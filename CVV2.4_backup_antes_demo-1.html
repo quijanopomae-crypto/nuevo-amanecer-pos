@@ -3407,8 +3407,46 @@ cajTotales=function(){const movs=_naCajaMovsSesion(),income=movs.filter(m=>(m.ti
 function abrirModalApertura(){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}document.getElementById('cajFondo').value='';_naPopulateCashierSelect('cajCajero',appConfig.activeCashierId);document.getElementById('mApertura').classList.add('open');}
 abrirCaja=async function(){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}if(_naSessionOpen()){toast('La caja ya está abierta','error');return;}const fund=Math.max(0,_naNumber(document.getElementById('cajFondo').value)),cashier=_naCashierSnapshot(document.getElementById('cajCajero').value),now=new Date();if(!cashier?.id){toast('Selecciona un cajero activo','error');return;}cajEstado={abierta:true,fondo:fund,cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,hora:nowT(),hora24:_naTime24(now),fechaApertura:obtenerHoy(),timestampApertura:now.toISOString(),cerrada:false,horaCierre:null,sessionId:Date.now(),contado:null,esperado:null,diferencia:null};appConfig.activeCashierId=cashier.id;appConfig.business.cajero=cashier.nombre;cerrarModal('mApertura');cajRender();await _naFinalizeOperationPersistence(`Caja abierta por ${cashier.nombre} con ${fmt(fund)}`,'No se pudo guardar la apertura de caja');};
 abrirMovCaja=function(tipo){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}if(!_naSessionOpen()){toast('Abre la caja del día primero','error');return;}cajMovTipo=tipo;const color=CAJ_COL[tipo];document.getElementById('mMovCajaHead').className=`mhead ${color}`;document.getElementById('mMovCajaTit').textContent=`${CAJ_IC[tipo]} ${CAJ_LBL[tipo]}`;document.getElementById('cajMovBtn').className=`mbtn mbtn-ok ${color}`;document.getElementById('cajMovMonto').value='';document.getElementById('cajMovDesc').value='';document.getElementById('cajMovCat').innerHTML=CAJ_CATS[tipo].map(c=>`<option>${_naEsc(c)}</option>`).join('');document.getElementById('mMovCaja').classList.add('open');};
-guardarMovCaja=async function(){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}if(!_naSessionOpen()){toast('La caja no está abierta','error');return;}const amount=_naNumber(document.getElementById('cajMovMonto').value),desc=_naClean(document.getElementById('cajMovDesc').value);if(amount<=0||!desc){toast('Completa monto y concepto','error');return;}const method=document.getElementById('cajMovMetodo').value,now=new Date(),cashier=_naCashierSnapshot(cajEstado.cajeroId||cajEstado.cajero);cajMovs.push({id:Date.now(),tipo:cajMovTipo,monto:amount,efectivo:method==='efectivo'?amount:0,desc,cat:document.getElementById('cajMovCat').value,metodo:method,hora:nowT(),hora24:_naTime24(now),timestamp:now.toISOString(),cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,fecha:obtenerHoy(),sessionId:cajEstado.sessionId});cerrarModal('mMovCaja');cajRender();await _naFinalizeOperationPersistence(`${CAJ_LBL[cajMovTipo]} de ${fmt(amount)} registrado`,'No se pudo guardar el movimiento de caja');};
-cerrarCaja=async function(){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}const counted=_naNumber(document.getElementById('cajContado').value,NaN);if(!Number.isFinite(counted)||counted<0){toast('Ingresa el efectivo contado','error');return;}const expected=cajTotales().ef,now=new Date();cajEstado.cerrada=true;cajEstado.horaCierre=nowT();cajEstado.horaCierre24=_naTime24(now);cajEstado.timestampCierre=now.toISOString();cajEstado.contado=counted;cajEstado.esperado=expected;cajEstado.diferencia=Number((counted-expected).toFixed(2));cerrarModal('mCierre');cajRender();const persistResult=await saveAllData();if(_naWasPersisted(persistResult))toast(`Caja cerrada · diferencia ${fmt(cajEstado.diferencia)}`,Math.abs(cajEstado.diferencia)<.01?'success':'error');else toast(persistResult.temporary?'El cierre quedó solo en esta pestaña; no está guardado permanentemente.':'No se pudo guardar el cierre de caja.','error');};
+let cajMovProc=false,cajCloseProc=false;
+guardarMovCaja=async function(){
+  if(cajMovProc)return;
+  if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}
+  if(!_naSessionOpen()){toast('La caja no está abierta','error');return;}
+  const amount=_naNumber(document.getElementById('cajMovMonto').value),desc=_naClean(document.getElementById('cajMovDesc').value);
+  if(amount<=0||!desc){toast('Completa monto y concepto','error');return;}
+  const button=document.getElementById('cajMovBtn'),buttonText=button?.textContent||'✅ Registrar';
+  cajMovProc=true;
+  if(button){button.disabled=true;button.textContent='Procesando…';}
+  try{
+    const method=document.getElementById('cajMovMetodo').value,now=new Date(),cashier=_naCashierSnapshot(cajEstado.cajeroId||cajEstado.cajero);
+    cajMovs.push({id:Date.now(),tipo:cajMovTipo,monto:amount,efectivo:method==='efectivo'?amount:0,desc,cat:document.getElementById('cajMovCat').value,metodo:method,hora:nowT(),hora24:_naTime24(now),timestamp:now.toISOString(),cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,fecha:obtenerHoy(),sessionId:cajEstado.sessionId});
+    cerrarModal('mMovCaja');cajRender();
+    await _naFinalizeOperationPersistence(`${CAJ_LBL[cajMovTipo]} de ${fmt(amount)} registrado`,'No se pudo guardar el movimiento de caja');
+  }finally{
+    cajMovProc=false;
+    if(button){button.disabled=false;button.textContent=buttonText;}
+  }
+};
+cerrarCaja=async function(){
+  if(cajCloseProc)return;
+  if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}
+  const counted=_naNumber(document.getElementById('cajContado').value,NaN);
+  if(!Number.isFinite(counted)||counted<0){toast('Ingresa el efectivo contado','error');return;}
+  const button=document.querySelector('#mCierre .mbtn-ok'),buttonText=button?.textContent||'🔒 Confirmar cierre';
+  cajCloseProc=true;
+  if(button){button.disabled=true;button.textContent='Procesando…';}
+  try{
+    const expected=cajTotales().ef,now=new Date();
+    cajEstado.cerrada=true;cajEstado.horaCierre=nowT();cajEstado.horaCierre24=_naTime24(now);cajEstado.timestampCierre=now.toISOString();cajEstado.contado=counted;cajEstado.esperado=expected;cajEstado.diferencia=Number((counted-expected).toFixed(2));
+    cerrarModal('mCierre');cajRender();
+    const persistResult=await saveAllData();
+    if(_naWasPersisted(persistResult))toast(`Caja cerrada · diferencia ${fmt(cajEstado.diferencia)}`,Math.abs(cajEstado.diferencia)<.01?'success':'error');
+    else toast(persistResult.temporary?'El cierre quedó solo en esta pestaña; no está guardado permanentemente.':'No se pudo guardar el cierre de caja.','error');
+  }finally{
+    cajCloseProc=false;
+    if(button){button.disabled=false;button.textContent=buttonText;}
+  }
+};
 cajRender=function(){const all=cajMovs,session=_naCajaMovsSesion();cajMovs=session;try{_baseCajRender();}finally{cajMovs=all;}if(cajEstado?.cerrada){const banner=document.querySelector('#cajContent .banner-cerrada-cj');if(banner&&!banner.querySelector('.btn-abrir-cj')){const diff=Number(cajEstado.diferencia||0);banner.insertAdjacentHTML('beforeend',`${cajEstado.contado!=null?`<div style="font-size:11px;opacity:.8">Contado: ${fmt(cajEstado.contado)} · Diferencia: ${fmt(diff)}</div>`:''}<button class="btn-abrir-cj" onclick="abrirModalApertura()">🔓 Nueva apertura</button>`);}}else if(!cajEstado?.abierta){document.querySelector('#cajContent .btn-abrir-cj')?.setAttribute('onclick','abrirModalApertura()');}updateDashboard();};
 
 // Ventas y utilidad real
@@ -3477,7 +3515,29 @@ verTicket=function(id){tkCurrentVenta=ventas.find(x=>x.id===id);if(!tkCurrentVen
 generarCatalogo=function(){if(!cart.length){toast('No hay productos en el carrito','error');return;}const b=_naGetBusiness(),date=new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'long',year:'numeric'});let rows='',total=0;cart.forEach(it=>{const sub=it.precio*it.qty;total+=sub;const mode=_naUnitsPerQty(it)>1?`Caja x${_naUnitsPerQty(it)}`:'Unidad';rows+=`<tr><td>${_naEsc(it.icon||'📦')}</td><td>${_naEsc(it.name)}<div style="font-size:10px;color:#64748b">${mode}</div></td><td>${_naEsc(it.sku||'-')}</td><td style="text-align:center">${it.qty}</td><td style="text-align:right">${fmt(it.precio)}</td><td style="text-align:right"><strong>${fmt(sub)}</strong></td></tr>`;});const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Cotización — ${_naEsc(b.nombre)}</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;font-size:13px}h1{font-size:18px;margin:0}.sub{color:#64748b;font-size:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#f1f5f9;padding:8px 10px;font-size:11px;text-align:left;text-transform:uppercase;border-bottom:2px solid #e2e8f0}td{padding:8px 10px;border-bottom:1px solid #f1f5f9}.tot td{font-size:14px;font-weight:bold;border-top:2px solid #e2e8f0;border-bottom:none}@media print{button{display:none}}</style></head><body><h1>${_naEsc(b.nombre)}</h1><div class="sub">${_naEsc(b.direccion)} · ${date}</div><button onclick="window.print()" style="background:#00bca4;color:#fff;border:none;padding:8px 16px;border-radius:8px">Imprimir / Guardar PDF</button><table><thead><tr><th></th><th>Producto</th><th>SKU</th><th>Cant.</th><th>P. unit.</th><th>Subtotal</th></tr></thead><tbody>${rows}</tbody><tfoot><tr class="tot"><td colspan="4"></td><td style="text-align:right">TOTAL</td><td style="text-align:right">${fmt(total)}</td></tr></tfoot></table></body></html>`;const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}else toast('Activa las ventanas emergentes','error');closeCartMenu();};
 
 // Gastos
-guardarGasto=async function(){if(isModuleLocked('gastos')){toast('El sistema está en modo solo lectura','error');return;}const desc=_naClean(document.getElementById('gasDesc').value),amount=_naNumber(document.getElementById('gasMonto').value);if(!desc||amount<=0){toast('Verifica concepto y monto','error');return;}const method=document.getElementById('gasMetodo').value,date=document.getElementById('gasFecha').value||obtenerHoy(),category=document.getElementById('gasCat').value;gastos.unshift({id:Date.now(),desc,monto:amount,cat:category,metodo:method,fecha:date,nota:_naClean(document.getElementById('gasNota').value)});if(_naSessionOpen()&&date===obtenerHoy()){const cashier=_naCashierSnapshot(cajEstado.cajeroId||cajEstado.cajero),now=new Date();cajMovs.push({id:Date.now()+1,tipo:'gas',monto:amount,efectivo:method==='efectivo'?amount:0,desc,cat:category,metodo:method,hora:nowT(),hora24:_naTime24(now),timestamp:now.toISOString(),cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,fecha:date,sessionId:cajEstado.sessionId});}cerrarModal('mGasto');gasRender();await _naFinalizeOperationPersistence(_naSessionOpen()?'Gasto registrado':'Gasto guardado fuera de una caja abierta','No se pudo guardar el gasto');};
+let gastoProc=false;
+guardarGasto=async function(){
+  if(gastoProc)return;
+  if(isModuleLocked('gastos')){toast('El sistema está en modo solo lectura','error');return;}
+  const desc=_naClean(document.getElementById('gasDesc').value),amount=_naNumber(document.getElementById('gasMonto').value);
+  if(!desc||amount<=0){toast('Verifica concepto y monto','error');return;}
+  const button=document.querySelector('#mGasto .mbtn-ok'),buttonText=button?.textContent||'💾 Registrar';
+  gastoProc=true;
+  if(button){button.disabled=true;button.textContent='Procesando…';}
+  try{
+    const method=document.getElementById('gasMetodo').value,date=document.getElementById('gasFecha').value||obtenerHoy(),category=document.getElementById('gasCat').value;
+    gastos.unshift({id:Date.now(),desc,monto:amount,cat:category,metodo:method,fecha:date,nota:_naClean(document.getElementById('gasNota').value)});
+    if(_naSessionOpen()&&date===obtenerHoy()){
+      const cashier=_naCashierSnapshot(cajEstado.cajeroId||cajEstado.cajero),now=new Date();
+      cajMovs.push({id:Date.now()+1,tipo:'gas',monto:amount,efectivo:method==='efectivo'?amount:0,desc,cat:category,metodo:method,hora:nowT(),hora24:_naTime24(now),timestamp:now.toISOString(),cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,fecha:date,sessionId:cajEstado.sessionId});
+    }
+    cerrarModal('mGasto');gasRender();
+    await _naFinalizeOperationPersistence(_naSessionOpen()?'Gasto registrado':'Gasto guardado fuera de una caja abierta','No se pudo guardar el gasto');
+  }finally{
+    gastoProc=false;
+    if(button){button.disabled=false;button.textContent=buttonText;}
+  }
+};
 
 // Bloqueos: se consultan siempre desde almacenamiento, aunque configuración no esté visible.
 isModuleLocked=function(moduleName){if(securityIsLocked())return true;const master=storage.getItem(LOCK_KEYS.master)==='true',readOnly=storage.getItem(LOCK_KEYS.readOnly)==='true';if(master||readOnly)return true;const key=LOCK_KEYS.modules[moduleName];return key?storage.getItem(key)==='true':false;};
@@ -3983,7 +4043,7 @@ aplicarDescuentoPorcentaje=function(value){const max=Math.max(0,Number(_naSecuri
 const _naSecOriginalAnularV=anularV;
 anularV=async function(id){if(!_naAuthorize('anularVenta',`Anular la venta ${id}`))return;_naAudit('Anulación autorizada',id);return await _naSecOriginalAnularV(id);};
 const _naSecOriginalCerrarCaja=cerrarCaja;
-cerrarCaja=function(){if(!_naAuthorize('cerrarCaja','Cerrar caja del día'))return;_naAudit('Cierre de caja autorizado');return _naSecOriginalCerrarCaja();};
+cerrarCaja=function(){if(cajCloseProc)return;if(!_naAuthorize('cerrarCaja','Cerrar caja del día'))return;_naAudit('Cierre de caja autorizado');return _naSecOriginalCerrarCaja();};
 const _naSecOriginalResetModule=resetModule;
 resetModule=async function(modulo){if(!_naAuthorize('reset',`Resetear ${modulo}`))return;_naAudit('Reseteo autorizado',modulo);return await _naSecOriginalResetModule(modulo);};
 const _naSecOriginalImportProducts=importProducts;
@@ -4460,7 +4520,7 @@ abrirCaja=async function(...args){if(!_naF10AuthorizePermission('cash','Confirma
 const _naF10BaseAbrirMovCaja=abrirMovCaja;
 abrirMovCaja=function(...args){if(!_naF10AuthorizePermission('cash','Registrar movimiento de caja'))return;return _naF10BaseAbrirMovCaja.apply(this,args);};
 const _naF10BaseGuardarMovCaja=guardarMovCaja;
-guardarMovCaja=async function(...args){if(!_naF10AuthorizePermission('cash','Guardar movimiento de caja'))return;return await _naF10BaseGuardarMovCaja.apply(this,args);};
+guardarMovCaja=async function(...args){if(cajMovProc)return;if(!_naF10AuthorizePermission('cash','Guardar movimiento de caja'))return;return await _naF10BaseGuardarMovCaja.apply(this,args);};
 const _naF10BaseAbrirGasto=abrirModalGasto;
 abrirModalGasto=function(...args){if(!_naF10AuthorizePermission('cash','Registrar gasto'))return;return _naF10BaseAbrirGasto.apply(this,args);};
 const _naF10BaseExportReport=_naF8ExportReport;
