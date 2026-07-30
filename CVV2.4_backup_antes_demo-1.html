@@ -3796,7 +3796,7 @@ function _naBackupPick(record,allowed,path,warnings){
   }
   return out;
 }
-function _naBackupId(value,path){if(typeof value==='number')return _naBackupNumber(value,path,{min:-1e12,max:1e12});return _naBackupString(value,path,120,{allowEmpty:false});}
+function _naBackupId(value,path){if(typeof value==='number')return _naBackupNumber(value,path,{min:-Number.MAX_SAFE_INTEGER,max:Number.MAX_SAFE_INTEGER});return _naBackupString(value,path,120,{allowEmpty:false});}
 function _naSanitizeProduct(raw,index,warnings,isCart=false){
   const path=`${isCart?'cart':'productos'}[${index}]`,p=_naBackupPick(raw,isCart?_NA_BACKUP_KEYS.item:_NA_BACKUP_KEYS.product,path,warnings),out={};
   if(p.id!==undefined)out.id=_naBackupId(p.id,`${path}.id`);
@@ -3815,7 +3815,7 @@ function _naSanitizeProduct(raw,index,warnings,isCart=false){
 }
 function _naSanitizeSaleItem(raw,path,warnings){
   const p=_naBackupPick(raw,_NA_BACKUP_KEYS.item,path,warnings),out={};
-  if(p.id!==undefined)out.id=_naBackupId(p.id,`${path}.id`);if(p.productoId!==undefined)out.productoId=_naBackupId(p.productoId,`${path}.productoId`);
+  if(p.id!==undefined)out.id=p.id===null?null:_naBackupId(p.id,`${path}.id`);if(p.productoId!==undefined)out.productoId=p.productoId===null?null:_naBackupId(p.productoId,`${path}.productoId`);
   for(const key of ['itemKey','sku','barcode','icon','name','nombre','unidad','marca','tipoImpuesto','ventaModo','modo','_lineKey','cat','tipoLinea','codigoIngresado','cajeroRegistro'])if(p[key]!==undefined)out[key]=_naBackupString(p[key],`${path}.${key}`,key==='name'?180:160);
   if(p.imagen!==undefined)out.imagen=_naBackupImage(p.imagen,`${path}.imagen`);
   for(const key of ['qty','cantidad','precio','precioUnitario','subtotal','costo','unitsPerQty','descuento','_descuento','_precioOriginal','stock','stockMin','precioCaja','unidCaja','unidadesSinStock','stockAntes'])if(p[key]!==undefined)out[key]=_naBackupNumber(p[key],`${path}.${key}`,{min:['stock','stockAntes'].includes(key)?-1e9:0,max:1e9,nullable:['precioCaja','_precioOriginal','stockAntes'].includes(key)});
