@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Regresión de transacciones de venta</title>
+  <style>
+    body{font:14px system-ui;margin:20px;background:#f8fafc;color:#172033}
+    button{padding:9px 14px;font-weight:700}
+    table{border-collapse:collapse;width:100%;margin-top:16px;background:#fff}
+    td,th{border:1px solid #d8e0ea;padding:8px;text-align:left;vertical-align:top}
+    pre{white-space:pre-wrap;word-break:break-word;margin:0;font-size:12px}
+    .ok{color:#087443}.fail{color:#b42318}
+    iframe{position:absolute;width:1px;height:1px;border:0}
+  </style>
+</head>
+<body>
+  <h1>Venta única, caja y rollback</h1>
+  <button id="run" type="button">Ejecutar pruebas</button>
+  <p id="status">Esperando ejecución.</p>
+  <table>
+    <thead><tr><th>Caso</th><th>Resultado</th><th>Métricas</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <iframe id="pos" src="../CVV2.4_backup_antes_demo-1.html"></iframe>
+
+  <script>
+  (() => {
+    const PRODUCT_NAME='__PRUEBA_POS_NO_USAR__ Venta';
+    const PRODUCT_SKU='TEST-SALE-REGRESSION-001';
+    const PRODUCT_BARCODE='990000000103';
+    const resultsBody=document.querySelector('#results');
+    const status=document.querySelector('#status');
+    const runButton=document.querySelector('#run');
+    const frame=document.querySelector('#pos');
+    const uncaught=[];
+    const toastEvents=[];
+    let activeCase='before-iframe';
+    let toastObserver=null;
+
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const read=(win,expression)=>win.eval(expression);
+
+    function recordUncaught(origin,event){
+      const reason=event.reason;
+      uncaught.push({
+        origin,
+        case:activeCase,
+        message:event.message||reason?.message||String(reason||'Error desconocido'),
+        file:event.filename||'',
+        line:Number(event.lineno||0),
+        column:Number(event.colno||0),
+        stack:event.error?.stack||reason?.stack||'',
+        at:new Date().toISOString()
+      });
+    }
+
+    addEventListener('error',event=>recordUncaught('parent',event));
+    addEventListener('unhandledrejection',event=>recordUncaught('parent',event));
+
+    function renderCase(result){
+      const row=document.createElement('tr');
+      const name=document.createElement('td');
+      const outcome=document.createElement('td');
+      const metrics=document.createElement('td');
+      const pre=document.createElement('pre');
+      name.textContent=result.name;
+      outcome.textContent=result.passed?'APROBADO':'FALLIDO';
+      outcome.className=result.passed?'ok':'fail';
+      pre.textContent=JSON.stringify(result,null,2);
+      metrics.appendChild(pre);
+      row.append(name,outcome,metrics);
+      resultsBody.appendChild(row);
+    }
+
+    async function waitForPos(win){
+      activeCase='initialization';
+      for(let attempt=0;attempt<120;attempt++){
+        if(
+          typeof win.confirmarVenta==='function' &&
+          typeof win.saveAllData==='function' &&
+          typeof win.cajTotales==='function' &&
+          typeof win.abrirCaja==='function'
+        ) return;
+        await wait(50);
+      }
+      throw new Error('El POS no terminó de inicializar');
+    }
+
+    function installToastObserver(win){
+      const toastElement=win.document.querySelector('#gToast');
+      if(!(toastElement instanceof win.Node)){
+        throw new Error('No se encontró #gToast para capturar mensajes');
+      }
+      const capture=()=>{
+        const text=toastElement.textContent.trim();
+        const classes=[...toastElement.classList];
+        if(!text||!classes.includes('show'))return;
+        const event={
+          case:activeCase,
+          text,
+          classes,
+          type:classes.includes('success')?'success':classes.includes('error')?'error':'other',
+          visible:true,
+          at:Date.now()
+        };
+        const previous=toastEvents.at(-1);
+        if(!previous||previous.case!==event.case||previous.text!==event.text||previous.type!==event.type){
+          toastEvents.push(event);
+        }
+      };
+      toastObserver=new win.MutationObserver(capture);
+      toastObserver.observe(toastElement,{
+        attributes:true,
+        attributeFilter:['class'],
+        childList:true,
+        characterData:true,
+        subtree:true
+      });
+    }
+
+    function cashSnapshot(win){
+      const snapshot=read(win,`(()=>{
+        const sessionId=cajEstado?.sessionId??null;
+        const movements=_naCajaMovsSesion().map(move=>({
+          id:move.id,
+          tipo:String(move.tipo||''),
+          monto:Number(move.monto),
+          metodo:String(move.metodo||''),
+          efectivo:Number(move.efectivo||0),
+          ventaId:move.ventaId??null,
+          sessionId:move.sessionId??null
+        }));
+        return {
+          cajaAbierta:!!cajEstado?.abierta&&!cajEstado?.cerrada,
+          fondo:Number(cajEstado?.fondo),
+          saldoEfectivo:Number(cajTotales().ef),
+          sessionId,
+          cantidadMovimientos:movements.length,
+          movimientos:movements
+        };
+      })()`);
+      if(
+        !snapshot.cajaAbierta ||
+        !snapshot.sessionId ||
+        !Number.isFinite(snapshot.fondo) ||
+        !Number.isFinite(snapshot.saldoEfectivo)
+      ) throw new Error('No se pudo medir el estado real de caja');
+      return snapshot;
+    }
+
+    function buttonSnapshot(win){
+      const button=win.document.querySelector('#mBtnConf');
+      if(!button)throw new Error('No se encontró #mBtnConf');
+      return {
+        existe:true,
+        disabled:button.disabled,
+        texto:button.textContent.trim(),
+        clases:button.className
+      };
+    }
+
+    function stateSnapshot(win,productId){
+      const state=read(win,`({
+        ventas:ventas.length,
+        stock:productos.find(product=>String(product.id)===${JSON.stringify(String(productId))})?.stock,
+        carrito:cart.length
+      })`);
+      if(!Number.isFinite(state.ventas)||!Number.isFinite(state.stock)||!Number.isFinite(state.carrito)){
+        throw new Error('No se pudo medir ventas, stock o carrito');
+      }
+      return {...state,caja:cashSnapshot(win),boton:buttonSnapshot(win)};
+    }
+
+    async function ensureProduct(win){
+      let product=read(win,`productos.find(product=>product.sku===${JSON.stringify(PRODUCT_SKU)})`);
+      if(product)return product;
+      win.abrirModalProd();
+      const doc=win.document;
+      doc.querySelector('#pNombre').value=PRODUCT_NAME;
+      doc.querySelector('#pSku').value=PRODUCT_SKU;
+      doc.querySelector('#pBarcode').value=PRODUCT_BARCODE;
+      doc.querySelector('#pCosto').value='1';
+      doc.querySelector('#pPrecio').value='2';
+      doc.querySelector('#pStock').value='20';
+      await win.guardarProd();
+      product=read(win,`productos.find(product=>product.sku===${JSON.stringify(PRODUCT_SKU)})`);
+      if(!product)throw new Error('El producto de prueba no fue creado mediante guardarProd');
+      return product;
+    }
+
+    async function openTestCash(win,fund=100){
+      if(read(win,'!!cajEstado?.abierta&&!cajEstado?.cerrada')){
+        throw new Error('El origen ya contiene una caja abierta; use un puerto aislado nuevo');
+      }
+      win.abrirModalApertura();
+      const doc=win.document;
+      const fundInput=doc.querySelector('#cajFondo');
+      const cashierSelect=doc.querySelector('#cajCajero');
+      if(!fundInput||!cashierSelect)throw new Error('No se encontraron los controles reales de apertura');
+      const validOption=[...cashierSelect.options].find(option=>option.value);
+      if(!validOption)throw new Error('No existe un cajero activo para la prueba');
+      fundInput.value=String(fund);
+      fundInput.dispatchEvent(new win.Event('input',{bubbles:true}));
+      cashierSelect.value=validOption.value;
+      cashierSelect.dispatchEvent(new win.Event('change',{bubbles:true}));
+      await win.abrirCaja();
+      const snapshot=cashSnapshot(win);
+      if(snapshot.fondo!==fund||snapshot.saldoEfectivo!==fund){
+        throw new Error(`Apertura incorrecta: fondo ${snapshot.fondo}, saldo ${snapshot.saldoEfectivo}`);
+      }
+      return snapshot;
+    }
+
+    async function prepareSale(win,product){
+      win.posAdd(product.id);
+      win.abrirCobro('normal');
+      const received=win.document.querySelector('#mMontoRec');
+      received.value='2';
+      received.dispatchEvent(new win.Event('input',{bubbles:true}));
+      return stateSnapshot(win,product.id);
+    }
+
+    async function executeSaleCase(win,product,name,doubleInvocation){
+      activeCase=name;
+      const toastStart=toastEvents.length;
+      const errorStart=uncaught.length;
+      const before=await prepareSale(win,product);
+      const first=win.confirmarVenta();
+      const afterFirstCall=buttonSnapshot(win);
+      const second=doubleInvocation?win.confirmarVenta():null;
+      const afterSecondCall=buttonSnapshot(win);
+      await first;
+      if(second)await second;
+      await wait(80);
+      const after=stateSnapshot(win,product.id);
+      const messages=toastEvents.slice(toastStart);
+      const errors=uncaught.slice(errorStart);
+      const successes=messages.filter(message=>message.type==='success');
+      const passed=
+        after.ventas===before.ventas+1 &&
+        after.stock===before.stock-1 &&
+        after.caja.cantidadMovimientos===before.caja.cantidadMovimientos+1 &&
+        after.caja.saldoEfectivo===before.caja.saldoEfectivo+2 &&
+        after.carrito===0 &&
+        afterFirstCall.disabled &&
+        (!doubleInvocation||afterSecondCall.disabled) &&
+        !after.boton.disabled &&
+        successes.length===1 &&
+        errors.length===0;
+      return {
+        name,
+        passed,
+        invocations:doubleInvocation?2:1,
+        before,
+        afterFirstCall,
+        afterSecondCall,
+        after,
+        messages,
+        uncaught:errors
+      };
+    }
+
+    async function executeRollback(win,product){
+      activeCase='rollback';
+      const toastStart=toastEvents.length;
+      const errorStart=uncaught.length;
+      const before=await prepareSale(win,product);
+      const originalSaveAllData=win.saveAllData;
+      let saveAllDataCalls=0;
+      const delegatedCalls=[];
+      let originalRestored=false;
+      try{
+        win.saveAllData=async function(...args){
+          saveAllDataCalls+=1;
+          if(saveAllDataCalls===1){
+            throw new Error('Fallo controlado de persistencia para prueba');
+          }
+          const result=await originalSaveAllData.apply(this,args);
+          delegatedCalls.push({
+            call:saveAllDataCalls,
+            ok:!!result?.ok,
+            durable:!!result?.durable,
+            verified:!!result?.verified
+          });
+          return result;
+        };
+        await win.confirmarVenta();
+        await wait(100);
+      }finally{
+        win.saveAllData=originalSaveAllData;
+        originalRestored=win.saveAllData===originalSaveAllData;
+      }
+      const after=stateSnapshot(win,product.id);
+      const messages=toastEvents.slice(toastStart);
+      const errors=uncaught.slice(errorStart);
+      const successes=messages.filter(message=>message.type==='success');
+      const visibleErrors=messages.filter(message=>message.type==='error');
+      const restorationPersisted=delegatedCalls.some(call=>call.call>=2&&call.ok&&call.verified);
+      const passed=
+        saveAllDataCalls>=2 &&
+        restorationPersisted &&
+        originalRestored &&
+        after.ventas===before.ventas &&
+        after.stock===before.stock &&
+        after.caja.cantidadMovimientos===before.caja.cantidadMovimientos &&
+        after.caja.saldoEfectivo===before.caja.saldoEfectivo &&
+        after.carrito===before.carrito &&
+        !after.boton.disabled &&
+        successes.length===0 &&
+        visibleErrors.length>=1 &&
+        errors.length===0;
+      return {
+        name:'Rollback',
+        passed,
+        before,
+        after,
+        saveAllDataCalls,
+        failedCall:1,
+        delegatedCalls,
+        restorationPersisted,
+        originalRestored,
+        messages,
+        uncaught:errors
+      };
+    }
+
+    runButton.addEventListener('click',async()=>{
+      runButton.disabled=true;
+      resultsBody.replaceChildren();
+      status.textContent='Ejecutando…';
+      let allPassed=false;
+      try{
+        if(frame.contentDocument?.readyState!=='complete'){
+          await new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+        }
+        const win=frame.contentWindow;
+        win.addEventListener('error',event=>recordUncaught('iframe',event));
+        win.addEventListener('unhandledrejection',event=>recordUncaught('iframe',event));
+        await waitForPos(win);
+        installToastObserver(win);
+        const product=await ensureProduct(win);
+        await openTestCash(win,100);
+        const normal=await executeSaleCase(win,product,'Venta normal',false);
+        const double=await executeSaleCase(win,product,'Doble invocación',true);
+        const rollback=await executeRollback(win,product);
+        [normal,double,rollback].forEach(renderCase);
+        allPassed=normal.passed&&double.passed&&rollback.passed;
+        status.textContent=allPassed?'APROBADO':'FALLIDO';
+        status.className=allPassed?'ok':'fail';
+      }catch(error){
+        recordUncaught('harness',{message:error.message,error});
+        renderCase({name:'Harness',passed:false,error:error.message,uncaught});
+        status.textContent='FALLIDO';
+        status.className='fail';
+      }finally{
+        toastObserver?.disconnect();
+        toastObserver=null;
+        runButton.disabled=false;
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
