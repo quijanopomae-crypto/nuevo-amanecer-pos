@@ -4955,6 +4955,146 @@ document.getElementById('masterSalesContent')?.addEventListener('click',event=>{
   else if(action==='admin-annul')_naF10AdminAnnulSale(id);
 });
 </script>
+<script id="na-security-cash-render">
+// Seguridad: los movimientos de caja restaurados o importados nunca se interpretan como HTML.
+function _naSecCashButton(className,text,action){
+  const button=_naSecElement('button',className,text);
+  button.type='button';
+  button.dataset.naCashAction=action;
+  return button;
+}
+function _naSecCashBanner(container,totals){
+  const wrap=_naSecAppend(container,'div','caj-banner-wrap');
+  if(cajEstado.cerrada){
+    const banner=_naSecAppend(wrap,'div','banner-cerrada-cj');
+    _naSecAppend(banner,'div','bn-title',`🔒 Cerrada — ${cajEstado.horaCierre||''}`);
+    _naSecAppend(banner,'div','bn-monto',fmt(totals.ef));
+    _naSecAppend(banner,'div','bn-sub',`Cajero: ${cajEstado.cajero||''}`);
+    if(cajEstado.contado!=null)_naSecAppend(banner,'div','',`Contado: ${fmt(cajEstado.contado)} · Diferencia: ${fmt(Number(cajEstado.diferencia||0))}`).style.cssText='font-size:11px;opacity:.8';
+    banner.appendChild(_naSecCashButton('btn-abrir-cj','🔓 Nueva apertura','open'));
+    return;
+  }
+  const banner=_naSecAppend(wrap,'div','banner-abierta'),copy=_naSecAppend(banner,'div');
+  _naSecAppend(copy,'div','bn-title',`🟢 Abierta desde ${cajEstado.hora||''}`);
+  _naSecAppend(copy,'div','bn-monto',fmt(totals.ef));
+  _naSecAppend(copy,'div','bn-sub',`Fondo: ${fmt(cajEstado.fondo)} · Cajero: ${cajEstado.cajero||''}`);
+  banner.appendChild(_naSecCashButton('btn-cerrar-cj','🔒 Cerrar','close'));
+}
+function _naSecCashMovement(parent,movement){
+  const allowedTypes=new Set(['ing','egr','cob','gas']),type=allowedTypes.has(movement.tipo)?movement.tipo:'egr',positive=type==='ing'||type==='cob';
+  const row=_naSecAppend(parent,'div',`mov-item ${type}`);
+  _naSecAppend(row,'div',`mov-ic ${type}`,CAJ_IC[type]||'📋');
+  const info=_naSecAppend(row,'div');
+  info.style.cssText='flex:1;min-width:0';
+  _naSecAppend(info,'div','mov-desc',movement.desc||'Movimiento');
+  _naSecAppend(info,'div','mov-meta',`${movement.cat||''} · ${movement.metodo||''} · ${movement.hora24||movement.hora||''} · ${movement.cajeroNombre||movement.cajero||''}`);
+  _naSecAppend(row,'div',`mov-amt ${positive?'pos':'neg'}`,`${positive?'+':'-'}${fmt(movement.monto)}`);
+}
+function _naSecCashMovementList(container,movements,title){
+  const wrap=_naSecAppend(container,'div','cj-mov-wrap');
+  _naSecAppend(wrap,'div','mov-section-title',title);
+  const list=_naSecAppend(wrap,'div','mov-list');
+  movements.forEach(movement=>_naSecCashMovement(list,movement));
+}
+function _naSecCashStats(container,totals){
+  const grid=_naSecAppend(container,'div','cj-stats-grid');
+  [
+    ['green','📈','Ventas',totals.ven],
+    ['red','📉','Egresos',totals.egr],
+    ['teal','🤝','Cobros',totals.cob],
+    ['amber','🧾','Gastos',totals.gas]
+  ].forEach(([tone,icon,label,value])=>{
+    const card=_naSecAppend(grid,'div',`cjsg ${tone}`);
+    _naSecAppend(card,'div','cjsg-icon',icon);
+    const copy=_naSecAppend(card,'div');
+    _naSecAppend(copy,'div','cjsg-lbl',label);
+    _naSecAppend(copy,'div','cjsg-val',fmt(value));
+  });
+}
+function _naSecCashActions(container){
+  const actions=_naSecAppend(container,'div','cj-acciones');
+  if(cajEstado.cerrada){actions.style.opacity='.4';actions.style.pointerEvents='none';}
+  [['ing','💵','Ingreso'],['egr','💸','Egreso'],['cob','🤝','Cobro'],['gas','🧾','Gasto']].forEach(([type,icon,label])=>{
+    const button=_naSecCashButton(`btn-cjac ${type}`,'',`move-${type}`);
+    _naSecAppend(button,'span','bci',icon);
+    button.appendChild(document.createTextNode(label));
+    actions.appendChild(button);
+  });
+}
+function _naSecCashClosing(container,totals){
+  const outer=_naSecAppend(container,'div');
+  outer.style.cssText='padding:12px 13px';
+  const summary=_naSecAppend(outer,'div');
+  summary.style.cssText='background:var(--white);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:9px';
+  _naSecAppend(summary,'div','','📊 Resumen del turno').style.cssText='font-size:12px;font-weight:800;color:var(--dark);margin-bottom:11px';
+  [
+    ['Fondo inicial',fmt(cajEstado.fondo),'var(--dark)'],
+    ['Ventas del día',`+${fmt(totals.ven)}`,'#15803d'],
+    ['Cobros crédito',`+${fmt(totals.cob)}`,'var(--teal)'],
+    ['Gastos operativos',`-${fmt(totals.gas)}`,'var(--amber)'],
+    ['Egresos / Retiros',`-${fmt(totals.ret)}`,'var(--red)']
+  ].forEach(([label,value,color])=>{
+    const row=_naSecAppend(summary,'div');
+    row.style.cssText='display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:6px 0;border-bottom:1px solid var(--border);color:var(--slate)';
+    _naSecAppend(row,'span','',label);
+    const amount=_naSecAppend(row,'span','',value);
+    amount.style.cssText=`color:${color};font-weight:800`;
+  });
+  const expected=_naSecAppend(summary,'div');
+  expected.style.cssText='display:flex;justify-content:space-between;font-size:16px;font-weight:800;padding:9px 0 0';
+  _naSecAppend(expected,'span','','Efectivo esperado');
+  _naSecAppend(expected,'span','',fmt(totals.ef)).style.color='var(--teal)';
+  if(cajEstado.cerrada){
+    const closed=_naSecAppend(outer,'div');
+    closed.style.cssText='background:var(--green-light);border:1px solid #bbf7d0;border-radius:11px;padding:13px;text-align:center';
+    _naSecAppend(closed,'div','','✅').style.cssText='font-size:20px;margin-bottom:5px';
+    _naSecAppend(closed,'div','','Caja cerrada correctamente').style.cssText='font-size:14px;font-weight:800;color:#15803d';
+    _naSecAppend(closed,'div','',`Hora: ${cajEstado.horaCierre||''} · Cajero: ${cajEstado.cajero||''}`).style.cssText='font-size:11px;color:var(--slate);margin-top:3px';
+  }else{
+    const close=_naSecCashButton('','🔒 Proceder al cierre de caja','close');
+    close.style.cssText="width:100%;background:var(--dark);color:var(--white);border:none;border-radius:11px;padding:14px;font-size:14px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif";
+    outer.appendChild(close);
+  }
+}
+cajRender=function(){
+  if(isModuleLocked('caja'))toast('Módulo de caja protegido','error');
+  if(cajEstado.abierta&&!cajEstado.cerrada&&cajEstado.fechaApertura&&cajEstado.fechaApertura!==obtenerHoy())toast('⚠️ Caja de otro día, ciérrala primero','error');
+  const container=document.getElementById('cajContent');
+  if(!container)return;
+  const movements=_naCajaMovsSesion(),allMovements=cajMovs;
+  let totals;
+  cajMovs=movements;
+  try{totals=cajTotales();}finally{cajMovs=allMovements;}
+  container.replaceChildren();
+  if(!cajEstado.abierta&&!cajEstado.cerrada){
+    const outer=_naSecAppend(container,'div');
+    outer.style.padding='13px';
+    const banner=_naSecAppend(outer,'div','banner-cerrada-cj'),copy=_naSecAppend(banner,'div');
+    _naSecAppend(copy,'div','bn-title','🔒 Caja sin abrir');
+    _naSecAppend(copy,'div','','Inicia el turno para registrar').style.cssText='font-size:12px;opacity:.7;margin-top:3px';
+    banner.appendChild(_naSecCashButton('btn-abrir-cj','🔓 Abrir caja','open'));
+    updateDashboard();
+    return;
+  }
+  if(cajTab==='resumen'){
+    _naSecCashBanner(container,totals);
+    _naSecCashStats(container,totals);
+    _naSecCashActions(container);
+    _naSecCashMovementList(container,[...movements].reverse().slice(0,5),'Últimos movimientos');
+  }else if(cajTab==='movimientos'){
+    _naSecCashMovementList(container,[...movements].reverse(),`${movements.length} movimientos`);
+  }else _naSecCashClosing(container,totals);
+  updateDashboard();
+};
+document.getElementById('cajContent')?.addEventListener('click',event=>{
+  const control=event.target.closest('[data-na-cash-action]');
+  if(!control)return;
+  const action=control.dataset.naCashAction;
+  if(action==='open')abrirModalApertura();
+  else if(action==='close')prepCierre();
+  else if(action.startsWith('move-'))abrirMovCaja(action.slice(5));
+});
+</script>
 <script>
 // Operación crítica: no se deja una variación de stock en memoria si no fue persistida.
 let _naInventoryMoveBusy=false;
