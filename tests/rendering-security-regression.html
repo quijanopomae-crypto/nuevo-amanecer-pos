@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Regresión de seguridad de renderización</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#f4f7fb}
+    body{margin:0;padding:24px}main{max-width:1180px;margin:auto}
+    h1{margin:0 0 6px}.summary{font-weight:800;margin:12px 0;padding:12px;border-radius:8px}
+    .pending{background:#fff7d6}.pass{background:#dcfce7;color:#166534}.fail{background:#fee2e2;color:#991b1b}
+    table{width:100%;border-collapse:collapse;background:white;font-size:13px}
+    th,td{border:1px solid #d8e0ea;padding:8px;text-align:left;vertical-align:top}
+    th{background:#e9eef5}code{white-space:pre-wrap;word-break:break-word}
+    iframe{position:absolute;width:1px;height:1px;border:0;clip-path:inset(50%)}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Seguridad de renderización e inyección</h1>
+  <p>Ejecuta las funciones reales del POS en un iframe del mismo origen y restaura el estado al finalizar.</p>
+  <div id="summary" class="summary pending">EJECUTANDO…</div>
+  <table>
+    <thead><tr><th>Superficie</th><th>Texto comprobado</th><th>Eventos dinámicos</th><th>Imágenes inesperadas</th><th>Errores</th><th>Resultado</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <h2>Errores capturados</h2>
+  <pre id="errors">[]</pre>
+</main>
+<iframe id="pos" src="../CVV2.4_backup_antes_demo-1.html?security-rendering-regression=1"></iframe>
+<script>
+'use strict';
+const payloads={
+  client:'María <img src=x onerror=alert(1)> & "Nuevo Amanecer"',
+  product:'Galleta </div><scr'+'ipt>alert(2)</scr'+'ipt>',
+  brand:'Marca "Especial" <svg onload=alert(3)>',
+  reference:'12345" onclick="alert(4)',
+  cash:'Cierre </div><img src=x onerror=alert(5)>'
+};
+const results=[],uncaught=[];
+let activeCase='carga-padre';
+function captureError(scope,event){
+  uncaught.push({
+    case:activeCase,
+    scope,
+    message:String(event?.message||event?.reason?.message||event?.reason||'Error sin mensaje'),
+    source:String(event?.filename||''),
+    line:Number(event?.lineno||0),
+    column:Number(event?.colno||0),
+    stack:String(event?.error?.stack||event?.reason?.stack||''),
+    timestamp:new Date().toISOString()
+  });
+}
+addEventListener('error',event=>captureError('padre',event));
+addEventListener('unhandledrejection',event=>captureError('padre',event));
+function assert(condition,message){if(!condition)throw new Error(message);}
+function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+function waitFor(check,timeout=15000){
+  const started=Date.now();
+  return new Promise((resolve,reject)=>{
+    const poll=()=>{
+      try{if(check()){resolve();return;}}catch(error){}
+      if(Date.now()-started>=timeout){reject(new Error('Timeout esperando inicialización del POS'));return;}
+      setTimeout(poll,50);
+    };
+    poll();
+  });
+}
+function suspiciousEvents(root){
+  return [...root.querySelectorAll('*')].flatMap(element=>[...element.attributes].filter(attribute=>/^on/i.test(attribute.name)&&/alert\s*\(|12345|script|svg/i.test(attribute.value)).map(attribute=>`${element.tagName}.${attribute.name}=${attribute.value}`));
+}
+function unexpectedImages(root){
+  return [...root.querySelectorAll('img,svg')].filter(element=>{
+    if(element.tagName==='SVG')return true;
+    const source=element.getAttribute('src')||'';
+    return source==='x'||/onerror|alert|svg/i.test(source);
+  }).map(element=>element.outerHTML.slice(0,180));
+}
+function record(name,root,textChecks,extra={}){
+  const events=suspiciousEvents(root),images=unexpectedImages(root),missing=textChecks.filter(text=>!root.textContent.includes(text)),caseErrors=uncaught.filter(error=>error.case===name);
+  const passed=!events.length&&!images.length&&!missing.length&&!caseErrors.length&&extra.passed!==false;
+  results.push({
+    name,
+    text:missing.length?`Falta: ${missing.join(' | ')}`:textChecks.join(' | '),
+    events,
+    images,
+    errors:caseErrors,
+    details:extra.details||'',
+    passed
+  });
+  return passed;
+}
+function render(){
+  const body=document.querySelector('#results');
+  body.replaceChildren();
+  results.forEach(result=>{
+    const row=document.createElement('tr');
+    [result.name,result.text,result.events.length?result.events.join('\n'):'0',result.images.length?result.images.join('\n'):'0',result.errors.length?JSON.stringify(result.errors):'0',result.passed?'APROBADO':'FALLIDO'].forEach((value,index)=>{
+      const cell=document.createElement('td');
+      if(index>0&&index<5){const code=document.createElement('code');code.textContent=value;cell.appendChild(code);}else cell.textContent=value;
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
+  });
+  document.querySelector('#errors').textContent=JSON.stringify(uncaught,null,2);
+  const passed=results.length===10&&results.every(result=>result.passed)&&uncaught.length===0;
+  const summary=document.querySelector('#summary');
+  summary.className=`summary ${passed?'pass':'fail'}`;
+  summary.textContent=passed?'APROBADO — 10 superficies seguras, 0 ejecuciones y 0 errores no controlados':'FALLIDO — revisa la tabla y los errores';
+}
+async function run(){
+  const frame=document.querySelector('#pos');
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('El iframe del POS no cargó')),15000);
+    frame.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});
+  });
+  const posWindow=frame.contentWindow,posDocument=frame.contentDocument;
+  activeCase='inicializacion-pos';
+  posWindow.addEventListener('error',event=>captureError('iframe',event));
+  posWindow.addEventListener('unhandledrejection',event=>captureError('iframe',event));
+  await waitFor(()=>posWindow.eval('typeof ventasRender==="function" && typeof cajRender==="function" && typeof cliRender==="function" && typeof _naSafeProductImageSource==="function"'));
+  await wait(300);
+  const initErrors=uncaught.filter(error=>error.case==='inicializacion-pos');
+  if(initErrors.length)throw new Error(`El POS produjo ${initErrors.length} error(es) durante la inicialización`);
+  const originalState=posWindow.eval(`JSON.stringify({
+    productos,ventas,clientes,creditos,cajMovs,cart,cajEstado,
+    ventasTab,cajTab,cliTab,invTab,posCat,tkCurrentVenta,
+    appConfig
+  })`);
+  posWindow.__securityAlerts=[];
+  const originalAlert=posWindow.alert;
+  posWindow.alert=message=>posWindow.__securityAlerts.push(String(message));
+  const originalOpen=posWindow.open;
+  try{
+    const data={
+      product:{id:'SEC-PROD-1',name:payloads.product,descripcion:payloads.cash,sku:'TEST-POS-SEC-001',barcode:'990000009901',cat:'abarrotes',marca:payloads.brand,unidad:'unidad',icon:'📦',imagen:'x" onerror="alert(9)',costo:1,precio:2,stock:10,stockMin:1,controlInventario:true},
+      client:{id:'SEC-CLI-1',nombre:payloads.client,dni:payloads.reference,tel:'999999999',dir:payloads.cash,color:1,totalCompras:0},
+      sale:{id:payloads.reference,fecha:'2026-07-30',hora:'12:34',hora24:'12:34',cajero:payloads.client,cajeroNombre:payloads.client,cajeroId:payloads.reference,clienteId:'SEC-CLI-1',clienteNombre:payloads.client,metodo:'efectivo',paymentRef:payloads.reference,estado:'completada',items:[{id:'SEC-PROD-1',name:payloads.product,icon:'📦',qty:1,precio:2,costo:1}]},
+      credit:{id:payloads.reference,cliId:'SEC-CLI-1',clienteId:'SEC-CLI-1',clienteNombre:payloads.client,desc:payloads.reference,monto:20,pagado:0,vence:'2099-12-31',fecha:'2026-07-30',hora:'12:34',hora24:'12:34',cajero:payloads.client,cajeroNombre:payloads.client,cajeroId:payloads.reference,pagos:[],items:[{id:'SEC-PROD-1',name:payloads.product,nombre:payloads.product,qty:1,cantidad:1,precio:20,precioUnitario:20,subtotal:20}]},
+      movement:{id:'SEC-MOV-1',tipo:'ing',cat:payloads.brand,desc:payloads.cash,metodo:'efectivo',hora:'12:34',hora24:'12:34',fecha:'2026-07-30',cajero:payloads.client,cajeroNombre:payloads.client,referencia:payloads.reference,monto:2,sessionId:'SEC-SESSION'}
+    };
+    posWindow.eval(`{
+      const test=${JSON.stringify(data)};
+      productos=[test.product];
+      clientes=[test.client];
+      ventas=[test.sale];
+      creditos=[test.credit];
+      cajMovs=[test.movement];
+      cart=[{...test.product,qty:1,_lineKey:${JSON.stringify(payloads.reference)},unitsPerQty:1}];
+      cajEstado={abierta:true,cerrada:false,fondo:100,cajero:test.client.nombre,cajeroNombre:test.client.nombre,cajeroId:test.client.id,hora:'12:00',hora24:'12:00',fechaApertura:'2026-07-30',sessionId:'SEC-SESSION'};
+    }`);
+
+    activeCase='Inventario';
+    posWindow.eval(`invTab='todo';document.querySelector('#invSearch').value='';document.querySelector('#invCat').value='';_baseInvRender();`);
+    record(activeCase,posDocument.querySelector('#invBody'),[payloads.product,payloads.brand,'TEST-POS-SEC-001']);
+
+    activeCase='Carrito';
+    posWindow.eval('posUpdateCart()');
+    await wait(150);
+    record(activeCase,posDocument.querySelector('#cartItems'),[payloads.product]);
+
+    activeCase='Historial de ventas';
+    posWindow.eval(`ventasTab='historial';document.querySelector('#ventasSearch').value='';document.querySelector('#ventasMetodo').value='';ventasRender();`);
+    const salesRoot=posDocument.querySelector('#ventasContent');
+    record(activeCase,salesRoot,[payloads.product,payloads.client,payloads.reference]);
+
+    activeCase='Detalle de venta';
+    const saleDetail=salesRoot.querySelector('.v-detalle');
+    assert(saleDetail,'No se creó el detalle de venta');
+    record(activeCase,saleDetail,[payloads.product,payloads.client,payloads.reference]);
+
+    activeCase='Clientes';
+    posWindow.eval(`cliTab='todos';document.querySelector('#cliSearch').value='';document.querySelector('#cliSort').value='nombre';cliRender();`);
+    const clientsRoot=posDocument.querySelector('#cliList');
+    record(activeCase,clientsRoot,[payloads.client,payloads.reference]);
+
+    activeCase='Créditos';
+    const detailButton=clientsRoot.querySelector('[data-na-credit-action="detail"]');
+    assert(detailButton,'No se creó la acción segura del crédito');
+    posWindow.abrirDetalleCredito(detailButton.dataset.creditId);
+    const creditRoot=posDocument.querySelector('#creditoDetalleContent');
+    record(activeCase,creditRoot,[payloads.client,'Galleta','alert(2)',payloads.reference]);
+
+    activeCase='Movimientos de caja';
+    posWindow.eval(`cajTab='movimientos';cajRender();`);
+    record(activeCase,posDocument.querySelector('#cajContent'),[payloads.cash,payloads.brand,payloads.client]);
+
+    activeCase='Ticket';
+    posWindow.eval(`tkCurrentVenta=ventas[0];renderTicketPreview();`);
+    const ticketRoot=posDocument.querySelector('#ticketBody');
+    record(activeCase,ticketRoot,['Galleta','alert(2)',payloads.reference],{passed:ticketRoot.querySelectorAll('pre.thermal-ticket-pre').length===1,details:'Vista previa basada en textContent'});
+
+    activeCase='Impresión';
+    const printDocument=posDocument.implementation.createHTMLDocument('Prueba impresión');
+    let printCalled=false;
+    posWindow.open=()=>({document:printDocument,focus(){},print(){printCalled=true;},close(){},onafterprint:null});
+    posWindow.imprimirTicketSistema();
+    await wait(400);
+    const printRoot=printDocument.querySelector('#ticketBody');
+    assert(printRoot,'No se creó el documento real de impresión');
+    record(activeCase,printRoot,['Galleta','alert(2)',payloads.reference],{passed:printCalled&&printRoot.querySelectorAll('pre.thermal-ticket-pre').length===1,details:'Documento construido con DOM; print() invocado'});
+
+    activeCase='Vista previa de imagen';
+    posWindow.eval(`editProd('SEC-PROD-1')`);
+    const imageRoot=posDocument.querySelector('#imgPreview');
+    record(activeCase,imageRoot,['📦'],{passed:imageRoot.querySelectorAll('img').length===0,details:'Fuente importada inválida rechazada'});
+
+    const alerts=[...posWindow.__securityAlerts];
+    if(alerts.length)results.push({name:'Ejecución de payload',text:alerts.join(' | '),events:[],images:[],errors:[],passed:false});
+  }finally{
+    activeCase='restauracion';
+    posWindow.open=originalOpen;
+    posWindow.alert=originalAlert;
+    posWindow.eval(`{
+      const state=JSON.parse(${JSON.stringify(originalState)});
+      productos=state.productos;ventas=state.ventas;clientes=state.clientes;creditos=state.creditos;cajMovs=state.cajMovs;cart=state.cart;cajEstado=state.cajEstado;
+      ventasTab=state.ventasTab;cajTab=state.cajTab;cliTab=state.cliTab;invTab=state.invTab;posCat=state.posCat;tkCurrentVenta=state.tkCurrentVenta;appConfig=state.appConfig;
+    }`);
+    await posWindow.eval('saveAllData()');
+    activeCase='finalizado';
+  }
+  render();
+}
+run().catch(error=>{
+  uncaught.push({case:activeCase,scope:'harness',message:error.message,source:'sale-rendering-security-regression',line:0,column:0,stack:error.stack||'',timestamp:new Date().toISOString()});
+  render();
+});
+</script>
+</body>
+</html>
