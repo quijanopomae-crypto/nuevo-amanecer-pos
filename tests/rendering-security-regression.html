@@ -103,10 +103,10 @@ function render(){
     body.appendChild(row);
   });
   document.querySelector('#errors').textContent=JSON.stringify(uncaught,null,2);
-  const passed=results.length===10&&results.every(result=>result.passed)&&uncaught.length===0;
+  const passed=results.length===11&&results.every(result=>result.passed)&&uncaught.length===0;
   const summary=document.querySelector('#summary');
   summary.className=`summary ${passed?'pass':'fail'}`;
-  summary.textContent=passed?'APROBADO — 10 superficies seguras, 0 ejecuciones y 0 errores no controlados':'FALLIDO — revisa la tabla y los errores';
+  summary.textContent=passed?'APROBADO — 11 superficies seguras, 0 ejecuciones y 0 errores no controlados':'FALLIDO — revisa la tabla y los errores';
 }
 async function run(){
   const frame=document.querySelector('#pos');
@@ -123,8 +123,8 @@ async function run(){
   const initErrors=uncaught.filter(error=>error.case==='inicializacion-pos');
   if(initErrors.length)throw new Error(`El POS produjo ${initErrors.length} error(es) durante la inicialización`);
   const originalState=posWindow.eval(`JSON.stringify({
-    productos,ventas,clientes,creditos,cajMovs,cart,cajEstado,
-    ventasTab,cajTab,cliTab,invTab,posCat,tkCurrentVenta,
+    productos,ventas,clientes,creditos,cajMovs,gastos,cart,cajEstado,
+    ventasTab,cajTab,cliTab,invTab,posCat,gasTab,tkCurrentVenta,
     appConfig
   })`);
   posWindow.__securityAlerts=[];
@@ -137,7 +137,8 @@ async function run(){
       client:{id:'SEC-CLI-1',nombre:payloads.client,dni:payloads.reference,tel:'999999999',dir:payloads.cash,color:1,totalCompras:0},
       sale:{id:payloads.reference,fecha:'2026-07-30',hora:'12:34',hora24:'12:34',cajero:payloads.client,cajeroNombre:payloads.client,cajeroId:payloads.reference,clienteId:'SEC-CLI-1',clienteNombre:payloads.client,metodo:'efectivo',paymentRef:payloads.reference,estado:'completada',items:[{id:'SEC-PROD-1',name:payloads.product,icon:'📦',qty:1,precio:2,costo:1}]},
       credit:{id:payloads.reference,cliId:'SEC-CLI-1',clienteId:'SEC-CLI-1',clienteNombre:payloads.client,desc:payloads.reference,monto:20,pagado:0,vence:'2099-12-31',fecha:'2026-07-30',hora:'12:34',hora24:'12:34',cajero:payloads.client,cajeroNombre:payloads.client,cajeroId:payloads.reference,pagos:[],items:[{id:'SEC-PROD-1',name:payloads.product,nombre:payloads.product,qty:1,cantidad:1,precio:20,precioUnitario:20,subtotal:20}]},
-      movement:{id:'SEC-MOV-1',tipo:'ing',cat:payloads.brand,desc:payloads.cash,metodo:'efectivo',hora:'12:34',hora24:'12:34',fecha:'2026-07-30',cajero:payloads.client,cajeroNombre:payloads.client,referencia:payloads.reference,monto:2,sessionId:'SEC-SESSION'}
+      movement:{id:'SEC-MOV-1',tipo:'ing',cat:payloads.brand,desc:payloads.cash,metodo:'efectivo',hora:'12:34',hora24:'12:34',fecha:'2026-07-30',cajero:payloads.client,cajeroNombre:payloads.client,referencia:payloads.reference,monto:2,sessionId:'SEC-SESSION'},
+      expense:{id:'SEC-EXP-1',cat:payloads.brand,desc:payloads.cash,nota:payloads.reference,metodo:'efectivo',fecha:'2026-07-30',monto:2}
     };
     posWindow.eval(`{
       const test=${JSON.stringify(data)};
@@ -146,6 +147,7 @@ async function run(){
       ventas=[test.sale];
       creditos=[test.credit];
       cajMovs=[test.movement];
+      gastos=[test.expense];
       cart=[{...test.product,qty:1,_lineKey:${JSON.stringify(payloads.reference)},unitsPerQty:1}];
       cajEstado={abierta:true,cerrada:false,fondo:100,cajero:test.client.nombre,cajeroNombre:test.client.nombre,cajeroId:test.client.id,hora:'12:00',hora24:'12:00',fechaApertura:'2026-07-30',sessionId:'SEC-SESSION'};
     }`);
@@ -185,6 +187,10 @@ async function run(){
     posWindow.eval(`cajTab='movimientos';cajRender();`);
     record(activeCase,posDocument.querySelector('#cajContent'),[payloads.cash,payloads.brand,payloads.client]);
 
+    activeCase='Gastos';
+    posWindow.eval(`gasTab='todo';document.querySelector('#gasSearch').value='';document.querySelector('#gasCatFilter').value='';gasRender();`);
+    record(activeCase,posDocument.querySelector('#gasContent'),[payloads.cash,payloads.brand,payloads.reference]);
+
     activeCase='Ticket';
     posWindow.eval(`tkCurrentVenta=ventas[0];renderTicketPreview();`);
     const ticketRoot=posDocument.querySelector('#ticketBody');
@@ -213,8 +219,8 @@ async function run(){
     posWindow.alert=originalAlert;
     posWindow.eval(`{
       const state=JSON.parse(${JSON.stringify(originalState)});
-      productos=state.productos;ventas=state.ventas;clientes=state.clientes;creditos=state.creditos;cajMovs=state.cajMovs;cart=state.cart;cajEstado=state.cajEstado;
-      ventasTab=state.ventasTab;cajTab=state.cajTab;cliTab=state.cliTab;invTab=state.invTab;posCat=state.posCat;tkCurrentVenta=state.tkCurrentVenta;appConfig=state.appConfig;
+      productos=state.productos;ventas=state.ventas;clientes=state.clientes;creditos=state.creditos;cajMovs=state.cajMovs;gastos=state.gastos;cart=state.cart;cajEstado=state.cajEstado;
+      ventasTab=state.ventasTab;cajTab=state.cajTab;cliTab=state.cliTab;invTab=state.invTab;posCat=state.posCat;gasTab=state.gasTab;tkCurrentVenta=state.tkCurrentVenta;appConfig=state.appConfig;
     }`);
     await posWindow.eval('saveAllData()');
     activeCase='finalizado';
