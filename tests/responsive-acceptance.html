@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Aceptación responsive del POS</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:16px}
+    h1{margin:0 0 4px;font-size:22px}
+    p{margin:0 0 12px;color:#526071}
+    button,select{height:38px;border:1px solid #c7d1dc;border-radius:8px;padding:0 12px;background:#fff}
+    button{background:#087f72;color:#fff;border:0;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+    .stage{max-width:100%;overflow:auto;border:1px solid #cbd5e1;background:#dce5ec;padding:8px;margin-bottom:14px}
+    iframe{display:block;height:760px;border:2px solid #334155;background:#fff}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px}
+    th,td{border:1px solid #d7dee8;padding:6px;text-align:left;vertical-align:top}
+    th{background:#e7eef4;position:sticky;top:0}
+    .ok{color:#087443;font-weight:900}.fail{color:#b42318;font-weight:900}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:10px}
+  </style>
+</head>
+<body>
+  <h1>Aceptación responsive final</h1>
+  <p>Recorre el archivo principal real en un iframe del mismo origen, sin modificar datos.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar matriz completa</button>
+    <strong id="status">Esperando.</strong>
+    <label>Ancho <select id="widthSelect"></select></label>
+    <label>Vista <select id="stateSelect"></select></label>
+    <button id="show" type="button">Mostrar vista</button>
+  </div>
+  <div class="stage"><iframe id="pos" src="../CVV2.4_backup_antes_demo-1.html"></iframe></div>
+  <table>
+    <thead>
+      <tr>
+        <th>Ancho</th><th>Vista</th><th>Raíz</th><th>Contenido</th>
+        <th>Scroll</th><th>Acciones</th><th>Cierre</th><th>Tablas</th><th>Resultado</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+  <script>
+  (() => {
+    const widths=[320,360,390,430,768,1024,1366,1920];
+    const states=[
+      {key:'menu',label:'Menú principal',page:'pageMenu'},
+      {key:'pos',label:'POS',page:'pagePOS'},
+      {key:'cart',label:'Carrito',page:'pagePOS',target:'#cartDrawer',open:'cart'},
+      {key:'product-new',label:'Producto nuevo',page:'pageInventario',target:'#mProd',open:'product-new'},
+      {key:'product-edit',label:'Editar producto',page:'pageInventario',target:'#mProd',open:'product-edit'},
+      {key:'payment',label:'Cobro',page:'pagePOS',target:'#mCobro',open:'modal'},
+      {key:'inventory',label:'Inventario',page:'pageInventario'},
+      {key:'clients',label:'Clientes y créditos',page:'pageClientes'},
+      {key:'cash',label:'Caja',page:'pageCaja'},
+      {key:'expenses',label:'Gastos',page:'pageGastos'},
+      {key:'config',label:'Configuración',page:'pageConfig',open:'config'},
+      {key:'ticket',label:'Ticket',page:'pageVentas',target:'#mTicket',open:'modal'},
+      {key:'printer',label:'Selector de impresora',page:'pageVentas',target:'#mPrinter',open:'modal'}
+    ];
+    const frame=document.querySelector('#pos');
+    const runButton=document.querySelector('#run');
+    const status=document.querySelector('#status');
+    const results=document.querySelector('#results');
+    const widthSelect=document.querySelector('#widthSelect');
+    const stateSelect=document.querySelector('#stateSelect');
+    const showButton=document.querySelector('#show');
+    const errors=[];
+    let activeCase='inicialización';
+    let observedWindow=null;
+    let handlers=null;
+
+    for(const width of widths){
+      const option=document.createElement('option');
+      option.value=String(width);
+      option.textContent=`${width} px`;
+      widthSelect.appendChild(option);
+    }
+    for(const state of states){
+      const option=document.createElement('option');
+      option.value=state.key;
+      option.textContent=state.label;
+      stateSelect.appendChild(option);
+    }
+
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const read=(win,expression)=>win.eval(expression);
+
+    function recordError(origin,event){
+      const reason=event?.reason??event?.error??event;
+      errors.push({
+        origin,
+        case:activeCase,
+        message:String(event?.message||reason?.message||reason||'Error desconocido'),
+        file:String(event?.filename||''),
+        line:Number(event?.lineno||0),
+        column:Number(event?.colno||0),
+        stack:String(reason?.stack||''),
+        at:new Date().toISOString()
+      });
+    }
+    window.addEventListener('error',event=>recordError('harness',event));
+    window.addEventListener('unhandledrejection',event=>recordError('harness',event));
+
+    function attachIframeErrors(win){
+      if(observedWindow&&handlers){
+        observedWindow.removeEventListener('error',handlers.error);
+        observedWindow.removeEventListener('unhandledrejection',handlers.rejection);
+      }
+      observedWindow=win;
+      handlers={
+        error:event=>recordError('pos',event),
+        rejection:event=>recordError('pos',event)
+      };
+      win.addEventListener('error',handlers.error);
+      win.addEventListener('unhandledrejection',handlers.rejection);
+    }
+
+    async function waitForPos(){
+      if(frame.contentDocument?.readyState!=='complete'){
+        await new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+      }
+      const win=frame.contentWindow;
+      for(let attempt=0;attempt<160;attempt++){
+        if(
+          typeof win.goPage==='function' &&
+          typeof win.abrirModalProd==='function' &&
+          typeof win.editProd==='function' &&
+          win.document.querySelector('#pageMenu') &&
+          win.document.querySelector('#mPrinter')
+        ){
+          await wait(700);
+          attachIframeErrors(win);
+          return win;
+        }
+        await wait(50);
+      }
+      throw new Error('El POS no terminó de inicializar');
+    }
+
+    function closeTransient(win){
+      const document=win.document;
+      document.querySelectorAll('.modal-overlay.open').forEach(element=>element.classList.remove('open'));
+      document.querySelector('#cartDrawer')?.classList.remove('open');
+      document.querySelector('#cartBackdrop')?.classList.remove('open');
+      document.querySelector('#cartMenu')?.classList.remove('open');
+    }
+
+    async function prepareState(win,state){
+      closeTransient(win);
+      if(state.page==='pageMenu')win.goMenu();
+      else win.goPage(state.page);
+      await wait(20);
+      if(state.open==='cart'){
+        win.document.querySelector('#cartDrawer')?.classList.add('open');
+        win.document.querySelector('#cartBackdrop')?.classList.add('open');
+      }else if(state.open==='product-new'){
+        win.abrirModalProd();
+      }else if(state.open==='product-edit'){
+        const productId=read(win,'productos[0]?.id');
+        if(productId===undefined||productId===null)throw new Error('No hay producto base para abrir la edición');
+        win.editProd(productId);
+      }else if(state.open==='modal'){
+        const modal=win.document.querySelector(state.target);
+        if(!modal)throw new Error(`No existe ${state.target}`);
+        modal.classList.add('open');
+      }else if(state.open==='config'){
+        win.switchCfgCategory('negocio');
+      }
+      await settleLayout(win);
+      if(state.open==='cart')await wait(280);
+    }
+
+    async function settleLayout(win){
+      await new Promise(resolve=>win.requestAnimationFrame(()=>win.requestAnimationFrame(resolve)));
+      await wait(50);
+    }
+
+    function visible(element){
+      if(!element)return false;
+      const style=element.ownerDocument.defaultView.getComputedStyle(element);
+      const rect=element.getBoundingClientRect();
+      return style.display!=='none'&&style.visibility!=='hidden'&&rect.width>0&&rect.height>0;
+    }
+
+    function hasHorizontalScrollContainer(element,viewportWidth){
+      if(element.getBoundingClientRect().width<=viewportWidth+2)return true;
+      let current=element.parentElement;
+      while(current&&current!==element.ownerDocument.body){
+        const style=current.ownerDocument.defaultView.getComputedStyle(current);
+        if(['auto','scroll'].includes(style.overflowX)&&current.scrollWidth>current.clientWidth+1)return true;
+        current=current.parentElement;
+      }
+      return false;
+    }
+
+    function measureState(win,state,errorStart){
+      const document=win.document;
+      const viewport=document.documentElement.clientWidth;
+      const rootOverflow=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-viewport;
+      const activePage=document.querySelector('.page.active');
+      const target=state.target
+        ? document.querySelector(state.target)
+        : activePage;
+      const targetElement=state.target
+        ? target?.querySelector('.modal,.printer-modal,.printer-sheet')||target
+        : target;
+      const targetRect=targetElement?.getBoundingClientRect();
+      const topbarChildren=[...document.querySelectorAll('.g-topbar>*')].filter(visible);
+      const topbarInside=topbarChildren.every(element=>{
+        const rect=element.getBoundingClientRect();
+        return rect.left>=-2&&rect.right<=viewport+2;
+      });
+      const contentInside=!!targetRect&&targetRect.left>=-2&&targetRect.right<=viewport+2&&topbarInside;
+      const verticalContainers=[document.scrollingElement,...document.querySelectorAll('.page.active,.modal-overlay.open,.modal-overlay.open .modal,.modal-overlay.open .mbody,.cart-drawer.open')]
+        .filter(Boolean);
+      const verticalNeeded=verticalContainers.some(element=>element.scrollHeight>element.clientHeight+2);
+      const verticalFunctional=!verticalNeeded||verticalContainers.some(element=>{
+        const style=win.getComputedStyle(element);
+        return element.scrollHeight>element.clientHeight+2&&style.overflowY!=='hidden';
+      });
+      const actionBar=target?.querySelector('.mbtns,.cart-footer,.printer-actions,.printer-footer');
+      const actionAccessible=!actionBar||visible(actionBar)||verticalFunctional;
+      const closeButton=state.target
+        ? state.open==='cart'
+          ? target?.querySelector('button[onclick="toggleCart()"]')
+          : target?.querySelector('.btn-close-m,.btn-close-x,[aria-label="Cerrar"]')
+        : null;
+      let closePassed=true;
+      if(state.target){
+        closePassed=!!closeButton&&visible(closeButton);
+        if(closePassed){
+          closeButton.click();
+          closePassed=!target.classList.contains('open');
+        }
+      }
+      const visibleTables=[...document.querySelectorAll('.page.active table,.modal-overlay.open table')].filter(visible);
+      const tablesUsable=visibleTables.every(table=>hasHorizontalScrollContainer(table,viewport));
+      const caseErrors=errors.slice(errorStart);
+      const passed=
+        rootOverflow<=2 &&
+        contentInside &&
+        verticalFunctional &&
+        actionAccessible &&
+        closePassed &&
+        tablesUsable &&
+        caseErrors.length===0;
+      return{
+        passed,
+        viewport,
+        rootOverflow,
+        contentInside,
+        verticalNeeded,
+        verticalFunctional,
+        actionAccessible,
+        closePassed,
+        tables:visibleTables.length,
+        tablesUsable,
+        errors:caseErrors
+      };
+    }
+
+    function appendResult(width,state,result){
+      const row=document.createElement('tr');
+      const values=[
+        `${width} px`,
+        state.label,
+        result.rootOverflow<=2?`Sin overflow (${result.rootOverflow}px)`:`Overflow ${result.rootOverflow}px`,
+        result.contentInside?'Dentro del viewport':'Contenido cortado',
+        result.verticalNeeded?(result.verticalFunctional?'Funcional':'Bloqueado'):'No necesario',
+        result.actionAccessible?'Accesibles':'Inaccesibles',
+        state.target?(result.closePassed?'Cierra':'No cierra'):'—',
+        `${result.tables} · ${result.tablesUsable?'utilizables':'sin contenedor'}`,
+        result.passed?'APROBADO':'FALLIDO'
+      ];
+      values.forEach((value,index)=>{
+        const cell=document.createElement('td');
+        cell.textContent=value;
+        if(index===values.length-1)cell.className=result.passed?'ok':'fail';
+        row.appendChild(cell);
+      });
+      if(result.errors.length){
+        const detail=document.createElement('pre');
+        detail.textContent=JSON.stringify(result.errors,null,2);
+        row.children[1].appendChild(detail);
+      }
+      results.appendChild(row);
+    }
+
+    async function showState(){
+      const win=await waitForPos();
+      const width=Number(widthSelect.value);
+      const state=states.find(item=>item.key===stateSelect.value);
+      frame.style.width=`${width}px`;
+      frame.style.height=width<=430?'620px':'760px';
+      await settleLayout(win);
+      await prepareState(win,state);
+      status.textContent=`Mostrando ${state.label} a ${width}px`;
+    }
+
+    showButton.addEventListener('click',async()=>{
+      showButton.disabled=true;
+      try{await showState();}
+      catch(error){status.textContent=`FALLIDO: ${error.message}`;}
+      finally{showButton.disabled=false;}
+    });
+
+    runButton.addEventListener('click',async()=>{
+      runButton.disabled=true;
+      showButton.disabled=true;
+      results.replaceChildren();
+      errors.length=0;
+      status.textContent='Ejecutando…';
+      let allPassed=true;
+      try{
+        const win=await waitForPos();
+        for(const width of widths){
+          widthSelect.value=String(width);
+          frame.style.width=`${width}px`;
+          frame.style.height=width<=430?'620px':'760px';
+          await settleLayout(win);
+          for(const state of states){
+            activeCase=`${width}-${state.key}`;
+            stateSelect.value=state.key;
+            const errorStart=errors.length;
+            await prepareState(win,state);
+            const result=measureState(win,state,errorStart);
+            appendResult(width,state,result);
+            allPassed=allPassed&&result.passed;
+          }
+          if(width<=430){
+            activeCase=`${width}-viewport-reducido`;
+            const errorStart=errors.length;
+            frame.style.height='360px';
+            const state=states.find(item=>item.key==='product-new');
+            await prepareState(win,state);
+            const reduced=measureState(win,state,errorStart);
+            appendResult(width,{...state,label:'Producto nuevo · viewport reducido'},reduced);
+            allPassed=allPassed&&reduced.passed;
+            frame.style.height='620px';
+          }
+        }
+        status.textContent=allPassed?'APROBADO':'FALLIDO';
+      }catch(error){
+        recordError('harness',error);
+        status.textContent=`FALLIDO: ${error.message}`;
+      }finally{
+        runButton.disabled=false;
+        showButton.disabled=false;
+      }
+    });
+
+    widthSelect.value='390';
+    stateSelect.value='menu';
+    frame.style.width='390px';
+  })();
+  </script>
+</body>
+</html>
