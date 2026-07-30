@@ -2195,6 +2195,9 @@ const sinTildes=str=>str.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const initials=n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
 const COLORS=['#00bca4','#ff7043','#a855f7','#3b82f6','#f59e0b','#ef4444','#22c55e','#64748b'];
 const colorFor=i=>COLORS[i%8];
+// Estado único de la imagen temporal del formulario de producto.
+// Se carga desde el producto editado o desde la imagen procesada antes de guardar.
+let imagenProducto=null;
 const cerrarModal=id=>document.getElementById(id).classList.remove('open');
 const toast=(msg,type='')=>{const t=document.getElementById('gToast');t.textContent=msg;t.className='toast'+(type?' '+type:'');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);};
 
@@ -4676,7 +4679,7 @@ function _naF12HasKeyword(name,key){const normalized=_naF12Normalize(key);return
 function asignarEmojiAutomatico(nombreProducto){const name=_naF12Normalize(nombreProducto);if(!name)return'📦';for(const [key,emoji] of _NA_F12_EMOJI_RULES){if(_naF12HasKeyword(name,key))return emoji;}return'📦';}
 function _naF12EmojiReason(nombreProducto){const name=_naF12Normalize(nombreProducto);for(const [key,emoji,group] of _NA_F12_EMOJI_RULES){if(_naF12HasKeyword(name,key))return{emoji,reason:`Coincidencia: ${key} · ${group}`};}return{emoji:'📦',reason:'Sin coincidencia específica; se usará el icono general'};}
 function _naF12SetMode(mode){_naF12IconMode=mode;const labels={auto:'Automático',manual:'Emoji manual',image:'Imagen subida',custom:'Icono personalizado'},label=document.getElementById('pIconMode'),auto=document.getElementById('pIconAutoBtn');if(label)label.textContent=labels[mode]||'Manual';auto?.classList.toggle('active',mode==='auto');}
-function _naF12RenderVisual(){const preview=document.getElementById('imgPreview'),remove=document.getElementById('pRemoveImageBtn'),icon=document.getElementById('pIcon')?.value||'📦';if(!preview)return;preview.replaceChildren();if(imagenProducto){const img=document.createElement('img');img.src=imagenProducto;img.alt='Vista previa del producto';img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:8px';preview.appendChild(img);}else preview.textContent=icon;if(remove)remove.hidden=!imagenProducto;}
+function _naF12RenderVisual(){const preview=document.getElementById('imgPreview'),remove=document.getElementById('pRemoveImageBtn'),icon=document.getElementById('pIcon')?.value||'📦',source=typeof imagenProducto==='string'&&/^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(imagenProducto)?imagenProducto:null;if(!preview)return;preview.replaceChildren();if(source){const img=document.createElement('img');img.src=source;img.alt='Vista previa del producto';img.style.cssText='width:100%;height:100%;object-fit:cover;border-radius:8px';preview.appendChild(img);}else preview.textContent=icon;if(remove)remove.hidden=!source;}
 function _naF12ProductNameChanged(){if(_naF12IconMode!=='auto'||imagenProducto)return;const field=document.getElementById('pIcon');if(field)field.value=asignarEmojiAutomatico(document.getElementById('pNombre')?.value);_naF12RenderVisual();}
 function _naF12ManualIconChanged(){_naF12SetMode('manual');_naF12RenderVisual();}
 function _naF12EnableAutoEmoji(){if(imagenProducto&&!confirm('¿Reemplazar la imagen actual por un emoji automático?'))return;if(imagenProducto){imagenProducto=null;const input=document.getElementById('pImagen');if(input)input.value='';}_naF12SetMode('auto');_naF12ProductNameChanged();}
