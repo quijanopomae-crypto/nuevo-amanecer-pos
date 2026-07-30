@@ -537,6 +537,17 @@
             .cfg-sidebar{width:100%!important;border-right:none!important;border-bottom:1px solid var(--border)}
             .cfg-sidebar + .cfg-content{flex:1;overflow-y:auto}
         }
+        @media(max-width:700px){
+            .table-card{overflow-x:auto;overflow-y:hidden}
+        }
+        @media(max-width:350px){
+            .g-topbar{padding:0 8px;gap:6px}
+            .g-topbar>div:last-child{gap:5px!important;min-width:0}
+            .g-status{display:none}
+            .g-logo,.g-logo>div:last-child{min-width:0}
+            .g-logo-text{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .back-btn{padding:7px 9px}
+        }
         body.dark{
             --teal:#00d4b8;--teal-dark:#00bca4;--teal-light:#003d35;
             --orange:#ff8a65;--orange-light:#3d1a0d;
@@ -1124,7 +1135,7 @@
 
 
         /* Producto: misma interfaz para Nuevo y Editar */
-        #mProd .modal{max-width:700px;border-radius:22px;overflow:hidden}
+#mProd .modal{max-width:700px;border-radius:22px;overflow-x:hidden;overflow-y:auto}
         #mProd .mhead{padding:14px 18px}
         #mProd .mbody{padding:16px 18px 14px;background:#fff;display:flex;flex-direction:column;gap:12px}
         #mProd .mbtns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:2px;position:sticky;bottom:-14px;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);padding-top:12px;border-top:1px solid #edf1f5;z-index:4}
