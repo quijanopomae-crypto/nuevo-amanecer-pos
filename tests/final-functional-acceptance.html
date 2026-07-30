@@ -1,0 +1,1292 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Aceptación funcional final del POS</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#f1f5f9}
+    body{margin:18px}
+    button{padding:10px 16px;border:0;border-radius:8px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    table{width:100%;border-collapse:collapse;margin-top:16px;background:#fff}
+    th,td{border:1px solid #d7dee8;padding:8px;vertical-align:top;text-align:left}
+    th{background:#e8f1f5}
+    pre{white-space:pre-wrap;word-break:break-word;margin:0;font-size:11px}
+    .ok{color:#087443;font-weight:900}.fail{color:#b42318;font-weight:900}
+    iframe{position:absolute;width:1px;height:1px;border:0;left:-10000px}
+  </style>
+</head>
+<body>
+  <h1>Aceptación funcional final</h1>
+  <p>Ejecuta funciones reales del POS dentro de un iframe del mismo origen. El puerto debe ser exclusivo para esta prueba.</p>
+  <button id="run" type="button">Ejecutar aceptación</button>
+  <strong id="status">Esperando ejecución.</strong>
+  <table>
+    <thead><tr><th>Caso</th><th>Estado</th><th>Evidencia</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <iframe id="pos" src="../CVV2.4_backup_antes_demo-1.html"></iframe>
+
+  <script>
+  (() => {
+    const PREFIX='**PRUEBA_POS_NO_USAR**';
+    const PRODUCT_SKU='TEST-POS-FINAL-001';
+    const PRODUCT_BARCODE='990000009001';
+    const PRODUCT_NAME=`${PREFIX} Producto completo`;
+    const PRODUCT_EDITED_NAME=`${PREFIX} Producto completo editado`;
+    const PRODUCT_BRAND=`${PREFIX} Marca final`;
+    const ALT_CODES=Array.from({length:10},(_,index)=>`9900000091${String(index).padStart(2,'0')}`);
+    const CLIENT_NAME=`${PREFIX} Cliente aceptación`;
+    const CLIENT_DNI='90009001';
+    const IMPORT_SKU='TEST-POS-IMPORT-001';
+    const frame=document.querySelector('#pos');
+    const runButton=document.querySelector('#run');
+    const status=document.querySelector('#status');
+    const resultsBody=document.querySelector('#results');
+    const uncaught=[];
+    const toastEvents=[];
+    let activeCase='preload';
+    let observedWindow=null;
+    let toastObserver=null;
+    let iframeErrorHandlers=null;
+
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const read=(win,expression)=>win.eval(expression);
+    const clone=value=>JSON.parse(JSON.stringify(value));
+    const closeEnough=(left,right)=>Math.abs(Number(left)-Number(right))<0.001;
+
+    function setField(win,id,value,eventName='input'){
+      const field=win.document.querySelector(`#${id}`);
+      if(!field)throw new Error(`No se encontró #${id}`);
+      field.value=String(value);
+      field.dispatchEvent(new win.Event(eventName,{bubbles:true}));
+      return field;
+    }
+
+    function recordUncaught(origin,event){
+      const reason=event.reason;
+      uncaught.push({
+        origin,
+        case:activeCase,
+        message:event.message||reason?.message||String(reason||'Error desconocido'),
+        file:event.filename||'',
+        line:Number(event.lineno||0),
+        column:Number(event.colno||0),
+        stack:event.error?.stack||reason?.stack||'',
+        at:new Date().toISOString()
+      });
+    }
+
+    addEventListener('error',event=>recordUncaught('parent',event));
+    addEventListener('unhandledrejection',event=>recordUncaught('parent',event));
+
+    function renderResult(result){
+      const row=document.createElement('tr');
+      const name=document.createElement('td');
+      const outcome=document.createElement('td');
+      const evidence=document.createElement('td');
+      const pre=document.createElement('pre');
+      name.textContent=result.name;
+      outcome.textContent=result.passed?'APROBADO':'FALLIDO';
+      outcome.className=result.passed?'ok':'fail';
+      pre.textContent=JSON.stringify(result,null,2);
+      evidence.appendChild(pre);
+      row.append(name,outcome,evidence);
+      resultsBody.appendChild(row);
+    }
+
+    function detachObservers(){
+      toastObserver?.disconnect();
+      toastObserver=null;
+      if(observedWindow&&iframeErrorHandlers){
+        observedWindow.removeEventListener('error',iframeErrorHandlers.error);
+        observedWindow.removeEventListener('unhandledrejection',iframeErrorHandlers.rejection);
+      }
+      observedWindow=null;
+      iframeErrorHandlers=null;
+    }
+
+    function attachObservers(win){
+      detachObservers();
+      observedWindow=win;
+      iframeErrorHandlers={
+        error:event=>recordUncaught('iframe',event),
+        rejection:event=>recordUncaught('iframe',event)
+      };
+      win.addEventListener('error',iframeErrorHandlers.error);
+      win.addEventListener('unhandledrejection',iframeErrorHandlers.rejection);
+      const toastElement=win.document.querySelector('#gToast');
+      if(!(toastElement instanceof win.Node))throw new Error('No se encontró #gToast');
+      const capture=()=>{
+        const text=toastElement.textContent.trim();
+        if(!text||!toastElement.classList.contains('show'))return;
+        const classes=[...toastElement.classList];
+        const event={
+          case:activeCase,
+          text,
+          classes,
+          type:classes.includes('success')?'success':classes.includes('error')?'error':'other',
+          at:Date.now()
+        };
+        const previous=toastEvents.at(-1);
+        if(!previous||previous.case!==event.case||previous.text!==event.text||previous.type!==event.type||event.at-previous.at>80){
+          toastEvents.push(event);
+        }
+      };
+      toastObserver=new win.MutationObserver(capture);
+      toastObserver.observe(toastElement,{
+        attributes:true,
+        attributeFilter:['class'],
+        childList:true,
+        characterData:true,
+        subtree:true
+      });
+    }
+
+    async function waitForPos(win){
+      activeCase='initialization';
+      for(let attempt=0;attempt<160;attempt++){
+        if(
+          typeof win.guardarProd==='function' &&
+          typeof win.confirmarVenta==='function' &&
+          typeof win.confirmarPago==='function' &&
+          typeof win.guardarMovCaja==='function' &&
+          typeof win.guardarGasto==='function' &&
+          typeof win.importProducts==='function' &&
+          typeof win.importarRespaldo==='function' &&
+          typeof win.saveAllData==='function' &&
+          win.document.querySelector('#gToast')
+        ){
+          // Las funciones existen antes de que el listener async de DOMContentLoaded
+          // termine loadAllData(). Esperamos a que el estado y la UI se estabilicen.
+          await wait(700);
+          const first=read(win,'JSON.stringify({p:productos.length,v:ventas.length,c:clientes.length,m:cajMovs.length})');
+          await wait(120);
+          const second=read(win,'JSON.stringify({p:productos.length,v:ventas.length,c:clientes.length,m:cajMovs.length})');
+          if(first===second)return;
+        }
+        await wait(50);
+      }
+      throw new Error('El POS no terminó de inicializar');
+    }
+
+    async function currentPosWindow(){
+      if(frame.contentDocument?.readyState!=='complete'){
+        await new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+      }
+      const win=frame.contentWindow;
+      await waitForPos(win);
+      attachObservers(win);
+      return win;
+    }
+
+    async function reloadPos(){
+      detachObservers();
+      const loaded=new Promise(resolve=>frame.addEventListener('load',resolve,{once:true}));
+      frame.src=`../CVV2.4_backup_antes_demo-1.html?acceptance=${Date.now()}`;
+      await loaded;
+      const win=frame.contentWindow;
+      await waitForPos(win);
+      attachObservers(win);
+      return win;
+    }
+
+    function stateCounts(win,productId){
+      return read(win,`(()=>{
+        const product=productos.find(row=>String(row.id)===${JSON.stringify(String(productId))});
+        const sessionId=cajEstado?.sessionId??null;
+        const sessionMoves=cajMovs.filter(move=>String(move.sessionId??'')===String(sessionId??''));
+        return {
+          products:productos.length,
+          sales:ventas.length,
+          clients:clientes.length,
+          credits:creditos.length,
+          expenses:gastos.length,
+          stock:Number(product?.stock),
+          cart:cart.length,
+          cashOpen:!!cajEstado?.abierta&&!cajEstado?.cerrada,
+          fund:Number(cajEstado?.fondo||0),
+          cashBalance:Number(cajTotales().ef),
+          moves:sessionMoves.length
+        };
+      })()`);
+    }
+
+    function buttonSnapshot(win,selector){
+      const button=win.document.querySelector(selector);
+      if(!button)throw new Error(`No se encontró ${selector}`);
+      return{disabled:button.disabled,text:button.textContent.trim(),classes:button.className};
+    }
+
+    async function attachTinyImage(win){
+      const base64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z9ZQAAAAASUVORK5CYII=';
+      const bytes=win.Uint8Array.from(win.atob(base64),character=>character.charCodeAt(0));
+      const file=new win.File([bytes],'producto-prueba.png',{type:'image/png'});
+      const transfer=new win.DataTransfer();
+      transfer.items.add(file);
+      const input=win.document.querySelector('#pImagen');
+      input.files=transfer.files;
+      win.previewImagen();
+      for(let attempt=0;attempt<80;attempt++){
+        if(read(win,'typeof imagenProducto==="string"&&imagenProducto.startsWith("data:image/")'))return;
+        await wait(50);
+      }
+      throw new Error('La imagen no terminó de procesarse');
+    }
+
+    async function testProduct(win){
+      activeCase='producto';
+      const toastStart=toastEvents.length;
+      const errorStart=uncaught.length;
+      const beforeCount=read(win,'productos.length');
+      win.abrirModalProd();
+      setField(win,'pNombre',PRODUCT_NAME);
+      setField(win,'pSku',PRODUCT_SKU);
+      setField(win,'pBarcode',PRODUCT_BARCODE);
+      setField(win,'pMarca',PRODUCT_BRAND);
+      setField(win,'pDescripcion',`${PREFIX} descripción persistente`);
+      setField(win,'pCosto','1.25');
+      setField(win,'pPrecio','2.75');
+      setField(win,'pStock','17');
+      setField(win,'pStockMin','3');
+      setField(win,'pPrecioCaja','25');
+      setField(win,'pUnidCaja','10');
+      setField(win,'pFactorCompra','10');
+      setField(win,'pUnidadCompra','caja','change');
+      setField(win,'pUnidad','unidad','change');
+      setField(win,'pCat','abarrotes','change');
+      win.setProductInventoryControl(true);
+      win.renderAltBarcodeFields(ALT_CODES);
+      const tenRows=win.document.querySelectorAll('#pAltCodesList .alt-code-input').length;
+      win.addAltBarcodeField('990000009199');
+      await wait(30);
+      const afterEleventh=win.document.querySelectorAll('#pAltCodesList .alt-code-input').length;
+      const fields=[...win.document.querySelectorAll('#pAltCodesList .alt-code-input')];
+      fields.at(-1).value='';
+      await attachTinyImage(win);
+      await win.guardarProd();
+      const created=read(win,`productos.find(row=>row.sku===${JSON.stringify(PRODUCT_SKU)})`);
+      if(!created)throw new Error('guardarProd no creó el producto de prueba');
+      const emptyNotSaved=Array.isArray(created.codigosAlternativos)&&created.codigosAlternativos.length===9;
+
+      win.editProd(created.id);
+      setField(win,'pNombre',PRODUCT_EDITED_NAME);
+      setField(win,'pMarca',`${PRODUCT_BRAND} editada`);
+      setField(win,'pPrecio','3.25');
+      win.renderAltBarcodeFields(ALT_CODES);
+      await win.guardarProd();
+      const edited=read(win,`productos.find(row=>String(row.id)===${JSON.stringify(String(created.id))})`);
+      const editPersistedBeforeReload=
+        edited?.name===PRODUCT_EDITED_NAME &&
+        edited?.marca===`${PRODUCT_BRAND} editada` &&
+        edited?.codigosAlternativos?.length===10;
+
+      win=await reloadPos();
+      activeCase='producto-recarga';
+      const reloaded=read(win,`productos.find(row=>String(row.id)===${JSON.stringify(String(created.id))})`);
+      const queries=[PRODUCT_EDITED_NAME,`${PRODUCT_BRAND} editada`,PRODUCT_SKU,PRODUCT_BARCODE,...ALT_CODES];
+      const searches=[];
+      win.goPage('pageInventario');
+      read(win,'invTab="todos"');
+      const searchInput=win.document.querySelector('#invSearch');
+      for(const query of queries){
+        searchInput.value=query;
+        searchInput.dispatchEvent(new win.Event('input',{bubbles:true}));
+        win.invRender();
+        const visible=[...win.document.querySelectorAll('#invBody .prod-name-sm')].some(node=>node.textContent===PRODUCT_EDITED_NAME);
+        searches.push({query,visible});
+      }
+      searchInput.value='';
+      win.invRender();
+      const persisted=
+        reloaded?.name===PRODUCT_EDITED_NAME &&
+        reloaded?.sku===PRODUCT_SKU &&
+        reloaded?.barcode===PRODUCT_BARCODE &&
+        reloaded?.marca===`${PRODUCT_BRAND} editada` &&
+        reloaded?.cat==='abarrotes' &&
+        closeEnough(reloaded?.costo,1.25) &&
+        closeEnough(reloaded?.precio,3.25) &&
+        closeEnough(reloaded?.stock,17) &&
+        closeEnough(reloaded?.stockMin,3) &&
+        closeEnough(reloaded?.precioCaja,25) &&
+        closeEnough(reloaded?.unidCaja,10) &&
+        closeEnough(reloaded?.factorCompra,10) &&
+        reloaded?.controlInventario!==false &&
+        typeof reloaded?.imagen==='string' &&
+        reloaded.imagen.startsWith('data:image/') &&
+        reloaded?.codigosAlternativos?.length===10;
+      const errors=uncaught.slice(errorStart);
+      const result={
+        name:'Producto completo',
+        passed:
+          tenRows===10 &&
+          afterEleventh===10 &&
+          emptyNotSaved &&
+          editPersistedBeforeReload &&
+          read(win,'productos.length')===beforeCount+1 &&
+          persisted &&
+          searches.every(item=>item.visible) &&
+          errors.length===0,
+        beforeCount,
+        afterCount:read(win,'productos.length'),
+        tenRows,
+        afterEleventh,
+        emptyNotSaved,
+        editPersistedBeforeReload,
+        persisted,
+        searches,
+        stored:{
+          name:reloaded?.name,
+          sku:reloaded?.sku,
+          barcode:reloaded?.barcode,
+          alternateCount:reloaded?.codigosAlternativos?.length,
+          brand:reloaded?.marca,
+          category:reloaded?.cat,
+          cost:reloaded?.costo,
+          price:reloaded?.precio,
+          stock:reloaded?.stock,
+          stockMin:reloaded?.stockMin,
+          priceBox:reloaded?.precioCaja,
+          unitsBox:reloaded?.unidCaja,
+          purchaseFactor:reloaded?.factorCompra,
+          inventoryControl:reloaded?.controlInventario,
+          imagePrefix:String(reloaded?.imagen||'').slice(0,24)
+        },
+        messages:toastEvents.slice(toastStart),
+        uncaught:errors,
+        productId:created.id
+      };
+      return{win,result,productId:created.id};
+    }
+
+    async function testConfiguration(win){
+      activeCase='configuracion';
+      const errorStart=uncaught.length;
+      const original=read(win,'_naBuildSnapshot()');
+      const originalDark=win.document.body.classList.contains('dark');
+      const originalSecurity=clone(original.security);
+      win.goPage('pageConfig');
+      win.switchCfgCategory('negocio');
+      setField(win,'cfgNombre',`${PREFIX} Negocio temporal`);
+      setField(win,'cfgRuc','90009000900');
+      setField(win,'cfgTel','999888777');
+      setField(win,'cfgDir',`${PREFIX} Dirección temporal`);
+      setField(win,'cfgNewCashierName',`${PREFIX} Cajero`);
+      await win.cashierAddFromConfig();
+      const testCashier=read(win,`appConfig.cashiers.find(row=>row.nombre===${JSON.stringify(`${PREFIX} Cajero`)})`);
+      if(!testCashier)throw new Error('No se creó el cajero por el flujo real');
+      win.switchCfgCategory('negocio');
+      setField(win,'cfgNombre',`${PREFIX} Negocio temporal`);
+      await win.guardarConfig();
+
+      const previousToggles=read(win,'({igv:appConfig.igvActive,mayorista:appConfig.mayoristaActive})');
+      win.switchCfgCategory('pos');
+      win.toggleCfg('igvToggle');
+      win.toggleCfg('mayoristaToggle');
+      await win.guardarConfig();
+
+      win.switchCfgCategory('apariencia');
+      if(win.document.body.classList.contains('dark')===originalDark)win.toggleDark();
+      setField(win,'cfgFontSize','muy-grande','change');
+      win.applyFontSize();
+      win.setAccent(null,'#a855f7','#9333ea');
+      await win.guardarConfig();
+
+      win.abrirDisenadorTicket();
+      setField(win,'tkAncho','58mm','change');
+      setField(win,'tkLayout','compact','change');
+      win.renderTicketPreview();
+      await win.guardarConfig();
+      read(win,"cerrarModal('mTicket')");
+
+      win.switchCfgCategory('control');
+      const securityBefore=read(win,'({allowDiscounts:_naSecurity.rules.allowDiscounts,maxDiscount:_naSecurity.rules.maxDiscount})');
+      win.securityToggleOption('rules.allowDiscounts');
+      win.securitySetMaxDiscount(23);
+      await win.saveAllData();
+      win.switchCfgCategory('negocio');
+      setField(win,'cfgCajero',testCashier.id,'change');
+      await win.cashierSelectActive(testCashier.id);
+      const cashierChanged=read(win,`appConfig.activeCashierId===${JSON.stringify(testCashier.id)}&&appConfig.business.cajero===${JSON.stringify(`${PREFIX} Cajero`)}`);
+      if(!cashierChanged)throw new Error('El cajero activo no cambió mediante cashierSelectActive');
+      const expected=read(win,`({
+        business:appConfig.business,
+        activeCashierId:appConfig.activeCashierId,
+        igv:appConfig.igvActive,
+        mayorista:appConfig.mayoristaActive,
+        appearance:appConfig.appearance,
+        ticket:appConfig.ticket,
+        security:{allowDiscounts:_naSecurity.rules.allowDiscounts,maxDiscount:_naSecurity.rules.maxDiscount},
+        dark:document.body.classList.contains('dark')
+      })`);
+
+      win=await reloadPos();
+      activeCase='configuracion-recarga';
+      const actual=read(win,`({
+        business:appConfig.business,
+        activeCashierId:appConfig.activeCashierId,
+        igv:appConfig.igvActive,
+        mayorista:appConfig.mayoristaActive,
+        appearance:appConfig.appearance,
+        ticket:appConfig.ticket,
+        security:{allowDiscounts:_naSecurity.rules.allowDiscounts,maxDiscount:_naSecurity.rules.maxDiscount},
+        dark:document.body.classList.contains('dark')
+      })`);
+      const persisted=
+        actual.business.nombre===expected.business.nombre &&
+        actual.business.cajero===expected.business.cajero &&
+        actual.activeCashierId===expected.activeCashierId &&
+        actual.igv===!previousToggles.igv &&
+        actual.mayorista===!previousToggles.mayorista &&
+        actual.appearance.fontSize==='muy-grande' &&
+        actual.appearance.accent==='#a855f7' &&
+        actual.ticket.ancho==='58mm' &&
+        actual.ticket.layoutMode==='compact' &&
+        actual.activeCashierId===testCashier.id &&
+        actual.business.cajero===`${PREFIX} Cajero` &&
+        actual.security.allowDiscounts===!securityBefore.allowDiscounts &&
+        actual.security.maxDiscount===23 &&
+        actual.dark!==originalDark;
+
+      const current=read(win,'_naBuildSnapshot()');
+      current.appConfig=original.appConfig;
+      current.security=originalSecurity;
+      current.ui={...current.ui,isDark:original.ui.isDark};
+      if(win.document.body.classList.contains('dark')!==original.ui.isDark)win.toggleDark();
+      // Retira del DOM los campos temporales de negocio antes de guardar el
+      // snapshot original; saveAllData captura cualquier control visible.
+      win.switchCfgCategory('sistema');
+      read(win,`_naApplySnapshot(${JSON.stringify(current)});_naNormalizeData();`);
+      await win.saveAllData();
+      win=await reloadPos();
+      activeCase='configuracion-restaurada';
+      const restored=read(win,`({
+        appConfig,
+        security:_naSecurity,
+        dark:document.body.classList.contains('dark')
+      })`);
+      const restoredOk=
+        JSON.stringify(restored.appConfig)===JSON.stringify(original.appConfig) &&
+        JSON.stringify(restored.security)===JSON.stringify(originalSecurity) &&
+        restored.dark===original.ui.isDark;
+      const errors=uncaught.slice(errorStart);
+      return{
+        win,
+        result:{
+          name:'Configuración y restauración',
+          passed:persisted&&restoredOk&&errors.length===0,
+          expected,
+          actual,
+          persisted,
+          restoredOk,
+          restored:{
+            business:restored.appConfig.business,
+            igv:restored.appConfig.igvActive,
+            mayorista:restored.appConfig.mayoristaActive,
+            appearance:restored.appConfig.appearance,
+            ticket:restored.appConfig.ticket,
+            security:{
+              allowDiscounts:restored.security.rules.allowDiscounts,
+              maxDiscount:restored.security.rules.maxDiscount
+            },
+            dark:restored.dark
+          },
+          uncaught:errors
+        }
+      };
+    }
+
+    async function createClient(win){
+      win.abrirModalCli();
+      setField(win,'cNombre',CLIENT_NAME);
+      setField(win,'cDni',CLIENT_DNI);
+      setField(win,'cTel','999111222');
+      setField(win,'cDir',`${PREFIX} Dirección cliente`);
+      await win.guardarCli();
+      const client=read(win,`clientes.find(row=>row.dni===${JSON.stringify(CLIENT_DNI)})`);
+      if(!client)throw new Error('No se creó el cliente mediante guardarCli');
+      return client;
+    }
+
+    function cashSnapshot(win){
+      return read(win,`(()=>{
+        const sessionId=cajEstado?.sessionId??null;
+        const movements=cajMovs.filter(row=>String(row.sessionId??'')===String(sessionId??'')).map(row=>({
+          id:row.id,tipo:row.tipo,monto:Number(row.monto),efectivo:Number(row.efectivo||0),
+          metodo:row.metodo,referencia:row.referencia||'',ventaId:row.ventaId||null,
+          creditoId:row.creditoId||null,pagoId:row.pagoId||null,desc:row.desc
+        }));
+        return{
+          open:!!cajEstado?.abierta&&!cajEstado?.cerrada,
+          fund:Number(cajEstado?.fondo||0),
+          balance:Number(cajTotales().ef),
+          sessionId,
+          movements
+        };
+      })()`);
+    }
+
+    async function openCash(win,fund=100){
+      if(read(win,'!!cajEstado?.abierta&&!cajEstado?.cerrada'))throw new Error('El origen ya tenía una caja abierta');
+      win.abrirModalApertura();
+      setField(win,'cajFondo',fund);
+      const select=win.document.querySelector('#cajCajero');
+      const option=[...select.options].find(row=>row.value);
+      if(!option)throw new Error('No existe un cajero activo');
+      setField(win,'cajCajero',option.value,'change');
+      await win.abrirCaja();
+      const snapshot=cashSnapshot(win);
+      if(!snapshot.open||snapshot.fund!==fund||snapshot.balance!==fund||!snapshot.sessionId){
+        throw new Error(`Apertura inválida: ${JSON.stringify(snapshot)}`);
+      }
+      return snapshot;
+    }
+
+    async function editProductPrice(win,productId,price,stock){
+      win.editProd(productId);
+      setField(win,'pPrecio',price);
+      if(stock!==undefined)setField(win,'pStock',stock);
+      await win.guardarProd();
+      const product=read(win,`productos.find(row=>String(row.id)===${JSON.stringify(String(productId))})`);
+      if(!closeEnough(product.precio,price))throw new Error(`No se guardó el precio ${price}`);
+      return product;
+    }
+
+    async function prepareSale(win,productId,method,{clientId='',received='2',reference='',mixedCash='1',mixedMethod='yape'}={}){
+      win.posAdd(productId);
+      win.abrirCobro('normal');
+      const methodButton=win.document.querySelector(`.pm-btn[data-method="${method}"]`);
+      if(!methodButton)throw new Error(`No existe el método ${method}`);
+      win.selPM(methodButton);
+      if(clientId&&win.document.querySelector('#mVentaCliente'))setField(win,'mVentaCliente',clientId,'change');
+      if(method==='efectivo'){
+        setField(win,'mMontoRec',received);
+        win.calcCambio();
+      }else if(method==='yape'||method==='transferencia'){
+        setField(win,'mDigitalRef',reference);
+      }else if(method==='credito'){
+        setField(win,'mCreditoCliente',clientId,'change');
+        setField(win,'mCreditoVence',read(win,'_naDatePlus(30)'),'change');
+      }else if(method==='mixto'){
+        setField(win,'mMixedCash',mixedCash);
+        setField(win,'mMixedDigitalMethod',mixedMethod,'change');
+        setField(win,'mMixedRef',reference);
+        win.calcMixedPayment();
+      }
+      return stateCounts(win,productId);
+    }
+
+    async function executePayment(win,productId,method,options){
+      activeCase=`pago-${method}-${Date.now()}`;
+      const toastStart=toastEvents.length;
+      const errorStart=uncaught.length;
+      const before=await prepareSale(win,productId,method,options);
+      const beforeCash=cashSnapshot(win);
+      const changeText=win.document.querySelector('#mCambio')?.textContent?.trim()||'';
+      await win.confirmarVenta();
+      await wait(80);
+      const after=stateCounts(win,productId);
+      const afterCash=cashSnapshot(win);
+      const newMoves=afterCash.movements.slice(beforeCash.movements.length);
+      const sale=read(win,'ventas[0]');
+      const messages=toastEvents.slice(toastStart);
+      const errors=uncaught.slice(errorStart);
+      const expectedCashDelta=method==='efectivo'?2:method==='mixto'?1:0;
+      const reference=options?.reference||'';
+      const movement=newMoves[0];
+      const passed=
+        after.sales===before.sales+1 &&
+        after.stock===before.stock-1 &&
+        after.moves===before.moves+1 &&
+        closeEnough(after.cashBalance,before.cashBalance+expectedCashDelta) &&
+        after.cart===0 &&
+        newMoves.length===1 &&
+        movement?.metodo===method &&
+        (reference?movement?.referencia===reference:true) &&
+        (method!=='efectivo'||closeEnough(sale?.vuelto,Number(options.received)-2)) &&
+        messages.filter(row=>row.type==='success').length===1 &&
+        errors.length===0;
+      return{
+        name:`Método ${method}`,
+        passed,
+        before,
+        after,
+        movement,
+        sale:{
+          id:sale?.id,
+          method:sale?.metodo,
+          reference:sale?.paymentRef,
+          received:sale?.recibido,
+          change:sale?.vuelto,
+          clientId:sale?.clienteId
+        },
+        changeText,
+        messages,
+        uncaught:errors
+      };
+    }
+
+    async function testPayments(win,productId){
+      activeCase='metodos-preparacion';
+      const errorStart=uncaught.length;
+      await openCash(win,100);
+      const client=await createClient(win);
+      await editProductPrice(win,productId,1000,40);
+      const eligibilitySaleBefore=await prepareSale(win,productId,'efectivo',{clientId:client.id,received:'1000'});
+      await win.confirmarVenta();
+      await wait(80);
+      const eligibilitySaleAfter=stateCounts(win,productId);
+      await editProductPrice(win,productId,2,eligibilitySaleAfter.stock);
+      const evaluation=read(win,`_naEvaluateClientCredit(${JSON.stringify(client.id)})`);
+      if(!evaluation.eligible||evaluation.available<2)throw new Error(`El cliente de prueba no obtuvo línea real: ${JSON.stringify(evaluation)}`);
+
+      activeCase='credito-cliente-obligatorio';
+      const mandatoryToastStart=toastEvents.length;
+      const mandatoryBefore=await prepareSale(win,productId,'credito',{clientId:''});
+      await win.confirmarVenta();
+      await wait(40);
+      const mandatoryAfter=stateCounts(win,productId);
+      const mandatoryMessages=toastEvents.slice(mandatoryToastStart);
+      read(win,"cerrarModal('mCobro')");
+      read(win,'cart=[];posUpdateCart();');
+      await win.saveAllData();
+      const mandatoryPassed=
+        mandatoryAfter.sales===mandatoryBefore.sales &&
+        mandatoryAfter.stock===mandatoryBefore.stock &&
+        mandatoryAfter.moves===mandatoryBefore.moves &&
+        mandatoryAfter.cart===mandatoryBefore.cart &&
+        mandatoryMessages.some(row=>row.type==='error'&&/cliente/i.test(row.text));
+
+      const cases=[];
+      cases.push(await executePayment(win,productId,'efectivo',{received:'5'}));
+      cases.push(await executePayment(win,productId,'yape',{reference:'YAPE-FINAL-0001'}));
+      cases.push(await executePayment(win,productId,'transferencia',{reference:'TRANS-FINAL-0002'}));
+      cases.push(await executePayment(win,productId,'credito',{clientId:client.id}));
+      cases.push(await executePayment(win,productId,'mixto',{mixedCash:'1',mixedMethod:'yape',reference:'MIXTO-FINAL-0003'}));
+      const result={
+        name:'Métodos de pago',
+        passed:
+          eligibilitySaleAfter.sales===eligibilitySaleBefore.sales+1 &&
+          eligibilitySaleAfter.stock===eligibilitySaleBefore.stock-1 &&
+          mandatoryPassed &&
+          cases.every(row=>row.passed) &&
+          uncaught.slice(errorStart).length===0,
+        opening:cashSnapshot(win),
+        eligibilityPreparation:{
+          before:eligibilitySaleBefore,
+          after:eligibilitySaleAfter,
+          evaluation:{
+            eligible:evaluation.eligible,
+            purchases:evaluation.purchases,
+            realizedProfit:evaluation.realizedProfit,
+            available:evaluation.available
+          }
+        },
+        clientRequired:{
+          passed:mandatoryPassed,
+          before:mandatoryBefore,
+          after:mandatoryAfter,
+          messages:mandatoryMessages
+        },
+        cases,
+        uncaught:uncaught.slice(errorStart)
+      };
+      return{result,clientId:client.id};
+    }
+
+    async function createManualCredit(win,clientId){
+      win.abrirCred(clientId);
+      if(!win.document.querySelector('#mCred')?.classList.contains('open')){
+        throw new Error('No se abrió el crédito mediante abrirCred');
+      }
+      setField(win,'crDesc',`${PREFIX} Crédito manual`);
+      setField(win,'crMonto','2');
+      setField(win,'crVence',read(win,'_naDatePlus(30)'));
+      await win.guardarCred();
+      const credit=read(win,`creditos.find(row=>row.desc===${JSON.stringify(`${PREFIX} Crédito manual`)})`);
+      if(!credit)throw new Error('No se creó el crédito mediante guardarCred');
+      return credit;
+    }
+
+    function creditSnapshot(win,creditId){
+      return read(win,`(()=>{
+        const credit=creditos.find(row=>String(row.id)===${JSON.stringify(String(creditId))});
+        const sessionId=cajEstado?.sessionId??null;
+        const moves=cajMovs.filter(row=>String(row.sessionId??'')===String(sessionId??''));
+        return{
+          balance:Number(cajTotales().ef),
+          moves:moves.length,
+          paid:Number(credit?.pagado),
+          pending:Number(_naCreditOutstanding(credit)),
+          payments:Array.isArray(credit?.pagos)?credit.pagos.length:0
+        };
+      })()`);
+    }
+
+    async function prepareCreditPayment(win,creditId,amount){
+      win.abrirPago(creditId);
+      setField(win,'pagoMonto',amount);
+      setField(win,'pagoMetodo','efectivo','change');
+      return creditSnapshot(win,creditId);
+    }
+
+    async function testCredits(win,clientId){
+      activeCase='creditos-doble';
+      const errorStart=uncaught.length;
+      const credit=await createManualCredit(win,clientId);
+      const toastStart=toastEvents.length;
+      const before=await prepareCreditPayment(win,credit.id,1);
+      const first=win.confirmarPago();
+      const afterFirstButton=buttonSnapshot(win,'#pagoConfirmBtn');
+      const second=win.confirmarPago();
+      const afterSecondButton=buttonSnapshot(win,'#pagoConfirmBtn');
+      await Promise.all([first,second]);
+      await wait(80);
+      const after=creditSnapshot(win,credit.id);
+      const doubleMessages=toastEvents.slice(toastStart);
+      const doublePassed=
+        after.payments===before.payments+1 &&
+        closeEnough(after.paid,before.paid+1) &&
+        closeEnough(after.pending,before.pending-1) &&
+        after.moves===before.moves+1 &&
+        closeEnough(after.balance,before.balance+1) &&
+        afterFirstButton.disabled &&
+        afterSecondButton.disabled &&
+        !buttonSnapshot(win,'#pagoConfirmBtn').disabled &&
+        doubleMessages.filter(row=>row.type==='success').length===1;
+
+      activeCase='creditos-rollback';
+      const rollbackToastStart=toastEvents.length;
+      const rollbackBefore=await prepareCreditPayment(win,credit.id,.5);
+      const originalSave=win.saveAllData;
+      let calls=0;
+      const delegated=[];
+      let restored=false;
+      try{
+        win.saveAllData=async function(...args){
+          calls+=1;
+          if(calls===1)throw new Error('Fallo controlado de pago de crédito');
+          const value=await originalSave.apply(this,args);
+          delegated.push({call:calls,ok:!!value?.ok,verified:!!value?.verified});
+          return value;
+        };
+        await win.confirmarPago();
+        await wait(80);
+      }finally{
+        win.saveAllData=originalSave;
+        restored=win.saveAllData===originalSave;
+      }
+      const rollbackAfter=creditSnapshot(win,credit.id);
+      const rollbackMessages=toastEvents.slice(rollbackToastStart);
+      const rollbackButton=buttonSnapshot(win,'#pagoConfirmBtn');
+      const rollbackPassed=
+        calls>=2 &&
+        delegated.some(row=>row.call>=2&&row.ok&&row.verified) &&
+        restored &&
+        JSON.stringify(rollbackAfter)===JSON.stringify(rollbackBefore) &&
+        !rollbackButton.disabled &&
+        rollbackMessages.filter(row=>row.type==='success').length===0 &&
+        rollbackMessages.some(row=>row.type==='error');
+
+      win=await reloadPos();
+      activeCase='creditos-recarga';
+      const persisted=creditSnapshot(win,credit.id);
+      const persistPassed=JSON.stringify(persisted)===JSON.stringify(after);
+      const errors=uncaught.slice(errorStart);
+      return{
+        win,
+        result:{
+          name:'Créditos: doble pago y rollback',
+          passed:doublePassed&&rollbackPassed&&persistPassed&&errors.length===0,
+          creditId:credit.id,
+          double:{
+            before,
+            afterFirstButton,
+            afterSecondButton,
+            after,
+            messages:doubleMessages,
+            passed:doublePassed
+          },
+          rollback:{
+            before:rollbackBefore,
+            after:rollbackAfter,
+            calls,
+            delegated,
+            saveAllDataRestored:restored,
+            button:rollbackButton,
+            messages:rollbackMessages,
+            passed:rollbackPassed
+          },
+          persisted,
+          persistPassed,
+          uncaught:errors
+        }
+      };
+    }
+
+    async function runCashMovement(win,type,amount,description,doubleInvocation=false){
+      activeCase=`caja-${type}-${doubleInvocation?'doble':'normal'}-${Date.now()}`;
+      const toastStart=toastEvents.length;
+      const errorStart=uncaught.length;
+      const before=cashSnapshot(win);
+      win.abrirMovCaja(type);
+      setField(win,'cajMovMonto',amount);
+      setField(win,'cajMovDesc',description);
+      setField(win,'cajMovMetodo','efectivo','change');
+      const first=win.guardarMovCaja();
+      const afterFirstButton=buttonSnapshot(win,'#cajMovBtn');
+      const second=doubleInvocation?win.guardarMovCaja():null;
+      const afterSecondButton=buttonSnapshot(win,'#cajMovBtn');
+      await first;
+      if(second)await second;
+      await wait(80);
+      const after=cashSnapshot(win);
+      const messages=toastEvents.slice(toastStart);
+      const errors=uncaught.slice(errorStart);
+      return{
+        type,
+        amount,
+        doubleInvocation,
+        before,
+        after,
+        deltaMoves:after.movements.length-before.movements.length,
+        deltaBalance:after.balance-before.balance,
+        afterFirstButton,
+        afterSecondButton,
+        messages,
+        uncaught:errors
+      };
+    }
+
+    async function runExpense(win,amount,description,doubleInvocation=false){
+      activeCase=`gasto-${doubleInvocation?'doble':'normal'}-${Date.now()}`;
+      const toastStart=toastEvents.length;
+      const errorStart=uncaught.length;
+      const beforeCash=cashSnapshot(win);
+      const beforeExpenses=read(win,'gastos.length');
+      win.abrirModalGasto();
+      setField(win,'gasDesc',description);
+      setField(win,'gasMonto',amount);
+      setField(win,'gasFecha',read(win,'obtenerHoy()'));
+      setField(win,'gasMetodo','efectivo','change');
+      const button=win.document.querySelector('#mGasto .mbtn-ok');
+      const first=win.guardarGasto();
+      const afterFirstButton={disabled:button.disabled,text:button.textContent.trim(),classes:button.className};
+      const second=doubleInvocation?win.guardarGasto():null;
+      const afterSecondButton={disabled:button.disabled,text:button.textContent.trim(),classes:button.className};
+      await first;
+      if(second)await second;
+      await wait(80);
+      const afterCash=cashSnapshot(win);
+      const afterExpenses=read(win,'gastos.length');
+      return{
+        amount,
+        doubleInvocation,
+        beforeCash,
+        afterCash,
+        beforeExpenses,
+        afterExpenses,
+        deltaExpenses:afterExpenses-beforeExpenses,
+        deltaMoves:afterCash.movements.length-beforeCash.movements.length,
+        deltaBalance:afterCash.balance-beforeCash.balance,
+        afterFirstButton,
+        afterSecondButton,
+        finalButton:{disabled:button.disabled,text:button.textContent.trim(),classes:button.className},
+        messages:toastEvents.slice(toastStart),
+        uncaught:uncaught.slice(errorStart)
+      };
+    }
+
+    async function testCashAndExpenses(win){
+      activeCase='caja-gastos';
+      const errorStart=uncaught.length;
+      const income=await runCashMovement(win,'ing',10,`${PREFIX} Ingreso`,false);
+      const expenseMovement=await runCashMovement(win,'egr',3,`${PREFIX} Egreso`,false);
+      const expense=await runExpense(win,2,`${PREFIX} Gasto`,false);
+      const doubleMovement=await runCashMovement(win,'ing',4,`${PREFIX} Ingreso doble`,true);
+      const doubleExpense=await runExpense(win,1,`${PREFIX} Gasto doble`,true);
+      const normalPassed=
+        income.deltaMoves===1&&closeEnough(income.deltaBalance,10)&&
+        expenseMovement.deltaMoves===1&&closeEnough(expenseMovement.deltaBalance,-3)&&
+        expense.deltaExpenses===1&&expense.deltaMoves===1&&closeEnough(expense.deltaBalance,-2);
+      const doublePassed=
+        doubleMovement.deltaMoves===1&&closeEnough(doubleMovement.deltaBalance,4)&&
+        doubleMovement.afterFirstButton.disabled&&doubleMovement.afterSecondButton.disabled&&
+        doubleMovement.messages.filter(row=>row.type==='success').length===1&&
+        doubleExpense.deltaExpenses===1&&doubleExpense.deltaMoves===1&&closeEnough(doubleExpense.deltaBalance,-1)&&
+        doubleExpense.afterFirstButton.disabled&&doubleExpense.afterSecondButton.disabled&&
+        doubleExpense.messages.filter(row=>row.type==='success').length===1;
+
+      activeCase='cierre-caja-doble';
+      const closeToastStart=toastEvents.length;
+      const beforeClose=cashSnapshot(win);
+      win.prepCierre();
+      setField(win,'cajContado',beforeClose.balance);
+      const first=win.cerrarCaja();
+      const closeButton=win.document.querySelector('#mCierre .mbtn-ok');
+      const afterFirstButton={disabled:closeButton.disabled,text:closeButton.textContent.trim(),classes:closeButton.className};
+      const second=win.cerrarCaja();
+      const afterSecondButton={disabled:closeButton.disabled,text:closeButton.textContent.trim(),classes:closeButton.className};
+      await Promise.all([first,second]);
+      await wait(80);
+      const closed=read(win,'({abierta:cajEstado.abierta,cerrada:cajEstado.cerrada,contado:cajEstado.contado,esperado:cajEstado.esperado,diferencia:cajEstado.diferencia,sessionId:cajEstado.sessionId})');
+      const closeMessages=toastEvents.slice(closeToastStart);
+      const closePassed=
+        closed.cerrada===true &&
+        closeEnough(closed.contado,beforeClose.balance) &&
+        closeEnough(closed.esperado,beforeClose.balance) &&
+        closeEnough(closed.diferencia,0) &&
+        afterFirstButton.disabled &&
+        closeMessages.filter(row=>row.type==='success').length===1;
+
+      win=await reloadPos();
+      activeCase='caja-gastos-recarga';
+      const persisted=read(win,`({
+        closed:!!cajEstado?.cerrada,
+        sessionId:cajEstado?.sessionId,
+        counted:Number(cajEstado?.contado),
+        expected:Number(cajEstado?.esperado),
+        difference:Number(cajEstado?.diferencia),
+        traceMoves:cajMovs.filter(row=>String(row.sessionId??'')===${JSON.stringify(String(closed.sessionId))}).length,
+        expenses:gastos.filter(row=>String(row.desc||'').startsWith(${JSON.stringify(PREFIX)})).length
+      })`);
+      const traceExpected=doubleMovement.before.movements.length+1+1;
+      const persistPassed=
+        persisted.closed &&
+        String(persisted.sessionId)===String(closed.sessionId) &&
+        closeEnough(persisted.counted,closed.contado) &&
+        closeEnough(persisted.expected,closed.esperado) &&
+        closeEnough(persisted.difference,closed.diferencia) &&
+        persisted.traceMoves===cashSnapshot(win).movements.length;
+      const errors=uncaught.slice(errorStart);
+      return{
+        win,
+        result:{
+          name:'Caja, gastos, doble clic y cierre',
+          passed:normalPassed&&doublePassed&&closePassed&&persistPassed&&errors.length===0,
+          normal:{income,expenseMovement,expense,passed:normalPassed},
+          double:{movement:doubleMovement,expense:doubleExpense,passed:doublePassed},
+          close:{before:beforeClose,afterFirstButton,afterSecondButton,closed,messages:closeMessages,passed:closePassed},
+          persisted,
+          traceExpected,
+          persistPassed,
+          uncaught:errors
+        }
+      };
+    }
+
+    function setInputFile(win,input,file){
+      const transfer=new win.DataTransfer();
+      transfer.items.add(file);
+      input.files=transfer.files;
+    }
+
+    async function analyzeImport(win,file){
+      const input=win.document.querySelector('#importFile');
+      setInputFile(win,input,file);
+      await win.importProducts();
+      await wait(40);
+      return read(win,`({
+        pending:!!_naPendingProductImport,
+        report:_naLastImportReport?JSON.parse(JSON.stringify(_naLastImportReport)):null
+      })`);
+    }
+
+    function canonicalState(win){
+      return read(win,`(()=>{
+        const snapshot=_naBuildSnapshot();
+        const {logs,...security}=snapshot.security||{};
+        return{
+          appConfig:snapshot.appConfig,
+          security,
+          productos:snapshot.data.productos,
+          ventas:snapshot.data.ventas,
+          clientes:snapshot.data.clientes,
+          creditos:snapshot.data.creditos,
+          gastos:snapshot.data.gastos,
+          cajMovs:snapshot.data.cajMovs,
+          cajEstado:snapshot.data.cajEstado
+        };
+      })()`);
+    }
+
+    function stateDifferences(before,after,path='',differences=[]){
+      if(differences.length>=100)return differences;
+      if(Object.is(before,after))return differences;
+      if(path==='appConfig.stockMin'&&Number(before)===Number(after))return differences;
+      if(
+        /(?:clienteDni|creditId|ventaId)$/.test(path) &&
+        (before===null||before===undefined||before==='') &&
+        (after===null||after===undefined||after==='')
+      )return differences;
+      const beforeArray=Array.isArray(before),afterArray=Array.isArray(after);
+      if(beforeArray||afterArray){
+        if(!(beforeArray&&afterArray)){
+          differences.push({path,before,after});
+          return differences;
+        }
+        if(before.length!==after.length)differences.push({path:`${path}.length`,before:before.length,after:after.length});
+        const length=Math.max(before.length,after.length);
+        for(let index=0;index<length&&differences.length<100;index++){
+          stateDifferences(before[index],after[index],`${path}[${index}]`,differences);
+        }
+        return differences;
+      }
+      const beforeObject=before!==null&&typeof before==='object';
+      const afterObject=after!==null&&typeof after==='object';
+      if(beforeObject||afterObject){
+        if(!(beforeObject&&afterObject)){
+          differences.push({path,before,after});
+          return differences;
+        }
+        const keys=new Set([...Object.keys(before),...Object.keys(after)]);
+        for(const key of keys){
+          if(differences.length>=100)break;
+          stateDifferences(before[key],after[key],path?`${path}.${key}`:key,differences);
+        }
+        return differences;
+      }
+      differences.push({path,before,after});
+      return differences;
+    }
+
+    async function withCapturedDownloads(win,callback){
+      const proto=win.HTMLAnchorElement.prototype;
+      const originalClick=proto.click;
+      const downloads=[];
+      proto.click=function(){
+        downloads.push({download:this.download,href:String(this.href).slice(0,60)});
+      };
+      try{
+        await callback(downloads);
+      }finally{
+        proto.click=originalClick;
+      }
+      return downloads;
+    }
+
+    async function withAcceptedConfirmation(win,callback){
+      const operation=Promise.resolve().then(callback);
+      let overlay=null;
+      let okButton=null;
+      for(let attempt=0;attempt<200;attempt++){
+        overlay=win.document.querySelector('#naConfirm');
+        okButton=win.document.querySelector('#naConfirmOk');
+        if(overlay?.classList.contains('open')&&okButton)break;
+        await wait(10);
+      }
+      if(!overlay?.classList.contains('open')||!okButton){
+        await operation;
+        throw new Error('No se abrió la confirmación real de restauración');
+      }
+      okButton.click();
+      return await operation;
+    }
+
+    async function testImportAndBackup(win){
+      activeCase='importacion-respaldo';
+      const errorStart=uncaught.length;
+      const importToastStart=toastEvents.length;
+      win.goPage('pageConfig');
+      win.switchCfgCategory('importar');
+      if(!win.document.querySelector('#importFile')||!win.document.querySelector('#backupFile')){
+        throw new Error('No se renderizaron los controles reales de importación y respaldo');
+      }
+      const beforeProducts=read(win,'productos.length');
+      const csv=[
+        'Nombre;SKU;Código de barras;Marca;Categoría;Costo;Precio;Stock;Stock mínimo',
+        `${PREFIX} Importado;${IMPORT_SKU};990000009801;${PREFIX} Marca;Abarrotes;1;2;7;2`
+      ].join('\r\n');
+      const validFile=new win.File([csv],'productos-validos.csv',{type:'text/csv'});
+      const validAnalysis=await analyzeImport(win,validFile);
+      const validPlan=validAnalysis.report;
+      await win.confirmProductImport();
+      await wait(60);
+      const imported=read(win,`productos.find(row=>row.sku===${JSON.stringify(IMPORT_SKU)})`);
+      const validPassed=
+        validPlan?.added===1 &&
+        read(win,'productos.length')===beforeProducts+1 &&
+        imported?.name===`${PREFIX} Importado` &&
+        closeEnough(imported?.stock,7);
+
+      activeCase='importacion-duplicados';
+      const duplicateCsv=[
+        'Nombre;SKU;Código de barras;Marca;Categoría;Costo;Precio;Stock',
+        `${PREFIX} Duplicado A;TEST-POS-IMPORT-DUP;990000009802;Marca;Abarrotes;1;2;3`,
+        `${PREFIX} Duplicado B;TEST-POS-IMPORT-DUP;990000009802;Marca;Abarrotes;1;2;3`
+      ].join('\r\n');
+      const duplicatePlan=await analyzeImport(win,new win.File([duplicateCsv],'duplicados.csv',{type:'text/csv'}));
+      const duplicatePassed=
+        duplicatePlan.pending &&
+        duplicatePlan.report?.actions?.length===1 &&
+        duplicatePlan.report?.skipped===1 &&
+        duplicatePlan.report?.warnings?.length>=1;
+      win.clearProductImportPreview();
+
+      activeCase='importacion-invalida';
+      const invalidToastStart=toastEvents.length;
+      const invalidPlan=await analyzeImport(win,new win.File(['contenido'],'productos.exe',{type:'application/octet-stream'}));
+      const invalidMessages=toastEvents.slice(invalidToastStart);
+      const invalidPassed=
+        invalidPlan.pending===false &&
+        invalidMessages.some(row=>row.type==='error'&&/formato/i.test(row.text));
+
+      activeCase='importacion-tamano';
+      const sizeToastStart=toastEvents.length;
+      const largeFile=new win.File([new win.Uint8Array(8*1024*1024+1)],'demasiado-grande.csv',{type:'text/csv'});
+      const largePlan=await analyzeImport(win,largeFile);
+      const sizeMessages=toastEvents.slice(sizeToastStart);
+      const sizePassed=
+        largePlan.pending===false &&
+        sizeMessages.some(row=>row.type==='error'&&/8 MB|límite/i.test(row.text));
+
+      activeCase='exportacion-sin-sheetjs';
+      const originalXlsx=win.XLSX;
+      let csvDownloads;
+      try{
+        win.XLSX=undefined;
+        csvDownloads=await withCapturedDownloads(win,async downloads=>{
+          win.exportProductsExcel();
+          await wait(20);
+          return downloads;
+        });
+      }finally{
+        win.XLSX=originalXlsx;
+      }
+      const csvExportPassed=csvDownloads.some(row=>/\.csv$/i.test(row.download));
+
+      activeCase='respaldo-descarga-restauracion';
+      const stateBefore=canonicalState(win);
+      const snapshot=read(win,'_naBuildSnapshot()');
+      const backupDownloads=await withCapturedDownloads(win,async()=>win.exportarRespaldo());
+      const backupDownloadPassed=backupDownloads.some(row=>/\.json$/i.test(row.download));
+      const sentinel=read(win,`productos.find(row=>row.sku===${JSON.stringify(PRODUCT_SKU)})`);
+      read(win,`productos.find(row=>row.sku===${JSON.stringify(PRODUCT_SKU)}).name=${JSON.stringify(`${PREFIX} Mutado antes de restaurar`)}`);
+      await win.saveAllData();
+      const backupFile=new win.File([JSON.stringify(snapshot)],'respaldo-valido.json',{type:'application/json'});
+      setInputFile(win,win.document.querySelector('#backupFile'),backupFile);
+      const restoreDownloads=await withCapturedDownloads(win,async()=>{
+        await withAcceptedConfirmation(win,()=>win.importarRespaldo());
+      });
+      await wait(80);
+      const stateRestored=canonicalState(win);
+      const restoreDifferences=stateDifferences(stateBefore,stateRestored);
+      const restorePassed=
+        restoreDifferences.length===0 &&
+        restoreDownloads.some(row=>/antes_de_restaurar/i.test(row.download));
+
+      activeCase='respaldo-rollback';
+      const rollbackBefore=canonicalState(win);
+      const changedSnapshot=read(win,'_naBuildSnapshot()');
+      changedSnapshot.data.productos.find(row=>row.sku===PRODUCT_SKU).name=`${PREFIX} No debe persistir`;
+      const rollbackFile=new win.File([JSON.stringify(changedSnapshot)],'respaldo-fallo.json',{type:'application/json'});
+      setInputFile(win,win.document.querySelector('#backupFile'),rollbackFile);
+      const originalSave=win.saveAllData;
+      let saveCalls=0;
+      let saveRestored=false;
+      try{
+        win.saveAllData=async function(...args){
+          saveCalls+=1;
+          if(saveCalls===1)throw new Error('Fallo controlado de restauración');
+          return originalSave.apply(this,args);
+        };
+        await withCapturedDownloads(win,async()=>{
+          await withAcceptedConfirmation(win,()=>win.importarRespaldo());
+        });
+        await wait(80);
+      }finally{
+        win.saveAllData=originalSave;
+        saveRestored=win.saveAllData===originalSave;
+      }
+      const rollbackAfter=canonicalState(win);
+      const rollbackDifferences=stateDifferences(rollbackBefore,rollbackAfter);
+      const backupRollbackPassed=
+        saveCalls>=2 &&
+        saveRestored &&
+        rollbackDifferences.length===0;
+      const errors=uncaught.slice(errorStart);
+      const controlledErrors=errors.filter(row=>/Fallo controlado de restauración/.test(row.message));
+      const uncontrolledErrors=errors.filter(row=>!/Fallo controlado de restauración/.test(row.message));
+      return{
+        name:'Importación, exportación y respaldo',
+        passed:
+          validPassed &&
+          duplicatePassed &&
+          invalidPassed &&
+          sizePassed &&
+          csvExportPassed &&
+          backupDownloadPassed &&
+          restorePassed &&
+          backupRollbackPassed &&
+          uncontrolledErrors.length===0,
+        valid:{plan:validPlan,imported,passed:validPassed},
+        duplicates:{plan:duplicatePlan,passed:duplicatePassed},
+        invalid:{messages:invalidMessages,passed:invalidPassed},
+        size:{fileSize:largeFile.size,messages:sizeMessages,passed:sizePassed},
+        csvWithoutSheetJS:{downloads:csvDownloads,passed:csvExportPassed},
+        backupDownload:{downloads:backupDownloads,passed:backupDownloadPassed},
+        restore:{downloads:restoreDownloads,differences:restoreDifferences,passed:restorePassed},
+        rollback:{saveCalls,saveRestored,differences:rollbackDifferences,passed:backupRollbackPassed},
+        messages:toastEvents.slice(importToastStart),
+        controlledErrors,
+        uncaught:uncontrolledErrors
+      };
+    }
+
+    runButton.addEventListener('click',async()=>{
+      runButton.disabled=true;
+      resultsBody.replaceChildren();
+      status.textContent='Ejecutando…';
+      status.className='';
+      const results=[];
+      try{
+        let win=await currentPosWindow();
+        const productRun=await testProduct(win);
+        win=productRun.win;
+        results.push(productRun.result);
+        renderResult(productRun.result);
+
+        const configRun=await testConfiguration(win);
+        win=configRun.win;
+        results.push(configRun.result);
+        renderResult(configRun.result);
+
+        const paymentsRun=await testPayments(win,productRun.productId);
+        results.push(paymentsRun.result);
+        renderResult(paymentsRun.result);
+
+        const creditsRun=await testCredits(win,paymentsRun.clientId);
+        win=creditsRun.win;
+        results.push(creditsRun.result);
+        renderResult(creditsRun.result);
+
+        const cashRun=await testCashAndExpenses(win);
+        win=cashRun.win;
+        results.push(cashRun.result);
+        renderResult(cashRun.result);
+
+        const importRun=await testImportAndBackup(win);
+        results.push(importRun);
+        renderResult(importRun);
+
+        const allPassed=results.every(result=>result.passed);
+        status.textContent=allPassed?'APROBADO':'FALLIDO';
+        status.className=allPassed?'ok':'fail';
+        window.__acceptanceResults=clone(results);
+      }catch(error){
+        recordUncaught('harness',{message:error.message,error});
+        const failure={name:'Harness',passed:false,error:error.message,stack:error.stack,uncaught};
+        renderResult(failure);
+        status.textContent='FALLIDO';
+        status.className='fail';
+        window.__acceptanceResults=[...results,failure];
+      }finally{
+        detachObservers();
+        runButton.disabled=false;
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
