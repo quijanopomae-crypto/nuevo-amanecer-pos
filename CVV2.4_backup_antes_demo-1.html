@@ -4196,9 +4196,16 @@ document.addEventListener('DOMContentLoaded',async()=>{
 })();
 
 // Gestos de scroll: ocultar/mostrar .g-topbar con 3 gestos ascendentes en móvil
+// Un gesto físico = máximo un incremento. Touch usa touchstart/move/end. Wheel agrupa eventos consecutivos.
 (function(){
-  var lastScrollY=0,upCount=0,gestureBlock=false,ticking=false;
-  var THRESHOLD=20,NEAR_TOP=20;
+  var upGestureCount=0,lastScrollY=0,ticking=false;
+  var THRESHOLD=20,NEAR_TOP=20,WHEEL_WINDOW=350;
+  var touchStartY=0,touchMaxUp=0,touchActive=false;
+  var wheelGroupActive=false,wheelGroupDir=null,wheelGroupDist=0,wheelTimer=null;
+  function tb(){return document.querySelector('.g-topbar');}
+  function show(){var t=tb();if(t)t.classList.remove('g-topbar-hidden');}
+  function hide(){var t=tb();if(t)t.classList.add('g-topbar-hidden');}
+  function resetState(){upGestureCount=0;touchMaxUp=0;touchActive=false;wheelGroupDir=null;wheelGroupDist=0;wheelGroupActive=false;if(wheelTimer){clearTimeout(wheelTimer);wheelTimer=null;}}
   function isExcluded(el){
     while(el&&el!==document.body){
       if(el.closest){var c=el.closest('#cartDrawer,.cart-drawer,.modal-overlay,.modal,#mTicket,#mPrinter,#mCobro,#mMovInv,#mVentaLibre,#mDescuento,#pageConfig,.cfg-shell,.pay-modal-body');if(c)return true;}
@@ -4207,29 +4214,76 @@ document.addEventListener('DOMContentLoaded',async()=>{
     }
     return false;
   }
-  var lastTouchTarget=null;
-  document.addEventListener('touchstart',function(e){lastTouchTarget=e.target;},{passive:true});
-  document.addEventListener('touchend',function(){lastTouchTarget=null;},{passive:true});
+  function countGesture(){upGestureCount++;if(upGestureCount>=3){show();resetState();}}
+  function cancelGesture(){upGestureCount=0;}
+  /* ── Touch: un gesto físico = máximo un incremento ── */
+  document.addEventListener('touchstart',function(e){
+    if(!document.body.classList.contains('pos-mobile-scroll'))return;
+    if(e.touches.length!==1)return;
+    if(isExcluded(e.target)){touchActive=false;return;}
+    touchActive=true;touchStartY=e.touches[0].clientY;touchMaxUp=0;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!touchActive)return;
+    var dY=e.touches[0].clientY-touchStartY;if(dY>touchMaxUp)touchMaxUp=dY;
+  },{passive:true});
+  document.addEventListener('touchend',function(){
+    if(!touchActive)return;touchActive=false;
+    if(touchMaxUp>=THRESHOLD)countGesture();
+  });
+  document.addEventListener('touchcancel',function(){touchActive=false;});
+  /* ── Wheel / trackpad: agrupa eventos consecutivos como un solo gesto ── */
+  document.addEventListener('wheel',function(e){
+    if(!document.body.classList.contains('pos-mobile-scroll'))return;
+    if(isExcluded(e.target))return;
+    var d=e.deltaY,dir=d>1?'down':(d<-1?'up':null);if(!dir)return;
+    if(!wheelGroupActive){wheelGroupActive=true;wheelGroupDir=dir;wheelGroupDist=Math.abs(d);}
+    else{if(dir===wheelGroupDir)wheelGroupDist+=Math.abs(d);else{wheelGroupDir=dir;wheelGroupDist=Math.abs(d);}}
+    if(wheelTimer)clearTimeout(wheelTimer);
+    wheelTimer=setTimeout(function(){
+      wheelGroupActive=false;wheelTimer=null;
+      if(wheelGroupDir==='up'&&wheelGroupDist>=THRESHOLD)countGesture();
+      if(wheelGroupDir==='down')cancelGesture();
+    },WHEEL_WINDOW);
+    if(dir==='down'){cancelGesture();hide();}
+  },{passive:true});
+  /* ── Scroll: visibilidad (ocultar al bajar, mostrar cerca del inicio) ── */
   function handleScroll(){
     if(ticking)return;ticking=true;
     requestAnimationFrame(function(){
       if(!document.body.classList.contains('pos-mobile-scroll')){ticking=false;return;}
-      if(lastTouchTarget&&isExcluded(lastTouchTarget)){ticking=false;return;}
       var st=window.scrollY||document.documentElement.scrollTop||0;
-      var topbar=document.querySelector('.g-topbar');
-      if(!topbar){ticking=false;return;}
-      if(st<=NEAR_TOP){topbar.classList.remove('g-topbar-hidden');upCount=0;lastScrollY=st;ticking=false;return;}
+      if(!tb()){ticking=false;return;}
+      if(st<=NEAR_TOP){show();resetState();lastScrollY=st;ticking=false;return;}
       var diff=st-lastScrollY;
-      if(diff>4){
-        topbar.classList.add('g-topbar-hidden');upCount=0;gestureBlock=false;
-      }else if(diff<-THRESHOLD){
-        if(!gestureBlock){upCount++;gestureBlock=true;setTimeout(function(){gestureBlock=false;},180);}
-        if(upCount>=3){topbar.classList.remove('g-topbar-hidden');upCount=0;gestureBlock=false;}
-      }
+      if(diff>5&&st>NEAR_TOP){hide();cancelGesture();}
       lastScrollY=st;ticking=false;
     });
   }
   window.addEventListener('scroll',handleScroll,{passive:true});
+  /* ── Reinicio al cambiar de módulo o redimensionar ── */
+  new MutationObserver(function(){
+    if(!document.body.classList.contains('pos-mobile-scroll')){show();resetState();}
+  }).observe(document.body,{attributes:true,attributeFilter:['class']});
+  window.addEventListener('resize',function(){if(window.innerWidth>700){show();resetState();}});
+  /* ── API de pruebas: solo disponible con ?na-test=1 ── */
+  if(location.search.indexOf('na-test=1')!==-1){
+    window._naTopbarGesture={
+      getCount:function(){return upGestureCount;},
+      reset:resetState,
+      isHidden:function(){return (tb()||{}).classList&&tb().classList.contains('g-topbar-hidden');},
+      show:show,
+      hide:hide,
+      getTouchActive:function(){return touchActive;},
+      getWheelActive:function(){return wheelGroupActive;},
+      getWheelDir:function(){return wheelGroupDir;},
+      getWheelDist:function(){return wheelGroupDist;},
+      getThreshold:function(){return THRESHOLD;},
+      getNearTop:function(){return NEAR_TOP;},
+      simulateUpGesture:function(){if(!document.body.classList.contains('pos-mobile-scroll'))return;countGesture();},
+      simulateDownScroll:function(){if(!document.body.classList.contains('pos-mobile-scroll'))return;cancelGesture();hide();}
+    };
+  }
 })();
 </script>
 
