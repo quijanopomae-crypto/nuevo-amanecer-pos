@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Regresión: desplazamiento unificado móvil del POS</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:16px}
+    h1{margin:0 0 4px;font-size:22px}
+    p{margin:0 0 12px;color:#526071}
+    button{height:38px;border:0;border-radius:8px;padding:0 14px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:12px}
+    th,td{border:1px solid #d7dee8;padding:7px;text-align:left;vertical-align:top}
+    th{background:#e7eef4;position:sticky;top:0}
+    .ok{color:#087443;font-weight:900}.fail{color:#b42318;font-weight:900}.warn{color:#b45309;font-weight:900}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:10px}
+  </style>
+</head>
+<body>
+  <h1>Regresión de desplazamiento unificado móvil</h1>
+  <p>Verifica CSS y JS del nuevo sistema de scroll sin simular gestos táctiles.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar matriz</button>
+    <strong id="status">Esperando.</strong>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Ancho</th><th>Caso</th><th>Resultado</th><th>Evidencia</th></tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+  <script>
+  (() => {
+    const MOBILE_WIDTHS=[320,360,390,430];
+    const DESKTOP_WIDTHS=[768,1366];
+    const iframe=document.createElement('iframe');
+    iframe.src='../CVV2.4_backup_antes_demo-1.html';
+    iframe.style.cssText='position:absolute;width:1px;height:1px;border:0;left:-10000px;top:0';
+    document.body.appendChild(iframe);
+
+    const runBtn=document.getElementById('run');
+    const statusEl=document.getElementById('status');
+    const tbody=document.getElementById('results');
+    const results=[];
+
+    const pass=(label,detail='')=>`<span class="ok">✔ ${label}</span>${detail?`<br><pre>${detail}</pre>`:''}`;
+    const fail=(label,detail='')=>`<span class="fail">✘ ${label}</span>${detail?`<br><pre>${detail}</pre>`:''}`;
+    const warn=(label,detail='')=>`<span class="warn">⚠ ${label}</span>${detail?`<br><pre>${detail}</pre>`:''}`;
+
+    function addRow(width,label,result){results.push({width,label,result});tbody.innerHTML=results.map(r=>`<tr><td>${r.width}px</td><td>${r.label}</td><td>${r.result}</td></tr>`).join('');}
+
+    const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+    async function setWidth(win,width){
+      return new Promise(resolve=>{
+        const orig=win.innerWidth;
+        Object.defineProperty(win,'innerWidth',{value:width,configurable:true});
+        win.dispatchEvent(new Event('resize'));
+        setTimeout(()=>resolve(),200);
+      });
+    }
+
+    async function runTests(){
+      runBtn.disabled=true;
+      statusEl.textContent='Ejecutando...';
+      results.length=0;tbody.innerHTML='';
+
+      try{
+        await new Promise(resolve=>{if(iframe.contentWindow&&iframe.contentWindow.document.readyState==='complete')resolve();else iframe.addEventListener('load',resolve,{once:true});});
+        await wait(1500);
+      }catch(e){statusEl.textContent='Error de carga: '+e.message;runBtn.disabled=false;return;}
+
+      const win=iframe.contentWindow;
+      const doc=win.document;
+      const body=doc.body;
+      if(!win.goPage||!win.goMenu){statusEl.textContent='El POS no expuso las funciones esperadas.';runBtn.disabled=false;return;}
+
+      // Verificar que el archivo incluye las clases y CSS necesarias
+      const styleSheets=Array.from(doc.styleSheets||[]);
+      const allCSS=styleSheets.map(s=>{try{return Array.from(s.cssRules||[]).map(r=>r.cssText).join('')}catch(e){return'';}}).join('');
+
+      const hasScrollCSS=allCSS.includes('pos-mobile-scroll');
+      addRow('—','CSS: regla pos-mobile-scroll presente',hasScrollCSS?pass('Encontrada'):fail('No se encontró la regla'));
+
+      const hasStickyRule=allCSS.includes('body.pos-mobile-scroll .g-topbar');
+      addRow('—','CSS: g-topbar sticky en móvil',hasStickyRule?pass('Encontrada'):fail('No encontrada'));
+
+      const hasHiddenRule=allCSS.includes('g-topbar-hidden');
+      addRow('—','CSS: clase g-topbar-hidden definida',hasHiddenRule?pass('Encontrada'):fail('No encontrada'));
+
+      const hasOverflowBody=allCSS.includes('body.pos-mobile-scroll')&&allCSS.includes('overflow-y:auto');
+      addRow('—','CSS: body scroll habilitado',hasOverflowBody?pass('Encontrada'):fail('No encontrada'));
+
+      // Ir al menú limpio
+      win.goMenu();await wait(150);
+      for(const w of MOBILE_WIDTHS){
+        await setWidth(win,w);await wait(100);
+        win.goPage('pagePOS');await wait(300);
+
+        const className=body.className||'';
+        const hasScroll=className.includes('pos-mobile-scroll');
+        addRow(w,'JS: clase pos-mobile-scroll en body al entrar a POS',hasScroll?pass('Presente'):fail('No presente',`Clases: ${className||'(vacío)'}`));
+
+        const bodyOverflow=win.getComputedStyle(body).overflowY;
+        const bodyIsScrollable=bodyOverflow==='auto'||bodyOverflow==='scroll';
+        addRow(w,'CSS: body overflow-y es scrollable',bodyIsScrollable?pass(bodyOverflow):fail(bodyOverflow));
+
+        const posBody=doc.querySelector('#pagePOS .pos-body');
+        if(posBody){
+          const pbOverflow=win.getComputedStyle(posBody).overflow;
+          addRow(w,'CSS: pos-body overflow visible',pbOverflow==='visible'?pass(pbOverflow):fail(`overflow: ${pbOverflow}`));
+        }else{addRow(w,'DOM: pos-body existe',fail('No encontrado'));}
+
+        const prodArea=doc.querySelector('#pagePOS .products-area');
+        if(prodArea){
+          const paOverflow=win.getComputedStyle(prodArea).overflowY;
+          addRow(w,'CSS: products-area overflow visible',paOverflow==='visible'?pass(paOverflow):fail(`overflow-y: ${paOverflow}`));
+        }else{addRow(w,'DOM: products-area existe',fail('No encontrado'));}
+
+        const sidebar=doc.querySelector('#pagePOS .sidebar');
+        if(sidebar){
+          const sbOverflowX=win.getComputedStyle(sidebar).overflowX;
+          addRow(w,'CSS: sidebar overflow-x auto (horizontal)',sbOverflowX==='auto'?pass(sbOverflowX):fail(`overflow-x: ${sbOverflowX}`));
+        }
+
+        const topbar=doc.querySelector('.g-topbar');
+        if(topbar){
+          const tbPos=win.getComputedStyle(topbar).position;
+          const tbTrans=win.getComputedStyle(topbar).transition;
+          addRow(w,'CSS: g-topbar sticky',tbPos==='sticky'?pass(tbPos):fail(`position: ${tbPos}`));
+          addRow(w,'CSS: g-topbar tiene transición',tbTrans&&tbTrans.includes('transform')?pass('Presente'):fail(tbTrans||'(ninguna)'));
+        }
+
+        // Ir al menú y verificar que la clase se elimina
+        win.goMenu();await wait(150);
+        const afterMenu=body.className||'';
+        const removed=!afterMenu.includes('pos-mobile-scroll');
+        addRow(w,'JS: clase eliminada al volver al menú',removed?pass('Eliminada'):fail('Sigue presente'));
+      }
+
+      // Verificar que en escritorio NO se aplica la clase
+      for(const w of DESKTOP_WIDTHS){
+        await setWidth(win,w);await wait(100);
+        win.goPage('pagePOS');await wait(300);
+
+        const className=body.className||'';
+        const hasScroll=className.includes('pos-mobile-scroll');
+        addRow(w,'Escritorio: NO tiene pos-mobile-scroll',!hasScroll?pass('Correcto'):fail('Clase aplicada indebidamente'));
+
+        const bodyOverflow=win.getComputedStyle(body).overflowY;
+        addRow(w,'Escritorio: body overflow-y hidden',bodyOverflow==='hidden'?pass('Correcto'):fail(`overflow-y: ${bodyOverflow}`));
+      }
+
+      // Verificar que goPage y goMenu manejan correctamente transiciones POS↔Config
+      for(const w of MOBILE_WIDTHS){
+        await setWidth(win,w);await wait(100);
+        win.goPage('pagePOS');await wait(200);
+        win.goPage('pageConfig');await wait(200);
+        const className=body.className||'';
+        const noPosScroll=!className.includes('pos-mobile-scroll');
+        addRow(w,'Transición POS→Config: clase POS eliminada',noPosScroll?pass('Eliminada'):fail('Sigue presente',`Clases: ${className}`));
+        win.goMenu();await wait(100);
+      }
+
+      const passCount=results.filter(r=>r.result.includes('✔')).length;
+      const failCount=results.filter(r=>r.result.includes('✘')).length;
+      const warnCount=results.filter(r=>r.result.includes('⚠')).length;
+      statusEl.textContent=`Completado: ${passCount} ✔ / ${failCount} ✘ / ${warnCount} ⚠`;
+      runBtn.disabled=false;
+    }
+
+    runBtn.addEventListener('click',runTests);
+  })();
+  </script>
+</body>
+</html>

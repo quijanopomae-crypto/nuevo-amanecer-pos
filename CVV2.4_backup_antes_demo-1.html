@@ -874,6 +874,92 @@
             }
         }
 
+        /* Corrección: desplazamiento unificado del POS en móvil */
+        @media(max-width:700px){
+            body.pos-mobile-scroll{
+                position:relative;
+                overflow-x:hidden!important;
+                overflow-y:auto!important;
+                height:auto!important;
+                min-height:100dvh!important;
+                -webkit-overflow-scrolling:touch;
+                touch-action:pan-y;
+            }
+            body.pos-mobile-scroll #pagePOS.active{
+                display:block!important;
+                height:auto!important;
+                min-height:0!important;
+                overflow:visible!important;
+                flex:none!important;
+                padding-bottom:calc(80px + env(safe-area-inset-bottom))!important;
+            }
+            body.pos-mobile-scroll #pagePOS .pos-body{
+                display:block!important;
+                overflow:visible!important;
+                flex:none!important;
+                height:auto!important;
+            }
+            body.pos-mobile-scroll #pagePOS .products-area{
+                overflow:visible!important;
+                height:auto!important;
+                max-height:none!important;
+                flex:none!important;
+                grid-template-columns:repeat(2,minmax(0,1fr))!important;
+                gap:10px!important;
+                padding:10px!important;
+            }
+            body.pos-mobile-scroll #pagePOS .sidebar{
+                width:100%!important;
+                height:auto!important;
+                flex-shrink:0!important;
+                display:flex!important;
+                flex-direction:row!important;
+                overflow-x:auto!important;
+                overflow-y:hidden!important;
+                gap:6px!important;
+                padding:6px 8px!important;
+                border-right:none!important;
+                border-bottom:1px solid #dde7ef!important;
+                box-shadow:none!important;
+                white-space:nowrap;
+            }
+            body.pos-mobile-scroll #pagePOS .sidebar .cat-btn{
+                flex-shrink:0;
+                white-space:nowrap;
+                flex-direction:row;
+                gap:6px;
+                padding:9px 10px;
+                font-size:11px;
+                border-radius:999px;
+                width:auto;
+            }
+            body.pos-mobile-scroll #pagePOS .sidebar .cat-btn .ci{
+                font-size:16px;
+            }
+            /* g-topbar se oculta/desliza en móvil */
+            body.pos-mobile-scroll .g-topbar{
+                position:sticky!important;
+                top:0!important;
+                z-index:51!important;
+                transition:transform 0.28s ease!important;
+            }
+            body.pos-mobile-scroll .g-topbar.g-topbar-hidden{
+                transform:translateY(-100%)!important;
+            }
+            /* El buscador del POS no es sticky */
+            body.pos-mobile-scroll #pagePOS > div:first-child{
+                position:static!important;
+            }
+            /* Carrito y backdrop fijos al viewport */
+            body.pos-mobile-scroll #pagePOS .cart-backdrop{
+                position:fixed!important;
+            }
+            body.pos-mobile-scroll #pagePOS .cart-drawer{
+                position:fixed!important;
+                height:100dvh!important;
+            }
+        }
+
         /* v17: Configuración usa el scroll real del documento en móvil */
         @media(max-width:960px){
             html.config-page-scroll{
@@ -3305,8 +3391,8 @@ loadAppState=function(){
 
 
 getLunesSemana=function(){const d=new Date(obtenerHoy()+'T12:00:00'),day=d.getDay(),diff=day===0?6:day-1;d.setDate(d.getDate()-diff);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${dd}`;};
-goPage=function(id){const target=document.getElementById(id);if(!target){toast('Módulo no disponible','error');return;}const configMode=id==='pageConfig'&&window.innerWidth<=960;document.documentElement.classList.toggle('config-page-scroll',configMode);document.body.classList.toggle('config-page-scroll',configMode);document.documentElement.classList.remove('cfg-menu-lock');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));target.classList.add('active');document.getElementById('backBtn').style.display='block';if(id==='pagePOS'){posRender();posUpdateCart();}if(id==='pageInventario'){invRender();invBadges();}if(id==='pageClientes')cliRender();if(id==='pageCaja'){document.getElementById('cajFechaLbl').textContent=new Date().toLocaleDateString('es-PE',{weekday:'short',day:'numeric',month:'short'});cajRender();}if(id==='pageVentas')ventasRender();if(id==='pageGastos')gasRender();if(id==='pageConfig'){document.getElementById('pageConfig')?.classList.remove('cfg-menu-open');switchCfgCategory(currentCfgCategory);requestAnimationFrame(()=>window.scrollTo(0,0));}else requestAnimationFrame(()=>window.scrollTo(0,0));saveAppState();};
-goMenu=function(){document.documentElement.classList.remove('config-page-scroll','cfg-menu-lock');document.body.classList.remove('config-page-scroll');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('pageMenu').classList.add('active');document.getElementById('backBtn').style.display='none';window.scrollTo(0,0);updateDashboard();saveAppState();};
+goPage=function(id){const target=document.getElementById(id);if(!target){toast('Módulo no disponible','error');return;}const configMode=id==='pageConfig'&&window.innerWidth<=960;const posMobile=id==='pagePOS'&&window.innerWidth<=700;document.documentElement.classList.toggle('config-page-scroll',configMode);document.body.classList.toggle('config-page-scroll',configMode);document.body.classList.toggle('pos-mobile-scroll',posMobile);document.documentElement.classList.remove('cfg-menu-lock');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));target.classList.add('active');document.getElementById('backBtn').style.display='block';if(id==='pagePOS'){posRender();posUpdateCart();}if(id==='pageInventario'){invRender();invBadges();}if(id==='pageClientes')cliRender();if(id==='pageCaja'){document.getElementById('cajFechaLbl').textContent=new Date().toLocaleDateString('es-PE',{weekday:'short',day:'numeric',month:'short'});cajRender();}if(id==='pageVentas')ventasRender();if(id==='pageGastos')gasRender();if(id==='pageConfig'){document.getElementById('pageConfig')?.classList.remove('cfg-menu-open');switchCfgCategory(currentCfgCategory);requestAnimationFrame(()=>window.scrollTo(0,0));}else requestAnimationFrame(()=>window.scrollTo(0,0));saveAppState();};
+goMenu=function(){document.documentElement.classList.remove('config-page-scroll','cfg-menu-lock');document.body.classList.remove('config-page-scroll','pos-mobile-scroll');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('pageMenu').classList.add('active');document.getElementById('backBtn').style.display='none';window.scrollTo(0,0);updateDashboard();saveAppState();};
 
 // POS: precio por caja correcto, control de stock por unidades y líneas separadas.
 toggleMayorista=function(){if(!appConfig.mayoristaActive){toast('La venta mayorista está desactivada','error');return;}modoMayorista=!modoMayorista;const btn=document.getElementById('btnMayorista'),tag=document.getElementById('modoMayoristaTag');if(btn){btn.style.background=modoMayorista?'var(--amber-light)':'var(--white)';btn.style.borderColor=modoMayorista?'var(--amber)':'var(--border)';btn.style.color=modoMayorista?'#b45309':'var(--dark)';}if(tag)tag.style.display=modoMayorista?'inline-block':'none';toast(modoMayorista?'🛍️ Modo mayorista activado':'🛒 Modo minorista');posRender();};
@@ -3603,7 +3689,7 @@ renderCfgContent=function(cat){
   const sideC=document.getElementById('cfgSideMetricClients');if(sideC)sideC.textContent=clientes.length;
   cfgUpdateStats();
 };
-function toggleCfgMenu(force){const page=document.getElementById('pageConfig');if(!page)return;const shouldOpen=typeof force==='boolean'?force:!page.classList.contains('cfg-menu-open');if(window.innerWidth>960&&typeof force!=='boolean')return;page.classList.toggle('cfg-menu-open',shouldOpen);document.documentElement.classList.toggle('cfg-menu-lock',shouldOpen&&window.innerWidth<=960);}window.addEventListener('resize',()=>{const mobile=window.innerWidth<=960,configActive=document.getElementById('pageConfig')?.classList.contains('active');document.documentElement.classList.toggle('config-page-scroll',mobile&&configActive);document.body.classList.toggle('config-page-scroll',mobile&&configActive);if(!mobile){document.getElementById('pageConfig')?.classList.remove('cfg-menu-open');document.documentElement.classList.remove('cfg-menu-lock');}});
+function toggleCfgMenu(force){const page=document.getElementById('pageConfig');if(!page)return;const shouldOpen=typeof force==='boolean'?force:!page.classList.contains('cfg-menu-open');if(window.innerWidth>960&&typeof force!=='boolean')return;page.classList.toggle('cfg-menu-open',shouldOpen);document.documentElement.classList.toggle('cfg-menu-lock',shouldOpen&&window.innerWidth<=960);}window.addEventListener('resize',()=>{const mobile=window.innerWidth<=960,configActive=document.getElementById('pageConfig')?.classList.contains('active'),posActive=document.getElementById('pagePOS')?.classList.contains('active'),posMobile=window.innerWidth<=700&&posActive;document.documentElement.classList.toggle('config-page-scroll',mobile&&configActive);document.body.classList.toggle('config-page-scroll',mobile&&configActive);document.body.classList.toggle('pos-mobile-scroll',posMobile);if(!mobile){document.getElementById('pageConfig')?.classList.remove('cfg-menu-open');document.documentElement.classList.remove('cfg-menu-lock');}});
 switchCfgCategory=function(cat){_naCaptureVisibleConfig();currentCfgCategory=cat;storage.setItem('na_cfg_category',cat);document.querySelectorAll('.cfg-cat-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.cfgcat===cat));renderCfgContent(cat);if(window.innerWidth<=960){toggleCfgMenu(false);requestAnimationFrame(()=>window.scrollTo(0,0));}saveAppState();};
 guardarConfig=async function(){_naCaptureVisibleConfig();_naSaveTicketSettings();_naApplyConfigUI();await _naFinalizeOperationPersistence('Configuración guardada','No se pudo guardar la configuración');};
 toggleCfg=function(id){const map={igvToggle:'igvActive',margenToggle:'margenActive',stockToggle:'stockAlertActive',printToggle:'printAuto',mayoristaToggle:'mayoristaActive',alertsToggle:'alertsEnabled'},key=map[id];if(!key)return;const next=!appConfig[key];if(key==='mayoristaActive'&&!next){const boxes=cart.filter(i=>_naUnitsPerQty(i)>1);if(boxes.length&&!confirm(`Hay ${boxes.length} caja(s) en el carrito. Se retirarán al desactivar mayorista. ¿Continuar?`))return;cart=cart.filter(i=>_naUnitsPerQty(i)===1);modoMayorista=false;}appConfig[key]=next;if(key==='stockAlertActive'&&!next&&invTab==='critico')invTab='todos';_naApplyConfigUI();renderCfgContent(currentCfgCategory);posRender();posUpdateCart();invRender();updateDashboard();saveAppState();};
@@ -4107,6 +4193,43 @@ document.addEventListener('DOMContentLoaded',async()=>{
       observer.observe(overlay,{attributes:true,attributeFilter:['class']});
     });
   });
+})();
+
+// Gestos de scroll: ocultar/mostrar .g-topbar con 3 gestos ascendentes en móvil
+(function(){
+  var lastScrollY=0,upCount=0,gestureBlock=false,ticking=false;
+  var THRESHOLD=20,NEAR_TOP=20;
+  function isExcluded(el){
+    while(el&&el!==document.body){
+      if(el.closest){var c=el.closest('#cartDrawer,.cart-drawer,.modal-overlay,.modal,#mTicket,#mPrinter,#mCobro,#mMovInv,#mVentaLibre,#mDescuento,#pageConfig,.cfg-shell,.pay-modal-body');if(c)return true;}
+      if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT')return true;
+      el=el.parentElement;
+    }
+    return false;
+  }
+  var lastTouchTarget=null;
+  document.addEventListener('touchstart',function(e){lastTouchTarget=e.target;},{passive:true});
+  document.addEventListener('touchend',function(){lastTouchTarget=null;},{passive:true});
+  function handleScroll(){
+    if(ticking)return;ticking=true;
+    requestAnimationFrame(function(){
+      if(!document.body.classList.contains('pos-mobile-scroll')){ticking=false;return;}
+      if(lastTouchTarget&&isExcluded(lastTouchTarget)){ticking=false;return;}
+      var st=window.scrollY||document.documentElement.scrollTop||0;
+      var topbar=document.querySelector('.g-topbar');
+      if(!topbar){ticking=false;return;}
+      if(st<=NEAR_TOP){topbar.classList.remove('g-topbar-hidden');upCount=0;lastScrollY=st;ticking=false;return;}
+      var diff=st-lastScrollY;
+      if(diff>4){
+        topbar.classList.add('g-topbar-hidden');upCount=0;gestureBlock=false;
+      }else if(diff<-THRESHOLD){
+        if(!gestureBlock){upCount++;gestureBlock=true;setTimeout(function(){gestureBlock=false;},180);}
+        if(upCount>=3){topbar.classList.remove('g-topbar-hidden');upCount=0;gestureBlock=false;}
+      }
+      lastScrollY=st;ticking=false;
+    });
+  }
+  window.addEventListener('scroll',handleScroll,{passive:true});
 })();
 </script>
 
