@@ -4692,7 +4692,7 @@ cashierToggleFromConfig=async function(id,...args){if(!_naF10AuthorizePermission
 
 // MEJORA FASE 10: descargar respaldo automático antes de cualquier reseteo confirmado.
 const _naF10BaseResetModule=resetModule;
-resetModule=async function(modulo){if(!_naF10AuthorizePermission('resetData',`Resetear ${modulo}`))return;if(!_naF10DownloadSnapshot(`antes_reset_${modulo}`)){toast('El reseteo fue cancelado porque no se pudo crear el respaldo previo','error');return;}return await _naF10BaseResetModule(modulo);};
+resetModule=async function(modulo){if(_naSecurity.requirePin?.reset&&(!_naSecurity.pinEnabled||!_naSecurity.pinHash)){toast('Configura y activa un PIN maestro antes de resetear datos','error');_naAudit('Reseteo bloqueado',`${modulo} · PIN maestro no configurado`);return;}if(!_naF10AuthorizePermission('resetData',`Resetear ${modulo}`))return;if(!_naF10DownloadSnapshot(`antes_reset_${modulo}`)){toast('El reseteo fue cancelado porque no se pudo crear el respaldo previo','error');return;}return await _naF10BaseResetModule(modulo);};
 
 document.addEventListener('DOMContentLoaded',()=>{_naEnsureCashierConfig();setTimeout(()=>{if(currentCfgCategory==='control')renderCfgContent('control');},350);});
 </script>
