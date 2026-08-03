@@ -1110,6 +1110,19 @@
         .pay-btn-primary{background:var(--teal);color:#fff}
         .pay-btn-primary.needs-data{background:#cbd5e1;color:#64748b}
         .pay-btn-primary:disabled{opacity:.65;cursor:wait}
+        .quick-pay-modal{max-width:430px}
+        .quick-pay-intro{font-size:12px;font-weight:750;color:var(--slate);line-height:1.45;margin:0 0 12px}
+        .quick-pay-options{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+        .quick-pay-option{min-height:132px;border:1.5px solid var(--border);border-radius:15px;background:var(--white);padding:16px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;cursor:pointer;font-family:'Nunito',sans-serif;transition:transform .12s,border-color .15s,background .15s}
+        .quick-pay-option:active{transform:scale(.98)}
+        .quick-pay-option.cash{border-color:#86efac;background:#f0fdf4}
+        .quick-pay-option.transfer{border-color:#93c5fd;background:#eff6ff}
+        .quick-pay-option:disabled{opacity:.6;cursor:wait}
+        .quick-pay-icon{font-size:29px;line-height:1}
+        .quick-pay-option strong{font-size:14px;font-weight:900;color:var(--dark)}
+        .quick-pay-option small{font-size:11px;font-weight:750;color:var(--slate);line-height:1.35}
+        body.dark .quick-pay-option{background:#1e293b}
+        @media(max-width:520px){.quick-pay-options{grid-template-columns:1fr}.quick-pay-option{min-height:105px}}
         body.dark .pay-total-card{background:#0f172a}
         body.dark .pay-client-details,body.dark .pay-panel{background:#1e293b}
         body.dark .pay-amount-input-wrap,body.dark .cash-exact-btn{background:#111827}
@@ -1864,6 +1877,40 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="mCobroRapido">
+  <div class="modal pay-modal quick-pay-modal">
+    <div class="pay-modal-head">
+      <div>
+        <div class="pay-modal-title">Pago rapido</div>
+        <div class="pay-modal-sub">Selecciona como se recibio el pago</div>
+      </div>
+      <button class="pay-close" onclick="cerrarModal('mCobroRapido')" aria-label="Cerrar">&times;</button>
+    </div>
+
+    <div class="pay-modal-body">
+      <div class="pay-total-card">
+        <div class="pay-total-label">Total a cobrar</div>
+        <div class="pay-total-value" id="mQuickPaymentTotal">S/ 0.00</div>
+      </div>
+
+      <p class="quick-pay-intro">La venta se registrara inmediatamente al seleccionar una opcion.</p>
+
+      <div class="quick-pay-options">
+        <button type="button" class="quick-pay-option cash" id="mQuickCash" onclick="confirmarPagoRapido('efectivo')">
+          <span class="quick-pay-icon">&#128181;</span>
+          <strong>Efectivo exacto</strong>
+          <small>Registra el total recibido sin calcular vuelto.</small>
+        </button>
+
+        <button type="button" class="quick-pay-option transfer" id="mQuickTransfer" onclick="confirmarPagoRapido('transferencia')">
+          <span class="quick-pay-icon">&#127974;</span>
+          <strong>Transferencia completa</strong>
+          <small>Registra el total transferido sin pedir numero de operacion.</small>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="mVentaLibre"><div class="modal"><div class="mhead amber"><div><div class="mhead-title">➕ Venta libre / VARIOS</div><div style="font-size:10px;font-weight:700;opacity:.85;margin-top:2px">Artículo no registrado en el inventario</div></div><button class="btn-close-m" onclick="cerrarModal('mVentaLibre')">✕</button></div><div class="mbody">
     <div class="free-sale-note">Esta línea se guardará dentro de la venta con fecha, hora y cajero, pero no modificará el inventario. Úsala para un artículo ocasional que todavía no está registrado.</div>
     <div class="fg"><div class="fl">Nombre del artículo <span class="req">*</span></div><input class="fi" id="vlNombre" maxlength="120" value="VARIOS" placeholder="VARIOS"></div>
@@ -3383,7 +3430,68 @@ function _naSetPaymentHint(message='',tone='info'){const el=document.getElementB
 function _naMixedPaymentData(){const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),cash=Math.max(0,_naNumber(document.getElementById('mMixedCash')?.value)),digital=Math.max(0,Number((total-cash).toFixed(2))),digitalMethod=document.getElementById('mMixedDigitalMethod')?.value||'transferencia',reference=_naClean(document.getElementById('mMixedRef')?.value);return{total,cash,digital,digitalMethod,reference};}
 function setMixedCash(amount){const input=document.getElementById('mMixedCash');if(!input)return;input.value=_naNumber(amount).toFixed(2);document.querySelectorAll('[data-mixed-cash]').forEach(btn=>btn.classList.toggle('active',_naNumber(btn.dataset.mixedCash)===_naNumber(amount)));calcMixedPayment();input.focus();}
 function calcMixedPayment(){const data=_naMixedPaymentData(),amount=document.getElementById('mMixedDigitalAmount'),summary=document.getElementById('mMixedSummaryText'),sumTotal=document.getElementById('mMixedSummaryTotal');if(amount)amount.textContent=fmt(data.digital);if(sumTotal)sumTotal.textContent=fmt(data.cash+data.digital);if(summary){if(data.cash<=0)summary.textContent='Ingresa cuánto paga en efectivo.';else if(data.cash>=data.total)summary.textContent='El efectivo debe ser menor al total para usar pago mixto.';else summary.textContent=`${fmt(data.cash)} en efectivo + ${fmt(data.digital)} por ${data.digitalMethod==='yape'?'Yape/Plin':'transferencia'}.`;}document.querySelectorAll('[data-mixed-cash]').forEach(btn=>btn.classList.toggle('active',Math.abs(_naNumber(btn.dataset.mixedCash)-data.cash)<.001));_naValidatePaymentForm();}
-function _naPaymentState(){const total=cart.reduce((a,b)=>_naNumber(a)+_naNumber(b.precio)*_naNumber(b.qty),0);if(!cart.length)return{valid:false,message:'El carrito está vacío.',tone:'error'};if(posPayM==='efectivo'){const received=_naNumber(document.getElementById('mMontoRec')?.value);if(received+0.0001<total)return{valid:false,message:`Falta recibir ${fmt(Math.max(0,total-received))}.`,tone:'error'};return{valid:true,message:received>total?`Vuelto: ${fmt(received-total)}.`:'Monto exacto listo para cobrar.',tone:'ok'};}if(posPayM==='mixto'){const mix=_naMixedPaymentData();if(mix.cash<=0)return{valid:false,message:'Ingresa el monto pagado en efectivo.',tone:'error'};if(mix.cash>=total)return{valid:false,message:'Para pago mixto, el efectivo debe ser menor al total.',tone:'error'};if(mix.digital<=0)return{valid:false,message:'El monto digital debe ser mayor que cero.',tone:'error'};if(mix.reference.length<4)return{valid:false,message:'Ingresa el número de operación del pago digital.',tone:'error'};if(ventas.some(v=>!v.anulada&&v.paymentRef===mix.reference))return{valid:false,message:'Ese número de operación ya fue registrado.',tone:'error'};return{valid:true,message:`Pago dividido: ${fmt(mix.cash)} efectivo + ${fmt(mix.digital)} digital.`,tone:'ok'};}if(posPayM==='credito'){if(!document.getElementById('mCreditoCliente')?.value)return{valid:false,message:'Selecciona el cliente del crédito.',tone:'error'};if(!document.getElementById('mCreditoVence')?.value)return{valid:false,message:'Selecciona la fecha de vencimiento.',tone:'error'};return{valid:true,message:'Crédito listo para registrar.',tone:'ok'};}if(posPayM==='yape'||posPayM==='transferencia'){const ref=_naClean(document.getElementById('mDigitalRef')?.value);if(ref.length<4)return{valid:false,message:'Ingresa al menos 4 caracteres del número de operación.',tone:'error'};if(ventas.some(v=>!v.anulada&&v.paymentRef===ref))return{valid:false,message:'Ese número de operación ya fue registrado.',tone:'error'};return{valid:true,message:'Pago digital listo para confirmar.',tone:'ok'};}return{valid:true,message:'Venta lista para confirmar.',tone:'ok'};}
+let _naQuickPaymentActive=false,_naQuickPaymentProc=false;
+
+function _naOpenQuickPayment(){
+  if(isModuleLocked('ventas')){
+    toast('El modulo de ventas esta bloqueado en Control maestro','error');
+    return;
+  }
+
+  if(!_naSessionOpen()){
+    toast('Primero abre la caja del dia para registrar ventas','error');
+    goPage('pageCaja');
+    return;
+  }
+
+  const total=cart.reduce((sum,item)=>sum+_naNumber(item.precio)*_naNumber(item.qty),0);
+  const totalEl=document.getElementById('mQuickPaymentTotal');
+
+  if(totalEl)totalEl.textContent=fmt(total);
+
+  _naQuickPaymentActive=false;
+  _naQuickPaymentProc=false;
+
+  document.querySelectorAll('#mCobroRapido .quick-pay-option').forEach(button=>{
+    button.disabled=false;
+  });
+
+  document.getElementById('mCobroRapido')?.classList.add('open');
+  document.querySelector('#mCobroRapido .pay-modal-body')?.scrollTo(0,0);
+}
+
+async function confirmarPagoRapido(method){
+  if(!['efectivo','transferencia'].includes(method)||_naQuickPaymentProc||posProc||!cart.length)return;
+
+  _naQuickPaymentProc=true;
+  _naQuickPaymentActive=method==='transferencia';
+  posPayM=method;
+
+  const buttons=[...document.querySelectorAll('#mCobroRapido .quick-pay-option')];
+  buttons.forEach(button=>button.disabled=true);
+
+  const total=cart.reduce((sum,item)=>sum+_naNumber(item.precio)*_naNumber(item.qty),0);
+  const cashInput=document.getElementById('mMontoRec');
+  const digitalRef=document.getElementById('mDigitalRef');
+
+  if(cashInput)cashInput.value=total.toFixed(2);
+  if(digitalRef)digitalRef.value='';
+
+  const previousCartLength=cart.length;
+
+  try{
+    await confirmarVenta();
+
+    if(previousCartLength>0&&!cart.length){
+      cerrarModal('mCobroRapido');
+    }
+  }finally{
+    _naQuickPaymentActive=false;
+    _naQuickPaymentProc=false;
+    buttons.forEach(button=>button.disabled=false);
+  }
+}
+function _naPaymentState(){const total=cart.reduce((a,b)=>_naNumber(a)+_naNumber(b.precio)*_naNumber(b.qty),0);if(!cart.length)return{valid:false,message:'El carrito está vacío.',tone:'error'};if(posPayM==='efectivo'){const received=_naNumber(document.getElementById('mMontoRec')?.value);if(received+0.0001<total)return{valid:false,message:`Falta recibir ${fmt(Math.max(0,total-received))}.`,tone:'error'};return{valid:true,message:received>total?`Vuelto: ${fmt(received-total)}.`:'Monto exacto listo para cobrar.',tone:'ok'};}if(posPayM==='mixto'){const mix=_naMixedPaymentData();if(mix.cash<=0)return{valid:false,message:'Ingresa el monto pagado en efectivo.',tone:'error'};if(mix.cash>=total)return{valid:false,message:'Para pago mixto, el efectivo debe ser menor al total.',tone:'error'};if(mix.digital<=0)return{valid:false,message:'El monto digital debe ser mayor que cero.',tone:'error'};if(mix.reference.length<4)return{valid:false,message:'Ingresa el número de operación del pago digital.',tone:'error'};if(ventas.some(v=>!v.anulada&&v.paymentRef===mix.reference))return{valid:false,message:'Ese número de operación ya fue registrado.',tone:'error'};return{valid:true,message:`Pago dividido: ${fmt(mix.cash)} efectivo + ${fmt(mix.digital)} digital.`,tone:'ok'};}if(posPayM==='credito'){if(!document.getElementById('mCreditoCliente')?.value)return{valid:false,message:'Selecciona el cliente del crédito.',tone:'error'};if(!document.getElementById('mCreditoVence')?.value)return{valid:false,message:'Selecciona la fecha de vencimiento.',tone:'error'};return{valid:true,message:'Crédito listo para registrar.',tone:'ok'};}if(posPayM==='yape'||posPayM==='transferencia'){const ref=_naClean(document.getElementById('mDigitalRef')?.value);if(posPayM==='transferencia'&&_naQuickPaymentActive)return{valid:true,message:'Transferencia completa lista para registrar.',tone:'ok'};if(ref.length<4)return{valid:false,message:'Ingresa al menos 4 caracteres del número de operación.',tone:'error'};if(ventas.some(v=>!v.anulada&&v.paymentRef===ref))return{valid:false,message:'Ese número de operación ya fue registrado.',tone:'error'};return{valid:true,message:'Pago digital listo para confirmar.',tone:'ok'};}return{valid:true,message:'Venta lista para confirmar.',tone:'ok'};}
 function _naValidatePaymentForm(){const btn=document.getElementById('mBtnConf');if(!btn)return false;const state=_naPaymentState();btn.dataset.valid=state.valid?'true':'false';btn.classList.toggle('ready',state.valid);btn.classList.toggle('needs-data',!state.valid);btn.disabled=!!posProc;btn.textContent=posProc?'Procesando…':state.valid?'Confirmar venta':'Revisar datos';_naSetPaymentHint(state.message,state.tone);return state.valid;}
 function _naQuickCashOptions(total){total=_naNumber(total);const denominations=[5,10,20,50,100,200];return denominations.filter(amount=>amount>total);}
 function _naRenderCashQuickOptions(total){const inlineWrap=document.getElementById('mCashQuickInline'),advWrap=document.querySelector('#mCashAdvanced .pay-quick-row');const amounts=_naQuickCashOptions(total);if(inlineWrap){inlineWrap.innerHTML=amounts.map(amount=>`<button type="button" data-cash-inline="${amount}" onclick="setMontoRecibido(${amount},false)">S/ ${amount}</button>`).join('');inlineWrap.style.display=amounts.length?'grid':'none';}if(advWrap){advWrap.innerHTML=amounts.map(amount=>`<button type="button" data-cash="${amount}" onclick="setMontoRecibido(${amount},true)">${amount}</button>`).join('');}}
@@ -3392,7 +3500,7 @@ function toggleOtherCashAmounts(open=true){const advanced=document.getElementByI
 function setMontoExacto(collapse=false){const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),input=document.getElementById('mMontoRec');if(!input)return;input.value=total.toFixed(2);_naUpdateCashQuickHighlights(null);calcCambio();if(collapse)toggleOtherCashAmounts(false);}
 function setMontoRecibido(amount,focusInput=false){const input=document.getElementById('mMontoRec');if(!input)return;input.value=_naNumber(amount).toFixed(2);_naUpdateCashQuickHighlights(amount);calcCambio();if(focusInput){input.focus();input.select?.();}}
 function sumarMontoRecibido(amount){setMontoRecibido(amount,true);}
-abrirCobro=function(tipo){if(!cart.length||posProc)return;if(isModuleLocked('ventas')){toast('El módulo de ventas está bloqueado en Control maestro','error');return;}if(!_naSessionOpen()){toast('Primero abre la caja del día para registrar ventas','error');goPage('pageCaja');return;}const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),btn=document.getElementById('mBtnConf'),received=document.getElementById('mMontoRec');document.getElementById('mCobroTotal').textContent=fmt(total);received.value=total.toFixed(2);document.querySelectorAll('.cash-quick-row button,[data-mixed-cash],[data-cash-inline]').forEach(btn=>btn.classList.remove('active'));_naRenderCashQuickOptions(total);document.getElementById('mCambio').textContent='S/ 0.00';document.getElementById('mDigitalRef').value='';document.getElementById('mMixedRef').value='';document.getElementById('mMixedCash').value='';document.getElementById('mMixedDigitalMethod').value='transferencia';document.getElementById('mVentaCliente').value='';btn.textContent='Confirmar venta';posPayM='efectivo';document.querySelectorAll('.pm-btn').forEach(b=>b.classList.toggle('active',b.dataset.method==='efectivo'));document.getElementById('mEfSection').style.display='block';document.getElementById('mCreditoSection').style.display='none';document.getElementById('mDigitalSection').style.display='none';document.getElementById('mMixedSection').style.display='none';toggleOtherCashAmounts(false);_naPopulateCreditClients();document.getElementById('mCreditoVence').value=_naDatePlus(30);const clientDetails=document.getElementById('mClienteDetails');if(clientDetails)clientDetails.open=false;document.getElementById('mCobro').classList.add('open');document.querySelector('#mCobro .pay-modal-body')?.scrollTo(0,0);calcCambio();calcMixedPayment();_naValidatePaymentForm();};
+abrirCobro=function(tipo){if(!cart.length||posProc)return;if(tipo==='rapido'){_naOpenQuickPayment();return;}_naQuickPaymentActive=false;if(isModuleLocked('ventas')){toast('El módulo de ventas está bloqueado en Control maestro','error');return;}if(!_naSessionOpen()){toast('Primero abre la caja del día para registrar ventas','error');goPage('pageCaja');return;}const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),btn=document.getElementById('mBtnConf'),received=document.getElementById('mMontoRec');document.getElementById('mCobroTotal').textContent=fmt(total);received.value=total.toFixed(2);document.querySelectorAll('.cash-quick-row button,[data-mixed-cash],[data-cash-inline]').forEach(btn=>btn.classList.remove('active'));_naRenderCashQuickOptions(total);document.getElementById('mCambio').textContent='S/ 0.00';document.getElementById('mDigitalRef').value='';document.getElementById('mMixedRef').value='';document.getElementById('mMixedCash').value='';document.getElementById('mMixedDigitalMethod').value='transferencia';document.getElementById('mVentaCliente').value='';btn.textContent='Confirmar venta';posPayM='efectivo';document.querySelectorAll('.pm-btn').forEach(b=>b.classList.toggle('active',b.dataset.method==='efectivo'));document.getElementById('mEfSection').style.display='block';document.getElementById('mCreditoSection').style.display='none';document.getElementById('mDigitalSection').style.display='none';document.getElementById('mMixedSection').style.display='none';toggleOtherCashAmounts(false);_naPopulateCreditClients();document.getElementById('mCreditoVence').value=_naDatePlus(30);const clientDetails=document.getElementById('mClienteDetails');if(clientDetails)clientDetails.open=false;document.getElementById('mCobro').classList.add('open');document.querySelector('#mCobro .pay-modal-body')?.scrollTo(0,0);calcCambio();calcMixedPayment();_naValidatePaymentForm();};
 selPM=function(btn){document.querySelectorAll('.pm-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');posPayM=btn.dataset.method;document.getElementById('mEfSection').style.display=posPayM==='efectivo'?'block':'none';document.getElementById('mCreditoSection').style.display=posPayM==='credito'?'block':'none';document.getElementById('mDigitalSection').style.display=(posPayM==='yape'||posPayM==='transferencia')?'block':'none';document.getElementById('mMixedSection').style.display=posPayM==='mixto'?'block':'none';document.getElementById('mDigitalLabel').textContent=posPayM==='yape'?'Número de operación Yape/Plin':'Número de operación o referencia bancaria';if(posPayM==='efectivo'){setMontoExacto(true);}if(posPayM==='mixto'){const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),input=document.getElementById('mMixedCash');if(!_naNumber(input.value))input.value=(total>20?20:Math.max(.01,total/2)).toFixed(2);calcMixedPayment();setTimeout(()=>input.focus(),50);}_naValidatePaymentForm();};
 calcCambio=function(){const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),received=_naNumber(document.getElementById('mMontoRec')?.value),change=(Math.round(received*100)-Math.round(total*100))/100,el=document.getElementById('mCambio'),note=document.getElementById('mCashInlineNote');if(el){el.textContent=fmt(Math.max(0,change));el.style.color=change<0?'var(--red)':'#16a34a';}if(note){note.textContent=received>total?`Recibido: ${fmt(received)} · Vuelto: ${fmt(Math.max(0,change))}`:received<total?`Falta recibir ${fmt(Math.max(0,total-received))}.`:'Monto exacto listo para cobrar.';note.style.color=received<total?'var(--red)':'#15803d';}_naValidatePaymentForm();};
 document.addEventListener('keydown',event=>{if(event.key==='Enter'&&document.getElementById('mCobro')?.classList.contains('open')&&!posProc&&_naValidatePaymentForm()){event.preventDefault();confirmarVenta();}});
@@ -3402,7 +3510,7 @@ confirmarVenta=async function(){
   for(const item of cart){const prod=productos.find(p=>String(p.id)===String(item.id));if(prod&&_naTracksStock(prod)){const reserved=cart.filter(x=>String(x.id)===String(item.id)).reduce((a,x)=>a+_naUnitsSold(x),0);if(reserved>prod.stock&&!_naFreeSaleCfg().allowRegisteredNoStock){toast(`Stock insuficiente para ${prod.name}: quedan ${prod.stock} unidades`,'error');return;}}}
   const total=cart.reduce((a,b)=>a+_naNumber(b.precio)*_naNumber(b.qty),0),paymentState=_naPaymentState();if(!paymentState.valid){_naSetPaymentHint(paymentState.message,'error');toast(paymentState.message,'error');const target=posPayM==='efectivo'?document.getElementById('mMontoRec'):posPayM==='credito'?document.getElementById('mCreditoCliente'):posPayM==='mixto'?(_naNumber(document.getElementById('mMixedCash')?.value)>0?document.getElementById('mMixedRef'):document.getElementById('mMixedCash')):document.getElementById('mDigitalRef');target?.focus();return;}
 
-  const mixedData=posPayM==='mixto'?_naMixedPaymentData():null,paymentRef=(posPayM==='yape'||posPayM==='transferencia')?_naClean(document.getElementById('mDigitalRef')?.value):posPayM==='mixto'?mixedData.reference:'';if((posPayM==='yape'||posPayM==='transferencia'||posPayM==='mixto')&&paymentRef.length<4){toast('Ingresa el número de operación','error');return;}if(paymentRef&&ventas.some(v=>!v.anulada&&v.paymentRef===paymentRef)){toast('Ese número de operación ya fue registrado','error');return;}
+  const mixedData=posPayM==='mixto'?_naMixedPaymentData():null,paymentRef=(posPayM==='yape'||posPayM==='transferencia')?_naClean(document.getElementById('mDigitalRef')?.value):posPayM==='mixto'?mixedData.reference:'';if((posPayM==='yape'||posPayM==='transferencia'||posPayM==='mixto')&&!(posPayM==='transferencia'&&_naQuickPaymentActive)&&paymentRef.length<4){toast('Ingresa el número de operación','error');return;}if(paymentRef&&ventas.some(v=>!v.anulada&&v.paymentRef===paymentRef)){toast('Ese número de operación ya fue registrado','error');return;}
   let client=clientes.find(c=>String(c.id)===String(document.getElementById('mVentaCliente')?.value))||null,creditDue=null;if(posPayM==='credito'){client=clientes.find(c=>String(c.id)===String(document.getElementById('mCreditoCliente')?.value));creditDue=document.getElementById('mCreditoVence')?.value;if(!client||!creditDue){toast('Selecciona cliente y fecha de vencimiento','error');return;}}
   const backup={productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),cajMovs:_naClone(cajMovs),cart:_naClone(cart)};posProc=true;const btn=document.getElementById('mBtnConf');btn.disabled=true;btn.textContent='Procesando…';
   try{
