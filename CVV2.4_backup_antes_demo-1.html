@@ -5468,34 +5468,69 @@ function _naSecCreditCard(parent,credit){
 }
 function _naSecClientCard(parent,client){
   const debt=deudaT(client),status=statusCli(client),debtClass=status==='vencido'?'mal':status==='proximo'?'parcial':'ok',statusClass=status==='vencido'?'cs-m':status==='proximo'?'cs-p':status==='vigente'?'cs-v':'cs-c';
-  const statusLabel=status==='vencido'?'VENCIDO':status==='proximo'?'PRÓXIMO':status==='vigente'?'VIGENTE':'AL DÍA',cardClass=status==='vencido'?'vencido-c':status==='proximo'?'proximo-c':'';
+  const statusLabel=status==='vencido'?'VENCIDO':status==='proximo'?'PR\u00d3XIMO':status==='vigente'?'VIGENTE':'AL D\u00cdA',cardClass=status==='vencido'?'vencido-c':status==='proximo'?'proximo-c':'';
   const credits=creditos.filter(row=>String(row.cliId)===String(client.id)),evaluation=_naEvaluateClientCredit(client.id);
+
+  credits.forEach(_naSyncCreditStatus);
+
+  const activeCredits=credits
+    .filter(credit=>!credit.anulado&&credit.status!=='cancelado'&&_naCreditOutstanding(credit)>0)
+    .sort((a,b)=>String(a.vence||'9999-12-31').localeCompare(String(b.vence||'9999-12-31')));
+
+  const pastCredits=credits
+    .filter(credit=>credit.anulado||credit.status==='cancelado'||_naCreditOutstanding(credit)<=0)
+    .sort((a,b)=>new Date(b.timestamp||b.fecha||0)-new Date(a.timestamp||a.fecha||0));
+
   const card=_naSecAppend(parent,'div',`client-card ${cardClass}`);
   card.dataset.clientId=String(client.id);
+
   const header=_naSecAppend(card,'div','client-header');
   header.dataset.naCreditAction='toggle-client';
+
   const avatar=_naSecAppend(header,'div','c-avatar',initials(client.nombre));
   avatar.style.background=colorFor(client.color);
+
   const info=_naSecAppend(header,'div','c-info');
   _naSecAppend(info,'div','c-name',client.nombre);
-  _naSecAppend(info,'div','c-meta',`${client.dni?`📋 ${client.dni}`:''} ${client.tel?`📱 ${client.tel}`:''} ${credits.length?`· ${credits.length} crédito(s)`:''}`.trim());
+  _naSecAppend(info,'div','c-meta',`${client.dni?`\u{1F4CB} ${client.dni}`:''} ${client.tel?`\u{1F4F1} ${client.tel}`:''} ${credits.length?`\u00b7 ${credits.length} cr\u00e9dito(s)`:''}`.trim());
+
   const right=_naSecAppend(header,'div','c-right');
   _naSecAppend(right,'div',`c-deuda ${debtClass}`,fmt(debt));
   _naSecAppend(right,'span',`c-status ${statusClass}`,statusLabel);
-  const creditArea=_naSecAppend(card,'div','client-creds'),creditHeader=_naSecAppend(creditArea,'div','creds-hdr');
-  _naSecAppend(creditHeader,'span','','Créditos registrados');
+
+  const creditArea=_naSecAppend(card,'div','client-creds');
+  const creditHeader=_naSecAppend(creditArea,'div','creds-hdr');
+  _naSecAppend(creditHeader,'span','','Cr\u00e9ditos registrados');
+
   const actions=_naSecAppend(creditHeader,'div','credit-header-actions');
-  const evaluate=_naSecCreditAction('btn-credit-eval','📊 Evaluar línea','evaluate-client');
+  const evaluate=_naSecCreditAction('btn-credit-eval','\u{1F4CA} Evaluar l\u00ednea','evaluate-client');
   evaluate.dataset.clientId=String(client.id);
   actions.appendChild(evaluate);
+
   if(evaluation.enabled){
-    const add=_naSecCreditAction('btn-add-cr','+ Nuevo crédito','new-credit');
+    const add=_naSecCreditAction('btn-add-cr','+ Nuevo cr\u00e9dito','new-credit');
     add.dataset.clientId=String(client.id);
     actions.appendChild(add);
   }
+
   _naSecCreditEvaluation(creditArea,evaluation);
-  if(credits.length)credits.forEach(credit=>_naSecCreditCard(creditArea,credit));
-  else _naSecAppend(creditArea,'div','','Sin créditos').style.cssText='text-align:center;color:var(--slate);font-size:12px;padding:14px 0;font-weight:700';
+
+  if(!credits.length){
+    _naSecAppend(creditArea,'div','','Sin cr\u00e9ditos').style.cssText='text-align:center;color:var(--slate);font-size:12px;padding:14px 0;font-weight:700';
+    return;
+  }
+
+  const activeTitle=_naSecAppend(creditArea,'div','','Cr\u00e9ditos activos ('+activeCredits.length+')');
+  activeTitle.style.cssText='margin:14px 0 7px;padding:8px 10px;border-radius:9px;background:#ecfdf5;color:#166534;font-size:11px;font-weight:900';
+
+  if(activeCredits.length)activeCredits.forEach(credit=>_naSecCreditCard(creditArea,credit));
+  else _naSecAppend(creditArea,'div','','No hay cr\u00e9ditos pendientes').style.cssText='color:var(--slate);font-size:11px;padding:8px 4px 12px;font-weight:700';
+
+  if(pastCredits.length){
+    const pastTitle=_naSecAppend(creditArea,'div','','Historial de cr\u00e9ditos ('+pastCredits.length+')');
+    pastTitle.style.cssText='margin:16px 0 7px;padding:8px 10px;border-radius:9px;background:#f1f5f9;color:var(--slate);font-size:11px;font-weight:900';
+    pastCredits.forEach(credit=>_naSecCreditCard(creditArea,credit));
+  }
 }
 cliRender=function(){
   creditos=creditos.map((credit,index)=>_naNormalizeCreditRecord(credit,index));
@@ -5566,38 +5601,164 @@ function _naSecCreditDetailItem(parent,item,paid){
 }
 abrirDetalleCredito=function(creditId){
   const credit=creditos.find(row=>String(row.id)===String(creditId));
-  if(!credit){toast('No se encontró el crédito','error');return;}
+  if(!credit){toast('No se encontr\u00f3 el cr\u00e9dito','error');return;}
+
   const container=document.getElementById('creditoDetalleContent');
   if(!container)return;
+
   _naSyncCreditStatus(credit);
-  const client=clientes.find(row=>String(row.id)===String(credit.cliId)),items=_naCreditItems(credit),paidMap=_naCreditPaidMap(credit),payments=[...(Array.isArray(credit.pagos)?credit.pagos:[])].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)),pending=_naCreditOutstanding(credit);
+
+  const client=clientes.find(row=>String(row.id)===String(credit.cliId));
+  const items=_naCreditItems(credit);
+  const paidMap=_naCreditPaidMap(credit);
+  const payments=[...(Array.isArray(credit.pagos)?credit.pagos:[])]
+    .sort((a,b)=>new Date(b.timestamp||`${b.fecha||''}T${b.hora24||b.hora||'00:00:00'}`)-new Date(a.timestamp||`${a.fecha||''}T${a.hora24||a.hora||'00:00:00'}`));
+  const pending=_naCreditOutstanding(credit);
+
+  const paymentMoment=payment=>{
+    const stamp=payment?.timestamp&&Number.isFinite(new Date(payment.timestamp).getTime())
+      ?new Date(payment.timestamp)
+      :null;
+
+    return{
+      date:payment?.fecha||stamp?.toLocaleDateString('es-PE')||'Fecha no registrada',
+      time:payment?.hora24||payment?.hora||stamp?.toLocaleTimeString('es-PE',{
+        hour:'2-digit',
+        minute:'2-digit',
+        second:'2-digit',
+        hour12:false
+      })||'Hora no registrada'
+    };
+  };
+
+  const createdStamp=credit.timestamp&&Number.isFinite(new Date(credit.timestamp).getTime())
+    ?new Date(credit.timestamp)
+    :null;
+
+  const createdDate=credit.fecha||createdStamp?.toLocaleDateString('es-PE')||'Fecha no registrada';
+  const createdTime=credit.hora24||credit.hora||createdStamp?.toLocaleTimeString('es-PE',{
+    hour:'2-digit',
+    minute:'2-digit',
+    second:'2-digit',
+    hour12:false
+  })||'Hora no registrada';
+
+  const latestPayment=payments[0]||null;
+  const latestMoment=latestPayment?paymentMoment(latestPayment):null;
+
   container.replaceChildren();
+
   const summary=_naSecAppend(container,'div','credit-detail-summary');
-  [['Cliente',client?.nombre||credit.clienteNombre||'Cliente'],['Estado',_naCreditStatusLabel(credit)],['Saldo pendiente',fmt(pending)]].forEach(([label,value])=>{
+
+  [
+    ['Cliente',client?.nombre||credit.clienteNombre||'Cliente'],
+    ['Estado',_naCreditStatusLabel(credit)],
+    ['Monto original',fmt(credit.monto)],
+    ['Total abonado',fmt(credit.pagado)],
+    ['Saldo pendiente',fmt(pending)],
+    ['\u00daltimo abono',latestPayment?fmt(latestPayment.monto):'Sin pagos']
+  ].forEach(([label,value])=>{
     const box=_naSecAppend(summary,'div','credit-detail-box');
     _naSecAppend(box,'span','',label);
     _naSecAppend(box,'strong','',value);
   });
+
   const meta=_naSecAppend(container,'div','credit-pay-meta');
-  [['Crédito',credit.desc||'Crédito'],['Fecha / vencimiento',`${credit.fecha||''} · ${credit.vence||''}`],['Cajero de origen',`${credit.cajeroNombre||credit.cajero||'Cajero'}${credit.cajeroId?` · ${credit.cajeroId}`:''}`],['Venta vinculada',credit.ventaId||'Crédito manual']].forEach(([label,value])=>{
+
+  [
+    ['Cr\u00e9dito',credit.desc||'Cr\u00e9dito'],
+    ['Compra / registro',`${createdDate} \u00b7 ${createdTime}`],
+    ['Vencimiento',credit.vence||'No registrado'],
+    ['\u00daltimo pago',latestPayment?`${fmt(latestPayment.monto)} \u00b7 ${latestMoment.date} \u00b7 ${latestMoment.time}`:'Sin pagos registrados'],
+    ['Cantidad de pagos',String(payments.length)],
+    ['Cajero de origen',`${credit.cajeroNombre||credit.cajero||'Cajero'}${credit.cajeroId?` \u00b7 ${credit.cajeroId}`:''}`],
+    ['Venta vinculada',credit.ventaId||'Cr\u00e9dito manual']
+  ].forEach(([label,value])=>{
     const chip=_naSecAppend(meta,'div','credit-pay-chip');
     _naSecAppend(chip,'span','',label);
     _naSecAppend(chip,'strong','',value);
   });
+
   const productSection=_naSecAppend(container,'div','credit-detail-section');
-  _naSecAppend(productSection,'h4','','🛒 Productos o conceptos financiados');
-  items.forEach(item=>_naSecCreditDetailItem(productSection,item,Math.min(item.subtotal,_naNumber(paidMap.get(item.itemKey)))));
+  _naSecAppend(productSection,'h4','','\u{1F6D2} Productos o conceptos financiados');
+
+  items.forEach(item=>{
+    _naSecCreditDetailItem(
+      productSection,
+      item,
+      Math.min(item.subtotal,_naNumber(paidMap.get(item.itemKey)))
+    );
+  });
+
   const paymentSection=_naSecAppend(container,'div','credit-detail-section');
-  _naSecAppend(paymentSection,'h4','',`💵 Historial de pagos (${payments.length})`);
-  if(!payments.length)_naSecAppend(paymentSection,'div','credit-status-note','Todavía no se registraron pagos.');
-  payments.forEach(payment=>{
-    const card=_naSecAppend(paymentSection,'div','credit-payment-card'),head=_naSecAppend(card,'div','credit-payment-head'),copy=_naSecAppend(head,'div');
-    _naSecAppend(copy,'strong','',payment.pagoId||payment.id||'Pago');
-    _naSecAppend(copy,'div','credit-payment-sub',`${payment.diaSemana||''} ${payment.fecha||''} · ${payment.hora24||payment.hora||''} · ${payment.horarioPago||''}`.trim());
+  _naSecAppend(paymentSection,'h4','',`\u{1F4B5} Historial completo de pagos (${payments.length})`);
+
+  if(!payments.length){
+    _naSecAppend(
+      paymentSection,
+      'div',
+      'credit-status-note',
+      'Todav\u00eda no se registraron pagos para este cr\u00e9dito.'
+    );
+  }
+
+  payments.forEach((payment,index)=>{
+    const moment=paymentMoment(payment);
+    const paymentNumber=payments.length-index;
+
+    const card=_naSecAppend(paymentSection,'div','credit-payment-card');
+    const head=_naSecAppend(card,'div','credit-payment-head');
+    const copy=_naSecAppend(head,'div');
+
+    _naSecAppend(
+      copy,
+      'strong',
+      '',
+      `Pago ${paymentNumber}${index===0?' \u00b7 \u00daLTIMO PAGO':''}`
+    );
+
+    _naSecAppend(
+      copy,
+      'div',
+      'credit-payment-sub',
+      `${payment.diaSemana||''} ${moment.date} \u00b7 ${moment.time} \u00b7 ${payment.horarioPago||''}`.trim()
+    );
+
     _naSecAppend(head,'span','',fmt(payment.monto));
-    _naSecAppend(card,'div','credit-payment-sub',`${_NA_CREDIT_METHOD_LABELS[payment.metodo]||payment.metodo||''}${payment.operacion?` · Operación ${payment.operacion}`:''}\nCajero: ${payment.cajeroNombre||payment.cajero||'Cajero'}${payment.cajeroId?` · ${payment.cajeroId}`:''}\nSaldo: ${fmt(payment.saldoAnterior)} → ${fmt(payment.saldoActual)}`);
+
+    _naSecAppend(
+      card,
+      'div',
+      'credit-payment-sub',
+      `M\u00e9todo: ${_NA_CREDIT_METHOD_LABELS[payment.metodo]||payment.metodo||'No registrado'}`
+    );
+
+    if(payment.operacion){
+      _naSecAppend(
+        card,
+        'div',
+        'credit-payment-sub',
+        `N.\u00b0 de operaci\u00f3n: ${payment.operacion}`
+      );
+    }
+
+    _naSecAppend(
+      card,
+      'div',
+      'credit-payment-sub',
+      `Cajero: ${payment.cajeroNombre||payment.cajero||'Cajero'}${payment.cajeroId?` \u00b7 ${payment.cajeroId}`:''}`
+    );
+
+    _naSecAppend(
+      card,
+      'div',
+      'credit-payment-sub',
+      `Saldo antes: ${fmt(payment.saldoAnterior)} \u2192 Saldo despu\u00e9s: ${fmt(payment.saldoActual)}`
+    );
+
     if(Array.isArray(payment.desgloseProductos)&&payment.desgloseProductos.length){
       const allocation=_naSecAppend(card,'div','credit-payment-allocation');
+
       payment.desgloseProductos.forEach(item=>{
         const row=_naSecAppend(allocation,'div');
         _naSecAppend(row,'span','',item.nombre||'Concepto');
@@ -5605,16 +5766,24 @@ abrirDetalleCredito=function(creditId){
       });
     }
   });
+
   if(!credit.anulado&&credit.status!=='cancelado'&&pending>0){
     const actions=_naSecAppend(container,'div','mbtns');
     actions.style.marginTop='12px';
-    const pay=_naSecCreditAction('mbtn mbtn-ok green','💵 Registrar nuevo pago','detail-pay',credit.id);
+
+    const pay=_naSecCreditAction(
+      'mbtn mbtn-ok green',
+      '\u{1F4B5} Registrar nuevo pago',
+      'detail-pay',
+      credit.id
+    );
+
     actions.appendChild(pay);
   }
+
   document.getElementById('mCreditoDetalle')?.classList.add('open');
   document.querySelector('#mCreditoDetalle .modal')?.scrollTo(0,0);
-};
-document.getElementById('creditoDetalleContent')?.addEventListener('click',event=>{
+};document.getElementById('creditoDetalleContent')?.addEventListener('click',event=>{
   const control=event.target.closest('[data-na-credit-action="detail-pay"]');
   if(!control)return;
   cerrarModal('mCreditoDetalle');
