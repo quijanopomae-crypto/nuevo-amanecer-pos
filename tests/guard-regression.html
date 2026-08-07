@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Regresión: guardas de operaciones críticas</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:16px}h1{margin:0 0 4px;font-size:22px}
+    button{height:38px;border:0;border-radius:8px;padding:0 14px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:12px}
+    th,td{border:1px solid #d7dee8;padding:6px;text-align:left;vertical-align:top}
+    th{background:#e7eef4;position:sticky;top:0}
+    .ok{color:#087443;font-weight:900}.fail{color:#b42318;font-weight:900}.warn{color:#b45309;font-weight:900}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:10px}
+  </style>
+</head>
+<body>
+  <h1>Regresión: guardas de operaciones críticas</h1>
+  <p>Verifica doble ejecución, rollback, y liberación de botones en guardarProd, guardarCli, guardarCred, guardarGasto.</p>
+  <div class="controls" id="controls">
+    <button id="run" type="button">Ejecutar pruebas</button>
+    <strong id="status">Esperando.</strong>
+  </div>
+  <table id="results-table">
+    <thead><tr><th>Función</th><th>Caso</th><th>Resultado</th><th>Detalle</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <pre id="auto-result"></pre>
+  <script>
+  (function(){
+    var frame,runBtn,statusEl,tbody,autoResult,results=[],w=null,d=null,errs=[],t0=0;
+    var PREFIX='__GUARD_TEST__';
+
+    var OK=function(l){return'<span class="ok">✔</span> '+l;};
+    var NO=function(l){return'<span class="fail">✘</span> '+l;};
+    var INF=function(l){return'<span class="info">'+l+'</span>';};
+    function add(fn,caso,passed,detail){
+      results.push({fn:fn,caso:caso,ok:passed,detail:detail||''});
+      tbody.innerHTML=results.map(function(r){
+        return'<tr><td>'+r.fn+'</td><td>'+r.caso+'</td><td>'+(r.ok?OK('PASS'):NO('FAIL'))+'</td><td>'+r.detail+'</td></tr>';
+      }).join('');
+    }
+    function stat(){
+      var p=0,f=0;
+      for(var i=0;i<results.length;i++){if(results[i].ok)p++;else f++;}
+      statusEl.textContent=p+' PASS / '+f+' FAIL | '+results.length+' total';
+      return{p:p,f:f,total:results.length};
+    }
+    var wait=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+
+    /* ─── Setup helpers ─── */
+    function ensureFields(fields){
+      for(var i=0;i<fields.length;i++){
+        var f=fields[i];
+        if(!d.getElementById(f.id)){
+          var el=d.createElement(f.tag||'input');
+          el.id=f.id;
+          if(f.tag==='select'){
+            el.innerHTML=f.options||'<option value="'+f.val+'" selected>'+f.val+'</option>';
+          }else if(f.type==='checkbox'){
+            el.type='checkbox';el.checked=f.checked||false;
+          }else{
+            if(f.val)el.value=f.val;
+            if(f.type)el.type=f.type;
+          }
+          if(f.display===false)el.style.display='none';
+          d.body.appendChild(el);
+        }
+      }
+    }
+
+    function ensureButton(modalId,btnClass,label){
+      var modal=d.getElementById(modalId);
+      if(!modal){modal=d.createElement('div');modal.id=modalId;d.body.appendChild(modal);}
+      var existing=modal.querySelector('.'+btnClass.replace(/\./g,' ').trim());
+      if(!existing){
+        var btn=d.createElement('button');
+        btn.className='mbtn mbtn-ok';
+        btn.textContent=label||'Guardar';
+        modal.appendChild(btn);
+        return btn;
+      }
+      existing.disabled=false;existing.textContent=label||'Guardar';
+      return existing;
+    }
+
+    function snapshot(keys){
+      var obj={};
+      for(var i=0;i<keys.length;i++){
+        try{obj[keys[i]]=w[keys[i]]?w[keys[i]].length:'?'}catch(e){obj[keys[i]]='err';}
+      }
+      return JSON.stringify(obj);
+    }
+
+    /* ─── Mock saveAllData ─── */
+    var origSave=null;
+    function mockSave(failCount){
+      var counter=0;
+      w.saveAllData=async function(){
+        counter++;
+        if(counter<=failCount){
+          return{ok:false,durable:false,temporary:false,verified:false,storage:'none',_mock:true};
+        }
+        return origSave?origSave():{ok:true,durable:true,verified:true,storage:'indexedDB',_mock:true};
+      };
+    }
+    function restoreSave(){if(origSave)w.saveAllData=origSave;}
+
+    /* ─── Ejecución ─── */
+    async function go(){
+      runBtn.disabled=true;results=[];tbody.innerHTML='';errs=[];t0=Date.now();
+
+      // Create iframe
+      if(frame&&frame.parentNode)frame.parentNode.removeChild(frame);
+      frame=document.createElement('iframe');
+      frame.src='../CVV2.4_backup_antes_demo-1.html';
+      frame.style.cssText='border:0;width:1px;height:1px;position:absolute;left:-9999px';
+      document.body.appendChild(frame);
+      frame.contentWindow&&frame.contentWindow.addEventListener('error',function(e){errs.push(e.message);});
+      if(frame.contentDocument&&frame.contentDocument.readyState!=='complete')
+        await new Promise(function(r){frame.addEventListener('load',r,{once:true});});
+      await wait(3000);
+      w=frame.contentWindow;d=w.document;
+      if(!w.guardarProd||!w.guardarCli||!w.guardarCred||!w.guardarGasto){
+        statusEl.textContent='Funciones no expuestas.';runBtn.disabled=false;return;
+      }
+
+      origSave=w.saveAllData;
+      var snap0=snapshot(['productos','clientes','creditos','gastos','cajMovs']);
+      add('Init','Snapshot inicial',true,snap0);
+
+      // ================================================================
+      // guardarProd
+      // ================================================================
+      add('guardarProd','=== INICIO ===',true,'');
+      ensureFields([
+        {id:'pNombre',val:PREFIX+' Producto'},
+        {id:'pDescripcion',val:''},{id:'pSku',val:'TEST-GUARD-001'},{id:'pBarcode',val:''},
+        {id:'pCosto',val:'5'},{id:'pPrecio',val:'10'},
+        {id:'pMarca',val:''},{id:'pIcon',val:'📦'},
+        {id:'pUnidad',tag:'select',val:'unidad'},
+        {id:'pUnidadCompra',val:'unidad'},{id:'pFactorCompra',val:'1'},
+        {id:'pCat',tag:'select',val:'abarrotes'},
+        {id:'pControlInventario',type:'checkbox',checked:false},{id:'pStock',val:'0'},
+        {id:'pIncluyeIGV',type:'checkbox',checked:true},{id:'pTipoImpuesto',val:'gravado'},{id:'pImpuestoComplementario',val:''},
+        {id:'pPrecioCaja',val:''},{id:'pUnidCaja',val:''},{id:'pVenc',val:''},
+        {id:'pStockMin',val:'5'}
+      ]);
+      ensureButton('mProd','mbtn-ok','Guardar');
+      w.invEditId=null;w.imagenProducto=null;
+      if(!w.readAltBarcodes)w.readAltBarcodes=function(){return[];};
+      if(!w._naFindCodeOwner)w._naFindCodeOwner=function(){return null;};
+
+      var pBefore=w.productos.length;
+
+      // 1a: Normal execution
+      restoreSave();
+      await w.guardarProd();
+      var pAfter1=w.productos.length;
+      add('guardarProd','1 ejecución normal',pAfter1===pBefore+1,'+'+ (pAfter1-pBefore));
+
+      // 1b: Double execution (button disabled blocks second)
+      ensureButton('mProd','mbtn-ok','Guardar');
+      w.invEditId=null;w.imagenProducto=null;
+      restoreSave();
+      var pBefore2=w.productos.length;
+      var first=w.guardarProd();
+      var second=w.guardarProd();
+      await Promise.all([first,second]);
+      await wait(100);
+      var pAfter2=w.productos.length;
+      add('guardarProd','Doble ejecución → solo 1',pAfter2===pBefore2+1,'+'+ (pAfter2-pBefore2));
+
+      // 1c: Rollback on persistence failure
+      ensureButton('mProd','mbtn-ok','Guardar');
+      w.invEditId=null;w.imagenProducto=null;
+      mockSave(1);
+      var pBefore3=w.productos.length;
+      await w.guardarProd();
+      var pAfter3=w.productos.length;
+      restoreSave();
+      add('guardarProd','Fallo persistencia → rollback',pAfter3===pBefore3,'before='+pBefore3+' after='+pAfter3);
+
+      // 1d: Retry after failure
+      ensureButton('mProd','mbtn-ok','Guardar');
+      w.invEditId=null;w.imagenProducto=null;
+      var pBefore4=w.productos.length;
+      await w.guardarProd();
+      var pAfter4=w.productos.length;
+      add('guardarProd','Reintento tras fallo',pAfter4===pBefore4+1,'+1');
+
+      // 1e: Button released after success
+      var btnDisabled=!!d.querySelector('#mProd .mbtn-ok')?.disabled;
+      add('guardarProd','Botón liberado tras éxito',!btnDisabled,'disabled='+btnDisabled);
+
+      // ================================================================
+      // guardarCli
+      // ================================================================
+      add('guardarCli','=== INICIO ===',true,'');
+      ensureFields([
+        {id:'cNombre',val:PREFIX+' Cliente'},
+        {id:'cDni',val:'99'+Date.now().toString().slice(-6)},
+        {id:'cTel',val:''},{id:'cDir',val:''}
+      ]);
+      ensureButton('mCli','mbtn-ok','Guardar');
+
+      var cBefore=w.clientes.length;
+
+      // 2a: Normal
+      restoreSave();
+      await w.guardarCli();
+      add('guardarCli','1 ejecución normal',w.clientes.length===cBefore+1,'+1');
+
+      // 2b: Double
+      ensureButton('mCli','mbtn-ok','Guardar');
+      restoreSave();
+      var cBefore2=w.clientes.length;
+      var c1=w.guardarCli(),c2=w.guardarCli();
+      await Promise.all([c1,c2]);await wait(100);
+      add('guardarCli','Doble ejecución → solo 1',w.clientes.length===cBefore2+1,'+'+ (w.clientes.length-cBefore2));
+
+      // 2c: Rollback
+      ensureButton('mCli','mbtn-ok','Guardar');
+      mockSave(1);
+      var cBefore3=w.clientes.length;
+      await w.guardarCli();
+      restoreSave();
+      add('guardarCli','Fallo → rollback',w.clientes.length===cBefore3,'before='+cBefore3+' after='+w.clientes.length);
+
+      // 2d: Retry
+      ensureButton('mCli','mbtn-ok','Guardar');
+      var cBefore4=w.clientes.length;
+      await w.guardarCli();
+      add('guardarCli','Reintento tras fallo',w.clientes.length===cBefore4+1,'+1');
+
+      // 2e: Button
+      add('guardarCli','Botón liberado',!d.querySelector('#mCli .mbtn-ok')?.disabled,'');
+
+      // ================================================================
+      // guardarCred
+      // ================================================================
+      add('guardarCred','=== INICIO ===',true,'');
+      // Need a client first
+      ensureFields([{id:'cNombre',val:PREFIX+' ClienteCred'},{id:'cDni',val:'88'+Date.now().toString().slice(-6)},{id:'cTel',val:''},{id:'cDir',val:''}]);
+      ensureButton('mCli','mbtn-ok','Guardar');
+      restoreSave();
+      await w.guardarCli();
+      var cliId=w.clientes[w.clientes.length-1]?.id;
+      w.cliCredId=cliId;
+
+      ensureFields([
+        {id:'crDesc',val:PREFIX+' Crédito'},
+        {id:'crMonto',val:'100'},
+        {id:'crVence',val:'2099-12-31'},
+        {id:'crTipo',tag:'select',val:'contrato_privado'}
+      ]);
+      ensureButton('mCred','mbtn-ok','Guardar');
+
+      // Need _naEvaluateClientCredit to return enabled
+      var origEval=w._naEvaluateClientCredit;
+      w._naEvaluateClientCredit=function(id){
+        var e=origEval(id);
+        e.enabled=true;e.eligible=true;e.available=999999;
+        return e;
+      };
+
+      // 3a: Normal
+      restoreSave();
+      var crBefore=w.creditos.length;
+      await w.guardarCred();
+      add('guardarCred','1 ejecución normal',w.creditos.length===crBefore+1,'+1');
+
+      // 3b: Double
+      ensureButton('mCred','mbtn-ok','Guardar');
+      restoreSave();
+      var crBefore2=w.creditos.length;
+      var cr1=w.guardarCred(),cr2=w.guardarCred();
+      await Promise.all([cr1,cr2]);await wait(100);
+      add('guardarCred','Doble ejecución → solo 1',w.creditos.length===crBefore2+1,'+'+ (w.creditos.length-crBefore2));
+
+      // 3c: Rollback
+      ensureButton('mCred','mbtn-ok','Guardar');
+      mockSave(1);
+      var crBefore3=w.creditos.length;
+      await w.guardarCred();
+      restoreSave();
+      add('guardarCred','Fallo → rollback',w.creditos.length===crBefore3,'before='+crBefore3+' after='+w.creditos.length);
+
+      // 3d: Retry
+      ensureButton('mCred','mbtn-ok','Guardar');
+      var crBefore4=w.creditos.length;
+      await w.guardarCred();
+      add('guardarCred','Reintento tras fallo',w.creditos.length===crBefore4+1,'+1');
+
+      // Restore eval
+      w._naEvaluateClientCredit=origEval;
+
+      // ================================================================
+      // guardarGasto
+      // ================================================================
+      add('guardarGasto','=== INICIO ===',true,'');
+      ensureFields([
+        {id:'gasDesc',val:PREFIX+' Gasto'},
+        {id:'gasMonto',val:'25'},
+        {id:'gasFecha',val:'2025-01-01'},
+        {id:'gasCat',val:'Servicios'},
+        {id:'gasMetodo',val:'efectivo'},
+        {id:'gasNota',val:''}
+      ]);
+      ensureButton('mGasto','mbtn-ok','Registrar');
+      w.gastoProc=false;
+
+      // 4a: Normal
+      restoreSave();
+      var gBefore=w.gastos.length,cmBefore=w.cajMovs.length;
+      await w.guardarGasto();
+      add('guardarGasto','1 ejecución normal',w.gastos.length===gBefore+1,'+1 gasto');
+
+      // 4b: Double
+      w.gastoProc=false;ensureButton('mGasto','mbtn-ok','Registrar');
+      restoreSave();
+      var gBefore2=w.gastos.length,cmBefore2=w.cajMovs.length;
+      var g1=w.guardarGasto(),g2=w.guardarGasto();
+      await Promise.all([g1,g2]);await wait(100);
+      add('guardarGasto','Doble ejecución → solo 1',w.gastos.length===gBefore2+1,'+'+ (w.gastos.length-gBefore2));
+
+      // 4c: Rollback restores BOTH gastos AND cajMovs
+      w.gastoProc=false;ensureButton('mGasto','mbtn-ok','Registrar');
+      mockSave(1);
+      var gBefore3=w.gastos.length,cmBefore3=w.cajMovs.length;
+      await w.guardarGasto();
+      restoreSave();
+      var gOk=w.gastos.length===gBefore3;
+      var cmOk=w.cajMovs.length===cmBefore3;
+      add('guardarGasto','Fallo → rollback gastos',gOk,'before='+gBefore3+' after='+w.gastos.length);
+      add('guardarGasto','Fallo → rollback cajMovs',cmOk,'before='+cmBefore3+' after='+w.cajMovs.length);
+
+      // 4d: Retry
+      w.gastoProc=false;ensureButton('mGasto','mbtn-ok','Registrar');
+      var gBefore4=w.gastos.length;
+      await w.guardarGasto();
+      add('guardarGasto','Reintento tras fallo',w.gastos.length===gBefore4+1,'+1');
+
+      // 4e: Button + gastoProc released
+      add('guardarGasto','gastoProc liberado',!w.gastoProc,'gastoProc='+w.gastoProc);
+
+      // ================================================================
+      // Final integrity
+      // ================================================================
+      restoreSave();
+      var snap1=snapshot(['productos','clientes','creditos','gastos','cajMovs']);
+      add('Final','Snapshot final',true,snap1);
+
+      // Clean test data
+      w.productos=w.productos.filter(function(p){return(p.name||'').indexOf(PREFIX)===-1&&(p.sku||'').indexOf('TEST-GUARD')===-1;});
+      w.clientes=w.clientes.filter(function(c){return(c.nombre||'').indexOf(PREFIX)===-1;});
+      w.creditos=w.creditos.filter(function(cr){return(cr.desc||'').indexOf(PREFIX)===-1;});
+      w.gastos=w.gastos.filter(function(g){return(g.desc||'').indexOf(PREFIX)===-1;});
+
+      var s=stat();runBtn.disabled=false;
+      if(frame&&frame.parentNode)frame.parentNode.removeChild(frame);
+
+      // Auto-result
+      var fails=results.filter(function(r){return!r.ok;}).map(function(r){return r.fn+' | '+r.caso;});
+      var payload={total:s.total,passed:s.p,failed:s.f,failList:fails};
+      autoResult.textContent=JSON.stringify(payload,null,2);
+      autoResult.style.display='block';
+    }
+
+    runBtn=document.getElementById('run');
+    statusEl=document.getElementById('status');
+    tbody=document.getElementById('results');
+    autoResult=document.getElementById('auto-result');
+    runBtn.addEventListener('click',go);
+  })();
+  </script>
+</body>
+</html>
