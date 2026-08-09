@@ -6117,5 +6117,233 @@ guardarMovInv=async function(){
   }
 };
 </script>
+<script>
+// Nucleo V10 inactivo: infraestructura de concurrencia para integracion en fases posteriores.
+const _NA_V10_DB_VERSION=2;
+const _NA_V10_STATE_STORE='state';
+const _NA_V10_OPERATIONS_STORE='operations';
+const _NA_V10_CHECKPOINTS_STORE='checkpoints';
+const _NA_V10_SNAPSHOT_KEY='snapshot_v10';
+const _NA_V10_LOCK_NAME='nuevo-amanecer:financial-write:v10';
+const _NA_V10_CHANNEL_NAME='nuevo-amanecer:persistence:v10';
+const _NA_V10_STATUSES=Object.freeze({PENDING:'PENDING',COMMITTED:'COMMITTED',ROLLED_BACK:'ROLLED_BACK',CONFLICT:'CONFLICT'});
+const _NA_V10_RESULTS=Object.freeze({SUCCESS:'SUCCESS',ALREADY_COMMITTED:'ALREADY_COMMITTED',CONFLICT:'CONFLICT',PERSISTENCE_ERROR:'PERSISTENCE_ERROR'});
+
+let _naV10DbPromise=null,_naV10TabId=null,_naV10Channel=null,_naV10LastBroadcast=null;
+let _naV10Runtime={dbName:_NA_DB_NAME,localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:_NA_V10_LOCK_NAME,channelName:_NA_V10_CHANNEL_NAME,broadcastEnabled:true};
+
+const _naV10Clone=value=>{try{return structuredClone(value);}catch(error){return value===undefined?undefined:JSON.parse(JSON.stringify(value));}};
+const _naV10Now=()=>new Date().toISOString();
+function _naNewUuid(){
+  if(globalThis.crypto?.randomUUID)return globalThis.crypto.randomUUID();
+  if(!globalThis.crypto?.getRandomValues)throw new Error('No existe una fuente criptografica para generar UUID');
+  const bytes=new Uint8Array(16);globalThis.crypto.getRandomValues(bytes);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=Array.from(bytes,value=>value.toString(16).padStart(2,'0')).join('');
+  return`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+const _naNewOperationId=()=>`op_${_naNewUuid()}`;
+const _naNewCommitId=()=>`commit_${_naNewUuid()}`;
+function _naGetTabId(){if(!_naV10TabId)_naV10TabId=`tab_${_naNewUuid()}`;return _naV10TabId;}
+function _naV10Error(code,message,cause=null){const error=new Error(message);error.code=code;if(cause)error.cause=cause;return error;}
+function _naV10Result(status,extra={}){return{status,...extra};}
+function _naV10ConfigureRuntime(options={}){
+  if(_naV10DbPromise)throw _naV10Error('V10_ALREADY_OPEN','No se puede cambiar el namespace V10 despues de abrir IndexedDB');
+  if(_naV10Channel){try{_naV10Channel.close();}catch(error){}_naV10Channel=null;}
+  const allowed=['dbName','localMirrorKey','localSignalKey','sessionOutboxKey','lockName','channelName','broadcastEnabled'];
+  for(const key of allowed)if(Object.prototype.hasOwnProperty.call(options,key))_naV10Runtime[key]=options[key];
+  return _naV10Clone(_naV10Runtime);
+}
+async function _naV10PrepareUpgrade(){
+  if(typeof _naDbPromise!=='undefined'&&_naDbPromise){try{const legacyDb=await _naDbPromise;legacyDb?.close();}catch(error){}_naDbPromise=null;}
+  return true;
+}
+function _naV10OpenDB(){
+  if(_naV10DbPromise)return _naV10DbPromise;
+  const attempt=new Promise((resolve,reject)=>{
+    if(!globalThis.indexedDB){reject(_naV10Error('IDB_UNAVAILABLE','IndexedDB no esta disponible'));return;}
+    let settled=false,request;
+    const finish=(method,value)=>{if(settled)return;settled=true;method(value);};
+    try{request=indexedDB.open(_naV10Runtime.dbName,_NA_V10_DB_VERSION);}catch(error){finish(reject,_naV10Error('IDB_OPEN_FAILED','No se pudo solicitar IndexedDB V10',error));return;}
+    request.onupgradeneeded=()=>{
+      const db=request.result;
+      if(!db.objectStoreNames.contains(_NA_V10_STATE_STORE))db.createObjectStore(_NA_V10_STATE_STORE);
+      if(!db.objectStoreNames.contains(_NA_V10_OPERATIONS_STORE))db.createObjectStore(_NA_V10_OPERATIONS_STORE,{keyPath:'operationId'});
+      if(!db.objectStoreNames.contains(_NA_V10_CHECKPOINTS_STORE))db.createObjectStore(_NA_V10_CHECKPOINTS_STORE,{keyPath:'key'});
+    };
+    request.onblocked=()=>finish(reject,_naV10Error('UPGRADE_BLOCKED','La actualizacion de persistencia esta bloqueada. Cierra o recarga las otras pestañas de Nuevo Amanecer.'));
+    request.onerror=()=>finish(reject,_naV10Error('IDB_OPEN_FAILED','No se pudo abrir IndexedDB V10',request.error));
+    request.onsuccess=()=>{
+      if(settled){request.result.close();return;}
+      const db=request.result;db.onversionchange=()=>{db.close();if(_naV10DbPromise)_naV10DbPromise=null;};finish(resolve,db);
+    };
+  });
+  _naV10DbPromise=attempt.catch(error=>{_naV10DbPromise=null;throw error;});
+  return _naV10DbPromise;
+}
+async function _naV10CloseDB(){
+  if(!_naV10DbPromise)return;
+  try{const db=await _naV10DbPromise;db?.close();}catch(error){}
+  _naV10DbPromise=null;
+}
+function _naV10Request(request){return new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error||new Error('IndexedDB request failed'));});}
+async function _naV10ReadStateValue(key){const db=await _naV10OpenDB(),tx=db.transaction(_NA_V10_STATE_STORE,'readonly');return _naV10Request(tx.objectStore(_NA_V10_STATE_STORE).get(key));}
+async function _naV10ReadCanonical(){const snapshot=await _naV10ReadStateValue(_NA_V10_SNAPSHOT_KEY);return snapshot?_naV10Clone(snapshot):null;}
+async function _naV10GetOperation(operationId){const db=await _naV10OpenDB(),tx=db.transaction(_NA_V10_OPERATIONS_STORE,'readonly'),record=await _naV10Request(tx.objectStore(_NA_V10_OPERATIONS_STORE).get(operationId));return record?_naV10Clone(record):null;}
+async function _naV10GetCheckpoint(key){const db=await _naV10OpenDB(),tx=db.transaction(_NA_V10_CHECKPOINTS_STORE,'readonly'),record=await _naV10Request(tx.objectStore(_NA_V10_CHECKPOINTS_STORE).get(key));return record?_naV10Clone(record):null;}
+
+function _naV10ValidSnapshot(snapshot){
+  if(!snapshot||snapshot.version!==10||!Number.isSafeInteger(snapshot.revision)||snapshot.revision<0||typeof snapshot.commitId!=='string'||!snapshot.commitId||typeof snapshot.lastOperationId!=='string'||!snapshot.lastOperationId||typeof snapshot.writerId!=='string'||!snapshot.writerId||!snapshot.committedAt||!snapshot.data||typeof snapshot.data!=='object')return false;
+  if(snapshot.revision===0)return snapshot.parentRevision===null;
+  return Number.isSafeInteger(snapshot.parentRevision)&&snapshot.parentRevision===snapshot.revision-1;
+}
+function _naV10CompareSnapshots(left,right){
+  if(!_naV10ValidSnapshot(left)||!_naV10ValidSnapshot(right))return{ok:false,conflict:true,reason:'INVALID_SNAPSHOT'};
+  if(left.revision===right.revision&&left.commitId!==right.commitId)return{ok:false,conflict:true,reason:'REVISION_COMMIT_MISMATCH',revision:left.revision,leftCommitId:left.commitId,rightCommitId:right.commitId};
+  return{ok:true,conflict:false,newer:left.revision===right.revision?'SAME':left.revision>right.revision?'LEFT':'RIGHT'};
+}
+function _naV10StableValue(value){
+  if(Array.isArray(value))return value.map(_naV10StableValue);
+  if(value&&typeof value==='object'){const out={};Object.keys(value).sort().forEach(key=>{out[key]=_naV10StableValue(value[key]);});return out;}
+  return value;
+}
+async function _naV10PayloadHash(payload){
+  const text=JSON.stringify(_naV10StableValue(payload??null));
+  if(globalThis.crypto?.subtle&&globalThis.TextEncoder){const bytes=new TextEncoder().encode(text),digest=await crypto.subtle.digest('SHA-256',bytes);return'sha256:'+Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');}
+  let hash=2166136261;for(let i=0;i<text.length;i++){hash^=text.charCodeAt(i);hash=Math.imul(hash,16777619);}return`fnv1a:${(hash>>>0).toString(16).padStart(8,'0')}`;
+}
+function _naV10ReadOutbox(){try{const parsed=JSON.parse(sessionStorage.getItem(_naV10Runtime.sessionOutboxKey)||'{}');return parsed&&typeof parsed==='object'?parsed:{};}catch(error){return{};}}
+function _naV10WriteOutboxRecord(record){const outbox=_naV10ReadOutbox();outbox[record.operationId]=_naV10Clone(record);sessionStorage.setItem(_naV10Runtime.sessionOutboxKey,JSON.stringify(outbox));}
+function _naV10RemoveOutboxRecord(operationId){const outbox=_naV10ReadOutbox();delete outbox[operationId];if(Object.keys(outbox).length)sessionStorage.setItem(_naV10Runtime.sessionOutboxKey,JSON.stringify(outbox));else sessionStorage.removeItem(_naV10Runtime.sessionOutboxKey);}
+function _naV10WriteMirror(snapshot){
+  if(!_naV10ValidSnapshot(snapshot))return{ok:false,conflict:true,reason:'INVALID_SNAPSHOT'};
+  let current=null;try{current=JSON.parse(localStorage.getItem(_naV10Runtime.localMirrorKey)||'null');}catch(error){}
+  if(_naV10ValidSnapshot(current)){
+    const comparison=_naV10CompareSnapshots(current,snapshot);
+    if(comparison.conflict){localStorage.setItem(`${_naV10Runtime.localMirrorKey}_conflict_${snapshot.commitId}`,JSON.stringify(snapshot));return{ok:false,conflict:true,reason:comparison.reason};}
+    if(current.revision>snapshot.revision)return{ok:false,conflict:true,reason:'MIRROR_AHEAD',mirrorRevision:current.revision};
+    if(current.revision===snapshot.revision&&current.commitId===snapshot.commitId)return{ok:true,idempotent:true};
+  }
+  localStorage.setItem(_naV10Runtime.localMirrorKey,JSON.stringify(snapshot));
+  localStorage.setItem(_naV10Runtime.localSignalKey,JSON.stringify({revision:snapshot.revision,commitId:snapshot.commitId,operationId:snapshot.lastOperationId,writerId:snapshot.writerId,committedAt:snapshot.committedAt}));
+  return{ok:true,idempotent:false};
+}
+function _naV10GetChannel(){
+  if(!_naV10Runtime.broadcastEnabled||typeof BroadcastChannel!=='function')return null;
+  if(_naV10Channel)return _naV10Channel;
+  _naV10Channel=new BroadcastChannel(_naV10Runtime.channelName);_naV10Channel.onmessage=event=>{_naV10LastBroadcast=_naV10Clone(event.data);window.dispatchEvent(new CustomEvent('na:v10-commit',{detail:_naV10Clone(event.data)}));};return _naV10Channel;
+}
+function _naV10PublishCommit(snapshot){
+  const message={revision:snapshot.revision,commitId:snapshot.commitId,operationId:snapshot.lastOperationId,writerId:snapshot.writerId};
+  try{const channel=_naV10GetChannel();if(!channel)return{ok:false,skipped:true,message};channel.postMessage(message);return{ok:true,skipped:false,message};}catch(error){return{ok:false,skipped:false,error:{name:error.name||'BroadcastError',message:error.message||String(error)}};}
+}
+async function _naV10WithExclusiveLock(work){
+  if(navigator.locks?.request)return navigator.locks.request(_naV10Runtime.lockName,{mode:'exclusive'},work);
+  return work();
+}
+function _naV10BuildJournalRecord(spec,operationId,payloadHash){const now=_naV10Now();return{operationId,type:String(spec.type||'UNKNOWN').slice(0,80),status:_NA_V10_STATUSES.PENDING,baseRevision:spec.expectedRevision,committedRevision:null,tabId:_naGetTabId(),createdAt:now,updatedAt:now,attempts:1,payload:_naV10Clone(spec.payload??null),payloadHash,entityIds:_naV10Clone(spec.entityIds||[]),reason:null};}
+async function _naV10EnsurePending(spec,operationId){
+  const payloadHash=await _naV10PayloadHash(spec.payload),candidate=_naV10BuildJournalRecord(spec,operationId,payloadHash);_naV10WriteOutboxRecord(candidate);
+  const db=await _naV10OpenDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(_NA_V10_OPERATIONS_STORE,'readwrite'),store=tx.objectStore(_NA_V10_OPERATIONS_STORE),request=store.get(operationId);let result=null;
+    request.onerror=()=>{try{tx.abort();}catch(error){}};
+    request.onsuccess=()=>{
+      const existing=request.result;
+      if(existing){
+        if(existing.payloadHash!==payloadHash){
+          if(existing.status===_NA_V10_STATUSES.COMMITTED){result=existing;return;}
+          existing.status=_NA_V10_STATUSES.CONFLICT;existing.reason='OPERATION_ID_PAYLOAD_MISMATCH';existing.updatedAt=_naV10Now();existing.attempts=Number(existing.attempts||0)+1;store.put(existing);result=existing;return;
+        }
+        if(existing.status===_NA_V10_STATUSES.PENDING){existing.updatedAt=_naV10Now();existing.attempts=Number(existing.attempts||0)+1;store.put(existing);}result=existing;return;
+      }
+      store.put(candidate);result=candidate;
+    };
+    tx.oncomplete=()=>resolve(_naV10Clone(result));tx.onabort=()=>reject(_naV10Error('PENDING_WRITE_FAILED','No se pudo conservar la intencion PENDING',tx.error));tx.onerror=()=>{};
+  });
+}
+function _naV10ConflictJournal(record,reason,currentRevision){record.status=_NA_V10_STATUSES.CONFLICT;record.reason=reason;record.updatedAt=_naV10Now();record.attempts=Number(record.attempts||0)+1;record.currentRevision=currentRevision;return record;}
+async function _naV10CasCommit(spec,operationId){
+  const db=await _naV10OpenDB();
+  return new Promise(resolve=>{
+    let outcome=null;
+    const tx=db.transaction([_NA_V10_STATE_STORE,_NA_V10_OPERATIONS_STORE,_NA_V10_CHECKPOINTS_STORE],'readwrite'),stateStore=tx.objectStore(_NA_V10_STATE_STORE),operationStore=tx.objectStore(_NA_V10_OPERATIONS_STORE),checkpointStore=tx.objectStore(_NA_V10_CHECKPOINTS_STORE),stateRequest=stateStore.get(_NA_V10_SNAPSHOT_KEY),operationRequest=operationStore.get(operationId);
+    let stateReady=false,operationReady=false,current=null,record=null;
+    const abortWith=error=>{outcome=_naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,error:{code:error.code||'CAS_FAILED',message:error.message||String(error)}});try{tx.abort();}catch(abortError){}};
+    const proceed=()=>{
+      if(!stateReady||!operationReady)return;
+      try{
+        if(!_naV10ValidSnapshot(current))throw _naV10Error('CANONICAL_MISSING','No existe un snapshot V10 canonico valido');
+        if(!record)throw _naV10Error('PENDING_MISSING','No existe la intencion PENDING');
+        if(record.status===_NA_V10_STATUSES.COMMITTED){outcome=_naV10Result(_NA_V10_RESULTS.ALREADY_COMMITTED,{operationId,revision:record.committedRevision,operation:_naV10Clone(record),snapshot:_naV10Clone(current)});return;}
+        if(record.status===_NA_V10_STATUSES.CONFLICT||record.status===_NA_V10_STATUSES.ROLLED_BACK){outcome=_naV10Result(_NA_V10_RESULTS.CONFLICT,{operationId,revision:current.revision,reason:record.reason||record.status,operation:_naV10Clone(record),snapshot:_naV10Clone(current)});return;}
+        if(current.revision!==spec.expectedRevision){record=_naV10ConflictJournal(record,'REVISION_MISMATCH',current.revision);operationStore.put(record);outcome=_naV10Result(_NA_V10_RESULTS.CONFLICT,{operationId,expectedRevision:spec.expectedRevision,currentRevision:current.revision,reason:record.reason,operation:_naV10Clone(record),snapshot:_naV10Clone(current)});return;}
+        if(typeof spec.revalidate==='function'){
+          const validation=spec.revalidate(_naV10Clone(current));if(validation&&typeof validation.then==='function')throw _naV10Error('ASYNC_REDUCER','revalidate debe ser sincrono dentro de la transaccion');
+          const valid=validation===undefined||validation===true||validation?.ok===true;
+          if(!valid){const reason=typeof validation==='string'?validation:validation?.reason||'REVALIDATION_FAILED';record=_naV10ConflictJournal(record,reason,current.revision);operationStore.put(record);outcome=_naV10Result(_NA_V10_RESULTS.CONFLICT,{operationId,currentRevision:current.revision,reason,operation:_naV10Clone(record),snapshot:_naV10Clone(current)});return;}
+        }
+        const draft=_naV10Clone(current),produced=typeof spec.mutate==='function'?spec.mutate(draft,{operationId,currentRevision:current.revision,tabId:_naGetTabId()}):draft.data;
+        if(produced&&typeof produced.then==='function')throw _naV10Error('ASYNC_REDUCER','mutate debe ser sincrono dentro de la transaccion');
+        const nextData=produced===undefined?draft.data:produced,nextRevision=current.revision+1,commitId=_naNewCommitId(),committedAt=_naV10Now();
+        if(!Number.isSafeInteger(nextRevision))throw _naV10Error('REVISION_OVERFLOW','La revision excedio el rango seguro');
+        const next={version:10,revision:nextRevision,parentRevision:current.revision,commitId,lastOperationId:operationId,committedAt,writerId:_naGetTabId(),data:_naV10Clone(nextData)};
+        if(!_naV10ValidSnapshot(next))throw _naV10Error('INVALID_NEXT_SNAPSHOT','El reducer produjo un snapshot invalido');
+        record={...record,status:_NA_V10_STATUSES.COMMITTED,committedRevision:nextRevision,updatedAt:committedAt,reason:null,entityIds:_naV10Clone(spec.entityIds||record.entityIds||[])};
+        stateStore.put(next,_NA_V10_SNAPSHOT_KEY);operationStore.put(record);checkpointStore.put({key:`${nextRevision}:${commitId}`,revision:nextRevision,commitId,operationId,createdAt:committedAt,snapshot:_naV10Clone(next)});
+        outcome=_naV10Result(_NA_V10_RESULTS.SUCCESS,{operationId,revision:nextRevision,commitId,operation:_naV10Clone(record),snapshot:_naV10Clone(next)});
+      }catch(error){abortWith(error);}
+    };
+    stateRequest.onsuccess=()=>{current=stateRequest.result;stateReady=true;proceed();};operationRequest.onsuccess=()=>{record=operationRequest.result;operationReady=true;proceed();};
+    stateRequest.onerror=()=>abortWith(stateRequest.error||new Error('No se pudo leer el snapshot canonico'));operationRequest.onerror=()=>abortWith(operationRequest.error||new Error('No se pudo leer el journal'));
+    tx.oncomplete=()=>resolve(outcome||_naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,error:{code:'EMPTY_CAS_RESULT',message:'La transaccion termino sin resultado'}}));
+    tx.onabort=()=>resolve(outcome||_naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,error:{code:'CAS_ABORTED',message:tx.error?.message||'La transaccion CAS fue cancelada'}}));tx.onerror=()=>{};
+  });
+}
+async function _naRunCriticalOperation(spec={}){
+  const operationId=spec.operationId||_naNewOperationId();
+  if(!Number.isSafeInteger(spec.expectedRevision)||spec.expectedRevision<0)return _naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,error:{code:'INVALID_EXPECTED_REVISION',message:'expectedRevision debe ser un entero no negativo'}});
+  try{
+    const pending=await _naV10EnsurePending(spec,operationId);
+    if(pending.status===_NA_V10_STATUSES.COMMITTED){_naV10RemoveOutboxRecord(operationId);return _naV10Result(_NA_V10_RESULTS.ALREADY_COMMITTED,{operationId,revision:pending.committedRevision,operation:pending,snapshot:await _naV10ReadCanonical()});}
+    if(pending.status===_NA_V10_STATUSES.CONFLICT||pending.status===_NA_V10_STATUSES.ROLLED_BACK)return _naV10Result(_NA_V10_RESULTS.CONFLICT,{operationId,reason:pending.reason||pending.status,operation:pending});
+    const result=await _naV10WithExclusiveLock(()=>_naV10CasCommit(spec,operationId));
+    if(result.status===_NA_V10_RESULTS.SUCCESS||result.status===_NA_V10_RESULTS.ALREADY_COMMITTED){result.mirror=_naV10WriteMirror(result.snapshot);result.broadcast=_naV10PublishCommit(result.snapshot);_naV10RemoveOutboxRecord(operationId);}
+    return result;
+  }catch(error){return _naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,error:{code:error.code||error.name||'PERSISTENCE_ERROR',message:error.message||String(error)}});}
+}
+async function _naV10MarkOperationRolledBack(operationId,reason='CANCELLED'){
+  const db=await _naV10OpenDB();return new Promise(resolve=>{const tx=db.transaction(_NA_V10_OPERATIONS_STORE,'readwrite'),store=tx.objectStore(_NA_V10_OPERATIONS_STORE),request=store.get(operationId);let result=null;request.onsuccess=()=>{const record=request.result;if(!record){result={ok:false,reason:'NOT_FOUND'};return;}if(record.status===_NA_V10_STATUSES.COMMITTED){result={ok:false,reason:'COMMITTED_IS_IMMUTABLE',record:_naV10Clone(record)};return;}record.status=_NA_V10_STATUSES.ROLLED_BACK;record.reason=reason;record.updatedAt=_naV10Now();store.put(record);result={ok:true,record:_naV10Clone(record)};};request.onerror=()=>{try{tx.abort();}catch(error){}};tx.oncomplete=()=>{if(result?.ok)_naV10RemoveOutboxRecord(operationId);resolve(result);};tx.onabort=()=>resolve({ok:false,reason:'PERSISTENCE_ERROR'});});
+}
+
+function _naV10LegacyData(snapshot){return{appConfig:_naV10Clone(snapshot.appConfig||{}),ui:_naV10Clone(snapshot.ui||{}),locks:_naV10Clone(snapshot.locks||{}),security:_naV10Clone(snapshot.security||{}),productos:_naV10Clone(snapshot.data?.productos||[]),ventas:_naV10Clone(snapshot.data?.ventas||[]),clientes:_naV10Clone(snapshot.data?.clientes||[]),creditos:_naV10Clone(snapshot.data?.creditos||[]),gastos:_naV10Clone(snapshot.data?.gastos||[]),cajMovs:_naV10Clone(snapshot.data?.cajMovs||[]),cajEstado:_naV10Clone(snapshot.data?.cajEstado||{}),cart:_naV10Clone(snapshot.cart||[]),draft:_naV10Clone(snapshot.draft||null)};}
+async function _naV10ReadLegacySnapshot(){
+  const idb=await _naV10ReadStateValue(_NA_SNAPSHOT_KEY),local=_naReadLocalSnapshot(),session=_naReadSessionSnapshot(),candidates=[idb,local,session].filter(_naValidSnapshot).sort((left,right)=>String(right.updatedAt||'').localeCompare(String(left.updatedAt||'')));
+  return candidates[0]?_naV10Clone(candidates[0]):_naLegacySnapshot();
+}
+async function _naV10InitializeCanonical(data,options={}){
+  const operationId=options.operationId||_naNewOperationId(),commitId=options.commitId||_naNewCommitId(),committedAt=_naV10Now(),type=String(options.type||'INITIALIZE'),db=await _naV10OpenDB();
+  return new Promise(resolve=>{
+    const tx=db.transaction([_NA_V10_STATE_STORE,_NA_V10_OPERATIONS_STORE,_NA_V10_CHECKPOINTS_STORE],'readwrite'),stateStore=tx.objectStore(_NA_V10_STATE_STORE),operationStore=tx.objectStore(_NA_V10_OPERATIONS_STORE),checkpointStore=tx.objectStore(_NA_V10_CHECKPOINTS_STORE),request=stateStore.get(_NA_V10_SNAPSHOT_KEY);let outcome=null;
+    request.onsuccess=()=>{
+      const existing=request.result;if(existing){outcome=_naV10Result(_NA_V10_RESULTS.ALREADY_COMMITTED,{operationId:existing.lastOperationId,revision:existing.revision,commitId:existing.commitId,snapshot:_naV10Clone(existing)});return;}
+      const snapshot={version:10,revision:0,parentRevision:null,commitId,lastOperationId:operationId,committedAt,writerId:_naGetTabId(),data:_naV10Clone(data)},record={operationId,type,status:_NA_V10_STATUSES.COMMITTED,baseRevision:null,committedRevision:0,tabId:_naGetTabId(),createdAt:committedAt,updatedAt:committedAt,attempts:1,payload:_naV10Clone(options.payload??null),payloadHash:options.payloadHash||null,entityIds:[],reason:null};
+      stateStore.put(snapshot,_NA_V10_SNAPSHOT_KEY);operationStore.put(record);checkpointStore.put({key:`0:${commitId}`,revision:0,commitId,operationId,createdAt:committedAt,snapshot:_naV10Clone(snapshot)});
+      if(options.legacySnapshot)checkpointStore.put({key:`legacy-v9:${commitId}`,revision:null,commitId,operationId,createdAt:committedAt,kind:'LEGACY_V9',snapshot:_naV10Clone(options.legacySnapshot)});
+      outcome=_naV10Result(_NA_V10_RESULTS.SUCCESS,{operationId,revision:0,commitId,operation:record,snapshot});
+    };
+    request.onerror=()=>{try{tx.abort();}catch(error){}};tx.oncomplete=()=>{if(outcome?.snapshot){outcome.mirror=_naV10WriteMirror(outcome.snapshot);outcome.broadcast=_naV10PublishCommit(outcome.snapshot);}resolve(outcome);};tx.onabort=()=>resolve(_naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,error:{code:'INITIALIZE_FAILED',message:tx.error?.message||'No se pudo crear snapshot V10'}}));tx.onerror=()=>{};
+  });
+}
+async function _naV10CreateInitialSnapshot(data,options={}){return _naV10InitializeCanonical(data,{...options,type:options.type||'INITIALIZE'});}
+async function _naV10MigrateFromV9(options={}){
+  const existing=await _naV10ReadCanonical();if(existing)return _naV10Result(_NA_V10_RESULTS.ALREADY_COMMITTED,{operationId:existing.lastOperationId,revision:existing.revision,commitId:existing.commitId,snapshot:existing});
+  const legacy=options.legacySnapshot?_naV10Clone(options.legacySnapshot):await _naV10ReadLegacySnapshot();if(!_naValidSnapshot(legacy))return _naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{error:{code:'INVALID_LEGACY_SNAPSHOT',message:'No existe un snapshot V9 valido para migrar'}});
+  const payload={sourceVersion:legacy.version,sourceUpdatedAt:legacy.updatedAt||null},payloadHash=await _naV10PayloadHash(payload);
+  return _naV10InitializeCanonical(_naV10LegacyData(legacy),{operationId:options.operationId||_naNewOperationId(),type:'MIGRATION',payload,payloadHash,legacySnapshot:legacy});
+}
+function _naV10BuildUiState(source={}){return{version:1,savedAt:_naV10Now(),writerId:_naGetTabId(),ui:_naV10Clone(source.ui||{}),appConfig:_naV10Clone(source.appConfig||{})};}
+function _naV10UiStateHasFinancialData(state){return['productos','ventas','clientes','creditos','gastos','cajMovs','cajEstado','cart','draft'].some(key=>Object.prototype.hasOwnProperty.call(state||{},key));}
+function _naV10Diagnostics(){return{runtime:_naV10Clone(_naV10Runtime),tabId:_naGetTabId(),dbOpened:!!_naV10DbPromise,channelOpened:!!_naV10Channel,lastBroadcast:_naV10Clone(_naV10LastBroadcast),stores:{state:_NA_V10_STATE_STORE,operations:_NA_V10_OPERATIONS_STORE,checkpoints:_NA_V10_CHECKPOINTS_STORE},snapshotKey:_NA_V10_SNAPSHOT_KEY};}
+</script>
 </body>
 </html>
