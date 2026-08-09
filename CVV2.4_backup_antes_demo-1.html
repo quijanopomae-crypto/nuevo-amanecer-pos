@@ -6344,6 +6344,84 @@ async function _naV10MigrateFromV9(options={}){
 function _naV10BuildUiState(source={}){return{version:1,savedAt:_naV10Now(),writerId:_naGetTabId(),ui:_naV10Clone(source.ui||{}),appConfig:_naV10Clone(source.appConfig||{})};}
 function _naV10UiStateHasFinancialData(state){return['productos','ventas','clientes','creditos','gastos','cajMovs','cajEstado','cart','draft'].some(key=>Object.prototype.hasOwnProperty.call(state||{},key));}
 function _naV10Diagnostics(){return{runtime:_naV10Clone(_naV10Runtime),tabId:_naGetTabId(),dbOpened:!!_naV10DbPromise,channelOpened:!!_naV10Channel,lastBroadcast:_naV10Clone(_naV10LastBroadcast),stores:{state:_NA_V10_STATE_STORE,operations:_NA_V10_OPERATIONS_STORE,checkpoints:_NA_V10_CHECKPOINTS_STORE},snapshotKey:_NA_V10_SNAPSHOT_KEY};}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTOR DE VENTA V10 — sin reemplazar confirmarVenta todavía
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function _naV10BuildSaleIntent(intent){
+  const operationId=intent.operationId||_naNewOperationId();
+  return{operationId,items:_naV10Clone(intent.items||[]),paymentMethod:intent.paymentMethod||'efectivo',paymentRef:intent.paymentRef||'',clientId:intent.clientId||null,creditDue:intent.creditDue||null,cashierId:intent.cashierId||null,sessionId:intent.sessionId||null,timestamp:_naV10Now(),_built:true};
+}
+
+function _naV10RevalidateSale(canonical,intent){
+  const d=canonical?.data;if(!d)return{ok:false,reason:'CANONICAL_MISSING'};
+  const productos=d.productos||[],ventas=d.ventas||[],clientes=d.clientes||[],creditos=d.creditos||[],cajEstado=d.cajEstado||{};
+  if(!cajEstado.abierta||cajEstado.cerrada)return{ok:false,reason:'CAJA_CERRADA'};
+  if(!cajEstado.sessionId)return{ok:false,reason:'CAJA_SIN_SESION'};
+  for(let i=0;i<intent.items.length;i++){
+    const it=intent.items[i],prod=productos.find(p=>String(p.id)===String(it.productId));
+    if(!prod)return{ok:false,reason:'PRODUCTO_NO_EXISTE',productId:it.productId};
+    if(prod.controlInventario!==false&&prod.stock<it.qty)return{ok:false,reason:'STOCK_INSUFICIENTE',productId:it.productId,disponible:prod.stock,requerido:it.qty};
+  }
+  if(intent.paymentRef&&(intent.paymentMethod==='yape'||intent.paymentMethod==='transferencia')){
+    const dupeRef=ventas.some(v=>!v.anulada&&v.paymentRef===intent.paymentRef);
+    if(dupeRef)return{ok:false,reason:'REFERENCIA_DUPLICADA',paymentRef:intent.paymentRef};
+  }
+  if(intent.clientId){
+    const c=clientes.find(x=>String(x.id)===String(intent.clientId));
+    if(!c)return{ok:false,reason:'CLIENTE_NO_EXISTE',clientId:intent.clientId};
+    if(intent.paymentMethod==='credito'){
+      const cfg=(d.appConfig&&d.appConfig.creditPolicy)?_naV10Clone(d.appConfig.creditPolicy):{enabled:true,minPurchases:0,minProfit:0,initialLine:999999};
+      if(cfg.enabled===false)return{ok:false,reason:'CREDITO_DESACTIVADO'};
+      const existing=creditos.filter(cr=>String(cr.cliId)===String(intent.clientId)&&!cr.anulado&&cr.status!=='cancelado'),debt=existing.reduce((a,cr)=>a+Math.max(0,(cr.monto||0)-(cr.pagado||0)),0),total=cfg.initialLine||999999,available=Math.max(0,total-debt);
+      if(intent.total>available)return{ok:false,reason:'LINEA_CREDITO_INSUFICIENTE',disponible:available,requerido:intent.total};
+    }
+  }
+  if(intent.cashierId&&cajEstado.cajeroId&&String(intent.cashierId)!==String(cajEstado.cajeroId))return{ok:false,reason:'CAJERO_DIFERENTE'};
+  if(intent.sessionId&&cajEstado.sessionId&&String(intent.sessionId)!==String(cajEstado.sessionId))return{ok:false,reason:'SESION_DIFERENTE'};
+  return{ok:true};
+}
+
+function _naV10ApplySale(draft,intent,ctx){
+  const d=draft.data||(draft.data={});
+  d.productos=d.productos||[];d.ventas=d.ventas||[];d.clientes=d.clientes||[];d.creditos=d.creditos||[];d.cajMovs=d.cajMovs||[];
+  const ids=d.ventas.map(v=>parseInt(String(v.id).replace('V-',''))||0),newId='V-'+String(Math.max(...ids,0)+1).padStart(6,'0'),fecha=d.cajEstado?.fechaApertura||new Date().toISOString().slice(0,10),now=new Date().toISOString(),hora=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}),hora24=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const ventaUid=ctx.operationId+'_sale_'+_naNewUuid().slice(0,12),cashMoveId=ctx.operationId+'_cash_'+_naNewUuid().slice(0,12);
+  const total=intent.items.reduce((a,it)=>a+(it.price||0)*(it.qty||0),0);
+  const saleItems=intent.items.map(it=>{
+    const qty=Math.max(1,it.qty||1),price=Math.max(0,it.price||0),prod=d.productos.find(p=>String(p.id)===String(it.productId));
+    const units=(it.boxUnits||1)*qty;
+    return{id:it.productId,productoId:it.productId,sku:prod?.sku||it.sku||'',qty,cantidad:qty,precio:price,precioUnitario:price,subtotal:Number((price*qty).toFixed(2)),name:prod?.name||it.name||'',nombre:prod?.name||it.name||'',icon:prod?.icon||'📦',unidad:'unidad',unitsPerQty:it.boxUnits||1,ventaModo:(it.boxUnits||1)>1?'caja':'unidad',ventaLibre:false,ventaSinStock:false,costo:prod?.costo||0,descuento:0,_precioOriginal:null,incluyeIGV:true,tipoImpuesto:'gravado'};
+  });
+  const metodo=intent.paymentMethod||'efectivo',estado=metodo==='credito'?'credito':'completada';
+  let creditId=null;
+  if(metodo==='credito'&&intent.clientId){
+    creditId=ctx.operationId+'_credit_'+_naNewUuid().slice(0,12);
+    const client=d.clientes.find(c=>String(c.id)===String(intent.clientId));
+    d.creditos.push({id:creditId,cliId:intent.clientId,clienteId:intent.clientId,clienteNombre:client?.nombre||'',clienteDni:client?.dni||'',tipo:'venta_credito',desc:'Venta '+newId,monto:total,pagado:0,saldo:total,vence:intent.creditDue||fecha,status:'vigente',fecha,hora,hora24,timestamp:now,ventaId:newId,anulado:false,pagos:[],items:saleItems.map((it,i)=>({itemKey:it.productoId+':'+i,nombre:it.name,cantidad:it.qty,precioUnitario:it.precio,subtotal:it.subtotal,modo:it.ventaModo||'minorista'})),cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||''});
+  }
+  if(intent.clientId){
+    const cl=d.clientes.find(c=>String(c.id)===String(intent.clientId));
+    if(cl)cl.totalCompras=(cl.totalCompras||0)+total;
+  }
+  const paymentBreakdown=intent.mixedData?{efectivo:intent.mixedData.cash,digital:intent.mixedData.digital,digitalMethod:intent.mixedData.digitalMethod,reference:intent.paymentRef}:null;
+  d.ventas.unshift({id:newId,ventaUid,operation:ctx.operationId,fecha,hora,hora24,timestamp:now,cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||'',total,subtotal:total,descuentoTotal:0,metodo,metodoPago:metodo,estado,tipoVenta:'minorista',cantidadLineas:saleItems.length,unidadesFisicas:saleItems.reduce((a,x)=>a+(x.unitsPerQty||1)*x.qty,0),paymentRef:intent.paymentRef||'',paymentBreakdown,recibido:total,vuelto:0,anulada:false,clienteId:intent.clientId||null,clienteNombre:intent.clientId?(d.clientes.find(c=>String(c.id)===String(intent.clientId))?.nombre||''):null,clienteDni:null,creditId,contieneVentaLibre:false,contieneVentaSinStock:false,items:saleItems});
+  d.cajMovs.push({id:cashMoveId,cashMoveId,tipo:'ing',monto:total,efectivo:metodo==='efectivo'?total:0,desc:'Venta POS '+newId,cat:'Venta retail',metodo,referencia:intent.paymentRef||'',hora,hora24,timestamp:now,cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||'',fecha,sessionId:intent.sessionId||'',ventaId:newId});
+  for(let i=0;i<intent.items.length;i++){
+    const it=intent.items[i],prod=d.productos.find(p=>String(p.id)===String(it.productId));
+    if(prod&&prod.controlInventario!==false)prod.stock=Math.max(0,(prod.stock||0)-it.qty);
+  }
+  return d;
+}
+
+async function _naV10ConfirmSaleIntent(intent){
+  if(!intent._built)intent=_naV10BuildSaleIntent(intent);
+  const canonical=await _naV10ReadCanonical();
+  if(!canonical)return{status:_NA_V10_RESULTS.PERSISTENCE_ERROR,error:{code:'NO_CANONICAL',message:'No existe snapshot V10 canonico. Ejecuta la migracion o inicializacion primero.'}};
+  const spec={operationId:intent.operationId,type:'SALE',expectedRevision:canonical.revision,payload:_naV10Clone(intent),entityIds:[],revalidate:function(c){return _naV10RevalidateSale(c,intent);},mutate:function(draft,ctx){return _naV10ApplySale(draft,intent,ctx);}};
+  return _naRunCriticalOperation(spec);
+}
 </script>
 </body>
 </html>

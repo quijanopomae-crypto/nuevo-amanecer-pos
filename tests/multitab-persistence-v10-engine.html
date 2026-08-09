@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>Motor de venta V10 — contextos reales</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:18px}h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:16px 0 6px}
+    button{height:40px;border:0;border-radius:9px;padding:0 15px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .status{font-weight:800}.banner{margin-top:12px;padding:12px;border:2px solid #d0d7e2;border-radius:10px;background:#fff;font-weight:900}
+    .banner.pass{border-color:#087443;background:#ecfdf3;color:#087443}.banner.fail{border-color:#b42318;background:#fff1f2;color:#9f1239}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:8px}
+    th,td{border:1px solid #d7dee8;padding:7px;text-align:left;vertical-align:top}th{background:#e7eef4}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.4 ui-monospace,Consolas,monospace}
+    iframe{position:absolute;width:2px;height:2px;border:0;left:-9999px;top:0}
+    .pass{color:#087443;font-weight:900}.failure{color:#b42318;font-weight:900}
+  </style>
+</head>
+<body>
+  <h1>Motor de venta V10 — contextos reales</h1>
+  <p>Reutiliza el lifecycle probado de <code>persistence-v10-core-regression.html</code>: fetch + document.write + bridge. Dos contextos reales, IndexedDB real, Web Locks reales, namespace desechable.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar motor de venta V10</button>
+    <span id="status" class="status">Esperando ejecución.</span>
+  </div>
+  <div id="summary" class="banner">SIN EJECUTAR</div>
+
+  <h2>Diagnóstico de inicialización</h2>
+  <pre id="init-diag">Esperando.</pre>
+
+  <h2>Resultados</h2>
+  <table>
+    <thead><tr><th>#</th><th>Caso</th><th>Estado</th><th>Evidencia</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <h2>Resultado estructurado</h2>
+  <pre id="auto-result">{"status":"NOT_RUN"}</pre>
+
+  <script>
+  (function(){
+    'use strict';
+    var MAIN_HTML='../CVV2.4_backup_antes_demo-1.html';
+    var HARNESS_VERSION='v10-sale-engine-2026-08-09-2';
+    var query=new URLSearchParams(location.search);
+
+    /* ═══ ISOLATION (idéntico al harness probado) ═══ */
+    function isolationBootstrap(config){
+      'use strict';
+      var local=window.localStorage,session=window.sessionStorage,storageProto=window.Storage&&window.Storage.prototype;
+      if(!storageProto)throw new Error('Storage API no disponible');
+      var nativeGet=storageProto.getItem,nativeSet=storageProto.setItem,nativeRemove=storageProto.removeItem,nativeKey=storageProto.key,nativeClear=storageProto.clear;
+      var localPrefix=config.localPrefix,sessionPrefix=config.sessionPrefix;
+      function prefixFor(target){if(target===local)return localPrefix;if(target===session)return sessionPrefix;return null;}
+      function keysFor(target,prefix){var keys=[];for(var i=0;i<target.length;i++){var key=nativeKey.call(target,i);if(key&&key.indexOf(prefix)===0)keys.push(key);}return keys;}
+      storageProto.getItem=function(key){var p=prefixFor(this);return p===null?nativeGet.call(this,key):nativeGet.call(this,p+String(key));};
+      storageProto.setItem=function(key,value){var p=prefixFor(this);return p===null?nativeSet.call(this,key,value):nativeSet.call(this,p+String(key),String(value));};
+      storageProto.removeItem=function(key){var p=prefixFor(this);return p===null?nativeRemove.call(this,key):nativeRemove.call(this,p+String(key));};
+      storageProto.key=function(index){var p=prefixFor(this);if(p===null)return nativeKey.call(this,index);var keys=keysFor(this,p),full=keys[index];return full===undefined?null:full.slice(p.length);};
+      storageProto.clear=function(){var p=prefixFor(this);if(p===null)return nativeClear.call(this);keysFor(this,p).forEach(function(k){nativeRemove.call(this,k);},this);};
+      var factory=window.indexedDB,factoryProto=factory&&Object.getPrototypeOf(factory);
+      if(!factory||!factoryProto)throw new Error('IndexedDB no disponible');
+      var nativeOpen=factoryProto.open,nativeDelete=factoryProto.deleteDatabase,lifecycle=[];
+      factoryProto.open=function(name,version){
+        var isolated=config.dbPrefix+String(name);
+        lifecycle.push({action:'open',name:isolated,version:version===undefined?null:version,at:Date.now()});
+        return arguments.length>1?nativeOpen.call(this,isolated,version):nativeOpen.call(this,isolated);
+      };
+      factoryProto.deleteDatabase=function(name){return nativeDelete.call(this,config.dbPrefix+String(name));};
+      window.__v10IdbLifecycle=lifecycle;
+      window.__saleIsolation={runId:config.runId,tabId:config.tabId,localPrefix:config.localPrefix,sessionPrefix:config.sessionPrefix,dbName:config.dbPrefix+'NuevoAmanecerPOS'};
+      window.__saleWorkerState={status:'LOADING_POS',stage:'ISOLATION_READY',ready:false,error:null,tabId:config.tabId,runId:config.runId};
+    }
+
+    /* ═══ BRIDGE: expone motor de venta desde el realm del POS ═══ */
+    function saleBridgeBootstrap(){
+      'use strict';
+      var clone=function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};
+      var wait=function(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});};
+      var state=window.__saleWorkerState||{status:'BOOTSTRAPPING',ready:false,error:null};
+      function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+      async function settle(){await wait(1800);var stable=0;for(var i=0;i<80;i++){var chain=typeof _naPersistChain!=='undefined'?_naPersistChain:null;try{if(chain)await chain;}catch(error){}await wait(75);if(chain===(typeof _naPersistChain!=='undefined'?_naPersistChain:null)){stable++;if(stable>=5)return true;}else stable=0;}throw new Error('La persistencia V9 no se estabilizó');}
+      function probe(){return{readyState:document.readyState,origin:location.origin,href:location.href,scripts:document.scripts.length,helpers:{buildSaleIntent:typeof _naV10BuildSaleIntent,revalidateSale:typeof _naV10RevalidateSale,applySale:typeof _naV10ApplySale,confirmSaleIntent:typeof _naV10ConfirmSaleIntent,runCriticalOperation:typeof _naRunCriticalOperation,openDB:typeof _naV10OpenDB,configureRuntime:typeof _naV10ConfigureRuntime,readCanonical:typeof _naV10ReadCanonical,createInitial:typeof _naV10CreateInitialSnapshot,newUuid:typeof _naNewUuid,newOperationId:typeof _naNewOperationId},webLocks:typeof navigator.locks!=='undefined'&&typeof navigator.locks.request==='function',isolation:clone(window.__saleIsolation||null),worker:clone(state),idbLog:clone(window.__v10IdbLifecycle||[])};}
+      function buildSaleSpec(intent,expectedRevision){var built=_naV10BuildSaleIntent(intent);return{operationId:built.operationId,type:'SALE',expectedRevision:expectedRevision,payload:clone(built),entityIds:built.items.map(function(item){return item.productId;}),revalidate:function(canonical){return _naV10RevalidateSale(canonical,built);},mutate:function(draft,ctx){return _naV10ApplySale(draft,built,ctx);}};}
+      async function initialize(){
+        try{
+          state.status='INITIALIZING';state.stage='POS_LOADED';state.sourceLoaded=true;
+          await withTimeout(settle(),12000,'settle POS');
+          var inspected=probe(),missing=Object.keys(inspected.helpers).filter(function(key){return inspected.helpers[key]!=='function';});
+          if(missing.length)throw new Error('Helpers V10 ausentes: '+missing.join(', '));
+          state.helpersFound=true;state.stage='HELPERS_FOUND';
+          await withTimeout((async function(){await _naV10PrepareUpgrade();await _naV10CloseDB();_naV10ConfigureRuntime({dbName:'NuevoAmanecerPOS',localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:'nuevo-amanecer:financial-write:v10:'+window.__saleIsolation.runId,channelName:'nuevo-amanecer:persistence:v10:'+window.__saleIsolation.runId,broadcastEnabled:false});})(),10000,'configurar runtime');
+          state.runtimeConfigured=true;state.stage='RUNTIME_CONFIGURED';
+          var db=await withTimeout(_naV10OpenDB(),10000,'abrir IndexedDB V10');
+          state.idbOpened=true;state.dbVersion=db.version;state.stage='IDB_OPENED';
+          await withTimeout(_naV10ReadCanonical(),5000,'leer snapshot V10');state.snapshotAccessible=true;
+          state.status='READY';state.stage='READY';state.ready=true;return true;
+        }catch(error){state.status='ERROR';state.stage='ERROR';state.error=error.message||String(error);return false;}
+      }
+      window.__saleBridge={
+        state:function(){return clone(state);},probe:probe,isolation:clone(window.__saleIsolation),
+        createInitial:function(data){return _naV10CreateInitialSnapshot(data);},canonical:function(){return _naV10ReadCanonical();},operation:function(id){return _naV10GetOperation(id);},tabId:function(){return _naGetTabId();},newOperationId:function(){return _naNewOperationId();},newUuid:function(){return _naNewUuid();},
+        buildIntent:function(intent){return clone(_naV10BuildSaleIntent(intent));},revalidate:async function(intent){var canonical=await _naV10ReadCanonical();return clone(_naV10RevalidateSale(canonical,_naV10BuildSaleIntent(intent)));},
+        runSale:async function(intent,expectedRevision){var revision=expectedRevision;if(revision===undefined||revision===null){var canonical=await _naV10ReadCanonical();revision=canonical?canonical.revision:0;}var result=await _naRunCriticalOperation(buildSaleSpec(intent,revision));return clone({status:result.status,operationId:result.operationId,revision:result.revision,commitId:result.commitId,reason:result.reason,error:result.error});},
+        confirmSale:async function(intent){var result=await _naV10ConfirmSaleIntent(intent);return clone({status:result.status,operationId:result.operationId,revision:result.revision,commitId:result.commitId,reason:result.reason,error:result.error});},
+        snapshotSummary:async function(){var canonical=await _naV10ReadCanonical();if(!canonical)return null;var data=canonical.data||{};return clone({revision:canonical.revision,commitId:canonical.commitId,lastOperationId:canonical.lastOperationId,productos:(data.productos||[]).map(function(p){return{id:p.id,name:p.name,stock:p.stock};}),ventas:(data.ventas||[]).map(function(v){return{id:v.id,ventaUid:v.ventaUid,operation:v.operation,total:v.total,metodo:v.metodo,paymentRef:v.paymentRef,creditId:v.creditId,clienteId:v.clienteId};}),cajMovs:(data.cajMovs||[]).map(function(m){return{id:m.id,cashMoveId:m.cashMoveId,ventaId:m.ventaId,monto:m.monto,efectivo:m.efectivo,tipo:m.tipo,metodo:m.metodo,sessionId:m.sessionId};}),creditos:(data.creditos||[]).map(function(cr){return{id:cr.id,ventaId:cr.ventaId,cliId:cr.cliId,monto:cr.monto,pagado:cr.pagado,saldo:cr.saldo,status:cr.status};}),clientes:(data.clientes||[]).map(function(cl){return{id:cl.id,nombre:cl.nombre,totalCompras:cl.totalCompras};})});},
+        storageInfo:function(){return{localKeys:Object.keys(localStorage),sessionKeys:Object.keys(sessionStorage),v10Mirror:localStorage.getItem('na_snapshot_v10')};},
+        closeAll:async function(){try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(error){}await _naV10CloseDB();try{if(_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(error){}return true;}
+      };
+      window.__saleWorkerReady=initialize();
+    }
+
+    function workerConfig(){
+      var runId=query.get('runId'),tabId=query.get('worker');
+      return{runId:runId,tabId:tabId,localPrefix:'__NA_V10_SALE_TEST__'+runId+'__LOCAL__',sessionPrefix:'__NA_V10_SALE_TEST__'+runId+'__SESSION_'+tabId+'__',dbPrefix:'__NA_V10_SALE_TEST_DB__'+runId+'__'};
+    }
+
+    /* ═══ WORKER MODE: reescribe este documento con el POS aislado ═══ */
+    async function bootWorker(){
+      document.body.innerHTML='<p>Preparando contexto V10 de venta…</p>';
+      try{
+        var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},15000);
+        var response=await fetch(MAIN_HTML+'?saleSource='+Date.now(),{cache:'no-store',signal:controller.signal});clearTimeout(timer);
+        if(!response.ok)throw new Error('No se pudo cargar producción: HTTP '+response.status);
+        var source=await response.text(),config=workerConfig();
+        var isolationScript='<scr'+'ipt>('+isolationBootstrap.toString()+')('+JSON.stringify(config)+');</scr'+'ipt>';
+        var bridgeScript='<scr'+'ipt>('+saleBridgeBootstrap.toString()+')();</scr'+'ipt>';
+        if(!/<head[^>]*>/i.test(source)||source.toLowerCase().lastIndexOf('</body>')<0)throw new Error('HTML principal no reconocido');
+        source=source.replace(/<head([^>]*)>/i,function(m){return m+isolationScript;});
+        var close=source.toLowerCase().lastIndexOf('</body>');
+        source=source.slice(0,close)+bridgeScript+source.slice(close);
+        document.open();document.write(source);document.close();
+      }catch(error){
+        document.body.innerHTML='<pre id="worker-error"></pre>';
+        document.getElementById('worker-error').textContent=error.stack||error.message||String(error);
+      }
+    }
+    if(query.get('worker')){bootWorker();return;}
+
+    /* ═══ PARENT MODE ═══ */
+    var runButton=document.getElementById('run'),statusEl=document.getElementById('status');
+    var summaryEl=document.getElementById('summary'),resultsBody=document.getElementById('results');
+    var autoResult=document.getElementById('auto-result'),initDiag=document.getElementById('init-diag');
+    var frames=[],results=[],caseKeys={};
+    var CASES=[
+      {key:'INIT',name:'INIT: workers, helpers, runtime, IDB y snapshot'},
+      {key:'DOS_VENTAS',name:'A: dos ventas concurrentes sobreviven'},
+      {key:'IDEMPOTENCIA',name:'B: idempotencia por operationId'},
+      {key:'STOCK',name:'C: conflicto de stock sin efecto parcial'},
+      {key:'FOLIOS',name:'D: folios concurrentes sin colisión'},
+      {key:'REFERENCIA',name:'E: referencia digital duplicada'},
+      {key:'CREDITO',name:'F: venta a crédito y revalidación atómicas'}
+    ];
+
+    function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+    function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+    function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+    function addCase(key,passed,detail){
+      if(caseKeys[key])throw new Error('Caso duplicado: '+key);var definition=CASES.find(function(item){return item.key===key;});if(!definition)throw new Error('Caso desconocido: '+key);caseKeys[key]=true;var name=definition.name;
+      results.push({id:results.length+1,name:name,passed:!!passed,detail:clone(detail)});
+      var row=document.createElement('tr'),values=[String(results.length),name,passed?'PASS':'FAIL',JSON.stringify(detail,null,2)];
+      values.forEach(function(value,index){
+        var cell=document.createElement('td');
+        if(index===2)cell.className=passed?'pass':'failure';
+        var pre=document.createElement('pre');pre.textContent=value;cell.appendChild(pre);row.appendChild(cell);
+      });
+      resultsBody.appendChild(row);
+    }
+    function fillMissingCases(reason){CASES.forEach(function(item){if(!caseKeys[item.key])addCase(item.key,false,{notExecuted:true,reason:reason});});}
+    function stats(){var p=results.filter(function(r){return r.passed;}).length;return{pass:p,fail:results.length-p,total:results.length};}
+
+    async function createContext(tabId,runId){
+      var frame=document.createElement('iframe');
+      frame.src='multitab-persistence-v10-engine.html?worker='+encodeURIComponent(tabId)+'&runId='+encodeURIComponent(runId)+'&v='+encodeURIComponent(HARNESS_VERSION)+'&ts='+Date.now();
+      document.body.appendChild(frame);frames.push(frame);
+      for(var attempt=0;attempt<450;attempt++){
+        try{
+          if(frame.contentWindow&&frame.contentWindow.__saleBridge){
+            var state=frame.contentWindow.__saleBridge.state();
+            if(state.error)throw new Error('Worker '+tabId+': '+state.error);
+            if(state.ready)return{frame:frame,bridge:frame.contentWindow.__saleBridge,tabId:tabId,state:state};
+          }
+          var err=frame.contentDocument&&frame.contentDocument.getElementById('worker-error');
+          if(err)throw new Error(err.textContent);
+        }catch(problem){if(problem&&problem.message)throw problem;}
+        await wait(100);
+      }
+      throw new Error('TIMEOUT: el worker '+tabId+' no alcanzó READY en 45s');
+    }
+    async function destroyContext(ctx){
+      try{await withTimeout(ctx.bridge.closeAll(),5000,'cerrar worker '+ctx.tabId);}catch(e){}
+      var i=frames.indexOf(ctx.frame);if(i>=0)frames.splice(i,1);
+      ctx.frame.src='about:blank';ctx.frame.remove();await wait(150);
+    }
+    function removePrefixed(prefix){
+      [localStorage,sessionStorage].forEach(function(store){
+        var found=[];for(var i=0;i<store.length;i++){var k=store.key(i);if(k&&k.indexOf(prefix)===0)found.push(k);}
+        found.forEach(function(k){store.removeItem(k);});
+      });
+    }
+    function deleteDatabase(name){
+      return new Promise(function(resolve){
+        var done=false,finish=function(v){if(done)return;done=true;resolve(v);};
+        try{
+          var req=indexedDB.deleteDatabase(name);
+          req.onsuccess=function(){finish({ok:true});};
+          req.onerror=function(){finish({ok:false,error:req.error&&req.error.message});};
+          req.onblocked=function(){finish({ok:false,blocked:true});};
+          setTimeout(function(){finish({ok:false,timeout:true});},3000);
+        }catch(e){finish({ok:false,error:e.message});}
+      });
+    }
+    async function realStorageState(){
+      return{
+        snapshotV9:localStorage.getItem('na_snapshot_v9'),
+        snapshotV10:localStorage.getItem('na_snapshot_v10'),
+        signalV10:localStorage.getItem('na_snapshot_v10_signal'),
+        database:await withTimeout(databaseInfo('NuevoAmanecerPOS'),5000,'consultar DB real')
+      };
+    }
+    function sameRealState(a,b){return a.snapshotV9===b.snapshotV9&&a.snapshotV10===b.snapshotV10&&a.signalV10===b.signalV10&&JSON.stringify(a.database)===JSON.stringify(b.database);}
+    async function databaseInfo(name){if(typeof indexedDB.databases!=='function')return{supported:false,name:name};var databases=await indexedDB.databases(),match=databases.find(function(item){return item.name===name;});return{supported:true,name:name,exists:!!match,version:match&&match.version};}
+    function physicalKeys(prefix){var out=[];[localStorage,sessionStorage].forEach(function(store){for(var i=0;i<store.length;i++){var key=store.key(i);if(key&&key.indexOf(prefix)===0)out.push(key);}});return out.sort();}
+    async function cleanupStaleSaleTests(){var removed=[];removePrefixed('__NA_V10_SALE__');removePrefixed('__NA_V10_SALE_TEST__');if(typeof indexedDB.databases==='function'){var databases=await withTimeout(indexedDB.databases(),5000,'listar namespaces de prueba'),targets=databases.filter(function(item){return item.name&&item.name.indexOf('__NA_V10_SALE_TEST_DB__')===0;});for(var i=0;i<targets.length;i++)removed.push({name:targets[i].name,result:await deleteDatabase(targets[i].name)});}return removed;}
+    async function concurrentWithRebase(ctxA,ctxB,intentA,intentB,baseRevision){
+      var contexts=[ctxA,ctxB],originalIntents=[intentA,intentB],initial=await withTimeout(Promise.all([ctxA.bridge.runSale(intentA,baseRevision),ctxB.bridge.runSale(intentB,baseRevision)]),15000,'writers concurrentes'),finalResults=initial.slice(),finalIntents=[intentA,intentB],rebases=[];
+      for(var i=0;i<initial.length;i++)if(initial[i].status==='CONFLICT'&&initial[i].reason==='REVISION_MISMATCH'){
+        var fresh=await withTimeout(contexts[i].bridge.canonical(),5000,'leer revisión para rebase'),newOperationId=await contexts[i].bridge.newOperationId(),retryIntent=Object.assign({},originalIntents[i],{operationId:newOperationId});
+        finalIntents[i]=retryIntent;finalResults[i]=await withTimeout(contexts[i].bridge.runSale(retryIntent,fresh.revision),15000,'reintento con rebase');rebases.push({writer:i===0?'A':'B',originalOperationId:originalIntents[i].operationId,retryOperationId:newOperationId,fromRevision:baseRevision,toRevision:fresh.revision,result:finalResults[i]});
+      }
+      return{initial:initial,results:finalResults,intents:finalIntents,rebases:rebases};
+    }
+
+    async function run(){
+      runButton.disabled=true;results=[];caseKeys={};resultsBody.innerHTML='';
+      summaryEl.className='banner';summaryEl.textContent='EJECUTANDO';
+      autoResult.textContent='{"status":"RUNNING"}';
+      var runId=Date.now().toString(36)+'-'+crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+      var testDbName='__NA_V10_SALE_TEST_DB__'+runId+'__NuevoAmanecerPOS';
+      var report={version:HARNESS_VERSION,runId:runId,testDb:testDbName,status:'ERROR'};
+      var staleCleanup=await cleanupStaleSaleTests(),realBefore=await realStorageState(),ctxA=null,ctxB=null;report.staleTestCleanup=staleCleanup;
+
+      try{
+        statusEl.textContent='[1] creando contextos';
+        ctxA=await createContext('A',runId);
+        statusEl.textContent='[2] worker A cargado';
+        ctxB=await createContext('B',runId);
+        statusEl.textContent='[3] worker B cargado';
+        var probeA=await ctxA.bridge.probe(),probeB=await ctxB.bridge.probe();
+        initDiag.textContent=JSON.stringify({A:probeA,B:probeB},null,2);
+        var helpersOk=probeA.helpers.buildSaleIntent==='function'&&probeA.helpers.revalidateSale==='function'&&
+                      probeA.helpers.applySale==='function'&&probeA.helpers.confirmSaleIntent==='function'&&
+                      probeA.helpers.runCriticalOperation==='function'&&probeB.helpers.buildSaleIntent==='function'&&
+                      probeB.helpers.revalidateSale==='function'&&probeB.helpers.applySale==='function'&&
+                      probeB.helpers.confirmSaleIntent==='function'&&probeB.helpers.runCriticalOperation==='function';
+        statusEl.textContent='[4] helpers V10 encontrados';
+        var stateA=await ctxA.bridge.state(),stateB=await ctxB.bridge.state();
+        statusEl.textContent='[5] runtime aislado configurado';
+        var runtimeOk=stateA.runtimeConfigured&&stateB.runtimeConfigured;
+        statusEl.textContent='[6] IndexedDB V10 abierta';
+        var tabA=await ctxA.bridge.tabId(),tabB=await ctxB.bridge.tabId();
+        var isoA=probeA.isolation,isoB=probeB.isolation;
+        if(!helpersOk||!runtimeOk||!stateA.idbOpened||!stateB.idbOpened)throw new Error('INIT falló antes de crear el snapshot');
+        var today=new Date().toISOString().slice(0,10),sessionId=Date.now();
+        var fixture={
+          appConfig:{creditPolicy:{enabled:true,initialLine:100000,minPurchases:0,minProfit:0}},
+          ui:{},locks:{},security:{},cart:[],draft:null,
+          productos:[
+            {id:'P1',name:'Producto A',sku:'P-A',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:5,precio:10,stock:10,stockMin:1,unidad:'unidad',controlInventario:true},
+            {id:'P2',name:'Producto B',sku:'P-B',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:10,precio:20,stock:4,stockMin:1,unidad:'unidad',controlInventario:true},
+            {id:'P3',name:'Producto C',sku:'P-C',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:2,precio:6,stock:50,stockMin:1,unidad:'unidad',controlInventario:true}
+          ],
+          ventas:[],clientes:[{id:'C1',nombre:'Cliente Prueba',dni:'90000001',tel:'',dir:'',totalCompras:0,color:0}],
+          creditos:[],gastos:[],cajMovs:[],
+          cajEstado:{abierta:true,cerrada:false,fondo:100,cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',hora:'08:00',hora24:'08:00:00',fechaApertura:today,timestampApertura:new Date().toISOString(),sessionId:sessionId,contado:null,esperado:null,diferencia:null,horaCierre:null,horaCierre24:null}
+        };
+        var init=await withTimeout(ctxA.bridge.createInitial(fixture),10000,'crear snapshot inicial');
+        if(init.status!=='SUCCESS')throw new Error('createInitial: '+init.status);
+        var base=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer snapshot A'),baseB=await withTimeout(ctxB.bridge.snapshotSummary(),5000,'leer snapshot B');
+        var initOk=stateA.ready&&stateB.ready&&helpersOk&&runtimeOk&&stateA.idbOpened&&stateB.idbOpened&&stateA.dbVersion===2&&stateB.dbVersion===2&&stateA.snapshotAccessible&&stateB.snapshotAccessible&&location.origin===probeA.origin&&probeA.origin===probeB.origin&&tabA!==tabB&&isoA.dbName===isoB.dbName&&isoA.dbName===testDbName&&probeA.webLocks&&probeB.webLocks&&base&&baseB&&base.commitId===baseB.commitId;
+        addCase('INIT',initOk,{readyA:stateA.ready,readyB:stateB.ready,originParent:location.origin,originA:probeA.origin,originB:probeB.origin,helpersA:probeA.helpers,helpersB:probeB.helpers,runtimeA:stateA.runtimeConfigured,runtimeB:stateB.runtimeConfigured,idbA:{opened:stateA.idbOpened,version:stateA.dbVersion},idbB:{opened:stateB.idbOpened,version:stateB.dbVersion},tabA:tabA,tabB:tabB,dbName:isoA.dbName,mismaDb:isoA.dbName===isoB.dbName,webLocksA:probeA.webLocks,webLocksB:probeB.webLocks,snapshotA:{revision:base.revision,commitId:base.commitId},snapshotB:{revision:baseB.revision,commitId:baseB.commitId}});
+        if(!initOk)throw new Error('INIT no cumplió todas las precondiciones');
+        statusEl.textContent='[7] ejecutando pruebas';
+
+        /* ── CASO A: dos ventas concurrentes ── */
+        var revA=base.revision;
+        var intentA1={operationId:await ctxA.bridge.newOperationId(),items:[{productId:'P1',qty:2,price:10,name:'Producto A',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:20};
+        var intentA2={operationId:await ctxB.bridge.newOperationId(),items:[{productId:'P1',qty:3,price:10,name:'Producto A',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:30};
+        var executionA=await concurrentWithRebase(ctxA,ctxB,intentA1,intentA2,revA),raceA=executionA.results;
+        var afterA=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer resultado dos ventas');
+        var stockA=afterA.productos.find(function(p){return p.id==='P1';}).stock;
+        var saleOpsA=afterA.ventas.map(function(sale){return sale.operation;}),journalsA=await withTimeout(Promise.all(saleOpsA.map(function(id){return ctxA.bridge.operation(id);})),5000,'leer journals dos ventas');
+        var saleRevisionsA=journalsA.map(function(record){return record.committedRevision;}).sort(function(a,b){return a-b;});
+        var okA=raceA.every(function(r){return r.status==='SUCCESS';})&&stockA===5&&afterA.ventas.length===2&&afterA.cajMovs.length===2&&
+                afterA.ventas[0].id!==afterA.ventas[1].id&&afterA.ventas[0].ventaUid!==afterA.ventas[1].ventaUid&&
+                afterA.cajMovs[0].cashMoveId!==afterA.cajMovs[1].cashMoveId&&new Set(saleOpsA).size===2&&
+                journalsA.every(function(record){return record&&record.status==='COMMITTED';})&&saleRevisionsA[0]===revA+1&&saleRevisionsA[1]===revA+2;
+        addCase('DOS_VENTAS',okA,{
+          intentosIniciales:executionA.initial,rebases:executionA.rebases,
+          resultados:raceA.map(function(r){return{status:r.status,revision:r.revision,reason:r.reason};}),
+          stockInicial:10,stockFinal:stockA,ventas:afterA.ventas.length,cajMovs:afterA.cajMovs.length,
+          folios:afterA.ventas.map(function(v){return v.id;}),
+          ventaUids:afterA.ventas.map(function(v){return v.ventaUid;}),
+          cashMoveIds:afterA.cajMovs.map(function(m){return m.cashMoveId;}),
+          operationIds:saleOpsA,operationStatuses:journalsA.map(function(record){return record.status;}),
+          revisions:saleRevisionsA,revisionBase:revA,revisionFinal:afterA.revision
+        });
+
+        /* ── CASO B: idempotencia ── */
+        var beforeB=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer base idempotencia');
+        var opB=await ctxA.bridge.newOperationId();
+        var intentB={operationId:opB,items:[{productId:'P3',qty:1,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:6};
+        var b1=await withTimeout(ctxA.bridge.confirmSale(intentB),15000,'primera venta idempotente');
+        var mid=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer primer efecto idempotente');
+        var b2=await withTimeout(ctxA.bridge.confirmSale(intentB),15000,'repetición idempotente');
+        var afterB=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer resultado idempotencia'),journalB=await withTimeout(ctxA.bridge.operation(opB),5000,'leer journal idempotencia');
+        var stockP3=afterB.productos.find(function(p){return p.id==='P3';}).stock;
+        var okB=b1.status==='SUCCESS'&&b2.status==='ALREADY_COMMITTED'&&
+                afterB.ventas.length===beforeB.ventas.length+1&&
+                afterB.cajMovs.length===beforeB.cajMovs.length+1&&stockP3===49&&mid.revision===afterB.revision&&journalB.status==='COMMITTED';
+        addCase('IDEMPOTENCIA',okB,{
+          primera:b1.status,segunda:b2.status,operationId:opB,
+          ventasAntes:beforeB.ventas.length,ventasDespues:afterB.ventas.length,
+          cajMovsAntes:beforeB.cajMovs.length,cajMovsDespues:afterB.cajMovs.length,
+          stockP3Antes:50,stockP3Despues:stockP3,revisionTrasPrimero:mid.revision,revisionTrasSegundo:afterB.revision,journal:journalB.status
+        });
+
+        /* ── CASO C: conflicto de stock ── */
+        var beforeC=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer base conflicto stock'),revC=beforeC.revision;
+        var stockP2Antes=beforeC.productos.find(function(p){return p.id==='P2';}).stock;
+        var intentC1={operationId:await ctxA.bridge.newOperationId(),items:[{productId:'P2',qty:3,price:20,name:'Producto B',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:60};
+        var intentC2={operationId:await ctxB.bridge.newOperationId(),items:[{productId:'P2',qty:3,price:20,name:'Producto B',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:60};
+        var executionC=await concurrentWithRebase(ctxA,ctxB,intentC1,intentC2,revC),raceC=executionC.results;
+        var afterC=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer resultado conflicto stock');
+        var stockP2=afterC.productos.find(function(p){return p.id==='P2';}).stock;
+        var commitsC=raceC.filter(function(r){return r.status==='SUCCESS';}).length;
+        var conflictResultC=raceC.find(function(r){return r.status==='CONFLICT';}),conflictsC=conflictResultC?1:0,conflictJournalC=conflictResultC?await withTimeout(ctxA.bridge.operation(conflictResultC.operationId),5000,'leer intención conflictiva stock'):null;
+        var okC=commitsC===1&&conflictsC===1&&conflictResultC.reason==='STOCK_INSUFICIENTE'&&stockP2===1&&stockP2>=0&&afterC.ventas.length===beforeC.ventas.length+1&&afterC.cajMovs.length===beforeC.cajMovs.length+1&&conflictJournalC&&conflictJournalC.status==='CONFLICT'&&conflictJournalC.reason==='STOCK_INSUFICIENTE'&&conflictJournalC.payload?.items?.[0]?.productId==='P2';
+        addCase('STOCK',okC,{
+          stockInicial:stockP2Antes,stockFinal:stockP2,
+          commits:commitsC,conflicts:conflictsC,
+          intentosIniciales:executionC.initial,rebases:executionC.rebases,resultados:raceC.map(function(r){return{status:r.status,operationId:r.operationId,reason:r.reason};}),
+          ventasDelta:afterC.ventas.length-beforeC.ventas.length,cajMovsDelta:afterC.cajMovs.length-beforeC.cajMovs.length,
+          intencionConflictiva:conflictJournalC&&{status:conflictJournalC.status,reason:conflictJournalC.reason,payload:conflictJournalC.payload},stockNuncaNegativo:stockP2>=0
+        });
+
+        /* ── CASO D: folios concurrentes ── */
+        var beforeD=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer base folios'),revD=beforeD.revision;
+        var intentD1={operationId:await ctxA.bridge.newOperationId(),items:[{productId:'P3',qty:1,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:6};
+        var intentD2={operationId:await ctxB.bridge.newOperationId(),items:[{productId:'P3',qty:1,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'efectivo',sessionId:sessionId,total:6};
+        var executionD=await concurrentWithRebase(ctxA,ctxB,intentD1,intentD2,revD),raceD=executionD.results;
+        var afterD=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer folios concurrentes');
+        var nuevosFolios=afterD.ventas.slice(0,2).map(function(v){return v.id;});
+        var todosFolios=afterD.ventas.map(function(v){return v.id;});
+        var foliosUnicos=new Set(todosFolios).size===todosFolios.length;
+        var numeros=nuevosFolios.map(function(f){return parseInt(String(f).replace('V-',''),10);}).sort(function(a,b){return a-b;});
+        var revisionsD=raceD.map(function(result){return result.revision;}).sort(function(a,b){return a-b;});
+        var okD=raceD.every(function(r){return r.status==='SUCCESS';})&&foliosUnicos&&nuevosFolios[0]!==nuevosFolios[1]&&(numeros[1]-numeros[0]===1)&&revisionsD[0]===revD+1&&revisionsD[1]===revD+2;
+        addCase('FOLIOS',okD,{
+          intentosIniciales:executionD.initial,rebases:executionD.rebases,
+          resultados:raceD.map(function(r){return r.status;}),
+          foliosNuevos:nuevosFolios,todosFolios:todosFolios,
+          sinColisiones:foliosUnicos,consecutivos:numeros[1]-numeros[0]===1,secuencia:numeros,revisions:revisionsD
+        });
+
+        /* ── CASO E: referencia digital duplicada ── */
+        var beforeE=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer base referencia'),revE=beforeE.revision;
+        var sharedRef='REF-'+runId;
+        var intentE1={operationId:await ctxA.bridge.newOperationId(),items:[{productId:'P3',qty:1,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'transferencia',paymentRef:sharedRef,sessionId:sessionId,total:6};
+        var intentE2={operationId:await ctxB.bridge.newOperationId(),items:[{productId:'P3',qty:1,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'transferencia',paymentRef:sharedRef,sessionId:sessionId,total:6};
+        var executionE=await concurrentWithRebase(ctxA,ctxB,intentE1,intentE2,revE),raceE=executionE.results;
+        var afterE=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer resultado referencia');
+        var refCount=afterE.ventas.filter(function(v){return v.paymentRef===sharedRef;}).length;
+        var commitsE=raceE.filter(function(r){return r.status==='SUCCESS';}).length;
+        var conflictResultE=raceE.find(function(r){return r.status==='CONFLICT';}),conflictsE=conflictResultE?1:0,conflictJournalE=conflictResultE?await withTimeout(ctxA.bridge.operation(conflictResultE.operationId),5000,'leer intención conflictiva referencia'):null;
+        var stockP3BeforeE=beforeE.productos.find(function(p){return p.id==='P3';}).stock,stockP3AfterE=afterE.productos.find(function(p){return p.id==='P3';}).stock;
+        var okE=commitsE===1&&conflictsE===1&&conflictResultE.reason==='REFERENCIA_DUPLICADA'&&refCount===1&&afterE.ventas.length===beforeE.ventas.length+1&&afterE.cajMovs.length===beforeE.cajMovs.length+1&&stockP3AfterE===stockP3BeforeE-1&&conflictJournalE?.status==='CONFLICT';
+        addCase('REFERENCIA',okE,{
+          referencia:sharedRef,commits:commitsE,conflicts:conflictsE,
+          ventasConEsaReferencia:refCount,intentosIniciales:executionE.initial,rebases:executionE.rebases,
+          resultados:raceE.map(function(r){return{status:r.status,operationId:r.operationId,reason:r.reason};}),
+          ventasDelta:afterE.ventas.length-beforeE.ventas.length,cajMovsDelta:afterE.cajMovs.length-beforeE.cajMovs.length,stockAntes:stockP3BeforeE,stockDespues:stockP3AfterE,intencionConflictiva:conflictJournalE&&{status:conflictJournalE.status,reason:conflictJournalE.reason}
+        });
+
+        /* ── CASO F: venta a crédito atómica ── */
+        var beforeF=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer base crédito'),revF=beforeF.revision;
+        var stockP3F=beforeF.productos.find(function(p){return p.id==='P3';}).stock;
+        var clienteAntes=beforeF.clientes.find(function(c){return c.id==='C1';}).totalCompras;
+        var intentF={operationId:await ctxA.bridge.newOperationId(),items:[{productId:'P3',qty:2,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'credito',clientId:'C1',creditDue:'2099-12-31',sessionId:sessionId,total:12};
+        var rF=await withTimeout(ctxA.bridge.runSale(intentF,revF),15000,'venta a crédito');
+        var afterF=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer venta a crédito');
+        var ventaF=afterF.ventas[0];
+        var creditoF=afterF.creditos.find(function(cr){return cr.ventaId===ventaF.id;});
+        var cajMovF=afterF.cajMovs.find(function(mv){return mv.ventaId===ventaF.id;});
+        var clienteDespues=afterF.clientes.find(function(c){return c.id==='C1';}).totalCompras;
+        var stockP3Despues=afterF.productos.find(function(p){return p.id==='P3';}).stock;
+        var journalF=await withTimeout(ctxA.bridge.operation(rF.operationId),5000,'leer journal crédito'),idsF=[ventaF&&ventaF.ventaUid,creditoF&&creditoF.id,cajMovF&&cajMovF.cashMoveId];
+        var beforeF2=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer base revalidación crédito'),revF2=beforeF2.revision;
+        var intentF2={operationId:await ctxB.bridge.newOperationId(),items:[{productId:'P3',qty:1,price:6,name:'Producto C',boxUnits:1}],paymentMethod:'credito',clientId:'CLIENTE-INEXISTENTE',creditDue:'2099-12-31',sessionId:sessionId,total:6};
+        var rF2=await withTimeout(ctxA.bridge.runSale(intentF2,revF2),15000,'revalidación fallida crédito');
+        var afterF2=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer estado tras revalidación'),journalF2=await withTimeout(ctxA.bridge.operation(rF2.operationId),5000,'leer journal revalidación');
+        var creditCommitOk=rF.status==='SUCCESS'&&journalF?.status==='COMMITTED'&&!!creditoF&&!!cajMovF&&ventaF.creditId===creditoF.id&&creditoF.ventaId===ventaF.id&&creditoF.cliId===ventaF.clienteId&&cajMovF.ventaId===ventaF.id&&cajMovF.monto===ventaF.total&&cajMovF.metodo==='credito'&&cajMovF.efectivo===0&&stockP3Despues===stockP3F-2&&clienteDespues===clienteAntes+12&&idsF.every(Boolean)&&new Set(idsF).size===idsF.length;
+        var rejectedAtomic=rF2.status==='CONFLICT'&&rF2.reason==='CLIENTE_NO_EXISTE'&&journalF2?.status==='CONFLICT'&&journalF2.reason==='CLIENTE_NO_EXISTE'&&JSON.stringify(afterF2)===JSON.stringify(beforeF2);
+        addCase('CREDITO',creditCommitOk&&rejectedAtomic,{
+          commit:{status:rF.status,journal:journalF&&journalF.status,venta:ventaF&&{id:ventaF.id,ventaUid:ventaF.ventaUid,operation:ventaF.operation,creditId:ventaF.creditId,clienteId:ventaF.clienteId,metodo:ventaF.metodo,total:ventaF.total},credito:creditoF,cajMov:cajMovF,stockAntes:stockP3F,stockDespues:stockP3Despues,clienteTotalAntes:clienteAntes,clienteTotalDespues:clienteDespues,idsDistintos:new Set(idsF).size===idsF.length,relacionesCoherentes:!!(creditoF&&cajMovF&&ventaF.creditId===creditoF.id&&creditoF.ventaId===ventaF.id&&cajMovF.ventaId===ventaF.id)},
+          revalidacionFallida:{status:rF2.status,reason:rF2.reason,journal:journalF2&&{status:journalF2.status,reason:journalF2.reason},revisionAntes:beforeF2.revision,revisionDespues:afterF2.revision,commitAntes:beforeF2.commitId,commitDespues:afterF2.commitId,estadoFinancieroIgual:JSON.stringify(afterF2)===JSON.stringify(beforeF2)}
+        });
+
+        var finalSnap=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer snapshot final');
+        report.snapshot=finalSnap;
+        report.comparison={v9:{status:'PASS',executedThisRun:false,source:'tests/multitab-persistence-regression.html',observed:{stock:7,ventas:1,resultado:'P0 REPRODUCIDO: una venta durable desaparece'}},v10:{status:okA?'PASS':'FAIL',stockInicial:10,stockFinal:stockA,ventas:afterA.ventas.length,cajMovs:afterA.cajMovs.length,resultado:okA?'P0 EVITADO EN VENTA':'NO DEMOSTRADO'}};
+      }catch(error){
+        report.status='ERROR';report.error={message:error.message||String(error),stack:(error.stack||'').slice(0,800)};fillMissingCases(error.message||String(error));
+      }finally{
+        statusEl.textContent='[8] limpieza';
+        var testPrefix='__NA_V10_SALE_TEST__'+runId+'__',testKeysBeforeCleanup=physicalKeys(testPrefix),testDbBeforeCleanup=await databaseInfo(testDbName);
+        if(ctxA)await destroyContext(ctxA);
+        if(ctxB)await destroyContext(ctxB);
+        await wait(200);
+        removePrefixed(testPrefix);
+        var cleanup=await deleteDatabase(testDbName);
+        var realAfter=await realStorageState(),testKeysAfterCleanup=physicalKeys(testPrefix),testDbAfterCleanup=await databaseInfo(testDbName);
+        var intacto=sameRealState(realBefore,realAfter),namespaceClean=cleanup.ok===true&&testKeysAfterCleanup.length===0&&testDbAfterCleanup.exists===false;
+        report.isolation={testDbName:testDbName,testDbBeforeCleanup:testDbBeforeCleanup,testDbAfterCleanup:testDbAfterCleanup,testKeysBeforeCleanup:testKeysBeforeCleanup,testKeysAfterCleanup:testKeysAfterCleanup,cleanup:cleanup,namespaceClean:namespaceClean,realDatabaseBefore:realBefore.database,realDatabaseAfter:realAfter.database,realDataUntouched:intacto};
+      }
+
+      var s=stats();
+      report.pass=s.pass;report.fail=s.fail;report.total=s.total;
+      report.cases=results.map(function(r){return{n:r.id,name:r.name,status:r.passed?'PASS':'FAIL',detail:clone(r.detail)};});
+      report.status=s.fail===0&&s.total===7&&report.isolation?.namespaceClean&&report.isolation?.realDataUntouched?'PASS':'FAIL';
+      summaryEl.className='banner '+(report.status==='PASS'?'pass':'fail');
+      summaryEl.textContent='SALE V10 ENGINE: '+report.status+' — '+s.pass+'/7';
+      statusEl.textContent='[8] limpieza '+(report.isolation?.namespaceClean&&report.isolation?.realDataUntouched?'PASS':'FAIL')+' · '+s.pass+' PASS / '+s.fail+' FAIL / '+s.total+' total';
+      autoResult.textContent=JSON.stringify(report,null,2);
+      runButton.disabled=false;
+    }
+
+    runButton.addEventListener('click',function(){
+      run().catch(function(e){
+        statusEl.textContent='ERROR: '+e.message;
+        summaryEl.className='banner fail';summaryEl.textContent='ERROR: '+e.message;
+        runButton.disabled=false;
+      });
+    });
+    if(query.get('auto')==='1')setTimeout(function(){runButton.click();},400);
+  })();
+  </script>
+</body>
+</html>
