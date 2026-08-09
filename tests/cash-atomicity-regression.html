@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Regresión: atomicidad de caja</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:16px}h1{margin:0 0 4px;font-size:22px}
+    button{height:38px;border:0;border-radius:8px;padding:0 14px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:12px}
+    th,td{border:1px solid #d7dee8;padding:6px;text-align:left;vertical-align:top}
+    th{background:#e7eef4;position:sticky;top:0}
+    .ok{color:#087443;font-weight:900}.fail{color:#b42318;font-weight:900}.warn{color:#b45309;font-weight:900}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font-size:10px}
+  </style>
+</head>
+<body>
+  <h1>Regresión: atomicidad de caja</h1>
+  <p>Verifica commit, doble ejecución, rollback, reintento y liberación de guards sin escribir datos de prueba.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar pruebas</button>
+    <strong id="status">Esperando.</strong>
+  </div>
+  <table><thead><tr><th>Función</th><th>Caso</th><th>Resultado</th><th>Detalle observado</th></tr></thead><tbody id="results"></tbody></table>
+  <pre id="auto-result"></pre>
+  <script>
+  (function(){
+    var frame,results=[],w=null,d=null,errs=[],bridge=null,baseline=null,rollbackDiffs={},implementationInfo=null;
+    var P='__CASH_TEST__',TEST_CASHIER_ID='cash-atomicity-test',HARNESS_VERSION='cash-atomicity-2026-08-09-2';
+
+    function add(fn,caso,ok,detail){
+      results.push({fn:fn,caso:caso,ok:!!ok,detail:String(detail||'')});
+      document.getElementById('results').innerHTML=results.map(function(r){
+        return'<tr><td>'+r.fn+'</td><td>'+r.caso+'</td><td>'+(r.ok?'<span class="ok">✔ PASS</span>':'<span class="fail">✘ FAIL</span>')+'</td><td>'+r.detail+'</td></tr>';
+      }).join('');
+    }
+    function stat(){
+      var p=0,f=0;
+      for(var i=0;i<results.length;i++){if(results[i].ok)p++;else f++;}
+      var s=p+' PASS / '+f+' FAIL | '+results.length+' total';
+      document.getElementById('status').textContent=s;
+      return{p:p,f:f,total:results.length};
+    }
+    function clone(value){return value===undefined?undefined:JSON.parse(JSON.stringify(value));}
+    function same(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+    function structuralDiff(before,after){
+      var added=[],removed=[],changed=[];
+      function isObject(value){return value!==null&&typeof value==='object'&&!Array.isArray(value);}
+      function walk(left,right,path){
+        if(isObject(left)&&isObject(right)){
+          var keys=Array.from(new Set(Object.keys(left).concat(Object.keys(right)))).sort();
+          keys.forEach(function(key){
+            var next=path?path+'.'+key:key,hasLeft=Object.prototype.hasOwnProperty.call(left,key),hasRight=Object.prototype.hasOwnProperty.call(right,key);
+            if(!hasLeft){added.push({path:next,value:clone(right[key])});return;}
+            if(!hasRight){removed.push({path:next,value:clone(left[key])});return;}
+            walk(left[key],right[key],next);
+          });
+          return;
+        }
+        if(JSON.stringify(left)!==JSON.stringify(right))changed.push({path:path,before:clone(left),after:clone(right)});
+      }
+      walk(before,after,'');
+      return{before:clone(before),after:clone(after),added:added,removed:removed,changed:changed,equal:added.length===0&&removed.length===0&&changed.length===0};
+    }
+    var wait=function(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});};
+
+    function injectBridge(){
+      w.eval('('+function(){
+        var clone=function(value){return value===undefined?undefined:JSON.parse(JSON.stringify(value));};
+        var originals={
+          saveAllData:saveAllData,
+          saveAppState:saveAppState,
+          authorizePermission:typeof _naF10AuthorizePermission==='function'?_naF10AuthorizePermission:null,
+          verifyCashierPin:typeof _naF10VerifyCashierPin==='function'?_naF10VerifyCashierPin:null,
+          authorize:typeof _naAuthorize==='function'?_naAuthorize:null,
+          audit:typeof _naAudit==='function'?_naAudit:null,
+          isModuleLocked:typeof isModuleLocked==='function'?isModuleLocked:null
+        };
+        var persist={failRemaining:0,total:0,data:0,app:0,events:[]};
+        var sourceInfo=function(fn){
+          var source=typeof fn==='function'?Function.prototype.toString.call(fn):'';
+          var hash=0;for(var i=0;i<source.length;i++)hash=((hash<<5)-hash+source.charCodeAt(i))|0;
+          return{length:source.length,hash:String(hash),hasReturnTrue:source.indexOf('return true;')>=0,hasReturnFalse:source.indexOf('return false;')>=0,hasStrictResult:source.indexOf('result===true')>=0,hasSessionInference:source.indexOf('_naSessionOpen()&&cashier')>=0,hasExactOpenRollback:source.indexOf('cajEstado=backup.cajEstado')>=0,hasExactCloseRollback:source.indexOf('cajEstado=backup')>=0,source:source};
+        };
+        var durable=function(){return{ok:true,durable:true,temporary:false,verified:true,storage:'mock',_mock:true};};
+        var failed=function(){return{ok:false,durable:false,temporary:false,verified:false,storage:'none',_mock:true};};
+        var runPersist=async function(kind){
+          persist.total++;persist[kind]++;
+          var active=(appConfig.cashiers||[]).find(function(item){return item.id===appConfig.activeCashierId;});
+          persist.events.push({kind:kind,open:!!(cajEstado&&cajEstado.abierta&&!cajEstado.cerrada),sessionId:cajEstado&&cajEstado.sessionId,lastLoginAt:active&&active.lastLoginAt});
+          await Promise.resolve();
+          if(persist.failRemaining>0){persist.failRemaining--;return failed();}
+          return durable();
+        };
+        window.__cash_test_bridge={
+          snapshot:function(){return{cajEstado:clone(cajEstado),cajMovs:clone(cajMovs),appConfig:clone(appConfig),cajMovTipo:cajMovTipo,cajMovProc:cajMovProc,cajCloseProc:cajCloseProc};},
+          restore:function(state){cajEstado=clone(state.cajEstado);cajMovs=clone(state.cajMovs);appConfig=clone(state.appConfig);cajMovTipo=state.cajMovTipo;cajMovProc=!!state.cajMovProc;cajCloseProc=!!state.cajCloseProc;},
+          ceState:function(){return clone(cajEstado);},
+          ceSet:function(state){cajEstado=clone(state);},
+          ceSessionOpen:function(){return _naSessionOpen();},
+          cmLen:function(){return cajMovs.length;},
+          cmClone:function(){return clone(cajMovs);},
+          cmSet:function(items){cajMovs=clone(items);},
+          setMovType:function(type){cajMovTipo=type;},
+          setMovGuard:function(value){cajMovProc=!!value;},
+          getMovGuard:function(){return cajMovProc;},
+          setCloseGuard:function(value){cajCloseProc=!!value;},
+          getCloseGuard:function(){return cajCloseProc;},
+          today:function(){return obtenerHoy();},
+          implementationInfo:function(){return{base:sourceInfo(typeof _naF10BaseAbrirCaja==='function'?_naF10BaseAbrirCaja:null),final:sourceInfo(abrirCaja),closeBase:sourceInfo(typeof _naSecOriginalCerrarCaja==='function'?_naSecOriginalCerrarCaja:null),buttonResolution:'window.abrirCaja en tiempo de click'};},
+          configureCashier:function(id,name){
+            appConfig.business=appConfig.business||{};
+            appConfig.cashiers=[{id:id,nombre:name,activo:true,role:'admin',permissions:{cash:true,closeCash:true},pinHash:''}];
+            appConfig.activeCashierId=id;appConfig.business.cajero=name;
+          },
+          cashConfig:function(){var cashier=(appConfig.cashiers||[]).find(function(item){return item.id===appConfig.activeCashierId;});return{activeCashierId:appConfig.activeCashierId,businessCajero:appConfig.business&&appConfig.business.cajero,lastLoginAt:cashier&&cashier.lastLoginAt};},
+          setCashConfig:function(activeId,businessCajero){appConfig.activeCashierId=activeId;appConfig.business=appConfig.business||{};appConfig.business.cajero=businessCajero;},
+          cashierLogin:function(id){var cashier=(appConfig.cashiers||[]).find(function(item){return item.id===id;});return cashier&&cashier.lastLoginAt;},
+          setCashierLogin:function(id,value){var cashier=(appConfig.cashiers||[]).find(function(item){return item.id===id;});if(!cashier)return;if(value===undefined)delete cashier.lastLoginAt;else cashier.lastLoginAt=value;},
+          installIsolation:function(){
+            if(originals.authorizePermission)_naF10AuthorizePermission=function(){return true;};
+            if(originals.verifyCashierPin)_naF10VerifyCashierPin=function(){return true;};
+            if(originals.authorize)_naAuthorize=function(){return true;};
+            if(originals.audit)_naAudit=function(){};
+            if(originals.isModuleLocked)isModuleLocked=function(){return false;};
+          },
+          mockSave:function(failCount){
+            if(failCount<0){saveAllData=originals.saveAllData;saveAppState=originals.saveAppState;return;}
+            persist={failRemaining:Math.max(0,failCount),total:0,data:0,app:0,events:[]};
+            saveAllData=function(){return runPersist('data');};
+            saveAppState=function(){return runPersist('app');};
+          },
+          saveCounts:function(){return clone(persist);},
+          restoreFunctions:function(){
+            saveAllData=originals.saveAllData;saveAppState=originals.saveAppState;
+            if(originals.authorizePermission)_naF10AuthorizePermission=originals.authorizePermission;
+            if(originals.verifyCashierPin)_naF10VerifyCashierPin=originals.verifyCashierPin;
+            if(originals.authorize)_naAuthorize=originals.authorize;
+            if(originals.audit)_naAudit=originals.audit;
+            if(originals.isModuleLocked)isModuleLocked=originals.isModuleLocked;
+          }
+        };
+      }.toString()+')()');
+    }
+
+    function ceState(){return bridge.ceState();}
+    function ceSet(state){bridge.ceSet(state);}
+    function ceOpen(){return bridge.ceSessionOpen();}
+    function cmLen(){return bridge.cmLen();}
+    function cmClone(){return bridge.cmClone();}
+    function mockSave(n){bridge.mockSave(n);}
+    function counts(){return bridge.saveCounts();}
+    function openState(today,marker){return{abierta:true,fondo:100,cajero:'Test',cajeroNombre:'Test',cajeroId:TEST_CASHIER_ID,hora:'08:00',hora24:'08:00:00',fechaApertura:today,sessionId:Date.now(),cerrada:false,horaCierre:null,horaCierre24:null,contado:null,esperado:null,diferencia:null,marker:marker||''};}
+    function closedState(marker){return{abierta:false,cerrada:true,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',sessionId:null,contado:null,esperado:null,diferencia:null,horaCierre:null,horaCierre24:null,marker:marker||''};}
+    function field(id,tag,value){
+      var el=d.getElementById(id),text=String(value);
+      if(!el){el=d.createElement(tag||'input');el.id=id;d.body.appendChild(el);}
+      if((tag==='select'||el.tagName==='SELECT')&&![].slice.call(el.options||[]).some(function(option){return option.value===text;})){
+        var option=d.createElement('option');option.value=text;option.textContent=text;el.appendChild(option);
+      }
+      el.value=text;
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+      return el;
+    }
+    function setMovementFields(){field('cajMovMonto','input','50');field('cajMovDesc','input',P+' Ingreso');field('cajMovMetodo','select','efectivo');field('cajMovCat','select','Venta retail');bridge.setMovType('ing');}
+    function setOpeningFields(){field('cajFondo','input','200');field('cajCajero','select',TEST_CASHIER_ID);}
+    function setClosingFields(){field('cajContado','input','350');}
+
+    async function go(){
+      var statusEl=document.getElementById('status');
+      statusEl.textContent='[1/7] Creando iframe...';
+      document.getElementById('run').disabled=true;results=[];document.getElementById('results').innerHTML='';errs=[];
+      if(frame&&frame.parentNode)frame.parentNode.removeChild(frame);
+      frame=document.createElement('iframe');frame.src='../CVV2.4_backup_antes_demo-1.html?cashAtomicity='+encodeURIComponent(HARNESS_VERSION)+'&ts='+Date.now();
+      frame.style.cssText='border:0;width:1px;height:1px;position:absolute;left:-9999px';
+      document.body.appendChild(frame);
+      frame.contentWindow&&frame.contentWindow.addEventListener('error',function(e){errs.push(e.message);});
+
+      statusEl.textContent='[2/7] Esperando carga del POS...';
+      var loadPromise=new Promise(function(resolve){frame.addEventListener('load',function(){resolve();},{once:true});});
+      var timeoutPromise=new Promise(function(resolve){setTimeout(function(){resolve('timeout');},15000);});
+      var loadResult=await Promise.race([loadPromise,timeoutPromise]);
+      if(loadResult==='timeout'&&(!frame.contentDocument||frame.contentDocument.readyState!=='complete')){
+        statusEl.textContent='[ERROR] El POS no terminó de cargar (timeout 15s). Verifica red/CDN.';
+        document.getElementById('run').disabled=false;return;
+      }
+      statusEl.textContent='[3/7] POS cargado, esperando inicialización...';
+      await wait(3000);w=frame.contentWindow;d=w.document;
+      if(!w.guardarMovCaja||!w.abrirCaja||!w.cerrarCaja||!w.saveAllData){
+        statusEl.textContent='[ERROR] Funciones no expuestas. POS no inicializado.';
+        document.getElementById('run').disabled=false;return;
+      }
+
+      statusEl.textContent='[4/7] Inyectando bridge de pruebas...';
+      injectBridge();bridge=w.__cash_test_bridge;
+      if(!bridge||!bridge.cmLen){statusEl.textContent='[ERROR] Bridge no inyectado.';document.getElementById('run').disabled=false;return;}
+      baseline=bridge.snapshot();implementationInfo=bridge.implementationInfo();bridge.installIsolation();bridge.configureCashier(TEST_CASHIER_ID,'Test');
+      statusEl.textContent='[5/7] Bridge OK, ejecutando pruebas...';
+
+      try{
+        bridge.cmSet([]);bridge.setMovGuard(false);bridge.setCloseGuard(false);
+        var currentCode=implementationInfo.base.hasReturnTrue&&implementationInfo.base.hasReturnFalse&&implementationInfo.base.hasExactOpenRollback&&implementationInfo.final.hasStrictResult&&!implementationInfo.final.hasSessionInference&&implementationInfo.closeBase.hasExactCloseRollback;
+        add('Init','Puente y código activo',cmLen()===0&&!bridge.getMovGuard()&&!bridge.getCloseGuard()&&currentCode,'version='+HARNESS_VERSION+' cmLen='+cmLen()+' códigoActual='+currentCode+' baseHash='+implementationInfo.base.hash+' finalHash='+implementationInfo.final.hash+' closeHash='+implementationInfo.closeBase.hash);
+
+        var today=bridge.today();
+
+        // ====== guardarMovCaja ======
+        ceSet(openState(today,'movimientos'));setMovementFields();
+        mockSave(0);var beforeLen=cmLen();await w.guardarMovCaja();var c=counts(),delta=cmLen()-beforeLen;
+        add('guardarMovCaja','1 ejecución normal',delta===1&&c.data===1&&c.app===0,'delta='+delta+' saveAllData='+c.data+' saveAppState='+c.app);
+
+        bridge.setMovGuard(false);setMovementFields();mockSave(0);beforeLen=cmLen();
+        var g1=w.guardarMovCaja(),g2=w.guardarMovCaja();await Promise.all([g1,g2]);c=counts();delta=cmLen()-beforeLen;
+        add('guardarMovCaja','Doble ejecución → solo 1',delta===1&&c.data===1,'delta='+delta+' saveAllData='+c.data);
+
+        bridge.setMovGuard(false);setMovementFields();var beforeMoves=cmClone();mockSave(1);await w.guardarMovCaja();c=counts();
+        add('guardarMovCaja','Fallo → rollback',same(cmClone(),beforeMoves)&&c.data===2,'estadoIgual='+same(cmClone(),beforeMoves)+' saveAllData='+c.data);
+
+        bridge.setMovGuard(false);setMovementFields();mockSave(0);beforeLen=cmLen();await w.guardarMovCaja();c=counts();delta=cmLen()-beforeLen;
+        add('guardarMovCaja','Reintento tras fallo',delta===1&&c.data===1,'delta='+delta+' saveAllData='+c.data);
+        add('guardarMovCaja','cajMovProc liberado',!bridge.getMovGuard(),'cajMovProc='+bridge.getMovGuard());
+
+        // ====== abrirCaja ======
+        setOpeningFields();bridge.setCashierLogin(TEST_CASHIER_ID,undefined);ceSet(closedState('open-normal'));mockSave(0);
+        var opened=await w.abrirCaja();c=counts();
+        add('abrirCaja','1 ejecución normal',opened===true&&ceOpen()&&c.data===1&&c.app===1,'return='+opened+' abierta='+ceOpen()+' data='+c.data+' app='+c.app);
+
+        bridge.setCashierLogin(TEST_CASHIER_ID,undefined);ceSet(closedState('open-double'));setOpeningFields();mockSave(0);
+        var first=w.abrirCaja(),sessionAfterFirst=ceState().sessionId,second=w.abrirCaja(),openResults=await Promise.all([first,second]);c=counts();
+        var oneSuccess=openResults.filter(function(value){return value===true;}).length===1;
+        add('abrirCaja','Doble ejecución → solo 1',oneSuccess&&ceOpen()&&ceState().sessionId===sessionAfterFirst&&c.data===1&&c.app===1,'returns='+JSON.stringify(openResults)+' sameSession='+(ceState().sessionId===sessionAfterFirst)+' data='+c.data+' app='+c.app+' events='+JSON.stringify(c.events));
+
+        var openBefore=closedState('open-rollback'),loginBefore='2000-01-01T00:00:00.000Z';ceSet(openBefore);setOpeningFields();bridge.setCashConfig('cashier-before','Cajero anterior');bridge.setCashierLogin(TEST_CASHIER_ID,loginBefore);var configBefore=bridge.cashConfig();mockSave(1);
+        opened=await w.abrirCaja();c=counts();var configAfter=bridge.cashConfig(),loginAfter=bridge.cashierLogin(TEST_CASHIER_ID),openDiff=structuralDiff(openBefore,ceState());rollbackDiffs.abrirCaja=openDiff;
+        add('abrirCaja','Fallo → caja cerrada',opened===false&&openDiff.equal&&same(configAfter,configBefore)&&loginAfter===loginBefore&&c.data===2&&c.app===0,'return='+opened+' configIgual='+same(configAfter,configBefore)+' loginIgual='+(loginAfter===loginBefore)+' data='+c.data+' app='+c.app+' diff='+JSON.stringify(openDiff));
+
+        setOpeningFields();mockSave(0);opened=await w.abrirCaja();c=counts();
+        add('abrirCaja','Reintento → éxito',opened===true&&ceOpen()&&c.data===1&&c.app===1,'return='+opened+' abierta='+ceOpen()+' data='+c.data+' app='+c.app);
+
+        // ====== cerrarCaja ======
+        setClosingFields();ceSet(openState(today,'close-normal'));bridge.setCloseGuard(false);mockSave(0);await w.cerrarCaja();c=counts();var closeState=ceState();
+        add('cerrarCaja','1 ejecución normal',closeState.cerrada===true&&!ceOpen()&&c.data===1,'cerrada='+closeState.cerrada+' abierta='+ceOpen()+' saveAllData='+c.data);
+
+        setClosingFields();ceSet(openState(today,'close-double'));bridge.setCloseGuard(false);mockSave(0);
+        var cl1=w.cerrarCaja(),cl2=w.cerrarCaja();await Promise.all([cl1,cl2]);c=counts();closeState=ceState();
+        add('cerrarCaja','Doble ejecución → solo 1',closeState.cerrada===true&&!ceOpen()&&c.data===1,'cerrada='+closeState.cerrada+' abierta='+ceOpen()+' saveAllData='+c.data);
+
+        var closeBefore=openState(today,'close-rollback');delete closeBefore.timestampCierre;ceSet(closeBefore);setClosingFields();bridge.setCloseGuard(false);mockSave(1);await w.cerrarCaja();c=counts();var closeDiff=structuralDiff(closeBefore,ceState());rollbackDiffs.cerrarCaja=closeDiff;
+        add('cerrarCaja','Fallo → caja abierta',closeDiff.equal&&ceOpen()&&c.data===2,'abierta='+ceOpen()+' saveAllData='+c.data+' diff='+JSON.stringify(closeDiff));
+
+        setClosingFields();bridge.setCloseGuard(false);mockSave(0);await w.cerrarCaja();c=counts();closeState=ceState();
+        add('cerrarCaja','Reintento → éxito',closeState.cerrada===true&&!ceOpen()&&c.data===1,'cerrada='+closeState.cerrada+' abierta='+ceOpen()+' saveAllData='+c.data);
+        add('cerrarCaja','cajCloseProc liberado',!bridge.getCloseGuard(),'cajCloseProc='+bridge.getCloseGuard());
+      }finally{
+        bridge.restore(baseline);bridge.restoreFunctions();
+      }
+
+      var s=stat();statusEl.textContent='[7/7] '+s.p+' PASS / '+s.f+' FAIL / '+results.length+' total';
+      document.getElementById('run').disabled=false;
+      if(frame&&frame.parentNode)frame.parentNode.removeChild(frame);
+      var fails=results.filter(function(r){return!r.ok;}).map(function(r){return r.fn+' | '+r.caso;});
+      document.getElementById('auto-result').textContent=JSON.stringify({version:HARNESS_VERSION,total:s.total,passed:s.p,failed:s.f,failList:fails,implementation:implementationInfo,rollbackDiffs:rollbackDiffs,errors:errs},null,2);
+      document.getElementById('auto-result').style.display='block';
+    }
+
+    document.getElementById('run').addEventListener('click',function(){
+      go().catch(function(error){
+        try{if(bridge&&baseline){bridge.restore(baseline);bridge.restoreFunctions();}}catch(cleanupError){}
+        document.getElementById('status').textContent='[ERROR] Excepción: '+error.message;
+        document.getElementById('run').disabled=false;
+      });
+    });
+  })();
+  </script>
+</body>
+</html>
