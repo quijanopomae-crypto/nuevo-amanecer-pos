@@ -144,7 +144,7 @@
         add('Segundo writer detecta conflicto',conflicts.length===1&&conflicts[0].reason==='REVISION_MISMATCH',{conflict:conflicts[0]&&{status:conflicts[0].status,reason:conflicts[0].reason,currentRevision:conflicts[0].currentRevision}});
 
         var beforeRepeat=await A.bridge.canonical(),repeat=await A.bridge.run(winnerInput),afterRepeat=await A.bridge.canonical();
-        add('Mismo operationId produce un solo efecto',repeat.status==='ALREADY_COMMITTED'&&beforeRepeat.revision===afterRepeat.revision&&JSON.stringify(beforeRepeat.data)===JSON.stringify(afterRepeat.data),{status:repeat.status,beforeRevision:beforeRepeat.revision,afterRevision:afterRepeat.revision});
+        add('Mismo operationId historico no duplica y queda verificable',repeat.status==='PERSISTENCE_ERROR'&&repeat.error&&repeat.error.code==='HISTORICAL_COMMIT_UNVERIFIED'&&repeat.evidence&&repeat.evidence.recoverable===true&&beforeRepeat.revision===afterRepeat.revision&&JSON.stringify(beforeRepeat.data)===JSON.stringify(afterRepeat.data),{status:repeat.status,code:repeat.error&&repeat.error.code,recoverable:repeat.evidence&&repeat.evidence.recoverable,beforeRevision:beforeRepeat.revision,afterRevision:afterRepeat.revision});
         add('operationId distinto produce commit distinto',winner.operationId!==nextCommit.operationId&&winner.commitId!==nextCommit.commitId,{firstOperation:winner.operationId,secondOperation:nextCommit.operationId,firstCommit:winner.commitId,secondCommit:nextCommit.commitId});
 
         var idsA=A.bridge.ids(32),idsB=B.bridge.ids(32),allUuids=idsA.uuids.concat(idsB.uuids),allOps=idsA.operations.concat(idsB.operations),uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
