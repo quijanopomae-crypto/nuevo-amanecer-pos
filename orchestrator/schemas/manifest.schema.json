@@ -16,6 +16,8 @@
     "paths",
     "skills",
     "policies",
+    "routing",
+    "shadow_write_policy",
     "integrity"
   ],
   "properties": {
@@ -93,9 +95,10 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["mode", "model_ref", "capabilities"],
+        "required": ["mode", "runtime_agent_id", "model_ref", "capabilities"],
         "properties": {
           "mode": {"enum": ["primary", "worker", "reviewer", "external"]},
+          "runtime_agent_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
           "model_ref": {"type": "string", "minLength": 1},
           "capabilities": {
             "type": "array",
@@ -124,7 +127,7 @@
       "additionalProperties": false,
       "required": [
         "schemas", "state", "policies", "skills", "agents", "commands",
-        "tools", "tests", "fixtures", "evidence"
+        "tests", "fixtures", "evidence"
       ],
       "properties": {
         "schemas": {"type": "string", "minLength": 1},
@@ -133,10 +136,9 @@
         "skills": {"const": ".agents/skills"},
         "agents": {"type": "string", "minLength": 1},
         "commands": {"type": "string", "minLength": 1},
-        "tools": {"type": "string", "minLength": 1},
         "tests": {"type": "string", "minLength": 1},
         "fixtures": {"type": "string", "minLength": 1},
-        "evidence": {"type": "string", "minLength": 1}
+        "evidence": {"const": "evidence"}
       }
     },
     "skills": {
@@ -167,6 +169,56 @@
           "type": "array",
           "const": ["orchestrator", ".agents", ".opencode", "tests", "fixtures", "evidence"]
         }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary_implementer", "second_engineer", "critical_reviewer", "blocked_failure_classes"],
+      "properties": {
+        "primary_implementer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["role", "model_ref"],
+          "properties": {
+            "role": {"type": "string", "minLength": 1},
+            "model_ref": {"type": "string", "minLength": 1}
+          }
+        },
+        "second_engineer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["role", "model_ref", "risks"],
+          "properties": {
+            "role": {"type": "string", "minLength": 1},
+            "model_ref": {"type": "string", "minLength": 1},
+            "risks": {"type": "array", "items": {"enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]}, "uniqueItems": true}
+          }
+        },
+        "critical_reviewer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model_ref", "risks", "critical_topics", "denied_failure_classes", "admit_on_release_gate", "admit_after_review_exhausted", "deny_cosmetic"],
+          "properties": {
+            "model_ref": {"type": "string", "minLength": 1},
+            "risks": {"type": "array", "items": {"enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]}, "uniqueItems": true},
+            "critical_topics": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+            "denied_failure_classes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+            "admit_on_release_gate": {"type": "boolean"},
+            "admit_after_review_exhausted": {"type": "boolean"},
+            "deny_cosmetic": {"type": "boolean"}
+          }
+        },
+        "blocked_failure_classes": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
+      }
+    },
+    "shadow_write_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_write", "writable_path_ref"],
+      "properties": {
+        "product_write": {"const": "DENIED"},
+        "writable_path_ref": {"const": "evidence"}
       }
     },
     "integrity": {

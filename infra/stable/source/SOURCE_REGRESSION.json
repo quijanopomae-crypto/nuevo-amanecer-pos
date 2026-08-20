@@ -1,0 +1,43 @@
+{
+  "schema": "source-regression@1",
+  "source_repository": "pos-infra-lab",
+  "source_ref": "refs/heads/codex/infra-lab-stabilization",
+  "source_commit": "93c7bd73a6553b3aede655eea1204861264dfc22",
+  "source_tree": "bd16954a64875f3520ceb71972c30ee520e66345",
+  "source_suite_tree": "e0bc6d05a0327a482be9bfcf8ac115a2c9b42b44",
+  "promotion_commit": "151701d62800e926bcca2668d146c2d77037b9a2",
+  "bundle": "infra/stable/source/POS-INFRA-LAB.bundle",
+  "bundle_sha256": "sha256:ebd6622897e66d422ffc9a8c87c2b4db8cea9b564faa4af584792e1b7de80111",
+  "command": "python -B -m unittest discover -s tests/infrastructure -p test_*.py -v",
+  "methods": 93,
+  "source_test_blobs": {
+    "tests/infrastructure/test_manifest_schema.py": "d6a305318f1e58d0dd35ddcf274d6aed3de76081",
+    "tests/infrastructure/test_phase2_contracts.py": "3f2862fc049487133d6b0c2d3444d06f6b3f0a5b",
+    "tests/infrastructure/test_stabilization.py": "440e593c9e036145a29c5f65297b5cacccc06a27"
+  },
+  "promoted_blobs": {
+    "orchestrator/contracts/__init__.py": "9c315ad455b205ba51e8836eacaa888373707647",
+    "orchestrator/contracts/dependency_map.py": "0e4c794b4477fb8985abd874290ecec5d22976a4",
+    "orchestrator/contracts/feature_spec.py": "acbd4e1210218a5d18637f32b3e753094795d993",
+    "orchestrator/contracts/impact_analysis.py": "1c6e9226a017cb5f52ff9d6e089051aceca8f42a",
+    "orchestrator/contracts/risk_classifier.py": "0a93ea4cd613a2ec8b1e88a706708a4073f2158d",
+    "orchestrator/evidence/__init__.py": "4162500cc2f2839ae5d03524f8709dfa8e8a3265",
+    "orchestrator/evidence/pack.py": "1833ca5bde1c31ac842a8d86e11971e7df0679c8",
+    "orchestrator/gates/__init__.py": "e9bf3cfe9694cb7c6c6c113aff2be66bf0ed1076",
+    "orchestrator/gates/codex_admission.py": "0298cddb0ac3b4daf155f7126ebad3841019372b",
+    "orchestrator/handoff/__init__.py": "fa88d6a6da5d9122422f8317eb21c4b83acc2077",
+    "orchestrator/handoff/codex_handoff.py": "0aac0de8e60d7d277af55ad84f1efcb6bc6bbf88",
+    "orchestrator/io_atomic.py": "d5a6aa7a872d069e7fd957458776f48bf19a902c",
+    "orchestrator/metrics/__init__.py": "e2606feb3b608d6f42724ef6cefca365a28757a5",
+    "orchestrator/metrics/metrics.py": "d97015de9d8d8c6973e77b063ba0895df8ae9149",
+    "orchestrator/policies/ORCHESTRATOR_V1_TECHNICAL_CONTRACT_RC1.md": "56c16df57b24c7491f8282e71c0e73439aab0456",
+    "orchestrator/state/__init__.py": "d331dd4a43d22622d99eaefeac7f6ce30db6a025",
+    "orchestrator/state/anti_loop.py": "2b3b41e3c2ef043f4a1e3b30f3fe43b7cef5ebd2",
+    "orchestrator/state/durable_state.py": "45ec0986cdfe21844b1d7f546c6ba2df682878a1",
+    "orchestrator/state/failure_taxonomy.py": "6e9f3e89b4986242525f50028c1154361b98e0c9",
+    "orchestrator/state/resource_check.py": "d45353fba13288876c60f3a2d5314cff34526d29",
+    "orchestrator/state/state_machine.py": "2478f69a8e7657d8393de7d39b29e3926c6b9ec9",
+    "tests/infrastructure/test_phase2_contracts.py": "3f2862fc049487133d6b0c2d3444d06f6b3f0a5b",
+    "tests/infrastructure/test_stabilization.py": "440e593c9e036145a29c5f65297b5cacccc06a27"
+  }
+}

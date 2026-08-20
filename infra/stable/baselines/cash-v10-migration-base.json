@@ -1,0 +1,38 @@
+{
+  "schema": "infra-regression-baseline@1",
+  "suite": "CASH",
+  "base_commit": "28b90db0308a1bdddd3024374d7461aa22acc520",
+  "runs_required": 2,
+  "product_blobs": {
+    "CVV2.4_backup_antes_demo-1.html": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+  },
+  "harness_blobs": {
+    "tests/cash-v10-regression.html": "8ae51e07788242e54e66d74660846324ce219c7d",
+    "tests/cash-run-headless.test.mjs": "41b53e44fd188635ff4560dbd4b5732558b8ffb6"
+  },
+  "expected": {
+    "pass": 11,
+    "fail": 2,
+    "total": 13,
+    "failures": [
+      {
+        "n": 7,
+        "name": "7. operationId repetido: ALREADY_COMMITTED sin duplicar",
+        "observed_status": "PERSISTENCE_ERROR",
+        "error_code": "HISTORICAL_COMMIT_UNVERIFIED",
+        "gastos_con_operacion": 1,
+        "movimientos_con_operacion": 1,
+        "revision_delta": 0
+      },
+      {
+        "n": 8,
+        "name": "8. Retry (3er intento): ALREADY_COMMITTED, counts iguales",
+        "observed_status": "PERSISTENCE_ERROR",
+        "error_code": "HISTORICAL_COMMIT_UNVERIFIED",
+        "gastos_con_operacion": 1,
+        "movimientos_con_operacion": 1,
+        "revision_delta": null
+      }
+    ]
+  }
+}

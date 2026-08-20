@@ -27,6 +27,7 @@ from orchestrator.gates import CodexAdmissionContext, CodexAdmissionGate, CodexD
 from orchestrator.handoff import CodexHandoffError, write_codex_escalation_report  # noqa: E402
 from orchestrator.io_atomic import atomic_write_json, canonical_json_bytes, sha256_digest  # noqa: E402
 from orchestrator.metrics import MetricRecord, MetricsLedger, ModelFit, classify_model  # noqa: E402
+from orchestrator.schemas.validate_manifest import load_manifest  # noqa: E402
 from orchestrator.state.anti_loop import (  # noqa: E402
     ActionKind,
     AntiLoopGuard,
@@ -60,6 +61,10 @@ from orchestrator.state.state_machine import State  # noqa: E402
 
 def digest(label: str) -> str:
     return sha256_digest({"label": label})
+
+
+def admission_policy() -> dict[str, object]:
+    return dict(load_manifest(LAB_ROOT / "MANIFEST.yaml")["routing"]["critical_reviewer"])
 
 
 def initial_record() -> DurableStateRecord:
@@ -583,7 +588,7 @@ class EvidenceCodexAndMetricsTests(TemporaryCase):
         pack = evidence_pack()
         path = self.temporary() / "evidence-pack.json"
         pack.write(path)
-        loaded = EvidencePack.load(path)
+        loaded = EvidencePack.from_dict(json.loads(path.read_text(encoding="utf-8")))
         self.assertEqual(pack.digest, loaded.digest)
         self.assertEqual("manual Codex handoff", loaded.payload["next_action"])
 
@@ -594,7 +599,10 @@ class EvidenceCodexAndMetricsTests(TemporaryCase):
             EvidencePack.from_dict(value)
 
     def test_39_codex_admits_high_or_critical_review(self) -> None:
-        result = CodexAdmissionGate.decide(CodexAdmissionContext(risk=RiskLevel.HIGH, failure_class="F10"))
+        result = CodexAdmissionGate.decide(
+            CodexAdmissionContext(risk=RiskLevel.HIGH, failure_class="F10"),
+            admission_policy(),
+        )
         self.assertEqual(CodexDecision.ADMIT, result.decision)
 
     def test_40_codex_admits_exhausted_high_value_code_failure(self) -> None:
@@ -602,9 +610,10 @@ class EvidenceCodexAndMetricsTests(TemporaryCase):
             CodexAdmissionContext(
                 risk=RiskLevel.MEDIUM,
                 failure_class="F7",
-                deepseek_glm_exhausted=True,
+                prior_engineering_review_exhausted=True,
                 high_value_code_failure=True,
-            )
+            ),
+            admission_policy(),
         )
         self.assertEqual(CodexDecision.ADMIT, result.decision)
 
@@ -617,18 +626,23 @@ class EvidenceCodexAndMetricsTests(TemporaryCase):
         ):
             with self.subTest(failure=failure):
                 result = CodexAdmissionGate.decide(
-                    CodexAdmissionContext(risk=RiskLevel.CRITICAL, failure_class=failure)
+                    CodexAdmissionContext(risk=RiskLevel.CRITICAL, failure_class=failure),
+                    admission_policy(),
                 )
                 self.assertEqual(CodexDecision.DENY, result.decision)
 
     def test_42_codex_not_required_for_evaluable_low_risk(self) -> None:
-        result = CodexAdmissionGate.decide(CodexAdmissionContext(risk=RiskLevel.LOW, failure_class=None))
+        result = CodexAdmissionGate.decide(
+            CodexAdmissionContext(risk=RiskLevel.LOW, failure_class=None),
+            admission_policy(),
+        )
         self.assertEqual(CodexDecision.NOT_REQUIRED, result.decision)
 
     def test_43_codex_handoff_contains_required_manual_contract(self) -> None:
         pack = evidence_pack()
         admission = CodexAdmissionGate.decide(
-            CodexAdmissionContext(risk=RiskLevel.CRITICAL, failure_class="F10")
+            CodexAdmissionContext(risk=RiskLevel.CRITICAL, failure_class="F10"),
+            admission_policy(),
         )
         path = self.temporary() / "CODEX_ESCALATION_REPORT.md"
         write_codex_escalation_report(
@@ -644,7 +658,8 @@ class EvidenceCodexAndMetricsTests(TemporaryCase):
 
     def test_44_codex_handoff_refuses_non_admitted_context(self) -> None:
         denied = CodexAdmissionGate.decide(
-            CodexAdmissionContext(risk=RiskLevel.LOW, failure_class="RESOURCE_LIMIT")
+            CodexAdmissionContext(risk=RiskLevel.LOW, failure_class="RESOURCE_LIMIT"),
+            admission_policy(),
         )
         with self.assertRaises(CodexHandoffError):
             write_codex_escalation_report(

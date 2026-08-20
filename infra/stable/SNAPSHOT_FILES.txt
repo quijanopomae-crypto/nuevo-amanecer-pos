@@ -8,10 +8,10 @@
 .agents/skills/inventory-integrity/SKILL.md
 .agents/skills/release-readiness/SKILL.md
 .gitignore
-.opencode/agents/implementer.md
-.opencode/agents/planner.md
-.opencode/agents/reviewer.md
-.opencode/agents/tester.md
+.opencode/agents/pos-implementer.md
+.opencode/agents/pos-planner.md
+.opencode/agents/pos-reviewer.md
+.opencode/agents/pos-tester.md
 .opencode/commands/feature-spec.md
 .opencode/commands/orchestrate.md
 .opencode/commands/preflight.md
@@ -25,6 +25,9 @@ evidence/shadow/.gitkeep
 fixtures/shadow/scenarios.json
 infra/stable/INFRA_V2_COMPARISON.json
 infra/stable/SNAPSHOT_FILES.txt
+infra/stable/baselines/cash-v10-migration-base.json
+infra/stable/source/SOURCE_REGRESSION.json
+infra/stable/trust/evidence_allowed_signers
 opencode.json
 orchestrator/__init__.py
 orchestrator/contracts/__init__.py
@@ -34,8 +37,10 @@ orchestrator/contracts/impact_analysis.py
 orchestrator/contracts/risk_classifier.py
 orchestrator/evidence/__init__.py
 orchestrator/evidence/pack.py
+orchestrator/evidence/trust.py
 orchestrator/gates/__init__.py
 orchestrator/gates/codex_admission.py
+orchestrator/gates/regression.py
 orchestrator/handoff/__init__.py
 orchestrator/handoff/codex_handoff.py
 orchestrator/io_atomic.py
@@ -48,6 +53,7 @@ orchestrator/schemas/validate_manifest.py
 orchestrator/shadow_cli.py
 orchestrator/shadow_mode.py
 orchestrator/snapshot.py
+orchestrator/source_regression.py
 orchestrator/state/__init__.py
 orchestrator/state/anti_loop.py
 orchestrator/state/durable_state.py
@@ -56,5 +62,6 @@ orchestrator/state/resource_check.py
 orchestrator/state/state_machine.py
 tests/infrastructure/test_manifest_schema.py
 tests/infrastructure/test_phase2_contracts.py
+tests/infrastructure/test_remediation.py
 tests/infrastructure/test_shadow_mode.py
 tests/infrastructure/test_stabilization.py

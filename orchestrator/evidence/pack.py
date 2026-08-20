@@ -93,12 +93,25 @@ class EvidencePack:
         return pack
 
     @classmethod
-    def load(cls, path: Path) -> "EvidencePack":
+    def load(
+        cls,
+        path: Path,
+        *,
+        repository_root: Path,
+    ) -> "EvidencePack":
+        """Load only after detached verification of the complete run artifact set."""
+        path = Path(path)
+        if path.name != "EVIDENCE_PACK.json":
+            raise EvidencePackError("trusted Evidence Pack path must be EVIDENCE_PACK.json")
+        from orchestrator.evidence.trust import TrustVerificationError, verify_run_artifacts
+
         try:
-            value = json.loads(Path(path).read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise EvidencePackError(f"Evidence Pack unreadable: {exc}") from exc
-        return cls.from_dict(value)
+            return verify_run_artifacts(
+                repository_root,
+                path.parent,
+            )
+        except TrustVerificationError as exc:
+            raise EvidencePackError(str(exc)) from exc
 
     def validate(self) -> None:
         value = self.payload

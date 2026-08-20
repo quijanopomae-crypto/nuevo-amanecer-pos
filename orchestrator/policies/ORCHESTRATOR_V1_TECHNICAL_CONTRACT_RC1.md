@@ -117,7 +117,7 @@ Métricas mínimas: duración por gate/run, ciclos e intentos por modelo, tokens
 
 ## 12. Compatibilidad con OpenCode Desktop
 
-Objetivo exacto de RC1: OpenCode Desktop/OpenCode `1.18.18`. Se conservan `.opencode/agents`, `.opencode/commands` y `.opencode/tools`. `.agents/skills` es la única fuente canónica y `.opencode/skills` se rechaza para evitar duplicación. El contrato no elimina, reemplaza ni hace cutover fuera de OpenCode Desktop.
+Objetivo exacto de RC1: OpenCode Desktop/OpenCode `1.18.18`. Se conservan `.opencode/agents` y `.opencode/commands`. `.opencode/tools` solo puede declararse cuando existan tools reales requeridos; esta fase no lo declara ni crea placeholders. `.agents/skills` es la única fuente canónica y `.opencode/skills` se rechaza para evitar duplicación. El contrato no elimina, reemplaza ni hace cutover fuera de OpenCode Desktop.
 
 ## 13. Decisiones cerradas y prerequisitos de cutover
 

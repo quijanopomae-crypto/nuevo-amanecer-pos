@@ -42,7 +42,6 @@ PATH_FIELDS = (
     "skills",
     "agents",
     "commands",
-    "tools",
     "tests",
     "fixtures",
     "evidence",
@@ -259,6 +258,8 @@ def validate_manifest(document: Mapping[str, Any], root: Path, *, verify_digest:
             "paths",
             "skills",
             "policies",
+            "routing",
+            "shadow_write_policy",
             "integrity",
         ),
     )
@@ -303,11 +304,21 @@ def validate_manifest(document: Mapping[str, Any], root: Path, *, verify_digest:
         if kind not in {"read", "write", "tests", "git"}:
             _fail("INVALID_CAPABILITY_KIND", f"$.capabilities.{capability_id}.kind", kind)
 
-    roles = _validate_named_mapping(top["roles"], "$.roles", ("mode", "model_ref", "capabilities"))
+    roles = _validate_named_mapping(
+        top["roles"],
+        "$.roles",
+        ("mode", "runtime_agent_id", "model_ref", "capabilities"),
+    )
+    _exact(set(roles), {"planner", "implementer", "tester", "reviewer"}, "$.roles", "ROLE_SET_MISMATCH")
+    runtime_agent_ids: list[str] = []
     for role_id, role in roles.items():
         mode = _string(role["mode"], f"$.roles.{role_id}.mode")
         if mode not in {"primary", "worker", "reviewer", "external"}:
             _fail("INVALID_ROLE_MODE", f"$.roles.{role_id}.mode", mode)
+        runtime_agent_id = _identifier(
+            role["runtime_agent_id"], f"$.roles.{role_id}.runtime_agent_id"
+        )
+        runtime_agent_ids.append(runtime_agent_id)
         model_ref = _string(role["model_ref"], f"$.roles.{role_id}.model_ref")
         if model_ref not in models:
             _fail("UNKNOWN_MODEL_REFERENCE", f"$.roles.{role_id}.model_ref", model_ref)
@@ -316,6 +327,7 @@ def validate_manifest(document: Mapping[str, Any], root: Path, *, verify_digest:
         for capability_ref in capability_refs:
             if capability_ref not in capabilities:
                 _fail("UNKNOWN_CAPABILITY_REFERENCE", f"$.roles.{role_id}.capabilities", capability_ref)
+    _unique(runtime_agent_ids, "$.roles.*.runtime_agent_id")
 
     workflow = _strict_mapping(top["workflow"], "$.workflow", ("entry_role", "allowed_roles"))
     entry_role = _string(workflow["entry_role"], "$.workflow.entry_role")
@@ -330,6 +342,7 @@ def validate_manifest(document: Mapping[str, Any], root: Path, *, verify_digest:
     paths = _strict_mapping(top["paths"], "$.paths", PATH_FIELDS)
     normalized_paths = {field: _validate_path(paths[field], f"$.paths.{field}") for field in PATH_FIELDS}
     _exact(normalized_paths["skills"], CANONICAL_SKILLS, "$.paths.skills")
+    _exact(normalized_paths["evidence"], "evidence", "$.paths.evidence")
 
     skills = _strict_mapping(top["skills"], "$.skills", ("canonical_source", "required"))
     _exact(skills["canonical_source"], CANONICAL_SKILLS, "$.skills.canonical_source")
@@ -351,6 +364,69 @@ def validate_manifest(document: Mapping[str, Any], root: Path, *, verify_digest:
     _unique(policy_roots, "$.policies.allowed_path_roots")
     _exact(policy_variables, list(ALLOWED_VARIABLES), "$.policies.allowed_variables")
     _exact(policy_roots, list(ALLOWED_PATH_ROOTS), "$.policies.allowed_path_roots")
+
+    routing = _strict_mapping(
+        top["routing"],
+        "$.routing",
+        ("primary_implementer", "second_engineer", "critical_reviewer", "blocked_failure_classes"),
+    )
+    primary = _strict_mapping(
+        routing["primary_implementer"], "$.routing.primary_implementer", ("role", "model_ref")
+    )
+    second = _strict_mapping(
+        routing["second_engineer"], "$.routing.second_engineer", ("role", "model_ref", "risks")
+    )
+    critical = _strict_mapping(
+        routing["critical_reviewer"],
+        "$.routing.critical_reviewer",
+        (
+            "model_ref",
+            "risks",
+            "critical_topics",
+            "denied_failure_classes",
+            "admit_on_release_gate",
+            "admit_after_review_exhausted",
+            "deny_cosmetic",
+        ),
+    )
+    for path, route in (("primary_implementer", primary), ("second_engineer", second)):
+        role_ref = _string(route["role"], f"$.routing.{path}.role")
+        model_ref = _string(route["model_ref"], f"$.routing.{path}.model_ref")
+        if role_ref not in roles:
+            _fail("UNKNOWN_ROLE_REFERENCE", f"$.routing.{path}.role", role_ref)
+        if model_ref not in models:
+            _fail("UNKNOWN_MODEL_REFERENCE", f"$.routing.{path}.model_ref", model_ref)
+        if roles[role_ref]["model_ref"] != model_ref:
+            _fail("ROUTING_ROLE_MODEL_MISMATCH", f"$.routing.{path}", role_ref)
+    critical_model_ref = _string(critical["model_ref"], "$.routing.critical_reviewer.model_ref")
+    if critical_model_ref not in models:
+        _fail("UNKNOWN_MODEL_REFERENCE", "$.routing.critical_reviewer.model_ref", critical_model_ref)
+    valid_risks = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+    for path, values in (
+        ("$.routing.second_engineer.risks", second["risks"]),
+        ("$.routing.critical_reviewer.risks", critical["risks"]),
+    ):
+        risks = _string_list(values, path)
+        _unique(risks, path)
+        if any(risk not in valid_risks for risk in risks):
+            _fail("INVALID_RISK", path, str(risks))
+    for field in ("critical_topics", "denied_failure_classes"):
+        values = _string_list(critical[field], f"$.routing.critical_reviewer.{field}")
+        _unique(values, f"$.routing.critical_reviewer.{field}")
+    for field in ("admit_on_release_gate", "admit_after_review_exhausted", "deny_cosmetic"):
+        if type(critical[field]) is not bool:
+            _fail("INVALID_TYPE", f"$.routing.critical_reviewer.{field}", "expected boolean")
+    blocked = _string_list(routing["blocked_failure_classes"], "$.routing.blocked_failure_classes")
+    _unique(blocked, "$.routing.blocked_failure_classes")
+
+    shadow_write = _strict_mapping(
+        top["shadow_write_policy"],
+        "$.shadow_write_policy",
+        ("product_write", "writable_path_ref"),
+    )
+    _exact(shadow_write["product_write"], "DENIED", "$.shadow_write_policy.product_write")
+    writable_ref = _string(shadow_write["writable_path_ref"], "$.shadow_write_policy.writable_path_ref")
+    _exact(writable_ref, "evidence", "$.shadow_write_policy.writable_path_ref")
 
     root = root.resolve()
     skills_root = root / CANONICAL_SKILLS

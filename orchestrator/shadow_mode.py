@@ -16,6 +16,7 @@ from orchestrator.contracts import (
     RiskLevel,
 )
 from orchestrator.evidence.pack import EvidencePack
+from orchestrator.evidence.trust import sign_run_artifacts
 from orchestrator.gates.codex_admission import (
     CodexAdmissionContext,
     CodexAdmissionGate,
@@ -23,6 +24,8 @@ from orchestrator.gates.codex_admission import (
 )
 from orchestrator.handoff.codex_handoff import write_codex_escalation_report
 from orchestrator.io_atomic import sha256_digest
+from orchestrator.schemas.validate_manifest import compute_manifest_digest, validate_manifest
+from orchestrator.snapshot import validate_snapshot
 from orchestrator.state.durable_state import (
     DurableStateRecord,
     DurableStateStore,
@@ -64,11 +67,6 @@ SCENARIO_FIELDS = frozenset(
         "cosmetic",
     }
 )
-NON_EVALUABLE_FAILURES = frozenset(
-    {"RESOURCE_LIMIT", "PROVIDER_FAILURE", "EXTERNAL_DEPENDENCY", "TOOL_FAILURE"}
-)
-
-
 class ShadowModeError(ValueError):
     pass
 
@@ -145,6 +143,8 @@ class ShadowRunResult:
     evidence_path: Path
     state_path: Path
     handoff_path: Path | None
+    attestation_path: Path
+    signature_path: Path
 
 
 def load_scenarios(path: Path) -> dict[str, ShadowScenario]:
@@ -163,14 +163,20 @@ def load_scenarios(path: Path) -> dict[str, ShadowScenario]:
     return result
 
 
-def assert_shadow_write_allowed(root: Path, target: Path) -> Path:
+def assert_shadow_write_allowed(root: Path, target: Path, manifest: Mapping[str, Any]) -> Path:
     root = Path(root).resolve()
     target = Path(target).resolve()
     try:
         relative = target.relative_to(root)
     except ValueError as exc:
         raise ProductWriteDenied("shadow writes outside project are denied") from exc
-    if not relative.parts or relative.parts[0] != "evidence":
+    policy = manifest["shadow_write_policy"]
+    if policy["product_write"] != "DENIED":
+        raise ProductWriteDenied("shadow manifest must deny product writes")
+    if policy["writable_path_ref"] != "evidence" or manifest["paths"]["evidence"] != "evidence":
+        raise ProductWriteDenied("shadow writable root must be the fixed evidence directory")
+    writable = PurePosixPath("evidence")
+    if not relative.parts or PurePosixPath(*relative.parts).parts[: len(writable.parts)] != writable.parts:
         raise ProductWriteDenied(f"PRODUCT_WRITE_DENIED: {relative.as_posix()}")
     return target
 
@@ -258,29 +264,55 @@ def _resources(scenario: ShadowScenario) -> tuple[dict[str, Any], ResourceMode]:
     )
 
 
-def _routing(scenario: ShadowScenario, risk: RiskLevel) -> tuple[dict[str, Any], CodexDecision, tuple[str, ...]]:
+def _render_model(manifest: Mapping[str, Any], model_ref: str) -> str:
+    model = manifest["models"][model_ref]
+    variant = model["variant"]
+    return model["model_id"] if variant == "primary" else f"{model['model_id']}:{variant}"
+
+
+def _routing(
+    scenario: ShadowScenario,
+    risk: RiskLevel,
+    manifest: Mapping[str, Any],
+) -> tuple[dict[str, Any], CodexDecision, tuple[str, ...]]:
     failure_class = scenario.payload["failure_class"]
-    admission = CodexAdmissionGate.decide(
-        CodexAdmissionContext(
-            risk=risk,
-            failure_class=failure_class,
-            topics=tuple(scenario.payload["in_scope"]),
-            cosmetic=scenario.payload["cosmetic"],
+    routing_policy = manifest["routing"]
+    blocked = failure_class in frozenset(routing_policy["blocked_failure_classes"])
+    if blocked:
+        codex_decision = CodexDecision.DENY
+        codex_reasons = (f"BLOCKED_{failure_class}",)
+    else:
+        admission = CodexAdmissionGate.decide(
+            CodexAdmissionContext(
+                risk=risk,
+                failure_class=failure_class,
+                topics=tuple(scenario.payload["in_scope"]),
+                cosmetic=scenario.payload["cosmetic"],
+            ),
+            routing_policy["critical_reviewer"],
         )
-    )
-    blocked = failure_class in NON_EVALUABLE_FAILURES or failure_class == "WRONG_WORKTREE"
+        codex_decision = admission.decision
+        codex_reasons = admission.reasons
+    primary_ref = routing_policy["primary_implementer"]["model_ref"]
+    second_policy = routing_policy["second_engineer"]
+    critical_policy = routing_policy["critical_reviewer"]
     routing = {
-        "primary": None if blocked else "deepseek/deepseek-v4-pro",
+        "primary": None if blocked else _render_model(manifest, primary_ref),
         "conditional_review": (
-            "zai-coding-plan/glm-5.3:reasoning=max"
-            if not blocked and risk in {RiskLevel.HIGH, RiskLevel.CRITICAL}
+            _render_model(manifest, second_policy["model_ref"])
+            if not blocked and risk.value in frozenset(second_policy["risks"])
             else None
         ),
-        "codex": admission.decision.value,
-        "codex_reasons": list(admission.reasons),
+        "codex": codex_decision.value,
+        "critical_reviewer": (
+            _render_model(manifest, critical_policy["model_ref"])
+            if codex_decision is CodexDecision.ADMIT
+            else None
+        ),
+        "codex_reasons": list(codex_reasons),
         "product_write": "DENIED",
     }
-    return routing, admission.decision, admission.reasons
+    return routing, codex_decision, codex_reasons
 
 
 def _transition_for_scenario(
@@ -336,14 +368,32 @@ def _transition_for_scenario(
 
 
 class ShadowOrchestrator:
-    def __init__(self, root: Path, manifest_digest: str, identity: GitIdentity) -> None:
+    def __init__(
+        self,
+        root: Path,
+        manifest: Mapping[str, Any],
+        identity: GitIdentity,
+        *,
+        signing_key: Path,
+        snapshot_digest: str,
+    ) -> None:
         self.root = Path(root).resolve()
-        self.manifest_digest = manifest_digest
+        self.manifest = dict(manifest)
+        validate_manifest(self.manifest, self.root)
+        self.manifest_digest = compute_manifest_digest(self.manifest)
         self.identity = identity
+        self.signing_key = Path(signing_key)
+        verified_snapshot = validate_snapshot(
+            self.root / "infra" / "stable" / "SNAPSHOT.json",
+            self.root,
+        )
+        if snapshot_digest != verified_snapshot["snapshot_digest"]:
+            raise ShadowModeError("snapshot digest is not the validated INFRA-STABLE digest")
+        self.snapshot_digest = verified_snapshot["snapshot_digest"]
 
     def run(self, scenario: ShadowScenario, output_root: Path, *, run_id: str) -> ShadowRunResult:
-        output_root = assert_shadow_write_allowed(self.root, output_root)
-        run_dir = assert_shadow_write_allowed(self.root, output_root / run_id)
+        output_root = assert_shadow_write_allowed(self.root, output_root, self.manifest)
+        run_dir = assert_shadow_write_allowed(self.root, output_root / run_id, self.manifest)
         if run_dir.exists():
             raise ShadowModeError(f"run directory already exists: {run_dir}")
         spec = _feature_spec(scenario)
@@ -355,7 +405,7 @@ class ShadowOrchestrator:
                 f"risk mismatch for {scenario.scenario_id}: {risk.value} != {scenario.payload['expected_risk']}"
             )
         resource_check, resource_mode = _resources(scenario)
-        routing, codex_decision, codex_reasons = _routing(scenario, risk)
+        routing, codex_decision, codex_reasons = _routing(scenario, risk, self.manifest)
         evidence_seed = sha256_digest(
             {"scenario": scenario.payload, "routing": routing, "resources": resource_check}
         )
@@ -442,6 +492,12 @@ class ShadowOrchestrator:
         )
         evidence_path = run_dir / "EVIDENCE_PACK.json"
         pack.write(evidence_path)
+        attestation_path, signature_path = sign_run_artifacts(
+            self.root,
+            run_dir,
+            self.signing_key,
+            self.snapshot_digest,
+        )
         handoff_path = None
         if codex_decision is CodexDecision.ADMIT:
             handoff_path = run_dir / "CODEX_ESCALATION_REPORT.md"
@@ -454,7 +510,8 @@ class ShadowOrchestrator:
                         failure_class=scenario.payload["failure_class"],
                         topics=tuple(scenario.payload["in_scope"]),
                         cosmetic=scenario.payload["cosmetic"],
-                    )
+                    ),
+                    self.manifest["routing"]["critical_reviewer"],
                 ),
                 requested_codex_action="independent shadow evidence review",
             )
@@ -467,4 +524,6 @@ class ShadowOrchestrator:
             evidence_path,
             store.state_path,
             handoff_path,
+            attestation_path,
+            signature_path,
         )

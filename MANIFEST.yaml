@@ -2,7 +2,7 @@ schema: nuevo-amanecer.orchestrator/manifest@1.0.0-rc1
 strict: true
 metadata:
   name: nuevo-amanecer-shadow
-  manifest_revision: 2
+  manifest_revision: 3
   environment: shadow
 runtime:
   engine: opencode
@@ -38,12 +38,14 @@ capabilities:
 roles:
   planner:
     mode: primary
+    runtime_agent_id: pos-planner
     model_ref: primary-implementation
     capabilities:
       - project-read
       - git-inspect
   implementer:
     mode: worker
+    runtime_agent_id: pos-implementer
     model_ref: primary-implementation
     capabilities:
       - project-read
@@ -51,6 +53,7 @@ roles:
       - git-inspect
   tester:
     mode: worker
+    runtime_agent_id: pos-tester
     model_ref: primary-implementation
     capabilities:
       - project-read
@@ -58,6 +61,7 @@ roles:
       - git-inspect
   reviewer:
     mode: reviewer
+    runtime_agent_id: pos-reviewer
     model_ref: conditional-second-engineer
     capabilities:
       - project-read
@@ -77,7 +81,6 @@ paths:
   skills: .agents/skills
   agents: .opencode/agents
   commands: .opencode/commands
-  tools: .opencode/tools
   tests: tests/infrastructure
   fixtures: fixtures/shadow
   evidence: evidence
@@ -109,7 +112,45 @@ policies:
     - tests
     - fixtures
     - evidence
+routing:
+  primary_implementer:
+    role: implementer
+    model_ref: primary-implementation
+  second_engineer:
+    role: reviewer
+    model_ref: conditional-second-engineer
+    risks:
+      - HIGH
+      - CRITICAL
+  critical_reviewer:
+    model_ref: external-forensic
+    risks:
+      - HIGH
+      - CRITICAL
+    critical_topics:
+      - integridad financiera
+      - corrupción de datos
+      - persistencia crítica
+      - seguridad
+      - arquitectura compartida crítica
+    denied_failure_classes:
+      - RESOURCE_LIMIT
+      - PROVIDER_FAILURE
+      - EXTERNAL_DEPENDENCY
+      - TOOL_FAILURE
+    admit_on_release_gate: true
+    admit_after_review_exhausted: true
+    deny_cosmetic: true
+  blocked_failure_classes:
+    - RESOURCE_LIMIT
+    - PROVIDER_FAILURE
+    - EXTERNAL_DEPENDENCY
+    - TOOL_FAILURE
+    - WRONG_WORKTREE
+shadow_write_policy:
+  product_write: DENIED
+  writable_path_ref: evidence
 integrity:
   algorithm: sha256
   canonicalization: rfc8785-jcs-subset-v1
-  manifest_sha256: sha256:1ba3bfbf07d03e4c9ff7b772846edffba5b432c429612308bb29f2bd4d0527bc
+  manifest_sha256: sha256:c8532a6c0651088b42eee39d9dce2710c6b428c07807f027de6acd9c16b23bf6

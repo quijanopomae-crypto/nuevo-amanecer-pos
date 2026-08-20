@@ -9,7 +9,6 @@ from orchestrator.schemas.validate_manifest import validate_manifest_file
 from orchestrator.snapshot import validate_snapshot
 
 
-EXPECTED_AGENTS = frozenset({"planner", "implementer", "tester", "reviewer"})
 EXPECTED_COMMANDS = frozenset({"preflight", "feature-spec", "orchestrate", "validate", "resume"})
 EXPECTED_SKILLS = frozenset(
     {
@@ -42,12 +41,13 @@ def validate_project(root: Path, *, require_snapshot: bool = True) -> dict[str, 
     root = Path(root).resolve()
     manifest = validate_manifest_file(root / "MANIFEST.yaml", root)
     agents = _markdown_stems(root / ".opencode" / "agents")
+    expected_agents = frozenset(role["runtime_agent_id"] for role in manifest["roles"].values())
     commands = _markdown_stems(root / ".opencode" / "commands")
     skills_root = root / ".agents" / "skills"
     skills = frozenset(
         item.name for item in skills_root.iterdir() if item.is_dir() and (item / "SKILL.md").is_file()
     )
-    if agents != EXPECTED_AGENTS:
+    if agents != expected_agents:
         raise ProjectValidationError(f"agent set mismatch: {sorted(agents)}")
     if commands != EXPECTED_COMMANDS:
         raise ProjectValidationError(f"command set mismatch: {sorted(commands)}")
@@ -55,6 +55,8 @@ def validate_project(root: Path, *, require_snapshot: bool = True) -> dict[str, 
         raise ProjectValidationError(f"skill set mismatch: {sorted(skills)}")
     if (root / ".opencode" / "skills").exists():
         raise ProjectValidationError(".opencode/skills is forbidden")
+    if "tools" in manifest["paths"] or (root / ".opencode" / "tools").exists():
+        raise ProjectValidationError("undeclared or fictitious .opencode/tools is forbidden")
     try:
         config = json.loads((root / "opencode.json").read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:

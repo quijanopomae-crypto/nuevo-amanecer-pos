@@ -14,14 +14,14 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from orchestrator.project_validation import validate_project
-from orchestrator.schemas.validate_manifest import compute_manifest_digest, load_manifest
+from orchestrator.schemas.validate_manifest import compute_manifest_digest, validate_manifest_file
 from orchestrator.shadow_mode import (
     GitIdentity,
     ShadowOrchestrator,
     assert_shadow_write_allowed,
     load_scenarios,
 )
-from orchestrator.snapshot import generate_snapshot
+from orchestrator.snapshot import generate_snapshot, validate_snapshot
 from orchestrator.state.durable_state import (
     DurableStateRecord,
     DurableStateStore,
@@ -61,7 +61,22 @@ def git_identity() -> GitIdentity:
 
 
 def manifest_digest() -> str:
-    return compute_manifest_digest(load_manifest(ROOT / "MANIFEST.yaml"))
+    manifest = manifest_document()
+    return compute_manifest_digest(manifest)
+
+
+def manifest_document() -> dict[str, object]:
+    return dict(validate_manifest_file(ROOT / "MANIFEST.yaml", ROOT))
+
+
+def _model_for_ref(manifest: dict[str, object], model_ref: str) -> str:
+    model = manifest["models"][model_ref]
+    variant = model["variant"]
+    return model["model_id"] if variant == "primary" else f"{model['model_id']}:{variant}"
+
+
+def _snapshot_digest() -> str:
+    return validate_snapshot(ROOT / "infra" / "stable" / "SNAPSHOT.json", ROOT)["snapshot_digest"]
 
 
 def command_validate_project(_: argparse.Namespace) -> int:
@@ -76,7 +91,13 @@ def command_run_scenario(args: argparse.Namespace) -> int:
     output_root = Path(args.output_root)
     if not output_root.is_absolute():
         output_root = ROOT / output_root
-    runner = ShadowOrchestrator(ROOT, manifest_digest(), git_identity())
+    runner = ShadowOrchestrator(
+        ROOT,
+        manifest_document(),
+        git_identity(),
+        signing_key=Path(args.signing_key),
+        snapshot_digest=_snapshot_digest(),
+    )
     result = runner.run(scenarios[args.scenario_id], output_root, run_id=args.run_id or args.scenario_id)
     print(
         json.dumps(
@@ -101,7 +122,13 @@ def command_run_all(args: argparse.Namespace) -> int:
     output_root = Path(args.output_root)
     if not output_root.is_absolute():
         output_root = ROOT / output_root
-    runner = ShadowOrchestrator(ROOT, manifest_digest(), git_identity())
+    runner = ShadowOrchestrator(
+        ROOT,
+        manifest_document(),
+        git_identity(),
+        signing_key=Path(args.signing_key),
+        snapshot_digest=_snapshot_digest(),
+    )
     results = []
     for scenario_id, scenario in scenarios.items():
         result = runner.run(scenario, output_root, run_id=scenario_id)
@@ -112,6 +139,8 @@ def command_run_all(args: argparse.Namespace) -> int:
 
 def _resume_initial(state_root: Path) -> DurableStateRecord:
     identity = git_identity()
+    manifest = manifest_document()
+    primary_ref = manifest["routing"]["primary_implementer"]["model_ref"]
     seed = "sha256:" + hashlib.sha256(b"resume-demo").hexdigest()
     return DurableStateRecord(
         run_id="resume-demo",
@@ -120,7 +149,7 @@ def _resume_initial(state_root: Path) -> DurableStateRecord:
         state=State.RECEIVED,
         previous_state=None,
         timestamp=utc_now(),
-        model="deepseek/deepseek-v4-pro",
+        model=_model_for_ref(manifest, primary_ref),
         attempt=0,
         risk="LOW",
         failure_class=None,
@@ -139,7 +168,7 @@ def _state_root(raw: str) -> Path:
     value = Path(raw)
     if not value.is_absolute():
         value = ROOT / value
-    return assert_shadow_write_allowed(ROOT, value)
+    return assert_shadow_write_allowed(ROOT, value, manifest_document())
 
 
 def command_resume_start(args: argparse.Namespace) -> int:
@@ -178,17 +207,34 @@ def command_resume(args: argparse.Namespace) -> int:
 
 
 def command_generate_snapshot(args: argparse.Namespace) -> int:
+    source_result = {
+        "methods": args.source_methods,
+        "pass": args.source_passed,
+        "fail": args.source_failed,
+        "blocked": args.source_blocked,
+        "command": 'bundled source: python -B -m unittest discover -s tests/infrastructure -p "test_*.py" -v',
+    }
+    shadow_result = {
+        "methods": args.shadow_methods,
+        "pass": args.shadow_passed,
+        "fail": args.shadow_failed,
+        "blocked": args.shadow_blocked,
+        "command": "python -B -m unittest tests.infrastructure.test_manifest_schema tests.infrastructure.test_shadow_mode tests.infrastructure.test_remediation -v",
+    }
     result = generate_snapshot(
         ROOT,
-        version="1.0.0-shadow.1",
-        source_commit="93c7bd73a6553b3aede655eea1204861264dfc22",
+        version="1.0.0-shadow.2",
         target_base_commit="28b90db0308a1bdddd3024374d7461aa22acc520",
-        test_result={
-            "methods": args.methods,
-            "pass": args.passed,
-            "fail": args.failed,
-            "blocked": args.blocked,
-            "command": 'python -B -m unittest discover -s tests/infrastructure -p "test_*.py" -v',
+        regression_results={
+            "source": source_result,
+            "shadow_and_remediation": shadow_result,
+            "total": {
+                "methods": source_result["methods"] + shadow_result["methods"],
+                "pass": source_result["pass"] + shadow_result["pass"],
+                "fail": source_result["fail"] + shadow_result["fail"],
+                "blocked": source_result["blocked"] + shadow_result["blocked"],
+                "command": "source regression bundle + shadow/remediation suites",
+            },
         },
         created_at=args.created_at,
     )
@@ -205,9 +251,11 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("scenario_id")
     run.add_argument("--output-root", default="evidence/shadow")
     run.add_argument("--run-id")
+    run.add_argument("--signing-key", required=True)
     run.set_defaults(handler=command_run_scenario)
     run_all = subcommands.add_parser("run-all")
     run_all.add_argument("--output-root", default="evidence/shadow")
+    run_all.add_argument("--signing-key", required=True)
     run_all.set_defaults(handler=command_run_all)
     resume_start = subcommands.add_parser("resume-start")
     resume_start.add_argument("state_root")
@@ -216,10 +264,14 @@ def parser() -> argparse.ArgumentParser:
     resume.add_argument("state_root")
     resume.set_defaults(handler=command_resume)
     snapshot = subcommands.add_parser("generate-snapshot")
-    snapshot.add_argument("--methods", type=int, required=True)
-    snapshot.add_argument("--passed", type=int, required=True)
-    snapshot.add_argument("--failed", type=int, default=0)
-    snapshot.add_argument("--blocked", type=int, default=0)
+    snapshot.add_argument("--source-methods", type=int, required=True)
+    snapshot.add_argument("--source-passed", type=int, required=True)
+    snapshot.add_argument("--source-failed", type=int, default=0)
+    snapshot.add_argument("--source-blocked", type=int, default=0)
+    snapshot.add_argument("--shadow-methods", type=int, required=True)
+    snapshot.add_argument("--shadow-passed", type=int, required=True)
+    snapshot.add_argument("--shadow-failed", type=int, default=0)
+    snapshot.add_argument("--shadow-blocked", type=int, default=0)
     snapshot.add_argument("--created-at")
     snapshot.set_defaults(handler=command_generate_snapshot)
     return result

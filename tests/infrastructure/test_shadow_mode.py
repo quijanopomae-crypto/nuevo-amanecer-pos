@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from orchestrator.evidence.pack import EvidencePack  # noqa: E402
+from orchestrator.evidence.trust import _verify_run_artifacts_with_anchor  # noqa: E402
 from orchestrator.project_validation import (  # noqa: E402
-    EXPECTED_AGENTS,
     EXPECTED_COMMANDS,
     EXPECTED_SKILLS,
     validate_project,
@@ -78,9 +78,31 @@ class ShadowModeIntegrationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.temporary = tempfile.TemporaryDirectory(prefix="shadow-suite-", dir=ROOT / "evidence")
         cls.addClassCleanup(cls.temporary.cleanup)
+        cls.key_temporary = tempfile.TemporaryDirectory(prefix="shadow-signing-key-")
+        cls.addClassCleanup(cls.key_temporary.cleanup)
         cls.output_root = Path(cls.temporary.name)
         cls.scenarios = load_scenarios(ROOT / "fixtures" / "shadow" / "scenarios.json")
         manifest = load_manifest(ROOT / "MANIFEST.yaml")
+        cls.manifest = manifest
+        cls.snapshot_digest = json.loads(
+            (ROOT / "infra" / "stable" / "SNAPSHOT.json").read_text(encoding="utf-8")
+        )["snapshot_digest"]
+        cls.signing_key = Path(cls.key_temporary.name) / "test-ed25519"
+        generated = subprocess.run(
+            ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(cls.signing_key)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if generated.returncode != 0:
+            raise RuntimeError(generated.stderr)
+        public_key = Path(str(cls.signing_key) + ".pub").read_text(encoding="utf-8").split()
+        cls.allowed_signers = cls.output_root / "allowed_signers"
+        cls.allowed_signers.write_text(
+            f"nuevo-amanecer-pos-shadow {public_key[0]} {public_key[1]}\n",
+            encoding="utf-8",
+        )
         identity = GitIdentity(
             repo=str(ROOT),
             branch="codex/infra-shadow-mode",
@@ -88,7 +110,13 @@ class ShadowModeIntegrationTests(unittest.TestCase):
             worktree=str(ROOT),
             wip_fingerprint=digest("synthetic-wip"),
         )
-        runner = ShadowOrchestrator(ROOT, compute_manifest_digest(manifest), identity)
+        runner = ShadowOrchestrator(
+            ROOT,
+            manifest,
+            identity,
+            signing_key=cls.signing_key,
+            snapshot_digest=cls.snapshot_digest,
+        )
         cls.surface_before = repository_surface_hashes()
         cls.results = {
             scenario_id: runner.run(scenario, cls.output_root, run_id=scenario_id)
@@ -98,7 +126,8 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_01_project_layout_validates(self) -> None:
         result = validate_project(ROOT)
-        self.assertEqual(sorted(EXPECTED_AGENTS), result["agents"])
+        expected_agents = sorted(role["runtime_agent_id"] for role in self.manifest["roles"].values())
+        self.assertEqual(expected_agents, result["agents"])
         self.assertEqual(sorted(EXPECTED_COMMANDS), result["commands"])
         self.assertEqual(sorted(EXPECTED_SKILLS), result["skills"])
 
@@ -110,7 +139,8 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_03_agents_are_exact_and_model_agnostic(self) -> None:
         agents = ROOT / ".opencode" / "agents"
-        self.assertEqual(EXPECTED_AGENTS, {path.stem for path in agents.glob("*.md")})
+        expected_agents = {role["runtime_agent_id"] for role in self.manifest["roles"].values()}
+        self.assertEqual(expected_agents, {path.stem for path in agents.glob("*.md")})
         for path in agents.glob("*.md"):
             self.assertNotIn("\nmodel:", path.read_text(encoding="utf-8"))
 
@@ -148,8 +178,15 @@ class ShadowModeIntegrationTests(unittest.TestCase):
         for scenario_id in ("inventory-high", "cash-high", "credits-high", "unknown-critical"):
             with self.subTest(scenario=scenario_id):
                 routing = self.results[scenario_id].routing
-                self.assertEqual("deepseek/deepseek-v4-pro", routing["primary"])
-                self.assertEqual("zai-coding-plan/glm-5.3:reasoning=max", routing["conditional_review"])
+                primary_ref = self.manifest["routing"]["primary_implementer"]["model_ref"]
+                second_ref = self.manifest["routing"]["second_engineer"]["model_ref"]
+                primary = self.manifest["models"][primary_ref]
+                second = self.manifest["models"][second_ref]
+                self.assertEqual(primary["model_id"], routing["primary"])
+                self.assertEqual(
+                    f"{second['model_id']}:{second['variant']}",
+                    routing["conditional_review"],
+                )
                 self.assertEqual("ADMIT", routing["codex"])
 
     def test_11_non_evaluable_failures_do_not_route_models(self) -> None:
@@ -163,7 +200,11 @@ class ShadowModeIntegrationTests(unittest.TestCase):
     def test_12_failure_classification_is_preserved_in_evidence(self) -> None:
         for scenario_id in ("harness-failure", "wrong-worktree", "resource-limit", "provider-failure", "unknown-critical"):
             with self.subTest(scenario=scenario_id):
-                pack = EvidencePack.load(self.results[scenario_id].evidence_path)
+                pack = _verify_run_artifacts_with_anchor(
+                    self.results[scenario_id].evidence_path.parent,
+                    self.allowed_signers,
+                    expected_snapshot_digest=self.snapshot_digest,
+                )
                 self.assertEqual(self.scenarios[scenario_id].payload["failure_code"], pack.payload["failures"][0]["code"])
                 self.assertEqual(self.scenarios[scenario_id].payload["failure_class"], pack.payload["failures"][0]["classification"])
 
@@ -175,7 +216,11 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_14_evidence_pack_digests_validate(self) -> None:
         for result in self.results.values():
-            pack = EvidencePack.load(result.evidence_path)
+            pack = _verify_run_artifacts_with_anchor(
+                result.evidence_path.parent,
+                self.allowed_signers,
+                expected_snapshot_digest=self.snapshot_digest,
+            )
             self.assertTrue(pack.digest.startswith("sha256:"))
 
     def test_15_codex_handoffs_are_manual_and_only_when_admitted(self) -> None:
@@ -187,9 +232,13 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_16_product_write_is_denied(self) -> None:
         with self.assertRaises(ProductWriteDenied):
-            assert_shadow_write_allowed(ROOT, ROOT / "CVV2.4_backup_antes_demo-1.html")
+            assert_shadow_write_allowed(ROOT, ROOT / "CVV2.4_backup_antes_demo-1.html", self.manifest)
         with self.assertRaises(ProductWriteDenied):
-            assert_shadow_write_allowed(ROOT, ROOT / "tests" / "v10-credits-payments-engine.html")
+            assert_shadow_write_allowed(
+                ROOT,
+                ROOT / "tests" / "v10-credits-payments-engine.html",
+                self.manifest,
+            )
 
     def test_17_shadow_execution_changes_no_non_evidence_file(self) -> None:
         self.assertEqual(self.surface_before, self.surface_after)
@@ -219,7 +268,7 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_19_snapshot_and_all_file_digests_validate(self) -> None:
         snapshot = validate_snapshot(ROOT / "infra" / "stable" / "SNAPSHOT.json", ROOT)
-        self.assertEqual(SOURCE_COMMIT, snapshot["commit"])
+        self.assertEqual(SOURCE_COMMIT, snapshot["source_commit"])
         self.assertEqual(BASE_COMMIT, snapshot["target_base_commit"])
 
     def test_20_snapshot_tampering_is_rejected(self) -> None:
