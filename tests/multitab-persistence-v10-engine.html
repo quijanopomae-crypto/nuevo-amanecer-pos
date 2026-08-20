@@ -266,14 +266,14 @@
         if(!helpersOk||!runtimeOk||!stateA.idbOpened||!stateB.idbOpened)throw new Error('INIT falló antes de crear el snapshot');
         var today=new Date().toISOString().slice(0,10),sessionId=Date.now();
         var fixture={
-          appConfig:{creditPolicy:{enabled:true,initialLine:100000,minPurchases:0,minProfit:0}},
+          appConfig:{creditPolicy:{enabled:true,minPurchases:1000,minProfit:400,initialLine:5,punctualRate:10,lateRate:5}},
           ui:{},locks:{},security:{},cart:[],draft:null,
           productos:[
             {id:'P1',name:'Producto A',sku:'P-A',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:5,precio:10,stock:10,stockMin:1,unidad:'unidad',controlInventario:true},
             {id:'P2',name:'Producto B',sku:'P-B',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:10,precio:20,stock:4,stockMin:1,unidad:'unidad',controlInventario:true},
             {id:'P3',name:'Producto C',sku:'P-C',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:2,precio:6,stock:50,stockMin:1,unidad:'unidad',controlInventario:true}
           ],
-          ventas:[],clientes:[{id:'C1',nombre:'Cliente Prueba',dni:'90000001',tel:'',dir:'',totalCompras:0,color:0}],
+          ventas:[],clientes:[{id:'C1',nombre:'Cliente Prueba',dni:'90000001',tel:'',dir:'',totalCompras:0,color:0,lineaCreditoManualActiva:true,lineaCreditoManual:50,lineaCreditoManualMotivo:'Fixture: linea manual canonica para caso F',lineaCreditoManualAt:'2026-01-01T00:00:00.000Z',lineaCreditoManualPor:'Test'}],
           creditos:[],gastos:[],cajMovs:[],
           cajEstado:{abierta:true,cerrada:false,fondo:100,cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',hora:'08:00',hora24:'08:00:00',fechaApertura:today,timestampApertura:new Date().toISOString(),sessionId:sessionId,contado:null,esperado:null,diferencia:null,horaCierre:null,horaCierre24:null}
         };

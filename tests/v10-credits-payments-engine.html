@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>Motor V10 — créditos, pagos e identidad</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:18px}h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:16px 0 6px}
+    button{height:40px;border:0;border-radius:9px;padding:0 15px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .status{font-weight:800}.banner{margin-top:12px;padding:12px;border:2px solid #d0d7e2;border-radius:10px;background:#fff;font-weight:900}
+    .banner.pass{border-color:#087443;background:#ecfdf3;color:#087443}.banner.fail{border-color:#b42318;background:#fff1f2;color:#9f1239}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:8px}
+    th,td{border:1px solid #d7dee8;padding:7px;text-align:left;vertical-align:top}th{background:#e7eef4}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.4 ui-monospace,Consolas,monospace}
+    iframe{position:absolute;width:2px;height:2px;border:0;left:-9999px;top:0}
+    .pass{color:#087443;font-weight:900}.failure{color:#b42318;font-weight:900}
+  </style>
+</head>
+<body>
+  <h1>Motor V10 — créditos, pagos e identidad</h1>
+  <p>Clona el lifecycle probado de <code>multitab-persistence-v10-engine.html</code>: fetch + document.write + bridge. Cinco contextos reales (A/B comparten namespace; C/D/E aislados), IndexedDB real, Web Locks reales, namespace desechable.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar motor V10 créditos y pagos</button>
+    <span id="status" class="status">Esperando ejecución.</span>
+  </div>
+  <div id="summary" class="banner">SIN EJECUTAR</div>
+
+  <h2>Diagnóstico de inicialización</h2>
+  <pre id="init-diag">Esperando.</pre>
+
+  <h2>Resultados</h2>
+  <table>
+    <thead><tr><th>#</th><th>Caso</th><th>Estado</th><th>Evidencia</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <h2>Resultado estructurado</h2>
+  <pre id="auto-result">{"status":"NOT_RUN"}</pre>
+
+  <script>
+  (function(){
+    'use strict';
+    var MAIN_HTML='../CVV2.4_backup_antes_demo-1.html';
+    var HARNESS_VERSION='v10-credits-payments-2026-08-14-1';
+    var query=new URLSearchParams(location.search);
+
+    /* ═══ ISOLATION (idéntico al harness probado) ═══ */
+    function isolationBootstrap(config){
+      'use strict';
+      var local=window.localStorage,session=window.sessionStorage,storageProto=window.Storage&&window.Storage.prototype;
+      if(!storageProto)throw new Error('Storage API no disponible');
+      var nativeGet=storageProto.getItem,nativeSet=storageProto.setItem,nativeRemove=storageProto.removeItem,nativeKey=storageProto.key,nativeClear=storageProto.clear;
+      var localPrefix=config.localPrefix,sessionPrefix=config.sessionPrefix;
+      function prefixFor(target){if(target===local)return localPrefix;if(target===session)return sessionPrefix;return null;}
+      function keysFor(target,prefix){var keys=[];for(var i=0;i<target.length;i++){var key=nativeKey.call(target,i);if(key&&key.indexOf(prefix)===0)keys.push(key);}return keys;}
+      storageProto.getItem=function(key){var p=prefixFor(this);return p===null?nativeGet.call(this,key):nativeGet.call(this,p+String(key));};
+      storageProto.setItem=function(key,value){var p=prefixFor(this);return p===null?nativeSet.call(this,key,value):nativeSet.call(this,p+String(key),String(value));};
+      storageProto.removeItem=function(key){var p=prefixFor(this);return p===null?nativeRemove.call(this,key):nativeRemove.call(this,p+String(key));};
+      storageProto.key=function(index){var p=prefixFor(this);if(p===null)return nativeKey.call(this,index);var keys=keysFor(this,p),full=keys[index];return full===undefined?null:full.slice(p.length);};
+      storageProto.clear=function(){var p=prefixFor(this);if(p===null)return nativeClear.call(this);keysFor(this,p).forEach(function(k){nativeRemove.call(this,k);},this);};
+      var factory=window.indexedDB,factoryProto=factory&&Object.getPrototypeOf(factory);
+      if(!factory||!factoryProto)throw new Error('IndexedDB no disponible');
+      var nativeOpen=factoryProto.open,nativeDelete=factoryProto.deleteDatabase,lifecycle=[];
+      factoryProto.open=function(name,version){
+        var isolated=config.dbPrefix+String(name);
+        lifecycle.push({action:'open',name:isolated,version:version===undefined?null:version,at:Date.now()});
+        return arguments.length>1?nativeOpen.call(this,isolated,version):nativeOpen.call(this,isolated);
+      };
+      factoryProto.deleteDatabase=function(name){return nativeDelete.call(this,config.dbPrefix+String(name));};
+      window.__v10IdbLifecycle=lifecycle;
+      window.__saleIsolation={runId:config.runId,tabId:config.tabId,localPrefix:config.localPrefix,sessionPrefix:config.sessionPrefix,dbName:config.dbPrefix+'NuevoAmanecerPOS'};
+      window.__saleWorkerState={status:'LOADING_POS',stage:'ISOLATION_READY',ready:false,error:null,tabId:config.tabId,runId:config.runId};
+    }
+
+    /* ═══ BRIDGE: expone motor de venta desde el realm del POS ═══ */
+    function saleBridgeBootstrap(){
+      'use strict';
+      var clone=function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};
+      var wait=function(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});};
+      var state=window.__saleWorkerState||{status:'BOOTSTRAPPING',ready:false,error:null};
+      function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+      async function settle(){await wait(1800);var stable=0;for(var i=0;i<80;i++){var chain=typeof _naPersistChain!=='undefined'?_naPersistChain:null;try{if(chain)await chain;}catch(error){}await wait(75);if(chain===(typeof _naPersistChain!=='undefined'?_naPersistChain:null)){stable++;if(stable>=5)return true;}else stable=0;}throw new Error('La persistencia V9 no se estabilizó');}
+      function probe(){return{readyState:document.readyState,origin:location.origin,href:location.href,scripts:document.scripts.length,helpers:{buildSaleIntent:typeof _naV10BuildSaleIntent,revalidateSale:typeof _naV10RevalidateSale,applySale:typeof _naV10ApplySale,confirmSaleIntent:typeof _naV10ConfirmSaleIntent,runCriticalOperation:typeof _naRunCriticalOperation,openDB:typeof _naV10OpenDB,configureRuntime:typeof _naV10ConfigureRuntime,readCanonical:typeof _naV10ReadCanonical,createInitial:typeof _naV10CreateInitialSnapshot,newUuid:typeof _naNewUuid,newOperationId:typeof _naNewOperationId},webLocks:typeof navigator.locks!=='undefined'&&typeof navigator.locks.request==='function',isolation:clone(window.__saleIsolation||null),worker:clone(state),idbLog:clone(window.__v10IdbLifecycle||[])};}
+      function buildSaleSpec(intent,expectedRevision){var built=_naV10BuildSaleIntent(clone(intent));return{operationId:built.operationId,type:'SALE',expectedRevision:expectedRevision,payload:clone(built),entityIds:built.items.map(function(item){return item.productId;}),revalidate:function(canonical){return _naV10RevalidateSale(canonical,built);},mutate:function(draft,ctx){return _naV10ApplySale(draft,built,ctx);}};}
+      async function initialize(){
+        try{
+          state.status='INITIALIZING';state.stage='POS_LOADED';state.sourceLoaded=true;
+          await withTimeout(settle(),12000,'settle POS');
+          var inspected=probe(),missing=Object.keys(inspected.helpers).filter(function(key){return inspected.helpers[key]!=='function';});
+          if(missing.length)throw new Error('Helpers V10 ausentes: '+missing.join(', '));
+          state.helpersFound=true;state.stage='HELPERS_FOUND';
+          await withTimeout((async function(){await _naV10PrepareUpgrade();await _naV10CloseDB();_naV10ConfigureRuntime({dbName:'NuevoAmanecerPOS',localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:'nuevo-amanecer:financial-write:v10:'+window.__saleIsolation.runId,channelName:'nuevo-amanecer:persistence:v10:'+window.__saleIsolation.runId,broadcastEnabled:false});})(),10000,'configurar runtime');
+          state.runtimeConfigured=true;state.stage='RUNTIME_CONFIGURED';
+          var db=await withTimeout(_naV10OpenDB(),10000,'abrir IndexedDB V10');
+          state.idbOpened=true;state.dbVersion=db.version;state.stage='IDB_OPENED';
+          await withTimeout(_naV10ReadCanonical(),5000,'leer snapshot V10');state.snapshotAccessible=true;
+          state.status='READY';state.stage='READY';state.ready=true;return true;
+        }catch(error){state.status='ERROR';state.stage='ERROR';state.error=error.message||String(error);return false;}
+      }
+      window.__saleBridge={
+        state:function(){return clone(state);},probe:probe,isolation:clone(window.__saleIsolation),
+        createInitial:function(data){return _naV10CreateInitialSnapshot(clone(data));},canonical:function(){return _naV10ReadCanonical();},operation:function(id){return _naV10GetOperation(id);},tabId:function(){return _naGetTabId();},newOperationId:function(){return _naNewOperationId();},newUuid:function(){return _naNewUuid();},
+        buildIntent:function(intent){return clone(_naV10BuildSaleIntent(clone(intent)));},revalidate:async function(intent){var canonical=await _naV10ReadCanonical();return clone(_naV10RevalidateSale(canonical,_naV10BuildSaleIntent(clone(intent))));},
+        evaluateCredit:async function(clientId){var canonical=await _naV10ReadCanonical();return clone(canonical?_naV10EvaluateClientCredit(canonical.data,clientId):null);},
+        sabotageIdb:function(on){ if(on){ if(!window.__origV10OpenDB) window.__origV10OpenDB=window._naV10OpenDB; window._naV10OpenDB=function(){return Promise.reject(new Error('SIMULATED_IDB_FAILURE'));}; } else if(window.__origV10OpenDB){ window._naV10OpenDB=window.__origV10OpenDB; window.__origV10OpenDB=null; } return true; },
+        runSale:async function(intent,expectedRevision){var revision=expectedRevision;if(revision===undefined||revision===null){var canonical=await _naV10ReadCanonical();revision=canonical?canonical.revision:0;}var result=await _naRunCriticalOperation(buildSaleSpec(intent,revision));return clone({status:result.status,operationId:result.operationId,revision:result.revision,commitId:result.commitId,reason:result.reason,error:result.error});},
+        confirmSale:async function(intent){var result=await _naV10ConfirmSaleIntent(clone(intent));return clone({status:result.status,operationId:result.operationId,revision:result.revision,commitId:result.commitId,reason:result.reason,error:result.error});},
+        snapshotSummary:async function(){var canonical=await _naV10ReadCanonical();if(!canonical)return null;var data=canonical.data||{};return clone({revision:canonical.revision,commitId:canonical.commitId,lastOperationId:canonical.lastOperationId,productos:(data.productos||[]).map(function(p){return{id:p.id,name:p.name,stock:p.stock};}),ventas:(data.ventas||[]).map(function(v){return{id:v.id,ventaUid:v.ventaUid,operation:v.operation,total:v.total,metodo:v.metodo,paymentRef:v.paymentRef,creditId:v.creditId,clienteId:v.clienteId,cajeroId:v.cajeroId,recibido:v.recibido,vuelto:v.vuelto,paymentBreakdown:v.paymentBreakdown,estado:v.estado};}),cajMovs:(data.cajMovs||[]).map(function(m){return{id:m.id,cashMoveId:m.cashMoveId,ventaId:m.ventaId,monto:m.monto,efectivo:m.efectivo,tipo:m.tipo,metodo:m.metodo,sessionId:m.sessionId,cajeroId:m.cajeroId,referencia:m.referencia,detallePago:m.detallePago};}),creditos:(data.creditos||[]).map(function(cr){return{id:cr.id,ventaId:cr.ventaId,cliId:cr.cliId,monto:cr.monto,pagado:cr.pagado,saldo:cr.saldo,status:cr.status,lineaCreditoAsignada:cr.lineaCreditoAsignada,lineaCreditoDisponibleAntes:cr.lineaCreditoDisponibleAntes,gananciaClienteAlCrear:cr.gananciaClienteAlCrear,deudaClienteAntes:cr.deudaClienteAntes,scoreCreditoAlCrear:cr.scoreCreditoAlCrear,fuenteLineaCredito:cr.fuenteLineaCredito,criterioCredito:cr.criterioCredito,excepcionManualCredito:cr.excepcionManualCredito,vence:cr.vence,cajeroId:cr.cajeroId};}),clientes:(data.clientes||[]).map(function(cl){return{id:cl.id,nombre:cl.nombre,totalCompras:cl.totalCompras,lineaCreditoManualActiva:cl.lineaCreditoManualActiva,lineaCreditoManual:cl.lineaCreditoManual};})});},
+        storageInfo:function(){return{localKeys:Object.keys(localStorage),sessionKeys:Object.keys(sessionStorage),v10Mirror:localStorage.getItem('na_snapshot_v10')};},
+        closeAll:async function(){try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(error){}await _naV10CloseDB();try{if(_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(error){}return true;}
+      };
+      window.__saleWorkerReady=initialize();
+    }
+
+    function workerConfig(){
+      var runId=query.get('runId'),tabId=query.get('worker');
+      return{runId:runId,tabId:tabId,localPrefix:'__NA_V10_CP_TEST__'+runId+'__LOCAL__',sessionPrefix:'__NA_V10_CP_TEST__'+runId+'__SESSION_'+tabId+'__',dbPrefix:'__NA_V10_CP_TEST_DB__'+runId+'__'};
+    }
+
+    /* ═══ WORKER MODE: reescribe este documento con el POS aislado ═══ */
+    async function bootWorker(){
+      document.body.innerHTML='<p>Preparando contexto V10 de créditos y pagos…</p>';
+      try{
+        var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},15000);
+        var response=await fetch(MAIN_HTML+'?saleSource='+Date.now(),{cache:'no-store',signal:controller.signal});clearTimeout(timer);
+        if(!response.ok)throw new Error('No se pudo cargar producción: HTTP '+response.status);
+        var source=await response.text(),config=workerConfig();
+        var isolationScript='<scr'+'ipt>('+isolationBootstrap.toString()+')('+JSON.stringify(config)+');</scr'+'ipt>';
+        var bridgeScript='<scr'+'ipt>('+saleBridgeBootstrap.toString()+')();</scr'+'ipt>';
+        if(!/<head[^>]*>/i.test(source)||source.toLowerCase().lastIndexOf('</body>')<0)throw new Error('HTML principal no reconocido');
+        source=source.replace(/<head([^>]*)>/i,function(m){return m+isolationScript;});
+        var close=source.toLowerCase().lastIndexOf('</body>');
+        source=source.slice(0,close)+bridgeScript+source.slice(close);
+        document.open();document.write(source);document.close();
+      }catch(error){
+        document.body.innerHTML='<pre id="worker-error"></pre>';
+        document.getElementById('worker-error').textContent=error.stack||error.message||String(error);
+      }
+    }
+    if(query.get('worker')){bootWorker();return;}
+
+    /* ═══ PARENT MODE ═══ */
+    var runButton=document.getElementById('run'),statusEl=document.getElementById('status');
+    var summaryEl=document.getElementById('summary'),resultsBody=document.getElementById('results');
+    var autoResult=document.getElementById('auto-result'),initDiag=document.getElementById('init-diag');
+    var frames=[],results=[],caseKeys={};
+    var CASES=[
+      {key:'INIT',name:'INIT: workers, helpers, runtime, IDB, snapshot y fixture'},
+      {key:'CREDIT_ALLOWED',name:'Crédito permitido: evaluación y venta a crédito atómicas'},
+      {key:'CREDIT_NOT_ELIGIBLE',name:'Crédito rechazado por no elegible'},
+      {key:'CLIENT_MISSING',name:'Cliente ausente o inexistente en crédito y efectivo'},
+      {key:'INSUFFICIENT_LINE',name:'Línea de crédito insuficiente tras deuda activa'},
+      {key:'ACTIVE_DEBT',name:'Deuda activa consume la línea disponible'},
+      {key:'CASH_PAYMENT',name:'Pago en efectivo con vuelto'},
+      {key:'DIGITAL_PAYMENT',name:'Pago digital (yape) con referencia'},
+      {key:'MIXED_PAYMENT',name:'Pago mixto efectivo + digital'},
+      {key:'DUPLICATE_REFERENCE',name:'Referencia digital duplicada rechazada'},
+      {key:'OPERATION_IDEMPOTENCY',name:'Idempotencia por operationId (mismo tab)'},
+      {key:'RETRY_IDEMPOTENCY',name:'Idempotencia entre tabs (retry)'},
+      {key:'CASHIER_ID',name:'Cajero de sesión atribuido a venta y movimiento'},
+      {key:'SESSION_ID',name:'SessionId registrado en el movimiento de caja'},
+      {key:'CASHIER_MISMATCH',name:'Cajero distinto rechazado'},
+      {key:'SESSION_MISMATCH',name:'Sesión distinta rechazada'},
+      {key:'INVALID_REFERENCE',name:'Referencias inválidas y pagos mixtos malformados'},
+      {key:'CASH_CLOSED',name:'Caja cerrada / sin cajero / crédito desactivado'},
+      {key:'PERSISTENCE_FAILURE',name:'Falla de persistencia sin efectos durables'},
+      {key:'ZERO_DUPLICATION',name:'Sin duplicación: conteo exacto de efectos'},
+      {key:'NAMESPACE_ISOLATION',name:'Aislamiento de namespace y limpieza'},
+      {key:'V9_UNTOUCHED',name:'Datos reales V9/V10 intactos'}
+    ];
+
+    function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+    function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+    function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+    function line(productId,qty,price,name){return{productId:productId,qty:qty,price:price,name:name,boxUnits:1};}
+    function addCase(key,passed,detail){
+      if(caseKeys[key])throw new Error('Caso duplicado: '+key);var definition=CASES.find(function(item){return item.key===key;});if(!definition)throw new Error('Caso desconocido: '+key);caseKeys[key]=true;var name=definition.name;
+      results.push({id:results.length+1,name:name,passed:!!passed,detail:clone(detail)});
+      var row=document.createElement('tr'),values=[String(results.length),name,passed?'PASS':'FAIL',JSON.stringify(detail,null,2)];
+      values.forEach(function(value,index){
+        var cell=document.createElement('td');
+        if(index===2)cell.className=passed?'pass':'failure';
+        var pre=document.createElement('pre');pre.textContent=value;cell.appendChild(pre);row.appendChild(cell);
+      });
+      resultsBody.appendChild(row);
+    }
+    function fillMissingCases(reason){CASES.forEach(function(item){if(!caseKeys[item.key])addCase(item.key,false,{notExecuted:true,reason:reason});});}
+    function stats(){var p=results.filter(function(r){return r.passed;}).length;return{pass:p,fail:results.length-p,total:results.length};}
+
+    async function createContext(tabId,runId){
+      var frame=document.createElement('iframe');
+      frame.src='v10-credits-payments-engine.html?worker='+encodeURIComponent(tabId)+'&runId='+encodeURIComponent(runId)+'&v='+encodeURIComponent(HARNESS_VERSION)+'&ts='+Date.now();
+      document.body.appendChild(frame);frames.push(frame);
+      for(var attempt=0;attempt<450;attempt++){
+        try{
+          if(frame.contentWindow&&frame.contentWindow.__saleBridge){
+            var state=frame.contentWindow.__saleBridge.state();
+            if(state.error)throw new Error('Worker '+tabId+': '+state.error);
+            if(state.ready)return{frame:frame,bridge:frame.contentWindow.__saleBridge,tabId:tabId,state:state};
+          }
+          var err=frame.contentDocument&&frame.contentDocument.getElementById('worker-error');
+          if(err)throw new Error(err.textContent);
+        }catch(problem){if(problem&&problem.message)throw problem;}
+        await wait(100);
+      }
+      throw new Error('TIMEOUT: el worker '+tabId+' no alcanzó READY en 45s');
+    }
+    async function destroyContext(ctx){
+      try{await withTimeout(ctx.bridge.closeAll(),5000,'cerrar worker '+ctx.tabId);}catch(e){}
+      var i=frames.indexOf(ctx.frame);if(i>=0)frames.splice(i,1);
+      ctx.frame.src='about:blank';ctx.frame.remove();await wait(150);
+    }
+    function removePrefixed(prefix){
+      [localStorage,sessionStorage].forEach(function(store){
+        var found=[];for(var i=0;i<store.length;i++){var k=store.key(i);if(k&&k.indexOf(prefix)===0)found.push(k);}
+        found.forEach(function(k){store.removeItem(k);});
+      });
+    }
+    function deleteDatabase(name){
+      return new Promise(function(resolve){
+        var done=false,finish=function(v){if(done)return;done=true;resolve(v);};
+        try{
+          var req=indexedDB.deleteDatabase(name);
+          req.onsuccess=function(){finish({ok:true});};
+          req.onerror=function(){finish({ok:false,error:req.error&&req.error.message});};
+          req.onblocked=function(){finish({ok:false,blocked:true});};
+          setTimeout(function(){finish({ok:false,timeout:true});},3000);
+        }catch(e){finish({ok:false,error:e.message});}
+      });
+    }
+    async function realStorageState(){
+      return{
+        snapshotV9:localStorage.getItem('na_snapshot_v9'),
+        snapshotV10:localStorage.getItem('na_snapshot_v10'),
+        signalV10:localStorage.getItem('na_snapshot_v10_signal'),
+        database:await withTimeout(databaseInfo('NuevoAmanecerPOS'),5000,'consultar DB real')
+      };
+    }
+    function sameRealState(a,b){return a.snapshotV9===b.snapshotV9&&a.snapshotV10===b.snapshotV10&&a.signalV10===b.signalV10&&JSON.stringify(a.database)===JSON.stringify(b.database);}
+    async function databaseInfo(name){if(typeof indexedDB.databases!=='function')return{supported:false,name:name};var databases=await indexedDB.databases(),match=databases.find(function(item){return item.name===name;});return{supported:true,name:name,exists:!!match,version:match&&match.version};}
+    function physicalKeys(prefix){var out=[];[localStorage,sessionStorage].forEach(function(store){for(var i=0;i<store.length;i++){var key=store.key(i);if(key&&key.indexOf(prefix)===0)out.push(key);}});return out.sort();}
+    async function cleanupStaleCpTests(){var removed=[];removePrefixed('__NA_V10_CP_TEST__');removePrefixed('__NA_V10_CP__');if(typeof indexedDB.databases==='function'){var databases=await withTimeout(indexedDB.databases(),5000,'listar namespaces de prueba'),targets=databases.filter(function(item){return item.name&&item.name.indexOf('__NA_V10_CP_TEST_DB__')===0;});for(var i=0;i<targets.length;i++)removed.push({name:targets[i].name,result:await deleteDatabase(targets[i].name)});}return removed;}
+
+    function buildFixture(today,sessionId,overrides){
+      overrides=overrides||{};
+      var f={
+        appConfig:{creditPolicy:{enabled:true,minPurchases:1000,minProfit:400,initialLine:5,punctualRate:10,lateRate:5}},
+        ui:{},locks:{},security:{},cart:[],draft:null,gastos:[],
+        productos:[
+          {id:'PX',name:'Producto X',sku:'P-X',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:60,precio:100,stock:100,stockMin:1,unidad:'unidad',controlInventario:true},
+          {id:'PY',name:'Producto Y',sku:'P-Y',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:8,precio:20,stock:50,stockMin:1,unidad:'unidad',controlInventario:true},
+          {id:'PZ',name:'Producto Z',sku:'P-Z',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:2,precio:5,stock:100,stockMin:1,unidad:'unidad',controlInventario:true},
+          {id:'PW',name:'Producto W',sku:'P-W',barcode:'',cat:'abarrotes',icon:'📦',imagen:null,costo:5,precio:12,stock:100,stockMin:1,unidad:'unidad',controlInventario:110}
+        ],
+        ventas:[
+          {id:'V-900001',fecha:today,hora:'08:00',hora24:'08:00:00',timestamp:'2026-01-02T08:00:00.000Z',cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',total:500,subtotal:500,metodo:'efectivo',metodoPago:'efectivo',estado:'completada',anulada:false,clienteId:'CLI-A',clienteNombre:'Cliente A',paymentRef:'',recibido:500,vuelto:0,items:[{productoId:'PX',id:'PX',precio:100,precioUnitario:100,costo:60,qty:5,cantidad:5,unitsPerQty:1,subtotal:500}]},
+          {id:'V-900002',fecha:today,hora:'08:00',hora24:'08:00:00',timestamp:'2026-01-03T08:00:00.000Z',cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',total:500,subtotal:500,metodo:'efectivo',metodoPago:'efectivo',estado:'completada',anulada:false,clienteId:'CLI-A',clienteNombre:'Cliente A',paymentRef:'',recibido:500,vuelto:0,items:[{productoId:'PX',id:'PX',precio:100,precioUnitario:100,costo:60,qty:5,cantidad:5,unitsPerQty:1,subtotal:500}]},
+          {id:'V-900003',fecha:today,hora:'08:00',hora24:'08:00:00',timestamp:'2026-01-04T08:00:00.000Z',cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',total:500,subtotal:500,metodo:'efectivo',metodoPago:'efectivo',estado:'completada',anulada:false,clienteId:'CLI-P',clienteNombre:'Cliente P',paymentRef:'',recibido:500,vuelto:0,items:[{productoId:'PX',id:'PX',precio:100,precioUnitario:100,costo:60,qty:5,cantidad:5,unitsPerQty:1,subtotal:500}]},
+          {id:'V-900004',fecha:today,hora:'08:00',hora24:'08:00:00',timestamp:'2026-01-05T08:00:00.000Z',cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',total:500,subtotal:500,metodo:'efectivo',metodoPago:'efectivo',estado:'completada',anulada:false,clienteId:'CLI-P',clienteNombre:'Cliente P',paymentRef:'',recibido:500,vuelto:0,items:[{productoId:'PX',id:'PX',precio:100,precioUnitario:100,costo:60,qty:5,cantidad:5,unitsPerQty:1,subtotal:500}]}
+        ],
+        clientes:[
+          {id:'CLI-A',nombre:'Cliente A',dni:'90000001',tel:'',dir:'',totalCompras:0,color:0},
+          {id:'CLI-B',nombre:'Cliente B',dni:'90000002',tel:'',dir:'',totalCompras:0,color:1,lineaCreditoManualActiva:true,lineaCreditoManual:50,lineaCreditoManualMotivo:'Fixture: linea manual',lineaCreditoManualAt:'2026-01-01T00:00:00.000Z',lineaCreditoManualPor:'Test'},
+          {id:'CLI-C',nombre:'Cliente C',dni:'90000003',tel:'',dir:'',totalCompras:0,color:2},
+          {id:'CLI-P',nombre:'Cliente P',dni:'90000004',tel:'',dir:'',totalCompras:0,color:3}
+        ],
+        creditos:[
+          {id:'CR-B1',cliId:'CLI-B',clienteId:'CLI-B',clienteNombre:'Cliente B',tipo:'concepto',desc:'Deuda activa fixture',monto:30,pagado:0,saldo:30,vence:'2099-12-31',status:'vigente',fecha:today,timestamp:'2026-01-01T00:00:00.000Z',ventaId:null,anulado:false,pagos:[],items:[]},
+          {id:'CR-P1',cliId:'CLI-P',clienteId:'CLI-P',clienteNombre:'Cliente P',tipo:'concepto',desc:'Credito pagado puntual',monto:10,pagado:10,saldo:0,vence:'2026-01-10',status:'cancelado',fecha:'2026-01-01',timestamp:'2026-01-01T00:00:00.000Z',ventaId:null,anulado:false,pagos:[{pagoId:'PG-P1',monto:10,montoPagado:10,timestamp:'2026-01-05T12:00:00.000Z',fecha:'2026-01-05',hora24:'12:00:00'}],items:[]}
+        ],
+        cajEstado:{abierta:true,cerrada:false,fondo:100,cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',hora:'08:00',hora24:'08:00:00',fechaApertura:today,timestampApertura:'2026-01-01T00:00:00.000Z',sessionId:sessionId,contado:null,esperado:null,diferencia:null,horaCierre:null,horaCierre24:null},
+        cajMovs:[]
+      };
+      if(overrides.appConfig)f.appConfig=overrides.appConfig;
+      if(overrides.cajEstado)f.cajEstado=overrides.cajEstado;
+      return f;
+    }
+
+    async function run(){
+      runButton.disabled=true;results=[];caseKeys={};resultsBody.innerHTML='';
+      summaryEl.className='banner';summaryEl.textContent='EJECUTANDO';
+      autoResult.textContent='{"status":"RUNNING"}';
+      var runId=Date.now().toString(36)+'-'+crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+      var runId2=runId+'-closed',runId3=runId+'-nocashier',runId4=runId+'-nocredit';
+      var testDbName='__NA_V10_CP_TEST_DB__'+runId+'__NuevoAmanecerPOS';
+      var dbClosed='__NA_V10_CP_TEST_DB__'+runId2+'__NuevoAmanecerPOS';
+      var dbNoCashier='__NA_V10_CP_TEST_DB__'+runId3+'__NuevoAmanecerPOS';
+      var dbNoCredit='__NA_V10_CP_TEST_DB__'+runId4+'__NuevoAmanecerPOS';
+      var report={version:HARNESS_VERSION,runId:runId,testDb:testDbName,status:'ERROR'};
+      var staleCleanup=await cleanupStaleCpTests(),realBefore=await realStorageState();
+      var ctxA=null,ctxB=null,ctxC=null,ctxD=null,ctxE=null;
+      var namespaceClean=false,realDataUntouched=false;
+      report.staleTestCleanup=staleCleanup;
+
+      try{
+        statusEl.textContent='[1] creando contextos A/B';
+        ctxA=await createContext('A',runId);
+        ctxB=await createContext('B',runId);
+        statusEl.textContent='[2] workers A/B cargados';
+        var probeA=await ctxA.bridge.probe(),probeB=await ctxB.bridge.probe();
+        initDiag.textContent=JSON.stringify({A:probeA,B:probeB},null,2);
+        var helpersOk=probeA.helpers.buildSaleIntent==='function'&&probeA.helpers.revalidateSale==='function'&&probeA.helpers.applySale==='function'&&probeA.helpers.confirmSaleIntent==='function'&&probeA.helpers.runCriticalOperation==='function'&&probeB.helpers.buildSaleIntent==='function'&&probeB.helpers.revalidateSale==='function'&&probeB.helpers.applySale==='function'&&probeB.helpers.confirmSaleIntent==='function'&&probeB.helpers.runCriticalOperation==='function';
+        var stateA=await ctxA.bridge.state(),stateB=await ctxB.bridge.state();
+        var runtimeOk=stateA.runtimeConfigured&&stateB.runtimeConfigured;
+        var tabA=await ctxA.bridge.tabId(),tabB=await ctxB.bridge.tabId();
+        var isoA=probeA.isolation,isoB=probeB.isolation;
+        if(!helpersOk||!runtimeOk||!stateA.idbOpened||!stateB.idbOpened)throw new Error('INIT falló antes de crear el snapshot');
+        var today=new Date().toISOString().slice(0,10),sessionId=Date.now();
+        var fixture=buildFixture(today,sessionId);
+        var init=await withTimeout(ctxA.bridge.createInitial(fixture),10000,'crear snapshot inicial');
+        if(init.status!=='SUCCESS')throw new Error('createInitial: '+init.status);
+        var base=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer snapshot A'),baseB=await withTimeout(ctxB.bridge.snapshotSummary(),5000,'leer snapshot B');
+        var initOk=stateA.ready&&stateB.ready&&helpersOk&&runtimeOk&&stateA.idbOpened&&stateB.idbOpened&&stateA.dbVersion===2&&stateB.dbVersion===2&&stateA.snapshotAccessible&&stateB.snapshotAccessible&&location.origin===probeA.origin&&probeA.origin===probeB.origin&&tabA!==tabB&&isoA.dbName===isoB.dbName&&isoA.dbName===testDbName&&probeA.webLocks&&probeB.webLocks&&base&&baseB&&base.commitId===baseB.commitId&&base.clientes.length===4&&base.creditos.length===2;
+        addCase('INIT',initOk,{readyA:stateA.ready,readyB:stateB.ready,originParent:location.origin,originA:probeA.origin,originB:probeB.origin,helpersA:probeA.helpers,helpersB:probeB.helpers,runtimeA:stateA.runtimeConfigured,runtimeB:stateB.runtimeConfigured,idbA:{opened:stateA.idbOpened,version:stateA.dbVersion},idbB:{opened:stateB.idbOpened,version:stateB.dbVersion},tabA:tabA,tabB:tabB,dbName:isoA.dbName,mismaDb:isoA.dbName===isoB.dbName,webLocksA:probeA.webLocks,webLocksB:probeB.webLocks,snapshotA:{revision:base.revision,commitId:base.commitId,clientes:base.clientes.length,creditos:base.creditos.length},snapshotB:{revision:baseB.revision,commitId:baseB.commitId}});
+        if(!initOk)throw new Error('INIT no cumplió todas las precondiciones');
+        statusEl.textContent='[3] ejecutando pruebas';
+
+        /* ── CASO CREDIT_ALLOWED ── */
+        var eval2=await withTimeout(ctxA.bridge.evaluateCredit('CLI-A'),5000,'evaluar CLI-A');
+        var intent2={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'credito',clientId:'CLI-A',creditDue:'2099-12-31'};
+        var r2=await withTimeout(ctxA.bridge.confirmSale(intent2),15000,'venta a crédito CLI-A');
+        var after2=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer crédito permitido');
+        var venta2=after2.ventas.find(function(v){return v.creditId;});
+        var credito2=after2.creditos.find(function(cr){return cr.id===venta2.creditId;});
+        var cajMov2=after2.cajMovs.find(function(m){return m.ventaId===venta2.id;});
+        var pz2=after2.productos.find(function(p){return p.id==='PZ';}).stock;
+        var cliA2=after2.clientes.find(function(c){return c.id==='CLI-A';});
+        var ok2=eval2.eligible===true&&eval2.assignedLine===5&&eval2.available===5&&eval2.realizedProfit===400&&eval2.purchases===1000&&eval2.criterio==='compras_y_ganancia'&&eval2.score===71&&eval2.history.debt===0&&eval2.history.behavior==='sin_historial'&&r2.status==='SUCCESS'&&venta2.estado==='credito'&&!!credito2&&credito2.monto===5&&credito2.saldo===5&&credito2.lineaCreditoAsignada===5&&credito2.lineaCreditoDisponibleAntes===5&&credito2.gananciaClienteAlCrear===400&&credito2.deudaClienteAntes===0&&credito2.scoreCreditoAlCrear===71&&credito2.fuenteLineaCredito==='automatica'&&credito2.criterioCredito==='compras_y_ganancia'&&credito2.excepcionManualCredito===false&&credito2.cajeroId==='t1'&&cajMov2.metodo==='credito'&&cajMov2.efectivo===0&&!!cajMov2.ventaId&&pz2===99&&cliA2.totalCompras===5&&venta2.cajeroId==='t1'&&venta2.cajeroId!==tabA;
+        addCase('CREDIT_ALLOWED',ok2,{evaluacion:{eligible:eval2.eligible,assignedLine:eval2.assignedLine,available:eval2.available,realizedProfit:eval2.realizedProfit,purchases:eval2.purchases,criterio:eval2.criterio,score:eval2.score,historyDebt:eval2.history.debt},resultado:r2.status,venta:{id:venta2.id,estado:venta2.estado,creditId:venta2.creditId,cajeroId:venta2.cajeroId},credito:credito2,cajMov:cajMov2,stockPZ:pz2,totalComprasCLIA:cliA2.totalCompras});
+
+        /* ── CASO CREDIT_NOT_ELIGIBLE ── */
+        var before3=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base no elegible');
+        var intent3={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'credito',clientId:'CLI-C',creditDue:'2099-12-31'};
+        var r3=await withTimeout(ctxA.bridge.confirmSale(intent3),15000,'crédito no elegible');
+        var after3=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer no elegible');
+        var journal3=await withTimeout(ctxA.bridge.operation(intent3.operationId),5000,'journal no elegible');
+        var ok3=r3.status==='CONFLICT'&&r3.reason==='CREDITO_NO_ELEGIBLE'&&journal3&&journal3.status==='CONFLICT'&&journal3.reason==='CREDITO_NO_ELEGIBLE'&&JSON.stringify(before3)===JSON.stringify(after3);
+        addCase('CREDIT_NOT_ELIGIBLE',ok3,{resultado:r3.status,razon:r3.reason,journal:{status:journal3&&journal3.status,reason:journal3&&journal3.reason},snapshotIgual:JSON.stringify(before3)===JSON.stringify(after3)});
+
+        /* ── CASO CLIENT_MISSING ── */
+        var before4=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base cliente faltante');
+        var r4a=await withTimeout(ctxA.bridge.confirmSale({operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'credito',clientId:'CLI-Z',creditDue:'2099-12-31'}),15000,'crédito cliente inexistente');
+        var r4b=await withTimeout(ctxA.bridge.confirmSale({operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'credito',creditDue:'2099-12-31'}),15000,'crédito sin cliente');
+        var r4c=await withTimeout(ctxA.bridge.confirmSale({operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo',clientId:'CLI-Z'}),15000,'efectivo cliente inexistente');
+        var after4=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer cliente faltante');
+        var ok4=r4a.status==='CONFLICT'&&r4a.reason==='CLIENTE_NO_EXISTE'&&r4b.status==='CONFLICT'&&r4b.reason==='CREDITO_CLIENTE_AUSENTE'&&r4c.status==='CONFLICT'&&r4c.reason==='CLIENTE_NO_EXISTE'&&JSON.stringify(before4)===JSON.stringify(after4);
+        addCase('CLIENT_MISSING',ok4,{a:{status:r4a.status,reason:r4a.reason},b:{status:r4b.status,reason:r4b.reason},c:{status:r4c.status,reason:r4c.reason},snapshotIgual:JSON.stringify(before4)===JSON.stringify(after4)});
+
+        /* ── CASO INSUFFICIENT_LINE ── */
+        var before5=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base línea insuficiente');
+        var intent5={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',2,5,'Producto Z')],paymentMethod:'credito',clientId:'CLI-A',creditDue:'2099-12-31'};
+        var rv5=await withTimeout(ctxA.bridge.revalidate(intent5),5000,'revalidar línea insuficiente');
+        var r5=await withTimeout(ctxA.bridge.confirmSale(intent5),15000,'crédito línea insuficiente');
+        var after5=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer línea insuficiente');
+        var ok5=r5.status==='CONFLICT'&&r5.reason==='LINEA_CREDITO_INSUFICIENTE'&&rv5&&rv5.reason==='LINEA_CREDITO_INSUFICIENTE'&&rv5.disponible===0&&rv5.requerido===10&&JSON.stringify(before5)===JSON.stringify(after5);
+        addCase('INSUFFICIENT_LINE',ok5,{resultado:r5.status,razon:r5.reason,revalidacion:rv5,snapshotIgual:JSON.stringify(before5)===JSON.stringify(after5)});
+
+        /* ── CASO ACTIVE_DEBT ── */
+        var eval6=await withTimeout(ctxA.bridge.evaluateCredit('CLI-A'),5000,'re-evaluar CLI-A');
+        var intent6={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'credito',clientId:'CLI-A',creditDue:'2099-12-31'};
+        var rv6=await withTimeout(ctxA.bridge.revalidate(intent6),5000,'revalidar deuda activa');
+        var r6=await withTimeout(ctxA.bridge.confirmSale(intent6),15000,'crédito deuda activa');
+        var ok6=eval6.eligible===true&&eval6.available===0&&eval6.history.debt===5&&r6.status==='CONFLICT'&&r6.reason==='LINEA_CREDITO_INSUFICIENTE'&&rv6&&rv6.disponible===0;
+        addCase('ACTIVE_DEBT',ok6,{evaluacion:{eligible:eval6.eligible,available:eval6.available,debt:eval6.history.debt},resultado:r6.status,razon:r6.reason,revalidacion:rv6});
+
+        /* ── CASO CASH_PAYMENT ── */
+        var intent7={operationId:await ctxB.bridge.newOperationId(),items:[line('PY',1,20,'Producto Y')],paymentMethod:'efectivo',received:25};
+        var r7=await withTimeout(ctxB.bridge.confirmSale(intent7),15000,'venta efectivo con vuelto');
+        var after7=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer efectivo');
+        var venta7=after7.ventas.find(function(v){return v.operation===intent7.operationId;});
+        var cajMov7=after7.cajMovs.find(function(m){return m.ventaId===venta7.id;});
+        var ok7=r7.status==='SUCCESS'&&venta7.metodo==='efectivo'&&venta7.paymentRef===''&&venta7.recibido===25&&venta7.vuelto===5&&venta7.cajeroId==='t1'&&cajMov7.efectivo===20&&cajMov7.monto===20&&cajMov7.referencia==='';
+        addCase('CASH_PAYMENT',ok7,{resultado:r7.status,venta:{id:venta7.id,metodo:venta7.metodo,paymentRef:venta7.paymentRef,recibido:venta7.recibido,vuelto:venta7.vuelto,cajeroId:venta7.cajeroId},cajMov:{efectivo:cajMov7.efectivo,monto:cajMov7.monto,referencia:cajMov7.referencia}});
+
+        /* ── CASO DIGITAL_PAYMENT ── */
+        var intent8={operationId:await ctxA.bridge.newOperationId(),items:[line('PY',1,20,'Producto Y')],paymentMethod:'yape',paymentRef:'YAPE-0001'};
+        var r8=await withTimeout(ctxA.bridge.confirmSale(intent8),15000,'venta yape');
+        var after8=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer yape');
+        var venta8=after8.ventas.find(function(v){return v.operation===intent8.operationId;});
+        var cajMov8=after8.cajMovs.find(function(m){return m.ventaId===venta8.id;});
+        var ok8=r8.status==='SUCCESS'&&venta8.paymentRef==='YAPE-0001'&&cajMov8.efectivo===0&&cajMov8.referencia==='YAPE-0001'&&cajMov8.metodo==='yape';
+        addCase('DIGITAL_PAYMENT',ok8,{resultado:r8.status,ventaPaymentRef:venta8.paymentRef,cajMov:{efectivo:cajMov8.efectivo,referencia:cajMov8.referencia,metodo:cajMov8.metodo}});
+
+        /* ── CASO MIXED_PAYMENT ── */
+        var intent9={operationId:await ctxB.bridge.newOperationId(),items:[line('PY',1,20,'Producto Y')],paymentMethod:'mixto',mixedData:{cash:8,digital:12,digitalMethod:'yape'},paymentRef:'MIX-0001'};
+        var r9=await withTimeout(ctxB.bridge.confirmSale(intent9),15000,'venta mixta');
+        var after9=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer mixta');
+        var venta9=after9.ventas.find(function(v){return v.operation===intent9.operationId;});
+        var cajMov9=after9.cajMovs.find(function(m){return m.ventaId===venta9.id;});
+        var ok9=r9.status==='SUCCESS'&&venta9.paymentBreakdown&&venta9.paymentBreakdown.efectivo===8&&venta9.paymentBreakdown.digital===12&&venta9.paymentBreakdown.digitalMethod==='yape'&&venta9.paymentBreakdown.reference==='MIX-0001'&&venta9.recibido===8&&cajMov9.efectivo===8&&cajMov9.metodo==='mixto'&&cajMov9.referencia==='MIX-0001'&&cajMov9.detallePago&&cajMov9.detallePago.efectivo===8&&cajMov9.detallePago.digital===12;
+        addCase('MIXED_PAYMENT',ok9,{resultado:r9.status,ventaBreakdown:venta9.paymentBreakdown,ventaRecibido:venta9.recibido,cajMov:{efectivo:cajMov9.efectivo,metodo:cajMov9.metodo,referencia:cajMov9.referencia,detallePago:cajMov9.detallePago}});
+
+        /* ── CASO DUPLICATE_REFERENCE ── */
+        var before10=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base referencia duplicada');
+        var intent10={operationId:await ctxA.bridge.newOperationId(),items:[line('PY',1,20,'Producto Y')],paymentMethod:'yape',paymentRef:'YAPE-0001'};
+        var r10=await withTimeout(ctxA.bridge.confirmSale(intent10),15000,'referencia duplicada');
+        var after10=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer referencia duplicada');
+        var ok10=r10.status==='CONFLICT'&&r10.reason==='REFERENCIA_DUPLICADA'&&after10.ventas.length===before10.ventas.length;
+        addCase('DUPLICATE_REFERENCE',ok10,{resultado:r10.status,razon:r10.reason,ventasAntes:before10.ventas.length,ventasDespues:after10.ventas.length});
+
+        /* ── CASO OPERATION_IDEMPOTENCY ── */
+        var before11=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base idempotencia');
+        var op11=await ctxA.bridge.newOperationId();
+        var intent11={operationId:op11,items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo'};
+        var r11a=await withTimeout(ctxA.bridge.confirmSale(intent11),15000,'primera idempotente');
+        var r11b=await withTimeout(ctxA.bridge.confirmSale(intent11),15000,'repetición idempotente');
+        var after11=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer idempotencia');
+        var pz11=after11.productos.find(function(p){return p.id==='PZ';}).stock;
+        var pzBefore11=before11.productos.find(function(p){return p.id==='PZ';}).stock;
+        var ok11=r11a.status==='SUCCESS'&&r11b.status==='ALREADY_COMMITTED'&&after11.ventas.length===before11.ventas.length+1&&after11.cajMovs.length===before11.cajMovs.length+1&&pz11===pzBefore11-1;
+        addCase('OPERATION_IDEMPOTENCY',ok11,{primera:r11a.status,segunda:r11b.status,operationId:op11,ventasDelta:after11.ventas.length-before11.ventas.length,cajMovsDelta:after11.cajMovs.length-before11.cajMovs.length,stockPZAntes:pzBefore11,stockPZDespues:pz11});
+
+        /* ── CASO RETRY_IDEMPOTENCY ── */
+        var before12=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base retry');
+        var r12=await withTimeout(ctxB.bridge.confirmSale(intent11),15000,'retry cross-tab');
+        var after12=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer retry');
+        var journal11=await withTimeout(ctxA.bridge.operation(op11),5000,'journal retry');
+        var ok12=r12.status==='ALREADY_COMMITTED'&&after12.ventas.length===before12.ventas.length&&after12.cajMovs.length===before12.cajMovs.length&&journal11&&journal11.status==='COMMITTED';
+        addCase('RETRY_IDEMPOTENCY',ok12,{resultado:r12.status,journal:{status:journal11&&journal11.status},ventasIgual:after12.ventas.length===before12.ventas.length,cajMovsIgual:after12.cajMovs.length===before12.cajMovs.length});
+
+        /* ── CASO CASHIER_ID ── */
+        var intent13={operationId:await ctxB.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo',cashierId:'t1'};
+        var r13=await withTimeout(ctxB.bridge.confirmSale(intent13),15000,'venta con cashierId');
+        var after13=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer cashier');
+        var venta13=after13.ventas.find(function(v){return v.operation===intent13.operationId;});
+        var cajMov13=after13.cajMovs.find(function(m){return m.ventaId===venta13.id;});
+        var ok13=r13.status==='SUCCESS'&&venta13.cajeroId==='t1'&&cajMov13.cajeroId==='t1'&&venta13.cajeroId!==tabB;
+        addCase('CASHIER_ID',ok13,{resultado:r13.status,ventaCajeroId:venta13.cajeroId,cajMovCajeroId:cajMov13.cajeroId,tabB:tabB});
+
+        /* ── CASO SESSION_ID ── */
+        var intent14={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo',sessionId:String(sessionId)};
+        var r14=await withTimeout(ctxA.bridge.confirmSale(intent14),15000,'venta con sessionId');
+        var after14=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer session');
+        var venta14=after14.ventas.find(function(v){return v.operation===intent14.operationId;});
+        var cajMov14=after14.cajMovs.find(function(m){return m.ventaId===venta14.id;});
+        var ok14=r14.status==='SUCCESS'&&cajMov14.sessionId===String(sessionId);
+        addCase('SESSION_ID',ok14,{resultado:r14.status,cajMovSessionId:cajMov14.sessionId,sessionId:String(sessionId)});
+
+        /* ── CASO CASHIER_MISMATCH ── */
+        var before15=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base cajero distinto');
+        var intent15={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo',cashierId:'t9'};
+        var r15=await withTimeout(ctxA.bridge.confirmSale(intent15),15000,'cajero distinto');
+        var after15=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer cajero distinto');
+        var ok15=r15.status==='CONFLICT'&&r15.reason==='CAJERO_DIFERENTE'&&JSON.stringify(before15)===JSON.stringify(after15);
+        addCase('CASHIER_MISMATCH',ok15,{resultado:r15.status,razon:r15.reason,snapshotIgual:JSON.stringify(before15)===JSON.stringify(after15)});
+
+        /* ── CASO SESSION_MISMATCH ── */
+        var before16=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base sesión distinta');
+        var intent16={operationId:await ctxA.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo',sessionId:'otra-sesion'};
+        var r16=await withTimeout(ctxA.bridge.confirmSale(intent16),15000,'sesión distinta');
+        var after16=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer sesión distinta');
+        var ok16=r16.status==='CONFLICT'&&r16.reason==='SESION_DIFERENTE'&&JSON.stringify(before16)===JSON.stringify(after16);
+        addCase('SESSION_MISMATCH',ok16,{resultado:r16.status,razon:r16.reason,snapshotIgual:JSON.stringify(before16)===JSON.stringify(after16)});
+
+        /* ── CASO INVALID_REFERENCE ── */
+        var before17=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base referencias inválidas');
+        var intents17=[
+          {paymentMethod:'yape',paymentRef:'ABC'},
+          {paymentMethod:'mixto',paymentRef:'ABC',mixedData:{cash:8,digital:12,digitalMethod:'yape'}},
+          {paymentMethod:'efectivo',paymentRef:'XXXX'},
+          {paymentMethod:'credito',clientId:'CLI-B',creditDue:'2099-12-31',paymentRef:'XXXX'},
+          {paymentMethod:'mixto',paymentRef:'MIX-X1',mixedData:{cash:25,digital:0,digitalMethod:'yape'}},
+          {paymentMethod:'mixto',paymentRef:'MIX-X2',mixedData:{cash:0,digital:20,digitalMethod:'yape'}},
+          {paymentMethod:'mixto',paymentRef:'MIX-X3',mixedData:{cash:15,digital:10,digitalMethod:'yape'}},
+          {paymentMethod:'mixto',paymentRef:'MIX-X4',mixedData:{cash:20,digital:5,digitalMethod:'yape'}}
+        ];
+        var expected17=['REFERENCIA_INVALIDA','REFERENCIA_INVALIDA','REFERENCIA_NO_APLICA','REFERENCIA_NO_APLICA','MIXTO_INVALIDO','MIXTO_INVALIDO','MIXTO_INCONSISTENTE','MIXTO_INVALIDO'];
+        var checks17=[];
+        for(var idx17=0;idx17<intents17.length;idx17++){
+          var spec17=intents17[idx17];
+          var full17={operationId:await ctxA.bridge.newOperationId(),items:[line('PY',1,20,'Producto Y')],paymentMethod:spec17.paymentMethod};
+          if(spec17.paymentRef)full17.paymentRef=spec17.paymentRef;
+          if(spec17.mixedData)full17.mixedData=spec17.mixedData;
+          if(spec17.clientId)full17.clientId=spec17.clientId;
+          if(spec17.creditDue)full17.creditDue=spec17.creditDue;
+          var res17=await withTimeout(ctxA.bridge.confirmSale(full17),15000,'referencia inválida '+idx17);
+          checks17.push({idx:idx17,expected:expected17[idx17],status:res17.status,reason:res17.reason});
+        }
+        var after17=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer referencias inválidas');
+        var ok17=checks17.every(function(c){return c.status==='CONFLICT'&&c.reason===c.expected;})&&JSON.stringify(before17)===JSON.stringify(after17);
+        addCase('INVALID_REFERENCE',ok17,{checks:checks17,snapshotIgual:JSON.stringify(before17)===JSON.stringify(after17)});
+
+        /* ── CASO CASH_CLOSED ── */
+        statusEl.textContent='[4] contextos C/D/E';
+        ctxC=await createContext('C',runId2);
+        var fixtureC=buildFixture(today,sessionId,{cajEstado:{abierta:false,cerrada:true,fondo:100,cajero:'Test',cajeroNombre:'Test',cajeroId:'t1',sessionId:sessionId,horaCierre:'08:00',horaCierre24:'08:00:00',fechaApertura:today,contado:null,esperado:null,diferencia:null}});
+        var initC=await withTimeout(ctxC.bridge.createInitial(fixtureC),10000,'snapshot caja cerrada');
+        ctxD=await createContext('D',runId3);
+        var fixtureD=buildFixture(today,sessionId,{cajEstado:{abierta:true,cerrada:false,fondo:100,cajero:'Test',cajeroNombre:'Test',cajeroId:'',hora:'08:00',hora24:'08:00:00',fechaApertura:today,timestampApertura:'2026-01-01T00:00:00.000Z',sessionId:sessionId,contado:null,esperado:null,diferencia:null,horaCierre:null,horaCierre24:null}});
+        var initD=await withTimeout(ctxD.bridge.createInitial(fixtureD),10000,'snapshot sin cajero');
+        ctxE=await createContext('E',runId4);
+        var fixtureE=buildFixture(today,sessionId,{appConfig:{creditPolicy:{enabled:false,minPurchases:1000,minProfit:400,initialLine:5,punctualRate:10,lateRate:5}}});
+        var initE=await withTimeout(ctxE.bridge.createInitial(fixtureE),10000,'snapshot crédito desactivado');
+        var r18c=await withTimeout(ctxC.bridge.confirmSale({operationId:await ctxC.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo'}),15000,'venta caja cerrada');
+        var r18d=await withTimeout(ctxD.bridge.confirmSale({operationId:await ctxD.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo'}),15000,'venta sin cajero');
+        var r18e=await withTimeout(ctxE.bridge.confirmSale({operationId:await ctxE.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'credito',clientId:'CLI-A',creditDue:'2099-12-31'}),15000,'crédito desactivado');
+        var ok18=initC.status==='SUCCESS'&&initD.status==='SUCCESS'&&initE.status==='SUCCESS'&&r18c.status==='CONFLICT'&&r18c.reason==='CAJA_CERRADA'&&r18d.status==='CONFLICT'&&r18d.reason==='CAJERO_AUSENTE'&&r18e.status==='CONFLICT'&&r18e.reason==='CREDITO_DESACTIVADO';
+        addCase('CASH_CLOSED',ok18,{c:{init:initC.status,status:r18c.status,reason:r18c.reason},d:{init:initD.status,status:r18d.status,reason:r18d.reason},e:{init:initE.status,status:r18e.status,reason:r18e.reason}});
+
+        /* ── CASO PERSISTENCE_FAILURE ── */
+        var before19=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'base falla de persistencia');
+        var op19=await ctxA.bridge.newOperationId();
+        var intent19={operationId:op19,items:[line('PZ',2,5,'Producto Z')],paymentMethod:'efectivo'};
+        await ctxB.bridge.sabotageIdb(true);
+        var r19;
+        try{r19=await withTimeout(ctxB.bridge.confirmSale(intent19),15000,'venta con IDB saboteada');}
+        catch(e19){r19={status:'PERSISTENCE_ERROR',operationId:op19,error:{message:String(e19&&e19.message||e19)}};}
+        await ctxB.bridge.sabotageIdb(false);
+        var afterSabotage19=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer tras falla');
+        var opRec19=await withTimeout(ctxA.bridge.operation(op19),5000,'journal falla de persistencia');
+        var sanity19=await withTimeout(ctxB.bridge.confirmSale({operationId:await ctxB.bridge.newOperationId(),items:[line('PZ',1,5,'Producto Z')],paymentMethod:'efectivo'}),15000,'recuperación post-falla');
+        var afterSanity19=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer recuperación');
+        var ok19=r19.status==='PERSISTENCE_ERROR'&&JSON.stringify(before19)===JSON.stringify(afterSabotage19)&&(opRec19===null||opRec19.status==='NOT_FOUND')&&sanity19.status==='SUCCESS'&&afterSanity19.ventas.length===before19.ventas.length+1;
+        addCase('PERSISTENCE_FAILURE',ok19,{resultado:r19.status,error:r19.error,journalDurable:(opRec19===null?'null':opRec19.status),snapshotIgualTrasFalla:JSON.stringify(before19)===JSON.stringify(afterSabotage19),recuperacion:sanity19.status});
+
+        /* ── CASO ZERO_DUPLICATION ── */
+        var finalSnap=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'snapshot final');
+        var refs20=finalSnap.ventas.map(function(v){return v.paymentRef;}).filter(function(r){return r;});
+        var refsSorted20=refs20.slice().sort();
+        var stock20={PX:finalSnap.productos.find(function(p){return p.id==='PX';}).stock,PY:finalSnap.productos.find(function(p){return p.id==='PY';}).stock,PZ:finalSnap.productos.find(function(p){return p.id==='PZ';}).stock,PW:finalSnap.productos.find(function(p){return p.id==='PW';}).stock};
+        var ok20=finalSnap.ventas.length===12&&finalSnap.cajMovs.length===8&&finalSnap.creditos.length===3&&refs20.length===2&&new Set(refs20).size===2&&JSON.stringify(refsSorted20)===JSON.stringify(['MIX-0001','YAPE-0001'])&&stock20.PX===100&&stock20.PY===47&&stock20.PZ===95&&stock20.PW===100;
+        addCase('ZERO_DUPLICATION',ok20,{ventas:finalSnap.ventas.length,cajMovs:finalSnap.cajMovs.length,creditos:finalSnap.creditos.length,referencias:refsSorted20,referenciasSinRepeticion:new Set(refs20).size===refs20.length,stock:stock20});
+        report.snapshot=finalSnap;
+      }catch(error){
+        report.status='ERROR';report.error={message:error.message||String(error),stack:(error.stack||'').slice(0,800)};
+        fillMissingCases(error.message||String(error));
+      }finally{
+        statusEl.textContent='[5] limpieza';
+        var testPrefixBroad='__NA_V10_CP_TEST__'+runId;
+        var testKeysBeforeCleanup=physicalKeys(testPrefixBroad);
+        var dbsBefore=[testDbName,dbClosed,dbNoCashier,dbNoCredit];
+        var dbsBeforeInfo=await Promise.all(dbsBefore.map(function(n){return databaseInfo(n);}));
+        if(ctxA)await destroyContext(ctxA);
+        if(ctxB)await destroyContext(ctxB);
+        if(ctxC)await destroyContext(ctxC);
+        if(ctxD)await destroyContext(ctxD);
+        if(ctxE)await destroyContext(ctxE);
+        await wait(200);
+        removePrefixed(testPrefixBroad);
+        var cleanupResults=[];
+        for(var dbi=0;dbi<dbsBefore.length;dbi++)cleanupResults.push({name:dbsBefore[dbi],result:await deleteDatabase(dbsBefore[dbi])});
+        var realAfter=await realStorageState();
+        var testKeysAfterCleanup=physicalKeys(testPrefixBroad);
+        var dbsAfterInfo=await Promise.all(dbsBefore.map(function(n){return databaseInfo(n);}));
+        var intacto=sameRealState(realBefore,realAfter);
+        namespaceClean=cleanupResults.every(function(c){return c.result.ok===true;})&&dbsAfterInfo.every(function(d){return d.exists===false;})&&testKeysAfterCleanup.length===0;
+        realDataUntouched=intacto;
+        report.isolation={testDbName:testDbName,testDbNames:dbsBefore,testDbBeforeCleanup:dbsBeforeInfo,testDbAfterCleanup:dbsAfterInfo,testKeysBeforeCleanup:testKeysBeforeCleanup,testKeysAfterCleanup:testKeysAfterCleanup,cleanup:cleanupResults,namespaceClean:namespaceClean,realDatabaseBefore:realBefore.database,realDatabaseAfter:realAfter.database,realDataUntouched:intacto};
+        if(!caseKeys['NAMESPACE_ISOLATION'])addCase('NAMESPACE_ISOLATION',namespaceClean,{namespaceClean:namespaceClean,testKeysAntes:testKeysBeforeCleanup,testKeysDespues:testKeysAfterCleanup,dbLimpieza:cleanupResults,dbsDespues:dbsAfterInfo});
+        if(!caseKeys['V9_UNTOUCHED'])addCase('V9_UNTOUCHED',intacto,{snapshotV9Igual:realBefore.snapshotV9===realAfter.snapshotV9,snapshotV10Igual:realBefore.snapshotV10===realAfter.snapshotV10,signalV10Igual:realBefore.signalV10===realAfter.signalV10,dbRealIgual:JSON.stringify(realBefore.database)===JSON.stringify(realAfter.database)});
+      }
+
+      var s=stats();
+      report.pass=s.pass;report.fail=s.fail;report.total=s.total;
+      report.cases=results.map(function(r){return{n:r.id,name:r.name,status:r.passed?'PASS':'FAIL',detail:clone(r.detail)};});
+      report.status=s.fail===0&&s.total===22&&report.isolation&&report.isolation.namespaceClean&&report.isolation.realDataUntouched?'PASS':'FAIL';
+      summaryEl.className='banner '+(report.status==='PASS'?'pass':'fail');
+      summaryEl.textContent='CREDITOS V10 ENGINE: '+report.status+' — '+s.pass+'/'+s.total;
+      statusEl.textContent='[5] limpieza '+(namespaceClean&&realDataUntouched?'PASS':'FAIL')+' · '+s.pass+' PASS / '+s.fail+' FAIL / '+s.total+' total';
+      autoResult.textContent=JSON.stringify(report,null,2);
+      runButton.disabled=false;
+    }
+
+    runButton.addEventListener('click',function(){
+      run().catch(function(e){
+        statusEl.textContent='ERROR: '+e.message;
+        summaryEl.className='banner fail';summaryEl.textContent='ERROR: '+e.message;
+        runButton.disabled=false;
+      });
+    });
+    if(query.get('auto')==='1')setTimeout(function(){runButton.click();},400);
+  })();
+  </script>
+</body>
+</html>

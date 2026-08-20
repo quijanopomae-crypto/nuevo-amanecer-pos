@@ -6645,9 +6645,100 @@ function _naV10Diagnostics(){return{version:_NA_V10_PHASE_A_VERSION,runtime:_naV
    MOTOR DE VENTA V10 — sin reemplazar confirmarVenta todavía
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Política de crédito canónica V10 (espejo puro de _naEvaluateClientCredit V9, sin DOM ni estado global) ── */
+const _NA_V10_CREDIT_POLICY_DEFAULTS={enabled:true,minPurchases:1000,minProfit:400,initialLine:5,punctualRate:10,lateRate:5};
+const _NA_V10_PAYMENT_METHODS=['efectivo','yape','transferencia','mixto','credito'];
+function _naV10CreditPolicyFrom(data){
+  const raw=(data&&data.appConfig&&data.appConfig.creditPolicy)||{},cfg={..._NA_V10_CREDIT_POLICY_DEFAULTS,...raw};
+  cfg.enabled=cfg.enabled!==false;
+  cfg.minPurchases=Math.max(0,Math.min(100000,_naNumber(cfg.minPurchases,1000)));
+  cfg.minProfit=Math.max(0,Math.min(100000,_naNumber(cfg.minProfit,400)));
+  cfg.initialLine=Math.max(0,Math.min(100000,_naNumber(cfg.initialLine,5)));
+  cfg.punctualRate=Math.max(0,Math.min(100,_naNumber(cfg.punctualRate,10)));
+  cfg.lateRate=Math.max(0,Math.min(100,_naNumber(cfg.lateRate,5)));
+  return cfg;
+}
+function _naV10RoundMoney(value){return Number(Math.max(0,_naNumber(value)).toFixed(2));}
+function _naV10Today(){const ahora=new Date(),local=new Date(ahora.getTime()-(ahora.getTimezoneOffset()*60000));return local.toISOString().split('T')[0];}
+function _naV10DaysUntil(value,today){if(!value)return null;const d=new Date(String(value).slice(0,10)+'T00:00:00');if(Number.isNaN(d.getTime()))return null;const hoy=new Date(String(today)+'T00:00:00');if(Number.isNaN(hoy.getTime()))return null;return Math.round((d-hoy)/86400000);}
+function _naV10ItemsTotal(items){return Number((Array.isArray(items)?items:[]).reduce((a,it)=>a+_naNumber(it?.price??it?.precio)*_naNumber(it?.qty??it?.cantidad),0).toFixed(2));}
+function _naV10SaleTotal(sale){return Number((Array.isArray(sale?.items)?sale.items:[]).reduce((a,i)=>a+_naNumber(i.precio??i.precioUnitario)*_naNumber(i.qty??i.cantidad),0).toFixed(2));}
+function _naV10NormalizedCredit(raw){
+  const cr=_naV10Clone(raw)||{};
+  cr.monto=Math.max(0,_naNumber(cr.monto));cr.pagado=Math.min(cr.monto,Math.max(0,_naNumber(cr.pagado)));
+  if(cr.anulado)cr.status='anulado';
+  else if(cr.pagado>=cr.monto&&cr.monto>0)cr.status='cancelado';
+  else{const d=_naV10DaysUntil(cr.vence,_naV10Today());cr.status=d!==null&&d<0?'vencido':'vigente';}
+  return cr;
+}
+function _naV10CreditOutstanding(cr){return Math.max(0,Number((_naNumber(cr?.monto)-_naNumber(cr?.pagado)).toFixed(2)));}
+function _naV10SaleCreditRecord(sale,creditos){const list=Array.isArray(creditos)?creditos:[];return list.find(cr=>String(cr.id)===String(sale?.creditId))||list.find(cr=>String(cr.ventaId)===String(sale?.id))||null;}
+function _naV10SaleItemProfit(item,productos){
+  const qty=Math.max(0,_naNumber(item?.qty??item?.cantidad)),units=Math.max(1,_naInt(item?.unitsPerQty,1));
+  const revenue=Math.max(0,_naNumber(item?.subtotal,_naNumber(item?.precio??item?.precioUnitario)*qty));
+  let unitCost=Number(item?.costo);
+  if(!Number.isFinite(unitCost)){const prod=(Array.isArray(productos)?productos:[]).find(p=>String(p.id)===String(item?.productoId??item?.id));unitCost=Math.max(0,_naNumber(prod?.costo));}
+  return revenue-Math.max(0,unitCost)*qty*units;
+}
+function _naV10SaleRealizationFactor(sale,creditos){
+  const method=String(sale?.metodo||sale?.metodoPago||'').toLowerCase();
+  if(method!=='credito'&&!sale?.creditId)return 1;
+  const cr=_naV10SaleCreditRecord(sale,creditos);
+  if(!cr)return 0;
+  const amount=Math.max(0,_naNumber(cr.monto));
+  return amount>0?Math.max(0,Math.min(1,_naNumber(cr.pagado)/amount)):0;
+}
+function _naV10CreditCompletionDate(cr){
+  let cumulative=0;const amount=Math.max(0,_naNumber(cr?.monto)),payments=(Array.isArray(cr?.pagos)?cr.pagos:[]).slice().sort((a,b)=>new Date(a.timestamp||`${a.fecha||''}T${a.hora24||a.hora||'00:00:00'}`)-new Date(b.timestamp||`${b.fecha||''}T${b.hora24||b.hora||'00:00:00'}`));
+  for(const pay of payments){cumulative+=Math.max(0,_naNumber(pay.monto??pay.montoPagado));if(cumulative+0.001>=amount){const d=new Date(pay.timestamp||`${pay.fecha||''}T${pay.hora24||pay.hora||'23:59:59'}`);if(Number.isFinite(d.getTime()))return d;}}
+  const fallback=new Date(cr?.updatedAt||'');
+  return Number.isFinite(fallback.getTime())&&_naV10CreditOutstanding(cr)<=.001?fallback:null;
+}
+function _naV10CreditHistoryMetrics(data,clientId){
+  const list=(Array.isArray(data?.creditos)?data.creditos:[]).filter(raw=>String(raw?.cliId??raw?.clienteId)===String(clientId)&&!raw.anulado&&raw.status!=='anulado');
+  let punctual=0,late=0,unknown=0,completed=0,partial=0,overdueActive=0,debt=0;
+  for(const raw of list){
+    const cr=_naV10NormalizedCredit(raw),pending=_naV10CreditOutstanding(cr);debt+=pending;
+    if(pending<=.001){completed++;const completedAt=_naV10CreditCompletionDate(cr),due=cr.vence?new Date(`${String(cr.vence).slice(0,10)}T23:59:59`):null;if(completedAt&&due&&Number.isFinite(due.getTime())){if(completedAt<=due)punctual++;else late++;}else unknown++;}
+    else{if(_naNumber(cr.pagado)>0)partial++;const d=_naV10DaysUntil(cr.vence,_naV10Today());if(d!==null&&d<0){late++;overdueActive++;}}
+  }
+  let behavior='sin_historial';
+  if(punctual||late){if(late===0&&punctual>0)behavior='puntual';else if(late>punctual)behavior='impuntual';else behavior='irregular';}
+  else if(partial>0)behavior='en_proceso';
+  return{total:list.length,punctual,late,unknown,completed,partial,overdueActive,debt:_naV10RoundMoney(debt),behavior};
+}
+function _naV10EvaluateClientCredit(data,clientId){
+  const clientes=Array.isArray(data?.clientes)?data.clientes:[],ventas=Array.isArray(data?.ventas)?data.ventas:[],creditos=Array.isArray(data?.creditos)?data.creditos:[],productos=Array.isArray(data?.productos)?data.productos:[];
+  const client=clientes.find(c=>String(c.id)===String(clientId)),cfg=_naV10CreditPolicyFrom(data);
+  if(!client)return{exists:false,enabled:cfg.enabled,eligible:false,assignedLine:0,available:0};
+  const sales=ventas.filter(v=>!v.anulada&&String(v.clienteId??'')===String(client.id));
+  let purchases=0,grossProfit=0,realizedProfit=0,itemCount=0;
+  for(const sale of sales){const total=Math.max(0,_naNumber(_naV10SaleTotal(sale)));purchases+=total;const profit=(Array.isArray(sale.items)?sale.items:[]).reduce((sum,item)=>sum+_naV10SaleItemProfit(item,productos),0);grossProfit+=profit;realizedProfit+=profit*_naV10SaleRealizationFactor(sale,creditos);itemCount+=(Array.isArray(sale.items)?sale.items:[]).reduce((sum,item)=>sum+Math.max(0,_naNumber(item.qty??item.cantidad)),0);}
+  purchases=_naV10RoundMoney(purchases);grossProfit=_naV10RoundMoney(grossProfit);realizedProfit=_naV10RoundMoney(realizedProfit);
+  const history=_naV10CreditHistoryMetrics(data,client.id),byPurchases=purchases+0.001>=cfg.minPurchases,byProfit=realizedProfit+0.001>=cfg.minProfit,autoEligible=byPurchases||byProfit;
+  let autoLine=0,rate=0;
+  if(autoEligible&&realizedProfit>0){if(history.completed===0&&history.late===0)autoLine=Math.min(cfg.initialLine,realizedProfit);else{rate=history.behavior==='puntual'?cfg.punctualRate:cfg.lateRate;autoLine=realizedProfit*rate/100;const minimum=Math.min(cfg.initialLine,realizedProfit);autoLine=Math.max(minimum,autoLine);autoLine=Math.min(autoLine,realizedProfit);}}
+  autoLine=_naV10RoundMoney(autoLine);
+  const manualActive=client.lineaCreditoManualActiva===true,manualLine=_naV10RoundMoney(client.lineaCreditoManual),assignedLine=manualActive?manualLine:autoLine,eligible=cfg.enabled&&(manualActive?assignedLine>0:autoEligible&&assignedLine>0),available=cfg.enabled?_naV10RoundMoney(Math.max(0,assignedLine-history.debt)):0;
+  let score=0;
+  score+=Math.min(30,cfg.minPurchases>0?purchases/cfg.minPurchases*30:30);
+  score+=Math.min(30,cfg.minProfit>0?realizedProfit/cfg.minProfit*30:30);
+  score+=Math.min(15,sales.length*3);
+  if(history.behavior==='puntual')score+=25;else if(history.behavior==='irregular')score+=12;else if(history.behavior==='en_proceso')score+=8;else if(history.behavior==='sin_historial')score+=5;
+  score=Math.max(0,Math.min(100,Math.round(score)));
+  const criterion=manualActive?'manual':byPurchases&&byProfit?'compras_y_ganancia':byPurchases?'compras':byProfit?'ganancia':'no_cumple',source=manualActive?'manual':'automatica',manualAboveProfit=manualActive&&manualLine>realizedProfit+0.001;
+  return{exists:true,client,cfg,enabled:cfg.enabled,sales,purchases,grossProfit,realizedProfit,transactions:sales.length,itemCount,averageTicket:sales.length?_naV10RoundMoney(purchases/sales.length):0,history,byPurchases,byProfit,autoEligible,eligible,automaticLine:autoLine,manualActive,manualLine,assignedLine:_naV10RoundMoney(assignedLine),available,criterion,source,score,rate,manualAboveProfit};
+}
+function _naV10ResolveSessionCashier(cajEstado){
+  const id=cajEstado&&cajEstado.cajeroId?String(cajEstado.cajeroId):'';
+  if(!id)return{ok:false,reason:'CAJERO_AUSENTE'};
+  return{ok:true,cashierId:id,cashierName:String(cajEstado.cajeroNombre||cajEstado.cajero||''),sessionId:cajEstado.sessionId?String(cajEstado.sessionId):''};
+}
+
 function _naV10BuildSaleIntent(intent){
   const operationId=intent.operationId||_naNewOperationId();
-  return{operationId,items:_naV10Clone(intent.items||[]),paymentMethod:intent.paymentMethod||'efectivo',paymentRef:intent.paymentRef||'',clientId:intent.clientId||null,creditDue:intent.creditDue||null,cashierId:intent.cashierId||null,sessionId:intent.sessionId||null,timestamp:_naV10Now(),_built:true};
+  const mixed=(intent.paymentMethod==='mixto'&&intent.mixedData&&typeof intent.mixedData==='object')?{cash:_naNumber(intent.mixedData.cash),digital:_naNumber(intent.mixedData.digital),digitalMethod:String(intent.mixedData.digitalMethod||'')}:null;
+  return{operationId,items:_naV10Clone(intent.items||[]),paymentMethod:intent.paymentMethod||'efectivo',paymentRef:String(intent.paymentRef||''),clientId:intent.clientId||null,creditDue:intent.creditDue||null,cashierId:intent.cashierId||null,sessionId:intent.sessionId||null,received:intent.received===undefined||intent.received===null?null:Math.max(0,_naNumber(intent.received)),mixedData:mixed,timestamp:_naV10Now(),_built:true};
 }
 
 // Unidades físicas canónicas: qty × unitsPerQty. La propiedad real del intent V10 es boxUnits;
@@ -6657,9 +6748,16 @@ function _naV10ItemPhysicalUnits(item){return Math.max(0,_naNumber(item?.qty,1))
 
 function _naV10RevalidateSale(canonical,intent){
   const d=canonical?.data;if(!d)return{ok:false,reason:'CANONICAL_MISSING'};
-  const productos=d.productos||[],ventas=d.ventas||[],clientes=d.clientes||[],creditos=d.creditos||[],cajEstado=d.cajEstado||{};
+  const productos=d.productos||[],ventas=d.ventas||[],cajEstado=d.cajEstado||{};
   if(!cajEstado.abierta||cajEstado.cerrada)return{ok:false,reason:'CAJA_CERRADA'};
   if(!cajEstado.sessionId)return{ok:false,reason:'CAJA_SIN_SESION'};
+  const identity=_naV10ResolveSessionCashier(cajEstado);
+  if(!identity.ok)return{ok:false,reason:identity.reason};
+  if(intent.cashierId&&String(intent.cashierId)!==identity.cashierId)return{ok:false,reason:'CAJERO_DIFERENTE'};
+  if(intent.sessionId&&String(intent.sessionId)!==identity.sessionId)return{ok:false,reason:'SESION_DIFERENTE'};
+  const metodo=String(intent.paymentMethod||'efectivo');
+  if(_NA_V10_PAYMENT_METHODS.indexOf(metodo)<0)return{ok:false,reason:'METODO_PAGO_INVALIDO',metodo};
+  const total=_naV10ItemsTotal(intent.items);
   const allowNoStock=!!(d.appConfig&&d.appConfig.freeSale&&d.appConfig.freeSale.allowRegisteredNoStock===true);
   const required={};
   for(let i=0;i<intent.items.length;i++){
@@ -6671,49 +6769,71 @@ function _naV10RevalidateSale(canonical,intent){
     const prod=productos.find(p=>String(p.id)===String(productId)),req=required[productId];
     if(req>prod.stock&&!allowNoStock)return{ok:false,reason:'STOCK_INSUFICIENTE',productId:prod.id,disponible:prod.stock,requerido:req};
   }
-  if(intent.paymentRef&&(intent.paymentMethod==='yape'||intent.paymentMethod==='transferencia')){
-    const dupeRef=ventas.some(v=>!v.anulada&&v.paymentRef===intent.paymentRef);
-    if(dupeRef)return{ok:false,reason:'REFERENCIA_DUPLICADA',paymentRef:intent.paymentRef};
+  const ref=String(intent.paymentRef||'').trim();
+  if(metodo==='efectivo'||metodo==='credito'){
+    if(ref)return{ok:false,reason:'REFERENCIA_NO_APLICA',metodo};
+    if(metodo==='efectivo'&&intent.received!==null&&intent.received+0.0001<total)return{ok:false,reason:'EFECTIVO_INSUFICIENTE',recibido:intent.received,requerido:total};
+  }else if(metodo==='mixto'){
+    const mix=intent.mixedData;
+    if(!mix||typeof mix!=='object')return{ok:false,reason:'MIXTO_INVALIDO',detalle:'mixto requiere mixedData con cash, digital y digitalMethod'};
+    if(!(mix.cash>0))return{ok:false,reason:'MIXTO_INVALIDO',detalle:'el componente efectivo debe ser mayor que cero'};
+    if(!(mix.digital>0))return{ok:false,reason:'MIXTO_INVALIDO',detalle:'el componente digital debe ser mayor que cero'};
+    if(mix.cash>=total)return{ok:false,reason:'MIXTO_INVALIDO',detalle:'el componente efectivo debe ser menor al total'};
+    if(['yape','transferencia'].indexOf(mix.digitalMethod)<0)return{ok:false,reason:'MIXTO_INVALIDO',detalle:'digitalMethod debe ser yape o transferencia'};
+    if(Math.abs(mix.cash+mix.digital-total)>0.005)return{ok:false,reason:'MIXTO_INCONSISTENTE',efectivo:mix.cash,digital:mix.digital,total};
+    if(ref.length<4)return{ok:false,reason:'REFERENCIA_INVALIDA',paymentRef:intent.paymentRef,longitud:ref.length};
+    if(ventas.some(v=>!v.anulada&&v.paymentRef===ref))return{ok:false,reason:'REFERENCIA_DUPLICADA',paymentRef:ref};
+  }else{
+    if(ref.length<4)return{ok:false,reason:'REFERENCIA_INVALIDA',paymentRef:intent.paymentRef,longitud:ref.length};
+    if(ventas.some(v=>!v.anulada&&v.paymentRef===ref))return{ok:false,reason:'REFERENCIA_DUPLICADA',paymentRef:ref};
   }
   if(intent.clientId){
-    const c=clientes.find(x=>String(x.id)===String(intent.clientId));
+    const c=(d.clientes||[]).find(x=>String(x.id)===String(intent.clientId));
     if(!c)return{ok:false,reason:'CLIENTE_NO_EXISTE',clientId:intent.clientId};
-    if(intent.paymentMethod==='credito'){
-      const cfg=(d.appConfig&&d.appConfig.creditPolicy)?_naV10Clone(d.appConfig.creditPolicy):{enabled:true,minPurchases:0,minProfit:0,initialLine:999999};
-      if(cfg.enabled===false)return{ok:false,reason:'CREDITO_DESACTIVADO'};
-      const existing=creditos.filter(cr=>String(cr.cliId)===String(intent.clientId)&&!cr.anulado&&cr.status!=='cancelado'),debt=existing.reduce((a,cr)=>a+Math.max(0,(cr.monto||0)-(cr.pagado||0)),0),total=cfg.initialLine||999999,available=Math.max(0,total-debt);
-      if(intent.total>available)return{ok:false,reason:'LINEA_CREDITO_INSUFICIENTE',disponible:available,requerido:intent.total};
-    }
   }
-  if(intent.cashierId&&cajEstado.cajeroId&&String(intent.cashierId)!==String(cajEstado.cajeroId))return{ok:false,reason:'CAJERO_DIFERENTE'};
-  if(intent.sessionId&&cajEstado.sessionId&&String(intent.sessionId)!==String(cajEstado.sessionId))return{ok:false,reason:'SESION_DIFERENTE'};
+  if(metodo==='credito'){
+    const cfg=_naV10CreditPolicyFrom(d);
+    if(cfg.enabled===false)return{ok:false,reason:'CREDITO_DESACTIVADO'};
+    if(!intent.clientId)return{ok:false,reason:'CREDITO_CLIENTE_AUSENTE'};
+    if(!intent.creditDue)return{ok:false,reason:'CREDITO_SIN_VENCIMIENTO'};
+    const evaluation=_naV10EvaluateClientCredit(d,intent.clientId);
+    if(!evaluation.exists)return{ok:false,reason:'CLIENTE_NO_EXISTE',clientId:intent.clientId};
+    if(!evaluation.eligible)return{ok:false,reason:'CREDITO_NO_ELEGIBLE',disponible:evaluation.available,linea:evaluation.assignedLine,criterio:evaluation.criterion};
+    if(total>evaluation.available+0.001)return{ok:false,reason:'LINEA_CREDITO_INSUFICIENTE',disponible:evaluation.available,requerido:total};
+  }
   return{ok:true};
 }
 
 function _naV10ApplySale(draft,intent,ctx){
   const d=draft.data||(draft.data={});
   d.productos=d.productos||[];d.ventas=d.ventas||[];d.clientes=d.clientes||[];d.creditos=d.creditos||[];d.cajMovs=d.cajMovs||[];
+  const identity=_naV10ResolveSessionCashier(d.cajEstado||{});
+  if(!identity.ok)throw _naV10Error(identity.reason||'CAJERO_AUSENTE','La sesion de caja no tiene cajero valido para atribuir la venta');
+  const sessionId=identity.sessionId;
   const ids=d.ventas.map(v=>parseInt(String(v.id).replace('V-',''))||0),newId='V-'+String(Math.max(...ids,0)+1).padStart(6,'0'),fecha=d.cajEstado?.fechaApertura||new Date().toISOString().slice(0,10),now=new Date().toISOString(),hora=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}),hora24=new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
   const ventaUid=ctx.operationId+'_sale_'+_naNewUuid().slice(0,12),cashMoveId=ctx.operationId+'_cash_'+_naNewUuid().slice(0,12);
-  const total=intent.items.reduce((a,it)=>a+(it.price||0)*(it.qty||0),0);
+  const total=_naV10ItemsTotal(intent.items);
   const saleItems=intent.items.map(it=>{
     const qty=Math.max(1,it.qty||1),price=Math.max(0,it.price||0),prod=d.productos.find(p=>String(p.id)===String(it.productId));
     return{id:it.productId,productoId:it.productId,sku:prod?.sku||it.sku||'',qty,cantidad:qty,precio:price,precioUnitario:price,subtotal:Number((price*qty).toFixed(2)),name:prod?.name||it.name||'',nombre:prod?.name||it.name||'',icon:prod?.icon||'📦',unidad:'unidad',unitsPerQty:_naV10ItemUnitsPerQty(it),ventaModo:_naV10ItemUnitsPerQty(it)>1?'caja':'unidad',ventaLibre:false,ventaSinStock:false,costo:prod?.costo||0,descuento:0,_precioOriginal:null,incluyeIGV:true,tipoImpuesto:'gravado'};
   });
   const metodo=intent.paymentMethod||'efectivo',estado=metodo==='credito'?'credito':'completada';
+  const paymentBreakdown=metodo==='mixto'&&intent.mixedData?{efectivo:_naNumber(intent.mixedData.cash),digital:_naNumber(intent.mixedData.digital),digitalMethod:String(intent.mixedData.digitalMethod),reference:String(intent.paymentRef||'')}:null;
   let creditId=null;
   if(metodo==='credito'&&intent.clientId){
     creditId=ctx.operationId+'_credit_'+_naNewUuid().slice(0,12);
     const client=d.clientes.find(c=>String(c.id)===String(intent.clientId));
-    d.creditos.push({id:creditId,cliId:intent.clientId,clienteId:intent.clientId,clienteNombre:client?.nombre||'',clienteDni:client?.dni||'',tipo:'venta_credito',desc:'Venta '+newId,monto:total,pagado:0,saldo:total,vence:intent.creditDue||fecha,status:'vigente',fecha,hora,hora24,timestamp:now,ventaId:newId,anulado:false,pagos:[],items:saleItems.map((it,i)=>({itemKey:it.productoId+':'+i,nombre:it.name,cantidad:it.qty,precioUnitario:it.precio,subtotal:it.subtotal,modo:it.ventaModo||'minorista'})),cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||''});
+    const evaluation=_naV10EvaluateClientCredit(d,intent.clientId);
+    d.creditos.push({id:creditId,cliId:intent.clientId,clienteId:intent.clientId,clienteNombre:client?.nombre||'',clienteDni:client?.dni||'',tipo:'venta_credito',desc:'Venta '+newId,monto:total,pagado:0,saldo:total,vence:intent.creditDue||fecha,status:_naV10DaysUntil(intent.creditDue,_naV10Today())<0?'vencido':'vigente',fecha,hora,hora24,timestamp:now,ventaId:newId,anulado:false,pagos:[],items:saleItems.map((it,i)=>({itemKey:it.productoId+':'+i,nombre:it.name,cantidad:it.qty,precioUnitario:it.precio,subtotal:it.subtotal,modo:it.ventaModo||'minorista'})),cajero:identity.cashierName,cajeroNombre:identity.cashierName,cajeroId:identity.cashierId,lineaCreditoAsignada:evaluation.assignedLine,lineaCreditoDisponibleAntes:evaluation.available,gananciaClienteAlCrear:evaluation.realizedProfit,deudaClienteAntes:evaluation.history.debt,scoreCreditoAlCrear:evaluation.score,fuenteLineaCredito:evaluation.source,criterioCredito:evaluation.criterion,excepcionManualCredito:evaluation.manualActive});
   }
   if(intent.clientId){
     const cl=d.clientes.find(c=>String(c.id)===String(intent.clientId));
     if(cl)cl.totalCompras=(cl.totalCompras||0)+total;
   }
-  const paymentBreakdown=intent.mixedData?{efectivo:intent.mixedData.cash,digital:intent.mixedData.digital,digitalMethod:intent.mixedData.digitalMethod,reference:intent.paymentRef}:null;
-  d.ventas.unshift({id:newId,ventaUid,operation:ctx.operationId,fecha,hora,hora24,timestamp:now,cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||'',total,subtotal:total,descuentoTotal:0,metodo,metodoPago:metodo,estado,tipoVenta:'minorista',cantidadLineas:saleItems.length,unidadesFisicas:saleItems.reduce((a,x)=>a+(x.unitsPerQty||1)*x.qty,0),paymentRef:intent.paymentRef||'',paymentBreakdown,recibido:total,vuelto:0,anulada:false,clienteId:intent.clientId||null,clienteNombre:intent.clientId?(d.clientes.find(c=>String(c.id)===String(intent.clientId))?.nombre||''):null,clienteDni:null,creditId,contieneVentaLibre:false,contieneVentaSinStock:false,items:saleItems});
-  d.cajMovs.push({id:cashMoveId,cashMoveId,tipo:'ing',monto:total,efectivo:metodo==='efectivo'?total:0,desc:'Venta POS '+newId,cat:'Venta retail',metodo,referencia:intent.paymentRef||'',hora,hora24,timestamp:now,cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||'',fecha,sessionId:intent.sessionId||'',ventaId:newId});
+  const recibido=metodo==='efectivo'?(intent.received!==null&&intent.received!==undefined?_naNumber(intent.received):total):metodo==='mixto'?paymentBreakdown.efectivo:total;
+  const vuelto=metodo==='efectivo'?Math.max(0,Number((recibido-total).toFixed(2))):0;
+  d.ventas.unshift({id:newId,ventaUid,operation:ctx.operationId,fecha,hora,hora24,timestamp:now,cajero:identity.cashierName,cajeroNombre:identity.cashierName,cajeroId:identity.cashierId,total,subtotal:total,descuentoTotal:0,metodo,metodoPago:metodo,estado,tipoVenta:'minorista',cantidadLineas:saleItems.length,unidadesFisicas:saleItems.reduce((a,x)=>a+(x.unitsPerQty||1)*x.qty,0),paymentRef:String(intent.paymentRef||''),paymentBreakdown,recibido,vuelto,anulada:false,clienteId:intent.clientId||null,clienteNombre:intent.clientId?(d.clientes.find(c=>String(c.id)===String(intent.clientId))?.nombre||''):null,clienteDni:null,creditId,contieneVentaLibre:false,contieneVentaSinStock:false,items:saleItems});
+  d.cajMovs.push({id:cashMoveId,cashMoveId,tipo:'ing',monto:total,efectivo:metodo==='efectivo'?total:metodo==='mixto'?paymentBreakdown.efectivo:0,detallePago:paymentBreakdown,desc:'Venta POS '+newId,cat:metodo==='credito'?'Venta a crédito':metodo==='mixto'?'Venta mixta':'Venta retail',metodo,referencia:String(intent.paymentRef||''),hora,hora24,timestamp:now,cajero:identity.cashierName,cajeroNombre:identity.cashierName,cajeroId:identity.cashierId,fecha,sessionId,ventaId:newId});
   for(let i=0;i<intent.items.length;i++){
     const it=intent.items[i],prod=d.productos.find(p=>String(p.id)===String(it.productId));
     if(prod&&prod.controlInventario!==false)prod.stock=(prod.stock||0)-_naV10ItemPhysicalUnits(it);
