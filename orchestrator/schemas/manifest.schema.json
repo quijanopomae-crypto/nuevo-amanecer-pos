@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "nuevo-amanecer.orchestrator/manifest@1.0.0-rc1",
+  "title": "Orchestrator V1 RC1 strict manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "strict",
+    "metadata",
+    "runtime",
+    "models",
+    "capabilities",
+    "roles",
+    "workflow",
+    "paths",
+    "skills",
+    "policies",
+    "integrity"
+  ],
+  "properties": {
+    "schema": {
+      "const": "nuevo-amanecer.orchestrator/manifest@1.0.0-rc1"
+    },
+    "strict": {
+      "const": true
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "manifest_revision", "environment"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "manifest_revision": {"type": "integer", "minimum": 1},
+        "environment": {"enum": ["synthetic", "shadow"]}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "interface", "version", "skills_source", "forbidden_paths"],
+      "properties": {
+        "engine": {"const": "opencode"},
+        "interface": {"const": "desktop"},
+        "version": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policy", "value"],
+          "properties": {
+            "policy": {"const": "exact"},
+            "value": {"const": "1.18.18"}
+          }
+        },
+        "skills_source": {"const": ".agents/skills"},
+        "forbidden_paths": {
+          "type": "array",
+          "const": [".opencode/skills"]
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["transport", "model_id", "variant"],
+        "properties": {
+          "transport": {"type": "string", "minLength": 1},
+          "model_id": {"type": "string", "minLength": 1},
+          "variant": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind"],
+        "properties": {
+          "kind": {"enum": ["read", "write", "tests", "git"]}
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mode", "model_ref", "capabilities"],
+        "properties": {
+          "mode": {"enum": ["primary", "worker", "reviewer", "external"]},
+          "model_ref": {"type": "string", "minLength": 1},
+          "capabilities": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_role", "allowed_roles"],
+      "properties": {
+        "entry_role": {"type": "string", "minLength": 1},
+        "allowed_roles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemas", "state", "policies", "skills", "agents", "commands",
+        "tools", "tests", "fixtures", "evidence"
+      ],
+      "properties": {
+        "schemas": {"type": "string", "minLength": 1},
+        "state": {"type": "string", "minLength": 1},
+        "policies": {"type": "string", "minLength": 1},
+        "skills": {"const": ".agents/skills"},
+        "agents": {"type": "string", "minLength": 1},
+        "commands": {"type": "string", "minLength": 1},
+        "tools": {"type": "string", "minLength": 1},
+        "tests": {"type": "string", "minLength": 1},
+        "fixtures": {"type": "string", "minLength": 1},
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_source", "required"],
+      "properties": {
+        "canonical_source": {"const": ".agents/skills"},
+        "required": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unknown_properties", "duplicate_ids", "allowed_variables", "allowed_path_roots"],
+      "properties": {
+        "unknown_properties": {"const": "reject"},
+        "duplicate_ids": {"const": "reject"},
+        "allowed_variables": {
+          "type": "array",
+          "const": ["MANIFEST_DIR", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "PWD"]
+        },
+        "allowed_path_roots": {
+          "type": "array",
+          "const": ["orchestrator", ".agents", ".opencode", "tests", "fixtures", "evidence"]
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "canonicalization", "manifest_sha256"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "canonicalization": {"const": "rfc8785-jcs-subset-v1"},
+        "manifest_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

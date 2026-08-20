@@ -1,0 +1,115 @@
+schema: nuevo-amanecer.orchestrator/manifest@1.0.0-rc1
+strict: true
+metadata:
+  name: nuevo-amanecer-shadow
+  manifest_revision: 2
+  environment: shadow
+runtime:
+  engine: opencode
+  interface: desktop
+  version:
+    policy: exact
+    value: "1.18.18"
+  skills_source: .agents/skills
+  forbidden_paths:
+    - .opencode/skills
+models:
+  primary-implementation:
+    transport: opencode
+    model_id: deepseek/deepseek-v4-pro
+    variant: primary
+  conditional-second-engineer:
+    transport: opencode
+    model_id: zai-coding-plan/glm-5.3
+    variant: reasoning=max
+  external-forensic:
+    transport: manual-handoff
+    model_id: codex-app
+    variant: high-critical-release
+capabilities:
+  project-read:
+    kind: read
+  infra-write:
+    kind: write
+  test-execute:
+    kind: tests
+  git-inspect:
+    kind: git
+roles:
+  planner:
+    mode: primary
+    model_ref: primary-implementation
+    capabilities:
+      - project-read
+      - git-inspect
+  implementer:
+    mode: worker
+    model_ref: primary-implementation
+    capabilities:
+      - project-read
+      - infra-write
+      - git-inspect
+  tester:
+    mode: worker
+    model_ref: primary-implementation
+    capabilities:
+      - project-read
+      - test-execute
+      - git-inspect
+  reviewer:
+    mode: reviewer
+    model_ref: conditional-second-engineer
+    capabilities:
+      - project-read
+      - test-execute
+      - git-inspect
+workflow:
+  entry_role: planner
+  allowed_roles:
+    - planner
+    - implementer
+    - tester
+    - reviewer
+paths:
+  schemas: orchestrator/schemas
+  state: orchestrator/state
+  policies: orchestrator/policies
+  skills: .agents/skills
+  agents: .opencode/agents
+  commands: .opencode/commands
+  tools: .opencode/tools
+  tests: tests/infrastructure
+  fixtures: fixtures/shadow
+  evidence: evidence
+skills:
+  canonical_source: .agents/skills
+  required:
+    - feature-spec
+    - impact-analysis
+    - dependency-map
+    - inventory-integrity
+    - cash-integrity
+    - credits-integrity
+    - cross-module-impact
+    - evidence-pack
+    - release-readiness
+policies:
+  unknown_properties: reject
+  duplicate_ids: reject
+  allowed_variables:
+    - MANIFEST_DIR
+    - USERPROFILE
+    - LOCALAPPDATA
+    - APPDATA
+    - PWD
+  allowed_path_roots:
+    - orchestrator
+    - .agents
+    - .opencode
+    - tests
+    - fixtures
+    - evidence
+integrity:
+  algorithm: sha256
+  canonicalization: rfc8785-jcs-subset-v1
+  manifest_sha256: sha256:1ba3bfbf07d03e4c9ff7b772846edffba5b432c429612308bb29f2bd4d0527bc

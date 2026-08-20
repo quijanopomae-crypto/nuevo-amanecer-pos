@@ -1,0 +1,14 @@
+{
+  "schema": "infra-comparison@1",
+  "v2_fallback": "AGENTS_Nuevo_Amanecer.md via opencode.json",
+  "dimensions": {
+    "scope": {"rating": "BETTER", "reason": "V1 materializes a validated Feature Spec; V2 is instruction-only."},
+    "risk": {"rating": "BETTER", "reason": "V1 applies deterministic LOW/MEDIUM/HIGH/CRITICAL classification."},
+    "preflight": {"rating": "EQUIVALENT", "reason": "Both require Git/worktree inspection before action."},
+    "routing": {"rating": "WORSE", "reason": "V1 shadow emits decisions only; V2 can invoke configured agents."},
+    "anti-loop": {"rating": "BETTER", "reason": "V1 persists cycles, attempts and evidence requirements across restart."},
+    "failure_handling": {"rating": "BETTER", "reason": "V1 enforces F1-F11 transitions and non-evaluable resource failures."},
+    "evidence": {"rating": "BETTER", "reason": "V1 emits a digest-verifiable Evidence Pack per run/cycle."},
+    "resume_capability": {"rating": "BETTER", "reason": "V1 reconstructs NEXT_ACTION from durable state and chained events."}
+  }
+}

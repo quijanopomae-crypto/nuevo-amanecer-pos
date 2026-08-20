@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+evidence/shadow/**
+!evidence/shadow/.gitkeep
+evidence/resume-demo/**
+!evidence/resume-demo/.gitkeep
