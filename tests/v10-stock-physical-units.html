@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>V10 Stock Physical Units — unidades físicas en venta</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:18px}h1{font-size:22px;margin:0 0 4px}p.muted{color:#64748b;font-size:12px;margin-top:2px}
+    button{height:40px;border:0;border-radius:9px;padding:0 15px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .banner{margin-top:12px;padding:12px;border:2px solid #d0d7e2;border-radius:10px;background:#fff;font-weight:900}
+    .banner.pass{border-color:#087443;background:#ecfdf3;color:#087443}
+    .banner.fail{border-color:#b42318;background:#fff1f2;color:#9f1239}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:8px}
+    th,td{border:1px solid #d7dee8;padding:7px;text-align:left;vertical-align:top}th{background:#e7eef4}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.4 ui-monospace,Consolas,monospace}
+    iframe{position:absolute;width:2px;height:2px;border:0;left:-9999px;top:0}
+    .pass{color:#087443;font-weight:900}.failure{color:#b42318;font-weight:900}.hfail{color:#b45309;font-weight:900}
+  </style>
+</head>
+<body>
+  <h1>Motor de venta V10 — unidades físicas (qty × unitsPerQty) en stock</h1>
+  <p class="muted">Aísla el namespace V10 en IndexedDB/localStorage prefijados; jamás toca storage V9 real. Carga el archivo de producción real vía HTTP y lo document.write dentro del worker.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar escenarios de unidades físicas</button>
+    <span id="status" class="muted">Esperando ejecución.</span>
+  </div>
+  <div id="summary" class="banner">SIN EJECUTAR</div>
+  <h2>Diagnóstico</h2>
+  <pre id="init-diag">Esperando.</pre>
+  <h2>Resultados</h2>
+  <table>
+    <thead><tr><th>#</th><th>Escenario</th><th>Veredicto</th><th>EXPECTED / OBSERVED</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <h2>Resultado estructurado</h2>
+  <pre id="auto-result">{"status":"NOT_RUN"}</pre>
+
+  <script>
+  (function(){
+    'use strict';
+    var MAIN_HTML='../CVV2.4_backup_antes_demo-1.html';
+    var HARNESS_VERSION='v10-stock-physical-units-2026-08-14-1';
+    var query=new URLSearchParams(location.search);
+
+    /* ═══ ISOLATION: prefija todo storage (local/session/IndexedDB) ═══ */
+    function isolationBootstrap(config){
+      'use strict';
+      var local=window.localStorage,session=window.sessionStorage,proto=window.Storage&&window.Storage.prototype;
+      if(!proto)throw new Error('Storage API no disponible');
+      var nativeGet=proto.getItem,nativeSet=proto.setItem,nativeRemove=proto.removeItem,nativeKey=proto.key,nativeClear=proto.clear;
+      var localPrefix=config.localPrefix,sessionPrefix=config.sessionPrefix;
+      function prefixFor(target){if(target===local)return localPrefix;if(target===session)return sessionPrefix;return null;}
+      function keysFor(target,prefix){var keys=[];for(var i=0;i<target.length;i++){var key=nativeKey.call(target,i);if(key&&key.indexOf(prefix)===0)keys.push(key);}return keys;}
+      proto.getItem=function(key){var p=prefixFor(this);return p===null?nativeGet.call(this,key):nativeGet.call(this,p+String(key));};
+      proto.setItem=function(key,value){var p=prefixFor(this);return p===null?nativeSet.call(this,key,value):nativeSet.call(this,p+String(key),String(value));};
+      proto.removeItem=function(key){var p=prefixFor(this);return p===null?nativeRemove.call(this,key):nativeRemove.call(this,p+String(key));};
+      proto.key=function(index){var p=prefixFor(this);if(p===null)return nativeKey.call(this,index);var keys=keysFor(this,p),full=keys[index];return full===undefined?null:full.slice(p.length);};
+      proto.clear=function(){var p=prefixFor(this);if(p===null)return nativeClear.call(this);keysFor(this,p).forEach(function(k){nativeRemove.call(this,k);},this);};
+      var factory=window.indexedDB,factoryProto=factory&&Object.getPrototypeOf(factory);
+      if(!factory||!factoryProto)throw new Error('IndexedDB no disponible');
+      var nativeOpen=factoryProto.open,nativeDelete=factoryProto.deleteDatabase;
+      factoryProto.open=function(name,version){
+        var isolated=config.dbPrefix+String(name);
+        return arguments.length>1?nativeOpen.call(this,isolated,version):nativeOpen.call(this,isolated);
+      };
+      factoryProto.deleteDatabase=function(name){return nativeDelete.call(this,config.dbPrefix+String(name));};
+      window.__stockIsolation={runId:config.runId,tabId:config.tabId,localPrefix:config.localPrefix,sessionPrefix:config.sessionPrefix,dbName:config.dbPrefix+'NuevoAmanecerPOS'};
+    }
+
+    /* ═══ BRIDGE: expone motor V10 desde el realm del POS ═══ */
+    function stockBridgeBootstrap(){
+      'use strict';
+      var clone=function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};
+      var wait=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+      var state={status:'BOOTSTRAPPING',stage:'LOADING',ready:false,error:null};
+      var __faultRestore=null;
+      function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+      async function settle(){await wait(1200);var stable=0;for(var i=0;i<50;i++){var chain=(typeof _naPersistChain!=='undefined')?_naPersistChain:null;try{if(chain)await chain;}catch(e){}await wait(70);if(chain===((typeof _naPersistChain!=='undefined')?_naPersistChain:null)){stable++;if(stable>=4)return true;}else stable=0;}throw new Error('La persistencia V9 no se estabilizó');}
+      function probe(){return{readyState:document.readyState,origin:location.origin,href:location.href,helpers:{buildSaleIntent:typeof _naV10BuildSaleIntent,revalidateSale:typeof _naV10RevalidateSale,applySale:typeof _naV10ApplySale,confirmSaleIntent:typeof _naV10ConfirmSaleIntent,openDB:typeof _naV10OpenDB,configureRuntime:typeof _naV10ConfigureRuntime,readCanonical:typeof _naV10ReadCanonical,createInitial:typeof _naV10CreateInitialSnapshot,getOperation:typeof _naV10GetOperation},webLocks:(typeof navigator.locks!=='undefined')&&(typeof navigator.locks.request==='function'),isolation:clone(window.__stockIsolation||null),state:clone(state)};}
+      function deleteDbRetry(name,attempts){
+        attempts=attempts||4;
+        return new Promise(function(resolve){
+          (function attempt(n){
+            var finished=false;function finish(v){if(finished)return;finished=true;resolve(v);}
+            var req;try{req=indexedDB.deleteDatabase(name);}catch(e){return finish({ok:false,error:e.message||String(e)});}
+            req.onsuccess=function(){finish({ok:true});};
+            req.onerror=function(){finish({ok:false,error:(req.error&&req.error.message)||'delete failed'});};
+            req.onblocked=function(){if(n>1){setTimeout(function(){attempt(n-1);},180);}else{finish({ok:false,blocked:true});}};
+            setTimeout(function(){finish({ok:false,timeout:true});},5000);
+          })(attempts);
+        });
+      }
+      async function reset(data){
+        var out={stage:[]};
+        try{
+          try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(e){}
+          await _naV10CloseDB();out.stage.push('v10-closed');
+          try{if(typeof _naDbPromise!=='undefined'&&_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(e){}
+          out.stage.push('legacy-closed');
+          try{localStorage.clear();}catch(e){}
+          try{sessionStorage.clear();}catch(e){}
+          out.stage.push('storage-cleared');
+          out.delete=await deleteDbRetry(_naV10Runtime.dbName);
+          await _naV10OpenDB();out.stage.push('db-reopened');
+          out.create=clone(await _naV10CreateInitialSnapshot(clone(data)));
+          out.stage.push('created');
+          return out;
+        }catch(e){out.error={name:e.name||'',code:e.code||'',message:e.message||String(e)};return out;}
+      }
+      async function initialize(){
+        try{
+          state.status='INITIALIZING';
+          await withTimeout(settle(),15000,'settle POS');
+          state.stage='HELPERS';
+          var inspected=probe(),missing=Object.keys(inspected.helpers).filter(function(k){return inspected.helpers[k]!=='function';});
+          if(missing.length)throw new Error('Helpers V10 ausentes: '+missing.join(', '));
+          await _naV10PrepareUpgrade();
+          await _naV10CloseDB();
+          _naV10ConfigureRuntime({dbName:'NuevoAmanecerPOS',localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:'nuevo-amanecer:financial-write:v10:'+window.__stockIsolation.runId,channelName:'nuevo-amanecer:persistence:v10:'+window.__stockIsolation.runId,broadcastEnabled:false});
+          state.stage='RUNTIME';
+          var db=await withTimeout(_naV10OpenDB(),10000,'abrir IndexedDB V10');
+          state.dbVersion=db.version;
+          state.status='READY';state.ready=true;state.stage='READY';
+          return true;
+        }catch(e){state.status='ERROR';state.stage='ERROR';state.error=e.message||String(e);return false;}
+      }
+      window.__stockBridge={
+        state:function(){return clone(state);},probe:probe,isolation:clone(window.__stockIsolation),
+        reset:function(data){return reset(clone(data));},
+        canonical:function(){return _naV10ReadCanonical().then(clone);},
+        summary:async function(){var c=await _naV10ReadCanonical();if(!c)return null;var d=c.data||{};return clone({revision:c.revision,commitId:c.commitId,lastOperationId:c.lastOperationId,productos:(d.productos||[]).map(function(p){return{id:p.id,stock:p.stock};}),ventasCount:(d.ventas||[]).length,cajMovsCount:(d.cajMovs||[]).length,ventas:(d.ventas||[]).map(function(v){return{id:v.id,operation:v.operation,unidadesFisicas:v.unidadesFisicas,items:(v.items||[]).map(function(it){return{productoId:it.productoId,qty:it.qty,unitsPerQty:it.unitsPerQty};})};})});},
+        confirmSale:async function(intent){
+          try{
+            var r=await _naV10ConfirmSaleIntent(clone(intent));
+            return clone({status:r.status,operationId:r.operationId,revision:r.revision,commitId:r.commitId,reason:r.reason||null,error:r.error||null,requerido:(r.requerido!==undefined)?r.requerido:null,disponible:(r.disponible!==undefined)?r.disponible:null,hasRequerido:Object.prototype.hasOwnProperty.call(r,'requerido'),thrown:false});
+          }catch(e){
+            return{status:'PERSISTENCE_ERROR',operationId:(intent&&intent.operationId)||null,revision:null,commitId:null,reason:null,error:{name:e.name||'',code:e.code||'',message:e.message||String(e)},requerido:null,disponible:null,hasRequerido:false,thrown:true};
+          }
+        },
+        revalidateDirect:async function(intent){
+          var c=await _naV10ReadCanonical();
+          var built=_naV10BuildSaleIntent(clone(intent));
+          return clone(_naV10RevalidateSale(c,built));
+        },
+        operation:function(id){return _naV10GetOperation(id).then(clone);},
+        injectWriteFault:function(){
+          var proto=window.IDBObjectStore&&window.IDBObjectStore.prototype;
+          if(!proto||!proto.put)return{ok:false,error:'IDBObjectStore.prototype.put no disponible'};
+          if(__faultRestore)return{ok:false,error:'fault ya inyectado'};
+          var nativePut=proto.put;
+          proto.put=function(value,key){
+            var tx=this.transaction;
+            var req=arguments.length>1?nativePut.call(this,value,key):nativePut.call(this,value);
+            try{tx.abort();}catch(e){}
+            return req;
+          };
+          __faultRestore=function(){proto.put=nativePut;};
+          return{ok:true};
+        },
+        restoreWriteFault:function(){
+          if(__faultRestore){__faultRestore();__faultRestore=null;return{ok:true};}
+          return{ok:false,error:'no hay fault inyectado'};
+        },
+        closeAll:async function(){try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(e){}await _naV10CloseDB();try{if(typeof _naDbPromise!=='undefined'&&_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(e){}return true;}
+      };
+      window.__stockWorkerReady=initialize();
+    }
+
+    function workerConfig(){
+      var runId=query.get('runId');
+      return{runId:runId,tabId:'T',localPrefix:'__NA_V10_STOCK_TEST__'+runId+'__LOCAL__',sessionPrefix:'__NA_V10_STOCK_TEST__'+runId+'__SESSION__',dbPrefix:'__NA_V10_STOCK_TEST_DB__'+runId+'__'};
+    }
+
+    /* ═══ WORKER MODE ═══ */
+    async function bootWorker(){
+      document.body.innerHTML='<p>Preparando contexto V10 de stock…</p>';
+      try{
+        var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},15000);
+        var response=await fetch(MAIN_HTML+'?stockSource='+Date.now(),{cache:'no-store',signal:controller.signal});clearTimeout(timer);
+        if(!response.ok)throw new Error('No se pudo cargar producción: HTTP '+response.status);
+        var source=await response.text(),config=workerConfig();
+        var isolationScript='<scr'+'ipt>('+isolationBootstrap.toString()+')('+JSON.stringify(config)+');</scr'+'ipt>';
+        var bridgeScript='<scr'+'ipt>('+stockBridgeBootstrap.toString()+')();</scr'+'ipt>';
+        if(!/<head[^>]*>/i.test(source)||source.toLowerCase().lastIndexOf('</body>')<0)throw new Error('HTML principal no reconocido');
+        source=source.replace(/<head([^>]*)>/i,function(m){return m+isolationScript;});
+        var close=source.toLowerCase().lastIndexOf('</body>');
+        source=source.slice(0,close)+bridgeScript+source.slice(close);
+        document.open();document.write(source);document.close();
+      }catch(e){
+        document.body.innerHTML='<pre id="worker-error"></pre>';
+        document.getElementById('worker-error').textContent=e.stack||e.message||String(e);
+      }
+    }
+    if(query.get('worker')){bootWorker();return;}
+
+    /* ═══ PARENT MODE ═══ */
+    var runButton=document.getElementById('run'),statusEl=document.getElementById('status');
+    var summaryEl=document.getElementById('summary'),resultsBody=document.getElementById('results');
+    var autoResult=document.getElementById('auto-result'),initDiag=document.getElementById('init-diag');
+    var frame=null,results=[];
+    function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+    function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+    function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+
+    /* fixtures */
+    function product(id,stock){return{id:id,name:'Producto '+id,sku:'SKU-'+id,barcode:'',cat:'test',icon:'📦',imagen:null,costo:5,precio:10,stock:stock,stockMin:0,unidad:'unidad',controlInventario:true};}
+    function fixture(products,allowNoStock){
+      return{
+        appConfig:{freeSale:{allowRegisteredNoStock:allowNoStock===true},creditPolicy:{enabled:true,initialLine:100000,minPurchases:0,minProfit:0}},
+        ui:{},locks:{},security:{},cart:[],draft:null,
+        productos:products,ventas:[],clientes:[],creditos:[],gastos:[],cajMovs:[],
+        cajEstado:{abierta:true,cerrada:false,sessionId:'S1',cajeroId:null,fechaApertura:'2026-08-14',fondo:0}
+      };
+    }
+    function intent(opId,items,extra){
+      var base={operationId:opId,items:items,paymentMethod:'efectivo',sessionId:'S1'};
+      if(extra)Object.keys(extra).forEach(function(k){base[k]=extra[k];});
+      return base;
+    }
+    function stockOf(summary,id){var p=(summary.productos||[]).find(function(x){return String(x.id)===String(id);});return p?p.stock:undefined;}
+
+    /* registro */
+    function addRow(id,name,verdict,expected,observed){
+      var row=document.createElement('tr');
+      var cls=verdict==='PASS'?'pass':(verdict==='HARNESS_FAIL'?'hfail':'failure');
+      var cells=[String(id),name,verdict,('EXPECTED: '+expected+'\nOBSERVED: '+JSON.stringify(observed,null,2))];
+      cells.forEach(function(v,i){
+        var cell=document.createElement('td');
+        if(i===2)cell.className=cls;
+        var pre=document.createElement('pre');pre.textContent=v;cell.appendChild(pre);row.appendChild(cell);
+      });
+      resultsBody.appendChild(row);
+    }
+
+    async function createContext(runId){
+      var f=document.createElement('iframe');
+      f.src='v10-stock-physical-units.html?worker=1&runId='+encodeURIComponent(runId)+'&v='+encodeURIComponent(HARNESS_VERSION)+'&ts='+Date.now();
+      document.body.appendChild(f);frame=f;
+      for(var attempt=0;attempt<450;attempt++){
+        try{
+          if(f.contentWindow&&f.contentWindow.__stockBridge){
+            var st=f.contentWindow.__stockBridge.state();
+            if(st.error)throw new Error('Worker: '+st.error);
+            if(st.ready)return{frame:f,bridge:f.contentWindow.__stockBridge,state:st};
+          }
+          var err=f.contentDocument&&f.contentDocument.getElementById('worker-error');
+          if(err)throw new Error(err.textContent);
+        }catch(problem){if(problem&&problem.message)throw problem;}
+        await wait(100);
+      }
+      throw new Error('TIMEOUT: worker no alcanzó READY en 45s');
+    }
+
+    async function realStorageState(){
+      var keys={snapshotV9:localStorage.getItem('na_snapshot_v9'),sessionV9:localStorage.getItem('na_snapshot_v9_session')};
+      var allKeys=[];for(var i=0;i<localStorage.length;i++)allKeys.push(localStorage.key(i));
+      keys.localKeys=allKeys.sort();
+      var dbs=[];
+      if(typeof indexedDB.databases==='function'){var list=await indexedDB.databases();dbs=list.map(function(d){return{name:d.name,version:d.version};});}
+      keys.indexedDbNames=dbs;
+      return keys;
+    }
+    function sameRealState(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+    function deleteDb(name){
+      return new Promise(function(resolve){
+        var done=false;function finish(v){if(done)return;done=true;resolve(v);}
+        try{
+          var req=indexedDB.deleteDatabase(name);
+          req.onsuccess=function(){finish({ok:true});};
+          req.onerror=function(){finish({ok:false,error:req.error&&req.error.message});};
+          req.onblocked=function(){finish({ok:false,blocked:true});};
+          setTimeout(function(){finish({ok:false,timeout:true});},3000);
+        }catch(e){finish({ok:false,error:e.message});}
+      });
+    }
+    function removePrefixed(prefix){
+      [localStorage,sessionStorage].forEach(function(store){
+        var found=[];for(var i=0;i<store.length;i++){var k=store.key(i);if(k&&k.indexOf(prefix)===0)found.push(k);}
+        found.forEach(function(k){store.removeItem(k);});
+      });
+    }
+
+    async function runScenario(bridge,key,name,expected,fn){
+      var id=results.length+1;
+      try{
+        var out=await fn(bridge);
+        var passed=!!out.passed;
+        var verdict=passed?'PASS':'PRODUCT_FAIL';
+        results.push({n:id,key:key,name:name,verdict:verdict,expected:expected,observed:clone(out.observed)});
+        addRow(id,name,verdict,expected,out.observed);
+        return out;
+      }catch(e){
+        var detail={harnessError:e.message||String(e),stack:(e.stack||'').slice(0,600)};
+        results.push({n:id,key:key,name:name,verdict:'HARNESS_FAIL',expected:expected,observed:detail});
+        addRow(id,name,'HARNESS_FAIL',expected,detail);
+        return{passed:false,observed:detail,harnessFail:true};
+      }
+    }
+    function resetOk(reset){return reset&&reset.create&&reset.create.status==='SUCCESS';}
+
+    async function run(){
+      runButton.disabled=true;results=[];resultsBody.innerHTML='';
+      summaryEl.className='banner';summaryEl.textContent='EJECUTANDO';
+      autoResult.textContent='{"status":"RUNNING"}';
+      var runId=Date.now().toString(36)+'-'+crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+      var testDbName='__NA_V10_STOCK_TEST_DB__'+runId+'__NuevoAmanecerPOS';
+      var report={version:HARNESS_VERSION,runId:runId,testDb:testDbName,status:'ERROR'};
+      var realBefore=await realStorageState(),ctx=null;
+      report.realStorageBefore=realBefore;
+      try{
+        statusEl.textContent='[1] creando contexto';
+        ctx=await createContext(runId);
+        var probe=await ctx.bridge.probe();
+        initDiag.textContent=JSON.stringify({probe:probe,isolation:ctx.bridge.isolation},null,2);
+        var helpersOk=probe.helpers.confirmSaleIntent==='function'&&probe.helpers.revalidateSale==='function'&&probe.helpers.applySale==='function'&&probe.helpers.createInitial==='function';
+        if(!helpersOk||!ctx.state.ready)throw new Error('HARNESS_FAIL: helpers V10 no disponibles o worker no READY');
+        var B=ctx.bridge;
+        statusEl.textContent='[2] ejecutando escenarios';
+
+        /* 1 UNIT_SALE */
+        await runScenario(B,'UNIT_SALE','1. Venta unidad simple (qty1×box1)','commit SUCCESS; stock 10→9',async function(B){
+          var r=await B.reset(fixture([product('P1',10)],false));
+          var s=await B.confirmSale(intent('op-unit-1',[{productId:'P1',qty:1,price:10,name:'P1',boxUnits:1}]));
+          var sum=await B.summary();
+          var stock=stockOf(sum,'P1');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===9&&sum.ventasCount===1,
+            observed:{reset:r.create.status,status:s.status,stockFinal:stock,ventasCount:sum.ventasCount,unidadesFisicas:sum.ventas[0]&&sum.ventas[0].unidadesFisicas}};
+        });
+
+        /* 2 MULTI_UNIT_SALE */
+        await runScenario(B,'MULTI_UNIT_SALE','2. qty5×box1','stock 10→5 (consume 5)',async function(B){
+          var r=await B.reset(fixture([product('P2',10)],false));
+          var s=await B.confirmSale(intent('op-multi-unit-1',[{productId:'P2',qty:5,price:10,name:'P2',boxUnits:1}]));
+          var stock=stockOf(await B.summary(),'P2');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===5,
+            observed:{status:s.status,stockFinal:stock}};
+        });
+
+        /* 3 BOX_SALE */
+        await runScenario(B,'BOX_SALE','3. qty1×box12 (stock 24)','stock 24→12 (NO 23)',async function(B){
+          var r=await B.reset(fixture([product('P3',24)],false));
+          var s=await B.confirmSale(intent('op-box-1',[{productId:'P3',qty:1,price:10,name:'P3',boxUnits:12}]));
+          var stock=stockOf(await B.summary(),'P3');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===12,
+            observed:{status:s.status,stockFinal:stock}};
+        });
+
+        /* 4 MULTI_BOX */
+        await runScenario(B,'MULTI_BOX','4. qty2×box12 (stock 24)','stock 24→0 (consume 24, NO 2)',async function(B){
+          var r=await B.reset(fixture([product('P4',24)],false));
+          var s=await B.confirmSale(intent('op-multibox-1',[{productId:'P4',qty:2,price:10,name:'P4',boxUnits:12}]));
+          var stock=stockOf(await B.summary(),'P4');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===0,
+            observed:{status:s.status,stockFinal:stock}};
+        });
+
+        /* 5 VARIABLE_BOX_UNITS */
+        await runScenario(B,'VARIABLE_BOX_UNITS','5. 2 líneas box6 y box24','descuento=6 y 24; items.unitsPerQty 6/24; unidadesFisicas 30',async function(B){
+          var r=await B.reset(fixture([product('P6',100),product('P24',100)],false));
+          var s=await B.confirmSale(intent('op-var-box-1',[{productId:'P6',qty:1,price:10,name:'P6',boxUnits:6},{productId:'P24',qty:1,price:10,name:'P24',boxUnits:24}]));
+          var sum=await B.summary();
+          var stock6=stockOf(sum,'P6'),stock24=stockOf(sum,'P24');
+          var v=sum.ventas[0];
+          var upq0=v&&v.items&&v.items[0]&&v.items[0].unitsPerQty,upq1=v&&v.items&&v.items[1]&&v.items[1].unitsPerQty;
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock6===94&&stock24===76&&upq0===6&&upq1===24&&v.unidadesFisicas===30,
+            observed:{status:s.status,stockP6:stock6,stockP24:stock24,unitsPerQty:[upq0,upq1],unidadesFisicas:v&&v.unidadesFisicas}};
+        });
+
+        /* 6 EXACT_STOCK */
+        await runScenario(B,'EXACT_STOCK','6. stock 24 = qty2×box12','SUCCESS; stock 24→0',async function(B){
+          var r=await B.reset(fixture([product('P5',24)],false));
+          var s=await B.confirmSale(intent('op-exact-1',[{productId:'P5',qty:2,price:10,name:'P5',boxUnits:12}]));
+          var stock=stockOf(await B.summary(),'P5');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===0,
+            observed:{status:s.status,stockFinal:stock}};
+        });
+
+        /* 7 INSUFFICIENT_STOCK_POLICY */
+        await runScenario(B,'INSUFFICIENT_STOCK_POLICY','7. stock3, qty5×box1, allowNoStock=false','CONFLICT STOCK_INSUFICIENTE requerido5; stock sigue 3; sin venta',async function(B){
+          var r=await B.reset(fixture([product('P7',3)],false));
+          var intent7=intent('op-insuff-1',[{productId:'P7',qty:5,price:10,name:'P7',boxUnits:1}]);
+          var s=await B.confirmSale(intent7);
+          var rv=await B.revalidateDirect(intent7);
+          var sum=await B.summary();
+          var stock=stockOf(sum,'P7');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='CONFLICT'&&s.reason==='STOCK_INSUFICIENTE'&&stock===3&&sum.ventasCount===0&&rv.ok===false&&rv.reason==='STOCK_INSUFICIENTE'&&rv.requerido===5,
+            observed:{status:s.status,reason:s.reason,stockFinal:stock,ventasCount:sum.ventasCount,revalidate:{ok:rv.ok,reason:rv.reason,requerido:rv.requerido,disponible:rv.disponible},conflictResultHasRequerido:s.hasRequerido}};
+        });
+
+        /* 8 INSUFFICIENT_BOX_POLICY */
+        await runScenario(B,'INSUFFICIENT_BOX_POLICY','8. stock10, qty1×box12, allowNoStock=false','CONFLICT STOCK_INSUFICIENTE requerido12 (unidades físicas)',async function(B){
+          var r=await B.reset(fixture([product('P8',10)],false));
+          var intent8=intent('op-insuffbox-1',[{productId:'P8',qty:1,price:10,name:'P8',boxUnits:12}]);
+          var s=await B.confirmSale(intent8);
+          var rv=await B.revalidateDirect(intent8);
+          var stock=stockOf(await B.summary(),'P8');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='CONFLICT'&&s.reason==='STOCK_INSUFICIENTE'&&stock===10&&rv.ok===false&&rv.requerido===12,
+            observed:{status:s.status,reason:s.reason,stockFinal:stock,revalidate:{ok:rv.ok,requerido:rv.requerido,disponible:rv.disponible}}};
+        });
+
+        /* 9 ALLOW_REGISTERED_NO_STOCK_POLICY */
+        await runScenario(B,'ALLOW_REGISTERED_NO_STOCK_POLICY','9. stock3, qty5×box1, allowNoStock=true','SUCCESS; stock 3→-2 (sin clamp)',async function(B){
+          var r=await B.reset(fixture([product('P9',3)],true));
+          var s=await B.confirmSale(intent('op-allow-1',[{productId:'P9',qty:5,price:10,name:'P9',boxUnits:1}]));
+          var stock=stockOf(await B.summary(),'P9');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===-2,
+            observed:{status:s.status,stockFinal:stock}};
+        });
+
+        /* 10 ALLOW_REGISTERED_NO_STOCK_BOX */
+        await runScenario(B,'ALLOW_REGISTERED_NO_STOCK_BOX','10. stock3, qty2×box12, allowNoStock=true','SUCCESS; stock 3→-21',async function(B){
+          var r=await B.reset(fixture([product('P10',3)],true));
+          var s=await B.confirmSale(intent('op-allowbox-1',[{productId:'P10',qty:2,price:10,name:'P10',boxUnits:12}]));
+          var stock=stockOf(await B.summary(),'P10');
+          return{passed:r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&stock===-21,
+            observed:{status:s.status,stockFinal:stock}};
+        });
+
+        /* 11 OPERATION_ID_IDEMPOTENCY */
+        await runScenario(B,'OPERATION_ID_IDEMPOTENCY','11. opId ABC, doble envío idéntico','1ª SUCCESS (stock-6); 2ª ALREADY_COMMITTED; stock no cambia; 1 venta',async function(B){
+          var r=await B.reset(fixture([product('P11',100)],false));
+          var intent11=intent('ABC',[{productId:'P11',qty:2,price:10,name:'P11',boxUnits:3}]);
+          var s1=await B.confirmSale(intent11);
+          var stockAfter1=stockOf(await B.summary(),'P11');
+          var s2=await B.confirmSale(intent11);
+          var sum2=await B.summary();
+          var stockAfter2=stockOf(sum2,'P11');
+          var ventasConOp=sum2.ventas.filter(function(v){return v.operation==='ABC';}).length;
+          return{passed:r.create.status==='SUCCESS'&&s1.status==='SUCCESS'&&s2.status==='ALREADY_COMMITTED'&&stockAfter1===94&&stockAfter2===94&&ventasConOp===1,
+            observed:{first:s1.status,second:s2.status,stockAfter1:stockAfter1,stockAfter2:stockAfter2,ventasConOperation:ventasConOp}};
+        });
+
+        /* 12 RETRY_IDEMPOTENCY */
+        await runScenario(B,'RETRY_IDEMPOTENCY','12. opId RETRY1, retry idéntico','1ª SUCCESS; 2ª ALREADY_COMMITTED; cero descuento extra',async function(B){
+          var r=await B.reset(fixture([product('P12',100)],false));
+          var intent12=intent('RETRY1',[{productId:'P12',qty:1,price:10,name:'P12',boxUnits:5}]);
+          var s1=await B.confirmSale(intent12);
+          var stockAfter1=stockOf(await B.summary(),'P12');
+          var s2=await B.confirmSale(intent12);
+          var stockAfter2=stockOf(await B.summary(),'P12');
+          return{passed:r.create.status==='SUCCESS'&&s1.status==='SUCCESS'&&s2.status==='ALREADY_COMMITTED'&&stockAfter1===95&&stockAfter2===95,
+            observed:{first:s1.status,second:s2.status,stockAfter1:stockAfter1,stockAfter2:stockAfter2}};
+        });
+
+        /* 13 ZERO_SECOND_STOCK_EFFECT */
+        await runScenario(B,'ZERO_SECOND_STOCK_EFFECT','13. retry no descuenta de nuevo','stock baja exactamente una vez (antes=después del retry)',async function(B){
+          var r=await B.reset(fixture([product('P13',50)],false));
+          var intent13=intent('ZERO2',[{productId:'P13',qty:3,price:10,name:'P13',boxUnits:2}]);
+          var s1=await B.confirmSale(intent13);
+          var after1=stockOf(await B.summary(),'P13');
+          var s2=await B.confirmSale(intent13);
+          var after2=stockOf(await B.summary(),'P13');
+          var journal=await B.operation('ZERO2');
+          return{passed:r.create.status==='SUCCESS'&&s1.status==='SUCCESS'&&s2.status==='ALREADY_COMMITTED'&&after1===44&&after2===44&&journal&&journal.status==='COMMITTED',
+            observed:{first:s1.status,second:s2.status,stockAfter1:after1,stockAfter2:after2,journalStatus:journal&&journal.status}};
+        });
+
+        /* 14 REVALIDATE_PHYSICAL_UNITS */
+        await runScenario(B,'REVALIDATE_PHYSICAL_UNITS','14. revalidate usa unidades físicas','(a) req12; (b) ok con allowNoStock, descent12; (c) ok req24',async function(B){
+          var obs={};
+          var rA=await B.reset(fixture([product('P14A',10)],false));
+          var iA=intent('rv-a',[{productId:'P14A',qty:1,price:10,name:'P14A',boxUnits:12}]);
+          var rvA=await B.revalidateDirect(iA);
+          obs.a={ok:rvA.ok,reason:rvA.reason,requerido:rvA.requerido,disponible:rvA.disponible};
+
+          var rB=await B.reset(fixture([product('P14B',10)],true));
+          var iB=intent('rv-b',[{productId:'P14B',qty:1,price:10,name:'P14B',boxUnits:12}]);
+          var rvB=await B.revalidateDirect(iB);
+          var sB=await B.confirmSale(iB);
+          var stockB=stockOf(await B.summary(),'P14B');
+          obs.b={ok:rvB.ok,status:sB.status,stockFinal:stockB,descent:10-stockB};
+
+          var rC=await B.reset(fixture([product('P14C',25)],false));
+          var iC=intent('rv-c',[{productId:'P14C',qty:2,price:10,name:'P14C',boxUnits:12}]);
+          var rvC=await B.revalidateDirect(iC);
+          var sC=await B.confirmSale(iC);
+          var stockC=stockOf(await B.summary(),'P14C');
+          obs.c={ok:rvC.ok,status:sC.status,stockFinal:stockC,descent:25-stockC};
+
+          var passed=(obs.a.ok===false&&obs.a.reason==='STOCK_INSUFICIENTE'&&obs.a.requerido===12)
+            &&(obs.b.ok===true&&obs.b.status==='SUCCESS'&&obs.b.stockFinal===-2&&obs.b.descent===12)
+            &&(obs.c.ok===true&&obs.c.status==='SUCCESS'&&obs.c.stockFinal===1&&obs.c.descent===24)
+            &&(obs.a.requerido===obs.b.descent);
+          return{passed:passed,observed:obs};
+        });
+
+        /* 15 DUPLICATE_LINES */
+        await runScenario(B,'DUPLICATE_LINES','15. dos líneas del mismo producto','agregación: 13; stock13→0 OK; stock10→CONFLICT requerido13',async function(B){
+          var obs={};
+          var rA=await B.reset(fixture([product('P15',13)],false));
+          var iA=intent('dup-a',[{productId:'P15',qty:1,price:10,name:'P15',boxUnits:1},{productId:'P15',qty:1,price:10,name:'P15',boxUnits:12}]);
+          var sA=await B.confirmSale(iA);
+          obs.a={status:sA.status,stockFinal:stockOf(await B.summary(),'P15')};
+
+          var rB=await B.reset(fixture([product('P15B',10)],false));
+          var iB=intent('dup-b',[{productId:'P15B',qty:1,price:10,name:'P15B',boxUnits:1},{productId:'P15B',qty:1,price:10,name:'P15B',boxUnits:12}]);
+          var sB=await B.confirmSale(iB);
+          var rvB=await B.revalidateDirect(iB);
+          obs.b={status:sB.status,reason:sB.reason,stockFinal:stockOf(await B.summary(),'P15B'),revalidate:{ok:rvB.ok,requerido:rvB.requerido,disponible:rvB.disponible}};
+
+          var passed=(rA.create.status==='SUCCESS'&&obs.a.status==='SUCCESS'&&obs.a.stockFinal===0)
+            &&(rB.create.status==='SUCCESS'&&obs.b.status==='CONFLICT'&&obs.b.reason==='STOCK_INSUFICIENTE'&&obs.b.stockFinal===10&&obs.b.revalidate.ok===false&&obs.b.revalidate.requerido===13);
+          return{passed:passed,observed:obs};
+        });
+
+        /* 16 PERSISTENCE_FAILURE */
+        await runScenario(B,'PERSISTENCE_FAILURE','16. fallo IndexedDB antes de confirmar','PERSISTENCE_ERROR (nunca SUCCESS); canonical no cambia',async function(B){
+          var r=await B.reset(fixture([product('P16',50)],false));
+          var before=await B.summary();
+          var inj=await B.injectWriteFault();
+          var intent16=intent('op-pfail-1',[{productId:'P16',qty:2,price:10,name:'P16',boxUnits:2}]);
+          var s=await B.confirmSale(intent16);
+          var restore=await B.restoreWriteFault();
+          var after=await B.summary();
+          var journal=await B.operation('op-pfail-1');
+          var unchanged=JSON.stringify(before)===JSON.stringify(after);
+          var passed=r.create.status==='SUCCESS'&&inj.ok===true&&s.status==='PERSISTENCE_ERROR'&&s.status!=='SUCCESS'&&unchanged&&after.ventasCount===0&&stockOf(after,'P16')===50&&(!journal);
+          return{passed:passed,observed:{inject:inj,status:s.status,thrown:s.thrown,error:s.error,restore:restore,unchanged:unchanged,stockFinal:stockOf(after,'P16'),ventasCount:after.ventasCount,journalPersisted:!!journal}};
+        });
+
+        /* 17/18 handled at parent level below */
+      }catch(e){
+        report.status='ERROR';report.error={message:e.message||String(e),stack:(e.stack||'').slice(0,800)};
+      }finally{
+        statusEl.textContent='[3] limpieza';
+        try{if(ctx){await withTimeout(ctx.bridge.closeAll(),5000,'closeAll');}}catch(e){}
+        if(frame){frame.src='about:blank';frame.remove();frame=null;}
+        await wait(250);
+        var prefix='__NA_V10_STOCK_TEST__'+runId+'__';
+        removePrefixed(prefix);
+        var dbCleanup=await deleteDb(testDbName);
+        report.namespaceCleanup={prefix:prefix,dbCleanup:dbCleanup};
+        await wait(100);
+        var realAfter=await realStorageState();
+        var v9Untouched=sameRealState(realBefore,realAfter);
+        report.realStorageAfter=realAfter;
+        report.v9Isolation={
+          snapshotV9Before:realBefore.snapshotV9,snapshotV9After:realAfter.snapshotV9,
+          sessionV9Before:realBefore.sessionV9,sessionV9After:realAfter.sessionV9,
+          localKeysBefore:realBefore.localKeys,localKeysAfter:realAfter.localKeys,
+          indexedDbBefore:realBefore.indexedDbNames,indexedDbAfter:realAfter.indexedDbNames,
+          identical:sameRealState(realBefore,realAfter)
+        };
+        report.v9Untouched=v9Untouched;
+      }
+
+      var stats={pass:0,fail:0,hfail:0};
+      results.forEach(function(r){if(r.verdict==='PASS')stats.pass++;else if(r.verdict==='HARNESS_FAIL')stats.hfail++;else stats.fail++;});
+      report.stats=stats;
+      report.cases=results;
+      report.status=(stats.fail===0&&stats.hfail===0&&stats.pass===results.length&&results.length>0&&report.v9Untouched)?'PASS':'FAIL';
+      summaryEl.className='banner '+(report.status==='PASS'?'pass':'fail');
+      summaryEl.textContent='V10 STOCK PHYSICAL UNITS: '+report.status+' — '+stats.pass+' PASS / '+stats.fail+' PRODUCT_FAIL / '+stats.hfail+' HARNESS_FAIL / '+(results.length)+' total';
+      statusEl.textContent='[fin] '+stats.pass+' PASS · '+stats.fail+' FAIL · '+stats.hfail+' HARNESS_FAIL · v9Untouched='+report.v9Untouched;
+      autoResult.textContent=JSON.stringify(report,null,2);
+      window.__TEST_REPORT=report;
+      runButton.disabled=false;
+    }
+
+    runButton.addEventListener('click',function(){run().catch(function(e){statusEl.textContent='ERROR: '+e.message;summaryEl.className='banner fail';summaryEl.textContent='ERROR: '+e.message;runButton.disabled=false;});});
+    if(query.get('auto')==='1')setTimeout(function(){runButton.click();},400);
+  })();
+  </script>
+</body>
+</html>

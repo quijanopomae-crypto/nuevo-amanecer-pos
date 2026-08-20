@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>V10 Stock Physical Units — ADVERSARIAL (motor aislado)</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:18px}h1{font-size:22px;margin:0 0 4px}p.muted{color:#64748b;font-size:12px;margin-top:2px}
+    button{height:40px;border:0;border-radius:9px;padding:0 15px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .banner{margin-top:12px;padding:12px;border:2px solid #d0d7e2;border-radius:10px;background:#fff;font-weight:900}
+    .banner.pass{border-color:#087443;background:#ecfdf3;color:#087443}
+    .banner.fail{border-color:#b42318;background:#fff1f2;color:#9f1239}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:8px}
+    th,td{border:1px solid #d7dee8;padding:7px;text-align:left;vertical-align:top}th{background:#e7eef4}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.4 ui-monospace,Consolas,monospace}
+    iframe{position:absolute;width:2px;height:2px;border:0;left:-9999px;top:0}
+    .pass{color:#087443;font-weight:900}.failure{color:#b42318;font-weight:900}.hfail{color:#b45309;font-weight:900}
+  </style>
+</head>
+<body>
+  <h1>Motor de venta V10 — unidades físicas · ADVERSARIAL</h1>
+  <p class="muted">Aísla el namespace V10 (IndexedDB/localStorage/sessionStorage prefijados); nunca toca storage V9 real. Carga el archivo de producción real vía HTTP y lo document.write dentro del worker. Ataca ventanas de fallo 1–10.</p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar suite adversarial</button>
+    <span id="status" class="muted">Esperando ejecución.</span>
+  </div>
+  <div id="summary" class="banner">SIN EJECUTAR</div>
+  <h2>Diagnóstico</h2>
+  <pre id="init-diag">Esperando.</pre>
+  <h2>Resultados</h2>
+  <table>
+    <thead><tr><th>#</th><th>Escenario</th><th>Veredicto</th><th>EXPECTED / OBSERVED</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+  <h2>Resultado estructurado</h2>
+  <pre id="auto-result">{"status":"NOT_RUN"}</pre>
+
+  <script>
+  (function(){
+    'use strict';
+    var MAIN_HTML='../CVV2.4_backup_antes_demo-1.html';
+    var HARNESS_VERSION='v10-stock-adversarial-2026-08-14-1';
+    var query=new URLSearchParams(location.search);
+
+    /* ═══ ISOLATION: prefija todo storage (local/session/IndexedDB) ═══ */
+    function isolationBootstrap(config){
+      'use strict';
+      var local=window.localStorage,session=window.sessionStorage,proto=window.Storage&&window.Storage.prototype;
+      if(!proto)throw new Error('Storage API no disponible');
+      var nativeGet=proto.getItem,nativeSet=proto.setItem,nativeRemove=proto.removeItem,nativeKey=proto.key,nativeClear=proto.clear;
+      var localPrefix=config.localPrefix,sessionPrefix=config.sessionPrefix;
+      function prefixFor(target){if(target===local)return localPrefix;if(target===session)return sessionPrefix;return null;}
+      function keysFor(target,prefix){var keys=[];for(var i=0;i<target.length;i++){var key=nativeKey.call(target,i);if(key&&key.indexOf(prefix)===0)keys.push(key);}return keys;}
+      proto.getItem=function(key){var p=prefixFor(this);return p===null?nativeGet.call(this,key):nativeGet.call(this,p+String(key));};
+      proto.setItem=function(key,value){var p=prefixFor(this);return p===null?nativeSet.call(this,key,value):nativeSet.call(this,p+String(key),String(value));};
+      proto.removeItem=function(key){var p=prefixFor(this);return p===null?nativeRemove.call(this,key):nativeRemove.call(this,p+String(key));};
+      proto.key=function(index){var p=prefixFor(this);if(p===null)return nativeKey.call(this,index);var keys=keysFor(this,p),full=keys[index];return full===undefined?null:full.slice(p.length);};
+      proto.clear=function(){var p=prefixFor(this);if(p===null)return nativeClear.call(this);keysFor(this,p).forEach(function(k){nativeRemove.call(this,k);},this);};
+      var factory=window.indexedDB,factoryProto=factory&&Object.getPrototypeOf(factory);
+      if(!factory||!factoryProto)throw new Error('IndexedDB no disponible');
+      var nativeOpen=factoryProto.open,nativeDelete=factoryProto.deleteDatabase;
+      factoryProto.open=function(name,version){
+        var isolated=config.dbPrefix+String(name);
+        return arguments.length>1?nativeOpen.call(this,isolated,version):nativeOpen.call(this,isolated);
+      };
+      factoryProto.deleteDatabase=function(name){return nativeDelete.call(this,config.dbPrefix+String(name));};
+      window.__stockIsolation={runId:config.runId,tabId:config.tabId,localPrefix:config.localPrefix,sessionPrefix:config.sessionPrefix,dbName:config.dbPrefix+'NuevoAmanecerPOS'};
+    }
+
+    /* ═══ BRIDGE: expone motor V10 desde el realm del POS (extendido) ═══ */
+    function stockBridgeBootstrap(){
+      'use strict';
+      var clone=function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};
+      var wait=function(ms){return new Promise(function(r){setTimeout(r,ms);});};
+      var state={status:'BOOTSTRAPPING',stage:'LOADING',ready:false,error:null};
+      var __faultRestore=null,__resolveFaultRestore=null;
+      function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+      async function settle(){await wait(1200);var stable=0;for(var i=0;i<50;i++){var chain=(typeof _naPersistChain!=='undefined')?_naPersistChain:null;try{if(chain)await chain;}catch(e){}await wait(70);if(chain===((typeof _naPersistChain!=='undefined')?_naPersistChain:null)){stable++;if(stable>=4)return true;}else stable=0;}throw new Error('La persistencia V9 no se estabilizó');}
+      function probe(){return{readyState:document.readyState,origin:location.origin,href:location.href,helpers:{buildSaleIntent:typeof _naV10BuildSaleIntent,revalidateSale:typeof _naV10RevalidateSale,applySale:typeof _naV10ApplySale,confirmSaleIntent:typeof _naV10ConfirmSaleIntent,runCriticalOperation:typeof _naRunCriticalOperation,openDB:typeof _naV10OpenDB,configureRuntime:typeof _naV10ConfigureRuntime,readCanonical:typeof _naV10ReadCanonical,createInitial:typeof _naV10CreateInitialSnapshot,getOperation:typeof _naV10GetOperation,resolve:typeof _naV10ResolveOperation,recoverable:typeof _naV10ListRecoverableOperations},webLocks:(typeof navigator.locks!=='undefined')&&(typeof navigator.locks.request==='function'),isolation:clone(window.__stockIsolation||null),state:clone(state)};}
+      function deleteDbRetry(name,attempts){
+        attempts=attempts||4;
+        return new Promise(function(resolve){
+          (function attempt(n){
+            var finished=false;function finish(v){if(finished)return;finished=true;resolve(v);}
+            var req;try{req=indexedDB.deleteDatabase(name);}catch(e){return finish({ok:false,error:e.message||String(e)});}
+            req.onsuccess=function(){finish({ok:true});};
+            req.onerror=function(){finish({ok:false,error:(req.error&&req.error.message)||'delete failed'});};
+            req.onblocked=function(){if(n>1){setTimeout(function(){attempt(n-1);},180);}else{finish({ok:false,blocked:true});}};
+            setTimeout(function(){finish({ok:false,timeout:true});},5000);
+          })(attempts);
+        });
+      }
+      async function reset(data){
+        var out={stage:[]};
+        try{
+          try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(e){}
+          await _naV10CloseDB();out.stage.push('v10-closed');
+          try{if(typeof _naDbPromise!=='undefined'&&_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(e){}
+          out.stage.push('legacy-closed');
+          try{localStorage.clear();}catch(e){}
+          try{sessionStorage.clear();}catch(e){}
+          out.stage.push('storage-cleared');
+          out.delete=await deleteDbRetry(_naV10Runtime.dbName);
+          await _naV10OpenDB();out.stage.push('db-reopened');
+          out.create=clone(await _naV10CreateInitialSnapshot(clone(data)));
+          out.stage.push('created');
+          return out;
+        }catch(e){out.error={name:e.name||'',code:e.code||'',message:e.message||String(e)};return out;}
+      }
+      async function initialize(){
+        try{
+          state.status='INITIALIZING';
+          await withTimeout(settle(),15000,'settle POS');
+          state.stage='HELPERS';
+          var inspected=probe(),missing=Object.keys(inspected.helpers).filter(function(k){return inspected.helpers[k]!=='function';});
+          if(missing.length)throw new Error('Helpers V10 ausentes: '+missing.join(', '));
+          await _naV10PrepareUpgrade();
+          await _naV10CloseDB();
+          _naV10ConfigureRuntime({dbName:'NuevoAmanecerPOS',localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:'nuevo-amanecer:financial-write:v10:'+window.__stockIsolation.runId,channelName:'nuevo-amanecer:persistence:v10:'+window.__stockIsolation.runId,broadcastEnabled:false});
+          state.stage='RUNTIME';
+          var db=await withTimeout(_naV10OpenDB(),10000,'abrir IndexedDB V10');
+          state.dbVersion=db.version;
+          state.status='READY';state.ready=true;state.stage='READY';
+          return true;
+        }catch(e){state.status='ERROR';state.stage='ERROR';state.error=e.message||String(e);return false;}
+      }
+      function saleSpec(intent,expectedRevision){
+        var built=_naV10BuildSaleIntent(clone(intent));
+        return{operationId:built.operationId,type:'SALE',expectedRevision:expectedRevision,payload:clone(built),idempotencyPayload:_naV10SaleIdempotencyPayload(built),entityIds:built.items.map(function(it){return it.productId;}),revalidate:function(c,ctx){return _naV10RevalidateSale(c,built);},mutate:function(draft,ctx){return _naV10ApplySale(draft,built,ctx);}};
+      }
+      window.__stockBridge={
+        state:function(){return clone(state);},probe:probe,isolation:clone(window.__stockIsolation),
+        reset:function(data){return reset(clone(data));},
+        canonical:function(){return _naV10ReadCanonical().then(clone);},
+        summary:async function(){var c=await _naV10ReadCanonical();if(!c)return null;var d=c.data||{};return clone({revision:c.revision,commitId:c.commitId,lastOperationId:c.lastOperationId,productos:(d.productos||[]).map(function(p){return{id:p.id,stock:p.stock};}),ventasCount:(d.ventas||[]).length,cajMovsCount:(d.cajMovs||[]).length,ventas:(d.ventas||[]).map(function(v){return{id:v.id,operation:v.operation,unidadesFisicas:v.unidadesFisicas,total:v.total,items:(v.items||[]).map(function(it){return{productoId:it.productoId,qty:it.qty,unitsPerQty:it.unitsPerQty};})};})});},
+        confirmSale:async function(intent){
+          try{
+            var r=await _naV10ConfirmSaleIntent(clone(intent));
+            return clone({status:r.status,operationId:r.operationId,revision:r.revision,commitId:r.commitId,reason:r.reason||null,error:r.error||null,thrown:false});
+          }catch(e){
+            return{status:'PERSISTENCE_ERROR',operationId:(intent&&intent.operationId)||null,revision:null,commitId:null,reason:null,error:{name:e.name||'',code:e.code||'',message:e.message||String(e)},thrown:true};
+          }
+        },
+        rawRunSale:async function(intent,expectedRevision){
+          try{
+            var spec=saleSpec(intent,expectedRevision);
+            var r=await _naRunCriticalOperation(spec);
+            return clone({status:r.status,operationId:r.operationId,revision:r.revision,commitId:r.commitId,reason:r.reason||null,error:r.error||null,expectedRevision:expectedRevision,attemptId:r.attemptId||null,thrown:false});
+          }catch(e){
+            return{status:'PERSISTENCE_ERROR',operationId:(intent&&intent.operationId)||null,revision:null,commitId:null,reason:null,error:{name:e.name||'',code:e.code||'',message:e.message||String(e)},expectedRevision:expectedRevision,thrown:true};
+          }
+        },
+        revalidateDirect:async function(intent){
+          var c=await _naV10ReadCanonical();
+          var built=_naV10BuildSaleIntent(clone(intent));
+          return clone(_naV10RevalidateSale(c,built));
+        },
+        operation:function(id){return _naV10GetOperation(id).then(clone);},
+        resolve:function(id){return _naV10ResolveOperation(id).then(function(r){return clone({status:r.status,revision:r.revision,commitId:r.commitId,issues:r.error&&r.error.issues||null,errorCode:r.error&&r.error.code||null,hasCheckpoint:!!(r.checkpoint),checkpoint:r.checkpoint?{key:r.checkpoint.key,revision:r.checkpoint.revision,commitId:r.checkpoint.commitId,operationId:r.checkpoint.operationId}:null});});},
+        recoverable:function(){return _naV10ListRecoverableOperations().then(clone);},
+        checkpointsFor:async function(id){
+          var db=await _naV10OpenDB();
+          var all=await new Promise(function(res,rej){var tx=db.transaction('checkpoints','readonly'),req=tx.objectStore('checkpoints').getAll();req.onsuccess=function(){res(req.result||[]);};req.onerror=function(){rej(req.error||new Error('checkpoint read failed'));};});
+          return clone((all||[]).filter(function(c){return c.operationId===id;}).map(function(c){return{key:c.key,revision:c.revision,commitId:c.commitId,operationId:c.operationId};}));
+        },
+        injectFault:function(mode){
+          var proto=window.IDBObjectStore&&window.IDBObjectStore.prototype;
+          if(!proto||!proto.put)return{ok:false,error:'IDBObjectStore.prototype.put no disponible'};
+          if(__faultRestore)return{ok:false,error:'fault ya inyectado'};
+          var nativePut=proto.put,armed=true,target=null;
+          if(mode==='state')target='state';
+          else if(mode==='checkpoint')target='checkpoints';
+          else if(mode==='all')target=null;
+          else return{ok:false,error:'modo de fault desconocido: '+mode};
+          proto.put=function(value,key){
+            var tx=this.transaction;
+            var shouldAbort=target===null?true:(this.name===target);
+            if(armed&&shouldAbort){
+              armed=false;
+              var req=arguments.length>1?nativePut.call(this,value,key):nativePut.call(this,value);
+              try{tx.abort();}catch(e){}
+              return req;
+            }
+            return arguments.length>1?nativePut.call(this,value,key):nativePut.call(this,value);
+          };
+          __faultRestore=function(){proto.put=nativePut;};
+          return{ok:true,mode:mode,target:target};
+        },
+        injectResolveFault:function(){
+          if(__resolveFaultRestore)return{ok:false,error:'resolve fault ya inyectado'};
+          var orig=_naV10ResolveOperation,fired=false;
+          _naV10ResolveOperation=function(id){
+            if(!fired){fired=true;return Promise.reject(new Error('synthetic resolve failure (post-commit)'));}
+            return orig(id);
+          };
+          __resolveFaultRestore=function(){_naV10ResolveOperation=orig;};
+          return{ok:true};
+        },
+        restoreFault:function(){
+          if(__faultRestore){__faultRestore();__faultRestore=null;return{ok:true};}
+          return{ok:false,error:'no hay fault inyectado'};
+        },
+        restoreResolveFault:function(){
+          if(__resolveFaultRestore){__resolveFaultRestore();__resolveFaultRestore=null;return{ok:true};}
+          return{ok:false,error:'no hay resolve fault inyectado'};
+        },
+        closeAll:async function(){try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(e){}await _naV10CloseDB();try{if(typeof _naDbPromise!=='undefined'&&_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(e){}return true;}
+      };
+      window.__stockWorkerReady=initialize();
+    }
+
+    function workerConfig(){
+      var runId=query.get('runId');
+      return{runId:runId,tabId:'T',localPrefix:'__NA_V10_STOCK_ADV__'+runId+'__LOCAL__',sessionPrefix:'__NA_V10_STOCK_ADV__'+runId+'__SESSION__',dbPrefix:'__NA_V10_STOCK_ADV_DB__'+runId+'__'};
+    }
+
+    /* ═══ WORKER MODE ═══ */
+    async function bootWorker(){
+      document.body.innerHTML='<p>Preparando contexto V10 adversarial…</p>';
+      try{
+        var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},15000);
+        var response=await fetch(MAIN_HTML+'?stockSource='+Date.now(),{cache:'no-store',signal:controller.signal});clearTimeout(timer);
+        if(!response.ok)throw new Error('No se pudo cargar producción: HTTP '+response.status);
+        var source=await response.text(),config=workerConfig();
+        var isolationScript='<scr'+'ipt>('+isolationBootstrap.toString()+')('+JSON.stringify(config)+');</scr'+'ipt>';
+        var bridgeScript='<scr'+'ipt>('+stockBridgeBootstrap.toString()+')();</scr'+'ipt>';
+        if(!/<head[^>]*>/i.test(source)||source.toLowerCase().lastIndexOf('</body>')<0)throw new Error('HTML principal no reconocido');
+        source=source.replace(/<head([^>]*)>/i,function(m){return m+isolationScript;});
+        var close=source.toLowerCase().lastIndexOf('</body>');
+        source=source.slice(0,close)+bridgeScript+source.slice(close);
+        document.open();document.write(source);document.close();
+      }catch(e){
+        document.body.innerHTML='<pre id="worker-error"></pre>';
+        document.getElementById('worker-error').textContent=e.stack||e.message||String(e);
+      }
+    }
+    if(query.get('worker')){bootWorker();return;}
+
+    /* ═══ PARENT MODE ═══ */
+    var runButton=document.getElementById('run'),statusEl=document.getElementById('status');
+    var summaryEl=document.getElementById('summary'),resultsBody=document.getElementById('results');
+    var autoResult=document.getElementById('auto-result'),initDiag=document.getElementById('init-diag');
+    var frame=null,results=[];
+    function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+    function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+    function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+
+    /* fixtures */
+    function product(id,stock){return{id:id,name:'Producto '+id,sku:'SKU-'+id,barcode:'',cat:'test',icon:'📦',imagen:null,costo:5,precio:10,stock:stock,stockMin:0,unidad:'unidad',controlInventario:true};}
+    function fixture(products,allowNoStock){
+      return{
+        appConfig:{freeSale:{allowRegisteredNoStock:allowNoStock===true},creditPolicy:{enabled:true,initialLine:100000,minPurchases:0,minProfit:0}},
+        ui:{},locks:{},security:{},cart:[],draft:null,
+        productos:products,ventas:[],clientes:[],creditos:[],gastos:[],cajMovs:[],
+        cajEstado:{abierta:true,cerrada:false,sessionId:'S1',cajeroId:null,fechaApertura:'2026-08-14',fondo:0}
+      };
+    }
+    function intent(opId,items,extra){
+      var base={operationId:opId,items:items,paymentMethod:'efectivo',sessionId:'S1'};
+      if(extra)Object.keys(extra).forEach(function(k){base[k]=extra[k];});
+      return base;
+    }
+    function stockOf(summary,id){var p=(summary.productos||[]).find(function(x){return String(x.id)===String(id);});return p?p.stock:undefined;}
+    function journalDigest(op){
+      if(!op)return null;
+      return{status:op.status,baseRevision:op.baseRevision,committedRevision:op.committedRevision,attempts:op.attempts,activeAttemptId:op.activeAttemptId,reason:op.reason,attemptHistory:(op.attemptHistory||[]).map(function(a){return{kind:a.kind,status:a.status,baseRevision:a.baseRevision,rebaseOf:a.rebaseOf,reason:a.reason,currentRevision:a.currentRevision};})};
+    }
+
+    /* registro */
+    function addRow(id,name,verdict,expected,observed){
+      var row=document.createElement('tr');
+      var cls=verdict==='PASS'?'pass':(verdict==='HARNESS_FAIL'?'hfail':'failure');
+      var cells=[String(id),name,verdict,('EXPECTED: '+expected+'\nOBSERVED: '+JSON.stringify(observed,null,2))];
+      cells.forEach(function(v,i){
+        var cell=document.createElement('td');
+        if(i===2)cell.className=cls;
+        var pre=document.createElement('pre');pre.textContent=v;cell.appendChild(pre);row.appendChild(cell);
+      });
+      resultsBody.appendChild(row);
+    }
+
+    async function createContext(runId){
+      var f=document.createElement('iframe');
+      f.src='v10-stock-adversarial.html?worker=1&runId='+encodeURIComponent(runId)+'&v='+encodeURIComponent(HARNESS_VERSION)+'&ts='+Date.now();
+      document.body.appendChild(f);frame=f;
+      for(var attempt=0;attempt<450;attempt++){
+        try{
+          if(f.contentWindow&&f.contentWindow.__stockBridge){
+            var st=f.contentWindow.__stockBridge.state();
+            if(st.error)throw new Error('Worker: '+st.error);
+            if(st.ready)return{frame:f,bridge:f.contentWindow.__stockBridge,state:st};
+          }
+          var err=f.contentDocument&&f.contentDocument.getElementById('worker-error');
+          if(err)throw new Error(err.textContent);
+        }catch(problem){if(problem&&problem.message)throw problem;}
+        await wait(100);
+      }
+      throw new Error('TIMEOUT: worker no alcanzó READY en 45s');
+    }
+
+    async function realStorageState(){
+      var keys={snapshotV9:localStorage.getItem('na_snapshot_v9'),sessionV9:localStorage.getItem('na_snapshot_v9_session')};
+      var allKeys=[];for(var i=0;i<localStorage.length;i++)allKeys.push(localStorage.key(i));
+      keys.localKeys=allKeys.sort();
+      var dbs=[];
+      if(typeof indexedDB.databases==='function'){var list=await indexedDB.databases();dbs=list.map(function(d){return{name:d.name,version:d.version};});}
+      keys.indexedDbNames=dbs;
+      return keys;
+    }
+    function sameRealState(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+    function deleteDb(name){
+      return new Promise(function(resolve){
+        var done=false;function finish(v){if(done)return;done=true;resolve(v);}
+        try{
+          var req=indexedDB.deleteDatabase(name);
+          req.onsuccess=function(){finish({ok:true});};
+          req.onerror=function(){finish({ok:false,error:req.error&&req.error.message});};
+          req.onblocked=function(){finish({ok:false,blocked:true});};
+          setTimeout(function(){finish({ok:false,timeout:true});},3000);
+        }catch(e){finish({ok:false,error:e.message});}
+      });
+    }
+    function removePrefixed(prefix){
+      [localStorage,sessionStorage].forEach(function(store){
+        var found=[];for(var i=0;i<store.length;i++){var k=store.key(i);if(k&&k.indexOf(prefix)===0)found.push(k);}
+        found.forEach(function(k){store.removeItem(k);});
+      });
+    }
+
+    async function runScenario(bridge,key,name,expected,fn){
+      var id=results.length+1;
+      try{
+        var out=await fn(bridge);
+        var passed=!!out.passed;
+        var verdict=passed?'PASS':'PRODUCT_FAIL';
+        results.push({n:id,key:key,name:name,verdict:verdict,expected:expected,observed:clone(out.observed)});
+        addRow(id,name,verdict,expected,out.observed);
+        return out;
+      }catch(e){
+        var detail={harnessError:e.message||String(e),stack:(e.stack||'').slice(0,600)};
+        results.push({n:id,key:key,name:name,verdict:'HARNESS_FAIL',expected:expected,observed:detail});
+        addRow(id,name,'HARNESS_FAIL',expected,detail);
+        return{passed:false,observed:detail,harnessFail:true};
+      }
+    }
+    function resetOk(reset){return reset&&reset.create&&reset.create.status==='SUCCESS';}
+
+    async function run(){
+      runButton.disabled=true;results=[];resultsBody.innerHTML='';
+      summaryEl.className='banner';summaryEl.textContent='EJECUTANDO';
+      autoResult.textContent='{"status":"RUNNING"}';
+      var runId=Date.now().toString(36)+'-'+crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+      var testDbName='__NA_V10_STOCK_ADV_DB__'+runId+'__NuevoAmanecerPOS';
+      var report={version:HARNESS_VERSION,runId:runId,testDb:testDbName,status:'ERROR'};
+      var realBefore=await realStorageState(),ctx=null;
+      report.realStorageBefore=realBefore;
+      try{
+        statusEl.textContent='[1] creando contexto';
+        ctx=await createContext(runId);
+        var probe=await ctx.bridge.probe();
+        initDiag.textContent=JSON.stringify({probe:probe,isolation:ctx.bridge.isolation},null,2);
+        var helpersOk=probe.helpers.confirmSaleIntent==='function'&&probe.helpers.revalidateSale==='function'&&probe.helpers.applySale==='function'&&probe.helpers.createInitial==='function'&&probe.helpers.resolve==='function';
+        if(!helpersOk||!ctx.state.ready)throw new Error('HARNESS_FAIL: helpers V10 no disponibles o worker no READY');
+        var B=ctx.bridge;
+        statusEl.textContent='[2] ejecutando escenarios adversariales';
+
+        /* ── 1 CONCURRENT_SAME_OPERATION ── */
+        await runScenario(B,'CONCURRENT_SAME_OPERATION','1. Mismo operationId, Promise.all (5 iteraciones)','cada iteración → {SUCCESS, ALREADY_COMMITTED} (cualquier orden), UNA deducción, UNA venta, sin PERSISTENCE_ERROR/STALE_ATTEMPT',async function(B){
+          var iterations=[],allOk=true;
+          for(var i=0;i<5;i++){
+            var r=await B.reset(fixture([product('C1',10)],false));
+            if(r.create.status!=='SUCCESS'){return{passed:false,observed:{resetFail:r,iterations:iterations}};}
+            var it=intent('conc-'+i,[{productId:'C1',qty:2,price:10,name:'C1',boxUnits:3}]);
+            var res=await Promise.all([B.confirmSale(it),B.confirmSale(it)]);
+            var sum=await B.summary();
+            var statuses=[res[0].status,res[1].status].slice().sort();
+            var reasons=[res[0].reason,res[1].reason];
+            var stock=stockOf(sum,'C1');
+            var op=await B.operation('conc-'+i);
+            var ok=statuses[0]==='ALREADY_COMMITTED'&&statuses[1]==='SUCCESS'&&stock===4&&sum.ventasCount===1;
+            iterations.push({statuses:statuses,reasons:reasons,stock:stock,ventasCount:sum.ventasCount,journal:journalDigest(op)});
+            if(!ok)allOk=false;
+          }
+          return{passed:allOk,observed:{iterations:iterations}};
+        });
+
+        /* ── 2 CONCURRENT_DIFFERENT_OPERATIONS ── */
+        await runScenario(B,'CONCURRENT_DIFFERENT_OPERATIONS','2. Dos operationId distintos, stock insuficiente para ambos','exactamente 1 SUCCESS y 1 CONFLICT (STOCK_INSUFICIENTE|REVISION_MISMATCH); stock final 2; 1 venta',async function(B){
+          var r=await B.reset(fixture([product('C2',10)],false));
+          var ia=intent('conc-A',[{productId:'C2',qty:8,price:10,name:'C2',boxUnits:1}]);
+          var ib=intent('conc-B',[{productId:'C2',qty:8,price:10,name:'C2',boxUnits:1}]);
+          var res=await Promise.all([B.confirmSale(ia),B.confirmSale(ib)]);
+          var sum=await B.summary();
+          var statuses=[res[0].status,res[1].status].slice().sort();
+          var reasons=[res[0].reason,res[1].reason];
+          var stock=stockOf(sum,'C2');
+          var successes=statuses.filter(function(s){return s==='SUCCESS';}).length;
+          var conflicts=statuses.filter(function(s){return s==='CONFLICT';}).length;
+          var passed=r.create.status==='SUCCESS'&&successes===1&&conflicts===1&&stock===2&&sum.ventasCount===1&&reasons.some(function(x){return x==='STOCK_INSUFICIENTE'||x==='REVISION_MISMATCH';});
+          return{passed:passed,observed:{reset:r.create.status,statuses:statuses,reasons:reasons,stock:stock,ventasCount:sum.ventasCount}};
+        });
+
+        /* ── 3 RETRY_WHILE_PENDING ── */
+        await runScenario(B,'RETRY_WHILE_PENDING','3. Fault aborta CAS (1ª vez), journal PENDING, retry mismo opId','1ª PERSISTENCE_ERROR con journal PENDING; retry SUCCESS; stock deducido EXACTAMENTE una vez',async function(B){
+          var r=await B.reset(fixture([product('C3',50)],false));
+          var it=intent('retry-pending-1',[{productId:'C3',qty:2,price:10,name:'C3',boxUnits:2}]);
+          var inj=await B.injectFault('state');
+          var s1=await B.confirmSale(it);
+          var sum1=await B.summary();
+          var op1=await B.operation('retry-pending-1');
+          var restore=await B.restoreFault();
+          var s2=await B.confirmSale(it);
+          var sum2=await B.summary();
+          var op2=await B.operation('retry-pending-1');
+          var stock=stockOf(sum2,'C3');
+          var passed=r.create.status==='SUCCESS'&&inj.ok===true&&s1.status==='PERSISTENCE_ERROR'&&op1&&op1.status==='PENDING'&&(op1.attemptHistory||[]).length>=1&&sum1.ventasCount===0&&stockOf(sum1,'C3')===50&&restore.ok===true&&s2.status==='SUCCESS'&&stock===46&&sum2.ventasCount===1&&op2&&op2.status==='COMMITTED';
+          return{passed:passed,observed:{reset:r.create.status,inject:inj,s1:{status:s1.status,error:s1.error,thrown:s1.thrown},journalAfterFault:journalDigest(op1),stockAfterFault:stockOf(sum1,'C3'),restore:restore,s2:{status:s2.status,revision:s2.revision},stockFinal:stock,ventasCount:sum2.ventasCount,journalAfterRetry:journalDigest(op2)}};
+        });
+
+        /* ── 4 FAULT_AFTER_COMMIT_ATTEMPT (checkpoint abort) ── */
+        await runScenario(B,'FAULT_AFTER_COMMIT_ATTEMPT','4. Fault en put del checkpoint aborta la tx CAS','1ª PERSISTENCE_ERROR (nunca SUCCESS); journal PENDING; retry commit 1 solo efecto; final: journal COMMITTED + checkpoint + revision+1',async function(B){
+          var r=await B.reset(fixture([product('C4',50)],false));
+          var it=intent('fault-after-1',[{productId:'C4',qty:2,price:10,name:'C4',boxUnits:2}]);
+          var inj=await B.injectFault('checkpoint');
+          var s1=await B.confirmSale(it);
+          var sum1=await B.summary();
+          var op1=await B.operation('fault-after-1');
+          var restore=await B.restoreFault();
+          var s2=await B.confirmSale(it);
+          var sum2=await B.summary();
+          var op2=await B.operation('fault-after-1');
+          var res=await B.resolve('fault-after-1');
+          var cps=await B.checkpointsFor('fault-after-1');
+          var can=await B.canonical();
+          var stock=stockOf(sum2,'C4');
+          var noFalseSuccess=s1.status==='PERSISTENCE_ERROR';
+          var singleEffect=stock===46&&sum2.ventasCount===1;
+          var finalConsistent=op2&&op2.status==='COMMITTED'&&res.status==='COMMITTED'&&cps.length>=1&&can.revision===(r.create.revision+1);
+          var passed=r.create.status==='SUCCESS'&&inj.ok===true&&noFalseSuccess&&op1&&op1.status==='PENDING'&&sum1.ventasCount===0&&stockOf(sum1,'C4')===50&&restore.ok===true&&(s2.status==='SUCCESS'||s2.status==='ALREADY_COMMITTED')&&singleEffect&&finalConsistent;
+          return{passed:passed,observed:{reset:r.create.status,initialRevision:r.create.revision,inject:inj,s1:{status:s1.status,error:s1.error},journalAfterFault:journalDigest(op1),stockAfterFault:stockOf(sum1,'C4'),restore:restore,s2:{status:s2.status,revision:s2.revision,commitId:s2.commitId},stockFinal:stock,ventasCount:sum2.ventasCount,journalFinal:journalDigest(op2),resolve:{status:res.status,hasCheckpoint:res.hasCheckpoint},checkpointCount:cps.length,finalRevision:can.revision}};
+        });
+
+        /* ── 4b UNCERTAIN_COMMIT_RESPONSE_LOSS ── */
+        await runScenario(B,'UNCERTAIN_COMMIT_RESPONSE_LOSS','4b. Commit durable pero respuesta perdida (fault post-commit en resolve)','1ª PERSISTENCE_ERROR pero commit durable; retry ALREADY_COMMITTED con evidencia verificada; 1 solo efecto',async function(B){
+          var r=await B.reset(fixture([product('C4B',50)],false));
+          var it=intent('uncertain-1',[{productId:'C4B',qty:2,price:10,name:'C4B',boxUnits:2}]);
+          var inj=await B.injectResolveFault();
+          var s1=await B.confirmSale(it);
+          var sum1=await B.summary();
+          var op1=await B.operation('uncertain-1');
+          var restore=await B.restoreResolveFault();
+          var s2=await B.confirmSale(it);
+          var sum2=await B.summary();
+          var res=await B.resolve('uncertain-1');
+          var stock=stockOf(sum2,'C4B');
+          var passed=r.create.status==='SUCCESS'&&inj.ok===true&&s1.status==='PERSISTENCE_ERROR'&&op1&&op1.status==='COMMITTED'&&sum1.ventasCount===1&&stockOf(sum1,'C4B')===46&&restore.ok===true&&s2.status==='ALREADY_COMMITTED'&&s2.revision&&s2.commitId&&stock===46&&sum2.ventasCount===1&&res.status==='COMMITTED'&&res.hasCheckpoint===true;
+          return{passed:passed,observed:{reset:r.create.status,inject:inj,s1:{status:s1.status,error:s1.error},journalAfterCommit:journalDigest(op1),stockAfterCommit:stockOf(sum1,'C4B'),restore:restore,s2:{status:s2.status,revision:s2.revision,commitId:s2.commitId},stockFinal:stock,ventasCount:sum2.ventasCount,resolve:{status:res.status,hasCheckpoint:res.hasCheckpoint}}};
+        });
+
+        /* ── 5 EXTREME_VALUES ── */
+        await runScenario(B,'EXTREME_VALUES','5. boxUnits {0,-5,1e9,12.5} y qty {0.5,0,-2}','determinista: upq min1, trunc _naInt, qty decimal se conserva; stock coherente con physical; nunca NaN/Infinity; snapshot JSON-safe',async function(B){
+          var cases=[
+            {label:'boxUnits=0',boxUnits:0,qty:1,upq:1,phys:1},
+            {label:'boxUnits=-5',boxUnits:-5,qty:2,upq:1,phys:2},
+            {label:'boxUnits=1e9',boxUnits:1e9,qty:1,upq:1e9,phys:1e9},
+            {label:'boxUnits=12.5',boxUnits:12.5,qty:2,upq:12,phys:24},
+            {label:'qty=0.5',boxUnits:2,qty:0.5,upq:2,phys:1},
+            {label:'qty=0',boxUnits:4,qty:0,upq:4,phys:0},
+            {label:'qty=-2',boxUnits:3,qty:-2,upq:3,phys:0}
+          ];
+          var rows=[],allOk=true;
+          for(var i=0;i<cases.length;i++){
+            var c=cases[i],pid='E'+i;
+            var r=await B.reset(fixture([product(pid,100)],true));
+            if(r.create.status!=='SUCCESS'){allOk=false;rows.push({label:c.label,reset:'FAIL'});continue;}
+            var it=intent('ext-'+i,[{productId:pid,qty:c.qty,price:10,name:pid,boxUnits:c.boxUnits}]);
+            var s=await B.confirmSale(it);
+            var sum=await B.summary();
+            var stock=stockOf(sum,pid);
+            var v=sum.ventas[0];
+            var saleItem=v&&v.items&&v.items[0];
+            var expectedStock=100-c.phys;
+            var row={label:c.label,status:s.status,unitsPerQty:saleItem&&saleItem.unitsPerQty,saleLineQty:saleItem&&saleItem.qty,saleUnidadesFisicas:v&&v.unidadesFisicas,stock:stock,expectedStock:expectedStock,finite:Number.isFinite(stock),saleLineClamped:!!(saleItem&&saleItem.qty===Math.max(1,c.qty||1)),consistent:!!(v&&v.unidadesFisicas===c.phys)};
+            var ok=s.status==='SUCCESS'&&saleItem&&saleItem.unitsPerQty===c.upq&&stock===expectedStock&&Number.isFinite(stock)&&sum.ventasCount===1;
+            if(!ok)allOk=false;
+            rows.push(row);
+          }
+          return{passed:allOk,observed:{rows:rows}};
+        });
+
+        /* ── 6 DUPLICATE_LINES_RACE ── */
+        await runScenario(B,'DUPLICATE_LINES_RACE','6. 2 líneas mismo producto (1+1×12=13) stock13, 2×paralelo opIds distintos','exactamente 1 SUCCESS, otro CONFLICT; stock 0',async function(B){
+          var r=await B.reset(fixture([product('C6',13)],false));
+          function mk(opId){return intent(opId,[{productId:'C6',qty:1,price:10,name:'C6',boxUnits:1},{productId:'C6',qty:1,price:10,name:'C6',boxUnits:12}]);}
+          var res=await Promise.all([B.confirmSale(mk('dup-race-A')),B.confirmSale(mk('dup-race-B'))]);
+          var sum=await B.summary();
+          var statuses=[res[0].status,res[1].status].slice().sort();
+          var reasons=[res[0].reason,res[1].reason];
+          var stock=stockOf(sum,'C6');
+          var passed=r.create.status==='SUCCESS'&&statuses[0]==='CONFLICT'&&statuses[1]==='SUCCESS'&&stock===0&&sum.ventasCount===1;
+          return{passed:passed,observed:{reset:r.create.status,statuses:statuses,reasons:reasons,stock:stock,ventasCount:sum.ventasCount}};
+        });
+
+        /* ── 7 NEGATIVE_STOCK_CHAIN ── */
+        await runScenario(B,'NEGATIVE_STOCK_CHAIN','7. allowNoStock=true, 3 ventas encadenadas 5→0→-7→-19','cada deducción exacta sin clamp; stock final -19; 3 ventas; unidadesFisicas correctas',async function(B){
+          var r=await B.reset(fixture([product('C7',5)],true));
+          var seq=[{op:'neg-1',qty:5,upq:1,after:0},{op:'neg-2',qty:7,upq:1,after:-7},{op:'neg-3',qty:12,upq:1,after:-19}];
+          var rows=[],allOk=true;
+          for(var i=0;i<seq.length;i++){
+            var it=intent(seq[i].op,[{productId:'C7',qty:seq[i].qty,price:10,name:'C7',boxUnits:seq[i].upq}]);
+            var s=await B.confirmSale(it);
+            var stock=stockOf(await B.summary(),'C7');
+            rows.push({op:seq[i].op,status:s.status,stock:stock});
+            if(s.status!=='SUCCESS'||stock!==seq[i].after)allOk=false;
+          }
+          var sum=await B.summary();
+          var units=sum.ventas.map(function(v){return v.unidadesFisicas;}),unitsByOperation={};sum.ventas.forEach(function(v){unitsByOperation[v.operation]=v.unidadesFisicas;});
+          var passed=r.create.status==='SUCCESS'&&allOk&&sum.ventasCount===3&&unitsByOperation['neg-1']===5&&unitsByOperation['neg-2']===7&&unitsByOperation['neg-3']===12&&units.join(',')==='12,7,5';
+          return{passed:passed,observed:{reset:r.create.status,rows:rows,ventasCount:sum.ventasCount,order:'newest-first',unidadesFisicas:units,unidadesFisicasByOperation:unitsByOperation}};
+        });
+
+        /* ── 8 STALE_REVISION_RETRY ── */
+        await runScenario(B,'STALE_REVISION_RETRY','8. Operación PENDING con baseRevision vieja (tab desactualizado)','commit falla CONFLICT REVISION_MISMATCH/REBASE_REQUIRED; stock NO se descuenta',async function(B){
+          var r=await B.reset(fixture([product('C8',20)],false));
+          var ok1=await B.confirmSale(intent('stale-prep',[{productId:'C8',qty:10,price:10,name:'C8',boxUnits:1}]));
+          var afterPrep=await B.summary();
+          var baseRev=afterPrep.revision; // 1
+          var stale=await B.rawRunSale(intent('stale-op',[{productId:'C8',qty:5,price:10,name:'C8',boxUnits:1}]),0);
+          var sum=await B.summary();
+          var stock=stockOf(sum,'C8');
+          var op=await B.operation('stale-op');
+          var passed=r.create.status==='SUCCESS'&&ok1.status==='SUCCESS'&&baseRev===1&&stale.status==='CONFLICT'&&(stale.reason==='REVISION_MISMATCH'||stale.reason==='REBASE_REQUIRED')&&stock===10&&sum.ventasCount===1&&op&&op.status==='CONFLICT';
+          return{passed:passed,observed:{reset:r.create.status,prepStatus:ok1.status,baseRevisionAfterPrep:baseRev,stale:{status:stale.status,reason:stale.reason,expectedRevision:stale.expectedRevision},stock:stock,ventasCount:sum.ventasCount,journal:journalDigest(op)}};
+        });
+
+        /* ── 10 CROSS_FIELD_CONSISTENCY ── */
+        await runScenario(B,'CROSS_FIELD_CONSISTENCY','10. Ventas con cajas y duplicados: coherencia unidadesFisicas vs descuento real','venta.unidadesFisicas === Σ(qty×unitsPerQty) y el descuento real de stock coincide',async function(B){
+          var r=await B.reset(fixture([product('P',50),product('Q',100)],false));
+          var it=intent('cross-1',[{productId:'P',qty:2,price:10,name:'P',boxUnits:6},{productId:'P',qty:1,price:10,name:'P',boxUnits:1},{productId:'Q',qty:1,price:10,name:'Q',boxUnits:24}]);
+          var s=await B.confirmSale(it);
+          var sum=await B.summary();
+          var stockP=stockOf(sum,'P'),stockQ=stockOf(sum,'Q');
+          var v=sum.ventas[0];
+          var items=v&&v.items;
+          var sumItems=(items||[]).reduce(function(a,x){return a+(x.qty*x.unitsPerQty);},0);
+          var physP=2*6+1*1,physQ=1*24;
+          var passed=r.create.status==='SUCCESS'&&s.status==='SUCCESS'&&v&&v.unidadesFisicas===37&&sumItems===37&&stockP===50-physP&&stockQ===100-physQ&&(50-stockP)===physP&&(100-stockQ)===physQ;
+          return{passed:passed,observed:{reset:r.create.status,status:s.status,stockP:stockP,stockQ:stockQ,descuentoP:50-stockP,descuentoQ:100-stockQ,physP:physP,physQ:physQ,unidadesFisicas:v&&v.unidadesFisicas,sumItems:sumItems}};
+        });
+
+      }catch(e){
+        report.status='ERROR';report.error={message:e.message||String(e),stack:(e.stack||'').slice(0,800)};
+      }finally{
+        statusEl.textContent='[3] limpieza';
+        try{if(ctx){
+          await ctx.bridge.restoreFault();
+          await ctx.bridge.restoreResolveFault();
+          await withTimeout(ctx.bridge.closeAll(),5000,'closeAll');
+        }}catch(e){}
+        if(frame){frame.src='about:blank';frame.remove();frame=null;}
+        await wait(250);
+        var prefix='__NA_V10_STOCK_ADV__'+runId+'__';
+        removePrefixed(prefix);
+        var dbCleanup=await deleteDb(testDbName);
+        report.namespaceCleanup={prefix:prefix,dbCleanup:dbCleanup};
+        await wait(100);
+        var realAfter=await realStorageState();
+        var v9Untouched=sameRealState(realBefore,realAfter);
+        report.realStorageAfter=realAfter;
+        report.v9Isolation={
+          snapshotV9Before:realBefore.snapshotV9,snapshotV9After:realAfter.snapshotV9,
+          sessionV9Before:realBefore.sessionV9,sessionV9After:realAfter.sessionV9,
+          localKeysBefore:realBefore.localKeys,localKeysAfter:realAfter.localKeys,
+          indexedDbBefore:realBefore.indexedDbNames,indexedDbAfter:realAfter.indexedDbNames,
+          identical:sameRealState(realBefore,realAfter)
+        };
+        report.v9Untouched=v9Untouched;
+      }
+
+      var stats={pass:0,fail:0,hfail:0};
+      results.forEach(function(r){if(r.verdict==='PASS')stats.pass++;else if(r.verdict==='HARNESS_FAIL')stats.hfail++;else stats.fail++;});
+      report.stats=stats;
+      report.cases=results;
+      report.status=(stats.fail===0&&stats.hfail===0&&stats.pass===results.length&&results.length>0&&report.v9Untouched)?'PASS':'FAIL';
+      summaryEl.className='banner '+(report.status==='PASS'?'pass':'fail');
+      summaryEl.textContent='V10 ADVERSARIAL: '+report.status+' — '+stats.pass+' PASS / '+stats.fail+' PRODUCT_FAIL / '+stats.hfail+' HARNESS_FAIL / '+(results.length)+' total';
+      statusEl.textContent='[fin] '+stats.pass+' PASS · '+stats.fail+' FAIL · '+stats.hfail+' HARNESS_FAIL · v9Untouched='+report.v9Untouched;
+      autoResult.textContent=JSON.stringify(report,null,2);
+      window.__TEST_REPORT=report;
+      runButton.disabled=false;
+    }
+
+    runButton.addEventListener('click',function(){run().catch(function(e){statusEl.textContent='ERROR: '+e.message;summaryEl.className='banner fail';summaryEl.textContent='ERROR: '+e.message;runButton.disabled=false;});});
+    if(query.get('auto')==='1')setTimeout(function(){runButton.click();},400);
+  })();
+  </script>
+</body>
+</html>

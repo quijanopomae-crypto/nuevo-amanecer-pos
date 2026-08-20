@@ -1,0 +1,4262 @@
+{
+  "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "port": 49364,
+  "debugPort": 49365,
+  "urlBase": "http://127.0.0.1:49364",
+  "myHarness": {
+    "version": "v10-stock-physical-units-2026-08-14-1",
+    "runId": "mstfpx0n-ipuxeo",
+    "testDb": "__NA_V10_STOCK_TEST_DB__mstfpx0n-ipuxeo__NuevoAmanecerPOS",
+    "status": "PASS",
+    "realStorageBefore": {
+      "snapshotV9": null,
+      "sessionV9": null,
+      "localKeys": [],
+      "indexedDbNames": []
+    },
+    "namespaceCleanup": {
+      "prefix": "__NA_V10_STOCK_TEST__mstfpx0n-ipuxeo__",
+      "dbCleanup": {
+        "ok": true
+      }
+    },
+    "realStorageAfter": {
+      "snapshotV9": null,
+      "sessionV9": null,
+      "localKeys": [],
+      "indexedDbNames": []
+    },
+    "v9Isolation": {
+      "snapshotV9Before": null,
+      "snapshotV9After": null,
+      "sessionV9Before": null,
+      "sessionV9After": null,
+      "localKeysBefore": [],
+      "localKeysAfter": [],
+      "indexedDbBefore": [],
+      "indexedDbAfter": [],
+      "identical": true
+    },
+    "v9Untouched": true,
+    "stats": {
+      "pass": 16,
+      "fail": 0,
+      "hfail": 0
+    },
+    "cases": [
+      {
+        "n": 1,
+        "key": "UNIT_SALE",
+        "name": "1. Venta unidad simple (qty1×box1)",
+        "verdict": "PASS",
+        "expected": "commit SUCCESS; stock 10→9",
+        "observed": {
+          "reset": "SUCCESS",
+          "status": "SUCCESS",
+          "stockFinal": 9,
+          "ventasCount": 1,
+          "unidadesFisicas": 1
+        }
+      },
+      {
+        "n": 2,
+        "key": "MULTI_UNIT_SALE",
+        "name": "2. qty5×box1",
+        "verdict": "PASS",
+        "expected": "stock 10→5 (consume 5)",
+        "observed": {
+          "status": "SUCCESS",
+          "stockFinal": 5
+        }
+      },
+      {
+        "n": 3,
+        "key": "BOX_SALE",
+        "name": "3. qty1×box12 (stock 24)",
+        "verdict": "PASS",
+        "expected": "stock 24→12 (NO 23)",
+        "observed": {
+          "status": "SUCCESS",
+          "stockFinal": 12
+        }
+      },
+      {
+        "n": 4,
+        "key": "MULTI_BOX",
+        "name": "4. qty2×box12 (stock 24)",
+        "verdict": "PASS",
+        "expected": "stock 24→0 (consume 24, NO 2)",
+        "observed": {
+          "status": "SUCCESS",
+          "stockFinal": 0
+        }
+      },
+      {
+        "n": 5,
+        "key": "VARIABLE_BOX_UNITS",
+        "name": "5. 2 líneas box6 y box24",
+        "verdict": "PASS",
+        "expected": "descuento=6 y 24; items.unitsPerQty 6/24; unidadesFisicas 30",
+        "observed": {
+          "status": "SUCCESS",
+          "stockP6": 94,
+          "stockP24": 76,
+          "unitsPerQty": [
+            6,
+            24
+          ],
+          "unidadesFisicas": 30
+        }
+      },
+      {
+        "n": 6,
+        "key": "EXACT_STOCK",
+        "name": "6. stock 24 = qty2×box12",
+        "verdict": "PASS",
+        "expected": "SUCCESS; stock 24→0",
+        "observed": {
+          "status": "SUCCESS",
+          "stockFinal": 0
+        }
+      },
+      {
+        "n": 7,
+        "key": "INSUFFICIENT_STOCK_POLICY",
+        "name": "7. stock3, qty5×box1, allowNoStock=false",
+        "verdict": "PASS",
+        "expected": "CONFLICT STOCK_INSUFICIENTE requerido5; stock sigue 3; sin venta",
+        "observed": {
+          "status": "CONFLICT",
+          "reason": "STOCK_INSUFICIENTE",
+          "stockFinal": 3,
+          "ventasCount": 0,
+          "revalidate": {
+            "ok": false,
+            "reason": "STOCK_INSUFICIENTE",
+            "requerido": 5,
+            "disponible": 3
+          },
+          "conflictResultHasRequerido": false
+        }
+      },
+      {
+        "n": 8,
+        "key": "INSUFFICIENT_BOX_POLICY",
+        "name": "8. stock10, qty1×box12, allowNoStock=false",
+        "verdict": "PASS",
+        "expected": "CONFLICT STOCK_INSUFICIENTE requerido12 (unidades físicas)",
+        "observed": {
+          "status": "CONFLICT",
+          "reason": "STOCK_INSUFICIENTE",
+          "stockFinal": 10,
+          "revalidate": {
+            "ok": false,
+            "requerido": 12,
+            "disponible": 10
+          }
+        }
+      },
+      {
+        "n": 9,
+        "key": "ALLOW_REGISTERED_NO_STOCK_POLICY",
+        "name": "9. stock3, qty5×box1, allowNoStock=true",
+        "verdict": "PASS",
+        "expected": "SUCCESS; stock 3→-2 (sin clamp)",
+        "observed": {
+          "status": "SUCCESS",
+          "stockFinal": -2
+        }
+      },
+      {
+        "n": 10,
+        "key": "ALLOW_REGISTERED_NO_STOCK_BOX",
+        "name": "10. stock3, qty2×box12, allowNoStock=true",
+        "verdict": "PASS",
+        "expected": "SUCCESS; stock 3→-21",
+        "observed": {
+          "status": "SUCCESS",
+          "stockFinal": -21
+        }
+      },
+      {
+        "n": 11,
+        "key": "OPERATION_ID_IDEMPOTENCY",
+        "name": "11. opId ABC, doble envío idéntico",
+        "verdict": "PASS",
+        "expected": "1ª SUCCESS (stock-6); 2ª ALREADY_COMMITTED; stock no cambia; 1 venta",
+        "observed": {
+          "first": "SUCCESS",
+          "second": "ALREADY_COMMITTED",
+          "stockAfter1": 94,
+          "stockAfter2": 94,
+          "ventasConOperation": 1
+        }
+      },
+      {
+        "n": 12,
+        "key": "RETRY_IDEMPOTENCY",
+        "name": "12. opId RETRY1, retry idéntico",
+        "verdict": "PASS",
+        "expected": "1ª SUCCESS; 2ª ALREADY_COMMITTED; cero descuento extra",
+        "observed": {
+          "first": "SUCCESS",
+          "second": "ALREADY_COMMITTED",
+          "stockAfter1": 95,
+          "stockAfter2": 95
+        }
+      },
+      {
+        "n": 13,
+        "key": "ZERO_SECOND_STOCK_EFFECT",
+        "name": "13. retry no descuenta de nuevo",
+        "verdict": "PASS",
+        "expected": "stock baja exactamente una vez (antes=después del retry)",
+        "observed": {
+          "first": "SUCCESS",
+          "second": "ALREADY_COMMITTED",
+          "stockAfter1": 44,
+          "stockAfter2": 44,
+          "journalStatus": "COMMITTED"
+        }
+      },
+      {
+        "n": 14,
+        "key": "REVALIDATE_PHYSICAL_UNITS",
+        "name": "14. revalidate usa unidades físicas",
+        "verdict": "PASS",
+        "expected": "(a) req12; (b) ok con allowNoStock, descent12; (c) ok req24",
+        "observed": {
+          "a": {
+            "ok": false,
+            "reason": "STOCK_INSUFICIENTE",
+            "requerido": 12,
+            "disponible": 10
+          },
+          "b": {
+            "ok": true,
+            "status": "SUCCESS",
+            "stockFinal": -2,
+            "descent": 12
+          },
+          "c": {
+            "ok": true,
+            "status": "SUCCESS",
+            "stockFinal": 1,
+            "descent": 24
+          }
+        }
+      },
+      {
+        "n": 15,
+        "key": "DUPLICATE_LINES",
+        "name": "15. dos líneas del mismo producto",
+        "verdict": "PASS",
+        "expected": "agregación: 13; stock13→0 OK; stock10→CONFLICT requerido13",
+        "observed": {
+          "a": {
+            "status": "SUCCESS",
+            "stockFinal": 0
+          },
+          "b": {
+            "status": "CONFLICT",
+            "reason": "STOCK_INSUFICIENTE",
+            "stockFinal": 10,
+            "revalidate": {
+              "ok": false,
+              "requerido": 13,
+              "disponible": 10
+            }
+          }
+        }
+      },
+      {
+        "n": 16,
+        "key": "PERSISTENCE_FAILURE",
+        "name": "16. fallo IndexedDB antes de confirmar",
+        "verdict": "PASS",
+        "expected": "PERSISTENCE_ERROR (nunca SUCCESS); canonical no cambia",
+        "observed": {
+          "inject": {
+            "ok": true
+          },
+          "status": "PERSISTENCE_ERROR",
+          "thrown": false,
+          "error": {
+            "code": "PENDING_WRITE_FAILED",
+            "message": "No se pudo conservar la intencion PENDING"
+          },
+          "restore": {
+            "ok": true
+          },
+          "unchanged": true,
+          "stockFinal": 50,
+          "ventasCount": 0,
+          "journalPersisted": false
+        }
+      }
+    ]
+  },
+  "coreRegression": {
+    "version": "persistence-v10-core-2026-08-09-2",
+    "runId": "mstfpzpt-jmc3sj",
+    "status": "PASS",
+    "stats": {
+      "pass": 23,
+      "fail": 0,
+      "total": 23
+    },
+    "results": [
+      {
+        "id": 1,
+        "name": "Creación de snapshot revision 0",
+        "passed": true,
+        "detail": {
+          "migration": "SUCCESS",
+          "revision": 0,
+          "parentRevision": null
+        }
+      },
+      {
+        "id": 2,
+        "name": "Commit revision 0 → 1",
+        "passed": true,
+        "detail": {
+          "results": [
+            "SUCCESS",
+            "CONFLICT"
+          ],
+          "revision": 1
+        }
+      },
+      {
+        "id": 3,
+        "name": "Siguiente commit revision 1 → 2",
+        "passed": true,
+        "detail": {
+          "status": "SUCCESS",
+          "revision": 2,
+          "parentRevision": 1
+        }
+      },
+      {
+        "id": 4,
+        "name": "Dos writers expectedRevision=0: solo uno confirma",
+        "passed": true,
+        "detail": {
+          "successes": 1,
+          "conflicts": 1,
+          "results": [
+            "SUCCESS",
+            "CONFLICT"
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "name": "Segundo writer detecta conflicto",
+        "passed": true,
+        "detail": {
+          "conflict": {
+            "status": "CONFLICT",
+            "reason": "REVISION_MISMATCH",
+            "currentRevision": 1
+          }
+        }
+      },
+      {
+        "id": 6,
+        "name": "Mismo operationId historico no duplica y queda verificable",
+        "passed": true,
+        "detail": {
+          "status": "PERSISTENCE_ERROR",
+          "code": "HISTORICAL_COMMIT_UNVERIFIED",
+          "recoverable": true,
+          "beforeRevision": 2,
+          "afterRevision": 2
+        }
+      },
+      {
+        "id": 7,
+        "name": "operationId distinto produce commit distinto",
+        "passed": true,
+        "detail": {
+          "firstOperation": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+          "secondOperation": "op_c6dd1d7a-d5ca-4670-9e3f-4b580ebf4250",
+          "firstCommit": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+          "secondCommit": "commit_9c2d4246-a546-4cef-b715-c8aa1a492067"
+        }
+      },
+      {
+        "id": 8,
+        "name": "UUID e IDs financieros son distintos",
+        "passed": true,
+        "detail": {
+          "uuidCount": 64,
+          "uniqueUuids": 64,
+          "operationCount": 64,
+          "uniqueOperations": 64,
+          "tabIdsDistinct": true
+        }
+      },
+      {
+        "id": 9,
+        "name": "Journal PENDING → COMMITTED",
+        "passed": true,
+        "detail": {
+          "before": "PENDING",
+          "after": "COMMITTED",
+          "committedRevision": 2
+        }
+      },
+      {
+        "id": 10,
+        "name": "Fallo previo al commit conserva intención",
+        "passed": true,
+        "detail": {
+          "result": "PERSISTENCE_ERROR",
+          "journal": "PENDING",
+          "revision": 2
+        }
+      },
+      {
+        "id": 11,
+        "name": "Broadcast perdido no rompe CAS",
+        "passed": true,
+        "detail": {
+          "status": "SUCCESS",
+          "revision": 3,
+          "broadcast": {
+            "ok": false,
+            "skipped": true,
+            "message": {
+              "revision": 3,
+              "commitId": "commit_592f6174-e3ae-4c46-890e-3591e796b48e",
+              "operationId": "op_2eea08a8-ad2a-4c0f-95c9-906644d6093c",
+              "writerId": "tab_3700e478-3d22-459e-8cfa-09cb4a985f4a"
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "name": "Migración V9 → V10 conserva datos",
+        "passed": true,
+        "detail": {
+          "product": {
+            "id": "P-V10-mstfpzpt-jmc3sj",
+            "name": "Producto legado V9",
+            "sku": "SKU-V10-mstfpzpt-jmc3sj",
+            "barcode": "BAR-V10-mstfpzpt-jmc3sj",
+            "cat": "abarrotes",
+            "icon": "📦",
+            "imagen": null,
+            "costo": 1,
+            "precio": 5,
+            "stock": 10,
+            "stockMin": 0,
+            "unidad": "unidad",
+            "controlInventario": true,
+            "descripcion": "",
+            "codigosAlternativos": [],
+            "codigoAlternativo": "",
+            "marca": "Sin marca",
+            "unidadCompra": "unidad",
+            "factorCompra": 1,
+            "incluyeIGV": true,
+            "tipoImpuesto": "gravado",
+            "impuestoComplementario": "",
+            "precioCaja": null,
+            "unidCaja": null,
+            "venc": null
+          },
+          "sale": "V-LEGACY-1",
+          "checkpoint": "LEGACY_V9"
+        }
+      },
+      {
+        "id": 13,
+        "name": "Snapshot V9 no se borra",
+        "passed": true,
+        "detail": {
+          "version": 9,
+          "productId": "P-V10-mstfpzpt-jmc3sj"
+        }
+      },
+      {
+        "id": 14,
+        "name": "Misma revisión con distinto commitId se detecta",
+        "passed": true,
+        "detail": {
+          "comparison": {
+            "ok": false,
+            "conflict": true,
+            "reason": "REVISION_COMMIT_MISMATCH",
+            "revision": 3,
+            "leftCommitId": "commit_592f6174-e3ae-4c46-890e-3591e796b48e",
+            "rightCommitId": "commit_240a36d1-173e-4403-b40a-6c6dff9dd0a7"
+          }
+        }
+      },
+      {
+        "id": 15,
+        "name": "Revisión antigua nunca reemplaza una superior",
+        "passed": true,
+        "detail": {
+          "status": "CONFLICT",
+          "reason": "REVISION_MISMATCH",
+          "beforeRevision": 3,
+          "afterRevision": 3
+        }
+      },
+      {
+        "id": 16,
+        "name": "PENDING sano reutiliza el mismo activeAttemptId",
+        "passed": true,
+        "detail": {
+          "firstAttempt": "attempt_0b3521c6-7a7b-407e-beb1-54c9dac201a4",
+          "secondAttempt": "attempt_0b3521c6-7a7b-407e-beb1-54c9dac201a4",
+          "reused": true,
+          "attempts": 1
+        }
+      },
+      {
+        "id": 17,
+        "name": "Misma operación concurrente produce SUCCESS + ALREADY_COMMITTED",
+        "passed": true,
+        "detail": {
+          "statuses": [
+            "ALREADY_COMMITTED",
+            "SUCCESS"
+          ],
+          "attempts": 1,
+          "effects": 1,
+          "revision": 4
+        }
+      },
+      {
+        "id": 18,
+        "name": "STALE_ATTEMPT se reconcilia una vez solo con commit durable",
+        "passed": true,
+        "detail": {
+          "stale": "CONFLICT",
+          "staleReason": "STALE_ATTEMPT",
+          "winner": "SUCCESS",
+          "caller": "ALREADY_COMMITTED",
+          "reconciliation": "COMMITTED",
+          "attempts": 2,
+          "effects": 1
+        }
+      },
+      {
+        "id": 19,
+        "name": "AttemptId explícito obsoleto permanece STALE_ATTEMPT",
+        "passed": true,
+        "detail": {
+          "oldAttempt": "attempt_eab1f03a-946f-41a8-9af3-1758dbc00b85",
+          "activeAttempt": "attempt_9a8fa536-dba1-4d80-88cd-0c5f3cc68032",
+          "status": "CONFLICT",
+          "reason": "STALE_ATTEMPT",
+          "journalStatus": "PENDING"
+        }
+      },
+      {
+        "id": 20,
+        "name": "CAS_ABORTED permite RETRY legítimo con ancestry y base preservadas",
+        "passed": true,
+        "detail": {
+          "status": "SUCCESS",
+          "attempts": 2,
+          "rebaseOf": "attempt_3a2885fb-42ad-4f91-b36c-0ff9d6633c33",
+          "baseRevision": 5
+        }
+      },
+      {
+        "id": 21,
+        "name": "PERSISTENCE_ERROR permite RETRY legítimo con payload estricto",
+        "passed": true,
+        "detail": {
+          "status": "SUCCESS",
+          "attempts": 2,
+          "rebaseOf": "attempt_dbb84d84-07b4-4414-a13d-d533f4a7ec2b",
+          "payloadPreserved": true
+        }
+      },
+      {
+        "id": 22,
+        "name": "COMMITTED exige evidencia durable y no crea RETRY ficticio",
+        "passed": true,
+        "detail": {
+          "first": "SUCCESS",
+          "repeat": "ALREADY_COMMITTED",
+          "commitId": "commit_5d9e81b5-109b-4800-9e13-f1543a65153b",
+          "attemptsBefore": 1,
+          "attemptsAfter": 1,
+          "effects": 1
+        }
+      },
+      {
+        "id": 23,
+        "name": "Payload contradictorio permanece fail-closed",
+        "passed": true,
+        "detail": {
+          "status": "CONFLICT",
+          "reason": "OPERATION_ID_PAYLOAD_MISMATCH",
+          "beforeRevision": 8,
+          "afterRevision": 8
+        }
+      }
+    ],
+    "upgrade": {
+      "status": "PASS",
+      "blockedDetected": {
+        "pass": true,
+        "result": {
+          "ok": false,
+          "code": "UPGRADE_BLOCKED",
+          "message": "La actualizacion de persistencia esta bloqueada. Cierra o recarga las otras pestañas de Nuevo Amanecer."
+        },
+        "events": [
+          {
+            "sequence": 1,
+            "event": "open-requested",
+            "tabId": "V10_BLOCKED_ATTEMPT",
+            "at": "2026-08-14T21:04:04.575Z",
+            "requestId": "V10_BLOCKED_ATTEMPT-request-1",
+            "logicalName": "NuevoAmanecerPOS",
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+            "requestedVersion": 1
+          },
+          {
+            "sequence": 2,
+            "event": "connection-opened",
+            "tabId": "V10_BLOCKED_ATTEMPT",
+            "at": "2026-08-14T21:04:04.589Z",
+            "requestId": "V10_BLOCKED_ATTEMPT-request-1",
+            "connectionId": "V10_BLOCKED_ATTEMPT-connection-2",
+            "version": 1,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          },
+          {
+            "sequence": 3,
+            "event": "connection-close-called",
+            "tabId": "V10_BLOCKED_ATTEMPT",
+            "at": "2026-08-14T21:04:06.170Z",
+            "connectionId": "V10_BLOCKED_ATTEMPT-connection-2",
+            "version": 1,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          },
+          {
+            "sequence": 4,
+            "event": "open-requested",
+            "tabId": "V10_BLOCKED_ATTEMPT",
+            "at": "2026-08-14T21:04:06.280Z",
+            "requestId": "V10_BLOCKED_ATTEMPT-request-4",
+            "logicalName": "NuevoAmanecerPOS",
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+            "requestedVersion": 2
+          },
+          {
+            "sequence": 5,
+            "event": "blocked",
+            "tabId": "V10_BLOCKED_ATTEMPT",
+            "at": "2026-08-14T21:04:06.280Z",
+            "requestId": "V10_BLOCKED_ATTEMPT-request-4",
+            "oldVersion": 1,
+            "newVersion": 2
+          }
+        ]
+      },
+      "versionchangeAndClose": {
+        "pass": true,
+        "legacyConnection": {
+          "cached": true,
+          "open": true,
+          "version": 1,
+          "onversionchange": false
+        },
+        "closeResult": {
+          "existed": true,
+          "version": 1,
+          "closed": true
+        },
+        "events": [
+          {
+            "sequence": 1,
+            "event": "open-requested",
+            "tabId": "V9_HOLDER",
+            "at": "2026-08-14T21:04:01.771Z",
+            "requestId": "V9_HOLDER-request-1",
+            "logicalName": "NuevoAmanecerPOS",
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+            "requestedVersion": 1
+          },
+          {
+            "sequence": 2,
+            "event": "upgradeneeded",
+            "tabId": "V9_HOLDER",
+            "at": "2026-08-14T21:04:01.787Z",
+            "requestId": "V9_HOLDER-request-1",
+            "oldVersion": 0,
+            "newVersion": 1
+          },
+          {
+            "sequence": 3,
+            "event": "connection-opened",
+            "tabId": "V9_HOLDER",
+            "at": "2026-08-14T21:04:01.788Z",
+            "requestId": "V9_HOLDER-request-1",
+            "connectionId": "V9_HOLDER-connection-3",
+            "version": 1,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          },
+          {
+            "sequence": 4,
+            "event": "versionchange",
+            "tabId": "V9_HOLDER",
+            "at": "2026-08-14T21:04:06.280Z",
+            "connectionId": "V9_HOLDER-connection-3",
+            "oldVersion": 1,
+            "newVersion": 2,
+            "handlerInstalled": false
+          },
+          {
+            "sequence": 5,
+            "event": "connection-close-called",
+            "tabId": "V9_HOLDER",
+            "at": "2026-08-14T21:04:06.703Z",
+            "connectionId": "V9_HOLDER-connection-3",
+            "version": 1,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          }
+        ]
+      },
+      "retry": {
+        "pass": true,
+        "before": {
+          "supported": true,
+          "name": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+          "exists": true,
+          "version": 1
+        },
+        "after": {
+          "supported": true,
+          "name": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+          "exists": true,
+          "version": 2
+        },
+        "recreatedLegacy": {
+          "cached": true,
+          "open": true,
+          "version": 1,
+          "onversionchange": false
+        },
+        "v10Connection": {
+          "ok": true,
+          "version": 2,
+          "onversionchange": true
+        },
+        "events": [
+          {
+            "sequence": 1,
+            "event": "open-requested",
+            "tabId": "A_V10",
+            "at": "2026-08-14T21:04:07.831Z",
+            "requestId": "A_V10-request-1",
+            "logicalName": "NuevoAmanecerPOS",
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+            "requestedVersion": 1
+          },
+          {
+            "sequence": 2,
+            "event": "connection-opened",
+            "tabId": "A_V10",
+            "at": "2026-08-14T21:04:07.844Z",
+            "requestId": "A_V10-request-1",
+            "connectionId": "A_V10-connection-2",
+            "version": 1,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          },
+          {
+            "sequence": 3,
+            "event": "connection-close-called",
+            "tabId": "A_V10",
+            "at": "2026-08-14T21:04:09.545Z",
+            "connectionId": "A_V10-connection-2",
+            "version": 1,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          },
+          {
+            "sequence": 4,
+            "event": "open-requested",
+            "tabId": "A_V10",
+            "at": "2026-08-14T21:04:09.546Z",
+            "requestId": "A_V10-request-4",
+            "logicalName": "NuevoAmanecerPOS",
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+            "requestedVersion": 2
+          },
+          {
+            "sequence": 5,
+            "event": "upgradeneeded",
+            "tabId": "A_V10",
+            "at": "2026-08-14T21:04:09.546Z",
+            "requestId": "A_V10-request-4",
+            "oldVersion": 1,
+            "newVersion": 2
+          },
+          {
+            "sequence": 6,
+            "event": "connection-opened",
+            "tabId": "A_V10",
+            "at": "2026-08-14T21:04:09.549Z",
+            "requestId": "A_V10-request-4",
+            "connectionId": "A_V10-connection-6",
+            "version": 2,
+            "physicalName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+          }
+        ]
+      },
+      "unsafeFallback": "NO",
+      "dormantAtLoad": true,
+      "testDatabase": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+    },
+    "architecture": {
+      "diagnostics": {
+        "version": "persistence-v10-phase-a-2026-08-13-2",
+        "runtime": {
+          "dbName": "NuevoAmanecerPOS",
+          "localMirrorKey": "na_snapshot_v10",
+          "localSignalKey": "na_snapshot_v10_signal",
+          "sessionOutboxKey": "na_v10_outbox",
+          "lockName": "nuevo-amanecer:financial-write:v10:mstfpzpt-jmc3sj",
+          "channelName": "nuevo-amanecer:persistence:v10:mstfpzpt-jmc3sj",
+          "broadcastEnabled": true
+        },
+        "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+        "dbOpened": true,
+        "channelOpened": true,
+        "lastBroadcast": null,
+        "stores": {
+          "state": "state",
+          "operations": "operations",
+          "checkpoints": "checkpoints"
+        },
+        "snapshotKey": "snapshot_v10",
+        "recoveryApis": {
+          "resolve": true,
+          "list": true,
+          "rebase": true
+        }
+      },
+      "migration": {
+        "status": "SUCCESS",
+        "revision": 0,
+        "commitId": "commit_338c8ff8-e8dd-4a58-b156-8e1c208eb119",
+        "operationId": "op_da9dca43-c821-4bd7-9de8-65fcad51352a"
+      },
+      "finalSnapshot": {
+        "version": 10,
+        "revision": 8,
+        "parentRevision": 7,
+        "parentCommitId": "commit_4f0176d1-57d5-412d-a293-93b1a185bece",
+        "commitId": "commit_5d9e81b5-109b-4800-9e13-f1543a65153b",
+        "lastOperationId": "op_194882a8-cbd5-420a-8461-8cda99c8d21c",
+        "committedAt": "2026-08-14T21:04:14.252Z",
+        "writerId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+        "data": {
+          "appConfig": {
+            "igvActive": true,
+            "margenActive": true,
+            "stockAlertActive": true,
+            "printAuto": false,
+            "mayoristaActive": true,
+            "alertsEnabled": true,
+            "stockMin": "5",
+            "business": {
+              "nombre": "Multiservicios Nuevo Amanecer",
+              "ruc": "",
+              "direccion": "Puerto Súngaro, Huánuco",
+              "telefono": "",
+              "cajero": "Frank"
+            },
+            "appearance": {
+              "fontSize": "normal",
+              "accent": "#00bca4",
+              "accentDark": "#009e8a"
+            },
+            "customCategories": [],
+            "cashiers": [
+              {
+                "id": "CAJ-001",
+                "nombre": "Frank",
+                "activo": true,
+                "createdAt": null,
+                "updatedAt": null,
+                "role": "admin",
+                "permissions": {
+                  "accessControl": true,
+                  "manageCashiers": true,
+                  "sell": true,
+                  "annulSales": true,
+                  "adjustSales": true,
+                  "discounts": true,
+                  "products": true,
+                  "inventoryMoves": true,
+                  "clients": true,
+                  "credits": true,
+                  "cash": true,
+                  "closeCash": true,
+                  "reports": true,
+                  "imports": true,
+                  "backups": true,
+                  "resetData": true,
+                  "configuration": true,
+                  "audit": true
+                },
+                "pinHash": "",
+                "pinUpdatedAt": null,
+                "lastLoginAt": null
+              }
+            ],
+            "activeCashierId": "CAJ-001",
+            "scanner": {
+              "enabled": true,
+              "sound": true,
+              "minLength": 4,
+              "maxIntervalMs": 65
+            },
+            "freeSale": {
+              "allowRegisteredNoStock": false,
+              "allowGenericSale": true,
+              "shortcut": "F2"
+            },
+            "creditPolicy": {
+              "enabled": true,
+              "minPurchases": 1000,
+              "minProfit": 400,
+              "initialLine": 5,
+              "punctualRate": 10,
+              "lateRate": 5
+            },
+            "purchaseSuggestion": {
+              "historyDays": 90,
+              "coverageDays": 30,
+              "safetyDays": 7
+            },
+            "ticket": {
+              "ancho": "80mm",
+              "customMm": 60,
+              "fuente": "'Courier New',monospace",
+              "tamano": "11px",
+              "previewCustomPx": 11,
+              "align": "center",
+              "infoAlign": "left",
+              "paymentAlign": "split",
+              "footerAlign": "center",
+              "layoutMode": "auto",
+              "pie": "¡GRACIAS POR SU COMPRA! | Su preferencia nos motiva. | ¡Vuelva pronto!",
+              "showLogo": true,
+              "showIGV": false,
+              "showNum": true,
+              "showOperation": true,
+              "showCurrency": true,
+              "showUnitPrice": true,
+              "showPayment": true,
+              "showReceived": true,
+              "showSep": true,
+              "zoneOrder": "h,i,p,t,y,f",
+              "zoneSettings": "h1cn01;i1ln10;p1lc10;t1sn01;y1sn10;f1cn00"
+            },
+            "printer": {
+              "mode": "system",
+              "baudRate": 9600,
+              "autoCut": true
+            }
+          },
+          "ui": {
+            "currentPage": "pageMenu",
+            "isDark": false,
+            "currentCfgCategory": "negocio"
+          },
+          "locks": {
+            "master": false,
+            "readOnly": false,
+            "modules": {
+              "productos": false,
+              "ventas": false,
+              "caja": false,
+              "clientes": false,
+              "gastos": false,
+              "importacion": false,
+              "configuracion": false
+            }
+          },
+          "security": {
+            "pinEnabled": false,
+            "pinHash": "",
+            "autoLockMinutes": 0,
+            "requirePin": {
+              "locks": true,
+              "anularVenta": true,
+              "descuentos": false,
+              "reset": true,
+              "cerrarCaja": false,
+              "importar": true,
+              "configuracion": false
+            },
+            "rules": {
+              "allowDiscounts": true,
+              "maxDiscount": 20,
+              "allowGenericProducts": true,
+              "auditEnabled": true
+            },
+            "logs": []
+          },
+          "productos": [
+            {
+              "id": "P-V10-mstfpzpt-jmc3sj",
+              "name": "Producto legado V9",
+              "sku": "SKU-V10-mstfpzpt-jmc3sj",
+              "barcode": "BAR-V10-mstfpzpt-jmc3sj",
+              "cat": "abarrotes",
+              "icon": "📦",
+              "imagen": null,
+              "costo": 1,
+              "precio": 5,
+              "stock": 10,
+              "stockMin": 0,
+              "unidad": "unidad",
+              "controlInventario": true,
+              "descripcion": "",
+              "codigosAlternativos": [],
+              "codigoAlternativo": "",
+              "marca": "Sin marca",
+              "unidadCompra": "unidad",
+              "factorCompra": 1,
+              "incluyeIGV": true,
+              "tipoImpuesto": "gravado",
+              "impuestoComplementario": "",
+              "precioCaja": null,
+              "unidCaja": null,
+              "venc": null
+            }
+          ],
+          "ventas": [
+            {
+              "id": "V-LEGACY-1",
+              "operation": "LEGACY-1",
+              "fecha": "2026-08-14",
+              "timestamp": "2026-08-14T21:04:03.867Z",
+              "total": 0,
+              "items": [],
+              "hora": "04:04:03 p. m.",
+              "hora24": "16:04:03",
+              "cajero": "Cajero",
+              "cajeroId": null,
+              "cajeroNombre": "Cajero",
+              "subtotal": 0,
+              "descuentoTotal": 0,
+              "metodo": "efectivo",
+              "metodoPago": "efectivo",
+              "estado": "completada",
+              "tipoVenta": "minorista",
+              "cantidadLineas": 0,
+              "unidadesFisicas": 0,
+              "clienteId": null,
+              "clienteNombre": null
+            }
+          ],
+          "clientes": [],
+          "creditos": [],
+          "gastos": [],
+          "cajMovs": [],
+          "cajEstado": {
+            "abierta": false,
+            "fondo": 0,
+            "cajero": "",
+            "cajeroNombre": "",
+            "cajeroId": null,
+            "hora": "",
+            "hora24": "",
+            "fechaApertura": "2026-08-14",
+            "cerrada": true,
+            "horaCierre": null,
+            "horaCierre24": null,
+            "sessionId": null,
+            "contado": null,
+            "esperado": null,
+            "diferencia": null
+          },
+          "cart": [],
+          "draft": null,
+          "coreCounter": 36,
+          "coreEvents": [
+            {
+              "label": "writer-A",
+              "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16"
+            },
+            {
+              "label": "revision-2",
+              "operationId": "op_c6dd1d7a-d5ca-4670-9e3f-4b580ebf4250"
+            },
+            {
+              "label": "no-broadcast",
+              "operationId": "op_2eea08a8-ad2a-4c0f-95c9-906644d6093c"
+            },
+            {
+              "label": "same-operation-concurrent",
+              "operationId": "op_89407fbc-a77a-4cbe-a9c6-4010f14b05b2"
+            },
+            {
+              "label": "stale-reconcile",
+              "operationId": "op_370dfef0-ff11-46ea-bdaa-34cfeffc0b25"
+            },
+            {
+              "label": "retry-cas-aborted",
+              "operationId": "op_71d2fb8e-eb0f-4081-8905-4c091ce83862"
+            },
+            {
+              "label": "retry-persistence-error",
+              "operationId": "op_ddc3ca13-1afa-45c4-8600-f7e062b3ba11"
+            },
+            {
+              "label": "durable-committed",
+              "operationId": "op_194882a8-cbd5-420a-8461-8cda99c8d21c"
+            }
+          ]
+        }
+      },
+      "concurrent": [
+        {
+          "status": "SUCCESS",
+          "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+          "logicalOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+          "attemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+          "revision": 1,
+          "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+          "operation": {
+            "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+            "logicalOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+            "type": "CORE_TEST",
+            "status": "COMMITTED",
+            "journalSchemaVersion": 2,
+            "baseRevision": 0,
+            "committedRevision": 1,
+            "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+            "checkpointKey": "1:commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+            "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+            "createdAt": "2026-08-14T21:04:11.853Z",
+            "updatedAt": "2026-08-14T21:04:11.858Z",
+            "attempts": 1,
+            "activeAttemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+            "attemptHistory": [
+              {
+                "attemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+                "kind": "INITIAL",
+                "baseRevision": 0,
+                "status": "COMMITTED",
+                "rebaseOf": null,
+                "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                "createdAt": "2026-08-14T21:04:11.853Z",
+                "updatedAt": "2026-08-14T21:04:11.858Z",
+                "reason": null,
+                "currentRevision": 1,
+                "error": null,
+                "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                "checkpointKey": "1:commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46"
+              }
+            ],
+            "payload": {
+              "label": "writer-A",
+              "delta": 1
+            },
+            "idempotencyPayload": {
+              "label": "writer-A",
+              "delta": 1
+            },
+            "idempotencyKey": "{\"delta\":1,\"label\":\"writer-A\"}",
+            "idempotencyHash": "sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f",
+            "payloadHash": "sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f",
+            "entityIds": [],
+            "reason": null,
+            "mismatchEvidence": [],
+            "typeMismatchEvidence": []
+          },
+          "snapshot": {
+            "version": 10,
+            "revision": 1,
+            "parentRevision": 0,
+            "parentCommitId": "commit_338c8ff8-e8dd-4a58-b156-8e1c208eb119",
+            "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+            "lastOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+            "committedAt": "2026-08-14T21:04:11.858Z",
+            "writerId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+            "data": {
+              "appConfig": {
+                "igvActive": true,
+                "margenActive": true,
+                "stockAlertActive": true,
+                "printAuto": false,
+                "mayoristaActive": true,
+                "alertsEnabled": true,
+                "stockMin": "5",
+                "business": {
+                  "nombre": "Multiservicios Nuevo Amanecer",
+                  "ruc": "",
+                  "direccion": "Puerto Súngaro, Huánuco",
+                  "telefono": "",
+                  "cajero": "Frank"
+                },
+                "appearance": {
+                  "fontSize": "normal",
+                  "accent": "#00bca4",
+                  "accentDark": "#009e8a"
+                },
+                "customCategories": [],
+                "cashiers": [
+                  {
+                    "id": "CAJ-001",
+                    "nombre": "Frank",
+                    "activo": true,
+                    "createdAt": null,
+                    "updatedAt": null,
+                    "role": "admin",
+                    "permissions": {
+                      "accessControl": true,
+                      "manageCashiers": true,
+                      "sell": true,
+                      "annulSales": true,
+                      "adjustSales": true,
+                      "discounts": true,
+                      "products": true,
+                      "inventoryMoves": true,
+                      "clients": true,
+                      "credits": true,
+                      "cash": true,
+                      "closeCash": true,
+                      "reports": true,
+                      "imports": true,
+                      "backups": true,
+                      "resetData": true,
+                      "configuration": true,
+                      "audit": true
+                    },
+                    "pinHash": "",
+                    "pinUpdatedAt": null,
+                    "lastLoginAt": null
+                  }
+                ],
+                "activeCashierId": "CAJ-001",
+                "scanner": {
+                  "enabled": true,
+                  "sound": true,
+                  "minLength": 4,
+                  "maxIntervalMs": 65
+                },
+                "freeSale": {
+                  "allowRegisteredNoStock": false,
+                  "allowGenericSale": true,
+                  "shortcut": "F2"
+                },
+                "creditPolicy": {
+                  "enabled": true,
+                  "minPurchases": 1000,
+                  "minProfit": 400,
+                  "initialLine": 5,
+                  "punctualRate": 10,
+                  "lateRate": 5
+                },
+                "purchaseSuggestion": {
+                  "historyDays": 90,
+                  "coverageDays": 30,
+                  "safetyDays": 7
+                },
+                "ticket": {
+                  "ancho": "80mm",
+                  "customMm": 60,
+                  "fuente": "'Courier New',monospace",
+                  "tamano": "11px",
+                  "previewCustomPx": 11,
+                  "align": "center",
+                  "infoAlign": "left",
+                  "paymentAlign": "split",
+                  "footerAlign": "center",
+                  "layoutMode": "auto",
+                  "pie": "¡GRACIAS POR SU COMPRA! | Su preferencia nos motiva. | ¡Vuelva pronto!",
+                  "showLogo": true,
+                  "showIGV": false,
+                  "showNum": true,
+                  "showOperation": true,
+                  "showCurrency": true,
+                  "showUnitPrice": true,
+                  "showPayment": true,
+                  "showReceived": true,
+                  "showSep": true,
+                  "zoneOrder": "h,i,p,t,y,f",
+                  "zoneSettings": "h1cn01;i1ln10;p1lc10;t1sn01;y1sn10;f1cn00"
+                },
+                "printer": {
+                  "mode": "system",
+                  "baudRate": 9600,
+                  "autoCut": true
+                }
+              },
+              "ui": {
+                "currentPage": "pageMenu",
+                "isDark": false,
+                "currentCfgCategory": "negocio"
+              },
+              "locks": {
+                "master": false,
+                "readOnly": false,
+                "modules": {
+                  "productos": false,
+                  "ventas": false,
+                  "caja": false,
+                  "clientes": false,
+                  "gastos": false,
+                  "importacion": false,
+                  "configuracion": false
+                }
+              },
+              "security": {
+                "pinEnabled": false,
+                "pinHash": "",
+                "autoLockMinutes": 0,
+                "requirePin": {
+                  "locks": true,
+                  "anularVenta": true,
+                  "descuentos": false,
+                  "reset": true,
+                  "cerrarCaja": false,
+                  "importar": true,
+                  "configuracion": false
+                },
+                "rules": {
+                  "allowDiscounts": true,
+                  "maxDiscount": 20,
+                  "allowGenericProducts": true,
+                  "auditEnabled": true
+                },
+                "logs": []
+              },
+              "productos": [
+                {
+                  "id": "P-V10-mstfpzpt-jmc3sj",
+                  "name": "Producto legado V9",
+                  "sku": "SKU-V10-mstfpzpt-jmc3sj",
+                  "barcode": "BAR-V10-mstfpzpt-jmc3sj",
+                  "cat": "abarrotes",
+                  "icon": "📦",
+                  "imagen": null,
+                  "costo": 1,
+                  "precio": 5,
+                  "stock": 10,
+                  "stockMin": 0,
+                  "unidad": "unidad",
+                  "controlInventario": true,
+                  "descripcion": "",
+                  "codigosAlternativos": [],
+                  "codigoAlternativo": "",
+                  "marca": "Sin marca",
+                  "unidadCompra": "unidad",
+                  "factorCompra": 1,
+                  "incluyeIGV": true,
+                  "tipoImpuesto": "gravado",
+                  "impuestoComplementario": "",
+                  "precioCaja": null,
+                  "unidCaja": null,
+                  "venc": null
+                }
+              ],
+              "ventas": [
+                {
+                  "id": "V-LEGACY-1",
+                  "operation": "LEGACY-1",
+                  "fecha": "2026-08-14",
+                  "timestamp": "2026-08-14T21:04:03.867Z",
+                  "total": 0,
+                  "items": [],
+                  "hora": "04:04:03 p. m.",
+                  "hora24": "16:04:03",
+                  "cajero": "Cajero",
+                  "cajeroId": null,
+                  "cajeroNombre": "Cajero",
+                  "subtotal": 0,
+                  "descuentoTotal": 0,
+                  "metodo": "efectivo",
+                  "metodoPago": "efectivo",
+                  "estado": "completada",
+                  "tipoVenta": "minorista",
+                  "cantidadLineas": 0,
+                  "unidadesFisicas": 0,
+                  "clienteId": null,
+                  "clienteNombre": null
+                }
+              ],
+              "clientes": [],
+              "creditos": [],
+              "gastos": [],
+              "cajMovs": [],
+              "cajEstado": {
+                "abierta": false,
+                "fondo": 0,
+                "cajero": "",
+                "cajeroNombre": "",
+                "cajeroId": null,
+                "hora": "",
+                "hora24": "",
+                "fechaApertura": "2026-08-14",
+                "cerrada": true,
+                "horaCierre": null,
+                "horaCierre24": null,
+                "sessionId": null,
+                "contado": null,
+                "esperado": null,
+                "diferencia": null
+              },
+              "cart": [],
+              "draft": null,
+              "coreCounter": 1,
+              "coreEvents": [
+                {
+                  "label": "writer-A",
+                  "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16"
+                }
+              ]
+            }
+          },
+          "mirror": {
+            "ok": true,
+            "idempotent": false
+          },
+          "broadcast": {
+            "ok": true,
+            "skipped": false,
+            "message": {
+              "revision": 1,
+              "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+              "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+              "writerId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be"
+            }
+          },
+          "outbox": {
+            "ok": true,
+            "state": "EMPTY",
+            "verified": true,
+            "revision": 1,
+            "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+            "verification": {
+              "status": "COMMITTED",
+              "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+              "logicalOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+              "attemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+              "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+              "revision": 1,
+              "recoverable": false,
+              "operation": {
+                "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                "logicalOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                "type": "CORE_TEST",
+                "status": "COMMITTED",
+                "journalSchemaVersion": 2,
+                "baseRevision": 0,
+                "committedRevision": 1,
+                "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                "checkpointKey": "1:commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                "createdAt": "2026-08-14T21:04:11.853Z",
+                "updatedAt": "2026-08-14T21:04:11.858Z",
+                "attempts": 1,
+                "activeAttemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+                "attemptHistory": [
+                  {
+                    "attemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+                    "kind": "INITIAL",
+                    "baseRevision": 0,
+                    "status": "COMMITTED",
+                    "rebaseOf": null,
+                    "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                    "createdAt": "2026-08-14T21:04:11.853Z",
+                    "updatedAt": "2026-08-14T21:04:11.858Z",
+                    "reason": null,
+                    "currentRevision": 1,
+                    "error": null,
+                    "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                    "checkpointKey": "1:commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46"
+                  }
+                ],
+                "payload": {
+                  "label": "writer-A",
+                  "delta": 1
+                },
+                "idempotencyPayload": {
+                  "label": "writer-A",
+                  "delta": 1
+                },
+                "idempotencyKey": "{\"delta\":1,\"label\":\"writer-A\"}",
+                "idempotencyHash": "sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f",
+                "payloadHash": "sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f",
+                "entityIds": [],
+                "reason": null,
+                "mismatchEvidence": [],
+                "typeMismatchEvidence": []
+              },
+              "checkpoint": {
+                "key": "1:commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                "revision": 1,
+                "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                "logicalOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                "attemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+                "createdAt": "2026-08-14T21:04:11.858Z",
+                "snapshot": {
+                  "version": 10,
+                  "revision": 1,
+                  "parentRevision": 0,
+                  "parentCommitId": "commit_338c8ff8-e8dd-4a58-b156-8e1c208eb119",
+                  "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                  "lastOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                  "committedAt": "2026-08-14T21:04:11.858Z",
+                  "writerId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                  "data": {
+                    "appConfig": {
+                      "igvActive": true,
+                      "margenActive": true,
+                      "stockAlertActive": true,
+                      "printAuto": false,
+                      "mayoristaActive": true,
+                      "alertsEnabled": true,
+                      "stockMin": "5",
+                      "business": {
+                        "nombre": "Multiservicios Nuevo Amanecer",
+                        "ruc": "",
+                        "direccion": "Puerto Súngaro, Huánuco",
+                        "telefono": "",
+                        "cajero": "Frank"
+                      },
+                      "appearance": {
+                        "fontSize": "normal",
+                        "accent": "#00bca4",
+                        "accentDark": "#009e8a"
+                      },
+                      "customCategories": [],
+                      "cashiers": [
+                        {
+                          "id": "CAJ-001",
+                          "nombre": "Frank",
+                          "activo": true,
+                          "createdAt": null,
+                          "updatedAt": null,
+                          "role": "admin",
+                          "permissions": {
+                            "accessControl": true,
+                            "manageCashiers": true,
+                            "sell": true,
+                            "annulSales": true,
+                            "adjustSales": true,
+                            "discounts": true,
+                            "products": true,
+                            "inventoryMoves": true,
+                            "clients": true,
+                            "credits": true,
+                            "cash": true,
+                            "closeCash": true,
+                            "reports": true,
+                            "imports": true,
+                            "backups": true,
+                            "resetData": true,
+                            "configuration": true,
+                            "audit": true
+                          },
+                          "pinHash": "",
+                          "pinUpdatedAt": null,
+                          "lastLoginAt": null
+                        }
+                      ],
+                      "activeCashierId": "CAJ-001",
+                      "scanner": {
+                        "enabled": true,
+                        "sound": true,
+                        "minLength": 4,
+                        "maxIntervalMs": 65
+                      },
+                      "freeSale": {
+                        "allowRegisteredNoStock": false,
+                        "allowGenericSale": true,
+                        "shortcut": "F2"
+                      },
+                      "creditPolicy": {
+                        "enabled": true,
+                        "minPurchases": 1000,
+                        "minProfit": 400,
+                        "initialLine": 5,
+                        "punctualRate": 10,
+                        "lateRate": 5
+                      },
+                      "purchaseSuggestion": {
+                        "historyDays": 90,
+                        "coverageDays": 30,
+                        "safetyDays": 7
+                      },
+                      "ticket": {
+                        "ancho": "80mm",
+                        "customMm": 60,
+                        "fuente": "'Courier New',monospace",
+                        "tamano": "11px",
+                        "previewCustomPx": 11,
+                        "align": "center",
+                        "infoAlign": "left",
+                        "paymentAlign": "split",
+                        "footerAlign": "center",
+                        "layoutMode": "auto",
+                        "pie": "¡GRACIAS POR SU COMPRA! | Su preferencia nos motiva. | ¡Vuelva pronto!",
+                        "showLogo": true,
+                        "showIGV": false,
+                        "showNum": true,
+                        "showOperation": true,
+                        "showCurrency": true,
+                        "showUnitPrice": true,
+                        "showPayment": true,
+                        "showReceived": true,
+                        "showSep": true,
+                        "zoneOrder": "h,i,p,t,y,f",
+                        "zoneSettings": "h1cn01;i1ln10;p1lc10;t1sn01;y1sn10;f1cn00"
+                      },
+                      "printer": {
+                        "mode": "system",
+                        "baudRate": 9600,
+                        "autoCut": true
+                      }
+                    },
+                    "ui": {
+                      "currentPage": "pageMenu",
+                      "isDark": false,
+                      "currentCfgCategory": "negocio"
+                    },
+                    "locks": {
+                      "master": false,
+                      "readOnly": false,
+                      "modules": {
+                        "productos": false,
+                        "ventas": false,
+                        "caja": false,
+                        "clientes": false,
+                        "gastos": false,
+                        "importacion": false,
+                        "configuracion": false
+                      }
+                    },
+                    "security": {
+                      "pinEnabled": false,
+                      "pinHash": "",
+                      "autoLockMinutes": 0,
+                      "requirePin": {
+                        "locks": true,
+                        "anularVenta": true,
+                        "descuentos": false,
+                        "reset": true,
+                        "cerrarCaja": false,
+                        "importar": true,
+                        "configuracion": false
+                      },
+                      "rules": {
+                        "allowDiscounts": true,
+                        "maxDiscount": 20,
+                        "allowGenericProducts": true,
+                        "auditEnabled": true
+                      },
+                      "logs": []
+                    },
+                    "productos": [
+                      {
+                        "id": "P-V10-mstfpzpt-jmc3sj",
+                        "name": "Producto legado V9",
+                        "sku": "SKU-V10-mstfpzpt-jmc3sj",
+                        "barcode": "BAR-V10-mstfpzpt-jmc3sj",
+                        "cat": "abarrotes",
+                        "icon": "📦",
+                        "imagen": null,
+                        "costo": 1,
+                        "precio": 5,
+                        "stock": 10,
+                        "stockMin": 0,
+                        "unidad": "unidad",
+                        "controlInventario": true,
+                        "descripcion": "",
+                        "codigosAlternativos": [],
+                        "codigoAlternativo": "",
+                        "marca": "Sin marca",
+                        "unidadCompra": "unidad",
+                        "factorCompra": 1,
+                        "incluyeIGV": true,
+                        "tipoImpuesto": "gravado",
+                        "impuestoComplementario": "",
+                        "precioCaja": null,
+                        "unidCaja": null,
+                        "venc": null
+                      }
+                    ],
+                    "ventas": [
+                      {
+                        "id": "V-LEGACY-1",
+                        "operation": "LEGACY-1",
+                        "fecha": "2026-08-14",
+                        "timestamp": "2026-08-14T21:04:03.867Z",
+                        "total": 0,
+                        "items": [],
+                        "hora": "04:04:03 p. m.",
+                        "hora24": "16:04:03",
+                        "cajero": "Cajero",
+                        "cajeroId": null,
+                        "cajeroNombre": "Cajero",
+                        "subtotal": 0,
+                        "descuentoTotal": 0,
+                        "metodo": "efectivo",
+                        "metodoPago": "efectivo",
+                        "estado": "completada",
+                        "tipoVenta": "minorista",
+                        "cantidadLineas": 0,
+                        "unidadesFisicas": 0,
+                        "clienteId": null,
+                        "clienteNombre": null
+                      }
+                    ],
+                    "clientes": [],
+                    "creditos": [],
+                    "gastos": [],
+                    "cajMovs": [],
+                    "cajEstado": {
+                      "abierta": false,
+                      "fondo": 0,
+                      "cajero": "",
+                      "cajeroNombre": "",
+                      "cajeroId": null,
+                      "hora": "",
+                      "hora24": "",
+                      "fechaApertura": "2026-08-14",
+                      "cerrada": true,
+                      "horaCierre": null,
+                      "horaCierre24": null,
+                      "sessionId": null,
+                      "contado": null,
+                      "esperado": null,
+                      "diferencia": null
+                    },
+                    "cart": [],
+                    "draft": null,
+                    "coreCounter": 1,
+                    "coreEvents": [
+                      {
+                        "label": "writer-A",
+                        "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16"
+                      }
+                    ]
+                  }
+                }
+              },
+              "snapshot": {
+                "version": 10,
+                "revision": 1,
+                "parentRevision": 0,
+                "parentCommitId": "commit_338c8ff8-e8dd-4a58-b156-8e1c208eb119",
+                "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+                "lastOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                "committedAt": "2026-08-14T21:04:11.858Z",
+                "writerId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                "data": {
+                  "appConfig": {
+                    "igvActive": true,
+                    "margenActive": true,
+                    "stockAlertActive": true,
+                    "printAuto": false,
+                    "mayoristaActive": true,
+                    "alertsEnabled": true,
+                    "stockMin": "5",
+                    "business": {
+                      "nombre": "Multiservicios Nuevo Amanecer",
+                      "ruc": "",
+                      "direccion": "Puerto Súngaro, Huánuco",
+                      "telefono": "",
+                      "cajero": "Frank"
+                    },
+                    "appearance": {
+                      "fontSize": "normal",
+                      "accent": "#00bca4",
+                      "accentDark": "#009e8a"
+                    },
+                    "customCategories": [],
+                    "cashiers": [
+                      {
+                        "id": "CAJ-001",
+                        "nombre": "Frank",
+                        "activo": true,
+                        "createdAt": null,
+                        "updatedAt": null,
+                        "role": "admin",
+                        "permissions": {
+                          "accessControl": true,
+                          "manageCashiers": true,
+                          "sell": true,
+                          "annulSales": true,
+                          "adjustSales": true,
+                          "discounts": true,
+                          "products": true,
+                          "inventoryMoves": true,
+                          "clients": true,
+                          "credits": true,
+                          "cash": true,
+                          "closeCash": true,
+                          "reports": true,
+                          "imports": true,
+                          "backups": true,
+                          "resetData": true,
+                          "configuration": true,
+                          "audit": true
+                        },
+                        "pinHash": "",
+                        "pinUpdatedAt": null,
+                        "lastLoginAt": null
+                      }
+                    ],
+                    "activeCashierId": "CAJ-001",
+                    "scanner": {
+                      "enabled": true,
+                      "sound": true,
+                      "minLength": 4,
+                      "maxIntervalMs": 65
+                    },
+                    "freeSale": {
+                      "allowRegisteredNoStock": false,
+                      "allowGenericSale": true,
+                      "shortcut": "F2"
+                    },
+                    "creditPolicy": {
+                      "enabled": true,
+                      "minPurchases": 1000,
+                      "minProfit": 400,
+                      "initialLine": 5,
+                      "punctualRate": 10,
+                      "lateRate": 5
+                    },
+                    "purchaseSuggestion": {
+                      "historyDays": 90,
+                      "coverageDays": 30,
+                      "safetyDays": 7
+                    },
+                    "ticket": {
+                      "ancho": "80mm",
+                      "customMm": 60,
+                      "fuente": "'Courier New',monospace",
+                      "tamano": "11px",
+                      "previewCustomPx": 11,
+                      "align": "center",
+                      "infoAlign": "left",
+                      "paymentAlign": "split",
+                      "footerAlign": "center",
+                      "layoutMode": "auto",
+                      "pie": "¡GRACIAS POR SU COMPRA! | Su preferencia nos motiva. | ¡Vuelva pronto!",
+                      "showLogo": true,
+                      "showIGV": false,
+                      "showNum": true,
+                      "showOperation": true,
+                      "showCurrency": true,
+                      "showUnitPrice": true,
+                      "showPayment": true,
+                      "showReceived": true,
+                      "showSep": true,
+                      "zoneOrder": "h,i,p,t,y,f",
+                      "zoneSettings": "h1cn01;i1ln10;p1lc10;t1sn01;y1sn10;f1cn00"
+                    },
+                    "printer": {
+                      "mode": "system",
+                      "baudRate": 9600,
+                      "autoCut": true
+                    }
+                  },
+                  "ui": {
+                    "currentPage": "pageMenu",
+                    "isDark": false,
+                    "currentCfgCategory": "negocio"
+                  },
+                  "locks": {
+                    "master": false,
+                    "readOnly": false,
+                    "modules": {
+                      "productos": false,
+                      "ventas": false,
+                      "caja": false,
+                      "clientes": false,
+                      "gastos": false,
+                      "importacion": false,
+                      "configuracion": false
+                    }
+                  },
+                  "security": {
+                    "pinEnabled": false,
+                    "pinHash": "",
+                    "autoLockMinutes": 0,
+                    "requirePin": {
+                      "locks": true,
+                      "anularVenta": true,
+                      "descuentos": false,
+                      "reset": true,
+                      "cerrarCaja": false,
+                      "importar": true,
+                      "configuracion": false
+                    },
+                    "rules": {
+                      "allowDiscounts": true,
+                      "maxDiscount": 20,
+                      "allowGenericProducts": true,
+                      "auditEnabled": true
+                    },
+                    "logs": []
+                  },
+                  "productos": [
+                    {
+                      "id": "P-V10-mstfpzpt-jmc3sj",
+                      "name": "Producto legado V9",
+                      "sku": "SKU-V10-mstfpzpt-jmc3sj",
+                      "barcode": "BAR-V10-mstfpzpt-jmc3sj",
+                      "cat": "abarrotes",
+                      "icon": "📦",
+                      "imagen": null,
+                      "costo": 1,
+                      "precio": 5,
+                      "stock": 10,
+                      "stockMin": 0,
+                      "unidad": "unidad",
+                      "controlInventario": true,
+                      "descripcion": "",
+                      "codigosAlternativos": [],
+                      "codigoAlternativo": "",
+                      "marca": "Sin marca",
+                      "unidadCompra": "unidad",
+                      "factorCompra": 1,
+                      "incluyeIGV": true,
+                      "tipoImpuesto": "gravado",
+                      "impuestoComplementario": "",
+                      "precioCaja": null,
+                      "unidCaja": null,
+                      "venc": null
+                    }
+                  ],
+                  "ventas": [
+                    {
+                      "id": "V-LEGACY-1",
+                      "operation": "LEGACY-1",
+                      "fecha": "2026-08-14",
+                      "timestamp": "2026-08-14T21:04:03.867Z",
+                      "total": 0,
+                      "items": [],
+                      "hora": "04:04:03 p. m.",
+                      "hora24": "16:04:03",
+                      "cajero": "Cajero",
+                      "cajeroId": null,
+                      "cajeroNombre": "Cajero",
+                      "subtotal": 0,
+                      "descuentoTotal": 0,
+                      "metodo": "efectivo",
+                      "metodoPago": "efectivo",
+                      "estado": "completada",
+                      "tipoVenta": "minorista",
+                      "cantidadLineas": 0,
+                      "unidadesFisicas": 0,
+                      "clienteId": null,
+                      "clienteNombre": null
+                    }
+                  ],
+                  "clientes": [],
+                  "creditos": [],
+                  "gastos": [],
+                  "cajMovs": [],
+                  "cajEstado": {
+                    "abierta": false,
+                    "fondo": 0,
+                    "cajero": "",
+                    "cajeroNombre": "",
+                    "cajeroId": null,
+                    "hora": "",
+                    "hora24": "",
+                    "fechaApertura": "2026-08-14",
+                    "cerrada": true,
+                    "horaCierre": null,
+                    "horaCierre24": null,
+                    "sessionId": null,
+                    "contado": null,
+                    "esperado": null,
+                    "diferencia": null
+                  },
+                  "cart": [],
+                  "draft": null,
+                  "coreCounter": 1,
+                  "coreEvents": [
+                    {
+                      "label": "writer-A",
+                      "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16"
+                    }
+                  ]
+                }
+              },
+              "sessionOutbox": {
+                "state": "VALID",
+                "entry": {
+                  "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                  "logicalOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+                  "type": "CORE_TEST",
+                  "status": "PENDING",
+                  "journalSchemaVersion": 2,
+                  "baseRevision": 0,
+                  "committedRevision": null,
+                  "commitId": null,
+                  "checkpointKey": null,
+                  "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                  "createdAt": "2026-08-14T21:04:11.853Z",
+                  "updatedAt": "2026-08-14T21:04:11.853Z",
+                  "attempts": 1,
+                  "activeAttemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+                  "attemptHistory": [
+                    {
+                      "attemptId": "attempt_6260d3ea-f855-4134-b4d5-5da344c12a48",
+                      "kind": "INITIAL",
+                      "baseRevision": 0,
+                      "status": "PENDING",
+                      "rebaseOf": null,
+                      "tabId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+                      "createdAt": "2026-08-14T21:04:11.853Z",
+                      "updatedAt": "2026-08-14T21:04:11.853Z",
+                      "reason": null,
+                      "currentRevision": null,
+                      "error": null
+                    }
+                  ],
+                  "payload": {
+                    "label": "writer-A",
+                    "delta": 1
+                  },
+                  "idempotencyPayload": {
+                    "label": "writer-A",
+                    "delta": 1
+                  },
+                  "idempotencyKey": "{\"delta\":1,\"label\":\"writer-A\"}",
+                  "idempotencyHash": "sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f",
+                  "payloadHash": "sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f",
+                  "entityIds": [],
+                  "reason": null,
+                  "mismatchEvidence": [],
+                  "typeMismatchEvidence": []
+                },
+                "rawValue": "{\"op_79782f67-a17e-416a-8e01-ec58b3b94b16\":{\"operationId\":\"op_79782f67-a17e-416a-8e01-ec58b3b94b16\",\"logicalOperationId\":\"op_79782f67-a17e-416a-8e01-ec58b3b94b16\",\"type\":\"CORE_TEST\",\"status\":\"PENDING\",\"journalSchemaVersion\":2,\"baseRevision\":0,\"committedRevision\":null,\"commitId\":null,\"checkpointKey\":null,\"tabId\":\"tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be\",\"createdAt\":\"2026-08-14T21:04:11.853Z\",\"updatedAt\":\"2026-08-14T21:04:11.853Z\",\"attempts\":1,\"activeAttemptId\":\"attempt_6260d3ea-f855-4134-b4d5-5da344c12a48\",\"attemptHistory\":[{\"attemptId\":\"attempt_6260d3ea-f855-4134-b4d5-5da344c12a48\",\"kind\":\"INITIAL\",\"baseRevision\":0,\"status\":\"PENDING\",\"rebaseOf\":null,\"tabId\":\"tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be\",\"createdAt\":\"2026-08-14T21:04:11.853Z\",\"updatedAt\":\"2026-08-14T21:04:11.853Z\",\"reason\":null,\"currentRevision\":null,\"error\":null}],\"payload\":{\"label\":\"writer-A\",\"delta\":1},\"idempotencyPayload\":{\"label\":\"writer-A\",\"delta\":1},\"idempotencyKey\":\"{\\\"delta\\\":1,\\\"label\\\":\\\"writer-A\\\"}\",\"idempotencyHash\":\"sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f\",\"payloadHash\":\"sha256:d7bda8124bfba7cbf32774e653ec706d52602670a4c3b8506fdc2406a4cbf01f\",\"entityIds\":[],\"reason\":null,\"mismatchEvidence\":[],\"typeMismatchEvidence\":[]}}",
+                "detectedAt": null,
+                "error": null
+              }
+            }
+          },
+          "warnings": []
+        },
+        {
+          "status": "CONFLICT",
+          "operationId": "op_e58ca7a5-ff26-470e-9d64-40411eaa9e8f",
+          "expectedRevision": 0,
+          "currentRevision": 1,
+          "reason": "REVISION_MISMATCH",
+          "operation": {
+            "operationId": "op_e58ca7a5-ff26-470e-9d64-40411eaa9e8f",
+            "logicalOperationId": "op_e58ca7a5-ff26-470e-9d64-40411eaa9e8f",
+            "type": "CORE_TEST",
+            "status": "CONFLICT",
+            "journalSchemaVersion": 2,
+            "baseRevision": 0,
+            "committedRevision": null,
+            "commitId": null,
+            "checkpointKey": null,
+            "tabId": "tab_0acdb506-85e9-4ecc-baf6-8b8a6345b413",
+            "createdAt": "2026-08-14T21:04:11.853Z",
+            "updatedAt": "2026-08-14T21:04:11.864Z",
+            "attempts": 1,
+            "activeAttemptId": "attempt_2381b990-e32f-40c6-af37-5f1b55e6a0fd",
+            "attemptHistory": [
+              {
+                "attemptId": "attempt_2381b990-e32f-40c6-af37-5f1b55e6a0fd",
+                "kind": "INITIAL",
+                "baseRevision": 0,
+                "status": "CONFLICT",
+                "rebaseOf": null,
+                "tabId": "tab_0acdb506-85e9-4ecc-baf6-8b8a6345b413",
+                "createdAt": "2026-08-14T21:04:11.853Z",
+                "updatedAt": "2026-08-14T21:04:11.864Z",
+                "reason": "REVISION_MISMATCH",
+                "currentRevision": 1,
+                "error": null
+              }
+            ],
+            "payload": {
+              "label": "writer-B",
+              "delta": 10
+            },
+            "idempotencyPayload": {
+              "label": "writer-B",
+              "delta": 10
+            },
+            "idempotencyKey": "{\"delta\":10,\"label\":\"writer-B\"}",
+            "idempotencyHash": "sha256:a8275615d794c036d8eca04a8f79a68747d8905bb672a926eac0c32d7a036985",
+            "payloadHash": "sha256:a8275615d794c036d8eca04a8f79a68747d8905bb672a926eac0c32d7a036985",
+            "entityIds": [],
+            "reason": "REVISION_MISMATCH",
+            "mismatchEvidence": [],
+            "typeMismatchEvidence": [],
+            "currentRevision": 1
+          },
+          "snapshot": {
+            "version": 10,
+            "revision": 1,
+            "parentRevision": 0,
+            "parentCommitId": "commit_338c8ff8-e8dd-4a58-b156-8e1c208eb119",
+            "commitId": "commit_75b6a8da-b09c-4c6e-882c-0bcd5abcff46",
+            "lastOperationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16",
+            "committedAt": "2026-08-14T21:04:11.858Z",
+            "writerId": "tab_8406ac2c-2f95-43b5-b8bb-41fd819e96be",
+            "data": {
+              "appConfig": {
+                "igvActive": true,
+                "margenActive": true,
+                "stockAlertActive": true,
+                "printAuto": false,
+                "mayoristaActive": true,
+                "alertsEnabled": true,
+                "stockMin": "5",
+                "business": {
+                  "nombre": "Multiservicios Nuevo Amanecer",
+                  "ruc": "",
+                  "direccion": "Puerto Súngaro, Huánuco",
+                  "telefono": "",
+                  "cajero": "Frank"
+                },
+                "appearance": {
+                  "fontSize": "normal",
+                  "accent": "#00bca4",
+                  "accentDark": "#009e8a"
+                },
+                "customCategories": [],
+                "cashiers": [
+                  {
+                    "id": "CAJ-001",
+                    "nombre": "Frank",
+                    "activo": true,
+                    "createdAt": null,
+                    "updatedAt": null,
+                    "role": "admin",
+                    "permissions": {
+                      "accessControl": true,
+                      "manageCashiers": true,
+                      "sell": true,
+                      "annulSales": true,
+                      "adjustSales": true,
+                      "discounts": true,
+                      "products": true,
+                      "inventoryMoves": true,
+                      "clients": true,
+                      "credits": true,
+                      "cash": true,
+                      "closeCash": true,
+                      "reports": true,
+                      "imports": true,
+                      "backups": true,
+                      "resetData": true,
+                      "configuration": true,
+                      "audit": true
+                    },
+                    "pinHash": "",
+                    "pinUpdatedAt": null,
+                    "lastLoginAt": null
+                  }
+                ],
+                "activeCashierId": "CAJ-001",
+                "scanner": {
+                  "enabled": true,
+                  "sound": true,
+                  "minLength": 4,
+                  "maxIntervalMs": 65
+                },
+                "freeSale": {
+                  "allowRegisteredNoStock": false,
+                  "allowGenericSale": true,
+                  "shortcut": "F2"
+                },
+                "creditPolicy": {
+                  "enabled": true,
+                  "minPurchases": 1000,
+                  "minProfit": 400,
+                  "initialLine": 5,
+                  "punctualRate": 10,
+                  "lateRate": 5
+                },
+                "purchaseSuggestion": {
+                  "historyDays": 90,
+                  "coverageDays": 30,
+                  "safetyDays": 7
+                },
+                "ticket": {
+                  "ancho": "80mm",
+                  "customMm": 60,
+                  "fuente": "'Courier New',monospace",
+                  "tamano": "11px",
+                  "previewCustomPx": 11,
+                  "align": "center",
+                  "infoAlign": "left",
+                  "paymentAlign": "split",
+                  "footerAlign": "center",
+                  "layoutMode": "auto",
+                  "pie": "¡GRACIAS POR SU COMPRA! | Su preferencia nos motiva. | ¡Vuelva pronto!",
+                  "showLogo": true,
+                  "showIGV": false,
+                  "showNum": true,
+                  "showOperation": true,
+                  "showCurrency": true,
+                  "showUnitPrice": true,
+                  "showPayment": true,
+                  "showReceived": true,
+                  "showSep": true,
+                  "zoneOrder": "h,i,p,t,y,f",
+                  "zoneSettings": "h1cn01;i1ln10;p1lc10;t1sn01;y1sn10;f1cn00"
+                },
+                "printer": {
+                  "mode": "system",
+                  "baudRate": 9600,
+                  "autoCut": true
+                }
+              },
+              "ui": {
+                "currentPage": "pageMenu",
+                "isDark": false,
+                "currentCfgCategory": "negocio"
+              },
+              "locks": {
+                "master": false,
+                "readOnly": false,
+                "modules": {
+                  "productos": false,
+                  "ventas": false,
+                  "caja": false,
+                  "clientes": false,
+                  "gastos": false,
+                  "importacion": false,
+                  "configuracion": false
+                }
+              },
+              "security": {
+                "pinEnabled": false,
+                "pinHash": "",
+                "autoLockMinutes": 0,
+                "requirePin": {
+                  "locks": true,
+                  "anularVenta": true,
+                  "descuentos": false,
+                  "reset": true,
+                  "cerrarCaja": false,
+                  "importar": true,
+                  "configuracion": false
+                },
+                "rules": {
+                  "allowDiscounts": true,
+                  "maxDiscount": 20,
+                  "allowGenericProducts": true,
+                  "auditEnabled": true
+                },
+                "logs": []
+              },
+              "productos": [
+                {
+                  "id": "P-V10-mstfpzpt-jmc3sj",
+                  "name": "Producto legado V9",
+                  "sku": "SKU-V10-mstfpzpt-jmc3sj",
+                  "barcode": "BAR-V10-mstfpzpt-jmc3sj",
+                  "cat": "abarrotes",
+                  "icon": "📦",
+                  "imagen": null,
+                  "costo": 1,
+                  "precio": 5,
+                  "stock": 10,
+                  "stockMin": 0,
+                  "unidad": "unidad",
+                  "controlInventario": true,
+                  "descripcion": "",
+                  "codigosAlternativos": [],
+                  "codigoAlternativo": "",
+                  "marca": "Sin marca",
+                  "unidadCompra": "unidad",
+                  "factorCompra": 1,
+                  "incluyeIGV": true,
+                  "tipoImpuesto": "gravado",
+                  "impuestoComplementario": "",
+                  "precioCaja": null,
+                  "unidCaja": null,
+                  "venc": null
+                }
+              ],
+              "ventas": [
+                {
+                  "id": "V-LEGACY-1",
+                  "operation": "LEGACY-1",
+                  "fecha": "2026-08-14",
+                  "timestamp": "2026-08-14T21:04:03.867Z",
+                  "total": 0,
+                  "items": [],
+                  "hora": "04:04:03 p. m.",
+                  "hora24": "16:04:03",
+                  "cajero": "Cajero",
+                  "cajeroId": null,
+                  "cajeroNombre": "Cajero",
+                  "subtotal": 0,
+                  "descuentoTotal": 0,
+                  "metodo": "efectivo",
+                  "metodoPago": "efectivo",
+                  "estado": "completada",
+                  "tipoVenta": "minorista",
+                  "cantidadLineas": 0,
+                  "unidadesFisicas": 0,
+                  "clienteId": null,
+                  "clienteNombre": null
+                }
+              ],
+              "clientes": [],
+              "creditos": [],
+              "gastos": [],
+              "cajMovs": [],
+              "cajEstado": {
+                "abierta": false,
+                "fondo": 0,
+                "cajero": "",
+                "cajeroNombre": "",
+                "cajeroId": null,
+                "hora": "",
+                "hora24": "",
+                "fechaApertura": "2026-08-14",
+                "cerrada": true,
+                "horaCierre": null,
+                "horaCierre24": null,
+                "sessionId": null,
+                "contado": null,
+                "esperado": null,
+                "diferencia": null
+              },
+              "cart": [],
+              "draft": null,
+              "coreCounter": 1,
+              "coreEvents": [
+                {
+                  "label": "writer-A",
+                  "operationId": "op_79782f67-a17e-416a-8e01-ec58b3b94b16"
+                }
+              ]
+            }
+          },
+          "warnings": []
+        }
+      ]
+    },
+    "isolation": {
+      "runtime": {
+        "runId": "mstfpzpt-jmc3sj",
+        "tabId": "A_V10",
+        "localPrefix": "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__",
+        "sessionPrefix": "__NA_V10_TEST__mstfpzpt-jmc3sj__SESSION_A_V10__",
+        "dbName": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS"
+      },
+      "testDatabaseBeforeCleanup": {
+        "supported": true,
+        "name": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+        "exists": true,
+        "version": 2
+      },
+      "testKeysBeforeCleanup": [
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_app_initialized_v1",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_caja",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_clientes",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_configuracion",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_gastos",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_importacion",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_productos",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_lock_ventas",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_master_lock",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_readonly",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_security_v26",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_seed_catalog_suppressed",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_seed_catalog_version",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_snapshot_v10",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_snapshot_v10_signal",
+        "__NA_V10_TEST__mstfpzpt-jmc3sj__LOCAL__na_snapshot_v9"
+      ],
+      "testDatabase": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+      "testDatabaseAfterCleanup": {
+        "supported": true,
+        "name": "__NA_V10_TEST_DB__mstfpzpt-jmc3sj__NuevoAmanecerPOS",
+        "exists": false
+      },
+      "testKeysAfterCleanup": [],
+      "realDatabaseBefore": {
+        "supported": true,
+        "name": "NuevoAmanecerPOS",
+        "exists": false
+      },
+      "realDatabaseAfter": {
+        "supported": true,
+        "name": "NuevoAmanecerPOS",
+        "exists": false
+      },
+      "realStorageUntouched": true,
+      "testNamespaceCleaned": true
+    },
+    "cleanup": {
+      "ok": true
+    }
+  },
+  "multitabEngine": {
+    "version": "v10-sale-engine-2026-08-09-2",
+    "runId": "mstfqa5i-1eqtqlh",
+    "testDb": "__NA_V10_SALE_TEST_DB__mstfqa5i-1eqtqlh__NuevoAmanecerPOS",
+    "status": "PASS",
+    "staleTestCleanup": [],
+    "snapshot": {
+      "revision": 8,
+      "commitId": "commit_72d11ea4-4597-4f5a-8c78-e8a2926f1b16",
+      "lastOperationId": "op_f4719537-8196-4cc1-9e33-30f331ba4551",
+      "productos": [
+        {
+          "id": "P1",
+          "name": "Producto A",
+          "stock": 5
+        },
+        {
+          "id": "P2",
+          "name": "Producto B",
+          "stock": 1
+        },
+        {
+          "id": "P3",
+          "name": "Producto C",
+          "stock": 44
+        }
+      ],
+      "ventas": [
+        {
+          "id": "V-000008",
+          "ventaUid": "op_f4719537-8196-4cc1-9e33-30f331ba4551_sale_fa3837f6-b7a",
+          "operation": "op_f4719537-8196-4cc1-9e33-30f331ba4551",
+          "total": 12,
+          "metodo": "credito",
+          "paymentRef": "",
+          "creditId": "op_f4719537-8196-4cc1-9e33-30f331ba4551_credit_be6eb6f5-ab0",
+          "clienteId": "C1"
+        },
+        {
+          "id": "V-000007",
+          "ventaUid": "op_9847f975-d2c9-4280-9b8b-e1a06ec4e8dc_sale_843f4a2c-96e",
+          "operation": "op_9847f975-d2c9-4280-9b8b-e1a06ec4e8dc",
+          "total": 6,
+          "metodo": "transferencia",
+          "paymentRef": "REF-mstfqa5i-1eqtqlh",
+          "creditId": null,
+          "clienteId": null
+        },
+        {
+          "id": "V-000006",
+          "ventaUid": "op_95081f94-c1de-4133-aaf3-75530e5bc24c_sale_a63069aa-d0e",
+          "operation": "op_95081f94-c1de-4133-aaf3-75530e5bc24c",
+          "total": 6,
+          "metodo": "efectivo",
+          "paymentRef": "",
+          "creditId": null,
+          "clienteId": null
+        },
+        {
+          "id": "V-000005",
+          "ventaUid": "op_e099cd8f-011e-483c-8496-9e1c6d3e04aa_sale_1d741515-b56",
+          "operation": "op_e099cd8f-011e-483c-8496-9e1c6d3e04aa",
+          "total": 6,
+          "metodo": "efectivo",
+          "paymentRef": "",
+          "creditId": null,
+          "clienteId": null
+        },
+        {
+          "id": "V-000004",
+          "ventaUid": "op_989bda1e-4f46-489f-8f19-a17ab1321f9e_sale_047387f2-92d",
+          "operation": "op_989bda1e-4f46-489f-8f19-a17ab1321f9e",
+          "total": 60,
+          "metodo": "efectivo",
+          "paymentRef": "",
+          "creditId": null,
+          "clienteId": null
+        },
+        {
+          "id": "V-000003",
+          "ventaUid": "op_09ce0e37-08ed-47e1-9f71-effa7fc8480c_sale_b70cdf4a-a11",
+          "operation": "op_09ce0e37-08ed-47e1-9f71-effa7fc8480c",
+          "total": 6,
+          "metodo": "efectivo",
+          "paymentRef": "",
+          "creditId": null,
+          "clienteId": null
+        },
+        {
+          "id": "V-000002",
+          "ventaUid": "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6_sale_b2fd6462-068",
+          "operation": "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6",
+          "total": 30,
+          "metodo": "efectivo",
+          "paymentRef": "",
+          "creditId": null,
+          "clienteId": null
+        },
+        {
+          "id": "V-000001",
+          "ventaUid": "op_cf7759e3-e388-4389-9580-2748f9a81a3b_sale_c6fbb6d4-f66",
+          "operation": "op_cf7759e3-e388-4389-9580-2748f9a81a3b",
+          "total": 20,
+          "metodo": "efectivo",
+          "paymentRef": "",
+          "creditId": null,
+          "clienteId": null
+        }
+      ],
+      "cajMovs": [
+        {
+          "id": "op_cf7759e3-e388-4389-9580-2748f9a81a3b_cash_5545b6b9-64b",
+          "cashMoveId": "op_cf7759e3-e388-4389-9580-2748f9a81a3b_cash_5545b6b9-64b",
+          "ventaId": "V-000001",
+          "monto": 20,
+          "efectivo": 20,
+          "tipo": "ing",
+          "metodo": "efectivo",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6_cash_2073f9b3-293",
+          "cashMoveId": "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6_cash_2073f9b3-293",
+          "ventaId": "V-000002",
+          "monto": 30,
+          "efectivo": 30,
+          "tipo": "ing",
+          "metodo": "efectivo",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_09ce0e37-08ed-47e1-9f71-effa7fc8480c_cash_bb969623-eea",
+          "cashMoveId": "op_09ce0e37-08ed-47e1-9f71-effa7fc8480c_cash_bb969623-eea",
+          "ventaId": "V-000003",
+          "monto": 6,
+          "efectivo": 6,
+          "tipo": "ing",
+          "metodo": "efectivo",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_989bda1e-4f46-489f-8f19-a17ab1321f9e_cash_be4ae0a0-826",
+          "cashMoveId": "op_989bda1e-4f46-489f-8f19-a17ab1321f9e_cash_be4ae0a0-826",
+          "ventaId": "V-000004",
+          "monto": 60,
+          "efectivo": 60,
+          "tipo": "ing",
+          "metodo": "efectivo",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_e099cd8f-011e-483c-8496-9e1c6d3e04aa_cash_54168b59-72d",
+          "cashMoveId": "op_e099cd8f-011e-483c-8496-9e1c6d3e04aa_cash_54168b59-72d",
+          "ventaId": "V-000005",
+          "monto": 6,
+          "efectivo": 6,
+          "tipo": "ing",
+          "metodo": "efectivo",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_95081f94-c1de-4133-aaf3-75530e5bc24c_cash_56331320-0ef",
+          "cashMoveId": "op_95081f94-c1de-4133-aaf3-75530e5bc24c_cash_56331320-0ef",
+          "ventaId": "V-000006",
+          "monto": 6,
+          "efectivo": 6,
+          "tipo": "ing",
+          "metodo": "efectivo",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_9847f975-d2c9-4280-9b8b-e1a06ec4e8dc_cash_bfb1923a-a03",
+          "cashMoveId": "op_9847f975-d2c9-4280-9b8b-e1a06ec4e8dc_cash_bfb1923a-a03",
+          "ventaId": "V-000007",
+          "monto": 6,
+          "efectivo": 0,
+          "tipo": "ing",
+          "metodo": "transferencia",
+          "sessionId": 1786741459762
+        },
+        {
+          "id": "op_f4719537-8196-4cc1-9e33-30f331ba4551_cash_83c05a67-685",
+          "cashMoveId": "op_f4719537-8196-4cc1-9e33-30f331ba4551_cash_83c05a67-685",
+          "ventaId": "V-000008",
+          "monto": 12,
+          "efectivo": 0,
+          "tipo": "ing",
+          "metodo": "credito",
+          "sessionId": 1786741459762
+        }
+      ],
+      "creditos": [
+        {
+          "id": "op_f4719537-8196-4cc1-9e33-30f331ba4551_credit_be6eb6f5-ab0",
+          "ventaId": "V-000008",
+          "cliId": "C1",
+          "monto": 12,
+          "pagado": 0,
+          "saldo": 12,
+          "status": "vigente"
+        }
+      ],
+      "clientes": [
+        {
+          "id": "C1",
+          "nombre": "Cliente Prueba",
+          "totalCompras": 12
+        }
+      ]
+    },
+    "comparison": {
+      "v9": {
+        "status": "PASS",
+        "executedThisRun": false,
+        "source": "tests/multitab-persistence-regression.html",
+        "observed": {
+          "stock": 7,
+          "ventas": 1,
+          "resultado": "P0 REPRODUCIDO: una venta durable desaparece"
+        }
+      },
+      "v10": {
+        "status": "PASS",
+        "stockInicial": 10,
+        "stockFinal": 5,
+        "ventas": 2,
+        "cajMovs": 2,
+        "resultado": "P0 EVITADO EN VENTA"
+      }
+    },
+    "isolation": {
+      "testDbName": "__NA_V10_SALE_TEST_DB__mstfqa5i-1eqtqlh__NuevoAmanecerPOS",
+      "testDbBeforeCleanup": {
+        "supported": true,
+        "name": "__NA_V10_SALE_TEST_DB__mstfqa5i-1eqtqlh__NuevoAmanecerPOS",
+        "exists": true,
+        "version": 2
+      },
+      "testDbAfterCleanup": {
+        "supported": true,
+        "name": "__NA_V10_SALE_TEST_DB__mstfqa5i-1eqtqlh__NuevoAmanecerPOS",
+        "exists": false
+      },
+      "testKeysBeforeCleanup": [
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_app_initialized_v1",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_caja",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_clientes",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_configuracion",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_gastos",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_importacion",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_productos",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_lock_ventas",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_master_lock",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_readonly",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_security_v26",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_seed_catalog_suppressed",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_seed_catalog_version",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_snapshot_v10",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_snapshot_v10_signal",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__LOCAL__na_snapshot_v9",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_A__na_app_initialized_v1",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_A__na_seed_catalog_suppressed",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_A__na_seed_catalog_version",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_A__na_snapshot_v9_session",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_A__na_v10_outbox",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_app_initialized_v1",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_caja",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_clientes",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_configuracion",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_gastos",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_importacion",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_productos",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_lock_ventas",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_master_lock",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_readonly",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_seed_catalog_suppressed",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_snapshot_v9_session",
+        "__NA_V10_SALE_TEST__mstfqa5i-1eqtqlh__SESSION_B__na_v10_outbox"
+      ],
+      "testKeysAfterCleanup": [],
+      "cleanup": {
+        "ok": true
+      },
+      "namespaceClean": true,
+      "realDatabaseBefore": {
+        "supported": true,
+        "name": "NuevoAmanecerPOS",
+        "exists": false
+      },
+      "realDatabaseAfter": {
+        "supported": true,
+        "name": "NuevoAmanecerPOS",
+        "exists": false
+      },
+      "realDataUntouched": true
+    },
+    "pass": 7,
+    "fail": 0,
+    "total": 7,
+    "cases": [
+      {
+        "n": 1,
+        "name": "INIT: workers, helpers, runtime, IDB y snapshot",
+        "status": "PASS",
+        "detail": {
+          "readyA": true,
+          "readyB": true,
+          "originParent": "http://127.0.0.1:49364",
+          "originA": "http://127.0.0.1:49364",
+          "originB": "http://127.0.0.1:49364",
+          "helpersA": {
+            "buildSaleIntent": "function",
+            "revalidateSale": "function",
+            "applySale": "function",
+            "confirmSaleIntent": "function",
+            "runCriticalOperation": "function",
+            "openDB": "function",
+            "configureRuntime": "function",
+            "readCanonical": "function",
+            "createInitial": "function",
+            "newUuid": "function",
+            "newOperationId": "function"
+          },
+          "helpersB": {
+            "buildSaleIntent": "function",
+            "revalidateSale": "function",
+            "applySale": "function",
+            "confirmSaleIntent": "function",
+            "runCriticalOperation": "function",
+            "openDB": "function",
+            "configureRuntime": "function",
+            "readCanonical": "function",
+            "createInitial": "function",
+            "newUuid": "function",
+            "newOperationId": "function"
+          },
+          "runtimeA": true,
+          "runtimeB": true,
+          "idbA": {
+            "opened": true,
+            "version": 2
+          },
+          "idbB": {
+            "opened": true,
+            "version": 2
+          },
+          "tabA": "tab_143bfbee-f1f9-4bab-9601-1f2d26829403",
+          "tabB": "tab_434d02b4-02b2-4521-88ac-4892dccda396",
+          "dbName": "__NA_V10_SALE_TEST_DB__mstfqa5i-1eqtqlh__NuevoAmanecerPOS",
+          "mismaDb": true,
+          "webLocksA": true,
+          "webLocksB": true,
+          "snapshotA": {
+            "revision": 0,
+            "commitId": "commit_521fc79d-4741-48d0-abae-00a49e829b56"
+          },
+          "snapshotB": {
+            "revision": 0,
+            "commitId": "commit_521fc79d-4741-48d0-abae-00a49e829b56"
+          }
+        }
+      },
+      {
+        "n": 2,
+        "name": "A: dos ventas concurrentes sobreviven",
+        "status": "PASS",
+        "detail": {
+          "intentosIniciales": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_cf7759e3-e388-4389-9580-2748f9a81a3b",
+              "revision": 1,
+              "commitId": "commit_ca5e1564-f0ab-4028-995d-9c5f0c62f2cf"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_5ec80357-f615-4e3c-aaea-87ef4ecffed6",
+              "reason": "REVISION_MISMATCH"
+            }
+          ],
+          "rebases": [
+            {
+              "writer": "B",
+              "originalOperationId": "op_5ec80357-f615-4e3c-aaea-87ef4ecffed6",
+              "retryOperationId": "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6",
+              "fromRevision": 0,
+              "toRevision": 1,
+              "result": {
+                "status": "SUCCESS",
+                "operationId": "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6",
+                "revision": 2,
+                "commitId": "commit_2795ef70-fdae-43b8-9cb3-9b2022ddc562"
+              }
+            }
+          ],
+          "resultados": [
+            {
+              "status": "SUCCESS",
+              "revision": 1
+            },
+            {
+              "status": "SUCCESS",
+              "revision": 2
+            }
+          ],
+          "stockInicial": 10,
+          "stockFinal": 5,
+          "ventas": 2,
+          "cajMovs": 2,
+          "folios": [
+            "V-000002",
+            "V-000001"
+          ],
+          "ventaUids": [
+            "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6_sale_b2fd6462-068",
+            "op_cf7759e3-e388-4389-9580-2748f9a81a3b_sale_c6fbb6d4-f66"
+          ],
+          "cashMoveIds": [
+            "op_cf7759e3-e388-4389-9580-2748f9a81a3b_cash_5545b6b9-64b",
+            "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6_cash_2073f9b3-293"
+          ],
+          "operationIds": [
+            "op_fc3f3d81-6d3b-4877-aa1f-448116f949b6",
+            "op_cf7759e3-e388-4389-9580-2748f9a81a3b"
+          ],
+          "operationStatuses": [
+            "COMMITTED",
+            "COMMITTED"
+          ],
+          "revisions": [
+            1,
+            2
+          ],
+          "revisionBase": 0,
+          "revisionFinal": 2
+        }
+      },
+      {
+        "n": 3,
+        "name": "B: idempotencia por operationId",
+        "status": "PASS",
+        "detail": {
+          "primera": "SUCCESS",
+          "segunda": "ALREADY_COMMITTED",
+          "operationId": "op_09ce0e37-08ed-47e1-9f71-effa7fc8480c",
+          "ventasAntes": 2,
+          "ventasDespues": 3,
+          "cajMovsAntes": 2,
+          "cajMovsDespues": 3,
+          "stockP3Antes": 50,
+          "stockP3Despues": 49,
+          "revisionTrasPrimero": 3,
+          "revisionTrasSegundo": 3,
+          "journal": "COMMITTED"
+        }
+      },
+      {
+        "n": 4,
+        "name": "C: conflicto de stock sin efecto parcial",
+        "status": "PASS",
+        "detail": {
+          "stockInicial": 4,
+          "stockFinal": 1,
+          "commits": 1,
+          "conflicts": 1,
+          "intentosIniciales": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_989bda1e-4f46-489f-8f19-a17ab1321f9e",
+              "revision": 4,
+              "commitId": "commit_4eaee23b-ee62-4b97-a915-93541e861132"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_ca956471-004c-4047-be48-7998845c1e5a",
+              "reason": "REVISION_MISMATCH"
+            }
+          ],
+          "rebases": [
+            {
+              "writer": "B",
+              "originalOperationId": "op_ca956471-004c-4047-be48-7998845c1e5a",
+              "retryOperationId": "op_05fe871a-d802-4562-bd9f-8728ea6a5540",
+              "fromRevision": 3,
+              "toRevision": 4,
+              "result": {
+                "status": "CONFLICT",
+                "operationId": "op_05fe871a-d802-4562-bd9f-8728ea6a5540",
+                "reason": "STOCK_INSUFICIENTE"
+              }
+            }
+          ],
+          "resultados": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_989bda1e-4f46-489f-8f19-a17ab1321f9e"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_05fe871a-d802-4562-bd9f-8728ea6a5540",
+              "reason": "STOCK_INSUFICIENTE"
+            }
+          ],
+          "ventasDelta": 1,
+          "cajMovsDelta": 1,
+          "intencionConflictiva": {
+            "status": "CONFLICT",
+            "reason": "STOCK_INSUFICIENTE",
+            "payload": {
+              "operationId": "op_05fe871a-d802-4562-bd9f-8728ea6a5540",
+              "items": [
+                {
+                  "productId": "P2",
+                  "qty": 3,
+                  "price": 20,
+                  "name": "Producto B",
+                  "boxUnits": 1
+                }
+              ],
+              "paymentMethod": "efectivo",
+              "paymentRef": "",
+              "clientId": null,
+              "creditDue": null,
+              "cashierId": null,
+              "sessionId": 1786741459762,
+              "timestamp": "2026-08-14T21:04:19.820Z",
+              "_built": true
+            }
+          },
+          "stockNuncaNegativo": true
+        }
+      },
+      {
+        "n": 5,
+        "name": "D: folios concurrentes sin colisión",
+        "status": "PASS",
+        "detail": {
+          "intentosIniciales": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_e099cd8f-011e-483c-8496-9e1c6d3e04aa",
+              "revision": 5,
+              "commitId": "commit_26ae070e-ee13-49a8-995b-063842ef43aa"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_22860c14-f198-4715-b3db-51717132870a",
+              "reason": "REVISION_MISMATCH"
+            }
+          ],
+          "rebases": [
+            {
+              "writer": "B",
+              "originalOperationId": "op_22860c14-f198-4715-b3db-51717132870a",
+              "retryOperationId": "op_95081f94-c1de-4133-aaf3-75530e5bc24c",
+              "fromRevision": 4,
+              "toRevision": 5,
+              "result": {
+                "status": "SUCCESS",
+                "operationId": "op_95081f94-c1de-4133-aaf3-75530e5bc24c",
+                "revision": 6,
+                "commitId": "commit_7d85def1-0cc7-49ce-a10b-abae45820866"
+              }
+            }
+          ],
+          "resultados": [
+            "SUCCESS",
+            "SUCCESS"
+          ],
+          "foliosNuevos": [
+            "V-000006",
+            "V-000005"
+          ],
+          "todosFolios": [
+            "V-000006",
+            "V-000005",
+            "V-000004",
+            "V-000003",
+            "V-000002",
+            "V-000001"
+          ],
+          "sinColisiones": true,
+          "consecutivos": true,
+          "secuencia": [
+            5,
+            6
+          ],
+          "revisions": [
+            5,
+            6
+          ]
+        }
+      },
+      {
+        "n": 6,
+        "name": "E: referencia digital duplicada",
+        "status": "PASS",
+        "detail": {
+          "referencia": "REF-mstfqa5i-1eqtqlh",
+          "commits": 1,
+          "conflicts": 1,
+          "ventasConEsaReferencia": 1,
+          "intentosIniciales": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_9847f975-d2c9-4280-9b8b-e1a06ec4e8dc",
+              "revision": 7,
+              "commitId": "commit_72b1d98f-8da7-49f6-9816-c03dc984ae32"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_e09164df-143f-43d0-bddf-bd6f3a8732aa",
+              "reason": "REVISION_MISMATCH"
+            }
+          ],
+          "rebases": [
+            {
+              "writer": "B",
+              "originalOperationId": "op_e09164df-143f-43d0-bddf-bd6f3a8732aa",
+              "retryOperationId": "op_d78cf5ce-50c4-4ce5-8df2-dfb2f06c4f9b",
+              "fromRevision": 6,
+              "toRevision": 7,
+              "result": {
+                "status": "CONFLICT",
+                "operationId": "op_d78cf5ce-50c4-4ce5-8df2-dfb2f06c4f9b",
+                "reason": "REFERENCIA_DUPLICADA"
+              }
+            }
+          ],
+          "resultados": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_9847f975-d2c9-4280-9b8b-e1a06ec4e8dc"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_d78cf5ce-50c4-4ce5-8df2-dfb2f06c4f9b",
+              "reason": "REFERENCIA_DUPLICADA"
+            }
+          ],
+          "ventasDelta": 1,
+          "cajMovsDelta": 1,
+          "stockAntes": 47,
+          "stockDespues": 46,
+          "intencionConflictiva": {
+            "status": "CONFLICT",
+            "reason": "REFERENCIA_DUPLICADA"
+          }
+        }
+      },
+      {
+        "n": 7,
+        "name": "F: venta a crédito y revalidación atómicas",
+        "status": "PASS",
+        "detail": {
+          "commit": {
+            "status": "SUCCESS",
+            "journal": "COMMITTED",
+            "venta": {
+              "id": "V-000008",
+              "ventaUid": "op_f4719537-8196-4cc1-9e33-30f331ba4551_sale_fa3837f6-b7a",
+              "operation": "op_f4719537-8196-4cc1-9e33-30f331ba4551",
+              "creditId": "op_f4719537-8196-4cc1-9e33-30f331ba4551_credit_be6eb6f5-ab0",
+              "clienteId": "C1",
+              "metodo": "credito",
+              "total": 12
+            },
+            "credito": {
+              "id": "op_f4719537-8196-4cc1-9e33-30f331ba4551_credit_be6eb6f5-ab0",
+              "ventaId": "V-000008",
+              "cliId": "C1",
+              "monto": 12,
+              "pagado": 0,
+              "saldo": 12,
+              "status": "vigente"
+            },
+            "cajMov": {
+              "id": "op_f4719537-8196-4cc1-9e33-30f331ba4551_cash_83c05a67-685",
+              "cashMoveId": "op_f4719537-8196-4cc1-9e33-30f331ba4551_cash_83c05a67-685",
+              "ventaId": "V-000008",
+              "monto": 12,
+              "efectivo": 0,
+              "tipo": "ing",
+              "metodo": "credito",
+              "sessionId": 1786741459762
+            },
+            "stockAntes": 46,
+            "stockDespues": 44,
+            "clienteTotalAntes": 0,
+            "clienteTotalDespues": 12,
+            "idsDistintos": true,
+            "relacionesCoherentes": true
+          },
+          "revalidacionFallida": {
+            "status": "CONFLICT",
+            "reason": "CLIENTE_NO_EXISTE",
+            "journal": {
+              "status": "CONFLICT",
+              "reason": "CLIENTE_NO_EXISTE"
+            },
+            "revisionAntes": 8,
+            "revisionDespues": 8,
+            "commitAntes": "commit_72d11ea4-4597-4f5a-8c78-e8a2926f1b16",
+            "commitDespues": "commit_72d11ea4-4597-4f5a-8c78-e8a2926f1b16",
+            "estadoFinancieroIgual": true
+          }
+        }
+      }
+    ]
+  },
+  "phaseARecovery": {
+    "status": "PASS",
+    "total": 22,
+    "passed": 22,
+    "failed": 0,
+    "targeted": {
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "results": [
+        {
+          "key": "direct CAS historical verification",
+          "ok": true,
+          "detail": {
+            "status": "PERSISTENCE_ERROR",
+            "code": "HISTORICAL_COMMIT_UNVERIFIED",
+            "canonicalEqual": true,
+            "outboxPreserved": true
+          }
+        },
+        {
+          "key": "baseRevision consistency",
+          "ok": true,
+          "detail": {
+            "cas": "PERSISTENCE_ERROR",
+            "casCode": "JOURNAL_VALIDATION_FAILED",
+            "rebase": "PERSISTENCE_ERROR",
+            "canonicalEqual": true,
+            "journalEqual": true,
+            "outboxPreserved": true
+          }
+        },
+        {
+          "key": "tab ownership consistency",
+          "ok": true,
+          "detail": {
+            "cas": "PERSISTENCE_ERROR",
+            "code": "JOURNAL_VALIDATION_FAILED",
+            "reason": "ACTIVE_ATTEMPT_OWNER_MISMATCH",
+            "canonicalEqual": true,
+            "journalEqual": true,
+            "outboxPreserved": true
+          }
+        },
+        {
+          "key": "outbox deletion proof cannot be fabricated",
+          "ok": true,
+          "detail": {
+            "creatorType": "undefined",
+            "attempt": "PROOF_REQUIRED",
+            "preserved": true
+          }
+        }
+      ]
+    },
+    "isolation": {
+      "dbDeleted": true,
+      "localRemoved": [
+        "__NA_V10_RECOVERY_LS__mstfqew1-tjvpx3__na_snapshot_v9",
+        "__NA_V10_RECOVERY_LS__mstfqew1-tjvpx3__na_seed_catalog_suppressed",
+        "__NA_V10_RECOVERY_LS__mstfqew1-tjvpx3__na_seed_catalog_version",
+        "__NA_V10_RECOVERY_LS__mstfqew1-tjvpx3__na_app_initialized_v1",
+        "__NA_V10_RECOVERY_LS__mstfqew1-tjvpx3__na_snapshot_v10_signal",
+        "__NA_V10_RECOVERY_LS__mstfqew1-tjvpx3__na_snapshot_v10"
+      ],
+      "sessionRemoved": [
+        "__NA_V10_RECOVERY_SS__mstfqew1-tjvpx3__na_app_initialized_v1",
+        "__NA_V10_RECOVERY_SS__mstfqew1-tjvpx3__na_snapshot_v9_session",
+        "__NA_V10_RECOVERY_SS__mstfqew1-tjvpx3__na_seed_catalog_suppressed",
+        "__NA_V10_RECOVERY_SS__mstfqew1-tjvpx3__na_seed_catalog_version"
+      ],
+      "localRemaining": 0,
+      "sessionRemaining": 0,
+      "realAfter": {
+        "v9": null,
+        "v10": null,
+        "signal": null,
+        "dbs": []
+      },
+      "realUntouched": true,
+      "dbAbsent": true
+    }
+  },
+  "phaseARegression": {
+    "version": "persistence-v10-phase-a-2026-08-11-1",
+    "runId": "mstfqh08-1duq13h",
+    "status": "PASS",
+    "stats": {
+      "pass": 10,
+      "fail": 0,
+      "total": 10
+    },
+    "source": {
+      "sha256": "2cc75d684a5761b82de9464fd710bc2bdfb5bfaccf9c146aae307ea8cd493a55",
+      "phaseVersion": "persistence-v10-phase-a-2026-08-13-2",
+      "casOnComplete": true,
+      "casAbortError": true
+    },
+    "cases": [
+      {
+        "key": "A",
+        "name": "ABORT state.put",
+        "passed": true,
+        "detail": {
+          "nativePutError": {
+            "seq": 23,
+            "event": "put-error",
+            "tabId": "A",
+            "at": "2026-08-14T21:04:25.632Z",
+            "txId": "A-tx-18",
+            "store": "state",
+            "key": "snapshot_v10",
+            "revision": 1,
+            "error": "ConstraintError"
+          },
+          "transaction": {
+            "txId": "A-tx-18",
+            "aborted": true,
+            "completed": false
+          },
+          "result": "PERSISTENCE_ERROR",
+          "error": {
+            "code": "ConstraintError",
+            "message": "Unable to add key to index '__phase_a_state_revision': at least one key does not satisfy the uniqueness requirements."
+          },
+          "canonicalEqual": true,
+          "revision": 0,
+          "journalStatus": "PENDING",
+          "lastAttempt": {
+            "attemptId": "attempt_b6851c43-eadc-4037-a033-eb5634413d81",
+            "kind": "INITIAL",
+            "baseRevision": 0,
+            "status": "PERSISTENCE_ERROR",
+            "rebaseOf": null,
+            "tabId": "tab_4f494254-5265-481e-8ca9-fc4ce86874e6",
+            "createdAt": "2026-08-14T21:04:25.628Z",
+            "updatedAt": "2026-08-14T21:04:25.633Z",
+            "reason": "ConstraintError",
+            "currentRevision": null,
+            "error": {
+              "code": "ConstraintError",
+              "message": "Unable to add key to index '__phase_a_state_revision': at least one key does not satisfy the uniqueness requirements."
+            }
+          },
+          "recoverable": true,
+          "listContains": true,
+          "checkpointCount": 0,
+          "mirrorUnchanged": true,
+          "signalUnchanged": true,
+          "outboxRetained": true,
+          "broadcastDelta": 0
+        }
+      },
+      {
+        "key": "B",
+        "name": "ABORT operations.put",
+        "passed": true,
+        "detail": {
+          "nativePutError": {
+            "seq": 24,
+            "event": "put-error",
+            "tabId": "A",
+            "at": "2026-08-14T21:04:27.529Z",
+            "txId": "A-tx-18",
+            "store": "operations",
+            "key": null,
+            "operationId": "op_69538746-ec6f-4e9e-a513-3c6564795541",
+            "status": "COMMITTED",
+            "error": "ConstraintError"
+          },
+          "transaction": {
+            "txId": "A-tx-18",
+            "aborted": true,
+            "completed": false
+          },
+          "result": "PERSISTENCE_ERROR",
+          "error": {
+            "code": "ConstraintError",
+            "message": "Unable to add key to index '__phase_a_operation_committed_revision': at least one key does not satisfy the uniqueness requirements."
+          },
+          "canonicalEqual": true,
+          "revision": 0,
+          "journalStatus": "PENDING",
+          "lastAttempt": {
+            "attemptId": "attempt_41276f9a-a464-44e2-a8c1-2978ded6dda8",
+            "kind": "INITIAL",
+            "baseRevision": 0,
+            "status": "PERSISTENCE_ERROR",
+            "rebaseOf": null,
+            "tabId": "tab_7e939ecb-cfe8-4a91-9a24-600f6e107f1d",
+            "createdAt": "2026-08-14T21:04:27.524Z",
+            "updatedAt": "2026-08-14T21:04:27.529Z",
+            "reason": "ConstraintError",
+            "currentRevision": null,
+            "error": {
+              "code": "ConstraintError",
+              "message": "Unable to add key to index '__phase_a_operation_committed_revision': at least one key does not satisfy the uniqueness requirements."
+            }
+          },
+          "recoverable": true,
+          "listContains": true,
+          "checkpointCount": 0,
+          "mirrorUnchanged": true,
+          "signalUnchanged": true,
+          "outboxRetained": true,
+          "broadcastDelta": 0
+        }
+      },
+      {
+        "key": "C",
+        "name": "ABORT checkpoints.put",
+        "passed": true,
+        "detail": {
+          "nativePutError": {
+            "seq": 25,
+            "event": "put-error",
+            "tabId": "A",
+            "at": "2026-08-14T21:04:29.379Z",
+            "txId": "A-tx-18",
+            "store": "checkpoints",
+            "key": null,
+            "revision": 1,
+            "operationId": "op_25bbbaea-d7c5-4458-8ab2-a759481b40da",
+            "error": "ConstraintError"
+          },
+          "transaction": {
+            "txId": "A-tx-18",
+            "aborted": true,
+            "completed": false
+          },
+          "result": "PERSISTENCE_ERROR",
+          "error": {
+            "code": "ConstraintError",
+            "message": "Unable to add key to index '__phase_a_checkpoint_revision': at least one key does not satisfy the uniqueness requirements."
+          },
+          "canonicalEqual": true,
+          "revision": 0,
+          "journalStatus": "PENDING",
+          "lastAttempt": {
+            "attemptId": "attempt_805b0421-d519-4201-96a4-ce8f4cb1cccb",
+            "kind": "INITIAL",
+            "baseRevision": 0,
+            "status": "PERSISTENCE_ERROR",
+            "rebaseOf": null,
+            "tabId": "tab_83d261d6-a925-4f24-8160-ec63aef08e40",
+            "createdAt": "2026-08-14T21:04:29.373Z",
+            "updatedAt": "2026-08-14T21:04:29.380Z",
+            "reason": "ConstraintError",
+            "currentRevision": null,
+            "error": {
+              "code": "ConstraintError",
+              "message": "Unable to add key to index '__phase_a_checkpoint_revision': at least one key does not satisfy the uniqueness requirements."
+            }
+          },
+          "recoverable": true,
+          "listContains": true,
+          "checkpointCount": 0,
+          "mirrorUnchanged": true,
+          "signalUnchanged": true,
+          "outboxRetained": true,
+          "broadcastDelta": 0
+        }
+      },
+      {
+        "key": "D",
+        "name": "COMMITTED + mirror failure",
+        "passed": true,
+        "detail": {
+          "first": "SUCCESS",
+          "warning": {
+            "code": "MIRROR_WRITE_FAILED",
+            "message": "Fallo localStorage Fase A",
+            "name": "QuotaExceededError",
+            "revision": 1,
+            "commitId": "commit_1451c341-6694-4124-84e0-f3bc9ed2a483"
+          },
+          "retry": "ALREADY_COMMITTED",
+          "counter": 1,
+          "effects": 1,
+          "resolved": "COMMITTED"
+        }
+      },
+      {
+        "key": "E",
+        "name": "COMMITTED + outbox failure",
+        "passed": true,
+        "detail": {
+          "first": "SUCCESS",
+          "warning": {
+            "code": "OUTBOX_REMOVE_FAILED",
+            "message": "Fallo sessionStorage Fase A",
+            "name": "QuotaExceededError",
+            "operationId": "op_1f9df906-ff98-42fd-b4db-05f9f10f972d"
+          },
+          "outboxRetained": true,
+          "retry": "ALREADY_COMMITTED",
+          "retryWarnings": [
+            {
+              "code": "OUTBOX_REMOVE_FAILED",
+              "message": "Fallo sessionStorage Fase A",
+              "name": "QuotaExceededError",
+              "operationId": "op_1f9df906-ff98-42fd-b4db-05f9f10f972d"
+            }
+          ],
+          "counter": 1,
+          "effects": 1
+        }
+      },
+      {
+        "key": "F",
+        "name": "Mismo operationId + mismo payload",
+        "passed": true,
+        "detail": {
+          "first": "SUCCESS",
+          "legacyFixture": {
+            "status": "COMMITTED",
+            "schema": null,
+            "hasLogicalOperationId": false,
+            "hasAttemptHistory": false,
+            "payload": {
+              "operationId": "op_31e7418a-36e8-42dd-b4d2-260fed56bf49",
+              "label": "same",
+              "delta": 2,
+              "timestamp": "one",
+              "_built": true
+            }
+          },
+          "retry": "PERSISTENCE_ERROR",
+          "retryError": {
+            "code": "ENSURE_PENDING_FAILED",
+            "message": "LEGACY_OR_UNKNOWN_JOURNAL"
+          },
+          "evidence": {
+            "code": "JOURNAL_VALIDATION_FAILED",
+            "reason": "LEGACY_OR_UNKNOWN_JOURNAL",
+            "context": "ENSURE_EXISTING",
+            "detectedAt": "2026-08-14T21:04:35.256Z",
+            "rawJournal": {
+              "operationId": "op_31e7418a-36e8-42dd-b4d2-260fed56bf49",
+              "type": "SALE",
+              "status": "COMMITTED",
+              "baseRevision": 0,
+              "committedRevision": 1,
+              "tabId": "tab_6605030b-bfe7-486c-8df9-694e8c57cb57",
+              "createdAt": "2026-08-14T21:04:35.241Z",
+              "updatedAt": "2026-08-14T21:04:35.248Z",
+              "attempts": 1,
+              "payload": {
+                "operationId": "op_31e7418a-36e8-42dd-b4d2-260fed56bf49",
+                "label": "same",
+                "delta": 2,
+                "timestamp": "one",
+                "_built": true
+              },
+              "payloadHash": "sha256:a944bcfcc87b18babc80d0efea543ff18327ceab6500f4c7a159226f4d0f1653",
+              "entityIds": [],
+              "reason": null
+            },
+            "validation": {
+              "valid": false,
+              "reason": "LEGACY_OR_UNKNOWN_JOURNAL",
+              "context": "ENSURE_EXISTING",
+              "rawSchemaVersion": null
+            }
+          },
+          "rawPreserved": true,
+          "counter": 2,
+          "effects": 1,
+          "journal": {
+            "operationId": "op_31e7418a-36e8-42dd-b4d2-260fed56bf49",
+            "type": "SALE",
+            "status": "COMMITTED",
+            "baseRevision": 0,
+            "committedRevision": 1,
+            "tabId": "tab_6605030b-bfe7-486c-8df9-694e8c57cb57",
+            "createdAt": "2026-08-14T21:04:35.241Z",
+            "updatedAt": "2026-08-14T21:04:35.248Z",
+            "attempts": 1,
+            "payload": {
+              "operationId": "op_31e7418a-36e8-42dd-b4d2-260fed56bf49",
+              "label": "same",
+              "delta": 2,
+              "timestamp": "one",
+              "_built": true
+            },
+            "payloadHash": "sha256:a944bcfcc87b18babc80d0efea543ff18327ceab6500f4c7a159226f4d0f1653",
+            "entityIds": [],
+            "reason": null
+          }
+        }
+      },
+      {
+        "key": "G",
+        "name": "Mismo operationId + payload/tipo diferente",
+        "passed": true,
+        "detail": {
+          "first": "SUCCESS",
+          "payloadMismatch": {
+            "status": "CONFLICT",
+            "reason": "OPERATION_ID_PAYLOAD_MISMATCH",
+            "evidence": [
+              {
+                "attemptId": "attempt_2afb6931-f92a-436e-af05-8685d4a9c314",
+                "at": "2026-08-14T21:04:37.122Z",
+                "reason": "OPERATION_ID_PAYLOAD_MISMATCH",
+                "requestedHash": "sha256:eba3a18d193280d97a069522a731f46ffaadc80c6be548fbe6b27c398cf81805",
+                "requestedPayload": {
+                  "label": "contradictory",
+                  "delta": 9,
+                  "business": {
+                    "issuedAt": "2026-08-11T00:00:00.000Z"
+                  }
+                },
+                "tabId": "tab_5baed3db-fac2-457e-8e9d-150aadb7a8a9"
+              }
+            ]
+          },
+          "typeMismatch": {
+            "status": "CONFLICT",
+            "reason": "OPERATION_ID_TYPE_MISMATCH",
+            "evidence": [
+              {
+                "attemptId": "attempt_fc436509-ab65-4006-ac20-ed12d8ffd902",
+                "at": "2026-08-14T21:04:37.123Z",
+                "reason": "OPERATION_ID_TYPE_MISMATCH",
+                "existingType": "PHASE_A_TEST",
+                "requestedType": "PHASE_A_OTHER_TYPE",
+                "tabId": "tab_5baed3db-fac2-457e-8e9d-150aadb7a8a9"
+              }
+            ]
+          },
+          "journalStatus": "COMMITTED",
+          "commitId": "commit_9430df77-028a-46dc-9f69-bda2e8ba9474",
+          "resolved": "COMMITTED",
+          "revisionBeforeType": 1,
+          "revisionAfterType": 1,
+          "canonicalUnchanged": true,
+          "counter": 1,
+          "effects": 1
+        }
+      },
+      {
+        "key": "H",
+        "name": "Rebase conserva identidad",
+        "passed": true,
+        "detail": {
+          "initial": [
+            {
+              "status": "SUCCESS",
+              "operationId": "op_7f2c6416-da6b-470f-87c2-b1ddfa5b513e"
+            },
+            {
+              "status": "CONFLICT",
+              "operationId": "op_9e25e530-8a7d-4033-9197-ff3cb2bb8521",
+              "reason": "REVISION_MISMATCH"
+            }
+          ],
+          "loserOperationId": "op_9e25e530-8a7d-4033-9197-ff3cb2bb8521",
+          "prepared": {
+            "operationId": "op_9e25e530-8a7d-4033-9197-ff3cb2bb8521",
+            "logicalOperationId": "op_9e25e530-8a7d-4033-9197-ff3cb2bb8521",
+            "attemptId": "attempt_30c59150-73a4-4568-8408-9b545bfdce37",
+            "rebaseOf": "attempt_2b0394fd-5f7a-4726-957e-91e680754fab",
+            "expectedRevision": 1
+          },
+          "rebased": "SUCCESS",
+          "attemptHistory": [
+            {
+              "attemptId": "attempt_2b0394fd-5f7a-4726-957e-91e680754fab",
+              "kind": "INITIAL",
+              "baseRevision": 0,
+              "status": "CONFLICT",
+              "rebaseOf": null,
+              "tabId": "tab_1b72bd08-e2dd-4c68-9849-4182649b2863",
+              "createdAt": "2026-08-14T21:04:40.645Z",
+              "updatedAt": "2026-08-14T21:04:40.655Z",
+              "reason": "REVISION_MISMATCH",
+              "currentRevision": 1,
+              "error": null
+            },
+            {
+              "attemptId": "attempt_30c59150-73a4-4568-8408-9b545bfdce37",
+              "kind": "REBASE",
+              "baseRevision": 1,
+              "status": "COMMITTED",
+              "rebaseOf": "attempt_2b0394fd-5f7a-4726-957e-91e680754fab",
+              "tabId": "tab_1b72bd08-e2dd-4c68-9849-4182649b2863",
+              "createdAt": "2026-08-14T21:04:40.657Z",
+              "updatedAt": "2026-08-14T21:04:40.659Z",
+              "reason": null,
+              "currentRevision": 2,
+              "error": null,
+              "commitId": "commit_1437b2e7-dd39-4ec5-97f3-f5d210d49822",
+              "checkpointKey": "2:commit_1437b2e7-dd39-4ec5-97f3-f5d210d49822"
+            }
+          ],
+          "counter": 3,
+          "effects": [
+            "op_7f2c6416-da6b-470f-87c2-b1ddfa5b513e",
+            "op_9e25e530-8a7d-4033-9197-ff3cb2bb8521"
+          ]
+        }
+      },
+      {
+        "key": "I",
+        "name": "Recovery PENDING tras cierre",
+        "passed": true,
+        "detail": {
+          "pending": "PENDING",
+          "discovered": "PENDING",
+          "sessionOutboxInNewContext": {
+            "state": "EMPTY",
+            "entry": null,
+            "rawValue": null,
+            "detectedAt": null,
+            "error": null
+          },
+          "newContextOutboxEmpty": true,
+          "listContains": true,
+          "resumed": "SUCCESS",
+          "sourceFromJournal": true,
+          "sourceOperationId": "op_bd843367-5286-4c9d-bd74-3349e1efbf3e",
+          "resolved": "COMMITTED",
+          "counter": 4,
+          "effects": 1
+        }
+      },
+      {
+        "key": "J",
+        "name": "COMMITTED antes de respuesta",
+        "passed": true,
+        "detail": {
+          "started": {
+            "started": true,
+            "operationId": "op_612aff7b-2ae9-42ab-bd2d-90ce632ace4c",
+            "responseWithheld": true
+          },
+          "observed": {
+            "status": "COMMITTED",
+            "commitId": "commit_e0c6b66d-8d91-4977-89e4-5cea9206aecd"
+          },
+          "recovered": {
+            "status": "COMMITTED",
+            "commitId": "commit_e0c6b66d-8d91-4977-89e4-5cea9206aecd"
+          },
+          "retry": "ALREADY_COMMITTED",
+          "sourceFromJournal": true,
+          "sourceOperationId": "op_612aff7b-2ae9-42ab-bd2d-90ce632ace4c",
+          "counter": 5,
+          "effects": 1
+        }
+      }
+    ],
+    "errors": [],
+    "isolation": {
+      "sameOrigin": "http://127.0.0.1:49364",
+      "realBefore": {
+        "v9": null,
+        "v10": null,
+        "signal": null,
+        "database": {
+          "supported": true,
+          "name": "NuevoAmanecerPOS",
+          "exists": false
+        }
+      },
+      "realAfter": {
+        "v9": null,
+        "v10": null,
+        "signal": null,
+        "database": {
+          "supported": true,
+          "name": "NuevoAmanecerPOS",
+          "exists": false
+        }
+      },
+      "realDataUntouched": true,
+      "createdDatabases": [
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__A__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__B__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__C__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__D__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__E__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__F__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__G__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__H__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__I__NuevoAmanecerPOS",
+        "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__J__NuevoAmanecerPOS"
+      ],
+      "testDatabasesRemaining": [],
+      "testStorageKeysRemaining": [],
+      "cleanupReports": [
+        {
+          "caseId": "A",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__A__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__LOCAL__na_snapshot_v10"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__A__SESSION_A__na_v10_outbox"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "B",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__B__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__LOCAL__na_snapshot_v10_signal"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__B__SESSION_A__na_v10_outbox"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "C",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__C__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__LOCAL__na_seed_catalog_suppressed"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__SESSION_A__na_v10_outbox",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__C__SESSION_A__na_app_initialized_v1"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "D",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__D__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__LOCAL__na_snapshot_v10_signal"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__D__SESSION_A__na_snapshot_v9_session"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "E",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__E__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__LOCAL__na_app_initialized_v1"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__SESSION_A__na_v10_outbox",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__E__SESSION_A__na_snapshot_v9_session"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "F",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__F__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__LOCAL__na_snapshot_v10"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__F__SESSION_A__na_app_initialized_v1"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "G",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__G__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__LOCAL__na_app_initialized_v1"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__G__SESSION_A__na_app_initialized_v1"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": []
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "H",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__H__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "A",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_security_v26",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_lock_productos"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_importacion"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_importacion"
+                  ]
+                }
+              }
+            },
+            {
+              "tabId": "B",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__LOCAL__na_snapshot_v9"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_B__na_lock_importacion"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__H__SESSION_A__na_snapshot_v9_session"
+                  ]
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "I",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__I__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "B",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_security_v26",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__LOCAL__na_lock_importacion"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_v10_outbox",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_B__na_lock_gastos"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_v10_outbox",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__I__SESSION_A__na_seed_catalog_suppressed"
+                  ]
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        },
+        {
+          "caseId": "J",
+          "database": "__NA_V10_PHASE_A_TEST_DB__mstfqh08-1duq13h__J__NuevoAmanecerPOS",
+          "deleted": {
+            "ok": true
+          },
+          "clearedContexts": [
+            {
+              "tabId": "B",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_snapshot_v10",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_snapshot_v10_signal",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_snapshot_v9",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_security_v26",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_lock_configuracion"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_snapshot_v9_session"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_snapshot_v9_session"
+                  ]
+                }
+              }
+            },
+            {
+              "tabId": "C",
+              "storage": {
+                "before": {
+                  "local": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__LOCAL__na_snapshot_v9"
+                  ],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_readonly",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_gastos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_caja",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_clientes",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_importacion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_productos",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_master_lock",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_configuracion",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_lock_ventas",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_C__na_snapshot_v9_session"
+                  ]
+                },
+                "after": {
+                  "local": [],
+                  "session": [
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_version",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_snapshot_v9_session",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_seed_catalog_suppressed",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_A__na_app_initialized_v1",
+                    "__NA_V10_PHASE_A_TEST__mstfqh08-1duq13h__J__SESSION_B__na_snapshot_v9_session"
+                  ]
+                }
+              }
+            }
+          ],
+          "remainingStorageKeys": []
+        }
+      ],
+      "cleanupOk": true,
+      "exactNamespaceOnly": true
+    }
+  },
+  "cleanupError": "Error: EPERM, Permission denied: \\\\?\\C:\\Users\\ELISER~1\\AppData\\Local\\Temp\\na-v10-stock-nzXdtb '\\\\?\\C:\\Users\\ELISER~1\\AppData\\Local\\Temp\\na-v10-stock-nzXdtb'"
+}

@@ -6291,6 +6291,14 @@ function _naV10NormalizeOperationRecord(source){
 function _naV10UpdateAttempt(record,attemptId,patch){record.attemptHistory=(record.attemptHistory||[]).map(item=>item.attemptId===attemptId?{...item,..._naV10Clone(patch),updatedAt:patch.updatedAt||_naV10Now()}:item);return record;}
 function _naV10SpecIdentityPayload(spec){const raw=Object.prototype.hasOwnProperty.call(spec,'idempotencyPayload')?spec.idempotencyPayload:(spec.payload??null);if(!_naV10IsJsonSafe(raw,new Set()))throw _naV10Error('NON_JSON_SAFE_IDEMPOTENCY_PAYLOAD','El payload de idempotencia no es JSON-safe');return _naV10Clone(raw);}
 function _naV10BuildJournalRecord(spec,operationId,identity){const now=_naV10Now(),attempt=_naV10Attempt('INITIAL',spec.expectedRevision);return{operationId,logicalOperationId:operationId,type:String(spec.type||'UNKNOWN').slice(0,80),status:_NA_V10_STATUSES.PENDING,journalSchemaVersion:2,baseRevision:spec.expectedRevision,committedRevision:null,commitId:null,checkpointKey:null,tabId:_naGetTabId(),createdAt:now,updatedAt:now,attempts:1,activeAttemptId:attempt.attemptId,attemptHistory:[attempt],payload:_naV10Clone(spec.payload??null),idempotencyPayload:_naV10Clone(identity.payload),idempotencyKey:identity.key,idempotencyHash:identity.hash,payloadHash:identity.hash,entityIds:_naV10Clone(spec.entityIds||[]),reason:null,mismatchEvidence:[],typeMismatchEvidence:[]};}
+function _naV10ActiveAttempt(record){return(record?.attemptHistory||[]).find(attempt=>attempt?.attemptId===record?.activeAttemptId)||null;}
+function _naV10SameContextValue(left,right){return _naV10IdempotencyKey(left??null)===_naV10IdempotencyKey(right??null);}
+function _naV10RequestContextConflict(record,active,spec){
+  if(record.status!==_NA_V10_STATUSES.COMMITTED&&record.baseRevision!==spec.expectedRevision)return'REBASE_REQUIRED';
+  if(Object.prototype.hasOwnProperty.call(spec,'rebaseOf')&&(spec.rebaseOf||null)!==(active?.rebaseOf||null))return'REBASE_CONTEXT_MISMATCH';
+  if(!_naV10SameContextValue(record.entityIds||[],spec.entityIds||[]))return'OPERATION_CONTEXT_MISMATCH';
+  return null;
+}
 function _naV10AttachStorageWarning(warnings,result){if(result&&!result.ok&&result.warning)warnings.push(_naV10Clone(result.warning));return result;}
 function _naV10ValidateJournalRecordStrict(record,context){
   if(!_naV10IsPlainObject(record))return{valid:false,reason:'RECORD_NOT_PLAIN_OBJECT',context};
@@ -6361,6 +6369,7 @@ async function _naV10EnsurePending(spec,operationId){
       const existing=raw?_naV10Clone(raw):null;
       if(existing){
         const requestedType=String(spec.type||'UNKNOWN').slice(0,80);
+        if(spec.attemptId&&spec.attemptId!==existing.activeAttemptId){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:'STALE_ATTEMPT',requestAttemptId:spec.attemptId};return;}
         if(existing.type!==requestedType){
           const mismatchAttempt=_naV10Attempt('TYPE_MISMATCH',spec.expectedRevision),now=_naV10Now(),evidence={attemptId:mismatchAttempt.attemptId,at:now,reason:'OPERATION_ID_TYPE_MISMATCH',existingType:existing.type,requestedType,tabId:_naGetTabId()};
           mismatchAttempt.status=_NA_V10_STATUSES.CONFLICT;mismatchAttempt.reason=evidence.reason;mismatchAttempt.currentRevision=spec.expectedRevision;mismatchAttempt.updatedAt=now;existing.attemptHistory.push(mismatchAttempt);existing.attempts+=1;existing.typeMismatchEvidence.push(evidence);
@@ -6373,13 +6382,13 @@ async function _naV10EnsurePending(spec,operationId){
           if(existing.status!==_NA_V10_STATUSES.COMMITTED){existing.status=_NA_V10_STATUSES.CONFLICT;existing.reason=evidence.reason;existing.baseRevision=mismatchAttempt.baseRevision;existing.tabId=mismatchAttempt.tabId;existing.activeAttemptId=mismatchAttempt.attemptId;existing.updatedAt=now;}
           if(!putValidated(existing,'ENSURE_PAYLOAD_MISMATCH'))return;outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:evidence.reason,requestAttemptId:mismatchAttempt.attemptId};return;
         }
-        if(existing.status===_NA_V10_STATUSES.COMMITTED){const retry=_naV10Attempt('RETRY',spec.expectedRevision);retry.status=_NA_V10_RESULTS.ALREADY_COMMITTED;existing.attemptHistory.push(retry);existing.attempts+=1;if(!putValidated(existing,'ENSURE_ALREADY_COMMITTED'))return;outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.ALREADY_COMMITTED,requestAttemptId:retry.attemptId};return;}
+        const active=_naV10ActiveAttempt(existing);
+        const contextConflict=_naV10RequestContextConflict(existing,active,spec);if(contextConflict){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:contextConflict,requestAttemptId:spec.attemptId||null};return;}
+        if(existing.status===_NA_V10_STATUSES.COMMITTED){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.ALREADY_COMMITTED,requestAttemptId:existing.activeAttemptId};return;}
         if(existing.status===_NA_V10_STATUSES.CONFLICT||existing.status===_NA_V10_STATUSES.ROLLED_BACK){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:existing.reason||existing.status};return;}
-        if(spec.attemptId){
-          if(spec.attemptId!==existing.activeAttemptId){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:'STALE_ATTEMPT',requestAttemptId:spec.attemptId};return;}
-          outcome=existing;return;
-        }
-        if(existing.baseRevision!==spec.expectedRevision){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:'REBASE_REQUIRED'};return;}
+        if(spec.attemptId){outcome=existing;return;}
+        if(active?.status===_NA_V10_STATUSES.PENDING){outcome={..._naV10Clone(existing),requestReusedActiveAttempt:true};return;}
+        if(active?.status!==_NA_V10_RESULTS.PERSISTENCE_ERROR){outcome={..._naV10Clone(existing),requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:'STALE_ATTEMPT'};return;}
         const retry=_naV10Attempt('RETRY',existing.baseRevision,existing.activeAttemptId);existing.attemptHistory.push(retry);existing.attempts+=1;existing.activeAttemptId=retry.attemptId;existing.tabId=retry.tabId;existing.updatedAt=retry.updatedAt;existing.reason=null;if(!putValidated(existing,'ENSURE_RETRY'))return;outcome=existing;return;
       }
       if(spec.attemptId){outcome={...candidate,requestStatus:_NA_V10_RESULTS.CONFLICT,requestReason:'PREPARED_ATTEMPT_MISSING'};return;}
@@ -6461,6 +6470,13 @@ async function _naRunCriticalOperation(spec={}){
     if(pending.requestStatus===_NA_V10_RESULTS.ALREADY_COMMITTED||pending.status===_NA_V10_STATUSES.COMMITTED){const finalized=await _naV10OutboxDeletion.verifyAndRemove(operationId),resolved=finalized.verification;if(!finalized.verified||resolved?.status!==_NA_V10_STATUSES.COMMITTED)return _naV10Result(_NA_V10_RESULTS.PERSISTENCE_ERROR,{operationId,logicalOperationId:pending.logicalOperationId||operationId,attemptId:pending.requestAttemptId||null,error:resolved?.error||{code:'COMMIT_EVIDENCE_INCONSISTENT',message:'No se pudo verificar evidencia durable del commit'},operation:resolved?.operation||pending,evidence:resolved||finalized,warnings});_naV10AttachStorageWarning(warnings,finalized);return _naV10Result(_NA_V10_RESULTS.ALREADY_COMMITTED,{operationId,logicalOperationId:pending.logicalOperationId||operationId,attemptId:pending.requestAttemptId||null,revision:resolved.revision,commitId:resolved.commitId,operation:resolved.operation,snapshot:resolved.snapshot,outbox:finalized,warnings});}
     const executionSpec={...spec,expectedRevision:pending.baseRevision,attemptId:pending.activeAttemptId};
     const result=await _naV10WithExclusiveLock(()=>_naV10CasCommit(executionSpec,operationId));
+    if(result.status===_NA_V10_RESULTS.CONFLICT&&result.reason==='STALE_ATTEMPT'){
+      const finalized=await _naV10OutboxDeletion.verifyAndRemove(operationId),resolved=finalized.verification,requestedType=String(spec.type||'UNKNOWN').slice(0,80),explicitAttempt=Object.prototype.hasOwnProperty.call(spec,'attemptId')&&!!spec.attemptId;
+      let requestedKey=null,resolvedPayloadKey=null;try{requestedKey=_naV10IdempotencyKey(_naV10SpecIdentityPayload(spec));resolvedPayloadKey=_naV10IdempotencyKey(resolved?.operation?.idempotencyPayload??null);}catch(identityError){}
+      const committed=resolved?.status===_NA_V10_STATUSES.COMMITTED&&resolved.operation?.operationId===operationId&&resolved.operation?.logicalOperationId===operationId&&resolved.operation?.type===requestedType&&resolved.operation?.idempotencyKey===requestedKey&&resolvedPayloadKey===requestedKey&&resolved.operation?.baseRevision===pending.baseRevision&&result.operation?.baseRevision===resolved.operation.baseRevision&&result.operation?.activeAttemptId===resolved.operation.activeAttemptId&&resolved.attemptId===resolved.operation.activeAttemptId&&typeof resolved.commitId==='string'&&resolved.commitId&&Number.isSafeInteger(resolved.revision);
+      if(!explicitAttempt&&committed){_naV10AttachStorageWarning(warnings,finalized);return _naV10Result(_NA_V10_RESULTS.ALREADY_COMMITTED,{operationId,logicalOperationId:resolved.logicalOperationId||operationId,attemptId:resolved.attemptId,revision:resolved.revision,commitId:resolved.commitId,operation:resolved.operation,snapshot:resolved.snapshot,outbox:finalized,reconciliation:{attempted:true,status:_NA_V10_STATUSES.COMMITTED,evidence:resolved},warnings});}
+      result.reconciliation={attempted:true,status:resolved?.status||'UNKNOWN',evidence:resolved,outbox:finalized};
+    }
     if(result.status===_NA_V10_RESULTS.PERSISTENCE_ERROR){result.recovery=await _naV10AnnotatePersistenceError(operationId,pending.activeAttemptId,result.error);result.warnings=warnings;return result;}
     if(result.status===_NA_V10_RESULTS.SUCCESS){result.mirror=_naV10WriteMirror(result.snapshot);_naV10AttachStorageWarning(warnings,result.mirror);result.broadcast=_naV10PublishCommit(result.snapshot);result.outbox=await _naV10OutboxDeletion.verifyAndRemove(operationId);_naV10AttachStorageWarning(warnings,result.outbox);}
     result.warnings=warnings;
@@ -6634,15 +6650,26 @@ function _naV10BuildSaleIntent(intent){
   return{operationId,items:_naV10Clone(intent.items||[]),paymentMethod:intent.paymentMethod||'efectivo',paymentRef:intent.paymentRef||'',clientId:intent.clientId||null,creditDue:intent.creditDue||null,cashierId:intent.cashierId||null,sessionId:intent.sessionId||null,timestamp:_naV10Now(),_built:true};
 }
 
+// Unidades físicas canónicas: qty × unitsPerQty. La propiedad real del intent V10 es boxUnits;
+// unitsPerQty es el nombre equivalente usado en registros de venta (compatibilidad V9). Un solo concepto.
+function _naV10ItemUnitsPerQty(item){return Math.max(1,_naInt(item?.boxUnits,item?.unitsPerQty||1));}
+function _naV10ItemPhysicalUnits(item){return Math.max(0,_naNumber(item?.qty,1))*_naV10ItemUnitsPerQty(item);}
+
 function _naV10RevalidateSale(canonical,intent){
   const d=canonical?.data;if(!d)return{ok:false,reason:'CANONICAL_MISSING'};
   const productos=d.productos||[],ventas=d.ventas||[],clientes=d.clientes||[],creditos=d.creditos||[],cajEstado=d.cajEstado||{};
   if(!cajEstado.abierta||cajEstado.cerrada)return{ok:false,reason:'CAJA_CERRADA'};
   if(!cajEstado.sessionId)return{ok:false,reason:'CAJA_SIN_SESION'};
+  const allowNoStock=!!(d.appConfig&&d.appConfig.freeSale&&d.appConfig.freeSale.allowRegisteredNoStock===true);
+  const required={};
   for(let i=0;i<intent.items.length;i++){
     const it=intent.items[i],prod=productos.find(p=>String(p.id)===String(it.productId));
     if(!prod)return{ok:false,reason:'PRODUCTO_NO_EXISTE',productId:it.productId};
-    if(prod.controlInventario!==false&&prod.stock<it.qty)return{ok:false,reason:'STOCK_INSUFICIENTE',productId:it.productId,disponible:prod.stock,requerido:it.qty};
+    if(prod.controlInventario!==false)required[String(prod.id)]=(required[String(prod.id)]||0)+_naV10ItemPhysicalUnits(it);
+  }
+  for(const productId in required){
+    const prod=productos.find(p=>String(p.id)===String(productId)),req=required[productId];
+    if(req>prod.stock&&!allowNoStock)return{ok:false,reason:'STOCK_INSUFICIENTE',productId:prod.id,disponible:prod.stock,requerido:req};
   }
   if(intent.paymentRef&&(intent.paymentMethod==='yape'||intent.paymentMethod==='transferencia')){
     const dupeRef=ventas.some(v=>!v.anulada&&v.paymentRef===intent.paymentRef);
@@ -6671,8 +6698,7 @@ function _naV10ApplySale(draft,intent,ctx){
   const total=intent.items.reduce((a,it)=>a+(it.price||0)*(it.qty||0),0);
   const saleItems=intent.items.map(it=>{
     const qty=Math.max(1,it.qty||1),price=Math.max(0,it.price||0),prod=d.productos.find(p=>String(p.id)===String(it.productId));
-    const units=(it.boxUnits||1)*qty;
-    return{id:it.productId,productoId:it.productId,sku:prod?.sku||it.sku||'',qty,cantidad:qty,precio:price,precioUnitario:price,subtotal:Number((price*qty).toFixed(2)),name:prod?.name||it.name||'',nombre:prod?.name||it.name||'',icon:prod?.icon||'📦',unidad:'unidad',unitsPerQty:it.boxUnits||1,ventaModo:(it.boxUnits||1)>1?'caja':'unidad',ventaLibre:false,ventaSinStock:false,costo:prod?.costo||0,descuento:0,_precioOriginal:null,incluyeIGV:true,tipoImpuesto:'gravado'};
+    return{id:it.productId,productoId:it.productId,sku:prod?.sku||it.sku||'',qty,cantidad:qty,precio:price,precioUnitario:price,subtotal:Number((price*qty).toFixed(2)),name:prod?.name||it.name||'',nombre:prod?.name||it.name||'',icon:prod?.icon||'📦',unidad:'unidad',unitsPerQty:_naV10ItemUnitsPerQty(it),ventaModo:_naV10ItemUnitsPerQty(it)>1?'caja':'unidad',ventaLibre:false,ventaSinStock:false,costo:prod?.costo||0,descuento:0,_precioOriginal:null,incluyeIGV:true,tipoImpuesto:'gravado'};
   });
   const metodo=intent.paymentMethod||'efectivo',estado=metodo==='credito'?'credito':'completada';
   let creditId=null;
@@ -6690,7 +6716,7 @@ function _naV10ApplySale(draft,intent,ctx){
   d.cajMovs.push({id:cashMoveId,cashMoveId,tipo:'ing',monto:total,efectivo:metodo==='efectivo'?total:0,desc:'Venta POS '+newId,cat:'Venta retail',metodo,referencia:intent.paymentRef||'',hora,hora24,timestamp:now,cajero:'',cajeroNombre:'',cajeroId:ctx.tabId||'',fecha,sessionId:intent.sessionId||'',ventaId:newId});
   for(let i=0;i<intent.items.length;i++){
     const it=intent.items[i],prod=d.productos.find(p=>String(p.id)===String(it.productId));
-    if(prod&&prod.controlInventario!==false)prod.stock=Math.max(0,(prod.stock||0)-it.qty);
+    if(prod&&prod.controlInventario!==false)prod.stock=(prod.stock||0)-_naV10ItemPhysicalUnits(it);
   }
   return d;
 }

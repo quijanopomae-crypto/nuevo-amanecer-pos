@@ -1,0 +1,654 @@
+{
+  "chrome": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "port": 62128,
+  "debugPort": 62129,
+  "urlBase": "http://127.0.0.1:62128",
+  "report": {
+    "version": "v10-stock-adversarial-2026-08-14-1",
+    "runId": "mstfrqmy-13gitwq",
+    "testDb": "__NA_V10_STOCK_ADV_DB__mstfrqmy-13gitwq__NuevoAmanecerPOS",
+    "status": "PASS",
+    "realStorageBefore": {
+      "snapshotV9": null,
+      "sessionV9": null,
+      "localKeys": [],
+      "indexedDbNames": []
+    },
+    "namespaceCleanup": {
+      "prefix": "__NA_V10_STOCK_ADV__mstfrqmy-13gitwq__",
+      "dbCleanup": {
+        "ok": true
+      }
+    },
+    "realStorageAfter": {
+      "snapshotV9": null,
+      "sessionV9": null,
+      "localKeys": [],
+      "indexedDbNames": []
+    },
+    "v9Isolation": {
+      "snapshotV9Before": null,
+      "snapshotV9After": null,
+      "sessionV9Before": null,
+      "sessionV9After": null,
+      "localKeysBefore": [],
+      "localKeysAfter": [],
+      "indexedDbBefore": [],
+      "indexedDbAfter": [],
+      "identical": true
+    },
+    "v9Untouched": true,
+    "stats": {
+      "pass": 10,
+      "fail": 0,
+      "hfail": 0
+    },
+    "cases": [
+      {
+        "n": 1,
+        "key": "CONCURRENT_SAME_OPERATION",
+        "name": "1. Mismo operationId, Promise.all (5 iteraciones)",
+        "verdict": "PASS",
+        "expected": "cada iteración → {SUCCESS, ALREADY_COMMITTED} (cualquier orden), UNA deducción, UNA venta, sin PERSISTENCE_ERROR/STALE_ATTEMPT",
+        "observed": {
+          "iterations": [
+            {
+              "statuses": [
+                "ALREADY_COMMITTED",
+                "SUCCESS"
+              ],
+              "reasons": [
+                null,
+                null
+              ],
+              "stock": 4,
+              "ventasCount": 1,
+              "journal": {
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "committedRevision": 1,
+                "attempts": 1,
+                "activeAttemptId": "attempt_6de013b7-ffce-4b95-ba78-0737d82380e1",
+                "reason": null,
+                "attemptHistory": [
+                  {
+                    "kind": "INITIAL",
+                    "status": "COMMITTED",
+                    "baseRevision": 0,
+                    "rebaseOf": null,
+                    "reason": null,
+                    "currentRevision": 1
+                  }
+                ]
+              }
+            },
+            {
+              "statuses": [
+                "ALREADY_COMMITTED",
+                "SUCCESS"
+              ],
+              "reasons": [
+                null,
+                null
+              ],
+              "stock": 4,
+              "ventasCount": 1,
+              "journal": {
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "committedRevision": 1,
+                "attempts": 1,
+                "activeAttemptId": "attempt_f0b76b3e-f6ec-4a00-ae20-c17330668909",
+                "reason": null,
+                "attemptHistory": [
+                  {
+                    "kind": "INITIAL",
+                    "status": "COMMITTED",
+                    "baseRevision": 0,
+                    "rebaseOf": null,
+                    "reason": null,
+                    "currentRevision": 1
+                  }
+                ]
+              }
+            },
+            {
+              "statuses": [
+                "ALREADY_COMMITTED",
+                "SUCCESS"
+              ],
+              "reasons": [
+                null,
+                null
+              ],
+              "stock": 4,
+              "ventasCount": 1,
+              "journal": {
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "committedRevision": 1,
+                "attempts": 1,
+                "activeAttemptId": "attempt_3fc357cc-0466-4406-af34-7fece3cc196a",
+                "reason": null,
+                "attemptHistory": [
+                  {
+                    "kind": "INITIAL",
+                    "status": "COMMITTED",
+                    "baseRevision": 0,
+                    "rebaseOf": null,
+                    "reason": null,
+                    "currentRevision": 1
+                  }
+                ]
+              }
+            },
+            {
+              "statuses": [
+                "ALREADY_COMMITTED",
+                "SUCCESS"
+              ],
+              "reasons": [
+                null,
+                null
+              ],
+              "stock": 4,
+              "ventasCount": 1,
+              "journal": {
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "committedRevision": 1,
+                "attempts": 1,
+                "activeAttemptId": "attempt_c81a0249-56bc-4abe-8a95-31ab5a291ef4",
+                "reason": null,
+                "attemptHistory": [
+                  {
+                    "kind": "INITIAL",
+                    "status": "COMMITTED",
+                    "baseRevision": 0,
+                    "rebaseOf": null,
+                    "reason": null,
+                    "currentRevision": 1
+                  }
+                ]
+              }
+            },
+            {
+              "statuses": [
+                "ALREADY_COMMITTED",
+                "SUCCESS"
+              ],
+              "reasons": [
+                null,
+                null
+              ],
+              "stock": 4,
+              "ventasCount": 1,
+              "journal": {
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "committedRevision": 1,
+                "attempts": 1,
+                "activeAttemptId": "attempt_4e78889e-3b78-4f61-a609-31d6c286e90a",
+                "reason": null,
+                "attemptHistory": [
+                  {
+                    "kind": "INITIAL",
+                    "status": "COMMITTED",
+                    "baseRevision": 0,
+                    "rebaseOf": null,
+                    "reason": null,
+                    "currentRevision": 1
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "n": 2,
+        "key": "CONCURRENT_DIFFERENT_OPERATIONS",
+        "name": "2. Dos operationId distintos, stock insuficiente para ambos",
+        "verdict": "PASS",
+        "expected": "exactamente 1 SUCCESS y 1 CONFLICT (STOCK_INSUFICIENTE|REVISION_MISMATCH); stock final 2; 1 venta",
+        "observed": {
+          "reset": "SUCCESS",
+          "statuses": [
+            "CONFLICT",
+            "SUCCESS"
+          ],
+          "reasons": [
+            null,
+            "REVISION_MISMATCH"
+          ],
+          "stock": 2,
+          "ventasCount": 1
+        }
+      },
+      {
+        "n": 3,
+        "key": "RETRY_WHILE_PENDING",
+        "name": "3. Fault aborta CAS (1ª vez), journal PENDING, retry mismo opId",
+        "verdict": "PASS",
+        "expected": "1ª PERSISTENCE_ERROR con journal PENDING; retry SUCCESS; stock deducido EXACTAMENTE una vez",
+        "observed": {
+          "reset": "SUCCESS",
+          "inject": {
+            "ok": true,
+            "mode": "state",
+            "target": "state"
+          },
+          "s1": {
+            "status": "PERSISTENCE_ERROR",
+            "error": {
+              "code": "TransactionInactiveError",
+              "message": "Failed to execute 'put' on 'IDBObjectStore': The transaction has finished."
+            },
+            "thrown": false
+          },
+          "journalAfterFault": {
+            "status": "PENDING",
+            "baseRevision": 0,
+            "committedRevision": null,
+            "attempts": 1,
+            "activeAttemptId": "attempt_682bdbb1-7375-415c-8e71-7cd826de7fa7",
+            "reason": "TransactionInactiveError",
+            "attemptHistory": [
+              {
+                "kind": "INITIAL",
+                "status": "PERSISTENCE_ERROR",
+                "baseRevision": 0,
+                "rebaseOf": null,
+                "reason": "TransactionInactiveError",
+                "currentRevision": null
+              }
+            ]
+          },
+          "stockAfterFault": 50,
+          "restore": {
+            "ok": true
+          },
+          "s2": {
+            "status": "SUCCESS",
+            "revision": 1
+          },
+          "stockFinal": 46,
+          "ventasCount": 1,
+          "journalAfterRetry": {
+            "status": "COMMITTED",
+            "baseRevision": 0,
+            "committedRevision": 1,
+            "attempts": 2,
+            "activeAttemptId": "attempt_c22b3e39-791a-4926-8206-dec3c0f6155e",
+            "reason": null,
+            "attemptHistory": [
+              {
+                "kind": "INITIAL",
+                "status": "PERSISTENCE_ERROR",
+                "baseRevision": 0,
+                "rebaseOf": null,
+                "reason": "TransactionInactiveError",
+                "currentRevision": null
+              },
+              {
+                "kind": "RETRY",
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "rebaseOf": "attempt_682bdbb1-7375-415c-8e71-7cd826de7fa7",
+                "reason": null,
+                "currentRevision": 1
+              }
+            ]
+          }
+        }
+      },
+      {
+        "n": 4,
+        "key": "FAULT_AFTER_COMMIT_ATTEMPT",
+        "name": "4. Fault en put del checkpoint aborta la tx CAS",
+        "verdict": "PASS",
+        "expected": "1ª PERSISTENCE_ERROR (nunca SUCCESS); journal PENDING; retry commit 1 solo efecto; final: journal COMMITTED + checkpoint + revision+1",
+        "observed": {
+          "reset": "SUCCESS",
+          "initialRevision": 0,
+          "inject": {
+            "ok": true,
+            "mode": "checkpoint",
+            "target": "checkpoints"
+          },
+          "s1": {
+            "status": "PERSISTENCE_ERROR",
+            "error": {
+              "code": "CAS_ABORTED",
+              "message": "La transaccion CAS fue cancelada"
+            }
+          },
+          "journalAfterFault": {
+            "status": "PENDING",
+            "baseRevision": 0,
+            "committedRevision": null,
+            "attempts": 1,
+            "activeAttemptId": "attempt_71d78c12-185c-4ded-89b7-5dbaa3913a22",
+            "reason": "CAS_ABORTED",
+            "attemptHistory": [
+              {
+                "kind": "INITIAL",
+                "status": "PERSISTENCE_ERROR",
+                "baseRevision": 0,
+                "rebaseOf": null,
+                "reason": "CAS_ABORTED",
+                "currentRevision": null
+              }
+            ]
+          },
+          "stockAfterFault": 50,
+          "restore": {
+            "ok": true
+          },
+          "s2": {
+            "status": "SUCCESS",
+            "revision": 1,
+            "commitId": "commit_cdf64646-de2d-48da-aca2-2ddf9d25222c"
+          },
+          "stockFinal": 46,
+          "ventasCount": 1,
+          "journalFinal": {
+            "status": "COMMITTED",
+            "baseRevision": 0,
+            "committedRevision": 1,
+            "attempts": 2,
+            "activeAttemptId": "attempt_c255548a-3c11-4996-aaeb-a7f7673534da",
+            "reason": null,
+            "attemptHistory": [
+              {
+                "kind": "INITIAL",
+                "status": "PERSISTENCE_ERROR",
+                "baseRevision": 0,
+                "rebaseOf": null,
+                "reason": "CAS_ABORTED",
+                "currentRevision": null
+              },
+              {
+                "kind": "RETRY",
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "rebaseOf": "attempt_71d78c12-185c-4ded-89b7-5dbaa3913a22",
+                "reason": null,
+                "currentRevision": 1
+              }
+            ]
+          },
+          "resolve": {
+            "status": "COMMITTED",
+            "hasCheckpoint": true
+          },
+          "checkpointCount": 1,
+          "finalRevision": 1
+        }
+      },
+      {
+        "n": 5,
+        "key": "UNCERTAIN_COMMIT_RESPONSE_LOSS",
+        "name": "4b. Commit durable pero respuesta perdida (fault post-commit en resolve)",
+        "verdict": "PASS",
+        "expected": "1ª PERSISTENCE_ERROR pero commit durable; retry ALREADY_COMMITTED con evidencia verificada; 1 solo efecto",
+        "observed": {
+          "reset": "SUCCESS",
+          "inject": {
+            "ok": true
+          },
+          "s1": {
+            "status": "PERSISTENCE_ERROR",
+            "error": {
+              "code": "Error",
+              "message": "synthetic resolve failure (post-commit)"
+            }
+          },
+          "journalAfterCommit": {
+            "status": "COMMITTED",
+            "baseRevision": 0,
+            "committedRevision": 1,
+            "attempts": 1,
+            "activeAttemptId": "attempt_c5b7d7f5-72b8-4224-b3d6-789fa96123b9",
+            "reason": null,
+            "attemptHistory": [
+              {
+                "kind": "INITIAL",
+                "status": "COMMITTED",
+                "baseRevision": 0,
+                "rebaseOf": null,
+                "reason": null,
+                "currentRevision": 1
+              }
+            ]
+          },
+          "stockAfterCommit": 46,
+          "restore": {
+            "ok": true
+          },
+          "s2": {
+            "status": "ALREADY_COMMITTED",
+            "revision": 1,
+            "commitId": "commit_69efb8e1-726d-4a81-bb00-7918191c60c9"
+          },
+          "stockFinal": 46,
+          "ventasCount": 1,
+          "resolve": {
+            "status": "COMMITTED",
+            "hasCheckpoint": true
+          }
+        }
+      },
+      {
+        "n": 6,
+        "key": "EXTREME_VALUES",
+        "name": "5. boxUnits {0,-5,1e9,12.5} y qty {0.5,0,-2}",
+        "verdict": "PASS",
+        "expected": "determinista: upq min1, trunc _naInt, qty decimal se conserva; stock coherente con physical; nunca NaN/Infinity; snapshot JSON-safe",
+        "observed": {
+          "rows": [
+            {
+              "label": "boxUnits=0",
+              "status": "SUCCESS",
+              "unitsPerQty": 1,
+              "saleLineQty": 1,
+              "saleUnidadesFisicas": 1,
+              "stock": 99,
+              "expectedStock": 99,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": true
+            },
+            {
+              "label": "boxUnits=-5",
+              "status": "SUCCESS",
+              "unitsPerQty": 1,
+              "saleLineQty": 2,
+              "saleUnidadesFisicas": 2,
+              "stock": 98,
+              "expectedStock": 98,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": true
+            },
+            {
+              "label": "boxUnits=1e9",
+              "status": "SUCCESS",
+              "unitsPerQty": 1000000000,
+              "saleLineQty": 1,
+              "saleUnidadesFisicas": 1000000000,
+              "stock": -999999900,
+              "expectedStock": -999999900,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": true
+            },
+            {
+              "label": "boxUnits=12.5",
+              "status": "SUCCESS",
+              "unitsPerQty": 12,
+              "saleLineQty": 2,
+              "saleUnidadesFisicas": 24,
+              "stock": 76,
+              "expectedStock": 76,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": true
+            },
+            {
+              "label": "qty=0.5",
+              "status": "SUCCESS",
+              "unitsPerQty": 2,
+              "saleLineQty": 1,
+              "saleUnidadesFisicas": 2,
+              "stock": 99,
+              "expectedStock": 99,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": false
+            },
+            {
+              "label": "qty=0",
+              "status": "SUCCESS",
+              "unitsPerQty": 4,
+              "saleLineQty": 1,
+              "saleUnidadesFisicas": 4,
+              "stock": 100,
+              "expectedStock": 100,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": false
+            },
+            {
+              "label": "qty=-2",
+              "status": "SUCCESS",
+              "unitsPerQty": 3,
+              "saleLineQty": 1,
+              "saleUnidadesFisicas": 3,
+              "stock": 100,
+              "expectedStock": 100,
+              "finite": true,
+              "saleLineClamped": true,
+              "consistent": false
+            }
+          ]
+        }
+      },
+      {
+        "n": 7,
+        "key": "DUPLICATE_LINES_RACE",
+        "name": "6. 2 líneas mismo producto (1+1×12=13) stock13, 2×paralelo opIds distintos",
+        "verdict": "PASS",
+        "expected": "exactamente 1 SUCCESS, otro CONFLICT; stock 0",
+        "observed": {
+          "reset": "SUCCESS",
+          "statuses": [
+            "CONFLICT",
+            "SUCCESS"
+          ],
+          "reasons": [
+            null,
+            "REVISION_MISMATCH"
+          ],
+          "stock": 0,
+          "ventasCount": 1
+        }
+      },
+      {
+        "n": 8,
+        "key": "NEGATIVE_STOCK_CHAIN",
+        "name": "7. allowNoStock=true, 3 ventas encadenadas 5→0→-7→-19",
+        "verdict": "PASS",
+        "expected": "cada deducción exacta sin clamp; stock final -19; 3 ventas; unidadesFisicas correctas",
+        "observed": {
+          "reset": "SUCCESS",
+          "rows": [
+            {
+              "op": "neg-1",
+              "status": "SUCCESS",
+              "stock": 0
+            },
+            {
+              "op": "neg-2",
+              "status": "SUCCESS",
+              "stock": -7
+            },
+            {
+              "op": "neg-3",
+              "status": "SUCCESS",
+              "stock": -19
+            }
+          ],
+          "ventasCount": 3,
+          "order": "newest-first",
+          "unidadesFisicas": [
+            12,
+            7,
+            5
+          ],
+          "unidadesFisicasByOperation": {
+            "neg-3": 12,
+            "neg-2": 7,
+            "neg-1": 5
+          }
+        }
+      },
+      {
+        "n": 9,
+        "key": "STALE_REVISION_RETRY",
+        "name": "8. Operación PENDING con baseRevision vieja (tab desactualizado)",
+        "verdict": "PASS",
+        "expected": "commit falla CONFLICT REVISION_MISMATCH/REBASE_REQUIRED; stock NO se descuenta",
+        "observed": {
+          "reset": "SUCCESS",
+          "prepStatus": "SUCCESS",
+          "baseRevisionAfterPrep": 1,
+          "stale": {
+            "status": "CONFLICT",
+            "reason": "REVISION_MISMATCH",
+            "expectedRevision": 0
+          },
+          "stock": 10,
+          "ventasCount": 1,
+          "journal": {
+            "status": "CONFLICT",
+            "baseRevision": 0,
+            "committedRevision": null,
+            "attempts": 1,
+            "activeAttemptId": "attempt_e1dbee45-42e2-4226-8c3d-ef0c982b34ce",
+            "reason": "REVISION_MISMATCH",
+            "attemptHistory": [
+              {
+                "kind": "INITIAL",
+                "status": "CONFLICT",
+                "baseRevision": 0,
+                "rebaseOf": null,
+                "reason": "REVISION_MISMATCH",
+                "currentRevision": 1
+              }
+            ]
+          }
+        }
+      },
+      {
+        "n": 10,
+        "key": "CROSS_FIELD_CONSISTENCY",
+        "name": "10. Ventas con cajas y duplicados: coherencia unidadesFisicas vs descuento real",
+        "verdict": "PASS",
+        "expected": "venta.unidadesFisicas === Σ(qty×unitsPerQty) y el descuento real de stock coincide",
+        "observed": {
+          "reset": "SUCCESS",
+          "status": "SUCCESS",
+          "stockP": 37,
+          "stockQ": 76,
+          "descuentoP": 13,
+          "descuentoQ": 24,
+          "physP": 13,
+          "physQ": 24,
+          "unidadesFisicas": 37,
+          "sumItems": 37
+        }
+      }
+    ]
+  }
+}
