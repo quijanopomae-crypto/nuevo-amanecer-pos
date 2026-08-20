@@ -1,0 +1,1038 @@
+[
+  {
+    "run": 0,
+    "report": {
+      "version": "cash-v10-regression-2026-08-14-1",
+      "runId": "msszhwp3-ulwy5yae",
+      "testDbA": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae__NuevoAmanecerPOS",
+      "testDbC": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae-closed__NuevoAmanecerPOS",
+      "status": "FAIL",
+      "executionMode": "autorun",
+      "staleTestCleanup": [],
+      "realBefore": {
+        "snapshotV9": null,
+        "realDb": null
+      },
+      "source": {
+        "hash": "sha256:225690a9782c7e206b85fd715018509b1a1f20096588b5d26ad4c8373ef0b65b",
+        "length": 966891
+      },
+      "fixtureA": {
+        "revision": 0,
+        "commitId": "commit_d1725027-1f54-4a6c-8f6f-31a363803bfc",
+        "lastOperationId": "op_c3d6b37e-1350-4938-b125-de810e1911b6",
+        "gastos": [],
+        "cajMovs": [],
+        "cajEstado": {
+          "abierta": true,
+          "cerrada": false,
+          "cajeroId": "C-1",
+          "cajeroNombre": "Cajero Uno",
+          "sessionId": "S-1",
+          "fechaApertura": "2026-08-14"
+        }
+      },
+      "snapshot": {
+        "revision": 5,
+        "commitId": "commit_8ab5ee4e-8f59-4ffb-bd0c-26c4e5a54518",
+        "lastOperationId": "op_f1c41c45-3d6f-4f62-a5a7-2529d8c36e36",
+        "gastos": [
+          {
+            "id": "op_f1c41c45-3d6f-4f62-a5a7-2529d8c36e36_gasto",
+            "operationId": "op_f1c41c45-3d6f-4f62-a5a7-2529d8c36e36",
+            "desc": "Sesion OK",
+            "monto": 5,
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "cashierId": "C-1",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_d393d626-af60-4242-ad0a-636411d62d99_gasto",
+            "operationId": "op_d393d626-af60-4242-ad0a-636411d62d99",
+            "desc": "Identidad OK",
+            "monto": 5,
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "cashierId": "C-1",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_034161e0-41cc-40a5-85d1-f6244105fd14_gasto",
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "desc": "Luz",
+            "monto": 12.5,
+            "cat": "Servicios",
+            "metodo": "efectivo",
+            "cashierId": "C-1",
+            "sessionId": "S-1"
+          }
+        ],
+        "cajMovs": [
+          {
+            "id": "op_034161e0-41cc-40a5-85d1-f6244105fd14_mov",
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "tipo": "gas",
+            "monto": 12.5,
+            "efectivo": 12.5,
+            "desc": "Luz",
+            "cat": "Servicios",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_04927eb2-70e6-4fb9-88fe-dcb2f28774b7_mov",
+            "operationId": "op_04927eb2-70e6-4fb9-88fe-dcb2f28774b7",
+            "tipo": "ing",
+            "movTipo": "CASH_IN",
+            "monto": 50,
+            "efectivo": 50,
+            "desc": "Ingreso extra",
+            "cat": "",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_92509bd0-f476-4481-b2db-8eabbccbd849_mov",
+            "operationId": "op_92509bd0-f476-4481-b2db-8eabbccbd849",
+            "tipo": "egr",
+            "movTipo": "CASH_OUT",
+            "monto": 25,
+            "efectivo": 25,
+            "desc": "Compra insumos",
+            "cat": "",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_d393d626-af60-4242-ad0a-636411d62d99_mov",
+            "operationId": "op_d393d626-af60-4242-ad0a-636411d62d99",
+            "tipo": "gas",
+            "monto": 5,
+            "efectivo": 5,
+            "desc": "Identidad OK",
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_f1c41c45-3d6f-4f62-a5a7-2529d8c36e36_mov",
+            "operationId": "op_f1c41c45-3d6f-4f62-a5a7-2529d8c36e36",
+            "tipo": "gas",
+            "monto": 5,
+            "efectivo": 5,
+            "desc": "Sesion OK",
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          }
+        ],
+        "cajEstado": {
+          "abierta": true,
+          "cerrada": false,
+          "cajeroId": "C-1",
+          "cajeroNombre": "Cajero Uno",
+          "sessionId": "S-1",
+          "fechaApertura": "2026-08-14"
+        }
+      },
+      "isolation": {
+        "storageRoot": "__NA_V10_CASH_TEST__",
+        "dbRoot": "__NA_V10_CASH_TEST_DB__",
+        "testKeysBeforeCleanup": [
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__SESSION_C__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__SESSION_C__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__SESSION_C__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__SESSION_C__na_snapshot_v9_session",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__SESSION_C__na_v10_outbox",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__na_snapshot_v10",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__na_snapshot_v10_signal",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae-closed__na_snapshot_v9",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__SESSION_A__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__SESSION_A__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__SESSION_A__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__SESSION_A__na_snapshot_v9_session",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__SESSION_A__na_v10_outbox",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__na_snapshot_v10",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__na_snapshot_v10_signal",
+          "__NA_V10_CASH_TEST__msszhwp3-ulwy5yae__na_snapshot_v9"
+        ],
+        "testKeysAfterCleanup": [],
+        "testDbsBeforeCleanup": [
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae__NuevoAmanecerPOS",
+            "version": 2
+          },
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae-closed__NuevoAmanecerPOS",
+            "version": 2
+          }
+        ],
+        "testDbsAfterCleanup": [],
+        "removedDbs": [
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae-closed__NuevoAmanecerPOS",
+            "result": {
+              "ok": true
+            }
+          },
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae__NuevoAmanecerPOS",
+            "result": {
+              "ok": true
+            }
+          }
+        ],
+        "namespaceClean": true,
+        "realDataUntouched": true,
+        "realBefore": {
+          "snapshotV9": null,
+          "realDb": null
+        },
+        "realAfter": {
+          "snapshotV9": null,
+          "realDb": null
+        }
+      },
+      "pass": 11,
+      "fail": 2,
+      "total": 13,
+      "cases": [
+        {
+          "n": 1,
+          "name": "1. Gasto normal: SUCCESS + 1 gasto + 1 mov tipo gas",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "SUCCESS",
+              "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+              "revision": 1,
+              "commitId": "commit_916708fe-0a07-44d5-b016-84c85edc27fc",
+              "error": null
+            },
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "gastosConOp": 1,
+            "movsConOp": 1,
+            "gasto": {
+              "id": "op_034161e0-41cc-40a5-85d1-f6244105fd14_gasto",
+              "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+              "desc": "Luz",
+              "monto": 12.5,
+              "cat": "Servicios",
+              "metodo": "efectivo",
+              "cashierId": "C-1",
+              "sessionId": "S-1"
+            },
+            "mov": {
+              "id": "op_034161e0-41cc-40a5-85d1-f6244105fd14_mov",
+              "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+              "tipo": "gas",
+              "monto": 12.5,
+              "efectivo": 12.5,
+              "desc": "Luz",
+              "cat": "Servicios",
+              "metodo": "efectivo",
+              "sessionId": "S-1"
+            },
+            "revision": 1
+          }
+        },
+        {
+          "n": 2,
+          "name": "2. Ingreso CASH_IN: SUCCESS + 1 mov ing/CASH_IN",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "SUCCESS",
+              "operationId": "op_04927eb2-70e6-4fb9-88fe-dcb2f28774b7",
+              "revision": 2,
+              "commitId": "commit_db28b685-4a69-4d85-a1a0-182ba3dbc773",
+              "error": null
+            },
+            "operationId": "op_04927eb2-70e6-4fb9-88fe-dcb2f28774b7",
+            "movsConOp": 1,
+            "mov": {
+              "id": "op_04927eb2-70e6-4fb9-88fe-dcb2f28774b7_mov",
+              "operationId": "op_04927eb2-70e6-4fb9-88fe-dcb2f28774b7",
+              "tipo": "ing",
+              "movTipo": "CASH_IN",
+              "monto": 50,
+              "efectivo": 50,
+              "desc": "Ingreso extra",
+              "cat": "",
+              "metodo": "efectivo",
+              "sessionId": "S-1"
+            },
+            "revision": 2
+          }
+        },
+        {
+          "n": 3,
+          "name": "3. Salida CASH_OUT: SUCCESS + 1 mov egr/CASH_OUT",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "SUCCESS",
+              "operationId": "op_92509bd0-f476-4481-b2db-8eabbccbd849",
+              "revision": 3,
+              "commitId": "commit_54c31661-94dd-45e4-8f4d-45f0ba828d2d",
+              "error": null
+            },
+            "operationId": "op_92509bd0-f476-4481-b2db-8eabbccbd849",
+            "movsConOp": 1,
+            "mov": {
+              "id": "op_92509bd0-f476-4481-b2db-8eabbccbd849_mov",
+              "operationId": "op_92509bd0-f476-4481-b2db-8eabbccbd849",
+              "tipo": "egr",
+              "movTipo": "CASH_OUT",
+              "monto": 25,
+              "efectivo": 25,
+              "desc": "Compra insumos",
+              "cat": "",
+              "metodo": "efectivo",
+              "sessionId": "S-1"
+            },
+            "revision": 3
+          }
+        },
+        {
+          "n": 4,
+          "name": "4. Caja cerrada: CONFLICT CAJA_CERRADA sin cambios",
+          "status": "PASS",
+          "detail": {
+            "expense": {
+              "status": "CONFLICT",
+              "operationId": "op_0cf69208-c555-4f25-8986-bf406622d9ff",
+              "reason": "CAJA_CERRADA",
+              "error": null
+            },
+            "cashMove": {
+              "status": "CONFLICT",
+              "operationId": "op_5d836ea4-92ab-4897-91a1-9ef183dae21f",
+              "reason": "CAJA_CERRADA",
+              "error": null
+            },
+            "gastosAntes": 0,
+            "gastosDespues": 0,
+            "cajMovsAntes": 0,
+            "cajMovsDespues": 0,
+            "revisionAntes": 0,
+            "revisionDespues": 0,
+            "cajEstado": {
+              "abierta": false,
+              "cerrada": true,
+              "cajeroId": "C-1",
+              "cajeroNombre": "Cajero Uno",
+              "sessionId": "S-1",
+              "fechaApertura": "2026-08-14"
+            }
+          }
+        },
+        {
+          "n": 5,
+          "name": "5. Identidad de cajero (real / distinto / ausente)",
+          "status": "PASS",
+          "detail": {
+            "correcto": {
+              "status": "SUCCESS",
+              "cashierIdGuardado": "C-1",
+              "tabId": "tab_8e66685b-c96f-4df4-8c46-d0ff3363f137",
+              "noEsTabId": true
+            },
+            "incorrecto": {
+              "status": "CONFLICT",
+              "reason": "CAJERO_DIFERENTE",
+              "revisionAntes": 4,
+              "revisionDespues": 4,
+              "cambiosCero": true
+            },
+            "ausente": {
+              "status": "REJECTED",
+              "code": "INVALID_INPUT",
+              "journal": null
+            }
+          }
+        },
+        {
+          "n": 6,
+          "name": "6. Identidad de sesión (correcta / distinta / ausente)",
+          "status": "PASS",
+          "detail": {
+            "correcta": {
+              "status": "SUCCESS",
+              "sessionIdGuardado": "S-1"
+            },
+            "incorrecta": {
+              "status": "CONFLICT",
+              "reason": "SESION_DIFERENTE",
+              "revisionAntes": 5,
+              "revisionDespues": 5,
+              "cambiosCero": true
+            },
+            "ausente": {
+              "status": "REJECTED",
+              "code": "INVALID_INPUT",
+              "journal": null
+            }
+          }
+        },
+        {
+          "n": 7,
+          "name": "7. operationId repetido: ALREADY_COMMITTED sin duplicar",
+          "status": "FAIL",
+          "detail": {
+            "result": {
+              "status": "PERSISTENCE_ERROR",
+              "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+              "error": {
+                "code": "HISTORICAL_COMMIT_UNVERIFIED",
+                "message": "Fase A no infiere commits historicos mediante ancestry"
+              }
+            },
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "gastosConOp": 1,
+            "movsConOp": 1,
+            "revisionAntes": 5,
+            "revisionDespues": 5
+          }
+        },
+        {
+          "n": 8,
+          "name": "8. Retry (3er intento): ALREADY_COMMITTED, counts iguales",
+          "status": "FAIL",
+          "detail": {
+            "result": {
+              "status": "PERSISTENCE_ERROR",
+              "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+              "error": {
+                "code": "HISTORICAL_COMMIT_UNVERIFIED",
+                "message": "Fase A no infiere commits historicos mediante ancestry"
+              }
+            },
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "gastosConOp": 1,
+            "movsConOp": 1
+          }
+        },
+        {
+          "n": 9,
+          "name": "9. Fallo de persistencia: PERSISTENCE_ERROR, cero efecto",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "PERSISTENCE_ERROR",
+              "operationId": "op_d3e86453-21fd-433c-b444-3084f5020be1",
+              "error": {
+                "code": "IDB_OPEN_FAILED",
+                "message": "Fallo simulado de apertura de IndexedDB"
+              }
+            },
+            "operationId": "op_d3e86453-21fd-433c-b444-3084f5020be1",
+            "gastosConOp": 0,
+            "movsConOp": 0,
+            "revisionAntes": 5,
+            "revisionDespues": 5,
+            "journal": null
+          }
+        },
+        {
+          "n": 10,
+          "name": "10. Cero duplicación: 1 gasto / 1 mov exactos",
+          "status": "PASS",
+          "detail": {
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "gastosConOp": 1,
+            "movsConOp": 1
+          }
+        },
+        {
+          "n": 11,
+          "name": "11. Cero segundo efecto: sumas iguales al 1er commit",
+          "status": "PASS",
+          "detail": {
+            "operationId": "op_034161e0-41cc-40a5-85d1-f6244105fd14",
+            "sumaGastos": 12.5,
+            "sumaMovs": 12.5,
+            "esperado": 12.5,
+            "totalGastos": 3,
+            "totalCajMovs": 5
+          }
+        },
+        {
+          "n": 12,
+          "name": "12. Namespace V10 aislado y cleanup limpio",
+          "status": "PASS",
+          "detail": {
+            "testKeysAfterCleanup": [],
+            "testDbsAfterCleanup": [],
+            "removedDbs": [
+              {
+                "name": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae-closed__NuevoAmanecerPOS",
+                "result": {
+                  "ok": true
+                }
+              },
+              {
+                "name": "__NA_V10_CASH_TEST_DB__msszhwp3-ulwy5yae__NuevoAmanecerPOS",
+                "result": {
+                  "ok": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "n": 13,
+          "name": "13. Datos V9 intactos (byte a byte idénticos)",
+          "status": "PASS",
+          "detail": {
+            "realBefore": {
+              "snapshotV9": null,
+              "realDb": null
+            },
+            "realAfter": {
+              "snapshotV9": null,
+              "realDb": null
+            },
+            "clavesNoPrefijadasIdenticas": true
+          }
+        }
+      ],
+      "chromeVersion": "151.0.7922.138"
+    },
+    "chromeArgs": [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--remote-debugging-port=9333",
+      "--user-data-dir=C:\\Users\\ELISER~1\\AppData\\Local\\Temp\\cash-chrome-7kcsoH",
+      "http://127.0.0.1:8123/tests/cash-v10-regression.html?autorun=1&ts=1786714189320"
+    ],
+    "diag": null
+  },
+  {
+    "run": 1,
+    "report": {
+      "version": "cash-v10-regression-2026-08-14-1",
+      "runId": "msszi2ni-gv3u75i9",
+      "testDbA": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9__NuevoAmanecerPOS",
+      "testDbC": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9-closed__NuevoAmanecerPOS",
+      "status": "FAIL",
+      "executionMode": "autorun",
+      "staleTestCleanup": [],
+      "realBefore": {
+        "snapshotV9": null,
+        "realDb": null
+      },
+      "source": {
+        "hash": "sha256:225690a9782c7e206b85fd715018509b1a1f20096588b5d26ad4c8373ef0b65b",
+        "length": 966891
+      },
+      "fixtureA": {
+        "revision": 0,
+        "commitId": "commit_e48346cf-68c6-47f3-ad69-e765f24a625f",
+        "lastOperationId": "op_6fef2c16-80a4-4742-a5f6-d0849480ddc7",
+        "gastos": [],
+        "cajMovs": [],
+        "cajEstado": {
+          "abierta": true,
+          "cerrada": false,
+          "cajeroId": "C-1",
+          "cajeroNombre": "Cajero Uno",
+          "sessionId": "S-1",
+          "fechaApertura": "2026-08-14"
+        }
+      },
+      "snapshot": {
+        "revision": 5,
+        "commitId": "commit_efcfcf16-8dfe-4906-9941-69a6844acd3d",
+        "lastOperationId": "op_1b57d8ef-90a4-4dea-a0d1-4e5990ecaded",
+        "gastos": [
+          {
+            "id": "op_1b57d8ef-90a4-4dea-a0d1-4e5990ecaded_gasto",
+            "operationId": "op_1b57d8ef-90a4-4dea-a0d1-4e5990ecaded",
+            "desc": "Sesion OK",
+            "monto": 5,
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "cashierId": "C-1",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_7e237cdb-dbad-4b72-a780-8b0d83c1393d_gasto",
+            "operationId": "op_7e237cdb-dbad-4b72-a780-8b0d83c1393d",
+            "desc": "Identidad OK",
+            "monto": 5,
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "cashierId": "C-1",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce_gasto",
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "desc": "Luz",
+            "monto": 12.5,
+            "cat": "Servicios",
+            "metodo": "efectivo",
+            "cashierId": "C-1",
+            "sessionId": "S-1"
+          }
+        ],
+        "cajMovs": [
+          {
+            "id": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce_mov",
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "tipo": "gas",
+            "monto": 12.5,
+            "efectivo": 12.5,
+            "desc": "Luz",
+            "cat": "Servicios",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_873c0287-a2e9-498b-b1c4-c2afdef78dee_mov",
+            "operationId": "op_873c0287-a2e9-498b-b1c4-c2afdef78dee",
+            "tipo": "ing",
+            "movTipo": "CASH_IN",
+            "monto": 50,
+            "efectivo": 50,
+            "desc": "Ingreso extra",
+            "cat": "",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_4770dffd-eb78-49aa-8c5c-61bd117e1479_mov",
+            "operationId": "op_4770dffd-eb78-49aa-8c5c-61bd117e1479",
+            "tipo": "egr",
+            "movTipo": "CASH_OUT",
+            "monto": 25,
+            "efectivo": 25,
+            "desc": "Compra insumos",
+            "cat": "",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_7e237cdb-dbad-4b72-a780-8b0d83c1393d_mov",
+            "operationId": "op_7e237cdb-dbad-4b72-a780-8b0d83c1393d",
+            "tipo": "gas",
+            "monto": 5,
+            "efectivo": 5,
+            "desc": "Identidad OK",
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          },
+          {
+            "id": "op_1b57d8ef-90a4-4dea-a0d1-4e5990ecaded_mov",
+            "operationId": "op_1b57d8ef-90a4-4dea-a0d1-4e5990ecaded",
+            "tipo": "gas",
+            "monto": 5,
+            "efectivo": 5,
+            "desc": "Sesion OK",
+            "cat": "Otro",
+            "metodo": "efectivo",
+            "sessionId": "S-1"
+          }
+        ],
+        "cajEstado": {
+          "abierta": true,
+          "cerrada": false,
+          "cajeroId": "C-1",
+          "cajeroNombre": "Cajero Uno",
+          "sessionId": "S-1",
+          "fechaApertura": "2026-08-14"
+        }
+      },
+      "isolation": {
+        "storageRoot": "__NA_V10_CASH_TEST__",
+        "dbRoot": "__NA_V10_CASH_TEST_DB__",
+        "testKeysBeforeCleanup": [
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__SESSION_C__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__SESSION_C__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__SESSION_C__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__SESSION_C__na_snapshot_v9_session",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__SESSION_C__na_v10_outbox",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__na_snapshot_v10",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__na_snapshot_v10_signal",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9-closed__na_snapshot_v9",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__SESSION_A__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__SESSION_A__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__SESSION_A__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__SESSION_A__na_snapshot_v9_session",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__SESSION_A__na_v10_outbox",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__na_app_initialized_v1",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__na_seed_catalog_suppressed",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__na_seed_catalog_version",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__na_snapshot_v10",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__na_snapshot_v10_signal",
+          "__NA_V10_CASH_TEST__msszi2ni-gv3u75i9__na_snapshot_v9"
+        ],
+        "testKeysAfterCleanup": [],
+        "testDbsBeforeCleanup": [
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9__NuevoAmanecerPOS",
+            "version": 2
+          },
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9-closed__NuevoAmanecerPOS",
+            "version": 2
+          }
+        ],
+        "testDbsAfterCleanup": [],
+        "removedDbs": [
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9-closed__NuevoAmanecerPOS",
+            "result": {
+              "ok": true
+            }
+          },
+          {
+            "name": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9__NuevoAmanecerPOS",
+            "result": {
+              "ok": true
+            }
+          }
+        ],
+        "namespaceClean": true,
+        "realDataUntouched": true,
+        "realBefore": {
+          "snapshotV9": null,
+          "realDb": null
+        },
+        "realAfter": {
+          "snapshotV9": null,
+          "realDb": null
+        }
+      },
+      "pass": 11,
+      "fail": 2,
+      "total": 13,
+      "cases": [
+        {
+          "n": 1,
+          "name": "1. Gasto normal: SUCCESS + 1 gasto + 1 mov tipo gas",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "SUCCESS",
+              "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+              "revision": 1,
+              "commitId": "commit_031b9ebc-5918-4d86-bb77-f7616c1ca541",
+              "error": null
+            },
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "gastosConOp": 1,
+            "movsConOp": 1,
+            "gasto": {
+              "id": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce_gasto",
+              "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+              "desc": "Luz",
+              "monto": 12.5,
+              "cat": "Servicios",
+              "metodo": "efectivo",
+              "cashierId": "C-1",
+              "sessionId": "S-1"
+            },
+            "mov": {
+              "id": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce_mov",
+              "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+              "tipo": "gas",
+              "monto": 12.5,
+              "efectivo": 12.5,
+              "desc": "Luz",
+              "cat": "Servicios",
+              "metodo": "efectivo",
+              "sessionId": "S-1"
+            },
+            "revision": 1
+          }
+        },
+        {
+          "n": 2,
+          "name": "2. Ingreso CASH_IN: SUCCESS + 1 mov ing/CASH_IN",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "SUCCESS",
+              "operationId": "op_873c0287-a2e9-498b-b1c4-c2afdef78dee",
+              "revision": 2,
+              "commitId": "commit_b25e70b8-9b00-4b8d-95b3-c8a027dbe6fa",
+              "error": null
+            },
+            "operationId": "op_873c0287-a2e9-498b-b1c4-c2afdef78dee",
+            "movsConOp": 1,
+            "mov": {
+              "id": "op_873c0287-a2e9-498b-b1c4-c2afdef78dee_mov",
+              "operationId": "op_873c0287-a2e9-498b-b1c4-c2afdef78dee",
+              "tipo": "ing",
+              "movTipo": "CASH_IN",
+              "monto": 50,
+              "efectivo": 50,
+              "desc": "Ingreso extra",
+              "cat": "",
+              "metodo": "efectivo",
+              "sessionId": "S-1"
+            },
+            "revision": 2
+          }
+        },
+        {
+          "n": 3,
+          "name": "3. Salida CASH_OUT: SUCCESS + 1 mov egr/CASH_OUT",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "SUCCESS",
+              "operationId": "op_4770dffd-eb78-49aa-8c5c-61bd117e1479",
+              "revision": 3,
+              "commitId": "commit_f3a9c48a-0301-4c7d-b1ad-93244aa92fc8",
+              "error": null
+            },
+            "operationId": "op_4770dffd-eb78-49aa-8c5c-61bd117e1479",
+            "movsConOp": 1,
+            "mov": {
+              "id": "op_4770dffd-eb78-49aa-8c5c-61bd117e1479_mov",
+              "operationId": "op_4770dffd-eb78-49aa-8c5c-61bd117e1479",
+              "tipo": "egr",
+              "movTipo": "CASH_OUT",
+              "monto": 25,
+              "efectivo": 25,
+              "desc": "Compra insumos",
+              "cat": "",
+              "metodo": "efectivo",
+              "sessionId": "S-1"
+            },
+            "revision": 3
+          }
+        },
+        {
+          "n": 4,
+          "name": "4. Caja cerrada: CONFLICT CAJA_CERRADA sin cambios",
+          "status": "PASS",
+          "detail": {
+            "expense": {
+              "status": "CONFLICT",
+              "operationId": "op_214273f4-32bc-4f78-abe8-42c2ee4ff158",
+              "reason": "CAJA_CERRADA",
+              "error": null
+            },
+            "cashMove": {
+              "status": "CONFLICT",
+              "operationId": "op_6f00975d-89f3-4461-8dd6-ca0fd46390d7",
+              "reason": "CAJA_CERRADA",
+              "error": null
+            },
+            "gastosAntes": 0,
+            "gastosDespues": 0,
+            "cajMovsAntes": 0,
+            "cajMovsDespues": 0,
+            "revisionAntes": 0,
+            "revisionDespues": 0,
+            "cajEstado": {
+              "abierta": false,
+              "cerrada": true,
+              "cajeroId": "C-1",
+              "cajeroNombre": "Cajero Uno",
+              "sessionId": "S-1",
+              "fechaApertura": "2026-08-14"
+            }
+          }
+        },
+        {
+          "n": 5,
+          "name": "5. Identidad de cajero (real / distinto / ausente)",
+          "status": "PASS",
+          "detail": {
+            "correcto": {
+              "status": "SUCCESS",
+              "cashierIdGuardado": "C-1",
+              "tabId": "tab_1a108c5c-deee-4164-806b-07312e117cc5",
+              "noEsTabId": true
+            },
+            "incorrecto": {
+              "status": "CONFLICT",
+              "reason": "CAJERO_DIFERENTE",
+              "revisionAntes": 4,
+              "revisionDespues": 4,
+              "cambiosCero": true
+            },
+            "ausente": {
+              "status": "REJECTED",
+              "code": "INVALID_INPUT",
+              "journal": null
+            }
+          }
+        },
+        {
+          "n": 6,
+          "name": "6. Identidad de sesión (correcta / distinta / ausente)",
+          "status": "PASS",
+          "detail": {
+            "correcta": {
+              "status": "SUCCESS",
+              "sessionIdGuardado": "S-1"
+            },
+            "incorrecta": {
+              "status": "CONFLICT",
+              "reason": "SESION_DIFERENTE",
+              "revisionAntes": 5,
+              "revisionDespues": 5,
+              "cambiosCero": true
+            },
+            "ausente": {
+              "status": "REJECTED",
+              "code": "INVALID_INPUT",
+              "journal": null
+            }
+          }
+        },
+        {
+          "n": 7,
+          "name": "7. operationId repetido: ALREADY_COMMITTED sin duplicar",
+          "status": "FAIL",
+          "detail": {
+            "result": {
+              "status": "PERSISTENCE_ERROR",
+              "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+              "error": {
+                "code": "HISTORICAL_COMMIT_UNVERIFIED",
+                "message": "Fase A no infiere commits historicos mediante ancestry"
+              }
+            },
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "gastosConOp": 1,
+            "movsConOp": 1,
+            "revisionAntes": 5,
+            "revisionDespues": 5
+          }
+        },
+        {
+          "n": 8,
+          "name": "8. Retry (3er intento): ALREADY_COMMITTED, counts iguales",
+          "status": "FAIL",
+          "detail": {
+            "result": {
+              "status": "PERSISTENCE_ERROR",
+              "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+              "error": {
+                "code": "HISTORICAL_COMMIT_UNVERIFIED",
+                "message": "Fase A no infiere commits historicos mediante ancestry"
+              }
+            },
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "gastosConOp": 1,
+            "movsConOp": 1
+          }
+        },
+        {
+          "n": 9,
+          "name": "9. Fallo de persistencia: PERSISTENCE_ERROR, cero efecto",
+          "status": "PASS",
+          "detail": {
+            "result": {
+              "status": "PERSISTENCE_ERROR",
+              "operationId": "op_434c2543-c9fb-484f-8460-8c96c12fbd03",
+              "error": {
+                "code": "IDB_OPEN_FAILED",
+                "message": "Fallo simulado de apertura de IndexedDB"
+              }
+            },
+            "operationId": "op_434c2543-c9fb-484f-8460-8c96c12fbd03",
+            "gastosConOp": 0,
+            "movsConOp": 0,
+            "revisionAntes": 5,
+            "revisionDespues": 5,
+            "journal": null
+          }
+        },
+        {
+          "n": 10,
+          "name": "10. Cero duplicación: 1 gasto / 1 mov exactos",
+          "status": "PASS",
+          "detail": {
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "gastosConOp": 1,
+            "movsConOp": 1
+          }
+        },
+        {
+          "n": 11,
+          "name": "11. Cero segundo efecto: sumas iguales al 1er commit",
+          "status": "PASS",
+          "detail": {
+            "operationId": "op_6fe4ee0a-e514-4114-bf2e-d0aae79914ce",
+            "sumaGastos": 12.5,
+            "sumaMovs": 12.5,
+            "esperado": 12.5,
+            "totalGastos": 3,
+            "totalCajMovs": 5
+          }
+        },
+        {
+          "n": 12,
+          "name": "12. Namespace V10 aislado y cleanup limpio",
+          "status": "PASS",
+          "detail": {
+            "testKeysAfterCleanup": [],
+            "testDbsAfterCleanup": [],
+            "removedDbs": [
+              {
+                "name": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9-closed__NuevoAmanecerPOS",
+                "result": {
+                  "ok": true
+                }
+              },
+              {
+                "name": "__NA_V10_CASH_TEST_DB__msszi2ni-gv3u75i9__NuevoAmanecerPOS",
+                "result": {
+                  "ok": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "n": 13,
+          "name": "13. Datos V9 intactos (byte a byte idénticos)",
+          "status": "PASS",
+          "detail": {
+            "realBefore": {
+              "snapshotV9": null,
+              "realDb": null
+            },
+            "realAfter": {
+              "snapshotV9": null,
+              "realDb": null
+            },
+            "clavesNoPrefijadasIdenticas": true
+          }
+        }
+      ],
+      "chromeVersion": "151.0.7922.138"
+    },
+    "chromeArgs": [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--remote-debugging-port=9333",
+      "--user-data-dir=C:\\Users\\ELISER~1\\AppData\\Local\\Temp\\cash-chrome-4iQUki",
+      "http://127.0.0.1:8123/tests/cash-v10-regression.html?autorun=1&ts=1786714189320"
+    ],
+    "diag": null
+  }
+]

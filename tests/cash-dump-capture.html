@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>Módulo de caja V10 (gastos / CASH_IN / CASH_OUT) — regresión</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#172033;background:#eef3f7}
+    body{margin:18px}h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:16px 0 6px}
+    button{height:40px;border:0;border-radius:9px;padding:0 15px;background:#087f72;color:#fff;font-weight:800;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    .status{font-weight:800}.banner{margin-top:12px;padding:12px;border:2px solid #d0d7e2;border-radius:10px;background:#fff;font-weight:900}
+    .banner.pass{border-color:#087443;background:#ecfdf3;color:#087443}.banner.fail{border-color:#b42318;background:#fff1f2;color:#9f1239}
+    table{width:100%;border-collapse:collapse;background:#fff;font-size:12px;margin-top:8px}
+    th,td{border:1px solid #d7dee8;padding:7px;text-align:left;vertical-align:top}th{background:#e7eef4}
+    pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.4 ui-monospace,Consolas,monospace}
+    iframe{position:absolute;width:2px;height:2px;border:0;left:-9999px;top:0}
+    .pass{color:#087443;font-weight:900}.failure{color:#b42318;font-weight:900}
+  </style>
+</head>
+<body>
+  <h1>Módulo de caja V10 — gastos / CASH_IN / CASH_OUT</h1>
+  <p>Reutiliza el lifecycle probado de <code>multitab-persistence-v10-engine.html</code>: fetch + document.write + isolationBootstrap + bridge inyectado en el realm del POS. IndexedDB real, Web Locks reales, namespace desechable. <strong>Nunca toca la db real <code>NuevoAmanecerPOS</code> ni claves sin prefijo.</strong></p>
+  <div class="controls">
+    <button id="run" type="button">Ejecutar regresión de caja V10</button>
+    <span id="status" class="status">ERROR: TIMEOUT listar namespaces de prueba (5000ms)</span>
+  </div>
+  <div id="summary" class="banner fail">ERROR: TIMEOUT listar namespaces de prueba (5000ms)</div>
+
+  <h2>Diagnóstico de inicialización</h2>
+  <pre id="init-diag">Esperando.</pre>
+
+  <h2>Resultados</h2>
+  <table>
+    <thead><tr><th>#</th><th>Caso</th><th>Estado</th><th>Evidencia</th></tr></thead>
+    <tbody id="results"></tbody>
+  </table>
+
+  <h2>Resultado estructurado</h2>
+  <pre id="auto-result">{"status":"RUNNING"}</pre>
+
+  <script>
+  (function(){
+    'use strict';
+    var MAIN_HTML='../CVV2.4_backup_antes_demo-1.html';
+    var HARNESS_VERSION='cash-v10-regression-2026-08-14-1';
+    var STORAGE_ROOT='__NA_V10_CASH_TEST__';
+    var DB_ROOT='__NA_V10_CASH_TEST_DB__';
+    var query=new URLSearchParams(location.search);
+
+    /* ═══ ISOLATION (idéntico al harness probado, con prefijos de caja) ═══ */
+    function isolationBootstrap(config){
+      'use strict';
+      var local=window.localStorage,session=window.sessionStorage,storageProto=window.Storage&&window.Storage.prototype;
+      if(!storageProto)throw new Error('Storage API no disponible');
+      var nativeGet=storageProto.getItem,nativeSet=storageProto.setItem,nativeRemove=storageProto.removeItem,nativeKey=storageProto.key,nativeClear=storageProto.clear;
+      var localPrefix=config.localPrefix,sessionPrefix=config.sessionPrefix;
+      function prefixFor(target){if(target===local)return localPrefix;if(target===session)return sessionPrefix;return null;}
+      function keysFor(target,prefix){var keys=[];for(var i=0;i<target.length;i++){var key=nativeKey.call(target,i);if(key&&key.indexOf(prefix)===0)keys.push(key);}return keys;}
+      storageProto.getItem=function(key){var p=prefixFor(this);return p===null?nativeGet.call(this,key):nativeGet.call(this,p+String(key));};
+      storageProto.setItem=function(key,value){var p=prefixFor(this);return p===null?nativeSet.call(this,key,value):nativeSet.call(this,p+String(key),String(value));};
+      storageProto.removeItem=function(key){var p=prefixFor(this);return p===null?nativeRemove.call(this,key):nativeRemove.call(this,p+String(key));};
+      storageProto.key=function(index){var p=prefixFor(this);if(p===null)return nativeKey.call(this,index);var keys=keysFor(this,p),full=keys[index];return full===undefined?null:full.slice(p.length);};
+      storageProto.clear=function(){var p=prefixFor(this);if(p===null)return nativeClear.call(this);keysFor(this,p).forEach(function(k){nativeRemove.call(this,k);},this);};
+      var factory=window.indexedDB,factoryProto=factory&&Object.getPrototypeOf(factory);
+      if(!factory||!factoryProto)throw new Error('IndexedDB no disponible');
+      var nativeOpen=factoryProto.open,nativeDelete=factoryProto.deleteDatabase,lifecycle=[];
+      factoryProto.open=function(name,version){
+        var isolated=config.dbPrefix+String(name);
+        lifecycle.push({action:'open',name:isolated,version:version===undefined?null:version,at:Date.now()});
+        return arguments.length>1?nativeOpen.call(this,isolated,version):nativeOpen.call(this,isolated);
+      };
+      factoryProto.deleteDatabase=function(name){return nativeDelete.call(this,config.dbPrefix+String(name));};
+      window.__cashIdbLifecycle=lifecycle;
+      window.__cashIsolation={runId:config.runId,tabId:config.tabId,localPrefix:config.localPrefix,sessionPrefix:config.sessionPrefix,dbName:config.dbPrefix+'NuevoAmanecerPOS'};
+      window.__cashWorkerState={status:'LOADING_POS',stage:'ISOLATION_READY',ready:false,error:null,tabId:config.tabId,runId:config.runId};
+    }
+
+    /* ═══ BRIDGE: expone el módulo de caja V10 desde el realm del POS ═══ */
+    function cashBridgeBootstrap(){
+      'use strict';
+      var clone=function(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));};
+      var wait=function(ms){return new Promise(function(resolve){setTimeout(resolve,ms);});};
+      var state=window.__cashWorkerState||{status:'BOOTSTRAPPING',ready:false,error:null};
+      function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+      async function settle(){await wait(1800);var stable=0;for(var i=0;i<80;i++){var chain=typeof _naPersistChain!=='undefined'?_naPersistChain:null;try{if(chain)await chain;}catch(error){}await wait(75);if(chain===(typeof _naPersistChain!=='undefined'?_naPersistChain:null)){stable++;if(stable>=5)return true;}else stable=0;}throw new Error('La persistencia V9 no se estabilizó');}
+      function probe(){return{readyState:document.readyState,origin:location.origin,href:location.href,scripts:document.scripts.length,sourceHash:window.__cashSourceHash||null,sourceLength:window.__cashSourceLength||null,helpers:{buildExpense:typeof _naV10BuildExpenseIntent,buildCashMove:typeof _naV10BuildCashMoveIntent,revalidateExpense:typeof _naV10RevalidateExpense,revalidateCashMove:typeof _naV10RevalidateCashMove,applyExpense:typeof _naV10ApplyExpense,applyCashMove:typeof _naV10ApplyCashMove,confirmExpense:typeof _naV10ConfirmExpenseIntent,confirmCashMove:typeof _naV10ConfirmCashMoveIntent,runCriticalOperation:typeof _naRunCriticalOperation,openDB:typeof _naV10OpenDB,configureRuntime:typeof _naV10ConfigureRuntime,readCanonical:typeof _naV10ReadCanonical,createInitial:typeof _naV10CreateInitialSnapshot,getOperation:typeof _naV10GetOperation,newOperationId:typeof _naNewOperationId},webLocks:typeof navigator.locks!=='undefined'&&typeof navigator.locks.request==='function',isolation:clone(window.__cashIsolation||null),worker:clone(state)};}
+      function resultSummary(r){return clone({status:r.status,operationId:r.operationId,revision:r.revision,commitId:r.commitId,reason:r.reason,code:r.code,error:r.error?{code:r.error.code,message:r.error.message}:null});}
+      async function initialize(){
+        try{
+          state.status='INITIALIZING';state.stage='POS_LOADED';state.sourceLoaded=true;
+          await withTimeout(settle(),12000,'settle POS');
+          var inspected=probe(),missing=Object.keys(inspected.helpers).filter(function(key){return inspected.helpers[key]!=='function';});
+          if(missing.length)throw new Error('Helpers V10 ausentes: '+missing.join(', '));
+          state.helpersFound=true;state.stage='HELPERS_FOUND';
+          await withTimeout((async function(){await _naV10PrepareUpgrade();await _naV10CloseDB();_naV10ConfigureRuntime({dbName:'NuevoAmanecerPOS',localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:'nuevo-amanecer:financial-write:v10:'+window.__cashIsolation.runId,channelName:'nuevo-amanecer:persistence:v10:'+window.__cashIsolation.runId,broadcastEnabled:false});})(),10000,'configurar runtime');
+          state.runtimeConfigured=true;state.stage='RUNTIME_CONFIGURED';
+          var db=await withTimeout(_naV10OpenDB(),10000,'abrir IndexedDB V10');
+          state.idbOpened=true;state.dbVersion=db.version;state.stage='IDB_OPENED';
+          await withTimeout(_naV10ReadCanonical(),5000,'leer snapshot V10');state.snapshotAccessible=true;
+          state.status='READY';state.stage='READY';state.ready=true;return true;
+        }catch(error){state.status='ERROR';state.stage='ERROR';state.error=error.message||String(error);return false;}
+      }
+      window.__cashBridge={
+        state:function(){return clone(state);},probe:probe,isolation:clone(window.__cashIsolation),
+        tabId:function(){return _naGetTabId();},
+        createInitial:function(data){return _naV10CreateInitialSnapshot(clone(data)).then(function(r){return clone({status:r.status,operationId:r.operationId,revision:r.revision,commitId:r.commitId});});},
+        canonical:function(){return _naV10ReadCanonical();},
+        operation:function(id){return _naV10GetOperation(id);},
+        newOperationId:function(){return _naNewOperationId();},
+        buildExpense:function(intent){return clone(_naV10BuildExpenseIntent(clone(intent)));},
+        buildCashMove:function(intent){return clone(_naV10BuildCashMoveIntent(clone(intent)));},
+        revalidateExpense:async function(intent){var canonical=await _naV10ReadCanonical();return clone(_naV10RevalidateExpense(canonical,_naV10BuildExpenseIntent(clone(intent))));},
+        revalidateCashMove:async function(intent){var canonical=await _naV10ReadCanonical();return clone(_naV10RevalidateCashMove(canonical,_naV10BuildCashMoveIntent(clone(intent))));},
+        confirmExpense:function(intent){return _naV10ConfirmExpenseIntent(clone(intent)).then(resultSummary);},
+        confirmCashMove:function(intent){return _naV10ConfirmCashMoveIntent(clone(intent)).then(resultSummary);},
+        injectPersistenceFailure:function(){if(!state.__persistFailure){state.__persistFailure=_naV10OpenDB;}_naV10OpenDB=function(){return Promise.reject(_naV10Error('IDB_OPEN_FAILED','Fallo simulado de apertura de IndexedDB'));};return true;},
+        restorePersistence:function(){if(state.__persistFailure){_naV10OpenDB=state.__persistFailure;state.__persistFailure=null;}return true;},
+        snapshotSummary:async function(){var canonical=await _naV10ReadCanonical();if(!canonical)return null;var data=canonical.data||{};return clone({revision:canonical.revision,commitId:canonical.commitId,lastOperationId:canonical.lastOperationId,gastos:(data.gastos||[]).map(function(g){return{id:g.id,operationId:g.operationId,desc:g.desc,monto:g.monto,cat:g.cat,metodo:g.metodo,cashierId:g.cashierId,sessionId:g.sessionId};}),cajMovs:(data.cajMovs||[]).map(function(m){return{id:m.id,operationId:m.operationId,tipo:m.tipo,movTipo:m.movTipo,monto:m.monto,efectivo:m.efectivo,desc:m.desc,cat:m.cat,metodo:m.metodo,cashierId:m.cashierId,sessionId:m.sessionId};}),cajEstado:clone(data.cajEstado||{})});},
+        closeAll:async function(){try{if(_naV10Channel){_naV10Channel.close();_naV10Channel=null;}}catch(error){}await _naV10CloseDB();try{if(typeof _naDbPromise!=='undefined'&&_naDbPromise){var legacy=await _naDbPromise;legacy&&legacy.close();_naDbPromise=null;}}catch(error){}return true;}
+      };
+      window.__cashWorkerReady=initialize();
+    }
+
+    function workerConfig(){
+      var runId=query.get('runId'),tabId=query.get('worker');
+      return{runId:runId,tabId:tabId,localPrefix:STORAGE_ROOT+runId+'__',sessionPrefix:STORAGE_ROOT+runId+'__SESSION_'+tabId+'__',dbPrefix:DB_ROOT+runId+'__'};
+    }
+
+    /* ═══ WORKER MODE: reescribe este documento con el POS aislado ═══ */
+    async function bootWorker(){
+      document.body.innerHTML='<p>Preparando contexto V10 de caja…</p>';
+      try{
+        var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},15000);
+        var response=await fetch(MAIN_HTML+'?cashSource='+Date.now(),{cache:'no-store',signal:controller.signal});clearTimeout(timer);
+        if(!response.ok)throw new Error('No se pudo cargar producción: HTTP '+response.status);
+        var source=await response.text(),config=workerConfig();
+        var sourceLength=source.length,sourceHash='len:'+sourceLength;
+        try{
+          if(crypto&&crypto.subtle&&TextEncoder){
+            var bytes=new TextEncoder().encode(source);
+            var digest=await crypto.subtle.digest('SHA-256',bytes);
+            sourceHash='sha256:'+Array.from(new Uint8Array(digest),function(b){return b.toString(16).padStart(2,'0');}).join('');
+          }
+        }catch(error){}
+        window.__cashSourceHash=sourceHash;window.__cashSourceLength=sourceLength;
+        var isolationScript='<scr'+'ipt>('+isolationBootstrap.toString()+')('+JSON.stringify(config)+');</scr'+'ipt>';
+        var bridgeScript='<scr'+'ipt>('+cashBridgeBootstrap.toString()+')();</scr'+'ipt>';
+        if(!/<head[^>]*>/i.test(source)||source.toLowerCase().lastIndexOf('</body>')<0)throw new Error('HTML principal no reconocido');
+        source=source.replace(/<head([^>]*)>/i,function(m){return m+isolationScript;});
+        var close=source.toLowerCase().lastIndexOf('</body>');
+        source=source.slice(0,close)+bridgeScript+source.slice(close);
+        document.open();document.write(source);document.close();
+      }catch(error){
+        document.body.innerHTML='<pre id="worker-error"></pre>';
+        document.getElementById('worker-error').textContent=error.stack||error.message||String(error);
+      }
+    }
+    if(query.get('worker')){bootWorker();return;}
+
+    /* ═══ PARENT MODE ═══ */
+    var runButton=document.getElementById('run'),statusEl=document.getElementById('status');
+    var summaryEl=document.getElementById('summary'),resultsBody=document.getElementById('results');
+    var autoResult=document.getElementById('auto-result'),initDiag=document.getElementById('init-diag');
+    var frames=[],results=[],caseKeys={};
+    var CASES=[
+      {key:'GASTO_NORMAL',name:'1. Gasto normal: SUCCESS + 1 gasto + 1 mov tipo gas'},
+      {key:'INGRESO_CASH_IN',name:'2. Ingreso CASH_IN: SUCCESS + 1 mov ing/CASH_IN'},
+      {key:'SALIDA_CASH_OUT',name:'3. Salida CASH_OUT: SUCCESS + 1 mov egr/CASH_OUT'},
+      {key:'CAJA_CERRADA',name:'4. Caja cerrada: CONFLICT CAJA_CERRADA sin cambios'},
+      {key:'CASHIER_IDENTIDAD',name:'5. Identidad de cajero (real / distinto / ausente)'},
+      {key:'SESSION_IDENTIDAD',name:'6. Identidad de sesión (correcta / distinta / ausente)'},
+      {key:'OPERATION_ID_REPETIDO',name:'7. operationId repetido: ALREADY_COMMITTED sin duplicar'},
+      {key:'RETRY',name:'8. Retry (3er intento): ALREADY_COMMITTED, counts iguales'},
+      {key:'FALLO_PERSISTENCIA',name:'9. Fallo de persistencia: PERSISTENCE_ERROR, cero efecto'},
+      {key:'CERO_DUPLICACION',name:'10. Cero duplicación: 1 gasto / 1 mov exactos'},
+      {key:'CERO_SEGUNDO_EFECTO',name:'11. Cero segundo efecto: sumas iguales al 1er commit'},
+      {key:'NAMESPACE_AISLADO',name:'12. Namespace V10 aislado y cleanup limpio'},
+      {key:'DATOS_V9_INTACTOS',name:'13. Datos V9 intactos (byte a byte idénticos)'}
+    ];
+
+    function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+    function withTimeout(promise,ms,label){return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error('TIMEOUT '+label+' ('+ms+'ms)'));},ms);})]);}
+    function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
+    function addCase(key,passed,detail){
+      if(caseKeys[key])throw new Error('Caso duplicado: '+key);var definition=CASES.find(function(item){return item.key===key;});if(!definition)throw new Error('Caso desconocido: '+key);caseKeys[key]=true;var name=definition.name;
+      results.push({id:results.length+1,name:name,passed:!!passed,detail:clone(detail)});
+      var row=document.createElement('tr'),values=[String(results.length),name,passed?'PASS':'FAIL',JSON.stringify(detail,null,2)];
+      values.forEach(function(value,index){
+        var cell=document.createElement('td');
+        if(index===2)cell.className=passed?'pass':'failure';
+        var pre=document.createElement('pre');pre.textContent=value;cell.appendChild(pre);row.appendChild(cell);
+      });
+      resultsBody.appendChild(row);
+    }
+    function fillMissingCases(reason){CASES.forEach(function(item){if(!caseKeys[item.key])addCase(item.key,false,{notExecuted:true,reason:reason});});}
+    function stats(){var p=results.filter(function(r){return r.passed;}).length;return{pass:p,fail:results.length-p,total:results.length};}
+
+    async function createContext(tabId,runId){
+      var frame=document.createElement('iframe');
+      frame.src='cash-v10-regression.html?worker='+encodeURIComponent(tabId)+'&runId='+encodeURIComponent(runId)+'&v='+encodeURIComponent(HARNESS_VERSION)+'&ts='+Date.now();
+      document.body.appendChild(frame);frames.push(frame);
+      for(var attempt=0;attempt<450;attempt++){
+        try{
+          if(frame.contentWindow&&frame.contentWindow.__cashBridge){
+            var state=frame.contentWindow.__cashBridge.state();
+            if(state.error)throw new Error('Worker '+tabId+': '+state.error);
+            if(state.ready)return{frame:frame,bridge:frame.contentWindow.__cashBridge,tabId:tabId,state:state};
+          }
+          var err=frame.contentDocument&&frame.contentDocument.getElementById('worker-error');
+          if(err)throw new Error(err.textContent);
+        }catch(problem){if(problem&&problem.message)throw problem;}
+        await wait(100);
+      }
+      throw new Error('TIMEOUT: el worker '+tabId+' no alcanzó READY en 45s');
+    }
+    async function destroyContext(ctx){
+      try{await withTimeout(ctx.bridge.closeAll(),5000,'cerrar worker '+ctx.tabId);}catch(e){}
+      var i=frames.indexOf(ctx.frame);if(i>=0)frames.splice(i,1);
+      ctx.frame.src='about:blank';ctx.frame.remove();await wait(150);
+    }
+    function removePrefixed(prefix){
+      [localStorage,sessionStorage].forEach(function(store){
+        var found=[];for(var i=0;i<store.length;i++){var k=store.key(i);if(k&&k.indexOf(prefix)===0)found.push(k);}
+        found.forEach(function(k){store.removeItem(k);});
+      });
+    }
+    function physicalKeys(prefix){var out=[];[localStorage,sessionStorage].forEach(function(store){for(var i=0;i<store.length;i++){var key=store.key(i);if(key&&key.indexOf(prefix)===0)out.push(key);}});return out.sort();}
+    function deleteDatabase(name){
+      return new Promise(function(resolve){
+        var done=false,finish=function(v){if(done)return;done=true;resolve(v);};
+        try{
+          var req=indexedDB.deleteDatabase(name);
+          req.onsuccess=function(){finish({ok:true});};
+          req.onerror=function(){finish({ok:false,error:req.error&&req.error.message});};
+          req.onblocked=function(){finish({ok:false,blocked:true});};
+          setTimeout(function(){finish({ok:false,timeout:true});},3000);
+        }catch(e){finish({ok:false,error:e.message});}
+      });
+    }
+    async function listDatabases(){if(typeof indexedDB.databases!=='function')return{supported:false};try{var dbs=await indexedDB.databases();return{supported:true,list:dbs.map(function(d){return{name:d.name,version:d.version};}).sort(function(a,b){return String(a.name).localeCompare(String(b.name));})};}catch(e){return{supported:true,error:e.message};}}
+    async function cleanupTestDatabases(){var removed=[];if(typeof indexedDB.databases==='function'){var databases=await withTimeout(indexedDB.databases(),5000,'listar namespaces de prueba'),targets=databases.filter(function(item){return item.name&&item.name.indexOf(DB_ROOT)===0;});for(var i=0;i<targets.length;i++)removed.push({name:targets[i].name,result:await deleteDatabase(targets[i].name)});}return removed;}
+
+    /* Estado real (claves NO prefijadas + db real por listado, SIN abrirla) */
+    async function captureRealState(){
+      var localMap={},sessionMap={},localKeys=[],sessionKeys=[];
+      for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf(STORAGE_ROOT)!==0)localKeys.push(k);}
+      localKeys.sort();localKeys.forEach(function(k){localMap[k]=localStorage.getItem(k);});
+      for(var j=0;j<sessionStorage.length;j++){var s=sessionStorage.key(j);if(s&&s.indexOf(STORAGE_ROOT)!==0)sessionKeys.push(s);}
+      sessionKeys.sort();sessionKeys.forEach(function(k){sessionMap[k]=sessionStorage.getItem(k);});
+      var dbs=await listDatabases();
+      var realDb=(dbs.supported&&!dbs.error)?(dbs.list.find(function(d){return d.name==='NuevoAmanecerPOS';})||null):null;
+      return{local:localMap,session:sessionMap,dbs:(dbs.supported?dbs.list:null),dbsError:dbs.error||null,realDb:realDb,snapshotV9:localStorage.getItem('na_snapshot_v9')};
+    }
+    function sameRealState(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+
+    /* Fixtures */
+    function fixtureData(closed){
+      var today=new Date().toISOString().slice(0,10);
+      return{
+        productos:[],ventas:[],clientes:[],creditos:[],gastos:[],cajMovs:[],
+        cajEstado:closed
+          ?{abierta:false,cerrada:true,cajeroId:'C-1',cajeroNombre:'Cajero Uno',sessionId:'S-1',fechaApertura:today}
+          :{abierta:true,cerrada:false,cajeroId:'C-1',cajeroNombre:'Cajero Uno',sessionId:'S-1',fechaApertura:today}
+      };
+    }
+    function gastosByOp(snap,op){return snap.gastos.filter(function(g){return g.operationId===op;});}
+    function movsByOp(snap,op){return snap.cajMovs.filter(function(m){return m.operationId===op;});}
+    function sumMonto(arr){return arr.reduce(function(a,x){return a+(Number(x.monto)||0);},0);}
+
+    async function run(){
+      runButton.disabled=true;results=[];caseKeys={};resultsBody.innerHTML='';
+      summaryEl.className='banner';summaryEl.textContent='EJECUTANDO';
+      autoResult.textContent='{"status":"RUNNING"}';
+      var runId=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,10);
+      var runIdClosed=runId+'-closed';
+      var testDbA=DB_ROOT+runId+'__NuevoAmanecerPOS';
+      var testDbC=DB_ROOT+runIdClosed+'__NuevoAmanecerPOS';
+      var report={version:HARNESS_VERSION,runId:runId,testDbA:testDbA,testDbC:testDbC,status:'ERROR',executionMode:(query.get('autorun')==='1'||query.get('auto')==='1')?'autorun':'manual'};
+      var staleCleanup=await cleanupTestDatabases();removePrefixed(STORAGE_ROOT);
+      report.staleTestCleanup=staleCleanup;
+      var realBefore=await captureRealState(),ctxA=null,ctxC=null;
+      report.realBefore={snapshotV9:realBefore.snapshotV9,realDb:realBefore.realDb};
+
+      try{
+        statusEl.textContent='[1] creando contexto A (caja abierta)';
+        ctxA=await createContext('A',runId);
+        statusEl.textContent='[2] worker A cargado';
+        var probeA=await ctxA.bridge.probe();
+        var tabA=await ctxA.bridge.tabId();
+        initDiag.textContent=JSON.stringify({A:probeA},null,2);
+        var helpersOk=probeA.helpers.confirmExpense==='function'&&probeA.helpers.confirmCashMove==='function'&&
+                      probeA.helpers.buildExpense==='function'&&probeA.helpers.buildCashMove==='function'&&
+                      probeA.helpers.revalidateExpense==='function'&&probeA.helpers.revalidateCashMove==='function'&&
+                      probeA.helpers.applyExpense==='function'&&probeA.helpers.applyCashMove==='function'&&
+                      probeA.helpers.runCriticalOperation==='function'&&probeA.helpers.openDB==='function'&&
+                      probeA.helpers.createInitial==='function'&&probeA.helpers.getOperation==='function';
+        var stateA=await ctxA.bridge.state();
+        if(!helpersOk||!stateA.runtimeConfigured||!stateA.idbOpened||!stateA.ready)throw new Error('INIT A falló: '+JSON.stringify({helpersOk:helpersOk,stateA:stateA}));
+        report.source={hash:probeA.sourceHash,length:probeA.sourceLength};
+        var initA=await withTimeout(ctxA.bridge.createInitial(fixtureData(false)),10000,'crear snapshot inicial A');
+        if(initA.status!=='SUCCESS')throw new Error('createInitial A: '+initA.status);
+        var snapA=await withTimeout(ctxA.bridge.snapshotSummary(),5000,'leer snapshot A');
+        report.fixtureA=snapA;
+        statusEl.textContent='[3] ejecutando casos 1-3';
+
+        /* ── CASO 1: GASTO normal ── */
+        var op1=await ctxA.bridge.newOperationId();
+        var r1=await withTimeout(ctxA.bridge.confirmExpense({operationId:op1,monto:12.5,concepto:'Luz',categoria:'Servicios',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'gasto normal');
+        var s1=await ctxA.bridge.snapshotSummary();
+        var g1=gastosByOp(s1,op1),m1=movsByOp(s1,op1);
+        var ok1=r1.status==='SUCCESS'&&g1.length===1&&m1.length===1&&g1[0].monto===12.5&&g1[0].cashierId==='C-1'&&g1[0].sessionId==='S-1'&&m1[0].tipo==='gas'&&m1[0].operationId===op1;
+        addCase('GASTO_NORMAL',ok1,{result:r1,operationId:op1,gastosConOp:g1.length,movsConOp:m1.length,gasto:g1[0]||null,mov:m1[0]||null,revision:s1.revision});
+
+        /* ── CASO 2: INGRESO CASH_IN ── */
+        var op2=await ctxA.bridge.newOperationId();
+        var r2=await withTimeout(ctxA.bridge.confirmCashMove({operationId:op2,tipo:'CASH_IN',monto:50,motivo:'Ingreso extra',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'ingreso CASH_IN');
+        var s2=await ctxA.bridge.snapshotSummary();
+        var m2=movsByOp(s2,op2);
+        var ok2=r2.status==='SUCCESS'&&m2.length===1&&m2[0].tipo==='ing'&&m2[0].movTipo==='CASH_IN'&&m2[0].monto===50;
+        addCase('INGRESO_CASH_IN',ok2,{result:r2,operationId:op2,movsConOp:m2.length,mov:m2[0]||null,revision:s2.revision});
+
+        /* ── CASO 3: SALIDA CASH_OUT ── */
+        var op3=await ctxA.bridge.newOperationId();
+        var r3=await withTimeout(ctxA.bridge.confirmCashMove({operationId:op3,tipo:'CASH_OUT',monto:25,motivo:'Compra insumos',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'salida CASH_OUT');
+        var s3=await ctxA.bridge.snapshotSummary();
+        var m3=movsByOp(s3,op3);
+        var ok3=r3.status==='SUCCESS'&&m3.length===1&&m3[0].tipo==='egr'&&m3[0].movTipo==='CASH_OUT'&&m3[0].monto===25;
+        addCase('SALIDA_CASH_OUT',ok3,{result:r3,operationId:op3,movsConOp:m3.length,mov:m3[0]||null,revision:s3.revision});
+
+        /* ── CASO 4: CAJA CERRADA (contexto C con db propia) ── */
+        statusEl.textContent='[4] creando contexto C (caja cerrada)';
+        ctxC=await createContext('C',runIdClosed);
+        var probeC=await ctxC.bridge.probe();
+        var helpersOkC=probeC.helpers.confirmExpense==='function'&&probeC.helpers.confirmCashMove==='function';
+        var stateC=await ctxC.bridge.state();
+        if(!helpersOkC||!stateC.ready)throw new Error('INIT C falló');
+        var initC=await withTimeout(ctxC.bridge.createInitial(fixtureData(true)),10000,'crear snapshot inicial C');
+        if(initC.status!=='SUCCESS')throw new Error('createInitial C: '+initC.status);
+        var beforeC=await ctxC.bridge.snapshotSummary();
+        var opC1=await ctxC.bridge.newOperationId();
+        var rE=await withTimeout(ctxC.bridge.confirmExpense({operationId:opC1,monto:10,concepto:'X',categoria:'Otro',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'gasto caja cerrada');
+        var opC2=await ctxC.bridge.newOperationId();
+        var rM=await withTimeout(ctxC.bridge.confirmCashMove({operationId:opC2,tipo:'CASH_IN',monto:10,motivo:'Y',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'ingreso caja cerrada');
+        var afterC=await ctxC.bridge.snapshotSummary();
+        var ok4=(rE.status!=='SUCCESS'&&rE.reason==='CAJA_CERRADA')&&(rM.status!=='SUCCESS'&&rM.reason==='CAJA_CERRADA')&&afterC.gastos.length===beforeC.gastos.length&&afterC.cajMovs.length===beforeC.cajMovs.length&&afterC.revision===beforeC.revision;
+        addCase('CAJA_CERRADA',ok4,{expense:rE,cashMove:rM,gastosAntes:beforeC.gastos.length,gastosDespues:afterC.gastos.length,cajMovsAntes:beforeC.cajMovs.length,cajMovsDespues:afterC.cajMovs.length,revisionAntes:beforeC.revision,revisionDespues:afterC.revision,cajEstado:afterC.cajEstado});
+
+        /* ── CASO 5: CASHIER_IDENTIDAD ── */
+        statusEl.textContent='[5] identidad de cajero';
+        var op5a=await ctxA.bridge.newOperationId();
+        var r5a=await withTimeout(ctxA.bridge.confirmExpense({operationId:op5a,monto:5,concepto:'Identidad OK',categoria:'Otro',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'cajero correcto');
+        var s5a=await ctxA.bridge.snapshotSummary();
+        var g5a=gastosByOp(s5a,op5a);
+        var ok5a=r5a.status==='SUCCESS'&&g5a.length===1&&g5a[0].cashierId==='C-1'&&g5a[0].cashierId!==tabA;
+        var before5b=await ctxA.bridge.snapshotSummary();
+        var op5b=await ctxA.bridge.newOperationId();
+        var r5b=await withTimeout(ctxA.bridge.confirmExpense({operationId:op5b,monto:5,concepto:'Identidad mal',categoria:'Otro',metodo:'efectivo',cashierId:'C-999',sessionId:'S-1'}),15000,'cajero incorrecto');
+        var s5b=await ctxA.bridge.snapshotSummary();
+        var ok5b=r5b.status==='CONFLICT'&&r5b.reason==='CAJERO_DIFERENTE'&&s5b.revision===before5b.revision&&gastosByOp(s5b,op5b).length===0&&movsByOp(s5b,op5b).length===0;
+        var op5c=await ctxA.bridge.newOperationId();
+        var r5c=await withTimeout(ctxA.bridge.confirmExpense({operationId:op5c,monto:5,concepto:'Sin cashier',categoria:'Otro',metodo:'efectivo',sessionId:'S-1'}),15000,'cajero ausente');
+        var j5c=await ctxA.bridge.operation(op5c);
+        var ok5c=r5c.status==='REJECTED'&&r5c.code==='INVALID_INPUT'&&j5c===null;
+        var ok5=ok5a&&ok5b&&ok5c;
+        addCase('CASHIER_IDENTIDAD',ok5,{correcto:{status:r5a.status,cashierIdGuardado:g5a[0]?g5a[0].cashierId:null,tabId:tabA,noEsTabId:g5a[0]?g5a[0].cashierId!==tabA:null},incorrecto:{status:r5b.status,reason:r5b.reason,revisionAntes:before5b.revision,revisionDespues:s5b.revision,cambiosCero:(gastosByOp(s5b,op5b).length===0&&movsByOp(s5b,op5b).length===0)},ausente:{status:r5c.status,code:r5c.code,journal:j5c}});
+
+        /* ── CASO 6: SESSION_IDENTIDAD ── */
+        statusEl.textContent='[6] identidad de sesión';
+        var op6a=await ctxA.bridge.newOperationId();
+        var r6a=await withTimeout(ctxA.bridge.confirmExpense({operationId:op6a,monto:5,concepto:'Sesion OK',categoria:'Otro',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'sesión correcta');
+        var s6a=await ctxA.bridge.snapshotSummary();
+        var g6a=gastosByOp(s6a,op6a);
+        var ok6a=r6a.status==='SUCCESS'&&g6a.length===1&&g6a[0].sessionId==='S-1';
+        var before6b=await ctxA.bridge.snapshotSummary();
+        var op6b=await ctxA.bridge.newOperationId();
+        var r6b=await withTimeout(ctxA.bridge.confirmExpense({operationId:op6b,monto:5,concepto:'Sesion mal',categoria:'Otro',metodo:'efectivo',cashierId:'C-1',sessionId:'S-999'}),15000,'sesión incorrecta');
+        var s6b=await ctxA.bridge.snapshotSummary();
+        var ok6b=r6b.status==='CONFLICT'&&r6b.reason==='SESION_DIFERENTE'&&s6b.revision===before6b.revision&&gastosByOp(s6b,op6b).length===0&&movsByOp(s6b,op6b).length===0;
+        var op6c=await ctxA.bridge.newOperationId();
+        var r6c=await withTimeout(ctxA.bridge.confirmExpense({operationId:op6c,monto:5,concepto:'Sin sesion',categoria:'Otro',metodo:'efectivo',cashierId:'C-1'}),15000,'sesión ausente');
+        var j6c=await ctxA.bridge.operation(op6c);
+        var ok6c=r6c.status==='REJECTED'&&r6c.code==='INVALID_INPUT'&&j6c===null;
+        var ok6=ok6a&&ok6b&&ok6c;
+        addCase('SESSION_IDENTIDAD',ok6,{correcta:{status:r6a.status,sessionIdGuardado:g6a[0]?g6a[0].sessionId:null},incorrecta:{status:r6b.status,reason:r6b.reason,revisionAntes:before6b.revision,revisionDespues:s6b.revision,cambiosCero:(gastosByOp(s6b,op6b).length===0&&movsByOp(s6b,op6b).length===0)},ausente:{status:r6c.status,code:r6c.code,journal:j6c}});
+
+        /* ── CASO 7: OPERATION_ID REPETIDO ── */
+        statusEl.textContent='[7] operationId repetido';
+        var before7=await ctxA.bridge.snapshotSummary();
+        var r7=await withTimeout(ctxA.bridge.confirmExpense({operationId:op1,monto:12.5,concepto:'Luz',categoria:'Servicios',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'repetir operationId');
+        var s7=await ctxA.bridge.snapshotSummary();
+        var ok7=r7.status==='ALREADY_COMMITTED'&&gastosByOp(s7,op1).length===1&&movsByOp(s7,op1).length===1&&gastosByOp(s7,op1).length===before7.gastos.filter(function(g){return g.operationId===op1;}).length;
+        addCase('OPERATION_ID_REPETIDO',ok7,{result:r7,operationId:op1,gastosConOp:gastosByOp(s7,op1).length,movsConOp:movsByOp(s7,op1).length,revisionAntes:before7.revision,revisionDespues:s7.revision});
+
+        /* ── CASO 8: RETRY (3er intento) ── */
+        statusEl.textContent='[8] retry 3er intento';
+        var r8=await withTimeout(ctxA.bridge.confirmExpense({operationId:op1,monto:12.5,concepto:'Luz',categoria:'Servicios',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'retry operationId');
+        var s8=await ctxA.bridge.snapshotSummary();
+        var ok8=r8.status==='ALREADY_COMMITTED'&&gastosByOp(s8,op1).length===1&&movsByOp(s8,op1).length===1;
+        addCase('RETRY',ok8,{result:r8,operationId:op1,gastosConOp:gastosByOp(s8,op1).length,movsConOp:movsByOp(s8,op1).length});
+
+        /* ── CASO 9: FALLO DE PERSISTENCIA ── */
+        statusEl.textContent='[9] fallo de persistencia';
+        var before9=await ctxA.bridge.snapshotSummary();
+        ctxA.bridge.injectPersistenceFailure();
+        var op9=await ctxA.bridge.newOperationId();
+        var r9=await withTimeout(ctxA.bridge.confirmExpense({operationId:op9,monto:7,concepto:'Fallo persistencia',categoria:'Otro',metodo:'efectivo',cashierId:'C-1',sessionId:'S-1'}),15000,'gasto con fallo de persistencia');
+        ctxA.bridge.restorePersistence();
+        var s9=await ctxA.bridge.snapshotSummary();
+        var j9=await ctxA.bridge.operation(op9);
+        var ok9=r9.status!=='SUCCESS'&&r9.status==='PERSISTENCE_ERROR'&&gastosByOp(s9,op9).length===0&&movsByOp(s9,op9).length===0&&s9.revision===before9.revision&&(!j9||j9.status!=='COMMITTED');
+        addCase('FALLO_PERSISTENCIA',ok9,{result:r9,operationId:op9,gastosConOp:gastosByOp(s9,op9).length,movsConOp:movsByOp(s9,op9).length,revisionAntes:before9.revision,revisionDespues:s9.revision,journal:j9?{status:j9.status,type:j9.type}:null});
+
+        /* ── CASO 10: CERO DUPLICACIÓN ── */
+        var s10=await ctxA.bridge.snapshotSummary();
+        var ok10=gastosByOp(s10,op1).length===1&&movsByOp(s10,op1).length===1;
+        addCase('CERO_DUPLICACION',ok10,{operationId:op1,gastosConOp:gastosByOp(s10,op1).length,movsConOp:movsByOp(s10,op1).length});
+
+        /* ── CASO 11: CERO SEGUNDO EFECTO ── */
+        var s11=await ctxA.bridge.snapshotSummary();
+        var sumG=sumMonto(gastosByOp(s11,op1)),sumM=sumMonto(movsByOp(s11,op1));
+        var ok11=sumG===12.5&&sumM===12.5;
+        addCase('CERO_SEGUNDO_EFECTO',ok11,{operationId:op1,sumaGastos:sumG,sumaMovs:sumM,esperado:12.5,totalGastos:s11.gastos.length,totalCajMovs:s11.cajMovs.length});
+
+        report.snapshot=await ctxA.bridge.snapshotSummary();
+      }catch(error){
+        report.status='ERROR';report.error={message:error.message||String(error),stack:(error.stack||'').slice(0,800)};fillMissingCases(error.message||String(error));
+      }finally{
+        statusEl.textContent='[10] limpieza';
+        var testKeysBeforeCleanup=physicalKeys(STORAGE_ROOT);
+        var testDbsBeforeCleanup=(await listDatabases()).supported?((await listDatabases()).list||[]).filter(function(d){return d.name&&d.name.indexOf(DB_ROOT)===0;}):null;
+        if(ctxA)await destroyContext(ctxA);
+        if(ctxC)await destroyContext(ctxC);
+        await wait(250);
+        removePrefixed(STORAGE_ROOT);
+        var removedDbs=await cleanupTestDatabases();
+        var realAfter=await captureRealState();
+        var testKeysAfterCleanup=physicalKeys(STORAGE_ROOT);
+        var testDbsAfterCleanup=(await listDatabases()).supported?((await listDatabases()).list||[]).filter(function(d){return d.name&&d.name.indexOf(DB_ROOT)===0;}):null;
+        var namespaceClean=testKeysAfterCleanup.length===0&&(testDbsAfterCleanup===null||testDbsAfterCleanup.length===0);
+        var realIntact=sameRealState(realBefore,realAfter);
+        report.isolation={storageRoot:STORAGE_ROOT,dbRoot:DB_ROOT,testKeysBeforeCleanup:testKeysBeforeCleanup,testKeysAfterCleanup:testKeysAfterCleanup,testDbsBeforeCleanup:testDbsBeforeCleanup,testDbsAfterCleanup:testDbsAfterCleanup,removedDbs:removedDbs,namespaceClean:namespaceClean,realDataUntouched:realIntact,realBefore:{snapshotV9:realBefore.snapshotV9,realDb:realBefore.realDb},realAfter:{snapshotV9:realAfter.snapshotV9,realDb:realAfter.realDb}};
+        if(!caseKeys['NAMESPACE_AISLADO'])addCase('NAMESPACE_AISLADO',namespaceClean,{testKeysAfterCleanup:testKeysAfterCleanup,testDbsAfterCleanup:testDbsAfterCleanup,removedDbs:removedDbs});
+        if(!caseKeys['DATOS_V9_INTACTOS'])addCase('DATOS_V9_INTACTOS',realIntact,{realBefore:{snapshotV9:realBefore.snapshotV9,realDb:realBefore.realDb},realAfter:{snapshotV9:realAfter.snapshotV9,realDb:realAfter.realDb},clavesNoPrefijadasIdenticas:realIntact});
+      }
+
+      var s=stats();
+      report.pass=s.pass;report.fail=s.fail;report.total=s.total;
+      report.cases=results.map(function(r){return{n:r.id,name:r.name,status:r.passed?'PASS':'FAIL',detail:clone(r.detail)};});
+      report.status=s.fail===0&&s.total===CASES.length&&report.isolation&&report.isolation.namespaceClean&&report.isolation.realDataUntouched?'PASS':'FAIL';
+      window.__cashV10Report=clone(report);
+      summaryEl.className='banner '+(report.status==='PASS'?'pass':'fail');
+      summaryEl.textContent='CASH V10: '+report.status+' — '+s.pass+'/'+CASES.length;
+      statusEl.textContent='[10] limpieza '+(report.isolation&&report.isolation.namespaceClean&&report.isolation.realDataUntouched?'PASS':'FAIL')+' · '+s.pass+' PASS / '+s.fail+' FAIL / '+s.total+' total';
+      autoResult.textContent=JSON.stringify(report,null,2);
+      runButton.disabled=false;
+    }
+
+    runButton.addEventListener('click',function(){
+      run().catch(function(e){
+        statusEl.textContent='ERROR: '+e.message;
+        summaryEl.className='banner fail';summaryEl.textContent='ERROR: '+e.message;
+        runButton.disabled=false;
+      });
+    });
+    if(query.get('autorun')==='1'||query.get('auto')==='1')setTimeout(function(){runButton.click();},400);
+  })();
+  </script>
+
+
+</body></html>
