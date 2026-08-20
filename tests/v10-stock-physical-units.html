@@ -212,11 +212,11 @@
         appConfig:{freeSale:{allowRegisteredNoStock:allowNoStock===true},creditPolicy:{enabled:true,initialLine:100000,minPurchases:0,minProfit:0}},
         ui:{},locks:{},security:{},cart:[],draft:null,
         productos:products,ventas:[],clientes:[],creditos:[],gastos:[],cajMovs:[],
-        cajEstado:{abierta:true,cerrada:false,sessionId:'S1',cajeroId:null,fechaApertura:'2026-08-14',fondo:0}
+        cajEstado:{abierta:true,cerrada:false,sessionId:'S1',cajeroId:'INV-TEST-CASHIER',fechaApertura:'2026-08-14',fondo:0}
       };
     }
     function intent(opId,items,extra){
-      var base={operationId:opId,items:items,paymentMethod:'efectivo',sessionId:'S1'};
+      var base={operationId:opId,items:items,paymentMethod:'efectivo',sessionId:'S1',cashierId:'INV-TEST-CASHIER'};
       if(extra)Object.keys(extra).forEach(function(k){base[k]=extra[k];});
       return base;
     }
