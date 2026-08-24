@@ -130,7 +130,7 @@ test('dynamic characterization via headless browser', { skip: browser ? false : 
   let httpDebug = null;
   try {
     const dump = runDumpDom(browser, httpUrl, httpDir);
-    httpDebug = { browser, status: dump.status, signal: dump.signal, error: dump.error, stderrTail: dump.stderr.slice(-2000), stdoutLen: dump.stdout.length };
+    httpDebug = { browser, status: dump.status, signal: dump.signal, error: dump.error, stderrObserved: dump.stderr.length > 0, stdoutLen: dump.stdout.length }; // normalized: raw Chrome stderr contains PID/timestamps (non-deterministic)
     httpResults = extractResults(dump.stdout);
     if (!httpResults) httpError = 'failed to parse char-results (status ' + dump.status + ', signal ' + dump.signal + ', error ' + dump.error + ')';
   } catch (e) {
@@ -147,7 +147,7 @@ test('dynamic characterization via headless browser', { skip: browser ? false : 
   let fileDebug = null;
   try {
     const dump = runDumpDom(browser, fileUrl, fileDir);
-    fileDebug = { browser, status: dump.status, signal: dump.signal, error: dump.error, stderrTail: dump.stderr.slice(-2000), stdoutLen: dump.stdout.length };
+    fileDebug = { browser, status: dump.status, signal: dump.signal, error: dump.error, stderrObserved: dump.stderr.length > 0, stdoutLen: dump.stdout.length }; // normalized: raw Chrome stderr contains PID/timestamps (non-deterministic)
     fileResults = extractResults(dump.stdout);
     if (!fileResults) fileError = 'failed to parse char-results for file:// (status ' + dump.status + ', signal ' + dump.signal + ', error ' + dump.error + ')';
   } catch (e) {

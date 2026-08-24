@@ -1,0 +1,44 @@
+{
+  "baseCommit": "d0125183918a2f6f710d4d234005c3ac8757c1a6",
+  "sourceBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+  "cssFiles": [
+    {
+      "file": "POS/css/base.css",
+      "sha256": "7896814c503f61399630196cee62b40acffbf53ebbd1721f738f40e1fbf7b0db",
+      "lines": 1284
+    },
+    {
+      "file": "POS/css/layout.css",
+      "sha256": "900f63df82b3827e21d1926e32f02fd1890521c811997278cf1c4377b832f3f0",
+      "lines": 148
+    },
+    {
+      "file": "POS/css/components.css",
+      "sha256": "eb61208e884256499e85c84cf9ca3034a77998aab9a3c6fbc7afb9a3635e1ffc",
+      "lines": 113
+    },
+    {
+      "file": "POS/css/responsive.css",
+      "sha256": "120e58d02622809b1e37921483213603557a6790092b6aa6499fd6502c002cb8",
+      "lines": 1
+    },
+    {
+      "file": "POS/css/print.css",
+      "sha256": "120e58d02622809b1e37921483213603557a6790092b6aa6499fd6502c002cb8",
+      "lines": 1
+    }
+  ],
+  "indexSha256": "7c9d2d184badd34777ea27f06bc9f8a66dce10027f25b1801a0b287baec79b53",
+  "invariantSha256": "3c3cb612370d3a59c41d5aafa1df3587a6594d8f4395b4f9d3d45cab59612045",
+  "mediaCount": 49,
+  "printMediaCount": 2,
+  "styleBlocksSource": 8,
+  "linksOrder": [
+    "css/base.css",
+    "css/layout.css",
+    "css/components.css",
+    "css/responsive.css",
+    "css/print.css"
+  ],
+  "equivalence": "IDENTICAL"
+}

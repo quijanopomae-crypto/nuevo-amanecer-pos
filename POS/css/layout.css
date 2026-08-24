@@ -1,0 +1,148 @@
+        .cfg-layout{min-height:0}
+        .pm-grid{grid-template-columns:repeat(4,1fr)}
+        button:focus-visible,.module-card:focus-visible,.product-card:focus-visible,.cfg-toggle:focus-visible{outline:3px solid color-mix(in srgb,var(--teal) 45%,transparent);outline-offset:2px}
+        .toast{max-width:min(92vw,520px);white-space:normal;text-align:center;line-height:1.35}
+        .g-sync.saved{background:var(--green-light);border-color:#bbf7d0;color:#15803d}
+        .g-sync.error{background:var(--red-light);border-color:#fecaca;color:var(--red)}
+        .product-card.box-mode{border-color:var(--amber)}
+        .line-mode{display:inline-block;margin-top:3px;font-size:9px;font-weight:800;padding:2px 6px;border-radius:7px;background:var(--amber-light);color:#b45309}
+        @media(max-width:700px){
+            .pm-grid{grid-template-columns:repeat(2,1fr)}
+            .g-topbar{padding:0 9px}.g-logo-text{font-size:13px}.g-status{padding:5px 8px}.g-status span{font-size:0}.g-status span::after{content:'Local';font-size:10px}
+            .top-mod-bar{height:auto;min-height:50px;flex-wrap:wrap;padding:8px 10px}
+            .filter-bar{flex-wrap:wrap}.f-select{max-width:100%}
+        }
+        @media(max-width:480px){
+            .cfg-layout{flex-direction:column!important;overflow-y:auto!important}
+            .cfg-sidebar{max-height:215px;flex-shrink:0}
+            .cfg-content{overflow:visible!important;padding:12px}
+            .cfg-row{align-items:flex-start;gap:8px;flex-wrap:wrap}.cfg-input{min-width:150px;margin-left:0;width:100%;text-align:left}
+            .products-area{padding:12px;grid-template-columns:repeat(2,minmax(116px,1fr));gap:12px}
+            .product-card{min-height:142px;padding-left:6px;padding-right:6px}
+            .pos-search-box{min-width:0}.pos-search-box input{min-width:0}
+            #btnMayorista{padding:8px 10px!important;font-size:10px!important}
+        }
+        @media print{.no-print{display:none!important}}
+
+        /* v16: desplazamiento real de toda la página Configuración en teléfonos */
+        @media(max-width:960px){
+            #pageConfig.active{
+                display:block!important;
+                flex:1 1 auto!important;
+                min-height:0!important;
+                height:auto!important;
+                overflow-x:hidden!important;
+                overflow-y:auto!important;
+                -webkit-overflow-scrolling:touch!important;
+                overscroll-behavior-y:contain!important;
+                touch-action:pan-y!important;
+                scroll-behavior:auto!important;
+                padding-bottom:calc(110px + env(safe-area-inset-bottom))!important;
+            }
+            #pageConfig .cfg-topbar-simple{
+                position:sticky!important;
+                top:0!important;
+                z-index:35!important;
+                background:var(--white)!important;
+                border-bottom:1px solid var(--border)!important;
+            }
+            #pageConfig .cfg-shell{
+                display:block!important;
+                position:relative!important;
+                flex:none!important;
+                width:100%!important;
+                height:auto!important;
+                min-height:0!important;
+                max-height:none!important;
+                overflow:visible!important;
+                touch-action:pan-y!important;
+            }
+            #pageConfig .cfg-content{
+                display:flex!important;
+                flex-direction:column!important;
+                flex:none!important;
+                width:100%!important;
+                height:auto!important;
+                min-height:0!important;
+                max-height:none!important;
+                overflow:visible!important;
+                -webkit-overflow-scrolling:auto!important;
+                touch-action:pan-y!important;
+                padding:12px 12px calc(150px + env(safe-area-inset-bottom))!important;
+            }
+            #pageConfig .cfg-grid-2,
+            #pageConfig .cfg-panel,
+            #pageConfig .cfg-setting-list,
+            #pageConfig .cfg-preview-card{
+                height:auto!important;
+                max-height:none!important;
+                overflow:visible!important;
+                touch-action:pan-y!important;
+            }
+            #pageConfig .cfg-content>*:last-child{
+                margin-bottom:40px!important;
+            }
+            #pageConfig.cfg-menu-open{
+                overflow:hidden!important;
+            }
+        }
+        @media(max-width:520px){
+            #pageConfig.active{
+                padding-bottom:calc(130px + env(safe-area-inset-bottom))!important;
+            }
+            #pageConfig .cfg-content{
+                padding-bottom:calc(190px + env(safe-area-inset-bottom))!important;
+            }
+        }
+
+        /* CORRECCIÓN: mostrar el contenido completo de tarjetas en escritorio sin alterar el scroll móvil */
+        @media(min-width:701px){
+            #pageClientes .client-card{height:auto;max-height:none}
+            #pageClientes .client-header{align-items:flex-start;min-height:64px}
+            #pageClientes .c-info{min-width:0;overflow:visible}
+            #pageClientes .c-name,
+            #pageClientes .c-meta{
+                white-space:normal;
+                overflow:visible;
+                text-overflow:clip;
+                overflow-wrap:anywhere;
+                word-break:break-word;
+                line-height:1.35;
+            }
+            #pageClientes .c-right{min-width:112px;max-width:38%}
+            #pageClientes .client-creds.open{overflow:visible;max-height:none}
+            #pageClientes .cr-top{gap:10px}
+            #pageClientes .cr-desc{white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+
+            #pagePOS .products-area{grid-auto-rows:max-content}
+            #pagePOS .product-card{height:auto;max-height:none;min-height:190px}
+            #pagePOS .p-name{
+                width:100%;
+                min-height:2.7em;
+                white-space:normal;
+                overflow:visible;
+                text-overflow:clip;
+                overflow-wrap:anywhere;
+                word-break:break-word;
+                line-height:1.35;
+            }
+            #pagePOS .p-stock-badge{white-space:normal;line-height:1.25}
+        }
+
+        /* NUEVO FASE 2: importación/exportación de catálogo */
+        .import-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+        .import-action-grid .cfg-save-btn{margin:0}
+        .import-preview{display:none;margin-top:12px;border:1px solid var(--border);border-radius:13px;background:var(--bg);overflow:hidden}
+        .import-preview.show{display:block}
+        .import-preview-head{padding:11px 13px;background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .import-preview-title{font-size:12px;font-weight:900;color:var(--dark)}
+        .import-preview-file{font-size:10px;font-weight:700;color:var(--slate);overflow-wrap:anywhere;text-align:right}
+        .import-preview-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:10px}
+        .import-preview-stat{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:9px;text-align:center}
+        .import-preview-stat strong{display:block;font-size:17px;color:var(--dark)}
+        .import-preview-stat span{display:block;font-size:9px;color:var(--slate);font-weight:800;text-transform:uppercase;margin-top:2px}
+        .import-preview-warnings{max-height:145px;overflow:auto;padding:0 11px 10px;font-size:10px;line-height:1.45;color:var(--slate);font-weight:700}
+        .import-preview-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 10px 10px}
+        .import-preview-actions button{margin:0}
+        .import-note{font-size:10px;color:var(--slate);font-weight:700;line-height:1.45;margin-top:9px}
+        @media(max-width:480px){.import-action-grid{grid-template-columns:1fr}.import-preview-stats{grid-template-columns:1fr 1fr}.import-preview-stat:last-child{grid-column:1/-1}}
