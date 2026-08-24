@@ -1,0 +1,12 @@
+{
+  "reason": "failed to parse char-results (status null, signal SIGTERM, error Error: spawnSync C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe ETIMEDOUT)",
+  "browser": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "searched": [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Users\\eliser rusbel quijan\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+  ],
+  "note": "Chrome/Edge binary found, but the headless --dump-dom async harness did not produce char-results (virtual-time-budget/IndexedDB/offline limitation)."
+}

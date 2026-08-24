@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Characterization Harness — Nuevo Amanecer POS</title>
+</head>
+<body>
+<iframe id="app" src="../fixtures/CVV2.4_backup_antes_demo-1.baseline.html" style="width:1200px;height:700px;border:0"></iframe>
+<pre id="char-results"></pre>
+<script>
+(function () {
+  'use strict';
+  var results = [];
+  var meta = {
+    fileProtocolSameOriginAccess: null,
+    httpProtocol: location.protocol === 'http:' || location.protocol === 'https:',
+    harnessVersion: 'FASE4-CHARACTERIZATION-BASELINE'
+  };
+
+  var outEl = document.getElementById('char-results');
+  function writeResults(payload) {
+    try { outEl.textContent = JSON.stringify(payload); }
+    catch (e) { outEl.textContent = JSON.stringify({ fatal: String(e) }); }
+  }
+  function waitFor(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function normNum(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+  function getWindow() { return document.getElementById('app').contentWindow; }
+
+  function record(scenario, expected, observed, extra) {
+    var entry = { scenario: scenario, expected: expected, observed: observed };
+    entry.status = JSON.stringify(expected) === JSON.stringify(observed) ? 'PASS' : 'FAIL';
+    if (extra) { for (var k in extra) entry[k] = extra[k]; }
+    results.push(entry);
+  }
+
+  function openSession(win) {
+    win.cajEstado = {
+      abierta: true, cerrada: false, fechaApertura: win.obtenerHoy(), sessionId: 1000,
+      fondo: 0, cajero: 'Frank', cajeroNombre: 'Frank', cajeroId: 'CAJ-001',
+      hora: '00:00', hora24: '00:00', horaCierre: null, horaCierre24: null,
+      contado: null, esperado: null, diferencia: null, timestampApertura: new Date().toISOString()
+    };
+  }
+
+  function resetBusinessState(win) {
+    win.productos = []; win.ventas = []; win.creditos = []; win.cajMovs = [];
+    win.gastos = []; win.cart = []; win.clientes = [];
+    win.saveAllData = function () { return Promise.resolve({ durable: true, verified: true }); };
+  }
+
+  function makeProduct(opts) {
+    return Object.assign({
+      id: 1, name: 'p1', sku: 'SKU1', barcode: 'BC1', cat: 'abarrotes', icon: 'X',
+      imagen: null, costo: 0, precio: 10, precioCaja: null, unidCaja: null,
+      stock: 5, stockMin: 0, venc: null, controlInventario: true, unidad: 'unidad',
+      marca: '', incluyeIGV: true, tipoImpuesto: 'gravado', descripcion: ''
+    }, opts || {});
+  }
+
+  function makeCartItem(opts) {
+    return Object.assign({
+      id: 1, name: 'p1', sku: 'SKU1', barcode: 'BC1', precio: 10, costo: 0, qty: 1,
+      unitsPerQty: 1, ventaModo: 'unidad', unidad: 'unidad', icon: 'X', imagen: null,
+      controlInventario: true, ventaLibre: false, ventaSinStock: false, tipoLinea: ''
+    }, opts || {});
+  }
+
+  function setVal(win, id, value) {
+    var el = win.document.getElementById(id);
+    if (el) el.value = value;
+    return !!el;
+  }
+
+  // ---- S1 ----
+  function s1(win) {
+    var known = ['productos', 'cart', 'clientes', 'creditos', 'ventas', 'cajEstado', 'cajMovs', 'gastos', 'appConfig'];
+    var present = [], types = {}, missing = [];
+    known.forEach(function (name) {
+      if (typeof win[name] !== 'undefined') { present.push(name); types[name] = typeof win[name]; }
+      else missing.push(name);
+    });
+    record('S1', { present: known.slice().sort(), missing: [] }, { present: present.slice().sort(), missing: missing.slice().sort() });
+  }
+
+  // ---- S2 ----
+  function s2(win) {
+    var all = win.document.querySelectorAll('[id]');
+    var ids = [];
+    for (var i = 0; i < all.length; i++) ids.push(all[i].id);
+    var pages = ids.filter(function (x) { return /^page/.test(x); }).sort();
+    var modals = ids.filter(function (x) { return /^m[A-Z]/.test(x); }).sort();
+    record('S2', { pageCount: pages.length, modalCount: modals.length }, { pageCount: pages.length, modalCount: modals.length, idCount: ids.length, pages: pages, modals: modals });
+  }
+
+  // ---- S3 ----
+  function s3(win) {
+    var naSnapshotV10Present = false, naV10OutboxPresent = false;
+    try { naSnapshotV10Present = !!win.localStorage.getItem('na_snapshot_v10'); } catch (e) {}
+    try { naV10OutboxPresent = !!win.sessionStorage.getItem('na_v10_outbox'); } catch (e) {}
+    var hasV10ReadCanonical = typeof win._naV10ReadCanonical === 'function';
+    record('S3',
+      { naSnapshotV10Present: false, naV10OutboxPresent: false, hasV10ReadCanonical: true },
+      { naSnapshotV10Present: naSnapshotV10Present, naV10OutboxPresent: naV10OutboxPresent, hasV10ReadCanonical: hasV10ReadCanonical });
+  }
+
+  // ---- S4 ----
+  function s4(win) {
+    var ls = [], ss = [];
+    try { for (var i = 0; i < win.localStorage.length; i++) { var k = win.localStorage.key(i); if (k && k.indexOf('na_') === 0) ls.push(k); } } catch (e) {}
+    try { for (var j = 0; j < win.sessionStorage.length; j++) { var k2 = win.sessionStorage.key(j); if (k2 && k2.indexOf('na_') === 0) ss.push(k2); } } catch (e) {}
+    ls.sort(); ss.sort();
+    record('S4',
+      { naSnapshotV9Present: true, naSnapshotV10Present: false },
+      { naSnapshotV9Present: ls.indexOf('na_snapshot_v9') >= 0, naSnapshotV10Present: ls.indexOf('na_snapshot_v10') >= 0, localStorageKeys: ls, sessionStorageKeys: ss });
+  }
+
+  // ---- S5: SALE efectivo ----
+  async function s5(win) {
+    resetBusinessState(win); openSession(win);
+    win.appConfig.printAuto = false;
+    win.productos.push(makeProduct({ id: 1, precio: 10, stock: 5 }));
+    win.cart.push(makeCartItem({ id: 1, precio: 10, qty: 2 }));
+    win.posPayM = 'efectivo';
+    setVal(win, 'mMontoRec', '20');
+    await win.confirmarVenta();
+    var ing = win.cajMovs.filter(function (m) { return m.tipo === 'ing'; });
+    record('S5',
+      { ventas: 1, stock: 3, cajMovIng: 20, efectivo: 20, cart: 0 },
+      { ventas: win.ventas.length, stock: normNum(win.productos[0] ? win.productos[0].stock : null), cajMovIng: normNum(ing.reduce(function (a, m) { return a + (m.monto || 0); }, 0)), efectivo: normNum(ing.reduce(function (a, m) { return a + (m.efectivo || 0); }, 0)), cart: win.cart.length },
+      { mockedSaveAllData: true });
+  }
+
+  // ---- S6: SALE + INVENTORY unitsPerQty 24 ----
+  async function s6(win) {
+    resetBusinessState(win); openSession(win);
+    win.appConfig.printAuto = false;
+    win.productos.push(makeProduct({ id: 1, precio: 10, stock: 24 }));
+    win.cart.push(makeCartItem({ id: 1, precio: 10, qty: 1, unitsPerQty: 24, ventaModo: 'caja' }));
+    win.posPayM = 'efectivo';
+    setVal(win, 'mMontoRec', '10');
+    await win.confirmarVenta();
+    var v = win.ventas[0] || {};
+    record('S6',
+      { ventas: 1, stock: 0, unidadesFisicas: 24, cart: 0 },
+      { ventas: win.ventas.length, stock: normNum(win.productos[0] ? win.productos[0].stock : null), unidadesFisicas: normNum(v.unidadesFisicas), cart: win.cart.length },
+      { mockedSaveAllData: true });
+  }
+
+  // ---- S7: SALE + CREDIT ----
+  async function s7(win) {
+    resetBusinessState(win); openSession(win);
+    win.appConfig.printAuto = false;
+    win.productos.push(makeProduct({ id: 1, precio: 10, stock: 10 }));
+    win.clientes.push({ id: 1, nombre: 'cli1', dni: '', tel: '', totalCompras: 0, color: 0, lineaCreditoManualActiva: true, lineaCreditoManual: 100 });
+    win.cart.push(makeCartItem({ id: 1, precio: 10, qty: 1 }));
+    win.posPayM = 'credito';
+    setVal(win, 'mCreditoCliente', '1');
+    setVal(win, 'mCreditoVence', '2099-12-31');
+    await win.confirmarVenta();
+    var cr = win.creditos[0] || {};
+    var ing = win.cajMovs.filter(function (m) { return m.tipo === 'ing'; });
+    record('S7',
+      { creditos: 1, pagado: 0, saldo: 10, cajMovMetodo: 'credito', efectivo: 0 },
+      { creditos: win.creditos.length, pagado: normNum(cr.pagado), saldo: normNum(cr.saldo), cajMovMetodo: ing.length ? ing[0].metodo : null, efectivo: normNum(ing.length ? ing[0].efectivo : null) },
+      { mockedSaveAllData: true });
+  }
+
+  // ---- S8: CASH EXPENSE ----
+  async function s8(win) {
+    resetBusinessState(win); openSession(win);
+    setVal(win, 'gasDesc', 'luz'); setVal(win, 'gasMonto', '15'); setVal(win, 'gasMetodo', 'efectivo');
+    setVal(win, 'gasFecha', win.obtenerHoy()); setVal(win, 'gasCat', 'Servicios');
+    await win.guardarGasto();
+    var gas = win.cajMovs.filter(function (m) { return m.tipo === 'gas'; });
+    record('S8',
+      { gastos: 1, cajMovTipo: 'gas', cajMovEfectivo: 15, cajMovMonto: 15 },
+      { gastos: win.gastos.length, cajMovTipo: gas.length ? gas[0].tipo : null, cajMovEfectivo: normNum(gas.length ? gas[0].efectivo : null), cajMovMonto: normNum(gas.length ? gas[0].monto : null) },
+      { mockedSaveAllData: true });
+  }
+
+  // ---- S9: CREDIT PAYMENT ----
+  async function s9(win) {
+    resetBusinessState(win); openSession(win);
+    win.clientes.push({ id: 1, nombre: 'cli1', dni: '', tel: '', totalCompras: 0, color: 0 });
+    win.creditos.push({
+      id: 1, cliId: 1, clienteId: 1, clienteNombre: 'cli1', clienteDni: '',
+      desc: 'credito test', monto: 100, pagado: 0, saldo: 100,
+      vence: '2099-12-31', status: 'vigente', estado: 'vigente',
+      fecha: win.obtenerHoy(), anulado: false, pagos: [], items: []
+    });
+    win.pagoCredId = 1;
+    setVal(win, 'pagoMonto', '40'); setVal(win, 'pagoMetodo', 'efectivo');
+    await win.confirmarPago();
+    var cr = win.creditos[0] || {};
+    var cob = win.cajMovs.filter(function (m) { return m.tipo === 'cob'; });
+    record('S9',
+      { pagado: 40, saldo: 60, cajMovTipo: 'cob', cajMovEfectivo: 40, cajMovMonto: 40 },
+      { pagado: normNum(cr.pagado), saldo: normNum(cr.saldo), cajMovTipo: cob.length ? cob[0].tipo : null, cajMovEfectivo: normNum(cob.length ? cob[0].efectivo : null), cajMovMonto: normNum(cob.length ? cob[0].monto : null) },
+      { mockedSaveAllData: true });
+  }
+
+  // ---- S10: PERSISTENCE FAILURE ----
+  async function s10() {
+    var resp = await fetch('../fixtures/CVV2.4_backup_antes_demo-1.baseline.html');
+    if (!resp.ok) throw new Error('fetch fixture failed: ' + resp.status);
+    var html = await resp.text();
+    var blockCode = "window.__naBlockStorage=true;(function(){try{Storage.prototype.setItem=function(){throw new Error('__naBlockStorage');};Storage.prototype.getItem=function(){throw new Error('__naBlockStorage');};Storage.prototype.removeItem=function(){throw new Error('__naBlockStorage');};}catch(e){}try{Object.defineProperty(window,'indexedDB',{value:undefined,configurable:true});}catch(e){}})();";
+    var marker = html.indexOf('<script>');
+    if (marker < 0) throw new Error('no bare <script> found in fixture');
+    var modified = html.slice(0, marker + '<script>'.length) + blockCode + html.slice(marker + '<script>'.length);
+
+    var frame2 = document.createElement('iframe');
+    frame2.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+    frame2.style.cssText = 'width:1200px;height:700px;border:0';
+    document.body.appendChild(frame2);
+    frame2.srcdoc = modified;
+    await new Promise(function (resolve) {
+      var done = false;
+      function finish() { if (!done) { done = true; resolve(); } }
+      frame2.addEventListener('load', finish, { once: true });
+      setTimeout(finish, 30000);
+    });
+    await waitFor(600);
+
+    var w2 = frame2.contentWindow;
+    w2.productos = [makeProduct({ id: 1, precio: 10, stock: 5 })];
+    w2.ventas = []; w2.cajMovs = []; w2.cart = [makeCartItem({ id: 1, precio: 10, qty: 1 })];
+    w2.clientes = []; w2.creditos = []; w2.gastos = [];
+    openSession(w2);
+    w2.appConfig.printAuto = false;
+    w2.posPayM = 'efectivo';
+    setVal(w2, 'mMontoRec', '10');
+    await w2.confirmarVenta();
+    var observed = { ventas: w2.ventas.length, cart: w2.cart.length, __naBlockStorage: !!w2.__naBlockStorage };
+    var rollback = w2.ventas.length === 0;
+    results.push({ scenario: 'S10', expected: { rollbackObservable: true, ventas: 0 }, observed: observed, status: rollback ? 'PASS' : 'FAIL', realStorage: true });
+  }
+
+  async function main() {
+    var iframe = document.getElementById('app');
+    await new Promise(function (resolve) {
+      var done = false;
+      function finish() { if (!done) { done = true; resolve(); } }
+      iframe.addEventListener('load', finish, { once: true });
+      try { if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') { setTimeout(finish, 0); } } catch (e) {}
+      setTimeout(finish, 30000);
+    });
+    await waitFor(600);
+
+    var win = null;
+    try {
+      win = getWindow();
+      var probe = win.document && win.document.getElementById('pagePOS');
+      meta.fileProtocolSameOriginAccess = true;
+    } catch (e) {
+      meta.fileProtocolSameOriginAccess = false;
+      writeResults({ fileProtocolSupported: false, reason: 'cross-origin access to iframe failed', error: String(e), results: results, meta: meta });
+      return;
+    }
+    if (!win) { writeResults({ fileProtocolSupported: false, reason: 'iframe contentWindow unavailable', results: results, meta: meta }); return; }
+
+    s1(win); s2(win); s3(win); s4(win);
+
+    // Emit a partial result immediately so --dump-dom can capture S1-S4 even if
+    // the async business scenarios do not settle under virtual-time budget.
+    writeResults({ fileProtocolSupported: meta.fileProtocolSameOriginAccess, httpProtocol: meta.httpProtocol, results: results.slice(), meta: meta, partial: true });
+
+    try { await s5(win); } catch (e) { results.push({ scenario: 'S5', expected: {}, observed: { error: String(e) }, status: 'ERROR', mockedSaveAllData: true }); }
+    try { await s6(win); } catch (e) { results.push({ scenario: 'S6', expected: {}, observed: { error: String(e) }, status: 'ERROR', mockedSaveAllData: true }); }
+    try { await s7(win); } catch (e) { results.push({ scenario: 'S7', expected: {}, observed: { error: String(e) }, status: 'ERROR', mockedSaveAllData: true }); }
+    try { await s8(win); } catch (e) { results.push({ scenario: 'S8', expected: {}, observed: { error: String(e) }, status: 'ERROR', mockedSaveAllData: true }); }
+    try { await s9(win); } catch (e) { results.push({ scenario: 'S9', expected: {}, observed: { error: String(e) }, status: 'ERROR', mockedSaveAllData: true }); }
+
+    try { await s10(); } catch (e) { results.push({ scenario: 'S10', expected: { rollbackObservable: true }, observed: { error: String(e) }, status: 'ERROR', realStorage: true }); }
+
+    writeResults({ fileProtocolSupported: meta.fileProtocolSameOriginAccess, httpProtocol: meta.httpProtocol, results: results, meta: meta });
+  }
+
+  main().catch(function (e) {
+    writeResults({ fatal: String(e), results: results, meta: meta });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,316 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": {
+    "buttons": {
+      "staticCount": 143,
+      "templateCount": 104,
+      "totalCount": 247
+    },
+    "externalScriptCount": 1,
+    "formsCount": 0,
+    "inlineScriptCount": 18,
+    "innerHtml": {
+      "count": 51,
+      "lines": [
+        2607,
+        2645,
+        2678,
+        2700,
+        2701,
+        2712,
+        2718,
+        2736,
+        2739,
+        2740,
+        2741,
+        2746,
+        2759,
+        2761,
+        2762,
+        2763,
+        2832,
+        2852,
+        2854,
+        2856,
+        2878,
+        3016,
+        3158,
+        3201,
+        3269,
+        3270,
+        3410,
+        3421,
+        3428,
+        3497,
+        3531,
+        3532,
+        3604,
+        3651,
+        3788,
+        3904,
+        3905,
+        4494,
+        4496,
+        4501,
+        4518,
+        4528,
+        4588,
+        4590,
+        4639,
+        4643,
+        4769,
+        4785,
+        4898,
+        5086,
+        5087
+      ]
+    },
+    "lineCount": 7164,
+    "scriptCount": 19,
+    "scripts": [
+      {
+        "async": false,
+        "defer": true,
+        "endLine": 9,
+        "id": null,
+        "index": 0,
+        "src": "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js",
+        "startLine": 9,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 4390,
+        "id": null,
+        "index": 1,
+        "src": null,
+        "startLine": 2271,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 4533,
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "src": null,
+        "startLine": 4447,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 4595,
+        "id": "na-fase8-reportes-js",
+        "index": 3,
+        "src": null,
+        "startLine": 4549,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 4654,
+        "id": "na-fase9-sugerencia-js",
+        "index": 4,
+        "src": null,
+        "startLine": 4608,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 4842,
+        "id": null,
+        "index": 5,
+        "src": null,
+        "startLine": 4697,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 4973,
+        "id": null,
+        "index": 6,
+        "src": null,
+        "startLine": 4844,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5070,
+        "id": null,
+        "index": 7,
+        "src": null,
+        "startLine": 5016,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5095,
+        "id": null,
+        "index": 8,
+        "src": null,
+        "startLine": 5072,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5313,
+        "id": "na-security-sales-render",
+        "index": 9,
+        "src": null,
+        "startLine": 5096,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5453,
+        "id": "na-security-cash-render",
+        "index": 10,
+        "src": null,
+        "startLine": 5314,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5828,
+        "id": "na-security-credit-render",
+        "index": 11,
+        "src": null,
+        "startLine": 5454,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5902,
+        "id": "na-security-image-preview",
+        "index": 12,
+        "src": null,
+        "startLine": 5829,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 5953,
+        "id": "na-security-ticket-print",
+        "index": 13,
+        "src": null,
+        "startLine": 5903,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 6057,
+        "id": "na-security-pos-render",
+        "index": 14,
+        "src": null,
+        "startLine": 5954,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 6095,
+        "id": "na-security-expense-render",
+        "index": 15,
+        "src": null,
+        "startLine": 6058,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 6119,
+        "id": null,
+        "index": 16,
+        "src": null,
+        "startLine": 6096,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 6851,
+        "id": null,
+        "index": 17,
+        "src": null,
+        "startLine": 6120,
+        "typeModule": false
+      },
+      {
+        "async": false,
+        "defer": false,
+        "endLine": 7162,
+        "id": null,
+        "index": 18,
+        "src": null,
+        "startLine": 6853,
+        "typeModule": false
+      }
+    ],
+    "styleCount": 8,
+    "styles": [
+      {
+        "endLine": 1295,
+        "id": null,
+        "index": 0,
+        "startLine": 10
+      },
+      {
+        "endLine": 1446,
+        "id": null,
+        "index": 1,
+        "startLine": 1297
+      },
+      {
+        "endLine": 1469,
+        "id": "na-phase5-sales-cashiers",
+        "index": 2,
+        "startLine": 1448
+      },
+      {
+        "endLine": 4423,
+        "id": "na-fase7-credit-css",
+        "index": 3,
+        "startLine": 4411
+      },
+      {
+        "endLine": 4546,
+        "id": "na-fase8-reportes-css",
+        "index": 4,
+        "startLine": 4537
+      },
+      {
+        "endLine": 4606,
+        "id": "na-fase9-sugerencia-css",
+        "index": 5,
+        "startLine": 4598
+      },
+      {
+        "endLine": 4692,
+        "id": "na-phase10-control-master",
+        "index": 6,
+        "startLine": 4656
+      },
+      {
+        "endLine": 5010,
+        "id": null,
+        "index": 7,
+        "startLine": 4977
+      }
+    ],
+    "typeModuleCount": 0
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

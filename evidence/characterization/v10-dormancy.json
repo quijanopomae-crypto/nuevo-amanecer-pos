@@ -1,0 +1,523 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": {
+    "commentLine": 6121,
+    "definitions": [
+      {
+        "kind": "let",
+        "line": 6133,
+        "name": "_naV10Channel"
+      },
+      {
+        "kind": "let",
+        "line": 6133,
+        "name": "_naV10DbPromise"
+      },
+      {
+        "kind": "let",
+        "line": 6133,
+        "name": "_naV10LastBroadcast"
+      },
+      {
+        "kind": "let",
+        "line": 6133,
+        "name": "_naV10TabId"
+      },
+      {
+        "kind": "const",
+        "line": 6134,
+        "name": "_naV10EvidenceTimes"
+      },
+      {
+        "kind": "let",
+        "line": 6135,
+        "name": "_naV10Runtime"
+      },
+      {
+        "kind": "arrow",
+        "line": 6137,
+        "name": "_naV10Clone"
+      },
+      {
+        "kind": "arrow",
+        "line": 6138,
+        "name": "_naV10Now"
+      },
+      {
+        "kind": "arrow",
+        "line": 6146,
+        "name": "_naNewOperationId"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6149,
+        "name": "_naV10Error"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6150,
+        "name": "_naV10Result"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6151,
+        "name": "_naV10ConfigureRuntime"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6158,
+        "name": "_naV10PrepareUpgrade"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6162,
+        "name": "_naV10OpenDB"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6185,
+        "name": "_naV10CloseDB"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6190,
+        "name": "_naV10Request"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6191,
+        "name": "_naV10ReadStateValue"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6192,
+        "name": "_naV10ReadCanonical"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6193,
+        "name": "_naV10GetOperation"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6194,
+        "name": "_naV10GetCheckpoint"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6196,
+        "name": "_naV10ValidSnapshot"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6202,
+        "name": "_naV10CompareSnapshots"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6207,
+        "name": "_naV10StableValue"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6212,
+        "name": "_naV10IdempotencyKey"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6213,
+        "name": "_naV10PayloadHash"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6218,
+        "name": "_naV10EvidenceDetectedAt"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6219,
+        "name": "_naV10ReadOutbox"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6232,
+        "name": "_naV10StorageWarning"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6233,
+        "name": "_naV10WriteOutboxRecord"
+      },
+      {
+        "kind": "arrow",
+        "line": 6240,
+        "name": "_naV10OutboxDeletion"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6254,
+        "name": "_naV10WriteMirror"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6269,
+        "name": "_naV10GetChannel"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6274,
+        "name": "_naV10PublishCommit"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6278,
+        "name": "_naV10WithExclusiveLock"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6282,
+        "name": "_naV10Attempt"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6283,
+        "name": "_naV10SaleIdempotencyPayload"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6288,
+        "name": "_naV10NormalizeOperationRecord"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6291,
+        "name": "_naV10UpdateAttempt"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6292,
+        "name": "_naV10SpecIdentityPayload"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6293,
+        "name": "_naV10BuildJournalRecord"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6294,
+        "name": "_naV10ActiveAttempt"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6295,
+        "name": "_naV10SameContextValue"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6296,
+        "name": "_naV10RequestContextConflict"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6302,
+        "name": "_naV10AttachStorageWarning"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6303,
+        "name": "_naV10ValidateJournalRecordStrict"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6355,
+        "name": "_naV10JournalEvidence"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6356,
+        "name": "_naV10EnsurePending"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6402,
+        "name": "_naV10ConflictJournal"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6403,
+        "name": "_naV10AnnotatePersistenceError"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6406,
+        "name": "_naV10CasCommit"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6460,
+        "name": "_naRunCriticalOperation"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6486,
+        "name": "_naV10MarkOperationRolledBack"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6490,
+        "name": "_naV10StableSnapshotHash"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6494,
+        "name": "_naV10IsPlainObject"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6495,
+        "name": "_naV10IsJsonSafe"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6524,
+        "name": "_naV10ValidateSnapshotJsonSafe"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6534,
+        "name": "_naV10OutboxEvidence"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6535,
+        "name": "_naV10ResolveOperation"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6578,
+        "name": "_naV10ListRecoverableOperations"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6584,
+        "name": "_naV10PrepareRebase"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6608,
+        "name": "_naV10LegacyData"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6609,
+        "name": "_naV10ReadLegacySnapshot"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6613,
+        "name": "_naV10InitializeCanonical"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6633,
+        "name": "_naV10CreateInitialSnapshot"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6634,
+        "name": "_naV10MigrateFromV9"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6640,
+        "name": "_naV10BuildUiState"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6641,
+        "name": "_naV10UiStateHasFinancialData"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6642,
+        "name": "_naV10Diagnostics"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6651,
+        "name": "_naV10CreditPolicyFrom"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6661,
+        "name": "_naV10RoundMoney"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6662,
+        "name": "_naV10Today"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6663,
+        "name": "_naV10DaysUntil"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6664,
+        "name": "_naV10ItemsTotal"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6665,
+        "name": "_naV10SaleTotal"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6666,
+        "name": "_naV10NormalizedCredit"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6674,
+        "name": "_naV10CreditOutstanding"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6675,
+        "name": "_naV10SaleCreditRecord"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6676,
+        "name": "_naV10SaleItemProfit"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6683,
+        "name": "_naV10SaleRealizationFactor"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6691,
+        "name": "_naV10CreditCompletionDate"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6697,
+        "name": "_naV10CreditHistoryMetrics"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6710,
+        "name": "_naV10EvaluateClientCredit"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6732,
+        "name": "_naV10ResolveSessionCashier"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6738,
+        "name": "_naV10BuildSaleIntent"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6746,
+        "name": "_naV10ItemUnitsPerQty"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6747,
+        "name": "_naV10ItemPhysicalUnits"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6749,
+        "name": "_naV10RevalidateSale"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6807,
+        "name": "_naV10ApplySale"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6844,
+        "name": "_naV10ConfirmSaleIntent"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6858,
+        "name": "_naV10CashIdempotencyPayload"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6864,
+        "name": "_naV10CashStableEqual"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6866,
+        "name": "_naV10CashBuildReceipt"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6885,
+        "name": "_naV10BuildExpenseIntent"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6893,
+        "name": "_naV10BuildCashMoveIntent"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6901,
+        "name": "_naV10RevalidateCashIdentity"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6912,
+        "name": "_naV10RevalidateExpense"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6919,
+        "name": "_naV10RevalidateCashMove"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6927,
+        "name": "_naV10ApplyExpense"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6952,
+        "name": "_naV10ApplyCashMove"
+      },
+      {
+        "kind": "function-decl",
+        "line": 6976,
+        "name": "_naV10VerifyCashHistoricalCommit"
+      },
+      {
+        "kind": "function-decl",
+        "line": 7129,
+        "name": "_naV10ConfirmExpenseIntent"
+      },
+      {
+        "kind": "function-decl",
+        "line": 7146,
+        "name": "_naV10ConfirmCashMoveIntent"
+      }
+    ],
+    "dormant": true,
+    "externalRefs": [],
+    "totalReferences": 359,
+    "v10Start": 6120
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

@@ -1,0 +1,69 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": {
+    "chainLine": 4275,
+    "entrySequence": [
+      "loadAllData",
+      "loadAppState",
+      "loadMasterConfig",
+      "_naInitSecurity",
+      "_naNormalizeData",
+      "renderCategorySelects",
+      "_naApplyConfigUI",
+      "_naInitFreeSaleShortcut",
+      "_naInitBarcodeScanner",
+      "creditos.forEach",
+      "posRender",
+      "posUpdateCart",
+      "invRender",
+      "cfgUpdateStats",
+      "updateDashboard",
+      "saveAllData"
+    ],
+    "listeners": [
+      {
+        "event": "beforeunload",
+        "line": 2344
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 2545
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4273
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4290
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4532
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4594
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4653
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4841
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 4972
+      },
+      {
+        "event": "DOMContentLoaded",
+        "line": 5069
+      }
+    ],
+    "mainEntryLine": 4273,
+    "saveAllDataLine": 4277
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

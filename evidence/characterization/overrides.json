@@ -1,0 +1,2026 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": {
+    "_baseCliRender": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "cliRender"
+        ]
+      },
+      "definedAt": [
+        2693,
+        4527
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4527,
+      "finalKind": "assign-function",
+      "function": "_baseCliRender",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 3
+    },
+    "_baseInvRender": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "invRender"
+        ]
+      },
+      "definedAt": [
+        2607,
+        5075
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 8,
+        "startLine": 5072
+      },
+      "finalImplementation": 5075,
+      "finalKind": "assign-function",
+      "function": "_baseInvRender",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 3
+    },
+    "_baseRenderTicketPreview": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "renderTicketPreview"
+        ]
+      },
+      "definedAt": [
+        2828,
+        5905
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-ticket-print",
+        "index": 13,
+        "startLine": 5903
+      },
+      "finalImplementation": 5905,
+      "finalKind": "assign-function",
+      "function": "_baseRenderTicketPreview",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 3
+    },
+    "_naApplyConfigUI": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naPersistCashierChange",
+          "applyFontSize",
+          "guardarConfig",
+          "setAccent",
+          "toggleCfg"
+        ]
+      },
+      "definedAt": [
+        3310,
+        4526
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4526,
+      "finalKind": "assign-function",
+      "function": "_naApplyConfigUI",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 12
+    },
+    "_naAudit": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF10AddSaleNote",
+          "_naF10AuthorizePermission",
+          "_naF10DownloadSnapshot",
+          "_naF10ExportAuditCsv",
+          "_naF10MasterOverride",
+          "_naF10SavePermissions",
+          "_naF10SetCashierPin",
+          "_naF10SetCashierRole",
+          "_naF10VerifyCashierPin",
+          "_naVerifyPin",
+          "abrirDescuento",
+          "anularV",
+          "aplicarDescuentoPorcentaje",
+          "cashierAddFromConfig",
+          "cashierRenameFromConfig",
+          "cashierSelectActive",
+          "cashierToggleFromConfig",
+          "cerrarCaja",
+          "confirmarVentaLibre",
+          "creditPolicySetNumber",
+          "creditPolicyToggleEnabled",
+          "freeSaleSetShortcut",
+          "freeSaleToggleSetting",
+          "guardarConfig",
+          "guardarLineaCreditoManual",
+          "importProducts",
+          "importarRespaldo",
+          "posAdd",
+          "resetModule",
+          "restaurarLineaCreditoAutomatica",
+          "securityExportLog",
+          "securityLockNow",
+          "securitySetAutoLock",
+          "securitySetMaxDiscount",
+          "securitySetPin",
+          "securityToggleOption",
+          "securityTogglePin",
+          "securityUnlock",
+          "toggleMasterLock",
+          "toggleModuleLock",
+          "toggleReadOnly"
+        ]
+      },
+      "definedAt": [
+        3040,
+        4743
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4743,
+      "finalKind": "assign-function",
+      "function": "_naAudit",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 51
+    },
+    "_naAuthorize": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "abrirDescuento",
+          "anularV",
+          "applyFontSize",
+          "cashierAddFromConfig",
+          "cashierRenameFromConfig",
+          "cashierSelectActive",
+          "cashierToggleFromConfig",
+          "cerrarCaja",
+          "creditPolicySetNumber",
+          "creditPolicyToggleEnabled",
+          "freeSaleSetShortcut",
+          "freeSaleToggleSetting",
+          "guardarConfig",
+          "importProducts",
+          "importarRespaldo",
+          "resetModule",
+          "setAccent",
+          "toggleCfg",
+          "toggleMasterLock",
+          "toggleModuleLock",
+          "toggleReadOnly"
+        ]
+      },
+      "definedAt": [
+        3043,
+        4740
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4740,
+      "finalKind": "assign-function",
+      "function": "_naAuthorize",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 27
+    },
+    "_naBuildThermalTicket": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naCrearTicketTexto"
+        ]
+      },
+      "definedAt": [
+        2789,
+        4957
+      ],
+      "domain": "ticket",
+      "finalBlock": {
+        "id": null,
+        "index": 6,
+        "startLine": 4844
+      },
+      "finalImplementation": 4957,
+      "finalKind": "assign-function",
+      "function": "_naBuildThermalTicket",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 8
+    },
+    "_naF10RenderSalesAdmin": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF10AddSaleNote",
+          "_naF10AdminAnnulSale",
+          "_naF10OpenSalesAdmin"
+        ]
+      },
+      "definedAt": [
+        4785,
+        5269
+      ],
+      "domain": "fase10",
+      "finalBlock": {
+        "id": "na-security-sales-render",
+        "index": 9,
+        "startLine": 5096
+      },
+      "finalImplementation": 5269,
+      "finalKind": "assign-function",
+      "function": "_naF10RenderSalesAdmin",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 7
+    },
+    "_naF12RenderVisual": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF12ChooseEmoji",
+          "_naF12ManualIconChanged",
+          "_naF12ProductNameChanged",
+          "_naF12RemoveProductImage",
+          "_naF12SaveCustomIcon",
+          "abrirModalProd",
+          "editProd",
+          "previewImagen"
+        ]
+      },
+      "definedAt": [
+        5038,
+        5850
+      ],
+      "domain": "fase12",
+      "finalBlock": {
+        "id": "na-security-image-preview",
+        "index": 12,
+        "startLine": 5829
+      },
+      "finalImplementation": 5850,
+      "finalKind": "assign-function",
+      "function": "_naF12RenderVisual",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 13
+    },
+    "_naF8ExportReport": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        4593,
+        4823
+      ],
+      "domain": "fase8",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4823,
+      "finalKind": "assign-function",
+      "function": "_naF8ExportReport",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "_naF9Export": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF9RenderSuggestions"
+        ]
+      },
+      "definedAt": [
+        4645,
+        4825
+      ],
+      "domain": "fase9",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4825,
+      "finalKind": "assign-function",
+      "function": "_naF9Export",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "_naHydrateTicket": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "abrirDisenadorTicket",
+          "verTicket"
+        ]
+      },
+      "definedAt": [
+        3308,
+        4967
+      ],
+      "domain": "ticket",
+      "finalBlock": {
+        "id": null,
+        "index": 6,
+        "startLine": 4844
+      },
+      "finalImplementation": 4967,
+      "finalKind": "assign-function",
+      "function": "_naHydrateTicket",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "_naNormalizeCashier": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF10CashierCardsHtml",
+          "_naF10ControlHtml",
+          "_naF10HasPermission",
+          "_naF10OpenCashierPermissions",
+          "_naF10PermissionCount",
+          "_naSanitizeAppConfig"
+        ]
+      },
+      "definedAt": [
+        3133,
+        4732
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4732,
+      "finalKind": "assign-function",
+      "function": "_naNormalizeCashier",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 10
+    },
+    "_naNormalizeData": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "confirmProductImport"
+        ]
+      },
+      "definedAt": [
+        3279,
+        4652
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": "na-fase9-sugerencia-js",
+        "index": 4,
+        "startLine": 4608
+      },
+      "finalImplementation": 4652,
+      "finalKind": "assign-function",
+      "function": "_naNormalizeData",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 9
+    },
+    "_naPaymentState": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naValidatePaymentForm"
+        ]
+      },
+      "definedAt": [
+        3494,
+        4513
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4513,
+      "finalKind": "assign-function",
+      "function": "_naPaymentState",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 5
+    },
+    "_naPopulateCreditClients": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "abrirCobro"
+        ]
+      },
+      "definedAt": [
+        3428,
+        4518
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4518,
+      "finalKind": "assign-function",
+      "function": "_naPopulateCreditClients",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 3
+    },
+    "_naSanitizeAppConfig": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        4077,
+        4750
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4750,
+      "finalKind": "assign-function",
+      "function": "_naSanitizeAppConfig",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "_naSanitizeSale": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        4032,
+        4755
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4755,
+      "finalKind": "assign-function",
+      "function": "_naSanitizeSale",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "_naSanitizeSecurity": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        4119,
+        4752
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4752,
+      "finalKind": "assign-function",
+      "function": "_naSanitizeSecurity",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "_naSaveTicketSettings": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naCrearTicketTexto",
+          "guardarConfig",
+          "renderTicketPreview"
+        ]
+      },
+      "definedAt": [
+        3307,
+        4965
+      ],
+      "domain": "ticket",
+      "finalBlock": {
+        "id": null,
+        "index": 6,
+        "startLine": 4844
+      },
+      "finalImplementation": 4965,
+      "finalKind": "assign-function",
+      "function": "_naSaveTicketSettings",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 11
+    },
+    "_naSecurityLogHtml": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3062,
+        4746
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4746,
+      "finalKind": "assign-function",
+      "function": "_naSecurityLogHtml",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 3
+    },
+    "abrirCaja": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3603,
+        4815
+      ],
+      "domain": "caja",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4815,
+      "finalKind": "assign-function",
+      "function": "abrirCaja",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "abrirCobro": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3503,
+        4517
+      ],
+      "domain": "venta",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4517,
+      "finalKind": "assign-function",
+      "function": "abrirCobro",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 5
+    },
+    "abrirCred": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        2712,
+        4501,
+        4805,
+        5603
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-credit-render",
+        "index": 11,
+        "startLine": 5454
+      },
+      "finalImplementation": 5603,
+      "finalKind": "assign-function",
+      "function": "abrirCred",
+      "kinds": [
+        "function-decl",
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 10
+    },
+    "abrirDescuento": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3425,
+        4239
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4239,
+      "finalKind": "assign-function",
+      "function": "abrirDescuento",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "abrirDetalleCredito": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3270,
+        5638
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-credit-render",
+        "index": 11,
+        "startLine": 5454
+      },
+      "finalImplementation": 5638,
+      "finalKind": "assign-function",
+      "function": "abrirDetalleCredito",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "abrirModalApertura": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "cajRender"
+        ]
+      },
+      "definedAt": [
+        3602,
+        4813
+      ],
+      "domain": "caja",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4813,
+      "finalKind": "assign-function",
+      "function": "abrirModalApertura",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "abrirModalCli": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        2709,
+        4263,
+        4801
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4801,
+      "finalKind": "assign-function",
+      "function": "abrirModalCli",
+      "kinds": [
+        "function-decl",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "abrirModalGasto": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3017,
+        4265,
+        4821
+      ],
+      "domain": "gastos",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4821,
+      "finalKind": "assign-function",
+      "function": "abrirModalGasto",
+      "kinds": [
+        "function-decl",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "abrirModalProd": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3531,
+        4793,
+        5062
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 7,
+        "startLine": 5016
+      },
+      "finalImplementation": 5062,
+      "finalKind": "assign-function",
+      "function": "abrirModalProd",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 7
+    },
+    "abrirMovCaja": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3604,
+        4817
+      ],
+      "domain": "caja",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4817,
+      "finalKind": "assign-function",
+      "function": "abrirMovCaja",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 8
+    },
+    "abrirMovInv": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_baseInvRender"
+        ]
+      },
+      "definedAt": [
+        3557,
+        4797
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4797,
+      "finalKind": "assign-function",
+      "function": "abrirMovInv",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 7
+    },
+    "abrirPago": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        2714,
+        4809,
+        5615
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-credit-render",
+        "index": 11,
+        "startLine": 5454
+      },
+      "finalImplementation": 5615,
+      "finalKind": "assign-function",
+      "function": "abrirPago",
+      "kinds": [
+        "function-decl",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 9
+    },
+    "anularV": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF10AdminAnnulSale"
+        ]
+      },
+      "definedAt": [
+        3670,
+        4243
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4243,
+      "finalKind": "assign-function",
+      "function": "anularV",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "aplicarDescuentoPorcentaje": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "abrirDescuento"
+        ]
+      },
+      "definedAt": [
+        3426,
+        4241
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4241,
+      "finalKind": "assign-function",
+      "function": "aplicarDescuentoPorcentaje",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "applyFontSize": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3798,
+        4257
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4257,
+      "finalKind": "assign-function",
+      "function": "applyFontSize",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "cajRender": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "abrirCaja",
+          "cajSetTab",
+          "goPage"
+        ]
+      },
+      "definedAt": [
+        3647,
+        5415
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-cash-render",
+        "index": 10,
+        "startLine": 5314
+      },
+      "finalImplementation": 5415,
+      "finalKind": "assign-function",
+      "function": "cajRender",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 15
+    },
+    "calcularScoreCredito": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "abrirCred"
+        ]
+      },
+      "definedAt": [
+        3562,
+        4486
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4486,
+      "finalKind": "assign-function",
+      "function": "calcularScoreCredito",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "cashierAddFromConfig": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naCashierConfigHtml"
+        ]
+      },
+      "definedAt": [
+        3163,
+        4831
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4831,
+      "finalKind": "assign-function",
+      "function": "cashierAddFromConfig",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "cashierRenameFromConfig": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naCashierConfigHtml"
+        ]
+      },
+      "definedAt": [
+        3164,
+        4833
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4833,
+      "finalKind": "assign-function",
+      "function": "cashierRenameFromConfig",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "cashierToggleFromConfig": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naCashierConfigHtml"
+        ]
+      },
+      "definedAt": [
+        3165,
+        4835
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4835,
+      "finalKind": "assign-function",
+      "function": "cashierToggleFromConfig",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "cerrarCaja": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": [
+          "_naAuthorize"
+        ]
+      },
+      "definedAt": [
+        3627,
+        4245
+      ],
+      "domain": "caja",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4245,
+      "finalKind": "assign-function",
+      "function": "cerrarCaja",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 8
+    },
+    "cliRender": {
+      "callersStatic": {
+        "attributes": [
+          "onchange",
+          "oninput"
+        ],
+        "functions": [
+          "cliSetTab",
+          "creditPolicySetNumber",
+          "creditPolicyToggleEnabled",
+          "goPage",
+          "guardarLineaCreditoManual",
+          "restaurarLineaCreditoAutomatica"
+        ]
+      },
+      "definedAt": [
+        3598,
+        5571
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-credit-render",
+        "index": 11,
+        "startLine": 5454
+      },
+      "finalImplementation": 5571,
+      "finalKind": "assign-function",
+      "function": "cliRender",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 23
+    },
+    "confirmarPago": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3590,
+        4811
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4811,
+      "finalKind": "assign-function",
+      "function": "confirmarPago",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "confirmarVenta": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3508,
+        4791
+      ],
+      "domain": "venta",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4791,
+      "finalKind": "assign-function",
+      "function": "confirmarVenta",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 7
+    },
+    "editProd": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_baseInvRender",
+          "_naF9EditProduct"
+        ]
+      },
+      "definedAt": [
+        2678,
+        5064
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 7,
+        "startLine": 5016
+      },
+      "finalImplementation": 5064,
+      "finalKind": "assign-function",
+      "function": "editProd",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "exportProductsExcel": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3913,
+        4827
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4827,
+      "finalKind": "assign-function",
+      "function": "exportProductsExcel",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "exportarRespaldo": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        4181,
+        4829
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4829,
+      "finalKind": "assign-function",
+      "function": "exportarRespaldo",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "gasRender": {
+      "callersStatic": {
+        "attributes": [
+          "onchange",
+          "oninput"
+        ],
+        "functions": [
+          "gasSetTab",
+          "goPage"
+        ]
+      },
+      "definedAt": [
+        3016,
+        6060
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-expense-render",
+        "index": 15,
+        "startLine": 6058
+      },
+      "finalImplementation": 6060,
+      "finalKind": "assign-function",
+      "function": "gasRender",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 11
+    },
+    "guardarCli": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3563,
+        4803
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4803,
+      "finalKind": "assign-function",
+      "function": "guardarCli",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "guardarConfig": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3796,
+        4253
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4253,
+      "finalKind": "assign-function",
+      "function": "guardarConfig",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "guardarCred": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3579,
+        4502,
+        4807
+      ],
+      "domain": "clientes/creditos",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4807,
+      "finalKind": "assign-function",
+      "function": "guardarCred",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 5
+    },
+    "guardarMovCaja": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3606,
+        4819
+      ],
+      "domain": "caja",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4819,
+      "finalKind": "assign-function",
+      "function": "guardarMovCaja",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "guardarMovInv": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3558,
+        4799,
+        6099
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 16,
+        "startLine": 6096
+      },
+      "finalImplementation": 6099,
+      "finalKind": "assign-function",
+      "function": "guardarMovInv",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 5
+    },
+    "guardarProd": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3533,
+        4795,
+        5068
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 7,
+        "startLine": 5016
+      },
+      "finalImplementation": 5068,
+      "finalKind": "assign-function",
+      "function": "guardarProd",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 6
+    },
+    "importProducts": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3907,
+        4249
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4249,
+      "finalKind": "assign-function",
+      "function": "importProducts",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "importarRespaldo": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        4182,
+        4251
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4251,
+      "finalKind": "assign-function",
+      "function": "importarRespaldo",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "imprimirTicketSistema": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        2998,
+        5930
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-ticket-print",
+        "index": 13,
+        "startLine": 5903
+      },
+      "finalImplementation": 5930,
+      "finalKind": "assign-function",
+      "function": "imprimirTicketSistema",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 3
+    },
+    "invBadges": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_baseInvRender",
+          "goPage",
+          "invRender"
+        ]
+      },
+      "definedAt": [
+        3744,
+        4647
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": "na-fase9-sugerencia-js",
+        "index": 4,
+        "startLine": 4608
+      },
+      "finalImplementation": 4647,
+      "finalKind": "assign-function",
+      "function": "invBadges",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 7
+    },
+    "invRender": {
+      "callersStatic": {
+        "attributes": [
+          "onchange",
+          "oninput"
+        ],
+        "functions": [
+          "_baseInvSetTab",
+          "aplicarStockMinATodos",
+          "confirmProductImport",
+          "goPage",
+          "guardarMovInv",
+          "reclasificarCatalogo",
+          "toggleCfg"
+        ]
+      },
+      "definedAt": [
+        3745,
+        4649
+      ],
+      "domain": "inventario",
+      "finalBlock": {
+        "id": "na-fase9-sugerencia-js",
+        "index": 4,
+        "startLine": 4608
+      },
+      "finalImplementation": 4649,
+      "finalKind": "assign-function",
+      "function": "invRender",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 25
+    },
+    "posAddBySku": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3413,
+        4261
+      ],
+      "domain": "venta",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4261,
+      "finalKind": "assign-function",
+      "function": "posAddBySku",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "posRender": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naInitFreeSaleShortcut",
+          "aplicarStockMinATodos",
+          "confirmProductImport",
+          "freeSaleToggleSetting",
+          "goPage",
+          "guardarMovInv",
+          "posFilter",
+          "reclasificarCatalogo",
+          "toggleCfg",
+          "toggleMayorista"
+        ]
+      },
+      "definedAt": [
+        3410,
+        5976
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-pos-render",
+        "index": 14,
+        "startLine": 5954
+      },
+      "finalImplementation": 5976,
+      "finalKind": "assign-function",
+      "function": "posRender",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 26
+    },
+    "posUpdateCart": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "aplicarDescuentoPorcentaje",
+          "cancelarVenta",
+          "confirmarVentaLibre",
+          "goPage",
+          "posAdd",
+          "posQty",
+          "posRm",
+          "toggleCfg"
+        ]
+      },
+      "definedAt": [
+        3416,
+        6025
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-pos-render",
+        "index": 14,
+        "startLine": 5954
+      },
+      "finalImplementation": 6025,
+      "finalKind": "assign-function",
+      "function": "posUpdateCart",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 21
+    },
+    "previewImagen": {
+      "callersStatic": {
+        "attributes": [
+          "onchange"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3532,
+        5066,
+        5855
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-image-preview",
+        "index": 12,
+        "startLine": 5829
+      },
+      "finalImplementation": 5855,
+      "finalKind": "assign-function",
+      "function": "previewImagen",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 5
+    },
+    "renderCfgContent": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": [
+          "_naF10SavePermissions",
+          "_naF10SetCashierPin",
+          "_naF10SetCashierRole",
+          "_naPersistCashierChange",
+          "applyFontSize",
+          "cashierSelectActive",
+          "creditPolicySetNumber",
+          "creditPolicyToggleEnabled",
+          "freeSaleSetShortcut",
+          "freeSaleToggleSetting",
+          "securityClearLog",
+          "securitySetAutoLock",
+          "securitySetPin",
+          "securityToggleOption",
+          "securityTogglePin",
+          "setAccent",
+          "switchCfgCategory",
+          "toggleCfg",
+          "toggleMasterLock",
+          "toggleModuleLock",
+          "toggleReadOnly"
+        ]
+      },
+      "definedAt": [
+        3757,
+        4522,
+        4763
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4763,
+      "finalKind": "assign-function",
+      "function": "renderCfgContent",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 46
+    },
+    "resetModule": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3806,
+        4247,
+        4839
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4839,
+      "finalKind": "assign-function",
+      "function": "resetModule",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 11
+    },
+    "selPM": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": []
+      },
+      "definedAt": [
+        3504,
+        4515
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": "na-fase7-credit-js",
+        "index": 2,
+        "startLine": 4447
+      },
+      "finalImplementation": 4515,
+      "finalKind": "assign-function",
+      "function": "selPM",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 8
+    },
+    "setAccent": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3799,
+        4259
+      ],
+      "domain": "base",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4259,
+      "finalKind": "assign-function",
+      "function": "setAccent",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 7
+    },
+    "switchCfgCategory": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": [
+          "_naF10GoModule",
+          "goPage"
+        ]
+      },
+      "definedAt": [
+        3795,
+        4765
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 5,
+        "startLine": 4697
+      },
+      "finalImplementation": 4765,
+      "finalKind": "assign-function",
+      "function": "switchCfgCategory",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 13
+    },
+    "toggleCfg": {
+      "callersStatic": {
+        "attributes": [],
+        "functions": []
+      },
+      "definedAt": [
+        3797,
+        4255
+      ],
+      "domain": "config",
+      "finalBlock": {
+        "id": null,
+        "index": 1,
+        "startLine": 2271
+      },
+      "finalImplementation": 4255,
+      "finalKind": "assign-function",
+      "function": "toggleCfg",
+      "kinds": [
+        "assign-function",
+        "assign-function"
+      ],
+      "references": 4
+    },
+    "ventasRender": {
+      "callersStatic": {
+        "attributes": [
+          "onchange",
+          "oninput"
+        ],
+        "functions": [
+          "_naF8CustomRangeChanged",
+          "_naF8ReportPeriodChanged",
+          "goPage",
+          "ventasSetTab"
+        ]
+      },
+      "definedAt": [
+        3651,
+        4590,
+        5260
+      ],
+      "domain": "security-render",
+      "finalBlock": {
+        "id": "na-security-sales-render",
+        "index": 9,
+        "startLine": 5096
+      },
+      "finalImplementation": 5260,
+      "finalKind": "alias",
+      "function": "ventasRender",
+      "kinds": [
+        "assign-function",
+        "assign-function",
+        "alias"
+      ],
+      "references": 17
+    },
+    "ventasSetTab": {
+      "callersStatic": {
+        "attributes": [
+          "onclick"
+        ],
+        "functions": [
+          "_naF10GoModule"
+        ]
+      },
+      "definedAt": [
+        2753,
+        4563
+      ],
+      "domain": "venta",
+      "finalBlock": {
+        "id": "na-fase8-reportes-js",
+        "index": 3,
+        "startLine": 4549
+      },
+      "finalImplementation": 4563,
+      "finalKind": "assign-function",
+      "function": "ventasSetTab",
+      "kinds": [
+        "function-decl",
+        "assign-function"
+      ],
+      "references": 8
+    }
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

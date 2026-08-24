@@ -1,0 +1,33 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": {
+    "external": [
+      {
+        "line": 8,
+        "tag": "link",
+        "url": "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap"
+      },
+      {
+        "line": 9,
+        "tag": "script",
+        "url": "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"
+      }
+    ],
+    "links": [
+      {
+        "href": "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap",
+        "line": 8,
+        "rel": "stylesheet"
+      }
+    ],
+    "scripts": [
+      {
+        "async": false,
+        "defer": true,
+        "line": 9,
+        "src": "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"
+      }
+    ]
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

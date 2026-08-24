@@ -1,0 +1,20 @@
+{
+  "result": "IDENTICAL_TO_BASELINE",
+  "sourceA": {
+    "commit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+    "blob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+    "note": "authorized baseline fixture"
+  },
+  "sourceB": {
+    "path": "CVV2.4_backup_antes_demo-1.html",
+    "blob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+    "shortBlob": "2dec636",
+    "note": "working tree, identical to authorized baseline"
+  },
+  "diff": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  },
+  "historicalReference": "known-divergence-historical.json"
+}

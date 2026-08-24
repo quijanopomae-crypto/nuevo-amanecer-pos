@@ -1,0 +1,34 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "fingerprints": {
+    "domFingerprint": {
+      "source": "sha256(canonical dom-ids.json: static ids + dynamic template id count)",
+      "value": "49edad801e5261884f0ce3f2bf0482eb61d5408fbeaa706dbbb6ba9775bded39"
+    },
+    "globalApiFingerprint": {
+      "source": "sha256(canonical sorted global declarations (name/kind/line))",
+      "value": "34b44312e8c6e545d709a18353004a6658e99b91badb1d77751fc1c12f50703d"
+    },
+    "knownFailuresFingerprint": {
+      "source": "sha256(canonical known_baselines block)",
+      "value": "e7d01525c8a553d58cc49403e363dcda08fac4cc38f6e705038476a9143cf653"
+    },
+    "overrideMapFingerprint": {
+      "source": "sha256(canonical overrideMap: all functions with >1 definition)",
+      "value": "ebb52a0c2dabf8e5baa2d3c8eed0b1752231603630f49f8eebec8a7dde15f43a"
+    },
+    "storageFingerprint": {
+      "source": "sha256(canonical storage-static.json inventory)",
+      "value": "bebd7f0bb60731f0418f67f6c56e6f00a2cc917179891b21da33de58227dd426"
+    },
+    "v10BaselineFingerprint": {
+      "source": "sha256(canonical v10-dormancy.json)",
+      "value": "13257bf2807015d0b5ef954197239f60963fbc84a41d214b697bd10d4504bc8f"
+    },
+    "v9BaselineFingerprint": {
+      "source": "sha256(canonical V9-only overrides + globals + storage + startup)",
+      "value": "371323a59b8cc83dedd263ff9a9b461d4884d104dce21bf6ed8665096dd8f87f"
+    }
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

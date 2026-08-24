@@ -1,0 +1,1344 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": [
+    {
+      "initSnippet": "(()=>{",
+      "kind": "const",
+      "line": 2273,
+      "name": "storage"
+    },
+    {
+      "initSnippet": "n=>`S/ ${parseFloat(n||0).toFixed(2)}`;",
+      "kind": "const",
+      "line": 2296,
+      "name": "fmt"
+    },
+    {
+      "initSnippet": "n=>`S/${parseFloat(n||0).toFixed(0)}`;",
+      "kind": "const",
+      "line": 2297,
+      "name": "fmtS"
+    },
+    {
+      "initSnippet": "()=>new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});",
+      "kind": "const",
+      "line": 2298,
+      "name": "nowT"
+    },
+    {
+      "initSnippet": "obtenerHoy;",
+      "kind": "const",
+      "line": 2300,
+      "name": "HOY"
+    },
+    {
+      "initSnippet": "s=>{if(!s)return null;const d=new Date(String(s).slice(0,10)+'T00:00:00');if(Number.isNaN(d.getTime()))return null;const hoyD=new Date(obtenerHoy()+'T00:00:00')",
+      "kind": "const",
+      "line": 2301,
+      "name": "diasHasta"
+    },
+    {
+      "initSnippet": "str=>str.normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g,\"\");",
+      "kind": "const",
+      "line": 2302,
+      "name": "sinTildes"
+    },
+    {
+      "initSnippet": "n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();",
+      "kind": "const",
+      "line": 2303,
+      "name": "initials"
+    },
+    {
+      "initSnippet": "['#00bca4','#ff7043','#a855f7','#3b82f6','#f59e0b','#ef4444','#22c55e','#64748b'];",
+      "kind": "const",
+      "line": 2304,
+      "name": "COLORS"
+    },
+    {
+      "initSnippet": "i=>COLORS[i%8];",
+      "kind": "const",
+      "line": 2305,
+      "name": "colorFor"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 2308,
+      "name": "imagenProducto"
+    },
+    {
+      "initSnippet": "id=>document.getElementById(id).classList.remove('open');",
+      "kind": "const",
+      "line": 2309,
+      "name": "cerrarModal"
+    },
+    {
+      "initSnippet": "(msg,type='')=>{const t=document.getElementById('gToast');t.textContent=msg;t.className='toast'+(type?' '+type:'');t.classList.add('show');setTimeout(()=>t.clas",
+      "kind": "const",
+      "line": 2310,
+      "name": "toast"
+    },
+    {
+      "initSnippet": "{igvActive:true,margenActive:true,stockAlertActive:true,printAuto:false,mayoristaActive:true,alertsEnabled:true,stockMin:'5'};",
+      "kind": "let",
+      "line": 2337,
+      "name": "appConfig"
+    },
+    {
+      "initSnippet": "[{\"id\":1,\"name\":\"cuates x 44 gr\",\"sku\":\"798190256177\",\"barcode\":\"798190243160\",\"cat\":\"snacks\",\"icon\":\"🍪\",\"imagen\":null,\"costo\":0.77,\"precio\":1.0,\"precioCaja\":n",
+      "kind": "let",
+      "line": 2351,
+      "name": "productos"
+    },
+    {
+      "initSnippet": "[]",
+      "kind": "let",
+      "line": 2352,
+      "name": "cart"
+    },
+    {
+      "initSnippet": "'todo'",
+      "kind": "let",
+      "line": 2352,
+      "name": "posCat"
+    },
+    {
+      "initSnippet": "false",
+      "kind": "let",
+      "line": 2352,
+      "name": "posProc"
+    },
+    {
+      "initSnippet": "'efectivo'",
+      "kind": "let",
+      "line": 2352,
+      "name": "posPayM"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 2352,
+      "name": "modoMayorista"
+    },
+    {
+      "initSnippet": "'20250922_xlsx';",
+      "kind": "const",
+      "line": 2353,
+      "name": "_NA_SEED_CATALOG_VERSION"
+    },
+    {
+      "initSnippet": "JSON.parse(JSON.stringify(productos));",
+      "kind": "const",
+      "line": 2354,
+      "name": "_NA_SEED_PRODUCTOS"
+    },
+    {
+      "initSnippet": "'na_app_initialized_v1';",
+      "kind": "const",
+      "line": 2355,
+      "name": "_NA_APP_INITIALIZED_KEY"
+    },
+    {
+      "initSnippet": "'na_seed_catalog_version';",
+      "kind": "const",
+      "line": 2356,
+      "name": "_NA_SEED_VERSION_KEY"
+    },
+    {
+      "initSnippet": "'na_seed_catalog_suppressed';",
+      "kind": "const",
+      "line": 2357,
+      "name": "_NA_SEED_SUPPRESSED_KEY"
+    },
+    {
+      "initSnippet": "{enabled:true,sound:true,minLength:4,maxIntervalMs:65};",
+      "kind": "const",
+      "line": 2454,
+      "name": "_NA_SCANNER_DEFAULTS"
+    },
+    {
+      "initSnippet": "{buffer:'',times:[],resetTimer:null,statusTimer:null,lastCode:'',lastProcessedAt:0,audioContext:null};",
+      "kind": "const",
+      "line": 2455,
+      "name": "_naScannerState"
+    },
+    {
+      "initSnippet": "{allowRegisteredNoStock:false,allowGenericSale:true,shortcut:'F2'};",
+      "kind": "const",
+      "line": 2531,
+      "name": "_NA_FREE_SALE_DEFAULTS"
+    },
+    {
+      "initSnippet": "{buffer:'',lastAt:0,ready:false};",
+      "kind": "const",
+      "line": 2532,
+      "name": "_naFreeSaleShortcutState"
+    },
+    {
+      "initSnippet": "0;",
+      "kind": "let",
+      "line": 2533,
+      "name": "_naFreeSaleTempSeq"
+    },
+    {
+      "initSnippet": "'todos'",
+      "kind": "let",
+      "line": 2595,
+      "name": "invTab"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 2595,
+      "name": "invMovId"
+    },
+    {
+      "initSnippet": "'entrada';",
+      "kind": "let",
+      "line": 2595,
+      "name": "invMovT"
+    },
+    {
+      "initSnippet": "10;",
+      "kind": "const",
+      "line": 2609,
+      "name": "NA_MAX_ALT_BARCODES"
+    },
+    {
+      "initSnippet": "[];",
+      "kind": "let",
+      "line": 2687,
+      "name": "clientes"
+    },
+    {
+      "initSnippet": "[];",
+      "kind": "let",
+      "line": 2688,
+      "name": "creditos"
+    },
+    {
+      "initSnippet": "'todos'",
+      "kind": "let",
+      "line": 2689,
+      "name": "cliTab"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 2689,
+      "name": "cliCredId"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 2689,
+      "name": "pagoCredId"
+    },
+    {
+      "initSnippet": "0",
+      "kind": "let",
+      "line": 2689,
+      "name": "cobradoHoy"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 2689,
+      "name": "pagoProc"
+    },
+    {
+      "initSnippet": "c=>creditos.filter(x=>String(x.cliId)===String(c.id)&&!x.anulado&&_naSyncCreditStatus(x)!=='cancelado').reduce((a,x)=>a+Math.max(0,_naNumber(x.monto)-_naNumber(",
+      "kind": "const",
+      "line": 2690,
+      "name": "deudaT"
+    },
+    {
+      "initSnippet": "{ing:['Venta retail','Venta bebidas','Venta snacks','Venta limpieza','Otro ingreso'],egr:['Retiro de caja','Pago a proveedor','Pago servicios','Otro egreso'],co",
+      "kind": "const",
+      "line": 2725,
+      "name": "CAJ_CATS"
+    },
+    {
+      "initSnippet": "{ing:'💵',egr:'💸',cob:'🤝',gas:'🧾'}",
+      "kind": "const",
+      "line": 2726,
+      "name": "CAJ_IC"
+    },
+    {
+      "initSnippet": "{ing:'Ingreso',egr:'Egreso',cob:'Cobro crédito',gas:'Gasto'}",
+      "kind": "const",
+      "line": 2726,
+      "name": "CAJ_LBL"
+    },
+    {
+      "initSnippet": "{ing:'green',egr:'red',cob:'teal',gas:'amber'};",
+      "kind": "const",
+      "line": 2726,
+      "name": "CAJ_COL"
+    },
+    {
+      "initSnippet": "{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:obtenerHoy(),cerrada:true,horaCierre:null,horaCierre24:null,sessi",
+      "kind": "let",
+      "line": 2727,
+      "name": "cajEstado"
+    },
+    {
+      "initSnippet": "[];",
+      "kind": "let",
+      "line": 2728,
+      "name": "cajMovs"
+    },
+    {
+      "initSnippet": "'resumen'",
+      "kind": "let",
+      "line": 2729,
+      "name": "cajTab"
+    },
+    {
+      "initSnippet": "'ing';",
+      "kind": "let",
+      "line": 2729,
+      "name": "cajMovTipo"
+    },
+    {
+      "initSnippet": "[];",
+      "kind": "let",
+      "line": 2751,
+      "name": "ventas"
+    },
+    {
+      "initSnippet": "v=>Number((Array.isArray(v?.items)?v.items:[]).reduce((a,i)=>a+_naNumber(i.precio??i.precioUnitario)*_naNumber(i.qty??i.cantidad),0).toFixed(2));let ventasTab='",
+      "kind": "const",
+      "line": 2752,
+      "name": "totalV"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 2769,
+      "name": "tkCurrentVenta"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 2835,
+      "name": "_naPrinterPort"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 2835,
+      "name": "_naPrinterConnectionType"
+    },
+    {
+      "initSnippet": "[];",
+      "kind": "let",
+      "line": 2835,
+      "name": "_naAuthorizedPrinterPorts"
+    },
+    {
+      "initSnippet": "[];",
+      "kind": "let",
+      "line": 3012,
+      "name": "gastos"
+    },
+    {
+      "initSnippet": "'hoy';const CAT_ICONS={'Servicios':'💡','Proveedor':'📦','Operativo':'🏪','Personal':'👤','Transporte':'🚗','Otro':'📋'};",
+      "kind": "let",
+      "line": 3013,
+      "name": "gasTab"
+    },
+    {
+      "initSnippet": "{master:'na_master_lock',readOnly:'na_readonly',modules:{productos:'na_lock_productos',ventas:'na_lock_ventas',caja:'na_lock_caja',clientes:'na_lock_clientes',g",
+      "kind": "const",
+      "line": 3027,
+      "name": "LOCK_KEYS"
+    },
+    {
+      "initSnippet": "'na_security_v26';",
+      "kind": "const",
+      "line": 3028,
+      "name": "SECURITY_KEY"
+    },
+    {
+      "initSnippet": "{",
+      "kind": "const",
+      "line": 3029,
+      "name": "SECURITY_DEFAULTS"
+    },
+    {
+      "initSnippet": "_naLoadSecurity()",
+      "kind": "let",
+      "line": 3037,
+      "name": "_naSecurity"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 3037,
+      "name": "_naAutoLockTimer"
+    },
+    {
+      "initSnippet": "storage.getItem('na_cfg_category')||'negocio';",
+      "kind": "let",
+      "line": 3089,
+      "name": "currentCfgCategory"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 3096,
+      "name": "isDark"
+    },
+    {
+      "initSnippet": "{",
+      "kind": "const",
+      "line": 3100,
+      "name": "_naDefaults"
+    },
+    {
+      "initSnippet": "(base,extra)=>({...base,...(extra||{}),business:{...base.business,...(extra?.business||{})},appearance:{...base.appearance,...(extra?.appearance||{})},scanner:{",
+      "kind": "const",
+      "line": 3117,
+      "name": "_naMerge"
+    },
+    {
+      "initSnippet": "value=>String(value??'').replace(/[&<>'\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',\"'\":'&#39;','\"':'&quot;'}[ch]));",
+      "kind": "const",
+      "line": 3119,
+      "name": "_naEsc"
+    },
+    {
+      "initSnippet": "value=>String(value??'').replace(/[<>]/g,'').trim();",
+      "kind": "const",
+      "line": 3120,
+      "name": "_naClean"
+    },
+    {
+      "initSnippet": "(value,fallback=0)=>{if(typeof value==='number')return Number.isFinite(value)?value:fallback;let str=String(value??'').trim().replace(/\\s/g,'');if(!str)return f",
+      "kind": "const",
+      "line": 3121,
+      "name": "_naNumber"
+    },
+    {
+      "initSnippet": "(value,fallback=0)=>{const n=Math.trunc(_naNumber(value,NaN));return Number.isFinite(n)?n:fallback;};",
+      "kind": "const",
+      "line": 3122,
+      "name": "_naInt"
+    },
+    {
+      "initSnippet": "days=>{const d=new Date(obtenerHoy()+'T12:00:00');d.setDate(d.getDate()+days);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getD",
+      "kind": "const",
+      "line": 3123,
+      "name": "_naDatePlus"
+    },
+    {
+      "initSnippet": "item=>Math.max(1,_naInt(item?.unitsPerQty,1));",
+      "kind": "const",
+      "line": 3124,
+      "name": "_naUnitsPerQty"
+    },
+    {
+      "initSnippet": "item=>Math.max(0,_naNumber(item?.qty,0))*_naUnitsPerQty(item);",
+      "kind": "const",
+      "line": 3125,
+      "name": "_naUnitsSold"
+    },
+    {
+      "initSnippet": "(id,mode='unidad')=>`${id}-${mode}`;",
+      "kind": "const",
+      "line": 3126,
+      "name": "_naLineKey"
+    },
+    {
+      "initSnippet": "()=>!!(cajEstado?.abierta&&!cajEstado?.cerrada&&cajEstado?.fechaApertura===obtenerHoy());",
+      "kind": "const",
+      "line": 3127,
+      "name": "_naSessionOpen"
+    },
+    {
+      "initSnippet": "()=>appConfig.business||_naDefaults.business;",
+      "kind": "const",
+      "line": 3128,
+      "name": "_naGetBusiness"
+    },
+    {
+      "initSnippet": "(date=new Date())=>`${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}:${String(date.getSeconds()).padStart(2,'0')}`;",
+      "kind": "const",
+      "line": 3168,
+      "name": "_naTime24"
+    },
+    {
+      "initSnippet": "(key,fallback)=>{try{const raw=storage.getItem(key);if(!raw)return fallback;const parsed=JSON.parse(raw);return parsed??fallback;}catch(error){console.warn('Dat",
+      "kind": "const",
+      "line": 3179,
+      "name": "_naGetJSON"
+    },
+    {
+      "initSnippet": "[",
+      "kind": "const",
+      "line": 3181,
+      "name": "_naBaseCategories"
+    },
+    {
+      "initSnippet": "(ok=true,msg='Guardado local')=>{const el=document.getElementById('saveStatus');if(!el)return;el.classList.remove('saved','error');el.classList.add(ok?'saved':'",
+      "kind": "const",
+      "line": 3222,
+      "name": "_naSetSaveStatus"
+    },
+    {
+      "initSnippet": "cr=>{if(!cr)return'vigente';cr.monto=Math.max(0,_naNumber(cr.monto));cr.pagado=Math.min(cr.monto,Math.max(0,_naNumber(cr.pagado)));if(cr.anulado){cr.status='anu",
+      "kind": "const",
+      "line": 3223,
+      "name": "_naSyncCreditStatus"
+    },
+    {
+      "initSnippet": "{efectivo:'💵 Efectivo',yape:'📲 Yape / Plin',transferencia:'🏦 Transferencia'};",
+      "kind": "const",
+      "line": 3225,
+      "name": "_NA_CREDIT_METHOD_LABELS"
+    },
+    {
+      "initSnippet": "()=>{if(cajEstado?.sessionId)return cajMovs.filter(m=>m.sessionId===cajEstado.sessionId);const fecha=cajEstado?.fechaApertura||obtenerHoy();return cajMovs.filte",
+      "kind": "const",
+      "line": 3277,
+      "name": "_naCajaMovsSesion"
+    },
+    {
+      "initSnippet": "'NuevoAmanecerPOS'",
+      "kind": "const",
+      "line": 3325,
+      "name": "_NA_DB_NAME"
+    },
+    {
+      "initSnippet": "'state'",
+      "kind": "const",
+      "line": 3325,
+      "name": "_NA_DB_STORE"
+    },
+    {
+      "initSnippet": "'snapshot_v9'",
+      "kind": "const",
+      "line": 3325,
+      "name": "_NA_SNAPSHOT_KEY"
+    },
+    {
+      "initSnippet": "'na_snapshot_v9'",
+      "kind": "const",
+      "line": 3325,
+      "name": "_NA_LOCAL_KEY"
+    },
+    {
+      "initSnippet": "'na_snapshot_v9_session';",
+      "kind": "const",
+      "line": 3325,
+      "name": "_NA_SESSION_KEY"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 3326,
+      "name": "_naDbPromise"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 3326,
+      "name": "_naDbLastError"
+    },
+    {
+      "initSnippet": "Promise.resolve()",
+      "kind": "let",
+      "line": 3326,
+      "name": "_naPersistChain"
+    },
+    {
+      "initSnippet": "true",
+      "kind": "let",
+      "line": 3326,
+      "name": "_naLastPersistOK"
+    },
+    {
+      "initSnippet": "{}",
+      "kind": "let",
+      "line": 3326,
+      "name": "_naLoadedUIState"
+    },
+    {
+      "initSnippet": "'';",
+      "kind": "let",
+      "line": 3326,
+      "name": "_naPersistWarningState"
+    },
+    {
+      "initSnippet": "{ok:true,durable:true,temporary:false,storage:'unknown',verified:false,error:null};",
+      "kind": "let",
+      "line": 3327,
+      "name": "_naLastPersistResult"
+    },
+    {
+      "initSnippet": "value=>{try{return structuredClone(value);}catch(error){return JSON.parse(JSON.stringify(value));}};",
+      "kind": "const",
+      "line": 3328,
+      "name": "_naClone"
+    },
+    {
+      "initSnippet": "error=>{if(!error)return null;const name=String(error.name||'StorageError').slice(0,60),code=String(error.code||'').slice(0,40),message=String(error.message||'N",
+      "kind": "const",
+      "line": 3329,
+      "name": "_naSafePersistError"
+    },
+    {
+      "initSnippet": "error=>({ok:false,durable:false,temporary:false,storage:'none',verified:false,error:_naSafePersistError(error)||{name:'StorageError',code:'',message:'No existe ",
+      "kind": "const",
+      "line": 3330,
+      "name": "_naPersistFailed"
+    },
+    {
+      "initSnippet": "result=>!!(result&&result.durable&&result.verified);",
+      "kind": "const",
+      "line": 3370,
+      "name": "_naWasPersisted"
+    },
+    {
+      "initSnippet": "p=>p?.controlInventario!==false;",
+      "kind": "const",
+      "line": 3386,
+      "name": "_naTracksStock"
+    },
+    {
+      "initSnippet": "false",
+      "kind": "let",
+      "line": 3433,
+      "name": "_naQuickPaymentActive"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 3433,
+      "name": "_naQuickPaymentProc"
+    },
+    {
+      "initSnippet": "false",
+      "kind": "let",
+      "line": 3605,
+      "name": "cajMovProc"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 3605,
+      "name": "cajCloseProc"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 3715,
+      "name": "gastoProc"
+    },
+    {
+      "initSnippet": "8*1024*1024",
+      "kind": "const",
+      "line": 3851,
+      "name": "_NA_IMPORT_MAX_BYTES"
+    },
+    {
+      "initSnippet": "20000;",
+      "kind": "const",
+      "line": 3851,
+      "name": "_NA_IMPORT_MAX_ROWS"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 3852,
+      "name": "_naPendingProductImport"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 3852,
+      "name": "_naLastImportReport"
+    },
+    {
+      "initSnippet": "{",
+      "kind": "const",
+      "line": 3853,
+      "name": "_NA_IMPORT_ALIASES"
+    },
+    {
+      "initSnippet": "10*1024*1024;",
+      "kind": "const",
+      "line": 3915,
+      "name": "_NA_BACKUP_MAX_BYTES"
+    },
+    {
+      "initSnippet": "{productos:10000,ventas:50000,clientes:20000,creditos:50000,gastos:50000,cajMovs:100000,cart:1000,items:5000};",
+      "kind": "const",
+      "line": 3916,
+      "name": "_NA_BACKUP_LIMITS"
+    },
+    {
+      "initSnippet": "new Set(['__proto__','prototype','constructor']);",
+      "kind": "const",
+      "line": 3917,
+      "name": "_NA_DANGEROUS_BACKUP_KEYS"
+    },
+    {
+      "initSnippet": "{",
+      "kind": "const",
+      "line": 3918,
+      "name": "_NA_BACKUP_KEYS"
+    },
+    {
+      "initSnippet": "abrirDescuento;",
+      "kind": "const",
+      "line": 4238,
+      "name": "_naSecOriginalAbrirDescuento"
+    },
+    {
+      "initSnippet": "aplicarDescuentoPorcentaje;",
+      "kind": "const",
+      "line": 4240,
+      "name": "_naSecOriginalAplicarDescuento"
+    },
+    {
+      "initSnippet": "anularV;",
+      "kind": "const",
+      "line": 4242,
+      "name": "_naSecOriginalAnularV"
+    },
+    {
+      "initSnippet": "cerrarCaja;",
+      "kind": "const",
+      "line": 4244,
+      "name": "_naSecOriginalCerrarCaja"
+    },
+    {
+      "initSnippet": "resetModule;",
+      "kind": "const",
+      "line": 4246,
+      "name": "_naSecOriginalResetModule"
+    },
+    {
+      "initSnippet": "importProducts;",
+      "kind": "const",
+      "line": 4248,
+      "name": "_naSecOriginalImportProducts"
+    },
+    {
+      "initSnippet": "importarRespaldo;",
+      "kind": "const",
+      "line": 4250,
+      "name": "_naSecOriginalImportBackup"
+    },
+    {
+      "initSnippet": "guardarConfig;",
+      "kind": "const",
+      "line": 4252,
+      "name": "_naSecOriginalGuardarConfig"
+    },
+    {
+      "initSnippet": "toggleCfg;",
+      "kind": "const",
+      "line": 4254,
+      "name": "_naSecOriginalToggleCfg"
+    },
+    {
+      "initSnippet": "applyFontSize;",
+      "kind": "const",
+      "line": 4256,
+      "name": "_naSecOriginalApplyFont"
+    },
+    {
+      "initSnippet": "setAccent;",
+      "kind": "const",
+      "line": 4258,
+      "name": "_naSecOriginalSetAccent"
+    },
+    {
+      "initSnippet": "posAddBySku;",
+      "kind": "const",
+      "line": 4260,
+      "name": "_naSecOriginalPosAddBySku"
+    },
+    {
+      "initSnippet": "abrirModalCli;",
+      "kind": "const",
+      "line": 4262,
+      "name": "_naSecOriginalAbrirCli"
+    },
+    {
+      "initSnippet": "abrirModalGasto;",
+      "kind": "const",
+      "line": 4264,
+      "name": "_naSecOriginalAbrirGasto"
+    },
+    {
+      "initSnippet": "{enabled:true,minPurchases:1000,minProfit:400,initialLine:5,punctualRate:10,lateRate:5};",
+      "kind": "const",
+      "line": 4449,
+      "name": "_NA_CREDIT_POLICY_DEFAULTS"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 4450,
+      "name": "_naCreditEvaluationClientId"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 4450,
+      "name": "_naManualCreditClientId"
+    },
+    {
+      "initSnippet": "_naPaymentState;",
+      "kind": "const",
+      "line": 4512,
+      "name": "_naF7BasePaymentState"
+    },
+    {
+      "initSnippet": "selPM;",
+      "kind": "const",
+      "line": 4514,
+      "name": "_naF7BaseSelPM"
+    },
+    {
+      "initSnippet": "abrirCobro;",
+      "kind": "const",
+      "line": 4516,
+      "name": "_naF7BaseAbrirCobro"
+    },
+    {
+      "initSnippet": "renderCfgContent;",
+      "kind": "const",
+      "line": 4521,
+      "name": "_naF7BaseRenderCfgContent"
+    },
+    {
+      "initSnippet": "_naApplyConfigUI;",
+      "kind": "const",
+      "line": 4525,
+      "name": "_naF7BaseApplyConfigUI"
+    },
+    {
+      "initSnippet": "n=>Number(_naNumber(n).toFixed(2));",
+      "kind": "const",
+      "line": 4551,
+      "name": "_naF8Money"
+    },
+    {
+      "initSnippet": "ventasRender;",
+      "kind": "const",
+      "line": 4589,
+      "name": "_naF8BaseVentasRender"
+    },
+    {
+      "initSnippet": "invBadges;",
+      "kind": "const",
+      "line": 4646,
+      "name": "_naF9BaseInvBadges"
+    },
+    {
+      "initSnippet": "invRender;",
+      "kind": "const",
+      "line": 4648,
+      "name": "_naF9BaseInvRender"
+    },
+    {
+      "initSnippet": "_naNormalizeData;",
+      "kind": "const",
+      "line": 4651,
+      "name": "_naF9BaseNormalizeData"
+    },
+    {
+      "initSnippet": "[",
+      "kind": "const",
+      "line": 4703,
+      "name": "_NA_F10_PERMISSION_DEFS"
+    },
+    {
+      "initSnippet": "{admin:'Administrador',supervisor:'Supervisor',cajero:'Cajero',personalizado:'Personalizado'};",
+      "kind": "const",
+      "line": 4723,
+      "name": "_NA_F10_ROLE_LABELS"
+    },
+    {
+      "initSnippet": "{",
+      "kind": "const",
+      "line": 4724,
+      "name": "_NA_F10_ROLE_DEFAULTS"
+    },
+    {
+      "initSnippet": "_naNormalizeCashier;",
+      "kind": "const",
+      "line": 4731,
+      "name": "_naF10BaseNormalizeCashier"
+    },
+    {
+      "initSnippet": "_naAuthorize;",
+      "kind": "const",
+      "line": 4739,
+      "name": "_naF10BaseAuthorize"
+    },
+    {
+      "initSnippet": "_naSanitizeAppConfig;",
+      "kind": "const",
+      "line": 4749,
+      "name": "_naF10BaseSanitizeAppConfig"
+    },
+    {
+      "initSnippet": "_naSanitizeSecurity;",
+      "kind": "const",
+      "line": 4751,
+      "name": "_naF10BaseSanitizeSecurity"
+    },
+    {
+      "initSnippet": "_naSanitizeSale;",
+      "kind": "const",
+      "line": 4754,
+      "name": "_naF10BaseSanitizeSale"
+    },
+    {
+      "initSnippet": "renderCfgContent;",
+      "kind": "const",
+      "line": 4762,
+      "name": "_naF10BaseRenderCfgContent"
+    },
+    {
+      "initSnippet": "switchCfgCategory;",
+      "kind": "const",
+      "line": 4764,
+      "name": "_naF10BaseSwitchCfgCategory"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 4767,
+      "name": "_naF10PermissionDraft"
+    },
+    {
+      "initSnippet": "'';",
+      "kind": "let",
+      "line": 4782,
+      "name": "_naF10SalesQuery"
+    },
+    {
+      "initSnippet": "confirmarVenta;",
+      "kind": "const",
+      "line": 4790,
+      "name": "_naF10BaseConfirmarVenta"
+    },
+    {
+      "initSnippet": "abrirModalProd;",
+      "kind": "const",
+      "line": 4792,
+      "name": "_naF10BaseAbrirModalProd"
+    },
+    {
+      "initSnippet": "guardarProd;",
+      "kind": "const",
+      "line": 4794,
+      "name": "_naF10BaseGuardarProd"
+    },
+    {
+      "initSnippet": "abrirMovInv;",
+      "kind": "const",
+      "line": 4796,
+      "name": "_naF10BaseAbrirMovInv"
+    },
+    {
+      "initSnippet": "guardarMovInv;",
+      "kind": "const",
+      "line": 4798,
+      "name": "_naF10BaseGuardarMovInv"
+    },
+    {
+      "initSnippet": "abrirModalCli;",
+      "kind": "const",
+      "line": 4800,
+      "name": "_naF10BaseAbrirModalCli"
+    },
+    {
+      "initSnippet": "guardarCli;",
+      "kind": "const",
+      "line": 4802,
+      "name": "_naF10BaseGuardarCli"
+    },
+    {
+      "initSnippet": "abrirCred;",
+      "kind": "const",
+      "line": 4804,
+      "name": "_naF10BaseAbrirCred"
+    },
+    {
+      "initSnippet": "guardarCred;",
+      "kind": "const",
+      "line": 4806,
+      "name": "_naF10BaseGuardarCred"
+    },
+    {
+      "initSnippet": "abrirPago;",
+      "kind": "const",
+      "line": 4808,
+      "name": "_naF10BaseAbrirPago"
+    },
+    {
+      "initSnippet": "confirmarPago;",
+      "kind": "const",
+      "line": 4810,
+      "name": "_naF10BaseConfirmarPago"
+    },
+    {
+      "initSnippet": "abrirModalApertura;",
+      "kind": "const",
+      "line": 4812,
+      "name": "_naF10BaseAbrirModalApertura"
+    },
+    {
+      "initSnippet": "abrirCaja;",
+      "kind": "const",
+      "line": 4814,
+      "name": "_naF10BaseAbrirCaja"
+    },
+    {
+      "initSnippet": "abrirMovCaja;",
+      "kind": "const",
+      "line": 4816,
+      "name": "_naF10BaseAbrirMovCaja"
+    },
+    {
+      "initSnippet": "guardarMovCaja;",
+      "kind": "const",
+      "line": 4818,
+      "name": "_naF10BaseGuardarMovCaja"
+    },
+    {
+      "initSnippet": "abrirModalGasto;",
+      "kind": "const",
+      "line": 4820,
+      "name": "_naF10BaseAbrirGasto"
+    },
+    {
+      "initSnippet": "_naF8ExportReport;",
+      "kind": "const",
+      "line": 4822,
+      "name": "_naF10BaseExportReport"
+    },
+    {
+      "initSnippet": "_naF9Export;",
+      "kind": "const",
+      "line": 4824,
+      "name": "_naF10BaseExportSuggestions"
+    },
+    {
+      "initSnippet": "exportProductsExcel;",
+      "kind": "const",
+      "line": 4826,
+      "name": "_naF10BaseExportProducts"
+    },
+    {
+      "initSnippet": "exportarRespaldo;",
+      "kind": "const",
+      "line": 4828,
+      "name": "_naF10BaseExportBackup"
+    },
+    {
+      "initSnippet": "cashierAddFromConfig;",
+      "kind": "const",
+      "line": 4830,
+      "name": "_naF10BaseCashierAdd"
+    },
+    {
+      "initSnippet": "cashierRenameFromConfig;",
+      "kind": "const",
+      "line": 4832,
+      "name": "_naF10BaseCashierRename"
+    },
+    {
+      "initSnippet": "cashierToggleFromConfig;",
+      "kind": "const",
+      "line": 4834,
+      "name": "_naF10BaseCashierToggle"
+    },
+    {
+      "initSnippet": "resetModule;",
+      "kind": "const",
+      "line": 4838,
+      "name": "_naF10BaseResetModule"
+    },
+    {
+      "initSnippet": "{",
+      "kind": "const",
+      "line": 4849,
+      "name": "_NA_F11_ZONE_DEFS"
+    },
+    {
+      "initSnippet": "'h,i,p,t,y,f';",
+      "kind": "const",
+      "line": 4857,
+      "name": "_NA_F11_DEFAULT_ORDER"
+    },
+    {
+      "initSnippet": "'h1cn01;i1ln10;p1lc10;t1sn01;y1sn10;f1cn00';",
+      "kind": "const",
+      "line": 4858,
+      "name": "_NA_F11_DEFAULT_SETTINGS"
+    },
+    {
+      "initSnippet": "{l:'left',c:'center',r:'right',s:'split'};",
+      "kind": "const",
+      "line": 4859,
+      "name": "_NA_F11_ALIGN"
+    },
+    {
+      "initSnippet": "{left:'l',center:'c',right:'r',split:'s'};",
+      "kind": "const",
+      "line": 4860,
+      "name": "_NA_F11_ALIGN_CODE"
+    },
+    {
+      "initSnippet": "{c:'compact',n:'normal',r:'relaxed'};",
+      "kind": "const",
+      "line": 4861,
+      "name": "_NA_F11_DENSITY"
+    },
+    {
+      "initSnippet": "{compact:'c',normal:'n',relaxed:'r'};",
+      "kind": "const",
+      "line": 4862,
+      "name": "_NA_F11_DENSITY_CODE"
+    },
+    {
+      "initSnippet": "'';",
+      "kind": "let",
+      "line": 4865,
+      "name": "_naF11DragCode"
+    },
+    {
+      "initSnippet": "_naSaveTicketSettings;",
+      "kind": "const",
+      "line": 4964,
+      "name": "_naF11BaseSaveTicketSettings"
+    },
+    {
+      "initSnippet": "_naHydrateTicket;",
+      "kind": "const",
+      "line": 4966,
+      "name": "_naF11BaseHydrateTicket"
+    },
+    {
+      "initSnippet": "[",
+      "kind": "const",
+      "line": 5020,
+      "name": "_NA_F12_EMOJI_RULES"
+    },
+    {
+      "initSnippet": "[...new Set(['📦','🥤','💧','🧃','🍺','🍷','🥛','☕','🫖','⚡','🍚','🍬','🫗','🍞','🍝','🍪','🍫','🧂','🥫','🐟','🍗','🥩','🥚','🧀','🧈','🌾','🍲','🧼','🧻','🧴'",
+      "kind": "const",
+      "line": 5031,
+      "name": "_NA_F12_EMOJI_CATALOG"
+    },
+    {
+      "initSnippet": "'auto'",
+      "kind": "let",
+      "line": 5032,
+      "name": "_naF12IconMode"
+    },
+    {
+      "initSnippet": "false",
+      "kind": "let",
+      "line": 5032,
+      "name": "_naF12Drawing"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 5032,
+      "name": "_naF12LastPoint"
+    },
+    {
+      "initSnippet": "abrirModalProd;",
+      "kind": "const",
+      "line": 5061,
+      "name": "_naF12BaseAbrirModalProd"
+    },
+    {
+      "initSnippet": "editProd;",
+      "kind": "const",
+      "line": 5063,
+      "name": "_naF12BaseEditProd"
+    },
+    {
+      "initSnippet": "previewImagen;",
+      "kind": "const",
+      "line": 5065,
+      "name": "_naF12BasePreviewImagen"
+    },
+    {
+      "initSnippet": "guardarProd;",
+      "kind": "const",
+      "line": 5067,
+      "name": "_naF12BaseGuardarProd"
+    },
+    {
+      "initSnippet": "abrirCred;",
+      "kind": "const",
+      "line": 5602,
+      "name": "_naSecBaseAbrirCred"
+    },
+    {
+      "initSnippet": "abrirPago;",
+      "kind": "const",
+      "line": 5614,
+      "name": "_naSecBaseAbrirPago"
+    },
+    {
+      "initSnippet": "false;",
+      "kind": "let",
+      "line": 6098,
+      "name": "_naInventoryMoveBusy"
+    },
+    {
+      "initSnippet": "2;",
+      "kind": "const",
+      "line": 6122,
+      "name": "_NA_V10_DB_VERSION"
+    },
+    {
+      "initSnippet": "'state';",
+      "kind": "const",
+      "line": 6123,
+      "name": "_NA_V10_STATE_STORE"
+    },
+    {
+      "initSnippet": "'operations';",
+      "kind": "const",
+      "line": 6124,
+      "name": "_NA_V10_OPERATIONS_STORE"
+    },
+    {
+      "initSnippet": "'checkpoints';",
+      "kind": "const",
+      "line": 6125,
+      "name": "_NA_V10_CHECKPOINTS_STORE"
+    },
+    {
+      "initSnippet": "'snapshot_v10';",
+      "kind": "const",
+      "line": 6126,
+      "name": "_NA_V10_SNAPSHOT_KEY"
+    },
+    {
+      "initSnippet": "'nuevo-amanecer:financial-write:v10';",
+      "kind": "const",
+      "line": 6127,
+      "name": "_NA_V10_LOCK_NAME"
+    },
+    {
+      "initSnippet": "'nuevo-amanecer:persistence:v10';",
+      "kind": "const",
+      "line": 6128,
+      "name": "_NA_V10_CHANNEL_NAME"
+    },
+    {
+      "initSnippet": "'persistence-v10-phase-a-2026-08-13-2';",
+      "kind": "const",
+      "line": 6129,
+      "name": "_NA_V10_PHASE_A_VERSION"
+    },
+    {
+      "initSnippet": "Object.freeze({PENDING:'PENDING',COMMITTED:'COMMITTED',ROLLED_BACK:'ROLLED_BACK',CONFLICT:'CONFLICT'});",
+      "kind": "const",
+      "line": 6130,
+      "name": "_NA_V10_STATUSES"
+    },
+    {
+      "initSnippet": "Object.freeze({SUCCESS:'SUCCESS',ALREADY_COMMITTED:'ALREADY_COMMITTED',CONFLICT:'CONFLICT',PERSISTENCE_ERROR:'PERSISTENCE_ERROR'});",
+      "kind": "const",
+      "line": 6131,
+      "name": "_NA_V10_RESULTS"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 6133,
+      "name": "_naV10DbPromise"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 6133,
+      "name": "_naV10TabId"
+    },
+    {
+      "initSnippet": "null",
+      "kind": "let",
+      "line": 6133,
+      "name": "_naV10Channel"
+    },
+    {
+      "initSnippet": "null;",
+      "kind": "let",
+      "line": 6133,
+      "name": "_naV10LastBroadcast"
+    },
+    {
+      "initSnippet": "new Map();",
+      "kind": "const",
+      "line": 6134,
+      "name": "_naV10EvidenceTimes"
+    },
+    {
+      "initSnippet": "{dbName:_NA_DB_NAME,localMirrorKey:'na_snapshot_v10',localSignalKey:'na_snapshot_v10_signal',sessionOutboxKey:'na_v10_outbox',lockName:_NA_V10_LOCK_NAME,channel",
+      "kind": "let",
+      "line": 6135,
+      "name": "_naV10Runtime"
+    },
+    {
+      "initSnippet": "value=>{try{return structuredClone(value);}catch(error){return value===undefined?undefined:JSON.parse(JSON.stringify(value));}};",
+      "kind": "const",
+      "line": 6137,
+      "name": "_naV10Clone"
+    },
+    {
+      "initSnippet": "()=>new Date().toISOString();",
+      "kind": "const",
+      "line": 6138,
+      "name": "_naV10Now"
+    },
+    {
+      "initSnippet": "()=>`op_${_naNewUuid()}`;",
+      "kind": "const",
+      "line": 6146,
+      "name": "_naNewOperationId"
+    },
+    {
+      "initSnippet": "()=>`commit_${_naNewUuid()}`;",
+      "kind": "const",
+      "line": 6147,
+      "name": "_naNewCommitId"
+    },
+    {
+      "initSnippet": "(()=>{",
+      "kind": "const",
+      "line": 6240,
+      "name": "_naV10OutboxDeletion"
+    },
+    {
+      "initSnippet": "{enabled:true,minPurchases:1000,minProfit:400,initialLine:5,punctualRate:10,lateRate:5};",
+      "kind": "const",
+      "line": 6649,
+      "name": "_NA_V10_CREDIT_POLICY_DEFAULTS"
+    },
+    {
+      "initSnippet": "['efectivo','yape','transferencia','mixto','credito'];",
+      "kind": "const",
+      "line": 6650,
+      "name": "_NA_V10_PAYMENT_METHODS"
+    }
+  ],
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

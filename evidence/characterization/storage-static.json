@@ -1,0 +1,97 @@
+{
+  "baseCommit": "b4003e2f0d84cdb832de9eff730f60dc946cbbbe",
+  "data": {
+    "constants": {
+      "_NA_DB_NAME": "NuevoAmanecerPOS",
+      "_NA_DB_STORE": "state",
+      "_NA_LOCAL_KEY": "na_snapshot_v9",
+      "_NA_SESSION_KEY": "na_snapshot_v9_session",
+      "_NA_SNAPSHOT_KEY": "snapshot_v9",
+      "_NA_V10_CHECKPOINTS_STORE": "checkpoints",
+      "_NA_V10_DB_VERSION": "2",
+      "_NA_V10_OPERATIONS_STORE": "operations",
+      "_NA_V10_STATE_STORE": "state"
+    },
+    "dbOpens": [
+      {
+        "line": 3335,
+        "nameExpr": "_NA_DB_NAME",
+        "versionExpr": "1"
+      },
+      {
+        "line": 6168,
+        "nameExpr": "_naV10Runtime.dbName",
+        "versionExpr": "_NA_V10_DB_VERSION"
+      }
+    ],
+    "dynamicConflictKey": "na_snapshot_v10_conflict_<commitId>",
+    "legacy": [
+      "na_app_state",
+      "na_cajEstado",
+      "na_cajMovs",
+      "na_cart",
+      "na_clientes",
+      "na_creditos",
+      "na_gastos",
+      "na_productos",
+      "na_ventas"
+    ],
+    "localStorage": [
+      "na_app_initialized_v1",
+      "na_cart_draft",
+      "na_cfg_category",
+      "na_lock_caja",
+      "na_lock_clientes",
+      "na_lock_configuracion",
+      "na_lock_gastos",
+      "na_lock_importacion",
+      "na_lock_productos",
+      "na_lock_ventas",
+      "na_master_lock",
+      "na_pre_restore_snapshot_v1",
+      "na_readonly",
+      "na_security_v26",
+      "na_seed_catalog_suppressed",
+      "na_seed_catalog_version",
+      "na_snapshot_v10",
+      "na_snapshot_v10_conflict_<commitId>",
+      "na_snapshot_v10_signal",
+      "na_snapshot_v9"
+    ],
+    "objectStores": [
+      {
+        "keyPath": null,
+        "line": 3335,
+        "name": "state",
+        "nameExpr": "_NA_DB_STORE"
+      },
+      {
+        "keyPath": null,
+        "line": 6171,
+        "name": "state",
+        "nameExpr": "_NA_V10_STATE_STORE"
+      },
+      {
+        "keyPath": "operationId",
+        "line": 6172,
+        "name": "operations",
+        "nameExpr": "_NA_V10_OPERATIONS_STORE"
+      },
+      {
+        "keyPath": "key",
+        "line": 6173,
+        "name": "checkpoints",
+        "nameExpr": "_NA_V10_CHECKPOINTS_STORE"
+      }
+    ],
+    "other": [],
+    "sessionStorage": [
+      "na_cart_draft",
+      "na_pre_restore_snapshot_v1_session",
+      "na_security_locked",
+      "na_snapshot_v9_session",
+      "na_v10_outbox"
+    ]
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

@@ -1,0 +1,11 @@
+{
+  "fileProtocolSupported": false,
+  "reason": "cross-origin access to iframe failed",
+  "error": "SecurityError: Failed to read a named property 'document' from 'Window': Blocked a frame with origin \"null\" from accessing a cross-origin frame.",
+  "results": [],
+  "meta": {
+    "fileProtocolSameOriginAccess": false,
+    "httpProtocol": false,
+    "harnessVersion": "FASE4-CHARACTERIZATION-BASELINE"
+  }
+}
