@@ -1,0 +1,36 @@
+{
+  "CLASSIC_SCRIPT_REQUIRED": "YES",
+  "ES_MODULE_RUNTIME_NOW": "NO",
+  "MISSING_GLOBALS": [],
+  "baseCommit": "e58cd7bb43d340b5666eaba38fb91d7932c41ccf",
+  "counts": {
+    "boundary": 816,
+    "entrySequence": 16,
+    "externalScripts": 1,
+    "inlineScripts": 18,
+    "jsOnAssignmentsExcluded": 6,
+    "legacyAllLines": 372,
+    "overrideWinnersFrozen": 28,
+    "overrideWinnersFull": 72,
+    "realHandlerTotal": 366,
+    "requiredGlobals": 177,
+    "scripts": 19,
+    "staticNames": 99,
+    "staticOccurrences": 231,
+    "styleInScripts": 2,
+    "styleRealBlocks": 0,
+    "templateNames": 90,
+    "templateOccurrences": 135,
+    "typeModule": 0
+  },
+  "digests": {
+    "extractor": "590efe2a872dcb261800889debf017fbd80424f28c9c8bfc614e0820cb495728",
+    "finalGlobals": "590efe2a872dcb261800889debf017fbd80424f28c9c8bfc614e0820cb495728",
+    "oracle": "590efe2a872dcb261800889debf017fbd80424f28c9c8bfc614e0820cb495728"
+  },
+  "posIndexSha256": "7c9d2d184badd34777ea27f06bc9f8a66dce10027f25b1801a0b287baec79b53",
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+  "requiredGlobalsAfter": 177,
+  "requiredGlobalsBefore": 168,
+  "sourceBlob": "b675a540c8fd153dc3d25fc70343ff6aad37fd2a"
+}

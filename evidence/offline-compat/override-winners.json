@@ -1,0 +1,483 @@
+{
+  "baseCommit": "e58cd7bb43d340b5666eaba38fb91d7932c41ccf",
+  "frozen28": [
+    {
+      "count": 2,
+      "name": "confirmarVenta"
+    },
+    {
+      "count": 3,
+      "name": "guardarMovInv"
+    },
+    {
+      "count": 2,
+      "name": "posRender"
+    },
+    {
+      "count": 2,
+      "name": "cliRender"
+    },
+    {
+      "count": 2,
+      "name": "cajRender"
+    },
+    {
+      "count": 4,
+      "name": "abrirCred"
+    },
+    {
+      "count": 3,
+      "name": "ventasRender"
+    },
+    {
+      "count": 2,
+      "name": "gasRender"
+    },
+    {
+      "count": 3,
+      "name": "guardarProd"
+    },
+    {
+      "count": 3,
+      "name": "abrirModalProd"
+    },
+    {
+      "count": 3,
+      "name": "previewImagen"
+    },
+    {
+      "count": 2,
+      "name": "abrirCaja"
+    },
+    {
+      "count": 2,
+      "name": "abrirCobro"
+    },
+    {
+      "count": 2,
+      "name": "abrirDescuento"
+    },
+    {
+      "count": 3,
+      "name": "abrirModalCli"
+    },
+    {
+      "count": 3,
+      "name": "abrirModalGasto"
+    },
+    {
+      "count": 2,
+      "name": "cerrarCaja"
+    },
+    {
+      "count": 2,
+      "name": "confirmarPago"
+    },
+    {
+      "count": 2,
+      "name": "guardarCli"
+    },
+    {
+      "count": 2,
+      "name": "guardarConfig"
+    },
+    {
+      "count": 3,
+      "name": "guardarCred"
+    },
+    {
+      "count": 2,
+      "name": "guardarMovCaja"
+    },
+    {
+      "count": 2,
+      "name": "imprimirTicketSistema"
+    },
+    {
+      "count": 2,
+      "name": "invRender"
+    },
+    {
+      "count": 2,
+      "name": "selPM"
+    },
+    {
+      "count": 2,
+      "name": "switchCfgCategory"
+    },
+    {
+      "count": 2,
+      "name": "ventasSetTab"
+    },
+    {
+      "count": 2,
+      "name": "_naF8ExportReport"
+    }
+  ],
+  "frozen28Count": 28,
+  "full": [
+    {
+      "count": 2,
+      "name": "_baseCliRender",
+      "winner": 3055
+    },
+    {
+      "count": 2,
+      "name": "_baseInvRender",
+      "winner": 3506
+    },
+    {
+      "count": 2,
+      "name": "_baseRenderTicketPreview",
+      "winner": 4336
+    },
+    {
+      "count": 2,
+      "name": "_naApplyConfigUI",
+      "winner": 3054
+    },
+    {
+      "count": 2,
+      "name": "_naAudit",
+      "winner": 3208
+    },
+    {
+      "count": 2,
+      "name": "_naAuthorize",
+      "winner": 3205
+    },
+    {
+      "count": 2,
+      "name": "_naBuildThermalTicket",
+      "winner": 3422
+    },
+    {
+      "count": 2,
+      "name": "_naF10RenderSalesAdmin",
+      "winner": 3700
+    },
+    {
+      "count": 2,
+      "name": "_naF12RenderVisual",
+      "winner": 4281
+    },
+    {
+      "count": 2,
+      "name": "_naF8ExportReport",
+      "winner": 3288
+    },
+    {
+      "count": 2,
+      "name": "_naF9Export",
+      "winner": 3290
+    },
+    {
+      "count": 2,
+      "name": "_naHydrateTicket",
+      "winner": 3432
+    },
+    {
+      "count": 2,
+      "name": "_naNormalizeCashier",
+      "winner": 3197
+    },
+    {
+      "count": 2,
+      "name": "_naNormalizeData",
+      "winner": 3155
+    },
+    {
+      "count": 2,
+      "name": "_naPaymentState",
+      "winner": 3041
+    },
+    {
+      "count": 2,
+      "name": "_naPopulateCreditClients",
+      "winner": 3046
+    },
+    {
+      "count": 2,
+      "name": "_naSanitizeAppConfig",
+      "winner": 3215
+    },
+    {
+      "count": 2,
+      "name": "_naSanitizeSale",
+      "winner": 3220
+    },
+    {
+      "count": 2,
+      "name": "_naSanitizeSecurity",
+      "winner": 3217
+    },
+    {
+      "count": 2,
+      "name": "_naSaveTicketSettings",
+      "winner": 3430
+    },
+    {
+      "count": 2,
+      "name": "_naSecurityLogHtml",
+      "winner": 3211
+    },
+    {
+      "count": 2,
+      "name": "abrirCaja",
+      "winner": 3280
+    },
+    {
+      "count": 2,
+      "name": "abrirCobro",
+      "winner": 3045
+    },
+    {
+      "count": 4,
+      "name": "abrirCred",
+      "winner": 4034
+    },
+    {
+      "count": 2,
+      "name": "abrirDescuento",
+      "winner": 2784
+    },
+    {
+      "count": 2,
+      "name": "abrirDetalleCredito",
+      "winner": 4069
+    },
+    {
+      "count": 2,
+      "name": "abrirModalApertura",
+      "winner": 3278
+    },
+    {
+      "count": 3,
+      "name": "abrirModalCli",
+      "winner": 3266
+    },
+    {
+      "count": 3,
+      "name": "abrirModalGasto",
+      "winner": 3286
+    },
+    {
+      "count": 3,
+      "name": "abrirModalProd",
+      "winner": 3493
+    },
+    {
+      "count": 2,
+      "name": "abrirMovCaja",
+      "winner": 3282
+    },
+    {
+      "count": 2,
+      "name": "abrirMovInv",
+      "winner": 3262
+    },
+    {
+      "count": 3,
+      "name": "abrirPago",
+      "winner": 4046
+    },
+    {
+      "count": 2,
+      "name": "anularV",
+      "winner": 2788
+    },
+    {
+      "count": 2,
+      "name": "aplicarDescuentoPorcentaje",
+      "winner": 2786
+    },
+    {
+      "count": 2,
+      "name": "applyFontSize",
+      "winner": 2802
+    },
+    {
+      "count": 2,
+      "name": "cajRender",
+      "winner": 3846
+    },
+    {
+      "count": 2,
+      "name": "calcularScoreCredito",
+      "winner": 3014
+    },
+    {
+      "count": 2,
+      "name": "cashierAddFromConfig",
+      "winner": 3296
+    },
+    {
+      "count": 2,
+      "name": "cashierRenameFromConfig",
+      "winner": 3298
+    },
+    {
+      "count": 2,
+      "name": "cashierToggleFromConfig",
+      "winner": 3300
+    },
+    {
+      "count": 2,
+      "name": "cerrarCaja",
+      "winner": 2790
+    },
+    {
+      "count": 2,
+      "name": "cliRender",
+      "winner": 4002
+    },
+    {
+      "count": 2,
+      "name": "confirmarPago",
+      "winner": 3276
+    },
+    {
+      "count": 2,
+      "name": "confirmarVenta",
+      "winner": 3256
+    },
+    {
+      "count": 2,
+      "name": "editProd",
+      "winner": 3495
+    },
+    {
+      "count": 2,
+      "name": "exportProductsExcel",
+      "winner": 3292
+    },
+    {
+      "count": 2,
+      "name": "exportarRespaldo",
+      "winner": 3294
+    },
+    {
+      "count": 2,
+      "name": "gasRender",
+      "winner": 4491
+    },
+    {
+      "count": 2,
+      "name": "guardarCli",
+      "winner": 3268
+    },
+    {
+      "count": 2,
+      "name": "guardarConfig",
+      "winner": 2798
+    },
+    {
+      "count": 3,
+      "name": "guardarCred",
+      "winner": 3272
+    },
+    {
+      "count": 2,
+      "name": "guardarMovCaja",
+      "winner": 3284
+    },
+    {
+      "count": 3,
+      "name": "guardarMovInv",
+      "winner": 4530
+    },
+    {
+      "count": 3,
+      "name": "guardarProd",
+      "winner": 3499
+    },
+    {
+      "count": 2,
+      "name": "importProducts",
+      "winner": 2794
+    },
+    {
+      "count": 2,
+      "name": "importarRespaldo",
+      "winner": 2796
+    },
+    {
+      "count": 2,
+      "name": "imprimirTicketSistema",
+      "winner": 4361
+    },
+    {
+      "count": 2,
+      "name": "invBadges",
+      "winner": 3150
+    },
+    {
+      "count": 2,
+      "name": "invRender",
+      "winner": 3152
+    },
+    {
+      "count": 2,
+      "name": "posAddBySku",
+      "winner": 2806
+    },
+    {
+      "count": 2,
+      "name": "posRender",
+      "winner": 4407
+    },
+    {
+      "count": 2,
+      "name": "posUpdateCart",
+      "winner": 4456
+    },
+    {
+      "count": 3,
+      "name": "previewImagen",
+      "winner": 4286
+    },
+    {
+      "count": 3,
+      "name": "renderCfgContent",
+      "winner": 3228
+    },
+    {
+      "count": 3,
+      "name": "resetModule",
+      "winner": 3304
+    },
+    {
+      "count": 2,
+      "name": "selPM",
+      "winner": 3043
+    },
+    {
+      "count": 2,
+      "name": "setAccent",
+      "winner": 2804
+    },
+    {
+      "count": 2,
+      "name": "switchCfgCategory",
+      "winner": 3230
+    },
+    {
+      "count": 2,
+      "name": "toggleCfg",
+      "winner": 2800
+    },
+    {
+      "count": 3,
+      "name": "ventasRender",
+      "winner": 3691
+    },
+    {
+      "count": 2,
+      "name": "ventasSetTab",
+      "winner": 3077
+    }
+  ],
+  "fullCount": 72,
+  "note": "frozen28 = referencia semantica congelada F6-ARC-0",
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7"
+}

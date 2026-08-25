@@ -1,0 +1,55 @@
+{
+  "baseCommit": "e58cd7bb43d340b5666eaba38fb91d7932c41ccf",
+  "clauses": {
+    "A": "18 inline scripts ya ejecutados por el index.html actual (byte-exact, sin cambios)",
+    "B": "app.js solo registra _NA_BOOT y ejecuta verify() typeof-only; no invoca negocio",
+    "C": "los 177 REQUIRED_GLOBALS estan presentes en legacy-globals.js",
+    "D": "NO ejecuta negocio / V10 / persistencia / storage",
+    "E": "18 inline documental + 2 scripts classic SIN defer al final del body (conexion FASE 7)",
+    "F": "file:// OK con classic scripts; ES modules NO por origin null (FASE 4)",
+    "G": "HTTP: classic + modules ambos funcionan",
+    "H": "SheetJS export -> fallback CSV REAL; import .xlsx -> _naParseXlsxBasic INEXISTENTE (LEGACY_SCOPE_BLOCKED, ver xlsxScopeBlocked)"
+  },
+  "productBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+  "sheetjsGuards": [
+    {
+      "derived": true,
+      "fn": "_naImportDate",
+      "line": 2393
+    },
+    {
+      "derived": true,
+      "fn": "_naReadProductImportFile",
+      "line": 2451
+    },
+    {
+      "derived": true,
+      "fn": "exportProductsExcel",
+      "line": 2458
+    },
+    {
+      "derived": true,
+      "fn": "downloadProductTemplate",
+      "line": 2459
+    },
+    {
+      "derived": true,
+      "fn": "_naF8ExportReport",
+      "line": 3107
+    },
+    {
+      "derived": true,
+      "fn": "_naF9Export",
+      "line": 3148
+    }
+  ],
+  "xlsxScopeBlocked": {
+    "archivo": "CVV2.4_backup_antes_demo-1.html / POS/index.html",
+    "blocked": true,
+    "caller": "_naReadProductImportFile",
+    "causa": "funcion jamas definida en el blob 2dec6363; defecto LEGACY PREEXISTENTE",
+    "funcionInexistente": "_naParseXlsxBasic",
+    "impacto": "import .xlsx sin CDN -> ReferenceError capturado por importProducts -> toast; sin corrupcion de datos; export degrada a CSV real",
+    "solucionPropuesta": "definir _naParseXlsxBasic o fallback explicito; requiere modificar el canonico: decision del propietario"
+  }
+}
