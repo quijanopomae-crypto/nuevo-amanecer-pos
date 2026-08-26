@@ -1,0 +1,43 @@
+{
+  "baseCommit": "45c8c1e48a8004e96240cddbf923749018dec47b",
+  "canonicalBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+  "core": {
+    "contractsJs": null,
+    "utilsJs": {
+      "bytes": 3219,
+      "constants": [
+        "COLORS"
+      ],
+      "definitions": 17,
+      "functions": 16,
+      "lines": 39
+    }
+  },
+  "gates": {
+    "nodeCheckUtils": "PASS"
+  },
+  "index": {
+    "after": {
+      "bytes": 829672,
+      "lines": 5580
+    },
+    "before": {
+      "bytes": 831744,
+      "lines": 5597
+    },
+    "jsLinesRemoved": 18,
+    "scriptTagsAdded": 1
+  },
+  "loadOrder": [
+    "head:CDN(defer,preexistente)",
+    "js/core/utils.js",
+    "18 inline (V9+features)",
+    "js/compat/legacy-globals.js",
+    "js/app.js"
+  ],
+  "scripts": {
+    "external": 4,
+    "inline": 18,
+    "total": 22
+  }
+}

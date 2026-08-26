@@ -1,0 +1,42 @@
+{
+  "browser": "chrome.exe",
+  "fileProtocol": {
+    "error": null,
+    "results": {
+      "altBarcodes": 10,
+      "boot": true,
+      "clone": "function",
+      "connected": true,
+      "escFn": "&lt;b&gt;",
+      "fmt": "function",
+      "legacy": true,
+      "roundMoney": 3.15,
+      "secHash": "function",
+      "tkMoney": "function",
+      "verify": true,
+      "verifyChecked": 177,
+      "verifyMissing": 0
+    },
+    "status": "OK"
+  },
+  "httpProtocol": {
+    "error": null,
+    "results": {
+      "altBarcodes": 10,
+      "boot": true,
+      "clone": "function",
+      "connected": true,
+      "escFn": "&lt;b&gt;",
+      "fmt": "function",
+      "legacy": true,
+      "roundMoney": 3.15,
+      "secHash": "function",
+      "tkMoney": "function",
+      "verify": true,
+      "verifyChecked": 177,
+      "verifyMissing": 0
+    },
+    "status": "OK"
+  },
+  "status": "OK"
+}

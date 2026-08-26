@@ -813,6 +813,7 @@
 
 <div class="toast" id="gToast"></div>
 
+<script src="js/core/utils.js"></script>
 <script>
 // Almacenamiento seguro: separa persistencia local, recuperación de sesión y memoria.
 const storage=(()=>{
@@ -837,17 +838,6 @@ const storage=(()=>{
     isPersistent(){return !!nativeStore;},isSessionPersistent(){return !!sessionStore;},getLastError(){return lastError;}
   };
 })();
-// ===== UTILS =====
-const fmt=n=>`S/ ${parseFloat(n||0).toFixed(2)}`;
-const fmtS=n=>`S/${parseFloat(n||0).toFixed(0)}`;
-const nowT=()=>new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-function obtenerHoy(){const ahora=new Date();const local=new Date(ahora.getTime()-(ahora.getTimezoneOffset()*60000));return local.toISOString().split('T')[0];}
-const HOY=obtenerHoy;
-const diasHasta=s=>{if(!s)return null;const d=new Date(String(s).slice(0,10)+'T00:00:00');if(Number.isNaN(d.getTime()))return null;const hoyD=new Date(obtenerHoy()+'T00:00:00');return Math.round((d-hoyD)/86400000);};
-const sinTildes=str=>str.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-const initials=n=>n.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
-const COLORS=['#00bca4','#ff7043','#a855f7','#3b82f6','#f59e0b','#ef4444','#22c55e','#64748b'];
-const colorFor=i=>COLORS[i%8];
 // Estado único de la imagen temporal del formulario de producto.
 // Se carga desde el producto editado o desde la imagen procesada antes de guardar.
 let imagenProducto=null;
@@ -1661,10 +1651,6 @@ const _naDefaults={
 };
 const _naMerge=(base,extra)=>({...base,...(extra||{}),business:{...base.business,...(extra?.business||{})},appearance:{...base.appearance,...(extra?.appearance||{})},scanner:{...base.scanner,...(extra?.scanner||{})},freeSale:{...base.freeSale,...(extra?.freeSale||{})},creditPolicy:{...base.creditPolicy,...(extra?.creditPolicy||{})},purchaseSuggestion:{...base.purchaseSuggestion,...(extra?.purchaseSuggestion||{})},ticket:{...base.ticket,...(extra?.ticket||{})},printer:{...base.printer,...(extra?.printer||{})}});
 appConfig=_naMerge(_naDefaults,appConfig);
-const _naEsc=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-const _naClean=value=>String(value??'').replace(/[<>]/g,'').trim();
-const _naNumber=(value,fallback=0)=>{if(typeof value==='number')return Number.isFinite(value)?value:fallback;let str=String(value??'').trim().replace(/\s/g,'');if(!str)return fallback;if(str.includes(',')&&str.includes('.')){if(str.lastIndexOf(',')>str.lastIndexOf('.'))str=str.replace(/\./g,'').replace(',','.');else str=str.replace(/,/g,'');}else if(str.includes(','))str=str.replace(',','.');str=str.replace(/[^0-9.-]/g,'');const n=Number(str);return Number.isFinite(n)?n:fallback;};
-const _naInt=(value,fallback=0)=>{const n=Math.trunc(_naNumber(value,NaN));return Number.isFinite(n)?n:fallback;};
 const _naDatePlus=days=>{const d=new Date(obtenerHoy()+'T12:00:00');d.setDate(d.getDate()+days);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;};
 const _naUnitsPerQty=item=>Math.max(1,_naInt(item?.unitsPerQty,1));
 const _naUnitsSold=item=>Math.max(0,_naNumber(item?.qty,0))*_naUnitsPerQty(item);
@@ -1870,7 +1856,6 @@ function updateDashboard(){const hoy=obtenerHoy(),validas=ventas.filter(v=>v.fec
 const _NA_DB_NAME='NuevoAmanecerPOS',_NA_DB_STORE='state',_NA_SNAPSHOT_KEY='snapshot_v9',_NA_LOCAL_KEY='na_snapshot_v9',_NA_SESSION_KEY='na_snapshot_v9_session';
 let _naDbPromise=null,_naDbLastError=null,_naPersistChain=Promise.resolve(),_naLastPersistOK=true,_naLoadedUIState={},_naPersistWarningState='';
 let _naLastPersistResult={ok:true,durable:true,temporary:false,storage:'unknown',verified:false,error:null};
-const _naClone=value=>{try{return structuredClone(value);}catch(error){return JSON.parse(JSON.stringify(value));}};
 const _naSafePersistError=error=>{if(!error)return null;const name=String(error.name||'StorageError').slice(0,60),code=String(error.code||'').slice(0,40),message=String(error.message||'No fue posible verificar el almacenamiento').replace(/[\r\n]+/g,' ').slice(0,180);return{name,code,message};};
 const _naPersistFailed=error=>({ok:false,durable:false,temporary:false,storage:'none',verified:false,error:_naSafePersistError(error)||{name:'StorageError',code:'',message:'No existe almacenamiento disponible'}});
 function _naOpenDB(){
@@ -2473,7 +2458,6 @@ const _NA_BACKUP_KEYS={
   paymentLog:new Set(['id','pagoId','creditoId','clienteId','clienteNombre','monto','montoPagado','saldoAnterior','saldoActual','fecha','hora','hora24','timestamp','diaSemana','horarioPago','metodo','operacion','numeroOperacion','referencia','cajero','cajeroNombre','cajeroId','desgloseProductos']),
   creditAllocation:new Set(['itemKey','productoId','nombre','monto','subtotalCredito','saldoAnteriorProducto','saldoActualProducto'])
 };
-function _naIsPlainObject(value){if(!value||Object.prototype.toString.call(value)!=='[object Object]')return false;const proto=Object.getPrototypeOf(value);return proto===Object.prototype||proto===null;}
 function _naBackupParse(text){
   return JSON.parse(text,(key,value)=>{if(_NA_DANGEROUS_BACKUP_KEYS.has(key))throw new Error(`Propiedad peligrosa bloqueada: ${key}`);return value;});
 }
@@ -2987,7 +2971,6 @@ function _naCreditPolicy(){
   cfg.lateRate=Math.max(0,Math.min(100,_naNumber(cfg.lateRate,5)));
   appConfig.creditPolicy=cfg;return cfg;
 }
-function _naRoundMoney(value){return Number(Math.max(0,_naNumber(value)).toFixed(2));}
 function _naClientSales(clientId){const key=String(clientId);return (Array.isArray(ventas)?ventas:[]).filter(v=>!v.anulada&&String(v.clienteId??'')===key);}
 function _naSaleItemProfit(item){const qty=Math.max(0,_naNumber(item?.qty??item?.cantidad)),units=Math.max(1,_naInt(item?.unitsPerQty,1)),revenue=Math.max(0,_naNumber(item?.subtotal,_naNumber(item?.precio??item?.precioUnitario)*qty));let unitCost=Number(item?.costo);if(!Number.isFinite(unitCost)){const prod=productos.find(p=>String(p.id)===String(item?.productoId??item?.id));unitCost=Math.max(0,_naNumber(prod?.costo));}return revenue-Math.max(0,unitCost)*qty*units;}
 function _naSaleCreditRecord(sale){return (Array.isArray(creditos)?creditos:[]).find(cr=>String(cr.id)===String(sale?.creditId))||(Array.isArray(creditos)?creditos:[]).find(cr=>String(cr.ventaId)===String(sale?.id))||null;}
