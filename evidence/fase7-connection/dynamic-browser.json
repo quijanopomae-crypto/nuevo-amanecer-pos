@@ -1,0 +1,34 @@
+{
+  "browser": "chrome.exe",
+  "fileProtocol": {
+    "error": null,
+    "results": {
+      "boot": true,
+      "connected": true,
+      "legacy": true,
+      "phase": "f6",
+      "requiredCount": 177,
+      "started": true,
+      "verifyChecked": 177,
+      "verifyMissing": 0,
+      "verifyOk": true
+    },
+    "status": "OK"
+  },
+  "httpProtocol": {
+    "error": null,
+    "results": {
+      "boot": true,
+      "connected": true,
+      "legacy": true,
+      "phase": "f6",
+      "requiredCount": 177,
+      "started": true,
+      "verifyChecked": 177,
+      "verifyMissing": 0,
+      "verifyOk": true
+    },
+    "status": "OK"
+  },
+  "status": "OK"
+}

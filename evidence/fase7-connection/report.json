@@ -1,0 +1,45 @@
+{
+  "baseCommit": "d5c4378518bd7e7c9db95736865255bebd8cc530",
+  "canonicalBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+  "connection": {
+    "afterLastInline": true,
+    "appCount": 1,
+    "async": false,
+    "beforeBodyClose": true,
+    "defer": false,
+    "exactlyOnce": true,
+    "legacyCount": 1,
+    "orderOk": true,
+    "typeModule": false
+  },
+  "counts": {
+    "externalScripts": 3,
+    "inlineScripts": 18,
+    "scripts": 21
+  },
+  "entrySequence": 16,
+  "f6AnchorPosIndexSha256": "7c9d2d184badd34777ea27f06bc9f8a66dce10027f25b1801a0b287baec79b53",
+  "gates": {
+    "f6FrozenAll": true,
+    "f6FrozenArtifactsIntact": {
+      "evidence/offline-compat/bootstrap-contract.json": true,
+      "evidence/offline-compat/inventory.json": true,
+      "evidence/offline-compat/override-winners.json": true,
+      "evidence/offline-compat/report.json": true,
+      "tests/offline-compat/fase6-offline-compat.test.mjs": true
+    },
+    "nodeCheckAppJs": "PASS",
+    "nodeCheckLegacyGlobals": "PASS"
+  },
+  "postIndexSha256": "2bc9d241fe33f9d3b14149b583049d4ffe93b57088f87f9c74e6cada37f34864",
+  "preIndexMatchesF6Anchor": true,
+  "preIndexSha256": "7c9d2d184badd34777ea27f06bc9f8a66dce10027f25b1801a0b287baec79b53",
+  "requiredGlobalsContract": 177,
+  "storage": {
+    "legacy": 9,
+    "localStorage": 20,
+    "sessionStorage": 5,
+    "snapshotKey": "snapshot_v9"
+  },
+  "v10Dormant": true
+}
