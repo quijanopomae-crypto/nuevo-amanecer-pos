@@ -1,0 +1,42 @@
+{
+  "baseCommit": "4158e046069046069b1ae6e4e7287bf3c53e8fa2",
+  "canonicalBlob": "2dec6363d8aeef52da64ba60ac8eac8eb14f75f7",
+  "gates": {
+    "nodeCheckState": "PASS"
+  },
+  "index": {
+    "after": {
+      "bytes": 824062,
+      "lines": 5471
+    },
+    "before": {
+      "bytes": 829672,
+      "lines": 5580
+    },
+    "scriptTagsAdded": 1,
+    "stateBodyNonBlank": 109,
+    "stateLinesExtracted": 110
+  },
+  "loadOrderLines": {
+    "cdn": 9,
+    "f7Legacy": 5468,
+    "firstInline": 817,
+    "state": 2810,
+    "utils": 816
+  },
+  "navigationDeferredReason": "goPage/goMenu/toggleDark/applyFontSize/setAccent/toggleCfgMenu/switchCfgCategory acoplados a saveAppState (persistencia), renders de dominio y contrato 177",
+  "navigationExtracted": "NONE",
+  "scripts": {
+    "external": 5,
+    "inline": 18,
+    "total": 23
+  },
+  "stateJs": {
+    "blocks": [
+      "modal-scroll",
+      "topbar-gestures"
+    ],
+    "bytes": 6478,
+    "lines": 126
+  }
+}

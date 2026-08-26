@@ -1,0 +1,46 @@
+{
+  "browser": "chrome.exe",
+  "runs": [
+    {
+      "error": null,
+      "ok": true,
+      "results": {
+        "boot": true,
+        "connected": true,
+        "fmt": "function",
+        "gestureApi": "object",
+        "gestureCount": 0,
+        "gestureThreshold": 20,
+        "hiddenAfterSim": {
+          "hiddenAfterHide": true,
+          "shownAfter3Gestures": true
+        },
+        "topbarEl": true,
+        "verifyChecked": 177,
+        "verifyOk": true
+      },
+      "url": "file:///C:/Users/eliser rusbel quijan/OneDrive/Documentos/New project 2/POS/index.html"
+    },
+    {
+      "error": null,
+      "ok": true,
+      "results": {
+        "boot": true,
+        "connected": true,
+        "fmt": "function",
+        "gestureApi": "object",
+        "gestureCount": 0,
+        "gestureThreshold": 20,
+        "hiddenAfterSim": {
+          "hiddenAfterHide": true,
+          "shownAfter3Gestures": true
+        },
+        "topbarEl": true,
+        "verifyChecked": 177,
+        "verifyOk": true
+      },
+      "url": "http://127.0.0.1:58119/POS/index.html"
+    }
+  ],
+  "status": "OK"
+}
