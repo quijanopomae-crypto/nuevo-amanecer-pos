@@ -1,0 +1,106 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-08-27T20:54:48.129Z",
+  "gate": "GATE 5 — INVENTORY ROLLBACK",
+  "verdict": "PASS",
+  "winner": {
+    "chain": "inline-02 (base legacy) → inline-07 (wrapper auth) → inline-16 WINNER (auth propia + guard + rollback)",
+    "runtimeWinner": "inline-16 (autorización + guard + persistencia verificada + restauración)",
+    "doubleExecGuard": "PASS (segunda llamada ignorada mientras busy=true)",
+    "adjustBehavior": "ajuste = entrada/salida; motivo solo informativo (sin lógica propia)"
+  },
+  "note": "tests existentes de inventario son HTML frozen; este delta crea test nuevo (tests/release-invariants/)",
+  "checks": [
+    {
+      "id": "G5.1a",
+      "description": "orden de carga: inline-02 < inline-07 < inline-16",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.1b",
+      "description": "tres definiciones históricas: base legacy (02), wrapper auth (07), winner (16)",
+      "result": "PASS",
+      "detail": "02:544 07:103 16:4"
+    },
+    {
+      "id": "G5.1c",
+      "description": "ningún archivo posterior redefine guardarMovInv",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.1d",
+      "description": "inline-16 declara el guard de doble ejecución",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.1e",
+      "description": "inline-16 verifica persistencia con _naWasPersisted y restaura beforeStock en catch",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.2a",
+      "description": "winner runtime contiene el guard _naInventoryMoveBusy",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.2b",
+      "description": "winner runtime autoriza con _naF10AuthorizePermission(inventoryMoves)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.2c",
+      "description": "winner runtime NO es el wrapper indirecto de inline-07 (sin delegación _naF10BaseGuardarMovInv)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.3",
+      "description": "bloqueo con mensaje de stock insuficiente",
+      "result": "PASS",
+      "detail": "toast: \"Stock insuficiente (10 disponibles)\""
+    },
+    {
+      "id": "G5.4",
+      "description": "doble ejecución bloqueada: un solo movimiento aplicado",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.5a",
+      "description": "mensaje informa restauración",
+      "result": "PASS",
+      "detail": "toast: \"No se guardó el movimiento; el stock fue restaurado\""
+    },
+    {
+      "id": "G5.5b",
+      "description": "durable previo intacto",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.6",
+      "description": "movimiento denegado por permisos",
+      "result": "PASS",
+      "detail": "toast: \"El cajero Frank no tiene permiso para esta acción\""
+    },
+    {
+      "id": "G5.7a",
+      "description": "el winner no consulta el motivo (mMovMotivo) — ajuste = entrada/salida",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G5.7b",
+      "description": "aritmética de ajuste (entrada/salida) preservada",
+      "result": "PASS",
+      "detail": ""
+    }
+  ]
+}

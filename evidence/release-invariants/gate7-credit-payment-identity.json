@@ -1,0 +1,111 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-08-27T20:54:48.160Z",
+  "gate": "GATE 7 — CREDIT PAYMENT IDENTITY",
+  "verdict": "PASS",
+  "scope": "single-tab (V9 no promete coordinación cross-tab; ver gate1)",
+  "winner": "inline-07 wrapper (autorización credits) sobre base inline-02",
+  "identity": {
+    "pagoId": "P-1787864088067",
+    "creditoId": "9001"
+  },
+  "checks": [
+    {
+      "id": "G7.1a",
+      "description": "orden de carga: inline-02 < inline-07",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.1b",
+      "description": "inline-07 captura la base y reasigna el wrapper de autorización",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.1c",
+      "description": "ningún archivo posterior redefine confirmarPago (winner = wrapper F10)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.1d",
+      "description": "el pago nace con pagoId y creditoId propios",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.1e",
+      "description": "el movimiento de caja recibe creditoId:cr.id y pagoId:paymentId",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.1f",
+      "description": "el dedupe de operación digital existe (_naCreditPaymentOperationUsed)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.2a",
+      "description": "pagoId preservado dentro del pago",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.2b",
+      "description": "creditoId propagado al pago",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.2c",
+      "description": "pagoId propagado a cajMovs (movimiento cob)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.2d",
+      "description": "crédito y movimiento de caja quedan enlazados (mismo pagoId y creditoId)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.2e",
+      "description": "saldos consistentes: pagado 30, saldo 70, saldos del pago 100→70",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.2f",
+      "description": "la identidad persiste en el snapshot durable",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G7.3",
+      "description": "rechazo visible por operación duplicada",
+      "result": "PASS",
+      "detail": "toast: \"Ese número de operación ya fue registrado\""
+    },
+    {
+      "id": "G7.4",
+      "description": "sobrepago rechazado",
+      "result": "PASS",
+      "detail": "toast: \"El abono supera el saldo pendiente\""
+    },
+    {
+      "id": "G7.5",
+      "description": "cobro en efectivo sin caja abierta es rechazado",
+      "result": "PASS",
+      "detail": "toast: \"Abre la caja antes de registrar un cobro en efectivo\""
+    },
+    {
+      "id": "G7.6",
+      "description": "fallo de persistencia: sin pagos ni movimientos huérfanos; durable previo intacto",
+      "result": "PASS",
+      "detail": ""
+    }
+  ]
+}
