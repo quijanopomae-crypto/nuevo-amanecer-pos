@@ -1094,6 +1094,10 @@
         .pay-change-row span{font-size:12px;font-weight:800;color:#15803d}
         .pay-change-row strong{font-size:19px;font-weight:900;color:#15803d}
         .pay-hint{margin:0;min-height:0;padding:0 2px;font-size:11px;font-weight:750}
+        .digital-payment-confirmation{display:flex;align-items:flex-start;gap:10px;min-height:46px;margin:0 0 12px;padding:11px 12px;border:1.5px solid var(--border);border-radius:11px;background:var(--bg);color:var(--dark);font-size:12px;font-weight:850;line-height:1.35;cursor:pointer;box-sizing:border-box}
+        .digital-payment-confirmation:focus-within{border-color:var(--teal);box-shadow:0 0 0 3px color-mix(in srgb,var(--teal) 12%,transparent)}
+        .digital-payment-confirmation input{flex:0 0 auto;width:20px;height:20px;margin:0;accent-color:var(--teal);cursor:pointer}
+        .digital-payment-confirmation span{padding-top:1px}
         .pay-modal-footer{display:grid;grid-template-columns:1fr 1.45fr;gap:9px;padding:12px 18px 16px;border-top:1px solid var(--border);background:var(--white);flex-shrink:0}
         .pay-btn{height:48px;border:none;border-radius:11px;font:850 13px 'Nunito',sans-serif;cursor:pointer}
         .pay-btn-secondary{background:#eef2f7;color:var(--slate)}
@@ -1102,6 +1106,8 @@
         .pay-btn-primary:disabled{opacity:.65;cursor:wait}
         .quick-pay-modal{max-width:430px}
         .quick-pay-intro{font-size:12px;font-weight:750;color:var(--slate);line-height:1.45;margin:0 0 12px}
+        .quick-payment-confirmation{margin-bottom:7px;background:var(--blue-light);border-color:#bfdbfe}
+        #mQuickPaymentHint{min-height:17px;margin:0 0 8px}
         .quick-pay-options{display:grid;grid-template-columns:1fr 1fr;gap:11px}
         .quick-pay-option{min-height:132px;border:1.5px solid var(--border);border-radius:15px;background:var(--white);padding:16px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;cursor:pointer;font-family:'Nunito',sans-serif;transition:transform .12s,border-color .15s,background .15s}
         .quick-pay-option:active{transform:scale(.98)}
@@ -1115,6 +1121,7 @@
         @media(max-width:520px){.quick-pay-options{grid-template-columns:1fr}.quick-pay-option{min-height:105px}}
         body.dark .pay-total-card{background:#0f172a}
         body.dark .pay-client-details,body.dark .pay-panel{background:#1e293b}
+        body.dark .digital-payment-confirmation{background:#1e293b}
         body.dark .pay-amount-input-wrap,body.dark .cash-exact-btn{background:#111827}
         @media(max-width:520px){
             #mCobro{padding:10px;align-items:flex-end}

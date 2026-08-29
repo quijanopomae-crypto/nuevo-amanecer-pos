@@ -384,7 +384,11 @@
       </div>
 
       <div id="mDigitalSection" class="pay-panel pay-alt-panel" style="display:none">
-        <div class="fg" style="margin-bottom:0"><div class="fl" id="mDigitalLabel">Número de operación</div><input autocomplete="off" class="fi" id="mDigitalRef" inputmode="numeric" placeholder="Ej. 12345678"/></div>
+        <label class="digital-payment-confirmation" for="mDigitalVerified">
+          <input type="checkbox" id="mDigitalVerified" onchange="_naValidatePaymentForm()">
+          <span>He verificado que el pago fue recibido</span>
+        </label>
+        <div class="fg" style="margin-bottom:0"><div class="fl" id="mDigitalLabel">Número de operación (opcional)</div><input autocomplete="off" class="fi" id="mDigitalRef" inputmode="numeric" placeholder="Ej. 12345678"/></div>
       </div>
 
       <div id="mMixedSection" class="pay-panel pay-alt-panel" style="display:none">
@@ -407,8 +411,12 @@
         </div>
         <div class="mixed-method-row">
           <div><div class="fl">Pago digital</div><select class="fs" id="mMixedDigitalMethod" onchange="calcMixedPayment()"><option value="transferencia">Transferencia</option><option value="yape">Yape / Plin</option></select></div>
-          <div><div class="fl">Número de operación <span class="req">*</span></div><input class="fi" id="mMixedRef" autocomplete="off" inputmode="numeric" placeholder="Ej. 12345678" oninput="calcMixedPayment()"></div>
+          <div><div class="fl">Número de operación (opcional)</div><input class="fi" id="mMixedRef" autocomplete="off" inputmode="numeric" placeholder="Ej. 12345678" oninput="calcMixedPayment()"></div>
         </div>
+        <label class="digital-payment-confirmation" for="mMixedDigitalVerified">
+          <input type="checkbox" id="mMixedDigitalVerified" onchange="_naValidatePaymentForm()">
+          <span>He verificado que el pago fue recibido</span>
+        </label>
         <div class="mixed-pay-summary"><span id="mMixedSummaryText">Ingresa cuánto paga en efectivo.</span><strong id="mMixedSummaryTotal">S/ 0.00</strong></div>
       </div>
 
@@ -438,7 +446,13 @@
         <div class="pay-total-value" id="mQuickPaymentTotal">S/ 0.00</div>
       </div>
 
-      <p class="quick-pay-intro">La venta se registrara inmediatamente al seleccionar una opcion.</p>
+      <p class="quick-pay-intro">La venta se registrará inmediatamente al seleccionar una opción.</p>
+
+      <label class="digital-payment-confirmation quick-payment-confirmation" for="mQuickDigitalVerified">
+        <input type="checkbox" id="mQuickDigitalVerified" onchange="_naQuickPaymentVerificationChanged()">
+        <span>He verificado que el pago fue recibido</span>
+      </label>
+      <div id="mQuickPaymentHint" class="payment-hint" aria-live="polite"></div>
 
       <div class="quick-pay-options">
         <button type="button" class="quick-pay-option cash" id="mQuickCash" onclick="confirmarPagoRapido('efectivo')">
@@ -450,7 +464,7 @@
         <button type="button" class="quick-pay-option transfer" id="mQuickTransfer" onclick="confirmarPagoRapido('transferencia')">
           <span class="quick-pay-icon">&#127974;</span>
           <strong>Transferencia completa</strong>
-          <small>Registra el total transferido sin pedir numero de operacion.</small>
+          <small>Registra el total transferido; el número de operación es opcional.</small>
         </button>
       </div>
     </div>
