@@ -445,6 +445,8 @@ const CAJ_CATS={ing:['Venta retail','Venta bebidas','Venta snacks','Venta limpie
 const CAJ_IC={ing:'💵',egr:'💸',cob:'🤝',gas:'🧾'},CAJ_LBL={ing:'Ingreso',egr:'Egreso',cob:'Cobro crédito',gas:'Gasto'},CAJ_COL={ing:'green',egr:'red',cob:'teal',gas:'amber'};
 let cajEstado={abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:obtenerHoy(),cerrada:true,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null};
 let cajMovs=[];
+// FIX02: historial permanente de cierres de caja (un registro por cierre confirmado; nunca se recalcula).
+let cashClosures=[];
 let cajTab='resumen',cajMovTipo='ing';
 
 function cajSetTab(btn,tab){document.querySelectorAll('#pageCaja .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');cajTab=tab;cajRender();}

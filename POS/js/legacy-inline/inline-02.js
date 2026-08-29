@@ -60,7 +60,7 @@ function loadMasterConfig(){const master=storage.getItem(LOCK_KEYS.master)==='tr
 
 async function resetAllData(){
   const backup=_naBuildSnapshot();
-  productos=[];ventas=[];clientes=[];creditos=[];gastos=[];cajMovs=[];cobradoHoy=0;
+  productos=[];ventas=[];clientes=[];creditos=[];gastos=[];cajMovs=[];cashClosures=[];cobradoHoy=0;
   cajEstado={abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:obtenerHoy(),cerrada:true,horaCierre:nowT(),horaCierre24:_naTime24(),sessionId:null};
   cart=[];
   const persistResult=await saveAllData();
@@ -327,7 +327,7 @@ function _naGetLocks(){return{master:storage.getItem(LOCK_KEYS.master)==='true',
 function _naApplyLocks(locks={}){storage.setItem(LOCK_KEYS.master,!!locks.master);storage.setItem(LOCK_KEYS.readOnly,!!locks.readOnly);Object.entries(LOCK_KEYS.modules).forEach(([k,key])=>storage.setItem(key,!!locks.modules?.[k]));}
 function _naBuildSnapshot(){
   _naCaptureVisibleConfig();_naSaveTicketSettings();
-  return{version:9,updatedAt:new Date().toISOString(),appConfig:_naClone(appConfig),ui:{currentPage:document.querySelector('.page.active')?.id||'pageMenu',isDark:document.body.classList.contains('dark'),currentCfgCategory},locks:_naGetLocks(),security:_naClone(_naSecurity),data:{productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),gastos:_naClone(gastos),cajMovs:_naClone(cajMovs),cajEstado:_naClone(cajEstado)},cart:_naClone(cart),draft:_naGetJSON('na_cart_draft',null)};
+  return{version:9,updatedAt:new Date().toISOString(),appConfig:_naClone(appConfig),ui:{currentPage:document.querySelector('.page.active')?.id||'pageMenu',isDark:document.body.classList.contains('dark'),currentCfgCategory},locks:_naGetLocks(),security:_naClone(_naSecurity),data:{productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),gastos:_naClone(gastos),cajMovs:_naClone(cajMovs),cajEstado:_naClone(cajEstado),cashClosures:_naClone(cashClosures)},cart:_naClone(cart),draft:_naGetJSON('na_cart_draft',null)};
 }
 function _naParseStoredSnapshot(raw){if(typeof raw!=='string'||!raw)return null;try{return JSON.parse(raw);}catch(error){return null;}}
 function _naReadLocalSnapshot(){return _naParseStoredSnapshot(storage.readPersistent(_NA_LOCAL_KEY));}
@@ -362,7 +362,7 @@ async function _naFinalizeOperationPersistence(successMessage,failureMessage='No
 }
 function _naValidSnapshot(s){return !!(s&&typeof s==='object'&&s.data&&Array.isArray(s.data.productos)&&Array.isArray(s.data.ventas)&&Array.isArray(s.data.clientes)&&Array.isArray(s.data.creditos)&&Array.isArray(s.data.gastos)&&Array.isArray(s.data.cajMovs));}
 function _naApplySnapshot(s){
-  if(!_naValidSnapshot(s))return false;_naLoadedUIState=s.ui||{};appConfig=_naMerge(_naDefaults,s.appConfig||{});_naEnsureCashierConfig();productos=s.data.productos;ventas=s.data.ventas;clientes=s.data.clientes;creditos=s.data.creditos;gastos=s.data.gastos;cajMovs=s.data.cajMovs;cajEstado=s.data.cajEstado||cajEstado;cart=Array.isArray(s.cart)?s.cart:[];if(s.ui?.currentCfgCategory)currentCfgCategory=s.ui.currentCfgCategory;if(s.locks)_naApplyLocks(s.locks);if(s.security){_naSecurity=_naSecMerge(s.security);_naSaveSecurity(false);}if(s.draft)storage.setItem('na_cart_draft',JSON.stringify(s.draft));return true;
+  if(!_naValidSnapshot(s))return false;_naLoadedUIState=s.ui||{};appConfig=_naMerge(_naDefaults,s.appConfig||{});_naEnsureCashierConfig();productos=s.data.productos;ventas=s.data.ventas;clientes=s.data.clientes;creditos=s.data.creditos;gastos=s.data.gastos;cajMovs=s.data.cajMovs;cajEstado=s.data.cajEstado||cajEstado;cashClosures=Array.isArray(s.data.cashClosures)?s.data.cashClosures:[];cart=Array.isArray(s.cart)?s.cart:[];if(s.ui?.currentCfgCategory)currentCfgCategory=s.ui.currentCfgCategory;if(s.locks)_naApplyLocks(s.locks);if(s.security){_naSecurity=_naSecMerge(s.security);_naSaveSecurity(false);}if(s.draft)storage.setItem('na_cart_draft',JSON.stringify(s.draft));return true;
 }
 function _naLegacySnapshot(){
   const p=_naGetJSON('na_productos',null),v=_naGetJSON('na_ventas',null),c=_naGetJSON('na_clientes',null),cr=_naGetJSON('na_creditos',null),g=_naGetJSON('na_gastos',null),cm=_naGetJSON('na_cajMovs',null),ce=_naGetJSON('na_cajEstado',null),legacyState=_naGetJSON('na_app_state',{}),savedCart=_naGetJSON('na_cart',[]);
@@ -631,6 +631,7 @@ guardarMovCaja=async function(){
 cerrarCaja=async function(){
   if(cajCloseProc)return;
   if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}
+  if(cajEstado.cerrada){toast('La caja ya está cerrada','error');return;}
   const counted=_naNumber(document.getElementById('cajContado').value,NaN);
   if(!Number.isFinite(counted)||counted<0){toast('Ingresa el efectivo contado','error');return;}
   const button=document.querySelector('#mCierre .mbtn-ok'),buttonText=button?.textContent||'🔒 Confirmar cierre';
@@ -638,10 +639,12 @@ cerrarCaja=async function(){
   if(button){button.disabled=true;button.textContent='Procesando…';}
   try{
     const expected=cajTotales().ef,now=new Date();
-    const backup=_naClone(cajEstado);
+    // FIX02: el respaldo cubre cajEstado Y el historial; el cierre queda congelado como registro inmutable.
+    const backup={cajEstado:_naClone(cajEstado),cashClosures:_naClone(cashClosures)};
     cajEstado.cerrada=true;cajEstado.horaCierre=nowT();cajEstado.horaCierre24=_naTime24(now);cajEstado.timestampCierre=now.toISOString();cajEstado.contado=counted;cajEstado.esperado=expected;cajEstado.diferencia=Number((counted-expected).toFixed(2));
+    cashClosures.push({id:`C-${cajEstado.sessionId??`X${Date.now()}`}`,sessionId:cajEstado.sessionId??null,cajero:cajEstado.cajero,cajeroNombre:cajEstado.cajeroNombre,cajeroId:cajEstado.cajeroId,fechaApertura:cajEstado.fechaApertura,hora:cajEstado.hora,hora24:cajEstado.hora24,timestampApertura:cajEstado.timestampApertura,fondo:cajEstado.fondo,fechaCierre:obtenerHoy(),horaCierre:cajEstado.horaCierre,horaCierre24:cajEstado.horaCierre24,timestampCierre:cajEstado.timestampCierre,contado:cajEstado.contado,esperado:cajEstado.esperado,diferencia:cajEstado.diferencia});
     const persistResult=await saveAllData();
-    if(!_naWasPersisted(persistResult)){cajEstado=backup;await saveAllData();cajRender();toast('No se pudo guardar el cierre de caja porque no existe almacenamiento permanente verificado','error');return;}
+    if(!_naWasPersisted(persistResult)){cajEstado=backup.cajEstado;cashClosures=backup.cashClosures;await saveAllData();cajRender();toast('No se pudo guardar el cierre de caja porque no existe almacenamiento permanente verificado','error');return;}
     cerrarModal('mCierre');cajRender();toast(`Caja cerrada · diferencia ${fmt(cajEstado.diferencia)}`,Math.abs(cajEstado.diferencia)<.01?'success':'error');
   }finally{
     cajCloseProc=false;

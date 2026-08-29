@@ -103,7 +103,7 @@ resetModule=async function(modulo){
   if(modulo==='clientes'){clientes=[];creditos=[];}
   if(modulo==='caja'){cajMovs=[];cajEstado={abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:obtenerHoy(),cerrada:true,horaCierre:null,horaCierre24:null,sessionId:null};}
   if(modulo==='gastos')gastos=[];
-  if(modulo==='todo'){productos=[];ventas=[];clientes=[];creditos=[];gastos=[];cajMovs=[];cajEstado={abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:obtenerHoy(),cerrada:true,horaCierre:null,horaCierre24:null,sessionId:null};}
+  if(modulo==='todo'){productos=[];ventas=[];clientes=[];creditos=[];gastos=[];cajMovs=[];cashClosures=[];cajEstado={abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:obtenerHoy(),cerrada:true,horaCierre:null,horaCierre24:null,sessionId:null};}
   cart=[];
   const persistResult=await saveAllData();
   if(!_naWasPersisted(persistResult)){
@@ -361,6 +361,34 @@ function _naSanitizeCashState(raw,warnings){
   }
   return out;
 }
+// FIX02: cada cierre histórico se restaura byte-fiel; exige contado y esperado (núcleo del registro).
+function _naSanitizeCashClosure(raw,index,warnings){
+  if(!_naIsPlainObject(raw))throw new Error(`cashClosures[${index}]: objeto inválido`);
+  const allowed=new Set(['id','sessionId','cajero','cajeroNombre','cajeroId','fechaApertura','hora','hora24','timestampApertura','fondo','fechaCierre','horaCierre','horaCierre24','timestampCierre','contado','esperado','diferencia']),p=_naBackupPick(raw,allowed,`cashClosures[${index}]`,warnings),out={};
+  out.id=_naBackupString(p.id??`C-import-${index+1}`,`cashClosures[${index}].id`,60);
+  if(p.sessionId!==undefined&&p.sessionId!==null)out.sessionId=_naBackupId(p.sessionId,`cashClosures[${index}].sessionId`);
+  for(const key of ['cajero','cajeroNombre'])if(p[key]!==undefined)out[key]=_naBackupString(p[key],`cashClosures[${index}].${key}`,80);
+  if(p.cajeroId!==undefined&&p.cajeroId!==null)out.cajeroId=_naBackupId(p.cajeroId,`cashClosures[${index}].cajeroId`);
+  for(const key of ['fechaApertura','timestampApertura','fechaCierre','timestampCierre'])if(p[key]!==undefined)out[key]=_naBackupDate(p[key],`cashClosures[${index}].${key}`);
+  for(const key of ['hora','hora24','horaCierre','horaCierre24'])if(p[key]!==undefined)out[key]=_naBackupString(p[key],`cashClosures[${index}].${key}`,20);
+  if(p.fondo!==undefined)out.fondo=_naBackupNumber(p.fondo,`cashClosures[${index}].fondo`,{min:0,max:1e12,nullable:true});
+  for(const key of ['contado','esperado','diferencia']){
+    if(p[key]===undefined||p[key]===null||p[key]==='')throw new Error(`cashClosures[${index}].${key}: valor financiero obligatorio`);
+    out[key]=_naBackupNumber(p[key],`cashClosures[${index}].${key}`,{min:key==='diferencia'?-1e12:0,max:1e12});
+  }
+  return out;
+}
+function _naValidateCashClosureIdentity(closures){
+  const ids=new Set(),sessions=new Set();
+  for(let index=0;index<closures.length;index++){
+    const closure=closures[index],id=String(closure.id);
+    if(ids.has(id))throw new Error(`cashClosures[${index}].id: identificador duplicado`);ids.add(id);
+    if(closure.sessionId===undefined||closure.sessionId===null)continue;
+    const sessionId=String(closure.sessionId);
+    if(sessions.has(sessionId))throw new Error(`cashClosures[${index}].sessionId: identificador duplicado`);sessions.add(sessionId);
+  }
+  return closures;
+}
 function _naSanitizeAppConfig(raw,warnings){
   if(raw===null||raw===undefined)return _naClone(_naDefaults);
   if(!_naIsPlainObject(raw))throw new Error('appConfig: objeto inválido');
@@ -430,7 +458,7 @@ function _naCanonicalBackup(data){
   if(!_naIsPlainObject(data))throw new Error('El respaldo debe ser un objeto JSON');
   if(data.data)return data;
   if(Array.isArray(data.productos)&&Array.isArray(data.ventas)){
-    return{version:data.version||8,updatedAt:data.exportedAt||new Date().toISOString(),appConfig:data.appConfig||{},ui:{currentPage:'pageMenu',isDark:false,currentCfgCategory:'negocio'},locks:_naGetLocks(),security:data.security||null,data:{productos:data.productos,ventas:data.ventas,clientes:data.clientes||[],creditos:data.creditos||[],gastos:data.gastos||[],cajMovs:data.cajMovs||[],cajEstado:data.cajEstado||cajEstado},cart:data.cart||[],draft:data.draft||null};
+    return{version:data.version||8,updatedAt:data.exportedAt||new Date().toISOString(),appConfig:data.appConfig||{},ui:{currentPage:'pageMenu',isDark:false,currentCfgCategory:'negocio'},locks:_naGetLocks(),security:data.security||null,data:{productos:data.productos,ventas:data.ventas,clientes:data.clientes||[],creditos:data.creditos||[],gastos:data.gastos||[],cajMovs:data.cajMovs||[],cajEstado:data.cajEstado||cajEstado,cashClosures:Object.prototype.hasOwnProperty.call(data,'cashClosures')?data.cashClosures:[]},cart:data.cart||[],draft:data.draft||null};
   }
   throw new Error('Estructura de respaldo no reconocida');
 }
@@ -440,6 +468,7 @@ function _naPrepareBackupSnapshot(data){
   if(!_naIsPlainObject(source.data))throw new Error('El respaldo no contiene la sección data');
   const warnings=[],checkList=(name,limit)=>{const list=source.data[name];if(!Array.isArray(list))throw new Error(`${name}: se esperaba una lista`);if(list.length>limit)throw new Error(`${name}: supera el máximo de ${limit} registros`);return list;};
   const productosL=checkList('productos',_NA_BACKUP_LIMITS.productos),ventasL=checkList('ventas',_NA_BACKUP_LIMITS.ventas),clientesL=checkList('clientes',_NA_BACKUP_LIMITS.clientes),creditosL=checkList('creditos',_NA_BACKUP_LIMITS.creditos),gastosL=checkList('gastos',_NA_BACKUP_LIMITS.gastos),cajMovsL=checkList('cajMovs',_NA_BACKUP_LIMITS.cajMovs);
+  const hasClosures=Object.prototype.hasOwnProperty.call(source.data,'cashClosures'),closuresL=hasClosures?source.data.cashClosures:[];if(!Array.isArray(closuresL))throw new Error('cashClosures: se esperaba una lista');if(closuresL.length>_NA_BACKUP_LIMITS.cajMovs)throw new Error(`cashClosures: supera el máximo de ${_NA_BACKUP_LIMITS.cajMovs} registros`);
   const cartL=Array.isArray(source.cart)?source.cart:[];if(cartL.length>_NA_BACKUP_LIMITS.cart)throw new Error('cart: demasiados elementos');
   const draftL=source.draft==null?null:source.draft;if(draftL!==null&&(!Array.isArray(draftL)||draftL.length>_NA_BACKUP_LIMITS.cart))throw new Error('draft: lista inválida');
   const snapshot={
@@ -454,12 +483,13 @@ function _naPrepareBackupSnapshot(data){
       creditos:creditosL.map((item,i)=>_naSanitizeSimpleRecord(item,i,'credit',warnings)),
       gastos:gastosL.map((item,i)=>_naSanitizeSimpleRecord(item,i,'expense',warnings)),
       cajMovs:cajMovsL.map((item,i)=>_naSanitizeSimpleRecord(item,i,'cashMove',warnings)),
-      cajEstado:_naSanitizeCashState(source.data.cajEstado,warnings)
+      cajEstado:_naSanitizeCashState(source.data.cajEstado,warnings),
+      cashClosures:_naValidateCashClosureIdentity(closuresL.map((item,i)=>_naSanitizeCashClosure(item,i,warnings)))
     },
     cart:cartL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true)),
     draft:draftL===null?null:draftL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true))
   };
-  return{snapshot,warnings,counts:{productos:snapshot.data.productos.length,ventas:snapshot.data.ventas.length,clientes:snapshot.data.clientes.length,creditos:snapshot.data.creditos.length,gastos:snapshot.data.gastos.length,cajMovs:snapshot.data.cajMovs.length}};
+  return{snapshot,warnings,counts:{productos:snapshot.data.productos.length,ventas:snapshot.data.ventas.length,clientes:snapshot.data.clientes.length,creditos:snapshot.data.creditos.length,gastos:snapshot.data.gastos.length,cajMovs:snapshot.data.cajMovs.length,cashClosures:snapshot.data.cashClosures.length}};
 }
 function _naDownloadSnapshot(snapshot,prefix='nuevo_amanecer_respaldo'){
   const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
