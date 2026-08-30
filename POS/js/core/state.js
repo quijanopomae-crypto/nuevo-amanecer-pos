@@ -43,19 +43,54 @@
 // CONSECUTIVOS (un gesto físico = máximo un incremento; touch usa touchstart/move/end;
 // wheel agrupa eventos consecutivos); el jitter/minidesplazamientos no cuenta; volver
 // cerca del top muestra inmediatamente. Sin salto de layout: transform sobre sticky.
+// HOTFIX DESKTOP: en escritorio (>=701px) el scroll real vive en el CONTENEDOR de la
+// página activa (.main-scroll y equivalentes), no en window. Se reutiliza la misma
+// máquina (hide/jitter/2 gestos arriba/top reveal); solo cambia la FUENTE de scroll.
 (function(){
   var UP_GESTURES_REQUIRED=2,UP_GESTURE_MIN=60,DOWN_HIDE_MIN=80,NEAR_TOP=12,WHEEL_WINDOW=350;
   var upGestureCount=0,scrollAnchor=0,ticking=false,modeActive=false;
   var touchStartY=0,touchDelta=0,touchActive=false;
   var wheelGroupActive=false,wheelGroupDir=null,wheelGroupDist=0,wheelTimer=null;
+  var lastActivePage='';
+  var DESKTOP_PAGES=['pageMenu','pageInventario','pageClientes','pageVentas','pageCaja','pageGastos'];
+  var DESKTOP_SCROLL_SEL='.main-scroll,.table-wrap,.cli-list,#cajContent,#ventasContent,.v-list-wrap,#gasContent,.cj-mov-wrap';
+  function activePageEl(){
+    for(var i=0;i<DESKTOP_PAGES.length;i++){
+      var p=document.getElementById(DESKTOP_PAGES[i]);
+      if(p&&p.classList&&p.classList.contains('active'))return p;
+    }
+    return null;
+  }
+  function desktopMode(){return window.innerWidth>700&&!!activePageEl();}
+  function activeScrollEl(){
+    if(window.innerWidth<=700)return null;
+    var page=activePageEl();
+    if(page&&page.querySelector)return page.querySelector(DESKTOP_SCROLL_SEL)||null;
+    return null;
+  }
+  function isDesktopContainer(el){
+    if(!el)return false;
+    var keys=DESKTOP_SCROLL_SEL.split(',');
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i].trim();
+      if(k.charAt(0)==='#'){if(el.id===k.slice(1))return true;}
+      else if(k.charAt(0)==='.'&&el.classList){if(el.classList.contains(k.slice(1)))return true;}
+    }
+    return false;
+  }
   function gesturesActive(){
-    return document.body.classList.contains('module-mobile-scroll')
-      ||document.documentElement.classList.contains('config-page-scroll');
+    if(document.body.classList.contains('module-mobile-scroll'))return true;
+    if(document.documentElement.classList.contains('config-page-scroll'))return true;
+    return desktopMode();
   }
   function tb(){return document.querySelector('.g-topbar');}
   function show(){var t=tb();if(t)t.classList.remove('g-topbar-hidden');}
   function hide(){var t=tb();if(t)t.classList.add('g-topbar-hidden');}
-  function currentScroll(){return window.scrollY||document.documentElement.scrollTop||0;}
+  function currentScroll(){
+    var el=activeScrollEl();
+    if(el&&typeof el.scrollTop==='number')return el.scrollTop||0;
+    return window.scrollY||document.documentElement.scrollTop||0;
+  }
   function resetState(){upGestureCount=0;touchDelta=0;touchActive=false;scrollAnchor=currentScroll();wheelGroupDir=null;wheelGroupDist=0;wheelGroupActive=false;if(wheelTimer){clearTimeout(wheelTimer);wheelTimer=null;}}
   function significantDown(){var st=currentScroll();if(st<=NEAR_TOP){show();resetState();return;}hide();cancelGesture();scrollAnchor=st;}
   function isExcluded(el){
@@ -116,14 +151,40 @@
     });
   }
   window.addEventListener('scroll',handleScroll,{passive:true});
+  /* HOTFIX DESKTOP: escucha el scroll del contenedor activo REAL. Los eventos scroll no
+     burbujean; con capture=true llegan al document. Misma handleScroll => mismo hide,
+     jitter, 2 gestos arriba y top reveal. En móvil (<=700) esta ruta no se usa. */
+  document.addEventListener('scroll',function(e){
+    if(window.innerWidth<=700)return;
+    if(!gesturesActive())return;
+    var t=e&&e.target;
+    if(!t||t===document)return;
+    if(!isDesktopContainer(t))return;
+    handleScroll();
+  },true);
   /* ── Reinicio al cambiar de módulo o redimensionar ── */
-  function syncMode(){var next=gesturesActive();if(next!==modeActive){modeActive=next;show();resetState();}}
-  modeActive=gesturesActive();resetState();
+  function syncMode(){
+    var next=gesturesActive();
+    if(next!==modeActive){modeActive=next;show();resetState();return;}
+    var page=activePageEl();
+    var id=page?page.id:'';
+    if(id!==lastActivePage){lastActivePage=id;show();resetState();}
+  }
+  modeActive=gesturesActive();lastActivePage=(activePageEl()||{}).id||'';resetState();
   if(typeof MutationObserver==='function'){
     new MutationObserver(syncMode).observe(document.body,{attributes:true,attributeFilter:['class']});
     new MutationObserver(syncMode).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
   }
-  window.addEventListener('resize',function(){syncMode();if(window.innerWidth>960){show();resetState();}});
+  /* HOTFIX DESKTOP: en desktop navegar no cambia clases del body, así que se envuelve
+     goPage/goMenu para reiniciar la máquina en el mismo punto (misma clase g-topbar-hidden). */
+  var _naOrigGoPage=goPage,_naOrigGoMenu=goMenu;
+  if(typeof _naOrigGoPage==='function'){
+    goPage=function(id){var r=_naOrigGoPage(id);syncMode();return r;};
+  }
+  if(typeof _naOrigGoMenu==='function'){
+    goMenu=function(){var r=_naOrigGoMenu();syncMode();return r;};
+  }
+  window.addEventListener('resize',function(){syncMode();if(window.innerWidth>700){show();resetState();}});
   /* ── API de pruebas: solo disponible con ?na-test=1 ── */
   if(location.search.indexOf('na-test=1')!==-1){
     window._naTopbarGesture={
@@ -141,6 +202,9 @@
       getWheelDist:function(){return wheelGroupDist;},
       getNearTop:function(){return NEAR_TOP;},
       isActive:function(){return gesturesActive();},
+      sync:function(){syncMode();},
+      getActivePage:function(){var p=activePageEl();return p?p.id:'';},
+      getContainerScrollTop:function(){var el=activeScrollEl();return el?(el.scrollTop||0):null;},
       simulateUpGesture:function(){if(!gesturesActive())return;countGesture();},
       simulateDownScroll:function(){if(!gesturesActive())return;cancelGesture();hide();}
     };

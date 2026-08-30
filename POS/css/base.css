@@ -914,6 +914,20 @@
             }
         }
 
+        /* HOTFIX DESKTOP: header auto-hide en escritorio SIN cambiar el layout del body.
+           .g-topbar sigue siendo un flex-item en flujo (58px); al ocultarse se retira con
+           margin-top:-58px (misma clase g-topbar-hidden, misma máquina de gestos JS) y el
+           page activo (flex:1) crece para llenar el alto: sin franja vacía. El scroll se
+           escucha en el contenedor activo real (.main-scroll y equivalentes), no en window. */
+        @media(min-width:701px){
+            body>.g-topbar{
+                transition:margin-top 0.28s ease!important;
+            }
+            body>.g-topbar.g-topbar-hidden{
+                margin-top:-58px!important;
+            }
+        }
+
         /* v17: Configuración usa el scroll real del documento en móvil */
         @media(max-width:960px){
             html.config-page-scroll{
