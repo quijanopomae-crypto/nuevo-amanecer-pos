@@ -447,6 +447,7 @@ let cajEstado={abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hor
 let cajMovs=[];
 // FIX02: historial permanente de cierres de caja (un registro por cierre confirmado; nunca se recalcula).
 let cashClosures=[];
+let inventoryMovements=[];
 let cajTab='resumen',cajMovTipo='ing';
 
 function cajSetTab(btn,tab){document.querySelectorAll('#pageCaja .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');cajTab=tab;cajRender();}

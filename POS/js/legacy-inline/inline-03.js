@@ -193,7 +193,10 @@ function _naRenderProductImportPreview(plan,fileName){const box=document.getElem
 function clearProductImportPreview(){_naPendingProductImport=null;const box=document.getElementById('importPreview');if(box){box.classList.remove('show');box.innerHTML='';}}
 async function _naReadProductImportFile(file){if(!file)throw new Error('Selecciona un archivo');if(file.size>_NA_IMPORT_MAX_BYTES)throw new Error('El archivo supera el límite de 8 MB');const ext=file.name.split('.').pop().toLowerCase();if(!['csv','txt','xlsx','xls'].includes(ext))throw new Error('Formato no compatible. Usa CSV, XLSX o XLS');if(ext==='csv'||ext==='txt')return _naParseCSV(await file.text());const buffer=await file.arrayBuffer();if(typeof XLSX!=='undefined'){const data=new Uint8Array(buffer),book=XLSX.read(data,{type:'array',cellDates:true}),sheet=book.Sheets[book.SheetNames[0]];return XLSX.utils.sheet_to_json(sheet,{header:1,raw:true,defval:''});}return await _naParseXlsxBasic(buffer);}
 importProducts=async function(){try{const file=document.getElementById('importFile')?.files?.[0];if(!file)throw new Error('Selecciona un archivo');clearProductImportPreview();const rows=await _naReadProductImportFile(file),plan=_naBuildProductImportPlan(rows);_naPendingProductImport={rows,fileName:file.name,analyzedAt:Date.now()};_naLastImportReport=plan;_naRenderProductImportPreview(plan,file.name);toast(`Análisis listo: ${plan.added} nuevos, ${plan.updated} actualizaciones y ${plan.skipped} omitidos`,'success');}catch(error){console.error('[Importación] Análisis rechazado:',error?.message||error);clearProductImportPreview();toast(error?.message||'No se pudo analizar el archivo','error');}};
-async function confirmProductImport(){if(isModuleLocked('productos')||isModuleLocked('importacion')){toast('La importación está bloqueada','error');return;}if(!_naPendingProductImport){toast('Primero analiza un archivo','error');return;}const backup=_naClone(productos);try{const plan=_naBuildProductImportPlan(_naPendingProductImport.rows);if(!plan.actions.length){toast('No hay productos válidos para importar','error');return;}for(const action of plan.actions){if(action.type==='update'){const index=productos.findIndex(p=>String(p.id)===String(action.id));if(index<0)throw new Error(`El producto de la fila ${action.row} cambió después del análisis`);productos[index]={...productos[index],...action.data};}else productos.push(_naClone(action.product));}_naNormalizeData();const persistResult=await saveAllData();if(!_naWasPersisted(persistResult))throw new Error('No se pudo verificar el guardado permanente');invRender();posRender();cfgUpdateStats();updateDashboard();_naLastImportReport=plan;clearProductImportPreview();const input=document.getElementById('importFile');if(input)input.value='';toast(`Importación completada: ${plan.added} nuevos, ${plan.updated} actualizados y ${plan.skipped} omitidos`,'success');}catch(error){productos=backup;await saveAllData();invRender();posRender();cfgUpdateStats();console.error('[Importación] Se restauró el catálogo anterior:',error?.message||error);toast(`Importación cancelada: ${error?.message||'no se pudo guardar'}`,'error');}}
+async function confirmProductImport(){if(isModuleLocked('productos')||isModuleLocked('importacion')){toast('La importación está bloqueada','error');return;}if(!_naPendingProductImport){toast('Primero analiza un archivo','error');return;}const backup={productos:_naClone(productos),inventoryMovements:_naClone(inventoryMovements)};try{const plan=_naBuildProductImportPlan(_naPendingProductImport.rows);if(!plan.actions.length){toast('No hay productos válidos para importar','error');return;}for(const action of plan.actions){if(action.type==='update'){const index=productos.findIndex(p=>String(p.id)===String(action.id));if(index<0)throw new Error(`El producto de la fila ${action.row} cambió después del análisis`);const previous=productos[index],next={...previous,...action.data},beforeStock=_naInt(previous.stock),targetStock=_naTracksStock(next)?_naInt(next.stock):0,{stock:_ignoredTargetStock,...persistedData}=next,staged={...persistedData,stock:beforeStock},delta=targetStock-beforeStock;
+// FIX04: el producto conserva el stock previo hasta que el ledger aplica exactamente el delta al objetivo.
+if(delta!==0){staged.controlInventario=true;productos[index]=staged;const outcome=applyInventoryMovement({productId:staged.id,type:'IMPORT',delta,reason:`Importación de catálogo: stock fijado en ${targetStock}`,source:'PRODUCT_IMPORT',referenceId:String(staged.id)});if(!outcome.ok)throw new Error(outcome.message||'Movimiento de inventario bloqueado');}staged.controlInventario=next.controlInventario;productos[index]=staged;}
+else{const targetStock=_naTracksStock(action.product)?_naInt(action.product.stock):0,{stock:_ignoredTargetStock,...persistedData}=_naClone(action.product),created={...persistedData,stock:0};productos.push(created);if(targetStock>0){const outcome=applyInventoryMovement({productId:created.id,type:'ALTA',delta:targetStock,reason:`Importación de catálogo: alta con stock inicial ${targetStock}`,source:'PRODUCT_IMPORT',referenceId:String(created.id)});if(!outcome.ok)throw new Error(outcome.message||'Movimiento de inventario bloqueado');}}}_naNormalizeData();const persistResult=await saveAllData();if(!_naWasPersisted(persistResult))throw new Error('No se pudo verificar el guardado permanente');invRender();posRender();cfgUpdateStats();updateDashboard();_naLastImportReport=plan;clearProductImportPreview();const input=document.getElementById('importFile');if(input)input.value='';toast(`Importación completada: ${plan.added} nuevos, ${plan.updated} actualizados y ${plan.skipped} omitidos`,'success');}catch(error){productos=backup.productos;inventoryMovements=backup.inventoryMovements;await saveAllData();invRender();posRender();cfgUpdateStats();console.error('[Importación] Se restauró el catálogo anterior:',error?.message||error);toast(`Importación cancelada: ${error?.message||'no se pudo guardar'}`,'error');}}
 function _naDownloadBlob(blob,fileName){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=fileName;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function _naCsvCell(value){const text=String(value??'');return/[";,\n\r]/.test(text)?`"${text.replace(/"/g,'""')}"`:text;}
 function _naProductsExportRows(){return productos.map(p=>({ID:p.id,Nombre:p.name,SKU:p.sku,'Código de barras':p.barcode||'','Códigos alternativos':_naProductAltCodes(p).join(' | '),Descripción:p.descripcion||'',Marca:p.marca||'','Categoría':_naCategoryLabel(p.cat),'Unidad de venta':p.unidad||'unidad','Unidad de compra':p.unidadCompra||(p.unidCaja?'caja':'unidad'),'Unidades por presentación':p.factorCompra||p.unidCaja||1,Costo:_naNumber(p.costo),Precio:_naNumber(p.precio),'Precio por caja':p.precioCaja||'','Unidades por caja':p.unidCaja||'',Stock:_naNumber(p.stock),'Stock mínimo':_naNumber(p.stockMin),'Fecha de vencimiento':p.venc||'','Control de inventario':p.controlInventario===false?'No':'Sí','Incluye IGV':p.incluyeIGV===false?'No':'Sí',Icono:p.icon||'📦'}));}
@@ -201,7 +204,7 @@ function _naExportRowsToCsv(rows,fileName){if(!rows.length){toast('No hay produc
 function exportProductsExcel(){const rows=_naProductsExportRows();if(!rows.length){toast('No hay productos para exportar','error');return;}const date=obtenerHoy();try{if(typeof XLSX!=='undefined'&&XLSX.utils?.json_to_sheet){const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();ws['!cols']=Object.keys(rows[0]).map(key=>({wch:Math.min(42,Math.max(12,key.length+2,...rows.slice(0,200).map(row=>String(row[key]??'').length+2)))}));XLSX.utils.book_append_sheet(wb,ws,'Productos');XLSX.writeFile(wb,`productos_nuevo_amanecer_${date}.xlsx`);toast(`${rows.length} productos exportados a Excel`,'success');return;}}catch(error){console.error('[Exportación Excel]',error);} _naExportRowsToCsv(rows,`productos_nuevo_amanecer_${date}.csv`);toast(`${rows.length} productos exportados a CSV`,'success');}
 function downloadProductTemplate(){const sample=[{Nombre:'Ejemplo Producto',SKU:'PROD-001','Código de barras':'775000000001','Códigos alternativos':'775000000002 | 775000000003',Descripción:'Descripción opcional',Marca:'Marca','Categoría':'Abarrotes','Unidad de venta':'unidad','Unidad de compra':'caja','Unidades por presentación':24,Costo:4.5,Precio:6,'Precio por caja':130,'Unidades por caja':24,Stock:48,'Stock mínimo':5,'Fecha de vencimiento':'2027-12-31','Control de inventario':'Sí','Incluye IGV':'Sí',Icono:'📦'}];try{if(typeof XLSX!=='undefined'){const ws=XLSX.utils.json_to_sheet(sample),wb=XLSX.utils.book_new();ws['!cols']=Object.keys(sample[0]).map(key=>({wch:Math.max(16,key.length+2)}));XLSX.utils.book_append_sheet(wb,ws,'Plantilla');XLSX.writeFile(wb,'plantilla_productos_nuevo_amanecer.xlsx');toast('Plantilla Excel descargada','success');return;}}catch(error){console.error('[Plantilla Excel]',error);} _naExportRowsToCsv(sample,'plantilla_productos_nuevo_amanecer.csv');toast('Plantilla CSV descargada','success');}
 const _NA_BACKUP_MAX_BYTES=10*1024*1024;
-const _NA_BACKUP_LIMITS={productos:10000,ventas:50000,clientes:20000,creditos:50000,gastos:50000,cajMovs:100000,cart:1000,items:5000};
+const _NA_BACKUP_LIMITS={productos:10000,ventas:50000,clientes:20000,creditos:50000,gastos:50000,cajMovs:100000,cart:1000,items:5000,inventoryMovements:200000};
 const _NA_DANGEROUS_BACKUP_KEYS=new Set(['__proto__','prototype','constructor']);
 const _NA_BACKUP_KEYS={
   product:new Set(['id','name','sku','barcode','codigosAlternativos','codigoAlternativo','cat','icon','imagen','costo','precio','precioCaja','unidCaja','stock','stockMin','venc','descripcion','marca','unidad','unidadCompra','factorCompra','incluyeIGV','tipoImpuesto','impuestoComplementario','controlInventario','tienda','activo','createdAt','updatedAt']),
@@ -214,7 +217,8 @@ const _NA_BACKUP_KEYS={
   cashState:new Set(['abierta','fondo','cajero','cajeroNombre','cajeroId','hora','hora24','fechaApertura','cerrada','horaCierre','horaCierre24','sessionId','contado','esperado','diferencia','timestampApertura','timestampCierre']),
   payment:new Set(['efectivo','digital','digitalMethod','reference','reversal']),
   paymentLog:new Set(['id','pagoId','creditoId','clienteId','clienteNombre','monto','montoPagado','saldoAnterior','saldoActual','fecha','hora','hora24','timestamp','diaSemana','horarioPago','metodo','operacion','numeroOperacion','referencia','cajero','cajeroNombre','cajeroId','desgloseProductos','status','reversalId','reversalAt','reversalReason']),
-  creditAllocation:new Set(['itemKey','productoId','nombre','monto','subtotalCredito','saldoAnteriorProducto','saldoActualProducto'])
+  creditAllocation:new Set(['itemKey','productoId','nombre','monto','subtotalCredito','saldoAnteriorProducto','saldoActualProducto']),
+  inventoryMovement:new Set(['id','productId','type','before','delta','after','reason','source','referenceId','timestamp','fecha','sessionId'])
 };
 function _naBackupParse(text){
   return JSON.parse(text,(key,value)=>{if(_NA_DANGEROUS_BACKUP_KEYS.has(key))throw new Error(`Propiedad peligrosa bloqueada: ${key}`);return value;});
@@ -378,6 +382,36 @@ function _naSanitizeCashClosure(raw,index,warnings){
   }
   return out;
 }
+// FIX04: cada movimiento del ledger de inventario se restaura con before/delta/after congelados; delta es obligatorio.
+function _naSanitizeInventoryMovement(raw,index,warnings){
+  if(!_naIsPlainObject(raw))throw new Error(`inventoryMovements[${index}]: objeto inválido`);
+  const allowed=_NA_BACKUP_KEYS.inventoryMovement,p=_naBackupPick(raw,allowed,`inventoryMovements[${index}]`,warnings),out={};
+  out.id=_naBackupString(p.id,`inventoryMovements[${index}].id`,80,{allowEmpty:false});
+  if(p.productId===undefined||p.productId===null)throw new Error(`inventoryMovements[${index}].productId: identificador obligatorio`);out.productId=_naBackupId(p.productId,`inventoryMovements[${index}].productId`);
+  out.type=_naBackupString(p.type??'AJUSTE',`inventoryMovements[${index}].type`,40,{allowEmpty:false});
+  out.before=_naBackupNumber(p.before,`inventoryMovements[${index}].before`,{min:-1e9,max:1e9});
+  out.delta=_naBackupNumber(p.delta,`inventoryMovements[${index}].delta`,{min:-1e9,max:1e9});
+  out.after=_naBackupNumber(p.after,`inventoryMovements[${index}].after`,{min:-1e9,max:1e9});
+  if(Math.abs(out.after-(out.before+out.delta))>1e-6)throw new Error(`inventoryMovements[${index}]: after no coincide con before + delta`);
+  out.reason=_naBackupString(p.reason,`inventoryMovements[${index}].reason`,500,{allowEmpty:false});
+  out.source=_naBackupString(p.source,`inventoryMovements[${index}].source`,40,{allowEmpty:false});
+  if(p.referenceId!==undefined)out.referenceId=p.referenceId===null?null:_naBackupString(p.referenceId,`inventoryMovements[${index}].referenceId`,160);
+  if(p.timestamp!==undefined)out.timestamp=_naBackupDate(p.timestamp,`inventoryMovements[${index}].timestamp`);
+  if(p.fecha!==undefined)out.fecha=_naBackupDate(p.fecha,`inventoryMovements[${index}].fecha`);
+  if(p.sessionId!==undefined)out.sessionId=p.sessionId===null?null:_naBackupId(p.sessionId,`inventoryMovements[${index}].sessionId`);
+  return out;
+}
+function _naValidateInventoryMovementLedger(movements){
+  const ids=new Set(),previousByProduct=new Map();
+  for(let index=0;index<movements.length;index++){
+    const movement=movements[index],id=String(movement.id),productId=String(movement.productId);
+    if(ids.has(id))throw new Error(`inventoryMovements[${index}].id: identificador duplicado`);ids.add(id);
+    const previous=previousByProduct.get(productId);
+    if(previous&&Math.abs(previous.after-movement.before)>1e-6)throw new Error(`inventoryMovements[${index}]: cadena incoherente para productId ${productId}`);
+    previousByProduct.set(productId,movement);
+  }
+  return movements;
+}
 function _naValidateCashClosureIdentity(closures){
   const ids=new Set(),sessions=new Set();
   for(let index=0;index<closures.length;index++){
@@ -458,7 +492,7 @@ function _naCanonicalBackup(data){
   if(!_naIsPlainObject(data))throw new Error('El respaldo debe ser un objeto JSON');
   if(data.data)return data;
   if(Array.isArray(data.productos)&&Array.isArray(data.ventas)){
-    return{version:data.version||8,updatedAt:data.exportedAt||new Date().toISOString(),appConfig:data.appConfig||{},ui:{currentPage:'pageMenu',isDark:false,currentCfgCategory:'negocio'},locks:_naGetLocks(),security:data.security||null,data:{productos:data.productos,ventas:data.ventas,clientes:data.clientes||[],creditos:data.creditos||[],gastos:data.gastos||[],cajMovs:data.cajMovs||[],cajEstado:data.cajEstado||cajEstado,cashClosures:Object.prototype.hasOwnProperty.call(data,'cashClosures')?data.cashClosures:[]},cart:data.cart||[],draft:data.draft||null};
+    return{version:data.version||8,updatedAt:data.exportedAt||new Date().toISOString(),appConfig:data.appConfig||{},ui:{currentPage:'pageMenu',isDark:false,currentCfgCategory:'negocio'},locks:_naGetLocks(),security:data.security||null,data:{productos:data.productos,ventas:data.ventas,clientes:data.clientes||[],creditos:data.creditos||[],gastos:data.gastos||[],cajMovs:data.cajMovs||[],cajEstado:data.cajEstado||cajEstado,cashClosures:Object.prototype.hasOwnProperty.call(data,'cashClosures')?data.cashClosures:[],inventoryMovements:Object.prototype.hasOwnProperty.call(data,'inventoryMovements')?data.inventoryMovements:[]},cart:data.cart||[],draft:data.draft||null};
   }
   throw new Error('Estructura de respaldo no reconocida');
 }
@@ -469,6 +503,7 @@ function _naPrepareBackupSnapshot(data){
   const warnings=[],checkList=(name,limit)=>{const list=source.data[name];if(!Array.isArray(list))throw new Error(`${name}: se esperaba una lista`);if(list.length>limit)throw new Error(`${name}: supera el máximo de ${limit} registros`);return list;};
   const productosL=checkList('productos',_NA_BACKUP_LIMITS.productos),ventasL=checkList('ventas',_NA_BACKUP_LIMITS.ventas),clientesL=checkList('clientes',_NA_BACKUP_LIMITS.clientes),creditosL=checkList('creditos',_NA_BACKUP_LIMITS.creditos),gastosL=checkList('gastos',_NA_BACKUP_LIMITS.gastos),cajMovsL=checkList('cajMovs',_NA_BACKUP_LIMITS.cajMovs);
   const hasClosures=Object.prototype.hasOwnProperty.call(source.data,'cashClosures'),closuresL=hasClosures?source.data.cashClosures:[];if(!Array.isArray(closuresL))throw new Error('cashClosures: se esperaba una lista');if(closuresL.length>_NA_BACKUP_LIMITS.cajMovs)throw new Error(`cashClosures: supera el máximo de ${_NA_BACKUP_LIMITS.cajMovs} registros`);
+  const hasMovs=Object.prototype.hasOwnProperty.call(source.data,'inventoryMovements'),movsL=hasMovs?source.data.inventoryMovements:[];if(!Array.isArray(movsL))throw new Error('inventoryMovements: se esperaba una lista');if(movsL.length>_NA_BACKUP_LIMITS.inventoryMovements)throw new Error(`inventoryMovements: supera el máximo de ${_NA_BACKUP_LIMITS.inventoryMovements} registros`);
   const cartL=Array.isArray(source.cart)?source.cart:[];if(cartL.length>_NA_BACKUP_LIMITS.cart)throw new Error('cart: demasiados elementos');
   const draftL=source.draft==null?null:source.draft;if(draftL!==null&&(!Array.isArray(draftL)||draftL.length>_NA_BACKUP_LIMITS.cart))throw new Error('draft: lista inválida');
   const snapshot={
@@ -484,12 +519,13 @@ function _naPrepareBackupSnapshot(data){
       gastos:gastosL.map((item,i)=>_naSanitizeSimpleRecord(item,i,'expense',warnings)),
       cajMovs:cajMovsL.map((item,i)=>_naSanitizeSimpleRecord(item,i,'cashMove',warnings)),
       cajEstado:_naSanitizeCashState(source.data.cajEstado,warnings),
-      cashClosures:_naValidateCashClosureIdentity(closuresL.map((item,i)=>_naSanitizeCashClosure(item,i,warnings)))
+      cashClosures:_naValidateCashClosureIdentity(closuresL.map((item,i)=>_naSanitizeCashClosure(item,i,warnings))),
+      inventoryMovements:_naValidateInventoryMovementLedger(movsL.map((item,i)=>_naSanitizeInventoryMovement(item,i,warnings)))
     },
     cart:cartL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true)),
     draft:draftL===null?null:draftL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true))
   };
-  return{snapshot,warnings,counts:{productos:snapshot.data.productos.length,ventas:snapshot.data.ventas.length,clientes:snapshot.data.clientes.length,creditos:snapshot.data.creditos.length,gastos:snapshot.data.gastos.length,cajMovs:snapshot.data.cajMovs.length,cashClosures:snapshot.data.cashClosures.length}};
+  return{snapshot,warnings,counts:{productos:snapshot.data.productos.length,ventas:snapshot.data.ventas.length,clientes:snapshot.data.clientes.length,creditos:snapshot.data.creditos.length,gastos:snapshot.data.gastos.length,cajMovs:snapshot.data.cajMovs.length,cashClosures:snapshot.data.cashClosures.length,inventoryMovements:snapshot.data.inventoryMovements.length}};
 }
 function _naDownloadSnapshot(snapshot,prefix='nuevo_amanecer_respaldo'){
   const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');

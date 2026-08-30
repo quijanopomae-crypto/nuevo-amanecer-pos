@@ -276,6 +276,7 @@ function _naNormalizeData(){
   creditos=(Array.isArray(creditos)?creditos:[]).map((cr,index)=>_naNormalizeCreditRecord(cr,index));
   gastos=(Array.isArray(gastos)?gastos:[]).map(g=>({...g,desc:_naClean(g.desc||'Gasto'),monto:Math.max(0,_naNumber(g.monto)),fecha:g.fecha?String(g.fecha).slice(0,10):obtenerHoy()}));
   cajMovs=(Array.isArray(cajMovs)?cajMovs:[]).map(m=>({...m,monto:Math.max(0,_naNumber(m.monto)),efectivo:Math.max(0,_naNumber(m.efectivo)),fecha:m.fecha?String(m.fecha).slice(0,10):obtenerHoy()}));
+  inventoryMovements=(Array.isArray(inventoryMovements)?inventoryMovements:[]).map(m=>({...m,productId:m?.productId??null,type:_naClean(m?.type)||'AJUSTE',before:_naInt(m?.before),delta:_naNumber(m?.delta),after:_naInt(m?.after),reason:_naClean(m?.reason||''),source:_naClean(m?.source)||'MANUAL',referenceId:m?.referenceId==null?null:String(m.referenceId),fecha:m?.fecha?String(m.fecha).slice(0,10):obtenerHoy()}));
   cart=(Array.isArray(cart)?cart:[]).map((it,index)=>({...it,qty:Math.max(1,_naNumber(it.qty,1)),precio:Math.max(0,_naNumber(it.precio)),costo:Math.max(0,_naNumber(it.costo)),unitsPerQty:Math.max(1,_naInt(it.unitsPerQty,1)),_lineKey:it._lineKey||_naLineKey(it.id,it.unitsPerQty>1?'caja':'unidad')}));
 }
 
@@ -328,7 +329,7 @@ function _naGetLocks(){return{master:storage.getItem(LOCK_KEYS.master)==='true',
 function _naApplyLocks(locks={}){storage.setItem(LOCK_KEYS.master,!!locks.master);storage.setItem(LOCK_KEYS.readOnly,!!locks.readOnly);Object.entries(LOCK_KEYS.modules).forEach(([k,key])=>storage.setItem(key,!!locks.modules?.[k]));}
 function _naBuildSnapshot(){
   _naCaptureVisibleConfig();_naSaveTicketSettings();
-  return{version:9,updatedAt:new Date().toISOString(),appConfig:_naClone(appConfig),ui:{currentPage:document.querySelector('.page.active')?.id||'pageMenu',isDark:document.body.classList.contains('dark'),currentCfgCategory},locks:_naGetLocks(),security:_naClone(_naSecurity),data:{productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),gastos:_naClone(gastos),cajMovs:_naClone(cajMovs),cajEstado:_naClone(cajEstado),cashClosures:_naClone(cashClosures)},cart:_naClone(cart),draft:_naGetJSON('na_cart_draft',null)};
+  return{version:9,updatedAt:new Date().toISOString(),appConfig:_naClone(appConfig),ui:{currentPage:document.querySelector('.page.active')?.id||'pageMenu',isDark:document.body.classList.contains('dark'),currentCfgCategory},locks:_naGetLocks(),security:_naClone(_naSecurity),data:{productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),gastos:_naClone(gastos),cajMovs:_naClone(cajMovs),cajEstado:_naClone(cajEstado),cashClosures:_naClone(cashClosures),inventoryMovements:_naClone(inventoryMovements)},cart:_naClone(cart),draft:_naGetJSON('na_cart_draft',null)};
 }
 function _naParseStoredSnapshot(raw){if(typeof raw!=='string'||!raw)return null;try{return JSON.parse(raw);}catch(error){return null;}}
 function _naReadLocalSnapshot(){return _naParseStoredSnapshot(storage.readPersistent(_NA_LOCAL_KEY));}
@@ -361,9 +362,9 @@ async function _naFinalizeOperationPersistence(successMessage,failureMessage='No
   if(_naWasPersisted(result)){if(successMessage)toast(successMessage,'success');return result;}
   toast(result.temporary?`${failureMessage}. Solo existe una copia temporal en esta pestaña.`:failureMessage,'error');return result;
 }
-function _naValidSnapshot(s){return !!(s&&typeof s==='object'&&s.data&&Array.isArray(s.data.productos)&&Array.isArray(s.data.ventas)&&Array.isArray(s.data.clientes)&&Array.isArray(s.data.creditos)&&Array.isArray(s.data.gastos)&&Array.isArray(s.data.cajMovs));}
+function _naValidSnapshot(s){return !!(s&&typeof s==='object'&&s.data&&Array.isArray(s.data.productos)&&Array.isArray(s.data.ventas)&&Array.isArray(s.data.clientes)&&Array.isArray(s.data.creditos)&&Array.isArray(s.data.gastos)&&Array.isArray(s.data.cajMovs)&&(!Object.prototype.hasOwnProperty.call(s.data,'inventoryMovements')||Array.isArray(s.data.inventoryMovements)));}
 function _naApplySnapshot(s){
-  if(!_naValidSnapshot(s))return false;_naLoadedUIState=s.ui||{};appConfig=_naMerge(_naDefaults,s.appConfig||{});_naEnsureCashierConfig();productos=s.data.productos;ventas=s.data.ventas;clientes=s.data.clientes;creditos=s.data.creditos;gastos=s.data.gastos;cajMovs=s.data.cajMovs;cajEstado=s.data.cajEstado||cajEstado;cashClosures=Array.isArray(s.data.cashClosures)?s.data.cashClosures:[];cart=Array.isArray(s.cart)?s.cart:[];if(s.ui?.currentCfgCategory)currentCfgCategory=s.ui.currentCfgCategory;if(s.locks)_naApplyLocks(s.locks);if(s.security){_naSecurity=_naSecMerge(s.security);_naSaveSecurity(false);}if(s.draft)storage.setItem('na_cart_draft',JSON.stringify(s.draft));return true;
+  if(!_naValidSnapshot(s))return false;_naLoadedUIState=s.ui||{};appConfig=_naMerge(_naDefaults,s.appConfig||{});_naEnsureCashierConfig();productos=s.data.productos;ventas=s.data.ventas;clientes=s.data.clientes;creditos=s.data.creditos;gastos=s.data.gastos;cajMovs=s.data.cajMovs;cajEstado=s.data.cajEstado||cajEstado;cashClosures=Array.isArray(s.data.cashClosures)?s.data.cashClosures:[];inventoryMovements=Array.isArray(s.data.inventoryMovements)?s.data.inventoryMovements:[];cart=Array.isArray(s.cart)?s.cart:[];if(s.ui?.currentCfgCategory)currentCfgCategory=s.ui.currentCfgCategory;if(s.locks)_naApplyLocks(s.locks);if(s.security){_naSecurity=_naSecMerge(s.security);_naSaveSecurity(false);}if(s.draft)storage.setItem('na_cart_draft',JSON.stringify(s.draft));return true;
 }
 function _naLegacySnapshot(){
   const p=_naGetJSON('na_productos',null),v=_naGetJSON('na_ventas',null),c=_naGetJSON('na_clientes',null),cr=_naGetJSON('na_creditos',null),g=_naGetJSON('na_gastos',null),cm=_naGetJSON('na_cajMovs',null),ce=_naGetJSON('na_cajEstado',null),legacyState=_naGetJSON('na_app_state',{}),savedCart=_naGetJSON('na_cart',[]);
@@ -517,7 +518,7 @@ confirmarVenta=async function(){
 
   const mixedData=posPayM==='mixto'?_naMixedPaymentData():null,digitalPayment=_naDigitalSalePayment(),paymentRef=(posPayM==='yape'||posPayM==='transferencia')?_naClean(document.getElementById('mDigitalRef')?.value):posPayM==='mixto'?mixedData.reference:'';if(digitalPayment&&!_naDigitalPaymentVerified()){const message='Confirma que verificaste la recepción del pago digital.';_naSetPaymentHint(message,'error');toast(message,'error');_naDigitalVerificationControl()?.focus();return;}if(paymentRef&&ventas.some(v=>!v.anulada&&v.paymentRef===paymentRef)){toast('Ese número de operación ya fue registrado','error');return;}
   let client=clientes.find(c=>String(c.id)===String(document.getElementById('mVentaCliente')?.value))||null,creditDue=null;if(posPayM==='credito'){client=clientes.find(c=>String(c.id)===String(document.getElementById('mCreditoCliente')?.value));creditDue=document.getElementById('mCreditoVence')?.value;if(!client||!creditDue){toast('Selecciona cliente y fecha de vencimiento','error');return;}}
-  const backup={productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),cajMovs:_naClone(cajMovs),cart:_naClone(cart)};posProc=true;const btn=document.getElementById('mBtnConf');btn.disabled=true;btn.textContent='Procesando…';
+  const backup={productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),cajMovs:_naClone(cajMovs),inventoryMovements:_naClone(inventoryMovements),cart:_naClone(cart)};posProc=true;const btn=document.getElementById('mBtnConf');btn.disabled=true;btn.textContent='Procesando…';
   try{
     const ids=ventas.map(v=>parseInt(String(v.id).replace('V-',''))||0),newId='V-'+String(Math.max(...ids,0)+1).padStart(3,'0'),now=new Date(),timestamp=now.toISOString(),fecha=obtenerHoy(),hora=nowT(),hora24=_naTime24(now),cashier=_naCashierSnapshot(cajEstado.cajeroId||cajEstado.cajero||appConfig.activeCashierId);let creditId=null,creditDraft=null;
     if(client)client.totalCompras=_naNumber(client.totalCompras)+total;if(posPayM==='credito'){creditId=Date.now();creditDraft={id:creditId,cliId:client.id,clienteId:client.id,clienteNombre:client.nombre,clienteDni:client.dni||'',tipo:'venta_credito',desc:`Venta ${newId}`,monto:total,pagado:0,saldo:total,vence:creditDue,status:diasHasta(creditDue)<0?'vencido':'vigente',estado:diasHasta(creditDue)<0?'vencido':'vigente',fecha,hora,hora24,timestamp,ventaId:newId,anulado:false,pagos:[],items:[],cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id};}
@@ -525,12 +526,35 @@ confirmarVenta=async function(){
     if(creditDraft){creditDraft.items=saleItems.map((item,index)=>_naNormalizeCreditItem(item,index,total));creditDraft=_naNormalizeCreditRecord(creditDraft,creditos.length);creditos.push(creditDraft);}
     const paymentBreakdown=posPayM==='mixto'?{efectivo:mixedData.cash,digital:mixedData.digital,digitalMethod:mixedData.digitalMethod,reference:paymentRef}:null,recibido=posPayM==='efectivo'?_naNumber(document.getElementById('mMontoRec')?.value):posPayM==='mixto'?mixedData.cash:total,vuelto=posPayM==='efectivo'?Math.max(0,Number((recibido-total).toFixed(2))):0,operation=paymentRef||String(Math.max(...ids,0)+1).padStart(8,'0'),subtotal=Number(saleItems.reduce((sum,item)=>sum+Math.max(item.precioUnitario,_naNumber(item._precioOriginal,item.precioUnitario))*item.cantidad,0).toFixed(2)),tipoVenta=_naSaleType(saleItems),estado=posPayM==='credito'?'credito':'completada';ventas.unshift({id:newId,operation,fecha,hora,hora24,timestamp,cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,total:Number(total.toFixed(2)),subtotal,descuentoTotal:Math.max(0,Number((subtotal-total).toFixed(2))),metodo:posPayM,metodoPago:posPayM,estado,tipoVenta,cantidadLineas:saleItems.length,unidadesFisicas:saleItems.reduce((sum,item)=>sum+_naUnitsSold(item),0),paymentRef,paymentBreakdown,...(digitalPayment?{paymentVerified:true}:{}),recibido,vuelto,anulada:false,clienteId:client?.id||null,clienteNombre:client?.nombre||null,clienteDni:client?.dni||null,creditId,contieneVentaLibre:saleItems.some(item=>item.ventaLibre),contieneVentaSinStock:saleItems.some(item=>item.ventaSinStock),items:saleItems});
     cajMovs.push({id:Date.now()+1,tipo:'ing',monto:total,efectivo:posPayM==='efectivo'?total:posPayM==='mixto'?mixedData.cash:0,desc:`${posPayM==='credito'?'Venta a crédito':posPayM==='mixto'?'Venta mixta':'Venta POS'} ${newId}`,cat:posPayM==='credito'?'Venta a crédito':posPayM==='mixto'?'Venta mixta':'Venta retail',metodo:posPayM,referencia:paymentRef,detallePago:paymentBreakdown,hora,hora24,timestamp,cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,fecha,sessionId:cajEstado.sessionId||null,ventaId:newId});
-    cart.forEach(item=>{const prod=productos.find(p=>String(p.id)===String(item.id));if(prod&&_naTracksStock(prod))prod.stock-= _naUnitsSold(item);});cart=[];const persistResult=await saveAllData();if(!_naWasPersisted(persistResult))throw new Error('No se pudo confirmar el guardado permanente');
+    // FIX04: cada salida de stock queda en el ledger enlazada a la venta (before → delta → after).
+    for(const item of cart){const prod=productos.find(p=>String(p.id)===String(item.id));if(!prod||!_naTracksStock(prod))continue;const units=_naUnitsSold(item);if(units<=0)continue;const outcome=applyInventoryMovement({productId:prod.id,type:'SALE',delta:-units,reason:`Venta ${newId}`,source:'SALE',referenceId:newId,allowNegative:_naFreeSaleCfg().allowRegisteredNoStock});if(!outcome.ok)throw new Error(outcome.message||'Movimiento de inventario bloqueado');}
+    cart=[];const persistResult=await saveAllData();if(!_naWasPersisted(persistResult))throw new Error('No se pudo confirmar el guardado permanente');
     const descBadge=document.getElementById('btnDescInfo');if(descBadge)descBadge.style.display='none';posUpdateCart(false);posRender();invRender();ventasRender();cajRender();updateDashboard();cerrarModal('mCobro');document.getElementById('cartDrawer')?.classList.remove('open');document.getElementById('cartBackdrop')?.classList.remove('open');toast(`✅ Venta ${newId} registrada correctamente`,'success');if(appConfig.printAuto){try{verTicket(newId);setTimeout(()=>imprimirTicket(),50);}catch(ticketError){console.error(ticketError);toast('La venta se registró, pero hubo un problema al abrir el ticket','error');}}
-  }catch(error){console.error('[Venta] No se confirmó la operación:',error?.name||'Error');productos=backup.productos;ventas=backup.ventas;clientes=backup.clientes;creditos=backup.creditos;cajMovs=backup.cajMovs;cart=backup.cart;await saveAllData();posRender();posUpdateCart();toast('No se registró la venta porque no existe guardado permanente verificado. Tus productos siguen en el carrito.','error');}finally{posProc=false;if(btn){btn.disabled=false;}_naValidatePaymentForm();}
+  }catch(error){console.error('[Venta] No se confirmó la operación:',error?.name||'Error');productos=backup.productos;ventas=backup.ventas;clientes=backup.clientes;creditos=backup.creditos;cajMovs=backup.cajMovs;inventoryMovements=backup.inventoryMovements;cart=backup.cart;await saveAllData();posRender();posUpdateCart();toast('No se registró la venta porque no existe guardado permanente verificado. Tus productos siguen en el carrito.','error');}finally{posProc=false;if(btn){btn.disabled=false;}_naValidatePaymentForm();}
 };
 
 // Inventario y productos
+// FIX04: punto CENTRAL de mutación de stock. Contrato: ANTES → DELTA → DESPUÉS → MOTIVO → ORIGEN → FECHA/HORA.
+// Valida y congela before/delta/after en un movement del ledger y aplica el stock nuevo.
+// El caller persiste stock + ledger en el MISMO saveAllData y revierte AMBOS si falla (sin duplicar mutaciones).
+// allowNegative solo para caminos con contrato aprobado (venta libre sin stock configurada); por defecto after<0 BLOQUEADO.
+let _naInventoryLedgerSeq=0;
+function applyInventoryMovement(options){
+  const product=productos.find(p=>String(p.id)===String(options?.productId));
+  if(!product)return{ok:false,error:'PRODUCT_NOT_FOUND',message:'Producto no encontrado'};
+  if(!_naTracksStock(product))return{ok:false,error:'NOT_TRACKED',message:'El producto no controla inventario'};
+  const delta=Math.round(_naNumber(options?.delta,NaN)*100)/100;
+  if(!Number.isFinite(delta)||delta===0)return{ok:false,error:'INVALID_DELTA',message:'Delta de inventario inválido'};
+  const reason=_naClean(options?.reason);
+  if(!reason)return{ok:false,error:'REASON_REQUIRED',message:'Motivo obligatorio para el movimiento de inventario'};
+  const before=_naInt(product.stock),after=before+delta;
+  if(after<0&&!options?.allowNegative)return{ok:false,error:'NEGATIVE_STOCK',message:`Stock insuficiente (${before} disponibles)`};
+  if(!Array.isArray(inventoryMovements))inventoryMovements=[];
+  const now=new Date();_naInventoryLedgerSeq++;
+  const movement={id:`IM-${now.getTime()}-${_naInventoryLedgerSeq}`,productId:product.id,type:_naClean(options?.type)||'AJUSTE',before,delta,after,reason,source:_naClean(options?.source)||'MANUAL',referenceId:options?.referenceId===undefined||options?.referenceId===null?null:String(options.referenceId),timestamp:now.toISOString(),fecha:obtenerHoy(),sessionId:_naSessionOpen()?cajEstado.sessionId||null:null};
+  inventoryMovements.push(movement);product.stock=after;
+  return{ok:true,movement};
+}
 function toggleProductCodeFields(){const enabled=!!document.getElementById('pManualCode')?.checked,wrap=document.getElementById('pCodeFields');if(wrap)wrap.hidden=!enabled;}
 function setProductInventoryControl(enabled){const cb=document.getElementById('pControlInventario'),wrap=document.getElementById('pInventoryFields'),yes=document.getElementById('pInvYes'),no=document.getElementById('pInvNo');if(cb)cb.checked=!!enabled;if(wrap)wrap.hidden=!enabled;yes?.classList.toggle('active',!!enabled);no?.classList.toggle('active',!enabled);}
 abrirModalProd=function(){if(isModuleLocked('productos')){toast('Módulo de productos bloqueado','error');return;}invEditId=null;imagenProducto=null;document.getElementById('mProdTitle').textContent='➕ Nuevo producto';['pNombre','pDescripcion','pSku','pBarcode','pMarca','pCosto','pPrecio','pVenc','pPrecioCaja','pUnidCaja','pFactorCompra','pCatNueva'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});renderAltBarcodeFields([]);document.getElementById('pManualCode').checked=true;toggleProductCodeFields();document.getElementById('pUnidad').value='unidad';document.getElementById('pUnidadCompra').value='unidad';document.getElementById('pFactorCompra').value='1';document.getElementById('pIncluyeIGV').checked=true;document.getElementById('pTipoImpuesto').value='gravado';document.getElementById('pImpuestoComplementario').value='';document.getElementById('pWholesaleDetails').open=false;document.getElementById('pStock').value='0';document.getElementById('pStockMin').value=String(appConfig.stockMin||5);setProductInventoryControl(true);renderCategorySelects({prodValue:'abarrotes',invValue:document.getElementById('invCat')?.value||''});toggleNewCategoryField(false);document.getElementById('pIcon').value='📦';document.getElementById('pImagen').value='';document.getElementById('imgPreview').innerHTML='📦';document.getElementById('mgVal').textContent='—';document.getElementById('mProd').classList.add('open');document.querySelector('#mProd .modal')?.scrollTo(0,0);};
@@ -552,10 +576,20 @@ guardarProd=async function(){
   if((boxPrice>0)!==(boxUnits>0)){toast('Completa precio mayorista y unidades por caja, o deja ambos vacíos','error');return;}
   if(appConfig.margenActive&&boxPrice>0&&boxPrice<cost*boxUnits){toast('El precio por caja está por debajo del costo total','error');return;}
   const data={name,descripcion,sku:finalSku,barcode,codigosAlternativos,codigoAlternativo:codigosAlternativos[0]||'',unidadCompra,factorCompra,cat:document.getElementById('pCat').value,marca,unidad,icon:document.getElementById('pIcon').value||'📦',imagen:imagenProducto,costo:cost,precio:price,incluyeIGV:!!document.getElementById('pIncluyeIGV').checked,tipoImpuesto:document.getElementById('pTipoImpuesto').value,impuestoComplementario:document.getElementById('pImpuestoComplementario').value,controlInventario,stock:controlInventario?(invEditId?_naInt(document.getElementById('pStock').value):Math.max(0,_naInt(document.getElementById('pStock').value))):0,stockMin:controlInventario?Math.max(0,_naInt(document.getElementById('pStockMin').value,_naInt(appConfig.stockMin,5))):0,venc:controlInventario?(document.getElementById('pVenc').value||null):null,precioCaja:boxPrice>0?boxPrice:null,unidCaja:boxUnits>0?boxUnits:null};
-  const backup=_naClone(productos);
-  if(invEditId){const index=productos.findIndex(x=>x.id===invEditId);if(index<0)return;productos[index]={...productos[index],...data};}
-  else productos.push({id:Date.now(),...data});
-  const persistResult=await saveAllData();if(!_naWasPersisted(persistResult)){productos=backup;await saveAllData();invRender();posRender();toast('No se guardó el producto porque no existe almacenamiento permanente verificado','error');return;}
+  // FIX04: targetStock queda separado; applyInventoryMovement es la única mutación final de stock.
+  const targetStock=data.stock,{stock:_ignoredTargetStock,...persistedData}=data;
+  const backup={productos:_naClone(productos),inventoryMovements:_naClone(inventoryMovements)};
+  if(invEditId){const index=productos.findIndex(x=>x.id===invEditId);if(index<0)return;
+    const previous=productos[index],beforeStock=_naInt(previous.stock),ledgerDelta=targetStock-beforeStock,staged={...previous,...persistedData,stock:beforeStock};
+    if(ledgerDelta!==0){
+      staged.controlInventario=true;productos[index]=staged;
+      const outcome=applyInventoryMovement({productId:previous.id,type:'AJUSTE',delta:ledgerDelta,reason:`Edición de producto: stock fijado en ${targetStock}`,source:'PRODUCT_EDIT',referenceId:String(previous.id)});
+      if(!outcome.ok){productos=backup.productos;inventoryMovements=backup.inventoryMovements;toast(outcome.message||'No se pudo ajustar el stock del producto','error');return;}
+    }
+    staged.controlInventario=controlInventario;productos[index]=staged;
+  }
+  else{const created={id:Date.now(),...persistedData,stock:0};productos.push(created);if(controlInventario&&targetStock>0){const outcome=applyInventoryMovement({productId:created.id,type:'ALTA',delta:targetStock,reason:`Alta de producto con stock inicial ${targetStock}`,source:'PRODUCT_CREATE',referenceId:String(created.id)});if(!outcome.ok){productos=backup.productos;inventoryMovements=backup.inventoryMovements;toast(outcome.message||'No se pudo registrar el stock inicial','error');return;}}}
+  const persistResult=await saveAllData();if(!_naWasPersisted(persistResult)){productos=backup.productos;inventoryMovements=backup.inventoryMovements;await saveAllData();invRender();posRender();toast('No se guardó el producto porque no existe almacenamiento permanente verificado','error');return;}
   cerrarModal('mProd');invRender();posRender();toast(invEditId?'Producto actualizado':'Producto agregado','success');
   }finally{if(btnOk){btnOk.disabled=false;btnOk.textContent=btnText;}}
 };
@@ -752,42 +786,63 @@ function _naSalePaymentParts(sale){
 function _naSaleHasReversal(saleId){
   return cajMovs.some(move=>move.reversal===true&&String(move.reversalOf)===String(saleId));
 }
+function _naSaleHasInventoryReversal(saleId){
+  return Array.isArray(inventoryMovements)&&inventoryMovements.some(move=>move?.type==='SALE_REVERSAL'&&String(move.referenceId)===String(saleId));
+}
+let _naSaleAnnulmentProc=false;
 anularV=async function(id){
   if(isModuleLocked('ventas')){toast('Las ventas están bloqueadas','error');return;}
-  const v=ventas.find(x=>String(x.id)===String(id));
-  if(!v){toast('Venta no encontrada','error');return;}
-  if(v.anulada){toast('La venta ya fue anulada; no se realizaron nuevos movimientos');return;}
-  const linked=v.creditId?creditos.find(cr=>String(cr.id)===String(v.creditId)):null;
+  if(_naSaleAnnulmentProc)return;
+  const initialSale=ventas.find(x=>String(x.id)===String(id));
+  if(!initialSale){toast('Venta no encontrada','error');return;}
+  if(initialSale.anulada){toast('La venta ya fue anulada; no se realizaron nuevos movimientos');return;}
+  if(_naSaleHasInventoryReversal(initialSale.id)){toast('La venta ya tiene una reversión de inventario; no se realizaron nuevos movimientos','error');return;}
+  const linked=initialSale.creditId?creditos.find(cr=>String(cr.id)===String(initialSale.creditId)):null;
   if(linked&&_naNumber(linked.pagado)>0){toast('No se puede anular automáticamente: el crédito ya tiene pagos registrados','error');return;}
-  const payment=_naSalePaymentParts(v);
+  const payment=_naSalePaymentParts(initialSale);
   if(payment.cash>0&&!_naSessionOpen()){toast('Abre la caja para registrar la devolución de la parte en efectivo','error');return;}
-  const accepted=await _naConfirmAction(
-    `Se repondrá el stock y se revertirá ${payment.cash>0?fmt(payment.cash)+' de efectivo':'el pago registrado'} de la venta ${v.id}.`,
-    {title:'Anular venta',subtitle:'La operación quedará en el historial y no podrá revertirse dos veces.',icon:'↩️',danger:true,okText:'Anular venta'}
-  );
-  if(!accepted)return;
-  const backup={productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),cajMovs:_naClone(cajMovs)};
-  const annulNow=new Date(),annulCashier=_naCashierSnapshot(cajEstado?.cajeroId||cajEstado?.cajero||appConfig.activeCashierId);v.anulada=true;v.estado='anulada';v.anuladaAt=annulNow.toISOString();v.anuladaPor=annulCashier.nombre;v.anuladaPorId=annulCashier.id;v.horaAnulacion=_naTime24(annulNow);
-  v.items.forEach(item=>{const prod=productos.find(p=>String(p.id)===String(item.id));if(prod&&_naTracksStock(prod))prod.stock+=_naUnitsSold(item);});
-  if(linked){linked.anulado=true;linked.status='anulado';linked.pagado=0;}
-  const client=clientes.find(c=>String(c.id)===String(v.clienteId));
-  if(client)client.totalCompras=Math.max(0,_naNumber(client.totalCompras)-payment.total);
-  if(v.metodo!=='credito'&&!_naSaleHasReversal(v.id)){
-    cajMovs.push({
-      id:Date.now(),tipo:'egr',monto:payment.total,efectivo:payment.cash,digital:payment.digital,
-      desc:`Anulación venta ${v.id}`,cat:'Devolución',metodo:v.metodo,referencia:payment.reference,
-      detallePago:v.metodo==='mixto'?{efectivo:payment.cash,digital:payment.digital,digitalMethod:payment.digitalMethod,reference:payment.reference,reversal:true}:null,
-      reversal:true,reversalOf:v.id,hora:nowT(),timestamp:new Date().toISOString(),
-      cajero:annulCashier.nombre,cajeroNombre:annulCashier.nombre,cajeroId:annulCashier.id,hora24:_naTime24(annulNow),fecha:obtenerHoy(),
-      sessionId:_naSessionOpen()?cajEstado.sessionId||null:null,ventaId:v.id
-    });
-  }
-  const persistResult=await saveAllData();
-  if(!_naWasPersisted(persistResult)){
-    productos=backup.productos;ventas=backup.ventas;clientes=backup.clientes;creditos=backup.creditos;cajMovs=backup.cajMovs;
-    await saveAllData();toast('No se pudo guardar la anulación','error');return;
-  }
-  ventasRender();invRender();cajRender();updateDashboard();
-  toast(payment.cash>0?`Venta anulada: se revirtieron ${fmt(payment.cash)} de efectivo y se repuso el stock`:'Venta anulada y stock repuesto','success');
+  _naSaleAnnulmentProc=true;
+  let backup=null;
+  try{
+    const accepted=await _naConfirmAction(
+      `Se repondrá el stock y se revertirá ${payment.cash>0?fmt(payment.cash)+' de efectivo':'el pago registrado'} de la venta ${initialSale.id}.`,
+      {title:'Anular venta',subtitle:'La operación quedará en el historial y no podrá revertirse dos veces.',icon:'↩️',danger:true,okText:'Anular venta'}
+    );
+    if(!accepted)return;
+    // FIX04: todo dato observado antes de la confirmación se revalida después del await.
+    const v=ventas.find(x=>String(x.id)===String(id));
+    if(!v||String(v.id)!==String(id)){toast('Venta no encontrada','error');return;}
+    if(v.anulada){toast('La venta ya fue anulada; no se realizaron nuevos movimientos');return;}
+    if(_naSaleHasInventoryReversal(v.id)){toast('La venta ya tiene una reversión de inventario; no se realizaron nuevos movimientos','error');return;}
+    if(!Array.isArray(v.items)){toast('La venta no tiene un detalle válido para anular','error');return;}
+    const currentLinked=v.creditId?creditos.find(cr=>String(cr.id)===String(v.creditId)):null;
+    if(currentLinked&&_naNumber(currentLinked.pagado)>0){toast('No se puede anular automáticamente: el crédito ya tiene pagos registrados','error');return;}
+    const currentPayment=_naSalePaymentParts(v);
+    if(currentPayment.cash>0&&!_naSessionOpen()){toast('Abre la caja para registrar la devolución de la parte en efectivo','error');return;}
+    backup={productos:_naClone(productos),ventas:_naClone(ventas),clientes:_naClone(clientes),creditos:_naClone(creditos),cajMovs:_naClone(cajMovs),inventoryMovements:_naClone(inventoryMovements)};
+    const annulNow=new Date(),annulCashier=_naCashierSnapshot(cajEstado?.cajeroId||cajEstado?.cajero||appConfig.activeCashierId);v.anulada=true;v.estado='anulada';v.anuladaAt=annulNow.toISOString();v.anuladaPor=annulCashier.nombre;v.anuladaPorId=annulCashier.id;v.horaAnulacion=_naTime24(annulNow);
+    for(const item of v.items){const prod=productos.find(p=>String(p.id)===String(item.id));if(!prod||!_naTracksStock(prod))continue;const units=_naUnitsSold(item);if(units<=0)continue;const outcome=applyInventoryMovement({productId:prod.id,type:'SALE_REVERSAL',delta:units,reason:`Anulación venta ${v.id}`,source:'SALE_REVERSAL',referenceId:v.id});if(!outcome.ok)throw new Error(outcome.message||'No se pudo revertir el inventario');}
+    if(currentLinked){currentLinked.anulado=true;currentLinked.status='anulado';currentLinked.pagado=0;}
+    const client=clientes.find(c=>String(c.id)===String(v.clienteId));
+    if(client)client.totalCompras=Math.max(0,_naNumber(client.totalCompras)-currentPayment.total);
+    if(v.metodo!=='credito'&&!_naSaleHasReversal(v.id)){
+      cajMovs.push({
+        id:Date.now(),tipo:'egr',monto:currentPayment.total,efectivo:currentPayment.cash,digital:currentPayment.digital,
+        desc:`Anulación venta ${v.id}`,cat:'Devolución',metodo:v.metodo,referencia:currentPayment.reference,
+        detallePago:v.metodo==='mixto'?{efectivo:currentPayment.cash,digital:currentPayment.digital,digitalMethod:currentPayment.digitalMethod,reference:currentPayment.reference,reversal:true}:null,
+        reversal:true,reversalOf:v.id,hora:nowT(),timestamp:new Date().toISOString(),
+        cajero:annulCashier.nombre,cajeroNombre:annulCashier.nombre,cajeroId:annulCashier.id,hora24:_naTime24(annulNow),fecha:obtenerHoy(),
+        sessionId:_naSessionOpen()?cajEstado.sessionId||null:null,ventaId:v.id
+      });
+    }
+    const persistResult=await saveAllData();
+    const persistedSale=ventas.find(x=>String(x.id)===String(id));
+    if(!_naWasPersisted(persistResult)||!persistedSale?.anulada||!_naSaleHasInventoryReversal(id))throw new Error('No se pudo verificar la anulación persistida');
+    ventasRender();invRender();cajRender();updateDashboard();
+    toast(currentPayment.cash>0?`Venta anulada: se revirtieron ${fmt(currentPayment.cash)} de efectivo y se repuso el stock`:'Venta anulada y stock repuesto','success');
+  }catch(error){
+    if(backup){productos=backup.productos;ventas=backup.ventas;clientes=backup.clientes;creditos=backup.creditos;cajMovs=backup.cajMovs;inventoryMovements=backup.inventoryMovements;await saveAllData();}
+    toast('No se pudo guardar la anulación','error');
+  }finally{_naSaleAnnulmentProc=false;}
 };
 
