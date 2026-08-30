@@ -161,6 +161,7 @@
 
 <!-- INVENTARIO -->
 <div class="page" id="pageInventario">
+    <div class="page-chrome">
     <div class="top-mod-bar"><span class="top-mod-title">📦 Inventario</span><button class="top-btn-nuevo" onclick="abrirModalProd()">+ Nuevo</button></div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="invSetTab(this,'todos')">Todos <span class="tbadge teal" id="invB0">0</span></button>
@@ -181,11 +182,13 @@
         <div class="ss teal"><div class="ss-num" id="invS4">S/0</div><div class="ss-lbl">Valor venta</div></div>
         <div class="ss green"><div class="ss-num" id="invS5">S/0</div><div class="ss-lbl">Ganancia pot.</div></div>
     </div>
+    </div>
     <div class="table-wrap"><div class="table-card"><table><thead><tr><th>Producto</th><th>Cat.</th><th>Precio</th><th>Vencimiento</th><th>Stock</th><th>Acciones</th></tr></thead><tbody id="invBody"></tbody></table></div></div>
 </div>
 
 <!-- CLIENTES -->
 <div class="page" id="pageClientes">
+    <div class="page-chrome">
     <div class="top-mod-bar"><span class="top-mod-title">👥 Clientes y Créditos</span><button class="top-btn-nuevo" onclick="abrirModalCli()">+ Cliente</button></div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="cliSetTab(this,'todos')">Todos <span class="tbadge teal" id="cliB0">0</span></button>
@@ -203,22 +206,26 @@
         <div class="ss amber"><div class="ss-num" id="cliS2">0</div><div class="ss-lbl">Vencidos</div></div>
         <div class="ss green"><div class="ss-num" id="cliS3">S/0</div><div class="ss-lbl">Cobrado hoy</div></div>
     </div>
+    </div>
     <div class="cli-list" id="cliList"></div>
 </div>
 
 <!-- CAJA -->
 <div class="page" id="pageCaja">
+    <div class="page-chrome">
     <div class="top-mod-bar"><span class="top-mod-title">💰 Caja del Día</span><span style="font-size:11px;font-weight:700;color:var(--slate)" id="cajFechaLbl"></span></div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="cajSetTab(this,'resumen')">📊 Resumen</button>
         <button class="tab" onclick="cajSetTab(this,'movimientos')">📋 Movimientos</button>
         <button class="tab" onclick="cajSetTab(this,'cierre')">🔒 Cierre</button>
     </div>
+    </div>
     <div id="cajContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column"></div>
 </div>
 
 <!-- VENTAS -->
 <div class="page" id="pageVentas">
+    <div class="page-chrome">
     <div class="top-mod-bar"><span class="top-mod-title">📊 Ventas e Historial</span></div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="ventasSetTab(this,'hoy')">📅 Hoy</button>
@@ -265,11 +272,13 @@
         <div class="sales-report-range" id="salesReportRangeLabel">—</div>
     </div>
     <div class="v-kpi-row" id="ventasKPI"></div>
+    </div>
     <div id="ventasContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column"></div>
 </div>
 
 <!-- GASTOS -->
 <div class="page" id="pageGastos">
+    <div class="page-chrome">
     <div class="top-mod-bar"><span class="top-mod-title">🧾 Gastos y Egresos</span><button class="top-btn-nuevo" onclick="abrirModalGasto()">+ Gasto</button></div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="gasSetTab(this,'hoy')">📅 Hoy</button>
@@ -285,6 +294,7 @@
     <div class="filter-bar">
         <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="gasSearch" placeholder="Buscar gasto..." oninput="gasRender()"></div>
         <select class="f-select" id="gasCatFilter" onchange="gasRender()"><option value="">Todas</option><option value="Servicios">Servicios</option><option value="Proveedor">Proveedor</option><option value="Operativo">Operativo</option><option value="Personal">Personal</option><option value="Transporte">Transporte</option><option value="Otro">Otro</option></select>
+    </div>
     </div>
     <div id="gasContent" style="flex:1;overflow-y:auto;padding:12px 13px;display:flex;flex-direction:column;gap:7px"></div>
 </div>

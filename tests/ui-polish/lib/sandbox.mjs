@@ -214,6 +214,9 @@ export function createPosSandbox(opts = {}) {
     headerHidden() {
       return this.run(`!!(document.querySelector('.g-topbar')&&document.querySelector('.g-topbar').classList.contains('g-topbar-hidden'))`);
     },
+    pageChromeHidden(id) {
+      return this.run(`document.getElementById(${JSON.stringify(id)}).classList.contains('g-page-chrome-hidden')`);
+    },
     fireDocument(type, event) {
       for (const handler of documentListeners.get(type) || []) handler(event);
     },
