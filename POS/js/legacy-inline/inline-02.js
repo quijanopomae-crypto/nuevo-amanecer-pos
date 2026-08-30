@@ -714,7 +714,10 @@ revertirPagoCredito=async function(creditoId,pagoId){
 cliRender=function(){creditos=creditos.map((cr,index)=>_naNormalizeCreditRecord(cr,index));cobradoHoy=_naCreditCollectionsNetForDate(obtenerHoy());_baseCliRender();updateDashboard();};
 
 // Caja por sesiones
-cajTotales=function(){const movs=_naCajaMovsSesion(),income=movs.filter(m=>(m.tipo==='ing'&&m.metodo!=='credito')||m.tipo==='cob').reduce((a,m)=>a+m.monto,0),out=movs.filter(m=>m.tipo==='egr'||m.tipo==='gas').reduce((a,m)=>a+m.monto,0),sales=movs.filter(m=>m.tipo==='ing').reduce((a,m)=>a+m.monto,0),collections=movs.filter(m=>m.tipo==='cob').reduce((a,m)=>a+m.monto,0),expenses=movs.filter(m=>m.tipo==='gas').reduce((a,m)=>a+m.monto,0),withdrawals=movs.filter(m=>m.tipo==='egr').reduce((a,m)=>a+m.monto,0),cashIn=movs.filter(m=>m.tipo==='ing'||m.tipo==='cob').reduce((a,m)=>a+(m.efectivo||0),0),cashOut=movs.filter(m=>m.tipo==='egr'||m.tipo==='gas').reduce((a,m)=>a+(m.efectivo||0),0);return{ing:income,egr:out,ven:sales,cob:collections,gas:expenses,ret:withdrawals,ef:_naNumber(cajEstado?.fondo)+cashIn-cashOut};};
+function _naIsSaleIncomeMove(move){return move?.tipo==='ing'&&(move.ventaId!==undefined&&move.ventaId!==null||/\bventa\b/i.test(`${move?.cat||''} ${move?.desc||''}`));}
+function _naIsSaleReversalMove(move){return move?.tipo==='egr'&&move.reversal===true&&move.ventaId!==undefined&&move.ventaId!==null&&String(move.reversalOf||'')===String(move.ventaId);}
+function _naCashEconomicOut(move){return _naIsSaleReversalMove(move)&&move.metodo==='credito'?0:Math.max(0,_naNumber(move?.monto));}
+cajTotales=function(){const movs=_naCajaMovsSesion(),income=movs.filter(m=>(m.tipo==='ing'&&m.metodo!=='credito')||m.tipo==='cob').reduce((a,m)=>a+_naNumber(m.monto),0),out=movs.filter(m=>m.tipo==='egr'||m.tipo==='gas').reduce((a,m)=>a+(m.tipo==='gas'?Math.max(0,_naNumber(m.monto)):_naCashEconomicOut(m)),0),salesIn=movs.filter(_naIsSaleIncomeMove).reduce((a,m)=>a+_naNumber(m.monto),0),salesOut=movs.filter(_naIsSaleReversalMove).reduce((a,m)=>a+_naNumber(m.monto),0),sales=Number((salesIn-salesOut).toFixed(2)),collections=movs.filter(m=>m.tipo==='cob').reduce((a,m)=>a+_naNumber(m.monto),0),expenses=movs.filter(m=>m.tipo==='gas').reduce((a,m)=>a+_naNumber(m.monto),0),withdrawals=movs.filter(m=>m.tipo==='egr').reduce((a,m)=>a+_naCashEconomicOut(m),0),cashIn=movs.filter(m=>m.tipo==='ing'||m.tipo==='cob').reduce((a,m)=>a+_naNumber(m.efectivo),0),cashOut=movs.filter(m=>m.tipo==='egr'||m.tipo==='gas').reduce((a,m)=>a+_naNumber(m.efectivo),0);return{ing:income,egr:out,ven:sales,cob:collections,gas:expenses,ret:withdrawals,ef:_naNumber(cajEstado?.fondo)+cashIn-cashOut};};
 function abrirModalApertura(){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}document.getElementById('cajFondo').value='';_naPopulateCashierSelect('cajCajero',appConfig.activeCashierId);document.getElementById('mApertura').classList.add('open');}
 abrirCaja=async function(){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return false;}if(_naSessionOpen()){toast('La caja ya está abierta','error');return false;}const fund=Math.max(0,_naNumber(document.getElementById('cajFondo').value)),cashier=_naCashierSnapshot(document.getElementById('cajCajero').value),now=new Date();if(!cashier?.id){toast('Selecciona un cajero activo','error');return false;}const backup={cajEstado:_naClone(cajEstado),activeCashierId:appConfig.activeCashierId,businessCajero:appConfig.business.cajero};cajEstado={abierta:true,fondo:fund,cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,hora:nowT(),hora24:_naTime24(now),fechaApertura:obtenerHoy(),timestampApertura:now.toISOString(),cerrada:false,horaCierre:null,sessionId:Date.now(),contado:null,esperado:null,diferencia:null};appConfig.activeCashierId=cashier.id;appConfig.business.cajero=cashier.nombre;const persistResult=await saveAllData();if(!_naWasPersisted(persistResult)){cajEstado=backup.cajEstado;appConfig.activeCashierId=backup.activeCashierId;appConfig.business.cajero=backup.businessCajero;await saveAllData();cajRender();toast('No se pudo abrir la caja porque no existe almacenamiento permanente verificado','error');return false;}cerrarModal('mApertura');cajRender();toast(`Caja abierta por ${cashier.nombre} con ${fmt(fund)}`,'success');return true;};
 abrirMovCaja=function(tipo){if(isModuleLocked('caja')){toast('Módulo de caja protegido','error');return;}if(!_naSessionOpen()){toast('Abre la caja del día primero','error');return;}cajMovTipo=tipo;const color=CAJ_COL[tipo];document.getElementById('mMovCajaHead').className=`mhead ${color}`;document.getElementById('mMovCajaTit').textContent=`${CAJ_IC[tipo]} ${CAJ_LBL[tipo]}`;document.getElementById('cajMovBtn').className=`mbtn mbtn-ok ${color}`;document.getElementById('cajMovMonto').value='';document.getElementById('cajMovDesc').value='';document.getElementById('cajMovCat').innerHTML=CAJ_CATS[tipo].map(c=>`<option>${_naEsc(c)}</option>`).join('');document.getElementById('mMovCaja').classList.add('open');};
@@ -784,7 +787,7 @@ function _naSalePaymentParts(sale){
   return{total,cash:Number(cash.toFixed(2)),digital:Number(digital.toFixed(2)),digitalMethod,reference:_naClean(sale?.paymentRef||breakdown.reference||'')};
 }
 function _naSaleHasReversal(saleId){
-  return cajMovs.some(move=>move.reversal===true&&String(move.reversalOf)===String(saleId));
+  return cajMovs.some(move=>_naIsSaleReversalMove(move)&&String(move.reversalOf)===String(saleId));
 }
 function _naSaleHasInventoryReversal(saleId){
   return Array.isArray(inventoryMovements)&&inventoryMovements.some(move=>move?.type==='SALE_REVERSAL'&&String(move.referenceId)===String(saleId));
@@ -825,7 +828,7 @@ anularV=async function(id){
     if(currentLinked){currentLinked.anulado=true;currentLinked.status='anulado';currentLinked.pagado=0;}
     const client=clientes.find(c=>String(c.id)===String(v.clienteId));
     if(client)client.totalCompras=Math.max(0,_naNumber(client.totalCompras)-currentPayment.total);
-    if(v.metodo!=='credito'&&!_naSaleHasReversal(v.id)){
+    if(!_naSaleHasReversal(v.id)){
       cajMovs.push({
         id:Date.now(),tipo:'egr',monto:currentPayment.total,efectivo:currentPayment.cash,digital:currentPayment.digital,
         desc:`Anulación venta ${v.id}`,cat:'Devolución',metodo:v.metodo,referencia:currentPayment.reference,
@@ -835,9 +838,9 @@ anularV=async function(id){
         sessionId:_naSessionOpen()?cajEstado.sessionId||null:null,ventaId:v.id
       });
     }
-    const persistResult=await saveAllData();
+    const inventoryReversalRequired=v.items.some(item=>{const prod=productos.find(p=>String(p.id)===String(item.id));return !!prod&&_naTracksStock(prod)&&_naUnitsSold(item)>0;}),persistResult=await saveAllData();
     const persistedSale=ventas.find(x=>String(x.id)===String(id));
-    if(!_naWasPersisted(persistResult)||!persistedSale?.anulada||!_naSaleHasInventoryReversal(id))throw new Error('No se pudo verificar la anulación persistida');
+    if(!_naWasPersisted(persistResult)||!persistedSale?.anulada||!_naSaleHasReversal(id)||(inventoryReversalRequired&&!_naSaleHasInventoryReversal(id)))throw new Error('No se pudo verificar la anulación persistida');
     ventasRender();invRender();cajRender();updateDashboard();
     toast(currentPayment.cash>0?`Venta anulada: se revirtieron ${fmt(currentPayment.cash)} de efectivo y se repuso el stock`:'Venta anulada y stock repuesto','success');
   }catch(error){

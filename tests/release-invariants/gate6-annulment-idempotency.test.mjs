@@ -67,13 +67,13 @@ test('G6.1 — Estático: winner de anularV y guards de idempotencia', () => {
   const base = sliceBetween(INLINE_02, 'anularV=async function(id){', null) ?? '';
   check('G6.1d', 'base tiene guard v.anulada (segunda anulación sin efecto)',
     base.includes('if(v.anulada){toast('));
-  check('G6.1e', 'base tiene guard _naSaleHasReversal antes de crear el reversal',
-    base.includes('if(v.metodo!==\'credito\'&&!_naSaleHasReversal(v.id))'));
+  check('G6.1e', 'base tiene guard _naSaleHasReversal antes de crear un reversal económico para cualquier método',
+    base.includes('if(!_naSaleHasReversal(v.id))'));
   check('G6.1f', 'el reversal se crea con reversal:true y reversalOf:v.id',
     base.includes('reversal:true,reversalOf:v.id'));
   const guardFn = sliceBetween(INLINE_02, 'function _naSaleHasReversal(saleId){', 'anularV=async function') ?? '';
-  check('G6.1g', '_naSaleHasReversal busca por reversal===true && reversalOf===saleId',
-    guardFn.includes('move.reversal===true&&String(move.reversalOf)===String(saleId)'));
+  check('G6.1g', '_naSaleHasReversal exige un movimiento de reversión de venta enlazado',
+    guardFn.includes('_naIsSaleReversalMove(move)&&String(move.reversalOf)===String(saleId)'));
 });
 
 test('G6.2 — RUNTIME: primera anulación crea exactamente UN reversal enlazado', async () => {
