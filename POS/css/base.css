@@ -936,6 +936,10 @@
                 position:sticky!important;
                 top:0!important;
                 z-index:90!important;
+                transition:transform .28s ease!important;
+            }
+            html.config-page-scroll body>.g-topbar.g-topbar-hidden{
+                transform:translateY(-100%)!important;
             }
             html.config-page-scroll #pageConfig.active{
                 display:block!important;
