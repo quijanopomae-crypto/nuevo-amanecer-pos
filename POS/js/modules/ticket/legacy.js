@@ -1,5 +1,6 @@
 // ===== TICKET =====
 let tkCurrentVenta=null;
+function _naTicketTaxBreakdown(v){if(typeof _naTaxBreakdownForSale==='function')return _naTaxBreakdownForSale(v);const legacy=desglosarIGV(totalV(v),!!appConfig.igvActive);return{taxActive:!!appConfig.igvActive,subtotal:legacy.subtotal,totalIGV:legacy.igv,totalVenta:legacy.total??totalV(v)};}
 function toggleEditor(){const p=document.getElementById('editorPanel'),btn=document.getElementById('btnEditorToggle');const open=p.style.display==='none';p.style.display=open?'block':'none';btn.textContent=open?'👁 Vista previa':'✏️ Diseñar';}
 function _naTicketSelectedMm(){const sel=document.getElementById('tkAncho')?.value||appConfig.ticket.ancho||'80mm';if(sel==='custom')return Math.max(20,Math.min(120,Number(document.getElementById('tkCustomMm')?.value||appConfig.ticket.customMm||60)));return Math.max(20,parseFloat(sel)||80);}
 function _naTicketChars(mm){if(mm<=30)return 12;if(mm<=40)return 18;if(mm<=50)return 24;if(mm<=58)return 29;if(mm<=80)return 42;return Math.max(12,Math.min(64,Math.floor(mm*.52)));}
@@ -50,7 +51,7 @@ function _naBuildThermalTicket(v,fromDom=true){
   if(showSep)lines.push(dash);
   const articles=items.reduce((sum,i)=>sum+Number(i.qty||0),0);{const f=_naTkField(labels.articles,String(articles),width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);}
   if(showSep)lines.push(eq);
-  if(showIGV&&appConfig.igvActive){const p=desglosarIGV(total,true);{const f=_naTkField('Subtotal',_naTkMoney(p.subtotal,showCurrency),width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);}{const f=_naTkField('IGV 18%',_naTkMoney(p.igv,showCurrency),width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);}}
+  const taxBreakdown=_naTicketTaxBreakdown(v);if(showIGV&&taxBreakdown.taxActive){const p=taxBreakdown;{const f=_naTkField('Subtotal',_naTkMoney(p.subtotal,showCurrency),width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);}{const f=_naTkField('IGV 18%',_naTkMoney(p.totalIGV,showCurrency),width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);}}
   {const f=_naTkField(labels.total,_naTkMoney(total,showCurrency),width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);}
   if(showSep)lines.push(eq);
   if(showPayment){lines.push('');const addPay=(label,value)=>{const f=_naTkField(label,value,width,paymentAlign);Array.isArray(f)?lines.push(...f):lines.push(f);};addPay(labels.payment,_naTkPayment(v?.metodo));const received=Number(v?.recibido??v?.received??(v?.metodo==='efectivo'?total:0)),change=Number(v?.vuelto??v?.change??Math.max(0,received-total));if(showReceived&&v?.metodo==='efectivo'){addPay(labels.received,_naTkMoney(received,showCurrency));addPay(labels.change,_naTkMoney(change,showCurrency));}if(v?.metodo==='mixto'&&v?.paymentBreakdown){const mix=v.paymentBreakdown,digitalLabel=mix.digitalMethod==='yape'?'Yape/Plin':'Transferencia';addPay('Efectivo',_naTkMoney(mix.efectivo,showCurrency));addPay(digitalLabel,_naTkMoney(mix.digital,showCurrency));}}

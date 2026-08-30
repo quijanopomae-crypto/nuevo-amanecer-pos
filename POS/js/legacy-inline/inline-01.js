@@ -50,7 +50,33 @@ function _naConfirmAction(message,options={}){
   });
 }
 
-function desglosarIGV(totalConIGV,igvActivo){if(!igvActivo)return{subtotal:totalConIGV,igv:0,total:totalConIGV};const subtotal=totalConIGV/1.18;const igv=totalConIGV-subtotal;return{subtotal,igv,total:totalConIGV};}
+// FIX05: cálculo tributario único por línea. Los precios del POS conservan su contrato
+// histórico de importe final aun cuando incluyeIGV=false; ese flag queda congelado para
+// trazabilidad, pero no altera el total cobrado ni agrega impuesto por encima del precio.
+const _NA_IGV_RATE=.18;
+function _naTaxType(value){const raw=sinTildes(String(value??'').trim().toLowerCase()).replace(/[^a-z]/g,'');if(['exonerado','exonerada'].includes(raw))return'exonerado';if(['inafecto','inafecta','gratuito','gratuita'].includes(raw))return'inafecto';return'gravado';}
+function _naTaxBreakdownForSaleItems(items=[],taxActive=true){
+  let gravadoCents=0,exoneradoCents=0,inafectoCents=0,igvCents=0,totalCents=0;
+  for(const item of Array.isArray(items)?items:[]){
+    const qty=Math.max(0,_naNumber(item?.qty??item?.cantidad)),price=Math.max(0,_naNumber(item?.precio??item?.precioUnitario)),lineCents=Math.max(0,Math.round(price*qty*100)),type=_naTaxType(item?.tipoImpuesto);
+    totalCents+=lineCents;
+    if(type==='exonerado'){exoneradoCents+=lineCents;continue;}
+    if(type==='inafecto'){inafectoCents+=lineCents;continue;}
+    if(!taxActive){gravadoCents+=lineCents;continue;}
+    const baseCents=Math.round(lineCents/(1+_NA_IGV_RATE));gravadoCents+=baseCents;igvCents+=lineCents-baseCents;
+  }
+  const money=cents=>Number((cents/100).toFixed(2)),subtotalCents=gravadoCents+exoneradoCents+inafectoCents;
+  return{rate:_NA_IGV_RATE,taxActive:!!taxActive,totalGravado:money(gravadoCents),totalExonerado:money(exoneradoCents),totalInafecto:money(inafectoCents),totalIGV:money(igvCents),subtotal:money(subtotalCents),totalVenta:money(totalCents)};
+}
+function _naStoredTaxBreakdown(value){
+  if(!value||typeof value!=='object'||Array.isArray(value))return null;
+  const fields=['totalGravado','totalExonerado','totalInafecto','totalIGV','subtotal','totalVenta'],out={rate:Number.isFinite(Number(value.rate))?Number(value.rate):_NA_IGV_RATE,taxActive:value.taxActive!==false};
+  for(const field of fields){const number=Number(value[field]);if(!Number.isFinite(number)||number<0)return null;out[field]=Number(number.toFixed(2));}
+  if(Math.abs(out.rate-_NA_IGV_RATE)>.000001||(!out.taxActive&&out.totalIGV>.001)||Math.abs(out.subtotal-(out.totalGravado+out.totalExonerado+out.totalInafecto))>.011||Math.abs(out.totalVenta-(out.subtotal+out.totalIGV))>.011)return null;
+  return out;
+}
+function _naTaxBreakdownForSale(sale){const taxActive=sale?.igvActive===undefined?!!appConfig?.igvActive:sale.igvActive!==false,expected=_naTaxBreakdownForSaleItems(sale?.items||[],taxActive),stored=_naStoredTaxBreakdown(sale?.taxBreakdown),fields=['totalGravado','totalExonerado','totalInafecto','totalIGV','subtotal','totalVenta'];return stored&&stored.taxActive===taxActive&&fields.every(field=>Math.abs(stored[field]-expected[field])<=.011)?stored:expected;}
+function desglosarIGV(totalConIGV,igvActivo){const parts=_naTaxBreakdownForSaleItems([{qty:1,precio:totalConIGV,tipoImpuesto:'gravado'}],igvActivo);return{subtotal:parts.subtotal,igv:parts.totalIGV,total:parts.totalVenta};}
 
 // ===== CONFIGURACIÓN GLOBAL EN MEMORIA =====
 let appConfig={igvActive:true,margenActive:true,stockAlertActive:true,printAuto:false,mayoristaActive:true,alertsEnabled:true,stockMin:'5'};

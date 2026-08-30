@@ -96,7 +96,7 @@ function _naF11ZoneProducts(ctx,s){
 function _naF11ZoneTotals(ctx,s){
   const out=[],align=s.align,articles=ctx.items.reduce((sum,i)=>sum+Number(i.qty||i.cantidad||0),0),discount=Math.max(0,Number(ctx.v?.descuentoTotal||0)),before=Math.max(ctx.total,Number(ctx.v?.subtotalAntesDescuento||ctx.total+discount));
   if(s.emphasis&&ctx.showSep)out.push(ctx.eq);out.push(..._naF11FieldLines(ctx.labels.articles,String(articles),ctx.width,align));if(discount>0){out.push(..._naF11FieldLines('Subtotal',_naTkMoney(before,ctx.showCurrency),ctx.width,align));out.push(..._naF11FieldLines('Descuento','- '+_naTkMoney(discount,ctx.showCurrency),ctx.width,align));}
-  if(ctx.showIGV&&appConfig.igvActive){const parts=desglosarIGV(ctx.total,true);out.push(..._naF11FieldLines('Subtotal',_naTkMoney(parts.subtotal,ctx.showCurrency),ctx.width,align));out.push(..._naF11FieldLines('IGV 18%',_naTkMoney(parts.igv,ctx.showCurrency),ctx.width,align));}
+  const parts=_naTicketTaxBreakdown(ctx.v);if(ctx.showIGV&&parts.taxActive){out.push(..._naF11FieldLines('Subtotal',_naTkMoney(parts.subtotal,ctx.showCurrency),ctx.width,align));out.push(..._naF11FieldLines('IGV 18%',_naTkMoney(parts.totalIGV,ctx.showCurrency),ctx.width,align));}
   out.push(..._naF11FieldLines(ctx.labels.total,_naTkMoney(ctx.total,ctx.showCurrency),ctx.width,align));if(s.emphasis&&ctx.showSep)out.push(ctx.eq);return out;
 }
 function _naF11ZonePayment(ctx,s){

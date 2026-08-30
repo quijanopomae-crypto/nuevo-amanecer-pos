@@ -70,9 +70,9 @@ function _naSecCartItem(parent,item){
   row.appendChild(_naSecCartButton('🗑','remove',item._lineKey));
 }
 posUpdateCart=function(){
-  const total=cart.reduce((sum,item)=>sum+_naNumber(item.precio)*_naNumber(item.qty),0),parts=desglosarIGV(total,!!appConfig.igvActive),count=cart.reduce((sum,item)=>sum+_naNumber(item.qty),0),units=cart.reduce((sum,item)=>sum+_naUnitsSold(item),0),badge=document.getElementById('cartBadge');
+  const parts=_naTaxBreakdownForSaleItems(cart,!!appConfig.igvActive),count=cart.reduce((sum,item)=>sum+_naNumber(item.qty),0),units=cart.reduce((sum,item)=>sum+_naUnitsSold(item),0),badge=document.getElementById('cartBadge');
   if(badge){badge.style.display=count>0?'flex':'none';badge.textContent=String(count);badge.title=`${units} unidades físicas`;}
-  [['posSubtotal',fmt(parts.subtotal)],['posIgv',fmt(parts.igv)],['posTotal',fmt(parts.total)]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=value;});
+  [['posSubtotal',fmt(parts.subtotal)],['posIgv',fmt(parts.totalIGV)],['posTotal',fmt(parts.totalVenta)]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=value;});
   const quick=document.getElementById('btnRapido'),pay=document.getElementById('btnPagar');
   if(quick)quick.disabled=!cart.length;
   if(pay)pay.disabled=!cart.length;

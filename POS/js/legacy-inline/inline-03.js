@@ -208,7 +208,7 @@ const _NA_BACKUP_LIMITS={productos:10000,ventas:50000,clientes:20000,creditos:50
 const _NA_DANGEROUS_BACKUP_KEYS=new Set(['__proto__','prototype','constructor']);
 const _NA_BACKUP_KEYS={
   product:new Set(['id','name','sku','barcode','codigosAlternativos','codigoAlternativo','cat','icon','imagen','costo','precio','precioCaja','unidCaja','stock','stockMin','venc','descripcion','marca','unidad','unidadCompra','factorCompra','incluyeIGV','tipoImpuesto','impuestoComplementario','controlInventario','tienda','activo','createdAt','updatedAt']),
-  sale:new Set(['id','operation','fecha','hora','hora24','timestamp','cajero','cajeroNombre','cajeroId','metodo','metodoPago','estado','tipoVenta','total','subtotal','descuentoTotal','cantidadLineas','unidadesFisicas','paymentRef','paymentBreakdown','recibido','vuelto','anulada','anuladaAt','anuladaPor','anuladaPorId','horaAnulacion','motivoAnulacion','clienteId','clienteNombre','clienteDni','creditId','contieneVentaLibre','contieneVentaSinStock','items']),
+  sale:new Set(['id','operation','fecha','hora','hora24','timestamp','cajero','cajeroNombre','cajeroId','metodo','metodoPago','estado','tipoVenta','total','subtotal','descuentoTotal','igvActive','taxBreakdown','cantidadLineas','unidadesFisicas','paymentRef','paymentBreakdown','recibido','vuelto','anulada','anuladaAt','anuladaPor','anuladaPorId','horaAnulacion','motivoAnulacion','clienteId','clienteNombre','clienteDni','creditId','contieneVentaLibre','contieneVentaSinStock','items']),
   item:new Set(['id','productoId','itemKey','sku','barcode','icon','name','nombre','qty','cantidad','precio','precioUnitario','subtotal','costo','imagen','unidad','marca','incluyeIGV','tipoImpuesto','unitsPerQty','ventaModo','modo','descuento','_descuento','_precioOriginal','_lineKey','cat','controlInventario','stock','stockMin','precioCaja','unidCaja','ventaLibre','ventaSinStock','tipoLinea','codigoIngresado','unidadesSinStock','stockAntes','cajeroRegistro']),
   client:new Set(['id','nombre','dni','ruc','tel','telefono','dir','direccion','color','totalCompras','lineaCreditoManualActiva','lineaCreditoManual','lineaCreditoManualMotivo','lineaCreditoManualAt','lineaCreditoManualPor','lineaCreditoManualPorId','createdAt','updatedAt']),
   credit:new Set(['id','cliId','clienteId','clienteNombre','clienteDni','tipo','desc','monto','pagado','saldo','vence','status','estado','fecha','hora','hora24','timestamp','ventaId','anulado','pagos','items','cajero','cajeroNombre','cajeroId','lineaCreditoAsignada','lineaCreditoDisponibleAntes','gananciaClienteAlCrear','deudaClienteAntes','scoreCreditoAlCrear','fuenteLineaCredito','criterioCredito','excepcionManualCredito','createdAt','updatedAt']),
@@ -218,7 +218,8 @@ const _NA_BACKUP_KEYS={
   payment:new Set(['efectivo','digital','digitalMethod','reference','reversal']),
   paymentLog:new Set(['id','pagoId','creditoId','clienteId','clienteNombre','monto','montoPagado','saldoAnterior','saldoActual','fecha','hora','hora24','timestamp','diaSemana','horarioPago','metodo','operacion','numeroOperacion','referencia','cajero','cajeroNombre','cajeroId','desgloseProductos','status','reversalId','reversalAt','reversalReason']),
   creditAllocation:new Set(['itemKey','productoId','nombre','monto','subtotalCredito','saldoAnteriorProducto','saldoActualProducto']),
-  inventoryMovement:new Set(['id','productId','type','before','delta','after','reason','source','referenceId','timestamp','fecha','sessionId'])
+  inventoryMovement:new Set(['id','productId','type','before','delta','after','reason','source','referenceId','timestamp','fecha','sessionId']),
+  taxBreakdown:new Set(['rate','taxActive','totalGravado','totalExonerado','totalInafecto','totalIGV','subtotal','totalVenta'])
 };
 function _naBackupParse(text){
   return JSON.parse(text,(key,value)=>{if(_NA_DANGEROUS_BACKUP_KEYS.has(key))throw new Error(`Propiedad peligrosa bloqueada: ${key}`);return value;});
@@ -320,6 +321,14 @@ function _naSanitizePayment(raw,path,warnings){
   if(p.reversal!==undefined)out.reversal=_naBackupBoolean(p.reversal,`${path}.reversal`);
   return out;
 }
+function _naSanitizeTaxBreakdown(raw,path,warnings){
+  const p=_naBackupPick(raw,_NA_BACKUP_KEYS.taxBreakdown,path,warnings),out={};
+  out.rate=_naBackupNumber(p.rate,`${path}.rate`,{min:0,max:1});
+  out.taxActive=_naBackupBoolean(p.taxActive,`${path}.taxActive`,true);
+  for(const key of ['totalGravado','totalExonerado','totalInafecto','totalIGV','subtotal','totalVenta'])out[key]=_naBackupNumber(p[key],`${path}.${key}`,{min:0,max:1e12});
+  if(Math.abs(out.rate-_NA_IGV_RATE)>.000001||(!out.taxActive&&out.totalIGV>.001)||Math.abs(out.subtotal-(out.totalGravado+out.totalExonerado+out.totalInafecto))>.011||Math.abs(out.totalVenta-(out.subtotal+out.totalIGV))>.011)throw new Error(`${path}: desglose tributario incoherente`);
+  return out;
+}
 function _naSanitizeSale(raw,index,warnings){
   const path=`ventas[${index}]`,v=_naBackupPick(raw,_NA_BACKUP_KEYS.sale,path,warnings),out={};
   if(v.id!==undefined)out.id=_naBackupId(v.id,`${path}.id`);
@@ -328,11 +337,13 @@ function _naSanitizeSale(raw,index,warnings){
   for(const key of ['fecha','timestamp','anuladaAt'])if(v[key]!==undefined)out[key]=_naBackupDate(v[key],`${path}.${key}`);
   for(const key of ['recibido','vuelto','total','subtotal','descuentoTotal','cantidadLineas','unidadesFisicas'])if(v[key]!==undefined)out[key]=_naBackupNumber(v[key],`${path}.${key}`,{min:0,max:1e12});
   if(v.anulada!==undefined)out.anulada=_naBackupBoolean(v.anulada,`${path}.anulada`);
-  for(const key of ['contieneVentaLibre','contieneVentaSinStock'])if(v[key]!==undefined)out[key]=_naBackupBoolean(v[key],`${path}.${key}`);
+  for(const key of ['igvActive','contieneVentaLibre','contieneVentaSinStock'])if(v[key]!==undefined)out[key]=_naBackupBoolean(v[key],`${path}.${key}`);
   for(const key of ['clienteId','creditId'])if(v[key]!==undefined&&v[key]!==null)out[key]=_naBackupId(v[key],`${path}.${key}`);
   out.paymentBreakdown=_naSanitizePayment(v.paymentBreakdown,`${path}.paymentBreakdown`,warnings);
+  if(v.taxBreakdown!==undefined)out.taxBreakdown=_naSanitizeTaxBreakdown(v.taxBreakdown,`${path}.taxBreakdown`,warnings);
   if(!Array.isArray(v.items)||v.items.length>_NA_BACKUP_LIMITS.items)throw new Error(`${path}.items: lista inválida o demasiado grande`);
   out.items=v.items.map((item,i)=>_naSanitizeSaleItem(item,`${path}.items[${i}]`,warnings));
+  if(out.taxBreakdown){const expected=_naTaxBreakdownForSaleItems(out.items,out.taxBreakdown.taxActive),fields=['totalGravado','totalExonerado','totalInafecto','totalIGV','subtotal','totalVenta'];if(fields.some(key=>Math.abs(out.taxBreakdown[key]-expected[key])>.011)||(out.igvActive!==undefined&&out.igvActive!==out.taxBreakdown.taxActive)||(out.total!==undefined&&Math.abs(out.total-out.taxBreakdown.totalVenta)>.011))throw new Error(`${path}.taxBreakdown: no coincide con la venta congelada`);}
   return out;
 }
 function _naSanitizeCreditAllocation(raw,path,warnings){const p=_naBackupPick(raw,_NA_BACKUP_KEYS.creditAllocation,path,warnings),out={};if(p.productoId!==undefined&&p.productoId!==null)out.productoId=_naBackupId(p.productoId,`${path}.productoId`);for(const key of ['itemKey','nombre'])if(p[key]!==undefined)out[key]=_naBackupString(p[key],`${path}.${key}`,180);for(const key of ['monto','subtotalCredito','saldoAnteriorProducto','saldoActualProducto'])if(p[key]!==undefined)out[key]=_naBackupNumber(p[key],`${path}.${key}`,{min:0,max:1e12});return out;}
