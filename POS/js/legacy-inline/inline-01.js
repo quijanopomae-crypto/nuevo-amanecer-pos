@@ -167,6 +167,50 @@ async function cargarCatalogoInicial(){
 }
 
 
+// ===== CATÁLOGO V1: normalización de nombres (MAYÚSCULAS + trim + espacio simple) =====
+// Misma regla para alta, edición e importación (presente y futura). Se instala en
+// DOMContentLoaded: inline-01 se parsea primero ⇒ su handler corre ANTES que el arranque
+// de inline-03, envolviendo al WINNER vigente de guardarProd (inline-08→07→02) y de
+// _naNormalizeData (inline-06→02, llamado por loadAllData, cargarCatalogoInicial y
+// confirmProductImport antes de persistir). Solo transforma product.name: id, stock,
+// precio, costo, ledger, historial de ventas e impuestos quedan intactos. Las 2535
+// referencias externas NO entran al runtime; HIGH_CONFIDENCE queda solo como propuesta.
+function _naNormCatalogName(value){
+  return String(value??'').trim().replace(/\s+/g,' ').toUpperCase();
+}
+function _naInstallCatalogNameNorm(){
+  if(window._naCatalogNameNormInstalled)return;
+  window._naCatalogNameNormInstalled=true;
+  if(typeof _naNormalizeData==='function'&&!_naNormalizeData._naNameNorm){
+    const baseNormalize=_naNormalizeData;
+    const wrappedNormalize=function(){
+      const out=baseNormalize.apply(this,arguments);
+      if(Array.isArray(productos)){
+        productos=productos.map(function(p){
+          if(!p||typeof p.name!=='string')return p;
+          const normalized=_naNormCatalogName(p.name);
+          return normalized===p.name?p:{...p,name:normalized};
+        });
+      }
+      return out;
+    };
+    wrappedNormalize._naNameNorm=true;
+    _naNormalizeData=wrappedNormalize;
+  }
+  if(typeof guardarProd==='function'&&!guardarProd._naNameNorm){
+    const baseGuardar=guardarProd;
+    const wrappedGuardar=async function(){
+      const input=document.getElementById('pNombre');
+      if(input&&input.value)input.value=_naNormCatalogName(input.value);
+      return baseGuardar.apply(this,arguments);
+    };
+    wrappedGuardar._naNameNorm=true;
+    guardarProd=wrappedGuardar;
+  }
+}
+document.addEventListener('DOMContentLoaded',_naInstallCatalogNameNorm);
+
+
 // ===== POS — CATEGORÍAS Y RENDER =====
 
 function posFilter(){posRender();}
