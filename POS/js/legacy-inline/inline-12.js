@@ -117,7 +117,7 @@ function _naSecClientCard(parent,client){
 }
 cliRender=function(){
   creditos=creditos.map((credit,index)=>_naNormalizeCreditRecord(credit,index));
-  cobradoHoy=cajMovs.filter(movement=>movement.tipo==='cob'&&movement.fecha===obtenerHoy()).reduce((sum,movement)=>sum+_naNumber(movement.monto),0);
+  cobradoHoy=_naCreditCollectionsNetForDate(obtenerHoy());
   const expired=clientes.filter(client=>statusCli(client)==='vencido').length,soon=clientes.filter(client=>statusCli(client)==='proximo').length,current=clientes.filter(client=>statusCli(client)==='vigente').length;
   [['cliB0',clientes.length],['cliB1',expired],['cliB2',soon],['cliB3',current],['cliS0',clientes.length],['cliS1',`S/${clientes.reduce((sum,client)=>sum+deudaT(client),0).toFixed(0)}`],['cliS2',expired],['cliS3',`S/${cobradoHoy.toFixed(0)}`]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=String(value);});
   const search=sinTildes((document.getElementById('cliSearch')?.value||'').toLowerCase()),sort=document.getElementById('cliSort')?.value||'';
@@ -339,6 +339,21 @@ abrirDetalleCredito=function(creditId){
       `Saldo antes: ${fmt(payment.saldoAnterior)} \u2192 Saldo despu\u00e9s: ${fmt(payment.saldoActual)}`
     );
 
+    // FIX03: el pago original permanece visible; marcado como revertido y enlazado a su reversión.
+    if(payment.status==='REVERTED'){
+      _naSecAppend(
+        card,
+        'div',
+        'credit-payment-sub credit-payment-reversed',
+        `\u21a9\ufe0f REVERTIDO${payment.reversalId?` \u00b7 Reversi\u00f3n ${payment.reversalId}`:''}${payment.reversalReason?` \u00b7 Motivo: ${payment.reversalReason}`:''}`
+      ).style.cssText='color:var(--red);font-weight:800';
+    }else if(!credit.anulado){
+      const revert=_naSecCreditAction('btn-cr','\u21a9\ufe0f Revertir pago','revert-payment',credit.id);
+      revert.dataset.paymentId=String(payment.pagoId||payment.id||'');
+      revert.style.cssText='background:#fef2f2;color:var(--red);margin-top:8px';
+      card.appendChild(revert);
+    }
+
     if(Array.isArray(payment.desgloseProductos)&&payment.desgloseProductos.length){
       const allocation=_naSecAppend(card,'div','credit-payment-allocation');
 
@@ -371,4 +386,9 @@ abrirDetalleCredito=function(creditId){
   if(!control)return;
   cerrarModal('mCreditoDetalle');
   abrirPago(control.dataset.creditId);
+});
+document.getElementById('creditoDetalleContent')?.addEventListener('click',event=>{
+  const control=event.target.closest('[data-na-credit-action="revert-payment"]');
+  if(!control)return;
+  revertirPagoCredito(control.dataset.creditId,control.dataset.paymentId);
 });

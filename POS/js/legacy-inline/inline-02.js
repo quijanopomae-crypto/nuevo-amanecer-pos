@@ -231,13 +231,14 @@ function _naNormalizeCreditRecord(cr,index=0){
   item.items=_naCreditItems(item);
   const rawPayments=Array.isArray(cr?.pagos)?cr.pagos.slice():[],signatures=new Set(rawPayments.map(pay=>`${_naClean(pay?.pagoId||pay?.id)}|${_naClean(pay?.timestamp||`${pay?.fecha||''}T${pay?.hora24||pay?.hora||''}`)}|${_naNumber(pay?.monto??pay?.montoPagado).toFixed(2)}`));
   for(const move of Array.isArray(cajMovs)?cajMovs:[]){if(move?.tipo!=='cob'||String(move?.creditoId)!==String(item.id))continue;const signature=`${_naClean(move?.pagoId||move?.id)}|${_naClean(move?.timestamp||`${move?.fecha||''}T${move?.hora24||move?.hora||''}`)}|${_naNumber(move?.monto).toFixed(2)}`;const fallback=`|${_naClean(move?.timestamp||`${move?.fecha||''}T${move?.hora24||move?.hora||''}`)}|${_naNumber(move?.monto).toFixed(2)}`;if(signatures.has(signature)||[...signatures].some(sig=>sig.endsWith(fallback)))continue;rawPayments.push({id:move.pagoId||`P-MOV-${move.id}`,pagoId:move.pagoId||`P-MOV-${move.id}`,creditoId:item.id,clienteId:item.cliId,clienteNombre:item.clienteNombre,monto:move.monto,fecha:move.fecha,hora:move.hora,hora24:move.hora24,timestamp:move.timestamp,metodo:move.metodo,operacion:move.numeroOperacion||move.referencia||'',referencia:move.referencia||move.numeroOperacion||'',cajero:move.cajero,cajeroNombre:move.cajeroNombre,cajeroId:move.cajeroId,horarioPago:move.horarioPago});signatures.add(signature);}
-  item.pagos=rawPayments.map((pay,i)=>_naNormalizeCreditPayment(pay,item,i)).sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));const loggedTotal=item.pagos.reduce((sum,pay)=>sum+pay.monto,0),legacyPaid=Math.max(0,item.pagado-loggedTotal);let runningPaid=Math.min(item.monto,legacyPaid),processed=[];
-  for(const pay of item.pagos){const before=Math.max(0,Number((item.monto-runningPaid).toFixed(2))),available=Math.min(pay.monto,before),temp={...item,pagado:runningPaid,pagos:processed},allocation=Array.isArray(pay.desgloseProductos)&&pay.desgloseProductos.length?{rows:pay.desgloseProductos}:_naAllocateCreditPayment(temp,available);pay.monto=pay.montoPagado=available;pay.saldoAnterior=before;runningPaid=Math.min(item.monto,Number((runningPaid+available).toFixed(2)));pay.saldoActual=Math.max(0,Number((item.monto-runningPaid).toFixed(2)));pay.desgloseProductos=allocation.rows.map(_naNormalizeCreditAllocation);processed.push(pay);}
+  // FIX03: un pago REVERTED permanece en el historial byte-fiel pero aporta 0 al saldo recalculado.
+  item.pagos=rawPayments.map((pay,i)=>_naNormalizeCreditPayment(pay,item,i)).sort((a,b)=>new Date(a.timestamp)-new Date(b.timestamp));const loggedTotal=item.pagos.filter(pay=>pay.status!=='REVERTED').reduce((sum,pay)=>sum+pay.monto,0),legacyPaid=Math.max(0,item.pagado-loggedTotal);let runningPaid=Math.min(item.monto,legacyPaid),processed=[];
+  for(const pay of item.pagos){if(pay.status==='REVERTED'){processed.push(pay);continue;}const before=Math.max(0,Number((item.monto-runningPaid).toFixed(2))),available=Math.min(pay.monto,before),temp={...item,pagado:runningPaid,pagos:processed},allocation=Array.isArray(pay.desgloseProductos)&&pay.desgloseProductos.length?{rows:pay.desgloseProductos}:_naAllocateCreditPayment(temp,available);pay.monto=pay.montoPagado=available;pay.saldoAnterior=before;runningPaid=Math.min(item.monto,Number((runningPaid+available).toFixed(2)));pay.saldoActual=Math.max(0,Number((item.monto-runningPaid).toFixed(2)));pay.desgloseProductos=allocation.rows.map(_naNormalizeCreditAllocation);processed.push(pay);}
   item.pagos=processed;item.pagado=Math.min(item.monto,Math.max(item.pagado,runningPaid));item.saldo=_naCreditOutstanding(item);item.estado=_naSyncCreditStatus(item);return item;
 }
 function _naCreditPaidMap(cr){
   const map=new Map(),items=_naCreditItems(cr);for(const item of items)map.set(item.itemKey,0);
-  let logged=0;for(const pay of Array.isArray(cr?.pagos)?cr.pagos:[]){logged+=_naNumber(pay.monto);for(const row of Array.isArray(pay.desgloseProductos)?pay.desgloseProductos:[]){const key=_naClean(row.itemKey);if(key)map.set(key,_naNumber(map.get(key))+_naNumber(row.monto));}}
+  let logged=0;for(const pay of Array.isArray(cr?.pagos)?cr.pagos:[]){if(pay?.status==='REVERTED')continue;logged+=_naNumber(pay.monto);for(const row of Array.isArray(pay.desgloseProductos)?pay.desgloseProductos:[]){const key=_naClean(row.itemKey);if(key)map.set(key,_naNumber(map.get(key))+_naNumber(row.monto));}}
   let legacy=Math.max(0,_naNumber(cr?.pagado)-logged);for(const item of items){if(legacy<=.001)break;const used=_naNumber(map.get(item.itemKey)),available=Math.max(0,item.subtotal-used),part=Math.min(available,legacy);map.set(item.itemKey,used+part);legacy=Number((legacy-part).toFixed(2));}
   return map;
 }
@@ -599,7 +600,84 @@ confirmarPago=async function(){
   catch(error){creditos=backup.creditos;cajMovs=backup.cajMovs;await saveAllData();cliRender();toast('No se registró el pago porque no existe guardado permanente verificado','error');}
   finally{pagoProc=false;if(btn){btn.disabled=false;btn.textContent='✅ Confirmar';}}
 };
-cliRender=function(){creditos=creditos.map((cr,index)=>_naNormalizeCreditRecord(cr,index));cobradoHoy=cajMovs.filter(m=>m.tipo==='cob'&&m.fecha===obtenerHoy()).reduce((a,m)=>a+_naNumber(m.monto),0);_baseCliRender();updateDashboard();};
+
+// FIX03: reversión auditable de un pago de crédito. El pago original NUNCA se borra ni se edita su monto:
+// queda marcado (status REVERTED + reversalId) y la reversión crea un movimiento de caja inverso trazable
+// (reversal:true + reversalOf), mismo modelo que la anulación de ventas. Una sola reversión por pago.
+let pagoRevProc=false;
+function _naCreditPaymentReversalExists(cr,pay){
+  const pagoId=String(pay?.pagoId??pay?.id??'');
+  if(!pagoId)return false;
+  if(_naClean(pay?.reversalId))return true;
+  return cajMovs.some(move=>move&&move.tipo==='egr'&&move.reversal===true&&String(move.reversalOf||'')===pagoId&&move.creditoId!==undefined&&move.creditoId!==null&&String(move.creditoId)===String(cr?.id));
+}
+function _naIsCreditCollectionMovement(move){
+  return move?.tipo==='cob';
+}
+function _naIsCreditPaymentReversalMovement(move){
+  if(move?.tipo!=='egr'||move.reversal!==true||move.creditoId===undefined||move.creditoId===null||!_naClean(move.reversalOf)||!_naClean(move.pagoId))return false;
+  const cr=creditos.find(item=>String(item?.id)===String(move.creditoId));
+  const pay=Array.isArray(cr?.pagos)?cr.pagos.find(item=>String(item?.pagoId??item?.id)===String(move.reversalOf)):null;
+  return !!pay&&pay.status==='REVERTED'&&String(pay.reversalId||'')===String(move.pagoId);
+}
+function _naCreditCollectionsNetForDate(date){
+  return cajMovs.reduce((total,move)=>{
+    if(move?.fecha!==date)return total;
+    if(_naIsCreditCollectionMovement(move))return total+_naNumber(move.monto);
+    if(_naIsCreditPaymentReversalMovement(move))return total-_naNumber(move.monto);
+    return total;
+  },0);
+}
+revertirPagoCredito=async function(creditoId,pagoId){
+  if(isModuleLocked('clientes')){toast('El sistema está en modo solo lectura','error');return;}
+  if(pagoRevProc)return;
+  const cr=creditos.find(x=>String(x.id)===String(creditoId));
+  if(!cr){toast('No se encontró el crédito','error');return;}
+  if(cr.anulado||cr.status==='anulado'){toast('No se pueden revertir pagos de un crédito anulado','error');return;}
+  if(!Array.isArray(cr.pagos)){toast('No se encontró el pago en este crédito','error');return;}
+  const pay=cr.pagos.find(p=>String(p?.pagoId??p?.id)===String(pagoId));
+  if(!pay){toast('No se encontró el pago en este crédito','error');return;}
+  if(pay.creditoId!==undefined&&pay.creditoId!==null&&String(pay.creditoId)!==String(cr.id)){toast('El pago no pertenece a este crédito','error');return;}
+  const amount=Math.max(0,_naNumber(pay.monto));
+  if(amount<=0){toast('Ese pago no tiene monto reversible','error');return;}
+  if(pay.status==='REVERTED'||_naCreditPaymentReversalExists(cr,pay)){toast('Ese pago ya fue revertido','error');return;}
+  const method=['efectivo','yape','transferencia'].includes(pay.metodo)?pay.metodo:'efectivo';
+  if(method==='efectivo'&&!_naSessionOpen()){toast('Abre la caja antes de revertir un cobro en efectivo','error');return;}
+  pagoRevProc=true;
+  let backup=null;
+  try{
+    const reason=_naClean(typeof prompt==='function'?prompt(`Motivo de la reversión del pago ${pay.pagoId||pay.id} (opcional):`)||'':'').slice(0,200);
+    if(!await _naConfirmAction(`Se revertirá el pago de ${fmt(amount)} (${pay.pagoId||pay.id}). El saldo del crédito volverá a ${fmt(_naCreditOutstanding(cr)+amount)} y el pago original permanecerá en el historial marcado como revertido.`,{title:'Revertir pago de crédito',subtitle:'Se registrará una reversión trazable; el pago original no se borra ni se edita.',icon:'↩️',danger:true,okText:'Revertir pago'}))return;
+    const currentCr=creditos.find(x=>String(x.id)===String(creditoId));
+    if(!currentCr){toast('No se encontró el crédito','error');return;}
+    if(currentCr.anulado||currentCr.status==='anulado'){toast('No se pueden revertir pagos de un crédito anulado','error');return;}
+    if(!Array.isArray(currentCr.pagos)){toast('No se encontró el pago en este crédito','error');return;}
+    const currentPay=currentCr.pagos.find(p=>String(p?.pagoId??p?.id)===String(pagoId));
+    if(!currentPay){toast('No se encontró el pago en este crédito','error');return;}
+    if(currentPay.creditoId!==undefined&&currentPay.creditoId!==null&&String(currentPay.creditoId)!==String(currentCr.id)){toast('El pago no pertenece a este crédito','error');return;}
+    if(currentPay.status==='REVERTED'||_naCreditPaymentReversalExists(currentCr,currentPay)){toast('Ese pago ya fue revertido','error');return;}
+    const currentAmount=Math.max(0,_naNumber(currentPay.monto));
+    if(currentAmount<=0){toast('Ese pago no tiene monto reversible','error');return;}
+    const currentMethod=['efectivo','yape','transferencia'].includes(currentPay.metodo)?currentPay.metodo:'efectivo';
+    if(currentMethod==='efectivo'&&!_naSessionOpen()){toast('Abre la caja antes de revertir un cobro en efectivo','error');return;}
+    backup={creditos:_naClone(creditos),cajMovs:_naClone(cajMovs)};
+    const now=new Date(),cashier=_naCashierSnapshot(cajEstado?.cajeroId||cajEstado?.cajero||appConfig.activeCashierId),saldoAntes=_naCreditOutstanding(currentCr),paymentKey=String(currentPay.pagoId||currentPay.id);
+    let reversalId=`PR-${now.getTime()}`;
+    if(creditos.some(c=>Array.isArray(c.pagos)&&c.pagos.some(p=>p&&p.reversalId===reversalId))||cajMovs.some(m=>String(m?.pagoId||'')===reversalId))reversalId=`${reversalId}-${Math.floor(Math.random()*1000)}`;
+    currentPay.status='REVERTED';currentPay.reversalId=reversalId;currentPay.reversalAt=now.toISOString();currentPay.reversalReason=reason;
+    currentCr.pagado=Math.max(0,Number((_naNumber(currentCr.pagado)-currentAmount).toFixed(2)));
+    currentCr.saldo=_naCreditOutstanding(currentCr);currentCr.estado=_naSyncCreditStatus(currentCr);
+    cajMovs.push({id:Date.now()+1,tipo:'egr',monto:currentAmount,efectivo:currentMethod==='efectivo'?currentAmount:0,digital:currentMethod==='efectivo'?0:currentAmount,desc:`Reversión del pago ${paymentKey} — ${currentCr.desc}`,cat:'Devolución',metodo:currentMethod,referencia:currentPay.referencia||currentPay.operacion||'',numeroOperacion:currentPay.numeroOperacion||currentPay.operacion||'',hora:nowT(),hora24:_naTime24(now),timestamp:now.toISOString(),cajero:cashier.nombre,cajeroNombre:cashier.nombre,cajeroId:cashier.id,fecha:obtenerHoy(),sessionId:_naSessionOpen()?cajEstado.sessionId||null:null,creditoId:currentCr.id,pagoId:reversalId,reversal:true,reversalOf:paymentKey,saldoAnterior:saldoAntes,saldoActual:currentCr.saldo,horarioPago:_naCreditSchedule(now)});
+    const result=await saveAllData();
+    if(!_naWasPersisted(result))throw new Error('Persistencia no verificada');
+    cliRender();cajRender();updateDashboard();
+    if(document.getElementById('mCreditoDetalle')?.classList.contains('open'))abrirDetalleCredito(currentCr.id);
+    toast(`Pago de ${fmt(currentAmount)} revertido · Saldo ${fmt(currentCr.saldo)}`,'success');
+  }
+  catch(error){if(backup){creditos=backup.creditos;cajMovs=backup.cajMovs;await saveAllData();cliRender();}toast('No se revertió el pago porque no existe guardado permanente verificado','error');}
+  finally{pagoRevProc=false;}
+};
+cliRender=function(){creditos=creditos.map((cr,index)=>_naNormalizeCreditRecord(cr,index));cobradoHoy=_naCreditCollectionsNetForDate(obtenerHoy());_baseCliRender();updateDashboard();};
 
 // Caja por sesiones
 cajTotales=function(){const movs=_naCajaMovsSesion(),income=movs.filter(m=>(m.tipo==='ing'&&m.metodo!=='credito')||m.tipo==='cob').reduce((a,m)=>a+m.monto,0),out=movs.filter(m=>m.tipo==='egr'||m.tipo==='gas').reduce((a,m)=>a+m.monto,0),sales=movs.filter(m=>m.tipo==='ing').reduce((a,m)=>a+m.monto,0),collections=movs.filter(m=>m.tipo==='cob').reduce((a,m)=>a+m.monto,0),expenses=movs.filter(m=>m.tipo==='gas').reduce((a,m)=>a+m.monto,0),withdrawals=movs.filter(m=>m.tipo==='egr').reduce((a,m)=>a+m.monto,0),cashIn=movs.filter(m=>m.tipo==='ing'||m.tipo==='cob').reduce((a,m)=>a+(m.efectivo||0),0),cashOut=movs.filter(m=>m.tipo==='egr'||m.tipo==='gas').reduce((a,m)=>a+(m.efectivo||0),0);return{ing:income,egr:out,ven:sales,cob:collections,gas:expenses,ret:withdrawals,ef:_naNumber(cajEstado?.fondo)+cashIn-cashOut};};
