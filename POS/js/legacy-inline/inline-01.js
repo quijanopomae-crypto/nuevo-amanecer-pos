@@ -178,6 +178,24 @@ async function cargarCatalogoInicial(){
 function _naNormCatalogName(value){
   return String(value??'').trim().replace(/\s+/g,' ').toUpperCase();
 }
+const _NA_CATALOG_V2B_SAFE_NAMES=Object.freeze({
+  '133':Object.freeze({expectedCurrentName:'GOMITAS TRULULU SABORES 90 GR',canonicalName:'TRULULU SABORES 90GR'}),
+  '136':Object.freeze({expectedCurrentName:'GOMITAS TRULULU GUSANOS ÁCIDOS 80 GR',canonicalName:'TRULULU GUSANOS ACIDOS 80GR'}),
+  '137':Object.freeze({expectedCurrentName:'GOMAS TRULULU DINOSS 90G*',canonicalName:'TRULULU DINOS 90GR'})
+});
+function _naCatalogV2BSafeName(id,currentName){
+  const approved=_NA_CATALOG_V2B_SAFE_NAMES[String(id)];
+  if(!approved||currentName===approved.canonicalName||currentName!==approved.expectedCurrentName)return currentName;
+  return approved.canonicalName;
+}
+function _naApplyCatalogV2BSafeNames(list){
+  if(!Array.isArray(list))return list;
+  return list.map(function(product){
+    if(!product||typeof product.name!=='string')return product;
+    const canonicalName=_naCatalogV2BSafeName(product.id,product.name);
+    return canonicalName===product.name?product:{...product,name:canonicalName};
+  });
+}
 function _naInstallCatalogNameNorm(){
   if(window._naCatalogNameNormInstalled)return;
   window._naCatalogNameNormInstalled=true;
@@ -186,8 +204,10 @@ function _naInstallCatalogNameNorm(){
     const wrappedNormalize=function(){
       const out=baseNormalize.apply(this,arguments);
       if(Array.isArray(productos)){
-        productos=productos.map(function(p){
+        const safelyNamedProducts=_naApplyCatalogV2BSafeNames(productos);
+        productos=safelyNamedProducts.map(function(p){
           if(!p||typeof p.name!=='string')return p;
+          if(_NA_CATALOG_V2B_SAFE_NAMES[String(p.id)])return p;
           const normalized=_naNormCatalogName(p.name);
           return normalized===p.name?p:{...p,name:normalized};
         });
@@ -201,7 +221,10 @@ function _naInstallCatalogNameNorm(){
     const baseGuardar=guardarProd;
     const wrappedGuardar=async function(){
       const input=document.getElementById('pNombre');
-      if(input&&input.value)input.value=_naNormCatalogName(input.value);
+      if(input&&input.value){
+        const approved=_NA_CATALOG_V2B_SAFE_NAMES[String(invEditId)];
+        input.value=approved?_naCatalogV2BSafeName(invEditId,String(input.value)):_naNormCatalogName(input.value);
+      }
       return baseGuardar.apply(this,arguments);
     };
     wrappedGuardar._naNameNorm=true;
