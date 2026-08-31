@@ -566,6 +566,7 @@
                     <button type="button" class="alt-code-add" id="pAddAltCodeBtn" onclick="addAltBarcodeField()">＋ Añadir otro código de barras</button>
                 </div>
                 <div class="fg"><div class="fl">Descripción</div><textarea class="fi" id="pDescripcion" style="height:74px;resize:vertical" placeholder="Notas o presentación del producto"></textarea></div>
+                <div class="fg"><div class="fl">Estado del producto</div><select class="fs" id="pActivo"><option value="true">ACTIVO — visible normalmente</option><option value="false">DESCONTINUADO — visible solo al buscar</option></select><div class="field-help">Reactivar conserva el producto y reinicia de forma segura su periodo de visibilidad.</div></div>
                 <div class="prod-advanced-row">
                     <label class="prod-inline-check"><input type="checkbox" id="pIncluyeIGV" checked><span>Incluye IGV</span></label>
                     <div class="prod-stock-toggle"><strong>Controlar inventario</strong><div class="prod-yesno"><button type="button" id="pInvYes" onclick="setProductInventoryControl(true)">Sí</button><button type="button" id="pInvNo" onclick="setProductInventoryControl(false)">No</button></div></div>

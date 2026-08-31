@@ -111,3 +111,7 @@
 .icon-designer-hint{font-size:10px;line-height:1.45;color:#64748b;font-weight:700;background:#f8fafc;border-radius:10px;padding:9px}
 @media(max-width:720px){.emoji-grid{grid-template-columns:repeat(6,minmax(0,1fr));max-height:300px}.icon-designer-layout{grid-template-columns:1fr}.icon-canvas-wrap{min-height:250px}.icon-control-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:390px){.emoji-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.product-icon-input-row{grid-template-columns:1fr}.product-icon-mini-btn{width:100%}.icon-control-grid{grid-template-columns:1fr}}
+.product-visibility-badge{position:absolute;top:10px;right:10px;z-index:2;max-width:calc(100% - 20px);padding:4px 7px;border-radius:999px;font-size:8px;font-weight:900;line-height:1.15;letter-spacing:.02em;box-shadow:0 4px 10px rgba(15,23,42,.12)}
+.product-visibility-badge.no-restock,.inventory-visibility-badge.no-restock{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}
+.product-visibility-badge.discontinued,.inventory-visibility-badge.discontinued{background:#f1f5f9;border:1px solid #94a3b8;color:#334155}
+.inventory-visibility-badge{display:inline-flex;vertical-align:middle;margin-left:6px;padding:2px 6px;border-radius:999px;font-size:8px;font-weight:900;line-height:1.2;white-space:nowrap}

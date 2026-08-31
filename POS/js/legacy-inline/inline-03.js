@@ -228,7 +228,7 @@ const _NA_BACKUP_MAX_BYTES=10*1024*1024;
 const _NA_BACKUP_LIMITS={productos:10000,ventas:50000,clientes:20000,creditos:50000,gastos:50000,cajMovs:100000,cart:1000,items:5000,inventoryMovements:200000};
 const _NA_DANGEROUS_BACKUP_KEYS=new Set(['__proto__','prototype','constructor']);
 const _NA_BACKUP_KEYS={
-  product:new Set(['id','name','sku','barcode','codigosAlternativos','codigoAlternativo','cat','icon','imagen','costo','precio','precioCaja','unidCaja','stock','stockMin','venc','descripcion','marca','unidad','unidadCompra','factorCompra','incluyeIGV','tipoImpuesto','impuestoComplementario','controlInventario','tienda','activo','createdAt','updatedAt']),
+  product:new Set(['id','name','sku','barcode','codigosAlternativos','codigoAlternativo','cat','icon','imagen','costo','precio','precioCaja','unidCaja','stock','stockMin','venc','descripcion','marca','unidad','unidadCompra','factorCompra','incluyeIGV','tipoImpuesto','impuestoComplementario','controlInventario','tienda','activo','createdAt','updatedAt','reactivadoAt']),
   sale:new Set(['id','operation','fecha','hora','hora24','timestamp','cajero','cajeroNombre','cajeroId','metodo','metodoPago','estado','tipoVenta','total','subtotal','descuentoTotal','igvActive','taxBreakdown','cantidadLineas','unidadesFisicas','paymentRef','paymentBreakdown','recibido','vuelto','anulada','anuladaAt','anuladaPor','anuladaPorId','horaAnulacion','motivoAnulacion','clienteId','clienteNombre','clienteDni','creditId','contieneVentaLibre','contieneVentaSinStock','items']),
   item:new Set(['id','productoId','itemKey','sku','barcode','icon','name','nombre','qty','cantidad','precio','precioUnitario','subtotal','costo','imagen','unidad','marca','incluyeIGV','tipoImpuesto','unitsPerQty','ventaModo','modo','descuento','_descuento','_precioOriginal','_lineKey','cat','controlInventario','stock','stockMin','precioCaja','unidCaja','ventaLibre','ventaSinStock','tipoLinea','codigoIngresado','unidadesSinStock','stockAntes','cajeroRegistro']),
   client:new Set(['id','nombre','dni','ruc','tel','telefono','dir','direccion','color','totalCompras','lineaCreditoManualActiva','lineaCreditoManual','lineaCreditoManualMotivo','lineaCreditoManualAt','lineaCreditoManualPor','lineaCreditoManualPorId','createdAt','updatedAt']),
@@ -322,7 +322,7 @@ function _naSanitizeProduct(raw,index,warnings,isCart=false){
   for(const key of ['costo','precio','precioCaja','stock','stockMin','qty','unitsPerQty','descuento','_descuento','_precioOriginal','unidCaja','factorCompra','unidadesSinStock','stockAntes'])if(p[key]!==undefined)out[key]=_naBackupNumber(p[key],`${path}.${key}`,{min:['stock','stockAntes'].includes(key)?-1e9:0,max:1e9,nullable:['precioCaja','_precioOriginal','stockAntes'].includes(key)});
   for(const key of ['incluyeIGV','controlInventario','activo','ventaLibre','ventaSinStock'])if(p[key]!==undefined)out[key]=_naBackupBoolean(p[key],`${path}.${key}`,true);
   if(p.venc!==undefined)out.venc=_naBackupDate(p.venc,`${path}.venc`);
-  for(const key of ['createdAt','updatedAt'])if(p[key]!==undefined)out[key]=_naBackupDate(p[key],`${path}.${key}`);
+  for(const key of ['createdAt','updatedAt','reactivadoAt'])if(p[key]!==undefined)out[key]=_naBackupDate(p[key],`${path}.${key}`);
   return out;
 }
 function _naSanitizeSaleItem(raw,path,warnings){

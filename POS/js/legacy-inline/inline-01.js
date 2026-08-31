@@ -233,6 +233,101 @@ function _naInstallCatalogNameNorm(){
 }
 document.addEventListener('DOMContentLoaded',_naInstallCatalogNameNorm);
 
+// ===== VISIBILIDAD DE CATÁLOGO: inactividad calculada + baja manual reversible =====
+const _NA_PRODUCT_NO_RESTOCK_DAYS=60;
+function _naLastProductRestockAt(productId){
+  let latest=null;
+  for(const movement of Array.isArray(inventoryMovements)?inventoryMovements:[]){
+    if(String(movement?.productId)!==String(productId)||movement?.type!=='ENTRADA'||movement?.source!=='INVENTORY_MOVE'||_naNumber(movement?.delta)<=0)continue;
+    const timestamp=new Date(movement?.timestamp||'').getTime();
+    if(Number.isFinite(timestamp)&&(latest===null||timestamp>latest))latest=timestamp;
+  }
+  return latest===null?null:new Date(latest).toISOString();
+}
+function _naProductVisibility(product,now=Date.now()){
+  if(product?.activo===false)return{state:'DESCONTINUADO',hidden:true,daysWithoutRestock:null};
+  const lastRestockAt=_naLastProductRestockAt(product?.id);
+  if(!lastRestockAt)return{state:'ACTIVO',hidden:false,daysWithoutRestock:null};
+  const restockTime=new Date(lastRestockAt).getTime(),reactivatedTime=new Date(product?.reactivadoAt||'').getTime(),nowTime=new Date(now).getTime();
+  const anchor=Number.isFinite(reactivatedTime)?Math.max(restockTime,reactivatedTime):restockTime;
+  const daysWithoutRestock=Math.floor(Math.max(0,(Number.isFinite(nowTime)?nowTime:Date.now())-anchor)/86400000);
+  return daysWithoutRestock>_NA_PRODUCT_NO_RESTOCK_DAYS?{state:'SIN_REPOSICION',hidden:true,daysWithoutRestock}:{state:'ACTIVO',hidden:false,daysWithoutRestock};
+}
+function _naProductMatchesVisibleSearch(product,query,now=Date.now()){
+  const raw=String(query??''),search=sinTildes(raw.toLowerCase()),hasQuery=raw.trim().length>0;
+  if(!hasQuery)return!_naProductVisibility(product,now).hidden;
+  return sinTildes((product?.name||'').toLowerCase()).includes(search)||sinTildes(product?.descripcion||'').includes(search)||sinTildes((product?.marca||'').toLowerCase()).includes(search)||(product?.sku||'').toLowerCase().includes(search)||(product?.barcode||'').includes(search)||_naProductAltCodes(product).some(code=>code.toLowerCase().includes(search));
+}
+function _naProductManualVisibilityPatch(product,nextActive,now=Date.now()){
+  const activo=nextActive!==false;
+  if(!product)return{activo};
+  if(!activo)return{activo:false};
+  if(product.activo===false){
+    const timestamp=new Date(now).getTime();
+    return{activo:true,reactivadoAt:new Date(Number.isFinite(timestamp)?timestamp:Date.now()).toISOString()};
+  }
+  return{};
+}
+function _naProductVisibilityLabel(visibility){
+  return visibility?.state==='DESCONTINUADO'?'DESCONTINUADO':visibility?.state==='SIN_REPOSICION'?'SIN REPOSICION +60D':'';
+}
+function _naInstallProductVisibility(){
+  if(window._naProductVisibilityInstalled)return;
+  window._naProductVisibilityInstalled=true;
+  if(typeof abrirModalProd==='function'&&!abrirModalProd._naProductVisibility){
+    const baseOpenProduct=abrirModalProd;
+    const wrappedOpenProduct=function(){const result=baseOpenProduct.apply(this,arguments),field=document.getElementById('pActivo');if(field)field.value='true';return result;};
+    wrappedOpenProduct._naProductVisibility=true;
+    abrirModalProd=wrappedOpenProduct;
+  }
+  if(typeof editProd==='function'&&!editProd._naProductVisibility){
+    const baseEditProduct=editProd;
+    const wrappedEditProduct=function(id){const product=productos.find(item=>String(item.id)===String(id)),result=baseEditProduct.apply(this,arguments),field=document.getElementById('pActivo');if(field)field.value=product?.activo===false?'false':'true';return result;};
+    wrappedEditProduct._naProductVisibility=true;
+    editProd=wrappedEditProduct;
+  }
+  if(typeof _naSecProductCard==='function'&&!_naSecProductCard._naProductVisibility){
+    const baseProductCard=_naSecProductCard;
+    const wrappedProductCard=function(parent,product,allowNoStock){
+      const previousCount=parent?.children?.length||0,result=baseProductCard.apply(this,arguments),card=parent?.children?.[previousCount]||parent?.lastElementChild,visibility=_naProductVisibility(product);
+      if(card&&visibility.hidden){const badge=document.createElement('span');badge.className=`product-visibility-badge ${visibility.state==='DESCONTINUADO'?'discontinued':'no-restock'}`;badge.textContent=_naProductVisibilityLabel(visibility);card.appendChild(badge);}
+      return result;
+    };
+    wrappedProductCard._naProductVisibility=true;
+    _naSecProductCard=wrappedProductCard;
+  }
+  if(typeof posRender==='function'&&!posRender._naProductVisibility){
+    const basePosRender=posRender;
+    const wrappedPosRender=function(){
+      const original=productos,query=document.getElementById('posSearch')?.value||'',now=Date.now();
+      productos=original.filter(product=>_naProductMatchesVisibleSearch(product,query,now));
+      try{return basePosRender.apply(this,arguments);}finally{productos=original;}
+    };
+    wrappedPosRender._naProductVisibility=true;
+    posRender=wrappedPosRender;
+  }
+  if(typeof _baseInvRender==='function'&&!_baseInvRender._naProductVisibility){
+    const baseInventoryRender=_baseInvRender;
+    const wrappedInventoryRender=function(){
+      const original=productos,query=document.getElementById('invSearch')?.value||'',now=Date.now(),baseBadges=invBadges;
+      baseBadges();productos=original.filter(product=>_naProductMatchesVisibleSearch(product,query,now));invBadges=function(){};
+      let result;
+      try{result=baseInventoryRender.apply(this,arguments);}finally{productos=original;invBadges=baseBadges;}
+      if(query.trim())document.querySelectorAll('#invBody tr').forEach(row=>{
+        const handler=row.querySelector('.btn-edt')?.getAttribute('onclick')||'',match=handler.match(/^editProd\((.*)\)$/);if(!match)return;
+        let id;try{id=JSON.parse(match[1]);}catch(error){return;}
+        const product=original.find(item=>String(item.id)===String(id)),visibility=_naProductVisibility(product,now),name=row.querySelector('.prod-name-sm');
+        if(!name||!visibility.hidden)return;
+        const badge=document.createElement('span');badge.className=`inventory-visibility-badge ${visibility.state==='DESCONTINUADO'?'discontinued':'no-restock'}`;badge.textContent=_naProductVisibilityLabel(visibility);name.appendChild(badge);
+      });
+      return result;
+    };
+    wrappedInventoryRender._naProductVisibility=true;
+    _baseInvRender=wrappedInventoryRender;
+  }
+}
+document.addEventListener('DOMContentLoaded',_naInstallProductVisibility);
+
 
 // ===== POS — CATEGORÍAS Y RENDER =====
 

@@ -1,7 +1,8 @@
 // sandbox.mjs — harness de CATALOG V2A (base c296856).
 // Patrón fix02/03/04 + catalog-normalization: scripts REALES del producto en node:vm,
 // orden de index.html relevante para guardarProd/importación/búsqueda de códigos
-// (utils, inline-01..07 con el wrapper F10 de inline-07, inline-10..12, inline-16).
+// (utils, inline-01..07, winners seguros de inventario/POS inline-09/14,
+// inline-10..14 relevantes e inline-16).
 // El stub de elementos soporta árboles con hijos (patrón ui-polish) para poder ejercer
 // los campos reales de códigos alternativos (#pAltCodesList .alt-code-input) que usa
 // readAltBarcodes/_naCurrentAltFieldValues dentro de guardarProd.
@@ -23,9 +24,12 @@ const LOAD_ORDER = [
   'js/legacy-inline/inline-05.js',
   'js/legacy-inline/inline-06.js',
   'js/legacy-inline/inline-07.js',
+  'js/legacy-inline/inline-09.js',
   'js/legacy-inline/inline-10.js',
   'js/legacy-inline/inline-11.js',
   'js/legacy-inline/inline-12.js',
+  'js/legacy-inline/inline-13.js',
+  'js/legacy-inline/inline-14.js',
   'js/legacy-inline/inline-16.js',
 ];
 
