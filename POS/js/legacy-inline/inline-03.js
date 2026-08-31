@@ -147,7 +147,7 @@ function _naImportUnit(value){const raw=sinTildes(_naClean(value).toLowerCase())
 
 function _naImportPurchaseUnit(value){const raw=sinTildes(_naClean(value).toLowerCase());const allowed=['unidad','caja','paquete','sixpack','fardo','docena','bolsa','otro'];if(allowed.includes(raw))return raw;if(['und','unid','pieza'].includes(raw))return'unidad';if(['six pack','six-pack','pack 6'].includes(raw))return'sixpack';return'otro';}
 function _naImportCategory(value,name){if(!String(value??'').trim())return _naClassifyProductCategory(name,'abarrotes');const raw=sinTildes(_naClean(value).toLowerCase()),categories=_naAllCategories();const exact=categories.find(c=>sinTildes(c.value.toLowerCase())===raw||sinTildes(c.label.toLowerCase())===raw);if(exact)return exact.value;return _naClassifyProductCategory(name,raw);}
-function _naSplitImportCodes(value){const seen=new Set(),out=[];String(value??'').split(/[|;,\n\r]+/).forEach(part=>{const code=_naClean(part);const key=code.toLowerCase();if(code&&!seen.has(key)&&out.length<NA_MAX_ALT_BARCODES){seen.add(key);out.push(code);}});return out;}
+function _naSplitImportCodes(value,limit=NA_MAX_ALT_BARCODES){const seen=new Set(),out=[];String(value??'').split(/[|;,\n\r]+/).forEach(part=>{const code=_naClean(part);const key=code.toLowerCase();if(code&&!seen.has(key)&&out.length<limit){seen.add(key);out.push(code);}});return out;}
 function _naCatalogCodeOwner(list,code,excludeId=null){const key=_naClean(code).toLowerCase();if(!key)return null;return list.find(p=>String(p.id)!==String(excludeId)&&[p.sku,p.barcode,..._naProductAltCodes(p)].some(item=>_naClean(item).toLowerCase()===key))||null;}
 function _naNextImportProductId(usedIds){let id=Date.now();while(usedIds.has(String(id)))id++;usedIds.add(String(id));return id;}
 function _naBuildProductImportPlan(rows){
@@ -171,7 +171,8 @@ function _naBuildProductImportPlan(rows){
     if(conflicts.length){skipped++;warnings.push(`Fila ${r+1}: ${conflicts[0].code} ya pertenece a ${conflicts[0].owner.name}`);continue;}
     const controlInventario=_naImportBool(get('inventory'),true),purchaseUnit=blank(get('purchaseUnit'))?'unidad':_naImportPurchaseUnit(get('purchaseUnit')),purchaseFactor=blank(get('purchaseFactor'))?1:Math.max(0.001,_naNumber(get('purchaseFactor'),1)),data={name,sku,precio:Math.max(0,price),unidadCompra:purchaseUnit,factorCompra:purchaseUnit==='unidad'?1:purchaseFactor,descripcion:blank(get('description'))?'':_naClean(get('description')),marca:blank(get('brand'))?'Sin marca':_naClean(get('brand'))||'Sin marca',cat:_naImportCategory(get('cat'),name),unidad:_naImportUnit(get('unit')),controlInventario,incluyeIGV:_naImportBool(get('igv'),true)};
     if(!blank(get('barcode')))data.barcode=barcode;
-    data.codigosAlternativos=altCodes;data.codigoAlternativo=altCodes[0]||'';
+    // V2A: los códigos alternativos se resuelven por rama — update FUSIONA el histórico
+    // (nunca lo reemplaza ni lo vacía) y add respeta el tope de escritura de 7 totales.
     if(!blank(get('cost')))data.costo=Math.max(0,_naNumber(get('cost')));
     if(!blank(get('stock')))data.stock=controlInventario?Math.max(0,_naInt(get('stock'))):0;
     if(!blank(get('min')))data.stockMin=controlInventario?Math.max(0,_naInt(get('min'))):0;
@@ -184,8 +185,28 @@ function _naBuildProductImportPlan(rows){
     const effectiveCost=data.costo!==undefined?data.costo:_naNumber(existing?.costo);
     if(appConfig.margenActive&&effectiveCost>0&&data.precio<effectiveCost){skipped++;warnings.push(`Fila ${r+1}: precio menor al costo`);continue;}
     if(appConfig.margenActive&&data.precioCaja>0&&data.precioCaja<effectiveCost*data.unidCaja){skipped++;warnings.push(`Fila ${r+1}: precio por caja menor al costo total`);continue;}
-    if(existing){Object.assign(existing,data);touchedIds.add(String(existing.id));actions.push({type:'update',id:existing.id,data,row:r+1});updated++;}
-    else{const product={id:_naNextImportProductId(usedIds),barcode:'',codigosAlternativos:[],codigoAlternativo:'',descripcion:'',marca:'Sin marca',unidad:'unidad',unidadCompra:'unidad',factorCompra:1,incluyeIGV:true,tipoImpuesto:'gravado',impuestoComplementario:'',controlInventario:true,cat:'abarrotes',icon:'📦',imagen:null,costo:0,stock:0,stockMin:_naInt(appConfig.stockMin,5),venc:null,precioCaja:null,unidCaja:null,...data};working.push(product);touchedIds.add(String(product.id));actions.push({type:'add',product,row:r+1});added++;}
+    if(existing){
+      // V2A: fusión de códigos — históricos existentes primero (nunca se pierden),
+      // principal anterior conservado si la fila cambia el principal, luego los importados
+      // validados hasta el tope absoluto de 10. Un código nunca pertenece a dos productos.
+      const prevAlts=_naProductAltCodes(existing),prevBarcode=_naClean(existing.barcode),nextBarcode=data.barcode!==undefined?_naClean(data.barcode):prevBarcode,nextKey=nextBarcode.toLowerCase();
+      const seen=new Set([_naClean(existing.sku).toLowerCase()]),merged=[];
+      const keep=code=>{const key=code.toLowerCase();if(code&&key!==nextKey&&!seen.has(key)){seen.add(key);merged.push(code);}};
+      prevAlts.forEach(keep);
+      if(prevBarcode&&prevBarcode.toLowerCase()!==nextKey)keep(prevBarcode);
+      let rejectedImports=0;
+      for(const code of altCodes){if(merged.length>=NA_MAX_ALT_BARCODES){rejectedImports++;continue;}keep(code);}
+      if(rejectedImports)warnings.push(`Fila ${r+1}: ${rejectedImports} código(s) alternativo(s) fuera del máximo de ${NA_MAX_ALT_BARCODES} no se importaron`);
+      data.codigosAlternativos=merged;data.codigoAlternativo=merged[0]||'';
+      Object.assign(existing,data);touchedIds.add(String(existing.id));actions.push({type:'update',id:existing.id,data,row:r+1});updated++;
+    }
+    else{
+      // V2A: producto nuevo — tope de escritura 1 principal + 6 alternativos = 7 códigos.
+      const cappedAltCodes=altCodes.slice(0,NA_MAX_ALT_CODES_NEW);
+      if(altCodes.length>NA_MAX_ALT_CODES_NEW)warnings.push(`Fila ${r+1}: un producto nuevo admite ${NA_MAX_ALT_CODES_NEW} códigos alternativos; se importaron los primeros`);
+      data.codigosAlternativos=cappedAltCodes;data.codigoAlternativo=cappedAltCodes[0]||'';
+      const product={id:_naNextImportProductId(usedIds),barcode:'',codigosAlternativos:[],codigoAlternativo:'',descripcion:'',marca:'Sin marca',unidad:'unidad',unidadCompra:'unidad',factorCompra:1,incluyeIGV:true,tipoImpuesto:'gravado',impuestoComplementario:'',controlInventario:true,cat:'abarrotes',icon:'📦',imagen:null,costo:0,stock:0,stockMin:_naInt(appConfig.stockMin,5),venc:null,precioCaja:null,unidCaja:null,...data};working.push(product);touchedIds.add(String(product.id));actions.push({type:'add',product,row:r+1});added++;
+    }
   }
   return{headers,actions,added,updated,skipped,warnings,totalRows:rows.length-1,generatedAt:new Date().toISOString()};
 }

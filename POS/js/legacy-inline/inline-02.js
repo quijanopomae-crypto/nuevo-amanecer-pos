@@ -567,15 +567,28 @@ guardarProd=async function(){
   try{
   const name=_naClean(document.getElementById('pNombre').value),descripcion=_naClean(document.getElementById('pDescripcion').value),cost=Math.max(0,_naNumber(document.getElementById('pCosto').value)),price=Math.max(0,_naNumber(document.getElementById('pPrecio').value)),sku=_naClean(document.getElementById('pSku').value),barcode=_naClean(document.getElementById('pBarcode').value),finalSku=sku||`PROD-${Date.now()}`,marca=_naClean(document.getElementById('pMarca').value)||'Sin marca',unidad=document.getElementById('pUnidad').value,unidadCompra=document.getElementById('pUnidadCompra').value||'unidad',factorCompraRaw=_naNumber(document.getElementById('pFactorCompra').value,1),factorCompra=unidadCompra==='unidad'?1:factorCompraRaw,controlInventario=!!document.getElementById('pControlInventario').checked,codigosAlternativos=readAltBarcodes();
   if(codigosAlternativos===null)return;
+  // V2A: la edición conserva el histórico de códigos. El código que pasa a principal deja
+  // de repetirse como alternativo y el principal anterior se conserva como alternativo
+  // (A→B→C→A sin pérdida ni duplicados). Nunca se eliminan códigos automáticamente.
+  let altCodesFinal=codigosAlternativos;
+  const editingPrevious=invEditId?productos.find(x=>String(x.id)===String(invEditId)):null;
+  if(editingPrevious){
+    if(barcode){const newKey=barcode.toLowerCase();altCodesFinal=altCodesFinal.filter(c=>c.toLowerCase()!==newKey);}
+    const prevBarcode=_naClean(editingPrevious.barcode);
+    if(prevBarcode&&(!barcode||prevBarcode.toLowerCase()!==barcode.toLowerCase())&&!altCodesFinal.some(c=>c.toLowerCase()===prevBarcode.toLowerCase())){
+      if(altCodesFinal.length>=NA_MAX_ALT_BARCODES){toast('Retira un código alternativo para conservar el código principal anterior','error');return;}
+      altCodesFinal=[...altCodesFinal,prevBarcode];
+    }
+  }
   if(!name||price<=0||!unidad){toast('Nombre, unidad de medida y precio de venta son obligatorios','error');return;}
   if(unidadCompra!=='unidad'&&(!Number.isFinite(factorCompraRaw)||factorCompraRaw<=0)){toast('Las unidades por presentación deben ser mayores que cero','error');return;}
   if(appConfig.margenActive&&price<cost){toast('El precio no puede ser menor al costo mientras el control de margen esté activo','error');return;}
-  const ownCodes=[finalSku,barcode,...codigosAlternativos].map(_naClean).filter(Boolean),ownSeen=new Set();
+  const ownCodes=[finalSku,barcode,...altCodesFinal].map(_naClean).filter(Boolean),ownSeen=new Set();
   for(const code of ownCodes){const key=code.toLowerCase();if(ownSeen.has(key)){toast(`El código ${code} está repetido dentro del mismo producto`,'error');return;}ownSeen.add(key);const owner=_naFindCodeOwner(code,invEditId);if(owner){toast(`El código ${code} ya pertenece a ${owner.name}`,'error');return;}}
   const boxPrice=_naNumber(document.getElementById('pPrecioCaja').value),boxUnits=_naInt(document.getElementById('pUnidCaja').value);
   if((boxPrice>0)!==(boxUnits>0)){toast('Completa precio mayorista y unidades por caja, o deja ambos vacíos','error');return;}
   if(appConfig.margenActive&&boxPrice>0&&boxPrice<cost*boxUnits){toast('El precio por caja está por debajo del costo total','error');return;}
-  const data={name,descripcion,sku:finalSku,barcode,codigosAlternativos,codigoAlternativo:codigosAlternativos[0]||'',unidadCompra,factorCompra,cat:document.getElementById('pCat').value,marca,unidad,icon:document.getElementById('pIcon').value||'📦',imagen:imagenProducto,costo:cost,precio:price,incluyeIGV:!!document.getElementById('pIncluyeIGV').checked,tipoImpuesto:_naTaxType(document.getElementById('pTipoImpuesto').value),impuestoComplementario:document.getElementById('pImpuestoComplementario').value,controlInventario,stock:controlInventario?(invEditId?_naInt(document.getElementById('pStock').value):Math.max(0,_naInt(document.getElementById('pStock').value))):0,stockMin:controlInventario?Math.max(0,_naInt(document.getElementById('pStockMin').value,_naInt(appConfig.stockMin,5))):0,venc:controlInventario?(document.getElementById('pVenc').value||null):null,precioCaja:boxPrice>0?boxPrice:null,unidCaja:boxUnits>0?boxUnits:null};
+  const data={name,descripcion,sku:finalSku,barcode,codigosAlternativos:altCodesFinal,codigoAlternativo:altCodesFinal[0]||'',unidadCompra,factorCompra,cat:document.getElementById('pCat').value,marca,unidad,icon:document.getElementById('pIcon').value||'📦',imagen:imagenProducto,costo:cost,precio:price,incluyeIGV:!!document.getElementById('pIncluyeIGV').checked,tipoImpuesto:_naTaxType(document.getElementById('pTipoImpuesto').value),impuestoComplementario:document.getElementById('pImpuestoComplementario').value,controlInventario,stock:controlInventario?(invEditId?_naInt(document.getElementById('pStock').value):Math.max(0,_naInt(document.getElementById('pStock').value))):0,stockMin:controlInventario?Math.max(0,_naInt(document.getElementById('pStockMin').value,_naInt(appConfig.stockMin,5))):0,venc:controlInventario?(document.getElementById('pVenc').value||null):null,precioCaja:boxPrice>0?boxPrice:null,unidCaja:boxUnits>0?boxUnits:null};
   // FIX04: targetStock queda separado; applyInventoryMovement es la única mutación final de stock.
   const targetStock=data.stock,{stock:_ignoredTargetStock,...persistedData}=data;
   const backup={productos:_naClone(productos),inventoryMovements:_naClone(inventoryMovements)};

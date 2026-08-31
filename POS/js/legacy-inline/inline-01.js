@@ -412,11 +412,14 @@ function _naAltBarcodeRow(code='',index=0){
 }
 function _naUpdateAltBarcodeUI(){
   const inputs=[...document.querySelectorAll('#pAltCodesList .alt-code-input')],count=document.getElementById('pAltCodeCount'),add=document.getElementById('pAddAltCodeBtn');
-  if(count)count.textContent=`${inputs.length}/${NA_MAX_ALT_BARCODES}`;
+  // V2A: el contador refleja el total de códigos del producto (principal + alternativos con valor).
+  const primary=_naClean(document.getElementById('pBarcode')?.value);
+  const used=inputs.filter(input=>String(input.value||'').trim()).length+(primary?1:0);
+  if(count)count.textContent=`${used}/${NA_MAX_TOTAL_CODES}`;
   if(add){
-    const atLimit=inputs.length>=NA_MAX_ALT_BARCODES;
+    const atLimit=used>=NA_MAX_TOTAL_CODES||inputs.length>=NA_MAX_ALT_BARCODES;
     add.disabled=atLimit;
-    add.textContent=atLimit?'Límite de 10 códigos alcanzado':'＋ Añadir otro código de barras';
+    add.textContent=atLimit?'Límite de 7 códigos alcanzado':'＋ Añadir otro código de barras';
   }
   inputs.forEach((input,index)=>{
     input.placeholder=`Código alternativo ${index+1}`;
@@ -437,6 +440,10 @@ function renderAltBarcodeFields(codes=[]){
 function addAltBarcodeField(value=''){
   const wrap=document.getElementById('pAltCodesList');if(!wrap){toast('No se encontró la sección de códigos alternativos','error');return;}
   const current=_naCurrentAltFieldValues();
+  // V2A: tope de escritura nueva = 7 códigos totales (1 principal + 6 alternativos).
+  const primary=_naClean(document.getElementById('pBarcode')?.value);
+  const used=current.filter(code=>String(code).trim()).length+(primary?1:0);
+  if(used>=NA_MAX_TOTAL_CODES){toast('Cada producto admite 7 códigos en total: 1 principal + 6 alternativos','error');return;}
   if(current.length>=NA_MAX_ALT_BARCODES){toast('Puedes registrar como máximo 10 códigos alternativos','error');return;}
   current.push(String(value??''));
   renderAltBarcodeFields(current);
@@ -464,6 +471,70 @@ function readAltBarcodes(){
 function _naAllProductCodes(product){return [product?.sku,product?.barcode,..._naProductAltCodes(product)].map(_naClean).filter(Boolean);}
 function _naFindCodeOwner(code,excludedId=null){const key=_naClean(code).toLowerCase();if(!key)return null;return productos.find(product=>String(product.id)!==String(excludedId)&&_naAllProductCodes(product).some(existing=>existing.toLowerCase()===key))||null;}
 function _naProductMatchesCode(product,code){const key=_naClean(code).toLowerCase();return !!key&&_naAllProductCodes(product).some(existing=>existing.toLowerCase()===key);}
+
+// ===== CATÁLOGO V2A — NÚCLEO DE CÓDIGOS DE BARRAS (1 principal + 6 alternativos) =====
+// Tope de ESCRITURA nueva: 7 códigos totales por producto. La tolerancia de LECTURA,
+// normalización y respaldo se mantiene en 10 alternativos (NA_MAX_ALT_BARCODES) para que
+// los datos/respaldos legacy con más de 7 sigan siendo legibles, buscables y restaurables.
+// Los códigos históricos nunca se eliminan automáticamente: cambiar el principal conserva
+// el anterior como alternativo (A→B→C→A sin pérdida ni duplicados).
+const NA_MAX_TOTAL_CODES=7;
+const NA_MAX_ALT_CODES_NEW=NA_MAX_TOTAL_CODES-1;
+function _naProductByCode(code){
+  const key=_naClean(code).toLowerCase();
+  if(!key)return null;
+  return productos.find(product=>_naProductMatchesCode(product,key))||null;
+}
+function _naProductCodeCount(product){
+  if(!product)return 0;
+  return (_naClean(product.barcode)?1:0)+_naProductAltCodes(product).length;
+}
+function _naAddProductCode(product,code){
+  if(!product||typeof product!=='object')return{ok:false,reason:'INVALID'};
+  const clean=_naClean(code);
+  if(!clean)return{ok:false,reason:'INVALID'};
+  const key=clean.toLowerCase();
+  if(_naAllProductCodes(product).some(existing=>existing.toLowerCase()===key))return{ok:false,reason:'DUPLICATE_SAME_PRODUCT'};
+  const owner=_naFindCodeOwner(clean,product.id);
+  if(owner)return{ok:false,reason:'FOREIGN_OWNER',owner};
+  if(_naProductCodeCount(product)>=NA_MAX_TOTAL_CODES)return{ok:false,reason:'CAP_7'};
+  product.codigosAlternativos=[..._naProductAltCodes(product),clean];
+  product.codigoAlternativo=product.codigosAlternativos[0]||'';
+  return{ok:true,codes:_naAllProductCodes(product)};
+}
+function _naSetPrincipalCode(product,code){
+  if(!product||typeof product!=='object')return{ok:false,reason:'INVALID'};
+  const clean=_naClean(code);
+  if(!clean)return{ok:false,reason:'INVALID'};
+  const key=clean.toLowerCase();
+  if(_naClean(product.sku).toLowerCase()===key)return{ok:false,reason:'DUPLICATE_SAME_PRODUCT'};
+  const owner=_naFindCodeOwner(clean,product.id);
+  if(owner)return{ok:false,reason:'FOREIGN_OWNER',owner};
+  const prevPrimary=_naClean(product.barcode);
+  const seen=new Set([key]),nextAlts=[];
+  const push=c=>{const k=c.toLowerCase();if(!seen.has(k)){seen.add(k);nextAlts.push(c);}};
+  if(prevPrimary&&prevPrimary.toLowerCase()!==key)push(prevPrimary);
+  _naProductAltCodes(product).forEach(c=>{if(c.toLowerCase()!==key)push(c);});
+  if(nextAlts.length>NA_MAX_ALT_BARCODES)return{ok:false,reason:'CAP_ABSOLUTE'};
+  product.barcode=clean;
+  product.codigosAlternativos=nextAlts;
+  product.codigoAlternativo=nextAlts[0]||'';
+  return{ok:true};
+}
+function _naRemoveProductCode(product,code){
+  if(!product||typeof product!=='object')return{ok:false,reason:'INVALID'};
+  const clean=_naClean(code);
+  if(!clean)return{ok:false,reason:'INVALID'};
+  const key=clean.toLowerCase();
+  if(_naClean(product.barcode).toLowerCase()===key)return{ok:false,reason:'PRIMARY'};
+  const alts=_naProductAltCodes(product);
+  if(!alts.some(c=>c.toLowerCase()===key))return{ok:false,reason:'NOT_FOUND'};
+  const next=alts.filter(c=>c.toLowerCase()!==key);
+  product.codigosAlternativos=next;
+  product.codigoAlternativo=next[0]||'';
+  return{ok:true};
+}
+
 function editProd(id){invEditId=id;const p=productos.find(x=>x.id===id);if(!p)return;imagenProducto=p.imagen||null;document.getElementById('mProdTitle').textContent='✏️ Editar producto';document.getElementById('pNombre').value=p.name||'';document.getElementById('pDescripcion').value=p.descripcion||'';document.getElementById('pSku').value=p.sku||'';document.getElementById('pBarcode').value=p.barcode||'';renderAltBarcodeFields(_naProductAltCodes(p));document.getElementById('pManualCode').checked=true;toggleProductCodeFields();renderCategorySelects({prodValue:p.cat,invValue:document.getElementById('invCat')?.value||''});toggleNewCategoryField(false);document.getElementById('pMarca').value=p.marca||'Sin marca';document.getElementById('pUnidad').value=p.unidad||'unidad';document.getElementById('pUnidadCompra').value=p.unidadCompra||(p.unidCaja?'caja':'unidad');document.getElementById('pFactorCompra').value=p.factorCompra||p.unidCaja||1;document.getElementById('pCosto').value=p.costo;document.getElementById('pPrecio').value=p.precio;document.getElementById('pIncluyeIGV').checked=p.incluyeIGV!==false;document.getElementById('pTipoImpuesto').value=p.tipoImpuesto||'gravado';document.getElementById('pImpuestoComplementario').value=p.impuestoComplementario||'';document.getElementById('pStock').value=p.stock;document.getElementById('pStockMin').value=p.stockMin;document.getElementById('pVenc').value=p.venc||'';document.getElementById('pIcon').value=p.icon||'📦';document.getElementById('pPrecioCaja').value=p.precioCaja||'';document.getElementById('pUnidCaja').value=p.unidCaja||'';document.getElementById('pWholesaleDetails').open=!!(p.precioCaja&&p.unidCaja);document.getElementById('imgPreview').innerHTML=p.imagen?`<img src=\"${p.imagen}\" style=\"width:100%;height:100%;object-fit:cover\">`:(p.icon||'📦');setProductInventoryControl(p.controlInventario!==false);calcMargen();document.getElementById('mProd').classList.add('open');}
 
 function calcMargen(){const c=parseFloat(document.getElementById('pCosto').value)||0,v=parseFloat(document.getElementById('pPrecio').value)||0;if(c>0&&v>0){const m=((v-c)/c*100).toFixed(1);document.getElementById('mgVal').textContent=`${m}%`;document.getElementById('mgVal').style.color=m<50?'var(--red)':m>=100?'#15803d':'var(--teal)';}else if(c===0&&v===0){document.getElementById('mgVal').textContent='N/A';}else{document.getElementById('mgVal').textContent='∞%';}}
