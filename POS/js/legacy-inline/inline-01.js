@@ -179,13 +179,145 @@ function _naNormCatalogName(value){
   return String(value??'').trim().replace(/\s+/g,' ').toUpperCase();
 }
 const _NA_CATALOG_V2B_SAFE_NAMES=Object.freeze({
-  '133':Object.freeze({expectedCurrentName:'GOMITAS TRULULU SABORES 90 GR',canonicalName:'TRULULU SABORES 90GR'}),
-  '136':Object.freeze({expectedCurrentName:'GOMITAS TRULULU GUSANOS ÁCIDOS 80 GR',canonicalName:'TRULULU GUSANOS ACIDOS 80GR'}),
-  '137':Object.freeze({expectedCurrentName:'GOMAS TRULULU DINOSS 90G*',canonicalName:'TRULULU DINOS 90GR'})
+  "32":Object.freeze({expectedCurrentName:"PAPITA CHIPS X 23 GR",expectedSeedName:"papita chips x 23 gr",canonicalName:"PAPI CHIPS 23G"}),
+  "34":Object.freeze({expectedCurrentName:"NOSOTRAS INVISIBLES RAPIGEL 10 UND",canonicalName:"NOSOTRAS INVISIBLES RAPIGEL 10UND"}),
+  "35":Object.freeze({expectedCurrentName:"FANNY DELI FRESA 75 GR",canonicalName:"FANNY DELI FRESA 75G"}),
+  "44":Object.freeze({expectedCurrentName:"BOLIVAR AROMA&SUAVIDAD 730G",canonicalName:"DETERGENTE BOLÍVAR RENACIMIENTO AROMA Y SUAVIDAD 730G"}),
+  "49":Object.freeze({expectedCurrentName:"JABON PATITO FLORAL 190GR",canonicalName:"JABÓN PATITO FLORAL 190G"}),
+  "50":Object.freeze({expectedCurrentName:"DETERGENTE BOLIVAR ACTIVE CARNE 140 GR",expectedSeedName:"detergente bolivar active carne 140 gr",canonicalName:"DETERGENTE BOLÍVAR ACTIVE CARE 140G"}),
+  "53":Object.freeze({expectedCurrentName:"PATITO LIMON 140G",canonicalName:"DETERGENTE PATITO LIMÓN 140G"}),
+  "58":Object.freeze({expectedCurrentName:"TROME JABON EN PANELA AROMA FLORES 190G",canonicalName:"JABÓN TROME FLORAL 190G"}),
+  "61":Object.freeze({expectedCurrentName:"CLOROX ROPA COLOR 292 ML",canonicalName:"CLOROX ROPA COLOR 292ML"}),
+  "65":Object.freeze({expectedCurrentName:"DET. EN POLVO TROME CÍTRICO X130 G",expectedSeedName:"det. en polvo Trome cítrico x130 g",canonicalName:"DETERGENTE TROME CÍTRICO 130G"}),
+  "66":Object.freeze({expectedCurrentName:"DET. EN POLVO TROME FLORAL X 130 G",expectedSeedName:"det. en polvo trome floral x 130 g",canonicalName:"DETERGENTE TROME FLORAL 130G"}),
+  "69":Object.freeze({expectedCurrentName:"DET. EN POLVO OPAL ULTRA X 730G",expectedSeedName:"det. en polvo opal ultra x 730g",canonicalName:"DETERGENTE OPAL ULTRA 730G"}),
+  "70":Object.freeze({expectedCurrentName:"PAMPER NINET TALLA L",expectedSeedName:"pamper ninet talla L",canonicalName:"PAÑAL NINET TALLA L"}),
+  "71":Object.freeze({expectedCurrentName:"PAÑAL NINET XL 52UND",canonicalName:"PAÑAL NINET TALLA XL"}),
+  "72":Object.freeze({expectedCurrentName:"PAMPER NINET TALLA M",expectedSeedName:"pamper ninet talla M",canonicalName:"PAÑAL NINET TALLA M"}),
+  "73":Object.freeze({expectedCurrentName:"HENO DE PRAVIA AMARILLO ORIGINAL 85 GR",canonicalName:"JABÓN HENO DE PRAVIA ORIGINAL AMARILLO 85G"}),
+  "88":Object.freeze({expectedCurrentName:"BOLIVAR SUAV. ARO. ACTIV 80ML",canonicalName:"SUAVIZANTE BOLÍVAR AROMA ACTIVE 80ML"}),
+  "89":Object.freeze({expectedCurrentName:"KOLYNOS SUPER BLANCO 60 ML",canonicalName:"CREMA DENTAL KOLYNOS SUPER BLANCO 60ML"}),
+  "90":Object.freeze({expectedCurrentName:"SHAMPOO SUAVE Y MANEJABLE 2/1 18 ML",canonicalName:"SHAMPOO H&S 2 EN 1 SUAVE Y MANEJABLE 18ML"}),
+  "91":Object.freeze({expectedCurrentName:"SHAMPOO H&S LIMPIEZA RENOVADORA 18 ML",canonicalName:"SHAMPOO H&S LIMPIEZA RENOVADORA 18ML"}),
+  "93":Object.freeze({expectedCurrentName:"CREMA DENTAL COLGATE TRIPLE ACCION 75 ML",canonicalName:"CREMA DENTAL COLGATE TRIPLE ACCIÓN 75ML"}),
+  "95":Object.freeze({expectedCurrentName:"TOKAY ESPIRAL E INSECTICIDA",expectedSeedName:"tokay espiral e insecticida",canonicalName:"ESPIRAL INSECTICIDA TOKAY"}),
+  "96":Object.freeze({expectedCurrentName:"SAPOLIO MATA MOSCAS Y ZANCUDOS",canonicalName:"INSECTICIDA SAPOLIO MATA MOSCAS Y ZANCUDOS 360ML"}),
+  "98":Object.freeze({expectedCurrentName:"SAPOLIO MATACUCARACHAS Y HORMIGAS 360ML",canonicalName:"INSECTICIDA SAPOLIO MATA CUCARACHAS Y HORMIGAS 360ML"}),
+  "99":Object.freeze({expectedCurrentName:"SAPOLIO MATA TODO 360 ML(1-12)",canonicalName:"SAPOLIO CONTROL MATA TODO 360ML"}),
+  "103":Object.freeze({expectedCurrentName:"HAROXA AGUARDIENTE X 250 ML",expectedSeedName:"Haroxa aguardiente x 250 ml",canonicalName:"AGUARDIENTE HAROXA 250ML"}),
+  "106":Object.freeze({expectedCurrentName:"AGUA SAN LUIS CON GAS BT 625 ML",canonicalName:"AGUA SAN LUIS CON GAS BOTELLA 625ML"}),
+  "107":Object.freeze({expectedCurrentName:"SAN CARLOS S/GAS 500ML",canonicalName:"AGUA SAN CARLOS SIN GAS 500ML"}),
+  "108":Object.freeze({expectedCurrentName:"MALTIN POWER BT 330 ML",canonicalName:"MALTÍN POWER BOTELLA PET 330ML"}),
+  "109":Object.freeze({expectedCurrentName:"LATA MONSTER ENERGY 473 ML",canonicalName:"LATA MONSTER ENERGY 473ML"}),
+  "110":Object.freeze({expectedCurrentName:"LATA MONSTER ENERGY 473 ML",canonicalName:"LATA MONSTER ENERGY 473ML"}),
+  "113":Object.freeze({expectedCurrentName:"CERVEZA CRISTAL LT 355 ML",canonicalName:"CERVEZA CRISTAL LATA 355ML"}),
+  "115":Object.freeze({expectedCurrentName:"CUSQUEÑA DE TRIGO DE BOTELLA 310 ML",canonicalName:"CERVEZA CUSQUEÑA TRIGO BOTELLA 310ML"}),
+  "116":Object.freeze({expectedCurrentName:"ENERGIZANTE VOLT GINSENG (AZUL) 300 ML",canonicalName:"ENERGIZANTE VOLT GINSENG AZUL 300ML"}),
+  "117":Object.freeze({expectedCurrentName:"AGUA SAN CARLOS 3 LT",canonicalName:"AGUA SAN CARLOS 3L"}),
+  "118":Object.freeze({expectedCurrentName:"GASEOSA 3 LITROS IQ AMARILLA",expectedSeedName:"gaseosa 3 litros IQ amarilla",canonicalName:"GASEOSA IQ AMARILLA 3L"}),
+  "120":Object.freeze({expectedCurrentName:"REHIDRANTE SPORADE TROPICAL BOT. PET 500 ML",canonicalName:"REHIDRATANTE SPORADE TROPICAL BOTELLA PET 500ML"}),
+  "121":Object.freeze({expectedCurrentName:"GASEOSA IQ AMARILLA 420 ML",expectedSeedName:"gaseosa IQ amarilla 420 ml",canonicalName:"GASEOSA IQ AMARILLA 420ML"}),
+  "122":Object.freeze({expectedCurrentName:"GASEOSA INCA KOLA 600 ML",canonicalName:"GASEOSA INCA KOLA 600ML"}),
+  "123":Object.freeze({expectedCurrentName:"GASEOSA COCACOLA 600 ML",canonicalName:"GASEOSA COCA-COLA 600ML"}),
+  "124":Object.freeze({expectedCurrentName:"ELECTROLIGHTBEBIDA CON ELECTROLICTOS SABOR A FRESA 475ML",canonicalName:"BEBIDA ELECTROLIGHT FRESA 475ML"}),
+  "127":Object.freeze({expectedCurrentName:"YOFRESH SABOR FRESA 320ML",canonicalName:"YOGUR YOFRESH FRESA 320ML"}),
+  "131":Object.freeze({expectedCurrentName:"JUGO FRUGOS DURAZNO 235 ML",canonicalName:"BEBIDA FRUGOS DURAZNO 235ML"}),
+  "133":Object.freeze({expectedCurrentName:"GOMITAS TRULULU SABORES 90 GR",canonicalName:"TRULULU SABORES 90GR"}),
+  "136":Object.freeze({expectedCurrentName:"GOMITAS TRULULU GUSANOS ÁCIDOS 80 GR",canonicalName:"TRULULU GUSANOS ACIDOS 80GR"}),
+  "137":Object.freeze({expectedCurrentName:"GOMAS TRULULU DINOSS 90G*",canonicalName:"TRULULU DINOS 90GR"}),
+  "140":Object.freeze({expectedCurrentName:"PANETON SAYON 750 GR",canonicalName:"PANETÓN SAYÓN BOLSA 750G"}),
+  "141":Object.freeze({expectedCurrentName:"PANETON MILANO X 750 GR",canonicalName:"PANETÓN MILANO BOLSA 750G"}),
+  "142":Object.freeze({expectedCurrentName:"GASEOSA INCA KOLA 3LT",canonicalName:"GASEOSA INCA KOLA 3L"}),
+  "143":Object.freeze({expectedCurrentName:"GASEOSA COCA COLA 3 LT",canonicalName:"GASEOSA COCA-COLA 3L"}),
+  "147":Object.freeze({expectedCurrentName:"PULP DURAZNO 1 L",canonicalName:"PULP DURAZNO 1L"}),
+  "148":Object.freeze({expectedCurrentName:"JUGO PULP DURAZNO 315 ML",canonicalName:"JUGO PULP DURAZNO 315ML"}),
+  "150":Object.freeze({expectedCurrentName:"CHICHA MORADA UMSHA 13 GR",canonicalName:"REFRESCO UMSHA CHICHA MORADA 13G"}),
+  "151":Object.freeze({expectedCurrentName:"REFRESCO UMSHA MARACUYA",canonicalName:"REFRESCO UMSHA MARACUYÁ 13G"}),
+  "153":Object.freeze({expectedCurrentName:"REFRESCO UMSHA FRESA",canonicalName:"REFRESCO UMSHA FRESA 13G"}),
+  "154":Object.freeze({expectedCurrentName:"BONLÉ MANJARBLANCO 200G",canonicalName:"MANJARBLANCO BONLÉ SACHET 200G"}),
+  "156":Object.freeze({expectedCurrentName:"AVENA 3 OSITOS 100 GR",canonicalName:"AVENA 3 OSITOS CLÁSICA 100G"}),
+  "160":Object.freeze({expectedCurrentName:"NESCAFE KIRMA 9G",canonicalName:"NESCAFÉ KIRMA 9G"}),
+  "162":Object.freeze({expectedCurrentName:"AVENA 3 OSITOS CHOCOLATE 180GR",canonicalName:"AVENA 3 OSITOS CHOCOLATE 180G"}),
+  "163":Object.freeze({expectedCurrentName:"ALTOMAYO 8G",canonicalName:"CAFÉ ALTOMAYO INSTANTÁNEO CLÁSICO 8G"}),
+  "166":Object.freeze({expectedCurrentName:"MAIZENA DURYEA 100 GR",canonicalName:"MAIZENA DURYEA 100G"}),
+  "167":Object.freeze({expectedCurrentName:"ESPIGA DE ORO SPAGHETTI 500G",canonicalName:"SPAGHETTI ESPIGA DE ORO 500G"}),
+  "169":Object.freeze({expectedCurrentName:"SEMOLA MARCO POLO 180GR",canonicalName:"SÉMOLA MARCO POLO 180G"}),
+  "170":Object.freeze({expectedCurrentName:"SALSA CLASICA TOMATE POMAROLA 145 GR",canonicalName:"SALSA DE TOMATE POMAROLA CLÁSICA 145G"}),
+  "171":Object.freeze({expectedCurrentName:"MAYONESA ALACENA 95 GR",canonicalName:"MAYONESA ALACENA 95G"}),
+  "172":Object.freeze({expectedCurrentName:"CREMA AJI TARI ALACENA 85 GR",canonicalName:"CREMA DE AJÍ TARI 85G"}),
+  "174":Object.freeze({expectedCurrentName:"GOLDEN BEACH ROJO",canonicalName:"CIGARRO GOLDEN BEACH ROJO"}),
+  "178":Object.freeze({expectedCurrentName:"FIDEO ESPIGA DE ORO CABELLO DE ANGEL 250GR",canonicalName:"FIDEO ESPIGA DE ORO CABELLO DE ÁNGEL 250G"}),
+  "179":Object.freeze({expectedCurrentName:"LECHE GLORIA EVAPORADA ENTERA EN LATA 170 G",canonicalName:"LECHE GLORIA EVAPORADA ENTERA LATA 170G"}),
+  "181":Object.freeze({expectedCurrentName:"KIKO 85ML",canonicalName:"SILLAO KIKKO 85ML"}),
+  "184":Object.freeze({expectedCurrentName:"SILLAO TITO 85M",canonicalName:"SILLAO TITO 85ML"}),
+  "186":Object.freeze({expectedCurrentName:"LECHE CONDESADA NESTLE 100 GR",canonicalName:"LECHE CONDENSADA NESTLÉ 100G"}),
+  "187":Object.freeze({expectedCurrentName:"LECHE CONDENSADA NESTLE 393G A/F (1-48)",canonicalName:"LECHE CONDENSADA NESTLÉ 393G"}),
+  "190":Object.freeze({expectedCurrentName:"FILETE DE ATUN EN ACEITE VEGETAL DE SOYA PRIMOR 140G",canonicalName:"FILETE DE ATÚN PRIMOR EN ACEITE VEGETAL DE SOYA 140G"}),
+  "192":Object.freeze({expectedCurrentName:"FILETE DE CABALLA D' PACHO",canonicalName:"FILETE DE CABALLA D'PACHO 170G"}),
+  "195":Object.freeze({expectedCurrentName:"GALLETA OREO 36 GR",canonicalName:"GALLETA OREO 36G"}),
+  "198":Object.freeze({expectedCurrentName:"AJINOMOTO AJI-NO-SILLAO 150ML",canonicalName:"AJI-NO-SILLAO 150ML"}),
+  "200":Object.freeze({expectedCurrentName:"CULANTRO FRESH 27 G",canonicalName:"CULANTRITO FRESH 27G"}),
+  "203":Object.freeze({expectedCurrentName:"COMINO Y PIMIENTA 5 GR",canonicalName:"COMINO Y PIMIENTA LOPEZA 5G"}),
+  "204":Object.freeze({expectedCurrentName:"AJI AMARILLO FREHS 27 GR",canonicalName:"AJÍ AMARILLO FRESH 27G"}),
+  "205":Object.freeze({expectedCurrentName:"AJOS FREHS 25 GR",canonicalName:"AJOS FRESH 25G"}),
+  "209":Object.freeze({expectedCurrentName:"GALLETA CASINO VICTORIA FRESA 43 GR",canonicalName:"GALLETA CASINO FRESA 43G"}),
+  "214":Object.freeze({expectedCurrentName:"GALLETA CRACKNEL ORIGINAL 140 GR",canonicalName:"GALLETA CRACKNEL ORIGINAL 140G"}),
+  "215":Object.freeze({expectedCurrentName:"CHOMP NARANJA",canonicalName:"GALLETA CHOMP NARANJA Y CHOCOLATE 38G"}),
+  "220":Object.freeze({expectedCurrentName:"GALLETA CASINO VICTORIA CHOCO 43 GR",canonicalName:"GALLETA CASINO CHOCOLATE 43G"}),
+  "222":Object.freeze({expectedCurrentName:"COSTA POKEKE 28 GR",canonicalName:"BIZCOCHO COSTA POKEKE 28G"}),
+  "226":Object.freeze({expectedCurrentName:"CAFE NESCAFE TRADICION 7G (1-18)(1-12)",canonicalName:"CAFÉ NESCAFÉ TRADICIÓN SACHET 7G"}),
+  "227":Object.freeze({expectedCurrentName:"GALLETA CASINO LÚCUMA 43 GR",canonicalName:"GALLETA CASINO LÚCUMA 43G"}),
+  "228":Object.freeze({expectedCurrentName:"CEREAL ANGEL COPIX 18G (1-12)(1-15)",canonicalName:"CEREAL ÁNGEL COPIX CHOCOLATE 18G"}),
+  "229":Object.freeze({expectedCurrentName:"ANGEL FRESIA ALMOHADA 18G",canonicalName:"CEREAL ÁNGEL FRESIA ALMOHADA 18G"}),
+  "230":Object.freeze({expectedCurrentName:"CEREAL ANGEL CHOCK 20G (1-12)(1-18)",canonicalName:"CEREAL ÁNGEL CHOCK 20G"}),
+  "241":Object.freeze({expectedCurrentName:"GALL VAINILLA FAMILIAR 113 GR",canonicalName:"GALLETA SAYÓN VAINILLA FAMILIAR 113G"}),
+  "250":Object.freeze({expectedCurrentName:"WAFER NIK FRESA 72 GR",canonicalName:"WAFER NIK FRESA 72G"}),
+  "251":Object.freeze({expectedCurrentName:"WAFER NIK CHOCOLATE 72 GR",canonicalName:"WAFER NIK CHOCOLATE 72G"}),
+  "258":Object.freeze({expectedCurrentName:"RELLENAS LIMON 34G",canonicalName:"GALLETA RELLENA DE LIMÓN 34G"}),
+  "274":Object.freeze({expectedCurrentName:"ACEITE MIRASOL 900 ML",canonicalName:"ACEITE MIRASOL 900ML"}),
+  "275":Object.freeze({expectedCurrentName:"ACEITE MIRASOL 900 ML",canonicalName:"ACEITE MIRASOL 900ML"}),
+  "276":Object.freeze({expectedCurrentName:"POLVO DE HORNEAR LA TACNEÑA 25GR",canonicalName:"POLVO DE HORNEAR LA TACNEÑA 25G"}),
+  "277":Object.freeze({expectedCurrentName:"POLVO DE HORNEAR LA TACNEÑA 25GR",canonicalName:"POLVO DE HORNEAR LA TACNEÑA 25G"}),
+  "280":Object.freeze({expectedCurrentName:"ACEITE PRIMOR CLASICO 900 ML",canonicalName:"ACEITE PRIMOR CLÁSICO 900ML"}),
+  "281":Object.freeze({expectedCurrentName:"ACEITE PRIMOR CLASICO 900 ML",canonicalName:"ACEITE PRIMOR CLÁSICO 900ML"}),
+  "283":Object.freeze({expectedCurrentName:"ACEITE PALMEROLA X 900ML",canonicalName:"ACEITE PALMEROLA 900ML"}),
+  "284":Object.freeze({expectedCurrentName:"ACEITE PALMEROLA X 900ML",canonicalName:"ACEITE PALMEROLA 900ML"}),
+  "297":Object.freeze({expectedCurrentName:"PALMEROLA 450 ML",canonicalName:"ACEITE PALMEROLA 450ML"}),
+  "301":Object.freeze({expectedCurrentName:"AZUCAR RUBIA",canonicalName:"AZÚCAR RUBIA"}),
+  "308":Object.freeze({expectedCurrentName:"FIDEOS ESPIGA DE ORO TORNILLO 225GR (1-20)",canonicalName:"FIDEO ESPIGA DE ORO TORNILLO 225G"}),
+  "318":Object.freeze({expectedCurrentName:"MAIZ POP CORN",canonicalName:"MAÍZ POPCORN"}),
+  "328":Object.freeze({expectedCurrentName:"ESCOBESTIA",canonicalName:"ESCOBA ESCOBESTIA HUDE"}),
+  "331":Object.freeze({expectedCurrentName:"CERVEZA CUSQUEÑA NEGRA DARK LAGER BT 310 ML",canonicalName:"CERVEZA CUSQUEÑA NEGRA DARK LAGER BOTELLA 310ML"}),
+  "333":Object.freeze({expectedCurrentName:"CHOCOLATE CUSCO 85 GR",expectedSeedName:"chocolate cusco 85 gr",canonicalName:"CHOCOLATE CUSCO TABLETA PARA TAZA 85G"}),
+  "335":Object.freeze({expectedCurrentName:"DOÑA PEPEA FIELD 23G",canonicalName:"GALLETA FIELD DOÑA PEPA 23G"}),
+  "336":Object.freeze({expectedCurrentName:"GASEOSA GUARANÁ 450 ML",canonicalName:"GASEOSA GUARANÁ 450ML"}),
+  "342":Object.freeze({expectedCurrentName:"YOFRESH PET LECHE FRESA 970GR",canonicalName:"YOGUR YOFRESH FRESA BOTELLA PET 970G"}),
+  "343":Object.freeze({expectedCurrentName:"LEJIA SAPOLIO 400GR",canonicalName:"LEJÍA SAPOLIO ORIGINAL 400G"}),
+  "344":Object.freeze({expectedCurrentName:"LEJÍA SAPOLIO 790G",canonicalName:"LEJÍA SAPOLIO ORIGINAL 790G"}),
+  "345":Object.freeze({expectedCurrentName:"GALLETA SAN JORGE SODA FAMILIAR 75 GR",canonicalName:"GALLETA SAN JORGE SODA FAMILIAR 75G"}),
+  "347":Object.freeze({expectedCurrentName:"PAMPER NINET TALLA XL",canonicalName:"PAÑAL NINET TALLA XL"}),
+  "355":Object.freeze({expectedCurrentName:"OKA LOKA NANOS 40G",canonicalName:"OKA LOKA MANOS 40G"}),
+  "360":Object.freeze({expectedCurrentName:"AMBROSOLI CHUPETE QUE LOCO 13G",canonicalName:"CHUPETE AMBROSOLI QUÉ LOCO 13G"}),
+  "365":Object.freeze({expectedCurrentName:"NECTAR GLORIA DURAZNO 145ML TP (1-24)",canonicalName:"NÉCTAR GLORIA DURAZNO 145ML"}),
+  "367":Object.freeze({expectedCurrentName:"PEPSI COLA 600ML",canonicalName:"GASEOSA PEPSI BOTELLA 600ML"}),
+  "370":Object.freeze({expectedCurrentName:"GASEOSA FANTA KOLA INGLESA 500 ML",canonicalName:"GASEOSA FANTA KOLA INGLESA 500ML"}),
+  "371":Object.freeze({expectedCurrentName:"GASEOSA FANTA NARANJA 500 ML",canonicalName:"GASEOSA FANTA NARANJA 500ML"}),
+  "374":Object.freeze({expectedCurrentName:"CHICHARON DE CHANCO 15 GR",expectedSeedName:"chicharon de chanco 15 gr",canonicalName:"CHICHARRÓN DE CHANCHO 15G"}),
+  "379":Object.freeze({expectedCurrentName:"SUAVIZANTE BOLIVAR AROMA ACTIVO REVIVE COLOR 80ML",canonicalName:"SUAVIZANTE BOLÍVAR AROMA ACTIVE REVIVE COLOR 80ML"}),
+  "380":Object.freeze({expectedCurrentName:"D.T TROME BEBE 130GR",canonicalName:"DETERGENTE TROME BEBÉ 130G"}),
+  "385":Object.freeze({expectedCurrentName:"LECHE EN POLVO GLORIA 96 GR",canonicalName:"LECHE EN POLVO GLORIA SACHET 96G"}),
+  "387":Object.freeze({expectedCurrentName:"CHOCOBUM PACK X 6 UNID",canonicalName:"GALLETA VICTORIA CHOCOBUM PACK 6UND"}),
+  "388":Object.freeze({expectedCurrentName:"VICTORIA CHOCO BUM 33.5 GR",canonicalName:"GALLETA VICTORIA CHOCOBUM 33.5G"}),
+  "395":Object.freeze({expectedCurrentName:"ACEITE COCINERO 900ML (1-12)",canonicalName:"ACEITE COCINERO 900ML"}),
+  "404":Object.freeze({expectedCurrentName:"LECHE GLORIA CONDENSADA 393 GR",canonicalName:"LECHE CONDENSADA GLORIA LATA 393G"}),
+  "405":Object.freeze({expectedCurrentName:"GLORIA BONLÉ SABOR CHOCOLATE 180ML",canonicalName:"CHOCOLATADA GLORIA BONLÉ 180ML"})
 });
 function _naCatalogV2BSafeName(id,currentName){
   const approved=_NA_CATALOG_V2B_SAFE_NAMES[String(id)];
-  if(!approved||currentName===approved.canonicalName||currentName!==approved.expectedCurrentName)return currentName;
+  if(!approved||currentName===approved.canonicalName)return currentName;
+  const expectedCurrent=currentName===approved.expectedCurrentName;
+  const expectedSeed=Object.prototype.hasOwnProperty.call(approved,'expectedSeedName')&&currentName===approved.expectedSeedName;
+  if(!expectedCurrent&&!expectedSeed)return currentName;
   return approved.canonicalName;
 }
 function _naApplyCatalogV2BSafeNames(list){
@@ -196,12 +328,22 @@ function _naApplyCatalogV2BSafeNames(list){
     return canonicalName===product.name?product:{...product,name:canonicalName};
   });
 }
+function _naPrepareCatalogV2BBaseNames(list){
+  if(!Array.isArray(list))return list;
+  return list.map(function(product){
+    if(!product||typeof product.name!=='string')return product;
+    const approved=_NA_CATALOG_V2B_SAFE_NAMES[String(product.id)];
+    if(!approved||product.name!==approved.canonicalName)return product;
+    return{...product,name:approved.expectedCurrentName};
+  });
+}
 function _naInstallCatalogNameNorm(){
   if(window._naCatalogNameNormInstalled)return;
   window._naCatalogNameNormInstalled=true;
   if(typeof _naNormalizeData==='function'&&!_naNormalizeData._naNameNorm){
     const baseNormalize=_naNormalizeData;
     const wrappedNormalize=function(){
+      if(Array.isArray(productos))productos=_naPrepareCatalogV2BBaseNames(productos);
       const out=baseNormalize.apply(this,arguments);
       if(Array.isArray(productos)){
         const safelyNamedProducts=_naApplyCatalogV2BSafeNames(productos);
