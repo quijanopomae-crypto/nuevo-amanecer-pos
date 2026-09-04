@@ -22,6 +22,7 @@ const CATALOG_REL = 'POS/js/catalog/reference-catalog.js';
 const FIXTURE = path.join(ROOT, 'fixtures', 'reference-catalog', 'sample.json');
 
 const SAMPLE = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+const DATA_SRC = readFileSync(path.join(ROOT, DATA_REL), 'utf8');
 const CATALOG_SRC = readFileSync(path.join(ROOT, CATALOG_REL), 'utf8');
 
 /**
@@ -116,6 +117,7 @@ function createCatalogSandbox() {
     seed,
     sandbox,
     api: vm.runInContext('_NA_REFERENCE_CATALOG', ctx),
+    data: vm.runInContext('_NA_REFERENCE_CATALOG_DATA', ctx),
     plain(value) { return value === null || value === undefined ? value : JSON.parse(JSON.stringify(value)); },
   };
 }
@@ -133,10 +135,9 @@ function loaded() {
 
 test('C01 catalogo vacio', () => {
   const sb = createCatalogSandbox();
-  // El dataset versionado aun no tiene filas: rows === [].
-  assert.deepEqual(sb.plain(sb.api.loadReferenceCatalog(null)), []);
-  assert.deepEqual(sb.plain(sb.api.loadReferenceCatalog([])), []);
-  assert.deepEqual(sb.plain(sb.api.loadReferenceCatalog({ rows: [] })), []);
+  const emptySource = { rows: [] };
+  assert.deepEqual(sb.plain(sb.api.loadReferenceCatalog(emptySource)), []);
+  assert.deepEqual(sb.plain(sb.api.initReferenceCatalog(emptySource).references), []);
   const stats = sb.plain(sb.api.referenceCatalogStats());
   assert.equal(stats.referenceCount, 0);
   assert.equal(stats.duplicateCodeCount, 0);
@@ -144,6 +145,38 @@ test('C01 catalogo vacio', () => {
   assert.deepEqual(sb.plain(sb.api.searchReferenceCatalog('coca')), []);
   assert.equal(sb.api.getReferenceById('REF-2'), null);
   assert.deepEqual(sb.plain(sb.api.findReferenceCodeCandidates('1001')), []);
+});
+
+test('C01B gates permanentes del dataset productivo real', () => {
+  const sb = createCatalogSandbox();
+  const data = sb.plain(sb.data);
+  const references = sb.api.loadReferenceCatalog(sb.data);
+  const indexes = sb.api.buildReferenceCatalogIndexes(references);
+
+  assert.equal(data.generatedRows, 2535);
+  assert.equal(data.rows.length, 2535);
+  assert.equal(references.length, 2535);
+  assert.equal(data.generatedFrom, 'CATALOGO_REFERENCIA_PRODUCTOS_NORMALIZADO.csv');
+  assert.equal(data.sourceSha256, 'a1adbe633d0373826171b2df608dd277f8e462eab4e8bfee148b9ca10efb0be8');
+  assert.equal(indexes.duplicateCodeCount, 128);
+  assert.equal(indexes.duplicateNameCount, 1);
+
+  const codes = new Map();
+  const names = new Map();
+  for (const row of data.rows) {
+    if (row.CODIGO_REFERENCIA) {
+      codes.set(row.CODIGO_REFERENCIA, (codes.get(row.CODIGO_REFERENCIA) || 0) + 1);
+    }
+    const nameKey = (row.NOMBRE_LIMPIO_SEGURO || row.NOMBRE_ORIGINAL).toLowerCase();
+    if (nameKey) names.set(nameKey, (names.get(nameKey) || 0) + 1);
+  }
+  assert.equal([...codes.values()].filter((count) => count > 1).length, 127);
+  assert.equal([...names.values()].filter((count) => count > 1).length, 1);
+  assert.equal((DATA_SRC.match(/�/g) || []).length, 0);
+  for (const sample of ['DISEÑOS', 'PIÑATON', 'CAÑA', 'CUSQUEÑA']) {
+    assert.ok(data.rows.some((row) => row.NOMBRE_ORIGINAL.includes(sample)
+      || row.NOMBRE_LIMPIO_SEGURO.includes(sample)), `falta muestra Unicode real: ${sample}`);
+  }
 });
 
 test('C02 carga de referencias', () => {
