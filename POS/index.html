@@ -12,6 +12,9 @@
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/responsive.css">
     <link rel="stylesheet" href="css/print.css">
+    <style>
+      .ocr-purchase-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.ocr-purchase-status{padding:8px 13px;font-size:12px;font-weight:800;color:var(--slate)}.ocr-purchase-status[data-state="error"]{color:var(--red)}.ocr-purchase-status[data-state="success"]{color:var(--green)}.ocr-purchase-raw{white-space:pre-wrap;max-height:120px;overflow:auto;background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:9px;font-size:11px}.ocr-review-row{border:1px solid var(--border);border-radius:11px;padding:11px;margin-top:10px;background:var(--white)}.ocr-review-name{font-size:14px;margin:0 0 4px}.ocr-review-raw,.ocr-review-status{font-size:11px;font-weight:700;color:var(--slate);margin-bottom:5px}.ocr-review-field{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:8px;margin-top:7px;font-size:12px;font-weight:800}.ocr-review-field input,.ocr-review-field select{min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px}.ocr-review-reasons,.ocr-review-candidates,.ocr-review-validation{font-size:11px;margin:7px 0;padding-left:20px}.ocr-review-validation{color:var(--red)}.ocr-review-confirm,.ocr-review-discard{border:0;border-radius:8px;padding:8px 12px;margin:5px 6px 0 0;font-weight:800;cursor:pointer}.ocr-review-confirm{background:var(--teal);color:white}.ocr-review-discard{background:#fee2e2;color:var(--red)}
+    </style>
 
 </head>
 <body>
@@ -162,7 +165,8 @@
 <!-- INVENTARIO -->
 <div class="page" id="pageInventario">
     <div class="page-chrome">
-    <div class="top-mod-bar"><span class="top-mod-title">📦 Inventario</span><button class="top-btn-nuevo" onclick="abrirModalProd()">+ Nuevo</button></div>
+    <div class="top-mod-bar"><span class="top-mod-title">📦 Inventario</span><div class="ocr-purchase-actions"><input type="file" id="ocrPurchaseFile" accept="image/*" capture="environment" hidden><button class="top-btn-nuevo" type="button" onclick="document.getElementById('ocrPurchaseFile').click()">📷 OCR de compras</button><button class="top-btn-nuevo" type="button" id="ocrPurchaseStart">Leer foto</button><button class="top-btn-nuevo" onclick="abrirModalProd()">+ Nuevo</button></div></div>
+    <div class="ocr-purchase-status" id="ocrPurchaseStatus" role="status" aria-live="polite">Selecciona una foto de la compra.</div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="invSetTab(this,'todos')">Todos <span class="tbadge teal" id="invB0">0</span></button>
         <button class="tab" onclick="invSetTab(this,'critico')">⚠ Crítico <span class="tbadge red" id="invB1">0</span></button>
@@ -326,6 +330,7 @@
 </div>
 
 <!-- MODALES -->
+<div class="modal-overlay" id="mOcrPurchaseReview" style="z-index:390"><div class="modal" style="max-width:820px"><div class="mhead teal"><div><div class="mhead-title">📷 Revisión de compra OCR</div><div style="font-size:10px;font-weight:700;opacity:.85;margin-top:2px">Confirma, corrige o descarta cada fila antes de aplicar</div></div><button class="btn-close-m" type="button" id="ocrPurchaseClose">✕</button></div><div class="mbody"><div class="fl">Texto leído</div><pre class="ocr-purchase-raw" id="ocrPurchaseRawText"></pre><div id="ocrPurchaseReviewRows"></div><div class="mbtns"><button class="mbtn mbtn-cancel" type="button" onclick="document.getElementById('ocrPurchaseClose').click()">Cerrar</button><button class="mbtn mbtn-ok" type="button" id="ocrPurchaseApply">Aplicar filas confirmadas</button></div></div></div></div>
 <div class="modal-overlay" id="mCobro">
   <div class="modal pay-modal">
     <div class="pay-modal-head">
@@ -920,5 +925,15 @@
 <script src="js/legacy-inline/inline-18.js"></script>
 <script src="js/compat/legacy-globals.js"></script>
 <script src="js/app.js"></script>
+<script src="js/ocr/vendor/tesseract-6.0.1/tesseract.min.js"></script>
+<script src="js/catalog/reference-catalog-data.js"></script>
+<script src="js/catalog/reference-catalog.js"></script>
+<script src="js/ocr/ocr-extract.js"></script>
+<script src="js/ocr/ocr-parse.js"></script>
+<script src="js/ocr/ocr-reference-matcher.js"></script>
+<script src="js/ocr/ocr-purchase-engine.js"></script>
+<script src="js/ocr/ocr-purchase-review.js"></script>
+<script src="js/ocr/ocr-purchase-apply.js"></script>
+<script src="js/ocr/ocr-purchase-integration.js"></script>
 </body>
 </html>
