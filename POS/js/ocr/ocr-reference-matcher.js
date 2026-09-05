@@ -255,6 +255,7 @@ function matchOcrLineToPosProduct(line, posProducts) {
   var codes = _naOcrMatcherCodes(line);
   var byId = Object.create(null);
   var evidence = [];
+  var exactCodeProducts = [];
   var exactCodeProductIds = Object.create(null);
   var exactNameProductIds = Object.create(null);
 
@@ -268,9 +269,10 @@ function matchOcrLineToPosProduct(line, posProducts) {
       var matchesCode = productCodes.some(function (candidateCode) {
         return _naOcrPosCodeKey(candidateCode) === codeKey;
       });
-      if (!matchesCode) continue;
+      if (!matchesCode || product.id === null || product.id === undefined) continue;
       var productId = String(product.id);
       codeIds.push(productId);
+      exactCodeProducts.push(product);
       exactCodeProductIds[productId] = true;
       _naOcrPosAddCandidate(byId, product, 'POS_CODE_EXACT');
     }
@@ -287,6 +289,7 @@ function matchOcrLineToPosProduct(line, posProducts) {
       if (!productNameKey) continue;
       var namedId = String(namedProduct.id);
       if (productNameKey === nameKey) {
+        if (namedProduct.id === null || namedProduct.id === undefined) continue;
         exactNameIds.push(namedId);
         exactNameProductIds[namedId] = true;
         _naOcrPosAddCandidate(byId, namedProduct, 'POS_NAME_EXACT');
@@ -303,28 +306,37 @@ function matchOcrLineToPosProduct(line, posProducts) {
     });
   }
 
-  var exactIds = Object.create(null);
-  Object.keys(exactCodeProductIds).forEach(function (id) { exactIds[id] = true; });
-  Object.keys(exactNameProductIds).forEach(function (id) { exactIds[id] = true; });
-  var exactIdList = Object.keys(exactIds);
+  var exactCodeIds = Object.keys(exactCodeProductIds);
+  var exactNameIdList = Object.keys(exactNameProductIds);
   var candidates = Object.keys(byId).map(function (id) { return byId[id]; });
   candidates.sort(_naOcrPosCandidateSort);
 
-  if (exactIdList.length === 1) {
-    var selected = byId[exactIdList[0]];
+  if (exactCodeIds.length === 1) {
+    var selectedId = exactCodeIds[0];
+    var selected = byId[selectedId];
+    var nameSupportsCode = !nameKey || exactNameProductIds[selectedId]
+      || partialNameIds.indexOf(selectedId) >= 0;
+    var namePointsElsewhere = exactNameIdList.some(function (id) { return id !== selectedId; })
+      || partialNameIds.some(function (id) { return id !== selectedId; });
+    if (nameSupportsCode && !namePointsElsewhere) {
+      return _naOcrPosResult(
+        'MATCHED_SAFE', selected.product, candidates, referenceEvidence, evidence, ['CODIGO_POS_UNICO']
+      );
+    }
     return _naOcrPosResult(
-      'MATCHED_SAFE', selected.product, candidates, referenceEvidence, evidence, ['PRODUCTO_POS_INEQUIVOCO']
+      'MATCHED_REVIEW', null, candidates, referenceEvidence, evidence, ['CODIGO_NOMBRE_POS_EN_CONFLICTO']
     );
   }
-  if (exactIdList.length > 1) {
+  if (exactCodeIds.length > 1) {
     return _naOcrPosResult(
-      'MATCHED_REVIEW', null, candidates, referenceEvidence, evidence, ['IDENTIDAD_POS_AMBIGUA']
+      'MATCHED_REVIEW', null, candidates, referenceEvidence, evidence, ['CODIGO_POS_AMBIGUO']
     );
   }
   if (candidates.length) {
-    return _naOcrPosResult(
-      'MATCHED_REVIEW', null, candidates, referenceEvidence, evidence, ['SOLO_COINCIDENCIAS_POS_PARCIALES']
-    );
+    var reason = exactNameIdList.length === 1
+      ? 'SOLO_NOMBRE_POS_EXACTO'
+      : (exactNameIdList.length > 1 ? 'NOMBRE_POS_AMBIGUO' : 'SOLO_COINCIDENCIAS_POS_PARCIALES');
+    return _naOcrPosResult('MATCHED_REVIEW', null, candidates, referenceEvidence, evidence, [reason]);
   }
   var reason = referenceEvidence && referenceEvidence.candidates.length
     ? 'SOLO_REFERENCIA_SIN_PRODUCTO_POS'

@@ -231,11 +231,12 @@ test('M14 codigo OCR busca sku, barcode y alternativos del producto POS', () => 
   }
 });
 
-test('M15 nombre POS exacto usa normalizacion canonica y sinTildes', () => {
+test('M15 nombre POS exacto unico sin codigo requiere revision', () => {
   const sb = createSandbox();
   const result = sb.plain(sb.api.matchPosProduct(line('  jabon   patito 190 g '), POS_PRODUCTS));
-  assert.equal(result.status, 'MATCHED_SAFE');
-  assert.equal(result.product.id, 'P3');
+  assert.equal(result.status, 'MATCHED_REVIEW');
+  assert.equal(result.product, null);
+  assert.equal(result.candidates[0].product.id, 'P3');
   assert.ok(result.candidates[0].matchedBy.includes('POS_NAME_EXACT'));
 });
 
@@ -282,10 +283,15 @@ test('M19 nombre POS duplicado es ambiguo y requiere revision', () => {
 
 test('M20 codigo y nombre POS discordantes requieren revision', () => {
   const sb = createSandbox();
-  const result = sb.plain(sb.api.matchPosProduct(line('INKA KOLA 1 L', ['775000000001']), POS_PRODUCTS));
-  assert.equal(result.status, 'MATCHED_REVIEW');
-  assert.equal(result.product, null);
-  assert.deepEqual(result.candidates.map((candidate) => candidate.product.id), ['P1', 'P2']);
+  const exact = sb.plain(sb.api.matchPosProduct(line('INKA KOLA 1 L', ['775000000001']), POS_PRODUCTS));
+  assert.equal(exact.status, 'MATCHED_REVIEW');
+  assert.equal(exact.product, null);
+  assert.deepEqual(exact.candidates.map((candidate) => candidate.product.id), ['P1', 'P2']);
+
+  const partial = sb.plain(sb.api.matchPosProduct(line('INKA KOLA', ['775000000001']), POS_PRODUCTS));
+  assert.equal(partial.status, 'MATCHED_REVIEW');
+  assert.equal(partial.product, null);
+  assert.deepEqual(partial.candidates.map((candidate) => candidate.product.id), ['P1', 'P2']);
 });
 
 test('M21 coincidencia parcial POS nunca es segura', () => {
@@ -305,7 +311,7 @@ test('M22 sin productos o helpers no puede devolver producto seguro', () => {
 
 test('M23 lote POS conserva orden, identidad y no muta entradas', () => {
   const sb = createSandbox();
-  const lines = [line('COCA COLA 600 ML'), line('OREO ORIGINAL 36 G')];
+  const lines = [line('COCA COLA 600 ML', ['775000000001']), line('OREO ORIGINAL 36 G')];
   const beforeLines = JSON.stringify(lines);
   const beforeProducts = JSON.stringify(POS_PRODUCTS);
   const results = sb.plain(sb.api.matchPosProducts(lines, POS_PRODUCTS));
