@@ -563,14 +563,41 @@ function _naDownloadSnapshot(snapshot,prefix='nuevo_amanecer_respaldo'){
   const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download=`${prefix}_${obtenerHoy()}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-function exportarRespaldo(){_naDownloadSnapshot(_naBuildSnapshot(),'nuevo_amanecer_v9');toast('Respaldo descargado','success');}
+async function _naBackupSha256(payload){
+  if(!globalThis.crypto?.subtle||!globalThis.TextEncoder)return null;
+  const bytes=new TextEncoder().encode(JSON.stringify(payload)),digest=await crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');
+}
+async function _naCreateCompleteBackup(snapshot=_naBuildSnapshot()){
+  const payload=_naClone(snapshot),createdAt=new Date().toISOString(),hash=await _naBackupSha256(payload);
+  return{format:'nuevo-amanecer-pos-backup',version:1,createdAt,payload,integrity:hash?{algorithm:'SHA-256',scope:'payload-json',value:hash}:null};
+}
+async function _naResolveBackupDocument(document){
+  if(!_naIsPlainObject(document))throw new Error('El respaldo debe ser un objeto JSON');
+  if(!Object.prototype.hasOwnProperty.call(document,'format'))return document;
+  if(document.format!=='nuevo-amanecer-pos-backup')throw new Error(`Formato de respaldo no compatible: ${document.format}`);
+  if(document.version!==1)throw new Error(`Versión de documento no compatible: ${document.version}`);
+  if(!_naIsPlainObject(document.payload))throw new Error('El documento de respaldo no contiene un payload válido');
+  if(document.integrity!==null&&document.integrity!==undefined){
+    if(!_naIsPlainObject(document.integrity)||document.integrity.algorithm!=='SHA-256'||document.integrity.scope!=='payload-json')throw new Error('Configuración de integridad no compatible');
+    if(typeof document.integrity.value!=='string'||!/^[a-f0-9]{64}$/.test(document.integrity.value))throw new Error('Hash de integridad inválido');
+    const hash=await _naBackupSha256(document.payload);
+    if(!hash)throw new Error('No es posible verificar la integridad en este navegador');
+    if(hash!==document.integrity.value)throw new Error('La integridad del respaldo no coincide');
+  }
+  return document.payload;
+}
+async function exportarRespaldo(){
+  try{const backup=await _naCreateCompleteBackup();_naDownloadSnapshot(backup,'nuevo_amanecer_backup_completo');toast('Respaldo completo descargado','success');return backup;}
+  catch(error){console.error('[Respaldo] No se pudo crear el respaldo completo:',error?.name||'Error',error?.message||'');toast('No se pudo crear el respaldo completo','error');return null;}
+}
 async function importarRespaldo(){
   if(isModuleLocked('productos')||isModuleLocked('ventas')||isModuleLocked('caja')){toast('Desbloquea el sistema antes de restaurar','error');return;}
   const input=document.getElementById('backupFile'),file=input?.files?.[0];
   if(!file){toast('Selecciona un respaldo JSON','error');return;}
   if(!/\.json$/i.test(file.name)||file.size<=0||file.size>_NA_BACKUP_MAX_BYTES){toast('El archivo debe ser JSON y pesar menos de 10 MB','error');return;}
   try{
-    const raw=await file.text(),parsed=_naBackupParse(raw),prepared=_naPrepareBackupSnapshot(parsed),c=prepared.counts;
+    const raw=await file.text(),parsed=_naBackupParse(raw),snapshot=await _naResolveBackupDocument(parsed),prepared=_naPrepareBackupSnapshot(snapshot),c=prepared.counts;
     const preview=`Versión: ${prepared.snapshot.version}\nFecha: ${prepared.snapshot.updatedAt}\nProductos: ${c.productos}\nVentas: ${c.ventas}\nClientes: ${c.clientes}\nCréditos: ${c.creditos}\nGastos: ${c.gastos}\nMovimientos de caja: ${c.cajMovs}\nAdvertencias: ${prepared.warnings.length}`;
     const accepted=await _naConfirmAction(preview,{title:'Vista previa del respaldo',subtitle:'Se creará una copia automática de los datos actuales antes de reemplazarlos.',icon:'💾',danger:true,okText:'Crear copia y restaurar'});
     if(!accepted)return;
