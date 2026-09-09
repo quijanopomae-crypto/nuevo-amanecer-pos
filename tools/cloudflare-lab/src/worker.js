@@ -10,6 +10,9 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     try {
+      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/sync/operations'))) {
+        return cors(new Response(null, { status: 204 }));
+      }
       if (request.method === 'GET' && url.pathname === '/health') {
         return health(env);
       }
@@ -137,9 +140,17 @@ function constantTimeEqual(a, b) {
   return diff === 0;
 }
 
+function cors(response) {
+  response.headers.set('access-control-allow-origin', '*');
+  response.headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+  response.headers.set('access-control-allow-headers', 'content-type, x-sync-token');
+  response.headers.set('access-control-max-age', '600');
+  return response;
+}
+
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
+  return cors(new Response(JSON.stringify(data), {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
-  });
+  }));
 }

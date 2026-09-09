@@ -39,8 +39,22 @@ const operation = {
   created_at: new Date().toISOString(),
 };
 
-const health = await fetch(baseUrl + '/health').then(async (r) => ({ status: r.status, body: await r.json() }));
-record('HEALTH', health.status === 200 && health.body.ok === true && health.body.d1 === 'ok', health);
+const preflightResponse = await fetch(baseUrl + '/sync/operations', {
+  method: 'OPTIONS',
+  headers: { origin: 'null', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-sync-token' },
+});
+record(
+  'CORS_PREFLIGHT',
+  preflightResponse.status === 204 &&
+    preflightResponse.headers.get('access-control-allow-origin') === '*' &&
+    preflightResponse.headers.get('access-control-allow-methods')?.includes('POST') &&
+    preflightResponse.headers.get('access-control-allow-headers')?.includes('x-sync-token'),
+  { status: preflightResponse.status },
+);
+
+const healthResponse = await fetch(baseUrl + '/health');
+const health = { status: healthResponse.status, body: await healthResponse.json() };
+record('HEALTH', health.status === 200 && health.body.ok === true && health.body.d1 === 'ok' && healthResponse.headers.get('access-control-allow-origin') === '*', health);
 
 const noAuth = await fetch(baseUrl + '/sync/operations', { method: 'POST', body: JSON.stringify(operation) });
 record('AUTH_REQUIRED', noAuth.status === 401, { status: noAuth.status });

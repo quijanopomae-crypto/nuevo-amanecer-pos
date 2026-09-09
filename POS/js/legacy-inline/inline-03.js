@@ -555,7 +555,8 @@ function _naPrepareBackupSnapshot(data){
       inventoryMovements:_naValidateInventoryMovementLedger(movsL.map((item,i)=>_naSanitizeInventoryMovement(item,i,warnings)))
     },
     cart:cartL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true)),
-    draft:draftL===null?null:draftL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true))
+    draft:draftL===null?null:draftL.map((item,i)=>_naSanitizeProduct(item,i,warnings,true)),
+    ...(source.cloudSync!==undefined?{cloudSync:NuevoAmanecerOutbox.sanitize(source.cloudSync)}:{})
   };
   return{snapshot,warnings,counts:{productos:snapshot.data.productos.length,ventas:snapshot.data.ventas.length,clientes:snapshot.data.clientes.length,creditos:snapshot.data.creditos.length,gastos:snapshot.data.gastos.length,cajMovs:snapshot.data.cajMovs.length,cashClosures:snapshot.data.cashClosures.length,inventoryMovements:snapshot.data.inventoryMovements.length}};
 }
@@ -687,5 +688,6 @@ document.addEventListener('DOMContentLoaded',async()=>{
   await loadAllData();loadAppState();loadMasterConfig();_naInitSecurity();_naNormalizeData();renderCategorySelects();_naApplyConfigUI();_naInitFreeSaleShortcut();_naInitBarcodeScanner();creditos.forEach(_naSyncCreditStatus);posRender();posUpdateCart();invRender();cfgUpdateStats();updateDashboard();
   document.querySelectorAll('.module-card').forEach(card=>{card.setAttribute('role','button');card.setAttribute('tabindex','0');card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}});});
   await saveAllData();
+  if(typeof NuevoAmanecerOutbox!=='undefined')NuevoAmanecerOutbox.start(_naQueueCloudSyncPersist);
 });
 
