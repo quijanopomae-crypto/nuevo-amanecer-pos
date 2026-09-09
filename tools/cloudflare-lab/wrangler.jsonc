@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nuevo-amanecer-sync-lab",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "d1_databases": [
+    {
+      "binding": "nuevo_amanecer_lab",
+      "database_name": "nuevo-amanecer-lab",
+      "database_id": "e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

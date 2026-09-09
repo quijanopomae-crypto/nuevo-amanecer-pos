@@ -1,0 +1,3 @@
+# Copiar a .dev.vars (ignorado por git) y poner un valor aleatorio largo.
+# Local: wrangler dev lo carga solo. Remoto: `wrangler secret put SYNC_TOKEN`.
+SYNC_TOKEN=replace-with-a-random-secret
