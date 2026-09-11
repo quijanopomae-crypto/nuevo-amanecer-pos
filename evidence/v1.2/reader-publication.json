@@ -1,0 +1,42 @@
+{
+  "at": "2026-09-11T11:25:03.290Z",
+  "url": "https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/read-only.html",
+  "results": [
+    {
+      "path": "/read-only.html",
+      "status": 200,
+      "canonicalBytesMatch": true,
+      "sha256": "1b990dd31c7b2cc26641107754cabfa1ee751d780db55c56741b874e88a27389"
+    },
+    {
+      "path": "/js/sync/read-only.js",
+      "status": 200,
+      "canonicalBytesMatch": true,
+      "sha256": "16c783c0a15184501aaf9fa8a5efcd8df412023b6e512d73bf4785ba8b11f2e5"
+    },
+    {
+      "path": "/index.html",
+      "status": 404
+    },
+    {
+      "path": "/POS/index.html",
+      "status": 404
+    },
+    {
+      "path": "/.dev.vars",
+      "status": 404
+    },
+    {
+      "path": "/wrangler.jsonc",
+      "status": 404
+    },
+    {
+      "path": "/src/worker.js",
+      "status": 404
+    },
+    {
+      "path": "/js/sync/outbox.js",
+      "status": 404
+    }
+  ]
+}

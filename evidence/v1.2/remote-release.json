@@ -1,0 +1,93 @@
+{
+  "at": "2026-09-11T11:26:01.893Z",
+  "endpoint": "https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev",
+  "results": [
+    {
+      "name": "write_credential_lookup",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "sync_value_cannot_read",
+      "status": "PASS",
+      "http": 401
+    },
+    {
+      "name": "read_value_cannot_write",
+      "status": "PASS",
+      "http": 401
+    },
+    {
+      "name": "same_operation_is_idempotent",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "changed_payload_conflicts",
+      "status": "PASS",
+      "http": 409
+    },
+    {
+      "name": "original_survives_conflict",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "lookup_sales_V-001",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "lookup_sale_items_V-001:0",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "lookup_inventory_movements_IM-1789125752775-1",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "lookup_sales_V-002",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "lookup_sale_items_V-002:0",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "lookup_inventory_movements_IM-1789125752813-2",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_expected_sales",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_expected_lines_V-001",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_expected_lines_V-002",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_expected_inventory",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_sync_status",
+      "status": "PASS",
+      "http": 200
+    }
+  ],
+  "newOperationsCreated": 0,
+  "existingOperationUnchangedAfterConflict": true
+}

@@ -111,7 +111,10 @@ try {
   const serialized=JSON.stringify(synced.durable);
   assert.equal(serialized.includes(syncToken),false);
   assert.equal(serialized.includes(readToken),false);
-  record(remote?'real_worker_d1_synced':'real_worker_sqlite_synced',{operations:6});
+  record(remote?'real_worker_d1_synced':'real_worker_sqlite_synced',{
+    operations:6,deviceId:synced.cloud.device_id,
+    expectedOperations:synced.cloud.outbox.map(o=>({operationId:o.operation_id,entityType:o.entity_type,entityId:o.entity_id})),
+  });
   const op=synced.cloud.outbox[0];
   const retry=await page.evaluate(async ({endpoint,token,op})=>{
     const r=await fetch(endpoint+'/sync/operations',{method:'POST',headers:{'content-type':'application/json','x-sync-token':token},body:JSON.stringify(op)});

@@ -4,6 +4,13 @@
   "main": "src/worker.js",
   "compatibility_date": "2026-06-01",
   "workers_dev": true,
+  "build": { "command": "node scripts/build-reader.mjs" },
+  "assets": {
+    "directory": ".reader-assets",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": ["/health", "/read/*", "/sync/*"]
+  },
   "observability": { "enabled": false },
   "d1_databases": [
     {

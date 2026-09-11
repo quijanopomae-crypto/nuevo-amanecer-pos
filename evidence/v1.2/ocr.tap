@@ -2,985 +2,985 @@ TAP version 13
 # Subtest: A01 entrada valida
 ok 1 - A01 entrada valida
   ---
-  duration_ms: 6.0788
+  duration_ms: 26.4704
   type: 'test'
   ...
 # Subtest: A02 error de formato
 ok 2 - A02 error de formato
   ---
-  duration_ms: 4.96
+  duration_ms: 4.6194
   type: 'test'
   ...
 # Subtest: A03 motor inexistente
 ok 3 - A03 motor inexistente
   ---
-  duration_ms: 3.1515
+  duration_ms: 1.3922
   type: 'test'
   ...
 # Subtest: A04 worker falla
 ok 4 - A04 worker falla
   ---
-  duration_ms: 16.7808
+  duration_ms: 3.3766
   type: 'test'
   ...
 # Subtest: A05 OCR devuelve texto
 ok 5 - A05 OCR devuelve texto
   ---
-  duration_ms: 4.8111
+  duration_ms: 6.6981
   type: 'test'
   ...
 # Subtest: A06 confidence preservada
 ok 6 - A06 confidence preservada
   ---
-  duration_ms: 1.5328
+  duration_ms: 1.5171
   type: 'test'
   ...
 # Subtest: A07 language preservado
 ok 7 - A07 language preservado
   ---
-  duration_ms: 4.9075
+  duration_ms: 3.3447
   type: 'test'
   ...
 # Subtest: A08 durationMs valido
 ok 8 - A08 durationMs valido
   ---
-  duration_ms: 4.0131
+  duration_ms: 1.7365
   type: 'test'
   ...
 # Subtest: A09 excepcion del motor produce error controlado
 ok 9 - A09 excepcion del motor produce error controlado
   ---
-  duration_ms: 2.8898
+  duration_ms: 3.0956
   type: 'test'
   ...
 # Subtest: A10 no requiere DOM para Blob
 ok 10 - A10 no requiere DOM para Blob
   ---
-  duration_ms: 2.0814
+  duration_ms: 2.207
   type: 'test'
   ...
 # Subtest: A11 no usa localStorage ni sessionStorage
 ok 11 - A11 no usa localStorage ni sessionStorage
   ---
-  duration_ms: 2.1453
+  duration_ms: 1.5755
   type: 'test'
   ...
 # Subtest: A12 no modifica inventario
 ok 12 - A12 no modifica inventario
   ---
-  duration_ms: 1.782
+  duration_ms: 35.1139
   type: 'test'
   ...
 # Subtest: A13 no escribe persistencia
 ok 13 - A13 no escribe persistencia
   ---
-  duration_ms: 2.1819
+  duration_ms: 1.7433
   type: 'test'
   ...
 # Subtest: A14 adaptador determinista con motor determinista
 ok 14 - A14 adaptador determinista con motor determinista
   ---
-  duration_ms: 5.4186
+  duration_ms: 6.5046
   type: 'test'
   ...
 # Subtest: A15 no muta la entrada
 ok 15 - A15 no muta la entrada
   ---
-  duration_ms: 3.7767
+  duration_ms: 2.2013
   type: 'test'
   ...
 # Subtest: ImageData se convierte a PNG sin mutar la entrada
 ok 16 - ImageData se convierte a PNG sin mutar la entrada
   ---
-  duration_ms: 4.8783
+  duration_ms: 2.0216
   type: 'test'
   ...
 # Subtest: error al convertir ImageData queda controlado
 ok 17 - error al convertir ImageData queda controlado
   ---
-  duration_ms: 3.29
+  duration_ms: 1.3952
   type: 'test'
   ...
 # Subtest: file protocol devuelve indisponibilidad controlada antes del worker
 ok 18 - file protocol devuelve indisponibilidad controlada antes del worker
   ---
-  duration_ms: 2.1511
+  duration_ms: 1.5579
   type: 'test'
   ...
 # Subtest: rutas locales explicitas llegan al motor sin fallback
 ok 19 - rutas locales explicitas llegan al motor sin fallback
   ---
-  duration_ms: 1.7157
+  duration_ms: 1.6044
   type: 'test'
   ...
 # Subtest: P01 texto vacio devuelve []
 ok 20 - P01 texto vacio devuelve []
   ---
-  duration_ms: 4.0475
+  duration_ms: 5.0507
   type: 'test'
   ...
 # Subtest: P02 NAME_QTY_PRICE
 ok 21 - P02 NAME_QTY_PRICE
   ---
-  duration_ms: 3.9117
+  duration_ms: 3.3982
   type: 'test'
   ...
 # Subtest: P03 NAME_QTY_PRICE_TOTAL
 ok 22 - P03 NAME_QTY_PRICE_TOTAL
   ---
-  duration_ms: 3.0427
+  duration_ms: 1.7437
   type: 'test'
   ...
 # Subtest: P04 QTY_NAME_PRICE (cantidad al inicio)
 ok 23 - P04 QTY_NAME_PRICE (cantidad al inicio)
   ---
-  duration_ms: 30.3289
+  duration_ms: 0.5626
   type: 'test'
   ...
 # Subtest: P05 NAME_PRICE sin cantidad -> needsReview
 ok 24 - P05 NAME_PRICE sin cantidad -> needsReview
   ---
-  duration_ms: 0.7476
+  duration_ms: 0.6762
   type: 'test'
   ...
 # Subtest: P06 decimal con coma
 ok 25 - P06 decimal con coma
   ---
-  duration_ms: 0.6625
+  duration_ms: 0.5615
   type: 'test'
   ...
 # Subtest: P07 decimal con punto
 ok 26 - P07 decimal con punto
   ---
-  duration_ms: 0.5092
+  duration_ms: 17.7715
   type: 'test'
   ...
 # Subtest: P08 OCR O->0 solo en contexto numerico
 ok 27 - P08 OCR O->0 solo en contexto numerico
   ---
-  duration_ms: 0.7404
+  duration_ms: 0.8881
   type: 'test'
   ...
 # Subtest: P09 OCR I/l->1 solo en contexto numerico
 ok 28 - P09 OCR I/l->1 solo en contexto numerico
   ---
-  duration_ms: 0.4517
+  duration_ms: 23.201
   type: 'test'
   ...
 # Subtest: P10 no altera O/I de nombres normales
 ok 29 - P10 no altera O/I de nombres normales
   ---
-  duration_ms: 1.5629
+  duration_ms: 21.7728
   type: 'test'
   ...
 # Subtest: P11 barcode de 6 a 14 digitos
 ok 30 - P11 barcode de 6 a 14 digitos
   ---
-  duration_ms: 0.5128
+  duration_ms: 0.3934
   type: 'test'
   ...
 # Subtest: P12 barcode se elimina del nombre detectado
 ok 31 - P12 barcode se elimina del nombre detectado
   ---
-  duration_ms: 0.7956
+  duration_ms: 0.64
   type: 'test'
   ...
 # Subtest: P13 acentos preservados en el nombre
 ok 32 - P13 acentos preservados en el nombre
   ---
-  duration_ms: 1.1761
+  duration_ms: 1.8566
   type: 'test'
   ...
 # Subtest: P14 encabezados de columna ignorados
 ok 33 - P14 encabezados de columna ignorados
   ---
-  duration_ms: 1.0373
+  duration_ms: 0.5581
   type: 'test'
   ...
 # Subtest: P15 TOTAL ignorado
 ok 34 - P15 TOTAL ignorado
   ---
-  duration_ms: 0.6927
+  duration_ms: 0.4894
   type: 'test'
   ...
 # Subtest: P16 SUBTOTAL ignorado
 ok 35 - P16 SUBTOTAL ignorado
   ---
-  duration_ms: 0.3583
+  duration_ms: 0.4295
   type: 'test'
   ...
 # Subtest: P17 IGV ignorado
 ok 36 - P17 IGV ignorado
   ---
-  duration_ms: 0.346
+  duration_ms: 0.3243
   type: 'test'
   ...
 # Subtest: P18 RUC / factura ignorados
 ok 37 - P18 RUC / factura ignorados
   ---
-  duration_ms: 0.3554
+  duration_ms: 1.0081
   type: 'test'
   ...
 # Subtest: P18b factura completa deja solo las lineas de producto
 ok 38 - P18b factura completa deja solo las lineas de producto
   ---
-  duration_ms: 1.0145
+  duration_ms: 1.0671
   type: 'test'
   ...
 # Subtest: P19 qty x unitPrice = total
 ok 39 - P19 qty x unitPrice = total
   ---
-  duration_ms: 0.3955
+  duration_ms: 0.5106
   type: 'test'
   ...
 # Subtest: P20 discrepancia qty x unitPrice != total -> needsReview
 ok 40 - P20 discrepancia qty x unitPrice != total -> needsReview
   ---
-  duration_ms: 0.3668
+  duration_ms: 0.4305
   type: 'test'
   ...
 # Subtest: P21 cantidad inexistente -> null, no se inventa
 ok 41 - P21 cantidad inexistente -> null, no se inventa
   ---
-  duration_ms: 0.4282
+  duration_ms: 0.5986
   type: 'test'
   ...
 # Subtest: P22 precio inexistente -> null, no se inventa
 ok 42 - P22 precio inexistente -> null, no se inventa
   ---
-  duration_ms: 13.3947
+  duration_ms: 0.6064
   type: 'test'
   ...
 # Subtest: P22b linea con codigo pero sin precio se conserva para revision
 ok 43 - P22b linea con codigo pero sin precio se conserva para revision
   ---
-  duration_ms: 3.2596
+  duration_ms: 0.4462
   type: 'test'
   ...
 # Subtest: P23 multiples productos
 ok 44 - P23 multiples productos
   ---
-  duration_ms: 0.8216
+  duration_ms: 0.9167
   type: 'test'
   ...
 # Subtest: P24 espacios dobles, tabs y saltos de linea irregulares
 ok 45 - P24 espacios dobles, tabs y saltos de linea irregulares
   ---
-  duration_ms: 0.4736
+  duration_ms: 0.4321
   type: 'test'
   ...
 # Subtest: P25 entradas no-string / null / undefined no rompen
 ok 46 - P25 entradas no-string / null / undefined no rompen
   ---
-  duration_ms: 1.1164
+  duration_ms: 1.1564
   type: 'test'
   ...
 # Subtest: A01 tokens comerciales sin digitos nunca son numeros
 ok 47 - A01 tokens comerciales sin digitos nunca son numeros
   ---
-  duration_ms: 0.2942
+  duration_ms: 17.2086
   type: 'test'
   ...
 # Subtest: A02 nombres comerciales sobreviven intactos al parseo
 ok 48 - A02 nombres comerciales sobreviven intactos al parseo
   ---
-  duration_ms: 0.9258
+  duration_ms: 1.0777
   type: 'test'
   ...
 # Subtest: A03 presentaciones alfanumericas no se convierten en cantidad ni precio
 ok 49 - A03 presentaciones alfanumericas no se convierten en cantidad ni precio
   ---
-  duration_ms: 0.6216
+  duration_ms: 0.4281
   type: 'test'
   ...
 # Subtest: A04 palabra ambigua CAJA con estructura de producto NO se descarta
 ok 50 - A04 palabra ambigua CAJA con estructura de producto NO se descarta
   ---
-  duration_ms: 0.9384
+  duration_ms: 0.5106
   type: 'test'
   ...
 # Subtest: A05 marca ambigua TOTAL con estructura de producto NO se descarta
 ok 51 - A05 marca ambigua TOTAL con estructura de producto NO se descarta
   ---
-  duration_ms: 1.6832
+  duration_ms: 0.5041
   type: 'test'
   ...
 # Subtest: A06 simbolo monetario y separador de miles
 ok 52 - A06 simbolo monetario y separador de miles
   ---
-  duration_ms: 0.755
+  duration_ms: 0.4253
   type: 'test'
   ...
 # Subtest: A07 tokens basura no producen numeros
 ok 53 - A07 tokens basura no producen numeros
   ---
-  duration_ms: 0.4444
+  duration_ms: 0.2079
   type: 'test'
   ...
 # Subtest: A08 el parser es puro: mismo texto -> mismo resultado
 ok 54 - A08 el parser es puro: mismo texto -> mismo resultado
   ---
-  duration_ms: 0.9402
+  duration_ms: 0.6842
   type: 'test'
   ...
 # Subtest: A09 no se emiten lineas sin nombre ni codigo
 ok 55 - A09 no se emiten lineas sin nombre ni codigo
   ---
-  duration_ms: 1.6602
+  duration_ms: 0.5162
   type: 'test'
   ...
 # Subtest: A10 linea solo con codigo y numeros se conserva para revision
 ok 56 - A10 linea solo con codigo y numeros se conserva para revision
   ---
-  duration_ms: 1.9893
+  duration_ms: 0.468
   type: 'test'
   ...
 # Subtest: A01 lista vacia
 ok 57 - A01 lista vacia
   ---
-  duration_ms: 6.2648
+  duration_ms: 8.2335
   type: 'test'
   ...
 # Subtest: A02 propuesta no confirmada no se aplica
 ok 58 - A02 propuesta no confirmada no se aplica
   ---
-  duration_ms: 1.5363
+  duration_ms: 2.016
   type: 'test'
   ...
 # Subtest: A03 descartada no se aplica
 ok 59 - A03 descartada no se aplica
   ---
-  duration_ms: 1.3778
+  duration_ms: 1.9813
   type: 'test'
   ...
 # Subtest: A04 confirmada valida se aplica una vez
 ok 60 - A04 confirmada valida se aplica una vez
   ---
-  duration_ms: 2.1011
+  duration_ms: 21.4261
   type: 'test'
   ...
 # Subtest: A05 usa funcion canonica de inventario
 ok 61 - A05 usa funcion canonica de inventario
   ---
-  duration_ms: 6.4512
+  duration_ms: 13.3819
   type: 'test'
   ...
 # Subtest: A06 solo restaura stock directamente en el rollback canonico
 ok 62 - A06 solo restaura stock directamente en el rollback canonico
   ---
-  duration_ms: 4.1224
+  duration_ms: 7.1436
   type: 'test'
   ...
 # Subtest: A07 cantidad invalida bloquea
 ok 63 - A07 cantidad invalida bloquea
   ---
-  duration_ms: 6.0098
+  duration_ms: 31.1162
   type: 'test'
   ...
 # Subtest: A08 producto inexistente bloquea
 ok 64 - A08 producto inexistente bloquea
   ---
-  duration_ms: 2.8492
+  duration_ms: 1.6008
   type: 'test'
   ...
 # Subtest: A09 costo invalido bloquea
 ok 65 - A09 costo invalido bloquea
   ---
-  duration_ms: 6.4632
+  duration_ms: 7.2724
   type: 'test'
   ...
 # Subtest: A10 lote mixto se valida antes de mutar
 ok 66 - A10 lote mixto se valida antes de mutar
   ---
-  duration_ms: 2.0259
+  duration_ms: 2.0195
   type: 'test'
   ...
 # Subtest: A11 misma operacion repetida no duplica
 ok 67 - A11 misma operacion repetida no duplica
   ---
-  duration_ms: 48.9124
+  duration_ms: 1.6832
   type: 'test'
   ...
 # Subtest: referencias duplicadas dentro del lote bloquean antes de mutar
 ok 68 - referencias duplicadas dentro del lote bloquean antes de mutar
   ---
-  duration_ms: 34.2467
+  duration_ms: 1.554
   type: 'test'
   ...
 # Subtest: A12 operationId distinto si puede aplicar
 ok 69 - A12 operationId distinto si puede aplicar
   ---
-  duration_ms: 1.6963
+  duration_ms: 1.8453
   type: 'test'
   ...
 # Subtest: A13 conserva sourceIndex
 ok 70 - A13 conserva sourceIndex
   ---
-  duration_ms: 2.8403
+  duration_ms: 1.856
   type: 'test'
   ...
 # Subtest: A14 conserva productId
 ok 71 - A14 conserva productId
   ---
-  duration_ms: 2.0836
+  duration_ms: 1.4259
   type: 'test'
   ...
 # Subtest: A15 error canonico se propaga y restaura
 ok 72 - A15 error canonico se propaga y restaura
   ---
-  duration_ms: 2.4094
+  duration_ms: 1.5677
   type: 'test'
   ...
 # Subtest: A16 no crea segundo ledger
 ok 73 - A16 no crea segundo ledger
   ---
-  duration_ms: 2.3262
+  duration_ms: 1.7565
   type: 'test'
   ...
 # Subtest: A17 no toca ventas
 ok 74 - A17 no toca ventas
   ---
-  duration_ms: 1.7999
+  duration_ms: 1.5622
   type: 'test'
   ...
 # Subtest: A18 no toca caja
 ok 75 - A18 no toca caja
   ---
-  duration_ms: 1.6429
+  duration_ms: 1.4806
   type: 'test'
   ...
 # Subtest: A19 no toca creditos
 ok 76 - A19 no toca creditos
   ---
-  duration_ms: 1.6655
+  duration_ms: 1.4087
   type: 'test'
   ...
 # Subtest: A20 entrada no mutada
 ok 77 - A20 entrada no mutada
   ---
-  duration_ms: 1.7034
+  duration_ms: 1.6211
   type: 'test'
   ...
 # Subtest: persistencia canonica se ejecuta una vez y debe quedar verificada
 ok 78 - persistencia canonica se ejecuta una vez y debe quedar verificada
   ---
-  duration_ms: 3.1028
+  duration_ms: 2.6384
   type: 'test'
   ...
 # Subtest: fallo en movimiento posterior restaura lote y permite retry limpio
 ok 79 - fallo en movimiento posterior restaura lote y permite retry limpio
   ---
-  duration_ms: 4.5516
+  duration_ms: 2.3212
   type: 'test'
   ...
 # Subtest: fallo de persistencia restaura y retry no duplica stock ni ledger
 ok 80 - fallo de persistencia restaura y retry no duplica stock ni ledger
   ---
-  duration_ms: 2.4555
+  duration_ms: 2.4763
   type: 'test'
   ...
 # Subtest: B01 texto vacio
 ok 81 - B01 texto vacio
   ---
-  duration_ms: 8.5652
+  duration_ms: 10.0114
   type: 'test'
   ...
 # Subtest: B02 codigo POS unico produce SAFE
 ok 82 - B02 codigo POS unico produce SAFE
   ---
-  duration_ms: 7.9226
+  duration_ms: 7.829
   type: 'test'
   ...
 # Subtest: B03 nombre exacto unico sin codigo produce REVIEW
 ok 83 - B03 nombre exacto unico sin codigo produce REVIEW
   ---
-  duration_ms: 70.3945
+  duration_ms: 8.5237
   type: 'test'
   ...
 # Subtest: B04 codigo duplicado produce REVIEW
 ok 84 - B04 codigo duplicado produce REVIEW
   ---
-  duration_ms: 6.5873
+  duration_ms: 34.2266
   type: 'test'
   ...
 # Subtest: B05 codigo y nombre discordantes producen REVIEW
 ok 85 - B05 codigo y nombre discordantes producen REVIEW
   ---
-  duration_ms: 4.5006
+  duration_ms: 2.9182
   type: 'test'
   ...
 # Subtest: B06 solo referencia produce NO_SAFE_MATCH
 ok 86 - B06 solo referencia produce NO_SAFE_MATCH
   ---
-  duration_ms: 3.3739
+  duration_ms: 3.6912
   type: 'test'
   ...
 # Subtest: B07 sin candidato produce NO_SAFE_MATCH
 ok 87 - B07 sin candidato produce NO_SAFE_MATCH
   ---
-  duration_ms: 3.3487
+  duration_ms: 3.6277
   type: 'test'
   ...
 # Subtest: B08 multiples lineas mixtas resumen correctamente
 ok 88 - B08 multiples lineas mixtas resumen correctamente
   ---
-  duration_ms: 43.0654
+  duration_ms: 3.9689
   type: 'test'
   ...
 # Subtest: B09 orden de propuestas conservado
 ok 89 - B09 orden de propuestas conservado
   ---
-  duration_ms: 12.6238
+  duration_ms: 3.4996
   type: 'test'
   ...
 # Subtest: B10 cantidad preservada
 ok 90 - B10 cantidad preservada
   ---
-  duration_ms: 4.0668
+  duration_ms: 3.4503
   type: 'test'
   ...
 # Subtest: B11 precio preservado como costo propuesto
 ok 91 - B11 precio preservado como costo propuesto
   ---
-  duration_ms: 55.4857
+  duration_ms: 4.6003
   type: 'test'
   ...
 # Subtest: B12 total preservado dentro del resultado del parser
 ok 92 - B12 total preservado dentro del resultado del parser
   ---
-  duration_ms: 4.6701
+  duration_ms: 4.0726
   type: 'test'
   ...
 # Subtest: B13 reasons del parser y matcher se preservan
 ok 93 - B13 reasons del parser y matcher se preservan
   ---
-  duration_ms: 5.1446
+  duration_ms: 31.5472
   type: 'test'
   ...
 # Subtest: B14 productId solo aparece en match seguro
 ok 94 - B14 productId solo aparece en match seguro
   ---
-  duration_ms: 3.4788
+  duration_ms: 3.5962
   type: 'test'
   ...
 # Subtest: B15 linea problematica no rompe el lote
 ok 95 - B15 linea problematica no rompe el lote
   ---
-  duration_ms: 4.079
+  duration_ms: 3.8631
   type: 'test'
   ...
 # Subtest: B16 salida determinista
 ok 96 - B16 salida determinista
   ---
-  duration_ms: 6.5753
+  duration_ms: 7.097
   type: 'test'
   ...
 # Subtest: B17 products no mutados
 ok 97 - B17 products no mutados
   ---
-  duration_ms: 3.7387
+  duration_ms: 4.2621
   type: 'test'
   ...
 # Subtest: B18 resultados del parser no mutados
 ok 98 - B18 resultados del parser no mutados
   ---
-  duration_ms: 3.0917
+  duration_ms: 3.0867
   type: 'test'
   ...
 # Subtest: B19 sin inventario ni persistencia
 ok 99 - B19 sin inventario ni persistencia
   ---
-  duration_ms: 3.1885
+  duration_ms: 4.3437
   type: 'test'
   ...
 # Subtest: B20 funciona sin DOM
 ok 100 - B20 funciona sin DOM
   ---
-  duration_ms: 6.6747
+  duration_ms: 4.2473
   type: 'test'
   ...
 # Subtest: I01 foto valida recorre OCR, proceso, revisión y aplicación una vez
 ok 101 - I01 foto valida recorre OCR, proceso, revisión y aplicación una vez
   ---
-  duration_ms: 8.7707
+  duration_ms: 35.7428
   type: 'test'
   ...
 # Subtest: I02 MATCHED_REVIEW requiere selección y confirmación humana
 ok 102 - I02 MATCHED_REVIEW requiere selección y confirmación humana
   ---
-  duration_ms: 1.8496
+  duration_ms: 2.111
   type: 'test'
   ...
 # Subtest: I03 cantidad y costo corregidos llegan intactos a aplicación
 ok 103 - I03 cantidad y costo corregidos llegan intactos a aplicación
   ---
-  duration_ms: 6.0621
+  duration_ms: 3.633
   type: 'test'
   ...
 # Subtest: I04 fila descartada se transporta sin movimiento aplicable
 ok 104 - I04 fila descartada se transporta sin movimiento aplicable
   ---
-  duration_ms: 3.9425
+  duration_ms: 3.7767
   type: 'test'
   ...
 # Subtest: I05 NO_SAFE_MATCH no se aplica sin selección humana válida
 ok 105 - I05 NO_SAFE_MATCH no se aplica sin selección humana válida
   ---
-  duration_ms: 1.9997
+  duration_ms: 1.7985
   type: 'test'
   ...
 # Subtest: I06 doble clic concurrente ejecuta apply una sola vez
 ok 106 - I06 doble clic concurrente ejecuta apply una sola vez
   ---
-  duration_ms: 2.3047
+  duration_ms: 1.7457
   type: 'test'
   ...
 # Subtest: una nueva lectura invalida el lote anterior y bloquea Apply
 ok 107 - una nueva lectura invalida el lote anterior y bloquea Apply
   ---
-  duration_ms: 76.2283
+  duration_ms: 2.4558
   type: 'test'
   ...
 # Subtest: I07 misma imagen produce operationId estable
 ok 108 - I07 misma imagen produce operationId estable
   ---
-  duration_ms: 3.1042
+  duration_ms: 3.3456
   type: 'test'
   ...
 # Subtest: I08 fallo de persistencia delegado se muestra y no refresca UI
 ok 109 - I08 fallo de persistencia delegado se muestra y no refresca UI
   ---
-  duration_ms: 1.8628
+  duration_ms: 1.9135
   type: 'test'
   ...
 # Subtest: rollback durable no verificado queda visible
 ok 110 - rollback durable no verificado queda visible
   ---
-  duration_ms: 1.736
+  duration_ms: 2.0595
   type: 'test'
   ...
 # Subtest: resultado idempotente se reporta como ya aplicado
 ok 111 - resultado idempotente se reporta como ya aplicado
   ---
-  duration_ms: 1.4247
+  duration_ms: 1.6976
   type: 'test'
   ...
 # Subtest: fallo de render después del commit no convierte éxito durable en fallo
 ok 112 - fallo de render después del commit no convierte éxito durable en fallo
   ---
-  duration_ms: 4.8013
+  duration_ms: 3.1395
   type: 'test'
   ...
 # Subtest: I09 lote incompleto no llega a WP-06
 ok 113 - I09 lote incompleto no llega a WP-06
   ---
-  duration_ms: 1.7778
+  duration_ms: 1.4918
   type: 'test'
   ...
 # Subtest: I10 imagen inválida produce error visible controlado
 ok 114 - I10 imagen inválida produce error visible controlado
   ---
-  duration_ms: 1.7583
+  duration_ms: 2.1613
   type: 'test'
   ...
 # Subtest: I11 fallo OCR no ejecuta proceso y deja integración reutilizable
 ok 115 - I11 fallo OCR no ejecuta proceso y deja integración reutilizable
   ---
-  duration_ms: 1.831
+  duration_ms: 2.4131
   type: 'test'
   ...
 # Subtest: I12 huella estable permite idempotencia después de recrear integración
 ok 116 - I12 huella estable permite idempotencia después de recrear integración
   ---
-  duration_ms: 3.1861
+  duration_ms: 3.6576
   type: 'test'
   ...
 # Subtest: I13 flujo normal de inventario no es interceptado
 ok 117 - I13 flujo normal de inventario no es interceptado
   ---
-  duration_ms: 1.3529
+  duration_ms: 1.4208
   type: 'test'
   ...
 # Subtest: I14 flujo normal de ventas no es referenciado por integración
 ok 118 - I14 flujo normal de ventas no es referenciado por integración
   ---
-  duration_ms: 0.4144
+  duration_ms: 0.7558
   type: 'test'
   ...
 # Subtest: I15 file protocol conserva indisponibilidad controlada
 ok 119 - I15 file protocol conserva indisponibilidad controlada
   ---
-  duration_ms: 65.0932
+  duration_ms: 2.5431
   type: 'test'
   ...
 # Subtest: entrada OCR vive en Inventario y acepta cámara móvil
 ok 120 - entrada OCR vive en Inventario y acepta cámara móvil
   ---
-  duration_ms: 0.4702
+  duration_ms: 0.5524
   type: 'test'
   ...
 # Subtest: scripts OCR clásicos respetan el orden real de dependencias
 ok 121 - scripts OCR clásicos respetan el orden real de dependencias
   ---
-  duration_ms: 0.5847
+  duration_ms: 1.184
   type: 'test'
   ...
 # Subtest: U01 render propuesta SAFE
 ok 122 - U01 render propuesta SAFE
   ---
-  duration_ms: 9.0535
+  duration_ms: 6.1085
   type: 'test'
   ...
 # Subtest: U02 render REVIEW
 ok 123 - U02 render REVIEW
   ---
-  duration_ms: 1.8041
+  duration_ms: 1.625
   type: 'test'
   ...
 # Subtest: U03 render NO_SAFE_MATCH
 ok 124 - U03 render NO_SAFE_MATCH
   ---
-  duration_ms: 1.62
+  duration_ms: 1.6403
   type: 'test'
   ...
 # Subtest: U04 reasons visibles
 ok 125 - U04 reasons visibles
   ---
-  duration_ms: 1.8302
+  duration_ms: 1.8024
   type: 'test'
   ...
 # Subtest: U05 candidatos visibles
 ok 126 - U05 candidatos visibles
   ---
-  duration_ms: 6.8863
+  duration_ms: 2.9515
   type: 'test'
   ...
 # Subtest: U06 SAFE no queda confirmado automaticamente
 ok 127 - U06 SAFE no queda confirmado automaticamente
   ---
-  duration_ms: 3.0574
+  duration_ms: 3.2349
   type: 'test'
   ...
 # Subtest: U07 confirmar SAFE manualmente
 ok 128 - U07 confirmar SAFE manualmente
   ---
-  duration_ms: 2.0591
+  duration_ms: 2.4362
   type: 'test'
   ...
 # Subtest: U08 REVIEW exige seleccion humana
 ok 129 - U08 REVIEW exige seleccion humana
   ---
-  duration_ms: 1.9935
+  duration_ms: 2.1064
   type: 'test'
   ...
 # Subtest: U09 NO_SAFE_MATCH exige seleccion valida
 ok 130 - U09 NO_SAFE_MATCH exige seleccion valida
   ---
-  duration_ms: 2.0283
+  duration_ms: 2.1357
   type: 'test'
   ...
 # Subtest: U10 corregir producto
 ok 131 - U10 corregir producto
   ---
-  duration_ms: 83.7554
+  duration_ms: 2.0487
   type: 'test'
   ...
 # Subtest: U11 corregir cantidad
 ok 132 - U11 corregir cantidad
   ---
-  duration_ms: 1.8665
+  duration_ms: 1.8989
   type: 'test'
   ...
 # Subtest: U12 corregir costo
 ok 133 - U12 corregir costo
   ---
-  duration_ms: 50.4494
+  duration_ms: 41.2409
   type: 'test'
   ...
 # Subtest: U13 cantidad invalida bloquea confirmacion
 ok 134 - U13 cantidad invalida bloquea confirmacion
   ---
-  duration_ms: 11.3704
+  duration_ms: 35.5771
   type: 'test'
   ...
 # Subtest: U14 costo invalido bloquea confirmacion
 ok 135 - U14 costo invalido bloquea confirmacion
   ---
-  duration_ms: 11.772
+  duration_ms: 5.8095
   type: 'test'
   ...
 # Subtest: U15 descartar fila
 ok 136 - U15 descartar fila
   ---
-  duration_ms: 71.0132
+  duration_ms: 2.9682
   type: 'test'
   ...
 # Subtest: U16 mezcla confirmar corregir y descartar
 ok 137 - U16 mezcla confirmar corregir y descartar
   ---
-  duration_ms: 3.8781
+  duration_ms: 3.4277
   type: 'test'
   ...
 # Subtest: U17 orden conservado
 ok 138 - U17 orden conservado
   ---
-  duration_ms: 48.9471
+  duration_ms: 4.7899
   type: 'test'
   ...
 # Subtest: U18 originalProposal preservado
 ok 139 - U18 originalProposal preservado
   ---
-  duration_ms: 24.4698
+  duration_ms: 4.9728
   type: 'test'
   ...
 # Subtest: U19 no muta propuestas de entrada
 ok 140 - U19 no muta propuestas de entrada
   ---
-  duration_ms: 3.676
+  duration_ms: 17.77
   type: 'test'
   ...
 # Subtest: U20 no inventario ni persistencia
 ok 141 - U20 no inventario ni persistencia
   ---
-  duration_ms: 2.3204
+  duration_ms: 1.8875
   type: 'test'
   ...
 # Subtest: M01 nombre exacto unico produce MATCHED
 ok 142 - M01 nombre exacto unico produce MATCHED
   ---
-  duration_ms: 11.4391
+  duration_ms: 37.0186
   type: 'test'
   ...
 # Subtest: M02 codigo unico produce MATCHED sin convertirlo a barcode
 ok 143 - M02 codigo unico produce MATCHED sin convertirlo a barcode
   ---
-  duration_ms: 6.4656
+  duration_ms: 6.2102
   type: 'test'
   ...
 # Subtest: M03 codigo y nombre convergentes conservan ambas evidencias
 ok 144 - M03 codigo y nombre convergentes conservan ambas evidencias
   ---
-  duration_ms: 4.785
+  duration_ms: 3.3378
   type: 'test'
   ...
 # Subtest: M04 codigo duplicado requiere revision y no elige
 ok 145 - M04 codigo duplicado requiere revision y no elige
   ---
-  duration_ms: 3.6748
+  duration_ms: 3.2297
   type: 'test'
   ...
 # Subtest: M05 nombre duplicado requiere revision y no elige
 ok 146 - M05 nombre duplicado requiere revision y no elige
   ---
-  duration_ms: 3.6986
+  duration_ms: 3.3467
   type: 'test'
   ...
 # Subtest: M06 conflicto entre codigo y nombre nunca selecciona
 ok 147 - M06 conflicto entre codigo y nombre nunca selecciona
   ---
-  duration_ms: 6.2213
+  duration_ms: 45.7877
   type: 'test'
   ...
 # Subtest: M07 codigos unicos discordantes requieren revision
 ok 148 - M07 codigos unicos discordantes requieren revision
   ---
-  duration_ms: 3.5418
+  duration_ms: 3.7182
   type: 'test'
   ...
 # Subtest: M08 coincidencia parcial es propuesta, no match automatico
 ok 149 - M08 coincidencia parcial es propuesta, no match automatico
   ---
-  duration_ms: 41.299
+  duration_ms: 4.8418
   type: 'test'
   ...
 # Subtest: M09 consulta valida sin candidatos devuelve NOT_FOUND
 ok 150 - M09 consulta valida sin candidatos devuelve NOT_FOUND
   ---
-  duration_ms: 16.1331
+  duration_ms: 3.3528
   type: 'test'
   ...
 # Subtest: M10 entrada insuficiente o invalida requiere revision
 ok 151 - M10 entrada insuficiente o invalida requiere revision
   ---
-  duration_ms: 10.9687
+  duration_ms: 3.5666
   type: 'test'
   ...
 # Subtest: M11 lote conserva orden y no agrega lineas
 ok 152 - M11 lote conserva orden y no agrega lineas
   ---
-  duration_ms: 3.7362
+  duration_ms: 3.8297
   type: 'test'
   ...
 # Subtest: M12 es determinista y no muta lineas, fixture ni referencias
 ok 153 - M12 es determinista y no muta lineas, fixture ni referencias
   ---
-  duration_ms: 51.1412
+  duration_ms: 5.512
   type: 'test'
   ...
 # Subtest: M13 funciona sin DOM y no toca estado ni persistencia del POS
 ok 154 - M13 funciona sin DOM y no toca estado ni persistencia del POS
   ---
-  duration_ms: 60.6507
+  duration_ms: 4.5576
   type: 'test'
   ...
 # Subtest: M14 codigo OCR busca sku, barcode y alternativos del producto POS
 ok 155 - M14 codigo OCR busca sku, barcode y alternativos del producto POS
   ---
-  duration_ms: 7.7288
+  duration_ms: 69.7903
   type: 'test'
   ...
 # Subtest: M15 nombre POS exacto unico sin codigo requiere revision
 ok 156 - M15 nombre POS exacto unico sin codigo requiere revision
   ---
-  duration_ms: 9.2895
+  duration_ms: 3.5159
   type: 'test'
   ...
 # Subtest: M16 referencia unica sin producto POS nunca es segura
 ok 157 - M16 referencia unica sin producto POS nunca es segura
   ---
-  duration_ms: 3.3397
+  duration_ms: 3.7346
   type: 'test'
   ...
 # Subtest: M17 referenceCode no se usa como codigo de producto POS
 ok 158 - M17 referenceCode no se usa como codigo de producto POS
   ---
-  duration_ms: 3.8609
+  duration_ms: 3.1601
   type: 'test'
   ...
 # Subtest: M18 codigo POS duplicado es ambiguo y requiere revision
 ok 159 - M18 codigo POS duplicado es ambiguo y requiere revision
   ---
-  duration_ms: 4.1688
+  duration_ms: 4.0044
   type: 'test'
   ...
 # Subtest: M19 nombre POS duplicado es ambiguo y requiere revision
 ok 160 - M19 nombre POS duplicado es ambiguo y requiere revision
   ---
-  duration_ms: 3.6119
+  duration_ms: 3.9591
   type: 'test'
   ...
 # Subtest: M20 codigo y nombre POS discordantes requieren revision
 ok 161 - M20 codigo y nombre POS discordantes requieren revision
   ---
-  duration_ms: 4.0281
+  duration_ms: 4.5687
   type: 'test'
   ...
 # Subtest: M21 coincidencia parcial POS nunca es segura
 ok 162 - M21 coincidencia parcial POS nunca es segura
   ---
-  duration_ms: 5.7392
+  duration_ms: 3.2651
   type: 'test'
   ...
 # Subtest: M22 sin productos o helpers no puede devolver producto seguro
 ok 163 - M22 sin productos o helpers no puede devolver producto seguro
   ---
-  duration_ms: 4.3349
+  duration_ms: 53.8656
   type: 'test'
   ...
 # Subtest: M23 lote POS conserva orden, identidad y no muta entradas
 ok 164 - M23 lote POS conserva orden, identidad y no muta entradas
   ---
-  duration_ms: 72.9478
+  duration_ms: 6.4627
   type: 'test'
   ...
 1..164
@@ -991,4 +991,4 @@ ok 164 - M23 lote POS conserva orden, identidad y no muta entradas
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 1480.6098
+# duration_ms 1187.446

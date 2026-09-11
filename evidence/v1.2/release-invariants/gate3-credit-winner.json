@@ -1,7 +1,7 @@
 {
   "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
   "branch": "hardening/critical-write-gates",
-  "generatedAt": "2026-09-11T04:51:34.396Z",
+  "generatedAt": "2026-09-11T11:26:21.295Z",
   "gate": "GATE 3 — CREDIT WINNER",
   "verdict": "PASS",
   "winner": {
@@ -9,7 +9,7 @@
     "chain": "inline-02 (legacy) → inline-04 (política F7, base capturada) → inline-07 wrapper F10 = WINNER",
     "runtimeWinner": "wrapper F10 (inline-07) sobre base F7 (inline-04)",
     "persistedIdentity": {
-      "id": 1789102294344,
+      "id": 1789125981163,
       "cliId": "C1",
       "saldo": 50
     },

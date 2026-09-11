@@ -1,7 +1,7 @@
 {
   "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
   "branch": "hardening/critical-write-gates",
-  "generatedAt": "2026-09-11T04:51:34.546Z",
+  "generatedAt": "2026-09-11T11:26:21.519Z",
   "gate": "GATE 8 — V10 DORMANCY",
   "verdict": "PASS",
   "conclusion": "V10 cargado pero dormante; sin inicialización automática; sin apertura de DB; NO es requisito del release",

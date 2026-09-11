@@ -1,0 +1,161 @@
+TAP version 13
+# Subtest: venta durable crea sales, sale_items e inventory_movements en el mismo snapshot
+ok 1 - venta durable crea sales, sale_items e inventory_movements en el mismo snapshot
+  ---
+  duration_ms: 128.9552
+  type: 'test'
+  ...
+# [Venta] No se confirmó la operación: Error
+# Subtest: fallo durable revierte venta, stock, ledger y no acepta OUTBOX huérfano
+ok 2 - fallo durable revierte venta, stock, ledger y no acepta OUTBOX huérfano
+  ---
+  duration_ms: 36.0602
+  type: 'test'
+  ...
+# Subtest: reload conserva UUID, OUTBOX, hash y secuencia; siguiente operación es monotónica
+ok 3 - reload conserva UUID, OUTBOX, hash y secuencia; siguiente operación es monotónica
+  ---
+  duration_ms: 40.5849
+  type: 'test'
+  ...
+# Subtest: fallback SHA-256 mantiene la venta local sin Web Crypto subtle
+ok 4 - fallback SHA-256 mantiene la venta local sin Web Crypto subtle
+  ---
+  duration_ms: 4.6714
+  type: 'test'
+  ...
+# Subtest: snapshot antiguo establece baseline sin exportar historia previa
+ok 5 - snapshot antiguo establece baseline sin exportar historia previa
+  ---
+  duration_ms: 1.0236
+  type: 'test'
+  ...
+# Subtest: offline mantiene PENDING sin incrementar intentos y recuperación sincroniza
+ok 6 - offline mantiene PENDING sin incrementar intentos y recuperación sincroniza
+  ---
+  duration_ms: 4.8564
+  type: 'test'
+  ...
+# Subtest: network y 5xx conservan PENDING; retry usa operation_id/hash idénticos y acepta already_processed
+ok 7 - network y 5xx conservan PENDING; retry usa operation_id/hash idénticos y acepta already_processed
+  ---
+  duration_ms: 4.5718
+  type: 'test'
+  ...
+# Subtest: payload alterado se bloquea por integridad antes de cualquier POST
+ok 8 - payload alterado se bloquea por integridad antes de cualquier POST
+  ---
+  duration_ms: 3.7961
+  type: 'test'
+  ...
+# Subtest: 401 queda FAILED sin bucle y solo reintenta tras token nuevo explícito
+ok 9 - 401 queda FAILED sin bucle y solo reintenta tras token nuevo explícito
+  ---
+  duration_ms: 3.2304
+  type: 'test'
+  ...
+# Subtest: 409 queda FAILED, preserva payload y nunca habilita Last-Push-Wins
+ok 10 - 409 queda FAILED, preserva payload y nunca habilita Last-Push-Wins
+  ---
+  duration_ms: 2.8861
+  type: 'test'
+  ...
+# Subtest: acuse perdido y reload reintentan exactamente una vez contra el Worker real
+ok 11 - acuse perdido y reload reintentan exactamente una vez contra el Worker real
+  ---
+  duration_ms: 52.2478
+  type: 'test'
+  ...
+# Subtest: fallo al persistir SYNCED deja PENDING y el retry idempotente cierra sin duplicar
+ok 12 - fallo al persistir SYNCED deja PENDING y el retry idempotente cierra sin duplicar
+  ---
+  duration_ms: 7.0243
+  type: 'test'
+  ...
+# Subtest: persistencia de acuses no captura cambios financieros todavía no confirmados
+ok 13 - persistencia de acuses no captura cambios financieros todavía no confirmados
+  ---
+  duration_ms: 19.9986
+  type: 'test'
+  ...
+# Subtest: beforeunload no persiste datos financieros mientras el hash OUTBOX está pendiente
+ok 14 - beforeunload no persiste datos financieros mientras el hash OUTBOX está pendiente
+  ---
+  duration_ms: 13.5482
+  type: 'test'
+  ...
+# Subtest: backup focal conserva OUTBOX pero excluye endpoint y token
+ok 15 - backup focal conserva OUTBOX pero excluye endpoint y token
+  ---
+  duration_ms: 40.8605
+  type: 'test'
+  ...
+# Subtest: credenciales permanecen fuera del snapshot financiero
+ok 16 - credenciales permanecen fuera del snapshot financiero
+  ---
+  duration_ms: 1.9219
+  type: 'test'
+  ...
+# Subtest: lee ventas, líneas asociadas, inventario y estado sin exponer hashes
+ok 17 - lee ventas, líneas asociadas, inventario y estado sin exponer hashes
+  ---
+  duration_ms: 64.6671
+  type: 'test'
+  ...
+# Subtest: lectura requiere READ_TOKEN y no acepta SYNC_TOKEN
+ok 18 - lectura requiere READ_TOKEN y no acepta SYNC_TOKEN
+  ---
+  duration_ms: 15.034
+  type: 'test'
+  ...
+# Subtest: READ_TOKEN no puede escribir y métodos mutantes /read se rechazan sin tocar D1
+ok 19 - READ_TOKEN no puede escribir y métodos mutantes /read se rechazan sin tocar D1
+  ---
+  duration_ms: 5.8059
+  type: 'test'
+  ...
+# Subtest: credenciales iguales cierran lectura y escritura sin acceder a D1 ni exponer el secreto
+ok 20 - credenciales iguales cierran lectura y escritura sin acceder a D1 ni exponer el secreto
+  ---
+  duration_ms: 9.2189
+  type: 'test'
+  ...
+# Subtest: paginación aplica default, máximo, cursor opaco y páginas sin duplicados
+ok 21 - paginación aplica default, máximo, cursor opaco y páginas sin duplicados
+  ---
+  duration_ms: 23.4498
+  type: 'test'
+  ...
+# Subtest: CORS autoriza header de lectura y no anuncia métodos mutantes
+ok 22 - CORS autoriza header de lectura y no anuncia métodos mutantes
+  ---
+  duration_ms: 3.664
+  type: 'test'
+  ...
+# Subtest: visor estático solo carga cliente READ-ONLY y este solo usa GET
+ok 23 - visor estático solo carga cliente READ-ONLY y este solo usa GET
+  ---
+  duration_ms: 1.9295
+  type: 'test'
+  ...
+# Subtest: Worker permite preflight mínimo del POS sin autenticar OPTIONS
+ok 24 - Worker permite preflight mínimo del POS sin autenticar OPTIONS
+  ---
+  duration_ms: 36.904
+  type: 'test'
+  ...
+# Subtest: respuestas health, 401 y operación válida incluyen CORS
+ok 25 - respuestas health, 401 y operación válida incluyen CORS
+  ---
+  duration_ms: 20.5292
+  type: 'test'
+  ...
+1..25
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3336.6888

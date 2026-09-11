@@ -1,0 +1,42 @@
+{
+  "at": "2026-09-11T13:58:24.850Z",
+  "url": "https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/read-only.html",
+  "checks": [
+    {
+      "name": "hosted_status_authenticated",
+      "result": "PASS"
+    },
+    {
+      "name": "hosted_expected_sale_and_lines",
+      "result": "PASS"
+    },
+    {
+      "name": "hosted_expected_inventory",
+      "result": "PASS"
+    },
+    {
+      "name": "hosted_reader_get_only_no_overflow_no_errors",
+      "result": "PASS"
+    }
+  ],
+  "requests": [
+    {
+      "url": "/read/status",
+      "method": "GET"
+    },
+    {
+      "url": "/read/sales",
+      "method": "GET"
+    },
+    {
+      "url": "/read/sales/V-001/items",
+      "method": "GET"
+    },
+    {
+      "url": "/read/inventory-movements",
+      "method": "GET"
+    }
+  ],
+  "physicalSecondDevice": false,
+  "viewport": "390x844"
+}

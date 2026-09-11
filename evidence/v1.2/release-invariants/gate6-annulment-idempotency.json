@@ -1,7 +1,7 @@
 {
   "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
   "branch": "hardening/critical-write-gates",
-  "generatedAt": "2026-09-11T04:51:34.454Z",
+  "generatedAt": "2026-09-11T11:26:21.088Z",
   "gate": "GATE 6 — ANNULMENT IDEMPOTENCY",
   "verdict": "PASS",
   "winner": "inline-03 wrapper (_naAuthorize anularVenta) sobre base inline-02",

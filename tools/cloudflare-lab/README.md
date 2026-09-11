@@ -55,6 +55,10 @@ las respuestas JSON usan `Cache-Control: no-store`.
 a `POS/js/sync/read-only.js`, conservando esa estructura. La clave de lectura se
 introduce en el visor y permanece en la sesión; nunca usar allí la clave de escritura.
 
+Visor publicado: `https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/read-only.html`.
+El build `scripts/build-reader.mjs` copia únicamente esos dos archivos a
+`.reader-assets/` (ignorado por Git). No publicar `POS/index.html` ni la raíz del repositorio.
+
 ## Ejecutar
 
 ```sh
@@ -81,8 +85,10 @@ El subdominio ya está registrado, `workers_dev` está activo y la migración
 sin reemplazar SYNC_TOKEN. El Worker publicado pasó 16 comprobaciones remotas de
 lectura y rechazo de escrituras con credenciales de lectura.
 
-Esto no certifica todavía el envío real de nuevas ventas ni un segundo dispositivo
-físico. Consultar `docs/V1.2_STATUS.md` para los gates pendientes.
+El E2E remoto ya confirmó seis operaciones en D1 provenientes de dos ventas de
+ensayo, recuperación offline e idempotencia. Otros 17 controles verificaron claves,
+consultas y conflicto sin sobrescritura. Solo resta la confirmación del visor en un
+segundo dispositivo físico. Consultar `docs/V1.2_STATUS.md`.
 
 Prueba remota sin insertar registros, con READ_TOKEN cargado en el entorno:
 

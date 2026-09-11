@@ -1,0 +1,70 @@
+{
+  "at": "2026-09-11T11:22:41.380Z",
+  "mode": "remote",
+  "checks": [
+    {
+      "name": "local_sale_and_atomic_outbox",
+      "result": "PASS"
+    },
+    {
+      "name": "offline_sale_pending",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_process_close_reopen_offline_preserves_outbox",
+      "result": "PASS"
+    },
+    {
+      "name": "real_worker_d1_synced",
+      "result": "PASS",
+      "operations": 6,
+      "deviceId": "092c7c33-8efd-4943-a63d-f7263156edd6",
+      "expectedOperations": [
+        {
+          "operationId": "b2754f0a-9276-4ba9-a34e-0cff322bfcd0",
+          "entityType": "sales",
+          "entityId": "V-001"
+        },
+        {
+          "operationId": "d9a9681e-6fe0-4aea-beaa-16f5f2e5b515",
+          "entityType": "sale_items",
+          "entityId": "V-001:0"
+        },
+        {
+          "operationId": "bacf94c0-9a70-4443-a4ec-e41b4177ec15",
+          "entityType": "inventory_movements",
+          "entityId": "IM-1789125752775-1"
+        },
+        {
+          "operationId": "68e81730-5797-49ef-bb62-98e752f9f189",
+          "entityType": "sales",
+          "entityId": "V-002"
+        },
+        {
+          "operationId": "7e47edc8-874e-4d2a-8e95-aeb6de72020e",
+          "entityType": "sale_items",
+          "entityId": "V-002:0"
+        },
+        {
+          "operationId": "2214357e-309e-4841-bd12-c5777d1f3ec3",
+          "entityType": "inventory_movements",
+          "entityId": "IM-1789125752813-2"
+        }
+      ]
+    },
+    {
+      "name": "same_operation_remote_idempotency",
+      "result": "PASS"
+    },
+    {
+      "name": "synced_state_survives_reload",
+      "result": "PASS"
+    },
+    {
+      "name": "separate_browser_profile_mobile_read_only",
+      "result": "PASS",
+      "physicalSecondDevice": false
+    }
+  ],
+  "physicalSecondDevice": false
+}

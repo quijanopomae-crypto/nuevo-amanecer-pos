@@ -1,0 +1,66 @@
+[
+  {
+    "results": [
+      {
+        "operation_id": "b2754f0a-9276-4ba9-a34e-0cff322bfcd0",
+        "device_id": "092c7c33-8efd-4943-a63d-f7263156edd6",
+        "device_sequence": 1,
+        "entity_type": "sales",
+        "entity_id": "V-001"
+      },
+      {
+        "operation_id": "d9a9681e-6fe0-4aea-beaa-16f5f2e5b515",
+        "device_id": "092c7c33-8efd-4943-a63d-f7263156edd6",
+        "device_sequence": 2,
+        "entity_type": "sale_items",
+        "entity_id": "V-001:0"
+      },
+      {
+        "operation_id": "bacf94c0-9a70-4443-a4ec-e41b4177ec15",
+        "device_id": "092c7c33-8efd-4943-a63d-f7263156edd6",
+        "device_sequence": 3,
+        "entity_type": "inventory_movements",
+        "entity_id": "IM-1789125752775-1"
+      },
+      {
+        "operation_id": "68e81730-5797-49ef-bb62-98e752f9f189",
+        "device_id": "092c7c33-8efd-4943-a63d-f7263156edd6",
+        "device_sequence": 4,
+        "entity_type": "sales",
+        "entity_id": "V-002"
+      },
+      {
+        "operation_id": "7e47edc8-874e-4d2a-8e95-aeb6de72020e",
+        "device_id": "092c7c33-8efd-4943-a63d-f7263156edd6",
+        "device_sequence": 5,
+        "entity_type": "sale_items",
+        "entity_id": "V-002:0"
+      },
+      {
+        "operation_id": "2214357e-309e-4841-bd12-c5777d1f3ec3",
+        "device_id": "092c7c33-8efd-4943-a63d-f7263156edd6",
+        "device_sequence": 6,
+        "entity_type": "inventory_movements",
+        "entity_id": "IM-1789125752813-2"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "ENAM",
+      "served_by_colo": "EWR",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.2414
+      },
+      "duration": 0.2414,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 49152,
+      "rows_read": 7,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

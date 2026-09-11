@@ -1,7 +1,7 @@
 {
-  "at": "2026-09-11T04:55:17.208Z",
+  "at": "2026-09-11T13:59:52.631Z",
   "kind": "reviewed-working-tree-sources-not-final-release",
-  "productCheckpoint": "c0b83e9",
+  "startingCheckpoint": "642e90bde2c87fb13663061f506acfa24298080c",
   "selfExcluded": true,
   "files": [
     {
@@ -250,14 +250,19 @@
       "sha256": "1b990dd31c7b2cc26641107754cabfa1ee751d780db55c56741b874e88a27389"
     },
     {
+      "path": "docs/V1.2_DEVICE_CHECK.md",
+      "bytes": 1273,
+      "sha256": "c8c413a496738eac16af65cd868767fda018a0bca71d5c5515e6c3a7c23e19dc"
+    },
+    {
       "path": "docs/V1.2_RECOVERY.md",
-      "bytes": 3611,
-      "sha256": "fa2fbc8f89d8b98114734f52634ccdbc4acf94d637e14c5f097ef585d422c9c2"
+      "bytes": 5183,
+      "sha256": "48b87bc5d092864e5c372b2e68bd28637c7abe18a82e03828138ca56056ebfb7"
     },
     {
       "path": "docs/V1.2_STATUS.md",
-      "bytes": 4591,
-      "sha256": "3c44eccfe2d2a7ee54a739552942a4c47f2f899dbd5e71db8f3221fccb96e839"
+      "bytes": 6313,
+      "sha256": "8ab953e162363045de11c224eaf86a1723032d1d0a708be445029e988b50ec88"
     },
     {
       "path": "docs/characterization/BASELINE.md",
@@ -266,18 +271,38 @@
     },
     {
       "path": "evidence/v1.2/backup-restore.tap",
-      "bytes": 2074,
-      "sha256": "d1624a0ce0f0a5a01f7d46fab14609d9731d5e71ec95ea3c52620fac52569d11"
+      "bytes": 2072,
+      "sha256": "7b5d24c1fce6aa884e140f589f81385d0fb1e840d54696493dae4454b5951002"
+    },
+    {
+      "path": "evidence/v1.2/cloud-focal.tap",
+      "bytes": 5618,
+      "sha256": "c5602e41d47135d0494f66886042c18eacbcb5ce7e54ff1690f4cd29beb6a098"
+    },
+    {
+      "path": "evidence/v1.2/d1-remote-rc.json",
+      "bytes": 1929,
+      "sha256": "a408d2ed20fb6c7e87aaa56d1ea69d2ea4bd540ae5f480fd389645778450e25d"
+    },
+    {
+      "path": "evidence/v1.2/hosted-reader.json",
+      "bytes": 846,
+      "sha256": "d705eda979afca3cbd0764d389e59433459deca3a35d23d7e665fd73dfe767e4"
     },
     {
       "path": "evidence/v1.2/ocr.tap",
-      "bytes": 26103,
-      "sha256": "546b5df8583b466cb1e561cb2d50289bc9b0d73fb0f6f6e562fe08bc5d8fe767"
+      "bytes": 26096,
+      "sha256": "9a252f13b8b27bd1941839f501d900cf13188af724f8f05ec83a6582358278ab"
     },
     {
       "path": "evidence/v1.2/pos-regression.tap",
-      "bytes": 43395,
-      "sha256": "0b80fcab614f4aa731d89129ed1090175ad57cc3b27003e1ceee6d7d7d887e58"
+      "bytes": 43386,
+      "sha256": "6a36262ec5af416dd37ed07ce58474e547c24e18459c6c72ff3f4c5164052b25"
+    },
+    {
+      "path": "evidence/v1.2/production-package-files.json",
+      "bytes": 2524,
+      "sha256": "b7a2acb1fcbf51cf920d7990a9df2ca287fad1705c74843ee8f0b237434338a0"
     },
     {
       "path": "evidence/v1.2/rc-local.json",
@@ -285,9 +310,29 @@
       "sha256": "7fc81e087a06b004b6a83a2c4aecb656288ac4da11922628e4718f88adeb6d5b"
     },
     {
+      "path": "evidence/v1.2/rc-remote.json",
+      "bytes": 1830,
+      "sha256": "4011c7f87c4d19d21a2c933864c35104f6183242e471a09f20edb51bde5a734a"
+    },
+    {
+      "path": "evidence/v1.2/reader-hosted.png",
+      "bytes": 60274,
+      "sha256": "4e5466a530a41f353c93531f0e8cf4dc67aa3b7ac82a1d57ce441986956df4e4"
+    },
+    {
       "path": "evidence/v1.2/reader-local.png",
       "bytes": 60713,
       "sha256": "5858b3bcd45be9b808c5515e1adcd8273e22e6bc8def92c5ff567552ef343025"
+    },
+    {
+      "path": "evidence/v1.2/reader-publication.json",
+      "bytes": 913,
+      "sha256": "d35839d3ca7981791006903936ed1ae513a01e76f3017a40e6cc47e8c3052fbe"
+    },
+    {
+      "path": "evidence/v1.2/reader-remote.png",
+      "bytes": 60674,
+      "sha256": "88ee4040f5e98d90fab3d9eb840f4ed8d0d2e2cfe31fdd4b3abfff2cdc028110"
     },
     {
       "path": "evidence/v1.2/release-invariants-before-test-correction.tap",
@@ -296,8 +341,8 @@
     },
     {
       "path": "evidence/v1.2/release-invariants.tap",
-      "bytes": 11361,
-      "sha256": "c6c452ddc2e2c8d7f2b27d78fb17ca533e15ac835c8331cf33d7311a4bab7913"
+      "bytes": 11367,
+      "sha256": "4aaff5420102f5e1fc95e5c33c60c63d54adc5a5d7e35d42587cd05231a35bad"
     },
     {
       "path": "evidence/v1.2/release-invariants/SINGLE_TAB_WRITE_RESTRICTION.md",
@@ -307,52 +352,57 @@
     {
       "path": "evidence/v1.2/release-invariants/gate1-v9-multitab.json",
       "bytes": 8225,
-      "sha256": "eb3a15d595eed1f99b6f4d13605179efe6d5f0600eb1d59ae149c05337a7c057"
+      "sha256": "cd7952895a7e1e6051422e80d0e94395336be3f1de03da61f8245b96becdb481"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate2-durable-rollback.json",
       "bytes": 2001,
-      "sha256": "c1b27bfb1ec9041d086e0f533ea2d58676f35d8b68c35a791c7842359a1f5044"
+      "sha256": "d90a1c12c9f34182d15c04cc589f80b5507f1de78481854f444ac45ce51c507d"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate3-credit-winner.json",
       "bytes": 3664,
-      "sha256": "1adcce9dbdadb9fc278f4cfd695405cee5b6e0bc54b102ed54f84c2005c9cc0d"
+      "sha256": "24929780dce0d9762dee365c7e81225b06d392d4e07fdfb8df08c10533bc1a6f"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate4-credit-line-sale.json",
       "bytes": 3531,
-      "sha256": "f21404af3470d663ea6a7114d15f1119b3ae4b29dc6942430676704f7190d271"
+      "sha256": "3fba685baee37b70f7a86c714fc64b59d26ca4fc390b18b28332a247988205a1"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate5-inventory-rollback.json",
       "bytes": 3297,
-      "sha256": "7589edf2c7e73a48cdc37d0a595d5ae8ea50cca33687d9be1f40fe7a0cbed0fc"
+      "sha256": "a8e6c599dc74af4e57658048d71760ae4e2e7c2f77aa3c58b558d2745d27c774"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate6-annulment-idempotency.json",
       "bytes": 2590,
-      "sha256": "fff1ace675ec005102a99ba3561b79cf44f73f698e1c57d61b84ea37d069767a"
+      "sha256": "2aa8cfc6fc0c8b66d30c37c88ec330ce29c7c01e543ad21b9b49577dc597bc30"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate7-credit-payment-identity.json",
       "bytes": 3079,
-      "sha256": "0907458e1bd916765f1a5712706bf047925587744d6e82295a8d72153f3cbbcb"
+      "sha256": "47894d29171aa1746897c05916ae7c526fc76752d3a01652d91557f4040bc5e5"
     },
     {
       "path": "evidence/v1.2/release-invariants/gate8-v10-dormancy.json",
       "bytes": 7117,
-      "sha256": "980aceed44d739cac0cd20d0fa54f226b70f8e0d3f698c1258805c4f57b96683"
+      "sha256": "384a36ea8d9b1f62c416981843778822ec9cc1c956eea5de36004f47c4b7d5de"
     },
     {
       "path": "evidence/v1.2/remote-read.json",
-      "bytes": 1645,
-      "sha256": "bd664d9c73834d67a7106f4aa8db6046c695c638b21282b64aa2a4280064a8fa"
+      "bytes": 1644,
+      "sha256": "9460f10ac6c9f9a48920c3446d9fd26b6ad6889e563131c7ad4aa8ec3ded46ff"
+    },
+    {
+      "path": "evidence/v1.2/remote-release.json",
+      "bytes": 1890,
+      "sha256": "98e16ee224304132a37c506f118714f09cc273c3e99102d1640b075cb45b6a9f"
     },
     {
       "path": "evidence/v1.2/security-audit.json",
-      "bytes": 712,
-      "sha256": "af86a296b5158c915ff09309b77bb129c5a3127b7b4fa830d524a47ff64fbca6"
+      "bytes": 776,
+      "sha256": "e384365b4775a68f4a95e708e8ee2939b68ec3745da043b8dee57fa6842f6ec0"
     },
     {
       "path": "tests/backup-complete.test.mjs",
@@ -540,14 +590,19 @@
       "sha256": "af52ef9f70d3eedc4a828043d4fa44e6a996968601cf5d3da5b9c87937f66c21"
     },
     {
+      "path": "tests/cloud-sync/hosted-reader.mjs",
+      "bytes": 3882,
+      "sha256": "10fa76512612a27f758f357cb7773852b81e5558b6a1d27e1f0b42dbcf27f740"
+    },
+    {
       "path": "tests/cloud-sync/outbox-sync.test.mjs",
       "bytes": 15216,
       "sha256": "ed0b067f2ae1bb3d182910a5e0bf92b42d855e878c30adeac3a9cc74a217f7e8"
     },
     {
       "path": "tests/cloud-sync/rc-browser.mjs",
-      "bytes": 13290,
-      "sha256": "21521ff9e31c883692f665239679c7d839f964bec02fac5ec29bed237d8af722"
+      "bytes": 13460,
+      "sha256": "70e719f8e21d764a93cf6c5fc012643cc6a9688f159247263baf573f7834ef11"
     },
     {
       "path": "tests/cloud-sync/read-only.test.mjs",
@@ -926,13 +981,13 @@
     },
     {
       "path": "tools/cloudflare-lab/.gitignore",
-      "bytes": 78,
-      "sha256": "e1e0b821413fcef89665b5ca136b6ea4c3004469ecf41664ef15b6af31b732ac"
+      "bytes": 94,
+      "sha256": "7b536d8c343e7cf243e440532bd0d15ccd28e564931d4cd1f6cc51b6c3dcde94"
     },
     {
       "path": "tools/cloudflare-lab/README.md",
-      "bytes": 4094,
-      "sha256": "1cac906c14c8ddbe1ba5d796e80c2b1ee5626588a6d3ea55ad4b132bac93ed9f"
+      "bytes": 4522,
+      "sha256": "a9a7bcbfac346aaaacc3072bd4c2e86798d3faf073870d9fbd442586b5d45fe7"
     },
     {
       "path": "tools/cloudflare-lab/migrations/0001_sync_operations.sql",
@@ -955,6 +1010,11 @@
       "sha256": "7da5017baaf73768af92f33be9c9e0f327d7ec2e9eb0fb35e6bf2dba2f61592c"
     },
     {
+      "path": "tools/cloudflare-lab/scripts/build-reader.mjs",
+      "bytes": 1399,
+      "sha256": "83857d8bf8a45906bd18d5257c18f69dc607764736a29c1a537a311350a02baf"
+    },
+    {
       "path": "tools/cloudflare-lab/src/worker.js",
       "bytes": 11963,
       "sha256": "68372f577c6636de65318887b860f57cfce1f7d0211a2724914d29a945ef4013"
@@ -970,14 +1030,19 @@
       "sha256": "7494177b14977d2a6bc2cb2733fa8d2e12c30494339585e36c3965b88ad40d09"
     },
     {
+      "path": "tools/cloudflare-lab/test/remote-release.test.mjs",
+      "bytes": 4199,
+      "sha256": "2f1537275af9356a015a67d756bdad9a9c5cf3f2804fbb20723b6c2e1f45b0aa"
+    },
+    {
       "path": "tools/cloudflare-lab/test/sync-operations.test.mjs",
       "bytes": 4645,
       "sha256": "468d8f7d4dd86aaaeffa99e9804fc60c191fe7b3f5c45a2f9c05e9051e351b4a"
     },
     {
       "path": "tools/cloudflare-lab/wrangler.jsonc",
-      "bytes": 445,
-      "sha256": "66fc073dbd9c60acb9382a799e37d915f96480390ccb3323a369edd2e17a3160"
+      "bytes": 679,
+      "sha256": "beed4afdb2877c59f67089fb89ddfc3a0c4336b2fc78a7f74336da1b18f19d86"
     }
   ]
 }

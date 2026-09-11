@@ -1,7 +1,7 @@
 {
-  "at": "2026-09-11T04:55:17.167Z",
-  "scope": "allowed release sources and evidence only",
-  "scannedFiles": 194,
+  "at": "2026-09-11T13:59:52.586Z",
+  "scope": "allowed source and evidence paths",
+  "scannedFiles": 207,
   "knownSecretNamesScanned": [
     "CLOUDFLARE_API_TOKEN",
     "READ_TOKEN",
@@ -27,7 +27,9 @@
       "unchanged": true
     }
   ],
-  "remoteWriterCredentialVerified": false,
+  "productChangedSinceCheckpoint": false,
+  "credentialsTracked": false,
+  "remoteWriterCredentialVerified": true,
   "physicalSecondDeviceVerified": false,
   "productionReady": false
 }

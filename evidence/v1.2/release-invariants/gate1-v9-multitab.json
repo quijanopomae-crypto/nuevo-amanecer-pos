@@ -1,7 +1,7 @@
 {
   "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
   "branch": "hardening/critical-write-gates",
-  "generatedAt": "2026-09-11T04:51:34.354Z",
+  "generatedAt": "2026-09-11T11:26:20.757Z",
   "gate": "GATE 1 — V9 MULTI-TAB CHARACTERIZATION",
   "verdict": "PASS",
   "singleWriterRestriction": "DOCUMENTED",

@@ -1,7 +1,7 @@
 {
   "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
   "branch": "hardening/critical-write-gates",
-  "generatedAt": "2026-09-11T04:51:34.521Z",
+  "generatedAt": "2026-09-11T11:26:21.552Z",
   "gate": "GATE 2 — DURABLE ROLLBACK",
   "verdict": "PASS",
   "method": "harness: localStorage saboteado (durable=false), sessionStorage sano (temporary)",
