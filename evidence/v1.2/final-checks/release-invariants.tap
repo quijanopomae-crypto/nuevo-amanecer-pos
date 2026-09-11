@@ -1,0 +1,300 @@
+TAP version 13
+# Subtest: G1.1 — V9 serializa escrituras dentro de una pestaña (_naPersistChain FIFO)
+ok 1 - G1.1 — V9 serializa escrituras dentro de una pestaña (_naPersistChain FIFO)
+  ---
+  duration_ms: 10.6318
+  type: 'test'
+  ...
+# Subtest: G1.2 — V9 NO tiene CAS cross-tab (sin Web Locks / BroadcastChannel / storage listener / revisiones)
+ok 2 - G1.2 — V9 NO tiene CAS cross-tab (sin Web Locks / BroadcastChannel / storage listener / revisiones)
+  ---
+  duration_ms: 24.0792
+  type: 'test'
+  ...
+# Subtest: G1.3 — Escritura V9 = overwrite completo del snapshot (superficie last-writer-wins)
+ok 3 - G1.3 — Escritura V9 = overwrite completo del snapshot (superficie last-writer-wins)
+  ---
+  duration_ms: 5.1604
+  type: 'test'
+  ...
+# Subtest: G1.4 — RUNTIME: dos pestañas reales + localStorage compartido → last-writer-wins
+ok 4 - G1.4 — RUNTIME: dos pestañas reales + localStorage compartido → last-writer-wins
+  ---
+  duration_ms: 155.3026
+  type: 'test'
+  ...
+# Subtest: G1.5 — V10 contiene la mitigación futura y permanece dormante
+ok 5 - G1.5 — V10 contiene la mitigación futura y permanece dormante
+  ---
+  duration_ms: 15.9546
+  type: 'test'
+  ...
+# Subtest: G1.6 — El orden de carga real mantiene el comportamiento caracterizado
+ok 6 - G1.6 — El orden de carga real mantiene el comportamiento caracterizado
+  ---
+  duration_ms: 3.325
+  type: 'test'
+  ...
+# Subtest: G1.7 — Evidencia: documentación de la restricción UNA SOLA PESTAÑA ACTIVA DE ESCRITURA
+ok 7 - G1.7 — Evidencia: documentación de la restricción UNA SOLA PESTAÑA ACTIVA DE ESCRITURA
+  ---
+  duration_ms: 2.9666
+  type: 'test'
+  ...
+# [Venta] No se confirmó la operación: Error
+# Subtest: G2.0 — El patrón backup→persist→rollback existe en las cinco operaciones
+ok 8 - G2.0 — El patrón backup→persist→rollback existe en las cinco operaciones
+  ---
+  duration_ms: 12.0292
+  type: 'test'
+  ...
+# Subtest: G2.1 — VENTA: fallo de persistencia restaura venta, stock, caja y conserva el carrito
+ok 9 - G2.1 — VENTA: fallo de persistencia restaura venta, stock, caja y conserva el carrito
+  ---
+  duration_ms: 178.2121
+  type: 'test'
+  ...
+# Subtest: G2.2 — PAGO DE CRÉDITO: fallo de persistencia restaura crédito y caja
+ok 10 - G2.2 — PAGO DE CRÉDITO: fallo de persistencia restaura crédito y caja
+  ---
+  duration_ms: 38.0851
+  type: 'test'
+  ...
+# Subtest: G2.3 — CAJA (movimiento): fallo de persistencia restaura cajMovs
+ok 11 - G2.3 — CAJA (movimiento): fallo de persistencia restaura cajMovs
+  ---
+  duration_ms: 28.4413
+  type: 'test'
+  ...
+# Subtest: G2.4 — CAJA (gasto): fallo de persistencia restaura gastos y cajMovs
+ok 12 - G2.4 — CAJA (gasto): fallo de persistencia restaura gastos y cajMovs
+  ---
+  duration_ms: 26.8541
+  type: 'test'
+  ...
+# Subtest: G2.5 — INVENTARIO: fallo de persistencia restaura el stock anterior
+ok 13 - G2.5 — INVENTARIO: fallo de persistencia restaura el stock anterior
+  ---
+  duration_ms: 23.9076
+  type: 'test'
+  ...
+# Subtest: G2.6 — Control: con persistencia sana cada camino SÍ persiste (guarda anti-falso-PASS)
+ok 14 - G2.6 — Control: con persistencia sana cada camino SÍ persiste (guarda anti-falso-PASS)
+  ---
+  duration_ms: 65.4188
+  type: 'test'
+  ...
+# Subtest: G3.1 — Cadena de definiciones: inline-02 (legacy) → inline-04 (política F7) → inline-07 (wrapper F10 WINNER)
+ok 15 - G3.1 — Cadena de definiciones: inline-02 (legacy) → inline-04 (política F7) → inline-07 (wrapper F10 WINNER)
+  ---
+  duration_ms: 23.3355
+  type: 'test'
+  ...
+# Subtest: G3.2 — La política activa es la evaluación F7 por línea (no el score sugerido legacy)
+ok 16 - G3.2 — La política activa es la evaluación F7 por línea (no el score sugerido legacy)
+  ---
+  duration_ms: 6.2969
+  type: 'test'
+  ...
+# Subtest: G3.3 — RUNTIME: el winner final ES el wrapper de autorización F10
+ok 17 - G3.3 — RUNTIME: el winner final ES el wrapper de autorización F10
+  ---
+  duration_ms: 119.6291
+  type: 'test'
+  ...
+# Subtest: G3.4 — RUNTIME: el winner persiste el crédito (identidad preservada en memoria y durable)
+ok 18 - G3.4 — RUNTIME: el winner persiste el crédito (identidad preservada en memoria y durable)
+  ---
+  duration_ms: 32.1342
+  type: 'test'
+  ...
+# Subtest: G3.5 — RUNTIME: rollback ante fallo de persistencia (sin crédito huérfano ni identidad parcial)
+ok 19 - G3.5 — RUNTIME: rollback ante fallo de persistencia (sin crédito huérfano ni identidad parcial)
+  ---
+  duration_ms: 28.1294
+  type: 'test'
+  ...
+# Subtest: G3.6 — RUNTIME: sin autorización F10 no se crea crédito (el wrapper es obligatorio)
+ok 20 - G3.6 — RUNTIME: sin autorización F10 no se crea crédito (el wrapper es obligatorio)
+  ---
+  duration_ms: 22.3082
+  type: 'test'
+  ...
+# Subtest: G4.1 — Estático: _naPaymentState winner es el override F7 con validación de línea
+ok 21 - G4.1 — Estático: _naPaymentState winner es el override F7 con validación de línea
+  ---
+  duration_ms: 27.1003
+  type: 'test'
+  ...
+# Subtest: G4.2 — RUNTIME: sin elegibilidad NO se crea crédito
+ok 22 - G4.2 — RUNTIME: sin elegibilidad NO se crea crédito
+  ---
+  duration_ms: 111.206
+  type: 'test'
+  ...
+# Subtest: G4.3 — RUNTIME: si el total excede la línea disponible NO se crea crédito
+ok 23 - G4.3 — RUNTIME: si el total excede la línea disponible NO se crea crédito
+  ---
+  duration_ms: 28.8853
+  type: 'test'
+  ...
+# Subtest: G4.4 — RUNTIME: política deshabilitada bloquea la venta a crédito
+ok 24 - G4.4 — RUNTIME: política deshabilitada bloquea la venta a crédito
+  ---
+  duration_ms: 20.5892
+  type: 'test'
+  ...
+# Subtest: G4.5 — RUNTIME: si procede, venta y crédito quedan enlazados (y persisten enlazados)
+ok 25 - G4.5 — RUNTIME: si procede, venta y crédito quedan enlazados (y persisten enlazados)
+  ---
+  duration_ms: 38.3726
+  type: 'test'
+  ...
+# Subtest: G4.6 — RUNTIME: la venta a crédito exige caja abierta (comportamiento actual)
+ok 26 - G4.6 — RUNTIME: la venta a crédito exige caja abierta (comportamiento actual)
+  ---
+  duration_ms: 27.6794
+  type: 'test'
+  ...
+# Subtest: G5.1 — Estático: el WINNER de guardarMovInv es inline-16 (posterior a inline-02 e inline-07)
+ok 27 - G5.1 — Estático: el WINNER de guardarMovInv es inline-16 (posterior a inline-02 e inline-07)
+  ---
+  duration_ms: 13.0158
+  type: 'test'
+  ...
+# Subtest: G5.2 — RUNTIME: el winner final tiene autorización, guard y rollback inline-16
+ok 28 - G5.2 — RUNTIME: el winner final tiene autorización, guard y rollback inline-16
+  ---
+  duration_ms: 99.7936
+  type: 'test'
+  ...
+# Subtest: G5.3 — RUNTIME: salida mayor al stock queda BLOQUEADA (sin persistir nada)
+ok 29 - G5.3 — RUNTIME: salida mayor al stock queda BLOQUEADA (sin persistir nada)
+  ---
+  duration_ms: 27.8667
+  type: 'test'
+  ...
+# Subtest: G5.4 — RUNTIME: guard contra doble ejecución (_naInventoryMoveBusy)
+ok 30 - G5.4 — RUNTIME: guard contra doble ejecución (_naInventoryMoveBusy)
+  ---
+  duration_ms: 33.0083
+  type: 'test'
+  ...
+# Subtest: G5.5 — RUNTIME: fallo de persistencia restaura el stock anterior
+ok 31 - G5.5 — RUNTIME: fallo de persistencia restaura el stock anterior
+  ---
+  duration_ms: 30.9787
+  type: 'test'
+  ...
+# Subtest: G5.6 — RUNTIME: sin autorización F10 el movimiento no se ejecuta
+ok 32 - G5.6 — RUNTIME: sin autorización F10 el movimiento no se ejecuta
+  ---
+  duration_ms: 27.4613
+  type: 'test'
+  ...
+# Subtest: G5.7 — RUNTIME: comportamiento actual del AJUSTE queda preservado
+ok 33 - G5.7 — RUNTIME: comportamiento actual del AJUSTE queda preservado
+  ---
+  duration_ms: 18.6911
+  type: 'test'
+  ...
+# [Persistencia] No se pudo escribir la configuración de seguridad local: Error
+# Subtest: G6.1 — Estático: winner de anularV y guards de idempotencia
+ok 34 - G6.1 — Estático: winner de anularV y guards de idempotencia
+  ---
+  duration_ms: 22.183
+  type: 'test'
+  ...
+# Subtest: G6.2 — RUNTIME: primera anulación crea exactamente UN reversal enlazado
+ok 35 - G6.2 — RUNTIME: primera anulación crea exactamente UN reversal enlazado
+  ---
+  duration_ms: 84.5255
+  type: 'test'
+  ...
+# Subtest: G6.3 — RUNTIME: segunda anulación NO crea otro reversal
+ok 36 - G6.3 — RUNTIME: segunda anulación NO crea otro reversal
+  ---
+  duration_ms: 36.8919
+  type: 'test'
+  ...
+# Subtest: G6.4 — RUNTIME: reversalOf es único
+ok 37 - G6.4 — RUNTIME: reversalOf es único
+  ---
+  duration_ms: 25.9748
+  type: 'test'
+  ...
+# Subtest: G6.5 — RUNTIME: el rollback de la anulación también es durable
+ok 38 - G6.5 — RUNTIME: el rollback de la anulación también es durable
+  ---
+  duration_ms: 31.4753
+  type: 'test'
+  ...
+# Subtest: G7.1 — Estático: winner de confirmarPago y propagación de identidad en la base
+ok 39 - G7.1 — Estático: winner de confirmarPago y propagación de identidad en la base
+  ---
+  duration_ms: 17.0876
+  type: 'test'
+  ...
+# Subtest: G7.2 — RUNTIME: pago digital preserva pagoId y lo propaga al movimiento de caja
+ok 40 - G7.2 — RUNTIME: pago digital preserva pagoId y lo propaga al movimiento de caja
+  ---
+  duration_ms: 85.9197
+  type: 'test'
+  ...
+# Subtest: G7.3 — RUNTIME: dedupe digital — el número de operación no se puede reutilizar
+ok 41 - G7.3 — RUNTIME: dedupe digital — el número de operación no se puede reutilizar
+  ---
+  duration_ms: 33.7239
+  type: 'test'
+  ...
+# Subtest: G7.4 — RUNTIME: el abono no puede superar el saldo pendiente
+ok 42 - G7.4 — RUNTIME: el abono no puede superar el saldo pendiente
+  ---
+  duration_ms: 27.7533
+  type: 'test'
+  ...
+# Subtest: G7.5 — RUNTIME: pago en efectivo exige caja abierta (alcance actual)
+ok 43 - G7.5 — RUNTIME: pago en efectivo exige caja abierta (alcance actual)
+  ---
+  duration_ms: 21.3027
+  type: 'test'
+  ...
+# Subtest: G7.6 — RUNTIME: rollback del pago mantiene identidad sin residuos
+ok 44 - G7.6 — RUNTIME: rollback del pago mantiene identidad sin residuos
+  ---
+  duration_ms: 27.9535
+  type: 'test'
+  ...
+# Subtest: G8.1 — Estático: ningún archivo fuera de inline-17/18 referencia símbolos _naV10*
+ok 45 - G8.1 — Estático: ningún archivo fuera de inline-17/18 referencia símbolos _naV10*
+  ---
+  duration_ms: 8.505
+  type: 'test'
+  ...
+# Subtest: G8.2 — Estático: inline-17/18 cargados, sin listeners ni inicialización automática
+ok 46 - G8.2 — Estático: inline-17/18 cargados, sin listeners ni inicialización automática
+  ---
+  duration_ms: 3.8718
+  type: 'test'
+  ...
+# Subtest: G8.3 — RUNTIME: cargar inline-17/18 reales NO abre la DB V10 (indexedDB trampa)
+ok 47 - G8.3 — RUNTIME: cargar inline-17/18 reales NO abre la DB V10 (indexedDB trampa)
+  ---
+  duration_ms: 8.7991
+  type: 'test'
+  ...
+# Subtest: G8.4 — V10 no es requisito del release: los caminos activos no lo referencian
+ok 48 - G8.4 — V10 no es requisito del release: los caminos activos no lo referencian
+  ---
+  duration_ms: 20.197
+  type: 'test'
+  ...
+1..48
+# tests 48
+# suites 0
+# pass 48
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3356.6587

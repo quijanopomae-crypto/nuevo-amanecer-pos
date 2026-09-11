@@ -1,0 +1,53 @@
+{
+  "at": "2026-09-11T20:27:14.140Z",
+  "directory": "C:\\Users\\ELISER~1\\AppData\\Local\\Temp\\na-v12-final-TS687q",
+  "checks": [
+    {
+      "name": "invalid_sync_credential_not_saved",
+      "result": "PASS"
+    },
+    {
+      "name": "current_sync_credential_verified_saved_and_hidden",
+      "result": "PASS"
+    },
+    {
+      "name": "invalid_replacement_preserves_saved_configuration",
+      "result": "PASS"
+    },
+    {
+      "name": "prepared_package_pos_boots_with_empty_isolated_outbox",
+      "result": "PASS"
+    },
+    {
+      "name": "real_ocr_worker_wasm_and_spanish_resources_from_package",
+      "result": "PASS"
+    },
+    {
+      "name": "no_cloud_writes_no_local_missing_assets_no_page_errors",
+      "result": "PASS"
+    }
+  ],
+  "cloudRequests": [
+    {
+      "method": "GET",
+      "path": "/sync/operations/setup-cbfb54f0-d783-47f2-a738-27acab2520e4"
+    },
+    {
+      "method": "GET",
+      "path": "/sync/operations/setup-035392f8-8a09-4f7e-b93e-52607de75396"
+    },
+    {
+      "method": "GET",
+      "path": "/sync/operations/setup-6fd9313c-9869-49e0-97c3-38eceec9ecab"
+    }
+  ],
+  "physicalSecondDevice": false,
+  "commercialProfileConfigured": false,
+  "commercialDataBackupCreated": false,
+  "isolatedBrowserContext": true,
+  "ocr": {
+    "ok": true,
+    "recognized": true,
+    "error": null
+  }
+}

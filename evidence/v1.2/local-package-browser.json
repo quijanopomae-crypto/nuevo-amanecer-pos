@@ -1,0 +1,53 @@
+{
+  "at": "2026-09-11T17:40:40.816Z",
+  "directory": "C:\\Users\\eliser rusbel quijan\\AppData\\Local\\NuevoAmanecer\\V1.2\\release-staging",
+  "checks": [
+    {
+      "name": "invalid_sync_credential_not_saved",
+      "result": "PASS"
+    },
+    {
+      "name": "current_sync_credential_verified_saved_and_hidden",
+      "result": "PASS"
+    },
+    {
+      "name": "invalid_replacement_preserves_saved_configuration",
+      "result": "PASS"
+    },
+    {
+      "name": "prepared_package_pos_boots_with_empty_isolated_outbox",
+      "result": "PASS"
+    },
+    {
+      "name": "real_ocr_worker_wasm_and_spanish_resources_from_package",
+      "result": "PASS"
+    },
+    {
+      "name": "no_cloud_writes_no_local_missing_assets_no_page_errors",
+      "result": "PASS"
+    }
+  ],
+  "cloudRequests": [
+    {
+      "method": "GET",
+      "path": "/sync/operations/setup-70762f72-fc5a-478b-ac77-27a23e6b58e6"
+    },
+    {
+      "method": "GET",
+      "path": "/sync/operations/setup-f6cf5dd6-7144-4356-8b46-0f4fab88d5a5"
+    },
+    {
+      "method": "GET",
+      "path": "/sync/operations/setup-f8286d5d-01ce-4160-8ba2-270ac8aa0a99"
+    }
+  ],
+  "physicalSecondDevice": false,
+  "commercialProfileConfigured": false,
+  "commercialDataBackupCreated": false,
+  "isolatedBrowserContext": true,
+  "ocr": {
+    "ok": true,
+    "recognized": true,
+    "error": null
+  }
+}

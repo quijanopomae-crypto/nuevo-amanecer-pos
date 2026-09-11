@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Configurar caja — Nuevo Amanecer</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#eff5f3;color:#19332d;font:17px/1.5 system-ui,sans-serif;padding:32px 16px}main{max-width:640px;margin:auto;background:white;border:1px solid #d1dfd9;border-radius:18px;padding:32px}h1{font-size:28px;line-height:1.2;margin:0 0 16px}p{margin:12px 0}label{display:block;font-weight:650;margin-top:24px}input{width:100%;padding:12px;border:1px solid #738a81;border-radius:8px;font:inherit;margin:8px 0 16px}button,.open{display:inline-block;background:#146650;color:white;padding:12px 18px;border:0;border-radius:8px;font:inherit;text-decoration:none;cursor:pointer}button:disabled{opacity:.6;cursor:wait}.note{font-size:15px;color:#456056}.status{margin:18px 0;min-height:26px;font-weight:650}.open{background:#294f67}a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #be6c00;outline-offset:3px}@media(max-width:400px){main{padding:22px}h1{font-size:24px}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Conectar la caja a la nube</h1>
+  <p>Introduce la clave de sincronización vigente de esta caja. Se comprobará sin registrar ventas y se guardará solo en este perfil del navegador.</p>
+  <p class="note">Usa <strong>SYNC_TOKEN</strong>. La clave de lectura del teléfono no permite conectar una caja escritora.</p>
+  <form id="setupForm">
+    <label for="syncToken">Clave de sincronización</label>
+    <input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+    <button id="save" type="submit">Comprobar y guardar</button>
+  </form>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+  <p class="note">Si la caja ya está abierta, ciérrala y vuelve a abrirla después de guardar. Usa una sola pestaña para registrar ventas. Los datos que estaban en otro archivo o dirección necesitan un respaldo y restauración previos.</p>
+  <a class="open" href="/POS/index.html">Abrir POS</a>
+  <p class="note">La clave no se incluye en el respaldo de datos. Esta configuración no cambia ni renueva tus claves de Cloudflare.</p>
+</main>
+<script src="/POS/js/sync/outbox.js"></script>
+<script src="/tools/pos-local/setup.js"></script>
+</body>
+</html>

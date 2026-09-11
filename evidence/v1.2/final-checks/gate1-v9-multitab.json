@@ -1,0 +1,277 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-09-11T20:27:05.399Z",
+  "gate": "GATE 1 — V9 MULTI-TAB CHARACTERIZATION",
+  "verdict": "PASS",
+  "singleWriterRestriction": "DOCUMENTED",
+  "checks": [
+    {
+      "id": "G1.1a",
+      "description": "inline-02 encadena cada guardado sobre _naPersistChain (serialización in-tab)",
+      "result": "PASS",
+      "detail": "línea 357"
+    },
+    {
+      "id": "G1.1d",
+      "description": "los acuses cloud comparten la misma cadena FIFO sin abrir otra cola",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.1b",
+      "description": "_naQueuePersist construye el snapshot desde la MEMORIA de esta pestaña (_naBuildSnapshot)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.1c",
+      "description": "_naQueuePersist NO lee el snapshot previo del storage (no hay merge ni CAS en escritura)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/app.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/compat/legacy-globals.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/core/state.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/core/utils.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-01.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-02.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-03.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-04.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-05.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-06.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-07.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-08.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-09.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-10.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-11.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-12.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-13.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-14.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-15.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/legacy-inline/inline-16.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/modules/ticket/legacy.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/modules/ticket/overrides.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/modules/ticket/secure-print.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:js/modules/ticket/zones.js",
+      "description": "sin navigator.locks / BroadcastChannel / storage-listener",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:index.html",
+      "description": "index.html sin primitivas cross-tab",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.2:persist-path",
+      "description": "el commit V9 no compara revisiones ni versiones concurrentes",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.3a",
+      "description": "_naCommitSnapshot escribe el snapshot serializado completo",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.3b",
+      "description": "el commit no fusiona con el snapshot existente (sin read-modify-write)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.4a",
+      "description": "tras guardar B, el durable contiene el mundo de B (P1+P2)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.4b",
+      "description": "el último escritor (A) pisa el durable completo — P2 de B desaparece y el stock de A (8) reemplaza el de B (10) sin aviso",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.4c",
+      "description": "V9 no detecta el conflicto: el guardado de A reporta durable/verificado OK",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.4d",
+      "description": "dos saveAllData concurrentes en la MISMA pestaña se resuelven ambos por la cola",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.5a",
+      "description": "V10 usa Web Locks (exclusión cross-tab futura)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.5b",
+      "description": "V10 usa BroadcastChannel (aviso cross-tab futuro)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.5c",
+      "description": "V10 usa CAS por revisión (expectedRevision + comparación de snapshots)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.5d",
+      "description": "V10 dormante: ningún archivo fuera de inline-17/18 referencia símbolos _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.6a",
+      "description": "inline-02 (persistencia V9) carga antes que los wrappers de permisos y V10",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G1.7",
+      "description": "restricción single-writer documentada como evidencia",
+      "result": "PASS",
+      "detail": ""
+    }
+  ],
+  "runtime": {
+    "lastWriterWins": {
+      "durable_despues_de_B": [
+        "P1",
+        "P2"
+      ],
+      "stock_P1_en_B": 10,
+      "durable_despues_de_A": [
+        "P1"
+      ],
+      "stock_P1_final": 8
+    },
+    "concurrent_saves_resolved": 2
+  },
+  "singleWriterDocumentedAt": "evidence/release-invariants/SINGLE_TAB_WRITE_RESTRICTION.md"
+}

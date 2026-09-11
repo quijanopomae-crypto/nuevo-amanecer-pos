@@ -1,0 +1,33 @@
+{
+  "at": "2026-09-11T20:29:51.861Z",
+  "endpoint": "https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev",
+  "checks": [
+    {
+      "name": "worker_and_d1",
+      "status": 200,
+      "pass": true,
+      "secretsExposed": false
+    },
+    {
+      "name": "read_remote",
+      "status": 200,
+      "pass": true,
+      "secretsExposed": false
+    },
+    {
+      "name": "write_auth_get_only",
+      "status": 404,
+      "pass": true,
+      "secretsExposed": false
+    }
+  ],
+  "tokensDistinct": true,
+  "deployment": "dd7fed87-600d-4093-a93f-2457b2ba66c5",
+  "versions": [
+    {
+      "version_id": "db6bcb98-59c1-48c6-97a8-dcabaafca6fe",
+      "percentage": 100
+    }
+  ],
+  "cloudMutations": 0
+}

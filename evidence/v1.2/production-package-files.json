@@ -1,8 +1,11 @@
 {
-  "kind": "planned-package-not-yet-created",
+  "kind": "production-release-allowlist",
   "tag": "v1.2-production",
-  "requiresPhysicalConfirmation": true,
+  "requiresPhysicalConfirmation": false,
+  "physicalConfirmation": "PASS; explicit user confirmation on Android",
   "files": [
+    "INICIAR_POS.cmd",
+    "README.md",
     "POS/assets/README.md",
     "POS/css/base.css",
     "POS/css/components.css",
@@ -55,6 +58,8 @@
     "docs/V1.2_DEVICE_CHECK.md",
     "docs/V1.2_RECOVERY.md",
     "docs/V1.2_STATUS.md",
+    "docs/V1.2_USO.md",
+    "evidence/v1.2/production-package-files.json",
     "tools/cloudflare-lab/.gitignore",
     "tools/cloudflare-lab/migrations/0001_sync_operations.sql",
     "tools/cloudflare-lab/migrations/0002_read_only_indexes.sql",
@@ -62,6 +67,9 @@
     "tools/cloudflare-lab/package.json",
     "tools/cloudflare-lab/scripts/build-reader.mjs",
     "tools/cloudflare-lab/src/worker.js",
-    "tools/cloudflare-lab/wrangler.jsonc"
+    "tools/cloudflare-lab/wrangler.jsonc",
+    "tools/pos-local/server.mjs",
+    "tools/pos-local/setup.html",
+    "tools/pos-local/setup.js"
   ]
 }

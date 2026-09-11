@@ -1,0 +1,348 @@
+{
+  "at": "2026-09-11T17:42:31.188Z",
+  "kind": "prepared-directory-not-production-release",
+  "directory": "C:\\Users\\eliser rusbel quijan\\AppData\\Local\\NuevoAmanecer\\V1.2\\release-staging",
+  "files": [
+    {
+      "path": "INICIAR_POS.cmd",
+      "bytes": 225,
+      "sha256": "5a4118182dd2f430bb5f242c454507c57661d6188cef75eecb6e24006f093d20"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1029,
+      "sha256": "19ebc956d212c319451f31a39b82be37bf910c10313b894fb923d0f6fb65ec6c"
+    },
+    {
+      "path": "POS/assets/README.md",
+      "bytes": 73,
+      "sha256": "6033496e86d6208c611534712d8f3baca96d62c35dd708fa453100b7132860ef"
+    },
+    {
+      "path": "POS/css/base.css",
+      "bytes": 125488,
+      "sha256": "b71327bdf622d223010d7a5742cf4cd1fe816cfcb2474e7779dbf7d072ecec16"
+    },
+    {
+      "path": "POS/css/components.css",
+      "bytes": 32365,
+      "sha256": "f7b9129f71028827a4646158b6750597d9909f1b01012555564c0f025adf6197"
+    },
+    {
+      "path": "POS/css/layout.css",
+      "bytes": 8340,
+      "sha256": "44bc76d78b7a4c81b2c8f143efa7873298e793948d6000d33dd3fca2d525421c"
+    },
+    {
+      "path": "POS/css/print.css",
+      "bytes": 161,
+      "sha256": "dd08b8a1818964e18719b662021ee1f4b035264aedf652617632173ac776b485"
+    },
+    {
+      "path": "POS/css/responsive.css",
+      "bytes": 161,
+      "sha256": "dd08b8a1818964e18719b662021ee1f4b035264aedf652617632173ac776b485"
+    },
+    {
+      "path": "POS/index.html",
+      "bytes": 83949,
+      "sha256": "1c76244b1142652b2e152e7e50d0507c463c7a7326b9e38e31d884a1998e3e42"
+    },
+    {
+      "path": "POS/js/app.js",
+      "bytes": 2188,
+      "sha256": "ce9521a810e5e7f39504f7250797d2b5f6c827f2ecb14e9a8802400cdb4bfddd"
+    },
+    {
+      "path": "POS/js/catalog/reference-catalog-data.js",
+      "bytes": 821351,
+      "sha256": "5c6c6b3c865c206eada56a820f44a990aad04a8d266a44514638f8aa39f24d52"
+    },
+    {
+      "path": "POS/js/catalog/reference-catalog.js",
+      "bytes": 14820,
+      "sha256": "9c0a7b7af21ef666a1030a30f47673ee17682a696f3c4f830c8b266c5dfe0dbe"
+    },
+    {
+      "path": "POS/js/compat/legacy-globals.js",
+      "bytes": 10457,
+      "sha256": "f5e336be4afe0d2f90af4e170f4d7726165c7d0a27f7cbe0afaaa5f721553fcc"
+    },
+    {
+      "path": "POS/js/core/state.js",
+      "bytes": 13635,
+      "sha256": "1d6dbc3e4d92f33fd0bdc55d769e77ec3c6b59fc75273ad6843c44479fddb97f"
+    },
+    {
+      "path": "POS/js/core/utils.js",
+      "bytes": 3258,
+      "sha256": "71e45215c52249da905bc8168a6a726169e06f796045a3300ba54b864a8630da"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-01.js",
+      "bytes": 184298,
+      "sha256": "b3ffbb545806eaf5512ecf52bf55544cf0f6e540459e7e42a9748127a7bd8452"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-02.js",
+      "bytes": 167218,
+      "sha256": "a19c69391d055da53c270f27e73e1bb2d523daeff20287a16eb5f0892db2a155"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-03.js",
+      "bytes": 112498,
+      "sha256": "3615ec777a9828cbf717f317c4bf90e942ff733f4e337824cef69aff3ef88023"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-04.js",
+      "bytes": 33372,
+      "sha256": "45a234f30fa54058e5a49fb479e716b8e7704dfaa6924f1b16a5804eb68c9bdf"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-05.js",
+      "bytes": 23750,
+      "sha256": "bd67b98df225225953ed018f1e54c95fd15629c22bd1227b50ea62149e409a0d"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-06.js",
+      "bytes": 17880,
+      "sha256": "ef69effaac07fd7eac29efb3082a0de3be3ff04931b4204708db9f4f93b96bd5"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-07.js",
+      "bytes": 37197,
+      "sha256": "4b7abb615533e53604ceda25e0ccad8930040b7b5eb480849255344730e9e65f"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-08.js",
+      "bytes": 15644,
+      "sha256": "c7b5c6460f0be7855b195eea3dca1ffbd867460b618664ba7afc7521fb614e59"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-09.js",
+      "bytes": 3476,
+      "sha256": "dfaa5a3b615fab1a7cbfd444b514b9294b3783fda4bbed071666d0dd52b1582f"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-10.js",
+      "bytes": 12769,
+      "sha256": "5b0a3443d5111eaeed8a76c86366a093e34366db630b0799dd736ecd4d7eb29d"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-11.js",
+      "bytes": 7921,
+      "sha256": "20f33fb2ddb11c5658d762fbf2e87474d42f548b7344076dc56785eb5860c54c"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-12.js",
+      "bytes": 19975,
+      "sha256": "c5c9882f3dbd8c7ec635a8c0c4c1e2021708ce0f32fe5f3a5a20b6905a8e6d5c"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-13.js",
+      "bytes": 3248,
+      "sha256": "f7026ae000128eb4a83d9e1b9e990cc8bc7528d520a94ac6b950a6ef8957f58d"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-14.js",
+      "bytes": 6617,
+      "sha256": "e1531e825cb9d0e6d0a611d41eabc5e60a6109dc44b494664278acac44e95d51"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-15.js",
+      "bytes": 2517,
+      "sha256": "0c99a04f500177944eab8ba3f30ca9363df2bcfa50555755668758a3b5f2f184"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-16.js",
+      "bytes": 2326,
+      "sha256": "f487e7324011ac149e51e7a4a90a1efbc999b8353655d442fb5ee8c4a7750e9a"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-17.js",
+      "bytes": 95480,
+      "sha256": "6baf02e152b284c5dfb8c03deb987beffadcec7beb9828da87d0998ce490defb"
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-18.js",
+      "bytes": 22270,
+      "sha256": "e8d51c2ee90b2de08976183ffd4f0a3969abef1cd7c12958e3665f83c91e80c3"
+    },
+    {
+      "path": "POS/js/modules/ticket/legacy.js",
+      "bytes": 30843,
+      "sha256": "786e44c49c78336bd08dfdb6c0ecf025206f545afe9da14ac3167a9d75b05ece"
+    },
+    {
+      "path": "POS/js/modules/ticket/overrides.js",
+      "bytes": 2686,
+      "sha256": "1558c1f80098dda6d6dfffd3ba18abc9d5ffdeda73f87d106c203761569bf45a"
+    },
+    {
+      "path": "POS/js/modules/ticket/secure-print.js",
+      "bytes": 3360,
+      "sha256": "fe0252f97011c71f0a139445b60a631ace489d442ac8a75d2c5e619a30477704"
+    },
+    {
+      "path": "POS/js/modules/ticket/zones.js",
+      "bytes": 17654,
+      "sha256": "1195ca7313a66f4f5f3950c0bfe5667d662b801390d360a3dcd48be111b1cadd"
+    },
+    {
+      "path": "POS/js/ocr/ocr-extract.js",
+      "bytes": 7370,
+      "sha256": "3c280daab3e8e7d5ecd7f614ce83f251ae6b64464ce6d6fb39ae7dd2fe61a9c6"
+    },
+    {
+      "path": "POS/js/ocr/ocr-parse.js",
+      "bytes": 16288,
+      "sha256": "5e09c3224ce4eed75c68aa9f1ebb3a29f3d4ef6cd6fd87917ae5a3e5f63642bf"
+    },
+    {
+      "path": "POS/js/ocr/ocr-purchase-apply.js",
+      "bytes": 11522,
+      "sha256": "be7fc5d1daacbab74b6d9f0b3123af389ff73fe2ce3041daab5c51dd5461500b"
+    },
+    {
+      "path": "POS/js/ocr/ocr-purchase-engine.js",
+      "bytes": 5523,
+      "sha256": "3e9726dd13782794eadac997791657f17e9ab9778f65e16fd536db8b294b2b3c"
+    },
+    {
+      "path": "POS/js/ocr/ocr-purchase-integration.js",
+      "bytes": 13710,
+      "sha256": "61fd8e95917082a3d0d313959349231d592fa2173afe59c15201d65084c768f0"
+    },
+    {
+      "path": "POS/js/ocr/ocr-purchase-review.js",
+      "bytes": 12046,
+      "sha256": "d0b323a48bc4cc5e5f61355c48dbdff009760e58cbfabfa3aa1b921ef388e693"
+    },
+    {
+      "path": "POS/js/ocr/ocr-reference-matcher.js",
+      "bytes": 13847,
+      "sha256": "5a9591ef45a6439152deda8a2da7a693e970237526444e977f973cf4a714e7d5"
+    },
+    {
+      "path": "POS/js/ocr/vendor/tesseract-6.0.1/lang/spa.traineddata.gz",
+      "bytes": 2100190,
+      "sha256": "40be52f97b5d4eb7460073dc1f94cd546b27150333c0bf854ed7e7132db6bceb"
+    },
+    {
+      "path": "POS/js/ocr/vendor/tesseract-6.0.1/tesseract-core-simd-lstm.wasm.js",
+      "bytes": 3954852,
+      "sha256": "32146a9abe0c7166e64c338a5d4c614dd503e5cf26c82d145e721ab8617ab035"
+    },
+    {
+      "path": "POS/js/ocr/vendor/tesseract-6.0.1/tesseract.min.js",
+      "bytes": 62963,
+      "sha256": "bf2c4e50543ffaf4c2c2dc0f207540390f088d08a712de622ba82e8cee6b5547"
+    },
+    {
+      "path": "POS/js/ocr/vendor/tesseract-6.0.1/worker.min.js",
+      "bytes": 111164,
+      "sha256": "1279965e23f715295f6b2cfd9c55ad1f2ec77d4d45abd134f2098e40e31d53c0"
+    },
+    {
+      "path": "POS/js/sync/outbox.js",
+      "bytes": 17307,
+      "sha256": "80abdf504d3ff694c61b3ea8e406bce32487e2da2a7ab0765ca82e9ec4f64c8b"
+    },
+    {
+      "path": "POS/js/sync/read-only.js",
+      "bytes": 5809,
+      "sha256": "16c783c0a15184501aaf9fa8a5efcd8df412023b6e512d73bf4785ba8b11f2e5"
+    },
+    {
+      "path": "POS/read-only.html",
+      "bytes": 2580,
+      "sha256": "1b990dd31c7b2cc26641107754cabfa1ee751d780db55c56741b874e88a27389"
+    },
+    {
+      "path": "docs/V1.2_DEVICE_CHECK.md",
+      "bytes": 1273,
+      "sha256": "c8c413a496738eac16af65cd868767fda018a0bca71d5c5515e6c3a7c23e19dc"
+    },
+    {
+      "path": "docs/V1.2_RECOVERY.md",
+      "bytes": 6641,
+      "sha256": "23f51134258826c162ad51ceae31ad28a23abf149847a9ceff05491cd0fe5815"
+    },
+    {
+      "path": "docs/V1.2_STATUS.md",
+      "bytes": 8601,
+      "sha256": "9e6a17fd1c52b1e8782d3ac2d0342d8edd588b61520dfda18af47ef8356bc25a"
+    },
+    {
+      "path": "docs/V1.2_USO.md",
+      "bytes": 3503,
+      "sha256": "8306842e4a33cae99d47a0f244dd3391b4707e12ed9b74fffc8b65b9a9e8b50e"
+    },
+    {
+      "path": "evidence/v1.2/production-package-files.json",
+      "bytes": 2771,
+      "sha256": "ad9d833806059fabb0a745a14cea7e0ae6d31cc2e789453ecf178370f27ae7c9"
+    },
+    {
+      "path": "tools/cloudflare-lab/.gitignore",
+      "bytes": 94,
+      "sha256": "7b536d8c343e7cf243e440532bd0d15ccd28e564931d4cd1f6cc51b6c3dcde94"
+    },
+    {
+      "path": "tools/cloudflare-lab/migrations/0001_sync_operations.sql",
+      "bytes": 949,
+      "sha256": "28f284cb18768e7d0162d2eba6665e42d23b4b9d729bcb453b721376eceff564"
+    },
+    {
+      "path": "tools/cloudflare-lab/migrations/0002_read_only_indexes.sql",
+      "bytes": 134,
+      "sha256": "e5ff4bcde701280f0d9c822be104fff49516b2e7566088dad19d1fe9fb3360d5"
+    },
+    {
+      "path": "tools/cloudflare-lab/package-lock.json",
+      "bytes": 50028,
+      "sha256": "1ac99412bd1131a23833f345be8f299d5746d30ffd9c5a51648faeb51c318ee3"
+    },
+    {
+      "path": "tools/cloudflare-lab/package.json",
+      "bytes": 779,
+      "sha256": "7da5017baaf73768af92f33be9c9e0f327d7ec2e9eb0fb35e6bf2dba2f61592c"
+    },
+    {
+      "path": "tools/cloudflare-lab/scripts/build-reader.mjs",
+      "bytes": 1399,
+      "sha256": "83857d8bf8a45906bd18d5257c18f69dc607764736a29c1a537a311350a02baf"
+    },
+    {
+      "path": "tools/cloudflare-lab/src/worker.js",
+      "bytes": 11963,
+      "sha256": "68372f577c6636de65318887b860f57cfce1f7d0211a2724914d29a945ef4013"
+    },
+    {
+      "path": "tools/cloudflare-lab/wrangler.jsonc",
+      "bytes": 679,
+      "sha256": "beed4afdb2877c59f67089fb89ddfc3a0c4336b2fc78a7f74336da1b18f19d86"
+    },
+    {
+      "path": "tools/pos-local/server.mjs",
+      "bytes": 3671,
+      "sha256": "ddc138f53b98bf0f07dcba4d89ae10aa630776ca30c6f16b61a0e0cd6a9f009f"
+    },
+    {
+      "path": "tools/pos-local/setup.html",
+      "bytes": 2382,
+      "sha256": "827e7f6a83eee6ee5b1a1eca62575d56c9f0a5ce4d9ab1a673b2679193a3b2ac"
+    },
+    {
+      "path": "tools/pos-local/setup.js",
+      "bytes": 1847,
+      "sha256": "af6132b0f519f7e939d1f8dbcd913a929056beb1b4d2b0cccce678f2df7b2f30"
+    }
+  ],
+  "count": 67,
+  "secretFindings": 0,
+  "missingLocalReferences": [],
+  "physicalConfirmationRequired": true,
+  "zipCreated": false,
+  "productionTagCreated": false
+}

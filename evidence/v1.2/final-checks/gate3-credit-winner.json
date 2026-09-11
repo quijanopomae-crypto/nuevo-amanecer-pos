@@ -1,0 +1,128 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-09-11T20:27:05.452Z",
+  "gate": "GATE 3 — CREDIT WINNER",
+  "verdict": "PASS",
+  "winner": {
+    "laterRedefinitions": [],
+    "chain": "inline-02 (legacy) → inline-04 (política F7, base capturada) → inline-07 wrapper F10 = WINNER",
+    "runtimeWinner": "wrapper F10 (inline-07) sobre base F7 (inline-04)",
+    "persistedIdentity": {
+      "id": 1789158425391,
+      "cliId": "C1",
+      "saldo": 50
+    },
+    "rollback": "creditos restaurado; reintento produce exactamente 1 crédito"
+  },
+  "checks": [
+    {
+      "id": "G3.1a",
+      "description": "orden de carga: inline-02 < inline-04 < inline-07",
+      "result": "PASS",
+      "detail": "índices 4,8,11"
+    },
+    {
+      "id": "G3.1b",
+      "description": "inline-02 define la base legacy de guardarCred",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.1c",
+      "description": "inline-04 REDEFINE guardarCred con la política F7",
+      "result": "PASS",
+      "detail": "líneas 55"
+    },
+    {
+      "id": "G3.1d",
+      "description": "inline-07 captura la base y reasigna el wrapper",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.1e",
+      "description": "ningún archivo posterior a inline-07 redefine guardarCred",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.1f",
+      "description": "el wrapper delega en la base capturada (_naF10BaseGuardarCred.apply)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.2a",
+      "description": "la base F7 usa _naEvaluateClientCredit (línea automática/manual)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.2b",
+      "description": "la base F7 bloquea monto sobre la línea disponible",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.2c",
+      "description": "la base legacy de inline-02 (score con confirm) quedó REEMPLAZADA: el winner no la invoca",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.2d",
+      "description": "la base legacy usaba línea sugerida con confirm() (comportamiento histórico caracterizado)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.3a",
+      "description": "guardarCred (runtime) contiene la autorización F10 de credits",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.3b",
+      "description": "guardarCred (runtime) delega en la base F7 capturada",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.3c",
+      "description": "la base capturada en runtime es la política F7 (línea + persistencia verificada)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.4a",
+      "description": "identidad: id numérico (Date.now), cliId y saldo correctos",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.4b",
+      "description": "el crédito persistió: durable contiene el MISMO id y cliId",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.4c",
+      "description": "snapshot de línea: guarda línea asignada y disponible previa (política F7)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.5a",
+      "description": "rollback: memoria restaurada y durable previo intacto",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G3.6",
+      "description": "acceso denegado visible y sin registro",
+      "result": "PASS",
+      "detail": "toast: \"El cajero Frank no tiene permiso para esta acción\""
+    }
+  ]
+}

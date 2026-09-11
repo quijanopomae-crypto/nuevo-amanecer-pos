@@ -1,0 +1,20 @@
+{
+  "at": "2026-09-11T17:42:31.315Z",
+  "baseCommit": "d26d55f4bf7698237afb51f4a8445e505718081b",
+  "scannedFiles": 74,
+  "knownSecretFindings": [],
+  "packagePathsVerified": true,
+  "productUnchanged": true,
+  "workerUnchanged": true,
+  "excluded": [
+    "opencode.json",
+    "tools/turso-lab/**",
+    "nul",
+    "credentials",
+    "node_modules"
+  ],
+  "physicalSecondDevice": false,
+  "commercialProfileConfigured": false,
+  "commercialBackupVerified": false,
+  "productionReady": false
+}

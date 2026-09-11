@@ -1,0 +1,73 @@
+{
+  "at": "2026-09-11T17:38:48.288Z",
+  "worker": "nuevo-amanecer-sync-lab",
+  "url": "https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev",
+  "deployment": {
+    "id": "dd7fed87-600d-4093-a93f-2457b2ba66c5",
+    "created": "2026-09-11T16:51:28.96268Z",
+    "versions": [
+      {
+        "version_id": "db6bcb98-59c1-48c6-97a8-dcabaafca6fe",
+        "percentage": 100
+      }
+    ]
+  },
+  "bindings": [
+    {
+      "name": "nuevo_amanecer_lab",
+      "type": "d1"
+    },
+    {
+      "name": "READ_TOKEN",
+      "type": "secret_text"
+    },
+    {
+      "name": "SYNC_TOKEN",
+      "type": "secret_text"
+    }
+  ],
+  "code": {
+    "version12WasActiveBeforeFix": true,
+    "referenceV12CVersion": "0341720b-d1e2-4a30-8eec-cf302b8afc9c",
+    "activeVersion": "db6bcb98-59c1-48c6-97a8-dcabaafca6fe",
+    "referenceEtag": "3f9aedef358cab9ce3237283df643705d5f737cb5891c77c23658329cf3ce6a2",
+    "activeEtag": "3f9aedef358cab9ce3237283df643705d5f737cb5891c77c23658329cf3ce6a2",
+    "sameV12CCode": true,
+    "source": "authorizeRead reads env.READ_TOKEN and x-read-token; equal credentials return 503"
+  },
+  "tokensDistinct": true,
+  "tokenValuesRecorded": false,
+  "checks": [
+    {
+      "name": "read_current",
+      "http": 200,
+      "expected": 200,
+      "pass": true,
+      "secretExposure": false
+    },
+    {
+      "name": "missing_read",
+      "http": 401,
+      "expected": 401,
+      "pass": true,
+      "secretExposure": false
+    },
+    {
+      "name": "read_cannot_write",
+      "http": 401,
+      "expected": 401,
+      "pass": true,
+      "secretExposure": false
+    },
+    {
+      "name": "write_current_readonly_probe",
+      "http": 404,
+      "expected": 404,
+      "pass": true,
+      "secretExposure": false
+    }
+  ],
+  "physicalSecondDeviceVerified": false,
+  "commercialProfileConfigured": false,
+  "commercialBackupVerified": false
+}
