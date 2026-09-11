@@ -1,0 +1,260 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-09-11T04:51:34.546Z",
+  "gate": "GATE 8 — V10 DORMANCY",
+  "verdict": "PASS",
+  "conclusion": "V10 cargado pero dormante; sin inicialización automática; sin apertura de DB; NO es requisito del release",
+  "checks": [
+    {
+      "id": "G8.1:js/app.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/compat/legacy-globals.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/core/state.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/core/utils.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-01.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-02.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-03.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-04.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-05.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-06.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-07.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-08.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-09.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-10.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-11.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-12.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-13.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-14.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-15.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/legacy-inline/inline-16.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/modules/ticket/legacy.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/modules/ticket/overrides.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/modules/ticket/secure-print.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:js/modules/ticket/zones.js",
+      "description": "sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.1:index.html",
+      "description": "index.html sin referencias _naV10*",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2a",
+      "description": "inline-17 e inline-18 están incluidos en el orden de carga",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2b",
+      "description": "carga ANTES de legacy-globals/app (registro compat posterior; sin auto-conexión)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2:js/legacy-inline/inline-17.js:listeners",
+      "description": "cero addEventListener (nada invoca V10 automáticamente)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2:js/legacy-inline/inline-17.js:domready",
+      "description": "cero DOMContentLoaded / handlers de carga",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2:js/legacy-inline/inline-17.js:open",
+      "description": "sin llamada _naV10OpenDB a nivel de módulo (solo dentro de cuerpos de función)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2:js/legacy-inline/inline-18.js:listeners",
+      "description": "cero addEventListener (nada invoca V10 automáticamente)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2:js/legacy-inline/inline-18.js:domready",
+      "description": "cero DOMContentLoaded / handlers de carga",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.2:js/legacy-inline/inline-18.js:open",
+      "description": "sin llamada _naV10OpenDB a nivel de módulo (solo dentro de cuerpos de función)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.3:pre",
+      "description": "valor de _NA_DB_NAME replicado byte-exacto desde inline-02",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.3a",
+      "description": "la carga real de inline-17/18 NO abre IndexedDB",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.3b",
+      "description": "el estado V10 queda sin promesa de DB (_naV10DbPromise === null)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.3c",
+      "description": "las funciones V10 existen cargadas pero dormantes (disponibles, nunca invocadas)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.3d",
+      "description": "no hay ningún commit/broadcast V10 en curso (_naV10LastBroadcast === null)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.4a",
+      "description": "todos los archivos del release activo (salvo 17/18) carecen de símbolos V10",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.4b",
+      "description": "el núcleo de persistencia V9 (inline-02) opera sin V10",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G8.4c",
+      "description": "ningún winner de operación del release está definido dentro de inline-17/18",
+      "result": "PASS",
+      "detail": ""
+    }
+  ],
+  "runtime": {
+    "dbOpenAttemptsDuringLoad": 0,
+    "releaseFilesWithoutV10": 24
+  }
+}

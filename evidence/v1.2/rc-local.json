@@ -1,0 +1,61 @@
+{
+  "at": "2026-09-11T04:49:38.068Z",
+  "mode": "local-worker-fixture",
+  "checks": [
+    {
+      "name": "local_sale_and_atomic_outbox",
+      "result": "PASS"
+    },
+    {
+      "name": "offline_sale_pending",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_process_close_reopen_offline_preserves_outbox",
+      "result": "PASS"
+    },
+    {
+      "name": "real_worker_sqlite_synced",
+      "result": "PASS",
+      "operations": 6
+    },
+    {
+      "name": "same_operation_remote_idempotency",
+      "result": "PASS"
+    },
+    {
+      "name": "synced_state_survives_reload",
+      "result": "PASS"
+    },
+    {
+      "name": "separate_browser_profile_mobile_read_only",
+      "result": "PASS",
+      "physicalSecondDevice": false
+    },
+    {
+      "name": "browser_503_local_sale_and_safe_recovery",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_network_local_sale_and_safe_recovery",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_lost-ack_local_sale_and_safe_recovery",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_401_requires_explicit_retry_preserves_sale",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_409_never_overwrites_and_next_local_sale_works",
+      "result": "PASS"
+    },
+    {
+      "name": "browser_complete_backup_excludes_cloud_credentials",
+      "result": "PASS"
+    }
+  ],
+  "physicalSecondDevice": false
+}

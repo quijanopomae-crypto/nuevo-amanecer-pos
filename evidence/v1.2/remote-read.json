@@ -1,0 +1,88 @@
+{
+  "at": "2026-09-11T04:44:11.621Z",
+  "endpoint": "https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev",
+  "results": [
+    {
+      "name": "health",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "missing_read_token",
+      "status": "PASS",
+      "http": 401
+    },
+    {
+      "name": "incorrect_read_token",
+      "status": "PASS",
+      "http": 401
+    },
+    {
+      "name": "read_status",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_sales",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_sale_items",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_inventory_movements",
+      "status": "PASS",
+      "http": 200
+    },
+    {
+      "name": "read_token_cannot_write",
+      "status": "PASS",
+      "http": 401
+    },
+    {
+      "name": "read_header_cannot_write",
+      "status": "PASS",
+      "http": 401
+    },
+    {
+      "name": "deny_read_POST",
+      "status": "PASS",
+      "http": 405
+    },
+    {
+      "name": "deny_read_PUT",
+      "status": "PASS",
+      "http": 405
+    },
+    {
+      "name": "deny_read_PATCH",
+      "status": "PASS",
+      "http": 405
+    },
+    {
+      "name": "deny_read_DELETE",
+      "status": "PASS",
+      "http": 405
+    },
+    {
+      "name": "read_preflight",
+      "status": "PASS",
+      "http": 204
+    },
+    {
+      "name": "invalid_limit",
+      "status": "PASS",
+      "http": 400
+    },
+    {
+      "name": "unknown_read_route",
+      "status": "PASS",
+      "http": 404
+    }
+  ],
+  "saleItemsUsedExistingSale": false,
+  "writesAttemptedWithWriteCredential": false
+}

@@ -36,12 +36,16 @@ const INLINE_02 = 'js/legacy-inline/inline-02.js';
 const INLINE_17 = 'js/legacy-inline/inline-17.js';
 
 test('G1.1 — V9 serializa escrituras dentro de una pestaña (_naPersistChain FIFO)', () => {
+  const queue = readProductText(INLINE_02);
+  const cloudQueueStart = queue.indexOf('function _naQueueCloudSyncPersist');
+  const queueBody = queue.slice(queue.indexOf('function _naQueuePersist'), cloudQueueStart);
+  const cloudQueueBody = queue.slice(cloudQueueStart, queue.indexOf('const _naWasPersisted'));
+  const chain = /_naPersistChain\s*=\s*_naPersistChain\s*\.then\(\s*persist\s*,\s*persist\s*\)/g;
   const lines = fileMatchLines(INLINE_02, '_naPersistChain\\s*=\\s*_naPersistChain\\s*\\.then\\(\\s*persist\\s*,\\s*persist\\s*\\)');
   check('G1.1a', 'inline-02 encadena cada guardado sobre _naPersistChain (serialización in-tab)',
-    lines.length === 1, `línea ${lines[0] ?? 'no encontrada'}`);
-
-  const queue = readProductText(INLINE_02);
-  const queueBody = queue.slice(queue.indexOf('function _naQueuePersist'), queue.indexOf('const _naWasPersisted'));
+    (queueBody.match(chain) || []).length === 1, `línea ${lines[0] ?? 'no encontrada'}`);
+  check('G1.1d', 'los acuses cloud comparten la misma cadena FIFO sin abrir otra cola',
+    cloudQueueStart >= 0 && (cloudQueueBody.match(chain) || []).length === 1);
   check('G1.1b', '_naQueuePersist construye el snapshot desde la MEMORIA de esta pestaña (_naBuildSnapshot)',
     queueBody.includes('_naBuildSnapshot()'));
   check('G1.1c', '_naQueuePersist NO lee el snapshot previo del storage (no hay merge ni CAS en escritura)',

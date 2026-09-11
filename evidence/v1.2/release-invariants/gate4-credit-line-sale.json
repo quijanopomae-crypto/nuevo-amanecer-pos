@@ -1,0 +1,116 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-09-11T04:51:34.459Z",
+  "gate": "GATE 4 — CREDIT LINE SALE",
+  "verdict": "PASS",
+  "checks": [
+    {
+      "id": "G4.1a",
+      "description": "orden de carga: inline-02 < inline-04",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.1b",
+      "description": "inline-04 captura la base y reasigna _naPaymentState",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.1c",
+      "description": "ningún archivo posterior redefine _naPaymentState (winner = override F7)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.1d",
+      "description": "el override F7 valida: política habilitada, cliente, vencimiento, elegibilidad y línea disponible",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.2a",
+      "description": "_naPaymentState rechaza cliente no elegible",
+      "result": "PASS",
+      "detail": "El cliente aún no cumple S/ 1,000 en compras o S/ 400 de ganancia real."
+    },
+    {
+      "id": "G4.2b",
+      "description": "confirmarVenta no creó venta, crédito ni movimiento de caja",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.3a",
+      "description": "_naPaymentState rechaza por línea insuficiente",
+      "result": "PASS",
+      "detail": "Línea insuficiente: disponible S/ 100.00 para una venta de S/ 150.00."
+    },
+    {
+      "id": "G4.3b",
+      "description": "exceder la línea no crea crédito ni deja rastro en memoria",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.4",
+      "description": "política deshabilitada → inválida (\"desactivadas\")",
+      "result": "PASS",
+      "detail": "Las ventas a crédito están desactivadas en Configuración."
+    },
+    {
+      "id": "G4.5a",
+      "description": "estado válido con mensaje de crédito autorizado",
+      "result": "PASS",
+      "detail": "Crédito autorizado: S/ 80.00 de S/ 100.00 disponible."
+    },
+    {
+      "id": "G4.5b",
+      "description": "enlace venta→crédito: venta.creditId === credito.id",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.5c",
+      "description": "enlace crédito→venta: credito.ventaId === venta.id",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.5d",
+      "description": "el crédito nace con monto total de la venta, saldo pendiente y sin pagos",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.5e",
+      "description": "la venta queda con estado crédito y caja registra el movimiento enlazado",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.5f",
+      "description": "el enlace persiste en el snapshot durable",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G4.6",
+      "description": "bloqueo por caja cerrada informado",
+      "result": "PASS",
+      "detail": "toast: \"La caja no está abierta\""
+    }
+  ],
+  "cases": {
+    "winner": "inline-04 override de _naPaymentState (F7) → usado por confirmarVenta",
+    "noElegible": "El cliente aún no cumple S/ 1,000 en compras o S/ 400 de ganancia real.",
+    "excedeLinea": "Línea insuficiente: disponible S/ 100.00 para una venta de S/ 150.00.",
+    "politicaOff": "Las ventas a crédito están desactivadas en Configuración.",
+    "enlace": {
+      "ventaId": "V-001",
+      "creditoId": 1789102294414,
+      "monto": 80
+    }
+  }
+}

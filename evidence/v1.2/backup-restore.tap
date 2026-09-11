@@ -1,0 +1,71 @@
+TAP version 13
+# Subtest: V1.2-02 crea JSON completo con integridad sin cambiar los datos actuales
+ok 1 - V1.2-02 crea JSON completo con integridad sin cambiar los datos actuales
+  ---
+  duration_ms: 74.8071
+  type: 'test'
+  ...
+# Subtest: exportarRespaldo descarga el documento completo como JSON
+ok 2 - exportarRespaldo descarga el documento completo como JSON
+  ---
+  duration_ms: 19.8698
+  type: 'test'
+  ...
+# Subtest: crea el backup aunque Web Crypto no esté disponible
+ok 3 - crea el backup aunque Web Crypto no esté disponible
+  ---
+  duration_ms: 13.4306
+  type: 'test'
+  ...
+# Subtest: backup V1.2 válido se resuelve y pasa al sanitizador existente
+ok 4 - backup V1.2 válido se resuelve y pasa al sanitizador existente
+  ---
+  duration_ms: 81.1141
+  type: 'test'
+  ...
+# Subtest: SHA-256 válido permite resolver el payload
+ok 5 - SHA-256 válido permite resolver el payload
+  ---
+  duration_ms: 22.7428
+  type: 'test'
+  ...
+# Subtest: payload modificado después de calcular SHA-256 es rechazado
+ok 6 - payload modificado después de calcular SHA-256 es rechazado
+  ---
+  duration_ms: 18.0529
+  type: 'test'
+  ...
+# Subtest: snapshot V9 antiguo sin wrapper conserva compatibilidad
+ok 7 - snapshot V9 antiguo sin wrapper conserva compatibilidad
+  ---
+  duration_ms: 12.7232
+  type: 'test'
+  ...
+# Subtest: format y version desconocidos son rechazados
+ok 8 - format y version desconocidos son rechazados
+  ---
+  duration_ms: 13.6472
+  type: 'test'
+  ...
+# [Respaldo] Restauración rechazada: Error La integridad del respaldo no coincide
+# Subtest: rechazo por integridad no modifica el estado del POS
+ok 9 - rechazo por integridad no modifica el estado del POS
+  ---
+  duration_ms: 13.4482
+  type: 'test'
+  ...
+# Subtest: integrity null permite restaurar un snapshot válido
+ok 10 - integrity null permite restaurar un snapshot válido
+  ---
+  duration_ms: 39.13
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3215.6007

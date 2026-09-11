@@ -1,0 +1,94 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-09-11T04:51:34.454Z",
+  "gate": "GATE 6 — ANNULMENT IDEMPOTENCY",
+  "verdict": "PASS",
+  "winner": "inline-03 wrapper (_naAuthorize anularVenta) sobre base inline-02",
+  "checks": [
+    {
+      "id": "G6.1a",
+      "description": "orden de carga: inline-02 < inline-03",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.1b",
+      "description": "inline-03 captura la base y reasigna el wrapper con autorización",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.1c",
+      "description": "ningún archivo posterior redefine anularV (winner = wrapper inline-03)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.1d",
+      "description": "base tiene guard v.anulada (segunda anulación sin efecto)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.1e",
+      "description": "base tiene guard _naSaleHasReversal antes de crear un reversal económico para cualquier método",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.1f",
+      "description": "el reversal se crea con reversal:true y reversalOf:v.id",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.1g",
+      "description": "_naSaleHasReversal exige un movimiento de reversión de venta enlazado",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.2a",
+      "description": "reversal enlazado a V-001 (reversalOf)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.2b",
+      "description": "reversal es un egreso por el total de la venta",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.2c",
+      "description": "venta marcada anulada y stock repuesto (+2)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.2d",
+      "description": "auditoría de anulación autorizada registrada por el wrapper",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.3",
+      "description": "segunda anulación es no-op (idempotente)",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.4",
+      "description": "para V-001 existe exactamente un reversalOf único tras múltiples intentos",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "G6.5",
+      "description": "fallo de persistencia: venta no anulada, stock y reversales restaurados, durable previo intacto",
+      "result": "PASS",
+      "detail": ""
+    }
+  ]
+}

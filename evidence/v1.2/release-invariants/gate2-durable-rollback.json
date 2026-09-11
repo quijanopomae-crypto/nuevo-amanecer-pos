@@ -1,0 +1,49 @@
+{
+  "base": "1faf1062b9e30c96b1cdb71bf717ec03c8441e3e",
+  "branch": "hardening/critical-write-gates",
+  "generatedAt": "2026-09-11T04:51:34.521Z",
+  "gate": "GATE 2 — DURABLE ROLLBACK",
+  "verdict": "PASS",
+  "method": "harness: localStorage saboteado (durable=false), sessionStorage sano (temporary)",
+  "invariant": "estado memoria tras rollback == snapshot durable previo (sin alterar el durable previo)",
+  "checks": [
+    {
+      "id": "G2.0:venta",
+      "description": "rollback explícito cuando la persistencia no está verificada",
+      "result": "PASS",
+      "detail": "throw new Error('No se pudo confirmar el guardado permanente')"
+    },
+    {
+      "id": "G2.0:pago crédito",
+      "description": "rollback explícito cuando la persistencia no está verificada",
+      "result": "PASS",
+      "detail": "catch(error){creditos=backup.creditos;cajMovs=backup.cajMovs;"
+    },
+    {
+      "id": "G2.0:caja (movimiento)",
+      "description": "rollback explícito cuando la persistencia no está verificada",
+      "result": "PASS",
+      "detail": "cajMovs=backup;await saveAllData();"
+    },
+    {
+      "id": "G2.0:caja (gasto)",
+      "description": "rollback explícito cuando la persistencia no está verificada",
+      "result": "PASS",
+      "detail": "gastos=backup.gastos;cajMovs=backup.cajMovs;"
+    },
+    {
+      "id": "G2.0:inventario",
+      "description": "rollback explícito cuando la persistencia no está verificada",
+      "result": "PASS",
+      "detail": "product.stock=beforeStock;await saveAllData();"
+    }
+  ],
+  "paths": {
+    "venta": "PASS (memoria == snapshot durable previo; carrito conservado)",
+    "pagoCredito": "PASS (memoria == snapshot durable previo)",
+    "cajaMovimiento": "PASS (memoria == snapshot durable previo)",
+    "cajaGasto": "PASS (memoria == snapshot durable previo)",
+    "inventario": "PASS (memoria == snapshot durable previo)",
+    "controlPersistenciaSana": "PASS (venta/pago/caja/gasto/inventario persisten verificado)"
+  }
+}

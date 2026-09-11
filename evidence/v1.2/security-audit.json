@@ -1,0 +1,33 @@
+{
+  "at": "2026-09-11T04:55:17.167Z",
+  "scope": "allowed release sources and evidence only",
+  "scannedFiles": 194,
+  "knownSecretNamesScanned": [
+    "CLOUDFLARE_API_TOKEN",
+    "READ_TOKEN",
+    "SYNC_TOKEN"
+  ],
+  "findings": [],
+  "forbiddenPaths": [],
+  "preserved": [
+    {
+      "path": "opencode.json",
+      "unchanged": true
+    },
+    {
+      "path": "POS/js/sync/outbox.js",
+      "unchanged": true
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-17.js",
+      "unchanged": true
+    },
+    {
+      "path": "POS/js/legacy-inline/inline-18.js",
+      "unchanged": true
+    }
+  ],
+  "remoteWriterCredentialVerified": false,
+  "physicalSecondDeviceVerified": false,
+  "productionReady": false
+}

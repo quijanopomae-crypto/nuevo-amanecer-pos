@@ -1,6 +1,7 @@
 # cloudflare-lab
 
-Laboratorio aislado para la capa cloud del POS Nuevo Amanecer. **No toca el POS.**
+Capa cloud de V1.2 del POS Nuevo Amanecer. V9 conserva la autoridad local; el
+OUTBOX envía nuevas ventas, líneas y movimientos. El segundo dispositivo solo consulta.
 
 ```
 POS V9 (autoridad local) → OUTBOX atómico → Worker (gateway) → D1 sync_operations
@@ -12,7 +13,8 @@ POS V9 (autoridad local) → OUTBOX atómico → Worker (gateway) → D1 sync_op
 |---|---|
 | D1 | `nuevo-amanecer-lab` · `e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e` · ENAM |
 | Binding | `env.nuevo_amanecer_lab` |
-| Worker | `nuevo-amanecer-sync-lab` (subido, sin ruta pública todavía) |
+| Worker | `nuevo-amanecer-sync-lab` |
+| URL | `https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev` |
 
 ## Contrato de `sync_operations`
 
@@ -37,6 +39,22 @@ Campos técnicos añadidos a los obligatorios: `received_at` (hora del servidor,
 
 Los endpoints `/sync/*` exigen header `x-sync-token` igual al secreto `SYNC_TOKEN`. Sin secreto configurado el gateway responde `503 gateway_not_configured` (fail-closed).
 
+Consultas autenticadas mediante `x-read-token` y el secreto independiente `READ_TOKEN`:
+
+- `GET /read/status`
+- `GET /read/sales`
+- `GET /read/sales/{saleId}/items`
+- `GET /read/inventory-movements`
+
+Las listas aceptan `limit` (25 por defecto, máximo 100) y `cursor` opaco.
+Si ambos secretos coinciden, lectura y escritura quedan cerradas con HTTP 503.
+La lectura anuncia únicamente `GET, OPTIONS` y `x-read-token` en CORS;
+las respuestas JSON usan `Cache-Control: no-store`.
+
+`POS/read-only.html` carga exclusivamente el cliente de consulta. Se entrega junto
+a `POS/js/sync/read-only.js`, conservando esa estructura. La clave de lectura se
+introduce en el visor y permanece en la sesión; nunca usar allí la clave de escritura.
+
 ## Ejecutar
 
 ```sh
@@ -56,11 +74,24 @@ npm run test:d1:remote              # mismo contrato contra la D1 real
 npm run deploy                      # sube el Worker + binding D1
 ```
 
-## Pendiente manual (una sola vez, en el dashboard / con permiso explícito)
+## Estado de la verificación V1.2
 
-1. Registrar un subdominio `workers.dev` en la cuenta (`dash.cloudflare.com/<account>/workers/onboarding`). Sin él, `wrangler deploy` sube el script pero no publica URL, y `wrangler dev --remote` no arranca.
-2. `wrangler secret put SYNC_TOKEN` en el Worker.
-3. Poner `"workers_dev": true` en `wrangler.jsonc` y redeploy; luego `node test/sync-operations.test.mjs https://<worker>.<sub>.workers.dev`.
+El subdominio ya está registrado, `workers_dev` está activo y la migración
+`0002_read_only_indexes.sql` fue aplicada a la D1 indicada. READ_TOKEN fue creado
+sin reemplazar SYNC_TOKEN. El Worker publicado pasó 16 comprobaciones remotas de
+lectura y rechazo de escrituras con credenciales de lectura.
+
+Esto no certifica todavía el envío real de nuevas ventas ni un segundo dispositivo
+físico. Consultar `docs/V1.2_STATUS.md` para los gates pendientes.
+
+Prueba remota sin insertar registros, con READ_TOKEN cargado en el entorno:
+
+```sh
+node test/read-only-remote.test.mjs
+```
+
+Las pruebas de `sync-operations.test.mjs` sí insertan operaciones de laboratorio.
+No ejecutarlas sobre datos comerciales sin identificar claramente el ensayo.
 
 ## Seguridad
 

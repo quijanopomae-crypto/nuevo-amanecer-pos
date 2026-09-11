@@ -1,0 +1,1287 @@
+TAP version 13
+# Subtest: NAMES_NORMALIZED — MAYÚSCULAS + trim + espacio simple, idempotente, sin tocar contenido
+ok 1 - NAMES_NORMALIZED — MAYÚSCULAS + trim + espacio simple, idempotente, sin tocar contenido
+  ---
+  duration_ms: 70.6735
+  type: 'test'
+  ...
+# Subtest: WINNER — instalación envuelve a los winners reales y es idempotente
+ok 2 - WINNER — instalación envuelve a los winners reales y es idempotente
+  ---
+  duration_ms: 20.8948
+  type: 'test'
+  ...
+# Subtest: NEW_PRODUCT_NORMALIZATION — alta guarda el nombre normalizado
+ok 3 - NEW_PRODUCT_NORMALIZATION — alta guarda el nombre normalizado
+  ---
+  duration_ms: 26.8227
+  type: 'test'
+  ...
+# Subtest: EDIT_NORMALIZATION — edición normaliza y conserva id/stock/ledger
+ok 4 - EDIT_NORMALIZATION — edición normaliza y conserva id/stock/ledger
+  ---
+  duration_ms: 21.4923
+  type: 'test'
+  ...
+# Subtest: IMPORT_NORMALIZATION — winner _naNormalizeData cubre importación y arranque
+ok 5 - IMPORT_NORMALIZATION — winner _naNormalizeData cubre importación y arranque
+  ---
+  duration_ms: 21.9937
+  type: 'test'
+  ...
+# Subtest: INTEGRIDAD — solo cambia name: id/stock/precio/costo/ledger/historial/impuestos intactos
+ok 6 - INTEGRIDAD — solo cambia name: id/stock/precio/costo/ledger/historial/impuestos intactos
+  ---
+  duration_ms: 62.7337
+  type: 'test'
+  ...
+# Subtest: ZERO_DUPLICATES — nombres que colisionan tras normalizar NO se fusionan ni duplican
+ok 7 - ZERO_DUPLICATES — nombres que colisionan tras normalizar NO se fusionan ni duplican
+  ---
+  duration_ms: 15.8157
+  type: 'test'
+  ...
+# Subtest: T1 — alta con solo código principal funciona; integridad base
+ok 8 - T1 — alta con solo código principal funciona; integridad base
+  ---
+  duration_ms: 138.137
+  type: 'test'
+  ...
+# Subtest: T2 — 1 principal + 6 alternativos = 7 códigos en alta
+ok 9 - T2 — 1 principal + 6 alternativos = 7 códigos en alta
+  ---
+  duration_ms: 39.3192
+  type: 'test'
+  ...
+# Subtest: T3 — código 8 bloqueado en escritura nueva (helper + import)
+ok 10 - T3 — código 8 bloqueado en escritura nueva (helper + import)
+  ---
+  duration_ms: 31.9338
+  type: 'test'
+  ...
+# Subtest: T4 — un código no puede pertenecer a dos productos
+ok 11 - T4 — un código no puede pertenecer a dos productos
+  ---
+  duration_ms: 16.9692
+  type: 'test'
+  ...
+# Subtest: T5 — duplicado dentro del mismo producto bloqueado/dedupe
+ok 12 - T5 — duplicado dentro del mismo producto bloqueado/dedupe
+  ---
+  duration_ms: 53.9923
+  type: 'test'
+  ...
+# Subtest: T6 — A→B conserva A (edición real guardarProd)
+ok 13 - T6 — A→B conserva A (edición real guardarProd)
+  ---
+  duration_ms: 25.2412
+  type: 'test'
+  ...
+# Subtest: T7 — A→B→C conserva A y B
+ok 14 - T7 — A→B→C conserva A y B
+  ---
+  duration_ms: 31.3608
+  type: 'test'
+  ...
+# Subtest: T8 — A→B→C→A sin pérdida ni duplicados (guardarProd y _naSetPrincipalCode)
+ok 15 - T8 — A→B→C→A sin pérdida ni duplicados (guardarProd y _naSetPrincipalCode)
+  ---
+  duration_ms: 84.1351
+  type: 'test'
+  ...
+# Subtest: T9/T10 — búsqueda y posAddBySku resuelven los 7 códigos al mismo id
+ok 16 - T9/T10 — búsqueda y posAddBySku resuelven los 7 códigos al mismo id
+  ---
+  duration_ms: 149.4872
+  type: 'test'
+  ...
+# Subtest: T11 — editar sin tocar códigos conserva todos exactamente
+ok 17 - T11 — editar sin tocar códigos conserva todos exactamente
+  ---
+  duration_ms: 169.3686
+  type: 'test'
+  ...
+# Subtest: T12 — import update sin columna de alternativos NO vacía los existentes
+ok 18 - T12 — import update sin columna de alternativos NO vacía los existentes
+  ---
+  duration_ms: 95.1103
+  type: 'test'
+  ...
+# Subtest: T13 — import update con alternativos FUSIONA (no reemplaza)
+ok 19 - T13 — import update con alternativos FUSIONA (no reemplaza)
+  ---
+  duration_ms: 21.5191
+  type: 'test'
+  ...
+# Subtest: T14 — import que cambia el principal conserva el anterior
+ok 20 - T14 — import que cambia el principal conserva el anterior
+  ---
+  duration_ms: 30.3398
+  type: 'test'
+  ...
+# Subtest: T15 — export/import roundtrip conserva códigos
+ok 21 - T15 — export/import roundtrip conserva códigos
+  ---
+  duration_ms: 22.3016
+  type: 'test'
+  ...
+# Subtest: T16 — backup/restore con 7 códigos funciona
+ok 22 - T16 — backup/restore con 7 códigos funciona
+  ---
+  duration_ms: 93.7575
+  type: 'test'
+  ...
+# Subtest: T17 — legacy con 10 alternativos: legible, buscable, restaurable y editable
+ok 23 - T17 — legacy con 10 alternativos: legible, buscable, restaurable y editable
+  ---
+  duration_ms: 39.7003
+  type: 'test'
+  ...
+# Subtest: T18/T19 — eliminación explícita solo de alternativos; principal no removible
+ok 24 - T18/T19 — eliminación explícita solo de alternativos; principal no removible
+  ---
+  duration_ms: 17.3644
+  type: 'test'
+  ...
+# Subtest: T20-T25 — integridad: id/stock/precio/costo/ledger/historial/impuestos intactos
+ok 25 - T20-T25 — integridad: id/stock/precio/costo/ledger/historial/impuestos intactos
+  ---
+  duration_ms: 99.0255
+  type: 'test'
+  ...
+# Subtest: SAFE_ALLOWLIST — aplica exactamente los pares aprobados por ID + expectedCurrentName
+ok 26 - SAFE_ALLOWLIST — aplica exactamente los pares aprobados por ID + expectedCurrentName
+  ---
+  duration_ms: 70.7576
+  type: 'test'
+  ...
+# Subtest: FAIL_CLOSED — nombre inesperado, id incorrecto y canónico son no-op
+ok 27 - FAIL_CLOSED — nombre inesperado, id incorrecto y canónico son no-op
+  ---
+  duration_ms: 28.5091
+  type: 'test'
+  ...
+# Subtest: FRESH_SEED — el arranque real normaliza los 408 productos y aplica todos los nombres aprobados
+ok 28 - FRESH_SEED — el arranque real normaliza los 408 productos y aplica todos los nombres aprobados
+  ---
+  duration_ms: 635.094
+  type: 'test'
+  ...
+# Subtest: SEARCH_KEYS — el nombre canónico, SKU, barcode principal y alternativo siguen encontrando el producto
+ok 29 - SEARCH_KEYS — el nombre canónico, SKU, barcode principal y alternativo siguen encontrando el producto
+  ---
+  duration_ms: 19.7626
+  type: 'test'
+  ...
+# Subtest: PERSISTED_SNAPSHOT — loadAllData aplica V2B después de recuperar el snapshot V9
+ok 30 - PERSISTED_SNAPSHOT — loadAllData aplica V2B después de recuperar el snapshot V9
+  ---
+  duration_ms: 339.316
+  type: 'test'
+  ...
+# Subtest: FINAL_MISSION_CLASSIFICATION — cierra exactamente los 405 IDs en tres estados disjuntos
+ok 31 - FINAL_MISSION_CLASSIFICATION — cierra exactamente los 405 IDs en tres estados disjuntos
+  ---
+  duration_ms: 342.6644
+  type: 'test'
+  ...
+# Subtest: INTEGRITY_408 — cambian 132 names; los otros 276 productos quedan deep-equal
+ok 32 - INTEGRITY_408 — cambian 132 names; los otros 276 productos quedan deep-equal
+  ---
+  duration_ms: 383.9967
+  type: 'test'
+  ...
+# Subtest: FIELDS_UNCHANGED — códigos, stock, precio/costo e impuestos permanecen byte-equivalentes
+ok 33 - FIELDS_UNCHANGED — códigos, stock, precio/costo e impuestos permanecen byte-equivalentes
+  ---
+  duration_ms: 298.0236
+  type: 'test'
+  ...
+# Subtest: IDEMPOTENT — la segunda pasada completa es no-op
+ok 34 - IDEMPOTENT — la segunda pasada completa es no-op
+  ---
+  duration_ms: 275.5149
+  type: 'test'
+  ...
+# Subtest: BOUNDARIES — 59/60 días visibles; 61 días SIN_REPOSICION; sin historial fiable visible
+ok 35 - BOUNDARIES — 59/60 días visibles; 61 días SIN_REPOSICION; sin historial fiable visible
+  ---
+  duration_ms: 208.5056
+  type: 'test'
+  ...
+# Subtest: RESTOCK SEMANTICS — solo ENTRADA + INVENTORY_MOVE + delta positivo + timestamp fiable califica
+ok 36 - RESTOCK SEMANTICS — solo ENTRADA + INVENTORY_MOVE + delta positivo + timestamp fiable califica
+  ---
+  duration_ms: 26.7669
+  type: 'test'
+  ...
+# Subtest: SEARCH + SCANNER — ocultos no navegan en vacío, reaparecen por nombre/códigos y siguen vendibles
+ok 37 - SEARCH + SCANNER — ocultos no navegan en vacío, reaparecen por nombre/códigos y siguen vendibles
+  ---
+  duration_ms: 33.7919
+  type: 'test'
+  ...
+# Subtest: POS RUNTIME — vacío preserva orden de activos; búsqueda revela ocultos con indicador
+ok 38 - POS RUNTIME — vacío preserva orden de activos; búsqueda revela ocultos con indicador
+  ---
+  duration_ms: 70.0701
+  type: 'test'
+  ...
+# Subtest: MANUAL OVERRIDE + REACTIVATION — reposición no reactiva manual; ancla evita re-hide inmediato
+ok 39 - MANUAL OVERRIDE + REACTIVATION — reposición no reactiva manual; ancla evita re-hide inmediato
+  ---
+  duration_ms: 20.0764
+  type: 'test'
+  ...
+# Subtest: NEW RESTOCK — reactiva el estado automático, pero no el manual
+ok 40 - NEW RESTOCK — reactiva el estado automático, pero no el manual
+  ---
+  duration_ms: 59.5869
+  type: 'test'
+  ...
+# Subtest: REAL SAVE — discontinuar/reactivar solo cambia visibilidad y persiste ancla determinista
+ok 41 - REAL SAVE — discontinuar/reactivar solo cambia visibilidad y persiste ancla determinista
+  ---
+  duration_ms: 315.2127
+  type: 'test'
+  ...
+# Subtest: PERSISTENCE + BACKUP — estado manual y reactivadoAt sobreviven loadAllData y sanitizer
+ok 42 - PERSISTENCE + BACKUP — estado manual y reactivadoAt sobreviven loadAllData y sanitizer
+  ---
+  duration_ms: 105.2906
+  type: 'test'
+  ...
+# Subtest: IMPORT PRESERVATION — update no borra ni altera activo/reactivadoAt
+ok 43 - IMPORT PRESERVATION — update no borra ni altera activo/reactivadoAt
+  ---
+  duration_ms: 26.9562
+  type: 'test'
+  ...
+# Subtest: NEW PRODUCT + 408 BASELINE — alta inicia ACTIVO y catálogo sin historial no se oculta
+ok 44 - NEW PRODUCT + 408 BASELINE — alta inicia ACTIVO y catálogo sin historial no se oculta
+  ---
+  duration_ms: 60.0158
+  type: 'test'
+  ...
+# Subtest: UI + BACKUP CONTRACT — selector, badges e integración autorizada están presentes
+ok 45 - UI + BACKUP CONTRACT — selector, badges e integración autorizada están presentes
+  ---
+  duration_ms: 1.0352
+  type: 'test'
+  ...
+# Subtest: T1 — transferencia rápida no verificada queda bloqueada
+ok 46 - T1 — transferencia rápida no verificada queda bloqueada
+  ---
+  duration_ms: 109.6004
+  type: 'test'
+  ...
+# Subtest: T2 — el bloqueo no modifica ventas, stock, caja, carrito ni persistencia
+ok 47 - T2 — el bloqueo no modifica ventas, stock, caja, carrito ni persistencia
+  ---
+  duration_ms: 19.433
+  type: 'test'
+  ...
+# Subtest: T3 — transferencia verificada sin número de operación es válida
+ok 48 - T3 — transferencia verificada sin número de operación es válida
+  ---
+  duration_ms: 57.367
+  type: 'test'
+  ...
+# Subtest: T4 — transferencia verificada preserva el número de operación
+ok 49 - T4 — transferencia verificada preserva el número de operación
+  ---
+  duration_ms: 28.827
+  type: 'test'
+  ...
+# Subtest: T5 — paymentVerified persiste como true solo en la venta digital válida
+ok 50 - T5 — paymentVerified persiste como true solo en la venta digital válida
+  ---
+  duration_ms: 22.3767
+  type: 'test'
+  ...
+# Subtest: T6 — efectivo funciona sin confirmación digital y no inventa paymentVerified
+ok 51 - T6 — efectivo funciona sin confirmación digital y no inventa paymentVerified
+  ---
+  duration_ms: 53.1173
+  type: 'test'
+  ...
+# Subtest: T7 — pago mixto exige verificación digital y luego conserva su flujo
+ok 52 - T7 — pago mixto exige verificación digital y luego conserva su flujo
+  ---
+  duration_ms: 86.9333
+  type: 'test'
+  ...
+# Subtest: T8 — un intento bloqueado no abre ni imprime comprobante
+ok 53 - T8 — un intento bloqueado no abre ni imprime comprobante
+  ---
+  duration_ms: 21.9237
+  type: 'test'
+  ...
+# Subtest: T9 — el ticket no presenta un ID interno como operación bancaria
+ok 54 - T9 — el ticket no presenta un ID interno como operación bancaria
+  ---
+  duration_ms: 14.4635
+  type: 'test'
+  ...
+# Subtest: T10 — una transferencia rápida verificada persiste exactamente una vez
+ok 55 - T10 — una transferencia rápida verificada persiste exactamente una vez
+  ---
+  duration_ms: 91.679
+  type: 'test'
+  ...
+# [Persistencia] No se pudo escribir la configuración de seguridad local: Error
+# [Respaldo] Restauración rechazada: Error cashClosures: se esperaba una lista
+# Subtest: T1 — abrir → vender/operar → cerrar crea EXACTAMENTE 1 cierre histórico con los datos del turno
+ok 56 - T1 — abrir → vender/operar → cerrar crea EXACTAMENTE 1 cierre histórico con los datos del turno
+  ---
+  duration_ms: 217.5667
+  type: 'test'
+  ...
+# Subtest: T2 — abrir una segunda caja NO toca el cierre 1 (valor-equivalente)
+ok 57 - T2 — abrir una segunda caja NO toca el cierre 1 (valor-equivalente)
+  ---
+  duration_ms: 53.2351
+  type: 'test'
+  ...
+# Subtest: T3 — cerrar la segunda caja produce 2 cierres distintos
+ok 58 - T3 — cerrar la segunda caja produce 2 cierres distintos
+  ---
+  duration_ms: 61.7091
+  type: 'test'
+  ...
+# Subtest: T4 — RELOAD: ambos cierres sobreviven a la carga del snapshot durable
+ok 59 - T4 — RELOAD: ambos cierres sobreviven a la carga del snapshot durable
+  ---
+  duration_ms: 37.1295
+  type: 'test'
+  ...
+# Subtest: T5 — contado/esperado/diferencia del cierre 1 NO cambian después del turno 2
+ok 60 - T5 — contado/esperado/diferencia del cierre 1 NO cambian después del turno 2
+  ---
+  duration_ms: 197.1469
+  type: 'test'
+  ...
+# Subtest: T6 — compatibilidad legacy (snapshot sin campo, respaldo plano, import con cierres)
+ok 61 - T6 — compatibilidad legacy (snapshot sin campo, respaldo plano, import con cierres)
+  ---
+  duration_ms: 119.4336
+  type: 'test'
+  ...
+# Subtest: T7 — fallo inducido de persistencia al cerrar → rollback completo sin cierre fantasma
+ok 62 - T7 — fallo inducido de persistencia al cerrar → rollback completo sin cierre fantasma
+  ---
+  duration_ms: 82.554
+  type: 'test'
+  ...
+# Subtest: T8 — doble cierre / repetición accidental NO duplica el historial
+ok 63 - T8 — doble cierre / repetición accidental NO duplica el historial
+  ---
+  duration_ms: 53.183
+  type: 'test'
+  ...
+# Subtest: T9 — abrir/cerrar la caja actual sigue comportándose como antes
+ok 64 - T9 — abrir/cerrar la caja actual sigue comportándose como antes
+  ---
+  duration_ms: 30.5336
+  type: 'test'
+  ...
+# Subtest: T10 — control sano: la persistencia válida guarda cajEstado Y cashClosures (una sola fuente de verdad)
+ok 65 - T10 — control sano: la persistencia válida guarda cajEstado Y cashClosures (una sola fuente de verdad)
+  ---
+  duration_ms: 25.3732
+  type: 'test'
+  ...
+# Subtest: T11 — resetModule('caja') preserva el historial permanente
+ok 66 - T11 — resetModule('caja') preserva el historial permanente
+  ---
+  duration_ms: 21.6768
+  type: 'test'
+  ...
+# Subtest: T12 — reset total explícito sí puede borrar cashClosures
+ok 67 - T12 — reset total explícito sí puede borrar cashClosures
+  ---
+  duration_ms: 18.9825
+  type: 'test'
+  ...
+# Subtest: T13 — snapshot legacy sin cashClosures sigue siendo válido y carga []
+ok 68 - T13 — snapshot legacy sin cashClosures sigue siendo válido y carga []
+  ---
+  duration_ms: 19.3655
+  type: 'test'
+  ...
+# Subtest: T14 — cashClosures presente pero no-array rechaza el backup
+ok 69 - T14 — cashClosures presente pero no-array rechaza el backup
+  ---
+  duration_ms: 16.765
+  type: 'test'
+  ...
+# Subtest: T15 — contado, esperado o diferencia null/no-numérico rechazan el cierre importado
+ok 70 - T15 — contado, esperado o diferencia null/no-numérico rechazan el cierre importado
+  ---
+  duration_ms: 90.2154
+  type: 'test'
+  ...
+# Subtest: T16 — id duplicado rechaza todo el backup
+ok 71 - T16 — id duplicado rechaza todo el backup
+  ---
+  duration_ms: 25.0982
+  type: 'test'
+  ...
+# Subtest: T17 — sessionId duplicado rechaza todo el backup
+ok 72 - T17 — sessionId duplicado rechaza todo el backup
+  ---
+  duration_ms: 52.5135
+  type: 'test'
+  ...
+# Subtest: T18 — import inválido no altera memoria, durable ni cashClosures actuales
+ok 73 - T18 — import inválido no altera memoria, durable ni cashClosures actuales
+  ---
+  duration_ms: 45.8187
+  type: 'test'
+  ...
+# Subtest: T1 — pago parcial → la reversión restaura el saldo exacto
+ok 74 - T1 — pago parcial → la reversión restaura el saldo exacto
+  ---
+  duration_ms: 211.3743
+  type: 'test'
+  ...
+# Subtest: T2 — pago total → la reversión vuelve a abrir el saldo correctamente
+ok 75 - T2 — pago total → la reversión vuelve a abrir el saldo correctamente
+  ---
+  duration_ms: 72.1519
+  type: 'test'
+  ...
+# Subtest: T3 — el pago original permanece en el historial, marcado y sin botón de reversión
+ok 76 - T3 — el pago original permanece en el historial, marcado y sin botón de reversión
+  ---
+  duration_ms: 35.7424
+  type: 'test'
+  ...
+# Subtest: T4 — la reversión queda enlazada al pago original (reversalId ↔ reversalOf)
+ok 77 - T4 — la reversión queda enlazada al pago original (reversalId ↔ reversalOf)
+  ---
+  duration_ms: 50.393
+  type: 'test'
+  ...
+# Subtest: T5 — efectivo: movimiento inverso de caja exactamente una vez, cob original intacto
+ok 78 - T5 — efectivo: movimiento inverso de caja exactamente una vez, cob original intacto
+  ---
+  duration_ms: 171.8228
+  type: 'test'
+  ...
+# Subtest: T6 — pago digital: conserva identidad/referencia sin inventar datos
+ok 79 - T6 — pago digital: conserva identidad/referencia sin inventar datos
+  ---
+  duration_ms: 37.2363
+  type: 'test'
+  ...
+# Subtest: T7 — doble reversión bloqueada / idempotente
+ok 80 - T7 — doble reversión bloqueada / idempotente
+  ---
+  duration_ms: 86.1788
+  type: 'test'
+  ...
+# Subtest: T8 — fallo de persistencia → rollback completo de crédito, historial y caja
+ok 81 - T8 — fallo de persistencia → rollback completo de crédito, historial y caja
+  ---
+  duration_ms: 35.9942
+  type: 'test'
+  ...
+# Subtest: T9 — pago antiguo sin campos nuevos sigue cargando y puede revertirse
+ok 82 - T9 — pago antiguo sin campos nuevos sigue cargando y puede revertirse
+  ---
+  duration_ms: 37.1576
+  type: 'test'
+  ...
+# Subtest: T10 — tras revertir puede registrarse el pago correcto y el saldo final es exacto
+ok 83 - T10 — tras revertir puede registrarse el pago correcto y el saldo final es exacto
+  ---
+  duration_ms: 58.9885
+  type: 'test'
+  ...
+# Subtest: T11 — no se puede revertir un pago de otro crédito por ID inconsistente
+ok 84 - T11 — no se puede revertir un pago de otro crédito por ID inconsistente
+  ---
+  duration_ms: 60.0668
+  type: 'test'
+  ...
+# Subtest: T12 — operación sana persiste crédito + reversal + caja en un único snapshot V9
+ok 85 - T12 — operación sana persiste crédito + reversal + caja en un único snapshot V9
+  ---
+  duration_ms: 61.9838
+  type: 'test'
+  ...
+# Subtest: T13 — dos invocaciones concurrentes con confirmación demorada crean exactamente una reversión
+ok 86 - T13 — dos invocaciones concurrentes con confirmación demorada crean exactamente una reversión
+  ---
+  duration_ms: 51.4619
+  type: 'test'
+  ...
+# Subtest: T14 — cancelar la primera confirmación libera el lock y permite una reversión posterior
+ok 87 - T14 — cancelar la primera confirmación libera el lock y permite una reversión posterior
+  ---
+  duration_ms: 32.121
+  type: 'test'
+  ...
+# Subtest: T15 — cobro de crédito y reversal el mismo día dejan cobradoHoy neto en 0
+ok 88 - T15 — cobro de crédito y reversal el mismo día dejan cobradoHoy neto en 0
+  ---
+  duration_ms: 30.6293
+  type: 'test'
+  ...
+# Subtest: T16 — reversal de venta y otros egresos no reducen cobradoHoy de créditos
+ok 89 - T16 — reversal de venta y otros egresos no reducen cobradoHoy de créditos
+  ---
+  duration_ms: 22.3832
+  type: 'test'
+  ...
+# Subtest: T17 — pago y reversal en fechas distintas afectan solo el día correspondiente
+ok 90 - T17 — pago y reversal en fechas distintas afectan solo el día correspondiente
+  ---
+  duration_ms: 32.2405
+  type: 'test'
+  ...
+# [Venta] No se confirmó la operación: Error
+# Subtest: T1 — entrada +10: before 0 / delta +10 / after 10
+ok 91 - T1 — entrada +10: before 0 / delta +10 / after 10
+  ---
+  duration_ms: 31.2368
+  type: 'test'
+  ...
+# Subtest: T2 — salida -3: before 10 / delta -3 / after 7
+ok 92 - T2 — salida -3: before 10 / delta -3 / after 7
+  ---
+  duration_ms: 10.401
+  type: 'test'
+  ...
+# Subtest: T3 — salida que deja negativo: bloqueada, sin stock ni movement
+ok 93 - T3 — salida que deja negativo: bloqueada, sin stock ni movement
+  ---
+  duration_ms: 10.1688
+  type: 'test'
+  ...
+# Subtest: T4 — ajuste manual: requiere motivo y crea ledger
+ok 94 - T4 — ajuste manual: requiere motivo y crea ledger
+  ---
+  duration_ms: 9.0308
+  type: 'test'
+  ...
+# Subtest: T5 — venta: stock baja y crea movement enlazado a ventaId
+ok 95 - T5 — venta: stock baja y crea movement enlazado a ventaId
+  ---
+  duration_ms: 34.5161
+  type: 'test'
+  ...
+# Subtest: T6 — fallo de persistencia en venta: rollback venta + stock + inventoryMovement
+ok 96 - T6 — fallo de persistencia en venta: rollback venta + stock + inventoryMovement
+  ---
+  duration_ms: 16.2243
+  type: 'test'
+  ...
+# Subtest: T7 — anulación: crea movimiento inverso sin borrar el original
+ok 97 - T7 — anulación: crea movimiento inverso sin borrar el original
+  ---
+  duration_ms: 13.0988
+  type: 'test'
+  ...
+# Subtest: T8 — doble anulación: no duplica reversal de inventario
+ok 98 - T8 — doble anulación: no duplica reversal de inventario
+  ---
+  duration_ms: 11.6244
+  type: 'test'
+  ...
+# Subtest: T9 — edición directa no puede dejar stock negativo ni saltarse el ledger
+ok 99 - T9 — edición directa no puede dejar stock negativo ni saltarse el ledger
+  ---
+  duration_ms: 9.486
+  type: 'test'
+  ...
+# Subtest: T10 — snapshot antiguo sin inventoryMovements: carga []
+ok 100 - T10 — snapshot antiguo sin inventoryMovements: carga []
+  ---
+  duration_ms: 9.5825
+  type: 'test'
+  ...
+# Subtest: T11 — reload: los movimientos persisten exactamente
+ok 101 - T11 — reload: los movimientos persisten exactamente
+  ---
+  duration_ms: 12.3378
+  type: 'test'
+  ...
+# Subtest: T12 — import/export V9: el ledger se conserva
+ok 102 - T12 — import/export V9: el ledger se conserva
+  ---
+  duration_ms: 14.8048
+  type: 'test'
+  ...
+# Subtest: T13 — múltiples movimientos: before/delta/after forman cadena coherente
+ok 103 - T13 — múltiples movimientos: before/delta/after forman cadena coherente
+  ---
+  duration_ms: 10.0247
+  type: 'test'
+  ...
+# Subtest: T14 — fallo de persistencia de ajuste: rollback stock + ledger
+ok 104 - T14 — fallo de persistencia de ajuste: rollback stock + ledger
+  ---
+  duration_ms: 10.572
+  type: 'test'
+  ...
+# Subtest: T15 — identidad/referencia: cada movimiento queda enlazado a su operación origen
+ok 105 - T15 — identidad/referencia: cada movimiento queda enlazado a su operación origen
+  ---
+  duration_ms: 15.7943
+  type: 'test'
+  ...
+# Subtest: T16 — alta stock 10 termina en 10 y ledger 0→10
+ok 106 - T16 — alta stock 10 termina en 10 y ledger 0→10
+  ---
+  duration_ms: 18.0685
+  type: 'test'
+  ...
+# Subtest: T17 — edición/importación 10→15 termina en 15 y ledger delta +5
+ok 107 - T17 — edición/importación 10→15 termina en 15 y ledger delta +5
+  ---
+  duration_ms: 16.0359
+  type: 'test'
+  ...
+# Subtest: T18 — desactivar control no cambia stock sin movement
+ok 108 - T18 — desactivar control no cambia stock sin movement
+  ---
+  duration_ms: 6.8701
+  type: 'test'
+  ...
+# Subtest: T19 — doble anulación concurrente crea un solo SALE_REVERSAL
+ok 109 - T19 — doble anulación concurrente crea un solo SALE_REVERSAL
+  ---
+  duration_ms: 12.756
+  type: 'test'
+  ...
+# Subtest: T20 — cancelar o fallar anulación libera el lock
+ok 110 - T20 — cancelar o fallar anulación libera el lock
+  ---
+  duration_ms: 11.8075
+  type: 'test'
+  ...
+# Subtest: T21 — snapshot con inventoryMovements presente no-array se rechaza
+ok 111 - T21 — snapshot con inventoryMovements presente no-array se rechaza
+  ---
+  duration_ms: 7.9252
+  type: 'test'
+  ...
+# Subtest: T22 — snapshot inválido no altera memoria ni durable
+ok 112 - T22 — snapshot inválido no altera memoria ni durable
+  ---
+  duration_ms: 12.5117
+  type: 'test'
+  ...
+# Subtest: T23 — IDs duplicados invalidan todo el import
+ok 113 - T23 — IDs duplicados invalidan todo el import
+  ---
+  duration_ms: 13.4114
+  type: 'test'
+  ...
+# Subtest: T24 — after distinto de before + delta invalida todo el import
+ok 114 - T24 — after distinto de before + delta invalida todo el import
+  ---
+  duration_ms: 14.066
+  type: 'test'
+  ...
+# Subtest: T25 — cadena incoherente por producto invalida todo el import
+ok 115 - T25 — cadena incoherente por producto invalida todo el import
+  ---
+  duration_ms: 25.4392
+  type: 'test'
+  ...
+# [Venta] No se confirmó la operación: Error
+# Subtest: T1 — gravado S/118 guarda base S/100 e IGV S/18
+ok 116 - T1 — gravado S/118 guarda base S/100 e IGV S/18
+  ---
+  duration_ms: 64.4764
+  type: 'test'
+  ...
+# Subtest: T2 — exonerado no genera IGV
+ok 117 - T2 — exonerado no genera IGV
+  ---
+  duration_ms: 12.2726
+  type: 'test'
+  ...
+# Subtest: T3 — inafecto no genera IGV
+ok 118 - T3 — inafecto no genera IGV
+  ---
+  duration_ms: 10.9472
+  type: 'test'
+  ...
+# Subtest: T4 — venta mixta suma cada categoría sin IGV global
+ok 119 - T4 — venta mixta suma cada categoría sin IGV global
+  ---
+  duration_ms: 15.4812
+  type: 'test'
+  ...
+# Subtest: T5 — descuento calcula impuesto sobre precio efectivo
+ok 120 - T5 — descuento calcula impuesto sobre precio efectivo
+  ---
+  duration_ms: 14.8378
+  type: 'test'
+  ...
+# Subtest: T6 — múltiples gravados agregan redondeo por línea
+ok 121 - T6 — múltiples gravados agregan redondeo por línea
+  ---
+  duration_ms: 12.821
+  type: 'test'
+  ...
+# Subtest: T7 — ticket e impresión textual consumen el breakdown persistido
+ok 122 - T7 — ticket e impresión textual consumen el breakdown persistido
+  ---
+  duration_ms: 17.4456
+  type: 'test'
+  ...
+# Subtest: T8 — cambiar catálogo no altera una venta histórica
+ok 123 - T8 — cambiar catálogo no altera una venta histórica
+  ---
+  duration_ms: 12.4555
+  type: 'test'
+  ...
+# Subtest: T9 — venta legacy sin breakdown sigue cargando y usa sus saleItems
+ok 124 - T9 — venta legacy sin breakdown sigue cargando y usa sus saleItems
+  ---
+  duration_ms: 11.3029
+  type: 'test'
+  ...
+# Subtest: T10 — fallo durable revierte venta y taxBreakdown sin residuo
+ok 125 - T10 — fallo durable revierte venta y taxBreakdown sin residuo
+  ---
+  duration_ms: 13.049
+  type: 'test'
+  ...
+# Subtest: T11 — líneas pequeñas mantienen diferencia máxima de un céntimo
+ok 126 - T11 — líneas pequeñas mantienen diferencia máxima de un céntimo
+  ---
+  duration_ms: 12.0391
+  type: 'test'
+  ...
+# Subtest: T12 — incluyeIGV=false conserva el contrato real de precio final
+ok 127 - T12 — incluyeIGV=false conserva el contrato real de precio final
+  ---
+  duration_ms: 14.9149
+  type: 'test'
+  ...
+# Subtest: T13 — venta a crédito comparte exactamente el breakdown tributario
+ok 128 - T13 — venta a crédito comparte exactamente el breakdown tributario
+  ---
+  duration_ms: 11.6438
+  type: 'test'
+  ...
+# Subtest: T14 — pago mixto comparte total y breakdown tributario
+ok 129 - T14 — pago mixto comparte total y breakdown tributario
+  ---
+  duration_ms: 10.7159
+  type: 'test'
+  ...
+# Subtest: T15 — anulación no reescribe el breakdown original
+ok 130 - T15 — anulación no reescribe el breakdown original
+  ---
+  duration_ms: 13.7182
+  type: 'test'
+  ...
+# Subtest: T16 — respaldo valida y conserva el breakdown nuevo
+ok 131 - T16 — respaldo valida y conserva el breakdown nuevo
+  ---
+  duration_ms: 20.5485
+  type: 'test'
+  ...
+# Subtest: T17 — respaldo rechaza breakdown semánticamente falso aunque cuadre aritméticamente
+ok 132 - T17 — respaldo rechaza breakdown semánticamente falso aunque cuadre aritméticamente
+  ---
+  duration_ms: 21.103
+  type: 'test'
+  ...
+# [Persistencia] No se pudo escribir la configuración de seguridad local: Error
+# Subtest: T1 — efectivo: venta + anulación dejan ventas y caja neta en cero
+ok 133 - T1 — efectivo: venta + anulación dejan ventas y caja neta en cero
+  ---
+  duration_ms: 68.3051
+  type: 'test'
+  ...
+# Subtest: T2 — digital no inventa efectivo
+ok 134 - T2 — digital no inventa efectivo
+  ---
+  duration_ms: 14.5465
+  type: 'test'
+  ...
+# Subtest: T3 — mixto revierte solo su componente cash en caja física
+ok 135 - T3 — mixto revierte solo su componente cash en caja física
+  ---
+  duration_ms: 12.7054
+  type: 'test'
+  ...
+# Subtest: T4 — anulada no cuenta como venta activa del día
+ok 136 - T4 — anulada no cuenta como venta activa del día
+  ---
+  duration_ms: 14.8562
+  type: 'test'
+  ...
+# Subtest: T5 — la venta original permanece completa en el historial
+ok 137 - T5 — la venta original permanece completa en el historial
+  ---
+  duration_ms: 12.4432
+  type: 'test'
+  ...
+# Subtest: T6 — reversal separado, enlazado y con timestamp propio
+ok 138 - T6 — reversal separado, enlazado y con timestamp propio
+  ---
+  duration_ms: 16.0253
+  type: 'test'
+  ...
+# Subtest: T7 — doble anulación queda bloqueada e idempotente
+ok 139 - T7 — doble anulación queda bloqueada e idempotente
+  ---
+  duration_ms: 20.8565
+  type: 'test'
+  ...
+# Subtest: T8 — dos anulaciones concurrentes producen un solo reversal
+ok 140 - T8 — dos anulaciones concurrentes producen un solo reversal
+  ---
+  duration_ms: 14.4375
+  type: 'test'
+  ...
+# Subtest: T9 — cross-day atribuye el inverso al día del reversal sin cambiar fecha original
+ok 141 - T9 — cross-day atribuye el inverso al día del reversal sin cambiar fecha original
+  ---
+  duration_ms: 19.9842
+  type: 'test'
+  ...
+# Subtest: T10 — fallo durable revierte venta, caja, stock y reversal
+ok 142 - T10 — fallo durable revierte venta, caja, stock y reversal
+  ---
+  duration_ms: 16.4033
+  type: 'test'
+  ...
+# Subtest: T11 — cierre de caja congela el esperado neto correcto
+ok 143 - T11 — cierre de caja congela el esperado neto correcto
+  ---
+  duration_ms: 16.1778
+  type: 'test'
+  ...
+# Subtest: T12 — crédito crea reversal económico sin inventar cash
+ok 144 - T12 — crédito crea reversal económico sin inventar cash
+  ---
+  duration_ms: 17.5195
+  type: 'test'
+  ...
+# Subtest: T13 — sin referencia bancaria no se usa operation interno
+ok 145 - T13 — sin referencia bancaria no se usa operation interno
+  ---
+  duration_ms: 11.059
+  type: 'test'
+  ...
+# Subtest: T14 — reporte diario netea el movimiento sin contar venta activa
+ok 146 - T14 — reporte diario netea el movimiento sin contar venta activa
+  ---
+  duration_ms: 16.4953
+  type: 'test'
+  ...
+# Subtest: T15 — reload conserva original anulada y reversal enlazado
+ok 147 - T15 — reload conserva original anulada y reversal enlazado
+  ---
+  duration_ms: 15.2529
+  type: 'test'
+  ...
+# Subtest: T16 — combinación con pago y reversión de crédito mantiene caja neta
+ok 148 - T16 — combinación con pago y reversión de crédito mantiene caja neta
+  ---
+  duration_ms: 24.1164
+  type: 'test'
+  ...
+# Subtest: T17 — venta sin control de inventario también puede anularse
+ok 149 - T17 — venta sin control de inventario también puede anularse
+  ---
+  duration_ms: 24.7537
+  type: 'test'
+  ...
+# Subtest: C01 catalogo vacio
+ok 150 - C01 catalogo vacio
+  ---
+  duration_ms: 16.6274
+  type: 'test'
+  ...
+# Subtest: C01B gates permanentes del dataset productivo real
+ok 151 - C01B gates permanentes del dataset productivo real
+  ---
+  duration_ms: 82.7236
+  type: 'test'
+  ...
+# Subtest: C02 carga de referencias
+ok 152 - C02 carga de referencias
+  ---
+  duration_ms: 6.9149
+  type: 'test'
+  ...
+# Subtest: C03 conserva originalName tal cual (solo recorte de espacios)
+ok 153 - C03 conserva originalName tal cual (solo recorte de espacios)
+  ---
+  duration_ms: 11.7561
+  type: 'test'
+  ...
+# Subtest: C04 conserva safeName
+ok 154 - C04 conserva safeName
+  ---
+  duration_ms: 10.6573
+  type: 'test'
+  ...
+# Subtest: C05 conserva sourceRow
+ok 155 - C05 conserva sourceRow
+  ---
+  duration_ms: 9.8854
+  type: 'test'
+  ...
+# Subtest: C06 conserva referenceCode sin convertirlo en barcode del POS
+ok 156 - C06 conserva referenceCode sin convertirlo en barcode del POS
+  ---
+  duration_ms: 9.0813
+  type: 'test'
+  ...
+# Subtest: C07 conserva group
+ok 157 - C07 conserva group
+  ---
+  duration_ms: 12.1243
+  type: 'test'
+  ...
+# Subtest: C08 conserva measure sin convertirlo en unidad comercial
+ok 158 - C08 conserva measure sin convertirlo en unidad comercial
+  ---
+  duration_ms: 10.7225
+  type: 'test'
+  ...
+# Subtest: C09 codigo unico devuelve 1 candidato
+ok 159 - C09 codigo unico devuelve 1 candidato
+  ---
+  duration_ms: 10.5374
+  type: 'test'
+  ...
+# Subtest: C10 codigo duplicado devuelve multiples candidatos
+ok 160 - C10 codigo duplicado devuelve multiples candidatos
+  ---
+  duration_ms: 31.8543
+  type: 'test'
+  ...
+# Subtest: C11 codigo duplicado NO produce match automatico
+ok 161 - C11 codigo duplicado NO produce match automatico
+  ---
+  duration_ms: 16.1971
+  type: 'test'
+  ...
+# Subtest: C12 busqueda por nombre
+ok 162 - C12 busqueda por nombre
+  ---
+  duration_ms: 31.555
+  type: 'test'
+  ...
+# Subtest: C13 busqueda sin tildes
+ok 163 - C13 busqueda sin tildes
+  ---
+  duration_ms: 15.2252
+  type: 'test'
+  ...
+# Subtest: C14 busqueda case-insensitive
+ok 164 - C14 busqueda case-insensitive
+  ---
+  duration_ms: 14.9416
+  type: 'test'
+  ...
+# Subtest: C15 busqueda por codigo
+ok 165 - C15 busqueda por codigo
+  ---
+  duration_ms: 12.1322
+  type: 'test'
+  ...
+# Subtest: C16 busqueda por grupo
+ok 166 - C16 busqueda por grupo
+  ---
+  duration_ms: 11.9874
+  type: 'test'
+  ...
+# Subtest: C17 nombre repetido marcado para revision
+ok 167 - C17 nombre repetido marcado para revision
+  ---
+  duration_ms: 15.2174
+  type: 'test'
+  ...
+# Subtest: C18 no toca productos[]
+ok 168 - C18 no toca productos[]
+  ---
+  duration_ms: 9.0409
+  type: 'test'
+  ...
+# Subtest: C19 no toca stock
+ok 169 - C19 no toca stock
+  ---
+  duration_ms: 14.4073
+  type: 'test'
+  ...
+# Subtest: C20 no toca inventoryMovements
+ok 170 - C20 no toca inventoryMovements
+  ---
+  duration_ms: 12.8243
+  type: 'test'
+  ...
+# Subtest: C21 no llama applyInventoryMovement
+ok 171 - C21 no llama applyInventoryMovement
+  ---
+  duration_ms: 16.5106
+  type: 'test'
+  ...
+# Subtest: C22 no toca ventas / caja / creditos
+ok 172 - C22 no toca ventas / caja / creditos
+  ---
+  duration_ms: 14.6795
+  type: 'test'
+  ...
+# Subtest: C23 no modifica la persistencia V9
+ok 173 - C23 no modifica la persistencia V9
+  ---
+  duration_ms: 15.4375
+  type: 'test'
+  ...
+# Subtest: C24 mismo dataset -> mismos indices
+ok 174 - C24 mismo dataset -> mismos indices
+  ---
+  duration_ms: 15.7641
+  type: 'test'
+  ...
+# Subtest: C25 funciona sin DOM
+ok 175 - C25 funciona sin DOM
+  ---
+  duration_ms: 13.3711
+  type: 'test'
+  ...
+# [
+#   {
+#     "name": "Inventario 1366 desktop",
+#     "scrollOwner": ".table-wrap",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 318,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Inventario 1024 desktop",
+#     "scrollOwner": ".table-wrap",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 383,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Inventario 390 mobile",
+#     "scrollOwner": "window/documentElement",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 527,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Menú",
+#     "scrollOwner": ".main-scroll",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 58,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Ventas",
+#     "scrollOwner": ".v-list-wrap",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 286,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Clientes",
+#     "scrollOwner": ".cli-list",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 286,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Caja",
+#     "scrollOwner": ".cj-mov-wrap",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 151,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   },
+#   {
+#     "name": "Gastos",
+#     "scrollOwner": "\#gasContent",
+#     "chromeVisibleInitial": true,
+#     "chromeHiddenAfterDown": true,
+#     "verticalSpaceRecovered": 286,
+#     "firstUpStillHidden": true,
+#     "secondUpVisible": true,
+#     "topReveal": true,
+#     "noHorizontalOverflow": true
+#   }
+# ]
+# Subtest: REAL_BROWSER_GEOMETRY — chrome completo, owners reales y 8 escenarios
+ok 176 - REAL_BROWSER_GEOMETRY — chrome completo, owners reales y 8 escenarios
+  ---
+  duration_ms: 18919.2449
+  type: 'test'
+  ...
+# Subtest: HEADER_CLASS_TOGGLES_DESKTOP 1024 — scroll del contenedor activo oculta; 1↑ sigue, 2↑ muestra
+ok 177 - HEADER_CLASS_TOGGLES_DESKTOP 1024 — scroll del contenedor activo oculta; 1↑ sigue, 2↑ muestra
+  ---
+  duration_ms: 110.8835
+  type: 'test'
+  ...
+# Subtest: HEADER_CLASS_TOGGLES_DESKTOP 1366 — .main-scroll, wheel/trackpad y near-top
+ok 178 - HEADER_CLASS_TOGGLES_DESKTOP 1366 — .main-scroll, wheel/trackpad y near-top
+  ---
+  duration_ms: 514.9265
+  type: 'test'
+  ...
+# Subtest: SCROLL_OWNER_REAL — un wrapper interno dinámico gana sobre su contenedor padre
+ok 179 - SCROLL_OWNER_REAL — un wrapper interno dinámico gana sobre su contenedor padre
+  ---
+  duration_ms: 104.8758
+  type: 'test'
+  ...
+# Subtest: HEADER_CLASS_TOGGLES_DESKTOP — navegación y resize muestran/resetean
+ok 180 - HEADER_CLASS_TOGGLES_DESKTOP — navegación y resize muestran/resetean
+  ---
+  duration_ms: 196.4697
+  type: 'test'
+  ...
+# Subtest: CHROME_VISUALLY_COLLAPSES_DESKTOP — CSS retira topbar y page-chrome del layout
+ok 181 - CHROME_VISUALLY_COLLAPSES_DESKTOP — CSS retira topbar y page-chrome del layout
+  ---
+  duration_ms: 1.3411
+  type: 'test'
+  ...
+# Subtest: DOM CONTRACT — cinco módulos comparten un único wrapper page-chrome; Menú fluye
+ok 182 - DOM CONTRACT — cinco módulos comparten un único wrapper page-chrome; Menú fluye
+  ---
+  duration_ms: 0.537
+  type: 'test'
+  ...
+# Subtest: CHROME_FREES_VERTICAL_SPACE — body estable y móvil también libera los 58px globales
+ok 183 - CHROME_FREES_VERTICAL_SPACE — body estable y móvil también libera los 58px globales
+  ---
+  duration_ms: 0.4641
+  type: 'test'
+  ...
+# Subtest: MOBILE_390 — no degrada: ruta window/module-mobile-scroll
+ok 184 - MOBILE_390 — no degrada: ruta window/module-mobile-scroll
+  ---
+  duration_ms: 93.4105
+  type: 'test'
+  ...
+# Subtest: MOBILE_430 — no degrada: near-top y navegación
+ok 185 - MOBILE_430 — no degrada: near-top y navegación
+  ---
+  duration_ms: 79.2522
+  type: 'test'
+  ...
+# Subtest: T1 — scroll abajo significativo oculta el header
+ok 186 - T1 — scroll abajo significativo oculta el header
+  ---
+  duration_ms: 99.4351
+  type: 'test'
+  ...
+# Subtest: T2 — jitter/minidesplazamientos no lo ocultan
+ok 187 - T2 — jitter/minidesplazamientos no lo ocultan
+  ---
+  duration_ms: 134.1622
+  type: 'test'
+  ...
+# Subtest: T3 — primer gesto ascendente NO muestra el header
+ok 188 - T3 — primer gesto ascendente NO muestra el header
+  ---
+  duration_ms: 62.0127
+  type: 'test'
+  ...
+# Subtest: T4 — segundo gesto ascendente consecutivo SÍ lo muestra
+ok 189 - T4 — segundo gesto ascendente consecutivo SÍ lo muestra
+  ---
+  duration_ms: 202.3996
+  type: 'test'
+  ...
+# Subtest: T5 — un descenso significativo corta la secuencia ascendente
+ok 190 - T5 — un descenso significativo corta la secuencia ascendente
+  ---
+  duration_ms: 191.0558
+  type: 'test'
+  ...
+# Subtest: T6 — volver cerca del top muestra el header inmediatamente
+ok 191 - T6 — volver cerca del top muestra el header inmediatamente
+  ---
+  duration_ms: 94.6904
+  type: 'test'
+  ...
+# Subtest: T7 — config-page-scroll conserva scroll y reutiliza g-topbar-hidden
+ok 192 - T7 — config-page-scroll conserva scroll y reutiliza g-topbar-hidden
+  ---
+  duration_ms: 62.9278
+  type: 'test'
+  ...
+# Subtest: T8 — click en el backdrop de un modal cerrable con X lo cierra
+ok 193 - T8 — click en el backdrop de un modal cerrable con X lo cierra
+  ---
+  duration_ms: 14.0503
+  type: 'test'
+  ...
+# Subtest: T9 — click dentro del contenido NO cierra; modal sin X no se cierra por backdrop
+ok 194 - T9 — click dentro del contenido NO cierra; modal sin X no se cierra por backdrop
+  ---
+  duration_ms: 9.6489
+  type: 'test'
+  ...
+# Subtest: T10 — todos los guards de procesamiento bloquean el backdrop
+ok 195 - T10 — todos los guards de procesamiento bloquean el backdrop
+  ---
+  duration_ms: 10.058
+  type: 'test'
+  ...
+# Subtest: T11 — el backdrop invoca cerrarModal(id), el mismo camino que la X
+ok 196 - T11 — el backdrop invoca cerrarModal(id), el mismo camino que la X
+  ---
+  duration_ms: 9.5977
+  type: 'test'
+  ...
+# Subtest: T12 — navegación y scroll existentes siguen funcionando
+ok 197 - T12 — navegación y scroll existentes siguen funcionando
+  ---
+  duration_ms: 145.4297
+  type: 'test'
+  ...
+1..197
+# tests 197
+# suites 0
+# pass 197
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 23293.3385
