@@ -5,19 +5,30 @@
 const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const OPERATION_PATH = /^\/sync\/operations\/([^/]+)$/;
+const SALE_ITEMS_PATH = /^\/read\/sales\/([^/]+)\/items$/;
+const READ_TYPES = new Set(['sales', 'sale_items', 'inventory_movements']);
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const isRead = url.pathname.startsWith('/read/');
     try {
-      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/sync/operations'))) {
-        return cors(new Response(null, { status: 204 }));
+      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
+        return cors(new Response(null, { status: 204 }), isRead);
       }
       if (request.method === 'GET' && url.pathname === '/health') {
         return health(env);
       }
+      if (isRead) {
+        if (request.method !== 'GET') return cors(json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' }), true);
+        const denied = authorizeRead(request, env);
+        if (denied) return cors(denied, true);
+        return cors(await readRoute(url, env.nuevo_amanecer_lab), true);
+      }
       if (url.pathname.startsWith('/sync/operations')) {
-        const denied = authorize(request, env);
+        const denied = authorizeWrite(request, env);
         if (denied) return denied;
         if (request.method === 'POST' && url.pathname === '/sync/operations') {
           return insertOperation(request, env.nuevo_amanecer_lab);
@@ -29,7 +40,7 @@ export default {
       }
       return json({ error: 'not_found' }, 404);
     } catch (err) {
-      return json({ error: 'internal_error', message: String(err?.message ?? err) }, 500);
+      return cors(json({ error: 'internal_error', message: String(err?.message ?? err) }, 500), isRead);
     }
   },
 };
@@ -42,12 +53,134 @@ async function health(env) {
   return json({ ok: row?.one === 1, service: 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
 }
 
-// Fail-closed: sin SYNC_TOKEN configurado el gateway no acepta ni lee operaciones.
-function authorize(request, env) {
+// Fail-closed: escritura y lectura usan credenciales distintas y no intercambiables.
+function authorizeWrite(request, env) {
   if (!env.SYNC_TOKEN) return json({ error: 'gateway_not_configured' }, 503);
+  if (env.READ_TOKEN && constantTimeEqual(env.READ_TOKEN, env.SYNC_TOKEN)) return json({ error: 'gateway_credentials_not_separated' }, 503);
   const provided = request.headers.get('x-sync-token') ?? '';
   if (!constantTimeEqual(provided, env.SYNC_TOKEN)) return json({ error: 'unauthorized' }, 401);
   return null;
+}
+
+function authorizeRead(request, env) {
+  if (!env.READ_TOKEN) return json({ error: 'read_gateway_not_configured' }, 503);
+  if (env.SYNC_TOKEN && constantTimeEqual(env.READ_TOKEN, env.SYNC_TOKEN)) return json({ error: 'gateway_credentials_not_separated' }, 503);
+  const provided = request.headers.get('x-read-token') ?? '';
+  if (!constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
+  return null;
+}
+
+async function readRoute(url, db) {
+  if (url.pathname === '/read/status') return readStatus(db);
+  if (url.pathname === '/read/sales') return readOperations(url, db, 'sales');
+  if (url.pathname === '/read/inventory-movements') return readOperations(url, db, 'inventory_movements');
+  const match = url.pathname.match(SALE_ITEMS_PATH);
+  if (match) return readOperations(url, db, 'sale_items', decodeURIComponent(match[1]));
+  return json({ error: 'not_found' }, 404);
+}
+
+async function readStatus(db) {
+  const rows = await db
+    .prepare(
+      `SELECT entity_type, COUNT(*) AS count, MAX(received_at) AS last_received_at
+       FROM sync_operations
+       WHERE entity_type IN ('sales', 'sale_items', 'inventory_movements')
+       GROUP BY entity_type`,
+    )
+    .all();
+  const counts = { sales: 0, sale_items: 0, inventory_movements: 0 };
+  let lastReceivedAt = null;
+  for (const row of rows.results ?? []) {
+    if (!READ_TYPES.has(row.entity_type)) continue;
+    counts[row.entity_type] = Number(row.count) || 0;
+    if (row.last_received_at && (!lastReceivedAt || row.last_received_at > lastReceivedAt)) lastReceivedAt = row.last_received_at;
+  }
+  return json({ status: 'ok', counts, last_received_at: lastReceivedAt });
+}
+
+async function readOperations(url, db, entityType, saleId = null) {
+  const page = parsePage(url.searchParams);
+  if (page.error) return json({ error: page.error }, 400);
+  const where = ['entity_type = ?1'];
+  const bindings = [entityType];
+  if (saleId !== null) {
+    if (!saleId || saleId.length > 160) return json({ error: 'invalid_sale_id' }, 400);
+    where.push(`substr(entity_id, 1, length(?${bindings.length + 1}) + 1) = ?${bindings.length + 1} || ':'`);
+    bindings.push(saleId);
+  }
+  if (page.cursor) {
+    where.push(`(received_at < ?${bindings.length + 1} OR (received_at = ?${bindings.length + 1} AND operation_id < ?${bindings.length + 2}))`);
+    bindings.push(page.cursor.received_at, page.cursor.operation_id);
+  }
+  bindings.push(page.limit + 1);
+  const limitIndex = bindings.length;
+  const rows = await db
+    .prepare(
+      `SELECT operation_id, device_id, device_sequence, entity_type, entity_id, payload, created_at, received_at
+       FROM sync_operations
+       WHERE ${where.join(' AND ')}
+       ORDER BY received_at DESC, operation_id DESC
+       LIMIT ?${limitIndex}`,
+    )
+    .bind(...bindings)
+    .all();
+  const source = rows.results ?? [];
+  const hasMore = source.length > page.limit;
+  const selected = source.slice(0, page.limit);
+  const items = [];
+  for (const row of selected) {
+    let payload;
+    try { payload = JSON.parse(row.payload); } catch { return json({ error: 'invalid_stored_payload' }, 500); }
+    items.push({
+      operation_id: row.operation_id,
+      device_id: row.device_id,
+      device_sequence: row.device_sequence,
+      entity_type: row.entity_type,
+      entity_id: row.entity_id,
+      payload,
+      created_at: row.created_at,
+      received_at: row.received_at,
+    });
+  }
+  const last = selected.at(-1);
+  return json({ items, next_cursor: hasMore && last ? encodeCursor(last) : null, limit: page.limit });
+}
+
+function parsePage(searchParams) {
+  const rawLimit = searchParams.get('limit');
+  if (rawLimit !== null && !/^\d+$/.test(rawLimit)) return { error: 'invalid_limit' };
+  const limit = rawLimit === null ? DEFAULT_LIMIT : Number(rawLimit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIMIT) return { error: 'invalid_limit' };
+  const rawCursor = searchParams.get('cursor');
+  if (!rawCursor) return { limit, cursor: null };
+  try {
+    const cursor = JSON.parse(decodeBase64Url(rawCursor));
+    if (!cursor || typeof cursor.received_at !== 'string' || !Number.isFinite(Date.parse(cursor.received_at)) ||
+        typeof cursor.operation_id !== 'string' || !cursor.operation_id || cursor.operation_id.length > 160) {
+      return { error: 'invalid_cursor' };
+    }
+    return { limit, cursor };
+  } catch {
+    return { error: 'invalid_cursor' };
+  }
+}
+
+function encodeCursor(row) {
+  return encodeBase64Url(JSON.stringify({ received_at: row.received_at, operation_id: row.operation_id }));
+}
+
+function encodeBase64Url(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeBase64Url(value) {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('invalid cursor');
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4));
+  return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
 }
 
 async function insertOperation(request, db) {
@@ -140,17 +273,17 @@ function constantTimeEqual(a, b) {
   return diff === 0;
 }
 
-function cors(response) {
+function cors(response, isRead = false) {
   response.headers.set('access-control-allow-origin', '*');
-  response.headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
-  response.headers.set('access-control-allow-headers', 'content-type, x-sync-token');
+  response.headers.set('access-control-allow-methods', isRead ? 'GET, OPTIONS' : 'GET, POST, OPTIONS');
+  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'content-type, x-sync-token');
   response.headers.set('access-control-max-age', '600');
   return response;
 }
 
-function json(data, status = 200) {
+function json(data, status = 200, headers = {}) {
   return cors(new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
   }));
 }

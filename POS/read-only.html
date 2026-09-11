@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev; form-action 'none'; base-uri 'none'">
+  <title>Nuevo Amanecer — Consulta</title>
+  <style>
+    :root{color-scheme:light dark;font-family:system-ui,sans-serif}body{max-width:1100px;margin:auto;padding:24px;background:#f6f8fa;color:#172033}header,.panel{background:white;border:1px solid #dce3ea;border-radius:12px;padding:18px;margin-bottom:16px}h1,h2{margin-top:0}.notice{color:#8a4b08;font-weight:700}.config{display:grid;grid-template-columns:2fr 2fr auto;gap:10px}input,button,select{font:inherit;padding:10px;border:1px solid #aeb9c5;border-radius:8px}button{cursor:pointer;background:#086f65;color:white;font-weight:700}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button[aria-selected="true"]{background:#17324d}.status{min-height:24px;margin:12px 0}.item{border-top:1px solid #e1e6eb;padding:12px 0}.item:first-child{border-top:0}.meta{font-size:12px;color:#5d6977}.payload{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.pager{display:flex;gap:8px;margin-top:14px}@media(max-width:700px){.config{grid-template-columns:1fr}body{padding:10px}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Nuevo Amanecer — Consulta READ-ONLY</h1>
+    <p class="notice">Este dispositivo solo consulta información sincronizada. No registra ni modifica operaciones.</p>
+    <div class="config">
+      <input id="endpoint" type="url" value="https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev" aria-label="Endpoint">
+      <input id="readToken" type="password" autocomplete="off" placeholder="Token de lectura" aria-label="Token de lectura">
+      <button id="connect" type="button">Conectar</button>
+    </div>
+    <div id="connectionStatus" class="status" role="status"></div>
+  </header>
+
+  <section class="panel">
+    <div class="tabs">
+      <button type="button" data-view="status">Estado</button>
+      <button type="button" data-view="sales">Ventas</button>
+      <button type="button" data-view="inventory-movements">Inventario</button>
+    </div>
+    <div id="content"></div>
+    <div class="pager">
+      <button id="previous" type="button" disabled>Anterior</button>
+      <button id="next" type="button" disabled>Siguiente</button>
+    </div>
+  </section>
+  <script src="js/sync/read-only.js"></script>
+</body>
+</html>
