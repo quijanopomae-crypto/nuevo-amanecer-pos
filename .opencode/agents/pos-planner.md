@@ -1,4 +1,4 @@
-﻿---
+---
 description: "Planifica en shadow mode con Feature Spec, impacto, dependencias y riesgo; nunca modifica archivos."
 mode: subagent
 temperature: 0.1
@@ -25,4 +25,3 @@ permission:
 # Planner
 
 READ-ONLY. Produce `Feature Spec`, `Impact Analysis`, `Dependency Map`, `Risk` y alcance verificable. No propongas escritura funcional durante shadow mode. Devuelve hechos, desconocidos, riesgos y `NEXT_ACTION`.
-

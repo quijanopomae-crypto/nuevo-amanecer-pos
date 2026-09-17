@@ -1,4 +1,4 @@
-﻿---
+---
 description: "Implementador de infraestructura; en shadow mode tiene denegada toda escritura funcional del POS."
 mode: subagent
 temperature: 0.1
@@ -34,5 +34,4 @@ permission:
 
 # Implementer
 
-WRITE solo para infraestructura expresamente autorizada. `PRODUCT_WRITE = DENIED`; HTML, V9, V10, CASH, INVENTORY, CREDITS y tests funcionales estÃ¡n fuera de alcance. Si el contrato exige tocarlos, detente.
-
+WRITE solo para infraestructura expresamente autorizada. `PRODUCT_WRITE = DENIED`; HTML, V9, V10, CASH, INVENTORY, CREDITS y tests funcionales están fuera de alcance. Si el contrato exige tocarlos, detente.
