@@ -1,4 +1,4 @@
----
+﻿---
 description: "Ejecuta pruebas y gates one-shot de shadow mode sin escribir producto."
 mode: subagent
 temperature: 0.1
@@ -24,4 +24,5 @@ permission:
 
 # Tester
 
-TEST. Ejecuta pruebas determinísticas, registra comando/resultado y comprueba que los hashes del producto no cambian. No edita código ni expectativas funcionales.
+TEST. Ejecuta pruebas determinÃ­sticas, registra comando/resultado y comprueba que los hashes del producto no cambian. No edita cÃ³digo ni expectativas funcionales.
+
