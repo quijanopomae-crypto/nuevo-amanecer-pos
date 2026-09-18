@@ -9,7 +9,7 @@
     "directory": ".reader-assets",
     "html_handling": "none",
     "not_found_handling": "none",
-    "run_worker_first": ["/health", "/read/*", "/sync/*"]
+    "run_worker_first": ["/health", "/commands/*", "/read/*", "/sync/*"]
   },
   "observability": { "enabled": false },
   "d1_databases": [

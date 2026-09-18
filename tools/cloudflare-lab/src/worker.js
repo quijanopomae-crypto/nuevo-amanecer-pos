@@ -6,7 +6,9 @@ const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'p
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const OPERATION_PATH = /^\/sync\/operations\/([^/]+)$/;
 const SALE_ITEMS_PATH = /^\/read\/sales\/([^/]+)\/items$/;
+const SALE_CREATE_PATH = '/commands/sale.create';
 const READ_TYPES = new Set(['sales', 'sale_items', 'inventory_movements']);
+const PAYMENT_METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 
@@ -15,7 +17,7 @@ export default {
     const url = new URL(request.url);
     const isRead = url.pathname.startsWith('/read/');
     try {
-      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
+      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname === SALE_CREATE_PATH || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
         return cors(new Response(null, { status: 204 }), isRead);
       }
       if (request.method === 'GET' && url.pathname === '/health') {
@@ -26,6 +28,10 @@ export default {
         const denied = authorizeRead(request, env);
         if (denied) return cors(denied, true);
         return cors(await readRoute(url, env.nuevo_amanecer_lab), true);
+      }
+      if (url.pathname === SALE_CREATE_PATH) {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        return await createSale(request, env);
       }
       if (url.pathname.startsWith('/sync/operations')) {
         const provided = request.headers.get('x-sync-token') ?? '';
@@ -290,6 +296,198 @@ function validateOperation(body) {
 async function sha256Hex(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function createSale(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ status: 'error', error: 'invalid_json' }, 400);
+  }
+  const normalized = validateSale(body);
+  if (normalized.error) return json({ status: 'error', error: 'invalid_sale', message: normalized.error }, 400);
+
+  const deviceId = request.headers.get('x-device-id');
+  if (body.device_id !== undefined && body.device_id !== deviceId) return json({ status: 'error', operation_id: body.operation_id, error: 'device_id_mismatch' }, 403);
+  const denied = await authorizeDevice(deviceId, request, env, true);
+  if (denied instanceof Response) return denied;
+
+  const db = env.nuevo_amanecer_lab;
+  const payload = stableStringify(body);
+  const payloadHash = await sha256Hex(payload);
+  const existing = await db
+    .prepare('SELECT sale_id, payload_hash FROM sales WHERE operation_id = ?1')
+    .bind(body.operation_id)
+    .first();
+  if (existing) return saleReplay(body.operation_id, payloadHash, existing);
+
+  // Only this batch's winning INSERT may create children. Retries never repair or append effects.
+  const commitToken = crypto.randomUUID();
+  const statements = [
+    db.prepare(
+      `INSERT INTO sales (sale_id, operation_id, payload_hash, device_id, payment_method, total_cents, created_at,
+                          commit_token, payment_reference)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?9, ?10
+       WHERE EXISTS (SELECT 1 FROM devices WHERE device_id = ?4
+         AND role = 'writer' AND status = 'active' AND credential_hash = ?8)
+       ON CONFLICT DO NOTHING`,
+    ).bind(
+      normalized.sale.sale_id,
+      body.operation_id,
+      payloadHash,
+      deviceId,
+      normalized.sale.payment_method,
+      normalized.sale.total_cents,
+      normalized.sale.created_at,
+      denied.credentialHash,
+      commitToken,
+      normalized.sale.payment.reference,
+    ),
+  ];
+
+  for (const [index, item] of normalized.sale.items.entries()) {
+    const lineNumber = index + 1;
+    statements.push(
+      db.prepare(
+        `INSERT INTO sale_items
+           (sale_id, line_number, operation_id, product_id, quantity, unit_price_cents, line_total_cents, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+         WHERE EXISTS (SELECT 1 FROM sales WHERE operation_id = ?3 AND commit_token = ?9)`,
+      ).bind(
+        normalized.sale.sale_id, lineNumber, body.operation_id, item.product_id, item.quantity,
+        item.unit_price_cents, item.line_total_cents, normalized.sale.created_at, commitToken,
+      ),
+      db.prepare(
+        `INSERT INTO inventory_movements
+           (movement_id, operation_id, sale_id, line_number, product_id, quantity, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+         WHERE EXISTS (SELECT 1 FROM sales WHERE operation_id = ?2 AND commit_token = ?8)`,
+      ).bind(
+        `${body.operation_id}:inventory:${lineNumber}`, body.operation_id, normalized.sale.sale_id,
+        lineNumber, item.product_id, -item.quantity, normalized.sale.created_at, commitToken,
+      ),
+    );
+  }
+  statements.push(
+    db.prepare(
+      `INSERT INTO cash_movements
+         (movement_id, operation_id, sale_id, payment_method, amount_cents, cash_cents,
+          digital_cents, credit_cents, digital_method, reference, created_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+       WHERE EXISTS (SELECT 1 FROM sales WHERE operation_id = ?2 AND commit_token = ?12)`,
+    ).bind(
+      `${body.operation_id}:cash`, body.operation_id, normalized.sale.sale_id,
+      normalized.sale.payment_method, normalized.sale.total_cents, normalized.sale.payment.cash_cents,
+      normalized.sale.payment.digital_cents, normalized.sale.payment.credit_cents,
+      normalized.sale.payment.digital_method, normalized.sale.payment.reference,
+      normalized.sale.created_at, commitToken,
+    ),
+  );
+
+  const results = await db.batch(statements);
+  if (results[0]?.meta?.changes === 1) {
+    return json({ status: 'created', operation_id: body.operation_id, sale_id: normalized.sale.sale_id, idempotent: false }, 201);
+  }
+
+  // Revocation, a concurrent retry, or a conflicting operation may have won after authorization.
+  const recheck = await authorizeDevice(deviceId, request, env, true);
+  if (recheck instanceof Response) return recheck;
+  const raced = await db.prepare('SELECT sale_id, payload_hash FROM sales WHERE operation_id = ?1').bind(body.operation_id).first();
+  if (raced) return saleReplay(body.operation_id, payloadHash, raced);
+  return json({ status: 'conflict', operation_id: body.operation_id, error: 'sale_not_created' }, 409);
+}
+
+function saleReplay(operationId, payloadHash, existing) {
+  if (constantTimeEqual(payloadHash, existing.payload_hash)) {
+    return json({ status: 'already_processed', operation_id: operationId, sale_id: existing.sale_id, idempotent: true, already_processed: true });
+  }
+  return json({ status: 'conflict', error: 'operation_id_conflict', operation_id: operationId }, 409);
+}
+
+function validateSale(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'body must be a JSON object' };
+  if (!validId(body.operation_id)) return { error: 'operation_id must be a non-empty string of at most 160 characters' };
+  if (!validId(body.sale_id)) return { error: 'sale_id must be a non-empty string of at most 160 characters' };
+  if (typeof body.created_at !== 'string' || !Number.isFinite(Date.parse(body.created_at))) return { error: 'created_at must be a valid timestamp' };
+  if (!PAYMENT_METHODS.has(body.payment_method)) return { error: 'payment_method is not supported' };
+  if (body.payment_method === 'credito' && (!validId(body.customer_id) ||
+      typeof body.credit_due !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.credit_due) ||
+      !Number.isFinite(Date.parse(body.credit_due)) || new Date(body.credit_due).toISOString().slice(0, 10) !== body.credit_due)) {
+    return { error: 'credit requires customer_id and a valid credit_due date' };
+  }
+  if (!Number.isSafeInteger(body.total_cents) || body.total_cents <= 0) return { error: 'total_cents must be a positive integer' };
+  const payment = validatePayment(body.payment_method, body.total_cents, body.payment);
+  if (payment.error) return payment;
+  if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > 500) return { error: 'items must contain between 1 and 500 lines' };
+
+  const items = [];
+  let computedTotal = 0;
+  for (const item of body.items) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || !validId(item.product_id)) return { error: 'each product_id must be valid' };
+    if (!Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER) return { error: 'each quantity must be greater than zero and within the safe range' };
+    if (!Number.isSafeInteger(item.unit_price_cents) || item.unit_price_cents < 0) return { error: 'each unit_price_cents must be a non-negative integer' };
+    const lineTotal = item.quantity * item.unit_price_cents;
+    if (!Number.isSafeInteger(lineTotal) || lineTotal < 0) return { error: 'each line total must resolve to whole cents' };
+    if (!Number.isSafeInteger(computedTotal + lineTotal)) return { error: 'sale total exceeds the supported range' };
+    computedTotal += lineTotal;
+    items.push({ product_id: item.product_id, quantity: item.quantity, unit_price_cents: item.unit_price_cents, line_total_cents: lineTotal });
+  }
+  if (computedTotal !== body.total_cents) return { error: 'total_cents does not match item totals' };
+  return {
+    sale: {
+      sale_id: body.sale_id,
+      created_at: new Date(body.created_at).toISOString(),
+      payment_method: body.payment_method,
+      total_cents: body.total_cents,
+      payment: payment.value,
+      items,
+    },
+  };
+}
+
+function validatePayment(method, totalCents, payment) {
+  const empty = { cash_cents: 0, digital_cents: 0, credit_cents: 0, digital_method: null, reference: null };
+  if (method === 'efectivo') return { value: { ...empty, cash_cents: totalCents } };
+  if (method === 'credito') return { value: { ...empty, credit_cents: totalCents } };
+  if (method !== 'mixto') {
+    const reference = payment?.reference;
+    if (reference !== undefined && (typeof reference !== 'string' || reference.length > 160 || /[\x00-\x1f\x7f]/.test(reference))) {
+      return { error: 'payment reference must be a string of at most 160 characters' };
+    }
+    return { value: { ...empty, digital_cents: totalCents, digital_method: method, reference: reference || null } };
+  }
+  if (!payment || typeof payment !== 'object' || Array.isArray(payment)) return { error: 'mixed payment details are required' };
+  if (!Number.isSafeInteger(payment.cash_cents) || payment.cash_cents <= 0 ||
+      !Number.isSafeInteger(payment.digital_cents) || payment.digital_cents <= 0 ||
+      payment.cash_cents + payment.digital_cents !== totalCents ||
+      !['yape', 'plin', 'transferencia'].includes(payment.digital_method)) {
+    return { error: 'mixed payment amounts and digital_method must be valid' };
+  }
+  if (payment.reference !== undefined && (typeof payment.reference !== 'string' || payment.reference.length > 160 || /[\x00-\x1f\x7f]/.test(payment.reference))) {
+    return { error: 'payment reference must be a string of at most 160 characters' };
+  }
+  return {
+    value: {
+      ...empty,
+      cash_cents: payment.cash_cents,
+      digital_cents: payment.digital_cents,
+      digital_method: payment.digital_method,
+      reference: payment.reference || null,
+    },
+  };
+}
+
+function validId(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 160 && !/[\x00-\x1f\x7f]/.test(value);
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 async function credentialHash(credential, pepper) {

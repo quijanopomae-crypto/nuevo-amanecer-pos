@@ -8,8 +8,10 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0001_sync_operations.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0002_read_only_indexes.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0003_device_auth.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0004_sale_create.sql', import.meta.url), 'utf8'));
   const pepper = 'fixture-device-pepper';
   const hash = (credential) => createHmac('sha256', pepper).update(credential).digest('hex');
+  let batchFailureAt = null;
   const binding = {
     prepare(sql) {
       const statement = database.prepare(sql);
@@ -19,7 +21,23 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
         async first() { return statement.get(...params) || null; },
         async all() { return { results: statement.all(...params) }; },
         async run() { return { meta: { changes: Number(statement.run(...params).changes) } }; },
+        _run() { return { meta: { changes: Number(statement.run(...params).changes) } }; },
       };
+    },
+    async batch(statements) {
+      database.exec('BEGIN');
+      try {
+        const results = [];
+        for (const [index, statement] of statements.entries()) {
+          if (batchFailureAt === index) throw new Error('forced batch failure');
+          results.push(statement._run());
+        }
+        database.exec('COMMIT');
+        return results;
+      } catch (error) {
+        database.exec('ROLLBACK');
+        throw error;
+      }
     },
   };
   return {
@@ -42,6 +60,7 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
     },
     count() { return database.prepare('SELECT COUNT(*) AS n FROM sync_operations').get().n; },
     row(id) { return database.prepare('SELECT * FROM sync_operations WHERE operation_id = ?').get(id); },
+    failBatchAt(index) { batchFailureAt = index; },
     close() { database.close(); },
   };
 }
