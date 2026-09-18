@@ -40,6 +40,7 @@ test('respuestas health, 401 y operación válida incluyen CORS', async (t) => {
       Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')),
     created_at: new Date().toISOString(),
   };
+  fixture.addDevice(operation.device_id, 'writer', 'active', 'fixture-token');
   const inserted = await fixture.fetch('https://worker.test/sync/operations', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-sync-token': 'fixture-token' }, body: JSON.stringify(operation),
   });

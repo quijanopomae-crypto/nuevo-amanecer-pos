@@ -217,6 +217,7 @@ test('acuse perdido y reload reintentan exactamente una vez contra el Worker rea
   t.after(() => fixture.close());
   const { api } = directApi();
   const original = await captureOne(api, 'ACK-LOSS');
+  fixture.addDevice(original.device_id, 'writer', 'active', 'fixture-token');
   attachMemoryPersistence(api);
   api.configure({ token: 'fixture-token' });
   let loseAck = true;
@@ -238,7 +239,8 @@ test('fallo al persistir SYNCED deja PENDING y el retry idempotente cierra sin d
   const fixture = workerFixture();
   t.after(() => fixture.close());
   const { api } = directApi();
-  await captureOne(api, 'SYNC-PERSIST');
+  const original = await captureOne(api, 'SYNC-PERSIST');
+  fixture.addDevice(original.device_id, 'writer', 'active', 'fixture-token');
   let durable = api.snapshot();
   let rejectSyncedOnce = true;
   api.configure({ token: 'fixture-token', persist: async (operation, patch) => {

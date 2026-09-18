@@ -1,3 +1,5 @@
-# Copiar a .dev.vars (ignorado por git) y poner un valor aleatorio largo.
-# Local: wrangler dev lo carga solo. Remoto: `wrangler secret put SYNC_TOKEN`.
-SYNC_TOKEN=replace-with-a-random-secret
+# Copiar a .dev.vars (ignorado por git) y usar valores aleatorios largos y distintos.
+# DEVICE_CREDENTIAL_PEPPER solo existe en el Worker; las credenciales se provisionan
+# en D1 como HMAC-SHA-256(pepper, credencial), nunca en texto plano.
+DEVICE_CREDENTIAL_PEPPER=replace-with-a-random-server-only-pepper
+READ_TOKEN=replace-with-a-distinct-read-secret

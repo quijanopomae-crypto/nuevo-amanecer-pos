@@ -4,8 +4,13 @@ import { createHash, randomUUID } from 'node:crypto';
 
 const baseUrl = process.argv[2] ?? 'http://127.0.0.1:8787';
 const token = process.env.SYNC_TOKEN;
+const deviceId = process.env.DEVICE_ID;
 if (!token) {
   console.error('SYNC_TOKEN missing in environment');
+  process.exit(2);
+}
+if (!deviceId) {
+  console.error('DEVICE_ID missing in environment');
   process.exit(2);
 }
 
@@ -15,7 +20,7 @@ const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 async function call(method, path, body) {
   const res = await fetch(baseUrl + path, {
     method,
-    headers: { 'content-type': 'application/json', 'x-sync-token': token },
+    headers: { 'content-type': 'application/json', 'x-sync-token': token, 'x-device-id': deviceId },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: res.status, body: await res.json() };
@@ -30,7 +35,7 @@ const operationId = `op-${randomUUID()}`;
 const payload = JSON.stringify({ sale_id: 'S-0001', total_cents: 12500, lines: [{ sku: 'ARROZ-1KG', qty: 2 }] });
 const operation = {
   operation_id: operationId,
-  device_id: 'caja-01',
+  device_id: deviceId,
   device_sequence: 1,
   entity_type: 'sale',
   entity_id: 'S-0001',

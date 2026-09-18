@@ -19,7 +19,7 @@ export default {
         return cors(new Response(null, { status: 204 }), isRead);
       }
       if (request.method === 'GET' && url.pathname === '/health') {
-        return health(env);
+        return await health(env);
       }
       if (isRead) {
         if (request.method !== 'GET') return cors(json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' }), true);
@@ -28,19 +28,23 @@ export default {
         return cors(await readRoute(url, env.nuevo_amanecer_lab), true);
       }
       if (url.pathname.startsWith('/sync/operations')) {
-        const denied = authorizeWrite(request, env);
-        if (denied) return denied;
+        const provided = request.headers.get('x-sync-token') ?? '';
+        if (!provided || (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN))) {
+          return json({ error: 'unauthorized' }, 401);
+        }
         if (request.method === 'POST' && url.pathname === '/sync/operations') {
-          return insertOperation(request, env.nuevo_amanecer_lab);
+          return await insertOperation(request, env);
         }
         const match = url.pathname.match(OPERATION_PATH);
         if (request.method === 'GET' && match) {
-          return lookupOperation(decodeURIComponent(match[1]), env.nuevo_amanecer_lab);
+          const denied = await authorizeDevice(request.headers.get('x-device-id'), request, env, false);
+          if (denied instanceof Response) return denied;
+          return await lookupOperation(decodeURIComponent(match[1]), env.nuevo_amanecer_lab);
         }
       }
       return json({ error: 'not_found' }, 404);
-    } catch (err) {
-      return cors(json({ error: 'internal_error', message: String(err?.message ?? err) }, 500), isRead);
+    } catch {
+      return cors(json({ error: 'internal_error' }, 500), isRead);
     }
   },
 };
@@ -53,18 +57,30 @@ async function health(env) {
   return json({ ok: row?.one === 1, service: 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
 }
 
-// Fail-closed: escritura y lectura usan credenciales distintas y no intercambiables.
-function authorizeWrite(request, env) {
-  if (!env.SYNC_TOKEN) return json({ error: 'gateway_not_configured' }, 503);
-  if (env.READ_TOKEN && constantTimeEqual(env.READ_TOKEN, env.SYNC_TOKEN)) return json({ error: 'gateway_credentials_not_separated' }, 503);
+// Device credentials are HMACed with a server-only pepper before D1 lookup.
+async function authorizeDevice(deviceId, request, env, requireWriter) {
+  if (!env.DEVICE_CREDENTIAL_PEPPER) return json({ error: 'device_auth_not_configured' }, 503);
+  if (typeof deviceId !== 'string' || !deviceId || deviceId.length > 160) return json({ error: 'unauthorized' }, 401);
   const provided = request.headers.get('x-sync-token') ?? '';
-  if (!constantTimeEqual(provided, env.SYNC_TOKEN)) return json({ error: 'unauthorized' }, 401);
-  return null;
+  if (!provided || provided.length > 1024) return json({ error: 'unauthorized' }, 401);
+  if (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
+  const device = await env.nuevo_amanecer_lab
+    .prepare('SELECT device_id, role, status, credential_hash FROM devices WHERE device_id = ?1')
+    .bind(deviceId)
+    .first();
+  const providedHash = await credentialHash(provided, env.DEVICE_CREDENTIAL_PEPPER);
+  if (!device || !constantTimeEqual(providedHash, device.credential_hash)) return json({ error: 'unauthorized' }, 401);
+  if (device.status !== 'active') return json({ error: 'device_revoked' }, 403);
+  if (requireWriter && device.role !== 'writer') return json({ error: 'read_only_device' }, 403);
+  await env.nuevo_amanecer_lab
+    .prepare("UPDATE devices SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE device_id = ?1")
+    .bind(deviceId)
+    .run();
+  return { credentialHash: providedHash };
 }
 
 function authorizeRead(request, env) {
   if (!env.READ_TOKEN) return json({ error: 'read_gateway_not_configured' }, 503);
-  if (env.SYNC_TOKEN && constantTimeEqual(env.READ_TOKEN, env.SYNC_TOKEN)) return json({ error: 'gateway_credentials_not_separated' }, 503);
   const provided = request.headers.get('x-read-token') ?? '';
   if (!constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
   return null;
@@ -183,7 +199,7 @@ function decodeBase64Url(value) {
   return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
 }
 
-async function insertOperation(request, db) {
+async function insertOperation(request, env) {
   let body;
   try {
     body = await request.json();
@@ -192,6 +208,11 @@ async function insertOperation(request, db) {
   }
   const problem = validateOperation(body);
   if (problem) return json({ error: 'invalid_operation', message: problem }, 400);
+  const headerDeviceId = request.headers.get('x-device-id');
+  if (headerDeviceId && headerDeviceId !== body.device_id) return json({ error: 'device_id_mismatch' }, 403);
+  const denied = await authorizeDevice(body.device_id, request, env, true);
+  if (denied instanceof Response) return denied;
+  const db = env.nuevo_amanecer_lab;
 
   const computedHash = await sha256Hex(body.payload);
   if (computedHash !== body.payload_hash) {
@@ -202,8 +223,10 @@ async function insertOperation(request, db) {
     .prepare(
       `INSERT INTO sync_operations
          (operation_id, device_id, device_sequence, entity_type, entity_id, payload, payload_hash, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-       ON CONFLICT(operation_id) DO NOTHING`,
+        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+        WHERE EXISTS (SELECT 1 FROM devices WHERE device_id = ?2
+          AND role = 'writer' AND status = 'active' AND credential_hash = ?9)
+        ON CONFLICT(operation_id) DO NOTHING`,
     )
     .bind(
       body.operation_id,
@@ -214,12 +237,17 @@ async function insertOperation(request, db) {
       body.payload,
       body.payload_hash,
       body.created_at,
+      denied.credentialHash,
     )
     .run();
 
   if (result.meta.changes === 1) {
     return json({ status: 'inserted', operation_id: body.operation_id }, 201);
   }
+
+  // A revocation/rotation may have won the race with the guarded INSERT.
+  const recheck = await authorizeDevice(body.device_id, request, env, true);
+  if (recheck instanceof Response) return recheck;
 
   const existing = await db
     .prepare('SELECT payload_hash, received_at FROM sync_operations WHERE operation_id = ?1')
@@ -264,6 +292,18 @@ async function sha256Hex(text) {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+async function credentialHash(credential, pepper) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(pepper),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const digest = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(credential));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function constantTimeEqual(a, b) {
   const bytesA = new TextEncoder().encode(a);
   const bytesB = new TextEncoder().encode(b);
@@ -276,7 +316,7 @@ function constantTimeEqual(a, b) {
 function cors(response, isRead = false) {
   response.headers.set('access-control-allow-origin', '*');
   response.headers.set('access-control-allow-methods', isRead ? 'GET, OPTIONS' : 'GET, POST, OPTIONS');
-  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'content-type, x-sync-token');
+  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'content-type, x-sync-token, x-device-id');
   response.headers.set('access-control-max-age', '600');
   return response;
 }

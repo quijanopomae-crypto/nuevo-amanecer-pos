@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
-const sync = process.env.SYNC_TOKEN, read = process.env.READ_TOKEN;
-if (!sync || !read || sync === read) throw new Error('Distinct runtime credentials required');
+const sync = process.env.SYNC_TOKEN, read = process.env.READ_TOKEN, deviceId = process.env.DEVICE_ID;
+if (!sync || !read || !deviceId || sync === read) throw new Error('Device ID and distinct runtime credentials required');
 const endpoint = 'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev';
 const evidence = new URL('../../../evidence/v1.2/', import.meta.url);
 const rc = JSON.parse(readFileSync(new URL('rc-remote.json', evidence), 'utf8'));
@@ -20,19 +20,20 @@ async function request(name, path, options, status) {
   return JSON.parse(text);
 }
 const opId = expected.find(o => o.entityType === 'sales').operationId;
-const original = (await request('write_credential_lookup', '/sync/operations/' + opId, { headers: { 'x-sync-token': sync } }, 200)).operation;
+const deviceHeaders = { 'x-sync-token': sync, 'x-device-id': deviceId };
+const original = (await request('write_credential_lookup', '/sync/operations/' + opId, { headers: deviceHeaders }, 200)).operation;
 await request('sync_value_cannot_read', '/read/status', { headers: { 'x-read-token': sync } }, 401);
 await request('read_value_cannot_write', '/sync/operations', { method: 'POST', headers: { 'x-sync-token': read }, body: '{}' }, 401);
-const post = body => ({ method: 'POST', headers: { 'content-type': 'application/json', 'x-sync-token': sync }, body: JSON.stringify(body) });
+const post = body => ({ method: 'POST', headers: { 'content-type': 'application/json', ...deviceHeaders }, body: JSON.stringify(body) });
 const retry = await request('same_operation_is_idempotent', '/sync/operations', post(original), 200);
 assert.equal(retry.status, 'already_processed');
 const altered = JSON.stringify({ rc: 'conflict-probe', operation_id: opId });
 const conflict = await request('changed_payload_conflicts', '/sync/operations', post({ ...original, payload: altered, payload_hash: createHash('sha256').update(altered).digest('hex') }), 409);
 assert.equal(conflict.status, 'conflict');
-const after = (await request('original_survives_conflict', '/sync/operations/' + opId, { headers: { 'x-sync-token': sync } }, 200)).operation;
+const after = (await request('original_survives_conflict', '/sync/operations/' + opId, { headers: deviceHeaders }, 200)).operation;
 assert.equal(after.payload, original.payload); assert.equal(after.payload_hash, original.payload_hash);
 for (const entry of expected) {
-  const found = (await request('lookup_' + entry.entityType + '_' + entry.entityId, '/sync/operations/' + entry.operationId, { headers: { 'x-sync-token': sync } }, 200)).operation;
+  const found = (await request('lookup_' + entry.entityType + '_' + entry.entityId, '/sync/operations/' + entry.operationId, { headers: deviceHeaders }, 200)).operation;
   assert.equal(found.operation_id, entry.operationId); assert.equal(found.entity_id, entry.entityId);
 }
 const readHeaders = { 'x-read-token': read };

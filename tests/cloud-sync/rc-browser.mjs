@@ -102,6 +102,7 @@ try {
   assert.equal(reopened.sales, 2); assert.equal(reopened.stock, 8);
   assert.deepEqual(reopened.cloud, beforeClose.cloud);
   record('browser_process_close_reopen_offline_preserves_outbox');
+  if (fixture) fixture.addDevice(reopened.cloud.device_id, 'writer', 'active', syncToken);
   await page.evaluate(token=>NuevoAmanecerOutbox.configure({token,remember:false}),syncToken);
   await context.setOffline(false);
   await page.waitForFunction(() => NuevoAmanecerOutbox.snapshot().outbox.every(o=>o.status==='SYNCED'), null, { timeout: 45000 });
@@ -117,7 +118,7 @@ try {
   });
   const op=synced.cloud.outbox[0];
   const retry=await page.evaluate(async ({endpoint,token,op})=>{
-    const r=await fetch(endpoint+'/sync/operations',{method:'POST',headers:{'content-type':'application/json','x-sync-token':token},body:JSON.stringify(op)});
+    const r=await fetch(endpoint+'/sync/operations',{method:'POST',headers:{'content-type':'application/json','x-sync-token':token,'x-device-id':op.device_id},body:JSON.stringify(op)});
     return {status:r.status,body:await r.json()};
   },{endpoint,token:syncToken,op});
   assert.equal(retry.status,200);assert.equal(retry.body.status,'already_processed');

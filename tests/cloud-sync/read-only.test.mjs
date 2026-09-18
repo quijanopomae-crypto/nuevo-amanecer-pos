@@ -77,23 +77,14 @@ test('READ_TOKEN no puede escribir y métodos mutantes /read se rechazan sin toc
   assert.equal(fixture.count(), before);
 });
 
-test('credenciales iguales cierran lectura y escritura sin acceder a D1 ni exponer el secreto', async (t) => {
-  const duplicate = 'fixture-equal-credentials';
-  const fixture = workerFixture(duplicate, duplicate); t.after(() => fixture.close());
-  fixture.binding.prepare = () => { throw new Error('D1 must not be accessed'); };
-  for (const [path, method, headers] of [
-    ['/read/status', 'GET', { 'x-read-token': duplicate }],
-    ['/read/sales', 'GET', { 'x-read-token': duplicate }],
-    ['/sync/operations', 'POST', { 'x-sync-token': duplicate }],
-    ['/sync/operations/existing', 'GET', { 'x-sync-token': duplicate }],
-  ]) {
-    const response = await fixture.fetch('https://worker.test' + path, { method, headers });
-    assert.equal(response.status, 503, path);
-    assert.equal(response.headers.get('cache-control'), 'no-store');
-    const body = await response.text();
-    assert.equal(body.includes(duplicate), false);
-    assert.deepEqual(JSON.parse(body), { error: 'gateway_credentials_not_separated' });
-  }
+test('READ_TOKEN se rechaza como credencial de dispositivo sin consultar identidad ni exponerlo', async (t) => {
+  const readToken = 'fixture-read-token';
+  const fixture = workerFixture('unused', readToken); t.after(() => fixture.close());
+  const response = await fixture.fetch('https://worker.test/sync/operations', {
+    method: 'POST', headers: { 'x-sync-token': readToken }, body: '{}',
+  });
+  assert.equal(response.status, 401);
+  assert.equal((await response.text()).includes(readToken), false);
   assert.equal(fixture.count(), 0);
 });
 

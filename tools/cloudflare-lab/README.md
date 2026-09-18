@@ -37,7 +37,47 @@ Campos técnicos añadidos a los obligatorios: `received_at` (hora del servidor,
 - `POST /sync/operations` → inserta una operación (JSON con los 8 campos).
 - `GET /sync/operations/:operation_id` → devuelve la fila.
 
-Los endpoints `/sync/*` exigen header `x-sync-token` igual al secreto `SYNC_TOKEN`. Sin secreto configurado el gateway responde `503 gateway_not_configured` (fail-closed).
+Los endpoints `/sync/*` autentican el dispositivo contra D1. La PWA conserva su
+configuración A1: envía su credencial en `x-sync-token` y el `device_id` estable en
+la operación. `x-device-id` es obligatorio para consultas y, cuando se envía en un
+POST, debe coincidir con el payload. Solo un dispositivo `writer` y `active` puede
+escribir; `read_only`, `revoked` y credenciales inválidas se rechazan antes de la
+escritura.
+
+La migración `0003_device_auth.sql` crea el registro durable y un índice parcial
+único que impide más de un writer activo. `credential_hash` guarda únicamente
+`HMAC-SHA-256(DEVICE_CREDENTIAL_PEPPER, credencial)`. El pepper se configura como
+secreto del Worker y nunca se almacena en D1; la credencial en texto plano tampoco.
+`created_at` y `last_seen_at` usan hora del servidor.
+
+Para preparar localmente el SQL de alta, definir `DEVICE_ID`, `DEVICE_ROLE`,
+`DEVICE_CREDENTIAL` y `DEVICE_CREDENTIAL_PEPPER`, todos salvo el rol fuera de
+archivos versionados, y ejecutar `node scripts/device-auth-sql.mjs register`.
+La salida contiene solo el hash y se aplica mediante el flujo normal de D1. Para
+revocar, basta `DEVICE_ID=<id> node scripts/device-auth-sql.mjs revoke`. No pasar
+credenciales como argumentos de Wrangler ni conservar el SQL generado.
+
+El alta requiere credencial y pepper distintos, cada uno generado con 32 bytes
+aleatorios y codificado como 64 caracteres hexadecimales minúsculos. El pepper
+debe ser el mismo en la provisión y el Worker; nunca se entrega al navegador.
+Se provisiona el `device_id` que ya conserva `NuevoAmanecerOutbox.snapshot()`;
+no se regenera la identidad ni se modifica el OUTBOX existente. La revocación se
+aplica por SQL administrativo, no por un endpoint público de auto-registro.
+Un cambio de writer exige revocar primero al anterior. No reutilizar credenciales.
+
+A2 no aplica migraciones ni secretos a producción. El Worker V1.2 publicado no
+cambia. La futura activación necesita primero la migración, el pepper y el alta
+del dispositivo; sin ellos el nuevo Worker falla cerrado. El token global
+`SYNC_TOKEN` por sí solo ya no autoriza. El visor A1 conserva su acceso de lectura
+separado con `READ_TOKEN`, que nunca permite escribir.
+
+Pruebas A2 desde la raíz (sin evidencia histórica, servicios remotos ni release gates):
+
+```sh
+node --test tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
+node --test tools/cloudflare-lab/test/pwa-shell.test.mjs tests/release-local-server.test.mjs
+node --test tools/cloudflare-lab/test/pwa-browser.test.mjs
+```
 
 Consultas autenticadas mediante `x-read-token` y el secreto independiente `READ_TOKEN`:
 
@@ -47,7 +87,6 @@ Consultas autenticadas mediante `x-read-token` y el secreto independiente `READ_
 - `GET /read/inventory-movements`
 
 Las listas aceptan `limit` (25 por defecto, máximo 100) y `cursor` opaco.
-Si ambos secretos coinciden, lectura y escritura quedan cerradas con HTTP 503.
 La lectura anuncia únicamente `GET, OPTIONS` y `x-read-token` en CORS;
 las respuestas JSON usan `Cache-Control: no-store`.
 
@@ -82,7 +121,7 @@ npm install
 cp .dev.vars.example .dev.vars      # poner un valor aleatorio largo
 npm run migrate:local
 npm run dev                         # en otra terminal:
-SYNC_TOKEN=<mismo valor> npm run test:worker
+DEVICE_ID=<device_id provisionado> SYNC_TOKEN=<credencial del dispositivo> npm run test:worker
 npm run test:d1:local               # contrato a nivel SQL, sin Worker
 ```
 
@@ -119,4 +158,5 @@ No ejecutarlas sobre datos comerciales sin identificar claramente el ensayo.
 
 - `.dev.vars`, `.env*`, `.wrangler/` ignorados por git.
 - El Worker no contiene ningún token de Cloudflare; el token administrativo solo vive en el entorno de la máquina que ejecuta wrangler.
-- El POS nunca hablará con la API de Cloudflare: solo con el Worker, usando `SYNC_TOKEN`.
+- El POS nunca habla con la API de Cloudflare: solo con el Worker, usando la
+  credencial de su dispositivo. D1 conserva únicamente su hash HMAC.

@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import worker from '../../tools/cloudflare-lab/src/worker.js';
 
 export function workerFixture(token = 'fixture-token', readToken = 'fixture-read-token') {
   const database = new DatabaseSync(':memory:');
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0001_sync_operations.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0002_read_only_indexes.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0003_device_auth.sql', import.meta.url), 'utf8'));
+  const pepper = 'fixture-device-pepper';
+  const hash = (credential) => createHmac('sha256', pepper).update(credential).digest('hex');
   const binding = {
     prepare(sql) {
       const statement = database.prepare(sql);
@@ -20,7 +25,12 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
   return {
     database,
     binding,
-    fetch(url, options) { return worker.fetch(new Request(url, options), { SYNC_TOKEN: token, READ_TOKEN: readToken, nuevo_amanecer_lab: binding }); },
+    env: { READ_TOKEN: readToken, DEVICE_CREDENTIAL_PEPPER: pepper, nuevo_amanecer_lab: binding },
+    fetch(url, options) { return worker.fetch(new Request(url, options), { READ_TOKEN: readToken, DEVICE_CREDENTIAL_PEPPER: pepper, nuevo_amanecer_lab: binding }); },
+    addDevice(deviceId, role, status, credential) {
+      database.prepare('INSERT INTO devices (device_id, role, status, credential_hash) VALUES (?, ?, ?, ?)').run(deviceId, role, status, hash(credential));
+    },
+    device(deviceId) { return database.prepare('SELECT * FROM devices WHERE device_id = ?').get(deviceId); },
     insert(operation) {
       database.prepare(`INSERT INTO sync_operations
         (operation_id, device_id, device_sequence, entity_type, entity_id, payload, payload_hash, created_at, received_at)
