@@ -1,10 +1,11 @@
 # cloudflare-lab
 
-Capa cloud de V1.2 del POS Nuevo Amanecer. V9 conserva la autoridad local; el
-OUTBOX envía nuevas ventas, líneas y movimientos. El segundo dispositivo solo consulta.
+Capa cloud de V1.3 del POS Nuevo Amanecer. V9 conserva la autoridad local; el
+OUTBOX A4 envía cada nueva venta como un único comando durable `sale.create`. El
+segundo dispositivo solo consulta.
 
 ```
-POS V9 (autoridad local) → OUTBOX atómico → Worker (gateway) → D1 sync_operations
+POS V9 (autoridad local) → OUTBOX durable → POST /commands/sale.create → D1
 ```
 
 ## Recursos
@@ -39,15 +40,26 @@ Campos técnicos añadidos a los obligatorios: `received_at` (hora del servidor,
 - `POST /commands/sale.create` → crea atómicamente venta, líneas, movimientos de
   inventario y movimiento de caja. Requiere dispositivo `writer` activo.
 
-`sale.create` recibe `operation_id`, `sale_id`, `created_at`, `payment_method`,
-`total_cents` e `items`; cada línea contiene `product_id`, `quantity` y
-`unit_price_cents`. El total debe coincidir exactamente con las líneas. Un retry
+`sale.create` recibe `operation_id`, `device_id`, `sale_id`, `created_at`,
+`payment_method`, `total_cents` e `items`; cada línea contiene `product_id`,
+`quantity`, `unit_price_cents`, `line_total_cents` e `inventory_quantity`. El
+último campo conserva las unidades físicas descontadas localmente y puede ser cero
+para líneas sin control de inventario. El total debe coincidir exactamente con las líneas. Un retry
 idéntico devuelve `already_processed`; el mismo `operation_id` con cualquier
 contenido distinto devuelve `operation_id_conflict` sin efectos adicionales.
 Para `payment_method: "mixto"`, `payment` incluye `cash_cents`, `digital_cents`,
 `digital_method` (`yape`, `plin` o `transferencia`) y `reference` opcional; ambos
 importes deben sumar `total_cents`.
 Para `credito`, `customer_id` y `credit_due` (`YYYY-MM-DD`) son obligatorios.
+
+El OUTBOX A4 guarda el comando y su SHA-256 dentro del mismo snapshot durable que
+la venta local antes de intentar red. Sus estados son `PENDING`, `ACKED`,
+`REJECTED` y `NEEDS_REVIEW`. Offline, timeout y 5xx conservan `PENDING`; una
+respuesta `created` o `already_processed` con identidad coincidente produce
+`ACKED`; 401/403 quedan `REJECTED` sin bucle; conflicto, ACK ambiguo o payload
+alterado quedan `NEEDS_REVIEW`. Los retries reutilizan los mismos bytes y el mismo
+`operation_id`. Un OUTBOX V1 encontrado al actualizar se conserva dentro del
+snapshot como journal legacy para revisión y nunca se reinterpreta como una venta.
 
 Los endpoints `/sync/*` autentican el dispositivo contra D1. La PWA conserva su
 configuración A1: envía su credencial en `x-sync-token` y el `device_id` estable en
@@ -95,6 +107,15 @@ Prueba focal A3 desde la raíz, sin despliegue ni datos remotos:
 
 ```sh
 node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
+```
+
+Pruebas focalizadas A4 desde la raíz, sin desplegar ni usar datos remotos:
+
+```sh
+node --test tests/cloud-sync/outbox-sync.test.mjs
+node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs
+node --test tools/cloudflare-lab/test/pwa-shell.test.mjs tests/release-local-server.test.mjs
+node --test tools/cloudflare-lab/test/pwa-browser.test.mjs
 ```
 
 Consultas autenticadas mediante `x-read-token` y el secreto independiente `READ_TOKEN`:

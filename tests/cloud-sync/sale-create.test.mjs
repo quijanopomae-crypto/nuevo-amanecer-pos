@@ -53,6 +53,21 @@ test('writer crea venta, líneas, inventario y caja exactamente una vez', async 
   );
 });
 
+test('línea conserva total redondeado e inventario físico independientes', async (t) => {
+  const fixture = workerFixture(); t.after(() => fixture.close());
+  fixture.addDevice('writer-1', 'writer', 'active', 'writer-secret');
+  const body = {
+    ...sale(), total_cents: 100,
+    items: [{ product_id: 'box-item', quantity: 0.3, unit_price_cents: 333, line_total_cents: 100, inventory_quantity: 36 }],
+  };
+  assert.equal((await post(fixture, body)).status, 201);
+  assert.deepEqual(
+    { ...fixture.database.prepare('SELECT quantity, unit_price_cents, line_total_cents FROM sale_items WHERE operation_id = ?').get(body.operation_id) },
+    { quantity: 0.3, unit_price_cents: 333, line_total_cents: 100 },
+  );
+  assert.equal(fixture.database.prepare('SELECT quantity FROM inventory_movements WHERE operation_id = ?').get(body.operation_id).quantity, -36);
+});
+
 test('caja conserva el desglose económico de pagos mixtos y créditos', async (t) => {
   const fixture = workerFixture(); t.after(() => fixture.close());
   fixture.addDevice('writer-1', 'writer', 'active', 'writer-secret');

@@ -358,6 +358,8 @@ async function createSale(request, env) {
         normalized.sale.sale_id, lineNumber, body.operation_id, item.product_id, item.quantity,
         item.unit_price_cents, item.line_total_cents, normalized.sale.created_at, commitToken,
       ),
+    );
+    if (item.inventory_quantity > 0) statements.push(
       db.prepare(
         `INSERT INTO inventory_movements
            (movement_id, operation_id, sale_id, line_number, product_id, quantity, created_at)
@@ -365,7 +367,7 @@ async function createSale(request, env) {
          WHERE EXISTS (SELECT 1 FROM sales WHERE operation_id = ?2 AND commit_token = ?8)`,
       ).bind(
         `${body.operation_id}:inventory:${lineNumber}`, body.operation_id, normalized.sale.sale_id,
-        lineNumber, item.product_id, -item.quantity, normalized.sale.created_at, commitToken,
+        lineNumber, item.product_id, -item.inventory_quantity, normalized.sale.created_at, commitToken,
       ),
     );
   }
@@ -427,11 +429,15 @@ function validateSale(body) {
     if (!item || typeof item !== 'object' || Array.isArray(item) || !validId(item.product_id)) return { error: 'each product_id must be valid' };
     if (!Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER) return { error: 'each quantity must be greater than zero and within the safe range' };
     if (!Number.isSafeInteger(item.unit_price_cents) || item.unit_price_cents < 0) return { error: 'each unit_price_cents must be a non-negative integer' };
-    const lineTotal = item.quantity * item.unit_price_cents;
+    const exactTotal = item.quantity * item.unit_price_cents;
+    const lineTotal = item.line_total_cents === undefined ? exactTotal : item.line_total_cents;
+    if (item.line_total_cents !== undefined && (!Number.isSafeInteger(lineTotal) || lineTotal !== Math.round(exactTotal))) return { error: 'line_total_cents must match the rounded item total' };
     if (!Number.isSafeInteger(lineTotal) || lineTotal < 0) return { error: 'each line total must resolve to whole cents' };
+    const inventoryQuantity = item.inventory_quantity === undefined ? item.quantity : item.inventory_quantity;
+    if (!Number.isFinite(inventoryQuantity) || inventoryQuantity < 0 || inventoryQuantity > Number.MAX_SAFE_INTEGER) return { error: 'inventory_quantity must be non-negative and within the safe range' };
     if (!Number.isSafeInteger(computedTotal + lineTotal)) return { error: 'sale total exceeds the supported range' };
     computedTotal += lineTotal;
-    items.push({ product_id: item.product_id, quantity: item.quantity, unit_price_cents: item.unit_price_cents, line_total_cents: lineTotal });
+    items.push({ product_id: item.product_id, quantity: item.quantity, unit_price_cents: item.unit_price_cents, line_total_cents: lineTotal, inventory_quantity: inventoryQuantity });
   }
   if (computedTotal !== body.total_cents) return { error: 'total_cents does not match item totals' };
   return {
