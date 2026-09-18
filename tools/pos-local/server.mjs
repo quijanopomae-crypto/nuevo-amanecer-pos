@@ -1,25 +1,33 @@
-// Local launcher. Serve only release-listed POS files and the two setup assets.
+// Local launcher. Serve only release-listed files plus the explicit PWA shell assets.
 import http from 'node:http';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const root = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '../..'));
 const manifest = JSON.parse(readFileSync(resolve(root, 'evidence/v1.2/production-package-files.json'), 'utf8'));
 const allowed = new Map();
 const setupFiles = new Set(['tools/pos-local/setup.html', 'tools/pos-local/setup.js']);
-for (const entry of manifest.files.filter(name => name.startsWith('POS/') || setupFiles.has(name))) {
+const pwaFiles = ['POS/manifest.webmanifest', 'POS/sw.js', 'POS/assets/icons/icon-192.png', 'POS/assets/icons/icon-512.png'];
+for (const entry of [...manifest.files.filter(name => name.startsWith('POS/') || setupFiles.has(name)), ...pwaFiles]) {
   if (entry.includes('\\') || entry.split('/').includes('..')) throw new Error('Invalid release path');
   const path = realpathSync(resolve(root, entry));
   if (!path.startsWith(root + sep) || !statSync(path).isFile()) throw new Error('Invalid release file');
   allowed.set('/' + entry, path);
 }
 if (!allowed.has('/POS/index.html')) throw new Error('Missing POS entry point');
+// Local serving needs a concrete generation too; the historical release list stays intact.
+const buildHash = createHash('sha256');
+for (const [url, path] of allowed) {
+  if (url.startsWith('/POS/')) buildHash.update(url).update(readFileSync(path));
+}
+const generation = buildHash.digest('hex').slice(0, 16);
 const portArg = process.argv.find(arg => arg.startsWith('--port='));
 const port = portArg ? Number(portArg.slice(7)) : 8788;
 if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid port');
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.gz': 'application/gzip', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.gz': 'application/gzip', '.json': 'application/json', '.webmanifest': 'application/manifest+json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const server = http.createServer((request, response) => {
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -34,7 +42,10 @@ const server = http.createServer((request, response) => {
   if (!path) { response.writeHead(404); response.end(); return; }
   try {
     if (realpathSync(path) !== path) throw new Error('Changed release path');
-    const bytes = readFileSync(path);
+    const source = readFileSync(path);
+    const bytes = pathname === '/POS/sw.js'
+      ? Buffer.from(source.toString('utf8').replace('__BUILD_HASH__', generation))
+      : source;
     response.writeHead(200, { 'Content-Type': mime[extname(path)] || 'application/octet-stream', 'Content-Length': bytes.length });
     response.end(request.method === 'HEAD' ? undefined : bytes);
   } catch { response.writeHead(500); response.end(); }

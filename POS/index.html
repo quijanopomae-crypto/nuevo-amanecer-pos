@@ -4,7 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Nuevo Amanecer">
     <title>Nuevo Amanecer — ERP &amp; POS v4.0 · CVV1.4</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" defer></script>
     <link rel="stylesheet" href="css/base.css">
@@ -936,5 +944,14 @@
 <script src="js/ocr/ocr-purchase-review.js"></script>
 <script src="js/ocr/ocr-purchase-apply.js"></script>
 <script src="js/ocr/ocr-purchase-integration.js"></script>
+<script>
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function (error) {
+      console.warn('No se pudo registrar el shell PWA.', error);
+    });
+  });
+}
+</script>
 </body>
 </html>

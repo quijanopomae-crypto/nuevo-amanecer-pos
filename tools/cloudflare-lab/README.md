@@ -56,8 +56,24 @@ a `POS/js/sync/read-only.js`, conservando esa estructura. La clave de lectura se
 introduce en el visor y permanece en la sesión; nunca usar allí la clave de escritura.
 
 Visor publicado: `https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/read-only.html`.
-El build `scripts/build-reader.mjs` copia únicamente esos dos archivos a
-`.reader-assets/` (ignorado por Git). No publicar `POS/index.html` ni la raíz del repositorio.
+En esta rama V1.3, el build `scripts/build-reader.mjs` prepara 52 archivos de un
+allowlist explicito: el visor y el shell PWA bajo `POS/`, en `.reader-assets/`
+(ignorado por Git). Este cambio queda limitado a un nuevo preview HTTPS y prueba
+Android fisica; no autoriza deploy de produccion ni cutover. Nunca publicar la raiz
+del repositorio.
+
+Pruebas focalizadas A1 desde la raiz del repositorio, sin regenerar evidencia historica:
+
+```sh
+node tools/cloudflare-lab/scripts/build-reader.mjs
+node --test tools/cloudflare-lab/test/pwa-shell.test.mjs tests/release-local-server.test.mjs
+```
+
+El service worker conserva HTML y dependencias en la cache de su generacion,
+tambien al recargar online. Una actualizacion espera al cierre de todas las pestanas
+controladas; no fuerza recarga ni activacion durante una venta. Si falta un recurso
+de esa cache responde 503, sin mezclarlo con otra generacion. El servidor local
+calcula la generacion al arrancar: reiniciarlo despues de cambiar archivos del POS.
 
 ## Ejecutar
 
