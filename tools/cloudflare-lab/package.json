@@ -11,10 +11,12 @@
     "test:worker": "node test/sync-operations.test.mjs http://127.0.0.1:8787",
     "test:d1:local": "node test/d1-remote-contract.test.mjs --local",
     "test:d1:remote": "node test/d1-remote-contract.test.mjs --remote",
+    "a5:migrate": "node scripts/a5-migrate.mjs",
     "deploy": "wrangler deploy"
   },
   "license": "ISC",
   "devDependencies": {
+    "exceljs": "^4.4.0",
     "wrangler": "^4.129.0"
   }
 }

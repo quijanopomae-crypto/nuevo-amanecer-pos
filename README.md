@@ -27,3 +27,8 @@ node --test tests/release-local-server.test.mjs
 
 No cambiar el origen de una caja existente sin exportar y comprobar antes el respaldo
 completo. El paquete no contiene los datos comerciales ni las credenciales.
+
+La migracion A5 hacia staging D1 se documenta en
+[`docs/V1.3_A5_MIGRATION_RECONCILIATION.md`](docs/V1.3_A5_MIGRATION_RECONCILIATION.md).
+Sus fuentes privadas se colocan en `tools/cloudflare-lab/private/a5-inputs/`, que
+Git ignora. A5 no despliega, no promueve datos comerciales y no ejecuta cutover.

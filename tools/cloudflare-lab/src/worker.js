@@ -1,12 +1,15 @@
 // Gateway mínimo: POS OUTBOX -> Worker -> D1 sync_operations.
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
+import { buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
 
 const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const OPERATION_PATH = /^\/sync\/operations\/([^/]+)$/;
 const SALE_ITEMS_PATH = /^\/read\/sales\/([^/]+)\/items$/;
 const SALE_CREATE_PATH = '/commands/sale.create';
+const IMPORT_STAGE_PATH = '/commands/import.stage';
+const IMPORT_PATH = /^\/imports\/([^/]+)$/;
 const READ_TYPES = new Set(['sales', 'sale_items', 'inventory_movements']);
 const PAYMENT_METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
 const DEFAULT_LIMIT = 25;
@@ -17,7 +20,7 @@ export default {
     const url = new URL(request.url);
     const isRead = url.pathname.startsWith('/read/');
     try {
-      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname === SALE_CREATE_PATH || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
+      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/commands/') || url.pathname.startsWith('/imports/') || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
         return cors(new Response(null, { status: 204 }), isRead);
       }
       if (request.method === 'GET' && url.pathname === '/health') {
@@ -32,6 +35,17 @@ export default {
       if (url.pathname === SALE_CREATE_PATH) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
         return await createSale(request, env);
+      }
+      if (url.pathname === IMPORT_STAGE_PATH) {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        return await stageImport(request, env);
+      }
+      const importMatch = url.pathname.match(IMPORT_PATH);
+      if (importMatch) {
+        if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' });
+        const denied = await authorizeDevice(request.headers.get('x-device-id'), request, env, true);
+        if (denied instanceof Response) return denied;
+        return await readImport(decodeURIComponent(importMatch[1]), env.nuevo_amanecer_lab);
       }
       if (url.pathname.startsWith('/sync/operations')) {
         const provided = request.headers.get('x-sync-token') ?? '';
@@ -482,6 +496,143 @@ function validatePayment(method, totalCents, payment) {
       reference: payment.reference || null,
     },
   };
+}
+
+async function stageImport(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
+  const deviceId = request.headers.get('x-device-id');
+  const denied = await authorizeDevice(deviceId, request, env, true);
+  if (denied instanceof Response) return denied;
+  if (!body || !validId(body.import_id) || !['start', 'rows', 'issues', 'finish'].includes(body.action)) return json({ error: 'invalid_import_request' }, 400);
+  const db = env.nuevo_amanecer_lab;
+  if (body.action === 'start') return startImport(body, deviceId, denied.credentialHash, db);
+  const run = await db.prepare('SELECT * FROM import_runs WHERE import_id = ?1').bind(body.import_id).first();
+  if (!run) return json({ error: 'import_not_found' }, 404);
+  if (run.device_id !== deviceId) return json({ error: 'import_device_mismatch' }, 403);
+  if (run.status !== 'STAGING') {
+    if (body.action === 'finish' && body.manifest_hash === run.manifest_hash && body.verdict === run.status && body.issue_count === JSON.parse(run.report_json).issue_count) return json({ status: run.status, import_id: body.import_id, idempotent: true, reconciliation: run.status });
+    return json({ error: 'import_finalized', import_id: body.import_id }, 409);
+  }
+  if (body.action === 'rows') return stageImportRows(body, run, db, denied.credentialHash);
+  if (body.action === 'issues') return stageImportIssues(body, run, db, denied.credentialHash);
+  return finishImport(body, run, denied.credentialHash, db);
+}
+
+async function startImport(body, deviceId, credentialHash, db) {
+  if (!SHA256_HEX.test(body.source_hash) || !SHA256_HEX.test(body.manifest_hash) || body.transform_version !== 'a5-v1' ||
+      !Number.isSafeInteger(body.source_files) || body.source_files < 1 || body.source_files > 2 ||
+      !Number.isSafeInteger(body.row_count) || body.row_count < 0 || !Array.isArray(body.sources) || body.sources.length !== body.source_files ||
+      typeof body.report_json !== 'string' || body.report_json.length > 1000000) {
+    return json({ error: 'invalid_import_start' }, 400);
+  }
+  let report;
+  try { report = JSON.parse(body.report_json); } catch { return json({ error: 'invalid_import_start' }, 400); }
+  if (!report || !['PASS', 'FAIL'].includes(report.verdict) || !Number.isSafeInteger(report.issue_count) || report.issue_count < 0) return json({ error: 'invalid_import_start' }, 400);
+  let sourcesJson;
+  try { sourcesJson = stableImportStringify(body.sources); } catch { return json({ error: 'invalid_import_start' }, 400); }
+  const sourceRun = await db.prepare('SELECT import_id, status FROM import_runs WHERE source_hash = ?1 AND transform_version = ?2').bind(body.source_hash, body.transform_version).first();
+  if (sourceRun && sourceRun.import_id !== body.import_id) return json({ error: 'duplicate_source', import_id: sourceRun.import_id, status: sourceRun.status }, 409);
+  const result = await db.prepare(
+    `INSERT INTO import_runs (import_id, source_hash, manifest_hash, transform_version, device_id, status, source_files, sources_json, row_count, report_json)
+     SELECT ?1, ?2, ?3, ?4, ?5, 'STAGING', ?6, ?7, ?8, ?9
+     WHERE EXISTS (SELECT 1 FROM devices WHERE device_id = ?5 AND role = 'writer' AND status = 'active' AND credential_hash = ?10)
+     ON CONFLICT DO NOTHING`,
+  ).bind(body.import_id, body.source_hash, body.manifest_hash, body.transform_version, deviceId, body.source_files, sourcesJson, body.row_count, body.report_json, credentialHash).run();
+  if (result.meta.changes === 1) return json({ status: 'STAGING', import_id: body.import_id, idempotent: false }, 201);
+  const existing = await db.prepare('SELECT source_hash, manifest_hash, transform_version, source_files, sources_json, row_count, report_json, status, device_id FROM import_runs WHERE import_id = ?1').bind(body.import_id).first();
+  if (existing && existing.source_hash === body.source_hash && existing.manifest_hash === body.manifest_hash && existing.transform_version === body.transform_version &&
+      existing.device_id === deviceId && Number(existing.source_files) === body.source_files && existing.sources_json === sourcesJson && Number(existing.row_count) === body.row_count && existing.report_json === body.report_json) {
+    return json({ status: existing.status, import_id: body.import_id, idempotent: true });
+  }
+  return json({ error: 'import_id_conflict', import_id: body.import_id }, 409);
+}
+
+async function stageImportRows(body, run, db, credentialHash) {
+  if (!Array.isArray(body.rows) || body.rows.length < 1 || body.rows.length > 50) return json({ error: 'invalid_import_rows' }, 400);
+  const statements = [];
+  for (const row of body.rows) {
+    if (!row || !['products', 'sales', 'customers', 'credits', 'credit_payments', 'expenses', 'cash_movements', 'cash_closures', 'inventory_movements'].includes(row.entity_type) ||
+        !validSourceKey(row.source_key) || typeof row.source_name !== 'string' || !row.source_name || row.source_name.length > 240 ||
+        !Number.isSafeInteger(row.source_row) || row.source_row < 1 ||
+        typeof row.payload_json !== 'string' || row.payload_json.length > 1000000 || !SHA256_HEX.test(row.payload_hash) || !['VALID', 'REVIEW'].includes(row.validation_status) ||
+        await sha256Hex(row.payload_json) !== row.payload_hash) return json({ error: 'invalid_import_row' }, 400);
+    statements.push(db.prepare(
+      `INSERT INTO import_staging (import_id, entity_type, source_key, source_name, source_row, payload_json, payload_hash, validation_status)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+       WHERE EXISTS (SELECT 1 FROM import_runs r JOIN devices d ON d.device_id = r.device_id
+         WHERE r.import_id = ?1 AND r.status = 'STAGING' AND d.role = 'writer' AND d.status = 'active' AND d.credential_hash = ?9)
+       ON CONFLICT(import_id, entity_type, source_name, source_row, source_key) DO NOTHING`,
+    ).bind(body.import_id, row.entity_type, row.source_key, row.source_name, row.source_row, row.payload_json, row.payload_hash, row.validation_status, credentialHash));
+  }
+  await db.batch(statements);
+  for (const row of body.rows) {
+    const stored = await db.prepare('SELECT payload_hash, payload_json, validation_status FROM import_staging WHERE import_id = ?1 AND entity_type = ?2 AND source_name = ?3 AND source_row = ?4 AND source_key = ?5').bind(body.import_id, row.entity_type, row.source_name, row.source_row, row.source_key).first();
+    if (!stored || stored.payload_hash !== row.payload_hash || stored.payload_json !== row.payload_json || stored.validation_status !== row.validation_status) return json({ error: 'staging_row_conflict', entity_type: row.entity_type, source_key: row.source_key }, 409);
+  }
+  return json({ status: 'STAGING', import_id: run.import_id, accepted: body.rows.length });
+}
+
+async function stageImportIssues(body, run, db, credentialHash) {
+  if (!Array.isArray(body.issues) || body.issues.length < 1 || body.issues.length > 50) return json({ error: 'invalid_import_issues' }, 400);
+  const statements = [];
+  for (const entry of body.issues) {
+    if (!entry || !Number.isSafeInteger(entry.issue_number) || entry.issue_number < 1 || !['ERROR', 'DIFFERENCE'].includes(entry.severity) ||
+        typeof entry.code !== 'string' || !entry.code || entry.code.length > 120 || (entry.entity_type !== null && entry.entity_type !== undefined && typeof entry.entity_type !== 'string') ||
+        (entry.source_key !== null && entry.source_key !== undefined && !validSourceKey(entry.source_key)) || typeof entry.details_json !== 'string' || entry.details_json.length > 100000) return json({ error: 'invalid_import_issue' }, 400);
+    statements.push(db.prepare(
+      `INSERT INTO import_issues (import_id, issue_number, severity, code, entity_type, source_key, details_json)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
+       WHERE EXISTS (SELECT 1 FROM import_runs r JOIN devices d ON d.device_id = r.device_id
+         WHERE r.import_id = ?1 AND r.status = 'STAGING' AND d.role = 'writer' AND d.status = 'active' AND d.credential_hash = ?8)
+       ON CONFLICT(import_id, issue_number) DO NOTHING`,
+    ).bind(body.import_id, entry.issue_number, entry.severity, entry.code, entry.entity_type ?? null, entry.source_key ?? null, entry.details_json, credentialHash));
+  }
+  await db.batch(statements);
+  for (const entry of body.issues) {
+    const stored = await db.prepare('SELECT severity, code, entity_type, source_key, details_json FROM import_issues WHERE import_id = ?1 AND issue_number = ?2').bind(body.import_id, entry.issue_number).first();
+    if (!stored || stableStringify(stored) !== stableStringify({ severity: entry.severity, code: entry.code, entity_type: entry.entity_type ?? null, source_key: entry.source_key ?? null, details_json: entry.details_json })) return json({ error: 'staging_issue_conflict', issue_number: entry.issue_number }, 409);
+  }
+  return json({ status: 'STAGING', import_id: run.import_id, accepted: body.issues.length });
+}
+
+async function finishImport(body, run, credentialHash, db) {
+  if (body.manifest_hash !== run.manifest_hash || !['PASS', 'FAIL'].includes(body.verdict) || !Number.isSafeInteger(body.issue_count) || body.issue_count < 0) return json({ error: 'invalid_import_finish' }, 400);
+  let report;
+  try { report = JSON.parse(run.report_json); } catch { return json({ error: 'invalid_stored_report' }, 500); }
+  if (report.verdict !== body.verdict || report.issue_count !== body.issue_count) return json({ error: 'report_mismatch' }, 409);
+  const staged = await db.prepare('SELECT entity_type, source_key, source_name, source_row, payload_json, payload_hash, validation_status FROM import_staging WHERE import_id = ?1 ORDER BY entity_type, source_key, source_name, source_row').bind(run.import_id).all();
+  const storedIssues = await db.prepare('SELECT issue_number, severity, code, entity_type, source_key, details_json FROM import_issues WHERE import_id = ?1 ORDER BY issue_number').bind(run.import_id).all();
+  const rows = staged.results ?? [];
+  const issues = storedIssues.results ?? [];
+  if (rows.length !== Number(run.row_count) || issues.length !== body.issue_count) return json({ error: 'reconciliation_incomplete', expected_rows: run.row_count, staged_rows: rows.length, expected_issues: body.issue_count, staged_issues: issues.length }, 409);
+  let rebuilt;
+  try {
+    rebuilt = await buildManifest({ importId: run.import_id, sources: JSON.parse(run.sources_json), rows: rows.map((row) => ({ entity_type: row.entity_type, source_key: row.source_key, source_name: row.source_name, source_row: Number(row.source_row), payload: JSON.parse(row.payload_json) })) });
+  } catch { return json({ error: 'manifest_integrity_mismatch' }, 409); }
+  const expectedIssues = rebuilt.report.issues.map((entry, index) => ({ issue_number: index + 1, severity: entry.severity, code: entry.code, entity_type: entry.entity_type, source_key: entry.source_key, details_json: JSON.stringify(entry.details) }));
+  const rowStatusesMatch = rows.every((row) => rebuilt.rows.some((expected) => expected.entity_type === row.entity_type && expected.source_key === row.source_key && expected.source_name === row.source_name && expected.source_row === Number(row.source_row) && expected.payload_hash === row.payload_hash && expected.validation_status === row.validation_status));
+  if (rebuilt.source_hash !== run.source_hash || rebuilt.manifest_hash !== run.manifest_hash || stableImportStringify(rebuilt.report) !== stableImportStringify(report) ||
+      stableImportStringify(expectedIssues) !== stableImportStringify(issues) || !rowStatusesMatch) return json({ error: 'manifest_integrity_mismatch' }, 409);
+  const result = await db.prepare(
+    `UPDATE import_runs SET status = ?1
+     WHERE import_id = ?2 AND status = 'STAGING' AND revision = ?5 AND EXISTS
+       (SELECT 1 FROM devices WHERE device_id = ?3 AND role = 'writer' AND status = 'active' AND credential_hash = ?4)`,
+  ).bind(body.verdict, run.import_id, run.device_id, credentialHash, run.revision).run();
+  if (result.meta.changes !== 1) return json({ error: 'import_not_finalized' }, 409);
+  return json({ status: body.verdict, import_id: run.import_id, row_count: rows.length, issue_count: issues.length, reconciliation: body.verdict });
+}
+
+async function readImport(importId, db) {
+  if (!validId(importId)) return json({ error: 'invalid_import_id' }, 400);
+  const run = await db.prepare('SELECT import_id, source_hash, manifest_hash, transform_version, status, source_files, row_count, report_json, created_at FROM import_runs WHERE import_id = ?1').bind(importId).first();
+  if (!run) return json({ error: 'import_not_found' }, 404);
+  const counts = await db.prepare('SELECT entity_type, validation_status, COUNT(*) AS count FROM import_staging WHERE import_id = ?1 GROUP BY entity_type, validation_status ORDER BY entity_type, validation_status').bind(importId).all();
+  return json({ ...run, report: JSON.parse(run.report_json), report_json: undefined, staged_counts: counts.results ?? [] });
+}
+
+function validSourceKey(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 240 && !/[\x00-\x1f\x7f]/.test(value);
 }
 
 function validId(value) {

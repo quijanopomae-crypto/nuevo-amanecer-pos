@@ -4,3 +4,5 @@ evidence/shadow/**
 !evidence/shadow/.gitkeep
 evidence/resume-demo/**
 !evidence/resume-demo/.gitkeep
+tools/cloudflare-lab/private/a5-inputs/**
+!tools/cloudflare-lab/private/a5-inputs/.gitkeep

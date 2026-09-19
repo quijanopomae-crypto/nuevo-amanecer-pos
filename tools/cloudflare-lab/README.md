@@ -39,6 +39,9 @@ Campos técnicos añadidos a los obligatorios: `received_at` (hora del servidor,
 - `GET /sync/operations/:operation_id` → devuelve la fila.
 - `POST /commands/sale.create` → crea atómicamente venta, líneas, movimientos de
   inventario y movimiento de caja. Requiere dispositivo `writer` activo.
+- `POST /commands/import.stage` → carga por lotes un manifiesto A5 validado en
+  staging y finaliza su reconciliacion `PASS`/`FAIL`; nunca promociona a tablas A3.
+- `GET /imports/{import_id}` → consulta autenticada del run y sus conteos staging.
 
 `sale.create` recibe `operation_id`, `device_id`, `sale_id`, `created_at`,
 `payment_method`, `total_cents` e `items`; cada línea contiene `product_id`,
@@ -117,6 +120,15 @@ node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.t
 node --test tools/cloudflare-lab/test/pwa-shell.test.mjs tests/release-local-server.test.mjs
 node --test tools/cloudflare-lab/test/pwa-browser.test.mjs
 ```
+
+Prueba focalizada A5, completamente local y sin fuentes comerciales:
+
+```sh
+node --test tests/cloud-sync/migration-reconciliation.test.mjs
+```
+
+El migrador A5 esta en `scripts/a5-migrate.mjs`; formatos, dry-run y ruta privada
+de inputs estan definidos en `docs/V1.3_A5_MIGRATION_RECONCILIATION.md`.
 
 Consultas autenticadas mediante `x-read-token` y el secreto independiente `READ_TOKEN`:
 
