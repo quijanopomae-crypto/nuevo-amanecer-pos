@@ -6,3 +6,5 @@ evidence/resume-demo/**
 !evidence/resume-demo/.gitkeep
 tools/cloudflare-lab/private/a5-inputs/**
 !tools/cloudflare-lab/private/a5-inputs/.gitkeep
+
+tools/cloudflare-lab/private/a5-staging-final/**
