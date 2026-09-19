@@ -23,6 +23,12 @@ function cents(value) {
   return Number.isFinite(number) && number >= 0 && Number.isSafeInteger(Math.round(number * 100)) ? Math.round(number * 100) : null;
 }
 
+function signedCents(value) {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) return null;
+  const number = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+  return Number.isFinite(number) && Number.isSafeInteger(Math.round(number * 100)) ? Math.round(number * 100) : null;
+}
+
 function id(value) {
   if (typeof value !== 'string' && typeof value !== 'number') return null;
   const result = String(value).trim();
@@ -93,6 +99,21 @@ function normalizePayment(raw, fallbackCreditId = null) {
   return { ...original, id: paymentId, credito_id: creditId, monto_cents: amountCents, fecha: knownDate, fecha_conocida: knownDate !== null };
 }
 
+function realWorkbookRecord(entityType, raw) {
+  const source = normalizedKeys(raw);
+  if (entityType === 'customers') return { ...raw, ID: source.documento, Nombre: source.cliente };
+  if (entityType === 'credits') return { ...raw, ID: source.documento_credito, Cliente_ID: source.documento_cliente, Monto: source.credito_original, Pagado: source.total_abonado, Saldo: source.saldo };
+  const sequence = id(source.pago_n_secuencia);
+  const creditId = id(source.documento_credito);
+  const rawDate = source.fecha_y_hora;
+  const unknownDate = typeof rawDate === 'string' && ['sin fecha', 'no registrada'].includes(normalizedText(rawDate));
+  return { ...raw, ID: creditId && sequence ? `${creditId}:${sequence}` : null, Credito_ID: creditId, Monto: source.importe_del_pago, Fecha: unknownDate ? null : rawDate };
+}
+
+function normalizedText(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
 export function normalizeBackup(document, sourceName = 'backup.json') {
   if (!document || typeof document !== 'object' || Array.isArray(document)) throw new Error('backup must be an object');
   const snapshot = document.format === 'nuevo-amanecer-pos-backup' ? document.payload : document;
@@ -122,17 +143,18 @@ export function normalizeBackup(document, sourceName = 'backup.json') {
 
 export function normalizeWorkbook(sheets, sourceName = 'clientes-creditos.xlsx') {
   if (!sheets || typeof sheets !== 'object' || Array.isArray(sheets)) throw new Error('workbook sheets are required');
-  const aliases = { clientes: 'customers', customers: 'customers', creditos: 'credits', credits: 'credits', pagos: 'credit_payments', abonos: 'credit_payments', payments: 'credit_payments' };
+  const aliases = { clientes: 'customers', customers: 'customers', creditos: 'credits', credits: 'credits', pagos: 'credit_payments', abonos: 'credit_payments', payments: 'credit_payments', 'resumen clientes': 'customers', 'detalle creditos': 'credits', 'historial pagos': 'credit_payments' };
   const rows = [];
   for (const [sheetName, records] of Object.entries(sheets)) {
-    const normalizedSheetName = String(sheetName).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    const normalizedSheetName = normalizedText(sheetName);
     const entityType = aliases[normalizedSheetName];
     if (!entityType) continue;
     if (!Array.isArray(records)) throw new Error(`sheet ${sheetName} must contain rows`);
     for (const [index, raw] of records.entries()) {
-      const payload = entityType === 'customers' ? normalizeCustomer(raw) : entityType === 'credits' ? normalizeCredit(raw) : normalizePayment(raw);
+      const mapped = ['resumen clientes', 'detalle creditos', 'historial pagos'].includes(normalizedSheetName) ? realWorkbookRecord(entityType, raw) : raw;
+      const payload = entityType === 'customers' ? normalizeCustomer(mapped) : entityType === 'credits' ? normalizeCredit(mapped) : normalizePayment(mapped);
       const sourceKey = entityType === 'credit_payments' ? `${payload.credito_id}:${payload.id}` : payload.id;
-      rows.push({ entity_type: entityType, source_key: sourceKey, source_name: sourceName, source_row: index + 2, payload });
+      rows.push({ entity_type: entityType, source_key: sourceKey, source_name: sourceName, source_row: index + (records.headerRow ?? 1) + 1, payload });
     }
   }
   if (!rows.length) throw new Error('XLSX must contain Clientes, Creditos and/or Pagos sheets');
@@ -161,6 +183,11 @@ export async function buildManifest({ importId, sources, rows }) {
   const credits = new Map(normalizedRows.filter((row) => row.entity_type === 'credits').map((row) => [row.source_key, row.payload]));
   for (const row of normalizedRows.filter((item) => item.entity_type === 'credits')) {
     if (!customers.has(row.payload.cliente_id)) issues.push(issue('ORPHAN_CREDIT_CUSTOMER', 'credits', row.source_key, { cliente_id: row.payload.cliente_id }));
+  }
+  for (const row of normalizedRows.filter((item) => item.entity_type === 'customers')) {
+    const source = normalizedKeys(row.payload);
+    const declaredDifference = signedCents(source.diferencia);
+    if (declaredDifference !== null && declaredDifference !== 0) issues.push(issue('CUSTOMER_BALANCE_DIFFERENCE', 'customers', row.source_key, { image_balance_cents: cents(source.saldo_imagenes), document_balance_cents: cents(source.saldo_documentos), difference_cents: declaredDifference }, 'DIFFERENCE'));
   }
   const paymentTotals = new Map();
   for (const row of normalizedRows.filter((item) => item.entity_type === 'credit_payments')) {

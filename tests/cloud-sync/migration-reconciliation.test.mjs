@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import ExcelJS from '../../tools/cloudflare-lab/node_modules/exceljs/excel.js';
+import JSZip from '../../tools/cloudflare-lab/node_modules/jszip/lib/index.js';
 import { buildManifest, normalizeBackup, normalizeWorkbook, validateManifest } from '../../tools/cloudflare-lab/src/a5-import-core.js';
 import { workerFixture } from './worker-fixture.mjs';
 
@@ -87,6 +88,57 @@ test('CLI lee un XLSX real y genera dry-run determinista sin contactar D1', asyn
   assert.equal(report.rows.find((row) => row.entity_type === 'credit_payments').payload.fecha, null);
   const second = await execFileAsync(process.execPath, [command.pathname.slice(1), '--import-id', 'xlsx-real', '--xlsx', input, '--dry-run']);
   assert.equal(JSON.parse(first.stdout).manifest_hash, JSON.parse(second.stdout).manifest_hash);
+});
+
+test('CLI soporta la estructura OOXML real y conserva diferencias', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'na-a5-real-structure-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = join(directory, 'creditos-clientes.xlsx');
+  const workbook = new ExcelJS.Workbook();
+  const summary = workbook.addWorksheet('Resumen clientes');
+  for (let index = 0; index < 9; index++) summary.addRow(index === 0 ? ['Resumen sintético'] : []);
+  summary.addRow(['Documento', 'Cliente', 'Saldo imágenes', 'Saldo documentos', 'Diferencia']);
+  for (let index = 1; index <= 31; index++) summary.addRow([`customer-${index}`, `Customer ${index}`, index === 1 ? 10 : 0, index === 1 ? 119 : 0, index === 1 ? 109 : 0]);
+  const credits = workbook.addWorksheet('Detalle créditos');
+  credits.addRow(['Detalle sintético']); credits.addRow([]);
+  credits.addRow(['Documento cliente', 'Cliente', 'Documento crédito', 'Crédito original', 'Total abonado', 'Saldo']);
+  for (let index = 1; index <= 314; index++) credits.addRow([`customer-${((index - 1) % 31) + 1}`, `Customer ${index}`, `credit-${index}`, 10, index <= 134 ? 1 : 0, index <= 134 ? 9 : 10]);
+  const payments = workbook.addWorksheet('Historial pagos');
+  payments.addRow(['Pagos sintéticos']); payments.addRow([]);
+  payments.addRow(['Documento cliente', 'Cliente', 'Documento crédito', 'Pago N.º (secuencia)', 'Fecha y hora', 'Importe del pago']);
+  for (let index = 1; index <= 134; index++) payments.addRow([`customer-${((index - 1) % 31) + 1}`, `Customer ${index}`, `credit-${index}`, 1, index % 2 ? '' : 'No registrada', 1]);
+  workbook.addWorksheet('Notas y control').addRow(['Tema', 'Detalle']);
+  workbook.addWorksheet('Plan cuotas nuevas').addRow(['Cliente', 'Concepto']);
+  const zip = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+  for (const [name, entry] of Object.entries(zip.files)) {
+    if (entry.dir || !name.endsWith('.xml')) continue;
+    const xml = await entry.async('string');
+    if (!xml.includes('xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"')) continue;
+    zip.file(name, xml.replaceAll('<worksheet', '<x:worksheet').replaceAll('</worksheet>', '</x:worksheet>').replaceAll('<workbook', '<x:workbook').replaceAll('</workbook>', '</x:workbook>').replaceAll('<sst', '<x:sst').replaceAll('</sst>', '</x:sst>').replace('xmlns=', 'xmlns:x='));
+  }
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(input, await zip.generateAsync({ type: 'nodebuffer' }));
+  const command = new URL('../../tools/cloudflare-lab/scripts/a5-migrate.mjs', import.meta.url);
+  await assert.rejects(execFileAsync(process.execPath, [command.pathname.slice(1), '--import-id', 'xlsx-real-shape', '--xlsx', input, '--dry-run']), (error) => {
+    const report = JSON.parse(error.stdout);
+    assert.equal(report.report.verdict, 'FAIL');
+    assert.deepEqual(report.report.counts, { customers: 31, credits: 314, credit_payments: 134 });
+    assert.equal(report.rows.filter((row) => row.entity_type === 'credit_payments' && row.payload.fecha === null && row.payload.fecha_conocida === false).length, 134);
+    assert.equal(report.report.issues.some((entry) => entry.code === 'CUSTOMER_BALANCE_DIFFERENCE' && entry.details.difference_cents === 10900), true);
+    return true;
+  });
+});
+
+test('reconciliación conserva diferencias de cliente positivas y negativas', async () => {
+  const rows = normalizeWorkbook({
+    'Resumen clientes': [
+      { Documento: 'customer-positive', Cliente: 'Positive', 'Saldo imágenes': 10, 'Saldo documentos': 119, Diferencia: 109 },
+      { Documento: 'customer-negative', Cliente: 'Negative', 'Saldo imágenes': 119, 'Saldo documentos': 10, Diferencia: -109 },
+    ],
+  });
+  const result = await buildManifest({ importId: 'signed-differences', sources: [{ name: 'input.xlsx', type: 'CLIENT_CREDIT_XLSX', sha256: 'c'.repeat(64), bytes: 1 }], rows });
+  assert.deepEqual(result.report.issues.map((entry) => entry.details.difference_cents).sort((a, b) => a - b), [-10900, 10900]);
+  assert.equal(result.report.verdict, 'FAIL');
 });
 
 test('duplicados, huérfanos y diferencias quedan preservados y reportan FAIL', async () => {

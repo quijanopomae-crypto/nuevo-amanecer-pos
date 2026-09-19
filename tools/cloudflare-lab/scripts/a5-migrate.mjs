@@ -1,8 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import ExcelJS from 'exceljs';
 import { buildManifest, normalizeBackup, normalizeWorkbook } from '../src/a5-import-core.js';
+import { readWorkbookSheets } from '../src/a5-workbook.js';
 
 const args = process.argv.slice(2);
 const option = (name) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : null; };
@@ -32,20 +32,7 @@ if (!importId || (!jsonPath && !xlsxPath) || (stage && (!option('--endpoint') ||
     }
     if (xlsxPath) {
       const bytes = await readFile(resolve(xlsxPath));
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(bytes);
-      const sheets = {};
-      workbook.eachSheet((sheet) => {
-        const headers = sheet.getRow(1).values.slice(1).map((value) => String(value ?? '').trim());
-        const records = [];
-        sheet.eachRow((row, number) => {
-          if (number === 1) return;
-          const record = {};
-          headers.forEach((header, index) => { if (header) record[header] = row.getCell(index + 1).value ?? ''; });
-          if (Object.values(record).some((value) => value !== '')) records.push(record);
-        });
-        sheets[sheet.name] = records;
-      });
+      const sheets = await readWorkbookSheets(bytes);
       sources.push({ name: basename(xlsxPath), type: 'CLIENT_CREDIT_XLSX', sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length });
       rows.push(...normalizeWorkbook(sheets, basename(xlsxPath)));
     }
