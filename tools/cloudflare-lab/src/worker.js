@@ -520,7 +520,7 @@ async function stageImport(request, env) {
 }
 
 async function startImport(body, deviceId, credentialHash, db) {
-  if (!SHA256_HEX.test(body.source_hash) || !SHA256_HEX.test(body.manifest_hash) || body.transform_version !== 'a5-v1' ||
+  if (!SHA256_HEX.test(body.source_hash) || !SHA256_HEX.test(body.manifest_hash) || !['a5-v1', 'a5-v1-a4-quarantine-v1'].includes(body.transform_version) ||
       !Number.isSafeInteger(body.source_files) || body.source_files < 1 || body.source_files > 2 ||
       !Number.isSafeInteger(body.row_count) || body.row_count < 0 || !Array.isArray(body.sources) || body.sources.length !== body.source_files ||
       typeof body.report_json !== 'string' || body.report_json.length > 1000000) {
@@ -529,6 +529,8 @@ async function startImport(body, deviceId, credentialHash, db) {
   let report;
   try { report = JSON.parse(body.report_json); } catch { return json({ error: 'invalid_import_start' }, 400); }
   if (!report || !['PASS', 'FAIL'].includes(report.verdict) || !Number.isSafeInteger(report.issue_count) || report.issue_count < 0) return json({ error: 'invalid_import_start' }, 400);
+  const expectedTransformVersion = report.exclusions?.policy === 'A4_TEST_TRANSACTIONS_V1' ? 'a5-v1-a4-quarantine-v1' : 'a5-v1';
+  if (body.transform_version !== expectedTransformVersion || (report.exclusions && report.exclusions.policy !== 'A4_TEST_TRANSACTIONS_V1')) return json({ error: 'invalid_import_start' }, 400);
   let sourcesJson;
   try { sourcesJson = stableImportStringify(body.sources); } catch { return json({ error: 'invalid_import_start' }, 400); }
   const sourceRun = await db.prepare('SELECT import_id, status FROM import_runs WHERE source_hash = ?1 AND transform_version = ?2').bind(body.source_hash, body.transform_version).first();
@@ -608,11 +610,11 @@ async function finishImport(body, run, credentialHash, db) {
   if (rows.length !== Number(run.row_count) || issues.length !== body.issue_count) return json({ error: 'reconciliation_incomplete', expected_rows: run.row_count, staged_rows: rows.length, expected_issues: body.issue_count, staged_issues: issues.length }, 409);
   let rebuilt;
   try {
-    rebuilt = await buildManifest({ importId: run.import_id, sources: JSON.parse(run.sources_json), rows: rows.map((row) => ({ entity_type: row.entity_type, source_key: row.source_key, source_name: row.source_name, source_row: Number(row.source_row), payload: JSON.parse(row.payload_json) })) });
+    rebuilt = await buildManifest({ importId: run.import_id, sources: JSON.parse(run.sources_json), rows: rows.map((row) => ({ entity_type: row.entity_type, source_key: row.source_key, source_name: row.source_name, source_row: Number(row.source_row), payload: JSON.parse(row.payload_json) })), exclusions: report.exclusions ?? null });
   } catch { return json({ error: 'manifest_integrity_mismatch' }, 409); }
   const expectedIssues = rebuilt.report.issues.map((entry, index) => ({ issue_number: index + 1, severity: entry.severity, code: entry.code, entity_type: entry.entity_type, source_key: entry.source_key, details_json: JSON.stringify(entry.details) }));
   const rowStatusesMatch = rows.every((row) => rebuilt.rows.some((expected) => expected.entity_type === row.entity_type && expected.source_key === row.source_key && expected.source_name === row.source_name && expected.source_row === Number(row.source_row) && expected.payload_hash === row.payload_hash && expected.validation_status === row.validation_status));
-  if (rebuilt.source_hash !== run.source_hash || rebuilt.manifest_hash !== run.manifest_hash || stableImportStringify(rebuilt.report) !== stableImportStringify(report) ||
+  if (rebuilt.transform_version !== run.transform_version || rebuilt.source_hash !== run.source_hash || rebuilt.manifest_hash !== run.manifest_hash || stableImportStringify(rebuilt.report) !== stableImportStringify(report) ||
       stableImportStringify(expectedIssues) !== stableImportStringify(issues) || !rowStatusesMatch) return json({ error: 'manifest_integrity_mismatch' }, 409);
   const result = await db.prepare(
     `UPDATE import_runs SET status = ?1

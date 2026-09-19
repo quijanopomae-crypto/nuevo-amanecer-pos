@@ -8,10 +8,11 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import ExcelJS from '../../tools/cloudflare-lab/node_modules/exceljs/excel.js';
 import JSZip from '../../tools/cloudflare-lab/node_modules/jszip/lib/index.js';
-import { buildManifest, normalizeBackup, normalizeWorkbook, validateManifest } from '../../tools/cloudflare-lab/src/a5-import-core.js';
+import { buildManifest, normalizeBackup, normalizeWorkbook, quarantineA4TestTransactions, validateManifest } from '../../tools/cloudflare-lab/src/a5-import-core.js';
 import { workerFixture } from './worker-fixture.mjs';
 
 const execFileAsync = promisify(execFile);
+const A4_SOURCE = { name: 'synthetic.json', type: 'POS_JSON', sha256: '51229f1c1b37ab28a6865ac9935450207a56d5f3a48073c75b9527c5b68e7d8f', bytes: 1 };
 
 const backup = {
   format: 'nuevo-amanecer-pos-backup', version: 1,
@@ -30,6 +31,27 @@ async function manifest(overrides = {}) {
 
 function post(fixture, body) {
   return fixture.fetch('https://worker.test/commands/import.stage', { method: 'POST', headers: { 'content-type': 'application/json', 'x-device-id': 'writer-1', 'x-sync-token': 'writer-secret' }, body: JSON.stringify(body) });
+}
+
+function a4SyntheticBackup() {
+  return { version: 9, data: {
+    productos: [{ id: 'product-1', name: 'Synthetic product', stock: 38 }],
+    ventas: [
+      { id: 'V-002', total: 10, items: [{ productoId: 'product-1', qty: 10, unitsPerQty: 1, stockAntes: 48 }] },
+      { id: 'V-001', total: 2, items: [{ productoId: 'product-1', qty: 2, unitsPerQty: 1, stockAntes: 50 }] },
+    ],
+    clientes: [], creditos: [], gastos: [], cashClosures: [],
+    cajMovs: [
+      { id: 'cash-1', ventaId: 'V-001', monto: 2 },
+      { id: 'cash-2', ventaId: 'V-002', monto: 10 },
+      { id: 'cash-commercial', monto: 7 },
+    ],
+    inventoryMovements: [
+      { id: 'inventory-1', productId: 'product-1', type: 'SALE', source: 'SALE', referenceId: 'V-001', before: 50, delta: -2, after: 48 },
+      { id: 'inventory-2', productId: 'product-1', type: 'SALE', source: 'SALE', referenceId: 'V-002', before: 48, delta: -10, after: 38 },
+      { id: 'inventory-commercial', productId: 'product-1', type: 'ADJUSTMENT', source: 'MANUAL', referenceId: 'other', before: 38, delta: 0, after: 38 },
+    ],
+  } };
 }
 
 async function stage(fixture, value) {
@@ -51,6 +73,32 @@ test('mismo origen produce manifiesto reproducible y PASS con conteos y montos e
   assert.deepEqual(first.report.counts, { products: 1, customers: 1, credits: 1, credit_payments: 1 });
   assert.deepEqual(first.report.amounts, { credit_amount_cents: 10000, credit_paid_cents: 4000, credit_balance_cents: 6000, payment_amount_cents: 4000, sales_total_cents: 0 });
   assert.deepEqual(await validateManifest(first), first);
+});
+
+test('cuarentena A4 restaura el estado pre-prueba y conserva filas no relacionadas', async () => {
+  const originalRows = normalizeBackup(a4SyntheticBackup(), 'synthetic.json');
+  const result = quarantineA4TestTransactions(originalRows, [A4_SOURCE]);
+  const manifest = await buildManifest({ importId: 'a4-quarantine', sources: [A4_SOURCE], ...result });
+  assert.deepEqual(manifest.report.counts, { products: 1, cash_movements: 1, inventory_movements: 1, sales: 0 });
+  assert.equal(manifest.report.amounts.sales_total_cents, 0);
+  assert.equal(manifest.rows.find((row) => row.entity_type === 'products').payload.stock, 50);
+  assert.equal(manifest.rows.some((row) => row.source_key === 'cash-commercial'), true);
+  assert.equal(manifest.rows.some((row) => row.source_key === 'inventory-commercial'), true);
+  assert.deepEqual(manifest.report.exclusions.sale_ids, ['V-001', 'V-002']);
+  assert.deepEqual(manifest.report.exclusions.quarantined_rows.map((row) => row.entity_type).sort(), ['cash_movements', 'cash_movements', 'inventory_movements', 'inventory_movements', 'sales', 'sales']);
+  assert.deepEqual(manifest.report.exclusions.stock_restorations, [{ product_id: 'product-1', from_stock: 38, to_stock: 50, reversed_delta: 12, verified_sales: ['V-001', 'V-002'] }]);
+  assert.equal((await validateManifest(manifest)).manifest_hash, manifest.manifest_hash);
+});
+
+test('cuarentena A4 hace FAIL si stockAntes, delta o stock actual no coinciden', () => {
+  const rows = normalizeBackup(a4SyntheticBackup(), 'synthetic.json');
+  rows.find((row) => row.entity_type === 'inventory_movements' && row.payload.referenceId === 'V-002').payload.delta = -9;
+  assert.throws(() => quarantineA4TestTransactions(rows, [A4_SOURCE]), /A4 quarantine invariant failed: stockAntes\/delta mismatch/);
+
+  const wrongStockRows = normalizeBackup(a4SyntheticBackup(), 'synthetic.json');
+  wrongStockRows.find((row) => row.entity_type === 'products').payload.stock = 39;
+  assert.throws(() => quarantineA4TestTransactions(wrongStockRows, [A4_SOURCE]), /A4 quarantine invariant failed: current stock/);
+  assert.throws(() => quarantineA4TestTransactions(normalizeBackup(a4SyntheticBackup()), [{ ...A4_SOURCE, sha256: 'e'.repeat(64) }]), /SHA-256 is not the authorized A4 source/);
 });
 
 test('XLSX lógico preserva abono sin fecha como desconocida sin inventarla', async () => {

@@ -1,5 +1,8 @@
 const TYPES = new Set(['products', 'sales', 'customers', 'credits', 'credit_payments', 'expenses', 'cash_movements', 'cash_closures', 'inventory_movements']);
 export const A5_TRANSFORM_VERSION = 'a5-v1';
+export const A5_A4_QUARANTINE_TRANSFORM_VERSION = 'a5-v1-a4-quarantine-v1';
+const A4_TEST_SALE_IDS = ['V-001', 'V-002'];
+const A4_TEST_SOURCE_SHA256 = '51229f1c1b37ab28a6865ac9935450207a56d5f3a48073c75b9527c5b68e7d8f';
 
 export function stableStringify(value) {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -161,7 +164,80 @@ export function normalizeWorkbook(sheets, sourceName = 'clientes-creditos.xlsx')
   return rows;
 }
 
-export async function buildManifest({ importId, sources, rows }) {
+export function quarantineA4TestTransactions(rows, sources) {
+  if (!Array.isArray(rows)) throw new Error('A4 quarantine requires normalized rows');
+  const jsonSources = Array.isArray(sources) ? sources.filter((source) => source.type === 'POS_JSON') : [];
+  if (jsonSources.length !== 1 || jsonSources[0].sha256 !== A4_TEST_SOURCE_SHA256) throw new Error('A4 quarantine invariant failed: POS JSON SHA-256 is not the authorized A4 source');
+  const sales = new Map();
+  const cashRows = new Map();
+  const inventoryRows = new Map();
+  for (const saleId of A4_TEST_SALE_IDS) {
+    const matchingSales = rows.filter((row) => row.entity_type === 'sales' && row.source_key === saleId && row.payload?.id === saleId);
+    if (matchingSales.length !== 1) throw new Error(`A4 quarantine invariant failed: sale ${saleId} must exist exactly once`);
+    sales.set(saleId, matchingSales[0]);
+    const matchingCash = rows.filter((row) => row.entity_type === 'cash_movements' && id(row.payload?.ventaId) === saleId);
+    if (matchingCash.length !== 1) throw new Error(`A4 quarantine invariant failed: sale ${saleId} must have exactly one cash movement by ventaId`);
+    const saleTotal = cents(matchingSales[0].payload.total);
+    if (saleTotal === null || cents(matchingCash[0].payload.monto) !== saleTotal) throw new Error(`A4 quarantine invariant failed: cash movement for ${saleId} does not equal its exact sale total`);
+    cashRows.set(saleId, matchingCash[0]);
+    const matchingInventory = rows.filter((row) => row.entity_type === 'inventory_movements' && id(row.payload?.referenceId) === saleId);
+    const items = matchingSales[0].payload.items;
+    if (!Array.isArray(items) || !items.length || matchingInventory.length !== items.length) throw new Error(`A4 quarantine invariant failed: inventory movement count for ${saleId} does not match sale items`);
+    inventoryRows.set(saleId, matchingInventory);
+  }
+
+  const productChains = new Map();
+  for (const saleId of A4_TEST_SALE_IDS) {
+    const unmatched = [...inventoryRows.get(saleId)];
+    for (const item of sales.get(saleId).payload.items) {
+      const productId = id(item.productoId ?? item.id);
+      const before = Number(item.stockAntes);
+      const quantity = Number(item.qty ?? item.cantidad);
+      const unitsPerQuantity = Number(item.unitsPerQty ?? 1);
+      const delta = -(quantity * unitsPerQuantity);
+      if (!productId || !Number.isFinite(before) || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitsPerQuantity) || unitsPerQuantity <= 0 || !Number.isFinite(delta)) throw new Error(`A4 quarantine invariant failed: invalid stock data in sale ${saleId}`);
+      const index = unmatched.findIndex((row) => id(row.payload?.productId) === productId && Number(row.payload?.before) === before && Number(row.payload?.delta) === delta && Number(row.payload?.after) === before + delta && row.payload?.source === 'SALE' && row.payload?.type === 'SALE');
+      if (index < 0) throw new Error(`A4 quarantine invariant failed: stockAntes/delta mismatch for sale ${saleId} product ${productId}`);
+      const movement = unmatched.splice(index, 1)[0];
+      const chain = productChains.get(productId) || [];
+      chain.push({ sale_id: saleId, sale: sales.get(saleId), item, movement, before, delta, after: before + delta });
+      productChains.set(productId, chain);
+    }
+    if (unmatched.length) throw new Error(`A4 quarantine invariant failed: unmatched inventory movement for sale ${saleId}`);
+  }
+
+  const replacements = new Map();
+  const stockRestorations = [];
+  for (const [productId, chain] of productChains) {
+    for (let index = 1; index < chain.length; index++) {
+      if (chain[index - 1].after !== chain[index].before) throw new Error(`A4 quarantine invariant failed: stock chain is discontinuous for product ${productId}`);
+    }
+    const products = rows.filter((row) => row.entity_type === 'products' && id(row.payload?.id) === productId);
+    if (products.length !== 1) throw new Error(`A4 quarantine invariant failed: product ${productId} must exist exactly once`);
+    const currentStock = Number(products[0].payload.stock);
+    const finalStock = chain.at(-1).after;
+    if (!Number.isFinite(currentStock) || currentStock !== finalStock) throw new Error(`A4 quarantine invariant failed: current stock for product ${productId} does not match the final test delta`);
+    replacements.set(products[0], { ...products[0], payload: { ...products[0].payload, stock: chain[0].before } });
+    stockRestorations.push({ product_id: productId, from_stock: currentStock, to_stock: chain[0].before, reversed_delta: chain.reduce((sum, entry) => sum - entry.delta, 0), verified_sales: chain.map((entry) => entry.sale_id) });
+  }
+
+  const excluded = new Set([...sales.values(), ...cashRows.values(), ...[...inventoryRows.values()].flat()]);
+  const quarantinedRows = [...excluded].map((row) => ({ entity_type: row.entity_type, source_key: row.source_key, relationship: row.entity_type === 'sales' ? 'exact sale id' : row.entity_type === 'cash_movements' ? `ventaId=${row.payload.ventaId}` : `referenceId=${row.payload.referenceId}` }))
+    .sort((a, b) => stableStringify(a).localeCompare(stableStringify(b)));
+  return {
+    rows: rows.filter((row) => !excluded.has(row)).map((row) => replacements.get(row) || row),
+    exclusions: {
+      policy: 'A4_TEST_TRANSACTIONS_V1',
+      reason: 'Owner-confirmed A4 physical test transactions; excluded only by exact IDs and verified relationships',
+      sale_ids: [...A4_TEST_SALE_IDS],
+      quarantined_rows: quarantinedRows,
+      stock_restorations: stockRestorations.sort((a, b) => a.product_id.localeCompare(b.product_id)),
+      invariants: { exact_sales: true, exact_cash_links: true, exact_inventory_links: true, sale_item_deltas_match: true, stock_chain_continuous: true, current_stock_matches_chain: true },
+    },
+  };
+}
+
+export async function buildManifest({ importId, sources, rows, exclusions = null }) {
   if (!id(importId)) throw new Error('import_id is invalid');
   if (!Array.isArray(sources) || sources.length < 1 || sources.length > 2) throw new Error('one or two sources are required');
   const issues = [];
@@ -211,6 +287,9 @@ export async function buildManifest({ importId, sources, rows }) {
       else amounts.sales_total_cents += total;
     }
   }
+  if (exclusions?.policy === 'A4_TEST_TRANSACTIONS_V1') {
+    for (const entityType of ['sales', 'cash_movements', 'inventory_movements']) counts[entityType] ||= 0;
+  }
   normalizedRows.sort((a, b) => `${a.entity_type}:${a.source_key}:${a.source_name}:${a.source_row}`.localeCompare(`${b.entity_type}:${b.source_key}:${b.source_name}:${b.source_row}`));
   issues.sort((a, b) => stableStringify(a).localeCompare(stableStringify(b)));
   const sourceIdentities = sources.map(({ name, type, sha256, bytes }) => {
@@ -219,12 +298,15 @@ export async function buildManifest({ importId, sources, rows }) {
   }).sort((a, b) => stableStringify(a).localeCompare(stableStringify(b)));
   const sourceHash = await sha256Hex(stableStringify(sourceIdentities));
   const manifestHash = await sha256Hex(stableStringify(normalizedRows.map(({ entity_type, source_key, payload_hash }) => ({ entity_type, source_key, payload_hash }))));
-  return { import_id: importId, transform_version: A5_TRANSFORM_VERSION, source_hash: sourceHash, manifest_hash: manifestHash, sources, rows: normalizedRows, report: { verdict: issues.length ? 'FAIL' : 'PASS', counts, amounts, issue_count: issues.length, issues } };
+  const transformVersion = exclusions?.policy === 'A4_TEST_TRANSACTIONS_V1' ? A5_A4_QUARANTINE_TRANSFORM_VERSION : A5_TRANSFORM_VERSION;
+  const report = { verdict: issues.length ? 'FAIL' : 'PASS', counts, amounts, issue_count: issues.length, issues };
+  if (exclusions) report.exclusions = exclusions;
+  return { import_id: importId, transform_version: transformVersion, source_hash: sourceHash, manifest_hash: manifestHash, sources, rows: normalizedRows, report };
 }
 
 export async function validateManifest(manifest) {
-  if (!manifest || manifest.transform_version !== A5_TRANSFORM_VERSION) throw new Error('unsupported transform_version');
-  const rebuilt = await buildManifest({ importId: manifest.import_id, sources: manifest.sources, rows: manifest.rows.map((row) => ({ entity_type: row.entity_type, source_key: row.source_key, source_name: row.source_name, source_row: row.source_row, payload: JSON.parse(row.payload_json) })) });
-  if (rebuilt.source_hash !== manifest.source_hash || rebuilt.manifest_hash !== manifest.manifest_hash || stableStringify(rebuilt.report) !== stableStringify(manifest.report)) throw new Error('manifest integrity mismatch');
+  if (!manifest || ![A5_TRANSFORM_VERSION, A5_A4_QUARANTINE_TRANSFORM_VERSION].includes(manifest.transform_version)) throw new Error('unsupported transform_version');
+  const rebuilt = await buildManifest({ importId: manifest.import_id, sources: manifest.sources, rows: manifest.rows.map((row) => ({ entity_type: row.entity_type, source_key: row.source_key, source_name: row.source_name, source_row: row.source_row, payload: JSON.parse(row.payload_json) })), exclusions: manifest.report.exclusions ?? null });
+  if (rebuilt.transform_version !== manifest.transform_version || rebuilt.source_hash !== manifest.source_hash || rebuilt.manifest_hash !== manifest.manifest_hash || stableStringify(rebuilt.report) !== stableStringify(manifest.report)) throw new Error('manifest integrity mismatch');
   return rebuilt;
 }

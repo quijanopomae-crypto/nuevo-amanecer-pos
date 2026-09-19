@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { buildManifest, normalizeBackup, normalizeWorkbook } from '../src/a5-import-core.js';
+import { buildManifest, normalizeBackup, normalizeWorkbook, quarantineA4TestTransactions } from '../src/a5-import-core.js';
 import { readWorkbookSheets } from '../src/a5-workbook.js';
 
 const args = process.argv.slice(2);
@@ -12,8 +12,9 @@ const xlsxPath = option('--xlsx');
 const importId = option('--import-id');
 const outputPath = option('--output');
 const stage = has('--stage');
+const quarantineA4Tests = has('--quarantine-a4-tests');
 if (!importId || (!jsonPath && !xlsxPath) || (stage && (!option('--endpoint') || !process.env.DEVICE_ID || !process.env.SYNC_TOKEN))) {
-  console.error('Usage: node scripts/a5-migrate.mjs --import-id ID [--json FILE] [--xlsx FILE] [--output REPORT.json] [--dry-run | --stage --endpoint URL]');
+  console.error('Usage: node scripts/a5-migrate.mjs --import-id ID [--json FILE] [--xlsx FILE] [--quarantine-a4-tests] [--output REPORT.json] [--dry-run | --stage --endpoint URL]');
   process.exitCode = 2;
 } else {
   try {
@@ -36,7 +37,8 @@ if (!importId || (!jsonPath && !xlsxPath) || (stage && (!option('--endpoint') ||
       sources.push({ name: basename(xlsxPath), type: 'CLIENT_CREDIT_XLSX', sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length });
       rows.push(...normalizeWorkbook(sheets, basename(xlsxPath)));
     }
-    const manifest = await buildManifest({ importId, sources, rows });
+    const quarantine = quarantineA4Tests ? quarantineA4TestTransactions(rows, sources) : { rows, exclusions: null };
+    const manifest = await buildManifest({ importId, sources, rows: quarantine.rows, exclusions: quarantine.exclusions });
     let result = { mode: 'dry-run', ...manifest };
     if (stage) {
       const endpoint = new URL('/commands/import.stage', option('--endpoint'));
