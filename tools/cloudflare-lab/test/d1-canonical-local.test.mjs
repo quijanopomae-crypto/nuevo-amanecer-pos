@@ -23,12 +23,12 @@ const EXPECTED = Object.freeze({ products: 408, customers: 31, credits: 313, cre
   sales: 0, sale_items: 0, cash_movements: 0, inventory_movements: 0, expenses: 0, cash_closures: 0,
   credit_amount_cents: 2968150, credit_paid_cents: 864462, credit_balance_cents: 2103688,
   payment_amount_cents: 864462, sales_total_cents: 0, known_payment_dates: 73, unknown_payment_dates: 58 });
-const APPROVED_ID = 'a5-stage-datefix-saldo298-2026-09-19-v2';
-const SOURCE_HASH = '0da77eac1b729d9f0ae9775d3104adc43c747e1814a6e7dc0c5d953cb76ea7a3';
-const MANIFEST_HASH = '35ae00fdfff56ea29dea27bdc67b57e93a05a9b386a9d66bd8234cbde99c983a';
+const APPROVED_ID = 'a5-mery43250-2026-09-20-v3';
+const SOURCE_HASH = '50f73791a6762fbb38357fa0e09de74ef39bcc4fb07fc9ab7a10e941bb482589';
+const MANIFEST_HASH = '6b3ee021113fc960c5bd8b0663160a037fa9acc106b7745eed4e7e64485b7cde';
 const SOURCES = [
   { name: 'ef4fc9a1-7a5e-4f12-a539-7dfe17ebf2bc.json', type: 'POS_JSON', sha256: '51229f1c1b37ab28a6865ac9935450207a56d5f3a48073c75b9527c5b68e7d8f', bytes: 332160 },
-  { name: 'creditos_clientes_corregido_saldo_298_2026-09-19.xlsx', type: 'CLIENT_CREDIT_XLSX', sha256: '11ca365b459cd36330e1a8772bd2479297a57ebb531df04e6756561e6c9c63d8', bytes: 62374 },
+  { name: 'creditos_clientes_corregido_saldo_298_mery43250_2026-09-20.xlsx', type: 'CLIENT_CREDIT_XLSX', sha256: 'cba956295eb2f59eee82eb5551c02b58731bda9ae8756b0e3017c86bf6ae7e39', bytes: 62751 },
 ];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const quote = name => `"${name.replaceAll('"', '""')}"`;
@@ -180,13 +180,13 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
       t.diagnostic(JSON.stringify(metrics));
     }
   });
-  const step = async (name, run, required = true) => {
+  const step = async (name, run) => {
     let failure;
     await t.test(name, async () => {
       try { await run(); metrics.tests[name] = 'PASS'; }
       catch (error) { failure = error; metrics.tests[name] = `FAIL: ${error.message}`; throw error; }
     });
-    if (failure && required) throw new Error(`Required local gate failed: ${name}`, { cause: failure });
+    if (failure) throw new Error(`Required local gate failed: ${name}`, { cause: failure });
   };
   let approved;
   await step('private bytes reproduce supplied A5 hashes, counts, amounts and dates', async () => {
@@ -257,7 +257,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     const before = await exportDatabase(db);
     await applyMigrations(db, migrations);
     assert.equal(sha(stableStringify(await exportDatabase(db))), sha(stableStringify(before)));
-  }, false);
+  });
 
   const credential = randomBytes(32).toString('hex');
   const env = { DEVICE_CREDENTIAL_PEPPER: randomBytes(32).toString('hex'), READ_TOKEN: randomBytes(32).toString('hex'),
@@ -291,21 +291,58 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     rows: approved.rows.map(({ entity_type, source_key, source_name, source_row, payload }) => ({ entity_type, source_key, source_name, source_row, payload })) });
   assert.notEqual(synthetic.source_hash, approved.source_hash);
   assert.equal(synthetic.manifest_hash, approved.manifest_hash);
-  await step('workerd stages both 883-row generations before freeze, one random HMAC writer', async () => {
+  await step('workerd stages both 883-row generations before freeze; approved retry is idempotent', async () => {
     assert.equal((await first(db, "SELECT COUNT(*) n FROM devices WHERE role='writer' AND status='active'")).n, 1);
     for (const manifest of [synthetic, approved]) {
       const base = { import_id: manifest.import_id };
-      await checked(await send('/commands/import.stage', { ...base, action: 'start', source_hash: manifest.source_hash, manifest_hash: manifest.manifest_hash,
-        transform_version: manifest.transform_version, source_files: manifest.sources.length, sources: manifest.sources, row_count: manifest.rows.length, report_json: JSON.stringify(manifest.report) }), 201, 'stage start');
+      const relevantState = async () => ({
+        import_run: await first(db, 'SELECT * FROM import_runs WHERE import_id=?', APPROVED_ID),
+        import_staging: await all(db, 'SELECT * FROM import_staging WHERE import_id=? ORDER BY entity_type,source_name,source_row,source_key', APPROVED_ID),
+        import_issues: await all(db, 'SELECT * FROM import_issues ORDER BY import_id,issue_number'),
+        canonical: Object.fromEntries(await Promise.all(TABLES.map(async table => [table, await all(db, `SELECT * FROM ${table} ORDER BY promotion_id,${KEYS[TABLES.indexOf(table)]}`)]))),
+        canonical_control: await all(db, 'SELECT * FROM canonical_control ORDER BY id'),
+        canonical_promotions: await all(db, 'SELECT * FROM canonical_promotions ORDER BY promotion_id'),
+        canonical_command_receipts: await all(db, 'SELECT * FROM canonical_command_receipts ORDER BY operation_id'),
+        canonical_assertions: await all(db, 'SELECT * FROM canonical_assertions ORDER BY assertion_id'),
+        financial_traffic: Object.fromEntries(await Promise.all(TRAFFIC.map(async table => [table, await all(db, `SELECT * FROM ${table}`)]))),
+        devices: (await all(db, 'SELECT * FROM devices ORDER BY device_id')).map(({ last_seen_at, ...stable }) => stable),
+      });
+      const start = { ...base, action: 'start', source_hash: manifest.source_hash, manifest_hash: manifest.manifest_hash,
+        transform_version: manifest.transform_version, source_files: manifest.sources.length, sources: manifest.sources, row_count: manifest.rows.length, report_json: JSON.stringify(manifest.report) };
+      await checked(await send('/commands/import.stage', start), 201, 'stage start');
       for (let i = 0; i < manifest.rows.length; i += 50) {
         const rows = manifest.rows.slice(i, i + 50);
         const result = await checked(await send('/commands/import.stage', { ...base, action: 'rows', rows }), 200, `stage rows ${i}`);
         assert.equal(result.accepted, rows.length);
+        if (manifest === approved) {
+          const revision = (await first(db, 'SELECT revision FROM import_runs WHERE import_id=?', manifest.import_id)).revision;
+          const replay = await checked(await send('/commands/import.stage', { ...base, action: 'rows', rows }), 200, `stage rows retry ${i}`);
+          assert.equal(replay.accepted, rows.length);
+          assert.equal((await first(db, 'SELECT revision FROM import_runs WHERE import_id=?', manifest.import_id)).revision, revision);
+        }
+      }
+      if (manifest === approved) {
+        const beforeConflict = await relevantState();
+        assert.equal(beforeConflict.import_staging.length, 883);
+        for (const rows of Object.values(beforeConflict.financial_traffic)) assert.equal(rows.length, 0);
+        assert.equal((await checked(await send('/commands/import.stage', { ...start, manifest_hash: 'f'.repeat(64) }), 409, 'stage identity conflict')).error, 'import_id_conflict');
+        assert.deepEqual(await relevantState(), beforeConflict);
+        const replay = await checked(await send('/commands/import.stage', start), 200, 'stage start retry');
+        assert.deepEqual(replay, { status: 'STAGING', import_id: APPROVED_ID, idempotent: true });
       }
       const result = await checked(await send('/commands/import.stage', { ...base, action: 'finish', manifest_hash: manifest.manifest_hash, verdict: 'PASS', issue_count: 0 }), 200, 'stage finish');
       assert.equal(result.status, 'PASS');
       assert.equal(result.row_count, 883);
       assert.equal((await first(db, 'SELECT revision FROM import_runs WHERE import_id=?', manifest.import_id)).revision, 883);
+      if (manifest === approved) {
+        const beforeRetry = await relevantState();
+        const replay = await checked(await send('/commands/import.stage', { ...base, action: 'finish', manifest_hash: manifest.manifest_hash, verdict: 'PASS', issue_count: 0 }), 200, 'stage finish retry');
+        assert.deepEqual(replay, { status: 'PASS', import_id: APPROVED_ID, idempotent: true, reconciliation: 'PASS' });
+        assert.deepEqual(await relevantState(), beforeRetry);
+        assert.equal((await first(db, 'SELECT COUNT(*) n FROM import_runs WHERE import_id=?', APPROVED_ID)).n, 1);
+        assert.equal((await first(db, 'SELECT COUNT(*) n FROM import_staging WHERE import_id=?', APPROVED_ID)).n, 883);
+        metrics.staging_idempotence = { start: 'PASS', row_batches: 'PASS', finish: 'PASS', conflict_no_mutation: 'PASS', rows: 883, revision: 883 };
+      }
     }
     assert.equal((await first(db, 'SELECT COUNT(*) n FROM import_staging')).n, 1766);
     await noTraffic(db);
@@ -676,7 +713,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     const before = await exportDatabase(db);
     await applyMigrations(db, migrations);
     assert.equal(sha(stableStringify(await exportDatabase(db))), sha(stableStringify(before)));
-  }, false);
+  });
   await step('complete backup restores only into an independent NEW real D1, preserving all tables and NULLs', async () => {
     const saved = await persistExport(db, root, 'final-backup.json');
     const restore = await makeInstance('restore');
