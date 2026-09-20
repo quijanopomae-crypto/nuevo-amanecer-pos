@@ -2,6 +2,7 @@
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
 import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
+import { handleA6, isA6Path, a6LocalDenied } from './a6-canonical.js';
 
 const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -20,6 +21,12 @@ export default {
     const url = new URL(request.url);
     const isRead = url.pathname.startsWith('/read/');
     try {
+      if (isA6Path(url.pathname)) {
+        const denied = a6LocalDenied(url, env, json);
+        if (denied) return denied;
+        if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), isRead);
+        return cors(await handleA6(request, url, env, { json, authorizeRead, authorizeDevice }), isRead);
+      }
       if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/commands/') || url.pathname.startsWith('/imports/') || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
         return cors(new Response(null, { status: 204 }), isRead);
       }
@@ -30,6 +37,8 @@ export default {
         if (request.method !== 'GET') return cors(json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' }), true);
         const denied = authorizeRead(request, env);
         if (denied) return cors(denied, true);
+        const frozen = await authorityFence(env.nuevo_amanecer_lab);
+        if (frozen) return cors(frozen, true);
         return cors(await readRoute(url, env.nuevo_amanecer_lab), true);
       }
       if (url.pathname === SALE_CREATE_PATH) {
@@ -63,7 +72,8 @@ export default {
         }
       }
       return json({ error: 'not_found' }, 404);
-    } catch {
+    } catch (error) {
+      if (String(error?.message).includes('authority_frozen')) return cors(json({ error: 'authority_frozen' }, 409), isRead);
       return cors(json({ error: 'internal_error' }, 500), isRead);
     }
   },
@@ -220,6 +230,8 @@ function decodeBase64Url(value) {
 }
 
 async function insertOperation(request, env) {
+  const frozen = await authorityFence(env.nuevo_amanecer_lab);
+  if (frozen) return frozen;
   let body;
   try {
     body = await request.json();
@@ -313,6 +325,8 @@ async function sha256Hex(text) {
 }
 
 async function createSale(request, env) {
+  const frozen = await authorityFence(env.nuevo_amanecer_lab);
+  if (frozen) return frozen;
   let body;
   try {
     body = await request.json();
@@ -499,6 +513,8 @@ function validatePayment(method, totalCents, payment) {
 }
 
 async function stageImport(request, env) {
+  const frozen = await authorityFence(env.nuevo_amanecer_lab);
+  if (frozen) return frozen;
   let body;
   try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
   const deviceId = request.headers.get('x-device-id');
@@ -637,6 +653,12 @@ function validSourceKey(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 240 && !/[\x00-\x1f\x7f]/.test(value);
 }
 
+async function authorityFence(db) {
+  // A missing migration is an error, never permission to accept legacy writes.
+  const control = await db.prepare('SELECT mode FROM canonical_control WHERE id=1').first();
+  return control?.mode === 'LEGACY' ? null : json({ error: 'authority_frozen' }, 409);
+}
+
 function validId(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 160 && !/[\x00-\x1f\x7f]/.test(value);
 }
@@ -681,6 +703,6 @@ function cors(response, isRead = false) {
 function json(data, status = 200, headers = {}) {
   return cors(new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers },
   }));
 }

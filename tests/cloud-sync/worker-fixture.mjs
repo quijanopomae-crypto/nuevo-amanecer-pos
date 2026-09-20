@@ -10,6 +10,7 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0003_device_auth.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0004_sale_create.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0005_import_staging.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8'));
   const pepper = 'fixture-device-pepper';
   const hash = (credential) => createHmac('sha256', pepper).update(credential).digest('hex');
   let batchFailureAt = null;
@@ -41,11 +42,12 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
       }
     },
   };
+  const env = { READ_TOKEN: readToken, DEVICE_CREDENTIAL_PEPPER: pepper, nuevo_amanecer_lab: binding };
   return {
     database,
     binding,
-    env: { READ_TOKEN: readToken, DEVICE_CREDENTIAL_PEPPER: pepper, nuevo_amanecer_lab: binding },
-    fetch(url, options) { return worker.fetch(new Request(url, options), { READ_TOKEN: readToken, DEVICE_CREDENTIAL_PEPPER: pepper, nuevo_amanecer_lab: binding }); },
+    env,
+    fetch(url, options) { return worker.fetch(new Request(url, options), env); },
     addDevice(deviceId, role, status, credential) {
       database.prepare('INSERT INTO devices (device_id, role, status, credential_hash) VALUES (?, ?, ?, ?)').run(deviceId, role, status, hash(credential));
     },

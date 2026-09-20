@@ -133,6 +133,18 @@ Regresion cloud secuencial PRE-A6, despues de la prueba focalizada:
 node --test --test-concurrency=1 tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
 ```
 
+Gate P A6 local, sin deploy ni acceso a D1 remota:
+
+```sh
+node --test --test-concurrency=1 tests/cloud-sync/canonical-promotion.test.mjs
+node --test tools/cloudflare-lab/test/d1-canonical-local.test.mjs
+```
+
+La segunda prueba exige las fuentes privadas A5 exactas, crea dos D1 locales nuevas
+en el directorio temporal aprobado y falla cerrada si el baseline no satisface la
+reconciliacion campo a campo. Un `PASS` sintetico no sustituye ese resultado. A6
+solo puede publicar `CANONICAL_READ_ONLY`; no expone una ruta para `ACTIVE`.
+
 El migrador A5 esta en `scripts/a5-migrate.mjs`; formatos, dry-run y ruta privada
 de inputs estan definidos en `docs/V1.3_A5_MIGRATION_RECONCILIATION.md`.
 
