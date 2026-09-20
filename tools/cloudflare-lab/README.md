@@ -127,6 +127,12 @@ Prueba focalizada A5, completamente local y sin fuentes comerciales:
 node --test tests/cloud-sync/migration-reconciliation.test.mjs
 ```
 
+Regresion cloud secuencial PRE-A6, despues de la prueba focalizada:
+
+```sh
+node --test --test-concurrency=1 tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
+```
+
 El migrador A5 esta en `scripts/a5-migrate.mjs`; formatos, dry-run y ruta privada
 de inputs estan definidos en `docs/V1.3_A5_MIGRATION_RECONCILIATION.md`.
 

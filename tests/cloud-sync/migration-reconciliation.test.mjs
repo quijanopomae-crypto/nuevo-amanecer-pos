@@ -8,7 +8,8 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import ExcelJS from '../../tools/cloudflare-lab/node_modules/exceljs/excel.js';
 import JSZip from '../../tools/cloudflare-lab/node_modules/jszip/lib/index.js';
-import { buildManifest, normalizeBackup, normalizeWorkbook, quarantineA4TestTransactions, validateManifest } from '../../tools/cloudflare-lab/src/a5-import-core.js';
+import { buildManifest, normalizeBackup, normalizeWorkbook, quarantineA4TestTransactions, stableStringify, validateManifest } from '../../tools/cloudflare-lab/src/a5-import-core.js';
+import { readWorkbookSheets } from '../../tools/cloudflare-lab/src/a5-workbook.js';
 import { workerFixture } from './worker-fixture.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -106,6 +107,70 @@ test('XLSX lógico preserva abono sin fecha como desconocida sin inventarla', as
   const payment = rows.find((row) => row.entity_type === 'credit_payments').payload;
   assert.equal(payment.fecha, null);
   assert.equal(payment.fecha_conocida, false);
+});
+
+test('Date fidelity: serializa ISO sin cambiar objetos, arrays ni montos y rechaza Date invalido', async () => {
+  const iso = '2026-09-19T14:35:12.000Z';
+  assert.equal(stableStringify(new Date(iso)), JSON.stringify(iso));
+  assert.equal(stableStringify({ z: [25.15, null, false, { b: 'text', a: 0 }], a: {} }), '{"a":{},"z":[25.15,null,false,{"a":0,"b":"text"}]}');
+  assert.equal(stableStringify({ dates: [new Date(iso)] }), `{"dates":["${iso}"]}`);
+  const invalid = new Date(NaN);
+  for (const value of [invalid, [invalid], { original: invalid }]) assert.throws(() => stableStringify(value), RangeError);
+  assert.throws(() => normalizeWorkbook({ Pagos: [{ ID: 'p-1', Credito_ID: 'cr-1', Monto: 5, Fecha: invalid }] }), /payment date is invalid/);
+  const rows = normalizeBackup(backup);
+  rows[0].payload.original_date = invalid;
+  await assert.rejects(manifest({ rows }), RangeError);
+});
+
+test('Date fidelity: XLSX real conserva ISO, fecha conocida y desconocida con hashes reproducibles', async () => {
+  const iso = '2026-09-19T14:35:12.000Z';
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Historial pagos');
+  sheet.addRow(['Synthetic payments']); sheet.addRow([]);
+  sheet.addRow(['Documento cr\u00e9dito', 'Pago N.\u00ba (secuencia)', 'Fecha y hora', 'Importe del pago']);
+  sheet.addRow(['cr-1', 1, new Date(iso), 25]);
+  sheet.addRow(['cr-1', 2, 'No registrada', 15]);
+  const sheets = await readWorkbookSheets(await workbook.xlsx.writeBuffer());
+  assert.ok(sheets['Historial pagos'][0]['Fecha y hora'] instanceof Date);
+  const rows = normalizeBackup(backup).filter((row) => row.entity_type !== 'credit_payments');
+  rows.push(...normalizeWorkbook(sheets));
+  const first = await manifest({ rows });
+  const second = await manifest({ rows });
+  assert.equal(first.report.verdict, 'PASS');
+  assert.equal(first.manifest_hash, second.manifest_hash);
+  assert.deepEqual(first.rows.map((row) => row.payload_hash), second.rows.map((row) => row.payload_hash));
+  const payments = first.rows.filter((row) => row.entity_type === 'credit_payments');
+  const known = JSON.parse(payments[0].payload_json);
+  assert.equal(known['Fecha y hora'], iso);
+  assert.equal(known.Fecha, iso);
+  assert.equal(known.fecha, '2026-09-19');
+  assert.equal(known.fecha_conocida, true);
+  const unknown = JSON.parse(payments[1].payload_json);
+  assert.equal(unknown.fecha, null);
+  assert.equal(unknown.fecha_conocida, false);
+  assert.equal(unknown.Fecha, null);
+  assert.equal(unknown['Fecha y hora'], 'No registrada');
+  assert.equal((await validateManifest(first)).manifest_hash, first.manifest_hash);
+  for (const row of payments) assert.doesNotMatch(row.payload_json, /:\{\}/);
+});
+
+test('Date fidelity: versiones nuevas separan cuarentena y rechazan manifiestos antiguos', async (t) => {
+  const plain = await manifest();
+  const quarantine = await buildManifest({ importId: 'date-fidelity-a4', sources: [A4_SOURCE], ...quarantineA4TestTransactions(normalizeBackup(a4SyntheticBackup()), [A4_SOURCE]) });
+  assert.equal(plain.transform_version, 'a5-v2-date-fidelity');
+  assert.equal(quarantine.transform_version, 'a5-v2-date-fidelity-a4-quarantine-v1');
+  const fixture = workerFixture(); t.after(() => fixture.close());
+  fixture.addDevice('writer-1', 'writer', 'active', 'writer-secret');
+  for (const value of [plain, quarantine]) {
+    for (const transform_version of ['a5-v1', 'a5-v1-a4-quarantine-v1', value === plain ? quarantine.transform_version : plain.transform_version]) {
+      await assert.rejects(validateManifest({ ...value, transform_version }));
+      const rejected = await post(fixture, { import_id: value.import_id, action: 'start', source_hash: value.source_hash, manifest_hash: value.manifest_hash, transform_version, source_files: value.sources.length, sources: value.sources, row_count: value.rows.length, report_json: JSON.stringify(value.report) });
+      assert.equal(rejected.status, 400);
+    }
+    const { start, finish } = await stage(fixture, value);
+    assert.equal(start.status, 201);
+    assert.equal(finish.status, 200);
+  }
 });
 
 test('no inventa identidad ni importes financieros ausentes', () => {

@@ -1,7 +1,7 @@
 // Gateway mínimo: POS OUTBOX -> Worker -> D1 sync_operations.
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
-import { buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
+import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
 
 const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -520,7 +520,7 @@ async function stageImport(request, env) {
 }
 
 async function startImport(body, deviceId, credentialHash, db) {
-  if (!SHA256_HEX.test(body.source_hash) || !SHA256_HEX.test(body.manifest_hash) || !['a5-v1', 'a5-v1-a4-quarantine-v1'].includes(body.transform_version) ||
+  if (!SHA256_HEX.test(body.source_hash) || !SHA256_HEX.test(body.manifest_hash) || ![A5_TRANSFORM_VERSION, A5_A4_QUARANTINE_TRANSFORM_VERSION].includes(body.transform_version) ||
       !Number.isSafeInteger(body.source_files) || body.source_files < 1 || body.source_files > 2 ||
       !Number.isSafeInteger(body.row_count) || body.row_count < 0 || !Array.isArray(body.sources) || body.sources.length !== body.source_files ||
       typeof body.report_json !== 'string' || body.report_json.length > 1000000) {
@@ -529,7 +529,7 @@ async function startImport(body, deviceId, credentialHash, db) {
   let report;
   try { report = JSON.parse(body.report_json); } catch { return json({ error: 'invalid_import_start' }, 400); }
   if (!report || !['PASS', 'FAIL'].includes(report.verdict) || !Number.isSafeInteger(report.issue_count) || report.issue_count < 0) return json({ error: 'invalid_import_start' }, 400);
-  const expectedTransformVersion = report.exclusions?.policy === 'A4_TEST_TRANSACTIONS_V1' ? 'a5-v1-a4-quarantine-v1' : 'a5-v1';
+  const expectedTransformVersion = report.exclusions?.policy === 'A4_TEST_TRANSACTIONS_V1' ? A5_A4_QUARANTINE_TRANSFORM_VERSION : A5_TRANSFORM_VERSION;
   if (body.transform_version !== expectedTransformVersion || (report.exclusions && report.exclusions.policy !== 'A4_TEST_TRANSACTIONS_V1')) return json({ error: 'invalid_import_start' }, 400);
   let sourcesJson;
   try { sourcesJson = stableImportStringify(body.sources); } catch { return json({ error: 'invalid_import_start' }, 400); }

@@ -1,10 +1,11 @@
 const TYPES = new Set(['products', 'sales', 'customers', 'credits', 'credit_payments', 'expenses', 'cash_movements', 'cash_closures', 'inventory_movements']);
-export const A5_TRANSFORM_VERSION = 'a5-v1';
-export const A5_A4_QUARANTINE_TRANSFORM_VERSION = 'a5-v1-a4-quarantine-v1';
+export const A5_TRANSFORM_VERSION = 'a5-v2-date-fidelity';
+export const A5_A4_QUARANTINE_TRANSFORM_VERSION = 'a5-v2-date-fidelity-a4-quarantine-v1';
 const A4_TEST_SALE_IDS = ['V-001', 'V-002'];
 const A4_TEST_SOURCE_SHA256 = '51229f1c1b37ab28a6865ac9935450207a56d5f3a48073c75b9527c5b68e7d8f';
 
 export function stableStringify(value) {
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
   return JSON.stringify(value);
