@@ -1,0 +1,98 @@
+<div class="page" id="pagePOS">
+
+  <!-- Barra superior: búsqueda + botones -->
+  <div style="background:linear-gradient(180deg,#ffffff 0%,#f8fbfd 100%);border-bottom:1px solid #dde7ef;padding:8px 12px;min-height:62px;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 8px 18px rgba(15,23,42,.03)">
+    <div class="pos-search-box">
+      <span style="font-size:14px">🔍</span>
+      <input type="text" id="posSearch" placeholder="Buscar o escanear código..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <span id="scannerIndicator" class="scanner-indicator ready" role="status" aria-live="polite" title="Lectura automática de escáner HID activada"><span class="scanner-dot"></span><span class="scanner-label">Escáner listo</span></span>
+    </div>
+    <button class="free-sale-btn" id="btnVentaLibre" type="button" onclick="abrirVentaLibre()" title="Venta libre / VARIOS (F2)">➕ <span class="free-sale-label">VARIOS</span></button>
+    <button class="cart-fab" onclick="toggleCart()">
+      🛒<span class="cart-fab-badge" id="cartBadge">0</span>
+    </button>
+    <button id="btnMayorista" onclick="toggleMayorista()"
+      style="background:linear-gradient(180deg,#ffffff 0%,#f8fbfd 100%);border:1.5px solid #dce5ed;border-radius:12px;padding:9px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;transition:all 0.2s;box-shadow:0 6px 16px rgba(15,23,42,.04)">🛍️ Mayor</button>
+  </div>
+
+  <div class="pos-body">
+
+    <!-- Sidebar categorías -->
+    <aside class="sidebar" id="posSidebar">
+      <button class="cat-btn active" data-cat="todo" onclick="posSetCat(this,'todo')"><span class="ci">⊞</span>Todo</button>
+      <button class="cat-btn" data-cat="abarrotes" onclick="posSetCat(this,'abarrotes')"><span class="ci">🛒</span>Abarrotes</button>
+      <button class="cat-btn" data-cat="bebidas" onclick="posSetCat(this,'bebidas')"><span class="ci">🥤</span>Bebidas</button>
+      <button class="cat-btn" data-cat="snacks" onclick="posSetCat(this,'snacks')"><span class="ci">🍿</span>Snacks</button>
+      <button class="cat-btn" data-cat="helados" onclick="posSetCat(this,'helados')"><span class="ci">🍦</span>Helados</button>
+      <button class="cat-btn" data-cat="licores" onclick="posSetCat(this,'licores')"><span class="ci">🍺</span>Licores</button>
+      <button class="cat-btn" data-cat="limpieza" onclick="posSetCat(this,'limpieza')"><span class="ci">🧼</span>Limpieza</button>
+      <button class="cat-btn" data-cat="cuidado" onclick="posSetCat(this,'cuidado')"><span class="ci">🧴</span>Cuidado</button>
+      <button class="cat-btn" data-cat="bebe" onclick="posSetCat(this,'bebe')"><span class="ci">👶</span>Bebés</button>
+      <button class="cat-btn" data-cat="hogar" onclick="posSetCat(this,'hogar')"><span class="ci">🏠</span>Hogar</button>
+      <button class="cat-btn" data-cat="tecnologia" onclick="posSetCat(this,'tecnologia')"><span class="ci">📱</span>Tecnología</button>
+      <button class="cat-btn" data-cat="libreria" onclick="posSetCat(this,'libreria')"><span class="ci">✏️</span>Librería</button>
+      <button class="cat-btn" data-cat="servicios" onclick="posSetCat(this,'servicios')"><span class="ci">💳</span>Servicios</button>
+    </aside>
+
+    <!-- Área de productos -->
+    <main class="products-area" id="posArea"></main>
+
+    <!-- Backdrop carrito -->
+    <div class="cart-backdrop" id="cartBackdrop" onclick="toggleCart();closeCartMenu()"></div>
+
+    <!-- Drawer carrito -->
+    <aside class="cart-drawer" id="cartDrawer">
+
+      <!-- Cabecera del carrito -->
+      <div class="cart-head">
+        <div class="cart-head-title">🛒 Carrito actual <span id="modoMayoristaTag" style="display:none;background:var(--amber-light);color:#b45309;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px">MAYORISTA</span></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <!-- Menú 3 puntos -->
+          <div style="position:relative">
+            <button class="btn-close-x" onclick="toggleCartMenu()" id="btnCartMenu" title="Opciones">⋮</button>
+            <div id="cartMenuDropdown"
+                 style="display:none;position:absolute;top:36px;right:0;
+                        background:var(--white);border:1px solid var(--border);
+                        border-radius:12px;min-width:190px;z-index:300;
+                        box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden">
+              <button onclick="abrirDescuento()"  class="cart-menu-item">💸 Aplicar descuento</button>
+              <button onclick="guardarBorrador()" class="cart-menu-item">💾 Guardar borrador</button>
+              <button onclick="cargarBorrador()"  class="cart-menu-item">📂 Cargar borrador</button>
+              <button onclick="generarCatalogo()" class="cart-menu-item">📄 Generar catálogo</button>
+              <div style="height:1px;background:var(--border);margin:3px 0"></div>
+              <button onclick="limpiarCarrito()"  class="cart-menu-item" style="color:var(--red)">🧹 Limpiar carrito</button>
+            </div>
+          </div>
+          <button class="btn-close-x" onclick="toggleCart()">✕</button>
+        </div>
+      </div>
+
+      <!-- Badge descuento activo -->
+      <div id="btnDescInfo"
+           style="display:none;background:var(--amber);color:var(--dark);
+                  font-size:11px;font-weight:800;padding:6px 12px;
+                  text-align:center;cursor:pointer"
+           onclick="quitarDescuento()"></div>
+
+      <!-- Ítems del carrito -->
+      <div class="cart-items" id="cartItems">
+        <div class="cart-empty">El carrito está vacío</div>
+      </div>
+
+      <!-- Pie del carrito -->
+      <div class="cart-footer">
+        <div class="cart-totals">
+          <div class="total-row"><span>Subtotal</span><span id="posSubtotal">S/ 0.00</span></div>
+          <div class="total-row"><span>IGV (18%)</span><span id="posIgv">S/ 0.00</span></div>
+          <div class="total-main"><span>Total</span><span id="posTotal">S/ 0.00</span></div>
+        </div>
+        <div class="cart-actions">
+          <button class="btn-cobro btn-rapido" id="btnRapido" onclick="abrirCobro('rapido')" disabled>⚡ RÁPIDO</button>
+          <button class="btn-cobro btn-pagar"  id="btnPagar"  onclick="abrirCobro('normal')" disabled>💳 PAGAR</button>
+          <button class="btn-cancelar-cart" onclick="cancelarVenta()">🗑️ Cancelar venta</button>
+        </div>
+      </div>
+
+    </aside><!-- /cart-drawer -->
+  </div><!-- /pos-body -->
+</div>
