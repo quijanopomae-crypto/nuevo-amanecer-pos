@@ -23,6 +23,7 @@ Un experimento NO es producción y nunca obtiene autoridad comercial por existir
 
 ## Estructura
 
+- `pos-lab/`: copia completa y aislada del HTML del POS para desarrollar funciones nuevas sin editar CANON.
 - `experimentos/`: prototipos y pruebas aisladas.
 - `fixtures/`: datos sintéticos exclusivamente.
 - `evidence/`: evidencia de pruebas del laboratorio, sin datos reales.
