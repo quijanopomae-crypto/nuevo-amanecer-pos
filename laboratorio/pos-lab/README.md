@@ -74,3 +74,30 @@ node laboratorio/pos-lab/build-lab.mjs --check
 Para encontrar rápidamente qué archivo corresponde a una pantalla, componente o animación, consulta `UI_MAP.yaml`.
 
 Regla: extracción ≠ reescritura. Las secciones iniciales fueron extraídas exactamente del HTML LAB congelado; modularizar no autoriza cambios funcionales.
+
+
+## Estructura modular actual
+
+```text
+pos-lab/
+├── sections/            # HTML por pantalla
+├── styles/
+│   ├── tokens.css
+│   ├── components/      # botones, cards, tablas, forms, modales, navegación
+│   └── pages/           # CSS por pantalla
+├── animations/          # motion visual
+├── js/motion/           # helpers de animación sin lógica comercial
+├── UI_MAP.yaml          # mapa rápido para humanos e IA
+├── LAB_TASK.example.json
+├── scope-guard.mjs
+├── build-lab.mjs
+└── validate-lab.mjs
+```
+
+Para una tarea nueva, primero crea un contrato bajo `tasks/` y usa la allowlist más pequeña posible.
+
+Validación completa:
+
+```powershell
+node laboratorio/pos-lab/validate-lab.mjs --task=laboratorio/pos-lab/tasks/<TAREA>.json
+```
