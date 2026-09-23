@@ -15,10 +15,10 @@ test('POS-LAB existe y no convierte CANON en laboratorio', () => {
 
   assert.doesNotMatch(canon, /LABORATORIO · NO PRODUCCIÓN/);
   assert.match(lab, /LABORATORIO · NO PRODUCCIÓN/);
-  assert.match(lab, /<base href="\/POS\/">/);
-  assert.match(lab, /\/laboratorio\/pos-lab\/lab-guard\.js/);
-  assert.match(lab, /\/laboratorio\/pos-lab\/lab-overrides\.js/);
-  assert.match(lab, /\/laboratorio\/pos-lab\/lab-overrides\.css/);
+  assert.match(lab, /<base href="\.\.\/\.\.\/POS\/">/);
+  assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-guard\.js/);
+  assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-overrides\.js/);
+  assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-overrides\.css/);
   assert.match(lab, /!window\.__NA_LAB__/);
   assert.match(guard, /NA_LAB_PRODUCTION_WRITE_BLOCKED/);
   assert.match(server, /127\.0\.0\.1/);
