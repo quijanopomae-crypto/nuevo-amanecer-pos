@@ -44,3 +44,14 @@ Antes y después de cambios:
 - revisar diff
 
 No tocar cambios ajenos ni evidence/v1.3 salvo autorización explícita.
+
+## Laboratorio y promoción a CANON
+
+- `laboratorio/` es la zona general de experimentación del POS.
+- `tools/cloudflare-lab/` conserva su función separada de laboratorio de infraestructura.
+- Los experimentos importantes usan ramas `lab/<nombre>`.
+- LAB no usa datos comerciales reales, credenciales de producción ni escrituras de producción.
+- `POS/` nunca debe depender en runtime de archivos bajo `laboratorio/`.
+- Un experimento aprobado se promueve como parche mínimo revisado hacia `POS/`; nunca se sobrescribe CANON con todo LAB.
+- Antes de promover: ejecutar `node laboratorio/check.mjs`, pruebas funcionales aplicables, revisar diff y definir rollback.
+- Ver `docs/LABORATORIO_A_CANON.md` para el contrato durable.

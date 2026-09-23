@@ -1,0 +1,10 @@
+{
+  "id": "EXP-YYYYMMDD-nombre",
+  "status": "DRAFT",
+  "environment": "LABORATORIO",
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "result": null,
+  "promotion_candidate": false
+}

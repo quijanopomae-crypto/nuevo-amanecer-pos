@@ -8,3 +8,9 @@ tools/cloudflare-lab/private/a5-inputs/**
 !tools/cloudflare-lab/private/a5-inputs/.gitkeep
 
 tools/cloudflare-lab/private/a5-staging-final/**
+
+# Laboratorio general: nunca versionar secretos, datos privados ni dependencias locales.
+laboratorio/private/**
+laboratorio/**/.env*
+laboratorio/**/.dev.vars
+laboratorio/**/node_modules/**
