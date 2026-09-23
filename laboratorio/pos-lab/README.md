@@ -101,3 +101,21 @@ Validación completa:
 ```powershell
 node laboratorio/pos-lab/validate-lab.mjs --task=laboratorio/pos-lab/tasks/<TAREA>.json
 ```
+
+
+## Acceso directo desde celular
+
+El POS-LAB puede abrirse como vista HTTPS estática directamente desde el repositorio, sin PC encendida, Node ni servidor local:
+
+```text
+https://raw.githack.com/quijanopomae-crypto/nuevo-amanecer-pos/feature/v1.3-mobile-cloud/laboratorio/pos-lab/index.html
+```
+
+Este enlace es exclusivamente LAB:
+- no usar datos comerciales reales;
+- no usar credenciales de producción;
+- las escrituras al Worker cloud configurado permanecen bloqueadas por `lab-guard.js`;
+- no se registra el Service Worker canónico;
+- para producción se requiere un origen propio separado y controlado.
+
+Las rutas del LAB son portables: el mismo HTML sigue funcionando con el servidor local de desarrollo.
