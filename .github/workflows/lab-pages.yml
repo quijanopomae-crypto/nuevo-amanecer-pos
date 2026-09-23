@@ -1,0 +1,64 @@
+name: POS LAB Mobile
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "POS/**"
+      - "laboratorio/pos-lab/**"
+      - "tests/laboratorio-*.test.mjs"
+      - ".github/workflows/lab-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-pos-lab
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Validate generated LAB
+        run: |
+          node laboratorio/pos-lab/build-lab.mjs --check
+          node --test tests/laboratorio-*.test.mjs
+
+      - name: Prepare static LAB site
+        run: |
+          mkdir -p _site/POS _site/laboratorio/pos-lab
+          cp -a POS/. _site/POS/
+          cp -a laboratorio/pos-lab/. _site/laboratorio/pos-lab/
+          touch _site/.nojekyll
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
