@@ -1,0 +1,2 @@
+/* Tablas experimentales. No modifica tablas canónicas sin clase lab-table. */
+.lab-table { width:100%; border-collapse:collapse; }
