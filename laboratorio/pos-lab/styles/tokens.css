@@ -1,0 +1,19 @@
+/*
+ * Tokens visuales exclusivos del LAB.
+ * Cambia aquí colores/tamaños nuevos del laboratorio sin tocar CSS canónico.
+ * No redefine variables canónicas mientras no se adopten explícitamente.
+ */
+:root {
+  --lab-motion-fast: 120ms;
+  --lab-motion-normal: 220ms;
+  --lab-motion-slow: 350ms;
+  --lab-ease-standard: cubic-bezier(.2,.8,.2,1);
+  --lab-ease-emphasis: cubic-bezier(.34,1.56,.64,1);
+  --lab-radius-sm: 8px;
+  --lab-radius-md: 14px;
+  --lab-radius-lg: 20px;
+  --lab-space-1: 4px;
+  --lab-space-2: 8px;
+  --lab-space-3: 12px;
+  --lab-space-4: 16px;
+}
