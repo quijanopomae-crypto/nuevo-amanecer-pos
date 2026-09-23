@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "environment": "LABORATORIO",
+  "source_path": "POS/index.html",
+  "source_blob_sha": "f2462f72953ce26c0ab79f2bd39f84f8b3ac8a7d",
+  "snapshot_path": "laboratorio/pos-lab/index.html",
+  "canonical_modified": false,
+  "isolated_local_origin": "http://127.0.0.1:8799",
+  "canonical_local_origin": "http://127.0.0.1:8788",
+  "production_writes_blocked": true
+}

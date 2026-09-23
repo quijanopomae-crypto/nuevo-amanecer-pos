@@ -1,0 +1,17 @@
+/*
+ * Estilos exclusivos del POS-LAB.
+ * Úsalos para probar UI sin tocar POS/css/.
+ */
+html::before {
+  content: "LAB";
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2147483646;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #f59e0b;
+  color: #111827;
+  font: 900 10px/1 system-ui, sans-serif;
+  pointer-events: none;
+}
