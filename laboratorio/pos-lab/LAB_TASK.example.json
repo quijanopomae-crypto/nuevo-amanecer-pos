@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-EXAMPLE-UI-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Ejemplo: modificar solo la interfaz de Inventario en LAB",
+  "allowed_files": [
+    "laboratorio/pos-lab/sections/inventario.html",
+    "laboratorio/pos-lab/styles/pages/inventario.css",
+    "laboratorio/pos-lab/index.html"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-ui-edit"
+  ],
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false
+}
