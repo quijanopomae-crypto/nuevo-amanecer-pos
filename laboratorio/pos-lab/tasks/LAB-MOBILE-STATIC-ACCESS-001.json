@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-MOBILE-STATIC-ACCESS-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Permitir abrir POS-LAB desde celular por HTTPS estático sin servidor local ni modificar CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/README.md",
+    "laboratorio/pos-lab/UI_MAP.yaml",
+    "laboratorio/pos-lab/tasks/LAB-MOBILE-STATIC-ACCESS-001.json",
+    "tests/laboratorio-pos-html.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": ["lab-scope-guard","lab-ui-edit"],
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_write_authorized": false
+}
