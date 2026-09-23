@@ -3,7 +3,7 @@ environment: LABORATORIO
 generated_entrypoint: laboratorio/pos-lab/index.html
 template: laboratorio/pos-lab/index.template.html
 build: laboratorio/pos-lab/build-lab.mjs
-mobile_static_url: https://raw.githack.com/quijanopomae-crypto/nuevo-amanecer-pos/feature/v1.3-mobile-cloud/laboratorio/pos-lab/index.html
+mobile_static_url: https://quijanopomae-crypto.github.io/nuevo-amanecer-pos/laboratorio/pos-lab/index.html
 
 rules:
   canon_product: POS/
