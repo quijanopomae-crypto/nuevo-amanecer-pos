@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-CANON-MIRROR-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Crear espejo unidireccional CANON R2 -> D1 LAB -> POS-LAB, con baseline inmutable, workspace mutable y cero escritura de regreso a CANON.",
+  "allowed_files": [
+    "tools/cloudflare-lab/migrations/0007_lab_workspace.sql",
+    "tools/cloudflare-lab/src/lab-workspace.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "tools/cloudflare-lab/.dev.vars.example",
+    "tools/cloudflare-lab/README.md",
+    "tools/cloudflare-lab/test/lab-workspace.test.mjs",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/lab-guard.js",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/README.md",
+    "laboratorio/pos-lab/UI_MAP.yaml",
+    "laboratorio/pos-lab/tasks/LAB-CANON-MIRROR-001.json",
+    "tests/laboratorio-pos-html.test.mjs",
+    "docs/LAB_CANON_MIRROR.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "production_data_in_git": false,
+  "canon_writes_allowed": false,
+  "r2_methods_allowed": [
+    "GET"
+  ],
+  "lab_database": "nuevo-amanecer-lab"
+}
