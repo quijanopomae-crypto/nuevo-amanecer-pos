@@ -3,3 +3,11 @@
 # en D1 como HMAC-SHA-256(pepper, credencial), nunca en texto plano.
 DEVICE_CREDENTIAL_PEPPER=replace-with-a-random-server-only-pepper
 READ_TOKEN=replace-with-a-distinct-read-secret
+
+# Espejo CANON -> LAB.
+# R2_CANON_READ_TOKEN debe tener SOLO permiso "Workers R2 Storage Read".
+# Nunca usar un token con escritura para esta integración.
+R2_CANON_ACCOUNT_ID=replace-with-cloudflare-account-id
+R2_CANON_READ_TOKEN=replace-with-r2-read-only-api-token
+R2_CANON_BUCKET=nuevo-amanecer-prod-v2-backups
+R2_CANON_PREFIX=nuevo-amanecer-prod-v2/
