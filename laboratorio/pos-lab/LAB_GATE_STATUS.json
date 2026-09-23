@@ -4,13 +4,19 @@
   "stages": {
     "1_freeze_and_map": "STRUCTURAL_PASS",
     "2_html_sections_and_build": "STRUCTURAL_PASS",
-    "3_ui_layers": "IMPLEMENTED",
-    "4_motion_layers": "IMPLEMENTED",
-    "5_ai_scope_control": "IMPLEMENTED",
-    "6_final_gate": "PENDING_RUNTIME_EXECUTION"
+    "3_ui_layers": "STRUCTURAL_PASS",
+    "4_motion_layers": "STRUCTURAL_PASS",
+    "5_ai_scope_control": "STRUCTURAL_PASS",
+    "6_final_gate": "STATIC_PASS_BROWSER_SMOKE_PENDING"
+  },
+  "static_checks": {
+    "canon_blob_unchanged": true,
+    "generated_index_reconstructs_exactly": true,
+    "scope_contract_errors": 0,
+    "pos_files_changed": 0
   },
   "canon_modified": false,
   "production_deployed": false,
   "physical_or_browser_smoke": "PENDING",
-  "note": "No declarar FULL_PASS hasta ejecutar validate-lab.mjs y un smoke visual/funcional del POS-LAB."
+  "note": "No declarar FULL_PASS hasta ejecutar validate-lab.mjs en un checkout real y completar un smoke visual/funcional del POS-LAB."
 }
