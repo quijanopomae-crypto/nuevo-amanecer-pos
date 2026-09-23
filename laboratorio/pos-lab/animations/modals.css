@@ -1,0 +1,2 @@
+/* Animaciones futuras de modales LAB. */
+.lab-modal-enter { animation:lab-fade-in var(--lab-motion-fast) var(--lab-ease-standard) both; }

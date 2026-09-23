@@ -1,0 +1,51 @@
+<div class="page" id="pageVentas">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">📊 Ventas e Historial</span></div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="ventasSetTab(this,'hoy')">📅 Hoy</button>
+        <button class="tab" onclick="ventasSetTab(this,'semana')">📈 Semana</button>
+        <button class="tab" onclick="ventasSetTab(this,'historial')">🗂 Historial</button>
+        <button class="tab" onclick="ventasSetTab(this,'productos')">🏆 Top prods.</button>
+        <button class="tab" onclick="ventasSetTab(this,'reportes')">📑 Reportes</button>
+    </div>
+    <div class="filter-bar" id="ventasFilterBar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="ventasSearch" placeholder="Buscar venta..." oninput="ventasRender()"></div>
+        <select class="f-select" id="ventasMetodo" onchange="ventasRender()"><option value="">Todos</option><option value="efectivo">Efectivo</option><option value="yape">Yape/Plin</option><option value="credito">Crédito</option><option value="mixto">Pago mixto</option></select>
+    </div>
+    <div class="sales-report-controls" id="ventasReportControls" hidden>
+        <div class="sales-report-control">
+            <label for="salesReportPeriod">Período</label>
+            <select id="salesReportPeriod" onchange="_naF8ReportPeriodChanged()">
+                <option value="today">Hoy</option>
+                <option value="week">Esta semana</option>
+                <option value="month" selected>Este mes</option>
+                <option value="previousMonth">Mes anterior</option>
+                <option value="year">Este año</option>
+                <option value="custom">Personalizado</option>
+            </select>
+        </div>
+        <div class="sales-report-control date" id="salesReportFromWrap">
+            <label for="salesReportFrom">Desde</label>
+            <input type="date" id="salesReportFrom" onchange="_naF8CustomRangeChanged()">
+        </div>
+        <div class="sales-report-control date" id="salesReportToWrap">
+            <label for="salesReportTo">Hasta</label>
+            <input type="date" id="salesReportTo" onchange="_naF8CustomRangeChanged()">
+        </div>
+        <div class="sales-report-control">
+            <label for="salesReportView">Vista</label>
+            <select id="salesReportView" onchange="ventasRender()">
+                <option value="resumen">Resumen general</option>
+                <option value="productos">Por producto</option>
+                <option value="clientes">Por cliente</option>
+                <option value="dias">Por día</option>
+                <option value="meses">Por mes</option>
+            </select>
+        </div>
+        <button class="sales-report-export" type="button" onclick="_naF8ExportReport()">⬇️ Exportar</button>
+        <div class="sales-report-range" id="salesReportRangeLabel">—</div>
+    </div>
+    <div class="v-kpi-row" id="ventasKPI"></div>
+    </div>
+    <div id="ventasContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column"></div>
+</div>

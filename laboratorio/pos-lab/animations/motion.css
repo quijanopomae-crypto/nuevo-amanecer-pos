@@ -1,0 +1,17 @@
+/*
+ * Tokens y contrato de motion. Solo afecta elementos que adopten clases lab-motion*.
+ * Una animación nunca debe decidir ventas, stock, caja, créditos ni persistencia.
+ */
+.lab-motion {
+  transition-duration:var(--lab-motion-normal);
+  transition-timing-function:var(--lab-ease-standard);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lab-motion,
+  .lab-motion * {
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}

@@ -1,0 +1,4 @@
+/* Layout LAB. Usa clases lab-* para que los estilos nuevos sean opt-in. */
+.lab-stack { display:flex; flex-direction:column; gap:var(--lab-space-3); }
+.lab-row { display:flex; align-items:center; gap:var(--lab-space-2); }
+.lab-grid { display:grid; gap:var(--lab-space-3); }

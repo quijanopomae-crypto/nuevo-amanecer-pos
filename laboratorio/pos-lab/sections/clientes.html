@@ -1,0 +1,22 @@
+<div class="page" id="pageClientes">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">👥 Clientes y Créditos</span><button class="top-btn-nuevo" onclick="abrirModalCli()">+ Cliente</button></div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="cliSetTab(this,'todos')">Todos <span class="tbadge teal" id="cliB0">0</span></button>
+        <button class="tab" onclick="cliSetTab(this,'vencidos')">🔴 Vencidos <span class="tbadge red" id="cliB1">0</span></button>
+        <button class="tab" onclick="cliSetTab(this,'proximos')">🟡 Próximos <span class="tbadge amber" id="cliB2">0</span></button>
+        <button class="tab" onclick="cliSetTab(this,'vigentes')">🟢 Vigentes <span class="tbadge teal" id="cliB3">0</span></button>
+    </div>
+    <div class="filter-bar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="cliSearch" placeholder="Buscar cliente o DNI..." oninput="cliRender()"></div>
+        <select class="f-select" id="cliSort" onchange="cliRender()"><option value="deuda">Mayor deuda</option><option value="nombre">Nombre A-Z</option></select>
+    </div>
+    <div class="stats-strip">
+        <div class="ss teal"><div class="ss-num" id="cliS0">0</div><div class="ss-lbl">Clientes</div></div>
+        <div class="ss red"><div class="ss-num" id="cliS1">S/0</div><div class="ss-lbl">Total deuda</div></div>
+        <div class="ss amber"><div class="ss-num" id="cliS2">0</div><div class="ss-lbl">Vencidos</div></div>
+        <div class="ss green"><div class="ss-num" id="cliS3">S/0</div><div class="ss-lbl">Cobrado hoy</div></div>
+    </div>
+    </div>
+    <div class="cli-list" id="cliList"></div>
+</div>

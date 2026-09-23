@@ -55,3 +55,23 @@ No tocar cambios ajenos ni evidence/v1.3 salvo autorización explícita.
 - Un experimento aprobado se promueve como parche mínimo revisado hacia `POS/`; nunca se sobrescribe CANON con todo LAB.
 - Antes de promover: ejecutar `node laboratorio/check.mjs`, pruebas funcionales aplicables, revisar diff y definir rollback.
 - Ver `docs/LABORATORIO_A_CANON.md` para el contrato durable.
+
+
+## Preflight obligatorio para POS-LAB
+
+Antes de modificar `laboratorio/pos-lab/**`:
+1. leer este archivo;
+2. leer `.agents/skills/lab-scope-guard/SKILL.md`;
+3. leer la skill específica (`lab-ui-edit`, `lab-animation-edit` o `lab-feature-edit`);
+4. leer `laboratorio/pos-lab/UI_MAP.yaml`;
+5. leer el contrato JSON de la tarea;
+6. verificar que todos los archivos previstos estén en `allowed_files`.
+
+Reglas duras:
+- una tarea LAB no escribe `POS/**`;
+- `laboratorio/pos-lab/index.html` es generado y no se edita manualmente para cambios normales;
+- cambios de pantalla se realizan en `sections/` y capas `styles/` / `animations/`;
+- una IA no puede ampliar su propia allowlist;
+- al terminar ejecutar build/check, tests LAB, scope guard y revisar diff;
+- cualquier archivo fuera de alcance convierte el resultado en FAIL;
+- la promoción a CANON requiere la skill `canon-promotion` y aprobación explícita del owner.

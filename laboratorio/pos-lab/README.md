@@ -45,3 +45,59 @@ No edites `POS/index.html` mientras una función siga en prueba.
 - CANON source blob: `f2462f72953ce26c0ab79f2bd39f84f8b3ac8a7d`
 - Archivo origen: `POS/index.html`
 - Snapshot LAB: `laboratorio/pos-lab/index.html`
+
+
+## Edición modular
+
+`index.html` es ahora la salida generada del LAB. No lo edites directamente para cambios de pantalla.
+
+Edita la sección concreta en:
+
+```text
+sections/menu.html
+sections/punto-venta.html
+sections/inventario.html
+sections/clientes.html
+sections/caja.html
+sections/ventas.html
+sections/gastos.html
+sections/configuracion.html
+```
+
+Después reconstruye:
+
+```powershell
+node laboratorio/pos-lab/build-lab.mjs
+node laboratorio/pos-lab/build-lab.mjs --check
+```
+
+Para encontrar rápidamente qué archivo corresponde a una pantalla, componente o animación, consulta `UI_MAP.yaml`.
+
+Regla: extracción ≠ reescritura. Las secciones iniciales fueron extraídas exactamente del HTML LAB congelado; modularizar no autoriza cambios funcionales.
+
+
+## Estructura modular actual
+
+```text
+pos-lab/
+├── sections/            # HTML por pantalla
+├── styles/
+│   ├── tokens.css
+│   ├── components/      # botones, cards, tablas, forms, modales, navegación
+│   └── pages/           # CSS por pantalla
+├── animations/          # motion visual
+├── js/motion/           # helpers de animación sin lógica comercial
+├── UI_MAP.yaml          # mapa rápido para humanos e IA
+├── LAB_TASK.example.json
+├── scope-guard.mjs
+├── build-lab.mjs
+└── validate-lab.mjs
+```
+
+Para una tarea nueva, primero crea un contrato bajo `tasks/` y usa la allowlist más pequeña posible.
+
+Validación completa:
+
+```powershell
+node laboratorio/pos-lab/validate-lab.mjs --task=laboratorio/pos-lab/tasks/<TAREA>.json
+```
