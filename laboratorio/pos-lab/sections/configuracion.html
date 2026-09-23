@@ -1,0 +1,24 @@
+<div class="page" id="pageConfig">
+    <div class="top-mod-bar cfg-topbar-simple">
+        <div class="cfg-topbar-title-wrap">
+            <button class="cfg-menu-toggle" type="button" onclick="toggleCfgMenu()" aria-label="Abrir menú de configuración">☰</button>
+            <span class="top-mod-title">⚙️ Configuración del sistema</span>
+        </div>
+        <button class="top-btn-nuevo" onclick="guardarConfig()" style="background: var(--teal);">💾 Guardar todo</button>
+    </div>
+    <div class="cfg-mobile-overlay" id="cfgMenuOverlay" onclick="toggleCfgMenu(false)"></div>
+    <div class="cfg-layout cfg-shell" style="display:flex; flex:1; overflow:hidden;">
+        <div class="cfg-sidebar" id="cfgSidebar">
+            <div class="cfg-sidebar-search"><input type="text" id="cfgSearchCat" placeholder="🔍 Buscar ajuste..." oninput="filterCfgCategories()"></div>
+            <button class="cfg-cat-btn active" data-cfgcat="negocio" onclick="switchCfgCategory('negocio')"><span>🏪</span><div><strong>Negocio</strong><small>Datos y perfil comercial</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="pos" onclick="switchCfgCategory('pos')"><span>🛒</span><div><strong>Punto de Venta</strong><small>Reglas, stock y mayorista</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="apariencia" onclick="switchCfgCategory('apariencia')"><span>🎨</span><div><strong>Apariencia</strong><small>Tema, fuente y colores</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="ticket" onclick="switchCfgCategory('ticket')"><span>🧾</span><div><strong>Ticket</strong><small>Impresión y mensaje final</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="control" onclick="switchCfgCategory('control')"><span>🛡️</span><div><strong>Control maestro</strong><small>Bloqueos y seguridad</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="reseteo" onclick="switchCfgCategory('reseteo')"><span>⚠️</span><div><strong>Reseteo</strong><small>Limpieza por módulos</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="importar" onclick="switchCfgCategory('importar')"><span>📥</span><div><strong>Importar datos</strong><small>Catálogo y respaldos</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="info" onclick="switchCfgCategory('info')"><span>ℹ️</span><div><strong>Sistema</strong><small>Estado y versión</small></div></button>
+        </div>
+        <div class="cfg-content" id="cfgContent"></div>
+    </div>
+</div>
