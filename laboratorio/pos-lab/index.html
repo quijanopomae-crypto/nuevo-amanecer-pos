@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<!-- Fuente limpia reconstruida: estructura estática estable + lógica Codex, sin DOM guardado por navegador. -->
+<html lang="es">
+<head>
+    <!-- LAB SNAPSHOT: origen POS/index.html blob f2462f72953ce26c0ab79f2bd39f84f8b3ac8a7d. No es producción. -->
+    <base href="/POS/">
+    <script src="/laboratorio/pos-lab/lab-guard.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f766e">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Nuevo Amanecer">
+    <title>LABORATORIO — Nuevo Amanecer POS</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" defer></script>
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/print.css">
+    <style>
+      .ocr-purchase-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.ocr-purchase-status{padding:8px 13px;font-size:12px;font-weight:800;color:var(--slate)}.ocr-purchase-status[data-state="error"]{color:var(--red)}.ocr-purchase-status[data-state="success"]{color:var(--green)}.ocr-purchase-raw{white-space:pre-wrap;max-height:120px;overflow:auto;background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:9px;font-size:11px}.ocr-review-row{border:1px solid var(--border);border-radius:11px;padding:11px;margin-top:10px;background:var(--white)}.ocr-review-name{font-size:14px;margin:0 0 4px}.ocr-review-raw,.ocr-review-status{font-size:11px;font-weight:700;color:var(--slate);margin-bottom:5px}.ocr-review-field{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:8px;margin-top:7px;font-size:12px;font-weight:800}.ocr-review-field input,.ocr-review-field select{min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px}.ocr-review-reasons,.ocr-review-candidates,.ocr-review-validation{font-size:11px;margin:7px 0;padding-left:20px}.ocr-review-validation{color:var(--red)}.ocr-review-confirm,.ocr-review-discard{border:0;border-radius:8px;padding:8px 12px;margin:5px 6px 0 0;font-weight:800;cursor:pointer}.ocr-review-confirm{background:var(--teal);color:white}.ocr-review-discard{background:#fee2e2;color:var(--red)}
+    </style>
+
+</head>
+<body>
+<div id="naLabBadge" role="status" aria-label="Entorno de laboratorio" style="position:fixed;right:10px;bottom:10px;z-index:2147483647;background:#111827;color:#fff;border:2px solid #f59e0b;border-radius:999px;padding:7px 11px;font:800 11px/1.2 system-ui,sans-serif;letter-spacing:.04em;box-shadow:0 4px 16px rgba(0,0,0,.22);pointer-events:none">🧪 LABORATORIO · NO PRODUCCIÓN</div>
+<div class="g-topbar">
+    <div class="g-logo"><div class="g-logo-icon">🌅</div><div><div class="g-logo-text" id="topBusinessName">Nuevo Amanecer</div><div class="g-logo-sub" id="topBusinessSub">Puerto Súngaro · Multiservicios</div></div></div>
+    <div class="g-spacer"></div>
+    <div style="display:flex;align-items:center;gap:9px">
+        <div class="g-status" id="localStatus"><div class="g-dot"></div><span>Modo local</span></div>
+        <div class="g-sync" id="saveStatus">💾 Guardado local</div>
+        <button id="btnDarkMode" onclick="toggleDark()" title="Modo día/noche" style="background:#f1f5f9;border:none;width:34px;height:34px;border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🌙</button>
+        <div class="g-avatar" id="topAvatar">F</div>
+        <button class="back-btn" id="backBtn" onclick="goMenu()">← Menú</button>
+    </div>
+</div>
+
+<div class="page active" id="pageMenu">
+    <div class="main-scroll home-shell">
+        <section class="hero-dashboard hero-welcome-only">
+            <div class="hero-main">
+                <div class="hero-kicker">Panel principal</div>
+                <h1>¿Qué quieres hacer hoy? 👋</h1>
+                <p id="fechaHoy"></p>
+                <div class="hero-welcome-note">Elige un módulo para empezar.</div>
+            </div>
+        </section>
+
+        <div class="section-label">Resumen</div>
+        <div class="quick-stats">
+            <div class="qs-card"><div class="qs-top"><div class="qs-label">Ventas hoy</div><div class="qs-icon" style="color:var(--teal);background:#e7faf7">📈</div></div><div class="qs-val" style="color:var(--teal)" id="qsVentas">S/ 0.00</div><div class="qs-sub" id="qsVentasSub">0 transacciones</div></div>
+            <div class="qs-card"><div class="qs-top"><div class="qs-label">En caja</div><div class="qs-icon" style="color:#0f172a;background:#f8fafc">💵</div></div><div class="qs-val" id="qsCaja">S/ 0.00</div><div class="qs-sub" id="qsCajaSub">Caja no abierta</div></div>
+            <div class="qs-card"><div class="qs-top"><div class="qs-label">Por cobrar</div><div class="qs-icon" style="color:var(--amber);background:#fffbeb">🧾</div></div><div class="qs-val" style="color:var(--amber)" id="qsPorCobrar">S/ 0.00</div><div class="qs-sub" id="qsPorCobrarSub">0 créditos activos</div></div>
+            <div class="qs-card"><div class="qs-top"><div class="qs-label">Stock crítico</div><div class="qs-icon" style="color:var(--red);background:#fef2f2">⚠️</div></div><div class="qs-val" style="color:var(--red)" id="qsStockCritico">0</div><div class="qs-sub" id="qsStockCriticoSub">productos por reponer</div></div>
+        </div>
+
+        <div class="section-label">Módulos principales</div>
+        <div class="modules-grid">
+            <div class="module-card" style="--accent:#00bca4;--icon-bg:#e0f7f4" onclick="goPage('pagePOS')"><div class="module-badge">POS</div><div class="module-icon">🛒</div><div class="module-label">Punto de Venta</div><div class="module-desc">Cobrar, registrar ventas y emitir comprobantes.</div><div class="module-arrow">Entrar →</div></div>
+            <div class="module-card" style="--accent:#ff7043;--icon-bg:#fff3ef" onclick="goPage('pageInventario')"><div class="module-icon">📦</div><div class="module-label">Inventario</div><div class="module-desc">Control de stock, ingresos y productos críticos.</div><div class="module-arrow">Entrar →</div></div>
+            <div class="module-card" style="--accent:#3b82f6;--icon-bg:#eff6ff" onclick="goPage('pageVentas')"><div class="module-icon">📊</div><div class="module-label">Ventas</div><div class="module-desc">Historial, filtros, reportes y movimientos.</div><div class="module-arrow">Entrar →</div></div>
+            <div class="module-card" style="--accent:#a855f7;--icon-bg:#f5f0ff" onclick="goPage('pageClientes')"><div class="module-icon">👥</div><div class="module-label">Clientes</div><div class="module-desc">Créditos, seguimiento y cuentas por cobrar.</div><div class="module-arrow">Entrar →</div></div>
+            <div class="module-card" style="--accent:#f59e0b;--icon-bg:#fffbeb" onclick="goPage('pageCaja')"><div class="module-icon">💰</div><div class="module-label">Caja</div><div class="module-desc">Apertura, cierre diario y control de efectivo.</div><div class="module-arrow">Entrar →</div></div>
+            <div class="module-card" style="--accent:#ef4444;--icon-bg:#fef2f2" onclick="goPage('pageGastos')"><div class="module-icon">🧾</div><div class="module-label">Gastos</div><div class="module-desc">Egresos, compras y salidas de dinero.</div><div class="module-arrow">Entrar →</div></div>
+            <div class="module-card" style="--accent:#64748b;--icon-bg:#f8fafc" onclick="goPage('pageConfig')"><div class="module-icon">⚙️</div><div class="module-label">Configuración</div><div class="module-desc">Personaliza productos, ticket y el sistema.</div><div class="module-arrow">Entrar →</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- POS -->
+<div class="page" id="pagePOS">
+
+  <!-- Barra superior: búsqueda + botones -->
+  <div style="background:linear-gradient(180deg,#ffffff 0%,#f8fbfd 100%);border-bottom:1px solid #dde7ef;padding:8px 12px;min-height:62px;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 8px 18px rgba(15,23,42,.03)">
+    <div class="pos-search-box">
+      <span style="font-size:14px">🔍</span>
+      <input type="text" id="posSearch" placeholder="Buscar o escanear código..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <span id="scannerIndicator" class="scanner-indicator ready" role="status" aria-live="polite" title="Lectura automática de escáner HID activada"><span class="scanner-dot"></span><span class="scanner-label">Escáner listo</span></span>
+    </div>
+    <button class="free-sale-btn" id="btnVentaLibre" type="button" onclick="abrirVentaLibre()" title="Venta libre / VARIOS (F2)">➕ <span class="free-sale-label">VARIOS</span></button>
+    <button class="cart-fab" onclick="toggleCart()">
+      🛒<span class="cart-fab-badge" id="cartBadge">0</span>
+    </button>
+    <button id="btnMayorista" onclick="toggleMayorista()"
+      style="background:linear-gradient(180deg,#ffffff 0%,#f8fbfd 100%);border:1.5px solid #dce5ed;border-radius:12px;padding:9px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;transition:all 0.2s;box-shadow:0 6px 16px rgba(15,23,42,.04)">🛍️ Mayor</button>
+  </div>
+
+  <div class="pos-body">
+
+    <!-- Sidebar categorías -->
+    <aside class="sidebar" id="posSidebar">
+      <button class="cat-btn active" data-cat="todo" onclick="posSetCat(this,'todo')"><span class="ci">⊞</span>Todo</button>
+      <button class="cat-btn" data-cat="abarrotes" onclick="posSetCat(this,'abarrotes')"><span class="ci">🛒</span>Abarrotes</button>
+      <button class="cat-btn" data-cat="bebidas" onclick="posSetCat(this,'bebidas')"><span class="ci">🥤</span>Bebidas</button>
+      <button class="cat-btn" data-cat="snacks" onclick="posSetCat(this,'snacks')"><span class="ci">🍿</span>Snacks</button>
+      <button class="cat-btn" data-cat="helados" onclick="posSetCat(this,'helados')"><span class="ci">🍦</span>Helados</button>
+      <button class="cat-btn" data-cat="licores" onclick="posSetCat(this,'licores')"><span class="ci">🍺</span>Licores</button>
+      <button class="cat-btn" data-cat="limpieza" onclick="posSetCat(this,'limpieza')"><span class="ci">🧼</span>Limpieza</button>
+      <button class="cat-btn" data-cat="cuidado" onclick="posSetCat(this,'cuidado')"><span class="ci">🧴</span>Cuidado</button>
+      <button class="cat-btn" data-cat="bebe" onclick="posSetCat(this,'bebe')"><span class="ci">👶</span>Bebés</button>
+      <button class="cat-btn" data-cat="hogar" onclick="posSetCat(this,'hogar')"><span class="ci">🏠</span>Hogar</button>
+      <button class="cat-btn" data-cat="tecnologia" onclick="posSetCat(this,'tecnologia')"><span class="ci">📱</span>Tecnología</button>
+      <button class="cat-btn" data-cat="libreria" onclick="posSetCat(this,'libreria')"><span class="ci">✏️</span>Librería</button>
+      <button class="cat-btn" data-cat="servicios" onclick="posSetCat(this,'servicios')"><span class="ci">💳</span>Servicios</button>
+    </aside>
+
+    <!-- Área de productos -->
+    <main class="products-area" id="posArea"></main>
+
+    <!-- Backdrop carrito -->
+    <div class="cart-backdrop" id="cartBackdrop" onclick="toggleCart();closeCartMenu()"></div>
+
+    <!-- Drawer carrito -->
+    <aside class="cart-drawer" id="cartDrawer">
+
+      <!-- Cabecera del carrito -->
+      <div class="cart-head">
+        <div class="cart-head-title">🛒 Carrito actual <span id="modoMayoristaTag" style="display:none;background:var(--amber-light);color:#b45309;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px">MAYORISTA</span></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <!-- Menú 3 puntos -->
+          <div style="position:relative">
+            <button class="btn-close-x" onclick="toggleCartMenu()" id="btnCartMenu" title="Opciones">⋮</button>
+            <div id="cartMenuDropdown"
+                 style="display:none;position:absolute;top:36px;right:0;
+                        background:var(--white);border:1px solid var(--border);
+                        border-radius:12px;min-width:190px;z-index:300;
+                        box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden">
+              <button onclick="abrirDescuento()"  class="cart-menu-item">💸 Aplicar descuento</button>
+              <button onclick="guardarBorrador()" class="cart-menu-item">💾 Guardar borrador</button>
+              <button onclick="cargarBorrador()"  class="cart-menu-item">📂 Cargar borrador</button>
+              <button onclick="generarCatalogo()" class="cart-menu-item">📄 Generar catálogo</button>
+              <div style="height:1px;background:var(--border);margin:3px 0"></div>
+              <button onclick="limpiarCarrito()"  class="cart-menu-item" style="color:var(--red)">🧹 Limpiar carrito</button>
+            </div>
+          </div>
+          <button class="btn-close-x" onclick="toggleCart()">✕</button>
+        </div>
+      </div>
+
+      <!-- Badge descuento activo -->
+      <div id="btnDescInfo"
+           style="display:none;background:var(--amber);color:var(--dark);
+                  font-size:11px;font-weight:800;padding:6px 12px;
+                  text-align:center;cursor:pointer"
+           onclick="quitarDescuento()"></div>
+
+      <!-- Ítems del carrito -->
+      <div class="cart-items" id="cartItems">
+        <div class="cart-empty">El carrito está vacío</div>
+      </div>
+
+      <!-- Pie del carrito -->
+      <div class="cart-footer">
+        <div class="cart-totals">
+          <div class="total-row"><span>Subtotal</span><span id="posSubtotal">S/ 0.00</span></div>
+          <div class="total-row"><span>IGV (18%)</span><span id="posIgv">S/ 0.00</span></div>
+          <div class="total-main"><span>Total</span><span id="posTotal">S/ 0.00</span></div>
+        </div>
+        <div class="cart-actions">
+          <button class="btn-cobro btn-rapido" id="btnRapido" onclick="abrirCobro('rapido')" disabled>⚡ RÁPIDO</button>
+          <button class="btn-cobro btn-pagar"  id="btnPagar"  onclick="abrirCobro('normal')" disabled>💳 PAGAR</button>
+          <button class="btn-cancelar-cart" onclick="cancelarVenta()">🗑️ Cancelar venta</button>
+        </div>
+      </div>
+
+    </aside><!-- /cart-drawer -->
+  </div><!-- /pos-body -->
+</div><!-- /pagePOS -->
+
+<!-- INVENTARIO -->
+<div class="page" id="pageInventario">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">📦 Inventario</span><div class="ocr-purchase-actions"><input type="file" id="ocrPurchaseFile" accept="image/*" capture="environment" hidden><button class="top-btn-nuevo" type="button" onclick="document.getElementById('ocrPurchaseFile').click()">📷 OCR de compras</button><button class="top-btn-nuevo" type="button" id="ocrPurchaseStart">Leer foto</button><button class="top-btn-nuevo" onclick="abrirModalProd()">+ Nuevo</button></div></div>
+    <div class="ocr-purchase-status" id="ocrPurchaseStatus" role="status" aria-live="polite">Selecciona una foto de la compra.</div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="invSetTab(this,'todos')">Todos <span class="tbadge teal" id="invB0">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'critico')">⚠ Crítico <span class="tbadge red" id="invB1">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'sugerencia')">🛒 Sugerencia de Compra <span class="tbadge amber" id="invB4">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'vencimiento')">📅 Por vencer <span class="tbadge amber" id="invB2">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'vencidos')">🚫 Vencidos <span class="tbadge red" id="invB3">0</span></button>
+    </div>
+    <div class="filter-bar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="invSearch" placeholder="Buscar producto, SKU..." oninput="invRender()"></div>
+        <select class="f-select" id="invCat" onchange="invRender()"></select>
+    </div>
+    <div class="stats-strip">
+        <div class="ss teal"><div class="ss-num" id="invS0">0</div><div class="ss-lbl">Total prods.</div></div>
+        <div class="ss red"><div class="ss-num" id="invS1">0</div><div class="ss-lbl">Stock crítico</div></div>
+        <div class="ss amber"><div class="ss-num" id="invS2">0</div><div class="ss-lbl">Por vencer</div></div>
+        <div class="ss green"><div class="ss-num" id="invS3">S/0</div><div class="ss-lbl">Costo inv.</div></div>
+        <div class="ss teal"><div class="ss-num" id="invS4">S/0</div><div class="ss-lbl">Valor venta</div></div>
+        <div class="ss green"><div class="ss-num" id="invS5">S/0</div><div class="ss-lbl">Ganancia pot.</div></div>
+    </div>
+    </div>
+    <div class="table-wrap"><div class="table-card"><table><thead><tr><th>Producto</th><th>Cat.</th><th>Precio</th><th>Vencimiento</th><th>Stock</th><th>Acciones</th></tr></thead><tbody id="invBody"></tbody></table></div></div>
+</div>
+
+<!-- CLIENTES -->
+<div class="page" id="pageClientes">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">👥 Clientes y Créditos</span><button class="top-btn-nuevo" onclick="abrirModalCli()">+ Cliente</button></div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="cliSetTab(this,'todos')">Todos <span class="tbadge teal" id="cliB0">0</span></button>
+        <button class="tab" onclick="cliSetTab(this,'vencidos')">🔴 Vencidos <span class="tbadge red" id="cliB1">0</span></button>
+        <button class="tab" onclick="cliSetTab(this,'proximos')">🟡 Próximos <span class="tbadge amber" id="cliB2">0</span></button>
+        <button class="tab" onclick="cliSetTab(this,'vigentes')">🟢 Vigentes <span class="tbadge teal" id="cliB3">0</span></button>
+    </div>
+    <div class="filter-bar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="cliSearch" placeholder="Buscar cliente o DNI..." oninput="cliRender()"></div>
+        <select class="f-select" id="cliSort" onchange="cliRender()"><option value="deuda">Mayor deuda</option><option value="nombre">Nombre A-Z</option></select>
+    </div>
+    <div class="stats-strip">
+        <div class="ss teal"><div class="ss-num" id="cliS0">0</div><div class="ss-lbl">Clientes</div></div>
+        <div class="ss red"><div class="ss-num" id="cliS1">S/0</div><div class="ss-lbl">Total deuda</div></div>
+        <div class="ss amber"><div class="ss-num" id="cliS2">0</div><div class="ss-lbl">Vencidos</div></div>
+        <div class="ss green"><div class="ss-num" id="cliS3">S/0</div><div class="ss-lbl">Cobrado hoy</div></div>
+    </div>
+    </div>
+    <div class="cli-list" id="cliList"></div>
+</div>
+
+<!-- CAJA -->
+<div class="page" id="pageCaja">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">💰 Caja del Día</span><span style="font-size:11px;font-weight:700;color:var(--slate)" id="cajFechaLbl"></span></div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="cajSetTab(this,'resumen')">📊 Resumen</button>
+        <button class="tab" onclick="cajSetTab(this,'movimientos')">📋 Movimientos</button>
+        <button class="tab" onclick="cajSetTab(this,'cierre')">🔒 Cierre</button>
+    </div>
+    </div>
+    <div id="cajContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column"></div>
+</div>
+
+<!-- VENTAS -->
+<div class="page" id="pageVentas">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">📊 Ventas e Historial</span></div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="ventasSetTab(this,'hoy')">📅 Hoy</button>
+        <button class="tab" onclick="ventasSetTab(this,'semana')">📈 Semana</button>
+        <button class="tab" onclick="ventasSetTab(this,'historial')">🗂 Historial</button>
+        <button class="tab" onclick="ventasSetTab(this,'productos')">🏆 Top prods.</button>
+        <button class="tab" onclick="ventasSetTab(this,'reportes')">📑 Reportes</button>
+    </div>
+    <div class="filter-bar" id="ventasFilterBar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="ventasSearch" placeholder="Buscar venta..." oninput="ventasRender()"></div>
+        <select class="f-select" id="ventasMetodo" onchange="ventasRender()"><option value="">Todos</option><option value="efectivo">Efectivo</option><option value="yape">Yape/Plin</option><option value="credito">Crédito</option><option value="mixto">Pago mixto</option></select>
+    </div>
+    <div class="sales-report-controls" id="ventasReportControls" hidden>
+        <div class="sales-report-control">
+            <label for="salesReportPeriod">Período</label>
+            <select id="salesReportPeriod" onchange="_naF8ReportPeriodChanged()">
+                <option value="today">Hoy</option>
+                <option value="week">Esta semana</option>
+                <option value="month" selected>Este mes</option>
+                <option value="previousMonth">Mes anterior</option>
+                <option value="year">Este año</option>
+                <option value="custom">Personalizado</option>
+            </select>
+        </div>
+        <div class="sales-report-control date" id="salesReportFromWrap">
+            <label for="salesReportFrom">Desde</label>
+            <input type="date" id="salesReportFrom" onchange="_naF8CustomRangeChanged()">
+        </div>
+        <div class="sales-report-control date" id="salesReportToWrap">
+            <label for="salesReportTo">Hasta</label>
+            <input type="date" id="salesReportTo" onchange="_naF8CustomRangeChanged()">
+        </div>
+        <div class="sales-report-control">
+            <label for="salesReportView">Vista</label>
+            <select id="salesReportView" onchange="ventasRender()">
+                <option value="resumen">Resumen general</option>
+                <option value="productos">Por producto</option>
+                <option value="clientes">Por cliente</option>
+                <option value="dias">Por día</option>
+                <option value="meses">Por mes</option>
+            </select>
+        </div>
+        <button class="sales-report-export" type="button" onclick="_naF8ExportReport()">⬇️ Exportar</button>
+        <div class="sales-report-range" id="salesReportRangeLabel">—</div>
+    </div>
+    <div class="v-kpi-row" id="ventasKPI"></div>
+    </div>
+    <div id="ventasContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column"></div>
+</div>
+
+<!-- GASTOS -->
+<div class="page" id="pageGastos">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">🧾 Gastos y Egresos</span><button class="top-btn-nuevo" onclick="abrirModalGasto()">+ Gasto</button></div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="gasSetTab(this,'hoy')">📅 Hoy</button>
+        <button class="tab" onclick="gasSetTab(this,'semana')">📈 Semana</button>
+        <button class="tab" onclick="gasSetTab(this,'todos')">🗂 Todos</button>
+    </div>
+    <div class="stats-strip">
+        <div class="ss red"><div class="ss-num" id="gasS0">S/0</div><div class="ss-lbl">Total gastos</div></div>
+        <div class="ss amber"><div class="ss-num" id="gasS1">0</div><div class="ss-lbl">Registros</div></div>
+        <div class="ss teal"><div class="ss-num" id="gasS2">S/0</div><div class="ss-lbl">Mayor gasto</div></div>
+        <div class="ss green"><div class="ss-num" id="gasS3">—</div><div class="ss-lbl">Categoría top</div></div>
+    </div>
+    <div class="filter-bar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="gasSearch" placeholder="Buscar gasto..." oninput="gasRender()"></div>
+        <select class="f-select" id="gasCatFilter" onchange="gasRender()"><option value="">Todas</option><option value="Servicios">Servicios</option><option value="Proveedor">Proveedor</option><option value="Operativo">Operativo</option><option value="Personal">Personal</option><option value="Transporte">Transporte</option><option value="Otro">Otro</option></select>
+    </div>
+    </div>
+    <div id="gasContent" style="flex:1;overflow-y:auto;padding:12px 13px;display:flex;flex-direction:column;gap:7px"></div>
+</div>
+
+<!-- CONFIGURACIÓN -->
+<div class="page" id="pageConfig">
+    <div class="top-mod-bar cfg-topbar-simple">
+        <div class="cfg-topbar-title-wrap">
+            <button class="cfg-menu-toggle" type="button" onclick="toggleCfgMenu()" aria-label="Abrir menú de configuración">☰</button>
+            <span class="top-mod-title">⚙️ Configuración del sistema</span>
+        </div>
+        <button class="top-btn-nuevo" onclick="guardarConfig()" style="background: var(--teal);">💾 Guardar todo</button>
+    </div>
+    <div class="cfg-mobile-overlay" id="cfgMenuOverlay" onclick="toggleCfgMenu(false)"></div>
+    <div class="cfg-layout cfg-shell" style="display:flex; flex:1; overflow:hidden;">
+        <div class="cfg-sidebar" id="cfgSidebar">
+            <div class="cfg-sidebar-search"><input type="text" id="cfgSearchCat" placeholder="🔍 Buscar ajuste..." oninput="filterCfgCategories()"></div>
+            <button class="cfg-cat-btn active" data-cfgcat="negocio" onclick="switchCfgCategory('negocio')"><span>🏪</span><div><strong>Negocio</strong><small>Datos y perfil comercial</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="pos" onclick="switchCfgCategory('pos')"><span>🛒</span><div><strong>Punto de Venta</strong><small>Reglas, stock y mayorista</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="apariencia" onclick="switchCfgCategory('apariencia')"><span>🎨</span><div><strong>Apariencia</strong><small>Tema, fuente y colores</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="ticket" onclick="switchCfgCategory('ticket')"><span>🧾</span><div><strong>Ticket</strong><small>Impresión y mensaje final</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="control" onclick="switchCfgCategory('control')"><span>🛡️</span><div><strong>Control maestro</strong><small>Bloqueos y seguridad</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="reseteo" onclick="switchCfgCategory('reseteo')"><span>⚠️</span><div><strong>Reseteo</strong><small>Limpieza por módulos</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="importar" onclick="switchCfgCategory('importar')"><span>📥</span><div><strong>Importar datos</strong><small>Catálogo y respaldos</small></div></button>
+            <button class="cfg-cat-btn" data-cfgcat="info" onclick="switchCfgCategory('info')"><span>ℹ️</span><div><strong>Sistema</strong><small>Estado y versión</small></div></button>
+        </div>
+        <div class="cfg-content" id="cfgContent"></div>
+    </div>
+</div>
+
+<!-- MODALES -->
+<div class="modal-overlay" id="mOcrPurchaseReview" style="z-index:390"><div class="modal" style="max-width:820px"><div class="mhead teal"><div><div class="mhead-title">📷 Revisión de compra OCR</div><div style="font-size:10px;font-weight:700;opacity:.85;margin-top:2px">Confirma, corrige o descarta cada fila antes de aplicar</div></div><button class="btn-close-m" type="button" id="ocrPurchaseClose">✕</button></div><div class="mbody"><div class="fl">Texto leído</div><pre class="ocr-purchase-raw" id="ocrPurchaseRawText"></pre><div id="ocrPurchaseReviewRows"></div><div class="mbtns"><button class="mbtn mbtn-cancel" type="button" onclick="document.getElementById('ocrPurchaseClose').click()">Cerrar</button><button class="mbtn mbtn-ok" type="button" id="ocrPurchaseApply">Aplicar filas confirmadas</button></div></div></div></div>
+<div class="modal-overlay" id="mCobro">
+  <div class="modal pay-modal">
+    <div class="pay-modal-head">
+      <div>
+        <div class="pay-modal-title">Cobrar venta</div>
+        <div class="pay-modal-sub">Selecciona el método y confirma el pago</div>
+      </div>
+      <button class="pay-close" onclick="cerrarModal('mCobro')" aria-label="Cerrar">✕</button>
+    </div>
+
+    <div class="pay-modal-body">
+      <div class="pay-total-card">
+        <div class="pay-total-label">Total a cobrar</div>
+        <div class="pay-total-value" id="mCobroTotal">S/ 0.00</div>
+      </div>
+
+      <div class="pay-section-label">Método de pago</div>
+      <div class="pm-grid pay-methods">
+        <button type="button" class="pm-btn active" data-method="efectivo" onclick="selPM(this)"><span class="pmi">💵</span><span class="pml">Efectivo</span></button>
+        <button type="button" class="pm-btn" data-method="yape" onclick="selPM(this)"><span class="pmi">📱</span><span class="pml">Yape / Plin</span></button>
+        <button type="button" class="pm-btn" data-method="transferencia" onclick="selPM(this)"><span class="pmi">🏦</span><span class="pml">Transferencia</span></button>
+        <button type="button" class="pm-btn" data-method="credito" onclick="selPM(this)"><span class="pmi">🧾</span><span class="pml">Crédito</span></button>
+        <button type="button" class="pm-btn" data-method="mixto" onclick="selPM(this)"><span class="pmi">🔀</span><span class="pml">Pago mixto · Efectivo + digital</span></button>
+      </div>
+
+      <details class="pay-client-details" id="mClienteDetails">
+        <summary><span>Cliente</span><small>Opcional</small></summary>
+        <select class="fs" id="mVentaCliente"><option value="">Sin cliente</option></select>
+      </details>
+
+      <div id="mEfSection" class="pay-cash-section">
+        <div id="mCashSimple" class="cash-simple-actions">
+          <div class="cash-inline-note" id="mCashInlineNote">Monto exacto listo para cobrar.</div>
+          <div id="mCashQuickInline" class="cash-quick-inline"></div>
+          <button type="button" class="cash-other-btn" onclick="toggleOtherCashAmounts(true)">
+            <span>💵</span>
+            <span><strong>Otros montos</strong><small>Ingresar efectivo y calcular vuelto</small></span>
+            <span class="cash-other-arrow">›</span>
+          </button>
+        </div>
+        <div id="mCashAdvanced" class="pay-panel cash-advanced-panel" hidden>
+          <div class="pay-amount-head">
+            <label for="mMontoRec">Monto recibido</label>
+            <button type="button" class="cash-exact-btn" onclick="setMontoExacto(true)">Usar monto exacto</button>
+          </div>
+          <div class="pay-amount-input-wrap">
+            <span>S/</span>
+            <input class="fi-big pay-amount-input" id="mMontoRec" min="0" inputmode="decimal" oninput="calcCambio()" placeholder="0.00" step="0.10" type="number"/>
+          </div>
+          <div class="cash-quick-row pay-quick-row">
+            <button type="button" data-cash="20" onclick="setMontoRecibido(20)">20</button>
+            <button type="button" data-cash="50" onclick="setMontoRecibido(50)">50</button>
+            <button type="button" data-cash="100" onclick="setMontoRecibido(100)">100</button>
+            <button type="button" data-cash="200" onclick="setMontoRecibido(200)">200</button>
+          </div>
+          <div class="pay-change-row">
+            <span>Vuelto</span>
+            <strong id="mCambio">S/ 0.00</strong>
+          </div>
+        </div>
+      </div>
+
+      <div id="mCreditoSection" class="pay-panel pay-alt-panel" style="display:none">
+        <div class="fg"><div class="fl">Cliente del crédito <span class="req">*</span></div><select class="fs" id="mCreditoCliente"><option value="">Selecciona un cliente</option></select></div>
+        <div class="fg" style="margin-bottom:0"><div class="fl">Fecha de vencimiento <span class="req">*</span></div><input class="fi" id="mCreditoVence" type="date"/></div>
+      </div>
+
+      <div id="mDigitalSection" class="pay-panel pay-alt-panel" style="display:none">
+        <label class="digital-payment-confirmation" for="mDigitalVerified">
+          <input type="checkbox" id="mDigitalVerified" onchange="_naValidatePaymentForm()">
+          <span>He verificado que el pago fue recibido</span>
+        </label>
+        <div class="fg" style="margin-bottom:0"><div class="fl" id="mDigitalLabel">Número de operación (opcional)</div><input autocomplete="off" class="fi" id="mDigitalRef" inputmode="numeric" placeholder="Ej. 12345678"/></div>
+      </div>
+
+      <div id="mMixedSection" class="pay-panel pay-alt-panel" style="display:none">
+        <div class="pay-section-label" style="margin-bottom:9px">Dividir el pago</div>
+        <div class="mixed-pay-grid">
+          <div class="mixed-pay-card">
+            <label for="mMixedCash">Efectivo recibido</label>
+            <div class="mixed-pay-input"><span>S/</span><input id="mMixedCash" type="number" min="0" step="0.10" inputmode="decimal" placeholder="0.00" oninput="calcMixedPayment()"></div>
+            <div class="mixed-quick-row">
+              <button type="button" data-mixed-cash="10" onclick="setMixedCash(10)">10</button>
+              <button type="button" data-mixed-cash="20" onclick="setMixedCash(20)">20</button>
+              <button type="button" data-mixed-cash="50" onclick="setMixedCash(50)">50</button>
+              <button type="button" data-mixed-cash="100" onclick="setMixedCash(100)">100</button>
+            </div>
+          </div>
+          <div class="mixed-pay-card">
+            <label>Resto por pago digital</label>
+            <div class="mixed-pay-value" id="mMixedDigitalAmount">S/ 0.00</div>
+          </div>
+        </div>
+        <div class="mixed-method-row">
+          <div><div class="fl">Pago digital</div><select class="fs" id="mMixedDigitalMethod" onchange="calcMixedPayment()"><option value="transferencia">Transferencia</option><option value="yape">Yape / Plin</option></select></div>
+          <div><div class="fl">Número de operación (opcional)</div><input class="fi" id="mMixedRef" autocomplete="off" inputmode="numeric" placeholder="Ej. 12345678" oninput="calcMixedPayment()"></div>
+        </div>
+        <label class="digital-payment-confirmation" for="mMixedDigitalVerified">
+          <input type="checkbox" id="mMixedDigitalVerified" onchange="_naValidatePaymentForm()">
+          <span>He verificado que el pago fue recibido</span>
+        </label>
+        <div class="mixed-pay-summary"><span id="mMixedSummaryText">Ingresa cuánto paga en efectivo.</span><strong id="mMixedSummaryTotal">S/ 0.00</strong></div>
+      </div>
+
+      <div id="mPaymentHint" class="payment-hint pay-hint" aria-live="polite"></div>
+    </div>
+
+    <div class="pay-modal-footer">
+      <button class="pay-btn pay-btn-secondary" onclick="cerrarModal('mCobro')">Cancelar</button>
+      <button class="pay-btn pay-btn-primary" id="mBtnConf" onclick="confirmarVenta()">Confirmar venta</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mCobroRapido">
+  <div class="modal pay-modal quick-pay-modal">
+    <div class="pay-modal-head">
+      <div>
+        <div class="pay-modal-title">Pago rapido</div>
+        <div class="pay-modal-sub">Selecciona como se recibio el pago</div>
+      </div>
+      <button class="pay-close" onclick="cerrarModal('mCobroRapido')" aria-label="Cerrar">&times;</button>
+    </div>
+
+    <div class="pay-modal-body">
+      <div class="pay-total-card">
+        <div class="pay-total-label">Total a cobrar</div>
+        <div class="pay-total-value" id="mQuickPaymentTotal">S/ 0.00</div>
+      </div>
+
+      <p class="quick-pay-intro">La venta se registrará inmediatamente al seleccionar una opción.</p>
+
+      <label class="digital-payment-confirmation quick-payment-confirmation" for="mQuickDigitalVerified">
+        <input type="checkbox" id="mQuickDigitalVerified" onchange="_naQuickPaymentVerificationChanged()">
+        <span>He verificado que el pago fue recibido</span>
+      </label>
+      <div id="mQuickPaymentHint" class="payment-hint" aria-live="polite"></div>
+
+      <div class="quick-pay-options">
+        <button type="button" class="quick-pay-option cash" id="mQuickCash" onclick="confirmarPagoRapido('efectivo')">
+          <span class="quick-pay-icon">&#128181;</span>
+          <strong>Efectivo exacto</strong>
+          <small>Registra el total recibido sin calcular vuelto.</small>
+        </button>
+
+        <button type="button" class="quick-pay-option transfer" id="mQuickTransfer" onclick="confirmarPagoRapido('transferencia')">
+          <span class="quick-pay-icon">&#127974;</span>
+          <strong>Transferencia completa</strong>
+          <small>Registra el total transferido; el número de operación es opcional.</small>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="mVentaLibre"><div class="modal"><div class="mhead amber"><div><div class="mhead-title">➕ Venta libre / VARIOS</div><div style="font-size:10px;font-weight:700;opacity:.85;margin-top:2px">Artículo no registrado en el inventario</div></div><button class="btn-close-m" onclick="cerrarModal('mVentaLibre')">✕</button></div><div class="mbody">
+    <div class="free-sale-note">Esta línea se guardará dentro de la venta con fecha, hora y cajero, pero no modificará el inventario. Úsala para un artículo ocasional que todavía no está registrado.</div>
+    <div class="fg"><div class="fl">Nombre del artículo <span class="req">*</span></div><input class="fi" id="vlNombre" maxlength="120" value="VARIOS" placeholder="VARIOS"></div>
+    <div class="frow"><div class="fg"><div class="fl">Precio unitario (S/) <span class="req">*</span></div><input class="fi" id="vlPrecio" type="number" min="0.01" step="0.10" inputmode="decimal" placeholder="0.00" oninput="actualizarResumenVentaLibre()"></div><div class="fg"><div class="fl">Cantidad <span class="req">*</span></div><input class="fi" id="vlCantidad" type="number" min="1" max="9999" step="1" inputmode="numeric" value="1" oninput="actualizarResumenVentaLibre()"></div></div>
+    <div class="fg"><div class="fl">Código o referencia (opcional)</div><input class="fi" id="vlCodigo" maxlength="160" placeholder="Código leído o referencia interna"></div>
+    <div class="free-sale-summary"><div><span>Tipo</span><strong>Venta libre</strong></div><div><span>Subtotal</span><strong id="vlSubtotal">S/ 0.00</strong></div></div>
+    <div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mVentaLibre')">Cancelar</button><button class="mbtn mbtn-ok amber" id="vlConfirmar" onclick="confirmarVentaLibre()">➕ Agregar al carrito</button></div>
+</div></div></div>
+
+<div class="modal-overlay" id="mProd"><div class="modal"><div class="mhead teal"><div class="mhead-title" id="mProdTitle">➕ Nuevo producto</div><button class="btn-close-m" onclick="cerrarModal('mProd')">✕</button></div><div class="mbody">
+    <div class="prod-unified">
+        <input type="checkbox" id="pManualCode" hidden checked>
+
+        <div class="fg">
+            <div class="fl">Nombre <span class="req">*</span></div>
+            <input class="fi" id="pNombre" placeholder="Ej: cuates x 44 gr" oninput="_naF12ProductNameChanged()">
+        </div>
+
+        <div class="prod-unified-grid2" id="pCodeFields">
+            <div class="fg"><div class="fl">SKU</div><input class="fi" id="pSku" placeholder="Código interno"></div>
+            <div class="fg"><div class="fl">Código de barras</div><input class="fi" id="pBarcode" inputmode="numeric" placeholder="Escanear o escribir"></div>
+        </div>
+
+        <div class="prod-unified-grid2">
+            <div class="fg">
+                <div class="fl">Categoría</div>
+                <div class="prod-category-line"><select class="fs" id="pCat"></select><button type="button" class="prod-new-cat-btn" onclick="toggleNewCategoryField()">+ Nueva</button></div>
+            </div>
+            <div class="fg">
+                <div class="fl">Icono o emoji</div>
+                <div class="product-icon-input-row"><input class="fi" id="pIcon" placeholder="📦" maxlength="12" oninput="_naF12ManualIconChanged()"><button type="button" class="product-icon-mini-btn" onclick="abrirSelectorEmoji()">😀 Elegir</button></div>
+                <div class="product-icon-actions"><button type="button" class="product-icon-action active" id="pIconAutoBtn" onclick="_naF12EnableAutoEmoji()">✨ Automático</button><button type="button" class="product-icon-action" onclick="abrirCreadorIcono()">🎨 Crear icono</button><span class="product-icon-mode" id="pIconMode">Automático</span></div>
+            </div>
+        </div>
+
+        <div id="newCatWrap" style="display:none"><div class="cat-create-box"><input class="fi" id="pCatNueva" placeholder="Ej: Snacks premium" maxlength="40"><button type="button" class="cat-mini-btn fill" onclick="agregarCategoriaProducto()">Agregar</button></div></div>
+
+        <div class="fg">
+            <div class="fl">Imagen del producto</div>
+            <div class="prod-image-line"><button type="button" class="prod-image-btn" onclick="document.getElementById('pImagen').click()">📷 Subir imagen</button><button type="button" class="prod-image-remove" id="pRemoveImageBtn" onclick="_naF12RemoveProductImage()" hidden>🗑️ Quitar</button><div id="imgPreview" class="prod-image-preview">📦</div></div>
+            <input type="file" id="pImagen" accept="image/*" capture="environment" onchange="previewImagen()" style="display:none">
+        </div>
+
+        <div class="prod-unified-grid2">
+            <div class="fg"><div class="fl">Costo (S/) <span class="req">*</span></div><input class="fi" id="pCosto" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0" oninput="calcMargen()"></div>
+            <div class="fg"><div class="fl">Precio venta (S/) <span class="req">*</span></div><input class="fi" id="pPrecio" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0" oninput="calcMargen()"></div>
+        </div>
+
+        <div class="prod-margin"><strong>📈 Margen de ganancia</strong><span id="mgVal">—</span></div>
+
+        <div id="pInventoryFields">
+            <div class="prod-unified-grid2">
+                <div class="fg"><div class="fl">Stock inicial <span class="req">*</span></div><input class="fi" id="pStock" type="number" inputmode="numeric" placeholder="0" min="0"></div>
+                <div class="fg"><div class="fl">Stock mínimo</div><input class="fi" id="pStockMin" type="number" inputmode="numeric" placeholder="5" min="0"></div>
+            </div>
+        </div>
+
+        <div class="prod-unified-grid2">
+            <div class="fg"><div class="fl">Precio por caja (S/)</div><input class="fi" id="pPrecioCaja" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0"></div>
+            <div class="fg"><div class="fl">Unidades por caja (precio mayorista)</div><input class="fi" id="pUnidCaja" type="number" inputmode="numeric" placeholder="24" min="1"></div>
+        </div>
+
+        <!-- NUEVO FASE 9: presentación de compra para calcular reposición inteligente. -->
+        <div class="prod-unified-grid2">
+            <div class="fg"><div class="fl">Unidad de compra</div><select class="fs" id="pUnidadCompra"><option value="unidad">Unidad</option><option value="caja">Caja</option><option value="paquete">Paquete</option><option value="sixpack">Sixpack</option><option value="fardo">Fardo</option><option value="docena">Docena</option><option value="bolsa">Bolsa</option><option value="otro">Otro</option></select></div>
+            <div class="fg"><div class="fl">Unidades por presentación</div><input class="fi" id="pFactorCompra" type="number" inputmode="decimal" placeholder="1" min="0.001" step="0.001"><div class="field-help">Ejemplo: 1 caja = 24 unidades de venta.</div></div>
+        </div>
+
+        <div class="fg"><div class="fl">Fecha vencimiento</div><input class="fi" id="pVenc" type="date"></div>
+
+        <details class="prod-advanced">
+            <summary>Opciones avanzadas</summary>
+            <div class="prod-advanced-body">
+                <div class="prod-advanced-row">
+                    <div class="fg"><div class="fl">Marca</div><input class="fi" id="pMarca" placeholder="Sin marca"></div>
+                    <div class="fg"><div class="fl">Unidad de venta</div><select class="fs" id="pUnidad"><option value="unidad">Unidad</option><option value="paquete">Paquete</option><option value="caja">Caja</option><option value="botella">Botella</option><option value="lata">Lata</option><option value="bolsa">Bolsa</option><option value="kilogramo">Kilogramo</option><option value="gramo">Gramo</option><option value="litro">Litro</option><option value="mililitro">Mililitro</option><option value="docena">Docena</option><option value="rollo">Rollo</option><option value="servicio">Servicio</option><option value="otro">Otro</option></select></div>
+                </div>
+                <div class="alt-code-box">
+                    <div class="alt-code-head">
+                        <div><div class="alt-code-title">Códigos de barras alternativos</div><div class="alt-code-help">Registra hasta 10 códigos de barras. Pulsa “Añadir otro código” para crear una fila nueva.</div></div>
+                        <span class="alt-code-count" id="pAltCodeCount">0/10</span>
+                    </div>
+                    <div class="alt-code-list" id="pAltCodesList"></div>
+                    <button type="button" class="alt-code-add" id="pAddAltCodeBtn" onclick="addAltBarcodeField()">＋ Añadir otro código de barras</button>
+                </div>
+                <div class="fg"><div class="fl">Descripción</div><textarea class="fi" id="pDescripcion" style="height:74px;resize:vertical" placeholder="Notas o presentación del producto"></textarea></div>
+                <div class="fg"><div class="fl">Estado del producto</div><select class="fs" id="pActivo"><option value="true">ACTIVO — visible normalmente</option><option value="false">DESCONTINUADO — visible solo al buscar</option></select><div class="field-help">Reactivar conserva el producto y reinicia de forma segura su periodo de visibilidad.</div></div>
+                <div class="prod-advanced-row">
+                    <label class="prod-inline-check"><input type="checkbox" id="pIncluyeIGV" checked><span>Incluye IGV</span></label>
+                    <div class="prod-stock-toggle"><strong>Controlar inventario</strong><div class="prod-yesno"><button type="button" id="pInvYes" onclick="setProductInventoryControl(true)">Sí</button><button type="button" id="pInvNo" onclick="setProductInventoryControl(false)">No</button></div></div>
+                </div>
+                <input type="checkbox" id="pControlInventario" checked hidden>
+                <div class="prod-advanced-row">
+                    <div class="fg"><div class="fl">Tipo de impuesto</div><select class="fs" id="pTipoImpuesto"><option value="gravado">IGV — Gravado 18%</option><option value="exonerado">Exonerado</option><option value="inafecto">Inafecto</option><option value="gratuito">Transferencia gratuita</option></select></div>
+                    <div class="fg"><div class="fl">Impuesto complementario</div><select class="fs" id="pImpuestoComplementario"><option value="">Ninguno</option><option value="isc">ISC</option><option value="icbper">ICBPER — Bolsa plástica</option></select></div>
+                </div>
+                <details id="pWholesaleDetails" hidden></details>
+            </div>
+        </details>
+
+        <div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mProd')">Cancelar</button><button class="mbtn mbtn-ok" onclick="guardarProd()">💾 Guardar</button></div>
+    </div>
+</div></div></div>
+<div class="modal-overlay" id="mMovInv"><div class="modal"><div class="mhead teal"><div class="mhead-title">📦 Registrar movimiento</div><button class="btn-close-m" onclick="cerrarModal('mMovInv')">✕</button></div><div class="mbody"><div style="background:#f8fafc;border-radius:9px;padding:11px;margin-bottom:13px;display:flex;align-items:center;gap:10px"><span id="mMovIcon" style="font-size:22px">📦</span><div><div id="mMovNombre" style="font-size:13px;font-weight:800"></div><div id="mMovStock" style="font-size:11px;color:var(--slate);font-weight:600"></div></div></div><div class="mov-type-row"><div class="mov-type-btn active entrada" data-type="entrada" onclick="setMovType(this,'entrada')"><div class="mti">📥</div><div class="mtl">Entrada</div></div><div class="mov-type-btn salida" data-type="salida" onclick="setMovType(this,'salida')"><div class="mti">📤</div><div class="mtl">Salida</div></div></div><div class="fg"><div class="fl">Cantidad <span class="req">*</span></div><input class="fi-big" id="mMovCant" type="number" placeholder="0" min="1"></div><div class="fg" style="margin-top:12px"><div class="fl">Motivo</div><select class="fs" id="mMovMotivo"><option>Compra a proveedor</option><option>Devolución</option><option>Ajuste de inventario</option><option>Merma / daño</option><option>Producto vencido</option></select></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mMovInv')">Cancelar</button><button class="mbtn mbtn-ok" onclick="guardarMovInv()">✅ Registrar</button></div></div></div></div>
+
+<div class="modal-overlay" id="mCli"><div class="modal"><div class="mhead teal"><div class="mhead-title" id="mCliTitle">➕ Nuevo cliente</div><button class="btn-close-m" onclick="cerrarModal('mCli')">✕</button></div><div class="mbody"><div class="fg"><div class="fl">Nombre completo <span class="req">*</span></div><input class="fi" id="cNombre" placeholder="Ej: María López García"></div><div class="frow"><div class="fg"><div class="fl">DNI / RUC</div><input class="fi" id="cDni" placeholder="12345678" maxlength="11"></div><div class="fg"><div class="fl">Teléfono</div><input class="fi" id="cTel" placeholder="987654321" maxlength="9"></div></div><div class="fg"><div class="fl">Dirección</div><input class="fi" id="cDir" placeholder="Jr. Los Pinos 123"></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mCli')">Cancelar</button><button class="mbtn mbtn-ok" onclick="guardarCli()">💾 Guardar</button></div></div></div></div>
+
+<div class="modal-overlay" id="mCred"><div class="modal"><div class="mhead purple"><div class="mhead-title">📋 Nuevo crédito</div><button class="btn-close-m" onclick="cerrarModal('mCred')">✕</button></div><div class="mbody"><div style="background:var(--purple-light);border-radius:9px;padding:10px 12px;margin-bottom:13px;display:flex;align-items:center;gap:10px"><div id="mCredAv" style="width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--white)"></div><div id="mCredNom" style="font-size:13px;font-weight:800"></div></div><div class="fg"><div class="fl">Tipo <span class="req">*</span></div><select class="fs" id="crTipo"><option value="venta_credito">Venta a crédito</option><option value="contrato_privado">Préstamo / Contrato</option></select></div><div class="fg"><div class="fl">Descripción <span class="req">*</span></div><input class="fi" id="crDesc" placeholder="Ej: Compra accesorios, préstamo..."></div><div class="frow"><div class="fg"><div class="fl">Monto (S/) <span class="req">*</span></div><input class="fi" id="crMonto" type="number" placeholder="0.00" min="0.01" step="0.50"></div><div class="fg"><div class="fl">Fecha vence <span class="req">*</span></div><input class="fi" id="crVence" type="date"></div></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mCred')">Cancelar</button><button class="mbtn mbtn-ok purple" onclick="guardarCred()">✅ Registrar</button></div></div></div></div>
+
+<div class="modal-overlay" id="mPagoCred"><div class="modal"><div class="mhead green"><div class="mhead-title">💵 Registrar pago</div><button class="btn-close-m" onclick="cerrarModal('mPagoCred')">✕</button></div><div class="mbody"><div class="pago-info-box" id="pagoInfoBox"></div><div class="fg"><div class="fl">Monto del abono (S/) <span class="req">*</span></div><input class="fi-big" id="pagoMonto" type="number" placeholder="0.00" min="0.01" step="0.01" oninput="calcAbono()" style="margin-bottom:10px"></div><div class="fg"><div class="fl">Método de pago</div><select class="fs" id="pagoMetodo" onchange="_naCreditPaymentMethodChanged()"><option value="efectivo">💵 Efectivo</option><option value="yape">📲 Yape / Plin</option><option value="transferencia">🏦 Transferencia</option></select></div><div class="fg" id="pagoOperacionWrap" hidden><div class="fl">Número de operación <span class="req">*</span></div><input class="fi" id="pagoOperacion" maxlength="80" autocomplete="off" placeholder="Ej: 00078257" oninput="_naUpdateCreditPaymentPreview()"><div class="credit-status-note">Se valida para impedir registrar dos veces la misma operación digital.</div></div><div class="credit-pay-meta"><div class="credit-pay-chip"><span>Clasificación horaria</span><strong id="pagoHorario">—</strong></div><div class="credit-pay-chip"><span>Cajero que registra</span><strong id="pagoCajero">—</strong></div></div><div class="credit-breakdown-preview" id="pagoDesglosePreview"><div class="credit-breakdown-title">Desglose del abono</div><div class="credit-status-note">Ingresa un monto para ver cómo se distribuirá entre los productos.</div></div><div class="abono-prev"><span class="abp-lbl">💚 Saldo restante</span><span class="abp-val" id="abonoSaldo">S/ —</span></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mPagoCred')">Cancelar</button><button class="mbtn mbtn-ok green" id="pagoConfirmBtn" onclick="confirmarPago()">✅ Confirmar</button></div></div></div></div>
+<div class="modal-overlay" id="mCreditoDetalle" style="z-index:320"><div class="modal" style="max-width:680px"><div class="mhead purple"><div class="mhead-title">📄 Detalle del crédito</div><button class="btn-close-m" onclick="cerrarModal('mCreditoDetalle')">✕</button></div><div class="mbody" id="creditoDetalleContent"></div></div></div>
+
+<!-- NUEVO FASE 9: detalle y simulador de sugerencia de compra. -->
+<div class="modal-overlay" id="mSugerenciaCompra" style="z-index:330"><div class="modal purchase-modal"><div class="mhead teal"><div class="mhead-title">🛒 Sugerencia de Compra</div><button class="btn-close-m" onclick="cerrarModal('mSugerenciaCompra')">✕</button></div><div class="mbody" id="purchaseSuggestionDetail"></div></div></div>
+
+<div class="modal-overlay" id="mApertura"><div class="modal"><div class="mhead teal"><div class="mhead-title">🌅 Apertura de caja</div><button class="btn-close-m" onclick="cerrarModal('mApertura')">✕</button></div><div class="mbody"><div class="apertura-box"><div class="ap-label">¿Con cuánto efectivo inicia el turno?</div><div class="ap-hint">Cuenta el dinero físico antes de abrir</div></div><div class="fg"><div class="fl">Fondo inicial (S/) <span class="req">*</span></div><input class="fi-big" id="cajFondo" type="number" placeholder="0.00" min="0" step="0.50"></div><div class="fg"><div class="fl">Cajero <span class="req">*</span></div><select class="fs" id="cajCajero" aria-label="Seleccionar cajero"></select><div class="cashier-field-hint">La venta y todos los movimientos del turno quedarán vinculados al ID del cajero seleccionado.</div></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mApertura')">Cancelar</button><button class="mbtn mbtn-ok" onclick="abrirCaja()">🔓 Abrir caja</button></div></div></div></div>
+
+<div class="modal-overlay" id="mMovCaja"><div class="modal"><div class="mhead" id="mMovCajaHead"><div class="mhead-title" id="mMovCajaTit">Registrar movimiento</div><button class="btn-close-m" onclick="cerrarModal('mMovCaja')">✕</button></div><div class="mbody"><div class="fg"><div class="fl">Monto (S/) <span class="req">*</span></div><input class="fi-big" id="cajMovMonto" type="number" placeholder="0.00" min="0.01" step="0.50"></div><div class="fg"><div class="fl">Concepto <span class="req">*</span></div><input class="fi" id="cajMovDesc" placeholder=""></div><div class="fg"><div class="fl">Categoría</div><select class="fs" id="cajMovCat"></select></div><div class="fg"><div class="fl">Método</div><select class="fs" id="cajMovMetodo"><option value="efectivo">💵 Efectivo</option><option value="yape">📲 Yape / Plin</option><option value="transferencia">🏦 Transferencia</option></select></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mMovCaja')">Cancelar</button><button class="mbtn mbtn-ok" id="cajMovBtn" onclick="guardarMovCaja()">✅ Registrar</button></div></div></div></div>
+
+<div class="modal-overlay" id="mCierre"><div class="modal"><div class="mhead dark"><div class="mhead-title">🔒 Cerrar caja</div><button class="btn-close-m" onclick="cerrarModal('mCierre')">✕</button></div><div class="mbody"><div class="cierre-box" id="cierreBox"></div><div class="fg"><div class="fl">Efectivo contado (S/) <span class="req">*</span></div><input class="fi-big" id="cajContado" type="number" placeholder="0.00" step="0.50" oninput="calcDif()"></div><div class="dif-banner" id="difBanner"><div style="font-size:11px;font-weight:700;margin-bottom:3px" id="difLbl"></div><div style="font-size:19px;font-weight:800" id="difVal"></div></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mCierre')">Cancelar</button><button class="mbtn mbtn-ok dark" onclick="cerrarCaja()">🔒 Confirmar cierre</button></div></div></div></div>
+
+<div class="modal-overlay" id="mTicket" style="z-index:300"><div class="modal" style="max-width:520px"><div class="mhead teal" style="align-items:center"><div class="mhead-title">🧾 Ticket de venta</div><div style="display:flex;align-items:center;gap:8px"><button onclick="toggleEditor()" id="btnEditorToggle" style="background:rgba(255,255,255,.2);border:none;color:var(--white);padding:5px 10px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif">✏️ Diseñar</button><button class="btn-close-m" onclick="cerrarModal('mTicket')">✕</button></div></div><div id="editorPanel" style="display:none;border-bottom:2px solid var(--border);background:var(--bg)">
+  <div class="ticket-editor-grid">
+    <div>
+      <div class="fl">Ancho del papel</div>
+      <select class="fs" id="tkAncho" onchange="ticketWidthChanged()">
+        <option value="30mm">30 mm (muy angosto)</option>
+        <option value="40mm">40 mm (angosto)</option>
+        <option value="50mm">50 mm (compacto)</option>
+        <option value="58mm">58 mm (térmico común)</option>
+        <option value="80mm" selected>80 mm (térmico estándar)</option>
+        <option value="custom">Personalizado</option>
+      </select>
+    </div>
+    <div id="tkCustomWidthWrap" style="display:none">
+      <div class="fl">Ancho personalizado (mm)</div>
+      <input class="fi" id="tkCustomMm" type="number" min="20" max="120" step="1" value="60" oninput="renderTicketPreview()">
+    </div>
+    <div>
+      <div class="fl">Fuente</div>
+      <select class="fs" id="tkFuente" onchange="renderTicketPreview()">
+        <option value="'Courier New',monospace" selected>Monoespaciada térmica</option>
+        <option value="'Lucida Console',monospace">Monoespaciada compacta</option>
+        <option value="Arial,sans-serif">Arial</option>
+      </select>
+    </div>
+    <div>
+      <div class="fl">Tamaño de vista previa</div>
+      <select class="fs" id="tkTamano" onchange="ticketPreviewSizeChanged()">
+        <option value="9px">Muy pequeño (9px)</option>
+        <option value="10px">Compacto (10px)</option>
+        <option value="11px" selected>Pequeño (11px)</option>
+        <option value="12px">Normal térmico (12px)</option>
+        <option value="13px">Grande (13px)</option>
+        <option value="15px">Muy grande (15px)</option>
+        <option value="custom">Personalizado</option>
+      </select>
+    </div>
+    <div id="tkCustomPreviewWrap" style="display:none">
+      <div class="fl">Tamaño personalizado (px)</div>
+      <input class="fi" id="tkCustomPreviewPx" type="number" min="7" max="24" step="1" value="11" oninput="renderTicketPreview()">
+    </div>
+    <div>
+      <div class="fl">Alineación del negocio</div>
+      <select class="fs" id="tkAlign" onchange="renderTicketPreview()">
+        <option value="center" selected>Centrado</option>
+        <option value="left">Izquierda</option>
+        <option value="right">Derecha</option>
+      </select>
+    </div>
+    <div>
+      <div class="fl">Alineación de datos generales</div>
+      <select class="fs" id="tkInfoAlign" onchange="renderTicketPreview()">
+        <option value="left" selected>Izquierda</option>
+        <option value="center">Centrado</option>
+        <option value="right">Derecha</option>
+        <option value="split">Etiqueta izquierda / dato derecha</option>
+      </select>
+    </div>
+    <div>
+      <div class="fl">Alineación de totales y pago</div>
+      <select class="fs" id="tkPaymentAlign" onchange="renderTicketPreview()">
+        <option value="split" selected>Etiqueta izquierda / monto derecha</option>
+        <option value="left">Izquierda</option>
+        <option value="center">Centrado</option>
+        <option value="right">Derecha</option>
+      </select>
+    </div>
+    <div>
+      <div class="fl">Alineación del mensaje final</div>
+      <select class="fs" id="tkFooterAlign" onchange="renderTicketPreview()">
+        <option value="center" selected>Centrado</option>
+        <option value="left">Izquierda</option>
+        <option value="right">Derecha</option>
+      </select>
+    </div>
+    <div>
+      <div class="fl">Distribución del contenido</div>
+      <select class="fs" id="tkLayout" onchange="renderTicketPreview()">
+        <option value="auto" selected>Automática según el ancho</option>
+        <option value="compact">Compacta / abreviada</option>
+        <option value="full">Completa</option>
+      </select>
+    </div>
+    <div class="ticket-width-info" id="tkWidthInfo">80 mm · aproximadamente 48 caracteres por línea</div><div class="ticket-width-info" style="background:var(--blue-light);color:var(--blue)">El tamaño de vista previa solo cambia cómo se ve en pantalla; no modifica la impresión térmica.</div>
+  </div>
+  <div class="ticket-editor-grid ticket-business-grid">
+    <div><div class="fl">Nombre del negocio</div><input class="fi" id="tkNegocio" value="MULTISERVICIOS NUEVO AMANECER" oninput="renderTicketPreview()"></div>
+    <div><div class="fl">RUC / DNI</div><input class="fi" id="tkRuc" value="" oninput="renderTicketPreview()"></div>
+    <div><div class="fl">Dirección</div><input class="fi" id="tkDireccion" value="Puerto Súngaro - Huánuco" oninput="renderTicketPreview()"></div>
+    <div><div class="fl">Teléfono</div><input class="fi" id="tkTelefono" value="" oninput="renderTicketPreview()"></div>
+    <div style="grid-column:1/-1"><div class="fl">Mensaje de pie</div><input class="fi" id="tkPie" value="¡GRACIAS POR SU COMPRA! | Su preferencia nos motiva. | ¡Vuelva pronto!" oninput="renderTicketPreview()"></div>
+  </div>
+  <div class="ticket-options-box">
+    <div class="ticket-options-title">Elementos y adaptación del ticket</div>
+    <label><input type="checkbox" id="tkShowLogo" checked onchange="renderTicketPreview()"> Encabezado destacado</label>
+    <label><input type="checkbox" id="tkShowNum" checked onchange="renderTicketPreview()"> N.º de ticket</label>
+    <label><input type="checkbox" id="tkShowOperation" checked onchange="renderTicketPreview()"> N.º de operación</label>
+    <label><input type="checkbox" id="tkShowIGV" onchange="renderTicketPreview()"> Desglosar IGV</label>
+    <label><input type="checkbox" id="tkShowCurrency" checked onchange="renderTicketPreview()"> Mostrar S/</label>
+    <label><input type="checkbox" id="tkShowUnitPrice" checked onchange="renderTicketPreview()"> Precio unitario</label>
+    <label><input type="checkbox" id="tkShowPayment" checked onchange="renderTicketPreview()"> Forma de pago</label>
+    <label><input type="checkbox" id="tkShowReceived" checked onchange="renderTicketPreview()"> Recibido y vuelto</label>
+    <label><input type="checkbox" id="tkShowSep" checked onchange="renderTicketPreview()"> Líneas separadoras</label>
+  </div>
+
+  <!-- NUEVO FASE 11: editor seguro por zonas. El orden se controla sin coordenadas absolutas. -->
+  <div class="ticket-zone-panel" id="tkZoneEditor">
+    <div class="ticket-zone-head">
+      <div><strong>🧩 Editor por zonas</strong><span>Ordena, oculta y adapta cada bloque. Los botones ↑ ↓ funcionan también en teléfono; en computadora puedes arrastrar las zonas.</span></div>
+      <span class="ticket-zone-status" id="tkZoneStatus">6 zonas activas</span>
+    </div>
+    <div class="ticket-zone-presets">
+      <button type="button" onclick="ticketZonePreset('compacto')">58 mm compacto</button>
+      <button type="button" onclick="ticketZonePreset('clasico')">Clásico equilibrado</button>
+      <button type="button" onclick="ticketZonePreset('detallado')">80 mm detallado</button>
+      <button type="button" onclick="ticketZonePreset('minimo')">Ticket mínimo</button>
+    </div>
+    <div class="ticket-zone-list" id="tkZoneList"></div>
+    <div class="ticket-zone-foot"><span>Las líneas, espacios y alineación se adaptan al ancho térmico seleccionado. No se usan posiciones por píxeles que puedan desordenar la impresión.</span><button type="button" class="ticket-zone-reset" onclick="ticketZoneReset()">↺ Restablecer zonas</button></div>
+  </div>
+  <div class="ticket-thermal-note"><strong>Adaptación automática:</strong> en papel angosto se abrevian las etiquetas, se eliminan columnas que no caben y los productos ocupan varias líneas sin cortar los importes.</div>
+</div><div style="padding:14px;background:#f1f5f9;overflow-y:auto;max-height:420px"><div id="tkPreviewWrap" style="margin:0 auto;transition:all .2s"><div class="ticket-body" id="ticketBody" style="border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.1)"></div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)"><button onclick="cerrarModal('mTicket')" style="background:#f1f5f9;border:none;padding:14px;font-size:13px;font-weight:800;color:var(--slate);cursor:pointer;font-family:'Nunito',sans-serif">Cerrar</button><button onclick="imprimirTicket()" style="background:var(--teal);border:none;padding:14px;font-size:13px;font-weight:800;color:var(--white);cursor:pointer;font-family:'Nunito',sans-serif">🖨 Imprimir</button></div></div></div>
+
+<div class="modal-overlay" id="mPrinter" style="z-index:340">
+  <div class="modal printer-modal">
+    <div class="mhead teal">
+      <div>
+        <div class="mhead-title">🖨️ Seleccionar impresora</div>
+        <div class="printer-head-sub">Elige Bluetooth mediante app, cable USB/OTG o impresión del sistema</div>
+      </div>
+      <button class="btn-close-m" onclick="cerrarModal('mPrinter')">✕</button>
+    </div>
+    <div class="mbody printer-body">
+      <div class="printer-status-banner" id="printerStatusBanner">
+        <div class="printer-status-icon" id="printerStatusIcon">⚪</div>
+        <div>
+          <div class="printer-status-title" id="printerStatusTitle">Sin impresora conectada</div>
+          <div class="printer-status-sub" id="printerStatusSub">Selecciona una opción para imprimir el ticket.</div>
+        </div>
+      </div>
+
+      <div class="printer-device-panel">
+        <div class="printer-device-head">
+          <div>
+            <div class="printer-device-title">📡 Dispositivos disponibles</div>
+            <div class="printer-device-sub" id="printerBluetoothSummary">Comprobando Bluetooth y permisos…</div>
+          </div>
+          <button class="printer-refresh-btn" onclick="actualizarDispositivosBluetooth(true)">↻ Actualizar</button>
+        </div>
+        <div class="printer-device-list" id="printerBluetoothDevices">
+          <div class="printer-device-empty">Todavía no hay impresoras autorizadas para este POS.</div>
+        </div>
+        <button class="printer-search-btn" id="printerSearchBluetoothBtn" onclick="buscarImpresoraBluetooth()">🔍 Buscar impresora Bluetooth</button>
+        <div class="printer-device-note">La página puede mostrar dispositivos autorizados por Chrome. Android no entrega automáticamente toda la lista de equipos vinculados sin que primero elijas uno en el selector.</div>
+      </div>
+
+      <div class="printer-settings-row">
+        <label>
+          <span>Velocidad</span>
+          <select class="fs" id="printerBaud" onchange="guardarAjustesImpresora()">
+            <option value="9600">9600 bps</option>
+            <option value="19200">19200 bps</option>
+            <option value="38400">38400 bps</option>
+            <option value="57600">57600 bps</option>
+            <option value="115200">115200 bps</option>
+          </select>
+        </label>
+        <label class="printer-check">
+          <input type="checkbox" id="printerAutoCut" onchange="guardarAjustesImpresora()">
+          <span>Corte automático</span>
+        </label>
+      </div>
+
+      <div class="printer-options-grid">
+        <div class="printer-option-card bluetooth" id="printerBluetoothAppCard">
+          <div class="printer-option-top">
+            <div class="printer-option-icon">🔵</div>
+            <span class="printer-option-badge">ANDROID</span>
+          </div>
+          <div class="printer-option-title">Bluetooth mediante app</div>
+          <div class="printer-option-desc">Envía el ticket al menú Compartir de Android para abrirlo con una aplicación de impresión térmica Bluetooth instalada.</div>
+          <button class="printer-option-btn" onclick="compartirTicketBluetooth()">📤 Compartir con app Bluetooth</button>
+        </div>
+
+        <div class="printer-option-card bluetooth" id="printerBluetoothDirectCard" style="display:none">
+          <div class="printer-option-top">
+            <div class="printer-option-icon">🖥️</div>
+            <span class="printer-option-badge">BLUETOOTH SPP</span>
+          </div>
+          <div class="printer-option-title">Bluetooth directo</div>
+          <div class="printer-option-desc">Busca impresoras térmicas compatibles con puerto serial Bluetooth SPP y permite imprimir directamente.</div>
+          <button class="printer-option-btn" onclick="imprimirPorConexion('bluetooth')">🔍 Buscar y conectar</button>
+        </div>
+
+        <div class="printer-option-card usb">
+          <div class="printer-option-top">
+            <div class="printer-option-icon">🔌</div>
+            <span class="printer-option-badge">USB / OTG</span>
+          </div>
+          <div class="printer-option-title">Cable</div>
+          <div class="printer-option-desc">Conecta la impresora por USB, adaptador OTG o puerto serial compatible.</div>
+          <button class="printer-option-btn" onclick="imprimirPorConexion('usb')">🔗 Conectar e imprimir</button>
+        </div>
+
+        <div class="printer-option-card system">
+          <div class="printer-option-top">
+            <div class="printer-option-icon">📱</div>
+            <span class="printer-option-badge">RECOMENDADO</span>
+          </div>
+          <div class="printer-option-title">Impresión del sistema</div>
+          <div class="printer-option-desc">Abre el panel de impresión de Android, Windows o Chrome para elegir una impresora instalada.</div>
+          <button class="printer-option-btn" onclick="imprimirTicketSistema()">🖨️ Abrir impresión</button>
+        </div>
+      </div>
+
+      <div class="printer-help" id="printerCompatibilityInfo"></div>
+      <button class="printer-disconnect" id="printerDisconnectBtn" onclick="desconectarImpresora()" style="display:none">⛔ Desconectar impresora</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mGasto"><div class="modal"><div class="mhead red"><div class="mhead-title">🧾 Registrar gasto</div><button class="btn-close-m" onclick="cerrarModal('mGasto')">✕</button></div><div class="mbody"><div class="fg"><div class="fl">Concepto <span class="req">*</span></div><input class="fi" id="gasDesc" placeholder="Ej: Pago luz, compra útiles..."></div><div class="frow"><div class="fg"><div class="fl">Monto (S/) <span class="req">*</span></div><input class="fi-big" id="gasMonto" type="number" placeholder="0.00" min="0.01" step="0.50" style="font-size:18px"></div><div class="fg"><div class="fl">Fecha</div><input class="fi" id="gasFecha" type="date"></div></div><div class="fg"><div class="fl">Categoría</div><select class="fs" id="gasCat"><option value="Servicios">💡 Servicios (luz, agua, internet)</option><option value="Proveedor">📦 Pago a proveedor</option><option value="Operativo">🏪 Operativo (útiles, bolsas)</option><option value="Personal">👤 Personal / Sueldo</option><option value="Transporte">🚗 Transporte / Flete</option><option value="Otro">📋 Otro</option></select></div><div class="fg"><div class="fl">Método de pago</div><select class="fs" id="gasMetodo"><option value="efectivo">💵 Efectivo</option><option value="yape">📲 Yape / Plin</option><option value="transferencia">🏦 Transferencia</option></select></div><div class="fg"><div class="fl">Nota</div><input class="fi" id="gasNota" placeholder="Opcional..."></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mGasto')">Cancelar</button><button class="mbtn mbtn-ok red" onclick="guardarGasto()">💾 Registrar</button></div></div></div></div>
+
+
+<div id="securityLockScreen" aria-hidden="true">
+  <div class="security-lock-card">
+    <div class="security-lock-icon">🔐</div>
+    <div class="security-lock-title">Sistema bloqueado</div>
+    <div class="security-lock-sub">Ingresa el PIN maestro para continuar utilizando Nuevo Amanecer.</div>
+    <input id="securityUnlockPin" class="security-pin-input" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="••••" onkeydown="if(event.key==='Enter')securityUnlock()">
+    <button class="security-unlock-btn" onclick="securityUnlock()">🔓 Desbloquear sistema</button>
+    <div id="securityUnlockMsg"></div>
+  </div>
+</div>
+
+<div class="toast" id="gToast"></div>
+
+<script src="js/core/utils.js"></script>
+<script src="js/sync/outbox.js"></script>
+<script src="js/legacy-inline/inline-01.js"></script>
+<script src="js/modules/ticket/legacy.js"></script>
+<script src="js/legacy-inline/inline-02.js"></script>
+<script src="js/modules/ticket/overrides.js"></script>
+<script src="js/legacy-inline/inline-03.js"></script>
+<script src="js/core/state.js"></script>
+
+<div id="naConfirm" class="na-confirm-overlay" aria-hidden="true">
+  <div class="na-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="naConfirmTitle">
+    <div class="na-confirm-head">
+      <div class="na-confirm-icon" id="naConfirmIcon">⚠️</div>
+      <div>
+        <div class="na-confirm-title" id="naConfirmTitle">Confirmar acción</div>
+        <div class="na-confirm-sub" id="naConfirmSub">Verifica esta acción antes de continuar.</div>
+      </div>
+    </div>
+    <div class="na-confirm-body" id="naConfirmBody">¿Deseas continuar?</div>
+    <div class="na-confirm-actions">
+      <button type="button" class="na-confirm-btn cancel" id="naConfirmCancel">Cancelar</button>
+      <button type="button" class="na-confirm-btn ok" id="naConfirmOk">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<!-- NUEVO FASE 7: evaluación de crédito del cliente -->
+<div class="modal-overlay" id="mEvaluacionCredito" style="z-index:330">
+  <div class="modal" style="max-width:720px">
+    <div class="mhead purple"><div class="mhead-title">📊 Evaluación y línea de crédito</div><button class="btn-close-m" onclick="cerrarModal('mEvaluacionCredito')">✕</button></div>
+    <div class="mbody" id="evaluacionCreditoContent"></div>
+  </div>
+</div>
+<div class="modal-overlay" id="mLineaCreditoManual" style="z-index:340">
+  <div class="modal" style="max-width:520px">
+    <div class="mhead purple"><div class="mhead-title">🛡️ Ajuste manual de línea</div><button class="btn-close-m" onclick="cerrarModal('mLineaCreditoManual')">✕</button></div>
+    <div class="mbody">
+      <div class="credit-modal-summary" id="lineaManualResumen"></div>
+      <div class="fg"><div class="fl">Línea manual asignada (S/) <span class="req">*</span></div><input class="fi-big" id="lineaManualMonto" type="number" min="0" max="1000000" step="0.50" oninput="actualizarAdvertenciaLineaManual()"></div>
+      <div class="fg" style="margin-top:12px"><div class="fl">Motivo administrativo <span class="req">*</span></div><textarea class="fi" id="lineaManualMotivo" maxlength="500" rows="3" style="height:auto;min-height:78px;padding-top:9px" placeholder="Explica por qué se modifica la recomendación automática"></textarea></div>
+      <div id="lineaManualAdvertencia" class="credit-manual-warning"></div>
+      <div class="mbtns" style="flex-wrap:wrap"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mLineaCreditoManual')">Cancelar</button><button class="mbtn mbtn-cancel" id="btnLineaAutomatica" onclick="restaurarLineaCreditoAutomatica()">↩ Usar cálculo automático</button><button class="mbtn mbtn-ok purple" onclick="guardarLineaCreditoManual()">🛡️ Guardar excepción</button></div>
+    </div>
+  </div>
+</div>
+
+
+<script id="na-fase7-credit-js" src="js/legacy-inline/inline-04.js"></script>
+
+<script id="na-fase8-reportes-js" src="js/legacy-inline/inline-05.js"></script>
+
+<script id="na-fase9-sugerencia-js" src="js/legacy-inline/inline-06.js"></script>
+
+<div class="modal-overlay" id="mMasterPermissions" style="z-index:380"><div class="modal" style="max-width:760px"><div class="mhead purple"><div class="mhead-title">🔐 Permisos del cajero</div><button class="btn-close-m" onclick="cerrarModal('mMasterPermissions')">✕</button></div><div class="mbody" id="masterPermissionsContent"></div></div></div>
+<div class="modal-overlay" id="mMasterSales" style="z-index:375"><div class="modal" style="max-width:900px"><div class="mhead dark"><div class="mhead-title">📊 Administración trazable de ventas</div><button class="btn-close-m" onclick="cerrarModal('mMasterSales')">✕</button></div><div class="mbody" id="masterSalesContent"></div></div></div>
+
+<script src="js/legacy-inline/inline-07.js"></script>
+
+<script src="js/modules/ticket/zones.js"></script>
+
+
+<!-- MEJORA FASE 12: selector de emojis e iconos personalizados -->
+
+<div class="modal-overlay" id="mEmojiPicker" style="z-index:360"><div class="modal" style="max-width:620px"><div class="mhead teal"><div class="mhead-title">😀 Elegir emoji</div><button class="btn-close-m" onclick="cerrarModal('mEmojiPicker')">✕</button></div><div class="mbody"><input class="emoji-picker-search" id="emojiPickerSearch" placeholder="Buscar: bebida, arroz, limpieza, cable..." oninput="_naF12RenderEmojiPicker(this.value)"><div class="emoji-auto-card"><div><strong>Sugerencia automática</strong><small id="emojiAutoReason">Según el nombre del producto</small></div><button type="button" class="emoji-choice emoji-auto-preview" id="emojiAutoChoice" onclick="_naF12ChooseAutoSuggestion()">📦</button></div><div class="emoji-grid" id="emojiPickerGrid"></div></div></div></div>
+
+<div class="modal-overlay" id="mIconDesigner" style="z-index:370"><div class="modal" style="max-width:760px"><div class="mhead purple"><div class="mhead-title">🎨 Crear icono personalizado</div><button class="btn-close-m" onclick="cerrarModal('mIconDesigner')">✕</button></div><div class="mbody"><div class="icon-designer-layout"><div class="icon-canvas-wrap"><canvas id="iconDesignerCanvas" width="256" height="256" aria-label="Lienzo para crear icono"></canvas></div><div class="icon-designer-controls"><div class="icon-control-grid"><div class="icon-control-card"><label>Fondo</label><input type="color" id="iconBgColor" value="#00bca4" oninput="_naF12DesignerReset()"></div><div class="icon-control-card"><label>Trazo y texto</label><input type="color" id="iconFgColor" value="#ffffff"></div><div class="icon-control-card"><label>Forma</label><select class="fs" id="iconShape" onchange="_naF12DesignerReset()"><option value="rounded">Redondeado</option><option value="circle">Círculo</option><option value="square">Cuadrado</option><option value="transparent">Transparente</option></select></div><div class="icon-control-card"><label>Pincel <span id="iconBrushValue">12</span> px</label><input type="range" id="iconBrush" min="2" max="40" value="12" oninput="document.getElementById('iconBrushValue').textContent=this.value"></div></div><div class="icon-designer-row"><input class="fi" id="iconText" maxlength="3" placeholder="Iniciales, ej: NA"><button type="button" class="icon-designer-btn" onclick="_naF12DesignerAddText()">Añadir texto</button></div><div class="icon-designer-row"><button type="button" class="icon-designer-btn" onclick="document.getElementById('iconUpload').click()">🖼️ Cargar icono</button><button type="button" class="icon-designer-btn danger" onclick="_naF12DesignerReset()">Limpiar</button></div><input type="file" id="iconUpload" accept="image/png,image/jpeg,image/webp,image/gif" hidden onchange="_naF12DesignerLoadImage(this)"><div class="icon-designer-hint">Dibuja con el mouse o el dedo. También puedes añadir iniciales o cargar una imagen pequeña. El resultado se optimiza antes de guardarlo en el producto.</div></div></div><div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mIconDesigner')">Cancelar</button><button class="mbtn mbtn-ok purple" onclick="_naF12SaveCustomIcon()">💾 Usar este icono</button></div></div></div></div>
+
+<script src="js/legacy-inline/inline-08.js"></script>
+
+<script src="js/legacy-inline/inline-09.js"></script>
+<script id="na-security-sales-render" src="js/legacy-inline/inline-10.js"></script>
+<script id="na-security-cash-render" src="js/legacy-inline/inline-11.js"></script>
+<script id="na-security-credit-render" src="js/legacy-inline/inline-12.js"></script>
+<script id="na-security-image-preview" src="js/legacy-inline/inline-13.js"></script>
+<script id="na-security-ticket-print" src="js/modules/ticket/secure-print.js"></script>
+<script id="na-security-pos-render" src="js/legacy-inline/inline-14.js"></script>
+<script id="na-security-expense-render" src="js/legacy-inline/inline-15.js"></script>
+<script src="js/legacy-inline/inline-16.js"></script>
+<script src="js/legacy-inline/inline-17.js"></script>
+
+<script src="js/legacy-inline/inline-18.js"></script>
+<script src="js/compat/legacy-globals.js"></script>
+<script src="js/app.js"></script>
+<script src="js/ocr/vendor/tesseract-6.0.1/tesseract.min.js"></script>
+<script src="js/catalog/reference-catalog-data.js"></script>
+<script src="js/catalog/reference-catalog.js"></script>
+<script src="js/ocr/ocr-extract.js"></script>
+<script src="js/ocr/ocr-parse.js"></script>
+<script src="js/ocr/ocr-reference-matcher.js"></script>
+<script src="js/ocr/ocr-purchase-engine.js"></script>
+<script src="js/ocr/ocr-purchase-review.js"></script>
+<script src="js/ocr/ocr-purchase-apply.js"></script>
+<script src="js/ocr/ocr-purchase-integration.js"></script>
+<script>
+if (!window.__NA_LAB__ && 'serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function (error) {
+      console.warn('No se pudo registrar el shell PWA.', error);
+    });
+  });
+}
+</script>
+</body>
+</html>
