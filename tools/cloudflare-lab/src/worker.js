@@ -3,6 +3,7 @@
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
 import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
 import { handleA6, isA6Path, a6LocalDenied } from './a6-canonical.js';
+import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 
 const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -20,7 +21,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const isRead = url.pathname.startsWith('/read/');
+    const isLabWorkspace = isLabWorkspacePath(url.pathname);
     try {
+      if (isLabWorkspace) {
+        if (request.method === 'OPTIONS') return labCors(new Response(null, { status: 204 }));
+        return await handleLabWorkspace(request, url, env, { jsonLab, authorizeRead, authorizeDevice });
+      }
       if (isA6Path(url.pathname)) {
         const denied = a6LocalDenied(url, env, json);
         if (denied) return denied;
@@ -73,6 +79,7 @@ export default {
       }
       return json({ error: 'not_found' }, 404);
     } catch (error) {
+      if (isLabWorkspace) return jsonLab({ error: 'internal_error' }, 500);
       if (String(error?.message).includes('authority_frozen')) return cors(json({ error: 'authority_frozen' }, 409), isRead);
       return cors(json({ error: 'internal_error' }, 500), isRead);
     }
@@ -698,6 +705,21 @@ function cors(response, isRead = false) {
   response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'content-type, x-sync-token, x-device-id');
   response.headers.set('access-control-max-age', '600');
   return response;
+}
+
+function labCors(response) {
+  response.headers.set('access-control-allow-origin', '*');
+  response.headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+  response.headers.set('access-control-allow-headers', 'content-type, x-read-token, x-sync-token, x-device-id');
+  response.headers.set('access-control-max-age', '600');
+  return response;
+}
+
+function jsonLab(data, status = 200, headers = {}) {
+  return labCors(new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers },
+  }));
 }
 
 function json(data, status = 200, headers = {}) {

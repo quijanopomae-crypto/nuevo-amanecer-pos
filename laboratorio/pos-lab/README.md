@@ -34,10 +34,10 @@ No edites `POS/index.html` mientras una función siga en prueba.
 
 ## Seguridad
 
-- El LAB elimina cualquier credencial cloud recordada en su propio origen.
-- Bloquea escrituras hacia el Worker cloud configurado actualmente.
+- El LAB elimina cualquier credencial cloud de producción recordada en su propio origen.
+- Bloquea toda escritura externa excepto los endpoints `/lab/workspace/*` del Worker LAB.
 - No registra el Service Worker canónico desde este HTML.
-- No uses respaldos ni datos comerciales reales.
+- Los datos comerciales reales pueden existir únicamente dentro de D1 LAB autenticada; nunca se incrustan en GitHub Pages ni en el repositorio.
 - Una función aprobada pasa a CANON como parche mínimo revisado, no copiando este HTML completo.
 
 ## Origen
@@ -112,9 +112,9 @@ https://quijanopomae-crypto.github.io/nuevo-amanecer-pos/laboratorio/pos-lab/ind
 ```
 
 Este enlace es exclusivamente LAB:
-- no usar datos comerciales reales;
+- los datos comerciales reales solo se leen desde D1 LAB autenticada;
 - no usar credenciales de producción;
-- las escrituras al Worker cloud configurado permanecen bloqueadas por `lab-guard.js`;
+- `lab-guard.js` bloquea cualquier escritura externa que no sea `/lab/workspace/*` del Worker LAB;
 - no se registra el Service Worker canónico;
 - para producción se requiere un origen propio separado y controlado.
 
@@ -122,3 +122,23 @@ Las rutas del LAB son portables: el mismo HTML sigue funcionando con el servidor
 
 
 GitHub Pages publica automáticamente el LAB cuando cambia la rama canónica. No necesitas iniciar ningún servidor local para verlo desde el celular.
+
+
+## Datos CANON aislados en D1 LAB
+
+Toca la insignia **LAB** de la esquina inferior para abrir el panel de datos.
+
+El panel permite:
+- conectar el celular con D1 LAB;
+- cargar la revisión LAB actual;
+- ejecutar **CANON → LAB** para copiar el backup CANON más reciente;
+- restaurar el baseline CANON dentro de LAB.
+
+Los cambios de clientes, créditos, pagos, inventario, caja y demás hechos durante pruebas
+se guardan únicamente en `nuevo-amanecer-lab` cuando hay un writer LAB configurado.
+
+Un refresh con el mismo backup devuelve `no_change`: no pisa el trabajo LAB. Solo un
+backup CANON nuevo, confirmado por el usuario, crea un nuevo baseline y reemplaza el
+workspace de pruebas.
+
+Ver `docs/LAB_CANON_MIRROR.md`.

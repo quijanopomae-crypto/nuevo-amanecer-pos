@@ -17,10 +17,12 @@ test('POS-LAB existe y no convierte CANON en laboratorio', () => {
   assert.match(lab, /LABORATORIO · NO PRODUCCIÓN/);
   assert.match(lab, /<base href="\.\.\/\.\.\/POS\/">/);
   assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-guard\.js/);
+  assert.match(lab, /\.\.\/laboratorio\/pos-lab\/js\/lab-workspace\.js/);
   assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-overrides\.js/);
   assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-overrides\.css/);
   assert.match(lab, /!window\.__NA_LAB__/);
-  assert.match(guard, /NA_LAB_PRODUCTION_WRITE_BLOCKED/);
+  assert.match(guard, /NA_LAB_EXTERNAL_WRITE_BLOCKED/);
+  assert.match(guard, /url\.pathname\.startsWith\('\/lab\/workspace\/'\)/);
   assert.match(server, /127\.0\.0\.1/);
   assert.match(server, /8799/);
   assert.equal(source.source_path, 'POS/index.html');

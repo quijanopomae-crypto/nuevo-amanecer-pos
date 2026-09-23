@@ -1,0 +1,63 @@
+name: Deploy LAB Cloud
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-lab:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_CANON_READ_TOKEN: ${{ secrets.R2_CANON_READ_TOKEN }}
+
+    steps:
+      - name: Require LAB deployment secrets
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$R2_CANON_READ_TOKEN"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci
+
+      - name: Validate before remote changes
+        run: |
+          node --check tools/cloudflare-lab/src/lab-workspace.js
+          node --check tools/cloudflare-lab/src/worker.js
+          node --check laboratorio/pos-lab/js/lab-workspace.js
+          node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
+          node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
+          node laboratorio/pos-lab/build-lab.mjs --check
+          node laboratorio/check.mjs
+
+      - name: Configure CANON R2 read-only account
+        working-directory: tools/cloudflare-lab
+        run: printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | npx wrangler secret put R2_CANON_ACCOUNT_ID
+
+      - name: Configure CANON R2 read-only token
+        working-directory: tools/cloudflare-lab
+        run: printf '%s' "$R2_CANON_READ_TOKEN" | npx wrangler secret put R2_CANON_READ_TOKEN
+
+      - name: Apply D1 LAB migrations
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler d1 migrations apply nuevo-amanecer-lab --remote
+
+      - name: Deploy LAB Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy
+
+      - name: Verify LAB Worker health
+        run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health
