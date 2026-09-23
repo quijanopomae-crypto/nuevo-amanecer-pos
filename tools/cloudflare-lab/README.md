@@ -229,3 +229,35 @@ No ejecutarlas sobre datos comerciales sin identificar claramente el ensayo.
 - El Worker no contiene ningún token de Cloudflare; el token administrativo solo vive en el entorno de la máquina que ejecuta wrangler.
 - El POS nunca habla con la API de Cloudflare: solo con el Worker, usando la
   credencial de su dispositivo. D1 conserva únicamente su hash HMAC.
+
+
+## Workspace aislado CANON -> LAB
+
+El POS-LAB dispone de un workspace D1 independiente y revisionado definido por
+`migrations/0007_lab_workspace.sql` y `src/lab-workspace.js`.
+
+Flujo:
+
+```text
+R2 CANON --GET read-only--> Worker LAB --> D1 nuevo-amanecer-lab --> POS-LAB
+```
+
+No existe código de escritura hacia el bucket CANON. El secreto
+`R2_CANON_READ_TOKEN` debe tener únicamente permiso **Workers R2 Storage Read**.
+El Worker elimina `cloudSync`, carrito/borrador y controles de seguridad del snapshot
+CANON antes de crear el baseline LAB.
+
+Endpoints autenticados:
+- `GET /lab/workspace`
+- `GET /lab/workspace/status`
+- `POST /lab/workspace/refresh-from-canon`
+- `POST /lab/workspace/save`
+- `POST /lab/workspace/reset`
+
+Prueba focal:
+
+```powershell
+node --test test/lab-workspace.test.mjs
+```
+
+Contrato completo: `docs/LAB_CANON_MIRROR.md`.
