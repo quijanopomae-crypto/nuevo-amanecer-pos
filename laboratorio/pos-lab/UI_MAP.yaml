@@ -68,3 +68,13 @@ motion:
 safe_extension_points:
   js: laboratorio/pos-lab/lab-overrides.js
   css: laboratorio/pos-lab/lab-overrides.css
+
+ai_control:
+  scope_skill: .agents/skills/lab-scope-guard/SKILL.md
+  ui_skill: .agents/skills/lab-ui-edit/SKILL.md
+  animation_skill: .agents/skills/lab-animation-edit/SKILL.md
+  feature_skill: .agents/skills/lab-feature-edit/SKILL.md
+  promotion_skill: .agents/skills/canon-promotion/SKILL.md
+  implementer: .opencode/agents/pos-lab-implementer.md
+  task_template: laboratorio/pos-lab/LAB_TASK.example.json
+  scope_guard: laboratorio/pos-lab/scope-guard.mjs
