@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "stage": "ETAPA_1_FREEZE",
+  "environment": "LABORATORIO",
+  "canonical_path": "POS/index.html",
+  "canonical_blob_sha": "f2462f72953ce26c0ab79f2bd39f84f8b3ac8a7d",
+  "lab_entrypoint": "laboratorio/pos-lab/index.html",
+  "lab_blob_sha": "8054dd56c2f8d3b813297384ca3a7eea3e6176d3",
+  "extraction_mode": "exact-div-extraction-no-rewrite",
+  "sections": [
+    {
+      "key": "menu",
+      "dom_id": "pageMenu",
+      "path": "laboratorio/pos-lab/sections/menu.html",
+      "source_start": 4308,
+      "source_end": 8391
+    },
+    {
+      "key": "punto-venta",
+      "dom_id": "pagePOS",
+      "path": "laboratorio/pos-lab/sections/punto-venta.html",
+      "source_start": 8406,
+      "source_end": 14915
+    },
+    {
+      "key": "inventario",
+      "dom_id": "pageInventario",
+      "path": "laboratorio/pos-lab/sections/inventario.html",
+      "source_start": 14954,
+      "source_end": 17619
+    },
+    {
+      "key": "clientes",
+      "dom_id": "pageClientes",
+      "path": "laboratorio/pos-lab/sections/clientes.html",
+      "source_start": 17639,
+      "source_end": 19359
+    },
+    {
+      "key": "caja",
+      "dom_id": "pageCaja",
+      "path": "laboratorio/pos-lab/sections/caja.html",
+      "source_start": 19375,
+      "source_end": 20031
+    },
+    {
+      "key": "ventas",
+      "dom_id": "pageVentas",
+      "path": "laboratorio/pos-lab/sections/ventas.html",
+      "source_start": 20049,
+      "source_end": 23176
+    },
+    {
+      "key": "gastos",
+      "dom_id": "pageGastos",
+      "path": "laboratorio/pos-lab/sections/gastos.html",
+      "source_start": 23194,
+      "source_end": 24911
+    },
+    {
+      "key": "configuracion",
+      "dom_id": "pageConfig",
+      "path": "laboratorio/pos-lab/sections/configuracion.html",
+      "source_start": 24936,
+      "source_end": 27499
+    }
+  ],
+  "invariant": "POS/** MUST NOT CHANGE during LAB modularization"
+}
