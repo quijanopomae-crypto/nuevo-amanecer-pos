@@ -30,8 +30,11 @@
       var url = urlOf(input);
       var method = methodOf(input, init);
       if (url && blockedHosts.has(url.hostname) && method !== 'GET' && method !== 'HEAD') {
-        console.warn('[NA-LAB] Escritura cloud bloqueada:', method, url.href);
-        return Promise.reject(new Error('NA_LAB_PRODUCTION_WRITE_BLOCKED'));
+        var allowedLabWorkspaceWrite = url.pathname.startsWith('/lab/workspace/');
+        if (!allowedLabWorkspaceWrite) {
+          console.warn('[NA-LAB] Escritura cloud fuera de workspace bloqueada:', method, url.href);
+          return Promise.reject(new Error('NA_LAB_NON_WORKSPACE_WRITE_BLOCKED'));
+        }
       }
       return originalFetch(input, init);
     };
