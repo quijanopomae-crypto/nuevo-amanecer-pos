@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-MODULAR-FOUNDATION-001",
+  "stages": {
+    "1_freeze_and_map": "STRUCTURAL_PASS",
+    "2_html_sections_and_build": "STRUCTURAL_PASS",
+    "3_ui_layers": "IMPLEMENTED",
+    "4_motion_layers": "IMPLEMENTED",
+    "5_ai_scope_control": "IMPLEMENTED",
+    "6_final_gate": "PENDING_RUNTIME_EXECUTION"
+  },
+  "canon_modified": false,
+  "production_deployed": false,
+  "physical_or_browser_smoke": "PENDING",
+  "note": "No declarar FULL_PASS hasta ejecutar validate-lab.mjs y un smoke visual/funcional del POS-LAB."
+}
