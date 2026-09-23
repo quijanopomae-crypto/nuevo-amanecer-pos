@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-CANON-MIRROR-CI-001",
+  "environment": "LABORATORIO",
+  "objective": "Agregar CI local y sin secretos para validar CANON->LAB antes del merge.",
+  "allowed_files": [
+    ".github/workflows/lab-cloud-ci.yml",
+    "laboratorio/pos-lab/tasks/LAB-CANON-MIRROR-CI-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "production_writes": false,
+  "remote_cloud_calls": false
+}
