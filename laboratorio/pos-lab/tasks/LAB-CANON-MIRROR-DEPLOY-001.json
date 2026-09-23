@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-CANON-MIRROR-DEPLOY-001",
+  "environment": "LABORATORIO",
+  "objective": "Preparar despliegue manual y explícito del Worker/D1 LAB sin tocar producción.",
+  "allowed_files": [
+    ".github/workflows/lab-cloud-deploy.yml",
+    "laboratorio/pos-lab/tasks/LAB-CANON-MIRROR-DEPLOY-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "remote_target": "nuevo-amanecer-lab / nuevo-amanecer-sync-lab",
+  "automatic_deploy": false,
+  "canon_writes": false
+}
