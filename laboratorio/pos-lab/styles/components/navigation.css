@@ -1,0 +1,2 @@
+/* Navegación experimental. */
+.lab-nav-item { transition:transform var(--lab-motion-fast) var(--lab-ease-standard); }
