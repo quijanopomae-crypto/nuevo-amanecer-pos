@@ -1,0 +1,6 @@
+/* Helpers responsive exclusivos del LAB. */
+.lab-mobile-only { display:none; }
+@media (max-width: 767px) {
+  .lab-mobile-only { display:initial; }
+  .lab-desktop-only { display:none !important; }
+}
