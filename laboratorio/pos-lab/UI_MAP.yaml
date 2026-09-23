@@ -1,0 +1,70 @@
+schema_version: 1
+environment: LABORATORIO
+generated_entrypoint: laboratorio/pos-lab/index.html
+template: laboratorio/pos-lab/index.template.html
+build: laboratorio/pos-lab/build-lab.mjs
+
+rules:
+  canon_product: POS/
+  edit_generated_index_directly: false
+  lab_only: true
+  production_data: false
+  production_writes: false
+
+pages:
+  menu:
+    dom_id: pageMenu
+    html: laboratorio/pos-lab/sections/menu.html
+    css_page: laboratorio/pos-lab/styles/pages/menu.css
+    animation: laboratorio/pos-lab/animations/menu.css
+  punto_venta:
+    dom_id: pagePOS
+    html: laboratorio/pos-lab/sections/punto-venta.html
+    css_page: laboratorio/pos-lab/styles/pages/pos.css
+    animation: laboratorio/pos-lab/animations/pos.css
+  inventario:
+    dom_id: pageInventario
+    html: laboratorio/pos-lab/sections/inventario.html
+    css_page: laboratorio/pos-lab/styles/pages/inventario.css
+  clientes:
+    dom_id: pageClientes
+    html: laboratorio/pos-lab/sections/clientes.html
+    css_page: laboratorio/pos-lab/styles/pages/clientes.css
+  caja:
+    dom_id: pageCaja
+    html: laboratorio/pos-lab/sections/caja.html
+    css_page: laboratorio/pos-lab/styles/pages/caja.css
+  ventas:
+    dom_id: pageVentas
+    html: laboratorio/pos-lab/sections/ventas.html
+    css_page: laboratorio/pos-lab/styles/pages/ventas.css
+  gastos:
+    dom_id: pageGastos
+    html: laboratorio/pos-lab/sections/gastos.html
+    css_page: laboratorio/pos-lab/styles/pages/gastos.css
+  configuracion:
+    dom_id: pageConfig
+    html: laboratorio/pos-lab/sections/configuracion.html
+    css_page: laboratorio/pos-lab/styles/pages/configuracion.css
+
+components:
+  tokens: laboratorio/pos-lab/styles/tokens.css
+  layout: laboratorio/pos-lab/styles/layout.css
+  responsive: laboratorio/pos-lab/styles/responsive.css
+  buttons: laboratorio/pos-lab/styles/components/buttons.css
+  cards: laboratorio/pos-lab/styles/components/cards.css
+  tables: laboratorio/pos-lab/styles/components/tables.css
+  forms: laboratorio/pos-lab/styles/components/forms.css
+  modals: laboratorio/pos-lab/styles/components/modals.css
+  navigation: laboratorio/pos-lab/styles/components/navigation.css
+
+motion:
+  tokens: laboratorio/pos-lab/animations/motion.css
+  transitions: laboratorio/pos-lab/animations/transitions.css
+  modals: laboratorio/pos-lab/animations/modals.css
+  notifications: laboratorio/pos-lab/animations/notifications.css
+  js_root: laboratorio/pos-lab/js/motion/
+
+safe_extension_points:
+  js: laboratorio/pos-lab/lab-overrides.js
+  css: laboratorio/pos-lab/lab-overrides.css
