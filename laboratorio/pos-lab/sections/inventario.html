@@ -1,0 +1,26 @@
+<div class="page" id="pageInventario">
+    <div class="page-chrome">
+    <div class="top-mod-bar"><span class="top-mod-title">📦 Inventario</span><div class="ocr-purchase-actions"><input type="file" id="ocrPurchaseFile" accept="image/*" capture="environment" hidden><button class="top-btn-nuevo" type="button" onclick="document.getElementById('ocrPurchaseFile').click()">📷 OCR de compras</button><button class="top-btn-nuevo" type="button" id="ocrPurchaseStart">Leer foto</button><button class="top-btn-nuevo" onclick="abrirModalProd()">+ Nuevo</button></div></div>
+    <div class="ocr-purchase-status" id="ocrPurchaseStatus" role="status" aria-live="polite">Selecciona una foto de la compra.</div>
+    <div class="tabs-wrap">
+        <button class="tab active" onclick="invSetTab(this,'todos')">Todos <span class="tbadge teal" id="invB0">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'critico')">⚠ Crítico <span class="tbadge red" id="invB1">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'sugerencia')">🛒 Sugerencia de Compra <span class="tbadge amber" id="invB4">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'vencimiento')">📅 Por vencer <span class="tbadge amber" id="invB2">0</span></button>
+        <button class="tab" onclick="invSetTab(this,'vencidos')">🚫 Vencidos <span class="tbadge red" id="invB3">0</span></button>
+    </div>
+    <div class="filter-bar">
+        <div class="search-box"><span style="font-size:14px">🔍</span><input type="text" id="invSearch" placeholder="Buscar producto, SKU..." oninput="invRender()"></div>
+        <select class="f-select" id="invCat" onchange="invRender()"></select>
+    </div>
+    <div class="stats-strip">
+        <div class="ss teal"><div class="ss-num" id="invS0">0</div><div class="ss-lbl">Total prods.</div></div>
+        <div class="ss red"><div class="ss-num" id="invS1">0</div><div class="ss-lbl">Stock crítico</div></div>
+        <div class="ss amber"><div class="ss-num" id="invS2">0</div><div class="ss-lbl">Por vencer</div></div>
+        <div class="ss green"><div class="ss-num" id="invS3">S/0</div><div class="ss-lbl">Costo inv.</div></div>
+        <div class="ss teal"><div class="ss-num" id="invS4">S/0</div><div class="ss-lbl">Valor venta</div></div>
+        <div class="ss green"><div class="ss-num" id="invS5">S/0</div><div class="ss-lbl">Ganancia pot.</div></div>
+    </div>
+    </div>
+    <div class="table-wrap"><div class="table-card"><table><thead><tr><th>Producto</th><th>Cat.</th><th>Precio</th><th>Vencimiento</th><th>Stock</th><th>Acciones</th></tr></thead><tbody id="invBody"></tbody></table></div></div>
+</div>
