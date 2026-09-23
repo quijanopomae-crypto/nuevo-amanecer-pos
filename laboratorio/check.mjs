@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(import.meta.dirname, '..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const lab = join(root, 'laboratorio');
 const canon = join(root, 'POS');
 const policy = JSON.parse(readFileSync(join(lab, 'LAB_POLICY.json'), 'utf8'));
@@ -53,8 +54,8 @@ for (const file of walk(canon)) {
   if (!textExt.some(ext => lower.endsWith(ext))) continue;
   let content = '';
   try { content = readFileSync(file, 'utf8'); } catch { continue; }
-  if (/(['"`(=:\s]|^)\.\.\/laboratorio\//i.test(content) ||
-      /(['"`(=:\s]|^)\/laboratorio\//i.test(content)) {
+  if (/(?:^|['"`(=:\s])(?:\.\.\/)+laboratorio\//i.test(content) ||
+      /(?:^|['"`(=:\s])\/laboratorio\//i.test(content)) {
     fail('CANON no puede depender de LAB: ' + relative(root, file).replaceAll('\\', '/'));
   }
 }
