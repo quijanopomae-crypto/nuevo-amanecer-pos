@@ -17,8 +17,18 @@ export async function handleLabWorkspace(request, url, env, deps) {
   if (!db) return jsonLab({ error: 'lab_database_missing' }, 503);
 
   if (request.method === 'GET' && (url.pathname === '/lab/workspace' || url.pathname === '/lab/workspace/status')) {
-    const denied = authorizeRead(request, env);
-    if (denied) return jsonLab({ error: 'unauthorized' }, denied.status || 401);
+    const hasReadToken = !!request.headers.get('x-read-token');
+    if (hasReadToken) {
+      const denied = authorizeRead(request, env);
+      if (denied) return jsonLab({ error: 'unauthorized' }, denied.status || 401);
+    } else {
+      const auth = await authorizeDevice(request.headers.get('x-device-id'), request, env, false);
+      if (auth instanceof Response) {
+        let body = { error: 'unauthorized' };
+        try { body = await auth.clone().json(); } catch {}
+        return jsonLab(body, auth.status || 401);
+      }
+    }
     return readWorkspace(db, jsonLab, url.pathname === '/lab/workspace/status');
   }
 
