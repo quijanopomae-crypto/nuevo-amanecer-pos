@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "Nuevo Amanecer Laboratorio",
+  "laboratory_path": "laboratorio/",
+  "canonical_product_path": "POS/",
+  "production_data_allowed": false,
+  "production_credentials_allowed": false,
+  "production_writes_allowed": false,
+  "canonical_runtime_dependency_on_lab_allowed": false,
+  "required_branch_prefix": "lab/",
+  "promotion_mode": "reviewed-minimal-patch",
+  "promotion_requires": [
+    "tests_pass",
+    "diff_reviewed",
+    "rollback_defined",
+    "synthetic_data_only",
+    "no_production_credentials",
+    "no_production_writes"
+  ]
+}
