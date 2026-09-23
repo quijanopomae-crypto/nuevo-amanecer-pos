@@ -45,3 +45,32 @@ No edites `POS/index.html` mientras una función siga en prueba.
 - CANON source blob: `f2462f72953ce26c0ab79f2bd39f84f8b3ac8a7d`
 - Archivo origen: `POS/index.html`
 - Snapshot LAB: `laboratorio/pos-lab/index.html`
+
+
+## Edición modular
+
+`index.html` es ahora la salida generada del LAB. No lo edites directamente para cambios de pantalla.
+
+Edita la sección concreta en:
+
+```text
+sections/menu.html
+sections/punto-venta.html
+sections/inventario.html
+sections/clientes.html
+sections/caja.html
+sections/ventas.html
+sections/gastos.html
+sections/configuracion.html
+```
+
+Después reconstruye:
+
+```powershell
+node laboratorio/pos-lab/build-lab.mjs
+node laboratorio/pos-lab/build-lab.mjs --check
+```
+
+Para encontrar rápidamente qué archivo corresponde a una pantalla, componente o animación, consulta `UI_MAP.yaml`.
+
+Regla: extracción ≠ reescritura. Las secciones iniciales fueron extraídas exactamente del HTML LAB congelado; modularizar no autoriza cambios funcionales.
