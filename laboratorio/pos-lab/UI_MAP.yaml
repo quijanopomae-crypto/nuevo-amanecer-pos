@@ -79,3 +79,16 @@ ai_control:
   implementer: .opencode/agents/pos-lab-implementer.md
   task_template: laboratorio/pos-lab/LAB_TASK.example.json
   scope_guard: laboratorio/pos-lab/scope-guard.mjs
+
+data_workspace:
+  client: laboratorio/pos-lab/js/lab-workspace.js
+  worker_module: tools/cloudflare-lab/src/lab-workspace.js
+  database: nuevo-amanecer-lab
+  baseline_table: lab_workspace_baselines
+  revision_table: lab_workspace_revisions
+  control_table: lab_workspace_control
+  source_direction: CANON_TO_LAB_ONLY
+  canon_r2_bucket: nuevo-amanecer-prod-v2-backups
+  canon_r2_prefix: nuevo-amanecer-prod-v2/
+  canon_r2_allowed_methods:
+    - GET
