@@ -108,7 +108,7 @@ node laboratorio/pos-lab/validate-lab.mjs --task=laboratorio/pos-lab/tasks/<TARE
 El POS-LAB puede abrirse como vista HTTPS estática directamente desde el repositorio, sin PC encendida, Node ni servidor local:
 
 ```text
-https://raw.githack.com/quijanopomae-crypto/nuevo-amanecer-pos/feature/v1.3-mobile-cloud/laboratorio/pos-lab/index.html
+https://quijanopomae-crypto.github.io/nuevo-amanecer-pos/laboratorio/pos-lab/index.html
 ```
 
 Este enlace es exclusivamente LAB:
@@ -119,3 +119,6 @@ Este enlace es exclusivamente LAB:
 - para producción se requiere un origen propio separado y controlado.
 
 Las rutas del LAB son portables: el mismo HTML sigue funcionando con el servidor local de desarrollo.
+
+
+GitHub Pages publica automáticamente el LAB cuando cambia la rama canónica. No necesitas iniciar ningún servidor local para verlo desde el celular.
