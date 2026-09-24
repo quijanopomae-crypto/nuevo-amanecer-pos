@@ -1,7 +1,7 @@
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
 export const FINANCIAL_COMMANDS = new Set(['payment.create','cash.open','cash.close','adjustment.create','compensation.create']);
-const COMMON = ['operation_id','device_id','promotion_id','client_contract','authority_epoch','expected_control_revision','created_at'];
+const COMMON = ['operation_id','promotion_id','client_contract','authority_epoch','expected_control_revision','created_at'];
 const FIELDS = {
   'payment.create': ['credit_id','expected_credit_revision','amount_cents','payment_method','session_id','reference'],
   'cash.open': ['session_id','opening_cents'],
@@ -16,7 +16,7 @@ const text = v => typeof v === 'string' && v.trim().length > 0 && v.length <= 50
 function validate(command, b) {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return 'invalid_body';
   if (Object.keys(b).some(k => ![...COMMON,...FIELDS[command]].includes(k))) return 'unexpected_field';
-  if (!['operation_id','device_id','promotion_id'].every(k => id(b[k]))) return 'invalid_identity';
+  if (!['operation_id','promotion_id'].every(k => id(b[k]))) return 'invalid_identity';
   if (b.client_contract !== 'a6-gate-c-v1' || !uint(b.authority_epoch) || !uint(b.expected_control_revision)) return 'invalid_authority_revision';
   if (typeof b.created_at !== 'string' || !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(b.created_at) ||
       !Number.isFinite(Date.parse(b.created_at)) || !Number.isFinite(Date.parse(b.created_at.slice(0,10))) ||
@@ -43,16 +43,15 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   try { body = await request.json(); } catch { return json({error:'invalid_json'},400); }
   const invalid = validate(command,body);
   if (invalid) return json({error:invalid},400);
-  if (body.device_id !== request.headers.get('x-device-id')) return json({error:'device_id_mismatch'},403);
   const db = env.nuevo_amanecer_lab;
   const hash = await sha256Hex(stableStringify({command,body}));
   async function authorityError() {
     const c = await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
-      LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(body.device_id).first();
+      LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first();
     if (!c || c.mode !== 'ACTIVE') return 'canonical_not_active';
     if (c.active_promotion_id !== body.promotion_id || c.authority_epoch !== body.authority_epoch ||
         c.revision !== body.expected_control_revision || c.minimum_client_contract !== body.client_contract ||
-        c.writer_device_id !== body.device_id || c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
+        c.writer_device_id !== auth.principalId || c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
   async function replay() {
@@ -128,7 +127,7 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   }
   const receipt = db.prepare(`INSERT INTO canonical_financial_operations(operation_id,command,request_hash,result_json,promotion_id,
     authority_epoch,control_revision,client_contract,device_id,credential_hash,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)`)
-    .bind(body.operation_id,command,hash,stableStringify(result),body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,body.device_id,auth.credentialHash,body.created_at);
+    .bind(body.operation_id,command,hash,stableStringify(result),body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,auth.principalId,auth.credentialHash,body.created_at);
   const guard = db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract)
     VALUES(?1,?2,?3,?4,?5,?6)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract);
   const marker = db.prepare(`UPDATE canonical_control SET first_live_operation_id=COALESCE(first_live_operation_id,?1)
