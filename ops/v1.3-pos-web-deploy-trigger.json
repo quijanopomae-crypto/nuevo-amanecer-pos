@@ -1,0 +1,11 @@
+{
+  "format": "nuevo-amanecer-v1.3-hosted-pos-web-deploy-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "deploy-v1.3-pos-as-public-static-worker",
+  "public_worker": "nuevo-amanecer-pos-web",
+  "backend_worker": "nuevo-amanecer-pos-prod",
+  "local_server_required": false,
+  "activation_secret_embedded": false,
+  "note": "Serve a secure launcher at root and the canonical POS under /app/. Browser activation is required before entering CANON production."
+}
