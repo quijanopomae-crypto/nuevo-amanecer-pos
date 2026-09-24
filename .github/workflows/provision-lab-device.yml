@@ -12,44 +12,41 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      R2_CANON_READ_TOKEN: ${{ secrets.R2_CANON_READ_TOKEN }}
+      DEVICE_CREDENTIAL_PEPPER: ${{ secrets.DEVICE_CREDENTIAL_PEPPER }}
       LAB_DEVICE_SYNC_TOKEN: ${{ secrets.LAB_DEVICE_SYNC_TOKEN }}
       DEVICE_ID: lab-phone-main
 
     steps:
-      - name: Require provisioning secrets
+      - name: Require independent provisioning secrets
         run: |
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$R2_CANON_READ_TOKEN"
-          test -n "$LAB_DEVICE_SYNC_TOKEN"
+          printf '%s' "$DEVICE_CREDENTIAL_PEPPER" | grep -Eq '^[a-f0-9]{64}$'
           printf '%s' "$LAB_DEVICE_SYNC_TOKEN" | grep -Eq '^[a-f0-9]{64}$'
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
       - name: Install dependencies
         working-directory: tools/cloudflare-lab
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
-      - name: Derive server-only device pepper
-        shell: bash
-        run: |
-          PEPPER="$(printf 'nuevo-amanecer-lab-device-auth-v1:%s' "$R2_CANON_READ_TOKEN" | sha256sum | awk '{print $1}')"
-          echo "::add-mask::$PEPPER"
-          printf '%s' "$PEPPER" > /tmp/device-pepper
-          printf '%s' "$PEPPER" | (cd tools/cloudflare-lab && npx wrangler secret put DEVICE_CREDENTIAL_PEPPER)
+      - name: Configure server-only device pepper
+        working-directory: tools/cloudflare-lab
+        run: printf '%s' "$DEVICE_CREDENTIAL_PEPPER" | npx wrangler secret put DEVICE_CREDENTIAL_PEPPER
 
       - name: Build writer registration SQL
         shell: bash
         run: |
-          PEPPER="$(cat /tmp/device-pepper)"
-          HASH="$(printf '%s' "$LAB_DEVICE_SYNC_TOKEN" | openssl dgst -sha256 -hmac "$PEPPER" | awk '{print $2}')"
+          HASH="$(node -e "const {createHmac}=require('node:crypto');process.stdout.write(createHmac('sha256',process.env.DEVICE_CREDENTIAL_PEPPER).update(process.env.LAB_DEVICE_SYNC_TOKEN).digest('hex'))")"
+          test "${#HASH}" -eq 64
           cat > /tmp/register-lab-device.sql <<SQL
           UPDATE devices
              SET status = 'revoked'
