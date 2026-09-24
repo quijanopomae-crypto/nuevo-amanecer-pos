@@ -13,8 +13,16 @@ function Require-Command([string]$Name) {
 }
 
 function New-HexSecret([int]$Bytes = 32) {
-  $raw = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes($Bytes)
-  return [Convert]::ToHexString($raw).ToLowerInvariant()
+  if ($Bytes -le 0) { throw "Secret byte count must be positive." }
+  $raw = New-Object byte[] $Bytes
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($raw)
+  }
+  finally {
+    if ($null -ne $rng) { $rng.Dispose() }
+  }
+  return ([BitConverter]::ToString($raw).Replace("-", "").ToLowerInvariant())
 }
 
 function Invoke-GhJson([string[]]$GhArgs) {
