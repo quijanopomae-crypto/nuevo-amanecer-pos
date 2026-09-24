@@ -306,7 +306,8 @@ test('venta real envía un único comando A3 con identidad, pago e inventario co
   const result = await sb.run('NuevoAmanecerOutbox.syncPending').call(null, transport);
   assert.equal(result.synced, 1);
   assert.match(urls[0].url, /\/commands\/sale\.create$/);
-  assert.equal(urls[0].options.headers['x-device-id'], operation.device_id);
+  assert.equal(urls[0].options.headers.authorization, 'Bearer fixture-token');
+  assert.equal('x-device-id' in urls[0].options.headers, false);
   const body = JSON.parse(urls[0].options.body);
   assert.equal(body.operation_id, operation.operation_id);
   assert.equal(body.sale_id, 'V-001');
