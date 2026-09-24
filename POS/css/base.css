@@ -483,7 +483,7 @@
             .quick-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
             .home-panels{grid-template-columns:1.15fr .85fr}
             .products-area{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));padding:18px}
-            .stats-strip{grid-template-columns:repeat(6,minmax(0,1fr))}
+            #pageInventario .stats-strip{grid-template-columns:repeat(6,minmax(0,1fr))}
             .filter-bar{align-items:center}
             .search-box{min-width:280px}
             .module-card{min-height:248px}
