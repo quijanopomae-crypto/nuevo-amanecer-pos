@@ -237,7 +237,20 @@ async function createTechnicalFirstSale(control) {
 
   const candidate = await findSafeCandidate(control.active_promotion_id);
   if (!candidate) {
-    throw new Error('no_safe_non_inventory_candidate: requires an existing tracks_inventory=0 product priced between 1 and ' + MAX_CANARY_CENTS + ' cents');
+    const summary = (await query('non-inventory candidate summary',
+      "SELECT COUNT(*) total_non_inventory," +
+      "SUM(CASE WHEN price_cents>0 THEN 1 ELSE 0 END) positive_price_non_inventory," +
+      "MIN(CASE WHEN price_cents>0 THEN price_cents END) minimum_positive_price_cents " +
+      "FROM products WHERE promotion_id=?1 AND tracks_inventory=0",
+      [control.active_promotion_id]))[0] || {};
+    console.log(JSON.stringify({
+      state: 'NO_SAFE_NON_INVENTORY_CANDIDATE',
+      total_non_inventory: Number(summary.total_non_inventory || 0),
+      positive_price_non_inventory: Number(summary.positive_price_non_inventory || 0),
+      minimum_positive_price_cents: summary.minimum_positive_price_cents == null ? null : Number(summary.minimum_positive_price_cents),
+      max_canary_cents: MAX_CANARY_CENTS,
+    }));
+    throw new Error('no_safe_non_inventory_candidate');
   }
 
   const token = await activate();
