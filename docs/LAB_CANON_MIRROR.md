@@ -53,14 +53,20 @@ interpretando SQL en el Worker:
 
 1. `fetch-latest-canon-backup.mjs` lista R2 con **GET** y selecciona el `.sql` más reciente.
 2. Descarga el `.sql` y su `.manifest.json` compañero, también con **GET**.
-3. `lab-snapshot-from-sql.py` restaura el dump en SQLite temporal, ejecuta
+3. `fetch-latest-canon-backup.mjs` exige un manifiesto compañero válido con formato
+   `nuevo-amanecer-d1-backup-v1`, `status: PASS`, database ID esperado, bookmark,
+   `sql_key`, tamaño y SHA-256 que coincidan exactamente con el SQL descargado. Si
+   cualquiera falla, el flujo termina antes de cualquier escritura remota.
+4. `lab-snapshot-from-sql.py` restaura el dump en SQLite temporal, ejecuta
    `PRAGMA integrity_check`, resuelve la promoción canónica activa y reconstruye un
-   snapshot POS V9 de productos, clientes, créditos y pagos.
-4. `publish-lab-snapshot.mjs` firma `source_ref + source_hash + snapshot_hash`
+   snapshot POS V9 **parcial y explícito**: productos, clientes, créditos y pagos de
+   crédito. Ventas, gastos, movimientos de caja, cierres e inventory movements quedan
+   vacíos por diseño y no deben interpretarse como espejo comercial completo.
+5. `publish-lab-snapshot.mjs` firma `source_ref + source_hash + snapshot_hash`
    mediante HMAC-SHA256 usando el token R2, sin exponerlo al navegador.
-5. El Worker verifica la firma en `POST /lab/workspace/import-baseline`.
-6. D1 LAB crea un baseline inmutable y una nueva revisión de trabajo.
-7. Si `source_hash` ya es el baseline activo, responde `no_change` y no pisa las
+6. El Worker verifica la firma en `POST /lab/workspace/import-baseline`.
+7. D1 LAB crea un baseline inmutable y una nueva revisión de trabajo.
+8. Si `source_hash` ya es el baseline activo, responde `no_change` y no pisa las
    modificaciones LAB.
 
 Workflow manual:
@@ -71,6 +77,20 @@ Actions -> Refresh LAB Data -> Run workflow
 
 El workflow de despliegue `Deploy LAB Cloud` también ejecuta una primera importación
 del backup SQL más reciente después de actualizar Worker y migraciones.
+
+## Alcance del snapshot importado
+
+El baseline D1 LAB reconstruido desde SQL incluye únicamente:
+
+- productos;
+- clientes;
+- créditos;
+- pagos contenidos dentro de los créditos.
+
+Por diseño actual, el conversor inicializa vacíos: `ventas`, `gastos`, `cajMovs`,
+`cashClosures` e `inventoryMovements`. Por tanto, una pantalla LAB puede usar datos
+reales para las entidades incluidas, pero no debe inferir que las familias omitidas
+representan el histórico CANON completo.
 
 ## Escrituras experimentales
 
