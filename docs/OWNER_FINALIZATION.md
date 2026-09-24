@@ -1,6 +1,6 @@
-# Owner finalization — one command
+# Owner finalization — completed
 
-The repository-side remediation is complete. The remaining controls require repository administration and real Cloudflare credentials, which are intentionally not exposed to the connected GitHub app used by ChatGPT.
+Repository-side remediation and the owner-only operational controls are complete. Production cutover remains a separate explicit owner decision.
 
 Run from a Windows machine where GitHub CLI (`gh`) is authenticated as the repository owner/admin:
 
@@ -18,6 +18,17 @@ The script:
 6. runs the real backup/recovery drill.
 
 There is no per-device provisioning step. `DEVICE_CREDENTIAL_PEPPER`, `LAB_DEVICE_SYNC_TOKEN`, `lab-phone-main` and the device provisioning workflow are no longer part of the current architecture.
+
+
+## Completed evidence
+
+- LAB deployment run `36037787889`: PASS.
+- Backup/recovery drill run `36040032934`: PASS.
+- Real GitHub Actions secrets configured: `LAB_IMPORT_HMAC_SECRET` and `POS_ACTIVATION_SECRET`.
+- Branch protection configured on `feature/v1.3-mobile-cloud` from the owner-authenticated GitHub CLI session.
+- Owner finalization state: `OWNER_FINALIZATION_PASS`.
+
+This does **not** declare V1.3 production cutover. The verified production baseline remains V1.2 until a separate cutover is explicitly authorized.
 
 ## Authentication model
 
@@ -39,4 +50,4 @@ Backup/recovery drill run: <run id>
 Branch protection: PASS
 ~~~
 
-Only after this PASS should `OWNER_ONLY_PENDING` be considered operationally closed.
+`OWNER_ONLY_PENDING` is operationally closed by the evidence above. Production cutover remains unauthorized until separately approved.
