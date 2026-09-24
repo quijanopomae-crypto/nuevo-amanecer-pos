@@ -11,6 +11,8 @@ test('POS-LAB shields the default menu while a persisted module is restored', ()
   assert.match(guard, /na_snapshot_v9/);
   assert.match(guard, /initialLabPage !== 'pageMenu'/);
   assert.match(guard, /lab-route-restoring/);
+  assert.match(guard, /DOMContentLoaded/);
+  assert.match(guard, /target\.classList\.add\('active'\)/);
   assert.match(css, /html\.lab-route-restoring #pageMenu/);
   assert.match(overrides, /originalLoadAppState/);
   assert.match(overrides, /clearRouteRestoreShield/);

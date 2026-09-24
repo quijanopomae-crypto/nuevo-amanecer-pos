@@ -40,6 +40,23 @@
     document.documentElement.setAttribute('data-lab-restore-page', initialLabPage);
   }
 
+  // El guard corre en <head>. Cuando el DOM termina de parsearse, activa de
+  // inmediato la página persistida antes de que la carga asíncrona de datos
+  // pueda dejar una pantalla blanca durante varios segundos.
+  if (document.documentElement.classList.contains(LAB_ROUTE_RESTORE_CLASS)) {
+    document.addEventListener('DOMContentLoaded', function restoreLabPageShell() {
+      var pageId = document.documentElement.getAttribute('data-lab-restore-page');
+      var target = pageId ? document.getElementById(pageId) : null;
+      if (!target) return;
+      document.querySelectorAll('.page.active').forEach(function (page) {
+        page.classList.remove('active');
+      });
+      target.classList.add('active');
+      var back = document.getElementById('backBtn');
+      if (back) back.style.display = 'block';
+    }, { once: true });
+  }
+
   var blockedHosts = new Set([
     'nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev'
   ]);
