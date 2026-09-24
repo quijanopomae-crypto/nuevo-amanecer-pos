@@ -382,11 +382,11 @@ test('Date objects serializan ISO; objetos {}, inválidos y aliases contradictor
   assert.equal(JSON.parse(json).Fecha, '2026-03-01T03:04:05.000Z');
 });
 
-test('seguridad lecturas: auth por ruta, cursor/limit inválido, CORS y READ_TOKEN no revocado implícitamente', async (t) => {
+test('seguridad lecturas: READ_TOKEN o sesión writer activa, cursor/limit inválido y CORS', async (t) => {
   const { f } = await published(t);
   for (const route of READ_ROUTES) {
     await response(await f.read(route, '', {}), 401);
-    await response(await f.read(route, '', WRITER), 401);
+    await response(await f.read(route, '', WRITER), 200);
     const options = await f.fetch(`http://localhost/read/canonical/${route}`, { method: 'OPTIONS' });
     assert.equal(options.status, 204);
     assert.match(options.headers.get('access-control-allow-headers'), /x-read-token/i);
