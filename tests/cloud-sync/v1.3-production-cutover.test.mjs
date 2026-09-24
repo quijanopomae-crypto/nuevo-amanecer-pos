@@ -80,5 +80,9 @@ test('cutover helper fails closed before first live sale and never embeds secret
   assert.match(cutoverScript, /production authority changed during rehearsal/);
   assert.match(cutoverScript, /READY_FOR_FIRST_SALE/);
   assert.match(cutoverScript, /probe session delete/);
+  assert.match(cutoverScript, /PRODUCTION_ACTIVATION_WAIT/);
+  assert.match(cutoverScript, /activation\.status === 503/);
+  assert.match(cutoverScript, /activation_not_configured/);
+  assert.match(cutoverScript, /production activation probe failed: status=/);
   assert.doesNotMatch(cutoverScript, /sk-[A-Za-z0-9_-]+|Bearer [A-Za-z0-9_-]{16,}/);
 });

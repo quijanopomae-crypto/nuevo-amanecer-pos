@@ -196,13 +196,32 @@ async function cmdProbeWorker() {
   if (!secret) throw new Error('missing POS_ACTIVATION_SECRET');
   let sessionId = null;
   try {
-    const activation = await fetch(PROD_WORKER + '/auth/activate', {
-      method: 'POST',
-      headers: { 'x-activation-secret': secret },
-    });
-    const activated = await activation.json().catch(() => null);
-    if (!activation.ok || typeof activated?.session_token !== 'string' || !activated.session_token) {
-      throw new Error('production activation probe failed');
+    let activation = null;
+    let activated = null;
+    for (let attempt = 1; attempt <= 12; attempt++) {
+      activation = await fetch(PROD_WORKER + '/auth/activate', {
+        method: 'POST',
+        headers: { 'x-activation-secret': secret },
+      });
+      activated = await activation.json().catch(() => null);
+      if (activation.ok && typeof activated?.session_token === 'string' && activated.session_token) break;
+
+      const errorCode = typeof activated?.error === 'string' ? activated.error : 'invalid_response';
+      if (activation.status === 503 && errorCode === 'activation_not_configured' && attempt < 12) {
+        console.log(JSON.stringify({
+          state: 'PRODUCTION_ACTIVATION_WAIT',
+          attempt,
+          status: activation.status,
+          error: errorCode,
+        }));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+      throw new Error('production activation probe failed: status=' + activation.status + ' error=' + errorCode);
+    }
+
+    if (!activation?.ok || typeof activated?.session_token !== 'string' || !activated.session_token) {
+      throw new Error('production activation probe failed after propagation retries');
     }
     const sessionToken = activated.session_token;
 
