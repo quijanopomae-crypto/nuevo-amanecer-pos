@@ -1,8 +1,14 @@
 ---
-description: "Genera y valida una Feature Spec shadow sin aplicar cambios."
+description: "SHADOW legacy: genera Feature Spec solo cuando el owner invoque shadow explícitamente."
 subtask: false
 ---
 
+SHADOW_EXPLICIT_ONLY.
+
+Si la solicitud actual no invoca SHADOW de forma explícita, DETENTE y usa
+`/canon-preflight` o `/lab-preflight` según corresponda.
+
 Solicitud: $ARGUMENTS
 
-Usa la skill `feature-spec`, después `impact-analysis` y `dependency-map`. La salida es READ-ONLY y debe incluir riesgo, archivos esperados/prohibidos y `NEXT_ACTION`.
+En SHADOW usa `feature-spec`, después `impact-analysis` y `dependency-map`.
+La salida es READ-ONLY e incluye riesgo, archivos esperados/prohibidos y NEXT_ACTION.
