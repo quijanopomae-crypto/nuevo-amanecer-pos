@@ -7,9 +7,12 @@ const map = readFileSync('REPO_MAP.yaml', 'utf8');
 test('REPO_MAP identifies current authority and release boundary', () => {
   assert.match(map, /active_branch: feature\/v1\.3-mobile-cloud/);
   assert.match(map, /production_baseline: v1\.2-production/);
-  assert.match(map, /v1_3: remediation_integration/);
-  assert.match(map, /production_cutover: not_authorized/);
-  assert.match(map, /runtime_activation: dormant/);
+  assert.match(map, /v1_3: ready_for_first_sale/);
+  assert.match(map, /production_cutover: ready_for_first_sale/);
+  assert.match(map, /authority_mode: ACTIVE/);
+  assert.match(map, /ready_for_first_sale: true/);
+  assert.match(map, /first_live_operation_id: null/);
+  assert.match(map, /runtime_activation: production_active_ready_for_first_sale/);
   assert.match(map, /activation_migration_present: false/);
 });
 
