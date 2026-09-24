@@ -1,0 +1,106 @@
+name: V1.3 First Live Sale Finalization
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-first-live-sale-trigger.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v1-3-first-live-sale-finalization
+  cancel-in-progress: false
+
+jobs:
+  finalize-v1-3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Require owner credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$POS_ACTIVATION_SECRET"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Require exact active branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Re-run first-live release gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/cloudflare-prod/scripts/first-live-sale.mjs
+          node --test tests/cloud-sync/v1.3-first-live-sale.test.mjs
+          node --test tests/cloud-sync/v1.3-production-cutover.test.mjs
+          node --test tests/cloud-sync/canonical-session-backend.test.mjs tests/cloud-sync/canonical-session-integration.test.mjs tests/cloud-sync/canonical-sale-integration.test.mjs
+
+      - name: Execute or validate first live CANON sale
+        run: node tools/cloudflare-prod/scripts/first-live-sale.mjs
+
+      - name: Store final validation manifest in private R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-release/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA-v1.3-production-pass.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --file=/tmp/v1.3-first-live-manifest.json
+          echo "FINAL_MANIFEST_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Create immutable V1.3 production tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v1.3-production" >/tmp/tag.json 2>/dev/null; then
+            EXISTING="$(node -e "const x=require('/tmp/tag.json'); console.log(x.object.sha)")"
+            test "$EXISTING" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs"               -f ref='refs/tags/v1.3-production'               -f sha="$GITHUB_SHA" >/tmp/tag-created.json
+          fi
+
+      - name: Final release summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Nuevo Amanecer POS V1.3 — PRODUCTION PASS"
+            echo "- First live CANON sale validation: PASS"
+            echo "- Production authority: ACTIVE"
+            echo "- Release tag: v1.3-production"
+            echo "- Rollback tag preserved: v1.2-production"
+            echo "- Validation manifest: $FINAL_MANIFEST_KEY"
+            echo "- Release commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
