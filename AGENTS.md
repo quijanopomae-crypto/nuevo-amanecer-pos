@@ -17,6 +17,10 @@ Antes de actuar, identifica una sola zona y no mezcles permisos:
 
 La referencia corta es `.opencode/ROLE_MAP.md`.
 
+Navegación del repositorio: `REPO_MAP.yaml`. Estado vigente de la línea V1.3:
+`docs/V1.3_STATUS.md`. Los documentos de gates, freezes, snapshots y evidence
+son evidencia histórica o específica de una fase y no sustituyen esas fuentes.
+
 Comandos:
 - CANON: `/canon-preflight`, `/canon-validate`.
 - LAB: `/lab-preflight`, `/lab-validate`.
