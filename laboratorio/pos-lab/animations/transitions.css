@@ -2,28 +2,34 @@
 @keyframes lab-fade-in { from { opacity:0; } to { opacity:1; } }
 .lab-enter-fade { animation:lab-fade-in var(--lab-motion-normal) var(--lab-ease-standard) both; }
 
-/* Clientes/Créditos: microtransición rápida al refrescar datos en LAB. */
+/* Clientes/Créditos: transición suave y coordinada al refrescar datos en LAB. */
 #pageClientes .tabs-wrap,
 #pageClientes .stats-strip,
 #pageClientes .cli-list {
   transition:
-    opacity var(--lab-motion-fast) var(--lab-ease-standard),
-    transform var(--lab-motion-fast) var(--lab-ease-standard);
+    opacity 260ms cubic-bezier(.22,1,.36,1),
+    transform 280ms cubic-bezier(.22,1,.36,1);
+  transform-origin: 50% 20%;
   will-change: opacity, transform;
 }
 
+/* La salida nunca desaparece por completo: baja suavemente a 58% mientras
+   acompaña el contenido con un pequeño desplazamiento hacia arriba. */
 #pageClientes.lab-client-refresh-out .tabs-wrap,
 #pageClientes.lab-client-refresh-out .stats-strip,
 #pageClientes.lab-client-refresh-out .cli-list {
-  opacity: .18;
-  transform: translateY(3px);
+  opacity: .58;
+  transform: translateY(-5px) scale(.997);
+  transition-duration: 180ms, 190ms;
 }
 
+/* El contenido nuevo nace desde el mismo nivel de opacidad y entra desde abajo.
+   El salto de preparación ocurre con el contenido atenuado, nunca invisible. */
 #pageClientes.lab-client-refresh-in .tabs-wrap,
 #pageClientes.lab-client-refresh-in .stats-strip,
 #pageClientes.lab-client-refresh-in .cli-list {
-  opacity: 0;
-  transform: translateY(4px);
+  opacity: .58;
+  transform: translateY(6px) scale(.997);
   transition-duration: 0ms;
 }
 

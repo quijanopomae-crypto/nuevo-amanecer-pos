@@ -56,7 +56,8 @@
         return firstResult;
       }
 
-      // Refrescos siguientes: salida corta + actualización + entrada corta.
+      // Refrescos siguientes: salida visible y progresiva, actualización en el
+      // punto medio y entrada un poco más lenta para acompañar el deslizamiento.
       clearTimeout(labClientMotionTimer);
       page.classList.remove('lab-client-refresh-in');
       page.classList.add('lab-client-refresh-out');
@@ -64,7 +65,7 @@
       labClientMotionTimer = setTimeout(function () {
         originalCliRender.apply(context, args);
         labClientEnter(page);
-      }, 70);
+      }, 170);
     };
   }
 
