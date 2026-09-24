@@ -17,11 +17,16 @@ function New-HexSecret([int]$Bytes = 32) {
   return [Convert]::ToHexString($raw).ToLowerInvariant()
 }
 
-function Invoke-GhJson([string[]]$Args) {
-  $output = & gh @Args
-  if ($LASTEXITCODE -ne 0) { throw "gh failed: gh $($Args -join ' ')" }
+function Invoke-GhJson([string[]]$GhArgs) {
+  $output = & gh @GhArgs
+  if ($LASTEXITCODE -ne 0) { throw "gh failed: gh $($GhArgs -join ' ')" }
   if (-not $output) { return $null }
-  return ($output | ConvertFrom-Json)
+
+  # GitHub CLI can emit multi-line JSON. Join stdout into one JSON document
+  # before parsing so Windows PowerShell 5.1 does not parse line-by-line.
+  $json = ($output -join [Environment]::NewLine).Trim()
+  if (-not $json) { return $null }
+  return ($json | ConvertFrom-Json)
 }
 
 function Wait-LatestWorkflow([string]$Workflow, [string]$ExpectedHead) {
