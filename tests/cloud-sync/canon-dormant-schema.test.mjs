@@ -29,9 +29,13 @@ test('renumbered migrations follow LAB workspace and exclude activation migratio
   assert.equal(names.some(name => name.includes('canonical_activation')), false);
 });
 
-test('dormant migrations add schema only and never switch authority to ACTIVE', () => {
+test('dormant migrations prepare runtime without switching authority to ACTIVE', () => {
+  for (const [name, sql] of [['commerce', commerce], ['financial', financial]]) {
+    assert.match(sql, /CREATE TABLE IF NOT EXISTS/, name);
+  }
+  assert.match(sessionRuntime, /ALTER TABLE canonical_write_guards ADD COLUMN principal_id/);
+  assert.match(sessionRuntime, /CREATE TRIGGER canonical_write_guards_authorized_insert/);
   for (const [name, sql] of [['commerce', commerce], ['financial', financial], ['session-runtime', sessionRuntime]]) {
-    assert.match(sql, /CREATE TABLE IF NOT EXISTS/);
     assert.doesNotMatch(sql, /UPDATE\s+canonical_control\s+SET\s+mode\s*=\s*['"]ACTIVE['"]/i, name);
     assert.doesNotMatch(sql, /INSERT\s+INTO\s+canonical_activation_receipts/i, name);
   }
