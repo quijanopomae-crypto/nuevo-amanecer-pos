@@ -1,0 +1,22 @@
+{
+  "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
+  "name": "nuevo-amanecer-d1-backup",
+  "main": "src/workflow.js",
+  "compatibility_date": "2026-09-21",
+  "workflows": [
+    {
+      "name": "nuevo-amanecer-prod-v2-daily-backup",
+      "binding": "BACKUP_WORKFLOW",
+      "class_name": "D1BackupWorkflow"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 8 * * *"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "nuevo-amanecer-prod-v2-backups"
+    }
+  ]
+}
