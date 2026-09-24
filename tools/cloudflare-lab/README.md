@@ -239,13 +239,16 @@ El POS-LAB dispone de un workspace D1 independiente y revisionado definido por
 Flujo:
 
 ```text
-R2 CANON --GET read-only--> Worker LAB --> D1 nuevo-amanecer-lab --> POS-LAB
+R2 CANON --GET read-only por GitHub Actions--> snapshot firmado
+       --LAB_IMPORT_HMAC_SECRET--> Worker LAB --> D1 nuevo-amanecer-lab --> POS-LAB
 ```
 
-No existe código de escritura hacia el bucket CANON. El secreto
-`R2_CANON_READ_TOKEN` debe tener únicamente permiso **Workers R2 Storage Read**.
-El Worker elimina `cloudSync`, carrito/borrador y controles de seguridad del snapshot
-CANON antes de crear el baseline LAB.
+No existe código de escritura hacia el bucket CANON. `R2_CANON_READ_TOKEN` tiene
+únicamente permiso **Workers R2 Storage Read** y nunca se configura como secreto
+del Worker. La firma de import usa `LAB_IMPORT_HMAC_SECRET`; las credenciales de
+dispositivo usan un `DEVICE_CREDENTIAL_PEPPER` distinto. El Worker elimina
+`cloudSync`, carrito/borrador y controles de seguridad del snapshot CANON antes
+de crear el baseline LAB.
 
 Endpoints autenticados:
 - `GET /lab/workspace`
