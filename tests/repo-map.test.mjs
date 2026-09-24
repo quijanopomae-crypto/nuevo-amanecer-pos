@@ -29,6 +29,7 @@ test('REPO_MAP canonical navigation paths exist', () => {
     'docs/LABORATORIO_A_CANON.md',
     'docs/LAB_CANON_MIRROR.md',
     'docs/REMEDIATION_PHASE9_BRANCH_CLASSIFICATION.md',
+    'docs/REMEDIATION_FINAL_VERIFICATION.md',
     'tests/cloud-sync',
     'tests/product-fixes',
   ];
