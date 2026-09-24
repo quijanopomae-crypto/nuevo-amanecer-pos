@@ -16,6 +16,14 @@ on:
       - "tests/opencode-role-map.test.mjs"
       - "tests/repo-map.test.mjs"
       - "tests/final-repository-boundaries.test.mjs"
+      - "tests/owner-finalizer.test.mjs"
+      - "tools/owner-finalize-v1.3.ps1"
+      - "docs/OWNER_FINALIZATION.md"
+      - ".github/workflows/owner-backup-recovery-drill.yml"
+      - "tests/owner-finalizer.test.mjs"
+      - "tools/owner-finalize-v1.3.ps1"
+      - "docs/OWNER_FINALIZATION.md"
+      - ".github/workflows/owner-backup-recovery-drill.yml"
       - ".github/workflows/opencode-config-ci.yml"
   push:
     branches:
@@ -59,6 +67,9 @@ jobs:
 
       - name: Final repository boundaries
         run: node --test tests/final-repository-boundaries.test.mjs tests/laboratorio-boundary.test.mjs tests/security-secret-separation.test.mjs tests/cloud-sync/canon-dormant-schema.test.mjs
+
+      - name: Owner finalizer safety
+        run: node --test tests/owner-finalizer.test.mjs
 
       - name: Python validator syntax
         run: python -m py_compile orchestrator/project_validation.py orchestrator/snapshot.py tests/infrastructure/test_shadow_mode.py
