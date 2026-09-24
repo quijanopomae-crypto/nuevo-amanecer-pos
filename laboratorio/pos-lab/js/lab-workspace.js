@@ -5,6 +5,7 @@
   var DEFAULT_ENDPOINT = 'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev';
   var LOCAL_KEY = 'na_lab_workspace_credentials_v1';
   var SESSION_KEY = 'na_lab_workspace_credentials_session_v1';
+  var PENDING_KEY = 'na_lab_workspace_pending_v1';
   var state = {
     revision: null,
     baselineId: null,
@@ -14,7 +15,8 @@
     saving: false,
     dirty: false,
     timer: null,
-    credentials: null
+    credentials: null,
+    pendingOperation: null
   };
 
   var originalSaveAllData = typeof saveAllData === 'function' ? saveAllData : null;
@@ -63,6 +65,53 @@
       );
     } catch {}
     state.credentials = cleanCredentials(credentials);
+  }
+
+  function loadPendingOperation() {
+    var pending = parseStored(localStorage, PENDING_KEY);
+    if (!pending || typeof pending !== 'object') return null;
+    if (!Number.isSafeInteger(pending.expected_revision) || pending.expected_revision < 1) return null;
+    if (typeof pending.operation_id !== 'string' || !pending.operation_id) return null;
+    if (!pending.snapshot || typeof pending.snapshot !== 'object') return null;
+    return pending;
+  }
+
+  function storePendingOperation(body) {
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify(body));
+      state.pendingOperation = body;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function clearPendingOperation() {
+    try { localStorage.removeItem(PENDING_KEY); } catch {}
+    state.pendingOperation = null;
+  }
+
+  function newOperationId() {
+    try {
+      if (crypto && typeof crypto.randomUUID === 'function') return 'lab-save-' + crypto.randomUUID();
+    } catch {}
+    return 'lab-save-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10);
+  }
+
+  function comparableSnapshot(snapshot) {
+    var copy = JSON.parse(JSON.stringify(snapshot || {}));
+    try { delete copy.cloudSync; } catch {}
+    try { delete copy.updatedAt; } catch {}
+    try {
+      if (copy.ui && typeof copy.ui === 'object') delete copy.ui.currentPage;
+    } catch {}
+    return JSON.stringify(copy);
+  }
+
+  function localChangedAfterPending(pending) {
+    if (!pending || !pending.snapshot) return false;
+    try { return comparableSnapshot(snapshotForRemote()) !== comparableSnapshot(pending.snapshot); }
+    catch { return true; }
   }
 
   function clearCredentials() {
@@ -197,6 +246,18 @@
       throw new Error('No se pudo leer D1 LAB (' + response.status + ')');
     }
     var payload = await response.json();
+
+    // Nunca aplicar un snapshot remoto encima de una intención local pendiente.
+    // Primero conocemos la revisión remota y luego reintentamos exactamente la
+    // operación durable pendiente (o capturamos la edición local temprana).
+    if (state.pendingOperation || state.dirty) {
+      refreshMetadata(payload);
+      updateBadge('PENDIENTE');
+      renderStatus('Hay cambios locales pendientes. Se conservarán y se intentarán conciliar con D1 LAB.', 'info');
+      if (hasWriterAccess(state.credentials)) await flushRemoteSave();
+      return true;
+    }
+
     await applyRemoteWorkspace(payload);
     renderStatus('Datos LAB cargados. Los cambios se guardan solo en D1 LAB.', 'ok');
     return true;
@@ -210,42 +271,76 @@
   }
 
   function scheduleRemoteSave() {
-    if (!state.remoteReady || state.suppressRemoteSave || !hasWriterAccess(state.credentials)) return;
+    if (state.suppressRemoteSave || !hasWriterAccess(state.credentials)) return;
     state.dirty = true;
+    if (!state.remoteReady) {
+      updateBadge('PENDIENTE');
+      return;
+    }
     clearTimeout(state.timer);
     state.timer = setTimeout(flushRemoteSave, 1200);
   }
 
   async function flushRemoteSave() {
-    if (state.saving || !state.dirty || !state.remoteReady || !hasWriterAccess(state.credentials)) return;
+    if (state.saving || (!state.dirty && !state.pendingOperation) ||
+        !state.remoteReady || !hasWriterAccess(state.credentials)) return;
+
     state.saving = true;
-    state.dirty = false;
+    var body = state.pendingOperation;
     try {
-      var body = {
-        expected_revision: state.revision,
-        operation_id: 'lab-save-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10),
-        snapshot: snapshotForRemote()
-      };
+      if (!body) {
+        body = {
+          expected_revision: state.revision,
+          operation_id: newOperationId(),
+          snapshot: snapshotForRemote()
+        };
+        if (!storePendingOperation(body)) {
+          throw new Error('pending_operation_storage_failed');
+        }
+        // La intención ya quedó capturada de forma durable. Cambios nuevos
+        // durante el request volverán a poner dirty=true.
+        state.dirty = false;
+      }
+
       var response = await api('/lab/workspace/save', { method: 'POST', mode: 'write', body: body });
       var payload = {};
       try { payload = await response.json(); } catch {}
+
       if (response.status === 409 && payload.error === 'revision_conflict') {
         state.remoteReady = false;
         updateBadge('CONFLICTO');
-        renderStatus('Conflicto de revisión. Carga nuevamente D1 LAB antes de seguir.', 'error');
+        renderStatus('Conflicto de revisión. Se conserva la operación pendiente; vuelve a cargar D1 LAB para conciliar.', 'error');
+        return;
+      }
+      if (response.status === 403 && payload.error === 'device_revoked') {
+        state.remoteReady = false;
+        updateBadge('REVOCADO');
+        renderStatus('Este writer LAB fue revocado. La operación local pendiente se conserva.', 'error');
         return;
       }
       if (!response.ok) throw new Error(payload.error || 'save_failed_' + response.status);
+
+      var completed = body;
+      clearPendingOperation();
       state.revision = Number(payload.revision || state.revision);
-      updateBadge('D1 R' + state.revision);
-      renderStatus('Cambios guardados en D1 LAB · revisión ' + state.revision, 'ok');
+
+      // Si el snapshot local avanzó después de capturar la operación que acaba
+      // de recibir ACK, hay una segunda intención que todavía debe guardarse.
+      if (localChangedAfterPending(completed)) state.dirty = true;
+
+      updateBadge(state.dirty ? 'PENDIENTE' : 'D1 R' + state.revision);
+      renderStatus(
+        state.dirty
+          ? 'Una operación quedó confirmada; hay cambios locales posteriores pendientes.'
+          : 'Cambios guardados en D1 LAB · revisión ' + state.revision,
+        state.dirty ? 'info' : 'ok'
+      );
     } catch (error) {
-      state.dirty = true;
       updateBadge('PENDIENTE');
       renderStatus('No se pudo guardar D1 LAB: ' + error.message, 'error');
     } finally {
       state.saving = false;
-      if (state.dirty && state.remoteReady) {
+      if ((state.dirty || state.pendingOperation) && state.remoteReady) {
         clearTimeout(state.timer);
         state.timer = setTimeout(flushRemoteSave, 1800);
       }
@@ -425,6 +520,7 @@
   }
 
   state.credentials = cleanCredentials(loadCredentials());
+  state.pendingOperation = loadPendingOperation();
 
   function renderFastLocalPage() {
     var activeId = document.querySelector('.page.active')?.id || 'pageMenu';
@@ -516,7 +612,9 @@
         baselineId: state.baselineId,
         sourceRef: state.sourceRef,
         remoteReady: state.remoteReady,
-        writerConfigured: hasWriterAccess(state.credentials)
+        writerConfigured: hasWriterAccess(state.credentials),
+        dirty: state.dirty,
+        pendingOperationId: state.pendingOperation ? state.pendingOperation.operation_id : null
       };
     }
   };
