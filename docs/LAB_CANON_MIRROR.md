@@ -41,23 +41,36 @@ El workspace principal se llama `primary`.
 
 ## Refresh CANON -> LAB
 
-`POST /lab/workspace/refresh-from-canon`:
+El formato real del bucket es un par por respaldo:
 
-1. autentica un dispositivo writer LAB;
-2. lista objetos del bucket R2 usando un token server-side de solo lectura;
-3. selecciona el JSON más reciente bajo el prefijo configurado;
-4. descarga el objeto mediante GET;
-5. verifica el wrapper `nuevo-amanecer-pos-backup` y SHA-256 `payload-json` cuando existe;
-6. valida el snapshot V8/V9;
-7. elimina `cloudSync`, carrito, borrador, seguridad y locks de producción;
-8. guarda un baseline inmutable en D1 LAB;
-9. crea una nueva revisión de trabajo LAB.
+```text
+<timestamp>.manifest.json
+<timestamp>.sql
+```
 
-Si el SHA-256 del backup fuente es igual al baseline activo, devuelve `no_change` y
-NO pisa las modificaciones actuales del workspace.
+La importación autoritativa se ejecuta desde GitHub Actions, no dentro del navegador ni
+interpretando SQL en el Worker:
 
-Un backup CANON nuevo requiere confirmación explícita desde el panel LAB y reemplaza
-el workspace de prueba por la nueva copia.
+1. `fetch-latest-canon-backup.mjs` lista R2 con **GET** y selecciona el `.sql` más reciente.
+2. Descarga el `.sql` y su `.manifest.json` compañero, también con **GET**.
+3. `lab-snapshot-from-sql.py` restaura el dump en SQLite temporal, ejecuta
+   `PRAGMA integrity_check`, resuelve la promoción canónica activa y reconstruye un
+   snapshot POS V9 de productos, clientes, créditos y pagos.
+4. `publish-lab-snapshot.mjs` firma `source_ref + source_hash + snapshot_hash`
+   mediante HMAC-SHA256 usando el token R2, sin exponerlo al navegador.
+5. El Worker verifica la firma en `POST /lab/workspace/import-baseline`.
+6. D1 LAB crea un baseline inmutable y una nueva revisión de trabajo.
+7. Si `source_hash` ya es el baseline activo, responde `no_change` y no pisa las
+   modificaciones LAB.
+
+Workflow manual:
+
+```text
+Actions -> Refresh LAB Data -> Run workflow
+```
+
+El workflow de despliegue `Deploy LAB Cloud` también ejecuta una primera importación
+del backup SQL más reciente después de actualizar Worker y migraciones.
 
 ## Escrituras experimentales
 
@@ -89,27 +102,30 @@ Los datos reales nunca se incorporan al HTML, GitHub Pages ni al repositorio.
 
 ## Frontera R2
 
-El Worker usa únicamente:
+La integración R2 ejecuta únicamente:
 
 - `GET /accounts/{account}/r2/buckets/{bucket}/objects`
 - `GET /accounts/{account}/r2/buckets/{bucket}/objects/{key}`
 
-No implementa PUT, POST, PATCH ni DELETE contra R2 CANON.
+No existe PUT, POST, PATCH ni DELETE hacia R2 CANON.
 
-El token `R2_CANON_READ_TOKEN` debe crearse con **Workers R2 Storage Read** solamente.
+`R2_CANON_READ_TOKEN` debe ser un **Cloudflare API Token** limitado al bucket
+`nuevo-amanecer-prod-v2-backups` con permiso **Workers R2 Storage Read**. No usar
+un token S3 Object Read-only para este workflow REST.
 
 ## Configuración del Worker
 
 Variables/secretos requeridos:
 
 ```text
-R2_CANON_ACCOUNT_ID=<account id>
-R2_CANON_READ_TOKEN=<token de solo lectura>
+R2_CANON_READ_TOKEN=<Cloudflare API token de solo lectura R2>
 ```
 
 Valores por defecto en código:
 
 ```text
+GitHub secret CLOUDFLARE_ACCOUNT_ID=<account id>
+GitHub secret R2_CANON_READ_TOKEN=<Cloudflare API token read-only>
 R2_CANON_BUCKET=nuevo-amanecer-prod-v2-backups
 R2_CANON_PREFIX=nuevo-amanecer-prod-v2/
 ```
@@ -120,7 +136,6 @@ Para remoto, nunca versionar secretos:
 
 ```powershell
 cd tools/cloudflare-lab
-npx wrangler secret put R2_CANON_ACCOUNT_ID
 npx wrangler secret put R2_CANON_READ_TOKEN
 npm run migrate:remote
 npm run deploy

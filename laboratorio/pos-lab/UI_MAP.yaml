@@ -90,5 +90,8 @@ data_workspace:
   source_direction: CANON_TO_LAB_ONLY
   canon_r2_bucket: nuevo-amanecer-prod-v2-backups
   canon_r2_prefix: nuevo-amanecer-prod-v2/
+  canon_r2_source_format: SQL_PLUS_MANIFEST
+  canon_r2_refresh_workflow: .github/workflows/lab-data-refresh.yml
+  canon_r2_converter: tools/cloudflare-lab/scripts/lab-snapshot-from-sql.py
   canon_r2_allowed_methods:
     - GET

@@ -250,7 +250,7 @@ CANON antes de crear el baseline LAB.
 Endpoints autenticados:
 - `GET /lab/workspace`
 - `GET /lab/workspace/status`
-- `POST /lab/workspace/refresh-from-canon`
+- `POST /lab/workspace/import-baseline` (solo pipeline firmado GitHub Actions)
 - `POST /lab/workspace/save`
 - `POST /lab/workspace/reset`
 
@@ -261,3 +261,21 @@ node --test test/lab-workspace.test.mjs
 ```
 
 Contrato completo: `docs/LAB_CANON_MIRROR.md`.
+
+
+### Formato real del backup R2
+
+El bucket `nuevo-amanecer-prod-v2-backups` contiene pares:
+
+```text
+<timestamp>.manifest.json
+<timestamp>.sql
+```
+
+La restauración CANON -> LAB se ejecuta mediante `.github/workflows/lab-data-refresh.yml`.
+El workflow descarga el `.sql` más reciente con un token R2 de solo lectura,
+lo restaura en SQLite temporal, extrae la promoción canónica activa y genera un
+snapshot POS V9. El snapshot se firma y se publica en
+`POST /lab/workspace/import-baseline`.
+
+El Worker no interpreta ni ejecuta el dump SQL remoto y no escribe en R2.

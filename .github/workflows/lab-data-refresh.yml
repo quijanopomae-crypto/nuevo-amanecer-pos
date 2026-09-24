@@ -1,0 +1,43 @@
+name: Refresh LAB Data
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_CANON_READ_TOKEN: ${{ secrets.R2_CANON_READ_TOKEN }}
+
+    steps:
+      - name: Require R2 read-only secrets
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$R2_CANON_READ_TOKEN"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Test SQL converter
+        run: python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
+
+      - name: Fetch latest CANON SQL backup
+        working-directory: tools/cloudflare-lab
+        run: node scripts/fetch-latest-canon-backup.mjs
+
+      - name: Convert CANON SQL to POS snapshot
+        working-directory: tools/cloudflare-lab
+        run: python3 scripts/lab-snapshot-from-sql.py --sql /tmp/canon.sql --output /tmp/lab-snapshot.json
+
+      - name: Publish signed baseline to D1 LAB
+        working-directory: tools/cloudflare-lab
+        run: node scripts/publish-lab-snapshot.mjs

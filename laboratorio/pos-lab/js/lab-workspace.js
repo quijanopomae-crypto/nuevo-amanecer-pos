@@ -245,21 +245,9 @@
   }
 
   async function refreshFromCanon() {
-    if (!hasWriterAccess(state.credentials)) {
-      renderStatus('Para refrescar CANON → LAB necesitas Device ID + SYNC_TOKEN de LAB.', 'error');
-      return;
-    }
-    if (!confirm('Esto reemplazará el estado de trabajo LAB por el respaldo CANON más reciente. CANON no será modificado. ¿Continuar?')) return;
-    renderStatus('Buscando el backup CANON más reciente en R2…');
-    var response = await api('/lab/workspace/refresh-from-canon', { method: 'POST', mode: 'write', body: {} });
-    var payload = {};
-    try { payload = await response.json(); } catch {}
-    if (!response.ok) {
-      renderStatus('Refresh CANON → LAB falló: ' + (payload.detail || payload.error || response.status), 'error');
-      return;
-    }
-    renderStatus(payload.status === 'no_change' ? 'CANON no tiene un backup nuevo.' : 'Nuevo baseline CANON copiado a D1 LAB.', 'ok');
-    await loadRemoteWorkspace({ silent: false });
+    var actionUrl = 'https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/workflows/lab-data-refresh.yml';
+    renderStatus('La copia CANON → LAB usa el backup SQL real. Ejecuta “Refresh LAB Data” en GitHub y luego pulsa “Cargar D1 LAB”.', 'info');
+    try { window.open(actionUrl, '_blank', 'noopener'); } catch {}
   }
 
   async function resetToBaseline() {
@@ -297,7 +285,7 @@
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
       '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Guardar conexión</button>' +
       '<button id="naLabLoad" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Cargar D1 LAB</button>' +
-      '<button id="naLabRefreshCanon" type="button" style="padding:10px;border:0;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:800">CANON → LAB</button>' +
+      '<button id="naLabRefreshCanon" type="button" style="padding:10px;border:0;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:800">Actualizar CANON → LAB</button>' +
       '<button id="naLabResetBaseline" type="button" style="padding:10px;border:0;border-radius:10px;background:#f59e0b;color:#111827;font-weight:800">Restaurar baseline</button>' +
       '</div><button id="naLabClearCredentials" type="button" style="width:100%;margin-top:8px;padding:9px;border:0;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:800">Borrar credenciales de este navegador</button>' +
       '<p style="font-size:10px;line-height:1.45;color:#64748b;margin:12px 0 0">Los tokens nunca se incluyen en GitHub ni en el HTML. El refresh usa un token R2 de solo lectura guardado únicamente en el Worker LAB.</p>' +

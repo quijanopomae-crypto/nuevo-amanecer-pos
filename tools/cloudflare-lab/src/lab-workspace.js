@@ -1,13 +1,13 @@
 const WORKSPACE_ID = 'primary';
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
-const BACKUP_FORMAT = 'nuevo-amanecer-pos-backup';
 
 export function isLabWorkspacePath(pathname) {
   return pathname === '/lab/workspace' ||
     pathname === '/lab/workspace/status' ||
     pathname === '/lab/workspace/save' ||
     pathname === '/lab/workspace/reset' ||
+    pathname === '/lab/workspace/import-baseline' ||
     pathname === '/lab/workspace/refresh-from-canon';
 }
 
@@ -36,6 +36,12 @@ export async function handleLabWorkspace(request, url, env, deps) {
     return jsonLab({ error: 'method_not_allowed' }, 405, { allow: 'GET, POST, OPTIONS' });
   }
 
+  if (url.pathname === '/lab/workspace/import-baseline') {
+    const body = await readJsonBody(request, jsonLab);
+    if (body instanceof Response) return body;
+    return importBaseline(db, env, request, body, jsonLab);
+  }
+
   const auth = await authorizeDevice(request.headers.get('x-device-id'), request, env, true);
   if (auth instanceof Response) {
     let body = { error: 'unauthorized' };
@@ -55,7 +61,10 @@ export async function handleLabWorkspace(request, url, env, deps) {
     return resetWorkspace(db, body, deviceId, jsonLab);
   }
   if (url.pathname === '/lab/workspace/refresh-from-canon') {
-    return refreshFromCanon(db, env, deviceId, jsonLab);
+    return jsonLab({
+      error: 'refresh_pipeline_required',
+      message: 'CANON usa backups SQL + manifest. Ejecuta el workflow Refresh LAB Data desde GitHub Actions.'
+    }, 409);
   }
   return jsonLab({ error: 'not_found' }, 404);
 }
@@ -188,6 +197,108 @@ async function resetWorkspace(db, body, deviceId, jsonLab) {
   return jsonLab({ status: 'reset', revision, baseline_id: current.active_baseline_id });
 }
 
+async function importBaseline(db, env, request, body, jsonLab) {
+  const token = String(env.R2_CANON_READ_TOKEN || '').trim();
+  if (!token) return jsonLab({ error: 'canon_r2_read_not_configured' }, 503);
+  if (!body || typeof body !== 'object') return jsonLab({ error: 'invalid_import_body' }, 400);
+  const sourceRef = String(body.source_ref || '');
+  const sourceHash = String(body.source_hash || '');
+  if (!sourceRef.startsWith('r2://nuevo-amanecer-prod-v2-backups/')) return jsonLab({ error: 'invalid_source_ref' }, 400);
+  if (!SHA256_HEX.test(sourceHash)) return jsonLab({ error: 'invalid_source_hash' }, 400);
+
+  let snapshot;
+  try { snapshot = sanitizeSnapshotForLab(body.snapshot, true); }
+  catch (error) { return jsonLab({ error: 'invalid_snapshot', detail: error.message }, 400); }
+
+  const snapshotJson = JSON.stringify(snapshot);
+  const snapshotHash = await sha256Text(snapshotJson);
+  const signature = String(request.headers.get('x-lab-import-signature') || '').toLowerCase();
+  const signed = [sourceRef, sourceHash, snapshotHash].join('\n');
+  if (!await verifyHmacHex(token, signed, signature)) return jsonLab({ error: 'invalid_import_signature' }, 401);
+
+  const current = await db.prepare(
+    `SELECT c.active_revision, c.active_baseline_id, b.source_hash
+       FROM lab_workspace_control c
+       JOIN lab_workspace_baselines b ON b.baseline_id = c.active_baseline_id
+      WHERE c.workspace_id = ?1`
+  ).bind(WORKSPACE_ID).first();
+
+  if (current?.source_hash === sourceHash) {
+    return jsonLab({
+      status: 'no_change',
+      revision: Number(current.active_revision),
+      baseline_id: current.active_baseline_id,
+      source_ref: sourceRef,
+      source_hash: sourceHash
+    });
+  }
+
+  const existing = await db.prepare(
+    'SELECT baseline_id, snapshot_hash FROM lab_workspace_baselines WHERE source_hash = ?1'
+  ).bind(sourceHash).first();
+  if (existing && existing.snapshot_hash !== snapshotHash) {
+    return jsonLab({ error: 'baseline_hash_conflict' }, 409);
+  }
+
+  const baselineId = existing?.baseline_id || `canon-sql-${sourceHash.slice(0, 24)}`;
+  const revision = current ? Number(current.active_revision) + 1 : 1;
+  const operationId = `import-sql:${sourceHash}`;
+  const actor = 'github-actions-r2';
+  const statements = [];
+
+  if (!existing) {
+    statements.push(db.prepare(
+      `INSERT INTO lab_workspace_baselines
+       (baseline_id, source_ref, source_hash, snapshot_hash, snapshot_json, imported_by_device)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+    ).bind(baselineId, sourceRef, sourceHash, snapshotHash, snapshotJson, actor));
+  }
+  statements.push(db.prepare(
+    `INSERT INTO lab_workspace_revisions
+     (workspace_id, revision, operation_id, baseline_id, snapshot_hash, snapshot_json, reason, device_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'REFRESH_FROM_CANON', ?7)`
+  ).bind(WORKSPACE_ID, revision, operationId, baselineId, snapshotHash, snapshotJson, actor));
+
+  if (current) {
+    statements.push(db.prepare(
+      `UPDATE lab_workspace_control
+          SET active_revision = ?2, active_baseline_id = ?3,
+              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE workspace_id = ?1`
+    ).bind(WORKSPACE_ID, revision, baselineId));
+  } else {
+    statements.push(db.prepare(
+      `INSERT INTO lab_workspace_control (workspace_id, active_revision, active_baseline_id)
+       VALUES (?1, ?2, ?3)`
+    ).bind(WORKSPACE_ID, revision, baselineId));
+  }
+  await db.batch(statements);
+  return jsonLab({
+    status: 'refreshed',
+    revision,
+    baseline_id: baselineId,
+    source_ref: sourceRef,
+    source_hash: sourceHash,
+    snapshot_hash: snapshotHash,
+    manifest_ref: body.manifest_ref || null,
+    manifest_hash: body.manifest_hash || null,
+    counts: snapshotCounts(snapshot)
+  });
+}
+
+async function verifyHmacHex(secret, message, signature) {
+  if (!/^[0-9a-f]{64}$/.test(signature)) return false;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+  const bytes = Uint8Array.from(signature.match(/../g).map(hex => parseInt(hex, 16)));
+  return crypto.subtle.verify('HMAC', key, bytes, new TextEncoder().encode(message));
+}
+
 async function refreshFromCanon(db, env, deviceId, jsonLab) {
   const config = readR2Config(env);
   if (config.error) return jsonLab({ error: config.error }, 503);
@@ -279,63 +390,6 @@ async function refreshFromCanon(db, env, deviceId, jsonLab) {
     snapshot_hash: snapshotHash,
     counts: snapshotCounts(snapshot)
   });
-}
-
-export function readR2Config(env) {
-  const accountId = String(env.R2_CANON_ACCOUNT_ID || '').trim();
-  const token = String(env.R2_CANON_READ_TOKEN || '').trim();
-  const bucket = String(env.R2_CANON_BUCKET || 'nuevo-amanecer-prod-v2-backups').trim();
-  const prefix = String(env.R2_CANON_PREFIX || 'nuevo-amanecer-prod-v2/').trim();
-  if (!accountId || !token) return { error: 'canon_r2_read_not_configured' };
-  return { accountId, token, bucket, prefix };
-}
-
-export async function fetchLatestCanonBackup(config, fetchImpl = fetch) {
-  const base = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/r2/buckets/${encodeURIComponent(config.bucket)}/objects`;
-  const listUrl = new URL(base);
-  listUrl.searchParams.set('prefix', config.prefix);
-  listUrl.searchParams.set('per_page', '1000');
-  const listed = await fetchImpl(listUrl, { headers: { authorization: `Bearer ${config.token}` } });
-  if (!listed.ok) throw new Error(`R2 list failed: ${listed.status}`);
-  const payload = await listed.json();
-  if (!payload?.success || !Array.isArray(payload.result)) throw new Error('R2 list response invalid');
-  const latest = selectLatestR2Object(payload.result);
-  if (!latest) throw new Error('No JSON backups found under configured prefix');
-
-  const encodedKey = String(latest.key).split('/').map(encodeURIComponent).join('/');
-  const response = await fetchImpl(`${base}/${encodedKey}`, { headers: { authorization: `Bearer ${config.token}` } });
-  if (!response.ok) throw new Error(`R2 get failed: ${response.status}`);
-  const text = await response.text();
-  if (!text || new TextEncoder().encode(text).length > MAX_SNAPSHOT_BYTES) throw new Error('Backup empty or over 10 MB');
-  return { key: latest.key, text, sourceRef: `r2://${config.bucket}/${latest.key}` };
-}
-
-export function selectLatestR2Object(objects) {
-  const candidates = (Array.isArray(objects) ? objects : [])
-    .filter(item => item && typeof item.key === 'string' && /\.json$/i.test(item.key));
-  candidates.sort((a, b) => {
-    const ta = Date.parse(a.uploaded || a.last_modified || a.lastModified || '') || 0;
-    const tb = Date.parse(b.uploaded || b.last_modified || b.lastModified || '') || 0;
-    if (ta !== tb) return tb - ta;
-    return String(b.key).localeCompare(String(a.key));
-  });
-  return candidates[0] || null;
-}
-
-export async function resolveBackupDocument(document) {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) throw new Error('backup must be an object');
-  if (!Object.prototype.hasOwnProperty.call(document, 'format')) return document;
-  if (document.format !== BACKUP_FORMAT || Number(document.version) !== 1) throw new Error('unsupported backup wrapper');
-  if (!document.payload || typeof document.payload !== 'object' || Array.isArray(document.payload)) throw new Error('backup payload missing');
-  if (document.integrity != null) {
-    const integrity = document.integrity;
-    if (integrity.algorithm !== 'SHA-256' || integrity.scope !== 'payload-json' || !SHA256_HEX.test(String(integrity.value || ''))) {
-      throw new Error('unsupported backup integrity');
-    }
-    const actual = await sha256Text(JSON.stringify(document.payload));
-    if (actual !== integrity.value) throw new Error('backup integrity mismatch');
-  }
-  return document.payload;
 }
 
 export function sanitizeSnapshotForLab(source, fromCanon = false) {
