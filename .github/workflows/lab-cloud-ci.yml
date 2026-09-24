@@ -7,6 +7,7 @@ on:
       - "laboratorio/pos-lab/**"
       - "tests/laboratorio-*.test.mjs"
       - "tests/security-secret-separation.test.mjs"
+      - "tests/cloud-sync/session-architecture.test.mjs"
       - "docs/LAB_CANON_MIRROR.md"
       - ".github/workflows/lab-cloud-ci.yml"
   push:
@@ -50,6 +51,7 @@ jobs:
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
           node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           node --test tests/security-secret-separation.test.mjs
+          node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
           node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
