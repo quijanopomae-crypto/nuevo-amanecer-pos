@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-DEPLOY-YAML-FIX-002",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Corregir YAML del workflow de despliegue LAB y retirar el duplicado inválido.",
+  "allowed_files": [
+    ".github/workflows/deploy-lab-cloud.yml",
+    ".github/workflows/lab-cloud-deploy.yml",
+    "laboratorio/pos-lab/tasks/LAB-DEPLOY-YAML-FIX-002.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-lab/migrations/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "production_writes": false,
+  "canon_writes": false
+}

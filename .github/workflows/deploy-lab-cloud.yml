@@ -58,7 +58,8 @@ jobs:
 
       - name: Verify R2 secret binding exists
         working-directory: tools/cloudflare-lab
-        run: npx wrangler secret list | grep -F '"name": "R2_CANON_READ_TOKEN"'
+        run: |
+          npx wrangler secret list | grep -F '"name": "R2_CANON_READ_TOKEN"'
 
       - name: Verify LAB Worker health
         run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health
