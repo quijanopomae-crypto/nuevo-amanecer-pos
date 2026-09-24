@@ -63,8 +63,8 @@ interpretando SQL en el Worker:
    crédito. Ventas, gastos, movimientos de caja, cierres e inventory movements quedan
    vacíos por diseño y no deben interpretarse como espejo comercial completo.
 5. `publish-lab-snapshot.mjs` firma `source_ref + source_hash + snapshot_hash`
-   mediante HMAC-SHA256 usando el token R2, sin exponerlo al navegador.
-6. El Worker verifica la firma en `POST /lab/workspace/import-baseline`.
+   mediante HMAC-SHA256 usando `LAB_IMPORT_HMAC_SECRET`, independiente del token R2.
+6. El Worker verifica la firma con ese secreto dedicado en `POST /lab/workspace/import-baseline`.
 7. D1 LAB crea un baseline inmutable y una nueva revisión de trabajo.
 8. Si `source_hash` ya es el baseline activo, responde `no_change` y no pisa las
    modificaciones LAB.
@@ -142,35 +142,32 @@ No existe PUT, POST, PATCH ni DELETE hacia R2 CANON.
 `nuevo-amanecer-prod-v2-backups` con permiso **Workers R2 Storage Read**. No usar
 un token S3 Object Read-only para este workflow REST.
 
-## Configuración del Worker
+## Separación de secretos
 
-Variables/secretos requeridos:
-
-```text
-R2_CANON_READ_TOKEN=<Cloudflare API token de solo lectura R2>
-```
-
-Valores por defecto en código:
+Cada responsabilidad usa un secreto distinto:
 
 ```text
-GitHub secret CLOUDFLARE_ACCOUNT_ID=<account id>
-GitHub secret R2_CANON_READ_TOKEN=<Cloudflare API token read-only>
-R2_CANON_BUCKET=nuevo-amanecer-prod-v2-backups
-R2_CANON_PREFIX=nuevo-amanecer-prod-v2/
+R2_CANON_READ_TOKEN
+  -> solo GitHub Actions/CLI para GET de R2 CANON
+
+LAB_IMPORT_HMAC_SECRET
+  -> solo firma en GitHub Actions y verificación de /lab/workspace/import-baseline
+
+DEVICE_CREDENTIAL_PEPPER
+  -> solo HMAC de credenciales de dispositivos en el Worker
 ```
 
-Para local pueden colocarse en `tools/cloudflare-lab/.dev.vars`, que está ignorado por Git.
+GitHub Actions requiere `CLOUDFLARE_ACCOUNT_ID`, `R2_CANON_READ_TOKEN` y
+`LAB_IMPORT_HMAC_SECRET` para el refresh. La provisión de dispositivos usa
+`DEVICE_CREDENTIAL_PEPPER` y `LAB_DEVICE_SYNC_TOKEN`, nunca el token R2.
 
-Para remoto, nunca versionar valores de secretos. Los GitHub Actions Secrets cifrados y los secretos de Worker son mecanismos autorizados cuando el workflow los necesita:
+El Worker no recibe `R2_CANON_READ_TOKEN`. Para local, `.dev.vars` contiene
+únicamente secretos del Worker. El token R2 se pasa solo al proceso que ejecuta
+`fetch-latest-canon-backup.mjs`.
 
-```powershell
-cd tools/cloudflare-lab
-npx wrangler secret put R2_CANON_READ_TOKEN
-npm run migrate:remote
-npm run deploy
-```
-
-Antes de `migrate:remote` o `deploy`, ejecutar pruebas locales.
+Para remoto, nunca versionar valores. La configuración real de los secretos
+nuevos es una acción OWNER_ONLY y debe realizarse antes de volver a ejecutar los
+workflows manuales de deploy/refresh/provision.
 
 ## Configuración del celular
 

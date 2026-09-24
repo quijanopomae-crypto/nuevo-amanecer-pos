@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { createHash, createHmac } from 'node:crypto';
 
-const token=process.env.R2_CANON_READ_TOKEN;
+const importSecret=process.env.LAB_IMPORT_HMAC_SECRET;
 const endpoint=(process.env.LAB_WORKER_URL||'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev').replace(/\/+$/,'');
-if(!token) throw new Error('Missing R2_CANON_READ_TOKEN');
+if(!importSecret) throw new Error('Missing LAB_IMPORT_HMAC_SECRET');
 
 const meta=JSON.parse(readFileSync('/tmp/canon-meta.json','utf8'));
 const snapshot=JSON.parse(readFileSync('/tmp/lab-snapshot.json','utf8'));
 const snapshotRaw=JSON.stringify(snapshot);
 const snapshotHash=createHash('sha256').update(snapshotRaw).digest('hex');
 const message=[meta.source_ref,meta.source_hash,snapshotHash].join('\n');
-const signature=createHmac('sha256',token).update(message).digest('hex');
+const signature=createHmac('sha256',importSecret).update(message).digest('hex');
 
 const body={
  source_ref:meta.source_ref,

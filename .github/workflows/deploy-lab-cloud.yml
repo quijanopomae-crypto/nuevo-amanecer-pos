@@ -13,6 +13,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_CANON_READ_TOKEN: ${{ secrets.R2_CANON_READ_TOKEN }}
+      LAB_IMPORT_HMAC_SECRET: ${{ secrets.LAB_IMPORT_HMAC_SECRET }}
 
     steps:
       - name: Require LAB deployment secrets
@@ -20,12 +21,15 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$R2_CANON_READ_TOKEN"
+          test -n "$LAB_IMPORT_HMAC_SECRET"
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
@@ -37,7 +41,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: tools/cloudflare-lab
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Validate before remote changes
         run: |
@@ -49,6 +53,7 @@ jobs:
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
           node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           node --test tests/laboratorio-*.test.mjs
+          node --test tests/security-secret-separation.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
 
@@ -66,14 +71,14 @@ jobs:
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy
 
-      - name: Configure CANON R2 read-only token
+      - name: Configure dedicated LAB import HMAC secret
         working-directory: tools/cloudflare-lab
-        run: printf '%s' "$R2_CANON_READ_TOKEN" | npx wrangler secret put R2_CANON_READ_TOKEN
+        run: printf '%s' "$LAB_IMPORT_HMAC_SECRET" | npx wrangler secret put LAB_IMPORT_HMAC_SECRET
 
-      - name: Verify R2 secret binding exists
+      - name: Verify import HMAC secret binding exists
         working-directory: tools/cloudflare-lab
         run: |
-          npx wrangler secret list | grep -F '"name": "R2_CANON_READ_TOKEN"'
+          npx wrangler secret list | grep -F '"name": "LAB_IMPORT_HMAC_SECRET"'
 
       - name: Verify LAB Worker health
         run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health

@@ -1,13 +1,14 @@
 # Copiar a .dev.vars (ignorado por git) y usar valores aleatorios largos y distintos.
-# DEVICE_CREDENTIAL_PEPPER solo existe en el Worker; las credenciales se provisionan
-# en D1 como HMAC-SHA-256(pepper, credencial), nunca en texto plano.
-DEVICE_CREDENTIAL_PEPPER=replace-with-a-random-server-only-pepper
+# Estos valores pertenecen al Worker LAB. No usar aquí credenciales administrativas Cloudflare.
+
+# Hash de credenciales de dispositivos LAB. Debe ser independiente de cualquier token R2.
+DEVICE_CREDENTIAL_PEPPER=replace-with-64-hex-random-server-only-pepper
+
+# Lectura del gateway LAB; nunca autoriza escrituras.
 READ_TOKEN=replace-with-a-distinct-read-secret
 
-# Espejo CANON -> LAB.
-# R2_CANON_READ_TOKEN debe tener SOLO permiso "Workers R2 Storage Read".
-# Nunca usar un token con escritura para esta integración.
-R2_CANON_ACCOUNT_ID=replace-with-cloudflare-account-id
-R2_CANON_READ_TOKEN=replace-with-r2-read-only-api-token
-R2_CANON_BUCKET=nuevo-amanecer-prod-v2-backups
-R2_CANON_PREFIX=nuevo-amanecer-prod-v2/
+# Firma/verificación del pipeline CANON -> LAB. Debe ser distinto del token R2 y del pepper.
+LAB_IMPORT_HMAC_SECRET=replace-with-a-distinct-random-import-secret
+
+# R2_CANON_READ_TOKEN NO es un secreto del Worker.
+# Solo se entrega al proceso GitHub Actions/CLI que ejecuta fetch-latest-canon-backup.mjs.
