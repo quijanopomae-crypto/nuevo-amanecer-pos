@@ -44,10 +44,6 @@ jobs:
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
 
-      - name: Configure CANON R2 read-only account
-        working-directory: tools/cloudflare-lab
-        run: printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | npx wrangler secret put R2_CANON_ACCOUNT_ID
-
       - name: Configure CANON R2 read-only token
         working-directory: tools/cloudflare-lab
         run: printf '%s' "$R2_CANON_READ_TOKEN" | npx wrangler secret put R2_CANON_READ_TOKEN
