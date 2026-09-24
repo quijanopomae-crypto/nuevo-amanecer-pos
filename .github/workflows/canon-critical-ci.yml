@@ -32,18 +32,21 @@ permissions:
 jobs:
   critical-regression:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
       - name: Install Cloudflare test dependencies
         working-directory: tools/cloudflare-lab
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: CANON business regressions
         shell: bash
