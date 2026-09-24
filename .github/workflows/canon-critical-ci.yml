@@ -1,0 +1,77 @@
+name: CANON Critical CI
+
+on:
+  pull_request:
+    paths:
+      - "POS/**"
+      - "tests/product-fixes/**"
+      - "tests/backup-*.test.mjs"
+      - "tests/cloud-sync/**"
+      - "tools/cloudflare-lab/src/**"
+      - "tools/cloudflare-lab/migrations/**"
+      - "tools/cloudflare-lab/scripts/**"
+      - "tools/cloudflare-lab/test/**"
+      - ".github/workflows/canon-critical-ci.yml"
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "POS/**"
+      - "tests/product-fixes/**"
+      - "tests/backup-*.test.mjs"
+      - "tests/cloud-sync/**"
+      - "tools/cloudflare-lab/src/**"
+      - "tools/cloudflare-lab/migrations/**"
+      - "tools/cloudflare-lab/scripts/**"
+      - "tools/cloudflare-lab/test/**"
+      - ".github/workflows/canon-critical-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  critical-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install Cloudflare test dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci
+
+      - name: CANON business regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/product-fixes/fix*/*.test.mjs
+          node --test tests/backup-complete.test.mjs tests/backup-restore.test.mjs
+
+      - name: Cloud sync, offline outbox and idempotency regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/*.test.mjs
+
+      - name: Backup manifest and SQL snapshot contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
+          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
+
+      - name: Apply all D1 migrations in isolated local database
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler d1 migrations apply nuevo-amanecer-lab --local
+
+      - name: Tests must not modify tracked repository state
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
