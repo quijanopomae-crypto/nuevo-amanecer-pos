@@ -201,7 +201,7 @@
 <!-- CLIENTES -->
 <div class="page" id="pageClientes">
     <div class="page-chrome">
-    <div class="top-mod-bar"><span class="top-mod-title">👥 Clientes y Créditos</span><button class="top-btn-nuevo" onclick="abrirModalCli()">+ Cliente</button></div>
+    <div class="top-mod-bar"><span class="top-mod-title">👥 Clientes y Créditos</span><span id="cliAuthorityBadge" hidden></span><button class="top-btn-nuevo" onclick="abrirModalCli()">+ Cliente</button></div>
     <div class="tabs-wrap">
         <button class="tab active" onclick="cliSetTab(this,'todos')">Todos <span class="tbadge teal" id="cliB0">0</span></button>
         <button class="tab" onclick="cliSetTab(this,'vencidos')">🔴 Vencidos <span class="tbadge red" id="cliB1">0</span></button>
@@ -853,11 +853,16 @@
 
 <script src="js/core/utils.js"></script>
 <script src="js/sync/outbox.js"></script>
+<script src="js/sync/canonical-client.js"></script>
 <script src="js/legacy-inline/inline-01.js"></script>
 <script src="js/modules/ticket/legacy.js"></script>
 <script src="js/legacy-inline/inline-02.js"></script>
 <script src="js/modules/ticket/overrides.js"></script>
 <script src="js/legacy-inline/inline-03.js"></script>
+<script src="js/sync/canonical-sale-intent.js"></script>
+<script src="js/sync/canonical-sale-outbox.js"></script>
+<script src="js/sync/canonical-sale-projection.js"></script>
+<script src="js/sync/canonical-sale-integration.js"></script>
 <script src="js/core/state.js"></script>
 
 <div id="naConfirm" class="na-confirm-overlay" aria-hidden="true">
@@ -932,6 +937,7 @@
 <script src="js/legacy-inline/inline-17.js"></script>
 
 <script src="js/legacy-inline/inline-18.js"></script>
+<script src="js/sync/canonical-sale-view.js"></script>
 <script src="js/compat/legacy-globals.js"></script>
 <script src="js/app.js"></script>
 <script src="js/ocr/vendor/tesseract-6.0.1/tesseract.min.js"></script>

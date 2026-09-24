@@ -202,6 +202,7 @@
 
   // Preparation is detached: no operation becomes sendable until the full local sale commit is verified.
   async function prepare(source) {
+    if (root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()) throw new Error('CANONICAL_LEGACY_OUTBOX_BLOCKED');
     var next = state ? snapshot() : baseline(source);
     for (var entry of sales(source)) {
       if (next.captured[entry.key]) continue;
@@ -272,6 +273,7 @@
   function firstPending() { return state && state.outbox.find(function (op) { return op.status === STATUS.PENDING; }); }
 
   function scheduleSync() {
+    if (root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()) return;
     if (runtime.syncing || runtime.timer !== null || !runtime.token || !runtime.persist || !firstPending()) return;
     if (root.navigator && root.navigator.onLine === false) return;
     runtime.timer = root.setTimeout(function () { runtime.timer = null; syncPending().catch(function () {}); }, Math.max(0, runtime.retryAfter - Date.now()));
@@ -303,6 +305,7 @@
   }
 
   async function syncPending(fetchImpl) {
+    if (root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()) return { ok: false, blocked: 'canonical_authority' };
     if (runtime.syncing) return { ok: false, blocked: 'busy' };
     if (!runtime.token) return { ok: false, blocked: 'missing_token' };
     if (!runtime.persist) return { ok: false, blocked: 'persistence_unavailable' };
