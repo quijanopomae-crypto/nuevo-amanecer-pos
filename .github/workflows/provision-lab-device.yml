@@ -1,0 +1,83 @@
+name: Autorizar celular LAB
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_CANON_READ_TOKEN: ${{ secrets.R2_CANON_READ_TOKEN }}
+      LAB_DEVICE_SYNC_TOKEN: ${{ secrets.LAB_DEVICE_SYNC_TOKEN }}
+      DEVICE_ID: lab-phone-main
+
+    steps:
+      - name: Require provisioning secrets
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$R2_CANON_READ_TOKEN"
+          test -n "$LAB_DEVICE_SYNC_TOKEN"
+          printf '%s' "$LAB_DEVICE_SYNC_TOKEN" | grep -Eq '^[a-f0-9]{64}$'
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci
+
+      - name: Derive server-only device pepper
+        shell: bash
+        run: |
+          PEPPER="$(printf 'nuevo-amanecer-lab-device-auth-v1:%s' "$R2_CANON_READ_TOKEN" | sha256sum | awk '{print $1}')"
+          echo "::add-mask::$PEPPER"
+          printf '%s' "$PEPPER" > /tmp/device-pepper
+          printf '%s' "$PEPPER" | (cd tools/cloudflare-lab && npx wrangler secret put DEVICE_CREDENTIAL_PEPPER)
+
+      - name: Build writer registration SQL
+        shell: bash
+        run: |
+          PEPPER="$(cat /tmp/device-pepper)"
+          HASH="$(printf '%s' "$LAB_DEVICE_SYNC_TOKEN" | openssl dgst -sha256 -hmac "$PEPPER" | awk '{print $2}')"
+          cat > /tmp/register-lab-device.sql <<SQL
+          UPDATE devices
+             SET status = 'revoked'
+           WHERE role = 'writer'
+             AND status = 'active'
+             AND device_id <> 'lab-phone-main';
+
+          INSERT INTO devices (device_id, role, status, credential_hash)
+          VALUES ('lab-phone-main', 'writer', 'active', '$HASH')
+          ON CONFLICT(device_id) DO UPDATE SET
+            role = 'writer',
+            status = 'active',
+            credential_hash = excluded.credential_hash,
+            last_seen_at = NULL;
+          SQL
+
+      - name: Register writer in D1 LAB
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler d1 execute nuevo-amanecer-lab --remote --file=/tmp/register-lab-device.sql
+
+      - name: Verify writer registration
+        working-directory: tools/cloudflare-lab
+        run: |
+          npx wrangler d1 execute nuevo-amanecer-lab --remote --command="SELECT device_id, role, status FROM devices WHERE device_id='lab-phone-main';" | tee /tmp/device-check.txt
+          grep -F 'lab-phone-main' /tmp/device-check.txt
+          grep -F 'writer' /tmp/device-check.txt
+          grep -F 'active' /tmp/device-check.txt
+
+      - name: Verify authenticated LAB workspace
+        run: |
+          curl --fail --silent --show-error             -H "x-device-id: $DEVICE_ID"             -H "x-sync-token: $LAB_DEVICE_SYNC_TOKEN"             https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/lab/workspace/status
