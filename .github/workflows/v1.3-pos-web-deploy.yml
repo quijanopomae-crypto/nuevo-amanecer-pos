@@ -1,0 +1,115 @@
+name: V1.3 Hosted POS Web Deploy
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-pos-web-deploy-trigger.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v1-3-hosted-pos-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_WEB_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Require Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Require exact active branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Wrangler
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Assemble hosted POS
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/cloudflare-pos-web/_site
+          mkdir -p tools/cloudflare-pos-web/_site/app
+          cp -a POS/. tools/cloudflare-pos-web/_site/app/
+          cp tools/cloudflare-pos-web/public/index.html tools/cloudflare-pos-web/_site/index.html
+          cp tools/cloudflare-pos-web/public/activate.js tools/cloudflare-pos-web/_site/activate.js
+
+      - name: Hosted POS safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/v1.3-pos-web-deploy.test.mjs
+          test -f tools/cloudflare-pos-web/_site/app/index.html
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/canonical-client.js
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/canonical-sale-integration.js
+
+      - name: Static Worker dry-run
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Deploy hosted POS
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Verify public launcher and POS assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            ROOT="$(curl -fsS --max-time 15 "$POS_WEB_URL/" || true)"
+            APP="$(curl -fsS --max-time 15 "$POS_WEB_URL/app/" || true)"
+            JS_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/canonical-client.js" || true)"
+            if printf '%s' "$ROOT" | grep -q 'Nuevo Amanecer POS' &&
+               printf '%s' "$APP" | grep -q 'Nuevo Amanecer — ERP &amp; POS' &&
+               test "$JS_CODE" = "200"; then
+              echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Hosted POS public verification failed" >&2
+          exit 1
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## Nuevo Amanecer POS V1.3 — Hosted Web"
+            echo "- Status: DEPLOYED"
+            echo "- Public URL: $POS_WEB_URL/"
+            echo "- App path: $POS_WEB_URL/app/"
+            echo "- Local server required: NO"
+            echo "- Activation secret embedded: NO"
+            echo "- Backend CANON: nuevo-amanecer-pos-prod"
+            echo "- Commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
