@@ -28,6 +28,7 @@ test('REPO_MAP canonical navigation paths exist', () => {
     'docs/V1.3_STATUS.md',
     'docs/LABORATORIO_A_CANON.md',
     'docs/LAB_CANON_MIRROR.md',
+    'docs/REMEDIATION_PHASE9_BRANCH_CLASSIFICATION.md',
     'tests/cloud-sync',
     'tests/product-fixes',
   ];
@@ -47,4 +48,11 @@ test('REPO_MAP preserves historical artifacts instead of declaring blind deletio
   ]) {
     assert.equal(existsSync(path), true, 'historical candidate disappeared before Phase 9 proof: ' + path);
   }
+});
+
+test('REPO_MAP records conservative branch hygiene', () => {
+  assert.match(map, /checkpoint\/v1\.3-pc-20260923/);
+  assert.match(map, /merged_recoverable_refs: 24/);
+  assert.match(map, /safe_file_deletions_demonstrated: 0/);
+  assert.match(map, /remote_branch_refs_deleted: false/);
 });
