@@ -56,6 +56,10 @@ jobs:
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
 
+      - name: Production Worker dry-run
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
+
       - name: CANON business regressions
         shell: bash
         run: |
