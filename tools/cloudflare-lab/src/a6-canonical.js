@@ -10,7 +10,7 @@ const TABLES = {
   credit_payments: ['payment_id','credit_id','source_payment_id','source_sequence','amount_cents','payment_date','payment_timestamp','payment_date_known','date_precision','method','source_method','source_origin','source_document_type','source_operation_reference','seller','date_observation','source_customer_document','source_customer_name','source_cumulative_paid_cents','source_balance_after_cents','source_progress_ratio','source_credit_original_cents','source_current_document_balance_cents'],
 };
 const PROVENANCE = ['promotion_id','source_import_id','source_entity_type','source_name','source_row','source_key','source_payload_json','source_payload_hash','mapping_version'];
-const READ_TABLES = new Set(['products','customers','credits','credit-payments','sales','sale-items','inventory-movements','cash-movements']);
+const READ_TABLES = new Set(['products','customers','credits','credit-payments','sales','sale-items','inventory-movements','cash-movements','cash-sessions','financial-events']);
 const A3_PUBLIC_COLUMNS={
   sales:'sale_id,operation_id,payment_method,total_cents,payment_reference,created_at,received_at',
   sale_items:'sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at',
@@ -45,10 +45,21 @@ export async function handleA6(request, url, env, helpers) {
   if (url.pathname.startsWith('/read/canonical/')) {
     const runtimeDenied = canonicalRuntimeDenied(url, env, helpers.json);
     if (runtimeDenied) return runtimeDenied;
+
+    // Preserve the original local promotion gate: local canonical reads remain
+    // tied to the exact synthetic operational manifest. Remote runtime reads,
+    // when explicitly enabled, do not depend on that local-only manifest.
+    const localRuntime = env.A6_LOCAL_GATE === 'enabled' && ['localhost','127.0.0.1'].includes(url.hostname);
+    if (localRuntime) {
+      const configured = await operationalManifest(env);
+      if (configured.error) return helpers.json({ error:'a6_manifest_invalid', message:configured.error },503);
+    }
+
     if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
     const denied = await authorizeCanonicalRead(request,env,helpers); if (denied) return denied;
     return canonicalRead(url,env.nuevo_amanecer_lab,helpers.json);
   }
+
   const localDenied = a6LocalDenied(url, env, helpers.json);
   if (localDenied) return localDenied;
   const configured = await operationalManifest(env);
@@ -436,15 +447,60 @@ async function rollback(body,deviceId,credentialHash,manifest,db,json){
 
 async function canonicalRead(url,db,json){
   const type=url.pathname.slice('/read/canonical/'.length);if(!READ_TABLES.has(type)&&type!=='status')return json({error:'not_found'},404);
-  const before=await control(db);if(!before||before.mode!=='CANONICAL_READ_ONLY'||!before.active_promotion_id)return json({error:'canonical_not_published'},409);
-  if(type==='status'){const counts={};for(const table of Object.keys(TABLES))counts[table]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(before.active_promotion_id).first()).count);const after=await control(db);if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});}
+  const initial=await control(db);if(!initial||!['CANONICAL_READ_ONLY','ACTIVE'].includes(initial.mode)||!initial.active_promotion_id)return json({error:'canonical_not_published'},409);
+  const before=initial.mode==='ACTIVE'?await readControl(db):initial;
+  if(!sameControl({...initial,financial_revision:before?.financial_revision},before))return json({error:'authority_changed'},409);
+  if(['cash-sessions','financial-events'].includes(type)&&before.mode!=='ACTIVE')return json({error:'canonical_not_active'},409);
+  if(type==='status'){
+    const counts={};for(const table of Object.keys(TABLES))counts[table]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(before.active_promotion_id).first()).count);
+    if(before.mode==='ACTIVE'){
+      counts.imported_credits=counts.credits;
+      counts.live_credits=Number((await db.prepare('SELECT COUNT(*) AS count FROM live_credits WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
+      counts.credits+=counts.live_credits;
+      counts.credit_payments+=Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL').bind(before.active_promotion_id).first()).count);
+      for(const [name,sql] of Object.entries({sales:'canonical_sale_context x',sale_items:'canonical_sale_context x JOIN sale_items r ON r.sale_id=x.sale_id',inventory_movements:'canonical_inventory_effects',cash_movements:'canonical_sale_context x JOIN cash_movements r ON r.sale_id=x.sale_id'}))
+        counts[name]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${sql} WHERE ${name==='inventory_movements'?'promotion_id':'x.promotion_id'}=?1`).bind(before.active_promotion_id).first()).count);
+    }
+    const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
+    if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});
+  }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
   const sqlName=type.replaceAll('-','_');let rows;
-  if(TABLES[sqlName]){const key=TABLES[sqlName][0];rows=await db.prepare(`SELECT ${TABLES[sqlName].join(',')} FROM ${sqlName} WHERE promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();}
+  if(sqlName==='credits'&&before.mode==='ACTIVE'){
+    const liveFields={credit_id:'l.credit_id',customer_id:'l.customer_id',sale_id:'l.sale_id',issued_value:'l.created_at',due_value:'l.due_date',original_amount_cents:'l.original_amount_cents',import_paid_cents:'0',opening_balance_cents:'l.original_amount_cents',current_balance_cents:'b.current_balance_cents',source_status:'NULL'};
+    rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || c.credit_id AS read_key,${TABLES.credits.map(column=>column==='current_balance_cents'?'b.current_balance_cents':`c.${column}`).join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS status,b.revision AS revision,NULL AS created_at,NULL AS due_date FROM credits c JOIN canonical_credit_balances b ON b.promotion_id=c.promotion_id AND b.credit_id=c.credit_id AND b.provenance='IMPORT' WHERE c.promotion_id=?1 UNION ALL
+      SELECT 'L:' || l.credit_id AS read_key,${TABLES.credits.map(column=>liveFields[column]??'NULL').join(',')},'LIVE',l.operation_id,l.status,b.revision,l.created_at,l.due_date
+      FROM live_credits l JOIN canonical_credit_balances b ON b.promotion_id=l.promotion_id AND b.credit_id=l.credit_id AND b.provenance='LIVE' WHERE l.promotion_id=?1) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='credit_payments'&&before.mode==='ACTIVE'){
+    const fields={payment_id:'event_id',credit_id:'credit_id',amount_cents:'-credit_delta_cents',payment_date:'substr(created_at,1,10)',payment_timestamp:'created_at',payment_date_known:'1',date_precision:"'TIMESTAMP'",method:'payment_method',source_origin:"'LIVE'",source_operation_reference:'reference'};
+    rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || payment_id AS read_key,${TABLES.credit_payments.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS credit_provenance,NULL AS credit_delta_cents,NULL AS cash_delta_cents,NULL AS session_id,NULL AS reason,NULL AS compensates_operation_id FROM credit_payments WHERE promotion_id=?1 UNION ALL
+      SELECT 'L:' || event_id AS read_key,${TABLES.credit_payments.map(c=>fields[c]??'NULL').join(',')},'LIVE',operation_id,credit_provenance,credit_delta_cents,cash_delta_cents,session_id,reason,compensates_operation_id FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL)
+      WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='cash_sessions'){
+    rows=await db.prepare(`SELECT session_id AS read_key,session_id,promotion_id,open_operation_id,opening_cents,cash_movement_watermark,opened_at,status,
+      close_operation_id,expected_cents,counted_cents,difference_cents,closing_watermark,closed_at,revision FROM canonical_cash_state
+      WHERE promotion_id=?1 AND session_id>?2 ORDER BY session_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='financial_events'){
+    rows=await db.prepare(`SELECT event_id AS read_key,event_id,operation_id,promotion_id,event_type,session_id,credit_id,credit_provenance,
+      credit_delta_cents,cash_delta_cents,payment_method,reference,reason,compensates_operation_id,created_at FROM canonical_financial_events
+      WHERE promotion_id=?1 AND event_id>?2 ORDER BY event_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(TABLES[sqlName]){const key=TABLES[sqlName][0];rows=await db.prepare(`SELECT ${TABLES[sqlName].join(',')} FROM ${sqlName} WHERE promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();}
+  else if(before.mode==='ACTIVE'){
+    const key=sqlName==='sale_items'?"r.sale_id || char(0) || printf('%020d',r.line_number)":sqlName==='sales'?'r.sale_id':'r.movement_id';
+    const join=sqlName==='inventory_movements'?'canonical_inventory_effects x JOIN inventory_movements r ON r.movement_id=x.movement_id':'canonical_sale_context x JOIN '+sqlName+' r ON r.sale_id=x.sale_id';
+    const context=sqlName==='sales'?',x.customer_id,x.promotion_id,x.authority_epoch,x.control_revision,x.client_contract':'';
+    rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName].split(',').map(c=>'r.'+c).join(',')}${context} FROM ${join} WHERE x.promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  }
   else {const key=sqlName==='sale_items'?"sale_id || char(0) || printf('%020d',line_number)":sqlName==='sales'?'sale_id':'movement_id';rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName]} FROM ${sqlName} WHERE ${key}>?1 ORDER BY ${key} LIMIT ?2`).bind(page.key,page.limit+1).all();}
-  const after=await control(db);if(!sameControl(before,after))return json({error:'authority_changed'},409);
-  const source=rows.results??[],selected=source.slice(0,page.limit),last=selected.at(-1);let lastKey=null;if(last)lastKey=sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')];
-  return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),key:lastKey}):null,limit:page.limit});
+  const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
+  if(!sameControl(before,after))return json({error:'authority_changed'},409);
+  const source=rows.results??[],selected=source.slice(0,page.limit),last=selected.at(-1);let lastKey=null;if(last)lastKey=last.read_key??(sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')]);
+  for(const item of selected){
+    delete item.read_key;
+    // Preserve the imported read shape; only LIVE entries carry ledger metadata.
+    if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
+  }
+  return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),...(before.mode==='ACTIVE'?{financial_revision:before.financial_revision}:{}),key:lastKey}):null,limit:page.limit});
 }
 
 async function readProvenance(promotionId,url,db,json){
@@ -456,13 +512,20 @@ async function readProvenance(promotionId,url,db,json){
 }
 
 function pageLimit(params){const raw=params.get('limit');if(raw!==null&&!/^\d+$/.test(raw))return null;const limit=raw===null?25:Number(raw);return Number.isSafeInteger(limit)&&limit>=1&&limit<=100?limit:null;}
-function parsePage(params,controlRow){const limit=pageLimit(params);if(limit===null)return{error:'invalid_limit'};const token=params.get('cursor');if(token===null)return{limit,key:''};try{const c=decodeCursor(token);if(c.promotion_id!==controlRow.active_promotion_id||c.authority_epoch!==Number(controlRow.authority_epoch)||c.revision!==Number(controlRow.revision)||typeof c.key!=='string'||c.key.length>512)return{error:'stale_cursor'};return{limit,key:c.key};}catch{return{error:'invalid_cursor'};}}
+function parsePage(params,controlRow){const limit=pageLimit(params);if(limit===null)return{error:'invalid_limit'};const token=params.get('cursor');if(token===null)return{limit,key:''};try{const c=decodeCursor(token);if(c.promotion_id!==controlRow.active_promotion_id||c.authority_epoch!==Number(controlRow.authority_epoch)||c.revision!==Number(controlRow.revision)||(controlRow.mode==='ACTIVE'&&c.financial_revision!==controlRow.financial_revision)||typeof c.key!=='string'||c.key.length>512)return{error:'stale_cursor'};return{limit,key:c.key};}catch{return{error:'invalid_cursor'};}}
 function parseAdminPage(params,promotionId,type){const limit=pageLimit(params);if(limit===null)return{error:'invalid_limit'};const token=params.get('cursor');if(token===null)return{limit,name:'',row:0,key:''};try{const c=decodeCursor(token);if(!plainExact(c,['promotion_id','entity_type','name','row','key'])||c.promotion_id!==promotionId||c.entity_type!==type||typeof c.name!=='string'||c.name.length>240||!Number.isSafeInteger(c.row)||c.row<1||typeof c.key!=='string'||c.key.length>240)throw new Error();return{limit,name:c.name,row:c.row,key:c.key};}catch{return{error:'invalid_cursor'};}}
 function encodeCursor(value){const bytes=new TextEncoder().encode(JSON.stringify(value));let binary='';for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 function decodeCursor(value){if(value.length>8192||!/^[A-Za-z0-9_-]+$/.test(value))throw new Error();const s=value.replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(s+'='.repeat((4-s.length%4)%4)),(c)=>c.charCodeAt(0))));}
 async function control(db){return db.prepare('SELECT mode,active_promotion_id,revision,authority_epoch,minimum_client_contract,first_live_operation_id FROM canonical_control WHERE id=1').first();}
-function sameControl(a,b){return b&&a.mode===b.mode&&a.active_promotion_id===b.active_promotion_id&&Number(a.revision)===Number(b.revision)&&Number(a.authority_epoch)===Number(b.authority_epoch);}
-function readMeta(c){return{authority:'canonical',promotion_id:c.active_promotion_id,authority_epoch:Number(c.authority_epoch),revision:Number(c.revision),read_only:true,mode:c.mode};}
+function sameControl(a,b){return b&&a.mode===b.mode&&a.active_promotion_id===b.active_promotion_id&&Number(a.revision)===Number(b.revision)&&Number(a.authority_epoch)===Number(b.authority_epoch)&&(a.mode!=='ACTIVE'||a.financial_revision===b.financial_revision);}
+function readMeta(c){return{authority:'canonical',promotion_id:c.active_promotion_id,authority_epoch:Number(c.authority_epoch),revision:Number(c.revision),...(c.mode==='ACTIVE'?{financial_revision:c.financial_revision}:{}),read_only:c.mode!=='ACTIVE',mode:c.mode,minimum_client_contract:c.minimum_client_contract};}
+// One SQL snapshot binds authority and the append-only commit count. Counts do
+// not change on replay, and a rolled-back batch cannot advance the read version.
+async function readControl(db){return db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
+  c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
+  (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
+  (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
+  ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();}
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}
 async function candidateCount(db,id){let total=0;for(const table of Object.keys(TABLES))total+=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(id).first()).count);return total;}
 async function receiptReplay(db,id,hash,json){const row=await db.prepare('SELECT request_hash,result_json FROM canonical_command_receipts WHERE operation_id=?1').bind(id).first();if(!row)return null;return row.request_hash===hash?json(JSON.parse(row.result_json)):json({error:'operation_id_conflict'},409);}
