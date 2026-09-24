@@ -433,6 +433,7 @@
       badge.style.cursor = 'pointer';
       badge.addEventListener('click', function () {
         fillPanel();
+        overlay.scrollTop = 0;
         overlay.style.display = 'block';
       });
     }
@@ -455,6 +456,7 @@
         fillPanel();
         renderStatus('Sesión activada. No tendrás que volver a escribir la clave en este navegador.', 'ok');
         try { await loadRemoteWorkspace({ silent: true }); } catch {}
+        overlay.style.display = 'none';
       } catch (error) {
         secretInput.value = '';
         renderStatus(error.message, 'error');
@@ -613,7 +615,7 @@
     resetToBaseline: resetToBaseline,
     open: function () {
       var overlay = document.getElementById('naLabWorkspaceOverlay');
-      if (overlay) { fillPanel(); overlay.style.display = 'block'; }
+      if (overlay) { fillPanel(); overlay.scrollTop = 0; overlay.style.display = 'block'; }
     },
     state: function () {
       return {
