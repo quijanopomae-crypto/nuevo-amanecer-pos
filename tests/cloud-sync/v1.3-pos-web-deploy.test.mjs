@@ -58,3 +58,11 @@ test('hosted POS router maps root and app entrypoints to exact HTML assets', () 
   assert.match(router, /assetUrl\.pathname = '\/app\/index\.html'/);
   assert.match(router, /env\.ASSETS\.fetch/);
 });
+
+test('public verification is pipe-safe for the large POS HTML document', () => {
+  assert.match(workflow, /ROOT_CODE=.*pos-root\.html/);
+  assert.match(workflow, /APP_CODE=.*pos-app\.html/);
+  assert.match(workflow, /grep -Fq 'Nuevo Amanecer POS' \/tmp\/pos-root\.html/);
+  assert.match(workflow, /grep -Fq 'Nuevo Amanecer — ERP &amp; POS' \/tmp\/pos-app\.html/);
+  assert.doesNotMatch(workflow, /printf '%s' "\$APP" \| grep -q/);
+});
