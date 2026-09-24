@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  handleLabWorkspace,
   isLabWorkspacePath,
   sanitizeSnapshotForLab,
   snapshotCounts
@@ -59,4 +60,70 @@ test('firma se verifica sobre el snapshot recibido antes de sanitizar', async ()
   const cleanHashRaw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(clean)));
   const cleanHex = [...new Uint8Array(cleanHashRaw)].map(v => v.toString(16).padStart(2, '0')).join('');
   assert.notEqual(hex, cleanHex, 'sanitation mutates the snapshot; signature must target pre-sanitized input');
+});
+
+
+test('LAB save sanitation preserves client timestamp so a replay is hash-stable', () => {
+  const source = snapshot();
+  const first = sanitizeSnapshotForLab(source, false);
+  const second = sanitizeSnapshotForLab(source, false);
+  assert.equal(first.updatedAt, source.updatedAt);
+  assert.deepEqual(first, second);
+});
+
+test('workspace save fails closed if writer is revoked between auth and commit', async () => {
+  const db = {
+    prepare(sql) {
+      return {
+        bind(...args) {
+          return {
+            async first() {
+              if (sql.includes('FROM lab_workspace_control')) {
+                return { active_revision: 1, active_baseline_id: 'B1' };
+              }
+              if (sql.includes('FROM lab_workspace_revisions') && sql.includes('operation_id')) return null;
+              if (sql.includes('FROM devices')) return null;
+              return null;
+            }
+          };
+        }
+      };
+    },
+    async batch() {
+      return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }];
+    }
+  };
+  const env = { nuevo_amanecer_lab: db };
+  const request = new Request('https://lab.example/lab/workspace/save', {
+    method: 'POST',
+    headers: { 'x-device-id': 'lab-phone-main', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      expected_revision: 1,
+      operation_id: 'op-revoked',
+      snapshot: snapshot()
+    })
+  });
+  const response = await handleLabWorkspace(request, new URL(request.url), env, {
+    jsonLab: (body, status = 200, headers = {}) => Response.json(body, { status, headers }),
+    authorizeRead: () => null,
+    authorizeDevice: async () => ({ credentialHash: 'a'.repeat(64) })
+  });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, 'device_revoked');
+});
+
+test('workspace reset requires expected_revision instead of accepting blind reset', async () => {
+  const env = { nuevo_amanecer_lab: { prepare() { throw new Error('DB must not be reached'); } } };
+  const request = new Request('https://lab.example/lab/workspace/reset', {
+    method: 'POST',
+    headers: { 'x-device-id': 'lab-phone-main', 'content-type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  const response = await handleLabWorkspace(request, new URL(request.url), env, {
+    jsonLab: (body, status = 200, headers = {}) => Response.json(body, { status, headers }),
+    authorizeRead: () => null,
+    authorizeDevice: async () => ({ credentialHash: 'a'.repeat(64) })
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, 'expected_revision_required');
 });

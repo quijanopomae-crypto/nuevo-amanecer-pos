@@ -53,12 +53,12 @@ export async function handleLabWorkspace(request, url, env, deps) {
   if (url.pathname === '/lab/workspace/save') {
     const body = await readJsonBody(request, jsonLab);
     if (body instanceof Response) return body;
-    return saveWorkspace(db, body, deviceId, jsonLab);
+    return saveWorkspace(db, body, deviceId, auth.credentialHash, jsonLab);
   }
   if (url.pathname === '/lab/workspace/reset') {
     const body = await readJsonBody(request, jsonLab, true);
     if (body instanceof Response) return body;
-    return resetWorkspace(db, body, deviceId, jsonLab);
+    return resetWorkspace(db, body, deviceId, auth.credentialHash, jsonLab);
   }
   if (url.pathname === '/lab/workspace/refresh-from-canon') {
     return jsonLab({
@@ -120,7 +120,7 @@ async function readWorkspace(db, jsonLab, statusOnly) {
   return jsonLab({ ...base, snapshot });
 }
 
-async function saveWorkspace(db, body, deviceId, jsonLab) {
+async function saveWorkspace(db, body, deviceId, credentialHash, jsonLab) {
   if (!Number.isSafeInteger(body?.expected_revision) || body.expected_revision < 1) {
     return jsonLab({ error: 'expected_revision_required' }, 400);
   }
@@ -137,11 +137,11 @@ async function saveWorkspace(db, body, deviceId, jsonLab) {
   ).bind(WORKSPACE_ID).first();
   if (!current) return jsonLab({ error: 'lab_workspace_empty' }, 409);
 
+  const snapshotJson = JSON.stringify(snapshot);
+  const snapshotHash = await sha256Text(snapshotJson);
   const existing = await db.prepare(
     'SELECT revision, snapshot_hash FROM lab_workspace_revisions WHERE workspace_id = ?1 AND operation_id = ?2'
   ).bind(WORKSPACE_ID, body.operation_id).first();
-  const snapshotJson = JSON.stringify(snapshot);
-  const snapshotHash = await sha256Text(snapshotJson);
   if (existing) {
     if (existing.snapshot_hash !== snapshotHash) return jsonLab({ error: 'operation_id_conflict' }, 409);
     return jsonLab({ status: 'already_saved', revision: Number(existing.revision), snapshot_hash: snapshotHash });
@@ -152,48 +152,138 @@ async function saveWorkspace(db, body, deviceId, jsonLab) {
   }
 
   const revision = Number(current.active_revision) + 1;
-  await db.batch([
+  const results = await db.batch([
     db.prepare(
       `INSERT INTO lab_workspace_revisions
        (workspace_id, revision, operation_id, baseline_id, snapshot_hash, snapshot_json, reason, device_id)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'LAB_SAVE', ?7)`
-    ).bind(WORKSPACE_ID, revision, body.operation_id, current.active_baseline_id, snapshotHash, snapshotJson, deviceId),
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, 'LAB_SAVE', ?7
+        WHERE EXISTS (
+          SELECT 1 FROM lab_workspace_control
+           WHERE workspace_id = ?1 AND active_revision = ?8
+        )
+          AND EXISTS (
+          SELECT 1 FROM devices
+           WHERE device_id = ?7 AND role = 'writer' AND status = 'active' AND credential_hash = ?9
+        )`
+    ).bind(
+      WORKSPACE_ID, revision, body.operation_id, current.active_baseline_id,
+      snapshotHash, snapshotJson, deviceId, body.expected_revision, credentialHash
+    ),
     db.prepare(
       `UPDATE lab_workspace_control
           SET active_revision = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE workspace_id = ?1 AND active_revision = ?3`
-    ).bind(WORKSPACE_ID, revision, body.expected_revision)
+        WHERE workspace_id = ?1 AND active_revision = ?3
+          AND EXISTS (
+            SELECT 1 FROM lab_workspace_revisions
+             WHERE workspace_id = ?1 AND revision = ?2 AND operation_id = ?4
+          )`
+    ).bind(WORKSPACE_ID, revision, body.expected_revision, body.operation_id)
   ]);
+
+  if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
+    const activeWriter = await db.prepare(
+      `SELECT 1 AS ok FROM devices
+        WHERE device_id = ?1 AND role = 'writer' AND status = 'active' AND credential_hash = ?2`
+    ).bind(deviceId, credentialHash).first();
+    if (!activeWriter?.ok) return jsonLab({ error: 'device_revoked' }, 403);
+
+    const raced = await db.prepare(
+      'SELECT revision, snapshot_hash FROM lab_workspace_revisions WHERE workspace_id = ?1 AND operation_id = ?2'
+    ).bind(WORKSPACE_ID, body.operation_id).first();
+    if (raced) {
+      if (raced.snapshot_hash !== snapshotHash) return jsonLab({ error: 'operation_id_conflict' }, 409);
+      return jsonLab({ status: 'already_saved', revision: Number(raced.revision), snapshot_hash: snapshotHash });
+    }
+
+    const latest = await db.prepare(
+      'SELECT active_revision FROM lab_workspace_control WHERE workspace_id = ?1'
+    ).bind(WORKSPACE_ID).first();
+    return jsonLab({ error: 'revision_conflict', current_revision: Number(latest?.active_revision || current.active_revision) }, 409);
+  }
+
   return jsonLab({ status: 'saved', revision, snapshot_hash: snapshotHash });
 }
 
-async function resetWorkspace(db, body, deviceId, jsonLab) {
+async function resetWorkspace(db, body, deviceId, credentialHash, jsonLab) {
+  if (!Number.isSafeInteger(body?.expected_revision) || body.expected_revision < 1) {
+    return jsonLab({ error: 'expected_revision_required' }, 400);
+  }
+
   const current = await db.prepare(
     'SELECT active_revision, active_baseline_id FROM lab_workspace_control WHERE workspace_id = ?1'
   ).bind(WORKSPACE_ID).first();
   if (!current) return jsonLab({ error: 'lab_workspace_empty' }, 409);
-  if (body?.expected_revision !== undefined && Number(body.expected_revision) !== Number(current.active_revision)) {
+
+  const operationId = `reset:${current.active_baseline_id}:${body.expected_revision}`;
+  const existing = await db.prepare(
+    'SELECT revision FROM lab_workspace_revisions WHERE workspace_id = ?1 AND operation_id = ?2'
+  ).bind(WORKSPACE_ID, operationId).first();
+  if (existing) {
+    return jsonLab({
+      status: 'already_reset',
+      revision: Number(existing.revision),
+      baseline_id: current.active_baseline_id
+    });
+  }
+
+  if (Number(current.active_revision) !== body.expected_revision) {
     return jsonLab({ error: 'revision_conflict', current_revision: Number(current.active_revision) }, 409);
   }
+
   const baseline = await db.prepare(
     'SELECT snapshot_json, snapshot_hash FROM lab_workspace_baselines WHERE baseline_id = ?1'
   ).bind(current.active_baseline_id).first();
   if (!baseline) return jsonLab({ error: 'baseline_missing' }, 500);
 
   const revision = Number(current.active_revision) + 1;
-  const operationId = `reset:${current.active_baseline_id}:${revision}`;
-  await db.batch([
+  const results = await db.batch([
     db.prepare(
       `INSERT INTO lab_workspace_revisions
        (workspace_id, revision, operation_id, baseline_id, snapshot_hash, snapshot_json, reason, device_id)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'RESET_TO_BASELINE', ?7)`
-    ).bind(WORKSPACE_ID, revision, operationId, current.active_baseline_id, baseline.snapshot_hash, baseline.snapshot_json, deviceId),
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, 'RESET_TO_BASELINE', ?7
+        WHERE EXISTS (
+          SELECT 1 FROM lab_workspace_control
+           WHERE workspace_id = ?1 AND active_revision = ?8 AND active_baseline_id = ?4
+        )
+          AND EXISTS (
+          SELECT 1 FROM devices
+           WHERE device_id = ?7 AND role = 'writer' AND status = 'active' AND credential_hash = ?9
+        )`
+    ).bind(
+      WORKSPACE_ID, revision, operationId, current.active_baseline_id,
+      baseline.snapshot_hash, baseline.snapshot_json, deviceId, body.expected_revision, credentialHash
+    ),
     db.prepare(
       `UPDATE lab_workspace_control
           SET active_revision = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE workspace_id = ?1`
-    ).bind(WORKSPACE_ID, revision)
+        WHERE workspace_id = ?1 AND active_revision = ?3
+          AND EXISTS (
+            SELECT 1 FROM lab_workspace_revisions
+             WHERE workspace_id = ?1 AND revision = ?2 AND operation_id = ?4
+          )`
+    ).bind(WORKSPACE_ID, revision, body.expected_revision, operationId)
   ]);
+
+  if (results[0]?.meta?.changes !== 1 || results[1]?.meta?.changes !== 1) {
+    const activeWriter = await db.prepare(
+      `SELECT 1 AS ok FROM devices
+        WHERE device_id = ?1 AND role = 'writer' AND status = 'active' AND credential_hash = ?2`
+    ).bind(deviceId, credentialHash).first();
+    if (!activeWriter?.ok) return jsonLab({ error: 'device_revoked' }, 403);
+
+    const raced = await db.prepare(
+      'SELECT revision FROM lab_workspace_revisions WHERE workspace_id = ?1 AND operation_id = ?2'
+    ).bind(WORKSPACE_ID, operationId).first();
+    if (raced) {
+      return jsonLab({ status: 'already_reset', revision: Number(raced.revision), baseline_id: current.active_baseline_id });
+    }
+
+    const latest = await db.prepare(
+      'SELECT active_revision FROM lab_workspace_control WHERE workspace_id = ?1'
+    ).bind(WORKSPACE_ID).first();
+    return jsonLab({ error: 'revision_conflict', current_revision: Number(latest?.active_revision || current.active_revision) }, 409);
+  }
+
   return jsonLab({ status: 'reset', revision, baseline_id: current.active_baseline_id });
 }
 
@@ -412,7 +502,9 @@ export function sanitizeSnapshotForLab(source, fromCanon = false) {
   const snapshot = JSON.parse(JSON.stringify(source));
   delete snapshot.cloudSync;
   snapshot.version = Number(snapshot.version);
-  snapshot.updatedAt = new Date().toISOString();
+  // LAB saves must remain byte-stable across retries. Only a CANON import gets
+  // a new LAB-side timestamp; normal saves preserve the timestamp received.
+  if (fromCanon) snapshot.updatedAt = new Date().toISOString();
 
   if (fromCanon) {
     snapshot.cart = [];
