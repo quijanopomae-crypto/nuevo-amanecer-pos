@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-IMPORT-SIGNATURE-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Corregir invalid_import_signature verificando HMAC sobre el snapshot exacto recibido antes de sanitizarlo para D1 LAB.",
+  "allowed_files": [
+    "tools/cloudflare-lab/src/lab-workspace.js",
+    "tools/cloudflare-lab/test/lab-workspace.test.mjs",
+    "laboratorio/pos-lab/tasks/LAB-IMPORT-SIGNATURE-FIX-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/migrations/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "production_writes": false,
+  "canon_writes": false
+}
