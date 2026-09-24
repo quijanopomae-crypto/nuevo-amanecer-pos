@@ -24,15 +24,44 @@ function matchesAny(path, globs) {
   return globs.some(glob => globToRegExp(glob).test(path));
 }
 
-export function validateChangedFiles(changedFiles, contract) {
+export function validateContract(contract) {
   const errors = [];
-  const environment = contract.environment;
-  const allowed = Array.isArray(contract.allowed_files) ? contract.allowed_files : [];
-  const forbidden = Array.isArray(contract.forbidden_files) ? contract.forbidden_files : [];
-
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract)) return ['contrato inválido'];
   if (!contract.task_id) errors.push('task_id requerido');
-  if (!environment) errors.push('environment requerido');
-  if (!allowed.length) errors.push('allowed_files no puede estar vacío');
+  if (contract.environment !== 'LABORATORIO') errors.push('environment debe ser LABORATORIO');
+  if (!contract.base_ref) errors.push('base_ref requerido');
+  if (!contract.objective) errors.push('objective requerido');
+  if (!Array.isArray(contract.allowed_files) || !contract.allowed_files.length) errors.push('allowed_files no puede estar vacío');
+  if (!Array.isArray(contract.forbidden_files)) errors.push('forbidden_files debe ser un array');
+  if (!Array.isArray(contract.required_skills) || !contract.required_skills.length) errors.push('required_skills no puede estar vacío');
+
+  const mustBeFalse = [
+    ['production_data', contract.production_data],
+    ['production_data_authority', contract.production_data_authority],
+    ['production_credentials', contract.production_credentials],
+    ['production_writes', contract.production_writes],
+    ['canon_writes', contract.canon_writes]
+  ];
+  for (const [name, value] of mustBeFalse) {
+    if (value === true) errors.push(name + ' debe ser false en LAB');
+  }
+
+  if (Number(contract.schema_version) >= 2) {
+    for (const name of ['production_data_authority', 'production_credentials', 'production_writes', 'canon_writes']) {
+      if (contract[name] !== false) errors.push(name + '=false requerido en schema_version>=2');
+    }
+    if (typeof contract.isolated_d1_data_allowed !== 'boolean') {
+      errors.push('isolated_d1_data_allowed boolean requerido en schema_version>=2');
+    }
+  }
+  return errors;
+}
+
+export function validateChangedFiles(changedFiles, contract) {
+  const errors = validateContract(contract);
+  const environment = contract?.environment;
+  const allowed = Array.isArray(contract?.allowed_files) ? contract.allowed_files : [];
+  const forbidden = Array.isArray(contract?.forbidden_files) ? contract.forbidden_files : [];
 
   for (const raw of changedFiles) {
     const path = String(raw).replaceAll('\\', '/');
@@ -74,6 +103,7 @@ export function collectChangedFiles(baseRef) {
   if (baseRef) for (const x of gitNames(['diff', '--name-only', '--diff-filter=ACMRD', baseRef + '...HEAD'])) names.add(x);
   for (const x of gitNames(['diff', '--name-only', '--diff-filter=ACMRD'])) names.add(x);
   for (const x of gitNames(['diff', '--cached', '--name-only', '--diff-filter=ACMRD'])) names.add(x);
+  for (const x of gitNames(['ls-files', '--others', '--exclude-standard'])) names.add(x);
   return [...names].sort();
 }
 
