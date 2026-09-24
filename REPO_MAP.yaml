@@ -136,3 +136,13 @@ do_not_delete_without_phase9_proof:
   - POS/js/legacy-inline/
   - POS/js/compat/legacy-globals.js
   - evidence/
+
+branch_hygiene:
+  classification: docs/REMEDIATION_PHASE9_BRANCH_CLASSIFICATION.md
+  active: feature/v1.3-mobile-cloud
+  preserve_unique:
+    - checkpoint/v1.3-pc-20260923
+  merged_recoverable_refs: 24
+  safe_file_deletions_demonstrated: 0
+  remote_branch_refs_deleted: false
+  branch_ref_deletion_note: connected_tool_has_no_branch_delete_action
