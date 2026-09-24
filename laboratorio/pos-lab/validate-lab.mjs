@@ -31,10 +31,15 @@ if (!labTests.length) {
 run('tests', process.execPath, ['--test', ...labTests]);
 
 const taskArg = process.argv.find(arg => arg.startsWith('--task='));
+const skipScope = process.argv.includes('--skip-scope');
+
 if (taskArg) {
   run('scope', process.execPath, ['laboratorio/pos-lab/scope-guard.mjs', taskArg]);
+  console.log('LAB_VALIDATE_PASS');
+} else if (skipScope) {
+  console.log('LAB_SCOPE_SKIPPED_EXPLICIT');
+  console.log('LAB_VALIDATE_PARTIAL');
 } else {
-  console.log('LAB_SCOPE_SKIPPED: usa --task=<contrato.json> para validar alcance git');
+  console.error('LAB_VALIDATE_FAIL: se requiere --task=<contrato.json> para declarar PASS; usa --skip-scope solo para una validación parcial explícita');
+  process.exit(2);
 }
-
-console.log('LAB_VALIDATE_PASS');

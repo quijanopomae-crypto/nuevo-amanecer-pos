@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "task_id": "LAB-EXAMPLE-UI-001",
   "environment": "LABORATORIO",
   "base_ref": "feature/v1.3-mobile-cloud",
@@ -19,7 +19,9 @@
     "lab-scope-guard",
     "lab-ui-edit"
   ],
-  "production_data": false,
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
   "production_credentials": false,
-  "production_writes": false
+  "production_writes": false,
+  "canon_writes": false
 }
