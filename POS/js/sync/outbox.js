@@ -226,6 +226,28 @@
     return { endpoint: endpoint, configured: !!token, remembered: remembered };
   }
 
+  async function activate(secret, options, fetchImpl) {
+    var next = options || {};
+    var endpoint = next.endpoint === undefined ? runtime.endpoint : String(next.endpoint).replace(/\/+$/, '');
+    var url = new URL(endpoint);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('INVALID_SYNC_ENDPOINT');
+    if (typeof secret !== 'string' || !secret || /[\r\n]/.test(secret)) throw new Error('INVALID_ACTIVATION_SECRET');
+    var send = fetchImpl || root.fetch;
+    if (typeof send !== 'function') throw new Error('FETCH_UNAVAILABLE');
+    var response = await send(endpoint + '/auth/activate', {
+      method: 'POST',
+      credentials: 'omit',
+      redirect: 'error',
+      headers: { 'x-activation-secret': secret },
+    });
+    var body = null;
+    try { body = await response.json(); } catch (error) {}
+    if (!response.ok || !body || body.status !== 'activated' || typeof body.session_token !== 'string' || !body.session_token) {
+      throw new Error(response.status === 401 ? 'ACTIVATION_DENIED' : 'ACTIVATION_FAILED');
+    }
+    return configure({ endpoint: endpoint, token: body.session_token, remember: true, persist: next.persist });
+  }
+
   function start(persist) {
     runtime.persist = persist;
     try {
@@ -298,7 +320,7 @@
         try {
           var response = await send(runtime.endpoint + '/commands/sale.create', {
             method: 'POST', credentials: 'omit', redirect: 'error', signal: controller.signal,
-            headers: { 'content-type': 'application/json', 'x-sync-token': runtime.token, 'x-device-id': operation.device_id },
+            headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + runtime.token },
             body: operation.payload,
           });
           var body = null;
@@ -337,7 +359,7 @@
   root.NuevoAmanecerOutbox = {
     STATUS: STATUS, snapshot: snapshot, restore: restore, sanitize: sanitize, valid: valid,
     initializeBaseline: initializeBaseline, prepare: prepare, accept: accept, updateState: updateState,
-    configure: configure, start: start, scheduleSync: scheduleSync, syncPending: syncPending,
+    configure: configure, activate: activate, start: start, scheduleSync: scheduleSync, syncPending: syncPending,
     retryRejected: retryRejected, retryFailed: retryRejected, stableJson: stableJson, sha256: sha256,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
