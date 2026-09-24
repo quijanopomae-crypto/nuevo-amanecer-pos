@@ -48,3 +48,11 @@ test('all wrangler restore/check commands target the temporary database name', (
     assert.doesNotMatch(line, /nuevo-amanecer-prod-v2|\$PROD_DATABASE_ID/);
   }
 });
+
+
+test('gh JSON helper is Windows PowerShell safe', () => {
+  assert.match(finalizer, /Invoke-GhJson\(\[string\[\]\]\$GhArgs\)/);
+  assert.match(finalizer, /& gh @GhArgs/);
+  assert.match(finalizer, /\$output -join \[Environment\]::NewLine/);
+  assert.doesNotMatch(finalizer, /Invoke-GhJson\(\[string\[\]\]\$Args\)/);
+});
