@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "task_id": "LAB-WORKSPACE-RECOVERY-REMEDIATION-001",
+  "environment": "LABORATORIO",
+  "base_ref": "4b526e656592acd49d30297f771956c43b3af3ae",
+  "objective": "Cerrar H05 H06 H07 H14 H15 H41 sin tocar CANON: reintento durable, protección de cambios locales, fencing de writer y reset revisionado.",
+  "allowed_files": [
+    "tools/cloudflare-lab/src/lab-workspace.js",
+    "tools/cloudflare-lab/test/lab-workspace.test.mjs",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/tasks/LAB-WORKSPACE-RECOVERY-REMEDIATION-001.json",
+    "tests/laboratorio-workspace-recovery.test.mjs",
+    "docs/LAB_CANON_MIRROR.md",
+    "docs/REMEDIATION_PHASE3_WORKSPACE_RECOVERY.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/v1.3/**",
+    "infra/**"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
