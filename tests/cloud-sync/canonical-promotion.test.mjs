@@ -140,7 +140,7 @@ test('carreras control/staging/auth revalidan claim, prepare y publish dentro de
         fired = true;
         if (change === 'control') f.bumpControl();
         if (change === 'rotate') f.rotate();
-        if (change === 'revoke') f.exec("UPDATE devices SET status='revoked' WHERE device_id='a6-writer'");
+        if (change === 'revoke') f.revoke();
       }
     });
     await response(await f.promote(), 409);
@@ -196,7 +196,7 @@ test('rollback revalida first_live/control/auth dentro del batch y conserva reci
         if (change === 'marker') f.bumpControl(",first_live_operation_id='durable-live-marker'");
         if (change === 'control') f.bumpControl();
         if (change === 'rotate') f.rotate();
-        if (change === 'revoke') f.exec("UPDATE devices SET status='revoked' WHERE device_id='a6-writer'");
+        if (change === 'revoke') f.revoke();
       }
     });
     await response(await f.rollback(), 409);
@@ -392,7 +392,7 @@ test('seguridad lecturas: auth por ruta, cursor/limit inválido, CORS y READ_TOK
     assert.match(options.headers.get('access-control-allow-headers'), /x-read-token/i);
   }
   for (const query of ['?limit=0','?limit=101','?limit=1.1','?limit=NaN','?cursor=!!!','?cursor=e30']) await response(await f.read('products', query), 400);
-  f.exec("UPDATE devices SET status='revoked' WHERE device_id='a6-writer'");
+  f.revoke();
   await response(await f.read('products'), 200);
   await response(await f.export(f.request.promotion_id, 'products'), 403);
   assert.equal((await f.fetch('http://localhost/read/canonical/products', { method: 'POST', headers: READER })).status, 405);
@@ -485,7 +485,7 @@ test('CAS de writer detecta rotación y revocación entre autorización y lote; 
     const restore = intercept(f, async ({ when, method, kind }) => {
       if (!injected && when === 'before' && method === 'batch' && kind === 'prepare') {
         injected = true;
-        if (action === 'rotate') f.rotate(); else f.exec("UPDATE devices SET status='revoked' WHERE device_id='a6-writer'");
+        if (action === 'rotate') f.rotate(); else f.revoke();
       }
     });
     assert.equal((await f.promote('prepare')).status, 409);
