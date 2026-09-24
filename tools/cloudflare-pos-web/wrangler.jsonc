@@ -1,11 +1,14 @@
 {
   "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
   "name": "nuevo-amanecer-pos-web",
+  "main": "./src/worker.js",
   "compatibility_date": "2026-09-24",
   "workers_dev": true,
   "assets": {
     "directory": "./_site",
-    "html_handling": "auto-trailing-slash",
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "run_worker_first": ["/", "/app", "/app/"],
+    "html_handling": "none",
+    "not_found_handling": "none"
   }
 }

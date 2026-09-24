@@ -6,12 +6,16 @@ const config = readFileSync('tools/cloudflare-pos-web/wrangler.jsonc', 'utf8');
 const launcher = readFileSync('tools/cloudflare-pos-web/public/index.html', 'utf8');
 const activation = readFileSync('tools/cloudflare-pos-web/public/activate.js', 'utf8');
 const workflow = readFileSync('.github/workflows/v1.3-pos-web-deploy.yml', 'utf8');
+const router = readFileSync('tools/cloudflare-pos-web/src/worker.js', 'utf8');
 
-test('hosted POS is an assets-only Worker with a stable workers.dev name', () => {
+test('hosted POS uses explicit Worker routing with a stable workers.dev name', () => {
   assert.match(config, /"name": "nuevo-amanecer-pos-web"/);
+  assert.match(config, /"main": "\.\/src\/worker\.js"/);
   assert.match(config, /"directory": "\.\/_site"/);
+  assert.match(config, /"binding": "ASSETS"/);
+  assert.match(config, /"run_worker_first": \["\/", "\/app", "\/app\/"\]/);
+  assert.match(config, /"html_handling": "none"/);
   assert.match(config, /"workers_dev": true/);
-  assert.doesNotMatch(config, /"main"\s*:/);
 });
 
 test('launcher requires browser activation and never embeds the activation secret', () => {
@@ -44,4 +48,13 @@ test('deployment assembles canonical POS under app and verifies the public URL',
 test('deploy workflow does not expose the production activation secret', () => {
   assert.doesNotMatch(workflow, /POS_ACTIVATION_SECRET/);
   assert.doesNotMatch(workflow, /x-activation-secret/);
+});
+
+test('hosted POS router maps root and app entrypoints to exact HTML assets', () => {
+  assert.match(router, /url\.pathname === '\/'/);
+  assert.match(router, /assetUrl\.pathname = '\/index\.html'/);
+  assert.match(router, /url\.pathname === '\/app'/);
+  assert.match(router, /url\.pathname === '\/app\/'/);
+  assert.match(router, /assetUrl\.pathname = '\/app\/index\.html'/);
+  assert.match(router, /env\.ASSETS\.fetch/);
 });
