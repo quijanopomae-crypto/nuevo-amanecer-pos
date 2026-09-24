@@ -1,0 +1,117 @@
+{
+  "at": "2026-09-18T13:31:38.908Z",
+  "head": "6749472e289ac1b4501bcad553029cfa0d680194",
+  "branch": "feature/v1.3-mobile-cloud",
+  "method": "Node VM dispatch of actual built service worker with synthetic network/cache. NOT a browser, install, lifecycle or physical-device test.",
+  "sourceSha256": {
+    "MANIFEST.yaml": "2ef3ce7a417e21f59bafa847c7070228f7dc1591a70d24de2f52ef1b1a1c2fb1",
+    "POS/index.html": "fc79cb096869a4f4e43ca598d3524536872303fbd3c9481251f9ddb2e8ae9a3b",
+    "POS/sw.js": "eb5569042abd96efa5b3a007c0deeba5e36abd1b93f4ddac02949a41e0a568a8",
+    "POS/manifest.webmanifest": "246755bc0da96d4b5062f7be53813254cff1bc90ff13577b2ef7a3ff1b2fa6bc",
+    "POS/assets/icons/icon-192.png": "afb0408cd9aac7b89d301373a48572302c3ad20809f8122452103e854a283b81",
+    "POS/assets/icons/icon-512.png": "9a20ae4887496032c3829c1986fbdbd73eafec8b7a051737b8eb5d618e7ae845",
+    "tools/cloudflare-lab/scripts/build-reader.mjs": "64fab8916ef087be3b5b835acc07b8e391e00b5c88e27e82120a073d36ff0848"
+  },
+  "checks": [
+    {
+      "name": "hosted_cache_version",
+      "expected": true,
+      "observed": true,
+      "result": "PASS"
+    },
+    {
+      "name": "local_source_cache_version",
+      "expected": false,
+      "observed": true,
+      "result": "PRODUCT_FAIL"
+    },
+    {
+      "name": "precache_missing_files",
+      "expected": [],
+      "observed": [],
+      "result": "PASS"
+    },
+    {
+      "name": "precache_unique",
+      "expected": 49,
+      "observed": 49,
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_/health",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_/sync/operations",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_/read/sales",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_https://external.example/data",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_write",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_authorization",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_x-sync-token",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "exclude_x-read-token",
+      "expected": "NETWORK_BYPASS",
+      "observed": "NETWORK_BYPASS",
+      "result": "PASS"
+    },
+    {
+      "name": "offline_navigation",
+      "expected": "html-v1",
+      "observed": "html-v1",
+      "result": "PASS"
+    },
+    {
+      "name": "offline_script",
+      "expected": "js-v1",
+      "observed": "js-v1",
+      "result": "PASS"
+    },
+    {
+      "name": "update_keeps_same_generation",
+      "expected": true,
+      "observed": false,
+      "result": "PRODUCT_FAIL"
+    }
+  ],
+  "updateObserved": {
+    "html": "html-v2",
+    "script": "js-v1"
+  },
+  "cacheRequests": [
+    "./index.html",
+    "https://pwa.example/POS/js/app.js",
+    "https://pwa.example/POS/js/app.js"
+  ],
+  "verdict": "NOT_APPROVED"
+}

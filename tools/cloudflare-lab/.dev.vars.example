@@ -1,5 +1,11 @@
-# Copiar a .dev.vars (ignorado por git) y usar valores aleatorios largos y distintos.
-# DEVICE_CREDENTIAL_PEPPER solo existe en el Worker; las credenciales se provisionan
-# en D1 como HMAC-SHA-256(pepper, credencial), nunca en texto plano.
-DEVICE_CREDENTIAL_PEPPER=replace-with-a-random-server-only-pepper
-READ_TOKEN=replace-with-a-distinct-read-secret
+# Copiar este archivo como .dev.vars SOLO en la PC.
+# Nunca colocar credenciales reales en GitHub.
+
+DEVICE_CREDENTIAL_PEPPER=
+READ_TOKEN=
+
+# Espejo CANON -> LAB
+R2_CANON_ACCOUNT_ID=
+R2_CANON_READ_TOKEN=
+R2_CANON_BUCKET=
+R2_CANON_PREFIX=

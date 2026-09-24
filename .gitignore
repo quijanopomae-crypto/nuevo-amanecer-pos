@@ -8,3 +8,11 @@ tools/cloudflare-lab/private/a5-inputs/**
 !tools/cloudflare-lab/private/a5-inputs/.gitkeep
 
 tools/cloudflare-lab/private/a5-staging-final/**
+.wrangler/
+**/.dev.vars
+**/.dev.vars.*
+!**/.dev.vars.example
+.env
+.env.*
+!.env.example
+evidence/v1.3/cutover/*.sql
