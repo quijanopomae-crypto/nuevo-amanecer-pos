@@ -58,6 +58,7 @@ export async function a6Fixture(t, { runs = 1, rows = syntheticRows() } = {}) {
   f.read = (route, query = '', headers = READER) => f.fetch(`http://localhost/read/canonical/${route}${query}`, { headers });
   f.export = (promotion, table, query = '', headers = WRITER) => f.fetch(`http://localhost/imports/canonical/${promotion}?entity_type=${table}${query}`, { headers });
   f.rotate = () => f.rotateSession('a6-writer', 'rotated-secret');
+  f.revoke = () => f.exec("UPDATE devices SET status='revoked' WHERE device_id='session:a6-writer'");
   f.bumpControl = (extra = '') => f.database.exec(`UPDATE canonical_control SET revision=revision+1,authority_epoch=authority_epoch+1${extra} WHERE id=1`);
   f.manifests = [];
   // Both source runs MUST exist while LEGACY. No bypass of the freeze trigger.
