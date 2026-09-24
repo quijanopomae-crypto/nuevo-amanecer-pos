@@ -3,9 +3,9 @@ schema: nuevo-amanecer.repo-map/v1
 status:
   active_branch: feature/v1.3-mobile-cloud
   production_baseline: v1.2-production
-  v1_3: remediation_integration
-  production_cutover: not_authorized
-  remote_paid_or_production_actions: owner_only
+  v1_3: ready_for_first_sale
+  production_cutover: ready_for_first_sale
+  remote_paid_or_production_actions: owner_authorized_to_ready_for_first_sale
 
 sources_of_truth:
   current_status: docs/V1.3_STATUS.md
@@ -95,12 +95,19 @@ v1_3_runtime:
     - POS/
     - tools/cloudflare-lab/src/worker.js
     - tools/cloudflare-lab/src/lab-workspace.js
-  dormant_checkpoint_components:
-    - tools/cloudflare-lab/migrations/0008_canonical_commerce.sql
-    - tools/cloudflare-lab/migrations/0009_canonical_financial.sql
-    - tools/cloudflare-lab/src/a6-commerce.js
-    - tools/cloudflare-lab/src/a6-financial.js
-  runtime_activation: dormant
+  production:
+    worker: nuevo-amanecer-pos-prod
+    runtime_enabled: true
+    authority_mode: ACTIVE
+    session_auth_migration_applied: true
+    session_runtime_migration_applied: true
+    ready_for_first_sale: true
+    first_live_operation_id: null
+    operational_traffic_at_gate: 0
+    cutover_run: 36054220606
+    canon_critical_ci_run: 36054220605
+  dormant_checkpoint_components: []
+  runtime_activation: production_active_ready_for_first_sale
   activation_migration_present: false
 
 ci:
@@ -152,18 +159,19 @@ final_verification:
   report: docs/REMEDIATION_FINAL_VERIFICATION.md
   repository_code_state: CODE_REMEDIATION_PASS
   overall_clean_pass: false
-  remaining_state: OWNER_ONLY_PENDING
+  remaining_state: FIRST_LIVE_SALE_AND_RELEASE_FINALIZATION
   blockers:
-    - github_branch_protection
-    - real_security_secret_configuration
-    - real_backup_restore_drill
-  production_cutover_authorized: false
+    - real_first_live_sale
+    - post_sale_canonical_validation
+    - final_v1_3_release_declaration
+  production_cutover_authorized: true
+  production_preparation_status: READY_FOR_FIRST_SALE
 
 owner_finalizer:
   script: tools/owner-finalize-v1.3.ps1
   instructions: docs/OWNER_FINALIZATION.md
   recovery_drill_workflow: .github/workflows/owner-backup-recovery-drill.yml
-  status: prepared_not_executed
+  status: OWNER_FINALIZATION_PASS
   closes_when:
     - independent_lab_secrets_configured
     - branch_protection_verified
