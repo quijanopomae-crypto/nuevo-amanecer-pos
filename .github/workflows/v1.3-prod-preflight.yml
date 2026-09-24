@@ -1,0 +1,120 @@
+name: V1.3 Production Read-Only Preflight
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - ".github/workflows/v1.3-prod-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v1-3-production-read-only-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+    steps:
+      - name: Require credentials
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Require exact branch head
+        run: |
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Query production D1 read-only
+        shell: bash
+        run: |
+          node <<'NODE'
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const database = process.env.PROD_DATABASE_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/d1/database/' + database + '/query';
+
+          async function query(sql) {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ sql }),
+            });
+            const parsed = await response.json().catch(() => null);
+            if (!response.ok || parsed?.success !== true) throw new Error('D1 query failed (' + response.status + ')');
+            const result = Array.isArray(parsed.result) ? parsed.result[0] : parsed.result;
+            if (!result || result.success === false) throw new Error('D1 query returned failure');
+            return Array.isArray(result.results) ? result.results : [];
+          }
+
+          (async () => {
+            const control = (await query(`
+              SELECT mode, active_promotion_id, revision, authority_epoch,
+                     minimum_client_contract, first_live_operation_id
+              FROM canonical_control WHERE id=1;
+            `))[0];
+            if (!control) throw new Error('canonical_control missing');
+
+            const schema = (await query(`
+              SELECT
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='auth_sessions') AS has_auth_sessions,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_financial_operations') AS has_financial_operations,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_write_guards') AS has_write_guards,
+                COALESCE((SELECT instr(sql,'principal_id') > 0 FROM sqlite_master WHERE type='table' AND name='canonical_write_guards'),0) AS write_guard_has_principal_id,
+                COALESCE((SELECT instr(sql,'credential_hash') > 0 FROM sqlite_master WHERE type='table' AND name='canonical_write_guards'),0) AS write_guard_has_credential_hash,
+                COALESCE((SELECT instr(sql,'NEW.principal_id') > 0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) AS session_guard_trigger;
+            `))[0];
+
+            const traffic = (await query(`
+              SELECT
+                (SELECT COUNT(*) FROM sales) AS sales,
+                (SELECT COUNT(*) FROM sale_items) AS sale_items,
+                (SELECT COUNT(*) FROM cash_movements) AS cash_movements,
+                (SELECT COUNT(*) FROM inventory_movements) AS inventory_movements,
+                (SELECT COUNT(*) FROM sync_operations) AS sync_operations,
+                CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_financial_operations')
+                  THEN (SELECT COUNT(*) FROM canonical_financial_operations) ELSE 0 END AS financial_operations,
+                CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='auth_sessions')
+                  THEN (SELECT COUNT(*) FROM auth_sessions WHERE status='active') ELSE 0 END AS active_sessions;
+            `))[0];
+
+            const result = {
+              database_id: database,
+              control: {
+                mode: control.mode,
+                active_promotion_id: control.active_promotion_id,
+                revision: Number(control.revision),
+                authority_epoch: Number(control.authority_epoch),
+                minimum_client_contract: control.minimum_client_contract,
+                first_live_operation_id: control.first_live_operation_id,
+              },
+              schema: Object.fromEntries(Object.entries(schema).map(([k,v]) => [k, Number(v)])),
+              traffic: Object.fromEntries(Object.entries(traffic).map(([k,v]) => [k, Number(v)])),
+              read_only_preflight: 'PASS',
+            };
+            console.log(JSON.stringify(result));
+            if (control.mode !== 'ACTIVE') throw new Error('production canonical authority is not ACTIVE');
+            if (!control.active_promotion_id) throw new Error('active promotion missing');
+          })().catch(error => {
+            console.error(error.message);
+            process.exit(1);
+          });
+          NODE
