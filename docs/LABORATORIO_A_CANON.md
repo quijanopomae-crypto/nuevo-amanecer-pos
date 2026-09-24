@@ -19,7 +19,8 @@ Esta política gobierna el código del producto y no reemplaza los estados de da
 IDEA
  -> rama lab/<nombre>
  -> laboratorio/experimentos/<ID>
- -> prueba con datos sintéticos
+ -> prueba local/unitaria con datos sintéticos
+ -> integración autorizada puede usar copia real aislada en D1 LAB
  -> LAB_BOUNDARY_PASS
  -> pruebas funcionales
  -> revisión de diff
@@ -37,7 +38,7 @@ Un candidato solo puede entrar a CANON cuando:
 
 1. el comportamiento esperado está definido;
 2. las pruebas relevantes pasan;
-3. no contiene secretos ni datos comerciales;
+3. no contiene secretos ni datos comerciales reales versionados, incrustados o publicados;
 4. CANON no depende en runtime de `laboratorio/`;
 5. el diff se revisó completo;
 6. no reemplaza archivos canónicos completos si basta un cambio localizado;
@@ -48,7 +49,7 @@ Un candidato solo puede entrar a CANON cuando:
 
 - Nunca copiar todo `laboratorio/` sobre `POS/`.
 - Nunca borrar CANON para instalar una prueba.
-- Nunca reutilizar almacenamiento, credenciales o bases de producción para experimentar.
+- Nunca reutilizar almacenamiento, credenciales o bases de producción para experimentar. D1 LAB aislada no es producción y puede recibir únicamente la copia CANON autorizada.
 - Nunca promover archivos no usados por el cambio aprobado.
 - Nunca considerar PASS solo porque “abre”; validar persistencia y regresiones relacionadas.
 - Si el primer enfoque falla de forma real, diagnosticar antes de repetir cambios.

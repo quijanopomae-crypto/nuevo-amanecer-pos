@@ -12,10 +12,12 @@ Un experimento NO es producción y nunca obtiene autoridad comercial por existir
 
 ## Fronteras obligatorias
 
-- No usar datos comerciales reales.
-- No guardar SYNC_TOKEN, READ_TOKEN, API keys, PIN, contraseñas, cookies ni credenciales.
+- No versionar, incrustar en HTML/fixtures/evidence ni publicar datos comerciales reales.
+- D1 LAB puede contener una copia real aislada procedente del flujo autorizado `CANON -> backup R2 -> D1 LAB`; esa copia sigue siendo LAB y nunca autoridad CANON.
+- Los fixtures y pruebas unitarias usan datos sintéticos por defecto.
+- No guardar en Git, HTML, logs o cliente valores de SYNC_TOKEN, READ_TOKEN, API keys, PIN, contraseñas, cookies ni credenciales. GitHub Actions Secrets cifrados sí pueden usarse en workflows autorizados.
 - No apuntar prototipos a endpoints de escritura de producción.
-- No registrar ventas reales, movimientos de caja, créditos ni inventario real.
+- No registrar operaciones reales de negocio en producción desde LAB; cualquier venta, caja, crédito o inventario modificado en D1 LAB es únicamente experimental.
 - `POS/` no puede importar ni depender en runtime de archivos bajo `laboratorio/`.
 - Un prototipo aprobado se promueve como un cambio mínimo revisado; no se copia todo el laboratorio encima de `POS/`.
 - Todo trabajo experimental importante usa una rama `lab/<nombre>`.

@@ -15,6 +15,7 @@ Reglas duras:
 - Una tarea `environment=LABORATORIO` no modifica `POS/**`.
 - No amplíes alcance por conveniencia.
 - Un archivo no listado en `allowed_files` requiere detenerse y redefinir el contrato.
-- No uses datos, tokens ni endpoints de escritura de producción.
+- No uses tokens/credenciales de producción en cliente/repositorio ni endpoints de escritura de producción.
+- No versionar datos comerciales reales. Una copia real aislada dentro de D1 LAB sí está permitida cuando procede del flujo autorizado CANON -> R2 -> D1 LAB.
 - Después de editar ejecuta `node laboratorio/pos-lab/scope-guard.mjs --task=<contrato>`.
 - Si el guard falla, la tarea está FAIL aunque la función parezca funcionar.

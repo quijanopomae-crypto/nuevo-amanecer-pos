@@ -9,7 +9,9 @@ rules:
   canon_product: POS/
   edit_generated_index_directly: false
   lab_only: true
-  production_data: false
+  production_data_authority: false
+  isolated_canon_copy_in_d1_lab: true
+  real_commercial_data_versioned: false
   production_writes: false
 
 pages:

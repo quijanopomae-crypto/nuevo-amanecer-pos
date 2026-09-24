@@ -1,4 +1,4 @@
-# AGENTS.md — Sistema POS Nuevo Amanecer
+# AGENTS_Nuevo_Amanecer.md — Sistema POS Nuevo Amanecer
 
 ## Misión
 
@@ -14,10 +14,11 @@ Aplica este orden:
 
 1. Solicitud explícita actual del propietario.
 2. Capturas y ejemplos entregados para esa solicitud.
-3. Este archivo `AGENTS.md`.
-4. Documentos dentro de `docs/`.
-5. Último comportamiento estable aprobado.
-6. Código actual del repositorio.
+3. `AGENTS.md` de la raíz, que define el modo normal/LAB/shadow y la frontera CANON.
+4. Este archivo `AGENTS_Nuevo_Amanecer.md`, para reglas funcionales y de seguridad.
+5. La especificación o contrato durable aplicable dentro de `docs/` o `laboratorio/pos-lab/tasks/`.
+6. Último comportamiento estable aprobado.
+7. Código actual del repositorio.
 
 Cuando exista contradicción, no adivines ni borres comportamiento estable. Documenta la contradicción y solicita una decisión solo cuando afecte datos, reglas comerciales, seguridad o cambios irreversibles.
 
@@ -190,14 +191,22 @@ Una tarea termina solo cuando:
 
 ## Documentos obligatorios
 
-Lee según la tarea:
+Lee solo los documentos que existen y aplican a la tarea; no inventes rutas ausentes.
 
+Siempre:
 - `README.md`
-- `docs/01_CONTEXTO_REGLAS_Y_ARQUITECTURA.md`
-- `docs/02_ESPECIFICACION_FUNCIONAL.md`
-- `docs/03_PLAN_DE_PRUEBAS.md`
-- `docs/04_FLUJO_DE_TRABAJO_Y_TERMINADO.md`
-- `docs/05_AUDITORIA_SEGURIDAD_ISHIKAWA.md`
-- `docs/06_PRIMERA_TAREA_CODEX.md`
+- `AGENTS.md`
+- este archivo `AGENTS_Nuevo_Amanecer.md`
 
-Si descubres comandos reales para ejecutar o probar, documéntalos en `README.md`. No inventes comandos.
+Para LAB:
+- `laboratorio/README.md`
+- `laboratorio/LAB_POLICY.json`
+- `docs/LABORATORIO_A_CANON.md`
+- `docs/LAB_CANON_MIRROR.md`
+- el contrato de tarea bajo `laboratorio/pos-lab/tasks/`
+
+Para V1.3 CANON/cloud, lee la especificación V1.3 aplicable existente en `docs/` (A2, A3, A4, A5, A6 o Gate P según el alcance).
+
+Para V1.2/recovery, usa los documentos `docs/V1.2_*.md` existentes solo cuando esa versión o recuperación sea relevante.
+
+Si descubres comandos reales para ejecutar o probar, documéntalos en `README.md`. No inventes comandos ni documentos.
