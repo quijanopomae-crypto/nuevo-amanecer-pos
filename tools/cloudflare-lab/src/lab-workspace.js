@@ -206,15 +206,30 @@ async function importBaseline(db, env, request, body, jsonLab) {
   if (!sourceRef.startsWith('r2://nuevo-amanecer-prod-v2-backups/')) return jsonLab({ error: 'invalid_source_ref' }, 400);
   if (!SHA256_HEX.test(sourceHash)) return jsonLab({ error: 'invalid_source_hash' }, 400);
 
+  let receivedSnapshot;
+  try {
+    validateSnapshot(body.snapshot);
+    receivedSnapshot = body.snapshot;
+  } catch (error) {
+    return jsonLab({ error: 'invalid_snapshot', detail: error.message }, 400);
+  }
+
+  // Verify the exact bytes/structure signed by GitHub Actions BEFORE LAB sanitation.
+  // sanitizeSnapshotForLab() intentionally mutates updatedAt and strips production-only
+  // state, so verifying after sanitation would make every valid signature fail.
+  const receivedSnapshotHash = await sha256Text(JSON.stringify(receivedSnapshot));
+  const signature = String(request.headers.get('x-lab-import-signature') || '').toLowerCase();
+  const signed = [sourceRef, sourceHash, receivedSnapshotHash].join('\n');
+  if (!await verifyHmacHex(token, signed, signature)) {
+    return jsonLab({ error: 'invalid_import_signature' }, 401);
+  }
+
   let snapshot;
-  try { snapshot = sanitizeSnapshotForLab(body.snapshot, true); }
+  try { snapshot = sanitizeSnapshotForLab(receivedSnapshot, true); }
   catch (error) { return jsonLab({ error: 'invalid_snapshot', detail: error.message }, 400); }
 
   const snapshotJson = JSON.stringify(snapshot);
   const snapshotHash = await sha256Text(snapshotJson);
-  const signature = String(request.headers.get('x-lab-import-signature') || '').toLowerCase();
-  const signed = [sourceRef, sourceHash, snapshotHash].join('\n');
-  if (!await verifyHmacHex(token, signed, signature)) return jsonLab({ error: 'invalid_import_signature' }, 401);
 
   const current = await db.prepare(
     `SELECT c.active_revision, c.active_baseline_id, b.source_hash
