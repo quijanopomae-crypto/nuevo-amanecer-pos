@@ -115,9 +115,7 @@ function _naSecClientCard(parent,client){
     pastCredits.forEach(credit=>_naSecCreditCard(creditArea,credit));
   }
 }
-cliRender=function(){
-  creditos=creditos.map((credit,index)=>_naNormalizeCreditRecord(credit,index));
-  cobradoHoy=_naCreditCollectionsNetForDate(obtenerHoy());
+_baseCliRender=function(){
   const expired=clientes.filter(client=>statusCli(client)==='vencido').length,soon=clientes.filter(client=>statusCli(client)==='proximo').length,current=clientes.filter(client=>statusCli(client)==='vigente').length;
   [['cliB0',clientes.length],['cliB1',expired],['cliB2',soon],['cliB3',current],['cliS0',clientes.length],['cliS1',`S/${clientes.reduce((sum,client)=>sum+deudaT(client),0).toFixed(0)}`],['cliS2',expired],['cliS3',`S/${cobradoHoy.toFixed(0)}`]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=String(value);});
   const search=sinTildes((document.getElementById('cliSearch')?.value||'').toLowerCase()),sort=document.getElementById('cliSort')?.value||'';
@@ -134,7 +132,6 @@ cliRender=function(){
     _naSecAppend(empty,'div','ei','👥');
     _naSecAppend(empty,'p','','Sin clientes en esta vista');
   }else rows.forEach(client=>_naSecClientCard(list,client));
-  updateDashboard();
 };
 document.getElementById('cliList')?.addEventListener('click',event=>{
   const control=event.target.closest('[data-na-credit-action]');
