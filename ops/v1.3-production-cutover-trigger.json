@@ -1,0 +1,10 @@
+{
+  "format": "nuevo-amanecer-v1.3-production-cutover-trigger-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "target_branch": "feature/v1.3-mobile-cloud",
+  "target_head": "3c87565c1f5b53a7228ed647eeae97f15f056b83",
+  "requested_action": "prepare-production-to-ready-for-first-sale",
+  "requested_at_utc": "2026-09-24T20:15:00Z",
+  "note": "Owner requested completion of the remaining V1.3 production cutover preparation. Workflow must remain fail-closed and must not fabricate the first live sale."
+}
