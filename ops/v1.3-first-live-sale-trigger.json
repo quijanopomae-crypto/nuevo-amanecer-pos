@@ -1,0 +1,10 @@
+{
+  "format": "nuevo-amanecer-v1.3-first-live-finalization-trigger-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "complete-first-live-canon-validation-and-release-v1.3",
+  "safety": "fail-closed-non-inventory-canary-only",
+  "production_tag": "v1.3-production",
+  "rollback_tag": "v1.2-production",
+  "note": "Complete the remaining V1.3 release gate. If no safe existing tracks_inventory=0 product exists, stop before any sale mutation."
+}
