@@ -150,17 +150,162 @@ jobs:
         run: npx wrangler d1 execute "$DRILL_DB_NAME" --remote --file=/tmp/restore.sql
 
       - name: Verify restored D1 integrity and canonical reconciliation
-        working-directory: tools/cloudflare-lab
         shell: bash
         run: |
-          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="PRAGMA integrity_check;" | tee /tmp/integrity.txt
-          grep -F 'ok' /tmp/integrity.txt
-          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="PRAGMA foreign_key_check;" | tee /tmp/fk.txt
-          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT mode, active_promotion_id FROM canonical_control WHERE id=1;" | tee /tmp/control.txt
-          grep -F 'active_promotion_id' /tmp/control.txt
-          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT 'products' entity, COUNT(*) row_count FROM products WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) UNION ALL SELECT 'customers', COUNT(*) FROM customers WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) UNION ALL SELECT 'credits', COUNT(*) FROM credits WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) UNION ALL SELECT 'credit_payments', COUNT(*) FROM credit_payments WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);" | tee /tmp/counts.txt
-          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT SUM(original_amount_cents) original_cents, SUM(import_paid_cents) paid_cents, SUM(current_balance_cents) balance_cents FROM credits WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);" | tee /tmp/credits.txt
-          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT SUM(amount_cents) payment_cents FROM credit_payments WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);" | tee /tmp/payments.txt
+          node <<'NODE'
+          const { writeFileSync } = require('node:fs');
+
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const database = process.env.DRILL_DB_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/d1/database/' + database + '/query';
+
+          async function query(sql) {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ sql }),
+            });
+            const parsed = await response.json().catch(() => null);
+            if (!response.ok || parsed?.success !== true) {
+              throw new Error('D1 verification query failed (' + response.status + ')');
+            }
+            const result = Array.isArray(parsed.result) ? parsed.result[0] : parsed.result;
+            if (!result || result.success === false) throw new Error('D1 verification query returned failure');
+            return Array.isArray(result.results) ? result.results : [];
+          }
+
+          function expectZero(row, fields, label) {
+            if (!row) throw new Error(label + ': missing result row');
+            for (const field of fields) {
+              if (Number(row[field]) !== 0) {
+                throw new Error(label + ': ' + field + '=' + row[field]);
+              }
+            }
+          }
+
+          (async () => {
+            const schema = await query(`
+              WITH required(name) AS (
+                VALUES
+                  ('canonical_control'),
+                  ('canonical_promotions'),
+                  ('products'),
+                  ('customers'),
+                  ('credits'),
+                  ('credit_payments')
+              )
+              SELECT COUNT(*) AS missing_required_tables
+              FROM required r
+              WHERE NOT EXISTS (
+                SELECT 1 FROM sqlite_master s
+                WHERE s.type='table' AND s.name=r.name
+              );
+            `);
+            expectZero(schema[0], ['missing_required_tables'], 'schema');
+
+            const control = await query(
+              "SELECT mode, active_promotion_id FROM canonical_control WHERE id=1;"
+            );
+            if (control.length !== 1 || typeof control[0].mode !== 'string') {
+              throw new Error('canonical_control row missing or invalid');
+            }
+
+            const relationships = await query(`
+              SELECT
+                (SELECT COUNT(*) FROM products x
+                  LEFT JOIN canonical_promotions p ON p.promotion_id=x.promotion_id
+                  WHERE p.promotion_id IS NULL) AS orphan_products,
+                (SELECT COUNT(*) FROM customers x
+                  LEFT JOIN canonical_promotions p ON p.promotion_id=x.promotion_id
+                  WHERE p.promotion_id IS NULL) AS orphan_customers,
+                (SELECT COUNT(*) FROM credits x
+                  LEFT JOIN canonical_promotions p ON p.promotion_id=x.promotion_id
+                  WHERE p.promotion_id IS NULL) AS orphan_credit_promotions,
+                (SELECT COUNT(*) FROM credits x
+                  LEFT JOIN customers c ON c.promotion_id=x.promotion_id AND c.customer_id=x.customer_id
+                  WHERE c.customer_id IS NULL) AS orphan_credit_customers,
+                (SELECT COUNT(*) FROM credit_payments x
+                  LEFT JOIN canonical_promotions p ON p.promotion_id=x.promotion_id
+                  WHERE p.promotion_id IS NULL) AS orphan_payment_promotions,
+                (SELECT COUNT(*) FROM credit_payments x
+                  LEFT JOIN credits c ON c.promotion_id=x.promotion_id AND c.credit_id=x.credit_id
+                  WHERE c.credit_id IS NULL) AS orphan_payment_credits,
+                (SELECT COUNT(*) FROM canonical_control c
+                  LEFT JOIN canonical_promotions p ON p.promotion_id=c.active_promotion_id
+                  WHERE c.active_promotion_id IS NOT NULL AND p.promotion_id IS NULL) AS orphan_active_promotion;
+            `);
+            expectZero(relationships[0], [
+              'orphan_products',
+              'orphan_customers',
+              'orphan_credit_promotions',
+              'orphan_credit_customers',
+              'orphan_payment_promotions',
+              'orphan_payment_credits',
+              'orphan_active_promotion',
+            ], 'relationships');
+
+            const creditIntegrity = await query(`
+              SELECT COUNT(*) AS invalid_credit_balance_rows
+              FROM credits
+              WHERE original_amount_cents < 0
+                 OR import_paid_cents < 0
+                 OR opening_balance_cents < 0
+                 OR current_balance_cents < 0
+                 OR original_amount_cents - import_paid_cents <> opening_balance_cents
+                 OR current_balance_cents <> opening_balance_cents;
+            `);
+            expectZero(creditIntegrity[0], ['invalid_credit_balance_rows'], 'credit_integrity');
+
+            const counts = await query(`
+              SELECT 'products' entity, COUNT(*) row_count FROM products
+                WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1)
+              UNION ALL
+              SELECT 'customers', COUNT(*) FROM customers
+                WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1)
+              UNION ALL
+              SELECT 'credits', COUNT(*) FROM credits
+                WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1)
+              UNION ALL
+              SELECT 'credit_payments', COUNT(*) FROM credit_payments
+                WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);
+            `);
+
+            const credits = await query(`
+              SELECT
+                SUM(original_amount_cents) original_cents,
+                SUM(import_paid_cents) paid_cents,
+                SUM(current_balance_cents) balance_cents
+              FROM credits
+              WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);
+            `);
+
+            const payments = await query(`
+              SELECT SUM(amount_cents) payment_cents
+              FROM credit_payments
+              WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);
+            `);
+
+            const summary = {
+              verification: 'd1-remote-select-v1',
+              schema: schema[0],
+              control: control[0],
+              relationships: relationships[0],
+              credit_integrity: creditIntegrity[0],
+              counts,
+              credit_totals: credits[0] || {},
+              payment_totals: payments[0] || {},
+            };
+            writeFileSync('/tmp/recovery-checks.json', JSON.stringify(summary, null, 2));
+            console.log(JSON.stringify(summary));
+          })().catch(error => {
+            console.error(error.message);
+            process.exit(1);
+          });
+          NODE
 
       - name: Store durable drill manifest in R2
         working-directory: tools/cloudflare-lab
