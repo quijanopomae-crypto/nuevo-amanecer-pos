@@ -108,3 +108,11 @@ test('Worker import verifier does not retain R2 read token dependency', () => {
   const importSection = workspace.slice(workspace.indexOf('async function importBaseline'), workspace.indexOf('async function verifyHmacHex'));
   assert.doesNotMatch(importSection, /R2_CANON_READ_TOKEN/);
 });
+
+
+test('LAB and activation secrets tolerate PowerShell trailing newlines', () => {
+  const publisher = readFileSync('tools/cloudflare-lab/scripts/publish-lab-snapshot.mjs', 'utf8');
+  const worker = readFileSync('tools/cloudflare-lab/src/worker.js', 'utf8');
+  assert.match(publisher, /LAB_IMPORT_HMAC_SECRET\|\|'\'\)\.trim\(\)/);
+  assert.match(worker, /POS_ACTIVATION_SECRET \|\| ''\)\.trim\(\)/);
+});

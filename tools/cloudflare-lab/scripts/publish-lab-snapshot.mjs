@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash, createHmac } from 'node:crypto';
 
-const importSecret=process.env.LAB_IMPORT_HMAC_SECRET;
+const importSecret=String(process.env.LAB_IMPORT_HMAC_SECRET||'').trim();
 const endpoint=(process.env.LAB_WORKER_URL||'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev').replace(/\/+$/,'');
 if(!importSecret) throw new Error('Missing LAB_IMPORT_HMAC_SECRET');
 

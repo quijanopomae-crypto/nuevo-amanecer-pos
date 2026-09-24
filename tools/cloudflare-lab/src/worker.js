@@ -102,7 +102,7 @@ async function health(env) {
 
 // A one-time activation secret issues a persistent session token.
 async function activateSession(request, env) {
-  const configured = String(env.POS_ACTIVATION_SECRET || '');
+  const configured = String(env.POS_ACTIVATION_SECRET || '').trim();
   if (!configured) return json({ error: 'activation_not_configured' }, 503);
   const provided = String(request.headers.get('x-activation-secret') || '');
   if (!provided || provided.length > 1024 || !constantTimeEqual(provided, configured)) {
