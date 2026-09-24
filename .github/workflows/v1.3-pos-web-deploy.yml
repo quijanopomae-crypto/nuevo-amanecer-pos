@@ -86,12 +86,15 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 20); do
-            ROOT="$(curl -fsS --max-time 15 "$POS_WEB_URL/" || true)"
-            APP="$(curl -fsS --max-time 15 "$POS_WEB_URL/app/" || true)"
+            ROOT_CODE="$(curl -sS -o /tmp/pos-root.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/" || true)"
+            APP_CODE="$(curl -sS -o /tmp/pos-app.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/" || true)"
             JS_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/canonical-client.js" || true)"
-            if printf '%s' "$ROOT" | grep -q 'Nuevo Amanecer POS' &&
-               printf '%s' "$APP" | grep -q 'Nuevo Amanecer — ERP &amp; POS' &&
-               test "$JS_CODE" = "200"; then
+            echo "probe attempt=$attempt root=$ROOT_CODE app=$APP_CODE canonical_client=$JS_CODE"
+            if test "$ROOT_CODE" = "200" &&
+               test "$APP_CODE" = "200" &&
+               test "$JS_CODE" = "200" &&
+               grep -Fq 'Nuevo Amanecer POS' /tmp/pos-root.html &&
+               grep -Fq 'Nuevo Amanecer — ERP &amp; POS' /tmp/pos-app.html; then
               echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"
               exit 0
             fi
