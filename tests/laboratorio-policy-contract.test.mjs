@@ -31,3 +31,13 @@ test('UI map declares D1 LAB copy without granting production authority', () => 
   assert.match(map, /isolated_canon_copy_in_d1_lab:\s*true/);
   assert.match(map, /real_commercial_data_versioned:\s*false/);
 });
+
+
+test('LAB isolation guard allows only the one-time activation write outside workspace routes', () => {
+  const guard = read('laboratorio/pos-lab/lab-guard.js');
+  assert.match(guard, /url\.pathname === '\/auth\/activate'/);
+  assert.match(guard, /method === 'POST'/);
+  assert.match(guard, /blockedHosts\.has\(url\.hostname\)/);
+  assert.match(guard, /!allowedLabWorkspaceWrite && !allowedActivationWrite/);
+  assert.doesNotMatch(guard, /url\.pathname\.startsWith\('\/auth\/'\)/);
+});
