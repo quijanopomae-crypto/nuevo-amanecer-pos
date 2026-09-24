@@ -17,6 +17,57 @@
     experiments: Object.create(null)
   };
 
+  var labClientMotionTimer = 0;
+  var labClientMotionReady = false;
+  var originalCliRender = (typeof cliRender === 'function') ? cliRender : null;
+
+  function labClientReducedMotion() {
+    try { return !!window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch { return false; }
+  }
+
+  function labClientEnter(page) {
+    if (!page || labClientReducedMotion()) return;
+    page.classList.remove('lab-client-refresh-out');
+    page.classList.add('lab-client-refresh-in');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        page.classList.remove('lab-client-refresh-in');
+      });
+    });
+  }
+
+  if (originalCliRender) {
+    cliRender = function () {
+      var context = this;
+      var args = arguments;
+      var page = document.getElementById('pageClientes');
+      var active = !!(page && page.classList.contains('active'));
+
+      if (!active || labClientReducedMotion()) {
+        return originalCliRender.apply(context, args);
+      }
+
+      // Primera pintura: datos inmediatos, solo una entrada suave.
+      if (!labClientMotionReady) {
+        labClientMotionReady = true;
+        var firstResult = originalCliRender.apply(context, args);
+        labClientEnter(page);
+        return firstResult;
+      }
+
+      // Refrescos siguientes: salida corta + actualización + entrada corta.
+      clearTimeout(labClientMotionTimer);
+      page.classList.remove('lab-client-refresh-in');
+      page.classList.add('lab-client-refresh-out');
+
+      labClientMotionTimer = setTimeout(function () {
+        originalCliRender.apply(context, args);
+        labClientEnter(page);
+      }, 70);
+    };
+  }
+
   function clearRouteRestoreShield() {
     document.documentElement.classList.remove('lab-route-restoring');
     document.documentElement.removeAttribute('data-lab-restore-page');

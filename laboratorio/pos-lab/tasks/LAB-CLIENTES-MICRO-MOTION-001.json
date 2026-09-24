@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-CLIENTES-MICRO-MOTION-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Aplicar una transición visual breve y suave al refrescar Clientes y Créditos, manteniendo la primera pintura inmediata y sin alterar lógica comercial.",
+  "allowed_files": [
+    "laboratorio/pos-lab/animations/transitions.css",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/tasks/LAB-CLIENTES-MICRO-MOTION-001.json",
+    "tests/laboratorio-clientes-motion.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-animation-edit",
+    "lab-feature-edit"
+  ],
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

@@ -1,3 +1,37 @@
 /* Transiciones opt-in entre estados/páginas. */
 @keyframes lab-fade-in { from { opacity:0; } to { opacity:1; } }
 .lab-enter-fade { animation:lab-fade-in var(--lab-motion-normal) var(--lab-ease-standard) both; }
+
+/* Clientes/Créditos: microtransición rápida al refrescar datos en LAB. */
+#pageClientes .tabs-wrap,
+#pageClientes .stats-strip,
+#pageClientes .cli-list {
+  transition:
+    opacity var(--lab-motion-fast) var(--lab-ease-standard),
+    transform var(--lab-motion-fast) var(--lab-ease-standard);
+  will-change: opacity, transform;
+}
+
+#pageClientes.lab-client-refresh-out .tabs-wrap,
+#pageClientes.lab-client-refresh-out .stats-strip,
+#pageClientes.lab-client-refresh-out .cli-list {
+  opacity: .18;
+  transform: translateY(3px);
+}
+
+#pageClientes.lab-client-refresh-in .tabs-wrap,
+#pageClientes.lab-client-refresh-in .stats-strip,
+#pageClientes.lab-client-refresh-in .cli-list {
+  opacity: 0;
+  transform: translateY(4px);
+  transition-duration: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pageClientes .tabs-wrap,
+  #pageClientes .stats-strip,
+  #pageClientes .cli-list {
+    transition: none !important;
+    transform: none !important;
+  }
+}
