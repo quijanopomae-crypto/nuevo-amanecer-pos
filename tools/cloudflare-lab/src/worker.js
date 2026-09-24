@@ -26,6 +26,7 @@ export default {
     const isLabWorkspace = isLabWorkspacePath(url.pathname);
     try {
       if (isLabWorkspace) {
+        if (env.RUNTIME_ENVIRONMENT === 'production') return json({ error: 'not_found' }, 404);
         if (request.method === 'OPTIONS') return labCors(new Response(null, { status: 204 }));
         return await handleLabWorkspace(request, url, env, { jsonLab, authorizeRead, authorizeSession });
       }
@@ -123,7 +124,7 @@ async function health(env) {
     return json({ ok: false, d1: 'binding_missing' }, 503);
   }
   const row = await env.nuevo_amanecer_lab.prepare('SELECT 1 AS one').first();
-  return json({ ok: row?.one === 1, service: 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
+  return json({ ok: row?.one === 1, service: env.RUNTIME_ENVIRONMENT === 'production' ? 'nuevo-amanecer-pos-prod' : 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
 }
 
 // A one-time activation secret issues a persistent session token.
