@@ -44,17 +44,21 @@ jobs:
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
 
-      - name: Configure CANON R2 read-only token
-        working-directory: tools/cloudflare-lab
-        run: printf '%s' "$R2_CANON_READ_TOKEN" | npx wrangler secret put R2_CANON_READ_TOKEN
-
       - name: Apply D1 LAB migrations
         working-directory: tools/cloudflare-lab
         run: npx wrangler d1 migrations apply nuevo-amanecer-lab --remote
 
-      - name: Deploy LAB Worker
+      - name: Deploy LAB Worker before secret binding
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy
+
+      - name: Configure CANON R2 read-only token
+        working-directory: tools/cloudflare-lab
+        run: printf '%s' "$R2_CANON_READ_TOKEN" | npx wrangler secret put R2_CANON_READ_TOKEN
+
+      - name: Verify R2 secret binding exists
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler secret list | grep -F '"name": "R2_CANON_READ_TOKEN"'
 
       - name: Verify LAB Worker health
         run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health
