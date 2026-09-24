@@ -5,7 +5,7 @@ import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest
 import { handleA6, isA6Path, a6LocalDenied } from './a6-canonical.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 
-const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
+const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const OPERATION_PATH = /^\/sync\/operations\/([^/]+)$/;
 const SALE_ITEMS_PATH = /^\/read\/sales\/([^/]+)\/items$/;
