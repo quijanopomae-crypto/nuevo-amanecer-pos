@@ -59,11 +59,15 @@ test('tracked text does not contain common live-secret signatures', () => {
   }
 });
 
-test('final status does not claim production cutover or a clean pass', () => {
+test('final status records READY_FOR_FIRST_SALE without claiming final V1.3 release', () => {
   const status = readFileSync(resolve(root, 'docs/V1.3_STATUS.md'), 'utf8');
   const map = readFileSync(resolve(root, 'REPO_MAP.yaml'), 'utf8');
   assert.match(status, /CODE_REMEDIATION_PASS/);
-  assert.match(status, /OWNER_ONLY_PENDING/);
+  assert.match(status, /OWNER_FINALIZATION_PASS/);
+  assert.match(status, /READY_FOR_FIRST_SALE/);
+  assert.match(status, /first_live_operation_id = NULL/);
   assert.match(map, /overall_clean_pass: false/);
-  assert.match(map, /production_cutover: not_authorized/);
+  assert.match(map, /production_cutover: ready_for_first_sale/);
+  assert.match(map, /remaining_state: FIRST_LIVE_SALE_AND_RELEASE_FINALIZATION/);
+  assert.match(map, /first_live_operation_id: null/);
 });
