@@ -10,10 +10,12 @@ on:
       - "README.md"
       - "REPO_MAP.yaml"
       - "docs/V1.3_STATUS.md"
+      - "docs/REMEDIATION_FINAL_VERIFICATION.md"
       - "MANIFEST.yaml"
       - "opencode.json"
       - "tests/opencode-role-map.test.mjs"
       - "tests/repo-map.test.mjs"
+      - "tests/final-repository-boundaries.test.mjs"
       - ".github/workflows/opencode-config-ci.yml"
   push:
     branches:
@@ -26,10 +28,12 @@ on:
       - "README.md"
       - "REPO_MAP.yaml"
       - "docs/V1.3_STATUS.md"
+      - "docs/REMEDIATION_FINAL_VERIFICATION.md"
       - "MANIFEST.yaml"
       - "opencode.json"
       - "tests/opencode-role-map.test.mjs"
       - "tests/repo-map.test.mjs"
+      - "tests/final-repository-boundaries.test.mjs"
       - ".github/workflows/opencode-config-ci.yml"
 
 permissions:
