@@ -7,7 +7,7 @@ const contract = JSON.parse(readFileSync('laboratorio/pos-lab/tasks/LAB-WORKSPAC
 
 function loadAllDataOverride() {
   const start = source.indexOf('loadAllData = async function () {');
-  const end = source.indexOf('\n    setupPanel();', start);
+  const end = source.indexOf('\n  setupPanel();', start);
   assert.ok(start >= 0 && end > start, 'loadAllData override must remain discoverable');
   return source.slice(start, end);
 }
