@@ -104,12 +104,21 @@ representan el histórico CANON completo.
 La actualización usa revisión optimista. Si otra pestaña/dispositivo avanzó la revisión,
 devuelve `409 revision_conflict` en vez de sobrescribir silenciosamente.
 
+El cliente conserva de forma durable la operación pendiente (`operation_id`, revisión esperada
+y snapshot exacto) hasta recibir ACK. Un ACK perdido reintenta la misma operación, no crea otra.
+Si existe una edición local pendiente durante el arranque, el snapshot D1 no se aplica encima de
+ella: primero se intenta conciliar la intención local.
+
+El Worker vuelve a comprobar dentro del commit que el dispositivo sigue siendo el writer activo
+con la misma credencial; una revocación entre autenticación y commit falla cerrada.
+
 Las revisiones anteriores permanecen en D1 LAB.
 
 ## Restaurar baseline
 
-`POST /lab/workspace/reset` crea una nueva revisión copiando el baseline activo. No
-borra historial y no toca CANON.
+`POST /lab/workspace/reset` exige `expected_revision` y crea una nueva revisión copiando
+el baseline activo. Un reset ciego o basado en una revisión vieja se rechaza; no borra historial
+y no toca CANON.
 
 ## Lectura
 
