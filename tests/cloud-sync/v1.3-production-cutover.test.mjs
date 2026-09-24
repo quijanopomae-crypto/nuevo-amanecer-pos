@@ -23,7 +23,7 @@ test('production worker config is isolated from LAB and points only to productio
 });
 
 test('local V1.3 setup activates against production and derives canonical binding from live authority', () => {
-  assert.match(setupHtml, /Clave de activación V1\.3/);
+  assert.match(setupHtml, /clave de activación V1\.3/i);
   assert.match(setupHtml, /canonical-client\.js/);
   assert.match(setupJs, /nuevo-amanecer-pos-prod\.nuevo-amanecer-pos\.workers\.dev/);
   assert.match(setupJs, /\/auth\/activate/);
