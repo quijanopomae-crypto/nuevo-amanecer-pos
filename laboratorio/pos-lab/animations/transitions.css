@@ -7,8 +7,8 @@
 #pageClientes .stats-strip,
 #pageClientes .cli-list {
   transition:
-    opacity 520ms cubic-bezier(.22,1,.36,1),
-    transform 560ms cubic-bezier(.22,1,.36,1);
+    opacity 1300ms cubic-bezier(.22,1,.36,1),
+    transform 1400ms cubic-bezier(.22,1,.36,1);
   transform-origin: 50% 20%;
   will-change: opacity, transform;
 }
@@ -18,7 +18,7 @@
 #pageClientes.lab-client-refresh-out .cli-list {
   opacity: .82;
   transform: translateY(-6px) scale(.998);
-  transition-duration: 360ms, 380ms;
+  transition-duration: 900ms, 950ms;
 }
 
 /* Primera entrada: parte apenas desplazada y vuelve a reposo suavemente. */

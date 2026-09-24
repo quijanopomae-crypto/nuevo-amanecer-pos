@@ -6,16 +6,16 @@ const css = readFileSync('laboratorio/pos-lab/animations/transitions.css', 'utf8
 const js = readFileSync('laboratorio/pos-lab/lab-overrides.js', 'utf8');
 const contract = JSON.parse(readFileSync('laboratorio/pos-lab/tasks/LAB-CLIENTES-MICRO-MOTION-001.json', 'utf8'));
 
-test('Clientes LAB transition is about half-speed and stays visible', () => {
-  assert.match(css, /opacity 520ms/);
-  assert.match(css, /transform 560ms/);
-  assert.match(css, /transition-duration: 360ms, 380ms/);
+test('Clientes LAB transition is roughly 150 percent slower and stays visible', () => {
+  assert.match(css, /opacity 1300ms/);
+  assert.match(css, /transform 1400ms/);
+  assert.match(css, /transition-duration: 900ms, 950ms/);
   assert.match(css, /opacity:\s*\.82/);
   assert.match(css, /translateY\(-6px\)/);
-  assert.match(js, /\}, 340\)/);
+  assert.match(js, /\}, 850\)/);
 });
 
-test('refresh updates at the end of the same slide without opposite-direction jump', () => {
+test('refresh stays synchronized with the same slide direction', () => {
   assert.match(js, /originalCliRender\.apply\(context, args\);[\s\S]*requestAnimationFrame\(function \(\) \{[\s\S]*classList\.remove\('lab-client-refresh-out'\)/);
   const refreshSection = js.slice(js.indexOf('// Refrescos siguientes:'), js.indexOf('function clearRouteRestoreShield'));
   assert.doesNotMatch(refreshSection, /labClientEnter\(page\)/);

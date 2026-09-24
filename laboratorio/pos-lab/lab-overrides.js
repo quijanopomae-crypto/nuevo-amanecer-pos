@@ -68,7 +68,7 @@
         requestAnimationFrame(function () {
           page.classList.remove('lab-client-refresh-out');
         });
-      }, 340);
+      }, 850);
     };
   }
 
