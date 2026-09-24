@@ -83,8 +83,9 @@
       var method = methodOf(input, init);
       if (url && method !== 'GET' && method !== 'HEAD') {
         var allowedLabWorkspaceWrite = blockedHosts.has(url.hostname) && url.pathname.startsWith('/lab/workspace/');
+        var allowedActivationWrite = blockedHosts.has(url.hostname) && url.pathname === '/auth/activate' && method === 'POST';
         var crossOriginWrite = url.origin !== location.origin;
-        if (crossOriginWrite && !allowedLabWorkspaceWrite) {
+        if (crossOriginWrite && !allowedLabWorkspaceWrite && !allowedActivationWrite) {
           console.warn('[NA-LAB] Escritura externa fuera de workspace bloqueada:', method, url.href);
           return Promise.reject(new Error('NA_LAB_EXTERNAL_WRITE_BLOCKED'));
         }
