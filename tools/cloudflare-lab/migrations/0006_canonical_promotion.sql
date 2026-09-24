@@ -158,50 +158,50 @@ CREATE TRIGGER IF NOT EXISTS canonical_receipts_no_delete BEFORE DELETE ON canon
 CREATE TABLE IF NOT EXISTS canonical_assertions (assertion_id TEXT PRIMARY KEY NOT NULL, ok INTEGER NOT NULL CHECK(ok=1));
 
 CREATE TRIGGER IF NOT EXISTS products_candidate_insert BEFORE INSERT ON products BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
+ SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
  WHERE p.promotion_id=NEW.promotion_id AND p.status='PREPARED' AND p.sealed_revision IS NULL AND c.mode='FROZEN'
  AND p.import_id=NEW.source_import_id AND p.mapping_version=NEW.mapping_version)
- THEN RAISE(ABORT,'candidate_sealed') END;
- SELECT CASE WHEN NEW.current_stock_quantity IS NOT NEW.opening_stock_quantity OR NEW.stock_revision<>0 OR length(NEW.product_id) NOT BETWEEN 1 AND 160 OR length(NEW.name)=0
+ THEN RAISE(ABORT,'candidate_sealed') END);
+ SELECT (CASE WHEN NEW.current_stock_quantity IS NOT NEW.opening_stock_quantity OR NEW.stock_revision<>0 OR length(NEW.product_id) NOT BETWEEN 1 AND 160 OR length(NEW.name)=0
  OR (NEW.alternate_codes_json IS NOT NULL AND json_type(NEW.alternate_codes_json)<>'array')
  OR EXISTS(SELECT 1 FROM json_each(json_array(NEW.cost_cents,NEW.price_cents,NEW.box_price_cents)) WHERE type<>'null' AND (type<>'integer' OR value<0 OR value>9007199254740991))
- THEN RAISE(ABORT,'invalid_product') END;
+ THEN RAISE(ABORT,'invalid_product') END);
 END;
 CREATE TRIGGER IF NOT EXISTS customers_candidate_insert BEFORE INSERT ON customers BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
+ SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
  WHERE p.promotion_id=NEW.promotion_id AND p.status='PREPARED' AND p.sealed_revision IS NULL AND c.mode='FROZEN'
  AND p.import_id=NEW.source_import_id AND p.mapping_version=NEW.mapping_version)
- THEN RAISE(ABORT,'candidate_sealed') END;
- SELECT CASE WHEN length(NEW.customer_id) NOT BETWEEN 1 AND 160 OR length(NEW.name)=0
+ THEN RAISE(ABORT,'candidate_sealed') END);
+ SELECT (CASE WHEN length(NEW.customer_id) NOT BETWEEN 1 AND 160 OR length(NEW.name)=0
  OR EXISTS(SELECT 1 FROM json_each(json_array(NEW.total_purchases_cents,NEW.source_image_balance_cents,NEW.source_document_balance_cents,NEW.source_difference_cents,
  NEW.source_documents_total,NEW.source_documents_pending,NEW.source_documents_paid,NEW.source_payment_count,NEW.source_pending_original_cents,NEW.source_pending_paid_cents,
  NEW.source_historical_credit_cents,NEW.source_historical_paid_cents,NEW.source_max_term_days,NEW.source_days_until_due)) WHERE type<>'null' AND (type<>'integer' OR abs(value)>9007199254740991))
  OR (NEW.source_pending_progress_ratio IS NOT NULL AND (NEW.source_pending_progress_ratio<0 OR NEW.source_pending_progress_ratio>1))
- THEN RAISE(ABORT,'invalid_customer') END;
+ THEN RAISE(ABORT,'invalid_customer') END);
 END;
 CREATE TRIGGER IF NOT EXISTS credits_candidate_insert BEFORE INSERT ON credits BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
+ SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
  WHERE p.promotion_id=NEW.promotion_id AND p.status='PREPARED' AND p.sealed_revision IS NULL AND c.mode='FROZEN'
  AND p.import_id=NEW.source_import_id AND p.mapping_version=NEW.mapping_version)
- THEN RAISE(ABORT,'candidate_sealed') END;
- SELECT CASE WHEN length(NEW.credit_id) NOT BETWEEN 1 AND 160 OR NEW.sale_id IS NOT NULL
+ THEN RAISE(ABORT,'candidate_sealed') END);
+ SELECT (CASE WHEN length(NEW.credit_id) NOT BETWEEN 1 AND 160 OR NEW.sale_id IS NOT NULL
  OR EXISTS(SELECT 1 FROM json_each(json_array(NEW.original_amount_cents,NEW.import_paid_cents,NEW.opening_balance_cents,NEW.current_balance_cents,NEW.term_days,
  NEW.source_payment_count,NEW.source_days_until_due,NEW.source_customer_image_balance_cents,NEW.source_customer_document_balance_cents,NEW.source_customer_difference_cents))
  WHERE type<>'null' AND (type<>'integer' OR abs(value)>9007199254740991))
  OR (NEW.source_progress_ratio IS NOT NULL AND (NEW.source_progress_ratio<0 OR NEW.source_progress_ratio>1))
- THEN RAISE(ABORT,'invalid_credit') END;
+ THEN RAISE(ABORT,'invalid_credit') END);
 END;
 CREATE TRIGGER IF NOT EXISTS payments_candidate_insert BEFORE INSERT ON credit_payments BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
+ SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM canonical_promotions p JOIN canonical_control c ON c.id=1
  WHERE p.promotion_id=NEW.promotion_id AND p.status='PREPARED' AND p.sealed_revision IS NULL AND c.mode='FROZEN'
  AND p.import_id=NEW.source_import_id AND p.mapping_version=NEW.mapping_version)
- THEN RAISE(ABORT,'candidate_sealed') END;
- SELECT CASE WHEN length(NEW.payment_id)<>64 OR length(NEW.source_payment_id) NOT BETWEEN 1 AND 160 OR NEW.source_payment_id='-'
+ THEN RAISE(ABORT,'candidate_sealed') END);
+ SELECT (CASE WHEN length(NEW.payment_id)<>64 OR length(NEW.source_payment_id) NOT BETWEEN 1 AND 160 OR NEW.source_payment_id='-'
  OR EXISTS(SELECT 1 FROM json_each(json_array(NEW.amount_cents,NEW.source_sequence,NEW.source_cumulative_paid_cents,NEW.source_balance_after_cents,
  NEW.source_credit_original_cents,NEW.source_current_document_balance_cents)) WHERE type<>'null' AND (type<>'integer' OR value<0 OR value>9007199254740991))
  OR (NEW.source_progress_ratio IS NOT NULL AND (NEW.source_progress_ratio<0 OR NEW.source_progress_ratio>1))
  OR (NEW.date_precision='DATE' AND NEW.payment_timestamp IS NOT NULL) OR (NEW.date_precision='TIMESTAMP' AND NEW.payment_timestamp IS NULL)
- THEN RAISE(ABORT,'invalid_payment') END;
+ THEN RAISE(ABORT,'invalid_payment') END);
 END;
 CREATE TRIGGER IF NOT EXISTS products_candidate_revision AFTER INSERT ON products BEGIN UPDATE canonical_promotions SET candidate_revision=candidate_revision+1 WHERE promotion_id=NEW.promotion_id; END;
 CREATE TRIGGER IF NOT EXISTS customers_candidate_revision AFTER INSERT ON customers BEGIN UPDATE canonical_promotions SET candidate_revision=candidate_revision+1 WHERE promotion_id=NEW.promotion_id; END;
