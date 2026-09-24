@@ -36,7 +36,7 @@
     return session || persistent || {
       endpoint: DEFAULT_ENDPOINT,
       readToken: '',
-      deviceId: '',
+      deviceId: 'lab-phone-main',
       syncToken: '',
       remember: false
     };
@@ -46,7 +46,7 @@
     return {
       endpoint: String(raw && raw.endpoint || DEFAULT_ENDPOINT).replace(/\/+$/, ''),
       readToken: String(raw && raw.readToken || '').trim(),
-      deviceId: String(raw && raw.deviceId || '').trim(),
+      deviceId: String(raw && raw.deviceId || 'lab-phone-main').trim(),
       syncToken: String(raw && raw.syncToken || '').trim(),
       remember: !!(raw && raw.remember)
     };
@@ -280,7 +280,7 @@
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Worker LAB</label><input id="naLabEndpoint" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">READ_TOKEN (opcional si usas dispositivo)</label><input id="naLabReadToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Device ID LAB</label><input id="naLabDeviceId" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
-      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">SYNC_TOKEN LAB</label><input id="naLabSyncToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
+      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">SYNC_TOKEN LAB</label><div style="display:flex;gap:8px"><input id="naLabSyncToken" type="password" autocomplete="off" style="flex:1;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:9px" /><button id="naLabGenerateToken" type="button" style="border:0;border-radius:9px;padding:8px 10px;background:#e0f2fe;color:#075985;font-weight:800">Generar</button></div>' +
       '<label style="display:flex;gap:8px;align-items:center;margin:12px 0;font-size:12px"><input id="naLabRemember" type="checkbox"> Recordar credenciales en este dispositivo LAB</label>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
       '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Guardar conexión</button>' +
@@ -306,6 +306,14 @@
       });
     }
     document.getElementById('naLabWorkspaceClose').onclick = function () { overlay.style.display = 'none'; };
+    document.getElementById('naLabGenerateToken').onclick = function () {
+      var bytes = new Uint8Array(32);
+      crypto.getRandomValues(bytes);
+      var token = Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0'); }).join('');
+      document.getElementById('naLabDeviceId').value = 'lab-phone-main';
+      document.getElementById('naLabSyncToken').value = token;
+      renderStatus('Token seguro generado SOLO en este celular. Cópialo y guárdalo en GitHub como LAB_DEVICE_SYNC_TOKEN. No lo envíes por chat.', 'ok');
+    };
     document.getElementById('naLabSaveConfig').onclick = async function () {
       state.credentials = cleanCredentials({
         endpoint: document.getElementById('naLabEndpoint').value,
