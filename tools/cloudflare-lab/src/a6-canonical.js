@@ -27,16 +27,32 @@ export function a6LocalDenied(url, env, json) {
   return null;
 }
 
+export function canonicalRuntimeDenied(url, env, json) {
+  const local = env.A6_LOCAL_GATE === 'enabled' && ['localhost','127.0.0.1'].includes(url.hostname);
+  if (local || env.CANONICAL_RUNTIME_ENABLED === 'enabled') return null;
+  return json({ error:'not_found' },404);
+}
+
+async function authorizeCanonicalRead(request, env, helpers) {
+  if (request.headers.get('authorization') || request.headers.get('x-session-token')) {
+    const auth = await helpers.authorizeSession(request, env);
+    return auth instanceof Response ? auth : null;
+  }
+  return helpers.authorizeRead(request, env);
+}
+
 export async function handleA6(request, url, env, helpers) {
+  if (url.pathname.startsWith('/read/canonical/')) {
+    const runtimeDenied = canonicalRuntimeDenied(url, env, helpers.json);
+    if (runtimeDenied) return runtimeDenied;
+    if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
+    const denied = await authorizeCanonicalRead(request,env,helpers); if (denied) return denied;
+    return canonicalRead(url,env.nuevo_amanecer_lab,helpers.json);
+  }
   const localDenied = a6LocalDenied(url, env, helpers.json);
   if (localDenied) return localDenied;
   const configured = await operationalManifest(env);
   if (configured.error) return helpers.json({ error:'a6_manifest_invalid', message:configured.error },503);
-  if (url.pathname.startsWith('/read/canonical/')) {
-    if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
-    const denied = helpers.authorizeRead(request,env); if (denied) return denied;
-    return canonicalRead(url,env.nuevo_amanecer_lab,helpers.json);
-  }
   const provenance = url.pathname.match(/^\/imports\/canonical\/([^/]+)$/);
   if (provenance) {
     if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
