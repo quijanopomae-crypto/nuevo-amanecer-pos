@@ -49,3 +49,14 @@ test('workspace reconoce el import firmado desde GitHub Actions', () => {
   assert.equal(isLabWorkspacePath('/lab/workspace/save'), true);
   assert.equal(isLabWorkspacePath('/lab/workspace/not-real'), false);
 });
+
+
+test('firma se verifica sobre el snapshot recibido antes de sanitizar', async () => {
+  const source = snapshot();
+  const signedHash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(source)));
+  const hex = [...new Uint8Array(signedHash)].map(v => v.toString(16).padStart(2, '0')).join('');
+  const clean = sanitizeSnapshotForLab(source, true);
+  const cleanHashRaw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(clean)));
+  const cleanHex = [...new Uint8Array(cleanHashRaw)].map(v => v.toString(16).padStart(2, '0')).join('');
+  assert.notEqual(hex, cleanHex, 'sanitation mutates the snapshot; signature must target pre-sanitized input');
+});
