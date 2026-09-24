@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-SQL-BACKUP-MIRROR-002",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Corregir CANON->LAB para el formato real R2: .sql + .manifest.json, convertir canonical D1 a snapshot POS y publicar baseline firmado en D1 LAB.",
+  "allowed_files": [
+    ".github/workflows/lab-cloud-ci.yml",
+    ".github/workflows/lab-cloud-deploy.yml",
+    ".github/workflows/lab-data-refresh.yml",
+    "docs/LAB_CANON_MIRROR.md",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/README.md",
+    "laboratorio/pos-lab/UI_MAP.yaml",
+    "laboratorio/pos-lab/tasks/LAB-SQL-BACKUP-MIRROR-002.json",
+    "tools/cloudflare-lab/README.md",
+    "tools/cloudflare-lab/src/lab-workspace.js",
+    "tools/cloudflare-lab/scripts/fetch-latest-canon-backup.mjs",
+    "tools/cloudflare-lab/scripts/lab-snapshot-from-sql.py",
+    "tools/cloudflare-lab/scripts/publish-lab-snapshot.mjs",
+    "tools/cloudflare-lab/test/lab-workspace.test.mjs",
+    "tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "canon_writes_allowed": false,
+  "source_bucket": "nuevo-amanecer-prod-v2-backups",
+  "source_format": [
+    "*.sql",
+    "*.manifest.json"
+  ],
+  "r2_methods_allowed": [
+    "GET"
+  ]
+}
