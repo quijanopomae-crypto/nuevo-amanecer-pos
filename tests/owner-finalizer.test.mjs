@@ -5,11 +5,12 @@ import { readFileSync } from 'node:fs';
 const finalizer = readFileSync('tools/owner-finalize-v1.3.ps1', 'utf8');
 const drill = readFileSync('.github/workflows/owner-backup-recovery-drill.yml', 'utf8');
 
-test('owner finalizer generates separated secrets without printing them', () => {
+test('owner finalizer configures import signing plus one reusable activation secret', () => {
   assert.match(finalizer, /New-HexSecret 32/);
   assert.match(finalizer, /gh secret set LAB_IMPORT_HMAC_SECRET/);
-  assert.match(finalizer, /gh secret set DEVICE_CREDENTIAL_PEPPER/);
-  assert.doesNotMatch(finalizer, /Write-Host.*labImportSecret|Write-Host.*devicePepper/i);
+  assert.match(finalizer, /gh secret set POS_ACTIVATION_SECRET/);
+  assert.match(finalizer, /Read-Host .*activation secret.*-AsSecureString/i);
+  assert.doesNotMatch(finalizer, /Write-Host.*activationSecret/i);
 });
 
 test('owner finalizer protects main and disables force push/deletion', () => {
@@ -19,9 +20,8 @@ test('owner finalizer protects main and disables force push/deletion', () => {
   assert.match(finalizer, /required_conversation_resolution = \$true/);
 });
 
-test('owner finalizer runs all operational closure workflows', () => {
+test('owner finalizer runs deployment and recovery closure workflows', () => {
   assert.match(finalizer, /deploy-lab-cloud\.yml/);
-  assert.match(finalizer, /provision-lab-device\.yml/);
   assert.match(finalizer, /owner-backup-recovery-drill\.yml/);
   assert.match(finalizer, /gh run watch/);
 });
