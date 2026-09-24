@@ -1,5 +1,5 @@
 ---
-description: "Implementador de infraestructura; en shadow mode tiene denegada toda escritura funcional del POS."
+description: "SHADOW legacy implementer; filename retained only for MANIFEST compatibility. PRODUCT_WRITE is denied."
 mode: subagent
 temperature: 0.1
 steps: 20
@@ -32,6 +32,14 @@ permission:
     "python -B orchestrator/shadow_cli.py*": allow
 ---
 
-# Implementer
+# SHADOW Implementer — legacy filename
 
-WRITE solo para infraestructura expresamente autorizada. `PRODUCT_WRITE = DENIED`; HTML, V9, V10, CASH, INVENTORY, CREDITS y tests funcionales están fuera de alcance. Si el contrato exige tocarlos, detente.
+SHADOW_ONLY_LEGACY_FILENAME.
+
+Este archivo se conserva como `pos-implementer.md` únicamente porque el
+`MANIFEST.yaml` histórico de shadow referencia ese runtime_agent_id.
+
+WRITE solo para infraestructura shadow expresamente autorizada.
+`PRODUCT_WRITE = DENIED`: no escribe `POS/**`, `laboratorio/**` ni runtime
+CANON. Para producto usa `pos-canon-implementer`; para laboratorio usa
+`pos-lab-implementer`.
