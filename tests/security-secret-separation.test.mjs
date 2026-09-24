@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { handleLabWorkspace } from '../tools/cloudflare-lab/src/lab-workspace.js';
 
 const jsonLab = (body, status = 200, headers = {}) => Response.json(body, { status, headers });
@@ -74,4 +74,37 @@ test('publisher and device provisioning no longer reuse the R2 read credential',
   assert.match(provision, /DEVICE_CREDENTIAL_PEPPER/);
   assert.doesNotMatch(provision, /R2_CANON_READ_TOKEN/);
   assert.doesNotMatch(provision, /derive|Derive server-only device pepper/i);
+});
+
+
+test('all GitHub Actions are pinned to immutable commit SHAs', () => {
+  for (const name of readdirSync('.github/workflows').filter(name => /\.ya?ml$/.test(name))) {
+    const workflow = readFileSync('.github/workflows/' + name, 'utf8');
+    for (const match of workflow.matchAll(/\buses:\s*([^\s#]+)/g)) {
+      assert.match(match[1], /@[0-9a-f]{40}$/, name + ': ' + match[1]);
+    }
+  }
+});
+
+test('Pages does not auto-deploy on POS-only or workflow-only pushes', () => {
+  const pages = readFileSync('.github/workflows/lab-pages.yml', 'utf8');
+  const pushBlock = pages.split('workflow_dispatch:')[0];
+  assert.doesNotMatch(pushBlock, /"POS\/\*\*"/);
+  assert.doesNotMatch(pushBlock, /\.github\/workflows\/lab-pages\.yml/);
+  assert.match(pages, /cp -a POS\/\. _site\/POS\//, 'public POS surface remains explicit pending H17 decision');
+});
+
+test('Pages write permissions are scoped to deploy job', () => {
+  const pages = readFileSync('.github/workflows/lab-pages.yml', 'utf8');
+  const beforeJobs = pages.split('jobs:')[0];
+  assert.match(beforeJobs, /permissions:\s*\n\s+contents: read/);
+  assert.doesNotMatch(beforeJobs, /pages: write|id-token: write/);
+  assert.match(pages, /deploy:\s*\n\s+permissions:\s*\n\s+pages: write\s*\n\s+id-token: write/);
+});
+
+test('Worker import verifier does not retain R2 read token dependency', () => {
+  const workspace = readFileSync('tools/cloudflare-lab/src/lab-workspace.js', 'utf8');
+  assert.match(workspace, /LAB_IMPORT_HMAC_SECRET/);
+  const importSection = workspace.slice(workspace.indexOf('async function importBaseline'), workspace.indexOf('async function verifyHmacHex'));
+  assert.doesNotMatch(importSection, /R2_CANON_READ_TOKEN/);
 });
