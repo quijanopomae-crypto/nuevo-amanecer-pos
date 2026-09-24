@@ -4,6 +4,25 @@
 
 La solicitud explícita actual del propietario es la máxima autoridad para tareas normales de desarrollo del producto.
 
+## Selección de agente OpenCode
+
+Antes de actuar, identifica una sola zona y no mezcles permisos:
+
+- **CANON** → `pos-canon-implementer`: producto `POS/**` y código CANON versionado dentro del alcance autorizado. No deploy ni remote por defecto.
+- **LAB** → `pos-lab-implementer`: solo `laboratorio/**` y pruebas LAB permitidas.
+- **SHADOW legacy** → `pos-implementer`: el nombre se conserva por compatibilidad con `MANIFEST.yaml`, pero `PRODUCT_WRITE = DENIED`.
+- **PLANNER** → `pos-planner`: READ-ONLY; declara CANON/LAB/SHADOW.
+- **REVIEWER** → `pos-reviewer`: READ-ONLY independiente.
+- **TESTER** → `pos-tester`: TEST-ONLY; no modifica expectativas.
+
+La referencia corta es `.opencode/ROLE_MAP.md`.
+
+Comandos:
+- CANON: `/canon-preflight`, `/canon-validate`.
+- LAB: `/lab-preflight`, `/lab-validate`.
+- `/preflight`, `/validate`, `/feature-spec`, `/orchestrate` y `/resume`
+  son comandos SHADOW legacy y requieren invocación explícita de SHADOW.
+
 ## Modo normal de producto
 
 Cuando una tarea:

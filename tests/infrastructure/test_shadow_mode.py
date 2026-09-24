@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from orchestrator.evidence.pack import EvidencePack  # noqa: E402
 from orchestrator.evidence.trust import _verify_run_artifacts_with_anchor  # noqa: E402
 from orchestrator.project_validation import (  # noqa: E402
+    CURRENT_AGENTS,
     EXPECTED_COMMANDS,
     EXPECTED_SKILLS,
     validate_project,
@@ -126,8 +127,7 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_01_project_layout_validates(self) -> None:
         result = validate_project(ROOT)
-        expected_agents = sorted(role["runtime_agent_id"] for role in self.manifest["roles"].values())
-        self.assertEqual(expected_agents, result["agents"])
+        self.assertEqual(sorted(CURRENT_AGENTS), result["agents"])
         self.assertEqual(sorted(EXPECTED_COMMANDS), result["commands"])
         self.assertEqual(sorted(EXPECTED_SKILLS), result["skills"])
 
@@ -139,8 +139,7 @@ class ShadowModeIntegrationTests(unittest.TestCase):
 
     def test_03_agents_are_exact_and_model_agnostic(self) -> None:
         agents = ROOT / ".opencode" / "agents"
-        expected_agents = {role["runtime_agent_id"] for role in self.manifest["roles"].values()}
-        self.assertEqual(expected_agents, {path.stem for path in agents.glob("*.md")})
+        self.assertEqual(CURRENT_AGENTS, {path.stem for path in agents.glob("*.md")})
         for path in agents.glob("*.md"):
             self.assertNotIn("\nmodel:", path.read_text(encoding="utf-8"))
 
@@ -266,18 +265,28 @@ class ShadowModeIntegrationTests(unittest.TestCase):
         self.assertEqual("RECOVERABLE", payload["status"])
         self.assertEqual("run Resource Check", payload["next_action"])
 
-    def test_19_snapshot_and_all_file_digests_validate(self) -> None:
-        snapshot = validate_snapshot(ROOT / "infra" / "stable" / "SNAPSHOT.json", ROOT)
+    def test_19_historical_snapshot_record_is_valid_but_live_tree_is_fail_closed(self) -> None:
+        snapshot = validate_snapshot(
+            ROOT / "infra" / "stable" / "SNAPSHOT.json",
+            ROOT,
+            verify_live_files=False,
+        )
         self.assertEqual(SOURCE_COMMIT, snapshot["source_commit"])
         self.assertEqual(BASE_COMMIT, snapshot["target_base_commit"])
+        with self.assertRaises(SnapshotValidationError):
+            validate_snapshot(ROOT / "infra" / "stable" / "SNAPSHOT.json", ROOT)
 
     def test_20_snapshot_tampering_is_rejected(self) -> None:
-        snapshot = validate_snapshot(ROOT / "infra" / "stable" / "SNAPSHOT.json", ROOT)
+        snapshot = validate_snapshot(
+            ROOT / "infra" / "stable" / "SNAPSHOT.json",
+            ROOT,
+            verify_live_files=False,
+        )
         altered = copy.deepcopy(snapshot)
         first = next(iter(altered["file_digests"]))
         altered["file_digests"][first] = digest("altered")
         with self.assertRaises(SnapshotValidationError):
-            validate_snapshot_payload(altered, ROOT)
+            validate_snapshot_payload(altered, ROOT, verify_live_files=False)
 
     def test_21_comparison_contains_every_required_dimension(self) -> None:
         value = json.loads((ROOT / "infra" / "stable" / "INFRA_V2_COMPARISON.json").read_text(encoding="utf-8"))

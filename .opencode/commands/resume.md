@@ -1,6 +1,11 @@
 ---
-description: "Reanuda un STATE shadow durable y recupera NEXT_ACTION sin memoria del modelo."
+description: "SHADOW legacy: reanuda STATE shadow durable solo bajo invocación explícita."
 subtask: false
 ---
 
-Ejecuta `python -B orchestrator/shadow_cli.py resume evidence/resume-demo`. Si STATE/log se contradicen, devuelve `BLOCKED`; nunca inventes PASS.
+SHADOW_EXPLICIT_ONLY.
+
+Si SHADOW no fue pedido explícitamente, DETENTE.
+
+En SHADOW ejecuta `python -B orchestrator/shadow_cli.py resume evidence/resume-demo`.
+Si STATE/log se contradicen, devuelve `BLOCKED`; nunca inventes PASS.

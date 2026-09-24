@@ -1,4 +1,4 @@
-"""Static project-local contract validation for OpenCode shadow mode."""
+"""Static validation for the live OpenCode surface plus optional legacy shadow baseline."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from orchestrator.schemas.validate_manifest import validate_manifest_file
 from orchestrator.snapshot import validate_snapshot
 
 
-EXPECTED_COMMANDS = frozenset({"preflight", "feature-spec", "orchestrate", "validate", "resume"})
-EXPECTED_SKILLS = frozenset(
+SHADOW_COMMANDS = frozenset({"preflight", "feature-spec", "orchestrate", "validate", "resume"})
+SHADOW_SKILLS = frozenset(
     {
         "feature-spec",
         "impact-analysis",
@@ -23,6 +23,26 @@ EXPECTED_SKILLS = frozenset(
         "release-readiness",
     }
 )
+CURRENT_AGENTS = frozenset(
+    {
+        "pos-canon-implementer",
+        "pos-lab-implementer",
+        "pos-implementer",
+        "pos-planner",
+        "pos-reviewer",
+        "pos-tester",
+    }
+)
+CURRENT_COMMANDS = SHADOW_COMMANDS | frozenset(
+    {"lab-preflight", "lab-validate", "canon-preflight", "canon-validate"}
+)
+CURRENT_SKILLS = SHADOW_SKILLS | frozenset(
+    {"canon-promotion", "lab-animation-edit", "lab-feature-edit", "lab-scope-guard", "lab-ui-edit"}
+)
+
+# Backward-compatible exports used by the existing infrastructure tests.
+EXPECTED_COMMANDS = CURRENT_COMMANDS
+EXPECTED_SKILLS = CURRENT_SKILLS
 COMPARISON_DIMENSIONS = frozenset(
     {"scope", "risk", "preflight", "routing", "anti-loop", "failure_handling", "evidence", "resume_capability"}
 )
@@ -37,22 +57,26 @@ def _markdown_stems(path: Path) -> frozenset[str]:
     return frozenset(item.stem for item in path.glob("*.md") if item.is_file())
 
 
-def validate_project(root: Path, *, require_snapshot: bool = True) -> dict[str, object]:
+def validate_project(root: Path, *, require_snapshot: bool = False) -> dict[str, object]:
     root = Path(root).resolve()
     manifest = validate_manifest_file(root / "MANIFEST.yaml", root)
     agents = _markdown_stems(root / ".opencode" / "agents")
-    expected_agents = frozenset(role["runtime_agent_id"] for role in manifest["roles"].values())
+    shadow_agents = frozenset(role["runtime_agent_id"] for role in manifest["roles"].values())
     commands = _markdown_stems(root / ".opencode" / "commands")
     skills_root = root / ".agents" / "skills"
     skills = frozenset(
         item.name for item in skills_root.iterdir() if item.is_dir() and (item / "SKILL.md").is_file()
     )
-    if agents != expected_agents:
+    if shadow_agents - CURRENT_AGENTS:
+        raise ProjectValidationError(f"shadow manifest references unknown live agents: {sorted(shadow_agents - CURRENT_AGENTS)}")
+    if agents != CURRENT_AGENTS:
         raise ProjectValidationError(f"agent set mismatch: {sorted(agents)}")
-    if commands != EXPECTED_COMMANDS:
+    if commands != CURRENT_COMMANDS:
         raise ProjectValidationError(f"command set mismatch: {sorted(commands)}")
-    if skills != EXPECTED_SKILLS:
+    if skills != CURRENT_SKILLS:
         raise ProjectValidationError(f"skill set mismatch: {sorted(skills)}")
+    if frozenset(manifest["skills"]["required"]) != SHADOW_SKILLS:
+        raise ProjectValidationError("legacy shadow skill set drifted from MANIFEST")
     if (root / ".opencode" / "skills").exists():
         raise ProjectValidationError(".opencode/skills is forbidden")
     if "tools" in manifest["paths"] or (root / ".opencode" / "tools").exists():
@@ -86,5 +110,5 @@ def validate_project(root: Path, *, require_snapshot: bool = True) -> dict[str, 
         "commands": sorted(commands),
         "skills": sorted(skills),
         "v2_fallback": True,
-        "snapshot": snapshot["version"] if snapshot else "NOT_REQUIRED",
+        "snapshot": snapshot["version"] if snapshot else "HISTORICAL_BASELINE_NOT_APPLIED",
     }

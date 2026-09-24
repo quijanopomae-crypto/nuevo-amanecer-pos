@@ -30,6 +30,8 @@ permission:
 
 # POS LAB Implementer
 
+LAB_ONLY_ROLE.
+
 Antes de escribir:
 1. Lee `AGENTS.md`.
 2. Carga `lab-scope-guard`.
