@@ -1,0 +1,187 @@
+name: V1.3 Production Cutover Preparation
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-production-cutover-trigger.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v1-3-production-cutover
+  cancel-in-progress: false
+
+jobs:
+  prepare-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+      PROD_DATABASE_NAME: nuevo-amanecer-prod-v2
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Require owner credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$POS_ACTIVATION_SECRET"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Require exact active branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Re-run production-facing gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/cloudflare-prod/scripts/cutover-prepare.mjs
+          node --test tests/cloud-sync/v1.3-production-cutover.test.mjs
+          node --test tests/cloud-sync/canonical-session-backend.test.mjs tests/cloud-sync/canonical-session-integration.test.mjs
+          cd tools/cloudflare-lab
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
+
+      - name: Production preflight before writes
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs preflight
+
+      - name: Export fresh production backup
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs export
+
+      - name: Store and re-read fresh backup in private R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-cutover/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA-pre-cutover.sql"
+          echo "CUTOVER_R2_KEY=$KEY" >> "$GITHUB_ENV"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --file=/tmp/v1.3-pre-cutover.sql
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --file=/tmp/v1.3-pre-cutover-reread.sql
+          test "$(sha256sum /tmp/v1.3-pre-cutover.sql | awk '{print $1}')" = "$(sha256sum /tmp/v1.3-pre-cutover-reread.sql | awk '{print $1}')"
+
+      - name: Create isolated migration rehearsal D1
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs create-rehearsal
+
+      - name: Restore production backup into rehearsal D1
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler d1 execute "$REHEARSAL_DB_NAME" --remote --file=/tmp/v1.3-pre-cutover-reread.sql
+
+      - name: Rehearse 0010 and 0011 on restored production snapshot
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_AUTH_SESSIONS" = "0" ]; then
+            npx wrangler d1 execute "$REHEARSAL_DB_NAME" --remote --file=migrations/0010_session_auth.sql
+          fi
+          if [ "$HAS_PRINCIPAL_GUARD" = "0" ] || [ "$HAS_SESSION_TRIGGER" = "0" ]; then
+            npx wrangler d1 execute "$REHEARSAL_DB_NAME" --remote --file=migrations/0011_canonical_session_runtime.sql
+          fi
+
+      - name: Verify rehearsal after migrations
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs verify-rehearsal
+
+      - name: Recheck production before mutation
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs recheck
+
+      - name: Apply 0010 and 0011 to production
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_AUTH_SESSIONS" = "0" ]; then
+            npx wrangler d1 execute "$PROD_DATABASE_NAME" --remote --file=migrations/0010_session_auth.sql
+          fi
+          if [ "$HAS_PRINCIPAL_GUARD" = "0" ] || [ "$HAS_SESSION_TRIGGER" = "0" ]; then
+            npx wrangler d1 execute "$PROD_DATABASE_NAME" --remote --file=migrations/0011_canonical_session_runtime.sql
+          fi
+
+      - name: Verify production schema
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs verify-production
+
+      - name: Deploy isolated production Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-prod/wrangler.jsonc
+
+      - name: Bind activation secret to production Worker
+        working-directory: tools/cloudflare-lab
+        run: printf '%s' "$POS_ACTIVATION_SECRET" | npx wrangler secret put POS_ACTIVATION_SECRET --config ../cloudflare-prod/wrangler.jsonc
+
+      - name: Verify production Worker boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH="$(curl --fail --silent --show-error "$PROD_WORKER_URL/health")"
+          printf '%s' "$HEALTH" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(x.ok!==true||x.service!=='nuevo-amanecer-pos-prod'||x.d1!=='ok')process.exit(2)})"
+          CODE="$(curl --silent --output /tmp/prod-lab-boundary.json --write-out '%{http_code}' "$PROD_WORKER_URL/lab/workspace/status")"
+          test "$CODE" = "404"
+
+      - name: Probe activation and canonical authority
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs probe-worker
+
+      - name: Final READY_FOR_FIRST_SALE verification
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs final
+
+      - name: Store cutover preparation manifest in private R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL_SHA="$(cat /tmp/v1.3-pre-cutover.sha256)"
+          MANIFEST_KEY="${CUTOVER_R2_KEY%.sql}.ready-for-first-sale.json"
+          cat > /tmp/v1.3-cutover-manifest.json <<EOF
+          {
+            "format": "nuevo-amanecer-v1.3-cutover-preparation-v1",
+            "status": "READY_FOR_FIRST_SALE",
+            "source_database_id": "$PROD_DATABASE_ID",
+            "pre_cutover_backup_key": "$CUTOVER_R2_KEY",
+            "pre_cutover_sql_sha256": "$SQL_SHA",
+            "worker": "nuevo-amanecer-pos-prod",
+            "github_run_id": "$GITHUB_RUN_ID",
+            "github_sha": "$GITHUB_SHA"
+          }
+          EOF
+          npx wrangler r2 object put "$R2_BUCKET/$MANIFEST_KEY" --file=/tmp/v1.3-cutover-manifest.json
+          {
+            echo "## V1.3 READY_FOR_FIRST_SALE"
+            echo "- Production D1: $PROD_DATABASE_ID"
+            echo "- Fresh private backup: $CUTOVER_R2_KEY"
+            echo "- Production Worker: $PROD_WORKER_URL"
+            echo "- Session migrations: PASS"
+            echo "- Probe session cleanup: PASS"
+            echo "- first_live_operation_id: NULL"
+            echo "- Operational traffic: 0"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete rehearsal D1
+        if: ${{ always() && env.REHEARSAL_DB_ID != '' }}
+        shell: bash
+        run: |
+          curl --fail --silent --show-error -X DELETE             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$REHEARSAL_DB_ID"             > /tmp/delete-rehearsal.json
