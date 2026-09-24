@@ -135,7 +135,7 @@ El panel permite:
 - restaurar el baseline CANON dentro de LAB.
 
 Los cambios de clientes, créditos, pagos, inventario, caja y demás hechos durante pruebas
-se guardan únicamente en `nuevo-amanecer-lab` cuando hay un writer LAB configurado.
+se guardan únicamente en `nuevo-amanecer-lab` cuando hay una sesión de escritura LAB activa.
 
 Un refresh con el mismo `.sql` devuelve `no_change`: no pisa el trabajo LAB. Un backup
 CANON con SHA-256 nuevo crea un baseline nuevo y reemplaza el workspace activo, dejando
