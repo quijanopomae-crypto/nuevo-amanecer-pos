@@ -426,8 +426,63 @@
 
   state.credentials = cleanCredentials(loadCredentials());
 
+  function renderFastLocalPage() {
+    var activeId = document.querySelector('.page.active')?.id || 'pageMenu';
+    try { if (typeof renderCategorySelects === 'function') renderCategorySelects(); } catch {}
+    try { if (typeof _naApplyConfigUI === 'function') _naApplyConfigUI(); } catch {}
+
+    try {
+      if (activeId === 'pagePOS') {
+        if (typeof posRender === 'function') posRender();
+        if (typeof posUpdateCart === 'function') posUpdateCart();
+      } else if (activeId === 'pageInventario') {
+        if (typeof invRender === 'function') invRender();
+        if (typeof invBadges === 'function') invBadges();
+      } else if (activeId === 'pageClientes') {
+        if (typeof cliRender === 'function') cliRender();
+      } else if (activeId === 'pageVentas') {
+        if (typeof ventasRender === 'function') ventasRender();
+      } else if (activeId === 'pageCaja') {
+        if (typeof cajRender === 'function') cajRender();
+      } else if (activeId === 'pageGastos') {
+        if (typeof gasRender === 'function') gasRender();
+      } else if (activeId === 'pageConfig') {
+        if (typeof cfgUpdateStats === 'function') cfgUpdateStats();
+      } else if (typeof updateDashboard === 'function') {
+        updateDashboard();
+      }
+    } catch (error) {
+      console.warn('[NA-LAB] Render rápido local omitido.', error && error.message || error);
+    }
+  }
+
+  function hydrateFastLocalSnapshot() {
+    try {
+      var local = (typeof _naReadLocalSnapshot === 'function') ? _naReadLocalSnapshot() : null;
+      var session = (typeof _naReadSessionSnapshot === 'function') ? _naReadSessionSnapshot() : null;
+      var cached = local || session;
+      if (!cached || typeof _naValidSnapshot !== 'function' || !_naValidSnapshot(cached)) return false;
+      if (typeof _naApplySnapshot !== 'function' || !_naApplySnapshot(cached)) return false;
+      if (typeof _naNormalizeData === 'function') _naNormalizeData();
+      if (typeof _naReconcileCart === 'function' && typeof cart !== 'undefined') {
+        var rec = _naReconcileCart(cart);
+        if (rec && Array.isArray(rec.cart)) cart = rec.cart;
+      }
+      renderFastLocalPage();
+      return true;
+    } catch (error) {
+      console.warn('[NA-LAB] Caché local rápida no disponible.', error && error.message || error);
+      return false;
+    }
+  }
+
   if (originalLoadAllData) {
     loadAllData = async function () {
+      // Pintar primero la copia local síncrona. La verificación durable en
+      // IndexedDB sigue ejecutándose inmediatamente después y mantiene la
+      // semántica canónica de recuperación.
+      hydrateFastLocalSnapshot();
+
       var result = await originalLoadAllData.apply(this, arguments);
 
       // No bloquear el primer render esperando la red. Primero mostramos el

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-INSTANT-CACHE-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Mostrar inmediatamente los datos locales cacheados del módulo abierto mientras continúa la verificación durable y la actualización D1 LAB en segundo plano.",
+  "allowed_files": [
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/tasks/LAB-INSTANT-CACHE-001.json",
+    "tests/laboratorio-instant-cache.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
