@@ -10,20 +10,21 @@
 </head>
 <body>
 <main>
-  <h1>Conectar la caja a la nube</h1>
-  <p>Introduce la clave de sincronización vigente de esta caja. Se comprobará sin registrar ventas y se guardará solo en este perfil del navegador.</p>
-  <p class="note">Usa <strong>SYNC_TOKEN</strong>. La clave de lectura del teléfono no permite conectar una caja escritora.</p>
+  <h1>Activar Nuevo Amanecer V1.3</h1>
+  <p>Introduce tu clave privada de activación una sola vez. El servidor la valida y entrega una sesión propia para este navegador.</p>
+  <p class="note">No uses tu contraseña de GitHub ni READ_TOKEN. Usa la misma <strong>clave de activación V1.3</strong> que ya probaste en PC y teléfono.</p>
   <form id="setupForm">
-    <label for="syncToken">Clave de sincronización</label>
-    <input id="syncToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-    <button id="save" type="submit">Comprobar y guardar</button>
+    <label for="activationSecret">Clave de activación</label>
+    <input id="activationSecret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+    <button id="save" type="submit">Activar y conectar</button>
   </form>
   <p id="status" class="status" role="status" aria-live="polite"></p>
-  <p class="note">Si la caja ya está abierta, ciérrala y vuelve a abrirla después de guardar. Usa una sola pestaña para registrar ventas. Los datos que estaban en otro archivo o dirección necesitan un respaldo y restauración previos.</p>
+  <p class="note">Después de activar, cierra cualquier pestaña antigua del POS y vuelve a abrirla. V1.3 usa la autoridad CANON de producción y conserva una sesión persistente por navegador.</p>
   <a class="open" href="/POS/index.html">Abrir POS</a>
-  <p class="note">La clave no se incluye en el respaldo de datos. Esta configuración no cambia ni renueva tus claves de Cloudflare.</p>
+  <p class="note">La clave de activación no queda guardada. Solo se conserva el token de sesión emitido por el Worker productivo.</p>
 </main>
 <script src="/POS/js/sync/outbox.js"></script>
+<script src="/POS/js/sync/canonical-client.js"></script>
 <script src="/tools/pos-local/setup.js"></script>
 </body>
 </html>

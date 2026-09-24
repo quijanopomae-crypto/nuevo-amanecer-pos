@@ -1,0 +1,20 @@
+{
+  "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
+  "name": "nuevo-amanecer-pos-prod",
+  "main": "../cloudflare-lab/src/worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "vars": {
+    "RUNTIME_ENVIRONMENT": "production",
+    "CANONICAL_RUNTIME_ENABLED": "enabled"
+  },
+  "d1_databases": [
+    {
+      "binding": "nuevo_amanecer_lab",
+      "database_name": "nuevo-amanecer-prod-v2",
+      "database_id": "cf2c83d3-f187-472e-967b-0ad24be969eb",
+      "migrations_dir": "../cloudflare-lab/migrations"
+    }
+  ]
+}

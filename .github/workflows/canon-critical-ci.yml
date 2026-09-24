@@ -9,10 +9,15 @@ on:
       - "tests/cloud-sync/**"
       - "tools/cloudflare-lab/src/**"
       - "tools/cloudflare-backup/**"
+      - "tools/cloudflare-prod/**"
+      - "tools/pos-local/setup.html"
+      - "tools/pos-local/setup.js"
       - "tools/cloudflare-lab/migrations/**"
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
       - ".github/workflows/canon-critical-ci.yml"
+      - ".github/workflows/v1.3-prod-cutover.yml"
+      - ".github/workflows/v1.3-prod-preflight.yml"
   push:
     branches:
       - feature/v1.3-mobile-cloud
@@ -23,10 +28,15 @@ on:
       - "tests/cloud-sync/**"
       - "tools/cloudflare-lab/src/**"
       - "tools/cloudflare-backup/**"
+      - "tools/cloudflare-prod/**"
+      - "tools/pos-local/setup.html"
+      - "tools/pos-local/setup.js"
       - "tools/cloudflare-lab/migrations/**"
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
       - ".github/workflows/canon-critical-ci.yml"
+      - ".github/workflows/v1.3-prod-cutover.yml"
+      - ".github/workflows/v1.3-prod-preflight.yml"
 
 permissions:
   contents: read
@@ -49,6 +59,10 @@ jobs:
       - name: Install Cloudflare test dependencies
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
+
+      - name: Production Worker dry-run
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
 
       - name: CANON business regressions
         shell: bash
