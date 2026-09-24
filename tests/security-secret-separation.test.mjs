@@ -76,7 +76,6 @@ test('publisher and device provisioning no longer reuse the R2 read credential',
   assert.doesNotMatch(provision, /derive|Derive server-only device pepper/i);
 });
 
-
 test('all GitHub Actions are pinned to immutable commit SHAs', () => {
   for (const name of readdirSync('.github/workflows').filter(name => /\.ya?ml$/.test(name))) {
     const workflow = readFileSync('.github/workflows/' + name, 'utf8');
@@ -86,12 +85,15 @@ test('all GitHub Actions are pinned to immutable commit SHAs', () => {
   }
 });
 
-test('Pages does not auto-deploy on POS-only or workflow-only pushes', () => {
+test('Pages auto-deploy is LAB-only and canonical POS entry point is replaced', () => {
   const pages = readFileSync('.github/workflows/lab-pages.yml', 'utf8');
   const pushBlock = pages.split('workflow_dispatch:')[0];
   assert.doesNotMatch(pushBlock, /"POS\/\*\*"/);
   assert.doesNotMatch(pushBlock, /\.github\/workflows\/lab-pages\.yml/);
-  assert.match(pages, /cp -a POS\/\. _site\/POS\//, 'public POS surface remains explicit pending H17 decision');
+  assert.match(pages, /cp -a POS\/\. _site\/POS\//, 'LAB still needs canonical static assets through its base href');
+  assert.match(pages, /cat > _site\/POS\/index\.html/);
+  assert.match(pages, /LAB support assets only/);
+  assert.match(pages, /canonical POS is not served from GitHub Pages/);
 });
 
 test('Pages write permissions are scoped to deploy job', () => {
