@@ -146,3 +146,14 @@ branch_hygiene:
   safe_file_deletions_demonstrated: 0
   remote_branch_refs_deleted: false
   branch_ref_deletion_note: connected_tool_has_no_branch_delete_action
+
+final_verification:
+  report: docs/REMEDIATION_FINAL_VERIFICATION.md
+  repository_code_state: CODE_REMEDIATION_PASS
+  overall_clean_pass: false
+  remaining_state: OWNER_ONLY_PENDING
+  blockers:
+    - github_branch_protection
+    - real_security_secret_configuration
+    - real_backup_restore_drill
+  production_cutover_authorized: false
