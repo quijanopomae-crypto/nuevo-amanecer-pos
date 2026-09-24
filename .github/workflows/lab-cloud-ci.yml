@@ -43,6 +43,7 @@ jobs:
         run: |
           python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
+          node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
