@@ -11,6 +11,9 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0004_sale_create.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0005_import_staging.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0007_canonical_commerce.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0008_canonical_financial.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0009_canonical_activation.sql', import.meta.url), 'utf8'));
   const pepper = 'fixture-device-pepper';
   const hash = (credential) => createHmac('sha256', pepper).update(credential).digest('hex');
   let batchFailureAt = null;

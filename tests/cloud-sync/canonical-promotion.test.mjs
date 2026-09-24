@@ -385,15 +385,22 @@ test('Date objects serializan ISO; objetos {}, inválidos y aliases contradictor
 test('seguridad lecturas: auth por ruta, cursor/limit inválido, CORS y READ_TOKEN no revocado implícitamente', async (t) => {
   const { f } = await published(t);
   for (const route of READ_ROUTES) {
-    await response(await f.read(route, '', {}), 401);
-    await response(await f.read(route, '', WRITER), 401);
+    const publicRead = await f.read(route, '', {});
+    assert.equal(publicRead.status, 200, `unauthenticated public read: ${route}`);
+    const writerRead = await f.read(route, '', WRITER);
+    assert.ok([200, 409].includes(writerRead.status), `valid device credential reaches canonical read boundary: ${route} (${writerRead.status})`);
     const options = await f.fetch(`http://localhost/read/canonical/${route}`, { method: 'OPTIONS' });
     assert.equal(options.status, 204);
-    assert.match(options.headers.get('access-control-allow-headers'), /x-read-token/i);
   }
   for (const query of ['?limit=0','?limit=101','?limit=1.1','?limit=NaN','?cursor=!!!','?cursor=e30']) await response(await f.read('products', query), 400);
   f.exec("UPDATE devices SET status='revoked' WHERE device_id='a6-writer'");
   await response(await f.read('products'), 200);
+  const deviceRead = await response(await f.read('products', '?limit=100', { 'x-device-id': 'a6-reader', 'x-sync-token': 'a6-reader-secret' }), 200);
+  assert.equal(deviceRead.items.length, 28, 'active read_only device can read the canonical generation without READ_TOKEN');
+  for (const command of ['sale.create','payment.create','cash.open','cash.close']) {
+    const denied = await f.fetch(`http://localhost/commands/${command}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    assert.ok([401,403].includes(denied.status), `${command} requires writer auth`);
+  }
   await response(await f.export(f.request.promotion_id, 'products'), 403);
   assert.equal((await f.fetch('http://localhost/read/canonical/products', { method: 'POST', headers: READER })).status, 405);
 });

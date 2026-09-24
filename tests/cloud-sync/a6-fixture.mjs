@@ -56,7 +56,7 @@ export async function a6Fixture(t, { runs = 1, rows = syntheticRows() } = {}) {
   f.control = () => f.sql('SELECT * FROM canonical_control WHERE id=1');
   f.counts = (promotion = 'a6-promotion-1') => Object.fromEntries(TABLES.map(table => [table, f.sql(`SELECT COUNT(*) n FROM ${table} WHERE promotion_id=?`, promotion).n]));
   f.post = (path, body, headers = WRITER) => f.fetch(`http://localhost${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
-  f.read = (route, query = '', headers = READER) => f.fetch(`http://localhost/read/canonical/${route}${query}`, { headers });
+  f.read = (route, query = '', headers = {}) => f.fetch(`http://localhost/read/canonical/${route}${query}`, { headers });
   f.export = (promotion, table, query = '', headers = WRITER) => f.fetch(`http://localhost/imports/canonical/${promotion}?entity_type=${table}${query}`, { headers });
   f.rotate = () => f.exec('UPDATE devices SET credential_hash=? WHERE device_id=?', createHmac('sha256', f.env.DEVICE_CREDENTIAL_PEPPER).update('rotated-secret').digest('hex'), 'a6-writer');
   f.bumpControl = (extra = '') => f.database.exec(`UPDATE canonical_control SET revision=revision+1,authority_epoch=authority_epoch+1${extra} WHERE id=1`);
