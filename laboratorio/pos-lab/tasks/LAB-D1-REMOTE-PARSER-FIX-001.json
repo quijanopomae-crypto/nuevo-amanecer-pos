@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-D1-REMOTE-PARSER-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Corregir incompatibilidad del parser remoto de Cloudflare D1 en triggers de la migración 0006.",
+  "allowed_files": [
+    ".gitattributes",
+    ".github/workflows/lab-cloud-ci.yml",
+    ".github/workflows/deploy-lab-cloud.yml",
+    "tools/cloudflare-lab/migrations/0006_canonical_promotion.sql",
+    "tools/cloudflare-lab/test/d1-remote-compat.test.mjs",
+    "laboratorio/pos-lab/tasks/LAB-D1-REMOTE-PARSER-FIX-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-lab/migrations/0001_init.sql",
+    "tools/cloudflare-lab/migrations/0002_read_only_indexes.sql",
+    "tools/cloudflare-lab/migrations/0003_device_auth.sql",
+    "tools/cloudflare-lab/migrations/0004_sale_create.sql",
+    "tools/cloudflare-lab/migrations/0005_import_staging.sql",
+    "tools/cloudflare-lab/migrations/0007_lab_workspace.sql",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "production_writes": false,
+  "canon_writes": false
+}
