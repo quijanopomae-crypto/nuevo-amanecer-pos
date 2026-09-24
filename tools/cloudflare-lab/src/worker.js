@@ -143,10 +143,9 @@ async function authorizeSession(request, env) {
        JOIN devices d ON d.device_id = 'session:' || s.session_id
       WHERE s.token_hash = ?1`
   ).bind(tokenHash).first();
-  if (!session || session.session_status !== 'active' || session.principal_status !== 'active' ||
-      session.role !== 'writer' || !constantTimeEqual(tokenHash, session.credential_hash)) {
-    return json({ error: 'unauthorized' }, 401);
-  }
+  if (!session || !constantTimeEqual(tokenHash, session.credential_hash)) return json({ error: 'unauthorized' }, 401);
+  if (session.session_status !== 'active' || session.principal_status !== 'active') return json({ error: 'session_revoked' }, 403);
+  if (session.role !== 'writer') return json({ error: 'read_only_session' }, 403);
   await db.batch([
     db.prepare("UPDATE auth_sessions SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE session_id = ?1").bind(session.session_id),
     db.prepare("UPDATE devices SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE device_id = ?1").bind(session.device_id),
