@@ -97,7 +97,7 @@
 
         /* CORRECCIÓN: mostrar el contenido completo de tarjetas en escritorio sin alterar el scroll móvil */
         @media(min-width:701px){
-            #pageClientes .client-card{height:auto;max-height:none}
+            #pageClientes .client-card{height:auto;max-height:none;flex-shrink:0}
             #pageClientes .client-header{align-items:flex-start;min-height:64px}
             #pageClientes .c-info{min-width:0;overflow:visible}
             #pageClientes .c-name,
