@@ -51,7 +51,7 @@ export async function createCanonicalFinancial(command, request, env, auth, json
     if (!c || c.mode !== 'ACTIVE') return 'canonical_not_active';
     if (c.active_promotion_id !== body.promotion_id || c.authority_epoch !== body.authority_epoch ||
         c.revision !== body.expected_control_revision || c.minimum_client_contract !== body.client_contract ||
-        c.writer_device_id !== auth.principalId || c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
+        c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
   async function replay() {
@@ -128,8 +128,8 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   const receipt = db.prepare(`INSERT INTO canonical_financial_operations(operation_id,command,request_hash,result_json,promotion_id,
     authority_epoch,control_revision,client_contract,device_id,credential_hash,created_at) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)`)
     .bind(body.operation_id,command,hash,stableStringify(result),body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,auth.principalId,auth.credentialHash,body.created_at);
-  const guard = db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract)
-    VALUES(?1,?2,?3,?4,?5,?6)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract);
+  const guard = db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash)
+    VALUES(?1,?2,?3,?4,?5,?6,?7,?8)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,auth.principalId,auth.credentialHash);
   const marker = db.prepare(`UPDATE canonical_control SET first_live_operation_id=COALESCE(first_live_operation_id,?1)
     WHERE id=1 AND mode='ACTIVE' AND active_promotion_id=?2 AND authority_epoch=?3 AND revision=?4
     AND EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?1 AND commit_token=?5)`)
