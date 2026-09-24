@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-MOBILE-TOKEN-COPY-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Agregar controles móviles para copiar y mostrar/ocultar el SYNC_TOKEN LAB sin tocar CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/tasks/LAB-MOBILE-TOKEN-COPY-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "production_writes": false,
+  "canon_writes": false
+}
