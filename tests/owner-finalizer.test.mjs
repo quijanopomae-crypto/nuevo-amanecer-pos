@@ -33,20 +33,23 @@ test('real recovery drill is manual and restores only into a temporary D1', () =
   assert.match(drill, /recovery-drills\//);
   assert.match(drill, /Create temporary recovery D1/);
   assert.match(drill, /Restore SQL into temporary D1/);
-  assert.match(drill, /PRAGMA integrity_check/);
-  assert.match(drill, /PRAGMA foreign_key_check/);
+  assert.doesNotMatch(drill, /PRAGMA integrity_check/);
+  assert.doesNotMatch(drill, /PRAGMA foreign_key_check/);
+  assert.match(drill, /sqlite_master/);
+  assert.match(drill, /orphan_payment_credits/);
+  assert.match(drill, /invalid_credit_balance_rows/);
   assert.match(drill, /canonical_control/);
   assert.match(drill, /Delete temporary recovery D1/);
   assert.match(drill, /-X DELETE/);
 });
 
-test('all wrangler restore/check commands target the temporary database name', () => {
+test('restore command and verification queries target only the temporary database', () => {
   const executeLines = drill.split('\n').filter(line => /wrangler d1 execute/.test(line));
-  assert.ok(executeLines.length >= 4);
-  for (const line of executeLines) {
-    assert.match(line, /\$DRILL_DB_NAME/);
-    assert.doesNotMatch(line, /nuevo-amanecer-prod-v2|\$PROD_DATABASE_ID/);
-  }
+  assert.equal(executeLines.length, 1);
+  assert.match(executeLines[0], /\$DRILL_DB_NAME/);
+  assert.doesNotMatch(executeLines[0], /nuevo-amanecer-prod-v2|\$PROD_DATABASE_ID/);
+  assert.match(drill, /const database = process\.env\.DRILL_DB_ID/);
+  assert.match(drill, /\/d1\/database\/.*\/query/);
 });
 
 
