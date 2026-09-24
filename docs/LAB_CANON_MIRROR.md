@@ -132,7 +132,7 @@ R2_CANON_PREFIX=nuevo-amanecer-prod-v2/
 
 Para local pueden colocarse en `tools/cloudflare-lab/.dev.vars`, que está ignorado por Git.
 
-Para remoto, nunca versionar secretos:
+Para remoto, nunca versionar valores de secretos. Los GitHub Actions Secrets cifrados y los secretos de Worker son mecanismos autorizados cuando el workflow los necesita:
 
 ```powershell
 cd tools/cloudflare-lab
@@ -176,5 +176,6 @@ node laboratorio/pos-lab/build-lab.mjs --check
 - R2 CANON: GET solamente.
 - D1 LAB: mutable y revisionado.
 - Datos reales en GitHub: prohibido.
-- Credenciales en GitHub: prohibido.
+- Valores de credenciales versionados en Git/repo: prohibidos.
+- GitHub Actions Secrets cifrados: permitidos únicamente para workflows autorizados; nunca imprimir ni exponer sus valores.
 - `POS/**`: no se modifica para esta integración.
