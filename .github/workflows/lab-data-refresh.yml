@@ -27,8 +27,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Test SQL converter
-        run: python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
+      - name: Require current active branch head
+        run: |
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Test backup contract and SQL converter
+        run: |
+          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
+          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
 
       - name: Fetch latest CANON SQL backup
         working-directory: tools/cloudflare-lab

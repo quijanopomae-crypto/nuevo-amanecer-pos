@@ -29,6 +29,12 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Require current active branch head
+        run: |
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
       - name: Install dependencies
         working-directory: tools/cloudflare-lab
         run: npm ci
@@ -39,11 +45,18 @@ jobs:
           node --check tools/cloudflare-lab/src/worker.js
           node --check laboratorio/pos-lab/js/lab-workspace.js
           python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
+          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
           node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
-          node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
+          node --test tests/laboratorio-*.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
+
+      - name: Preflight latest CANON backup before remote changes
+        working-directory: tools/cloudflare-lab
+        run: |
+          node scripts/fetch-latest-canon-backup.mjs
+          python3 scripts/lab-snapshot-from-sql.py --sql /tmp/canon.sql --output /tmp/lab-snapshot.json
 
       - name: Apply D1 LAB migrations
         working-directory: tools/cloudflare-lab
@@ -65,9 +78,6 @@ jobs:
       - name: Verify LAB Worker health
         run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health
 
-      - name: Import latest CANON SQL backup into D1 LAB workspace
+      - name: Publish prevalidated CANON baseline into D1 LAB workspace
         working-directory: tools/cloudflare-lab
-        run: |
-          node scripts/fetch-latest-canon-backup.mjs
-          python3 scripts/lab-snapshot-from-sql.py --sql /tmp/canon.sql --output /tmp/lab-snapshot.json
-          node scripts/publish-lab-snapshot.mjs
+        run: node scripts/publish-lab-snapshot.mjs
