@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "task_id": "LAB-TASK-GUARDS-REMEDIATION-001",
+  "environment": "LABORATORIO",
+  "base_ref": "07952120f3aa2daeacec425f7eac870dae5fe796",
+  "objective": "Cerrar H24 H25 H26: detectar untracked, impedir PASS sin scope y estandarizar contratos LAB ejecutables.",
+  "allowed_files": [
+    "laboratorio/pos-lab/scope-guard.mjs",
+    "laboratorio/pos-lab/validate-lab.mjs",
+    "laboratorio/pos-lab/LAB_TASK.example.json",
+    "laboratorio/pos-lab/tasks/README.md",
+    "laboratorio/pos-lab/tasks/LAB-TASK-GUARDS-REMEDIATION-001.json",
+    "tests/laboratorio-scope-guard.test.mjs",
+    "docs/REMEDIATION_PHASE4A_TASK_GUARDS.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
