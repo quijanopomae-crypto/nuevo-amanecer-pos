@@ -46,17 +46,17 @@ export async function createCanonicalSale(request, env, auth, json) {
   const checked = validateCanonicalSale(body);
   if (checked.error) return json({ error: checked.error }, 400);
   body = checked.value;
-  if (body.device_id !== undefined && body.device_id !== request.headers.get('x-device-id')) return json({error:'device_id_mismatch'},403);
+  const principalId = auth.principalId;
   const db = env.nuevo_amanecer_lab;
   // Authorization and the authority contract apply even to a durable replay.
   // Recheck again after replay lookup (including recovery from a lost ACK).
   async function authorityError() {
     const control = await db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
-      FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(request.headers.get('x-device-id')).first();
+      FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId).first();
     if (!control || control.mode !== 'ACTIVE') return 'canonical_not_active';
     if (control.active_promotion_id !== body.promotion_id || Number(control.authority_epoch) !== body.authority_epoch ||
         Number(control.revision) !== body.expected_control_revision || control.minimum_client_contract !== body.client_contract ||
-        control.writer_device_id !== request.headers.get('x-device-id') || control.device_role !== 'writer' ||
+        control.writer_device_id !== principalId || control.device_role !== 'writer' ||
         control.device_status !== 'active' || control.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
@@ -88,9 +88,9 @@ export async function createCanonicalSale(request, env, auth, json) {
     db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract)
       SELECT ?1,?2,?3,?4,?5,?6 WHERE EXISTS(SELECT 1 FROM canonical_control c JOIN devices d ON d.device_id=?7
       WHERE c.id=1 AND c.mode='ACTIVE' AND c.active_promotion_id=?3 AND c.authority_epoch=?4 AND c.revision=?5
-      AND c.minimum_client_contract=?6 AND c.writer_device_id=?7 AND d.role='writer' AND d.status='active' AND d.credential_hash=?8)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,request.headers.get('x-device-id'),auth.credentialHash),
+      AND c.minimum_client_contract=?6 AND c.writer_device_id=?7 AND d.role='writer' AND d.status='active' AND d.credential_hash=?8)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,principalId,auth.credentialHash),
     db.prepare(`INSERT INTO sales(sale_id,operation_id,payload_hash,commit_token,device_id,payment_method,total_cents,payment_reference,created_at)
-      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?2 AND commit_token=?4)`).bind(body.sale_id,body.operation_id,payloadHash,token,request.headers.get('x-device-id'),body.payment_method,body.total_cents,body.payment.reference,body.created_at),
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?2 AND commit_token=?4)`).bind(body.sale_id,body.operation_id,payloadHash,token,principalId,body.payment_method,body.total_cents,body.payment.reference,body.created_at),
     db.prepare(`INSERT INTO canonical_sale_context(sale_id,operation_id,promotion_id,authority_epoch,control_revision,customer_id,client_contract,created_at)
       SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE EXISTS(SELECT 1 FROM sales WHERE operation_id=?2 AND commit_token=?9)`).bind(body.sale_id,body.operation_id,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.customer_id||null,body.client_contract,body.created_at,token),
   ];
