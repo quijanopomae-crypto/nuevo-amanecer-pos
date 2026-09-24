@@ -51,6 +51,9 @@ test('browser clients persist session token and never persist activation secret'
   assert.match(outbox, /\/auth\/activate/);
   assert.match(outbox, /remember: true/);
   assert.match(outbox, /authorization.*Bearer/i);
+  const commandBuilder = outbox.slice(outbox.indexOf('function saleCommand'), outbox.indexOf('function initializeBaseline'));
+  assert.doesNotMatch(commandBuilder, /device_id|deviceId/);
+  assert.match(outbox, /version: 3/);
   assert.match(lab, /naLabActivationSecret/);
   assert.match(lab, /sessionToken/);
   assert.match(lab, /authorization.*Bearer/i);
