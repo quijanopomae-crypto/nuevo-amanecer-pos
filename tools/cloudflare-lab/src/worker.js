@@ -2,7 +2,9 @@
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
 import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
-import { handleA6, isA6Path, a6LocalDenied } from './a6-canonical.js';
+import { handleA6, isA6Path, canonicalRuntimeDenied } from './a6-canonical.js';
+import { createCanonicalSale, CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
+import { createCanonicalFinancial, FINANCIAL_COMMANDS } from './a6-financial.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 
 const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
@@ -28,8 +30,6 @@ export default {
         return await handleLabWorkspace(request, url, env, { jsonLab, authorizeRead, authorizeSession });
       }
       if (isA6Path(url.pathname)) {
-        const denied = a6LocalDenied(url, env, json);
-        if (denied) return denied;
         if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), isRead);
         return cors(await handleA6(request, url, env, { json, authorizeRead, authorizeSession }), isRead);
       }
@@ -59,7 +59,23 @@ export default {
       }
       if (url.pathname === SALE_CREATE_PATH) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        if (await isCanonicalSaleRequest(request)) {
+          const denied = canonicalRuntimeDenied(url, env, json);
+          if (denied) return denied;
+          const auth = await authorizeSession(request, env);
+          if (auth instanceof Response) return auth;
+          return await createCanonicalSale(request, env, auth, json);
+        }
         return await createSale(request, env);
+      }
+      const financialCommand = url.pathname.startsWith('/commands/') ? url.pathname.slice('/commands/'.length) : '';
+      if (FINANCIAL_COMMANDS.has(financialCommand)) {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        const denied = canonicalRuntimeDenied(url, env, json);
+        if (denied) return denied;
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return await createCanonicalFinancial(financialCommand, request, env, auth, json);
       }
       if (url.pathname === IMPORT_STAGE_PATH) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
@@ -91,6 +107,16 @@ export default {
     }
   },
 };
+
+async function isCanonicalSaleRequest(request) {
+  try {
+    const body = await request.clone().json();
+    return !!(body && typeof body === 'object' && !Array.isArray(body) &&
+      body.client_contract === CANONICAL_CLIENT_CONTRACT && typeof body.promotion_id === 'string');
+  } catch {
+    return false;
+  }
+}
 
 async function health(env) {
   if (!env.nuevo_amanecer_lab) {
