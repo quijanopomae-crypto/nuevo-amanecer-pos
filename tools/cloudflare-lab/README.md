@@ -38,7 +38,7 @@ Campos técnicos añadidos a los obligatorios: `received_at` (hora del servidor,
 - `POST /sync/operations` → inserta una operación (JSON con los 8 campos).
 - `GET /sync/operations/:operation_id` → devuelve la fila.
 - `POST /commands/sale.create` → crea atómicamente venta, líneas, movimientos de
-  inventario y movimiento de caja. Requiere dispositivo `writer` activo.
+  inventario y movimiento de caja. Requiere una sesión persistente activa.
 - `POST /commands/import.stage` → carga por lotes un manifiesto A5 validado en
   staging y finaliza su reconciliacion `PASS`/`FAIL`; nunca promociona a tablas A3.
 - `GET /imports/{import_id}` → consulta autenticada del run y sus conteos staging.
@@ -64,44 +64,33 @@ alterado quedan `NEEDS_REVIEW`. Los retries reutilizan los mismos bytes y el mis
 `operation_id`. Un OUTBOX V1 encontrado al actualizar se conserva dentro del
 snapshot como journal legacy para revisión y nunca se reinterpreta como una venta.
 
-Los endpoints `/sync/*` autentican el dispositivo contra D1. La PWA conserva su
-configuración A1: envía su credencial en `x-sync-token` y el `device_id` estable en
-la operación. `x-device-id` es obligatorio para consultas y, cuando se envía en un
-POST, debe coincidir con el payload. Solo un dispositivo `writer` y `active` puede
-escribir; `read_only`, `revoked` y credenciales inválidas se rechazan antes de la
+Los endpoints de escritura usan una **sesión persistente**. Un navegador nuevo
+llama una sola vez a `POST /auth/activate` con `x-activation-secret`. Si la clave
+coincide con `POS_ACTIVATION_SECRET`, el Worker genera un token aleatorio de 256 bits,
+guarda únicamente su SHA-256 en D1 y devuelve el token al navegador.
+
+Las siguientes solicitudes usan `Authorization: Bearer <session_token>`. No se exige
+`x-device-id`, IMEI, hardware ID, registro manual del teléfono ni una credencial
+distinta por equipo. La migración `0010_session_auth.sql` elimina el índice que imponía
+un único writer y permite varias sesiones activas simultáneamente.
+
+El esquema histórico conserva algunas columnas llamadas `device_id` para compatibilidad
+con FKs/auditoría de migraciones anteriores. En el runtime actual esas columnas reciben
+un principal de sesión `session:<uuid>`; no representan un dispositivo físico y no
+participan en la decisión de login.
+
+La clave de activación nunca se almacena en el navegador. `NuevoAmanecerOutbox.activate()`
+la intercambia por el token de sesión y persiste solo ese token. La clave vuelve a ser
+necesaria únicamente si se elimina el almacenamiento del navegador, se revoca la sesión
+o se usa un perfil/navegador nuevo.
+
+El visor A1 conserva su acceso de lectura separado con `READ_TOKEN`, que nunca permite
 escritura.
-
-La migración `0003_device_auth.sql` crea el registro durable y un índice parcial
-único que impide más de un writer activo. `credential_hash` guarda únicamente
-`HMAC-SHA-256(DEVICE_CREDENTIAL_PEPPER, credencial)`. El pepper se configura como
-secreto del Worker y nunca se almacena en D1; la credencial en texto plano tampoco.
-`created_at` y `last_seen_at` usan hora del servidor.
-
-Para preparar localmente el SQL de alta, definir `DEVICE_ID`, `DEVICE_ROLE`,
-`DEVICE_CREDENTIAL` y `DEVICE_CREDENTIAL_PEPPER`, todos salvo el rol fuera de
-archivos versionados, y ejecutar `node scripts/device-auth-sql.mjs register`.
-La salida contiene solo el hash y se aplica mediante el flujo normal de D1. Para
-revocar, basta `DEVICE_ID=<id> node scripts/device-auth-sql.mjs revoke`. No pasar
-credenciales como argumentos de Wrangler ni conservar el SQL generado.
-
-El alta requiere credencial y pepper distintos, cada uno generado con 32 bytes
-aleatorios y codificado como 64 caracteres hexadecimales minúsculos. El pepper
-debe ser el mismo en la provisión y el Worker; nunca se entrega al navegador.
-Se provisiona el `device_id` que ya conserva `NuevoAmanecerOutbox.snapshot()`;
-no se regenera la identidad ni se modifica el OUTBOX existente. La revocación se
-aplica por SQL administrativo, no por un endpoint público de auto-registro.
-Un cambio de writer exige revocar primero al anterior. No reutilizar credenciales.
-
-A2 no aplica migraciones ni secretos a producción. El Worker V1.2 publicado no
-cambia. La futura activación necesita primero la migración, el pepper y el alta
-del dispositivo; sin ellos el nuevo Worker falla cerrado. El token global
-`SYNC_TOKEN` por sí solo ya no autoriza. El visor A1 conserva su acceso de lectura
-separado con `READ_TOKEN`, que nunca permite escribir.
 
 Pruebas A2 desde la raíz (sin evidencia histórica, servicios remotos ni release gates):
 
 ```sh
-node --test tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
+node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
 node --test tools/cloudflare-lab/test/pwa-shell.test.mjs tests/release-local-server.test.mjs
 node --test tools/cloudflare-lab/test/pwa-browser.test.mjs
 ```
@@ -109,14 +98,14 @@ node --test tools/cloudflare-lab/test/pwa-browser.test.mjs
 Prueba focal A3 desde la raíz, sin despliegue ni datos remotos:
 
 ```sh
-node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
+node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
 ```
 
 Pruebas focalizadas A4 desde la raíz, sin desplegar ni usar datos remotos:
 
 ```sh
 node --test tests/cloud-sync/outbox-sync.test.mjs
-node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs
+node --test tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs
 node --test tools/cloudflare-lab/test/pwa-shell.test.mjs tests/release-local-server.test.mjs
 node --test tools/cloudflare-lab/test/pwa-browser.test.mjs
 ```
@@ -130,7 +119,7 @@ node --test tests/cloud-sync/migration-reconciliation.test.mjs
 Regresion cloud secuencial PRE-A6, despues de la prueba focalizada:
 
 ```sh
-node --test --test-concurrency=1 tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/device-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
+node --test --test-concurrency=1 tests/cloud-sync/sale-create.test.mjs tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/worker-cors.test.mjs tests/cloud-sync/read-only.test.mjs tests/cloud-sync/outbox-sync.test.mjs
 ```
 
 Gate P A6 local, sin deploy ni acceso a D1 remota:
@@ -190,7 +179,7 @@ npm install
 cp .dev.vars.example .dev.vars      # poner un valor aleatorio largo
 npm run migrate:local
 npm run dev                         # en otra terminal:
-DEVICE_ID=<device_id provisionado> SYNC_TOKEN=<credencial del dispositivo> npm run test:worker
+POS_ACTIVATION_SECRET=<clave-local> npm run test:worker
 npm run test:d1:local               # contrato a nivel SQL, sin Worker
 ```
 
@@ -227,8 +216,7 @@ No ejecutarlas sobre datos comerciales sin identificar claramente el ensayo.
 
 - `.dev.vars`, `.env*`, `.wrangler/` ignorados por git.
 - El Worker no contiene ningún token de Cloudflare; el token administrativo solo vive en el entorno de la máquina que ejecuta wrangler.
-- El POS nunca habla con la API de Cloudflare: solo con el Worker, usando la
-  credencial de su dispositivo. D1 conserva únicamente su hash HMAC.
+- El POS nunca habla con la API administrativa de Cloudflare: solo con el Worker. Tras la activación inicial usa un token de sesión aleatorio; D1 conserva únicamente su SHA-256.
 
 
 ## Workspace aislado CANON -> LAB
@@ -245,8 +233,8 @@ R2 CANON --GET read-only por GitHub Actions--> snapshot firmado
 
 No existe código de escritura hacia el bucket CANON. `R2_CANON_READ_TOKEN` tiene
 únicamente permiso **Workers R2 Storage Read** y nunca se configura como secreto
-del Worker. La firma de import usa `LAB_IMPORT_HMAC_SECRET`; las credenciales de
-dispositivo usan un `DEVICE_CREDENTIAL_PEPPER` distinto. El Worker elimina
+del Worker. La firma de import usa `LAB_IMPORT_HMAC_SECRET`; la activación de escritura usa
+`POS_ACTIVATION_SECRET` y sesiones persistentes. El Worker elimina
 `cloudSync`, carrito/borrador y controles de seguridad del snapshot CANON antes
 de crear el baseline LAB.
 
