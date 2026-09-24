@@ -16,6 +16,8 @@ on:
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
       - ".github/workflows/canon-critical-ci.yml"
+      - ".github/workflows/v1.3-prod-cutover.yml"
+      - ".github/workflows/v1.3-prod-preflight.yml"
   push:
     branches:
       - feature/v1.3-mobile-cloud
@@ -33,6 +35,8 @@ on:
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
       - ".github/workflows/canon-critical-ci.yml"
+      - ".github/workflows/v1.3-prod-cutover.yml"
+      - ".github/workflows/v1.3-prod-preflight.yml"
 
 permissions:
   contents: read
