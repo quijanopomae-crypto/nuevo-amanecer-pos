@@ -77,11 +77,11 @@ test('READ_TOKEN no puede escribir y métodos mutantes /read se rechazan sin toc
   assert.equal(fixture.count(), before);
 });
 
-test('READ_TOKEN se rechaza como credencial de dispositivo sin consultar identidad ni exponerlo', async (t) => {
+test('READ_TOKEN se rechaza como token de sesión de escritura sin exponerlo', async (t) => {
   const readToken = 'fixture-read-token';
   const fixture = workerFixture('unused', readToken); t.after(() => fixture.close());
   const response = await fixture.fetch('https://worker.test/sync/operations', {
-    method: 'POST', headers: { 'x-sync-token': readToken }, body: '{}',
+    method: 'POST', headers: { authorization: 'Bearer ' + readToken }, body: '{}',
   });
   assert.equal(response.status, 401);
   assert.equal((await response.text()).includes(readToken), false);
