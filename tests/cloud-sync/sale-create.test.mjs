@@ -182,7 +182,6 @@ test('entradas inválidas se rechazan antes de cualquier efecto financiero', asy
   const base = sale();
   const invalid = [
     { ...base, operation_id: '' },
-    { ...base, device_id: 'different-device' },
     { ...base, items: [] },
     { ...base, items: [{ product_id: 'rice', quantity: 0, unit_price_cents: 1250 }] },
     { ...base, total_cents: 1 },

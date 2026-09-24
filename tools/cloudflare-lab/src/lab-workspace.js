@@ -12,7 +12,7 @@ export function isLabWorkspacePath(pathname) {
 }
 
 export async function handleLabWorkspace(request, url, env, deps) {
-  const { jsonLab, authorizeRead, authorizeDevice } = deps;
+  const { jsonLab, authorizeRead, authorizeSession } = deps;
   const db = env.nuevo_amanecer_lab;
   if (!db) return jsonLab({ error: 'lab_database_missing' }, 503);
 
@@ -22,7 +22,7 @@ export async function handleLabWorkspace(request, url, env, deps) {
       const denied = authorizeRead(request, env);
       if (denied) return jsonLab({ error: 'unauthorized' }, denied.status || 401);
     } else {
-      const auth = await authorizeDevice(request.headers.get('x-device-id'), request, env, false);
+      const auth = await authorizeSession(request, env);
       if (auth instanceof Response) {
         let body = { error: 'unauthorized' };
         try { body = await auth.clone().json(); } catch {}
@@ -42,13 +42,13 @@ export async function handleLabWorkspace(request, url, env, deps) {
     return importBaseline(db, env, request, body, jsonLab);
   }
 
-  const auth = await authorizeDevice(request.headers.get('x-device-id'), request, env, true);
+  const auth = await authorizeSession(request, env);
   if (auth instanceof Response) {
     let body = { error: 'unauthorized' };
     try { body = await auth.clone().json(); } catch {}
     return jsonLab(body, auth.status || 401);
   }
-  const deviceId = request.headers.get('x-device-id');
+  const deviceId = auth.principalId;
 
   if (url.pathname === '/lab/workspace/save') {
     const body = await readJsonBody(request, jsonLab);

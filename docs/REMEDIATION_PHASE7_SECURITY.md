@@ -2,7 +2,7 @@
 
 Status: code-side remediation prepared on `remediation/phase7-security-infra`.
 
-This phase is intentionally split between repository changes that can be verified in CI and owner-only operations that require real credentials or GitHub administration. No Cloudflare deployment, remote D1 migration, R2 write, device provisioning, or secret creation is performed by this phase.
+This phase is intentionally split between repository changes that can be verified in CI and owner-only operations that require real credentials or GitHub administration. No Cloudflare deployment, remote D1 migration, R2 write, or secret creation is performed by this phase.
 
 ## H13 — credential separation
 
@@ -10,15 +10,15 @@ The repository now assigns one responsibility to each credential:
 
 - `R2_CANON_READ_TOKEN`: read-only download of the CANON backup from R2 in GitHub Actions/CLI. It is not a Worker secret.
 - `LAB_IMPORT_HMAC_SECRET`: signs and verifies the LAB baseline import payload.
-- `DEVICE_CREDENTIAL_PEPPER`: hashes LAB device credentials.
+- `POS_ACTIVATION_SECRET`: validates the one-time activation step that issues a persistent browser session.
 
-The LAB Worker import verifier no longer accepts `R2_CANON_READ_TOKEN`. Device provisioning no longer derives its pepper from the R2 token.
+The LAB Worker import verifier does not accept `R2_CANON_READ_TOKEN`. Device provisioning has been retired; write authorization uses persistent sessions instead of hardware identities.
 
 ### OWNER_ONLY activation
 
-Before the manual remote workflows are used, the repository owner must configure independent random GitHub secrets named `LAB_IMPORT_HMAC_SECRET` and `DEVICE_CREDENTIAL_PEPPER`. Do not paste either value into Git, issues, PRs, logs, chat, or documentation.
+Before the manual remote workflows are used, the repository owner must configure `LAB_IMPORT_HMAC_SECRET` and a private `POS_ACTIVATION_SECRET`. Neither value belongs in Git, issues, PRs, logs, chat, or documentation.
 
-After those secrets exist, the owner may deliberately run the manual LAB deployment/provisioning workflows. That remote activation is outside this remediation PR.
+After those secrets exist, the owner may deliberately run the manual LAB deployment workflow. A new browser exchanges the activation secret once for a persistent random session token; no device-registration workflow is required.
 
 ## H17 — GitHub Pages boundary
 

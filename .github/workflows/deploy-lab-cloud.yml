@@ -14,6 +14,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_CANON_READ_TOKEN: ${{ secrets.R2_CANON_READ_TOKEN }}
       LAB_IMPORT_HMAC_SECRET: ${{ secrets.LAB_IMPORT_HMAC_SECRET }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
 
     steps:
       - name: Require LAB deployment secrets
@@ -22,6 +23,7 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$R2_CANON_READ_TOKEN"
           test -n "$LAB_IMPORT_HMAC_SECRET"
+          test -n "$POS_ACTIVATION_SECRET"
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -75,10 +77,15 @@ jobs:
         working-directory: tools/cloudflare-lab
         run: printf '%s' "$LAB_IMPORT_HMAC_SECRET" | npx wrangler secret put LAB_IMPORT_HMAC_SECRET
 
-      - name: Verify import HMAC secret binding exists
+      - name: Configure persistent-session activation secret
+        working-directory: tools/cloudflare-lab
+        run: printf '%s' "$POS_ACTIVATION_SECRET" | npx wrangler secret put POS_ACTIVATION_SECRET
+
+      - name: Verify security secret bindings exist
         working-directory: tools/cloudflare-lab
         run: |
           npx wrangler secret list | grep -F '"name": "LAB_IMPORT_HMAC_SECRET"'
+          npx wrangler secret list | grep -F '"name": "POS_ACTIVATION_SECRET"'
 
       - name: Verify LAB Worker health
         run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health

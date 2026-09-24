@@ -5,7 +5,7 @@ import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest
 import { handleA6, isA6Path, a6LocalDenied } from './a6-canonical.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 
-const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
+const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const OPERATION_PATH = /^\/sync\/operations\/([^/]+)$/;
 const SALE_ITEMS_PATH = /^\/read\/sales\/([^/]+)\/items$/;
@@ -25,19 +25,29 @@ export default {
     try {
       if (isLabWorkspace) {
         if (request.method === 'OPTIONS') return labCors(new Response(null, { status: 204 }));
-        return await handleLabWorkspace(request, url, env, { jsonLab, authorizeRead, authorizeDevice });
+        return await handleLabWorkspace(request, url, env, { jsonLab, authorizeRead, authorizeSession });
       }
       if (isA6Path(url.pathname)) {
         const denied = a6LocalDenied(url, env, json);
         if (denied) return denied;
         if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), isRead);
-        return cors(await handleA6(request, url, env, { json, authorizeRead, authorizeDevice }), isRead);
+        return cors(await handleA6(request, url, env, { json, authorizeRead, authorizeSession }), isRead);
       }
-      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/commands/') || url.pathname.startsWith('/imports/') || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
+      if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/commands/') || url.pathname.startsWith('/imports/') || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
         return cors(new Response(null, { status: 204 }), isRead);
       }
       if (request.method === 'GET' && url.pathname === '/health') {
         return await health(env);
+      }
+      if (url.pathname === '/auth/activate') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        return await activateSession(request, env);
+      }
+      if (url.pathname === '/auth/session') {
+        if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' });
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return json({ status: 'ok', session_id: auth.sessionId });
       }
       if (isRead) {
         if (request.method !== 'GET') return cors(json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' }), true);
@@ -58,22 +68,18 @@ export default {
       const importMatch = url.pathname.match(IMPORT_PATH);
       if (importMatch) {
         if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' });
-        const denied = await authorizeDevice(request.headers.get('x-device-id'), request, env, true);
-        if (denied instanceof Response) return denied;
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
         return await readImport(decodeURIComponent(importMatch[1]), env.nuevo_amanecer_lab);
       }
       if (url.pathname.startsWith('/sync/operations')) {
-        const provided = request.headers.get('x-sync-token') ?? '';
-        if (!provided || (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN))) {
-          return json({ error: 'unauthorized' }, 401);
-        }
         if (request.method === 'POST' && url.pathname === '/sync/operations') {
           return await insertOperation(request, env);
         }
         const match = url.pathname.match(OPERATION_PATH);
         if (request.method === 'GET' && match) {
-          const denied = await authorizeDevice(request.headers.get('x-device-id'), request, env, false);
-          if (denied instanceof Response) return denied;
+          const auth = await authorizeSession(request, env);
+          if (auth instanceof Response) return auth;
           return await lookupOperation(decodeURIComponent(match[1]), env.nuevo_amanecer_lab);
         }
       }
@@ -94,26 +100,61 @@ async function health(env) {
   return json({ ok: row?.one === 1, service: 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
 }
 
-// Device credentials are HMACed with a server-only pepper before D1 lookup.
-async function authorizeDevice(deviceId, request, env, requireWriter) {
-  if (!env.DEVICE_CREDENTIAL_PEPPER) return json({ error: 'device_auth_not_configured' }, 503);
-  if (typeof deviceId !== 'string' || !deviceId || deviceId.length > 160) return json({ error: 'unauthorized' }, 401);
-  const provided = request.headers.get('x-sync-token') ?? '';
+// A one-time activation secret issues a persistent session token.
+async function activateSession(request, env) {
+  const configured = String(env.POS_ACTIVATION_SECRET || '');
+  if (!configured) return json({ error: 'activation_not_configured' }, 503);
+  const provided = String(request.headers.get('x-activation-secret') || '');
+  if (!provided || provided.length > 1024 || !constantTimeEqual(provided, configured)) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  const sessionId = crypto.randomUUID();
+  const principalId = 'session:' + sessionId;
+  const token = randomToken();
+  const tokenHash = await sha256Hex(token);
+  const db = env.nuevo_amanecer_lab;
+  await db.batch([
+    db.prepare(
+      `INSERT INTO devices (device_id, role, status, credential_hash, last_seen_at)
+       VALUES (?1, 'writer', 'active', ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+       ON CONFLICT(device_id) DO UPDATE SET role='writer', status='active',
+         credential_hash=excluded.credential_hash, last_seen_at=excluded.last_seen_at`
+    ).bind(principalId, tokenHash),
+    db.prepare(
+      `INSERT INTO auth_sessions (session_id, token_hash, status, last_seen_at)
+       VALUES (?1, ?2, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
+    ).bind(sessionId, tokenHash),
+  ]);
+  return json({ status: 'activated', session_token: token });
+}
+
+async function authorizeSession(request, env) {
+  const authorization = String(request.headers.get('authorization') || '');
+  const bearer = authorization.match(/^Bearer\s+([^\s]+)$/i);
+  const provided = bearer?.[1] || String(request.headers.get('x-session-token') || '');
   if (!provided || provided.length > 1024) return json({ error: 'unauthorized' }, 401);
   if (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
-  const device = await env.nuevo_amanecer_lab
-    .prepare('SELECT device_id, role, status, credential_hash FROM devices WHERE device_id = ?1')
-    .bind(deviceId)
-    .first();
-  const providedHash = await credentialHash(provided, env.DEVICE_CREDENTIAL_PEPPER);
-  if (!device || !constantTimeEqual(providedHash, device.credential_hash)) return json({ error: 'unauthorized' }, 401);
-  if (device.status !== 'active') return json({ error: 'device_revoked' }, 403);
-  if (requireWriter && device.role !== 'writer') return json({ error: 'read_only_device' }, 403);
-  await env.nuevo_amanecer_lab
-    .prepare("UPDATE devices SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE device_id = ?1")
-    .bind(deviceId)
-    .run();
-  return { credentialHash: providedHash };
+  const tokenHash = await sha256Hex(provided);
+  const db = env.nuevo_amanecer_lab;
+  const session = await db.prepare(
+    `SELECT s.session_id, s.status AS session_status, d.device_id, d.role,
+            d.status AS principal_status, d.credential_hash
+       FROM auth_sessions s
+       JOIN devices d ON d.device_id = 'session:' || s.session_id
+      WHERE s.token_hash = ?1`
+  ).bind(tokenHash).first();
+  if (!session || !constantTimeEqual(tokenHash, session.credential_hash)) return json({ error: 'unauthorized' }, 401);
+  if (session.session_status !== 'active' || session.principal_status !== 'active') return json({ error: 'session_revoked' }, 403);
+  if (session.role !== 'writer') return json({ error: 'read_only_session' }, 403);
+  // Authorization is intentionally read-only. It must not create a write race
+  // or interfere with the atomic business/canonical batch that follows.
+  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash };
+}
+
+function randomToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function authorizeRead(request, env) {
@@ -239,6 +280,8 @@ function decodeBase64Url(value) {
 async function insertOperation(request, env) {
   const frozen = await authorityFence(env.nuevo_amanecer_lab);
   if (frozen) return frozen;
+  const auth = await authorizeSession(request, env);
+  if (auth instanceof Response) return auth;
   let body;
   try {
     body = await request.json();
@@ -247,10 +290,6 @@ async function insertOperation(request, env) {
   }
   const problem = validateOperation(body);
   if (problem) return json({ error: 'invalid_operation', message: problem }, 400);
-  const headerDeviceId = request.headers.get('x-device-id');
-  if (headerDeviceId && headerDeviceId !== body.device_id) return json({ error: 'device_id_mismatch' }, 403);
-  const denied = await authorizeDevice(body.device_id, request, env, true);
-  if (denied instanceof Response) return denied;
   const db = env.nuevo_amanecer_lab;
 
   const computedHash = await sha256Hex(body.payload);
@@ -269,14 +308,14 @@ async function insertOperation(request, env) {
     )
     .bind(
       body.operation_id,
-      body.device_id,
+      auth.principalId,
       body.device_sequence,
       body.entity_type,
       body.entity_id,
       body.payload,
       body.payload_hash,
       body.created_at,
-      denied.credentialHash,
+      auth.credentialHash,
     )
     .run();
 
@@ -285,7 +324,7 @@ async function insertOperation(request, env) {
   }
 
   // A revocation/rotation may have won the race with the guarded INSERT.
-  const recheck = await authorizeDevice(body.device_id, request, env, true);
+  const recheck = await authorizeSession(request, env);
   if (recheck instanceof Response) return recheck;
 
   const existing = await db
@@ -334,6 +373,9 @@ async function sha256Hex(text) {
 async function createSale(request, env) {
   const frozen = await authorityFence(env.nuevo_amanecer_lab);
   if (frozen) return frozen;
+  const auth = await authorizeSession(request, env);
+  if (auth instanceof Response) return auth;
+  const principalId = auth.principalId;
   let body;
   try {
     body = await request.json();
@@ -342,11 +384,6 @@ async function createSale(request, env) {
   }
   const normalized = validateSale(body);
   if (normalized.error) return json({ status: 'error', error: 'invalid_sale', message: normalized.error }, 400);
-
-  const deviceId = request.headers.get('x-device-id');
-  if (body.device_id !== undefined && body.device_id !== deviceId) return json({ status: 'error', operation_id: body.operation_id, error: 'device_id_mismatch' }, 403);
-  const denied = await authorizeDevice(deviceId, request, env, true);
-  if (denied instanceof Response) return denied;
 
   const db = env.nuevo_amanecer_lab;
   const payload = stableStringify(body);
@@ -371,11 +408,11 @@ async function createSale(request, env) {
       normalized.sale.sale_id,
       body.operation_id,
       payloadHash,
-      deviceId,
+      principalId,
       normalized.sale.payment_method,
       normalized.sale.total_cents,
       normalized.sale.created_at,
-      denied.credentialHash,
+      auth.credentialHash,
       commitToken,
       normalized.sale.payment.reference,
     ),
@@ -428,7 +465,7 @@ async function createSale(request, env) {
   }
 
   // Revocation, a concurrent retry, or a conflicting operation may have won after authorization.
-  const recheck = await authorizeDevice(deviceId, request, env, true);
+  const recheck = await authorizeSession(request, env);
   if (recheck instanceof Response) return recheck;
   const raced = await db.prepare('SELECT sale_id, payload_hash FROM sales WHERE operation_id = ?1').bind(body.operation_id).first();
   if (raced) return saleReplay(body.operation_id, payloadHash, raced);
@@ -522,14 +559,14 @@ function validatePayment(method, totalCents, payment) {
 async function stageImport(request, env) {
   const frozen = await authorityFence(env.nuevo_amanecer_lab);
   if (frozen) return frozen;
+  const auth = await authorizeSession(request, env);
+  if (auth instanceof Response) return auth;
+  const deviceId = auth.principalId;
   let body;
   try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
-  const deviceId = request.headers.get('x-device-id');
-  const denied = await authorizeDevice(deviceId, request, env, true);
-  if (denied instanceof Response) return denied;
   if (!body || !validId(body.import_id) || !['start', 'rows', 'issues', 'finish'].includes(body.action)) return json({ error: 'invalid_import_request' }, 400);
   const db = env.nuevo_amanecer_lab;
-  if (body.action === 'start') return startImport(body, deviceId, denied.credentialHash, db);
+  if (body.action === 'start') return startImport(body, deviceId, auth.credentialHash, db);
   const run = await db.prepare('SELECT * FROM import_runs WHERE import_id = ?1').bind(body.import_id).first();
   if (!run) return json({ error: 'import_not_found' }, 404);
   if (run.device_id !== deviceId) return json({ error: 'import_device_mismatch' }, 403);
@@ -537,9 +574,9 @@ async function stageImport(request, env) {
     if (body.action === 'finish' && body.manifest_hash === run.manifest_hash && body.verdict === run.status && body.issue_count === JSON.parse(run.report_json).issue_count) return json({ status: run.status, import_id: body.import_id, idempotent: true, reconciliation: run.status });
     return json({ error: 'import_finalized', import_id: body.import_id }, 409);
   }
-  if (body.action === 'rows') return stageImportRows(body, run, db, denied.credentialHash);
-  if (body.action === 'issues') return stageImportIssues(body, run, db, denied.credentialHash);
-  return finishImport(body, run, denied.credentialHash, db);
+  if (body.action === 'rows') return stageImportRows(body, run, db, auth.credentialHash);
+  if (body.action === 'issues') return stageImportIssues(body, run, db, auth.credentialHash);
+  return finishImport(body, run, auth.credentialHash, db);
 }
 
 async function startImport(body, deviceId, credentialHash, db) {
@@ -678,18 +715,6 @@ function stableStringify(value) {
   return JSON.stringify(value);
 }
 
-async function credentialHash(credential, pepper) {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(pepper),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const digest = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(credential));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 function constantTimeEqual(a, b) {
   const bytesA = new TextEncoder().encode(a);
   const bytesB = new TextEncoder().encode(b);
@@ -702,7 +727,7 @@ function constantTimeEqual(a, b) {
 function cors(response, isRead = false) {
   response.headers.set('access-control-allow-origin', '*');
   response.headers.set('access-control-allow-methods', isRead ? 'GET, OPTIONS' : 'GET, POST, OPTIONS');
-  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'content-type, x-sync-token, x-device-id');
+  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'authorization, content-type, x-activation-secret, x-session-token');
   response.headers.set('access-control-max-age', '600');
   return response;
 }
@@ -710,7 +735,7 @@ function cors(response, isRead = false) {
 function labCors(response) {
   response.headers.set('access-control-allow-origin', '*');
   response.headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
-  response.headers.set('access-control-allow-headers', 'content-type, x-read-token, x-sync-token, x-device-id');
+  response.headers.set('access-control-allow-headers', 'authorization, content-type, x-activation-secret, x-read-token, x-session-token');
   response.headers.set('access-control-max-age', '600');
   return response;
 }

@@ -10,13 +10,14 @@ test('Worker permite preflight mínimo del POS sin autenticar OPTIONS', async (t
     headers: {
       origin: 'null',
       'access-control-request-method': 'POST',
-      'access-control-request-headers': 'content-type,x-sync-token',
+      'access-control-request-headers': 'authorization,content-type,x-activation-secret',
     },
   });
   assert.equal(response.status, 204);
   assert.equal(response.headers.get('access-control-allow-origin'), '*');
   assert.match(response.headers.get('access-control-allow-methods'), /POST/);
-  assert.match(response.headers.get('access-control-allow-headers'), /x-sync-token/);
+  assert.match(response.headers.get('access-control-allow-headers'), /authorization/);
+  assert.match(response.headers.get('access-control-allow-headers'), /x-activation-secret/);
 });
 
 test('respuestas health, 401 y operación válida incluyen CORS', async (t) => {
@@ -40,9 +41,9 @@ test('respuestas health, 401 y operación válida incluyen CORS', async (t) => {
       Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')),
     created_at: new Date().toISOString(),
   };
-  fixture.addDevice(operation.device_id, 'writer', 'active', 'fixture-token');
+  fixture.addDevice('cors-session', 'writer', 'active', 'fixture-token');
   const inserted = await fixture.fetch('https://worker.test/sync/operations', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-sync-token': 'fixture-token' }, body: JSON.stringify(operation),
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer fixture-token' }, body: JSON.stringify(operation),
   });
   assert.equal(inserted.status, 201);
   assert.equal(inserted.headers.get('access-control-allow-origin'), '*');

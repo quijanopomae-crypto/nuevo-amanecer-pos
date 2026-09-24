@@ -7,7 +7,7 @@ const jsonLab = (body, status = 200, headers = {}) => Response.json(body, { stat
 const deps = {
   jsonLab,
   authorizeRead: () => null,
-  authorizeDevice: async () => ({ credentialHash: 'a'.repeat(64) }),
+  authorizeSession: async () => ({ principalId: 'session:test', credentialHash: 'a'.repeat(64) }),
 };
 
 function snapshot() {
@@ -66,14 +66,12 @@ test('dedicated LAB import HMAC is required and invalid signatures fail before D
   assert.equal((await response.json()).error, 'invalid_import_signature');
 });
 
-test('publisher and device provisioning no longer reuse the R2 read credential', () => {
+test('publisher keeps the LAB import signing secret independent from R2 access', () => {
   const publisher = readFileSync('tools/cloudflare-lab/scripts/publish-lab-snapshot.mjs', 'utf8');
-  const provision = readFileSync('.github/workflows/provision-lab-device.yml', 'utf8');
+  const deploy = readFileSync('.github/workflows/deploy-lab-cloud.yml', 'utf8');
   assert.match(publisher, /LAB_IMPORT_HMAC_SECRET/);
   assert.doesNotMatch(publisher, /R2_CANON_READ_TOKEN/);
-  assert.match(provision, /DEVICE_CREDENTIAL_PEPPER/);
-  assert.doesNotMatch(provision, /R2_CANON_READ_TOKEN/);
-  assert.doesNotMatch(provision, /derive|Derive server-only device pepper/i);
+  assert.match(deploy, /POS_ACTIVATION_SECRET/);
 });
 
 test('all GitHub Actions are pinned to immutable commit SHAs', () => {

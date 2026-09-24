@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { createHmac } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import worker from '../../tools/cloudflare-lab/src/worker.js';
 
@@ -11,8 +11,8 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0004_sale_create.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0005_import_staging.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8'));
-  const pepper = 'fixture-device-pepper';
-  const hash = (credential) => createHmac('sha256', pepper).update(credential).digest('hex');
+  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0010_session_auth.sql', import.meta.url), 'utf8'));
+  const hash = (credential) => createHash('sha256').update(credential).digest('hex');
   let batchFailureAt = null;
   const binding = {
     prepare(sql) {
@@ -42,16 +42,47 @@ export function workerFixture(token = 'fixture-token', readToken = 'fixture-read
       }
     },
   };
-  const env = { READ_TOKEN: readToken, DEVICE_CREDENTIAL_PEPPER: pepper, nuevo_amanecer_lab: binding };
+  const env = { READ_TOKEN: readToken, POS_ACTIVATION_SECRET: token, nuevo_amanecer_lab: binding };
   return {
     database,
     binding,
     env,
-    fetch(url, options) { return worker.fetch(new Request(url, options), env); },
-    addDevice(deviceId, role, status, credential) {
-      database.prepare('INSERT INTO devices (device_id, role, status, credential_hash) VALUES (?, ?, ?, ?)').run(deviceId, role, status, hash(credential));
+    async fetch(url, options = {}) {
+      const headers = new Headers(options.headers || {});
+      const legacyToken = headers.get('x-sync-token');
+      const legacyDevice = headers.get('x-device-id');
+      if (legacyToken && legacyDevice) {
+        const existing = database.prepare('SELECT session_id FROM auth_sessions WHERE session_id = ?').get(legacyDevice);
+        if (!existing) {
+          const tokenHash = hash(legacyToken);
+          database.prepare("INSERT INTO devices (device_id, role, status, credential_hash) VALUES (?, 'writer', 'active', ?)").run('session:' + legacyDevice, tokenHash);
+          database.prepare("INSERT INTO auth_sessions (session_id, token_hash, status) VALUES (?, ?, 'active')").run(legacyDevice, tokenHash);
+        }
+        headers.delete('x-sync-token');
+        headers.delete('x-device-id');
+        headers.set('authorization', 'Bearer ' + legacyToken);
+      }
+      return worker.fetch(new Request(url, { ...options, headers }), env);
     },
-    device(deviceId) { return database.prepare('SELECT * FROM devices WHERE device_id = ?').get(deviceId); },
+    async activate(secret = token) {
+      const response = await worker.fetch(new Request('https://worker.test/auth/activate', {
+        method: 'POST',
+        headers: { 'x-activation-secret': secret },
+      }), env);
+      const body = await response.clone().json().catch(() => null);
+      return { response, token: body?.session_token || null };
+    },
+    addDevice(deviceId, role, status, credential) {
+      const tokenHash = hash(credential);
+      database.prepare('INSERT INTO devices (device_id, role, status, credential_hash) VALUES (?, ?, ?, ?)').run('session:' + deviceId, role, status, tokenHash);
+      database.prepare('INSERT INTO auth_sessions (session_id, token_hash, status) VALUES (?, ?, ?)').run(deviceId, tokenHash, status);
+    },
+    rotateSession(sessionId, credential) {
+      const tokenHash = hash(credential);
+      database.prepare('UPDATE auth_sessions SET token_hash=? WHERE session_id=?').run(tokenHash, sessionId);
+      database.prepare('UPDATE devices SET credential_hash=? WHERE device_id=?').run(tokenHash, 'session:' + sessionId);
+    },
+    device(deviceId) { return database.prepare('SELECT * FROM devices WHERE device_id = ?').get('session:' + deviceId); },
     insert(operation) {
       database.prepare(`INSERT INTO sync_operations
         (operation_id, device_id, device_sequence, entity_type, entity_id, payload, payload_hash, created_at, received_at)

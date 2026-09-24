@@ -3,8 +3,9 @@
   if (!window.__NA_LAB__) return;
 
   var DEFAULT_ENDPOINT = 'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev';
-  var LOCAL_KEY = 'na_lab_workspace_credentials_v1';
-  var SESSION_KEY = 'na_lab_workspace_credentials_session_v1';
+  var LOCAL_KEY = 'na_lab_workspace_auth_v2';
+  var LEGACY_LOCAL_KEY = 'na_lab_workspace_credentials_v1';
+  var LEGACY_SESSION_KEY = 'na_lab_workspace_credentials_session_v1';
   var PENDING_KEY = 'na_lab_workspace_pending_v1';
   var state = {
     revision: null,
@@ -33,14 +34,15 @@
   }
 
   function loadCredentials() {
-    var session = parseStored(sessionStorage, SESSION_KEY);
     var persistent = parseStored(localStorage, LOCAL_KEY);
-    return session || persistent || {
+    try {
+      localStorage.removeItem(LEGACY_LOCAL_KEY);
+      sessionStorage.removeItem(LEGACY_SESSION_KEY);
+    } catch {}
+    return persistent || {
       endpoint: DEFAULT_ENDPOINT,
       readToken: '',
-      deviceId: 'lab-phone-main',
-      syncToken: '',
-      remember: false
+      sessionToken: ''
     };
   }
 
@@ -48,23 +50,18 @@
     return {
       endpoint: String(raw && raw.endpoint || DEFAULT_ENDPOINT).replace(/\/+$/, ''),
       readToken: String(raw && raw.readToken || '').trim(),
-      deviceId: String(raw && raw.deviceId || 'lab-phone-main').trim(),
-      syncToken: String(raw && raw.syncToken || '').trim(),
-      remember: !!(raw && raw.remember)
+      sessionToken: String(raw && raw.sessionToken || '').trim()
     };
   }
 
   function storeCredentials(credentials) {
-    var value = JSON.stringify(cleanCredentials(credentials));
+    var clean = cleanCredentials(credentials);
     try {
-      localStorage.removeItem(LOCAL_KEY);
-      sessionStorage.removeItem(SESSION_KEY);
-      (credentials.remember ? localStorage : sessionStorage).setItem(
-        credentials.remember ? LOCAL_KEY : SESSION_KEY,
-        value
-      );
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(clean));
+      localStorage.removeItem(LEGACY_LOCAL_KEY);
+      sessionStorage.removeItem(LEGACY_SESSION_KEY);
     } catch {}
-    state.credentials = cleanCredentials(credentials);
+    state.credentials = clean;
   }
 
   function loadPendingOperation() {
@@ -117,33 +114,62 @@
   function clearCredentials() {
     try {
       localStorage.removeItem(LOCAL_KEY);
-      sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(LEGACY_LOCAL_KEY);
+      sessionStorage.removeItem(LEGACY_SESSION_KEY);
     } catch {}
     state.credentials = cleanCredentials({ endpoint: DEFAULT_ENDPOINT });
     state.remoteReady = false;
     state.revision = null;
     updateBadge('SIN CONEXIÓN');
-    renderStatus('Credenciales LAB borradas.');
+    renderStatus('Sesión y conexión LAB borradas de este navegador.');
   }
 
   function hasReadAccess(credentials) {
-    return !!(credentials.readToken || (credentials.deviceId && credentials.syncToken));
+    return !!(credentials && (credentials.readToken || credentials.sessionToken));
   }
 
   function hasWriterAccess(credentials) {
-    return !!(credentials.deviceId && credentials.syncToken);
+    return !!(credentials && credentials.sessionToken);
   }
 
   function headersFor(mode) {
     var c = state.credentials || loadCredentials();
     var headers = {};
     if (mode === 'write' || !c.readToken) {
-      if (c.deviceId) headers['x-device-id'] = c.deviceId;
-      if (c.syncToken) headers['x-sync-token'] = c.syncToken;
+      if (c.sessionToken) headers.authorization = 'Bearer ' + c.sessionToken;
     } else if (c.readToken) {
       headers['x-read-token'] = c.readToken;
     }
     return headers;
+  }
+
+  async function activateWriter(activationSecret) {
+    var c = state.credentials || loadCredentials();
+    var secret = String(activationSecret || '');
+    if (!secret) throw new Error('Ingresa la clave de activación.');
+    if (/[\r\n]/.test(secret)) throw new Error('Clave de activación inválida.');
+    var response = await fetch(c.endpoint + '/auth/activate', {
+      method: 'POST',
+      headers: { 'x-activation-secret': secret },
+      cache: 'no-store'
+    });
+    var payload = {};
+    try { payload = await response.json(); } catch {}
+    if (!response.ok || payload.status !== 'activated' || typeof payload.session_token !== 'string' || !payload.session_token) {
+      throw new Error(response.status === 401 ? 'Clave de activación incorrecta.' : 'No se pudo activar la sesión LAB.');
+    }
+    storeCredentials({
+      endpoint: c.endpoint,
+      readToken: c.readToken,
+      sessionToken: payload.session_token
+    });
+    return true;
+  }
+
+  function forgetWriterSession() {
+    var c = state.credentials || loadCredentials();
+    storeCredentials({ endpoint: c.endpoint, readToken: c.readToken, sessionToken: '' });
+    state.remoteReady = false;
   }
 
   async function api(path, options) {
@@ -229,7 +255,7 @@
     if (!hasReadAccess(state.credentials)) {
       state.remoteReady = false;
       updateBadge('SIN CONEXIÓN');
-      if (!silent) renderStatus('Configura un READ_TOKEN o las credenciales del dispositivo LAB.');
+      if (!silent) renderStatus('Configura READ_TOKEN para solo lectura o activa una sesión de escritura.');
       return false;
     }
     if (!silent) renderStatus('Cargando D1 LAB…');
@@ -312,10 +338,11 @@
         renderStatus('Conflicto de revisión. Se conserva la operación pendiente; vuelve a cargar D1 LAB para conciliar.', 'error');
         return;
       }
-      if (response.status === 403 && payload.error === 'device_revoked') {
-        state.remoteReady = false;
-        updateBadge('REVOCADO');
-        renderStatus('Este writer LAB fue revocado. La operación local pendiente se conserva.', 'error');
+      if ((response.status === 401 || response.status === 403) &&
+          (payload.error === 'session_revoked' || payload.error === 'unauthorized')) {
+        forgetWriterSession();
+        updateBadge('SESIÓN VENCIDA');
+        renderStatus('La sesión de escritura ya no es válida. La operación local pendiente se conserva; activa nuevamente con tu clave.', 'error');
         return;
       }
       if (!response.ok) throw new Error(payload.error || 'save_failed_' + response.status);
@@ -355,7 +382,7 @@
 
   async function resetToBaseline() {
     if (!hasWriterAccess(state.credentials) || !state.revision) {
-      renderStatus('Conecta primero el workspace LAB con credenciales de escritura.', 'error');
+      renderStatus('Activa primero una sesión de escritura LAB.', 'error');
       return;
     }
     if (!confirm('¿Descartar los cambios experimentales actuales y volver al baseline CANON de este LAB?')) return;
@@ -381,18 +408,18 @@
       '<div id="naLabWorkspaceStatus" style="margin:14px 0;padding:10px;border-radius:10px;background:#f8fafc;font-size:12px;font-weight:700">Configura la conexión LAB.</div>' +
       '<pre id="naLabWorkspaceMeta" style="white-space:pre-wrap;font-size:10px;color:#64748b;background:#f8fafc;border-radius:10px;padding:9px"></pre>' +
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Worker LAB</label><input id="naLabEndpoint" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
-      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">READ_TOKEN (opcional si usas dispositivo)</label><input id="naLabReadToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
-      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Device ID LAB</label><input id="naLabDeviceId" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
-      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">SYNC_TOKEN LAB</label><input id="naLabSyncToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:7px"><button id="naLabGenerateToken" type="button" style="border:0;border-radius:9px;padding:9px;background:#e0f2fe;color:#075985;font-weight:800">Generar</button><button id="naLabCopyToken" type="button" style="border:0;border-radius:9px;padding:9px;background:#dcfce7;color:#166534;font-weight:800">Copiar</button><button id="naLabToggleToken" type="button" style="border:0;border-radius:9px;padding:9px;background:#f1f5f9;color:#334155;font-weight:800">Mostrar</button></div>' +
-      '<label style="display:flex;gap:8px;align-items:center;margin:12px 0;font-size:12px"><input id="naLabRemember" type="checkbox"> Recordar credenciales en este dispositivo LAB</label>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-      '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Guardar conexión</button>' +
+      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">READ_TOKEN (opcional · solo lectura)</label><input id="naLabReadToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
+      '<div id="naLabWriterState" style="margin-top:12px;padding:10px;border-radius:10px;background:#f8fafc;font-size:11px;font-weight:800"></div>' +
+      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Clave secreta de activación</label><input id="naLabActivationSecret" type="password" autocomplete="new-password" placeholder="Solo se usa la primera vez" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
+      '<p style="font-size:10px;line-height:1.45;color:#64748b;margin:6px 0 0">La clave se envía una sola vez al Worker y no se guarda. Este navegador conservará únicamente una sesión aleatoria para no volver a pedirla.</p>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">' +
+      '<button id="naLabActivate" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Activar escritura</button>' +
+      '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Guardar conexión</button>' +
       '<button id="naLabLoad" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Cargar D1 LAB</button>' +
       '<button id="naLabRefreshCanon" type="button" style="padding:10px;border:0;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:800">Actualizar CANON → LAB</button>' +
       '<button id="naLabResetBaseline" type="button" style="padding:10px;border:0;border-radius:10px;background:#f59e0b;color:#111827;font-weight:800">Restaurar baseline</button>' +
-      '</div><button id="naLabClearCredentials" type="button" style="width:100%;margin-top:8px;padding:9px;border:0;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:800">Borrar credenciales de este navegador</button>' +
-      '<p style="font-size:10px;line-height:1.45;color:#64748b;margin:12px 0 0">Los tokens nunca se incluyen en GitHub ni en el HTML. El refresh usa un token R2 de solo lectura guardado únicamente en el Worker LAB.</p>' +
+      '</div><button id="naLabClearCredentials" type="button" style="width:100%;margin-top:8px;padding:9px;border:0;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:800">Borrar sesión de este navegador</button>' +
+      '<p style="font-size:10px;line-height:1.45;color:#64748b;margin:12px 0 0">No se usa Device ID, IMEI ni una credencial distinta por teléfono. Los secretos nunca se incluyen en GitHub ni en el HTML.</p>' +
       '</div></div>';
   }
 
@@ -410,61 +437,36 @@
       });
     }
     document.getElementById('naLabWorkspaceClose').onclick = function () { overlay.style.display = 'none'; };
-    async function copySyncToken() {
-      var input = document.getElementById('naLabSyncToken');
-      var token = String(input && input.value || '').trim();
-      if (!token) {
-        renderStatus('Primero genera el SYNC_TOKEN LAB.', 'error');
-        return false;
-      }
-      try {
-        await navigator.clipboard.writeText(token);
-        renderStatus('SYNC_TOKEN copiado. Pégalo en GitHub como LAB_DEVICE_SYNC_TOKEN. No lo envíes por chat.', 'ok');
-        return true;
-      } catch {}
-      try {
-        var previousType = input.type;
-        input.type = 'text';
-        input.focus();
-        input.select();
-        input.setSelectionRange(0, token.length);
-        var copied = document.execCommand && document.execCommand('copy');
-        input.type = previousType;
-        if (copied) {
-          renderStatus('SYNC_TOKEN copiado. Pégalo en GitHub como LAB_DEVICE_SYNC_TOKEN.', 'ok');
-          return true;
-        }
-      } catch {}
-      renderStatus('No se pudo copiar automáticamente. Pulsa “Mostrar” y usa el menú de copiar de Android.', 'error');
-      return false;
-    }
 
-    document.getElementById('naLabGenerateToken').onclick = async function () {
-      var bytes = new Uint8Array(32);
-      crypto.getRandomValues(bytes);
-      var token = Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0'); }).join('');
-      document.getElementById('naLabDeviceId').value = 'lab-phone-main';
-      document.getElementById('naLabSyncToken').value = token;
-      await copySyncToken();
+    document.getElementById('naLabActivate').onclick = async function () {
+      var endpoint = String(document.getElementById('naLabEndpoint').value || DEFAULT_ENDPOINT).replace(/\/+$/, '');
+      var readToken = String(document.getElementById('naLabReadToken').value || '').trim();
+      state.credentials = cleanCredentials({
+        endpoint: endpoint,
+        readToken: readToken,
+        sessionToken: state.credentials && state.credentials.sessionToken
+      });
+      storeCredentials(state.credentials);
+      var secretInput = document.getElementById('naLabActivationSecret');
+      try {
+        renderStatus('Activando sesión de escritura…', 'info');
+        await activateWriter(secretInput.value);
+        secretInput.value = '';
+        fillPanel();
+        renderStatus('Sesión activada. No tendrás que volver a escribir la clave en este navegador.', 'ok');
+        try { await loadRemoteWorkspace({ silent: true }); } catch {}
+      } catch (error) {
+        secretInput.value = '';
+        renderStatus(error.message, 'error');
+      }
     };
-    document.getElementById('naLabCopyToken').onclick = function () {
-      copySyncToken();
-    };
-    document.getElementById('naLabToggleToken').onclick = function () {
-      var input = document.getElementById('naLabSyncToken');
-      var button = document.getElementById('naLabToggleToken');
-      var showing = input.type === 'text';
-      input.type = showing ? 'password' : 'text';
-      button.textContent = showing ? 'Mostrar' : 'Ocultar';
-      renderStatus(showing ? 'SYNC_TOKEN oculto.' : 'SYNC_TOKEN visible solo en esta pantalla.', 'info');
-    };
+
     document.getElementById('naLabSaveConfig').onclick = async function () {
+      var current = state.credentials || loadCredentials();
       state.credentials = cleanCredentials({
         endpoint: document.getElementById('naLabEndpoint').value,
         readToken: document.getElementById('naLabReadToken').value,
-        deviceId: document.getElementById('naLabDeviceId').value,
-        syncToken: document.getElementById('naLabSyncToken').value,
-        remember: document.getElementById('naLabRemember').checked
+        sessionToken: current.sessionToken
       });
       storeCredentials(state.credentials);
       renderStatus('Conexión LAB guardada en este navegador.', 'ok');
@@ -479,16 +481,23 @@
     document.getElementById('naLabResetBaseline').onclick = function () {
       resetToBaseline().catch(function (error) { renderStatus(error.message, 'error'); });
     };
-    document.getElementById('naLabClearCredentials').onclick = clearCredentials;
+    document.getElementById('naLabClearCredentials').onclick = function () {
+      clearCredentials();
+      fillPanel();
+    };
   }
 
   function fillPanel() {
     var c = state.credentials || loadCredentials();
     document.getElementById('naLabEndpoint').value = c.endpoint || DEFAULT_ENDPOINT;
     document.getElementById('naLabReadToken').value = c.readToken || '';
-    document.getElementById('naLabDeviceId').value = c.deviceId || '';
-    document.getElementById('naLabSyncToken').value = c.syncToken || '';
-    document.getElementById('naLabRemember').checked = !!c.remember;
+    document.getElementById('naLabActivationSecret').value = '';
+    var writerState = document.getElementById('naLabWriterState');
+    if (writerState) {
+      writerState.textContent = hasWriterAccess(c)
+        ? '✓ Sesión de escritura activa en este navegador'
+        : 'Sin sesión de escritura · ingresa tu clave una sola vez';
+    }
     if (state.revision) refreshMetadata({
       revision: state.revision,
       baseline_id: state.baselineId,

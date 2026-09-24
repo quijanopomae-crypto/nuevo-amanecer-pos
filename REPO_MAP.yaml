@@ -42,6 +42,7 @@ zones:
     worker: tools/cloudflare-lab/src/worker.js
     workspace: tools/cloudflare-lab/src/lab-workspace.js
     migrations: tools/cloudflare-lab/migrations/
+    session_auth_migration: tools/cloudflare-lab/migrations/0010_session_auth.sql
     private_inputs: tools/cloudflare-lab/private/
   backup_recovery:
     path: tools/cloudflare-backup/
@@ -86,7 +87,7 @@ cloud_data:
     worker_binding: forbidden
   secrets:
     lab_import_hmac: LAB_IMPORT_HMAC_SECRET
-    device_credential_pepper: DEVICE_CREDENTIAL_PEPPER
+    pos_activation_secret: POS_ACTIVATION_SECRET
     values_in_git: forbidden
 
 v1_3_runtime:
@@ -167,5 +168,4 @@ owner_finalizer:
     - independent_lab_secrets_configured
     - branch_protection_verified
     - current_lab_deploy_pass
-    - current_device_provision_pass
     - real_backup_r2_temporary_d1_drill_pass

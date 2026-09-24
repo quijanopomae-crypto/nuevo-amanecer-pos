@@ -1,13 +1,14 @@
-# Copiar a .dev.vars (ignorado por git) y usar valores aleatorios largos y distintos.
+# Copiar a .dev.vars (ignorado por git) y usar valores largos y distintos.
 # Estos valores pertenecen al Worker LAB. No usar aquí credenciales administrativas Cloudflare.
 
-# Hash de credenciales de dispositivos LAB. Debe ser independiente de cualquier token R2.
-DEVICE_CREDENTIAL_PEPPER=replace-with-64-hex-random-server-only-pepper
+# Clave que el usuario escribe una sola vez por navegador nuevo.
+# El Worker la intercambia por un token de sesión persistente; la clave no se guarda en el navegador.
+POS_ACTIVATION_SECRET=replace-with-your-private-activation-secret
 
 # Lectura del gateway LAB; nunca autoriza escrituras.
 READ_TOKEN=replace-with-a-distinct-read-secret
 
-# Firma/verificación del pipeline CANON -> LAB. Debe ser distinto del token R2 y del pepper.
+# Firma/verificación del pipeline CANON -> LAB. Debe ser distinto del token R2 y de la clave de activación.
 LAB_IMPORT_HMAC_SECRET=replace-with-a-distinct-random-import-secret
 
 # R2_CANON_READ_TOKEN NO es un secreto del Worker.

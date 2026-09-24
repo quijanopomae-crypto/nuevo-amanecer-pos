@@ -103,7 +103,8 @@ test('reload y cierre/reapertura conservan UUID, OUTBOX y hash; la siguiente ven
   second.run("ventas.unshift({id:'V-NEW',timestamp:'2026-09-09T13:00:00.000Z',metodo:'efectivo',total:10,items:[{id:'P1',cantidad:1,precioUnitario:10}]});");
   await second.run('saveAllData()');
   const after = json(second, 'NuevoAmanecerOutbox.snapshot()');
-  assert.equal(after.device_id, before.device_id);
+  assert.equal(after.device_id, undefined);
+  assert.equal(before.device_id, undefined);
   assert.deepEqual(after.outbox.slice(0, before.outbox.length), before.outbox);
   assert.notEqual(after.outbox.at(-1).operation_id, before.outbox.at(-1).operation_id);
   for (const op of after.outbox) assert.equal(await second.run(`NuevoAmanecerOutbox.sha256(${JSON.stringify(op.payload)})`), op.payload_hash);
@@ -140,7 +141,7 @@ test('OUTBOX V1 se conserva íntegro para revisión y no se reinterpreta como ve
   api.restore(legacy, { data: { ventas: [{ id: 'V-OLD', timestamp: '2026-09-09T00:00:00.000Z' }], creditos: [] } });
   assert.equal(JSON.stringify(api.snapshot().legacy), JSON.stringify(legacy));
   assert.equal(api.snapshot().outbox.length, 0);
-  assert.equal(api.snapshot().device_id, deviceId);
+  assert.equal(api.snapshot().device_id, undefined);
 });
 
 test('offline mantiene PENDING sin incrementar intentos y recuperación sincroniza', async () => {
@@ -252,7 +253,7 @@ test('read_only y revoked quedan REJECTED sin reintento automático', async (t) 
     t.after(() => fixture.close());
     const { api } = directApi();
     const operation = await captureOne(api, scenario.suffix);
-    fixture.addDevice(operation.device_id, scenario.role, scenario.status, 'fixture-token');
+    fixture.addDevice('outbox-session', scenario.role, scenario.status, 'fixture-token');
     attachMemoryPersistence(api);
     api.configure({ token: 'fixture-token' });
     let calls = 0;
@@ -270,7 +271,7 @@ test('acuse perdido y reload reintentan exactamente una vez contra el Worker rea
   t.after(() => fixture.close());
   const { api } = directApi();
   const original = await captureOne(api, 'ACK-LOSS');
-  fixture.addDevice(original.device_id, 'writer', 'active', 'fixture-token');
+  fixture.addDevice('outbox-session', 'writer', 'active', 'fixture-token');
   attachMemoryPersistence(api);
   api.configure({ token: 'fixture-token' });
   let loseAck = true;
@@ -292,23 +293,25 @@ test('acuse perdido y reload reintentan exactamente una vez contra el Worker rea
   assert.equal(fixture.database.prepare('SELECT COUNT(*) AS n FROM cash_movements WHERE operation_id = ?').get(original.operation_id).n, 1);
 });
 
-test('venta real envía un único comando A3 con identidad, pago e inventario coherentes', async (t) => {
+test('venta real envía un único comando A3 con sesión, pago e inventario coherentes', async (t) => {
   const fixture = workerFixture();
   t.after(() => fixture.close());
   const sb = withOutbox();
   sb.ctx.AbortController = AbortController;
   await sell(sb, 2);
   const operation = sb.durableSnapshot().cloudSync.outbox[0];
-  fixture.addDevice(operation.device_id, 'writer', 'active', 'fixture-token');
+  fixture.addDevice('outbox-session', 'writer', 'active', 'fixture-token');
   sb.run("NuevoAmanecerOutbox.configure({token:'fixture-token',persist:_naQueueCloudSyncPersist})");
   const urls = [];
   const transport = async (url, options) => { urls.push({ url, options }); return fixture.fetch(url, options); };
   const result = await sb.run('NuevoAmanecerOutbox.syncPending').call(null, transport);
   assert.equal(result.synced, 1);
   assert.match(urls[0].url, /\/commands\/sale\.create$/);
-  assert.equal(urls[0].options.headers['x-device-id'], operation.device_id);
+  assert.equal(urls[0].options.headers.authorization, 'Bearer fixture-token');
+  assert.equal('x-device-id' in urls[0].options.headers, false);
   const body = JSON.parse(urls[0].options.body);
   assert.equal(body.operation_id, operation.operation_id);
+  assert.equal('device_id' in body, false);
   assert.equal(body.sale_id, 'V-001');
   assert.equal(body.total_cents, 5000);
   assert.deepEqual(body.items.map(({ product_id, quantity, unit_price_cents, inventory_quantity }) => ({ product_id, quantity, unit_price_cents, inventory_quantity })),
@@ -322,7 +325,7 @@ test('fallo al persistir ACKED deja PENDING y el retry idempotente cierra sin du
   t.after(() => fixture.close());
   const { api } = directApi();
   const original = await captureOne(api, 'SYNC-PERSIST');
-  fixture.addDevice(original.device_id, 'writer', 'active', 'fixture-token');
+  fixture.addDevice('outbox-session', 'writer', 'active', 'fixture-token');
   let durable = api.snapshot();
   let rejectSyncedOnce = true;
   api.configure({ token: 'fixture-token', persist: async (operation, patch) => {

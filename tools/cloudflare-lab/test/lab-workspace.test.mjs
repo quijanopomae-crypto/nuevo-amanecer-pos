@@ -96,7 +96,7 @@ test('workspace save fails closed if writer is revoked between auth and commit',
   const env = { nuevo_amanecer_lab: db };
   const request = new Request('https://lab.example/lab/workspace/save', {
     method: 'POST',
-    headers: { 'x-device-id': 'lab-phone-main', 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       expected_revision: 1,
       operation_id: 'op-revoked',
@@ -106,7 +106,7 @@ test('workspace save fails closed if writer is revoked between auth and commit',
   const response = await handleLabWorkspace(request, new URL(request.url), env, {
     jsonLab: (body, status = 200, headers = {}) => Response.json(body, { status, headers }),
     authorizeRead: () => null,
-    authorizeDevice: async () => ({ credentialHash: 'a'.repeat(64) })
+    authorizeSession: async () => ({ principalId: 'session:test', credentialHash: 'a'.repeat(64) })
   });
   assert.equal(response.status, 403);
   assert.equal((await response.json()).error, 'device_revoked');
@@ -116,13 +116,13 @@ test('workspace reset requires expected_revision instead of accepting blind rese
   const env = { nuevo_amanecer_lab: { prepare() { throw new Error('DB must not be reached'); } } };
   const request = new Request('https://lab.example/lab/workspace/reset', {
     method: 'POST',
-    headers: { 'x-device-id': 'lab-phone-main', 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({})
   });
   const response = await handleLabWorkspace(request, new URL(request.url), env, {
     jsonLab: (body, status = 200, headers = {}) => Response.json(body, { status, headers }),
     authorizeRead: () => null,
-    authorizeDevice: async () => ({ credentialHash: 'a'.repeat(64) })
+    authorizeSession: async () => ({ principalId: 'session:test', credentialHash: 'a'.repeat(64) })
   });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, 'expected_revision_required');
