@@ -74,7 +74,7 @@
   }
 
   function baseline(source) {
-    var next = { version: 2, device_id: uuid(), initialized: true, captured: {}, outbox: [] };
+    var next = { version: 3, initialized: true, captured: {}, outbox: [] };
     sales(source).forEach(function (entry) { next.captured[entry.key] = true; });
     return next;
   }
@@ -85,13 +85,12 @@
     return Math.round(amount * 100);
   }
 
-  function saleCommand(sale, operationId, deviceId, source) {
+  function saleCommand(sale, operationId, source) {
     var movements = (source.data.inventoryMovements || []).filter(function (movement) {
       return movement.source === 'SALE' && String(movement.referenceId) === String(sale.id);
     }).slice();
     var command = {
       operation_id: operationId,
-      device_id: deviceId,
       sale_id: String(sale.id),
       created_at: new Date(sale.timestamp).toISOString(),
       payment_method: String(sale.metodoPago || sale.metodo),
@@ -129,10 +128,12 @@
 
   function sanitize(raw) {
     function require(condition) { if (!condition) throw new Error('INVALID_CLOUD_SYNC_STATE'); }
-    require(raw && [1, 2].includes(raw.version) && raw.initialized === true && UUID.test(raw.device_id));
+    require(raw && [1, 2, 3].includes(raw.version) && raw.initialized === true);
     require(raw.captured && typeof raw.captured === 'object' && !Array.isArray(raw.captured));
     require(Array.isArray(raw.outbox) && raw.outbox.length <= 300000);
+
     if (raw.version === 1) {
+      require(UUID.test(raw.device_id));
       require(Number.isSafeInteger(raw.next_device_sequence) && raw.next_device_sequence > 0);
       var legacyIds = new Set(), sequences = new Set();
       Object.keys(raw.captured).forEach(function (key) { require(/^(sales|sale_items|inventory_movements):/.test(key) && raw.captured[key] === true); });
@@ -152,23 +153,34 @@
       return { version: 1, device_id: raw.device_id, next_device_sequence: raw.next_device_sequence,
         initialized: true, captured: clone(raw.captured), outbox: legacyOperations };
     }
+
     var captured = {};
     Object.keys(raw.captured).forEach(function (key) { require(/^sale:/.test(key) && raw.captured[key] === true); captured[key] = true; });
     var ids = new Set();
+    var legacyDeviceId = raw.version === 2 ? raw.device_id : null;
+    if (raw.version === 2) require(UUID.test(legacyDeviceId));
+    else require(raw.device_id === undefined);
+
     var outbox = raw.outbox.map(function (op) {
-      require(op && UUID.test(op.operation_id) && op.device_id === raw.device_id && !ids.has(op.operation_id)); ids.add(op.operation_id);
+      require(op && UUID.test(op.operation_id) && !ids.has(op.operation_id)); ids.add(op.operation_id);
       require(op.command === 'sale.create' && typeof op.sale_id === 'string' && op.sale_id.length > 0 && op.sale_id.length <= 160);
       require(typeof op.payload === 'string' && /^[0-9a-f]{64}$/.test(op.payload_hash));
       require(typeof op.created_at === 'string' && Number.isFinite(Date.parse(op.created_at)));
       require(Object.values(STATUS).includes(op.status) && Number.isSafeInteger(op.attempts) && op.attempts >= 0);
       require(op.last_error === null || (typeof op.last_error === 'string' && op.last_error.length <= 80));
-      return { operation_id: op.operation_id, device_id: op.device_id, command: op.command, sale_id: op.sale_id,
+      var migratedDeviceId = raw.version === 2 ? op.device_id : op.legacy_device_id;
+      if (migratedDeviceId !== undefined && migratedDeviceId !== null) require(UUID.test(migratedDeviceId));
+      if (raw.version === 2) require(migratedDeviceId === legacyDeviceId);
+      var clean = { operation_id: op.operation_id, command: op.command, sale_id: op.sale_id,
         payload: op.payload, payload_hash: op.payload_hash, created_at: op.created_at,
         status: op.status, attempts: op.attempts, last_error: op.last_error };
+      if (migratedDeviceId) clean.legacy_device_id = migratedDeviceId;
+      return clean;
     });
-    var result = { version: 2, device_id: raw.device_id, initialized: true, captured: captured, outbox: outbox };
+
+    var result = { version: 3, initialized: true, captured: captured, outbox: outbox };
     if (raw.legacy !== undefined) {
-      require(raw.legacy && raw.legacy.version === 1 && raw.legacy.device_id === raw.device_id);
+      require(raw.legacy && raw.legacy.version === 1);
       result.legacy = sanitize(raw.legacy);
     }
     return result;
@@ -182,8 +194,8 @@
   function restore(raw, source) {
     var restored = raw ? sanitize(raw) : null;
     if (restored && restored.version === 1) {
-      // Preserve the legacy journal verbatim for review, never reinterpret it as an A3 sale.
-      state = baseline(source); state.device_id = restored.device_id; state.legacy = restored;
+      // Preserve the legacy journal verbatim for review, never reinterpret it as a current sale command.
+      state = baseline(source); state.legacy = restored;
     } else state = restored || baseline(source);
     runtime.retryAfter = 0;
   }
@@ -193,9 +205,9 @@
     var next = state ? snapshot() : baseline(source);
     for (var entry of sales(source)) {
       if (next.captured[entry.key]) continue;
-      var operationId = uuid(), command = saleCommand(entry.sale, operationId, next.device_id, source);
+      var operationId = uuid(), command = saleCommand(entry.sale, operationId, source);
       var payload = stableJson(command);
-      next.outbox.push({ operation_id: operationId, device_id: next.device_id, command: 'sale.create', sale_id: command.sale_id,
+      next.outbox.push({ operation_id: operationId, command: 'sale.create', sale_id: command.sale_id,
         payload: payload, payload_hash: await sha256(payload), created_at: new Date().toISOString(),
         status: STATUS.PENDING, attempts: 0, last_error: null });
       next.captured[entry.key] = true;
@@ -268,7 +280,7 @@
   function updateState(raw, operation, patch) {
     var next = sanitize(raw);
     var item = next.outbox.find(function (row) { return row.operation_id === operation.operation_id; });
-    if (!item || item.payload !== operation.payload || item.payload_hash !== operation.payload_hash || item.device_id !== operation.device_id || item.sale_id !== operation.sale_id || item.status !== operation.status || item.attempts !== operation.attempts) throw new Error('STALE_OUTBOX_OPERATION');
+    if (!item || item.payload !== operation.payload || item.payload_hash !== operation.payload_hash || (item.legacy_device_id || null) !== (operation.legacy_device_id || null) || item.sale_id !== operation.sale_id || item.status !== operation.status || item.attempts !== operation.attempts) throw new Error('STALE_OUTBOX_OPERATION');
     item.status = patch.status; item.attempts = patch.attempts; item.last_error = patch.last_error;
     return sanitize(next);
   }
@@ -308,7 +320,8 @@
         if (!operation || operation.status !== STATUS.PENDING) continue;
         var command;
         try { command = JSON.parse(operation.payload); } catch (error) {}
-        if (await sha256(operation.payload) !== operation.payload_hash || !command || command.operation_id !== operation.operation_id || command.device_id !== operation.device_id || command.sale_id !== operation.sale_id) {
+        var legacyIdentityOk = operation.legacy_device_id ? command.device_id === operation.legacy_device_id : command.device_id === undefined;
+        if (await sha256(operation.payload) !== operation.payload_hash || !command || command.operation_id !== operation.operation_id || !legacyIdentityOk || command.sale_id !== operation.sale_id) {
           await update(operation, { status: STATUS.NEEDS_REVIEW, attempts: operation.attempts, last_error: 'PAYLOAD_HASH_MISMATCH' });
           summary.blocked = 'integrity'; break;
         }
