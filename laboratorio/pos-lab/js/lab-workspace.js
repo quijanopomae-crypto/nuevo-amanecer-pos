@@ -145,9 +145,17 @@
     if (!payload || !payload.snapshot || typeof _naValidSnapshot !== 'function' || !_naValidSnapshot(payload.snapshot)) {
       throw new Error('El snapshot LAB recibido no es válido');
     }
+    // La ruta/pantalla abierta pertenece al navegador actual. El workspace D1
+    // comparte datos de negocio, pero no debe mandar al usuario a otra pantalla.
+    var localPageId = document.querySelector('.page.active')?.id || 'pageMenu';
     state.suppressRemoteSave = true;
     try {
       if (!_naApplySnapshot(payload.snapshot)) throw new Error('No se pudo aplicar el snapshot LAB');
+      try {
+        if (typeof _naLoadedUIState !== 'undefined' && _naLoadedUIState && typeof _naLoadedUIState === 'object') {
+          _naLoadedUIState.currentPage = localPageId;
+        }
+      } catch {}
       if (typeof _naNormalizeData === 'function') _naNormalizeData();
       if (originalSaveAllData) await originalSaveAllData();
       if (typeof renderCategorySelects === 'function') renderCategorySelects();
@@ -421,12 +429,16 @@
   if (originalLoadAllData) {
     loadAllData = async function () {
       var result = await originalLoadAllData.apply(this, arguments);
-      try {
-        await loadRemoteWorkspace({ silent: true });
-      } catch (error) {
-        console.warn('[NA-LAB] No se pudo cargar D1 LAB.', error && error.message || error);
-        updateBadge('LOCAL');
-      }
+
+      // No bloquear el primer render esperando la red. Primero mostramos el
+      // estado local y la pantalla guardada; luego D1 LAB se actualiza detrás.
+      setTimeout(function () {
+        loadRemoteWorkspace({ silent: true }).catch(function (error) {
+          console.warn('[NA-LAB] No se pudo cargar D1 LAB.', error && error.message || error);
+          updateBadge('LOCAL');
+        });
+      }, 0);
+
       return result;
     };
   }
