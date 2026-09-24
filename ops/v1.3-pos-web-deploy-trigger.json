@@ -8,6 +8,6 @@
   "local_server_required": false,
   "activation_secret_embedded": false,
   "note": "Serve a secure launcher at root and the canonical POS under /app/. Browser activation is required before entering CANON production.",
-  "retry_attempt": 2,
-  "retry_reason": "Cloudflare static assets uploaded successfully, but automatic root/app HTML routing returned 404. Redeploy with explicit ASSETS router."
+  "retry_attempt": 3,
+  "retry_reason": "Deployment and routing succeeded; previous verification used a pipefail-sensitive grep pipeline on the large POS HTML. Retry with file-based HTTP probes."
 }
