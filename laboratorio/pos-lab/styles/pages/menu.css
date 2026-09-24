@@ -1,2 +1,7 @@
 /* pageMenu: cambios visuales futuros del menú principal van aquí. */
 #pageMenu.lab-ui-experiment { }
+
+/* LAB UI: ocultar la tarjeta de bienvenida para priorizar Resumen y módulos. */
+#pageMenu .hero-dashboard.hero-welcome-only {
+  display: none;
+}

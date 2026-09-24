@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-MENU-HIDE-WELCOME-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Ocultar visualmente la tarjeta de bienvenida del panel principal en POS-LAB para priorizar Resumen y módulos, sin tocar CANON ni lógica comercial.",
+  "allowed_files": [
+    "laboratorio/pos-lab/styles/pages/menu.css",
+    "laboratorio/pos-lab/tasks/LAB-MENU-HIDE-WELCOME-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-ui-edit"
+  ],
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
