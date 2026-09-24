@@ -131,14 +131,14 @@ Toca la insignia **LAB** de la esquina inferior para abrir el panel de datos.
 El panel permite:
 - conectar el celular con D1 LAB;
 - cargar la revisión LAB actual;
-- ejecutar **CANON → LAB** para copiar el backup CANON más reciente;
+- abrir **Refresh LAB Data** en GitHub Actions para importar el backup `.sql` más reciente de CANON;
 - restaurar el baseline CANON dentro de LAB.
 
 Los cambios de clientes, créditos, pagos, inventario, caja y demás hechos durante pruebas
 se guardan únicamente en `nuevo-amanecer-lab` cuando hay un writer LAB configurado.
 
-Un refresh con el mismo backup devuelve `no_change`: no pisa el trabajo LAB. Solo un
-backup CANON nuevo, confirmado por el usuario, crea un nuevo baseline y reemplaza el
-workspace de pruebas.
+Un refresh con el mismo `.sql` devuelve `no_change`: no pisa el trabajo LAB. Un backup
+CANON con SHA-256 nuevo crea un baseline nuevo y reemplaza el workspace activo, dejando
+las revisiones LAB anteriores en el historial.
 
 Ver `docs/LAB_CANON_MIRROR.md`.
