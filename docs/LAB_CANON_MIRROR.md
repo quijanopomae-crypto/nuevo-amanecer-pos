@@ -96,12 +96,12 @@ representan el histórico CANON completo.
 
 `POST /lab/workspace/save` requiere:
 
-- dispositivo LAB `writer` activo;
+- una sesión persistente válida;
 - `expected_revision`;
 - `operation_id` único;
 - snapshot válido.
 
-La actualización usa revisión optimista. Si otra pestaña/dispositivo avanzó la revisión,
+La actualización usa revisión optimista. Si otra pestaña o sesión avanzó la revisión,
 devuelve `409 revision_conflict` en vez de sobrescribir silenciosamente.
 
 El cliente conserva de forma durable la operación pendiente (`operation_id`, revisión esperada
@@ -109,8 +109,7 @@ y snapshot exacto) hasta recibir ACK. Un ACK perdido reintenta la misma operaci�
 Si existe una edición local pendiente durante el arranque, el snapshot D1 no se aplica encima de
 ella: primero se intenta conciliar la intención local.
 
-El Worker vuelve a comprobar dentro del commit que el dispositivo sigue siendo el writer activo
-con la misma credencial; una revocación entre autenticación y commit falla cerrada.
+El Worker vuelve a comprobar dentro del commit que la sesión sigue activa; una revocación entre autenticación y commit falla cerrada.
 
 Las revisiones anteriores permanecen en D1 LAB.
 
@@ -125,7 +124,7 @@ y no toca CANON.
 `GET /lab/workspace` admite:
 
 - `x-read-token`, o
-- credenciales de un dispositivo LAB válido.
+- una sesión persistente válida.
 
 Los datos reales nunca se incorporan al HTML, GitHub Pages ni al repositorio.
 
@@ -153,13 +152,13 @@ R2_CANON_READ_TOKEN
 LAB_IMPORT_HMAC_SECRET
   -> solo firma en GitHub Actions y verificación de /lab/workspace/import-baseline
 
-DEVICE_CREDENTIAL_PEPPER
-  -> solo HMAC de credenciales de dispositivos en el Worker
+POS_ACTIVATION_SECRET
+  -> solo intercambio inicial por un token de sesión persistente
 ```
 
 GitHub Actions requiere `CLOUDFLARE_ACCOUNT_ID`, `R2_CANON_READ_TOKEN` y
-`LAB_IMPORT_HMAC_SECRET` para el refresh. La provisión de dispositivos usa
-`DEVICE_CREDENTIAL_PEPPER` y `LAB_DEVICE_SYNC_TOKEN`, nunca el token R2.
+`LAB_IMPORT_HMAC_SECRET` para el refresh. El deploy del Worker también recibe
+`POS_ACTIVATION_SECRET`, separado del token R2.
 
 El Worker no recibe `R2_CANON_READ_TOKEN`. Para local, `.dev.vars` contiene
 únicamente secretos del Worker. El token R2 se pasa solo al proceso que ejecuta
@@ -167,9 +166,9 @@ El Worker no recibe `R2_CANON_READ_TOKEN`. Para local, `.dev.vars` contiene
 
 Para remoto, nunca versionar valores. La configuración real de los secretos
 nuevos es una acción OWNER_ONLY y debe realizarse antes de volver a ejecutar los
-workflows manuales de deploy/refresh/provision.
+workflows manuales de deploy/refresh.
 
-## Configuración del celular
+## Activación en un teléfono o PC nuevo
 
 Abrir:
 
@@ -177,15 +176,11 @@ Abrir:
 https://quijanopomae-crypto.github.io/nuevo-amanecer-pos/laboratorio/pos-lab/index.html
 ```
 
-Tocar la insignia **LAB** inferior y configurar una de estas opciones:
+Para escritura, el usuario introduce su clave privada de activación una sola vez. El Worker la valida y devuelve un token aleatorio de sesión. El navegador conserva únicamente ese token; no se registra IMEI, hardware, teléfono, `device_id` ni credencial específica del equipo.
 
-- READ_TOKEN para carga de solo lectura; o
-- Device ID + SYNC_TOKEN LAB para cargar y guardar cambios.
+La clave de activación no se almacena en el navegador. Solo vuelve a solicitarse si se borra el almacenamiento local, la sesión es revocada o se usa un navegador/perfil nuevo.
 
-Para usar **CANON -> LAB**, guardar Device ID + SYNC_TOKEN de un writer LAB.
-
-Las credenciales solo se guardan en el almacenamiento del navegador si el usuario marca
-"Recordar credenciales". Nunca se escriben en GitHub.
+El modo de lectura puede seguir usando `READ_TOKEN` separado.
 
 ## Pruebas
 
