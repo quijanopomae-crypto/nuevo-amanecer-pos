@@ -157,3 +157,15 @@ final_verification:
     - real_security_secret_configuration
     - real_backup_restore_drill
   production_cutover_authorized: false
+
+owner_finalizer:
+  script: tools/owner-finalize-v1.3.ps1
+  instructions: docs/OWNER_FINALIZATION.md
+  recovery_drill_workflow: .github/workflows/owner-backup-recovery-drill.yml
+  status: prepared_not_executed
+  closes_when:
+    - independent_lab_secrets_configured
+    - branch_protection_verified
+    - current_lab_deploy_pass
+    - current_device_provision_pass
+    - real_backup_r2_temporary_d1_drill_pass

@@ -1,0 +1,199 @@
+name: Owner Backup Recovery Drill
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owner-backup-recovery-drill
+  cancel-in-progress: false
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+
+    steps:
+      - name: Require Cloudflare credentials
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Require exact current main HEAD
+        run: |
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Install Wrangler
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Local backup and converter guards
+        run: |
+          node --test tests/cloud-sync/d1-backup-workflow.test.mjs
+          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
+          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
+
+      - name: Export production D1 read-only
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync } = require('node:fs');
+          const { createHash } = require('node:crypto');
+
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const database = process.env.PROD_DATABASE_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/d1/database/' + database + '/export';
+          const headers = {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          };
+
+          async function api(body) {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(body),
+            });
+            const parsed = await response.json().catch(() => null);
+            if (!response.ok || parsed?.success !== true || !parsed.result) {
+              throw new Error('D1 export API failed (' + response.status + ')');
+            }
+            if (parsed.result.status === 'error') throw new Error('D1 export job failed');
+            return parsed.result;
+          }
+
+          (async () => {
+            const start = await api({ output_format: 'polling' });
+            if (!start.at_bookmark) throw new Error('Missing export bookmark');
+
+            let complete = null;
+            for (let attempt = 0; attempt < 60; attempt++) {
+              const result = await api({
+                output_format: 'polling',
+                current_bookmark: start.at_bookmark,
+              });
+              if (result.status === 'complete' && result.result?.signed_url) {
+                complete = result;
+                break;
+              }
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+            if (!complete) throw new Error('D1 export did not complete');
+
+            const download = await fetch(complete.result.signed_url);
+            if (!download.ok) throw new Error('Export download failed (' + download.status + ')');
+            const bytes = Buffer.from(await download.arrayBuffer());
+            if (!bytes.length) throw new Error('Empty export');
+            if (bytes.length > 16 * 1024 * 1024) throw new Error('Export exceeds 16 MiB safety limit');
+
+            const sha256 = createHash('sha256').update(bytes).digest('hex');
+            writeFileSync('/tmp/canon-drill.sql', bytes);
+            writeFileSync('/tmp/export-meta.json', JSON.stringify({
+              database_id: database,
+              bookmark: start.at_bookmark,
+              size_bytes: bytes.length,
+              sha256,
+            }, null, 2));
+            console.log(JSON.stringify({ database_id: database, size_bytes: bytes.length, sha256 }));
+          })().catch(error => {
+            console.error(error.message);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Validate exported SQL semantically
+        run: |
+          python3 tools/cloudflare-lab/scripts/lab-snapshot-from-sql.py --sql /tmp/canon-drill.sql --output /tmp/lab-snapshot.json | tee /tmp/snapshot-summary.json
+
+      - name: Store and re-read drill backup in private R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          KEY="recovery-drills/$(date -u +%Y-%m-%dT%H-%M-%SZ)-${GITHUB_SHA}.sql"
+          echo "DRILL_R2_KEY=$KEY" >> "$GITHUB_ENV"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --file=/tmp/canon-drill.sql
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --file=/tmp/restore.sql
+          test "$(sha256sum /tmp/canon-drill.sql | awk '{print $1}')" = "$(sha256sum /tmp/restore.sql | awk '{print $1}')"
+
+      - name: Create temporary recovery D1
+        shell: bash
+        run: |
+          NAME="nuevo-amanecer-recovery-drill-${GITHUB_RUN_ID}"
+          RESPONSE="$(curl --fail --silent --show-error -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" --data "{\"name\":\"$NAME\"}")"
+          ID="$(printf '%s' "$RESPONSE" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const x=JSON.parse(s);if(x.success!==true||!x.result?.uuid)process.exit(2);process.stdout.write(x.result.uuid)})")"
+          test -n "$ID"
+          echo "DRILL_DB_NAME=$NAME" >> "$GITHUB_ENV"
+          echo "DRILL_DB_ID=$ID" >> "$GITHUB_ENV"
+
+      - name: Restore SQL into temporary D1
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler d1 execute "$DRILL_DB_NAME" --remote --file=/tmp/restore.sql
+
+      - name: Verify restored D1 integrity and canonical reconciliation
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="PRAGMA integrity_check;" | tee /tmp/integrity.txt
+          grep -F 'ok' /tmp/integrity.txt
+          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="PRAGMA foreign_key_check;" | tee /tmp/fk.txt
+          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT mode, active_promotion_id FROM canonical_control WHERE id=1;" | tee /tmp/control.txt
+          grep -F 'active_promotion_id' /tmp/control.txt
+          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT 'products' entity, COUNT(*) row_count FROM products WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) UNION ALL SELECT 'customers', COUNT(*) FROM customers WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) UNION ALL SELECT 'credits', COUNT(*) FROM credits WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) UNION ALL SELECT 'credit_payments', COUNT(*) FROM credit_payments WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);" | tee /tmp/counts.txt
+          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT SUM(original_amount_cents) original_cents, SUM(import_paid_cents) paid_cents, SUM(current_balance_cents) balance_cents FROM credits WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);" | tee /tmp/credits.txt
+          npx wrangler d1 execute "$DRILL_DB_NAME" --remote --command="SELECT SUM(amount_cents) payment_cents FROM credit_payments WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1);" | tee /tmp/payments.txt
+
+      - name: Store durable drill manifest in R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          SQL_SHA="$(sha256sum /tmp/restore.sql | awk '{print $1}')"
+          MANIFEST_KEY="${DRILL_R2_KEY%.sql}.manifest.json"
+          cat > /tmp/drill-manifest.json <<EOF
+          {
+            "format": "nuevo-amanecer-recovery-drill-v1",
+            "status": "PASS",
+            "source_database_id": "$PROD_DATABASE_ID",
+            "temporary_database_id": "$DRILL_DB_ID",
+            "temporary_database_name": "$DRILL_DB_NAME",
+            "r2_sql_key": "$DRILL_R2_KEY",
+            "sql_sha256": "$SQL_SHA",
+            "github_run_id": "$GITHUB_RUN_ID",
+            "github_sha": "$GITHUB_SHA"
+          }
+          EOF
+          npx wrangler r2 object put "$R2_BUCKET/$MANIFEST_KEY" --file=/tmp/drill-manifest.json
+          {
+            echo "## Backup / recovery drill PASS"
+            echo "- Source D1: $PROD_DATABASE_ID"
+            echo "- Private R2 SQL: $DRILL_R2_KEY"
+            echo "- Private R2 manifest: $MANIFEST_KEY"
+            echo "- SQL SHA-256: $SQL_SHA"
+            echo "- Temporary D1: $DRILL_DB_NAME"
+            echo "- Temporary D1 is deleted in the cleanup step."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete temporary recovery D1
+        if: ${{ always() && env.DRILL_DB_ID != '' }}
+        shell: bash
+        run: |
+          curl --fail --silent --show-error -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$DRILL_DB_ID" > /tmp/delete-result.json
