@@ -15,10 +15,20 @@ if (policy.canonical_product_path !== 'POS/') fail('LAB_POLICY canonical_product
 for (const key of [
   'production_data_allowed',
   'production_credentials_allowed',
+  'credentials_versioned_or_client_exposed_allowed',
   'production_writes_allowed',
   'canonical_runtime_dependency_on_lab_allowed'
 ]) {
   if (policy[key] !== false) fail('LAB_POLICY debe mantener ' + key + '=false');
+}
+for (const key of [
+  'isolated_canon_copy_in_d1_lab_allowed',
+  'encrypted_ci_secrets_allowed'
+]) {
+  if (policy[key] !== true) fail('LAB_POLICY debe mantener ' + key + '=true');
+}
+if (policy.real_commercial_data_versioning_allowed !== false) {
+  fail('LAB_POLICY debe mantener real_commercial_data_versioning_allowed=false');
 }
 if (policy.required_branch_prefix !== 'lab/') fail('La rama de laboratorio debe usar prefijo lab/');
 if (policy.promotion_mode !== 'reviewed-minimal-patch') fail('La promoción debe ser reviewed-minimal-patch');
