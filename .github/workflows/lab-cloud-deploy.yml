@@ -38,6 +38,7 @@ jobs:
           node --check tools/cloudflare-lab/src/lab-workspace.js
           node --check tools/cloudflare-lab/src/worker.js
           node --check laboratorio/pos-lab/js/lab-workspace.js
+          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
           node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
@@ -61,3 +62,10 @@ jobs:
 
       - name: Verify LAB Worker health
         run: curl --fail --silent --show-error https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev/health
+
+      - name: Import latest CANON SQL backup into D1 LAB workspace
+        working-directory: tools/cloudflare-lab
+        run: |
+          node scripts/fetch-latest-canon-backup.mjs
+          python3 scripts/lab-snapshot-from-sql.py --sql /tmp/canon.sql --output /tmp/lab-snapshot.json
+          node scripts/publish-lab-snapshot.mjs
