@@ -135,6 +135,8 @@ def main():
       "creditos":len(snapshot["data"]["creditos"]),
       "pagos":sum(len(c.get("pagos",[])) for c in snapshot["data"]["creditos"]),
       "productos":len(snapshot["data"]["productos"]),
+      "included_entities":["productos","clientes","creditos","creditos.pagos"],
+      "zeroed_by_design":["ventas","gastos","cajMovs","cashClosures","inventoryMovements"],
       "snapshot_sha256":hashlib.sha256(raw.encode()).hexdigest()
     }))
 
