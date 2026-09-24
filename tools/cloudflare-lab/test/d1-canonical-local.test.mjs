@@ -193,8 +193,8 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     approved = await baseline();
     Object.assign(metrics, { import_id: approved.import_id, source_hash: approved.source_hash, manifest_hash: approved.manifest_hash, transform_version: approved.transform_version });
   });
-  const migrationNames = (await readdir(join(LAB, 'migrations'))).filter(name => /^000[1-6]_.*\.sql$/.test(name)).sort();
-  assert.equal(migrationNames.length, 6);
+  const migrationNames = (await readdir(join(LAB, 'migrations'))).filter(name => /^000[1-7]_.*\.sql$/.test(name)).sort();
+  assert.equal(migrationNames.length, 7);
   const migrations = await Promise.all(migrationNames.map(async name => ({ name, sql: await readFile(join(LAB, 'migrations', name), 'utf8') })));
   const buildOptions = { entryPoints: [join(LAB, 'src', 'worker.js')], bundle: true, format: 'esm', platform: 'browser', target: 'es2022', write: false, logLevel: 'silent', absWorkingDir: LAB };
   const bundle = (await build(buildOptions)).outputFiles[0].contents;
@@ -228,7 +228,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
   metrics.persistence = f.persist;
   let db = f.db;
   auditDb = db;
-  await step('empty namespace applies migrations 0001..0006 with real D1 FK enforcement', async () => {
+  await step('empty namespace applies migrations 0001..0007 with real D1 FK enforcement', async () => {
     assert.equal((await all(db, "SELECT name FROM sqlite_master WHERE name='devices'")).length, 0);
     await applyMigrations(db, migrations);
     assert.equal((await first(db, 'PRAGMA foreign_keys')).foreign_keys, 1);
@@ -279,7 +279,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     const req = request(path, body, headers);
     return f.mf.dispatchFetch(req.url, { method: req.method, headers: req.headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   };
-  const read = path => send(path, undefined, { 'x-read-token': env.READ_TOKEN });
+  const read = path => send(path, undefined, {});
   const nodeSend = (path, body, binding) => nodeWorker.fetch(request(path, body), { ...env, nuevo_amanecer_lab: binding });
 
   // This is NOT a second approved source: a materialized, clearly labelled JSON
@@ -726,7 +726,8 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     // Restore data BEFORE installing triggers: immutable/frozen triggers must not
     // replay history, increment revisions, or forbid restoring sealed generations.
     // No trigger is removed from an existing database, and FK checks stay enabled.
-    const order = ['devices', 'sync_operations', 'sales', 'sale_items', 'inventory_movements', 'cash_movements', 'import_runs', 'import_staging', 'import_issues', 'canonical_promotions', 'canonical_control', 'canonical_command_receipts', 'canonical_assertions', ...TABLES];
+    const order = ['devices', 'sync_operations', 'sales', 'sale_items', 'inventory_movements', 'cash_movements', 'import_runs', 'import_staging', 'import_issues', 'canonical_promotions', 'canonical_control', 'canonical_command_receipts', 'canonical_assertions', ...TABLES,
+      'canonical_write_guards', 'canonical_sale_context', 'live_credits', 'canonical_inventory_effects'];
     assert.deepEqual(Object.keys(snapshot.tables).sort(), [...order].sort(), 'every application table is explicitly restored');
     for (const table of order) {
       const rows = snapshot.tables[table];
@@ -750,7 +751,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     await noTraffic(restore.db);
     const restoredEnv = { ...JSON.parse(env.A6_OPERATIONAL_MANIFEST), database_id: restore.databaseId };
     await restore.mf.setOptions(withBindings(restore.options, { ...env, A6_LOCAL_DATABASE_ID: restore.databaseId, A6_OPERATIONAL_MANIFEST: JSON.stringify(restoredEnv) }));
-    const status = await checked(await restore.mf.dispatchFetch('http://localhost/read/canonical/status', { headers: { 'x-read-token': env.READ_TOKEN } }), 200, 'restored workerd read');
+    const status = await checked(await restore.mf.dispatchFetch('http://localhost/read/canonical/status'), 200, 'restored workerd read');
     assert.equal(status.promotion_id, approvedRequest.promotion_id);
     assert.deepEqual(status.counts, Object.fromEntries(TABLES.map(table => [table, EXPECTED[table]])));
     metrics.restore = { database_id: restore.databaseId, namespace: restore.persist, hash: roundtrip.hash, tables: order.length, generations: snapshot.tables.canonical_promotions.length };

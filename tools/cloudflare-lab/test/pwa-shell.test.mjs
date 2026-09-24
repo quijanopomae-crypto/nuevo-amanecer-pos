@@ -108,7 +108,7 @@ test('built reader assets match the exact PWA allowlist and source bytes', () =>
       return entry.isDirectory() ? list(new URL(`${entry.name}/`, directory), `${prefix}${entry.name}/`) : [`${prefix}${entry.name}`];
     });
   }
-  assert.equal(expected.length, 52);
+  assert.equal(expected.length, 58);
   assert.deepEqual(list(output).sort(), expected);
   for (const file of expected.filter((file) => file !== 'POS/sw.js')) {
     assert.deepEqual(readFileSync(new URL(file, output)), read(file.startsWith('POS/') ? file : `POS/${file}`), file);

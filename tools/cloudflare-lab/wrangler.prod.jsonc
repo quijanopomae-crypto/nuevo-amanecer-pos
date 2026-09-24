@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "nuevo-amanecer-sync-lab",
+	"name": "nuevo-amanecer-pos-prod",
 	"main": "src/worker.js",
 	"compatibility_date": "2026-06-01",
 	"workers_dev": true,
@@ -22,11 +22,16 @@
 	"observability": {
 		"enabled": false
 	},
+	"vars": {
+		"SERVICE_NAME": "nuevo-amanecer-pos-prod",
+		"A6_ACTIVATION_DATABASE_ID": "cf2c83d3-f187-472e-967b-0ad24be969eb",
+		"A6_ACTIVATION_EXPECTED_COUNTS": "{\"products\":408,\"customers\":31,\"credits\":313,\"credit_payments\":131}"
+	},
 	"d1_databases": [
 		{
 			"binding": "nuevo_amanecer_lab",
-			"database_name": "nuevo-amanecer-lab",
-			"database_id": "e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e",
+			"database_name": "nuevo-amanecer-prod-v2",
+			"database_id": "cf2c83d3-f187-472e-967b-0ad24be969eb",
 			"migrations_dir": "migrations"
 		}
 	]

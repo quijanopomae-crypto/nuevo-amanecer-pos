@@ -1,7 +1,12 @@
 import { A6_FIELD_MAP, A6_MAPPING_VERSION, A6_POLICY, A6_SCHEMA_VERSION, a6PolicyHash, mapStagingRow } from './a6-mapping.js';
 import { buildManifest, sha256Hex, stableStringify } from './a5-import-core.js';
+import { CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
 
 const HASH = /^[0-9a-f]{64}$/;
+const ACTIVATION_WRITER = 'prod-v2-pos-writer-01';
+const TEMPORARY_WRITER = 'prod-v2-a5-temporary-writer';
+const PRODUCTION_DATABASE_ID = 'cf2c83d3-f187-472e-967b-0ad24be969eb';
+const PRODUCTION_HOST = 'nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev';
 const PROMOTE_FIELDS = ['operation_id','promotion_id','import_id','expected_source_hash','expected_manifest_hash','expected_transform_version','expected_staging_revision','mapping_version','schema_version','policy_hash','expected_control_revision'];
 const TABLES = {
   products: ['product_id','name','sku','barcode','alternate_codes_json','legacy_alternate_code','category','brand','description','icon','image','unit','purchase_unit','purchase_factor','cost_cents','price_cents','box_price_cents','units_per_box','opening_stock_quantity','current_stock_quantity','stock_revision','stock_min_quantity','expiry_date','includes_igv','tax_type','complementary_tax','tracks_inventory'],
@@ -10,7 +15,7 @@ const TABLES = {
   credit_payments: ['payment_id','credit_id','source_payment_id','source_sequence','amount_cents','payment_date','payment_timestamp','payment_date_known','date_precision','method','source_method','source_origin','source_document_type','source_operation_reference','seller','date_observation','source_customer_document','source_customer_name','source_cumulative_paid_cents','source_balance_after_cents','source_progress_ratio','source_credit_original_cents','source_current_document_balance_cents'],
 };
 const PROVENANCE = ['promotion_id','source_import_id','source_entity_type','source_name','source_row','source_key','source_payload_json','source_payload_hash','mapping_version'];
-const READ_TABLES = new Set(['products','customers','credits','credit-payments','sales','sale-items','inventory-movements','cash-movements']);
+const READ_TABLES = new Set(['products','customers','credits','credit-payments','sales','sale-items','inventory-movements','cash-movements','cash-sessions','financial-events']);
 const A3_PUBLIC_COLUMNS={
   sales:'sale_id,operation_id,payment_method,total_cents,payment_reference,created_at,received_at',
   sale_items:'sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at',
@@ -23,18 +28,24 @@ export function isA6Path(path) {
 }
 
 export function a6LocalDenied(url, env, json) {
+  if (productionCanonicalAccess(url, env)) return null;
   if (env.A6_LOCAL_GATE !== 'enabled' || !['localhost','127.0.0.1'].includes(url.hostname)) return json({ error:'not_found' },404);
   return null;
+}
+
+function productionCanonicalAccess(url, env) {
+  return url.protocol === 'https:' && url.hostname === PRODUCTION_HOST &&
+    env.A6_ACTIVATION_DATABASE_ID === PRODUCTION_DATABASE_ID;
 }
 
 export async function handleA6(request, url, env, helpers) {
   const localDenied = a6LocalDenied(url, env, helpers.json);
   if (localDenied) return localDenied;
-  const configured = await operationalManifest(env);
+  const configured = url.pathname.startsWith('/read/canonical/') && productionCanonicalAccess(url, env)
+    ? { value: null } : await operationalManifest(env);
   if (configured.error) return helpers.json({ error:'a6_manifest_invalid', message:configured.error },503);
   if (url.pathname.startsWith('/read/canonical/')) {
     if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
-    const denied = helpers.authorizeRead(request,env); if (denied) return denied;
     return canonicalRead(url,env.nuevo_amanecer_lab,helpers.json);
   }
   const provenance = url.pathname.match(/^\/imports\/canonical\/([^/]+)$/);
@@ -50,6 +61,70 @@ export async function handleA6(request, url, env, helpers) {
   if (url.pathname==='/commands/canonical.freeze') return freeze(body,deviceId,auth.credentialHash,configured.value,env.nuevo_amanecer_lab,helpers.json);
   if (url.pathname==='/commands/canonical.rollback') return rollback(body,deviceId,auth.credentialHash,configured.value,env.nuevo_amanecer_lab,helpers.json);
   return promote(body,deviceId,auth.credentialHash,configured.value,env.nuevo_amanecer_lab,helpers.json);
+}
+
+// This command has its own exact database binding and never inherits the
+// localhost-only Gate P route. It is inert until the target ID is configured.
+export async function activateCanonical(request, env, auth, json) {
+  let expected;
+  try { expected = JSON.parse(env.A6_ACTIVATION_EXPECTED_COUNTS); } catch { return json({ error: 'activation_not_configured' }, 503); }
+  if (!env.A6_ACTIVATION_DATABASE_ID || !plainExact(expected, ['products','customers','credits','credit_payments']) ||
+      Object.values(expected).some(n => !Number.isSafeInteger(n) || n < 0)) return json({ error: 'activation_not_configured' }, 503);
+  const db = env.nuevo_amanecer_lab;
+  let body; try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
+  const fields = ['operation_id', 'promotion_id', 'expected_control_revision', 'expected_authority_epoch', 'client_contract'];
+  if (!plainExact(body, fields) || !validId(body.operation_id) || !validId(body.promotion_id) ||
+      !Number.isSafeInteger(body.expected_control_revision) || body.expected_control_revision < 0 ||
+      !Number.isSafeInteger(body.expected_authority_epoch) || body.expected_authority_epoch < 0 ||
+      typeof body.client_contract !== 'string') return json({ error: 'invalid_activation_request' }, 400);
+  const deviceId = request.headers.get('x-device-id');
+  const requestHash = await sha256Hex(stableStringify({ ...body, writer_device_id: deviceId, database_id: env.A6_ACTIVATION_DATABASE_ID }));
+  const prior = await db.prepare('SELECT 1 AS found FROM canonical_command_receipts WHERE operation_id=?1').bind(body.operation_id).first();
+  if (prior) return json({ error: 'operation_id_conflict' }, 409);
+  const stored = await db.prepare('SELECT request_hash,result_json FROM canonical_activation_receipts WHERE operation_id=?1').bind(body.operation_id).first();
+  if (stored) return stored.request_hash === requestHash ? json(JSON.parse(stored.result_json)) : json({ error: 'operation_id_conflict' }, 409);
+  if (body.client_contract !== CANONICAL_CLIENT_CONTRACT || deviceId !== ACTIVATION_WRITER) return json({ error: 'activation_conflict' }, 409);
+  const before = await db.prepare('SELECT mode,active_promotion_id,revision,authority_epoch,minimum_client_contract,first_live_operation_id FROM canonical_control WHERE id=1').first();
+  if (!before || before.mode !== 'CANONICAL_READ_ONLY' || before.active_promotion_id !== body.promotion_id ||
+      before.revision !== body.expected_control_revision || before.authority_epoch !== body.expected_authority_epoch ||
+      before.minimum_client_contract !== 'a6-gate-p-v1' || before.first_live_operation_id !== null) return json({ error: 'activation_conflict' }, 409);
+  const result = { status: 'ACTIVE', mode: 'ACTIVE', operation_id: body.operation_id, promotion_id: body.promotion_id,
+    revision: before.revision + 1, authority_epoch: before.authority_epoch + 1,
+    writer_device_id: ACTIVATION_WRITER, minimum_client_contract: CANONICAL_CLIENT_CONTRACT, first_live_operation_id: null };
+  const traffic = `NOT EXISTS(SELECT 1 FROM sales) AND NOT EXISTS(SELECT 1 FROM sale_items) AND NOT EXISTS(SELECT 1 FROM inventory_movements) AND NOT EXISTS(SELECT 1 FROM cash_movements) AND NOT EXISTS(SELECT 1 FROM sync_operations) AND NOT EXISTS(SELECT 1 FROM canonical_sale_context) AND NOT EXISTS(SELECT 1 FROM canonical_financial_operations) AND NOT EXISTS(SELECT 1 FROM canonical_financial_events) AND NOT EXISTS(SELECT 1 FROM canonical_cash_sessions) AND NOT EXISTS(SELECT 1 FROM canonical_cash_closures) AND NOT EXISTS(SELECT 1 FROM canonical_write_guards)`;
+  const statements = [
+    db.prepare(`INSERT INTO canonical_activation_receipts(operation_id,request_hash,result_json,promotion_id,expected_control_revision,expected_authority_epoch,client_contract,writer_device_id,credential_hash,expected_products,expected_customers,expected_credits,expected_credit_payments)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?11,?12,?13,?14 WHERE EXISTS(SELECT 1 FROM canonical_control c JOIN canonical_promotions p ON p.promotion_id=c.active_promotion_id AND p.status='COMMITTED'
+        WHERE c.id=1 AND c.mode='CANONICAL_READ_ONLY' AND c.active_promotion_id=?4 AND c.revision=?5 AND c.authority_epoch=?6 AND c.minimum_client_contract='a6-gate-p-v1' AND c.first_live_operation_id IS NULL)
+      AND EXISTS(SELECT 1 FROM canonical_control c WHERE c.id=1 AND
+        (c.writer_device_id=?8 OR EXISTS(SELECT 1 FROM devices old_writer
+          WHERE old_writer.device_id=c.writer_device_id AND old_writer.role='writer' AND old_writer.status='revoked')))
+      AND EXISTS(SELECT 1 FROM devices d WHERE d.device_id=?8 AND d.role='writer' AND d.status='active' AND d.credential_hash=?9)
+      AND EXISTS(SELECT 1 FROM devices WHERE device_id=?10 AND role='writer' AND status='revoked')
+      AND (SELECT COUNT(*) FROM devices WHERE role='writer' AND status='active')=1
+      AND (SELECT COUNT(*) FROM products WHERE promotion_id=?4)=?11
+      AND (SELECT COUNT(*) FROM customers WHERE promotion_id=?4)=?12
+      AND (SELECT COUNT(*) FROM credits WHERE promotion_id=?4)=?13
+      AND (SELECT COUNT(*) FROM credit_payments WHERE promotion_id=?4)=?14
+      AND NOT EXISTS(SELECT 1 FROM canonical_command_receipts WHERE operation_id=?1) AND ${traffic}`)
+      .bind(body.operation_id, requestHash, stableStringify(result), body.promotion_id, body.expected_control_revision,
+        body.expected_authority_epoch, body.client_contract, deviceId, auth.credentialHash, TEMPORARY_WRITER,
+        expected.products, expected.customers, expected.credits, expected.credit_payments),
+    db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)`).bind(`activate:${body.operation_id}`),
+    db.prepare(`UPDATE canonical_control SET mode='ACTIVE',revision=revision+1,authority_epoch=authority_epoch+1,writer_device_id=?1,minimum_client_contract=?2
+      WHERE id=1 AND mode='CANONICAL_READ_ONLY' AND active_promotion_id=?3 AND revision=?4 AND authority_epoch=?5 AND first_live_operation_id IS NULL
+      AND EXISTS(SELECT 1 FROM canonical_activation_receipts WHERE operation_id=?6 AND request_hash=?7)`)
+      .bind(deviceId, body.client_contract, body.promotion_id, body.expected_control_revision, body.expected_authority_epoch, body.operation_id, requestHash),
+    db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)`).bind(`activate-control:${body.operation_id}`),
+    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(`activate:${body.operation_id}`, `activate-control:${body.operation_id}`),
+  ];
+  try { await db.batch(statements); }
+  catch {
+    const replay = await db.prepare('SELECT request_hash,result_json FROM canonical_activation_receipts WHERE operation_id=?1').bind(body.operation_id).first();
+    return replay && replay.request_hash === requestHash ? json(JSON.parse(replay.result_json)) :
+      json({ error: replay ? 'operation_id_conflict' : 'activation_conflict' }, 409);
+  }
+  return json(result, 201);
 }
 
 async function operationalManifest(env) {
@@ -420,15 +495,60 @@ async function rollback(body,deviceId,credentialHash,manifest,db,json){
 
 async function canonicalRead(url,db,json){
   const type=url.pathname.slice('/read/canonical/'.length);if(!READ_TABLES.has(type)&&type!=='status')return json({error:'not_found'},404);
-  const before=await control(db);if(!before||before.mode!=='CANONICAL_READ_ONLY'||!before.active_promotion_id)return json({error:'canonical_not_published'},409);
-  if(type==='status'){const counts={};for(const table of Object.keys(TABLES))counts[table]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(before.active_promotion_id).first()).count);const after=await control(db);if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});}
+  const initial=await control(db);if(!initial||!['CANONICAL_READ_ONLY','ACTIVE'].includes(initial.mode)||!initial.active_promotion_id)return json({error:'canonical_not_published'},409);
+  const before=initial.mode==='ACTIVE'?await readControl(db):initial;
+  if(!sameControl({...initial,financial_revision:before?.financial_revision},before))return json({error:'authority_changed'},409);
+  if(['cash-sessions','financial-events'].includes(type)&&before.mode!=='ACTIVE')return json({error:'canonical_not_active'},409);
+  if(type==='status'){
+    const counts={};for(const table of Object.keys(TABLES))counts[table]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(before.active_promotion_id).first()).count);
+    if(before.mode==='ACTIVE'){
+      counts.imported_credits=counts.credits;
+      counts.live_credits=Number((await db.prepare('SELECT COUNT(*) AS count FROM live_credits WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
+      counts.credits+=counts.live_credits;
+      counts.credit_payments+=Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL').bind(before.active_promotion_id).first()).count);
+      for(const [name,sql] of Object.entries({sales:'canonical_sale_context x',sale_items:'canonical_sale_context x JOIN sale_items r ON r.sale_id=x.sale_id',inventory_movements:'canonical_inventory_effects',cash_movements:'canonical_sale_context x JOIN cash_movements r ON r.sale_id=x.sale_id'}))
+        counts[name]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${sql} WHERE ${name==='inventory_movements'?'promotion_id':'x.promotion_id'}=?1`).bind(before.active_promotion_id).first()).count);
+    }
+    const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
+    if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});
+  }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
   const sqlName=type.replaceAll('-','_');let rows;
-  if(TABLES[sqlName]){const key=TABLES[sqlName][0];rows=await db.prepare(`SELECT ${TABLES[sqlName].join(',')} FROM ${sqlName} WHERE promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();}
+  if(sqlName==='credits'&&before.mode==='ACTIVE'){
+    const liveFields={credit_id:'l.credit_id',customer_id:'l.customer_id',sale_id:'l.sale_id',issued_value:'l.created_at',due_value:'l.due_date',original_amount_cents:'l.original_amount_cents',import_paid_cents:'0',opening_balance_cents:'l.original_amount_cents',current_balance_cents:'b.current_balance_cents',source_status:'NULL'};
+    rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || c.credit_id AS read_key,${TABLES.credits.map(column=>column==='current_balance_cents'?'b.current_balance_cents':`c.${column}`).join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS status,b.revision AS revision,NULL AS created_at,NULL AS due_date FROM credits c JOIN canonical_credit_balances b ON b.promotion_id=c.promotion_id AND b.credit_id=c.credit_id AND b.provenance='IMPORT' WHERE c.promotion_id=?1 UNION ALL
+      SELECT 'L:' || l.credit_id AS read_key,${TABLES.credits.map(column=>liveFields[column]??'NULL').join(',')},'LIVE',l.operation_id,l.status,b.revision,l.created_at,l.due_date
+      FROM live_credits l JOIN canonical_credit_balances b ON b.promotion_id=l.promotion_id AND b.credit_id=l.credit_id AND b.provenance='LIVE' WHERE l.promotion_id=?1) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='credit_payments'&&before.mode==='ACTIVE'){
+    const fields={payment_id:'event_id',credit_id:'credit_id',amount_cents:'-credit_delta_cents',payment_date:'substr(created_at,1,10)',payment_timestamp:'created_at',payment_date_known:'1',date_precision:"'TIMESTAMP'",method:'payment_method',source_origin:"'LIVE'",source_operation_reference:'reference'};
+    rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || payment_id AS read_key,${TABLES.credit_payments.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS credit_provenance,NULL AS credit_delta_cents,NULL AS cash_delta_cents,NULL AS session_id,NULL AS reason,NULL AS compensates_operation_id FROM credit_payments WHERE promotion_id=?1 UNION ALL
+      SELECT 'L:' || event_id AS read_key,${TABLES.credit_payments.map(c=>fields[c]??'NULL').join(',')},'LIVE',operation_id,credit_provenance,credit_delta_cents,cash_delta_cents,session_id,reason,compensates_operation_id FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL)
+      WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='cash_sessions'){
+    rows=await db.prepare(`SELECT session_id AS read_key,session_id,promotion_id,open_operation_id,opening_cents,cash_movement_watermark,opened_at,status,
+      close_operation_id,expected_cents,counted_cents,difference_cents,closing_watermark,closed_at,revision FROM canonical_cash_state
+      WHERE promotion_id=?1 AND session_id>?2 ORDER BY session_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='financial_events'){
+    rows=await db.prepare(`SELECT event_id AS read_key,event_id,operation_id,promotion_id,event_type,session_id,credit_id,credit_provenance,
+      credit_delta_cents,cash_delta_cents,payment_method,reference,reason,compensates_operation_id,created_at FROM canonical_financial_events
+      WHERE promotion_id=?1 AND event_id>?2 ORDER BY event_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(TABLES[sqlName]){const key=TABLES[sqlName][0];rows=await db.prepare(`SELECT ${TABLES[sqlName].join(',')} FROM ${sqlName} WHERE promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();}
+  else if(before.mode==='ACTIVE'){
+    const key=sqlName==='sale_items'?"r.sale_id || char(0) || printf('%020d',r.line_number)":sqlName==='sales'?'r.sale_id':'r.movement_id';
+    const join=sqlName==='inventory_movements'?'canonical_inventory_effects x JOIN inventory_movements r ON r.movement_id=x.movement_id':'canonical_sale_context x JOIN '+sqlName+' r ON r.sale_id=x.sale_id';
+    const context=sqlName==='sales'?',x.customer_id,x.promotion_id,x.authority_epoch,x.control_revision,x.client_contract':'';
+    rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName].split(',').map(c=>'r.'+c).join(',')}${context} FROM ${join} WHERE x.promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  }
   else {const key=sqlName==='sale_items'?"sale_id || char(0) || printf('%020d',line_number)":sqlName==='sales'?'sale_id':'movement_id';rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName]} FROM ${sqlName} WHERE ${key}>?1 ORDER BY ${key} LIMIT ?2`).bind(page.key,page.limit+1).all();}
-  const after=await control(db);if(!sameControl(before,after))return json({error:'authority_changed'},409);
-  const source=rows.results??[],selected=source.slice(0,page.limit),last=selected.at(-1);let lastKey=null;if(last)lastKey=sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')];
-  return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),key:lastKey}):null,limit:page.limit});
+  const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
+  if(!sameControl(before,after))return json({error:'authority_changed'},409);
+  const source=rows.results??[],selected=source.slice(0,page.limit),last=selected.at(-1);let lastKey=null;if(last)lastKey=last.read_key??(sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')]);
+  for(const item of selected){
+    delete item.read_key;
+    // Preserve the imported read shape; only LIVE entries carry ledger metadata.
+    if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
+  }
+  return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),...(before.mode==='ACTIVE'?{financial_revision:before.financial_revision}:{}),key:lastKey}):null,limit:page.limit});
 }
 
 async function readProvenance(promotionId,url,db,json){
@@ -440,13 +560,20 @@ async function readProvenance(promotionId,url,db,json){
 }
 
 function pageLimit(params){const raw=params.get('limit');if(raw!==null&&!/^\d+$/.test(raw))return null;const limit=raw===null?25:Number(raw);return Number.isSafeInteger(limit)&&limit>=1&&limit<=100?limit:null;}
-function parsePage(params,controlRow){const limit=pageLimit(params);if(limit===null)return{error:'invalid_limit'};const token=params.get('cursor');if(token===null)return{limit,key:''};try{const c=decodeCursor(token);if(c.promotion_id!==controlRow.active_promotion_id||c.authority_epoch!==Number(controlRow.authority_epoch)||c.revision!==Number(controlRow.revision)||typeof c.key!=='string'||c.key.length>512)return{error:'stale_cursor'};return{limit,key:c.key};}catch{return{error:'invalid_cursor'};}}
+function parsePage(params,controlRow){const limit=pageLimit(params);if(limit===null)return{error:'invalid_limit'};const token=params.get('cursor');if(token===null)return{limit,key:''};try{const c=decodeCursor(token);if(c.promotion_id!==controlRow.active_promotion_id||c.authority_epoch!==Number(controlRow.authority_epoch)||c.revision!==Number(controlRow.revision)||(controlRow.mode==='ACTIVE'&&c.financial_revision!==controlRow.financial_revision)||typeof c.key!=='string'||c.key.length>512)return{error:'stale_cursor'};return{limit,key:c.key};}catch{return{error:'invalid_cursor'};}}
 function parseAdminPage(params,promotionId,type){const limit=pageLimit(params);if(limit===null)return{error:'invalid_limit'};const token=params.get('cursor');if(token===null)return{limit,name:'',row:0,key:''};try{const c=decodeCursor(token);if(!plainExact(c,['promotion_id','entity_type','name','row','key'])||c.promotion_id!==promotionId||c.entity_type!==type||typeof c.name!=='string'||c.name.length>240||!Number.isSafeInteger(c.row)||c.row<1||typeof c.key!=='string'||c.key.length>240)throw new Error();return{limit,name:c.name,row:c.row,key:c.key};}catch{return{error:'invalid_cursor'};}}
 function encodeCursor(value){const bytes=new TextEncoder().encode(JSON.stringify(value));let binary='';for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 function decodeCursor(value){if(value.length>8192||!/^[A-Za-z0-9_-]+$/.test(value))throw new Error();const s=value.replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(s+'='.repeat((4-s.length%4)%4)),(c)=>c.charCodeAt(0))));}
 async function control(db){return db.prepare('SELECT mode,active_promotion_id,revision,authority_epoch,minimum_client_contract,first_live_operation_id FROM canonical_control WHERE id=1').first();}
-function sameControl(a,b){return b&&a.mode===b.mode&&a.active_promotion_id===b.active_promotion_id&&Number(a.revision)===Number(b.revision)&&Number(a.authority_epoch)===Number(b.authority_epoch);}
-function readMeta(c){return{authority:'canonical',promotion_id:c.active_promotion_id,authority_epoch:Number(c.authority_epoch),revision:Number(c.revision),read_only:true,mode:c.mode};}
+function sameControl(a,b){return b&&a.mode===b.mode&&a.active_promotion_id===b.active_promotion_id&&Number(a.revision)===Number(b.revision)&&Number(a.authority_epoch)===Number(b.authority_epoch)&&(a.mode!=='ACTIVE'||a.financial_revision===b.financial_revision);}
+function readMeta(c){return{authority:'canonical',promotion_id:c.active_promotion_id,authority_epoch:Number(c.authority_epoch),revision:Number(c.revision),...(c.mode==='ACTIVE'?{financial_revision:c.financial_revision}:{}),read_only:c.mode!=='ACTIVE',mode:c.mode,minimum_client_contract:c.minimum_client_contract};}
+// One SQL snapshot binds authority and the append-only commit count. Counts do
+// not change on replay, and a rolled-back batch cannot advance the read version.
+async function readControl(db){return db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
+  c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
+  (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
+  (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
+  ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();}
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}
 async function candidateCount(db,id){let total=0;for(const table of Object.keys(TABLES))total+=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(id).first()).count);return total;}
 async function receiptReplay(db,id,hash,json){const row=await db.prepare('SELECT request_hash,result_json FROM canonical_command_receipts WHERE operation_id=?1').bind(id).first();if(!row)return null;return row.request_hash===hash?json(JSON.parse(row.result_json)):json({error:'operation_id_conflict'},409);}

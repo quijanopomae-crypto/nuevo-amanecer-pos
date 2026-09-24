@@ -2,7 +2,9 @@
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
 import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
-import { handleA6, isA6Path, a6LocalDenied } from './a6-canonical.js';
+import { handleA6, isA6Path, a6LocalDenied, activateCanonical } from './a6-canonical.js';
+import { createCanonicalSale } from './a6-commerce.js';
+import { FINANCIAL_COMMANDS, createCanonicalFinancial } from './a6-financial.js';
 
 const TEXT_FIELDS = ['operation_id', 'device_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -20,18 +22,35 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const isRead = url.pathname.startsWith('/read/');
+    const isCanonicalRead = url.pathname.startsWith('/read/canonical/');
     try {
+      if (url.pathname === '/commands/canonical.activate') {
+        if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), false);
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        const auth = await authorizeDevice(request.headers.get('x-device-id'), request, env, true);
+        if (auth instanceof Response) return auth;
+        return await activateCanonical(request, env, auth, json);
+      }
       if (isA6Path(url.pathname)) {
         const denied = a6LocalDenied(url, env, json);
         if (denied) return denied;
-        if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), isRead);
-        return cors(await handleA6(request, url, env, { json, authorizeRead, authorizeDevice }), isRead);
+        if (request.method === 'OPTIONS') return cors(new Response(null, { status: 204 }), isRead, isCanonicalRead);
+        return cors(await handleA6(request, url, env, { json, authorizeRead, authorizeDevice }), isRead, isCanonicalRead);
       }
       if (request.method === 'OPTIONS' && (url.pathname === '/health' || url.pathname.startsWith('/commands/') || url.pathname.startsWith('/imports/') || url.pathname.startsWith('/sync/operations') || url.pathname.startsWith('/read/'))) {
         return cors(new Response(null, { status: 204 }), isRead);
       }
       if (request.method === 'GET' && url.pathname === '/health') {
         return await health(env);
+      }
+      const financialCommand = url.pathname.startsWith('/commands/') ? url.pathname.slice('/commands/'.length) : '';
+      if (FINANCIAL_COMMANDS.has(financialCommand)) {
+        const localDenied = a6LocalDenied(url, env, json);
+        if (localDenied) return localDenied;
+        if (request.method !== 'POST') return json({error:'method_not_allowed'},405,{allow:'POST, OPTIONS'});
+        const auth = await authorizeDevice(request.headers.get('x-device-id'), request, env, true);
+        if (auth instanceof Response) return auth;
+        return await createCanonicalFinancial(financialCommand, request, env, auth, json);
       }
       if (isRead) {
         if (request.method !== 'GET') return cors(json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' }), true);
@@ -84,7 +103,7 @@ async function health(env) {
     return json({ ok: false, d1: 'binding_missing' }, 503);
   }
   const row = await env.nuevo_amanecer_lab.prepare('SELECT 1 AS one').first();
-  return json({ ok: row?.one === 1, service: 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
+  return json({ ok: row?.one === 1, service: env.SERVICE_NAME || 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
 }
 
 // Device credentials are HMACed with a server-only pepper before D1 lookup.
@@ -325,8 +344,17 @@ async function sha256Hex(text) {
 }
 
 async function createSale(request, env) {
-  const frozen = await authorityFence(env.nuevo_amanecer_lab);
-  if (frozen) return frozen;
+  const deviceId = request.headers.get('x-device-id');
+  const writer = await authorizeDevice(deviceId, request, env, true);
+  if (writer instanceof Response) return writer;
+  const authority = await env.nuevo_amanecer_lab.prepare('SELECT mode FROM canonical_control WHERE id=1').first();
+  const intent = await request.clone().json().catch(() => null);
+  if (authority?.mode === 'ACTIVE' || intent?.client_contract || intent?.promotion_id) {
+    const localDenied = a6LocalDenied(new URL(request.url), env, json);
+    if (localDenied) return localDenied;
+    return createCanonicalSale(request, env, writer, json);
+  }
+  if (authority?.mode !== 'LEGACY') return json({ error: 'authority_frozen' }, 409);
   let body;
   try {
     body = await request.json();
@@ -336,10 +364,7 @@ async function createSale(request, env) {
   const normalized = validateSale(body);
   if (normalized.error) return json({ status: 'error', error: 'invalid_sale', message: normalized.error }, 400);
 
-  const deviceId = request.headers.get('x-device-id');
   if (body.device_id !== undefined && body.device_id !== deviceId) return json({ status: 'error', operation_id: body.operation_id, error: 'device_id_mismatch' }, 403);
-  const denied = await authorizeDevice(deviceId, request, env, true);
-  if (denied instanceof Response) return denied;
 
   const db = env.nuevo_amanecer_lab;
   const payload = stableStringify(body);
@@ -368,7 +393,7 @@ async function createSale(request, env) {
       normalized.sale.payment_method,
       normalized.sale.total_cents,
       normalized.sale.created_at,
-      denied.credentialHash,
+      writer.credentialHash,
       commitToken,
       normalized.sale.payment.reference,
     ),
@@ -415,7 +440,15 @@ async function createSale(request, env) {
     ),
   );
 
-  const results = await db.batch(statements);
+  let results;
+  try {
+    results = await db.batch(statements);
+  } catch (error) {
+    if (!String(error?.message).includes('financial_replace_forbidden')) throw error;
+    const raced = await db.prepare('SELECT sale_id, payload_hash FROM sales WHERE operation_id = ?1').bind(body.operation_id).first();
+    if (raced) return saleReplay(body.operation_id, payloadHash, raced);
+    return json({ status: 'conflict', operation_id: body.operation_id, error: 'sale_not_created' }, 409);
+  }
   if (results[0]?.meta?.changes === 1) {
     return json({ status: 'created', operation_id: body.operation_id, sale_id: normalized.sale.sale_id, idempotent: false }, 201);
   }
@@ -692,10 +725,10 @@ function constantTimeEqual(a, b) {
   return diff === 0;
 }
 
-function cors(response, isRead = false) {
+function cors(response, isRead = false, isCanonicalRead = false) {
   response.headers.set('access-control-allow-origin', '*');
   response.headers.set('access-control-allow-methods', isRead ? 'GET, OPTIONS' : 'GET, POST, OPTIONS');
-  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'content-type, x-sync-token, x-device-id');
+  response.headers.set('access-control-allow-headers', isCanonicalRead ? 'content-type' : isRead ? 'x-read-token' : 'content-type, x-sync-token, x-device-id');
   response.headers.set('access-control-max-age', '600');
   return response;
 }
