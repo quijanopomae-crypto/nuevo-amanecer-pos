@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
 import { workerFixture } from './worker-fixture.mjs';
 import { buildManifest, sha256Hex, stableStringify } from '../../tools/cloudflare-lab/src/a5-import-core.js';
 import { A6_MAPPING_VERSION, A6_SCHEMA_VERSION, a6PolicyHash } from '../../tools/cloudflare-lab/src/a6-mapping.js';
@@ -58,7 +57,7 @@ export async function a6Fixture(t, { runs = 1, rows = syntheticRows() } = {}) {
   f.post = (path, body, headers = WRITER) => f.fetch(`http://localhost${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
   f.read = (route, query = '', headers = READER) => f.fetch(`http://localhost/read/canonical/${route}${query}`, { headers });
   f.export = (promotion, table, query = '', headers = WRITER) => f.fetch(`http://localhost/imports/canonical/${promotion}?entity_type=${table}${query}`, { headers });
-  f.rotate = () => f.exec('UPDATE devices SET credential_hash=? WHERE device_id=?', createHmac('sha256', f.env.DEVICE_CREDENTIAL_PEPPER).update('rotated-secret').digest('hex'), 'a6-writer');
+  f.rotate = () => f.rotateSession('a6-writer', 'rotated-secret');
   f.bumpControl = (extra = '') => f.database.exec(`UPDATE canonical_control SET revision=revision+1,authority_epoch=authority_epoch+1${extra} WHERE id=1`);
   f.manifests = [];
   // Both source runs MUST exist while LEGACY. No bypass of the freeze trigger.
