@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-ROUTE-RESTORE-FLICKER-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Evitar el salto visual al menú principal durante una recarga cuando POS-LAB debe restaurar el módulo previamente abierto.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-guard.js",
+    "laboratorio/pos-lab/lab-overrides.css",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/tasks/LAB-ROUTE-RESTORE-FLICKER-001.json",
+    "tests/laboratorio-route-restore.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit"
+  ],
+  "production_data": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

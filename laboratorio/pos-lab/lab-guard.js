@@ -5,6 +5,41 @@
   window.__NA_LAB_SOURCE__ = "f2462f72953ce26c0ab79f2bd39f84f8b3ac8a7d";
   window.__NA_LAB_WRITE_BLOCKED__ = true;
 
+  // Evita que el menú principal aparezca un instante antes de restaurar
+  // el módulo que estaba abierto al recargar el LAB.
+  var LAB_ROUTE_RESTORE_CLASS = 'lab-route-restoring';
+  var LAB_LOCAL_SNAPSHOT_KEY = 'na_snapshot_v9';
+  var LAB_SESSION_SNAPSHOT_KEY = 'na_snapshot_v9_session';
+
+  function readInitialLabPage() {
+    var raw = null;
+    try { raw = localStorage.getItem(LAB_LOCAL_SNAPSHOT_KEY); } catch {}
+    if (!raw) {
+      try { raw = sessionStorage.getItem(LAB_SESSION_SNAPSHOT_KEY) || sessionStorage.getItem(LAB_LOCAL_SNAPSHOT_KEY); } catch {}
+    }
+    if (!raw) {
+      try {
+        var legacy = JSON.parse(localStorage.getItem('na_app_state') || '{}');
+        return typeof legacy.currentPage === 'string' ? legacy.currentPage : '';
+      } catch {
+        return '';
+      }
+    }
+    try {
+      var snapshot = JSON.parse(raw);
+      var page = snapshot && snapshot.ui && snapshot.ui.currentPage;
+      return typeof page === 'string' ? page : '';
+    } catch {
+      return '';
+    }
+  }
+
+  var initialLabPage = readInitialLabPage();
+  if (initialLabPage && initialLabPage !== 'pageMenu' && /^page[\w-]+$/.test(initialLabPage)) {
+    document.documentElement.classList.add(LAB_ROUTE_RESTORE_CLASS);
+    document.documentElement.setAttribute('data-lab-restore-page', initialLabPage);
+  }
+
   var blockedHosts = new Set([
     'nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev'
   ]);

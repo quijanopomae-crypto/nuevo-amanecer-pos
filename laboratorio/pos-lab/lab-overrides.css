@@ -15,3 +15,13 @@ html::before {
   font: 900 10px/1 system-ui, sans-serif;
   pointer-events: none;
 }
+
+/*
+ * Al recargar un módulo, el HTML generado trae pageMenu activo por defecto.
+ * Si existe una ruta persistida distinta, ocultamos solo ese menú inicial
+ * hasta que loadAppState restaure el módulo real.
+ */
+html.lab-route-restoring #pageMenu {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

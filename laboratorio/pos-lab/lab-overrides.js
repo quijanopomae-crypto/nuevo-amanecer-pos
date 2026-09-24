@@ -17,5 +17,23 @@
     experiments: Object.create(null)
   };
 
+  function clearRouteRestoreShield() {
+    document.documentElement.classList.remove('lab-route-restoring');
+    document.documentElement.removeAttribute('data-lab-restore-page');
+  }
+
+  var originalLoadAppState = (typeof loadAppState === 'function') ? loadAppState : null;
+  if (originalLoadAppState) {
+    loadAppState = function () {
+      try {
+        return originalLoadAppState.apply(this, arguments);
+      } finally {
+        clearRouteRestoreShield();
+      }
+    };
+  } else {
+    clearRouteRestoreShield();
+  }
+
   console.info('[NA-LAB] Punto de extensión listo para funciones nuevas.');
 })();
