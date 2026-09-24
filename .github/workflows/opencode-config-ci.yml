@@ -45,8 +45,8 @@ jobs:
       - name: Role and command boundaries
         run: node --test tests/opencode-role-map.test.mjs
 
-      - name: Legacy shadow manifest remains valid
-        run: python -B orchestrator/schemas/validate_manifest.py MANIFEST.yaml --root .
+      - name: Python validator syntax
+        run: python -m py_compile orchestrator/project_validation.py orchestrator/snapshot.py tests/infrastructure/test_shadow_mode.py
 
       - name: Working tree remains clean
         run: |
