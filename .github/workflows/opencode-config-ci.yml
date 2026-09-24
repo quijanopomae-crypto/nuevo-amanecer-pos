@@ -7,9 +7,13 @@ on:
       - ".agents/skills/**"
       - "AGENTS.md"
       - "AGENTS_Nuevo_Amanecer.md"
+      - "README.md"
+      - "REPO_MAP.yaml"
+      - "docs/V1.3_STATUS.md"
       - "MANIFEST.yaml"
       - "opencode.json"
       - "tests/opencode-role-map.test.mjs"
+      - "tests/repo-map.test.mjs"
       - ".github/workflows/opencode-config-ci.yml"
   push:
     branches:
@@ -19,9 +23,13 @@ on:
       - ".agents/skills/**"
       - "AGENTS.md"
       - "AGENTS_Nuevo_Amanecer.md"
+      - "README.md"
+      - "REPO_MAP.yaml"
+      - "docs/V1.3_STATUS.md"
       - "MANIFEST.yaml"
       - "opencode.json"
       - "tests/opencode-role-map.test.mjs"
+      - "tests/repo-map.test.mjs"
       - ".github/workflows/opencode-config-ci.yml"
 
 permissions:
@@ -42,7 +50,7 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Role and command boundaries
+      - name: Role, command and repository-map boundaries
         run: node --test tests/opencode-role-map.test.mjs tests/repo-map.test.mjs
 
       - name: Python validator syntax
