@@ -1,10 +1,12 @@
 import { writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { parseAndValidateCanonManifest, DEFAULT_CANON_DATABASE_ID } from './canon-backup-manifest.mjs';
 
 const account=process.env.CLOUDFLARE_ACCOUNT_ID;
 const token=process.env.R2_CANON_READ_TOKEN;
 const bucket=process.env.R2_CANON_BUCKET||'nuevo-amanecer-prod-v2-backups';
 const prefix=process.env.R2_CANON_PREFIX||'nuevo-amanecer-prod-v2/';
+const expectedDatabaseId=process.env.R2_CANON_DATABASE_ID||DEFAULT_CANON_DATABASE_ID;
 if(!account||!token) throw new Error('Missing CLOUDFLARE_ACCOUNT_ID/R2_CANON_READ_TOKEN');
 
 const base='https://api.cloudflare.com/client/v4/accounts/'+encodeURIComponent(account)+'/r2/buckets/'+encodeURIComponent(bucket)+'/objects';
@@ -33,19 +35,28 @@ async function getObject(key){
  return Buffer.from(await r.arrayBuffer());
 }
 const sql=await getObject(latest.key);
-let manifest=null;
-try{manifest=await getObject(manifestKey);}catch{}
+const manifest=await getObject(manifestKey);
+const { manifest: parsedManifest, sourceHash } = parseAndValidateCanonManifest({
+  raw: manifest,
+  sqlKey: latest.key,
+  sqlBytes: sql,
+  expectedDatabaseId,
+});
 writeFileSync('/tmp/canon.sql',sql);
-if(manifest) writeFileSync('/tmp/canon.manifest.json',manifest);
+writeFileSync('/tmp/canon.manifest.json',manifest);
 
 const meta={
  bucket,
  sql_key:latest.key,
- manifest_key:manifest?manifestKey:null,
+ manifest_key:manifestKey,
  source_ref:'r2://'+bucket+'/'+latest.key,
- source_hash:createHash('sha256').update(sql).digest('hex'),
- manifest_hash:manifest?createHash('sha256').update(manifest).digest('hex'):null,
- size:sql.length
+ source_hash:sourceHash,
+ manifest_hash:createHash('sha256').update(manifest).digest('hex'),
+ size:sql.length,
+ database_id:parsedManifest.database_id,
+ bookmark:parsedManifest.bookmark,
+ manifest_status:parsedManifest.status,
+ manifest_format:parsedManifest.format
 };
 writeFileSync('/tmp/canon-meta.json',JSON.stringify(meta));
 console.log(JSON.stringify(meta));
