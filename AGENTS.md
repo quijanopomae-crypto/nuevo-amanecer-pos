@@ -50,7 +50,9 @@ No tocar cambios ajenos ni evidence/v1.3 salvo autorización explícita.
 - `laboratorio/` es la zona general de experimentación del POS.
 - `tools/cloudflare-lab/` conserva su función separada de laboratorio de infraestructura.
 - Los experimentos importantes usan ramas `lab/<nombre>`.
-- LAB no usa datos comerciales reales, credenciales de producción ni escrituras de producción.
+- LAB no usa autoridad comercial de producción, credenciales de producción en cliente/repositorio ni escrituras de producción.
+- Los datos comerciales reales pueden existir **solo** como copia aislada dentro de D1 LAB cuando provienen del flujo autorizado `CANON -> backup R2 -> D1 LAB`; nunca se versionan en Git/HTML/fixtures/evidence ni convierten LAB en autoridad CANON.
+- Los fixtures y pruebas unitarias usan datos sintéticos por defecto. GitHub Actions Secrets cifrados pueden usarse en workflows autorizados; sus valores nunca se versionan, imprimen ni exponen al navegador.
 - `POS/` nunca debe depender en runtime de archivos bajo `laboratorio/`.
 - Un experimento aprobado se promueve como parche mínimo revisado hacia `POS/`; nunca se sobrescribe CANON con todo LAB.
 - Antes de promover: ejecutar `node laboratorio/check.mjs`, pruebas funcionales aplicables, revisar diff y definir rollback.
