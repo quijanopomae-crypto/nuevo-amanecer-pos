@@ -280,6 +280,8 @@ function decodeBase64Url(value) {
 async function insertOperation(request, env) {
   const frozen = await authorityFence(env.nuevo_amanecer_lab);
   if (frozen) return frozen;
+  const auth = await authorizeSession(request, env);
+  if (auth instanceof Response) return auth;
   let body;
   try {
     body = await request.json();
@@ -288,8 +290,6 @@ async function insertOperation(request, env) {
   }
   const problem = validateOperation(body);
   if (problem) return json({ error: 'invalid_operation', message: problem }, 400);
-  const auth = await authorizeSession(request, env);
-  if (auth instanceof Response) return auth;
   const db = env.nuevo_amanecer_lab;
 
   const computedHash = await sha256Hex(body.payload);
@@ -373,6 +373,9 @@ async function sha256Hex(text) {
 async function createSale(request, env) {
   const frozen = await authorityFence(env.nuevo_amanecer_lab);
   if (frozen) return frozen;
+  const auth = await authorizeSession(request, env);
+  if (auth instanceof Response) return auth;
+  const principalId = auth.principalId;
   let body;
   try {
     body = await request.json();
@@ -381,10 +384,6 @@ async function createSale(request, env) {
   }
   const normalized = validateSale(body);
   if (normalized.error) return json({ status: 'error', error: 'invalid_sale', message: normalized.error }, 400);
-
-  const auth = await authorizeSession(request, env);
-  if (auth instanceof Response) return auth;
-  const principalId = auth.principalId;
 
   const db = env.nuevo_amanecer_lab;
   const payload = stableStringify(body);
@@ -560,11 +559,11 @@ function validatePayment(method, totalCents, payment) {
 async function stageImport(request, env) {
   const frozen = await authorityFence(env.nuevo_amanecer_lab);
   if (frozen) return frozen;
-  let body;
-  try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
   const auth = await authorizeSession(request, env);
   if (auth instanceof Response) return auth;
   const deviceId = auth.principalId;
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
   if (!body || !validId(body.import_id) || !['start', 'rows', 'issues', 'finish'].includes(body.action)) return json({ error: 'invalid_import_request' }, 400);
   const db = env.nuevo_amanecer_lab;
   if (body.action === 'start') return startImport(body, deviceId, auth.credentialHash, db);
