@@ -56,16 +56,19 @@
         return firstResult;
       }
 
-      // Refrescos siguientes: salida visible y progresiva, actualización en el
-      // punto medio y entrada un poco más lenta para acompañar el deslizamiento.
+      // Refrescos siguientes: la vista se desplaza lentamente sin desaparecer.
+      // El DOM se actualiza casi al final de la salida y luego vuelve desde la
+      // misma posición; no existe salto instantáneo de -Y a +Y.
       clearTimeout(labClientMotionTimer);
       page.classList.remove('lab-client-refresh-in');
       page.classList.add('lab-client-refresh-out');
 
       labClientMotionTimer = setTimeout(function () {
         originalCliRender.apply(context, args);
-        labClientEnter(page);
-      }, 170);
+        requestAnimationFrame(function () {
+          page.classList.remove('lab-client-refresh-out');
+        });
+      }, 340);
     };
   }
 

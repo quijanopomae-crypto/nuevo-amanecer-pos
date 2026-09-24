@@ -6,23 +6,27 @@ const css = readFileSync('laboratorio/pos-lab/animations/transitions.css', 'utf8
 const js = readFileSync('laboratorio/pos-lab/lab-overrides.js', 'utf8');
 const contract = JSON.parse(readFileSync('laboratorio/pos-lab/tasks/LAB-CLIENTES-MICRO-MOTION-001.json', 'utf8'));
 
-test('Clientes LAB uses a softer coordinated exit and enter transition', () => {
-  assert.match(css, /#pageClientes\.lab-client-refresh-out/);
-  assert.match(css, /#pageClientes\.lab-client-refresh-in/);
-  assert.match(css, /opacity:\s*\.58/);
-  assert.match(css, /translateY\(-5px\)/);
-  assert.match(css, /translateY\(6px\)/);
-  assert.match(css, /opacity 260ms/);
-  assert.match(css, /transform 280ms/);
-  assert.match(js, /setTimeout\(function \(\) \{[\s\S]*originalCliRender\.apply\(context, args\);[\s\S]*labClientEnter\(page\);[\s\S]*\}, 170\)/);
+test('Clientes LAB transition is about half-speed and stays visible', () => {
+  assert.match(css, /opacity 520ms/);
+  assert.match(css, /transform 560ms/);
+  assert.match(css, /transition-duration: 360ms, 380ms/);
+  assert.match(css, /opacity:\s*\.82/);
+  assert.match(css, /translateY\(-6px\)/);
+  assert.match(js, /\}, 340\)/);
 });
 
-test('Clientes transition never hides content completely', () => {
-  const motionBlock = css.slice(css.indexOf('/* Clientes/Créditos'));
+test('refresh updates at the end of the same slide without opposite-direction jump', () => {
+  assert.match(js, /originalCliRender\.apply\(context, args\);[\s\S]*requestAnimationFrame\(function \(\) \{[\s\S]*classList\.remove\('lab-client-refresh-out'\)/);
+  const refreshSection = js.slice(js.indexOf('// Refrescos siguientes:'), js.indexOf('function clearRouteRestoreShield'));
+  assert.doesNotMatch(refreshSection, /labClientEnter\(page\)/);
+});
+
+test('Clientes animation does not fully hide changing content', () => {
+  const motionBlock = css.slice(css.indexOf('/* Clientes/Créditos'), css.indexOf('@media (prefers-reduced-motion: reduce)'));
   assert.doesNotMatch(motionBlock, /opacity:\s*0\s*;/);
 });
 
-test('first Clientes paint is not delayed and reduced motion is respected', () => {
+test('first paint remains immediate and reduced motion is respected', () => {
   const firstPaint = js.indexOf('var firstResult = originalCliRender.apply(context, args);');
   const delayedRefresh = js.indexOf('labClientMotionTimer = setTimeout');
   assert.ok(firstPaint >= 0 && delayedRefresh > firstPaint);

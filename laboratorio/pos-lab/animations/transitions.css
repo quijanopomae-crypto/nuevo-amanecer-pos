@@ -2,39 +2,34 @@
 @keyframes lab-fade-in { from { opacity:0; } to { opacity:1; } }
 .lab-enter-fade { animation:lab-fade-in var(--lab-motion-normal) var(--lab-ease-standard) both; }
 
-/* Clientes/Créditos: transición suave y coordinada al refrescar datos en LAB. */
-#pageClientes .tabs-wrap,
+/* Clientes/Créditos: transición más lenta, continua y coordinada.
+   El encabezado/filtros permanecen estables; solo se mueve el contenido que cambia. */
 #pageClientes .stats-strip,
 #pageClientes .cli-list {
   transition:
-    opacity 260ms cubic-bezier(.22,1,.36,1),
-    transform 280ms cubic-bezier(.22,1,.36,1);
+    opacity 520ms cubic-bezier(.22,1,.36,1),
+    transform 560ms cubic-bezier(.22,1,.36,1);
   transform-origin: 50% 20%;
   will-change: opacity, transform;
 }
 
-/* La salida nunca desaparece por completo: baja suavemente a 58% mientras
-   acompaña el contenido con un pequeño desplazamiento hacia arriba. */
-#pageClientes.lab-client-refresh-out .tabs-wrap,
+/* Salida a mitad de transición: el contenido sigue claramente visible. */
 #pageClientes.lab-client-refresh-out .stats-strip,
 #pageClientes.lab-client-refresh-out .cli-list {
-  opacity: .58;
-  transform: translateY(-5px) scale(.997);
-  transition-duration: 180ms, 190ms;
+  opacity: .82;
+  transform: translateY(-6px) scale(.998);
+  transition-duration: 360ms, 380ms;
 }
 
-/* El contenido nuevo nace desde el mismo nivel de opacidad y entra desde abajo.
-   El salto de preparación ocurre con el contenido atenuado, nunca invisible. */
-#pageClientes.lab-client-refresh-in .tabs-wrap,
+/* Primera entrada: parte apenas desplazada y vuelve a reposo suavemente. */
 #pageClientes.lab-client-refresh-in .stats-strip,
 #pageClientes.lab-client-refresh-in .cli-list {
-  opacity: .58;
-  transform: translateY(6px) scale(.997);
+  opacity: .82;
+  transform: translateY(7px) scale(.998);
   transition-duration: 0ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #pageClientes .tabs-wrap,
   #pageClientes .stats-strip,
   #pageClientes .cli-list {
     transition: none !important;

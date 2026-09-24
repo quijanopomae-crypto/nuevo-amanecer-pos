@@ -3,7 +3,7 @@
   "task_id": "LAB-CLIENTES-MICRO-MOTION-001",
   "environment": "LABORATORIO",
   "base_ref": "feature/v1.3-mobile-cloud",
-  "objective": "Aplicar una transición suave, ligeramente más lenta y coordinada con desplazamiento al refrescar Clientes y Créditos, sin ocultar el contenido de golpe ni alterar lógica comercial.",
+  "objective": "Reducir aproximadamente 50% la velocidad de la transición de Clientes y Créditos, mantener el contenido visible y coordinar la actualización con un único deslizamiento continuo sin saltos.",
   "allowed_files": [
     "laboratorio/pos-lab/animations/transitions.css",
     "laboratorio/pos-lab/lab-overrides.js",
