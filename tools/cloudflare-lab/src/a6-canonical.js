@@ -44,9 +44,9 @@ export async function handleA6(request, url, env, helpers) {
     return readProvenance(decodeURIComponent(provenance[1]),url,env.nuevo_amanecer_lab,helpers.json);
   }
   if (request.method !== 'POST') return helpers.json({ error:'method_not_allowed' },405,{ allow:'POST, OPTIONS' });
-  let body; try { body=await request.json(); } catch { return helpers.json({ error:'invalid_json' },400); }
   const auth=await helpers.authorizeSession(request,env); if (auth instanceof Response) return auth;
   const deviceId=auth.principalId;
+  let body; try { body=await request.json(); } catch { return helpers.json({ error:'invalid_json' },400); }
   if (url.pathname==='/commands/canonical.freeze') return freeze(body,deviceId,auth.credentialHash,configured.value,env.nuevo_amanecer_lab,helpers.json);
   if (url.pathname==='/commands/canonical.rollback') return rollback(body,deviceId,auth.credentialHash,configured.value,env.nuevo_amanecer_lab,helpers.json);
   return promote(body,deviceId,auth.credentialHash,configured.value,env.nuevo_amanecer_lab,helpers.json);
