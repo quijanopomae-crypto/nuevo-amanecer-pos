@@ -57,18 +57,29 @@ if ($LASTEXITCODE -ne 0 -or -not $head) { throw "Could not resolve current branc
 Write-Host "Finalizing repository at HEAD $head"
 
 $labImportSecret = New-HexSecret 32
-$devicePepper = New-HexSecret 32
+$activationSecure = Read-Host "Create the one-time POS activation secret you will enter once on each new browser" -AsSecureString
+$activationBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($activationSecure)
+$activationSecret = $null
 
 try {
+  $activationSecret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($activationBstr)
+  if ([string]::IsNullOrWhiteSpace($activationSecret) -or $activationSecret.Length -lt 12) {
+    throw "POS activation secret must be at least 12 characters."
+  }
+
   $labImportSecret | & gh secret set LAB_IMPORT_HMAC_SECRET --repo $Repo
   if ($LASTEXITCODE -ne 0) { throw "Failed to set LAB_IMPORT_HMAC_SECRET" }
 
-  $devicePepper | & gh secret set DEVICE_CREDENTIAL_PEPPER --repo $Repo
-  if ($LASTEXITCODE -ne 0) { throw "Failed to set DEVICE_CREDENTIAL_PEPPER" }
+  $activationSecret | & gh secret set POS_ACTIVATION_SECRET --repo $Repo
+  if ($LASTEXITCODE -ne 0) { throw "Failed to set POS_ACTIVATION_SECRET" }
 }
 finally {
   $labImportSecret = $null
-  $devicePepper = $null
+  $activationSecret = $null
+  if ($activationBstr -ne [IntPtr]::Zero) {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($activationBstr)
+  }
+  $activationSecure = $null
 }
 
 $protection = @{
@@ -100,10 +111,6 @@ Write-Host "Branch protection configured."
 if ($LASTEXITCODE -ne 0) { throw "Could not dispatch deploy-lab-cloud.yml" }
 $deployRun = Wait-LatestWorkflow "deploy-lab-cloud.yml" $head
 
-& gh workflow run provision-lab-device.yml --repo $Repo --ref $Branch
-if ($LASTEXITCODE -ne 0) { throw "Could not dispatch provision-lab-device.yml" }
-$provisionRun = Wait-LatestWorkflow "provision-lab-device.yml" $head
-
 & gh workflow run owner-backup-recovery-drill.yml --repo $Repo --ref $Branch
 if ($LASTEXITCODE -ne 0) { throw "Could not dispatch owner-backup-recovery-drill.yml" }
 $drillRun = Wait-LatestWorkflow "owner-backup-recovery-drill.yml" $head
@@ -129,6 +136,5 @@ Write-Host ""
 Write-Host "OWNER FINALIZATION PASS"
 Write-Host "HEAD: $head"
 Write-Host "LAB deploy run: $deployRun"
-Write-Host "LAB device run: $provisionRun"
 Write-Host "Backup/recovery drill run: $drillRun"
 Write-Host "Branch protection: PASS"
