@@ -1,7 +1,6 @@
 const WORKSPACE_ID = 'primary';
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
-const BACKUP_FORMAT = 'nuevo-amanecer-pos-backup';
 
 export function isLabWorkspacePath(pathname) {
   return pathname === '/lab/workspace' ||
@@ -391,63 +390,6 @@ async function refreshFromCanon(db, env, deviceId, jsonLab) {
     snapshot_hash: snapshotHash,
     counts: snapshotCounts(snapshot)
   });
-}
-
-export function readR2Config(env) {
-  const accountId = String(env.R2_CANON_ACCOUNT_ID || '').trim();
-  const token = String(env.R2_CANON_READ_TOKEN || '').trim();
-  const bucket = String(env.R2_CANON_BUCKET || 'nuevo-amanecer-prod-v2-backups').trim();
-  const prefix = String(env.R2_CANON_PREFIX || 'nuevo-amanecer-prod-v2/').trim();
-  if (!accountId || !token) return { error: 'canon_r2_read_not_configured' };
-  return { accountId, token, bucket, prefix };
-}
-
-export async function fetchLatestCanonBackup(config, fetchImpl = fetch) {
-  const base = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(config.accountId)}/r2/buckets/${encodeURIComponent(config.bucket)}/objects`;
-  const listUrl = new URL(base);
-  listUrl.searchParams.set('prefix', config.prefix);
-  listUrl.searchParams.set('per_page', '1000');
-  const listed = await fetchImpl(listUrl, { headers: { authorization: `Bearer ${config.token}` } });
-  if (!listed.ok) throw new Error(`R2 list failed: ${listed.status}`);
-  const payload = await listed.json();
-  if (!payload?.success || !Array.isArray(payload.result)) throw new Error('R2 list response invalid');
-  const latest = selectLatestR2Object(payload.result);
-  if (!latest) throw new Error('No JSON backups found under configured prefix');
-
-  const encodedKey = String(latest.key).split('/').map(encodeURIComponent).join('/');
-  const response = await fetchImpl(`${base}/${encodedKey}`, { headers: { authorization: `Bearer ${config.token}` } });
-  if (!response.ok) throw new Error(`R2 get failed: ${response.status}`);
-  const text = await response.text();
-  if (!text || new TextEncoder().encode(text).length > MAX_SNAPSHOT_BYTES) throw new Error('Backup empty or over 10 MB');
-  return { key: latest.key, text, sourceRef: `r2://${config.bucket}/${latest.key}` };
-}
-
-export function selectLatestR2Object(objects) {
-  const candidates = (Array.isArray(objects) ? objects : [])
-    .filter(item => item && typeof item.key === 'string' && /\.json$/i.test(item.key));
-  candidates.sort((a, b) => {
-    const ta = Date.parse(a.uploaded || a.last_modified || a.lastModified || '') || 0;
-    const tb = Date.parse(b.uploaded || b.last_modified || b.lastModified || '') || 0;
-    if (ta !== tb) return tb - ta;
-    return String(b.key).localeCompare(String(a.key));
-  });
-  return candidates[0] || null;
-}
-
-export async function resolveBackupDocument(document) {
-  if (!document || typeof document !== 'object' || Array.isArray(document)) throw new Error('backup must be an object');
-  if (!Object.prototype.hasOwnProperty.call(document, 'format')) return document;
-  if (document.format !== BACKUP_FORMAT || Number(document.version) !== 1) throw new Error('unsupported backup wrapper');
-  if (!document.payload || typeof document.payload !== 'object' || Array.isArray(document.payload)) throw new Error('backup payload missing');
-  if (document.integrity != null) {
-    const integrity = document.integrity;
-    if (integrity.algorithm !== 'SHA-256' || integrity.scope !== 'payload-json' || !SHA256_HEX.test(String(integrity.value || ''))) {
-      throw new Error('unsupported backup integrity');
-    }
-    const actual = await sha256Text(JSON.stringify(document.payload));
-    if (actual !== integrity.value) throw new Error('backup integrity mismatch');
-  }
-  return document.payload;
 }
 
 export function sanitizeSnapshotForLab(source, fromCanon = false) {
