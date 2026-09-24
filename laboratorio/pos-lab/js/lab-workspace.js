@@ -280,7 +280,8 @@
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Worker LAB</label><input id="naLabEndpoint" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">READ_TOKEN (opcional si usas dispositivo)</label><input id="naLabReadToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Device ID LAB</label><input id="naLabDeviceId" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
-      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">SYNC_TOKEN LAB</label><div style="display:flex;gap:8px"><input id="naLabSyncToken" type="password" autocomplete="off" style="flex:1;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:9px" /><button id="naLabGenerateToken" type="button" style="border:0;border-radius:9px;padding:8px 10px;background:#e0f2fe;color:#075985;font-weight:800">Generar</button></div>' +
+      '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">SYNC_TOKEN LAB</label><input id="naLabSyncToken" type="password" autocomplete="off" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:7px"><button id="naLabGenerateToken" type="button" style="border:0;border-radius:9px;padding:9px;background:#e0f2fe;color:#075985;font-weight:800">Generar</button><button id="naLabCopyToken" type="button" style="border:0;border-radius:9px;padding:9px;background:#dcfce7;color:#166534;font-weight:800">Copiar</button><button id="naLabToggleToken" type="button" style="border:0;border-radius:9px;padding:9px;background:#f1f5f9;color:#334155;font-weight:800">Mostrar</button></div>' +
       '<label style="display:flex;gap:8px;align-items:center;margin:12px 0;font-size:12px"><input id="naLabRemember" type="checkbox"> Recordar credenciales en este dispositivo LAB</label>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
       '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Guardar conexión</button>' +
@@ -306,13 +307,53 @@
       });
     }
     document.getElementById('naLabWorkspaceClose').onclick = function () { overlay.style.display = 'none'; };
-    document.getElementById('naLabGenerateToken').onclick = function () {
+    async function copySyncToken() {
+      var input = document.getElementById('naLabSyncToken');
+      var token = String(input && input.value || '').trim();
+      if (!token) {
+        renderStatus('Primero genera el SYNC_TOKEN LAB.', 'error');
+        return false;
+      }
+      try {
+        await navigator.clipboard.writeText(token);
+        renderStatus('SYNC_TOKEN copiado. Pégalo en GitHub como LAB_DEVICE_SYNC_TOKEN. No lo envíes por chat.', 'ok');
+        return true;
+      } catch {}
+      try {
+        var previousType = input.type;
+        input.type = 'text';
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, token.length);
+        var copied = document.execCommand && document.execCommand('copy');
+        input.type = previousType;
+        if (copied) {
+          renderStatus('SYNC_TOKEN copiado. Pégalo en GitHub como LAB_DEVICE_SYNC_TOKEN.', 'ok');
+          return true;
+        }
+      } catch {}
+      renderStatus('No se pudo copiar automáticamente. Pulsa “Mostrar” y usa el menú de copiar de Android.', 'error');
+      return false;
+    }
+
+    document.getElementById('naLabGenerateToken').onclick = async function () {
       var bytes = new Uint8Array(32);
       crypto.getRandomValues(bytes);
       var token = Array.from(bytes, function (value) { return value.toString(16).padStart(2, '0'); }).join('');
       document.getElementById('naLabDeviceId').value = 'lab-phone-main';
       document.getElementById('naLabSyncToken').value = token;
-      renderStatus('Token seguro generado SOLO en este celular. Cópialo y guárdalo en GitHub como LAB_DEVICE_SYNC_TOKEN. No lo envíes por chat.', 'ok');
+      await copySyncToken();
+    };
+    document.getElementById('naLabCopyToken').onclick = function () {
+      copySyncToken();
+    };
+    document.getElementById('naLabToggleToken').onclick = function () {
+      var input = document.getElementById('naLabSyncToken');
+      var button = document.getElementById('naLabToggleToken');
+      var showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      button.textContent = showing ? 'Mostrar' : 'Ocultar';
+      renderStatus(showing ? 'SYNC_TOKEN oculto.' : 'SYNC_TOKEN visible solo en esta pantalla.', 'info');
     };
     document.getElementById('naLabSaveConfig').onclick = async function () {
       state.credentials = cleanCredentials({
