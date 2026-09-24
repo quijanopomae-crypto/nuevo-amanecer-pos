@@ -149,7 +149,7 @@ def generate_snapshot(
     return payload
 
 
-def validate_snapshot_payload(value: Mapping[str, Any], root: Path) -> None:
+def validate_snapshot_payload(value: Mapping[str, Any], root: Path, *, verify_live_files: bool = True) -> None:
     if not isinstance(value, dict) or set(value) != SNAPSHOT_FIELDS:
         raise SnapshotValidationError("snapshot requires its exact field set")
     for field in (
@@ -194,9 +194,10 @@ def validate_snapshot_payload(value: Mapping[str, Any], root: Path) -> None:
         raise SnapshotValidationError("file_digests order/set differs from SNAPSHOT_FILES.txt")
     for relative, expected in files.items():
         _digest(expected, f"file_digests.{relative}")
-        target = Path(root) / relative
-        if not target.is_file() or target.is_symlink() or _sha256_file(target) != expected:
-            raise SnapshotValidationError(f"file digest mismatch: {relative}")
+        if verify_live_files:
+            target = Path(root) / relative
+            if not target.is_file() or target.is_symlink() or _sha256_file(target) != expected:
+                raise SnapshotValidationError(f"file digest mismatch: {relative}")
     _validate_regression_results(value["regression_results"])
     _digest(value["source_bundle_sha256"], "source_bundle_sha256")
     _digest(value["snapshot_digest"], "snapshot_digest")
@@ -205,12 +206,12 @@ def validate_snapshot_payload(value: Mapping[str, Any], root: Path) -> None:
         raise SnapshotValidationError("snapshot digest mismatch")
 
 
-def validate_snapshot(path: Path, root: Path | None = None) -> dict[str, Any]:
+def validate_snapshot(path: Path, root: Path | None = None, *, verify_live_files: bool = True) -> dict[str, Any]:
     path = Path(path)
     root = Path(root) if root is not None else path.resolve().parents[2]
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise SnapshotValidationError(f"snapshot unreadable: {exc}") from exc
-    validate_snapshot_payload(value, root)
+    validate_snapshot_payload(value, root, verify_live_files=verify_live_files)
     return value
