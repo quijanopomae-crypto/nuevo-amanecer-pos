@@ -49,7 +49,7 @@ jobs:
           const token = process.env.CLOUDFLARE_API_TOKEN;
           const url = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/d1/database/' + database + '/query';
 
-          async function query(sql) {
+          async function query(label, sql) {
             const response = await fetch(url, {
               method: 'POST',
               headers: {
@@ -59,21 +59,24 @@ jobs:
               body: JSON.stringify({ sql }),
             });
             const parsed = await response.json().catch(() => null);
-            if (!response.ok || parsed?.success !== true) throw new Error('D1 query failed (' + response.status + ')');
+            if (!response.ok || parsed?.success !== true) {
+              const message = parsed?.errors?.map(x => x?.message).filter(Boolean).join('; ') || 'unknown';
+              throw new Error(label + ' failed (' + response.status + '): ' + message);
+            }
             const result = Array.isArray(parsed.result) ? parsed.result[0] : parsed.result;
-            if (!result || result.success === false) throw new Error('D1 query returned failure');
+            if (!result || result.success === false) throw new Error(label + ' returned failure');
             return Array.isArray(result.results) ? result.results : [];
           }
 
           (async () => {
-            const control = (await query(`
+            const control = (await query('control', `
               SELECT mode, active_promotion_id, revision, authority_epoch,
                      minimum_client_contract, first_live_operation_id
               FROM canonical_control WHERE id=1;
             `))[0];
             if (!control) throw new Error('canonical_control missing');
 
-            const schema = (await query(`
+            const schema = (await query('schema', `
               SELECT
                 EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='auth_sessions') AS has_auth_sessions,
                 EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_financial_operations') AS has_financial_operations,
@@ -83,18 +86,27 @@ jobs:
                 COALESCE((SELECT instr(sql,'NEW.principal_id') > 0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) AS session_guard_trigger;
             `))[0];
 
-            const traffic = (await query(`
+            const traffic = (await query('traffic', `
               SELECT
                 (SELECT COUNT(*) FROM sales) AS sales,
                 (SELECT COUNT(*) FROM sale_items) AS sale_items,
                 (SELECT COUNT(*) FROM cash_movements) AS cash_movements,
                 (SELECT COUNT(*) FROM inventory_movements) AS inventory_movements,
-                (SELECT COUNT(*) FROM sync_operations) AS sync_operations,
-                CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_financial_operations')
-                  THEN (SELECT COUNT(*) FROM canonical_financial_operations) ELSE 0 END AS financial_operations,
-                CASE WHEN EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='auth_sessions')
-                  THEN (SELECT COUNT(*) FROM auth_sessions WHERE status='active') ELSE 0 END AS active_sessions;
+                (SELECT COUNT(*) FROM sync_operations) AS sync_operations;
             `))[0];
+
+            let financialOperations = 0;
+            if (Number(schema.has_financial_operations) === 1) {
+              financialOperations = Number((await query('financial_operations',
+                'SELECT COUNT(*) AS n FROM canonical_financial_operations;'))[0]?.n || 0);
+            }
+            let activeSessions = 0;
+            if (Number(schema.has_auth_sessions) === 1) {
+              activeSessions = Number((await query('active_sessions',
+                "SELECT COUNT(*) AS n FROM auth_sessions WHERE status='active';"))[0]?.n || 0);
+            }
+            traffic.financial_operations = financialOperations;
+            traffic.active_sessions = activeSessions;
 
             const result = {
               database_id: database,
