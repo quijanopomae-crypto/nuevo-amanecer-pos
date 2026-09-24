@@ -40,6 +40,23 @@ jobs:
           mkdir -p _site/POS _site/laboratorio/pos-lab
           cp -a POS/. _site/POS/
           cp -a laboratorio/pos-lab/. _site/laboratorio/pos-lab/
+          # LAB uses <base href="../../POS/">, so canonical assets remain available.
+          # Do not expose the canonical POS application entry point through Pages.
+          cat > _site/POS/index.html <<'EOF'
+          <!doctype html>
+          <html lang="es">
+          <head>
+            <meta charset="utf-8">
+            <meta name="robots" content="noindex,nofollow">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <title>Nuevo Amanecer — LAB support assets only</title>
+          </head>
+          <body>
+            <p>This Pages path contains support assets for POS-LAB only. The canonical POS is not served from GitHub Pages.</p>
+            <p><a href="../laboratorio/pos-lab/index.html">Open POS-LAB</a></p>
+          </body>
+          </html>
+          EOF
           touch _site/.nojekyll
 
       - name: Configure Pages
