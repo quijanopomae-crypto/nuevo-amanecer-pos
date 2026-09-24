@@ -6,5 +6,7 @@
   "safety": "fail-closed-non-inventory-canary-only",
   "production_tag": "v1.3-production",
   "rollback_tag": "v1.2-production",
-  "note": "Complete the remaining V1.3 release gate. If no safe existing tracks_inventory=0 product exists, stop before any sale mutation."
+  "note": "Complete the remaining V1.3 release gate. If no safe existing tracks_inventory=0 product exists, stop before any sale mutation.",
+  "retry_attempt": 2,
+  "retry_reason": "Read-only candidate summary after fail-closed first attempt."
 }
