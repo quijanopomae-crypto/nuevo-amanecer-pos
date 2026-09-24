@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-MOBILE-WRITER-PROVISION-001",
+  "environment": "LABORATORIO",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Permitir autorizar el celular LAB como writer mediante una credencial aleatoria generada localmente, sin exponer secretos Cloudflare al navegador.",
+  "allowed_files": [
+    ".github/workflows/provision-lab-device.yml",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/tasks/LAB-MOBILE-WRITER-PROVISION-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/migrations/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "production_writes": false,
+  "canon_writes": false
+}
