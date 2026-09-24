@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import ExcelJS from '../../tools/cloudflare-lab/node_modules/exceljs/excel.js';
 import JSZip from '../../tools/cloudflare-lab/node_modules/jszip/lib/index.js';
@@ -13,6 +14,7 @@ import { readWorkbookSheets } from '../../tools/cloudflare-lab/src/a5-workbook.j
 import { workerFixture } from './worker-fixture.mjs';
 
 const execFileAsync = promisify(execFile);
+const A5_MIGRATE = fileURLToPath(new URL('../../tools/cloudflare-lab/scripts/a5-migrate.mjs', import.meta.url));
 const A4_SOURCE = { name: 'synthetic.json', type: 'POS_JSON', sha256: '51229f1c1b37ab28a6865ac9935450207a56d5f3a48073c75b9527c5b68e7d8f', bytes: 1 };
 
 const backup = {
@@ -194,12 +196,11 @@ test('CLI lee un XLSX real y genera dry-run determinista sin contactar D1', asyn
     sheet.addRow(headers); sheet.addRow(values);
   }
   await workbook.xlsx.writeFile(input);
-  const command = new URL('../../tools/cloudflare-lab/scripts/a5-migrate.mjs', import.meta.url);
-  const first = await execFileAsync(process.execPath, [command.pathname.slice(1), '--import-id', 'xlsx-real', '--xlsx', input, '--dry-run', '--output', output]);
+  const first = await execFileAsync(process.execPath, [A5_MIGRATE, '--import-id', 'xlsx-real', '--xlsx', input, '--dry-run', '--output', output]);
   const report = JSON.parse(await readFile(output, 'utf8'));
   assert.equal(report.report.verdict, 'PASS');
   assert.equal(report.rows.find((row) => row.entity_type === 'credit_payments').payload.fecha, null);
-  const second = await execFileAsync(process.execPath, [command.pathname.slice(1), '--import-id', 'xlsx-real', '--xlsx', input, '--dry-run']);
+  const second = await execFileAsync(process.execPath, [A5_MIGRATE, '--import-id', 'xlsx-real', '--xlsx', input, '--dry-run']);
   assert.equal(JSON.parse(first.stdout).manifest_hash, JSON.parse(second.stdout).manifest_hash);
 });
 
@@ -231,8 +232,7 @@ test('CLI soporta la estructura OOXML real y conserva diferencias', async (t) =>
   }
   const { writeFile } = await import('node:fs/promises');
   await writeFile(input, await zip.generateAsync({ type: 'nodebuffer' }));
-  const command = new URL('../../tools/cloudflare-lab/scripts/a5-migrate.mjs', import.meta.url);
-  await assert.rejects(execFileAsync(process.execPath, [command.pathname.slice(1), '--import-id', 'xlsx-real-shape', '--xlsx', input, '--dry-run']), (error) => {
+  await assert.rejects(execFileAsync(process.execPath, [A5_MIGRATE, '--import-id', 'xlsx-real-shape', '--xlsx', input, '--dry-run']), (error) => {
     const report = JSON.parse(error.stdout);
     assert.equal(report.report.verdict, 'FAIL');
     assert.deepEqual(report.report.counts, { customers: 31, credits: 314, credit_payments: 134 });
