@@ -34,15 +34,15 @@ All repository-side remediation phases that can be completed safely with the con
 | Repository map/role gate | PASS | OpenCode Role Map CI run `36010237174` before Phase 10; Phase 10 must also pass this workflow before merge. |
 | Rollback operational proof | OWNER_ONLY | Code/tests/docs exist; real export -> R2 -> temporary D1 recovery drill has not been executed in this remediation session. |
 | GitHub branch protection | OWNER_ONLY | GitHub reports no rulesets and `feature/v1.3-mobile-cloud` is currently unprotected. |
-| Real security-secret activation | OWNER_ONLY | Repository expects independent `LAB_IMPORT_HMAC_SECRET` and `DEVICE_CREDENTIAL_PEPPER`; real values are not created or exposed by this session. |
+| Real security-secret activation | OWNER_ONLY | Repository expects independent `LAB_IMPORT_HMAC_SECRET` and `POS_ACTIVATION_SECRET`; real values are not created or exposed by this session. |
 
 ## Final safety boundary
 
-No remote Cloudflare deploy, remote D1 migration, production data mutation, production cutover, real secret creation/rotation, or device provisioning was performed by the remediation PRs.
+No remote Cloudflare deploy, remote D1 migration, production data mutation, production cutover, or real secret creation/rotation was performed by the remediation PRs.
 
 The remaining owner operations are:
 
-1. configure independent real `LAB_IMPORT_HMAC_SECRET` and `DEVICE_CREDENTIAL_PEPPER`;
+1. configure independent real `LAB_IMPORT_HMAC_SECRET` and `POS_ACTIVATION_SECRET`;
 2. enable branch protection/ruleset for `feature/v1.3-mobile-cloud`;
 3. execute and retain evidence for the real backup -> R2 -> temporary D1 restore drill;
 4. separately authorize any remote deployment/migration/cutover.
