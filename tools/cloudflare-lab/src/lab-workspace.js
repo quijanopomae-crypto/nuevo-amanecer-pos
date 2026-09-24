@@ -288,8 +288,8 @@ async function resetWorkspace(db, body, deviceId, credentialHash, jsonLab) {
 }
 
 async function importBaseline(db, env, request, body, jsonLab) {
-  const token = String(env.R2_CANON_READ_TOKEN || '').trim();
-  if (!token) return jsonLab({ error: 'canon_r2_read_not_configured' }, 503);
+  const importSecret = String(env.LAB_IMPORT_HMAC_SECRET || '').trim();
+  if (!importSecret) return jsonLab({ error: 'lab_import_hmac_not_configured' }, 503);
   if (!body || typeof body !== 'object') return jsonLab({ error: 'invalid_import_body' }, 400);
   const sourceRef = String(body.source_ref || '');
   const sourceHash = String(body.source_hash || '');
@@ -310,7 +310,7 @@ async function importBaseline(db, env, request, body, jsonLab) {
   const receivedSnapshotHash = await sha256Text(JSON.stringify(receivedSnapshot));
   const signature = String(request.headers.get('x-lab-import-signature') || '').toLowerCase();
   const signed = [sourceRef, sourceHash, receivedSnapshotHash].join('\n');
-  if (!await verifyHmacHex(token, signed, signature)) {
+  if (!await verifyHmacHex(importSecret, signed, signature)) {
     return jsonLab({ error: 'invalid_import_signature' }, 401);
   }
 
