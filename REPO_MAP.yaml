@@ -1,0 +1,138 @@
+schema: nuevo-amanecer.repo-map/v1
+
+status:
+  active_branch: feature/v1.3-mobile-cloud
+  production_baseline: v1.2-production
+  v1_3: remediation_integration
+  production_cutover: not_authorized
+  remote_paid_or_production_actions: owner_only
+
+sources_of_truth:
+  current_status: docs/V1.3_STATUS.md
+  work_modes_and_git_boundaries: AGENTS.md
+  product_rules: AGENTS_Nuevo_Amanecer.md
+  agent_role_map: .opencode/ROLE_MAP.md
+  lab_to_canon_contract: docs/LABORATORIO_A_CANON.md
+  lab_cloud_contract: docs/LAB_CANON_MIRROR.md
+  security_phase: docs/REMEDIATION_PHASE7_SECURITY.md
+
+zones:
+  canon_product:
+    path: POS/
+    authority: product
+    runtime_must_not_depend_on:
+      - laboratorio/
+  local_launcher:
+    paths:
+      - INICIAR_POS.cmd
+      - tools/pos-local/
+  ui_lab:
+    path: laboratorio/pos-lab/
+    authority: lab_only
+    generated:
+      - laboratorio/pos-lab/index.html
+    source_edits:
+      - laboratorio/pos-lab/sections/
+      - laboratorio/pos-lab/styles/
+      - laboratorio/pos-lab/animations/
+      - laboratorio/pos-lab/js/
+  cloudflare_lab:
+    path: tools/cloudflare-lab/
+    authority: isolated_lab_infrastructure
+    worker: tools/cloudflare-lab/src/worker.js
+    workspace: tools/cloudflare-lab/src/lab-workspace.js
+    migrations: tools/cloudflare-lab/migrations/
+    private_inputs: tools/cloudflare-lab/private/
+  backup_recovery:
+    path: tools/cloudflare-backup/
+    authority: backup_tooling
+  tests:
+    path: tests/
+    critical_groups:
+      - tests/product-fixes/
+      - tests/cloud-sync/
+      - tests/infrastructure/
+      - tests/security-secret-separation.test.mjs
+      - tests/repo-map.test.mjs
+  agents:
+    definitions: .opencode/agents/
+    commands: .opencode/commands/
+    skills: .agents/skills/
+    canon_writer: .opencode/agents/pos-canon-implementer.md
+    lab_writer: .opencode/agents/pos-lab-implementer.md
+    shadow_legacy_writer_name: .opencode/agents/pos-implementer.md
+  evidence:
+    path: evidence/
+    authority: historical_or_task_evidence
+    rule: never_treat_as_current_state_without_cross_check
+  shadow_infrastructure:
+    paths:
+      - MANIFEST.yaml
+      - orchestrator/
+      - infra/
+    authority: shadow_or_historical_baseline
+    rule: not_a_gate_for_normal_product_work_unless_explicitly_invoked
+
+cloud_data:
+  d1:
+    repository_schema: tools/cloudflare-lab/migrations/
+    remote_database: not_source_controlled
+    local_ci_migrations: allowed
+    remote_migrations: owner_only
+  r2:
+    repository_data: none
+    role: backup_transport
+    credential: R2_CANON_READ_TOKEN
+    worker_binding: forbidden
+  secrets:
+    lab_import_hmac: LAB_IMPORT_HMAC_SECRET
+    device_credential_pepper: DEVICE_CREDENTIAL_PEPPER
+    values_in_git: forbidden
+
+v1_3_runtime:
+  active_local_components:
+    - POS/
+    - tools/cloudflare-lab/src/worker.js
+    - tools/cloudflare-lab/src/lab-workspace.js
+  dormant_checkpoint_components:
+    - tools/cloudflare-lab/migrations/0008_canonical_commerce.sql
+    - tools/cloudflare-lab/migrations/0009_canonical_financial.sql
+    - tools/cloudflare-lab/src/a6-commerce.js
+    - tools/cloudflare-lab/src/a6-financial.js
+  runtime_activation: dormant
+  activation_migration_present: false
+
+ci:
+  workflows:
+    canon_critical: .github/workflows/canon-critical-ci.yml
+    lab_mirror: .github/workflows/lab-cloud-ci.yml
+    opencode_and_repo_map: .github/workflows/opencode-config-ci.yml
+    pages_lab: .github/workflows/lab-pages.yml
+  policy:
+    actions_pinned_to_sha: true
+    pages_pos_entrypoint: disabled
+    manual_remote_workflows: do_not_dispatch_without_owner_operation
+
+historical_or_gate_specific_docs:
+  note: These documents are evidence or contracts for a specific gate; they do not override current status.
+  paths:
+    - docs/V1.2_STATUS.md
+    - docs/V1.3_A2_DEVICE_AUTH.md
+    - docs/V1.3_A3_SALE_CREATE.md
+    - docs/V1.3_A4_OFFLINE_OUTBOX.md
+    - docs/V1.3_A5_MIGRATION_RECONCILIATION.md
+    - docs/V1.3_A6_CANONICAL_PROMOTION_CUTOVER.md
+    - docs/V1.3_A6_GATE_P_LOCAL_IMPLEMENTATION.md
+    - docs/REMEDIATION_PHASE1_POLICY_SOURCES.md
+    - docs/REMEDIATION_PHASE2_IMPORT_SAFETY.md
+    - docs/REMEDIATION_PHASE3_WORKSPACE_RECOVERY.md
+    - docs/REMEDIATION_PHASE4A_TASK_GUARDS.md
+    - docs/REMEDIATION_PHASE5_CHECKPOINT_CLASSIFICATION.md
+
+do_not_delete_without_phase9_proof:
+  - CVV1.1.html
+  - CVV2.4_backup_antes_demo-1.html
+  - nuevo-amanecer-pos-engineer.zip
+  - POS/js/legacy-inline/
+  - POS/js/compat/legacy-globals.js
+  - evidence/
