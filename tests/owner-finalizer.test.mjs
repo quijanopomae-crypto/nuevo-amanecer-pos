@@ -56,3 +56,12 @@ test('gh JSON helper is Windows PowerShell safe', () => {
   assert.match(finalizer, /\$output -join \[Environment\]::NewLine/);
   assert.doesNotMatch(finalizer, /Invoke-GhJson\(\[string\[\]\]\$Args\)/);
 });
+
+
+test('secret generation remains compatible with Windows PowerShell 5.1', () => {
+  assert.match(finalizer, /RandomNumberGenerator\]::Create\(\)/);
+  assert.match(finalizer, /\.GetBytes\(\$raw\)/);
+  assert.match(finalizer, /BitConverter\]::ToString\(\$raw\)/);
+  assert.doesNotMatch(finalizer, /RandomNumberGenerator\]::GetBytes\(\$Bytes\)/);
+  assert.doesNotMatch(finalizer, /Convert\]::ToHexString/);
+});
