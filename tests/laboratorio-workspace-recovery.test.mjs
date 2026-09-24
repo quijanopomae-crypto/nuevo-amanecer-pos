@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
 
 const source = readFileSync('laboratorio/pos-lab/js/lab-workspace.js', 'utf8');
-const CREDENTIAL_KEY = 'na_lab_workspace_credentials_v1';
+const CREDENTIAL_KEY = 'na_lab_workspace_auth_v2';
 const PENDING_KEY = 'na_lab_workspace_pending_v1';
 
 function snapshot(label) {
@@ -46,9 +46,7 @@ function makeHarness({ local, remote, pending = null, onFetch }) {
     [CREDENTIAL_KEY]: JSON.stringify({
       endpoint: 'https://lab.example',
       readToken: '',
-      deviceId: 'lab-phone-main',
-      syncToken: 'a'.repeat(64),
-      remember: true
+      sessionToken: 'a'.repeat(64)
     }),
     ...(pending ? { [PENDING_KEY]: JSON.stringify(pending) } : {})
   });
