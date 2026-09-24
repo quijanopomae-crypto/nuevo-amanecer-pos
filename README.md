@@ -32,3 +32,22 @@ La migracion A5 hacia staging D1 se documenta en
 [`docs/V1.3_A5_MIGRATION_RECONCILIATION.md`](docs/V1.3_A5_MIGRATION_RECONCILIATION.md).
 Sus fuentes privadas se colocan en `tools/cloudflare-lab/private/a5-inputs/`, que
 Git ignora. A5 no despliega, no promueve datos comerciales y no ejecuta cutover.
+
+El respaldo D1 de largo plazo, el gate obligatorio PRE-DEPLOY/PRE-MIGRATION y la
+restauracion exclusivamente en una D1 temporal se documentan en
+[`docs/V1.3_D1_BACKUP_AND_RECOVERY.md`](docs/V1.3_D1_BACKUP_AND_RECOVERY.md).
+La prueba local de sus funciones puras es:
+
+```powershell
+node --test tests/cloud-sync/d1-backup-workflow.test.mjs
+```
+
+La activación canónica de V1.3 usa la migración `0009_canonical_activation.sql`
+y el comando autenticado `POST /commands/canonical.activate`. Su prueba local
+de concurrencia, recibo durable, rollback y migración D1 real es:
+
+```powershell
+node --test tests/cloud-sync/canonical-activation.test.mjs
+```
+
+La prueba no conecta a PROD ni ejecuta migraciones remotas.
