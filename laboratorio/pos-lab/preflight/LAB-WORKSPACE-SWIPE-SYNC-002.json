@@ -1,0 +1,100 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-WORKSPACE-SWIPE-SYNC-002",
+  "base_ref": "704ed92a7cbfd13d498bb95f21cfc8cf78ce9b6b",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-DISMISS-001.json",
+      "laboratorio/pos-lab/js/motion/modal-motion.js",
+      "laboratorio/pos-lab/animations/modals.css",
+      "tests/laboratorio-workspace-swipe-dismiss.test.mjs"
+    ],
+    "WRITES": [
+      "New LAB Task Contract and preflight receipt",
+      "LAB workspace modal motion JavaScript",
+      "LAB modal animation CSS",
+      "Focused LAB regression test"
+    ],
+    "DOM_AFFECTED": [
+      "#naLabWorkspaceOverlay",
+      "#naLabWorkspaceOverlay > div"
+    ],
+    "STATE_AFFECTED": [
+      "Transient gesture distance, velocity and visual progress only",
+      "No commercial or synchronization state"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2 or API persistence changes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Products, customers, sales, inventory, cash and credits remain unchanged.",
+      "CANON to D1 LAB synchronization and conflict handling remain unchanged.",
+      "The X close path remains functional.",
+      "Motion remains visual feedback only and never a business truth source.",
+      "No POS/** or production writes."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Only the LAB workspace overlay presentation layer is affected.",
+      "No workspace API, credentials, save/load, OUTBOX, D1 or production code is modified.",
+      "Gesture must coexist with vertical scrolling and form controls."
+    ],
+    "RISKS": [
+      "Abrupt display:none before visual opacity reaches zero.",
+      "A jump at touchend if the settling animation does not start from the exact dragged state.",
+      "Scroll or interactive controls being captured by the swipe gesture.",
+      "Residual transform/opacity when reopening the panel."
+    ],
+    "ROLLBACK": [
+      "Revert modal-motion.js and modals.css from this task; no data migration is involved.",
+      "Remove the focused test and task metadata if the experiment is discarded."
+    ],
+    "TESTS": [
+      "Execute repository skill-preflight before any functional write.",
+      "Focused test asserts finger-driven transform and opacity use the same normalized progress.",
+      "Focused test asserts dismiss target reaches opacity 0 before display:none.",
+      "Focused test asserts settle continues from current dragged state without reset jump.",
+      "Run LAB build/check, LAB regression suite and scope guard.",
+      "Review complete diff and published GitHub Pages result."
+    ]
+  }
+}
