@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 const bootstrap = readFileSync('laboratorio/pos-lab/js/motion/page-transitions.js', 'utf8');
 const cart = readFileSync('laboratorio/pos-lab/js/motion/cart-motion.js', 'utf8');
@@ -12,6 +13,18 @@ const modalCss = readFileSync('laboratorio/pos-lab/animations/modals.css', 'utf8
 const uiMap = readFileSync('laboratorio/pos-lab/UI_MAP.yaml', 'utf8');
 const motionMap = readFileSync('laboratorio/pos-lab/MOTION_MAP.yaml', 'utf8');
 const template = readFileSync('laboratorio/pos-lab/index.template.html', 'utf8');
+
+test('all motion controllers are valid JavaScript', () => {
+  for (const path of [
+    'laboratorio/pos-lab/js/motion/page-transitions.js',
+    'laboratorio/pos-lab/js/motion/cart-motion.js',
+    'laboratorio/pos-lab/js/motion/modal-motion.js',
+    'laboratorio/pos-lab/js/motion/feedback-motion.js'
+  ]) {
+    const result = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
+});
 
 test('motion bootstrap loads before every existing controller', () => {
   const pageAt = template.indexOf('js/motion/page-transitions.js');
