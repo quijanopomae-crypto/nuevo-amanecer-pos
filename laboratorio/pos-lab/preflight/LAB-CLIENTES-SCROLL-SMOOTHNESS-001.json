@@ -1,0 +1,115 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-SCROLL-SMOOTHNESS-001",
+  "base_ref": "56a2081f4ee45aa76d1a11bb02a548e2ef337db8",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "laboratorio/pos-lab/sections/clientes.html",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "tests/laboratorio-motion-infrastructure.test.mjs",
+      "LAB-CLIENTES-SCROLL-LINKED-CHROME-001 and DOM-GUARD-001 task contracts",
+      "Context7/MDN animation performance guidance and Figma motion guidance"
+    ],
+    "WRITES": [
+      "LAB Clientes motion controller rendering path",
+      "LAB scroll-linked transition CSS",
+      "Motion architecture note only if needed",
+      "Focused LAB regression assertions",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .filter-bar",
+      "#pageClientes .stats-strip",
+      "#pageClientes .cli-list"
+    ],
+    "STATE_AFFECTED": [
+      "Transient normalized motion progress 0..1",
+      "One pending requestAnimationFrame render and pending visual offset",
+      "No customer, credit, payment, sales, inventory, cash or sync state"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, Supabase, Railway, R2 or network persistence"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Clientes and credit data/rendering semantics remain unchanged.",
+      "Sales, inventory, cash, payments, OUTBOX and synchronization remain unchanged.",
+      "Motion remains visual-only and has zero business/storage/network authority.",
+      "POS/** remains untouched.",
+      "The owner-approved 1:1 direct gesture behavior remains; no timed snap or delayed easing follows the finger."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Only Clientes mobile LAB motion is affected.",
+      "No backend, D1 LAB, Supabase or Railway operations are required.",
+      "Existing modal/cart/feedback motion controllers remain unchanged.",
+      "Existing client refresh animation remains available outside active scroll-linked rendering."
+    ],
+    "RISKS": [
+      "A transform-only visual collapse may leave layout space if list compensation is incomplete.",
+      "Touchmove plus scroll may still double-apply if input ownership is not preserved.",
+      "Clipping and transforms can overlap tabs if stacking is wrong.",
+      "RAF coalescing must remain direct enough to feel 1:1 instead of lagging behind the finger.",
+      "Reduced-motion behavior must not leave stale transforms."
+    ],
+    "ROLLBACK": [
+      "Revert page-transitions.js, transitions.css, optional MOTION_MAP note and focused test from this task.",
+      "No data, schema, backend or storage rollback is required."
+    ],
+    "TESTS": [
+      "Run skill-preflight before first functional write.",
+      "Focused test verifies touchmove queues one RAF instead of mutating layout directly.",
+      "Focused test verifies no per-frame height custom properties are used for scroll-linked Clientes.",
+      "Focused test verifies compositor-oriented translate/clip variables and list compensation.",
+      "Run motion infrastructure regression, all LAB tests, build/check, validate-lab and scope guard.",
+      "Review diff and GitHub CI/Pages.",
+      "Owner validates real Android gesture smoothness after deployment."
+    ]
+  }
+}

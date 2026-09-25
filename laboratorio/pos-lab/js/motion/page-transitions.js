@@ -154,12 +154,13 @@
     let touchStartY = 0;
     let touchStartOffset = 0;
     let collapseOffset = 0;
+    let targetOffset = 0;
     let filterHeight = 0;
     let statsHeight = 0;
     let totalHeight = 1;
     let lastScroll = 0;
-    let scrollFrame = 0;
-    let pendingScrollDelta = 0;
+    let renderFrame = 0;
+    let pendingState = 'idle';
 
     function currentScroll() {
       return window.scrollY || document.documentElement.scrollTop || 0;
@@ -182,31 +183,50 @@
       totalHeight = Math.max(1, filterHeight + statsHeight);
     }
 
-    function applyOffset(nextOffset, state) {
+    function renderOffset(nextOffset, state) {
       collapseOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
+      targetOffset = collapseOffset;
       const progress = core.setProgress(page, collapseOffset / totalHeight);
       const visible = 1 - progress;
       const reduced = core.reducedMotion();
+      const filterHidden = filterHeight * progress;
+      const statsHidden = statsHeight * progress;
 
-      page.style.setProperty('--lab-client-filter-height', (filterHeight * visible).toFixed(1) + 'px');
-      page.style.setProperty('--lab-client-stats-height', (statsHeight * visible).toFixed(1) + 'px');
+      // Un solo batch visual por frame. No cambiamos height durante el gesto:
+      // clip + transform reproducen la misma geometría sin forzar re-layout.
+      page.style.setProperty('--lab-client-filter-hidden', filterHidden.toFixed(2) + 'px');
+      page.style.setProperty('--lab-client-stats-hidden', statsHidden.toFixed(2) + 'px');
+      page.style.setProperty('--lab-client-total-hidden', collapseOffset.toFixed(2) + 'px');
       page.style.setProperty('--lab-client-chrome-opacity', reduced ? '1' : visible.toFixed(4));
-      page.style.setProperty('--lab-client-chrome-shift', reduced ? '0px' : (-12 * progress).toFixed(1) + 'px');
+      page.style.setProperty('--lab-client-chrome-shift', reduced ? '0px' : (-6 * progress).toFixed(2) + 'px');
       page.style.setProperty('--lab-client-chrome-pointer', progress >= 0.98 ? 'none' : 'auto');
       core.setState(page, state || (touchActive ? 'dragging' : 'idle'));
       return progress;
     }
 
+    function queueOffset(nextOffset, state) {
+      targetOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
+      pendingState = state || (touchActive ? 'dragging' : 'idle');
+      if (renderFrame) return;
+
+      renderFrame = window.requestAnimationFrame(function () {
+        renderFrame = 0;
+        renderOffset(targetOffset, pendingState);
+      });
+    }
+
     function clearVisualState() {
-      if (scrollFrame) {
-        window.cancelAnimationFrame(scrollFrame);
-        scrollFrame = 0;
+      if (renderFrame) {
+        window.cancelAnimationFrame(renderFrame);
+        renderFrame = 0;
       }
-      pendingScrollDelta = 0;
       touchActive = false;
       collapseOffset = 0;
-      page.style.removeProperty('--lab-client-filter-height');
-      page.style.removeProperty('--lab-client-stats-height');
+      targetOffset = 0;
+      pendingState = 'idle';
+      page.style.removeProperty('--lab-client-filter-hidden');
+      page.style.removeProperty('--lab-client-stats-hidden');
+      page.style.removeProperty('--lab-client-total-hidden');
       page.style.removeProperty('--lab-client-chrome-opacity');
       page.style.removeProperty('--lab-client-chrome-shift');
       page.style.removeProperty('--lab-client-chrome-pointer');
@@ -219,8 +239,9 @@
       document.body.classList.add('lab-client-scroll-linked');
       measure();
       collapseOffset = 0;
+      targetOffset = 0;
       lastScroll = currentScroll();
-      applyOffset(0, 'idle');
+      renderOffset(0, 'idle');
     }
 
     function deactivate() {
@@ -240,7 +261,7 @@
       if (!active || event.touches.length !== 1 || excludedTarget(event.target)) return;
       touchActive = true;
       touchStartY = event.touches[0].clientY;
-      touchStartOffset = collapseOffset;
+      touchStartOffset = targetOffset;
       lastScroll = currentScroll();
       core.setState(page, 'dragging');
     }, { passive: true });
@@ -248,13 +269,14 @@
     document.addEventListener('touchmove', function (event) {
       if (!active || !touchActive || event.touches.length !== 1) return;
       const fingerDelta = touchStartY - event.touches[0].clientY;
-      applyOffset(touchStartOffset + fingerDelta, 'dragging');
+      queueOffset(touchStartOffset + fingerDelta, 'dragging');
       lastScroll = currentScroll();
     }, { passive: true });
 
     function finishTouch() {
       if (!touchActive) return;
       touchActive = false;
+      pendingState = 'idle';
       lastScroll = currentScroll();
       core.setState(page, 'idle');
     }
@@ -271,23 +293,16 @@
       // Durante touchmove manda el dedo; no contamos además el mismo scroll.
       if (touchActive || Math.abs(delta) < 0.5) return;
 
-      pendingScrollDelta += delta;
-      if (scrollFrame) return;
-      scrollFrame = window.requestAnimationFrame(function () {
-        scrollFrame = 0;
-        const scrollDelta = pendingScrollDelta;
-        pendingScrollDelta = 0;
-        applyOffset(collapseOffset + scrollDelta, 'idle');
-      });
+      queueOffset(targetOffset + delta, 'idle');
     }, { passive: true });
 
     window.addEventListener('resize', function () {
       const wasActive = active;
       syncActivation();
       if (!wasActive || !active) return;
-      const progress = core.inspect(page).progress;
+      const progress = totalHeight > 0 ? targetOffset / totalHeight : 0;
       measure();
-      applyOffset(progress * totalHeight, 'idle');
+      renderOffset(progress * totalHeight, 'idle');
       lastScroll = currentScroll();
     }, { passive: true });
 
@@ -308,12 +323,13 @@
         return Object.assign(base, {
           active,
           collapseOffset,
+          targetOffset,
           totalHeight
         });
       },
       reset: function () {
         if (!active) return false;
-        applyOffset(0, 'idle');
+        renderOffset(0, 'idle');
         lastScroll = currentScroll();
         return true;
       }
