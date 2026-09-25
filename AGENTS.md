@@ -108,6 +108,7 @@ Reglas duras:
 - cambios de pantalla se realizan en `sections/` y capas `styles/` / `animations/`;
 - ningún writer puede ampliar su propia allowlist;
 - el gate aplica también cuando el writer opera mediante ChatGPT o el conector GitHub;
+- cambios LAB protegidos se realizan en rama + Pull Request; no se usa push directo a la rama activa para saltar el orden temporal;
 - al terminar ejecutar build/check, tests LAB, scope guard y revisar diff;
 - cualquier archivo fuera de alcance convierte el resultado en FAIL;
 - la promoción a CANON requiere la skill `canon-promotion` y aprobación explícita del owner.
