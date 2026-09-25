@@ -29,32 +29,31 @@
   transition-duration: 0ms;
 }
 
-/* Clientes móvil: el scroll nativo mueve la lista. El sticky solo recorta su
-   parte inferior la misma cantidad recorrida, por lo que no existe una segunda
-   geometría con translate de la lista ni espacio fantasma al final. */
+/* Scroll móvil compartido: el documento conserva la geometría real.
+   Solo las bandas secundarias reciben feedback visual; las listas/tablas/contenidos
+   siguen en flujo nativo y el page-chrome se recorta únicamente cuando aplica. */
 @media (max-width:700px) {
-  body.lab-client-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden {
+  body.lab-module-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden {
     transform:none !important;
     margin-top:0 !important;
   }
 
-  body.lab-client-scroll-linked #pageClientes.g-page-chrome-hidden > .page-chrome {
+  body.lab-module-scroll-linked .page.lab-scroll-linked.g-page-chrome-hidden > .page-chrome {
     display:block !important;
   }
 
-  body.lab-client-scroll-linked #pageClientes.active > .page-chrome {
+  body.lab-module-scroll-linked .page.lab-scroll-linked[data-lab-scroll-clip="chrome"].active > .page-chrome {
     overflow-anchor:none;
-    clip-path:inset(0 0 var(--lab-client-collapse-y,0px) 0);
-    -webkit-clip-path:inset(0 0 var(--lab-client-collapse-y,0px) 0);
+    clip-path:inset(0 0 var(--lab-scroll-collapse-y,0px) 0);
+    -webkit-clip-path:inset(0 0 var(--lab-scroll-collapse-y,0px) 0);
     will-change:clip-path;
   }
 
-  body.lab-client-scroll-linked #pageClientes .filter-bar,
-  body.lab-client-scroll-linked #pageClientes .stats-strip {
-    opacity:var(--lab-client-chrome-opacity,1) !important;
-    transform:translate3d(0,var(--lab-client-chrome-shift,0px),0) !important;
+  body.lab-module-scroll-linked .page.lab-scroll-linked .lab-scroll-secondary {
+    opacity:var(--lab-scroll-secondary-opacity,1) !important;
+    transform:translate3d(0,var(--lab-scroll-secondary-shift,0px),0) !important;
     transition:none !important;
-    pointer-events:var(--lab-client-chrome-pointer,auto);
+    pointer-events:var(--lab-scroll-secondary-pointer,auto);
     will-change:transform,opacity;
     backface-visibility:hidden;
   }
@@ -67,8 +66,7 @@
     transform:none !important;
   }
 
-  body.lab-client-scroll-linked #pageClientes .filter-bar,
-  body.lab-client-scroll-linked #pageClientes .stats-strip {
+  body.lab-module-scroll-linked .page.lab-scroll-linked .lab-scroll-secondary {
     opacity:1 !important;
     transform:none !important;
     transition:none !important;
