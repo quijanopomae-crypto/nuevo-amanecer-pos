@@ -1,0 +1,109 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-SCROLL-END-GAP-001",
+  "base_ref": "fa4def12ad2e31e92c0cca1acf5c84ecf0f65223",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "LAB-CLIENTES-SCROLL-LINKED-CHROME-001, DOM-GUARD-001, SCROLL-SMOOTHNESS-001 and TEST-REMEDIATION-001 contracts",
+      "Owner Android screenshot showing residual blank layout space at full collapse"
+    ],
+    "WRITES": [
+      "LAB Clientes motion controller commit/uncommit boundary",
+      "LAB transition CSS for fully-collapsed committed layout",
+      "MOTION_MAP render-state documentation",
+      "Focused LAB regression assertions",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .filter-bar",
+      "#pageClientes .stats-strip",
+      "#pageClientes .cli-list"
+    ],
+    "STATE_AFFECTED": [
+      "Normalized motion progress 0..1",
+      "Transient committedCollapsed boolean/class",
+      "One-frame guard for scroll events caused by layout consolidation"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2, Supabase, Railway or network persistence"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Clientes/credits data semantics remain unchanged.",
+      "Payments, sales, inventory, cash, OUTBOX and synchronization remain unchanged.",
+      "Motion remains visual-only with no business/storage/network authority.",
+      "POS/** remains untouched.",
+      "During active touch the owner-approved 1:1 direct gesture remains unchanged."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Only Clientes mobile LAB motion/layout presentation is affected.",
+      "No backend or deployment-service mutation is required.",
+      "Other motion controllers remain unchanged."
+    ],
+    "RISKS": [
+      "Committing display/layout at full collapse could visually jump if not equivalent to the transformed state.",
+      "Browser scrollTop clamping after layout shrink could emit a synthetic negative scroll and reopen the chrome.",
+      "Uncommitting when the user reverses direction could flash the hidden blocks.",
+      "Reduced-motion mode must not retain ghost space."
+    ],
+    "ROLLBACK": [
+      "Revert page-transitions.js, transitions.css, MOTION_MAP and focused test from this task.",
+      "No data/schema/storage rollback required."
+    ],
+    "TESTS": [
+      "Run skill-preflight before first functional write.",
+      "Focused test requires full-collapse committed class that removes filter/stats layout space and resets list transform.",
+      "Focused test requires uncommit before reverse gesture while preserving full visual collapse.",
+      "Focused test requires synthetic-scroll guard around one-time layout consolidation.",
+      "Run motion infrastructure and all LAB regressions, build/check, validate-lab, scope guard and diff review.",
+      "Require CI + POS LAB Mobile Pages PASS, then owner Android validation."
+    ]
+  }
+}
