@@ -74,7 +74,7 @@
   }
 
   body.lab-client-scroll-linked #pageClientes .cli-list {
-    transform:translate3d(0,calc(-1 * var(--lab-client-total-hidden,0px)),0) !important;
+    transform:translate3d(0,calc(0px - var(--lab-client-total-hidden,0px)),0) !important;
     transition:none !important;
     will-change:transform;
     backface-visibility:hidden;
