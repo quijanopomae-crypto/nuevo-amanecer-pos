@@ -61,9 +61,18 @@ jobs:
             BASE_SHA="$PUSH_BEFORE_SHA"
             REQUIRE_ORDER=false
           fi
-          if [ -z "$BASE_SHA" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+          node --check tools/cloudflare-lab/src/lab-workspace.js
+          if [ -z "$BASE_SHA" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          node laboratorio/pos-lab/skill-preflight.mjs --ci --base="$BASE_SHA" --require-order="$REQUIRE_ORDER"
+
+      - name: JavaScript syntax
+        run: |
+          node --check tools/cloudflare-lab/src/lab-workspace.js
           node --check tools/cloudflare-lab/src/worker.js
           node --check laboratorio/pos-lab/js/lab-workspace.js
+          node --check laboratorio/pos-lab/skill-preflight.mjs
+          node --check laboratorio/pos-lab/scope-guard.mjs
 
       - name: LAB unit tests
         run: |
@@ -74,36 +83,6 @@ jobs:
           node --test tests/security-secret-separation.test.mjs
           node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
           node --test tests/laboratorio-skill-preflight.test.mjs tests/laboratorio-scope-guard.test.mjs
-          node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
-          node laboratorio/pos-lab/build-lab.mjs --check
-          node laboratorio/check.mjs
-
-      - name: Install Cloudflare lab dependencies
-        working-directory: tools/cloudflare-lab
-        run: npm ci --no-audit --no-fund
-
-      - name: Apply all D1 migrations locally
-        working-directory: tools/cloudflare-lab
-        run: npx wrangler d1 migrations apply nuevo-amanecer-lab --local
-; then
-            BASE_SHA="$(git rev-parse HEAD^)"
-          fi
-          node laboratorio/pos-lab/skill-preflight.mjs --ci --base="$BASE_SHA" --require-order="$REQUIRE_ORDER"
-
-      - name: JavaScript syntax
-        run: |
-          node --check tools/cloudflare-lab/src/lab-workspace.js
-          node --check tools/cloudflare-lab/src/worker.js
-          node --check laboratorio/pos-lab/js/lab-workspace.js
-
-      - name: LAB unit tests
-        run: |
-          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
-          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
-          node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
-          node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
-          node --test tests/security-secret-separation.test.mjs
-          node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
           node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
