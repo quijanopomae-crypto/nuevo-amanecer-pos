@@ -1,0 +1,112 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-MOTION-INFRASTRUCTURE-001",
+  "base_ref": "33b4f872dd48923a48396553b1dccc2659630668",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "ChatGPT Work",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-SYNC-003.json",
+      "laboratorio/pos-lab/js/motion/*.js",
+      "laboratorio/pos-lab/animations/motion.css",
+      "laboratorio/pos-lab/animations/modals.css",
+      "tests/laboratorio-workspace-swipe-dismiss.test.mjs"
+    ],
+    "WRITES": [
+      "LAB-only motion architecture map",
+      "LAB-only shared motion runtime hosted in the already-first-loaded page-transitions.js",
+      "LAB-only motion CSS tokens and modal controller refactor",
+      "LAB-only focused regression tests"
+    ],
+    "DOM_AFFECTED": [
+      "#naLabWorkspaceOverlay",
+      "#naLabWorkspaceOverlay > div",
+      "elements opting into existing lab motion classes"
+    ],
+    "STATE_AFFECTED": [
+      "Visual motion lifecycle only: idle, dragging, settling, closing, closed",
+      "Normalized gesture progress and transient animation state",
+      "No product, customer, sale, inventory, cash, credit or sync state"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2 or production storage"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Motion is visual feedback and never business authority.",
+      "A sale, stock movement, cash operation, credit operation or persistence must complete even if motion fails.",
+      "Current workspace swipe keeps one continuous visual progress and reaches opacity zero before display none.",
+      "Reduced-motion remains supported.",
+      "No CANON or production writes.",
+      "No new dependency from POS/** to laboratorio/**."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Shared motion runtime becomes available to page, cart, modal and feedback controllers.",
+      "Workspace modal uses the common runtime without touching lab-workspace save/load/auth/sync.",
+      "UI_MAP will point agents to a dedicated MOTION_MAP.",
+      "No inventory, cash, credit, customer, sale or persistence module changes."
+    ],
+    "RISKS": [
+      "Refactoring shared helpers could subtly change current swipe timing.",
+      "A runtime bootstrap placed in the wrong file could execute after consumers.",
+      "A state helper could become business state if its contract is vague.",
+      "Transitionend can be absent when reduced motion or styles change, so a fallback is required.",
+      "Over-generalizing the runtime could make future edits harder rather than easier."
+    ],
+    "ROLLBACK": [
+      "Revert the single LAB PR; no schema/data migration exists.",
+      "Restore current four motion controllers and two CSS files.",
+      "MOTION_MAP/UI_MAP additions are documentation-only and reversible."
+    ],
+    "TESTS": [
+      "Run skill-preflight before first functional write.",
+      "Verify shared runtime loads from the already-first motion script and exposes clamp, reducedMotion, restartClass, state, CSS duration and transition completion helpers.",
+      "Verify modal uses shared runtime, CSS duration token and transitionend with timeout fallback.",
+      "Keep existing workspace swipe semantics and one-progress assertions.",
+      "Assert motion files have no storage/network/business writes.",
+      "Run all laboratorio tests, LAB build check, validate-lab/scope guard and diff review.",
+      "After merge verify GitHub Pages build/deploy and inspect published motion assets/markup."
+    ]
+  }
+}
