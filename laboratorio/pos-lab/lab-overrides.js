@@ -248,6 +248,7 @@
         '<div class="priority"><span>Pendiente</span><b>' + labMoney(pending) + '</b></div>' +
       '</div>' +
       '<div class="lab-fin-progress" aria-label="' + pct.toFixed(0) + '% pagado"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
+      '<div class="lab-fin-progress-label">' + pct.toFixed(0) + '% pagado</div>' +
       '<div class="lab-fin-credit-due"><span>' + labEsc(labCreditDueText(cr)) + '</span><span>' + (cr.vence ? 'Vence: ' + labEsc(cr.vence) : 'Fecha: —') + '</span></div>' +
       '<div class="lab-fin-installment"><span>Próxima cuota</span><b>' + (installment === null ? '—' : labMoney(installment)) + '</b></div>' +
       '<div class="lab-fin-credit-actions">' +
@@ -289,11 +290,14 @@
     var bucket = labCreditBucket(cr);
     var meta = labCreditBucketMeta(bucket);
     var pending = labCreditPending(cr);
+    var days = labDueDays(cr);
     var actionText = bucket === 'vencidos'
       ? 'Cobrar ' + labMoney(pending) + ' — ' + labCreditDueText(cr).toLowerCase()
       : bucket === 'hoy'
         ? 'Cobrar ' + labMoney(pending) + ' hoy'
-        : 'Próximo cobro ' + labMoney(pending) + (cr.vence ? ' — ' + cr.vence : '');
+        : days === null
+          ? 'Revisar saldo ' + labMoney(pending) + ' — sin fecha suficiente'
+          : 'Próximo cobro ' + labMoney(pending) + (cr.vence ? ' — ' + cr.vence : '');
     return '<section class="lab-fin-section"><div class="lab-fin-section-title">PRÓXIMA ACCIÓN</div>' +
       '<div class="lab-fin-action lab-fin-action-' + meta.tone + '">' +
         '<div class="lab-fin-action-main"><span class="lab-fin-state lab-fin-state-' + meta.tone + '">' + meta.icon + ' ' + meta.label + '</span>' +
