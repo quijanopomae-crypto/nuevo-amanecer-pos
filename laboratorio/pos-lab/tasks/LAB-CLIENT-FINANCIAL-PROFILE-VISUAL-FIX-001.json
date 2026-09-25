@@ -1,0 +1,46 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-PROFILE-VISUAL-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "c58f12f0d2b111a34e042a2001e2f0275572f65b",
+  "objective": "Corregir exclusivamente en POS-LAB la integración del render visual de la ficha financiera de cliente para que la capa lab-financial se aplique al DOM real después de cliRender, filtros, carga remota y reaperturas, sin duplicar lógica financiera ni modificar CANON, pagos, saldos, caja, sincronización o fórmula de crédito.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-PROFILE-VISUAL-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-PROFILE-VISUAL-FIX-001.json",
+    "tests/laboratorio-client-financial-profile.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/js/motion/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    ".github/**",
+    "evidence/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "D1/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-PROFILE-VISUAL-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
