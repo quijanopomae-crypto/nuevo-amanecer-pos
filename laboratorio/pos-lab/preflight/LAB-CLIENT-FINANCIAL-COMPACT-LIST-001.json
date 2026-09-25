@@ -1,0 +1,106 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-COMPACT-LIST-001",
+  "base_ref": "86a1818b2a5aad904a45144ad10488ecd684394a",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "source_hashes": {
+    "AGENTS.md": "7fc62ac9e9064b53aba95b467384200b56a6d217",
+    "laboratorio/pos-lab/AGENTS.md": "840088c8c342f69a4b973bdf2b2ca7e7d91eb339",
+    "laboratorio/pos-lab/UI_MAP.yaml": "b88fb28d8047a5dfccb61b99572d9e10686626fe",
+    "laboratorio/pos-lab/MOTION_MAP.yaml": "56830059c7601b83237cd940106d711bcb059073",
+    "laboratorio/pos-lab/lab-overrides.js": "02836f55be8ff678315d6394a4771fe24f849c41",
+    "laboratorio/pos-lab/styles/pages/clientes.css": "6913bd4edee1b4e622c102c905f0b3568082441f",
+    "tests/laboratorio-client-financial-profile.test.mjs": "cde94a5a48c53a2d2b4f942eb07f14a982becf82"
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      "required LAB skills",
+      "UI_MAP.yaml",
+      "MOTION_MAP.yaml",
+      "current client financial LAB renderer/styles/tests"
+    ],
+    "WRITES": [
+      "Compact client financial renderer",
+      "compact mobile styles",
+      "focused regression assertions",
+      "task/receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .client-creds .lab-fin-profile only"
+    ],
+    "STATE_AFFECTED": [
+      "Existing ephemeral credit tab/open state only; no new business state"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No invented installment plan",
+      "Payment count derives from existing cr.pagos",
+      "Balances use existing _naCreditOutstanding/monto/pagado",
+      "Existing payment/detail/evaluation actions reused",
+      "No persistence changes"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes presentation only; no products/inventory/sales/cash/expenses/OUTBOX/sync behavior changes"
+    ],
+    "RISKS": [
+      "Over-compression could hide useful urgency",
+      "closed/history/credit-line discoverability",
+      "mobile wrapping"
+    ],
+    "ROLLBACK": [
+      "Revert single LAB PR; no data rollback required"
+    ],
+    "TESTS": [
+      "Skill preflight before functional write",
+      "compact profile source assertions",
+      "payment-count correctness",
+      "existing financial-profile tests",
+      "all laboratorio-* tests",
+      "build check",
+      "scope guard",
+      "Pages deploy"
+    ]
+  }
+}

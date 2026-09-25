@@ -193,19 +193,49 @@ test('profile reuses existing payment/detail/evaluation actions and adds no fina
   assert.doesNotMatch(block, /score\s*[:=]|Score\s*\d|\/100/);
 });
 
-test('history, closed credits and behavior are folded by default', () => {
+test('secondary information is folded and line evaluation is no longer in the main flow', () => {
   assert.match(source, /<details><summary>Historial de pagos/);
   assert.match(source, /<details><summary>Créditos cerrados/);
+  assert.match(source, /<details><summary>Línea de crédito \/ evaluación/);
   assert.match(source, /<details><summary>Comportamiento del cliente/);
-  assert.match(source, /% pagado/);
   assert.doesNotMatch(source, /<details\s+open/);
+
+  const start = source.indexOf('function labProfileHtml(client)');
+  const end = source.indexOf('function labClientIdForPanel', start);
+  const profile = source.slice(start, end);
+  assert.doesNotMatch(profile, /SITUACIÓN ACTUAL/);
+  assert.doesNotMatch(profile, /labUrgentActionHtml\(summary\)/);
+  assert.match(profile, /labCompactActionHtml\(summary\)/);
+  assert.match(profile, /labActiveCreditsHtml\(client, summary\)/);
 });
 
-test('mobile CSS keeps two main metrics per row and prevents wide dashboard layout', () => {
-  assert.match(css, /\.lab-fin-kpis\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+test('compact credit cards show payment count and do not invent installment schedules', () => {
+  const ctx = makeContext();
+  const api = ctx.NA_LAB_CLIENT_FINANCIAL_PROFILE;
+  const credit = cr('A1','2026-09-28',500,230,'vigente',{
+    pagos:[
+      { id:'P1', status:'REGISTRADO' },
+      { id:'P2', status:'REGISTRADO' },
+      { id:'P3', status:'REVERTED', reversalId:'R1' }
+    ]
+  });
+  assert.equal(api.effectivePaymentCount(credit), 2);
+
+  const start = source.indexOf('function labCreditCardHtml(cr)');
+  const end = source.indexOf('function labCreditViewHtml', start);
+  const card = source.slice(start, end);
+  assert.match(card, /Pagos realizados:/);
+  assert.match(card, /Pagado <b>/);
+  assert.doesNotMatch(card, /Próxima cuota/);
+  assert.doesNotMatch(card, /lab-fin-credit-metrics/);
+});
+
+test('mobile CSS prioritizes the compact list and tactile actions', () => {
+  assert.match(css, /\.lab-fin-profile-compact\{gap:8px;padding-top:8px\}/);
+  assert.match(css, /\.lab-fin-credit-summary/);
+  assert.match(css, /\.lab-fin-credit-actions-compact/);
   assert.match(css, /@media\(max-width:430px\)/);
-  assert.match(css, /@media\(min-width:701px\)/);
-  assert.match(css, /\.lab-fin-profile\{max-width:980px/);
+  assert.match(css, /min-height:42px/);
   assert.match(css, /overflow-wrap:anywhere/);
 });
 

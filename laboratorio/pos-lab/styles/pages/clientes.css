@@ -133,3 +133,66 @@
   #pageClientes .lab-fin-action-main{min-width:0}
   #pageClientes .lab-fin-action-buttons{flex:0 0 auto}
 }
+
+
+/* Etapa compacta: lectura rápida de deuda/cobro + lista de créditos. */
+#pageClientes .lab-fin-profile-compact{gap:8px;padding-top:8px}
+#pageClientes .lab-fin-quick{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border:1px solid var(--border);border-left-width:4px;border-radius:11px;
+  padding:10px 11px;background:#f8fafc
+}
+#pageClientes .lab-fin-quick-copy{min-width:0;display:flex;flex-direction:column;gap:6px}
+#pageClientes .lab-fin-quick-copy strong,
+#pageClientes .lab-fin-quick>div>strong{font-size:14px;line-height:1.3;color:var(--dark);overflow-wrap:anywhere}
+#pageClientes .lab-fin-quick-red{border-left-color:var(--red);background:var(--red-light)}
+#pageClientes .lab-fin-quick-orange{border-left-color:var(--orange);background:var(--orange-light)}
+#pageClientes .lab-fin-quick-amber{border-left-color:var(--amber);background:var(--amber-light)}
+#pageClientes .lab-fin-quick-teal{border-left-color:var(--teal);background:var(--teal-light)}
+#pageClientes .lab-fin-quick-green{border-left-color:var(--green);background:var(--green-light)}
+#pageClientes .lab-fin-quick .lab-fin-btn{flex:0 0 auto;min-height:42px}
+
+#pageClientes .lab-fin-credits-compact{padding:10px}
+#pageClientes .lab-fin-credits-compact .lab-fin-section-title{margin-bottom:7px}
+#pageClientes .lab-fin-credits-compact .lab-fin-section-title b{
+  display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;
+  margin-left:4px;border-radius:999px;background:#eef2f7;color:var(--slate);font-size:10px
+}
+#pageClientes .lab-fin-credit-list{gap:7px}
+#pageClientes .lab-fin-credit-compact{padding:10px}
+#pageClientes .lab-fin-credit-compact .lab-fin-credit-head{align-items:flex-start}
+#pageClientes .lab-fin-credit-title{min-width:0}
+#pageClientes .lab-fin-credit-compact h5{font-size:13px;margin-top:5px}
+#pageClientes .lab-fin-credit-compact .lab-fin-credit-pending{font-size:16px}
+#pageClientes .lab-fin-credit-summary{
+  margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:6px 12px;
+  flex-wrap:wrap;font-size:10px;font-weight:700;color:var(--slate)
+}
+#pageClientes .lab-fin-credit-summary b{color:var(--dark);font-weight:900}
+#pageClientes .lab-fin-progress-compact{height:5px;margin-top:7px}
+#pageClientes .lab-fin-credit-due-compact{
+  margin-top:7px;align-items:center;font-size:10px
+}
+#pageClientes .lab-fin-credit-due-compact strong{color:var(--dark);font-weight:900}
+#pageClientes .lab-fin-credit-actions-compact{margin-top:8px}
+#pageClientes .lab-fin-credit-actions-compact .lab-fin-btn{min-height:42px}
+
+#pageClientes .lab-fin-folds-compact{gap:6px}
+#pageClientes .lab-fin-folds-compact summary{min-height:44px;padding:10px 12px}
+#pageClientes .lab-fin-folds-compact .lab-fin-fold-body{padding:9px}
+#pageClientes .lab-fin-folds-compact .lab-fin-fold-body>.lab-fin-section{
+  border:0;border-radius:0;padding:0;background:transparent
+}
+#pageClientes .lab-fin-folds-compact .lab-fin-fold-body>.lab-fin-section>.lab-fin-section-title{display:none}
+
+@media(max-width:430px){
+  #pageClientes .lab-fin-profile-compact{gap:7px}
+  #pageClientes .lab-fin-quick{padding:9px 10px;align-items:stretch;flex-direction:column}
+  #pageClientes .lab-fin-quick .lab-fin-btn{width:100%}
+  #pageClientes .lab-fin-credit-summary{display:grid;grid-template-columns:1fr 1fr}
+  #pageClientes .lab-fin-credit-actions-compact{display:grid;grid-template-columns:1fr 1fr}
+  #pageClientes .lab-fin-credit-actions-compact .lab-fin-btn{width:100%}
+}
+@media(max-width:370px){
+  #pageClientes .lab-fin-credit-summary{grid-template-columns:1fr}
+}
