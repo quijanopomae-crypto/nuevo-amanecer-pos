@@ -463,6 +463,7 @@
     classifyCredit: labCreditBucket,
     sortCredits: function (rows) { return (Array.isArray(rows) ? rows.slice() : []).sort(labCreditSort); },
     summarizeClient: labClientSummary,
+    effectivePaymentCount: labEffectivePaymentCount,
     ensureRenderHook: labEnsureClientRenderHook
   });
   // ===== FIN LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====
