@@ -1,14 +1,26 @@
 /*
- * Tokens y contrato de motion. Solo afecta elementos que adopten clases lab-motion*.
- * Una animación nunca debe decidir ventas, stock, caja, créditos ni persistencia.
+ * Contrato de motion LAB.
+ * Una animación es feedback visual: nunca decide ventas, stock, caja, créditos,
+ * persistencia, autenticación ni sincronización.
  */
+:root {
+  --lab-motion-modal-settle-duration: 560ms;
+  --lab-motion-ease-settle: cubic-bezier(.22,1,.36,1);
+}
+
 .lab-motion {
   transition-duration:var(--lab-motion-normal);
   transition-timing-function:var(--lab-ease-standard);
 }
+
+[data-lab-motion-state] {
+  --lab-motion-progress:0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lab-motion,
-  .lab-motion * {
+  .lab-motion *,
+  [data-lab-motion-state] {
     animation-duration:.01ms !important;
     animation-iteration-count:1 !important;
     transition-duration:.01ms !important;
