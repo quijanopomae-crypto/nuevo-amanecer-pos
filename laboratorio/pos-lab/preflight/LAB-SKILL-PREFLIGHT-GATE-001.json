@@ -1,0 +1,84 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-SKILL-PREFLIGHT-GATE-001",
+  "base_ref": "cd0082eb575f5fb0316c61aa447a5edbd219da9f",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "ChatGPT Work",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "c50c0898fa47817b6f0824c2eeff1c8e4c307f01"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "fb01789bcb8b99fa37e496bc737ab716e25b4402"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "21f08f52d81f33ccd52bd70d64d4b5f86bac1fd4"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "9f8dd42f0e9c2205ec23a592213889e60c36bcb8"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "LAB task contracts",
+      "required SKILL.md files",
+      "UI_MAP.yaml when POS-LAB UI is affected",
+      "git diff/history"
+    ],
+    "WRITES": [
+      "LAB governance/preflight tooling and tests only; no CANON product writes"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "task authorization state",
+      "pre-write permission state in agent workflow"
+    ],
+    "STORAGE_AFFECTED": [
+      "Git task/preflight receipt files only; no browser/D1/product data"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No writer may modify guarded LAB files before skill preflight passes.",
+      "CANON POS/** remains forbidden for LAB tasks.",
+      "A preflight receipt cannot be created after the first functional LAB change and still satisfy PR ordering.",
+      "Skill receipt hashes must match the exact current SKILL.md blobs."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "OpenCode command/agent behavior",
+      "LAB scope guard schema v3",
+      "LAB CI pull-request gate",
+      "ChatGPT/GitHub-connector workflow because repository rules apply to all writers"
+    ],
+    "RISKS": [
+      "Overly strict gate could block historical schema-v1/v2 tasks.",
+      "Shallow git history could make temporal verification unreliable.",
+      "A generic receipt without required analysis could become ceremonial."
+    ],
+    "ROLLBACK": [
+      "Revert the governance PR; no product or D1 data migration is involved.",
+      "Keep schema v1/v2 compatibility so historical task contracts remain valid."
+    ],
+    "TESTS": [
+      "Unit test receipt validation and skill blob matching.",
+      "Unit test schema-v3 mandatory skills.",
+      "CI checkout with full history.",
+      "PR temporal test: preflight commit must precede first guarded implementation commit."
+    ]
+  }
+}
