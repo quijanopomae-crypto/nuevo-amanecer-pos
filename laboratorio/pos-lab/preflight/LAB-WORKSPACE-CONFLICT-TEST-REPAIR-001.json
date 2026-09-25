@@ -1,0 +1,79 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-WORKSPACE-CONFLICT-TEST-REPAIR-001",
+  "base_ref": "8f1805b9d3ceb7b95e47d13882bbf3881eb6f9e2",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "source_hashes": {
+    "AGENTS.md": "7fc62ac9e9064b53aba95b467384200b56a6d217",
+    "laboratorio/pos-lab/AGENTS.md": "840088c8c342f69a4b973bdf2b2ca7e7d91eb339",
+    "tests/laboratorio-workspace-recovery.test.mjs": "82bd81cf9293c64cfcbfb8137de5f8d0ab590c99"
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      "required LAB skills",
+      "failed POS LAB Mobile job log",
+      "tests/laboratorio-workspace-recovery.test.mjs"
+    ],
+    "WRITES": [
+      "Only the recovery test expectation/comment plus task/receipt"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "None; test-only repair"
+    ],
+    "STORAGE_AFFECTED": [
+      "None; test-only repair"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No functional code change",
+      "No D1/Worker/CANON change",
+      "Existing conflict recovery semantics remain unchanged"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None at runtime; restores Pages regression gate only"
+    ],
+    "RISKS": [
+      "Incorrect expected read count could mask behavior; assertion must document exact 3-read sequence"
+    ],
+    "ROLLBACK": [
+      "Revert this test-only PR"
+    ],
+    "TESTS": [
+      "All laboratorio-* tests",
+      "Pages build",
+      "post-merge CI"
+    ]
+  }
+}
