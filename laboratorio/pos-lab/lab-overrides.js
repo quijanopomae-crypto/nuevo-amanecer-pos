@@ -233,28 +233,38 @@
     return rows.map(function (row) { return labPaymentHtml(row.pay, row.cr); }).join('');
   }
 
+  function labEffectivePaymentCount(cr) {
+    return (Array.isArray(cr && cr.pagos) ? cr.pagos : []).filter(function (pay) {
+      return String(pay && pay.status || '').toUpperCase() !== 'REVERTED' && !(pay && pay.reversalId);
+    }).length;
+  }
+
   function labCreditCardHtml(cr) {
     var bucket = labCreditBucket(cr);
     var meta = labCreditBucketMeta(bucket);
     var original = Number(cr && cr.monto);
     var paid = Number(cr && cr.pagado);
     var pending = labCreditPending(cr);
-    var pct = Number.isFinite(original) && original > 0 ? Math.min(100, Math.max(0, (Number.isFinite(paid) ? paid : 0) / original * 100)) : 0;
-    var installment = labNextInstallment(cr);
+    var pct = Number.isFinite(original) && original > 0
+      ? Math.min(100, Math.max(0, (Number.isFinite(paid) ? paid : 0) / original * 100))
+      : 0;
+    var paymentCount = labEffectivePaymentCount(cr);
     var paymentAllowed = bucket !== 'anteriores' && !cr.anulado && pending > 0.001;
-    return '<article class="lab-fin-credit lab-fin-tone-' + meta.tone + '" data-lab-credit-bucket="' + bucket + '">' +
-      '<div class="lab-fin-credit-head"><div><span class="lab-fin-state lab-fin-state-' + meta.tone + '">' + meta.icon + ' ' + meta.label + '</span>' +
-      '<h5>' + labEsc(cr.desc || cr.tipo || 'Crédito') + '</h5></div><strong class="lab-fin-credit-pending">' + labMoney(pending) + '<small>PENDIENTE</small></strong></div>' +
-      '<div class="lab-fin-credit-metrics">' +
-        '<div><span>Original</span><b>' + labMoney(Number.isFinite(original) ? original : null) + '</b></div>' +
-        '<div><span>Pagado</span><b>' + labMoney(Number.isFinite(paid) ? paid : null) + '</b></div>' +
-        '<div class="priority"><span>Pendiente</span><b>' + labMoney(pending) + '</b></div>' +
+
+    return '<article class="lab-fin-credit lab-fin-credit-compact lab-fin-tone-' + meta.tone + '" data-lab-credit-bucket="' + bucket + '">' +
+      '<div class="lab-fin-credit-head">' +
+        '<div class="lab-fin-credit-title"><span class="lab-fin-state lab-fin-state-' + meta.tone + '">' + meta.icon + ' ' + meta.label + '</span>' +
+          '<h5>' + labEsc(cr.desc || cr.tipo || 'Crédito') + '</h5></div>' +
+        '<strong class="lab-fin-credit-pending">' + labMoney(pending) + '<small>PENDIENTE</small></strong>' +
       '</div>' +
-      '<div class="lab-fin-progress" aria-label="' + pct.toFixed(0) + '% pagado"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
-      '<div class="lab-fin-progress-label">' + pct.toFixed(0) + '% pagado</div>' +
-      '<div class="lab-fin-credit-due"><span>' + labEsc(labCreditDueText(cr)) + '</span><span>' + (cr.vence ? 'Vence: ' + labEsc(cr.vence) : 'Fecha: —') + '</span></div>' +
-      '<div class="lab-fin-installment"><span>Próxima cuota</span><b>' + (installment === null ? '—' : labMoney(installment)) + '</b></div>' +
-      '<div class="lab-fin-credit-actions">' +
+      '<div class="lab-fin-credit-summary">' +
+        '<span>Pagado <b>' + labMoney(Number.isFinite(paid) ? paid : 0) + '</b> de <b>' + labMoney(Number.isFinite(original) ? original : null) + '</b></span>' +
+        '<span>Pagos realizados: <b>' + paymentCount + '</b></span>' +
+      '</div>' +
+      '<div class="lab-fin-progress lab-fin-progress-compact" aria-label="' + pct.toFixed(0) + '% pagado"><span style="width:' + pct.toFixed(0) + '%"></span></div>' +
+      '<div class="lab-fin-credit-due lab-fin-credit-due-compact"><strong>' + labEsc(labCreditDueText(cr)) + '</strong>' +
+        (cr.vence ? '<span>' + labEsc(cr.vence) + '</span>' : '') + '</div>' +
+      '<div class="lab-fin-credit-actions lab-fin-credit-actions-compact">' +
         (paymentAllowed ? '<button type="button" class="lab-fin-btn primary" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
         '<button type="button" class="lab-fin-btn ghost" onclick="abrirDetalleCredito(\'' + labEsc(String(cr.id)) + '\')">Historial</button>' +
       '</div>' +
@@ -342,29 +352,55 @@
     return '<div class="lab-fin-behavior-grid"><div><span>Comportamiento</span><b>' + labEsc(behavior) + '</b></div><div><span>Créditos registrados</span><b>' + labEsc(String(history.total ?? summary.all.length)) + '</b></div><div><span>Puntuales</span><b>' + labEsc(String(history.punctual ?? '—')) + '</b></div><div><span>Tardíos / vencidos</span><b>' + labEsc(String(history.late ?? '—')) + '</b></div></div>';
   }
 
+  function labCompactActionHtml(summary) {
+    var cr = summary.urgent;
+    if (!cr) {
+      return '<section class="lab-fin-quick lab-fin-quick-green">' +
+        '<div><span class="lab-fin-state lab-fin-state-green">🟢 AL DÍA</span><strong>Sin cobros pendientes</strong></div>' +
+      '</section>';
+    }
+
+    var bucket = labCreditBucket(cr);
+    var meta = labCreditBucketMeta(bucket);
+    var pending = labCreditPending(cr);
+    var label = bucket === 'vencidos'
+      ? 'Cobrar ' + labMoney(pending) + ' · ' + labCreditDueText(cr)
+      : bucket === 'hoy'
+        ? 'Cobrar ' + labMoney(pending) + ' hoy'
+        : 'Próximo pago ' + labMoney(pending) + ' · ' + labCreditDueText(cr);
+
+    return '<section class="lab-fin-quick lab-fin-quick-' + meta.tone + '">' +
+      '<div class="lab-fin-quick-copy"><span class="lab-fin-state lab-fin-state-' + meta.tone + '">' + meta.icon + ' ' + meta.label + '</span>' +
+        '<strong>' + labEsc(label) + '</strong></div>' +
+      '<button type="button" class="lab-fin-btn primary" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' +
+    '</section>';
+  }
+
+  function labActiveCreditsHtml(client, summary) {
+    return '<section class="lab-fin-section lab-fin-credits-section lab-fin-credits-compact">' +
+      '<div class="lab-fin-section-title"><span>CRÉDITOS ACTIVOS <b>' + summary.active.length + '</b></span>' +
+        '<button type="button" class="lab-fin-link" onclick="abrirCred(\'' + labEsc(String(client.id)) + '\')">+ Nuevo crédito</button></div>' +
+      '<div class="lab-fin-credit-list">' +
+        (summary.active.length
+          ? summary.active.slice().sort(labCreditSort).map(labCreditCardHtml).join('')
+          : '<div class="lab-fin-empty">Sin créditos activos.</div>') +
+      '</div>' +
+    '</section>';
+  }
+
   function labProfileHtml(client) {
     var summary = labClientSummary(client);
-    var next = summary.nextFuture;
-    var clientStatus = summary.active.length ? 'Cliente activo' : 'Sin deuda activa';
-    var doc = client.dni || 'Sin documento';
-    var phone = client.tel ? ' · ' + client.tel : '';
-    var nextValue = next ? labCreditPending(next) : null;
-    var nextDate = next ? labCreditDueText(next) : 'Sin próximo vencimiento';
-    return '<div class="lab-fin-profile" data-lab-fin-client="' + labEsc(String(client.id)) + '">' +
-      '<section class="lab-fin-identity"><div><h3>' + labEsc(client.nombre || 'Cliente') + '</h3><p>' + labEsc(doc) + labEsc(phone) + '</p><span>' + labEsc(clientStatus) + '</span></div>' +
-      '<button type="button" class="lab-fin-more" onclick="abrirEvaluacionCredito(\'' + labEsc(String(client.id)) + '\')" aria-label="Ver evaluación">⋮</button></section>' +
-      '<section class="lab-fin-section"><div class="lab-fin-section-title">SITUACIÓN ACTUAL</div><div class="lab-fin-kpis">' +
-        '<div><span>DEUDA TOTAL</span><b>' + labMoney(summary.debt) + '</b></div>' +
-        '<div class="' + (summary.overdue > 0 ? 'danger' : '') + '"><span>VENCIDO</span><b>' + labMoney(summary.overdue) + '</b></div>' +
-        '<div><span>PRÓXIMO PAGO</span><b>' + labMoney(nextValue) + '</b><small>' + labEsc(nextDate) + '</small></div>' +
-        '<div><span>CRÉDITOS</span><b>' + summary.active.length + ' activos</b></div>' +
-      '</div></section>' +
-      labUrgentActionHtml(summary) +
-      labLineHtml(client, summary) +
-      labCreditViewHtml(client, summary) +
-      '<section class="lab-fin-folds">' +
-        '<details><summary>Historial de pagos <span>' + summary.all.reduce(function (n, cr) { return n + (Array.isArray(cr.pagos) ? cr.pagos.length : 0); }, 0) + '</span></summary><div class="lab-fin-fold-body">' + labAllPaymentsHtml(summary) + '</div></details>' +
+    var paymentCount = summary.all.reduce(function (n, cr) {
+      return n + labEffectivePaymentCount(cr);
+    }, 0);
+
+    return '<div class="lab-fin-profile lab-fin-profile-compact" data-lab-fin-client="' + labEsc(String(client.id)) + '">' +
+      labCompactActionHtml(summary) +
+      labActiveCreditsHtml(client, summary) +
+      '<section class="lab-fin-folds lab-fin-folds-compact">' +
+        '<details><summary>Historial de pagos <span>' + paymentCount + '</span></summary><div class="lab-fin-fold-body">' + labAllPaymentsHtml(summary) + '</div></details>' +
         '<details><summary>Créditos cerrados <span>' + summary.closed.length + '</span></summary><div class="lab-fin-fold-body">' + labClosedCreditsHtml(summary) + '</div></details>' +
+        '<details><summary>Línea de crédito / evaluación</summary><div class="lab-fin-fold-body">' + labLineHtml(client, summary) + '</div></details>' +
         '<details><summary>Comportamiento del cliente</summary><div class="lab-fin-fold-body">' + labBehaviorHtml(summary) + '</div></details>' +
       '</section>' +
     '</div>';
