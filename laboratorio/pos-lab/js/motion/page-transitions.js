@@ -139,10 +139,15 @@
      ese desplazamiento; después, el momentum continúa con el scroll real. */
   (function bindClientsScrollLinkedChrome() {
     const core = motion.core;
+    if (!core ||
+        typeof document === 'undefined' ||
+        typeof document.getElementById !== 'function' ||
+        !document.body) return;
+
     const page = document.getElementById('pageClientes');
     const filter = page && page.querySelector('.filter-bar');
     const stats = page && page.querySelector('.stats-strip');
-    if (!page || !filter || !stats || !core) return;
+    if (!page || !filter || !stats) return;
 
     let active = false;
     let touchActive = false;
