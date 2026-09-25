@@ -10,6 +10,10 @@ on:
       - "tests/cloud-sync/session-architecture.test.mjs"
       - "docs/LAB_CANON_MIRROR.md"
       - ".github/workflows/lab-cloud-ci.yml"
+      - "AGENTS.md"
+      - ".agents/skills/**"
+      - ".opencode/commands/lab-preflight.md"
+      - ".opencode/agents/pos-lab-implementer.md"
   push:
     branches:
       - feature/v1.3-mobile-cloud
@@ -20,6 +24,10 @@ on:
       - "tests/security-secret-separation.test.mjs"
       - "docs/LAB_CANON_MIRROR.md"
       - ".github/workflows/lab-cloud-ci.yml"
+      - "AGENTS.md"
+      - ".agents/skills/**"
+      - ".opencode/commands/lab-preflight.md"
+      - ".opencode/agents/pos-lab-implementer.md"
 
 permissions:
   contents: read
@@ -32,17 +40,39 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
+      - name: Universal LAB skill preflight gate
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          BASE_SHA="$PR_BASE_SHA"
+          REQUIRE_ORDER=true
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            BASE_SHA="$PUSH_BEFORE_SHA"
+            REQUIRE_ORDER=false
+          fi
+          if [ -z "$BASE_SHA" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            BASE_SHA="$(git rev-parse HEAD^)"
+          fi
+          node laboratorio/pos-lab/skill-preflight.mjs --ci --base="$BASE_SHA" --require-order="$REQUIRE_ORDER"
+
       - name: JavaScript syntax
         run: |
           node --check tools/cloudflare-lab/src/lab-workspace.js
           node --check tools/cloudflare-lab/src/worker.js
           node --check laboratorio/pos-lab/js/lab-workspace.js
+          node --check laboratorio/pos-lab/skill-preflight.mjs
+          node --check laboratorio/pos-lab/scope-guard.mjs
 
       - name: LAB unit tests
         run: |
@@ -52,6 +82,7 @@ jobs:
           node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           node --test tests/security-secret-separation.test.mjs
           node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
+          node --test tests/laboratorio-skill-preflight.test.mjs tests/laboratorio-scope-guard.test.mjs
           node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
