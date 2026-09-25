@@ -1,0 +1,74 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-WORKSPACE-SWIPE-SYNC-003",
+  "base_ref": "704ed92a7cbfd13d498bb95f21cfc8cf78ce9b6b",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT","GitHub connector","OpenCode","Claude","DeepSeek","Codex","human-assisted agents","future agents"],
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md","git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md","git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md","git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-animation-edit": {"path": ".agents/skills/lab-animation-edit/SKILL.md","git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"}
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-DISMISS-001.json",
+      "laboratorio/pos-lab/js/motion/modal-motion.js",
+      "laboratorio/pos-lab/animations/modals.css",
+      "tests/laboratorio-workspace-swipe-dismiss.test.mjs"
+    ],
+    "WRITES": [
+      "LAB workspace modal motion JavaScript",
+      "LAB modal animation CSS",
+      "Existing focused LAB gesture test",
+      "New Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": ["#naLabWorkspaceOverlay","#naLabWorkspaceOverlay > div"],
+    "STATE_AFFECTED": [
+      "Transient finger distance, normalized visual progress and settling state only",
+      "No product, customer, sale, inventory, cash, credit or synchronization state"
+    ],
+    "STORAGE_AFFECTED": ["None: localStorage, sessionStorage, IndexedDB, D1 LAB, R2 and production storage remain untouched"],
+    "DOMAIN_INVARIANTS": [
+      "Products, customers, sales, inventory, cash and credits remain unchanged.",
+      "CANON to D1 LAB synchronization and conflict handling remain unchanged.",
+      "Existing X close behavior remains available.",
+      "Motion remains visual feedback only.",
+      "POS/** and production writes remain forbidden."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Only presentation and touch interaction of the LAB workspace overlay.",
+      "No changes to lab-workspace API, credentials, save/load, OUTBOX or D1.",
+      "The gesture must not capture form controls or normal vertical scrolling."
+    ],
+    "RISKS": [
+      "display:none could still become visible as a snap if opacity is above zero.",
+      "The browser may coalesce class and target-style changes, causing a jump at touchend.",
+      "A swipe could conflict with scrolling or form interactions.",
+      "Inline transform or opacity could leak into the next open."
+    ],
+    "ROLLBACK": [
+      "Revert the two motion files and focused test from this task.",
+      "No data migration or storage rollback is required."
+    ],
+    "TESTS": [
+      "Execute repository skill-preflight before the first functional write.",
+      "Assert drag distance drives translation, panel opacity and backdrop from the same normalized progress.",
+      "Assert dismiss animates from the current dragged values to opacity 0 and backdrop 0 before display:none.",
+      "Assert settle-back starts from the current position rather than resetting synchronously.",
+      "Run LAB build check, all laboratorio tests, scope guard and diff review.",
+      "Verify published LAB loads the new commit; physical finger feel remains owner acceptance."
+    ]
+  }
+}

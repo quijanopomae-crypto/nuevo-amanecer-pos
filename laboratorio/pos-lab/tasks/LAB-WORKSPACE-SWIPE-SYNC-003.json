@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-WORKSPACE-SWIPE-SYNC-003",
+  "environment": "LABORATORIO",
+  "base_ref": "704ed92a7cbfd13d498bb95f21cfc8cf78ce9b6b",
+  "objective": "Corregir el cierre por deslizamiento de Datos POS-LAB para que movimiento, opacidad y fondo progresen con el mismo gesto y el cierre termine suavemente en opacity 0 antes de ocultar el overlay, sin salto al soltar.",
+  "allowed_files": [
+    "laboratorio/pos-lab/js/motion/modal-motion.js",
+    "laboratorio/pos-lab/animations/modals.css",
+    "laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-SYNC-003.json",
+    "laboratorio/pos-lab/preflight/LAB-WORKSPACE-SWIPE-SYNC-003.json",
+    "tests/laboratorio-workspace-swipe-dismiss.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-WORKSPACE-SWIPE-SYNC-003.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

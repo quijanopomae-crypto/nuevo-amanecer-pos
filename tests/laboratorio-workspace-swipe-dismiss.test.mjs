@@ -5,36 +5,43 @@ import { readFileSync } from 'node:fs';
 const js = readFileSync('laboratorio/pos-lab/js/motion/modal-motion.js', 'utf8');
 const css = readFileSync('laboratorio/pos-lab/animations/modals.css', 'utf8');
 const contract = JSON.parse(readFileSync(
-  'laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-DISMISS-001.json',
+  'laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-SYNC-003.json',
   'utf8'
 ));
 
-test('workspace swipe tracks a downward finger gesture continuously', () => {
+test('workspace swipe tracks the finger and visual disappearance from one progress', () => {
   assert.match(js, /touchstart/);
   assert.match(js, /touchmove/);
   assert.match(js, /touchend/);
-  assert.match(js, /event\.preventDefault\(\)/);
-  assert.match(js, /--lab-workspace-drag-y/);
   assert.match(js, /setVisualProgress\(overlay, panel, deltaY\)/);
+  assert.match(js, /distance \/ visualTravel\(panel\)/);
+  assert.match(js, /progress \* 0\.94/);
+  assert.match(js, /0\.62 \* \(1 - progress\)/);
   assert.match(css, /translate3d\(0,var\(--lab-workspace-drag-y\),0\)/);
+  assert.match(css, /opacity:var\(--lab-workspace-panel-opacity\)/);
 });
 
-test('workspace swipe fades slowly while preserving scroll and controls', () => {
+test('release continues from the exact dragged frame instead of snapping', () => {
+  assert.match(js, /function beginSettle\(overlay, applyTarget\)/);
+  assert.match(js, /void overlay\.offsetWidth/);
+  assert.match(js, /requestAnimationFrame\(function \(\) \{\s*applyTarget\(\)/);
+  assert.match(js, /beginSettle\(overlay, function \(\) \{/);
+  assert.doesNotMatch(js, /function dismissOverlay[\s\S]*--lab-workspace-panel-opacity', '0\.72'/);
+});
+
+test('dismiss reaches opacity zero before display none', () => {
+  const dismiss = js.slice(js.indexOf('function dismissOverlay'), js.indexOf('function bindWorkspaceSwipe'));
+  const opacityZero = dismiss.indexOf("--lab-workspace-panel-opacity', '0'");
+  const displayNone = dismiss.indexOf("overlay.style.display = 'none'");
+  assert.ok(opacityZero >= 0);
+  assert.ok(displayNone > opacityZero);
+  assert.match(js, /SETTLE_MS = 560/);
+  assert.match(css, /560ms cubic-bezier\(\.22,1,\.36,1\)/);
+});
+
+test('workspace swipe preserves scrolling, controls, cleanup and reduced motion', () => {
   assert.match(js, /overlay\.scrollTop > 0/);
   assert.match(js, /isInteractive\(event\.target\)/);
-  assert.match(js, /progress \* 0\.18/);
-  assert.match(js, /progress \* 0\.88/);
-  assert.match(css, /360ms cubic-bezier\(\.22,1,\.36,1\)/);
-});
-
-test('workspace only dismisses after threshold or a deliberate fast swipe', () => {
-  assert.match(js, /Math\.min\(190, Math\.max\(110, panelHeight \* 0\.22\)\)/);
-  assert.match(js, /distance >= 60 && velocity >= 0\.85/);
-  assert.match(js, /overlay\.style\.display = 'none'/);
-  assert.match(js, /settleBack\(overlay\)/);
-});
-
-test('workspace motion cleans itself and respects reduced motion', () => {
   assert.match(js, /clearVisualState\(overlay\)/);
   assert.match(js, /prefers-reduced-motion: reduce/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);

@@ -4,6 +4,7 @@
 
   const motion = window.NA_LAB_MOTION = window.NA_LAB_MOTION || {};
   const WORKSPACE_OVERLAY_ID = 'naLabWorkspaceOverlay';
+  const SETTLE_MS = 560;
   const INTERACTIVE_SELECTOR = [
     'button',
     'input',
@@ -16,6 +17,7 @@
     '[role="button"]'
   ].join(',');
   const boundOverlays = new WeakSet();
+  const cleanupTimers = new WeakMap();
 
   motion.enterModal = function (element) {
     if (element) element.classList.add('lab-modal-enter');
@@ -37,49 +39,84 @@
     return overlay && overlay.firstElementChild ? overlay.firstElementChild : null;
   }
 
-  function setVisualProgress(overlay, panel, distance) {
+  function visualTravel(panel) {
     const panelHeight = Math.max(1, panel.getBoundingClientRect().height || panel.offsetHeight || 1);
-    const fadeDistance = Math.min(520, Math.max(300, panelHeight * 0.62));
-    const progress = clamp(distance / fadeDistance, 0, 1);
+    return Math.min(640, Math.max(360, panelHeight * 0.58));
+  }
+
+  function setVisualProgress(overlay, panel, distance) {
+    const progress = clamp(distance / visualTravel(panel), 0, 1);
 
     overlay.style.setProperty('--lab-workspace-drag-y', distance.toFixed(1) + 'px');
-    overlay.style.setProperty('--lab-workspace-panel-opacity', (1 - progress * 0.18).toFixed(3));
-    overlay.style.setProperty('--lab-workspace-backdrop-alpha', (0.62 * (1 - progress * 0.88)).toFixed(3));
+    overlay.style.setProperty('--lab-workspace-panel-opacity', (1 - progress * 0.94).toFixed(3));
+    overlay.style.setProperty('--lab-workspace-backdrop-alpha', (0.62 * (1 - progress)).toFixed(3));
+  }
+
+  function clearCleanupTimer(overlay) {
+    const timer = cleanupTimers.get(overlay);
+    if (timer) window.clearTimeout(timer);
+    cleanupTimers.delete(overlay);
   }
 
   function clearVisualState(overlay) {
+    clearCleanupTimer(overlay);
     overlay.classList.remove('lab-workspace-dragging', 'lab-workspace-settling');
     overlay.style.removeProperty('--lab-workspace-drag-y');
     overlay.style.removeProperty('--lab-workspace-panel-opacity');
     overlay.style.removeProperty('--lab-workspace-backdrop-alpha');
   }
 
-  function settleBack(overlay) {
+  function beginSettle(overlay, applyTarget) {
+    clearCleanupTimer(overlay);
     overlay.classList.remove('lab-workspace-dragging');
     overlay.classList.add('lab-workspace-settling');
-    overlay.style.setProperty('--lab-workspace-drag-y', '0px');
-    overlay.style.setProperty('--lab-workspace-panel-opacity', '1');
-    overlay.style.setProperty('--lab-workspace-backdrop-alpha', '0.62');
 
-    window.setTimeout(function () {
+    // Conserva exactamente el frame alcanzado con el dedo. El target se aplica
+    // en el siguiente frame para evitar que el navegador fusione ambos estados.
+    void overlay.offsetWidth;
+    window.requestAnimationFrame(function () {
+      applyTarget();
+    });
+  }
+
+  function scheduleCleanup(overlay, callback) {
+    clearCleanupTimer(overlay);
+    const delay = reducedMotion() ? 20 : SETTLE_MS + 70;
+    const timer = window.setTimeout(function () {
+      cleanupTimers.delete(overlay);
+      callback();
+    }, delay);
+    cleanupTimers.set(overlay, timer);
+  }
+
+  function settleBack(overlay) {
+    beginSettle(overlay, function () {
+      overlay.style.setProperty('--lab-workspace-drag-y', '0px');
+      overlay.style.setProperty('--lab-workspace-panel-opacity', '1');
+      overlay.style.setProperty('--lab-workspace-backdrop-alpha', '0.62');
+    });
+
+    scheduleCleanup(overlay, function () {
       if (overlay.style.display !== 'none') clearVisualState(overlay);
-    }, reducedMotion() ? 20 : 380);
+    });
   }
 
   function dismissOverlay(overlay, panel) {
-    overlay.classList.remove('lab-workspace-dragging');
-    overlay.classList.add('lab-workspace-settling');
+    beginSettle(overlay, function () {
+      const panelHeight = Math.max(0, panel.getBoundingClientRect().height || panel.offsetHeight || 0);
+      const exitDistance = Math.max(window.innerHeight || 0, panelHeight + 80) + 32;
 
-    const panelHeight = Math.max(0, panel.getBoundingClientRect().height || panel.offsetHeight || 0);
-    const exitDistance = Math.max(window.innerHeight || 0, panelHeight + 80) + 32;
-    overlay.style.setProperty('--lab-workspace-drag-y', exitDistance + 'px');
-    overlay.style.setProperty('--lab-workspace-panel-opacity', '0.72');
-    overlay.style.setProperty('--lab-workspace-backdrop-alpha', '0');
+      overlay.style.setProperty('--lab-workspace-drag-y', exitDistance + 'px');
+      overlay.style.setProperty('--lab-workspace-panel-opacity', '0');
+      overlay.style.setProperty('--lab-workspace-backdrop-alpha', '0');
+    });
 
-    window.setTimeout(function () {
+    scheduleCleanup(overlay, function () {
+      // En este punto el panel ya terminó visualmente en opacity 0. display:none
+      // solo retira el overlay invisible; no produce un corte visible.
       overlay.style.display = 'none';
       clearVisualState(overlay);
-    }, reducedMotion() ? 20 : 380);
+    });
   }
 
   function bindWorkspaceSwipe(overlay) {
@@ -111,6 +148,7 @@
       if (overlay.scrollTop > 0) return;
       if (isInteractive(event.target)) return;
 
+      clearCleanupTimer(overlay);
       overlay.classList.remove('lab-workspace-settling');
       const touch = event.touches[0];
       tracking = true;
