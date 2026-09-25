@@ -134,9 +134,9 @@
     return motion.core.restartClass(element, 'lab-enter-fade');
   };
 
-  /* Clientes móvil: chrome marcado por el owner ligado al gesto 1:1.
-     No hay snap temporal: mientras el dedo se mueve, el progreso visual sigue
-     ese desplazamiento; después, el momentum continúa con el scroll real. */
+  /* Clientes móvil: el scroll nativo es la geometría de referencia.
+     El sticky se recorta desde abajo con el mismo delta real del documento.
+     La lista permanece en flujo normal: sin translate compensatorio ni huecos. */
   (function bindClientsScrollLinkedChrome() {
     const core = motion.core;
     if (!core ||
@@ -145,22 +145,17 @@
         !document.body) return;
 
     const page = document.getElementById('pageClientes');
+    const chrome = page && page.querySelector(':scope > .page-chrome');
     const filter = page && page.querySelector('.filter-bar');
     const stats = page && page.querySelector('.stats-strip');
-    if (!page || !filter || !stats) return;
+    if (!page || !chrome || !filter || !stats) return;
 
     let active = false;
-    let touchActive = false;
-    let touchStartY = 0;
-    let touchStartOffset = 0;
     let collapseOffset = 0;
     let targetOffset = 0;
-    let filterHeight = 0;
-    let statsHeight = 0;
     let totalHeight = 1;
     let lastScroll = 0;
     let renderFrame = 0;
-    let pendingState = 'idle';
 
     function currentScroll() {
       return window.scrollY || document.documentElement.scrollTop || 0;
@@ -172,46 +167,34 @@
         document.body.classList.contains('module-mobile-scroll');
     }
 
-    function excludedTarget(target) {
-      return !!(target && target.closest &&
-        target.closest('.modal-overlay,.modal,.cart-drawer,#cartDrawer,.cfg-sidebar'));
-    }
-
     function measure() {
-      filterHeight = Math.max(0, filter.scrollHeight || filter.getBoundingClientRect().height || 0);
-      statsHeight = Math.max(0, stats.scrollHeight || stats.getBoundingClientRect().height || 0);
+      const filterHeight = Math.max(0, filter.scrollHeight || filter.getBoundingClientRect().height || 0);
+      const statsHeight = Math.max(0, stats.scrollHeight || stats.getBoundingClientRect().height || 0);
       totalHeight = Math.max(1, filterHeight + statsHeight);
     }
 
-    function renderOffset(nextOffset, state) {
+    function renderOffset(nextOffset) {
       collapseOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
       targetOffset = collapseOffset;
       const progress = core.setProgress(page, collapseOffset / totalHeight);
       const visible = 1 - progress;
       const reduced = core.reducedMotion();
-      const filterHidden = filterHeight * progress;
-      const statsHidden = statsHeight * progress;
 
-      // Un solo batch visual por frame. No cambiamos height durante el gesto:
-      // clip + transform reproducen la misma geometría sin forzar re-layout.
-      page.style.setProperty('--lab-client-filter-hidden', filterHidden.toFixed(2) + 'px');
-      page.style.setProperty('--lab-client-stats-hidden', statsHidden.toFixed(2) + 'px');
-      page.style.setProperty('--lab-client-total-hidden', collapseOffset.toFixed(2) + 'px');
+      page.style.setProperty('--lab-client-collapse-y', collapseOffset.toFixed(2) + 'px');
       page.style.setProperty('--lab-client-chrome-opacity', reduced ? '1' : visible.toFixed(4));
       page.style.setProperty('--lab-client-chrome-shift', reduced ? '0px' : (-6 * progress).toFixed(2) + 'px');
       page.style.setProperty('--lab-client-chrome-pointer', progress >= 0.98 ? 'none' : 'auto');
-      core.setState(page, state || (touchActive ? 'dragging' : 'idle'));
+      core.setState(page, 'idle');
       return progress;
     }
 
-    function queueOffset(nextOffset, state) {
+    function queueOffset(nextOffset) {
       targetOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
-      pendingState = state || (touchActive ? 'dragging' : 'idle');
       if (renderFrame) return;
 
       renderFrame = window.requestAnimationFrame(function () {
         renderFrame = 0;
-        renderOffset(targetOffset, pendingState);
+        renderOffset(targetOffset);
       });
     }
 
@@ -220,13 +203,9 @@
         window.cancelAnimationFrame(renderFrame);
         renderFrame = 0;
       }
-      touchActive = false;
       collapseOffset = 0;
       targetOffset = 0;
-      pendingState = 'idle';
-      page.style.removeProperty('--lab-client-filter-hidden');
-      page.style.removeProperty('--lab-client-stats-hidden');
-      page.style.removeProperty('--lab-client-total-hidden');
+      page.style.removeProperty('--lab-client-collapse-y');
       page.style.removeProperty('--lab-client-chrome-opacity');
       page.style.removeProperty('--lab-client-chrome-shift');
       page.style.removeProperty('--lab-client-chrome-pointer');
@@ -241,7 +220,7 @@
       collapseOffset = 0;
       targetOffset = 0;
       lastScroll = currentScroll();
-      renderOffset(0, 'idle');
+      renderOffset(0);
     }
 
     function deactivate() {
@@ -257,43 +236,16 @@
       else deactivate();
     }
 
-    document.addEventListener('touchstart', function (event) {
-      if (!active || event.touches.length !== 1 || excludedTarget(event.target)) return;
-      touchActive = true;
-      touchStartY = event.touches[0].clientY;
-      touchStartOffset = targetOffset;
-      lastScroll = currentScroll();
-      core.setState(page, 'dragging');
-    }, { passive: true });
-
-    document.addEventListener('touchmove', function (event) {
-      if (!active || !touchActive || event.touches.length !== 1) return;
-      const fingerDelta = touchStartY - event.touches[0].clientY;
-      queueOffset(touchStartOffset + fingerDelta, 'dragging');
-      lastScroll = currentScroll();
-    }, { passive: true });
-
-    function finishTouch() {
-      if (!touchActive) return;
-      touchActive = false;
-      pendingState = 'idle';
-      lastScroll = currentScroll();
-      core.setState(page, 'idle');
-    }
-
-    document.addEventListener('touchend', finishTouch, { passive: true });
-    document.addEventListener('touchcancel', finishTouch, { passive: true });
-
     window.addEventListener('scroll', function () {
       if (!active) return;
       const now = currentScroll();
       const delta = now - lastScroll;
       lastScroll = now;
+      if (Math.abs(delta) < 0.5) return;
 
-      // Durante touchmove manda el dedo; no contamos además el mismo scroll.
-      if (touchActive || Math.abs(delta) < 0.5) return;
-
-      queueOffset(targetOffset + delta, 'idle');
+      // Una única fuente geométrica: el delta real del scroll nativo.
+      // Bajar oculta; subir revierte exactamente la misma distancia.
+      queueOffset(targetOffset + delta);
     }, { passive: true });
 
     window.addEventListener('resize', function () {
@@ -302,7 +254,7 @@
       if (!wasActive || !active) return;
       const progress = totalHeight > 0 ? targetOffset / totalHeight : 0;
       measure();
-      renderOffset(progress * totalHeight, 'idle');
+      renderOffset(progress * totalHeight);
       lastScroll = currentScroll();
     }, { passive: true });
 
@@ -329,7 +281,7 @@
       },
       reset: function () {
         if (!active) return false;
-        renderOffset(0, 'idle');
+        renderOffset(0);
         lastScroll = currentScroll();
         return true;
       }
