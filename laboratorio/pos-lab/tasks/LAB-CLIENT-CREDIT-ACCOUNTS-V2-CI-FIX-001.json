@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-CI-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "99816ee8bf181141ea4681128bcec86607580239",
+  "objective": "Corregir exclusivamente en LAB la regresión de micro-motion detectada por la suite completa de Pages tras LAB-CLIENT-CREDIT-ACCOUNTS-V2-001 y ajustar una aserción de overflow demasiado estricta, sin alterar la arquitectura financiera ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-CREDIT-ACCOUNTS-V2-CI-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-ACCOUNTS-V2-CI-FIX-001.json",
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+    "tests/laboratorio-client-credit-accounts-v2-ci-fix.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-ACCOUNTS-V2-CI-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
