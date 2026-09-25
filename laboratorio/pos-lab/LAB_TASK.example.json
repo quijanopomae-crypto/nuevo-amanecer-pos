@@ -1,13 +1,15 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "task_id": "LAB-EXAMPLE-UI-001",
   "environment": "LABORATORIO",
-  "base_ref": "feature/v1.3-mobile-cloud",
+  "base_ref": "<BASE_SHA_ANTES_DEL_PREFLIGHT>",
   "objective": "Ejemplo: modificar solo la interfaz de Inventario en LAB",
   "allowed_files": [
     "laboratorio/pos-lab/sections/inventario.html",
     "laboratorio/pos-lab/styles/pages/inventario.css",
-    "laboratorio/pos-lab/index.html"
+    "laboratorio/pos-lab/tasks/LAB-EXAMPLE-UI-001.json",
+    "laboratorio/pos-lab/preflight/LAB-EXAMPLE-UI-001.json",
+    "tests/laboratorio-inventario-ui.test.mjs"
   ],
   "forbidden_files": [
     "POS/**",
@@ -16,9 +18,12 @@
     "infra/**"
   ],
   "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
     "lab-scope-guard",
     "lab-ui-edit"
   ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-EXAMPLE-UI-001.json",
   "production_data_authority": false,
   "isolated_d1_data_allowed": false,
   "production_credentials": false,

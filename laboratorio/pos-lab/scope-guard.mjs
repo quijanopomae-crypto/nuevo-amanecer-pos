@@ -54,6 +54,19 @@ export function validateContract(contract) {
       errors.push('isolated_d1_data_allowed boolean requerido en schema_version>=2');
     }
   }
+  if (Number(contract.schema_version) >= 3) {
+    const required = new Set(Array.isArray(contract.required_skills) ? contract.required_skills : []);
+    for (const skill of ['impact-analysis', 'cross-module-impact', 'lab-scope-guard']) {
+      if (!required.has(skill)) errors.push('skill base requerida en schema_version>=3: ' + skill);
+    }
+    if (!['lab-feature-edit', 'lab-ui-edit', 'lab-animation-edit'].some(skill => required.has(skill))) {
+      errors.push('skill LAB específica requerida en schema_version>=3');
+    }
+    if (typeof contract.skill_preflight_receipt !== 'string' ||
+        !/^laboratorio\/pos-lab\/preflight\/[^/]+\.json$/.test(contract.skill_preflight_receipt)) {
+      errors.push('skill_preflight_receipt requerido en schema_version>=3');
+    }
+  }
   return errors;
 }
 
