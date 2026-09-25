@@ -1,0 +1,8 @@
+{
+  "format": "nuevo-amanecer-lab-workspace-repair-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "repair-active-lab-workspace-if-empty",
+  "safety": "use-existing-lab-reset-api-only-if-products-or-customers-are-zero",
+  "note": "The validated CANON baseline contains 408 products and 31 customers. Repair only the mutable LAB workspace; never write to CANON."
+}
