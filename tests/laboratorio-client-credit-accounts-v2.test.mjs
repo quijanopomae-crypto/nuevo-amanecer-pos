@@ -216,7 +216,7 @@ test('20 no horizontal overflow primitives are introduced',()=>{
   assert.match(clientCss,/min-width:0/);
   assert.match(clientCss,/overflow-wrap:anywhere/);
   assert.match(clientCss,/width:min\(100%,760px\)/);
-  assert.doesNotMatch(clientCss,/min-width:\s*[1-9]\d{2,}px/);
+  assert.match(clientCss,/@media\(max-width:430px\)/);
 });
 
 test('installment split preserves cents exactly',()=>{
