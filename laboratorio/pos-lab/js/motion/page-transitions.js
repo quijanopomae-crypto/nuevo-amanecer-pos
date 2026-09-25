@@ -160,6 +160,9 @@
     let totalHeight = 1;
     let lastScroll = 0;
     let renderFrame = 0;
+    let suppressScrollFrame = 0;
+    let suppressSyntheticScroll = false;
+    let committedCollapsed = false;
     let pendingState = 'idle';
 
     function currentScroll() {
@@ -201,7 +204,39 @@
       page.style.setProperty('--lab-client-chrome-shift', reduced ? '0px' : (-6 * progress).toFixed(2) + 'px');
       page.style.setProperty('--lab-client-chrome-pointer', progress >= 0.98 ? 'none' : 'auto');
       core.setState(page, state || (touchActive ? 'dragging' : 'idle'));
+
+      if (!touchActive && collapseOffset >= totalHeight - 0.5) {
+        commitCollapsedLayout();
+      }
       return progress;
+    }
+
+    function syncAfterLayoutCommit() {
+      suppressSyntheticScroll = true;
+      if (suppressScrollFrame) window.cancelAnimationFrame(suppressScrollFrame);
+      suppressScrollFrame = window.requestAnimationFrame(function () {
+        suppressScrollFrame = 0;
+        lastScroll = currentScroll();
+        suppressSyntheticScroll = false;
+      });
+    }
+
+    function commitCollapsedLayout() {
+      if (committedCollapsed || touchActive || targetOffset < totalHeight - 0.5) return false;
+      committedCollapsed = true;
+      page.classList.add('lab-client-chrome-committed');
+      core.setState(page, 'idle');
+      syncAfterLayoutCommit();
+      return true;
+    }
+
+    function uncommitCollapsedLayout() {
+      if (!committedCollapsed) return false;
+      committedCollapsed = false;
+      page.classList.remove('lab-client-chrome-committed');
+      renderOffset(totalHeight, 'idle');
+      lastScroll = currentScroll();
+      return true;
     }
 
     function queueOffset(nextOffset, state) {
@@ -220,10 +255,17 @@
         window.cancelAnimationFrame(renderFrame);
         renderFrame = 0;
       }
+      if (suppressScrollFrame) {
+        window.cancelAnimationFrame(suppressScrollFrame);
+        suppressScrollFrame = 0;
+      }
       touchActive = false;
+      suppressSyntheticScroll = false;
+      committedCollapsed = false;
       collapseOffset = 0;
       targetOffset = 0;
       pendingState = 'idle';
+      page.classList.remove('lab-client-chrome-committed');
       page.style.removeProperty('--lab-client-filter-hidden');
       page.style.removeProperty('--lab-client-stats-hidden');
       page.style.removeProperty('--lab-client-total-hidden');
@@ -259,6 +301,7 @@
 
     document.addEventListener('touchstart', function (event) {
       if (!active || event.touches.length !== 1 || excludedTarget(event.target)) return;
+      if (committedCollapsed) uncommitCollapsedLayout();
       touchActive = true;
       touchStartY = event.touches[0].clientY;
       touchStartOffset = targetOffset;
@@ -279,6 +322,10 @@
       pendingState = 'idle';
       lastScroll = currentScroll();
       core.setState(page, 'idle');
+
+      // Si el último frame ya llegó al 100% mientras el dedo seguía activo,
+      // agenda un frame final para consolidar el layout sin hueco fantasma.
+      if (targetOffset >= totalHeight - 0.5) queueOffset(targetOffset, 'idle');
     }
 
     document.addEventListener('touchend', finishTouch, { passive: true });
@@ -290,6 +337,16 @@
       const delta = now - lastScroll;
       lastScroll = now;
 
+      if (suppressSyntheticScroll) return;
+
+      // Una vez consolidado, seguir bajando solo desplaza la lista real.
+      // Al invertir hacia arriba, restauramos el estado visual equivalente
+      // antes de continuar el progreso 1:1.
+      if (committedCollapsed) {
+        if (delta >= -0.5) return;
+        uncommitCollapsedLayout();
+      }
+
       // Durante touchmove manda el dedo; no contamos además el mismo scroll.
       if (touchActive || Math.abs(delta) < 0.5) return;
 
@@ -300,6 +357,17 @@
       const wasActive = active;
       syncActivation();
       if (!wasActive || !active) return;
+
+      if (committedCollapsed) {
+        committedCollapsed = false;
+        page.classList.remove('lab-client-chrome-committed');
+        measure();
+        renderOffset(totalHeight, 'idle');
+        commitCollapsedLayout();
+        lastScroll = currentScroll();
+        return;
+      }
+
       const progress = totalHeight > 0 ? targetOffset / totalHeight : 0;
       measure();
       renderOffset(progress * totalHeight, 'idle');
@@ -322,6 +390,7 @@
         const base = core.inspect(page);
         return Object.assign(base, {
           active,
+          committedCollapsed,
           collapseOffset,
           targetOffset,
           totalHeight
@@ -329,6 +398,7 @@
       },
       reset: function () {
         if (!active) return false;
+        if (committedCollapsed) uncommitCollapsedLayout();
         renderOffset(0, 'idle');
         lastScroll = currentScroll();
         return true;
