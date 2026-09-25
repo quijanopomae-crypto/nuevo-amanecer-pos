@@ -1,0 +1,109 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-WORKSPACE-CONFLICT-LOOP-FIX-001",
+  "base_ref": "103ec8c321852b82c2c5407a466ddf63f441761d",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "source_hashes": {
+    "AGENTS.md": "7fc62ac9e9064b53aba95b467384200b56a6d217",
+    "laboratorio/pos-lab/AGENTS.md": "840088c8c342f69a4b973bdf2b2ca7e7d91eb339",
+    "laboratorio/pos-lab/UI_MAP.yaml": "b88fb28d8047a5dfccb61b99572d9e10686626fe",
+    "laboratorio/pos-lab/MOTION_MAP.yaml": "56830059c7601b83237cd940106d711bcb059073",
+    "laboratorio/pos-lab/js/lab-workspace.js": "d20d1473ec311a4a36bb408c3fa77d92d1d029c1",
+    "tests/laboratorio-workspace-recovery.test.mjs": "6b1e4093d6df3fdde6a3afae98039dafcfd2301e",
+    "tests/laboratorio-workspace-boot.test.mjs": "37ab9c5ea4aa7353d3d4a497410cd08ce91fae55"
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      "required LAB skills",
+      "UI_MAP.yaml",
+      "MOTION_MAP.yaml",
+      "laboratorio/pos-lab/js/lab-workspace.js",
+      "tests/laboratorio-workspace-recovery.test.mjs",
+      "tests/laboratorio-workspace-boot.test.mjs",
+      "POS saveAppState/saveAllData call sites READ-ONLY"
+    ],
+    "WRITES": [
+      "LAB-only workspace conflict suppression and material-change detection",
+      "Focused workspace recovery/boot regressions",
+      "Task Contract and BEFORE_WRITE receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#naLabWorkspaceOverlay conflict visibility only; no product/client/business DOM changes"
+    ],
+    "STATE_AFFECTED": [
+      "LAB workspace dirty flag",
+      "pending operation handling",
+      "conflict notification acknowledgement",
+      "remote comparable snapshot baseline"
+    ],
+    "STORAGE_AFFECTED": [
+      "Existing na_lab_workspace_pending_v1 remains durable until explicit resolution or ACK",
+      "New session-only conflict notice marker; no production storage or D1 schema changes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Real data/config changes continue to sync to D1 LAB",
+      "Navigation-only ui.currentPage changes never become remote business writes",
+      "Pending operations are never silently discarded",
+      "ACK-loss idempotent retry semantics remain intact",
+      "CANON/production remain untouched"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Navigation no longer creates false LAB remote writes",
+      "Real config changes using saveAppState must still schedule D1 LAB sync",
+      "Products, inventory, sales, clients, credits, payments, cash and expenses retain existing persistence"
+    ],
+    "RISKS": [
+      "Over-filtering could suppress a real configuration sync",
+      "Conflict acknowledgement could hide unresolved conflict if badge/status are not retained",
+      "Changing dirty baseline could break early-edit recovery or ACK-loss retry"
+    ],
+    "ROLLBACK": [
+      "Revert the single LAB PR; no D1 migration or data rollback required"
+    ],
+    "TESTS": [
+      "Real skill preflight before first functional write",
+      "Navigation-only saveAppState does not create dirty/pending remote state",
+      "Real appConfig/data saveAppState still schedules remote sync",
+      "Same conflicting operation opens overlay only once per session while badge remains CONFLICTO",
+      "ACK lost retry keeps same operation_id",
+      "Use D1 LAB still clears pending and loads current revision",
+      "All laboratorio-* tests, build check, scope guard and Pages deploy"
+    ]
+  }
+}

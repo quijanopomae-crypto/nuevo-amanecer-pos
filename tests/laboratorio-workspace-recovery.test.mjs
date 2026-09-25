@@ -249,3 +249,140 @@ test('conflicto de revisión puede descartarse y cargar D1 sin borrar todo el na
   assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().conflict, false);
   assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().dirty, false);
 });
+
+
+test('navegación sola no crea dirty ni pending remoto', async () => {
+  const remote = snapshot('REMOTE');
+  let saves = 0;
+  const h = makeHarness({
+    local: structuredClone(remote),
+    remote,
+    async onFetch(url, options) {
+      if (url.endsWith('/lab/workspace') && (!options.method || options.method === 'GET')) {
+        return Response.json({ revision: 20, baseline_id: 'B1', source_ref: 'r2://canon', snapshot: remote });
+      }
+      if (url.endsWith('/lab/workspace/save')) {
+        saves += 1;
+        return Response.json({ status: 'saved', revision: 21, snapshot_hash: 'x' });
+      }
+      throw new Error('unexpected fetch ' + url);
+    }
+  });
+
+  await h.context.window.NuevoAmanecerLabWorkspace.load();
+  h.current.ui.currentPage = 'pageClientes';
+  await h.context.saveAppState();
+
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().dirty, false);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().pendingOperationId, null);
+  assert.equal(h.persistent.dump(PENDING_KEY), undefined);
+  assert.equal(saves, 0);
+});
+
+test('cambio material guardado por saveAppState sí conserva sync D1 LAB', async () => {
+  const remote = snapshot('REMOTE');
+  const posts = [];
+  const h = makeHarness({
+    local: structuredClone(remote),
+    remote,
+    async onFetch(url, options) {
+      if (url.endsWith('/lab/workspace') && (!options.method || options.method === 'GET')) {
+        return Response.json({ revision: 30, baseline_id: 'B1', source_ref: 'r2://canon', snapshot: remote });
+      }
+      if (url.endsWith('/lab/workspace/save')) {
+        posts.push(JSON.parse(options.body));
+        return Response.json({ status: 'saved', revision: 31, snapshot_hash: 'x' });
+      }
+      throw new Error('unexpected fetch ' + url);
+    }
+  });
+
+  await h.context.window.NuevoAmanecerLabWorkspace.load();
+  h.current.appConfig.creditPolicy = { enabled: false };
+  await h.context.saveAppState();
+
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().dirty, true);
+  await h.context.window.NuevoAmanecerLabWorkspace.saveNow();
+
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].snapshot.appConfig.creditPolicy, { enabled: false });
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().dirty, false);
+  assert.equal(h.persistent.dump(PENDING_KEY), undefined);
+});
+
+test('409 de pendiente obsoleto solo UI se autolimpia contra lectura fresca de D1', async () => {
+  const remote = snapshot('SAME-MATERIAL');
+  const stale = structuredClone(remote);
+  stale.updatedAt = '2026-09-25T11:59:00.000Z';
+  stale.ui.currentPage = 'pageClientes';
+  const pending = { expected_revision: 40, operation_id: 'op-ui-stale', snapshot: stale };
+  let reads = 0;
+  let posts = 0;
+
+  const h = makeHarness({
+    local: stale,
+    remote,
+    pending,
+    async onFetch(url, options) {
+      if (url.endsWith('/lab/workspace') && (!options.method || options.method === 'GET')) {
+        reads += 1;
+        return Response.json({ revision: 41, baseline_id: 'B1', source_ref: 'r2://canon', snapshot: remote });
+      }
+      if (url.endsWith('/lab/workspace/save')) {
+        posts += 1;
+        return Response.json({ error: 'revision_conflict', current_revision: 41 }, { status: 409 });
+      }
+      throw new Error('unexpected fetch ' + url);
+    }
+  });
+
+  const loaded = await h.context.window.NuevoAmanecerLabWorkspace.load();
+
+  assert.equal(loaded, true);
+  assert.equal(posts, 1);
+  assert.equal(reads, 2, '409 must verify against one fresh D1 read');
+  assert.equal(h.persistent.dump(PENDING_KEY), undefined);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().pendingOperationId, null);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().conflict, false);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().dirty, false);
+});
+
+test('409 con cambios materiales conserva pending y registra aviso una sola vez por operation_id', async () => {
+  const edited = snapshot('LOCAL-REAL-EDIT');
+  const remote = snapshot('REMOTE-CURRENT');
+  const pending = { expected_revision: 50, operation_id: 'op-real-conflict', snapshot: edited };
+  let reads = 0;
+  let posts = 0;
+
+  const h = makeHarness({
+    local: edited,
+    remote,
+    pending,
+    async onFetch(url, options) {
+      if (url.endsWith('/lab/workspace') && (!options.method || options.method === 'GET')) {
+        reads += 1;
+        return Response.json({ revision: 51, baseline_id: 'B1', source_ref: 'r2://canon', snapshot: remote });
+      }
+      if (url.endsWith('/lab/workspace/save')) {
+        posts += 1;
+        return Response.json({ error: 'revision_conflict', current_revision: 51 }, { status: 409 });
+      }
+      throw new Error('unexpected fetch ' + url);
+    }
+  });
+
+  await h.context.window.NuevoAmanecerLabWorkspace.load();
+  const state = h.context.window.NuevoAmanecerLabWorkspace.state();
+
+  assert.equal(posts, 1);
+  assert.equal(reads, 2);
+  assert.ok(h.persistent.dump(PENDING_KEY), 'real pending must remain durable');
+  assert.equal(state.conflict, true);
+  assert.equal(state.pendingOperationId, 'op-real-conflict');
+  assert.equal(state.conflictNoticeOperationId, 'op-real-conflict');
+
+  // Reconsultar dentro de la misma sesión no debe reintentar ni fabricar otro aviso.
+  await h.context.window.NuevoAmanecerLabWorkspace.load();
+  assert.equal(posts, 1);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().conflictNoticeOperationId, 'op-real-conflict');
+});

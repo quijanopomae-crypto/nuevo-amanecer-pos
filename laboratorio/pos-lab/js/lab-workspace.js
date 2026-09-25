@@ -7,6 +7,7 @@
   var LEGACY_LOCAL_KEY = 'na_lab_workspace_credentials_v1';
   var LEGACY_SESSION_KEY = 'na_lab_workspace_credentials_session_v1';
   var PENDING_KEY = 'na_lab_workspace_pending_v1';
+  var CONFLICT_NOTICE_KEY = 'na_lab_workspace_conflict_notice_v1';
   var state = {
     revision: null,
     baselineId: null,
@@ -18,7 +19,9 @@
     timer: null,
     credentials: null,
     pendingOperation: null,
-    conflict: false
+    conflict: false,
+    localComparable: null,
+    remoteComparable: null
   };
 
   var originalSaveAllData = typeof saveAllData === 'function' ? saveAllData : null;
@@ -84,9 +87,28 @@
     }
   }
 
+  function clearConflictNotice() {
+    try { sessionStorage.removeItem(CONFLICT_NOTICE_KEY); } catch {}
+  }
+
+  function conflictNoticeOperationId() {
+    try { return String(sessionStorage.getItem(CONFLICT_NOTICE_KEY) || ''); }
+    catch { return ''; }
+  }
+
+  function shouldOpenConflictNotice(operationId) {
+    operationId = String(operationId || '');
+    return !!operationId && conflictNoticeOperationId() !== operationId;
+  }
+
+  function markConflictNotice(operationId) {
+    try { sessionStorage.setItem(CONFLICT_NOTICE_KEY, String(operationId || '')); } catch {}
+  }
+
   function clearPendingOperation() {
     try { localStorage.removeItem(PENDING_KEY); } catch {}
     state.pendingOperation = null;
+    clearConflictNotice();
   }
 
   async function discardPendingAndLoadRemote() {
@@ -122,6 +144,39 @@
       if (copy.ui && typeof copy.ui === 'object') delete copy.ui.currentPage;
     } catch {}
     return JSON.stringify(copy);
+  }
+
+  function currentComparableSnapshot() {
+    try { return comparableSnapshot(snapshotForRemote()); }
+    catch { return null; }
+  }
+
+  function rememberLocalComparable() {
+    var current = currentComparableSnapshot();
+    if (current) state.localComparable = current;
+    return current;
+  }
+
+  function hasMaterialLocalChanges() {
+    var current = currentComparableSnapshot();
+    if (!current) return true;
+    var baseline = state.remoteComparable || state.localComparable;
+    if (!baseline) return true;
+    return current !== baseline;
+  }
+
+  async function pendingMatchesCurrentRemote(pending) {
+    if (!pending || !pending.snapshot) return false;
+    try {
+      var response = await api('/lab/workspace', { mode: 'read' });
+      if (!response.ok) return false;
+      var payload = await response.json();
+      if (!payload || !payload.snapshot) return false;
+      refreshMetadata(payload);
+      return comparableSnapshot(pending.snapshot) === comparableSnapshot(payload.snapshot);
+    } catch {
+      return false;
+    }
   }
 
   function localChangedAfterPending(pending) {
@@ -225,6 +280,9 @@
     state.revision = Number(payload.revision);
     state.baselineId = payload.baseline_id || null;
     state.sourceRef = payload.source_ref || null;
+    if (payload && payload.snapshot) {
+      try { state.remoteComparable = comparableSnapshot(payload.snapshot); } catch {}
+    }
     state.remoteReady = true;
     updateBadge('D1 R' + state.revision);
     var meta = document.getElementById('naLabWorkspaceMeta');
@@ -264,6 +322,7 @@
       if (typeof cfgUpdateStats === 'function') cfgUpdateStats();
       if (typeof updateDashboard === 'function') updateDashboard();
       refreshMetadata(payload);
+      state.localComparable = state.remoteComparable || currentComparableSnapshot();
     } finally {
       state.suppressRemoteSave = false;
     }
@@ -326,9 +385,18 @@
 
   function scheduleRemoteSave() {
     if (state.suppressRemoteSave || !hasWriterAccess(state.credentials)) return;
+
+    // saveAppState también se usa para navegación. currentPage/updatedAt no son
+    // cambios de negocio y no deben fabricar una nueva revisión D1 LAB.
+    if (!state.pendingOperation && !hasMaterialLocalChanges()) {
+      state.dirty = false;
+      if (state.remoteReady && state.revision && !state.conflict) updateBadge('D1 R' + state.revision);
+      return;
+    }
+
     state.dirty = true;
     if (!state.remoteReady) {
-      updateBadge('PENDIENTE');
+      updateBadge(state.conflict ? 'CONFLICTO' : 'PENDIENTE');
       return;
     }
     clearTimeout(state.timer);
@@ -361,15 +429,33 @@
       try { payload = await response.json(); } catch {}
 
       if (response.status === 409 && payload.error === 'revision_conflict') {
+        // Antes de bloquear al usuario, compara contra una lectura FRESCA de D1.
+        // Si el pendiente solo cambió currentPage/updatedAt/cloudSync, no existe
+        // una edición de negocio que proteger y puede descartarse con seguridad.
+        if (await pendingMatchesCurrentRemote(body)) {
+          clearPendingOperation();
+          state.dirty = false;
+          state.conflict = false;
+          state.remoteReady = true;
+          state.localComparable = state.remoteComparable || currentComparableSnapshot();
+          updateBadge('D1 R' + state.revision);
+          renderStatus('Pendiente local obsoleto sin cambios materiales descartado automáticamente. D1 LAB está actualizado.', 'ok');
+          return;
+        }
+
         state.remoteReady = false;
         state.conflict = true;
         updateBadge('CONFLICTO');
-        renderStatus('Conflicto de revisión. El pendiente local pertenece a una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
+        renderStatus('Conflicto de revisión. El pendiente local contiene cambios reales de una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
         var overlay = document.getElementById('naLabWorkspaceOverlay');
-        if (overlay) {
-          fillPanel();
-          overlay.scrollTop = 0;
-          overlay.style.display = 'block';
+        var operationId = body && body.operation_id;
+        if (shouldOpenConflictNotice(operationId)) {
+          markConflictNotice(operationId);
+          if (overlay) {
+            fillPanel();
+            overlay.scrollTop = 0;
+            overlay.style.display = 'block';
+          }
         }
         return;
       }
@@ -386,6 +472,10 @@
       clearPendingOperation();
       state.conflict = false;
       state.revision = Number(payload.revision || state.revision);
+      try {
+        state.remoteComparable = comparableSnapshot(completed.snapshot);
+        state.localComparable = state.remoteComparable;
+      } catch {}
 
       // Si el snapshot local avanzó después de capturar la operación que acaba
       // de recibir ACK, hay una segunda intención que todavía debe guardarse.
@@ -641,6 +731,10 @@
         state.suppressRemoteSave = previousSuppressRemoteSave;
       }
 
+      // Baseline material local: permite distinguir una navegación de una
+      // edición real incluso antes de que responda D1 LAB.
+      rememberLocalComparable();
+
       // No bloquear el primer render esperando la red. Primero mostramos el
       // estado local y la pantalla guardada; luego D1 LAB se actualiza detrás.
       setTimeout(function () {
@@ -688,7 +782,9 @@
         writerConfigured: hasWriterAccess(state.credentials),
         dirty: state.dirty,
         conflict: state.conflict,
-        pendingOperationId: state.pendingOperation ? state.pendingOperation.operation_id : null
+        pendingOperationId: state.pendingOperation ? state.pendingOperation.operation_id : null,
+        conflictNoticeOperationId: conflictNoticeOperationId(),
+        materialBaselineReady: !!(state.remoteComparable || state.localComparable)
       };
     }
   };
