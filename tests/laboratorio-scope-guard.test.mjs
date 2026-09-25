@@ -79,3 +79,25 @@ test('scope guard incluye archivos untracked y validator no declara PASS sin sco
   assert.match(validateSource, /LAB_VALIDATE_PARTIAL/);
   assert.doesNotMatch(validateSource, /LAB_SCOPE_SKIPPED: usa --task/);
 });
+
+
+test('schema v3 exige skills base, skill específica y recibo previo', () => {
+  const v3 = contract({
+    schema_version: 3,
+    required_skills: ['impact-analysis', 'cross-module-impact', 'lab-scope-guard', 'lab-feature-edit'],
+    skill_preflight_receipt: 'laboratorio/pos-lab/preflight/T.json'
+  });
+  assert.deepEqual(validateContract(v3), []);
+
+  const missingImpact = { ...v3, required_skills: v3.required_skills.filter(x => x !== 'impact-analysis') };
+  assert.equal(validateContract(missingImpact).some(x => x.includes('impact-analysis')), true);
+
+  const missingSpecific = {
+    ...v3,
+    required_skills: ['impact-analysis', 'cross-module-impact', 'lab-scope-guard']
+  };
+  assert.equal(validateContract(missingSpecific).some(x => x.includes('skill LAB específica')), true);
+
+  const missingReceipt = { ...v3, skill_preflight_receipt: undefined };
+  assert.equal(validateContract(missingReceipt).some(x => x.includes('skill_preflight_receipt')), true);
+});
