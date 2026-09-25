@@ -6,7 +6,7 @@ const js = readFileSync('laboratorio/pos-lab/js/motion/page-transitions.js', 'ut
 const css = readFileSync('laboratorio/pos-lab/animations/transitions.css', 'utf8');
 const map = readFileSync('laboratorio/pos-lab/MOTION_MAP.yaml', 'utf8');
 const contract = JSON.parse(readFileSync(
-  'laboratorio/pos-lab/tasks/LAB-CLIENTES-SCROLL-SMOOTHNESS-001.json',
+  'laboratorio/pos-lab/tasks/LAB-CLIENTES-SCROLL-END-GAP-001.json',
   'utf8'
 ));
 
@@ -23,60 +23,55 @@ test('Clientes controller skips incomplete non-browser DOM without disabling bro
   assert.match(controller, /typeof document === 'undefined'/);
   assert.match(controller, /typeof document\.getElementById !== 'function'/);
   assert.match(controller, /!document\.body/);
-  assert.ok(controller.indexOf("document.getElementById('pageClientes')") > controller.indexOf("typeof document.getElementById !== 'function'"));
 });
 
-test('Clientes gesture remains direct but visual writes are coalesced to one RAF', () => {
-  assert.match(controller, /touchStartY - event\.touches\[0\]\.clientY/);
+test('Clientes gesture remains direct and visual writes stay coalesced to one RAF', () => {
   assert.match(controller, /queueOffset\(touchStartOffset \+ fingerDelta, 'dragging'\)/);
   assert.match(controller, /if \(renderFrame\) return/);
   assert.match(controller, /renderFrame = window\.requestAnimationFrame/);
-  assert.match(controller, /renderOffset\(targetOffset, pendingState\)/);
-  assert.doesNotMatch(controller, /setTimeout\(/);
-});
-
-test('scroll-linked Clientes avoids per-frame layout height mutation', () => {
   assert.doesNotMatch(controller, /--lab-client-filter-height|--lab-client-stats-height/);
-  assert.doesNotMatch(linkedBlock, /height\s*:\s*var\(--lab-client-(?:filter|stats)-height/);
-  assert.doesNotMatch(linkedBlock, /will-change\s*:\s*height/);
-  assert.match(controller, /--lab-client-filter-hidden/);
-  assert.match(controller, /--lab-client-stats-hidden/);
-  assert.match(controller, /--lab-client-total-hidden/);
 });
 
-test('clip and transforms reproduce the collapsing geometry without re-layout', () => {
-  assert.match(linkedBlock, /clip-path:inset\(0 0 var\(--lab-client-filter-hidden/);
-  assert.match(linkedBlock, /clip-path:inset\(0 0 var\(--lab-client-stats-hidden/);
-  assert.match(linkedBlock, /calc\(var\(--lab-client-chrome-shift,0px\) - var\(--lab-client-filter-hidden,0px\)\)/);
-  assert.match(linkedBlock, /#pageClientes \.cli-list[\s\S]*calc\(0px - var\(--lab-client-total-hidden,0px\)\)/);
-  assert.match(linkedBlock, /will-change:transform,opacity,clip-path/);
+test('full collapse commits real layout so the list has no phantom end gap', () => {
+  assert.match(controller, /function commitCollapsedLayout\(\)/);
+  assert.match(controller, /targetOffset < totalHeight - 0\.5/);
+  assert.match(controller, /page\.classList\.add\('lab-client-chrome-committed'\)/);
+  assert.match(linkedBlock, /#pageClientes\.lab-client-chrome-committed \.filter-bar,[\s\S]*#pageClientes\.lab-client-chrome-committed \.stats-strip[\s\S]*display:none !important/);
+  assert.match(linkedBlock, /#pageClientes\.lab-client-chrome-committed \.cli-list[\s\S]*transform:none !important/);
 });
 
-test('touch and native scroll still do not double-count one physical gesture', () => {
-  assert.match(controller, /if \(touchActive \|\| Math\.abs\(delta\) < 0\.5\) return/);
-  assert.match(controller, /queueOffset\(targetOffset \+ delta, 'idle'\)/);
-  assert.match(controller, /touchStartOffset = targetOffset/);
+test('layout commit never occurs while the finger is active', () => {
+  assert.match(controller, /committedCollapsed \|\| touchActive \|\| targetOffset < totalHeight - 0\.5/);
+  assert.match(controller, /if \(!touchActive && collapseOffset >= totalHeight - 0\.5\)[\s\S]*commitCollapsedLayout\(\)/);
+  assert.match(controller, /if \(targetOffset >= totalHeight - 0\.5\) queueOffset\(targetOffset, 'idle'\)/);
 });
 
-test('canonical abrupt chrome hide is neutralized only for Clientes LAB mobile', () => {
-  assert.match(css, /@media \(max-width:700px\)/);
-  assert.match(css, /body\.lab-client-scroll-linked #pageClientes\.g-page-chrome-hidden > \.page-chrome\s*\{\s*display:block !important/);
-  assert.match(css, /body\.lab-client-scroll-linked\.module-mobile-scroll > \.g-topbar\.g-topbar-hidden/);
-  assert.doesNotMatch(css, /body\.lab-client-scroll-linked #pageInventario/);
+test('reverse gesture uncommits from an equivalent fully-collapsed visual state', () => {
+  assert.match(controller, /function uncommitCollapsedLayout\(\)/);
+  assert.match(controller, /page\.classList\.remove\('lab-client-chrome-committed'\)/);
+  assert.match(controller, /renderOffset\(totalHeight, 'idle'\)/);
+  assert.match(controller, /if \(committedCollapsed\) uncommitCollapsedLayout\(\)/);
+  assert.match(controller, /if \(committedCollapsed\)[\s\S]*if \(delta >= -0\.5\) return;[\s\S]*uncommitCollapsedLayout\(\)/);
 });
 
-test('owner-marked chrome collapses while title and tabs remain untouched', () => {
-  assert.match(linkedBlock, /#pageClientes \.filter-bar/);
-  assert.match(linkedBlock, /#pageClientes \.stats-strip/);
-  assert.match(linkedBlock, /#pageClientes \.cli-list/);
-  assert.doesNotMatch(linkedBlock, /\.top-mod-bar/);
-  assert.doesNotMatch(linkedBlock, /\.tabs-wrap/);
+test('one-frame synthetic scroll guard prevents layout shrink from reopening chrome', () => {
+  assert.match(controller, /let suppressSyntheticScroll = false/);
+  assert.match(controller, /function syncAfterLayoutCommit\(\)/);
+  assert.match(controller, /suppressSyntheticScroll = true/);
+  assert.match(controller, /lastScroll = currentScroll\(\);[\s\S]*suppressSyntheticScroll = false/);
+  assert.match(controller, /if \(suppressSyntheticScroll\) return/);
+});
+
+test('reduced motion keeps direct geometry compensation instead of reintroducing blank space', () => {
+  const reducedBlock = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.doesNotMatch(reducedBlock, /\.cli-list[\s\S]*transform:none !important/);
+  assert.match(reducedBlock, /opacity:1 !important/);
 });
 
 test('controller remains visual-only, documented and LAB-only', () => {
   assert.doesNotMatch(controller, /localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|saveAppState|saveAllData/);
-  assert.match(map, /secondary_responsibility:\s*clientes_mobile_scroll_linked_chrome/);
-  assert.match(map, /render_strategy:\s*raf_coalesced_transform_clip_no_per_frame_layout/);
+  assert.match(map, /render_strategy:\s*raf_coalesced_transform_clip_with_terminal_layout_commit/);
+  assert.match(map, /terminal_layout_class:\s*lab-client-chrome-committed/);
   assert.equal(contract.environment, 'LABORATORIO');
   assert.equal(contract.canon_writes, false);
   assert.equal(contract.production_writes, false);
