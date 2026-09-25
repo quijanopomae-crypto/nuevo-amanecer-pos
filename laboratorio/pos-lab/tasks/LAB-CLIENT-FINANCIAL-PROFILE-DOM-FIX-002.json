@@ -1,0 +1,45 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-PROFILE-DOM-FIX-002",
+  "environment": "LABORATORIO",
+  "base_ref": "daed3428ef4bd1bf82c4bcf42ade0a6062a0df05",
+  "objective": "Corregir exclusivamente en POS-LAB la compatibilidad de la ficha financiera con el DOM real actual de Clientes, soportando tanto .client-creds legado con id cc-* como el renderer seguro actual basado en .client-card[data-client-id], sin modificar CANON ni lógica financiera.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-PROFILE-DOM-FIX-002.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-PROFILE-DOM-FIX-002.json",
+    "tests/laboratorio-client-financial-profile.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/js/motion/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    ".github/**",
+    "evidence/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "D1/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-PROFILE-DOM-FIX-002.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
