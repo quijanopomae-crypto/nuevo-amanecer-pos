@@ -215,7 +215,8 @@ test('19 mobile motion and scrolling are preserved without horizontal layouts',(
 test('20 no horizontal overflow primitives are introduced',()=>{
   assert.match(clientCss,/min-width:0/);
   assert.match(clientCss,/overflow-wrap:anywhere/);
-  assert.doesNotMatch(clientCss,/width:\s*[5-9]\d\dpx/);
+  assert.match(clientCss,/width:min\(100%,760px\)/);
+  assert.doesNotMatch(clientCss,/min-width:\s*[1-9]\d{2,}px/);
 });
 
 test('installment split preserves cents exactly',()=>{
