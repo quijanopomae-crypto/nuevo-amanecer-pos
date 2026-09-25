@@ -49,9 +49,11 @@ controllers:
     js: laboratorio/pos-lab/js/motion/page-transitions.js
     css: laboratorio/pos-lab/animations/transitions.css
     responsibility: page_entry_feedback
-    secondary_responsibility: clientes_mobile_scroll_linked_chrome
-    render_strategy: native_scroll_delta_raf_sticky_clip_no_list_transform
+    secondary_responsibility: shared_mobile_scroll_linked_chrome
+    render_strategy: native_scroll_delta_raf_shared_sticky_clip_no_content_transform
     geometry_source: window_scroll_delta
+    supported_pages: [pageClientes, pageInventario, pageVentas, pageCaja, pageGastos]
+    cash_strategy: natural_content_scroll_with_visual_secondary_feedback
   cart:
     js: laboratorio/pos-lab/js/motion/cart-motion.js
     responsibility: cart_feedback
