@@ -1,0 +1,10 @@
+{
+  "format": "nuevo-amanecer-v1.3-browser-cors-hotfix-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "deploy-browser-session-auth-cors-hotfix-to-production",
+  "hosted_pos_origin": "https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev",
+  "production_worker": "nuevo-amanecer-pos-prod",
+  "scope": "CORS headers only for browser session-authenticated canonical reads",
+  "reason": "Chrome activation succeeds but subsequent canonical status read is blocked because read-route preflight did not allow Authorization."
+}
