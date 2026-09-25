@@ -1,0 +1,138 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-001",
+  "base_ref": "9109d22f3872a7ed5849913b4cc9ef104c037b0d",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "source_hashes": {
+    "AGENTS.md": "7fc62ac9e9064b53aba95b467384200b56a6d217",
+    "laboratorio/pos-lab/AGENTS.md": "840088c8c342f69a4b973bdf2b2ca7e7d91eb339",
+    "laboratorio/pos-lab/UI_MAP.yaml": "b88fb28d8047a5dfccb61b99572d9e10686626fe",
+    "laboratorio/pos-lab/MOTION_MAP.yaml": "56830059c7601b83237cd940106d711bcb059073",
+    "laboratorio/pos-lab/lab-overrides.js": "d80f3397d612ae1e76fafa5ee0dde725e8490b5d",
+    "laboratorio/pos-lab/styles/pages/clientes.css": "c844b6b941c70dd3e2e3fb8c6ca2fe043e76e462",
+    "laboratorio/pos-lab/styles/pages/pos.css": "2de2909df79ed559da7bdc8bd99794430881ce52",
+    "tests/laboratorio-client-financial-profile.test.mjs": "2f5593ddf20669ceef9bd05d20346c9549da7d02"
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "laboratorio/pos-lab/styles/pages/pos.css",
+      "POS/js/legacy-inline/inline-01.js READ-ONLY",
+      "POS/js/legacy-inline/inline-02.js READ-ONLY",
+      "POS/js/legacy-inline/inline-04.js READ-ONLY",
+      "POS/js/legacy-inline/inline-17.js READ-ONLY",
+      "tests/laboratorio-client-financial-profile.test.mjs",
+      "PR #69 READ-ONLY",
+      "PR #70 READ-ONLY",
+      "LAB publicado READ-ONLY"
+    ],
+    "WRITES": [
+      "Metadatos LAB compatibles para categorías de cliente y destino de crédito; no sustituyen el ledger financiero.",
+      "Selector de destino en la venta a crédito con Créditos pequeños seleccionado por defecto y creación manual de categorías.",
+      "Pantalla completa LAB de cliente con cuentas, categorías, créditos, cuotas, historial, cancelados, línea y comportamiento.",
+      "Tests LAB focalizados y actualización del test de la ficha anterior."
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes client cards: click abre pantalla completa LAB en lugar de expansión gigante.",
+      "#mCreditoSection: selector LAB de destino y plan de cuotas solo cuando aplica.",
+      "Overlay/panel LAB inyectado dinámicamente; no se edita index.html ni index.template.html."
+    ],
+    "STATE_AFFECTED": [
+      "Cliente: labCreditCategories[] opcional, creado solo por acción explícita del usuario.",
+      "Crédito: labCreditAccount y labInstallments opcionales; créditos heredados sin campos siguen abriendo y degradan al destino predeterminado.",
+      "Estado efímero de navegación y selección de destino de la venta."
+    ],
+    "STORAGE_AFFECTED": [
+      "Solo el mecanismo saveAllData ya existente y el workspace D1 LAB cuando hay sesión LAB de escritura.",
+      "Sin migraciones DDL, sin tablas nuevas, sin R2/D1 producción, sin OUTBOX/sync CANON, sin Supabase/Railway."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Monto y producto nunca determinan la categoría.",
+      "Toda venta a crédito sin selección explícita se asocia visualmente a Créditos pequeños.",
+      "El ledger original por venta se conserva para ventaId, pagos, reversión, auditoría y detalle de productos; la cuenta acumulativa es una agregación de presentación/metadata.",
+      "Pagos continúan usando abrirPago/confirmarPago y _naAllocateCreditPayment; no se crea una segunda lógica de cobro.",
+      "Línea y elegibilidad continúan usando _naEvaluateClientCredit/_naV10EvaluateClientCredit; manualActive y línea manual no se sobrescriben.",
+      "Caja, stock, FIFO, saldos, reversión, sync y OUTBOX no reciben una nueva ruta de mutación.",
+      "Campos nuevos son opcionales y la normalización existente conserva propiedades adicionales."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas aporta el destino elegido a Créditos sin alterar total, stock, caja o operación de venta.",
+      "Clientes consume categorías y agrupa créditos; Créditos conserva identidad financiera individual debajo de cuentas acumulativas.",
+      "Pagos e historial se muestran agrupados pero siguen enlazados a creditoId/pagoId originales.",
+      "Clasificación visual usa únicamente métricas financieras reales y no modifica la fórmula de línea."
+    ],
+    "RISKS": [
+      "Estampar por error metadatos de una venta sobre un crédito heredado.",
+      "Representar una cuenta acumulada sin perder identidad/reversibilidad de cada compra.",
+      "Cuotas múltiples deben conservar fechas/centavos sin alterar el motor de pagos existente.",
+      "El cambio a pantalla completa puede afectar scroll/motion o generar overflow horizontal.",
+      "Una categoría persistida antes de cancelar una venta debe seguir siendo reusable y no crear deuda."
+    ],
+    "ROLLBACK": [
+      "Revertir los commits/PR de esta tarea en LAB.",
+      "Los campos LAB son opcionales; retirarlos no exige reversión de saldos, pagos, caja o ventas.",
+      "No existe rollback de producción porque producción/CANON no se modifica."
+    ],
+    "TESTS": [
+      "Ejecutar skill-preflight BEFORE_WRITE y exigir SKILL_PREFLIGHT_PASS antes del primer cambio funcional.",
+      "Validar los 20 casos obligatorios del prompt con fixtures exclusivamente en memoria.",
+      "Ejecutar test focal de cuentas/créditos V2, test de ficha de cliente actualizado, Clientes motion/scroll, suite laboratorio-*.test.mjs, build --check, laboratorio/check.mjs, scope guard y diff check.",
+      "Verificar ausencia de escritura fuera de allowed_files y ausencia de cambios POS/**.",
+      "Tras PR/CI/merge/Pages, validar LAB real publicado en 360/390/412/430 px y escritorio, sin overflow horizontal y con navegación atrás/pagos utilizables."
+    ]
+  }
+}
