@@ -1,2 +1,39 @@
 /* pagePOS: cambios visuales futuros del punto de venta van aquí. */
 #pagePOS.lab-ui-experiment { }
+
+
+/* LAB client credit accounts V2 — sale destination */
+#mCreditoSection .lab-credit-destination{margin-top:14px;padding-top:13px;border-top:1px solid var(--border,#e2e8f0)}
+.lab-credit-destination-title{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.lab-credit-destination-title strong{font-size:13px}
+.lab-credit-destination-title small,.lab-credit-destination-option small{font-size:10px;color:var(--slate,#64748b);font-weight:700}
+.lab-credit-destination-options{display:flex;flex-direction:column;gap:6px}
+.lab-credit-destination-option{min-height:48px;border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:8px 10px;display:flex;gap:9px;align-items:center;cursor:pointer}
+.lab-credit-destination-option.selected{border-color:var(--teal,#0f766e);background:#f0fdfa}
+.lab-credit-destination-option input{accent-color:var(--teal,#0f766e);flex:0 0 auto}
+.lab-credit-destination-option span{display:flex;flex-direction:column;gap:2px}
+.lab-credit-destination-option strong{font-size:12px}
+.lab-credit-new-category{min-height:42px;margin-top:8px;border:0;background:transparent;color:var(--teal,#0f766e);font-weight:900;cursor:pointer;padding:7px 2px}
+.lab-credit-installment-config{margin-top:10px;background:#f8fafc;border-radius:10px;padding:10px}
+.lab-credit-installment-config>label{display:grid;grid-template-columns:1fr 100px;gap:8px;align-items:center;font-size:11px;font-weight:800}
+.lab-credit-installment-dates{display:grid;gap:6px;margin-top:8px;max-height:190px;overflow:auto}
+.lab-credit-installment-dates label{display:grid;grid-template-columns:1fr 150px;gap:8px;align-items:center;font-size:11px;font-weight:800}
+.lab-credit-category-modal{position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.lab-credit-category-modal[hidden]{display:none!important}
+.lab-credit-category-card{width:min(100%,440px);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;padding:16px;box-shadow:0 18px 50px rgba(15,23,42,.25)}
+.lab-credit-category-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.lab-credit-category-head h3{margin:0;font-size:15px}
+.lab-credit-category-head button{width:40px;height:40px;border:0;background:#f1f5f9;border-radius:50%;font-size:22px;cursor:pointer}
+.lab-credit-field{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:900}
+.lab-credit-category-card fieldset{border:0;margin:14px 0;padding:0}
+.lab-credit-category-card legend{font-size:11px;font-weight:900;margin-bottom:7px}
+.lab-credit-category-card fieldset label{display:flex;align-items:flex-start;gap:9px;border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:10px;margin-bottom:7px}
+.lab-credit-category-card fieldset label span{display:flex;flex-direction:column;gap:3px}
+.lab-credit-category-card fieldset small{font-size:10px;color:var(--slate,#64748b);font-weight:700}
+.lab-credit-category-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.lab-credit-category-actions button{min-height:42px;border:0;border-radius:10px;padding:8px 14px;font-weight:900;cursor:pointer}
+.lab-credit-category-actions button.primary{background:var(--teal,#0f766e);color:#fff}
+@media(max-width:430px){
+  .lab-credit-installment-config>label,.lab-credit-installment-dates label{grid-template-columns:1fr}
+  .lab-credit-installment-dates .fi{width:100%}
+}
