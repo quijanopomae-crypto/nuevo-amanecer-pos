@@ -754,7 +754,10 @@ function constantTimeEqual(a, b) {
 function cors(response, isRead = false) {
   response.headers.set('access-control-allow-origin', '*');
   response.headers.set('access-control-allow-methods', isRead ? 'GET, OPTIONS' : 'GET, POST, OPTIONS');
-  response.headers.set('access-control-allow-headers', isRead ? 'x-read-token' : 'authorization, content-type, x-activation-secret, x-session-token');
+  response.headers.set('access-control-allow-headers',
+    isRead
+      ? 'authorization, x-read-token, x-session-token'
+      : 'authorization, content-type, x-activation-secret, x-session-token');
   response.headers.set('access-control-max-age', '600');
   return response;
 }

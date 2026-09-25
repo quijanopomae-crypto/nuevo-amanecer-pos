@@ -48,3 +48,22 @@ test('respuestas health, 401 y operación válida incluyen CORS', async (t) => {
   assert.equal(inserted.status, 201);
   assert.equal(inserted.headers.get('access-control-allow-origin'), '*');
 });
+
+
+test('canonical read preflight allows browser session Authorization header', async (t) => {
+  const fixture = workerFixture();
+  t.after(() => fixture.close());
+  const response = await fixture.fetch('https://worker.test/read/canonical/status', {
+    method: 'OPTIONS',
+    headers: {
+      origin: 'https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev',
+      'access-control-request-method': 'GET',
+      'access-control-request-headers': 'authorization',
+    },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('access-control-allow-origin'), '*');
+  assert.match(response.headers.get('access-control-allow-methods'), /GET/);
+  assert.match(response.headers.get('access-control-allow-headers'), /authorization/);
+  assert.match(response.headers.get('access-control-allow-headers'), /x-read-token/);
+});

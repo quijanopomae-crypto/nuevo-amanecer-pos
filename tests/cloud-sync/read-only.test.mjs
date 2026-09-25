@@ -116,7 +116,9 @@ test('CORS autoriza header de lectura y no anuncia métodos mutantes', async (t)
   });
   assert.equal(response.status, 204);
   assert.equal(response.headers.get('access-control-allow-origin'), '*');
-  assert.equal(response.headers.get('access-control-allow-headers'), 'x-read-token');
+  assert.match(response.headers.get('access-control-allow-headers'), /x-read-token/);
+  assert.match(response.headers.get('access-control-allow-headers'), /authorization/);
+  assert.match(response.headers.get('access-control-allow-headers'), /x-session-token/);
   assert.equal(response.headers.get('access-control-allow-methods'), 'GET, OPTIONS');
   assert.doesNotMatch(response.headers.get('access-control-allow-methods'), /POST|PUT|PATCH|DELETE/);
   assert.doesNotMatch(response.headers.get('access-control-allow-headers'), /x-sync-token/);
@@ -130,7 +132,9 @@ test('CORS autoriza header de lectura y no anuncia métodos mutantes', async (t)
     const actual = await fixture.fetch('https://worker.test' + path, options);
     assert.equal(actual.status, expectedStatus);
     assert.equal(actual.headers.get('access-control-allow-methods'), 'GET, OPTIONS');
-    assert.equal(actual.headers.get('access-control-allow-headers'), 'x-read-token');
+    assert.match(actual.headers.get('access-control-allow-headers'), /x-read-token/);
+    assert.match(actual.headers.get('access-control-allow-headers'), /authorization/);
+    assert.match(actual.headers.get('access-control-allow-headers'), /x-session-token/);
     assert.equal(actual.headers.get('cache-control'), 'no-store');
   }
 });
