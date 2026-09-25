@@ -741,7 +741,7 @@
     if (category.mode === 'separate') {
       var amounts = labSplitInstallmentAmounts(cr.monto, Math.max(1, installmentDraft.length));
       cr.labInstallments = (installmentDraft.length ? installmentDraft : [{number:1,due:cr.vence || ''}]).map(function (row,index) {
-        return { number:index+1, due:String(row.due || cr.vence || '').slice(0,10), amount:amounts[index] ?? amounts[0] ?? Number(cr.monto) || 0 };
+        return { number:index+1, due:String(row.due || cr.vence || '').slice(0,10), amount:(amounts[index] ?? amounts[0] ?? Number(cr.monto) ?? 0) };
       });
     } else {
       delete cr.labInstallments;
