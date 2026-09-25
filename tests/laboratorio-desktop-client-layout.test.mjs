@@ -18,10 +18,8 @@ test('desktop client cards cannot shrink into horizontal lines', () => {
   );
 });
 
-test('LAB activation clears the modal backdrop and resets overlay scroll', () => {
+test('LAB activation resets overlay scroll and closes only after D1 loads', () => {
   assert.match(workspace, /overlay\.scrollTop = 0;\s*overlay\.style\.display = 'block'/);
-  assert.match(
-    workspace,
-    /loadRemoteWorkspace\(\{ silent: true \}\); \} catch \{\}\s*overlay\.style\.display = 'none';/
-  );
+  assert.match(workspace, /var loaded = await loadRemoteWorkspace\(\{ silent: false \}\)/);
+  assert.match(workspace, /if \(loaded\) overlay\.style\.display = 'none'/);
 });
