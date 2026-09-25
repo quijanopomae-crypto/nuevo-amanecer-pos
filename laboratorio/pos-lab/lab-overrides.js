@@ -848,13 +848,39 @@
 
   function labClientRenderWrapper() {
     if (!originalCliRender) return undefined;
-    var result = originalCliRender.apply(this, arguments);
-    labRenderClientProfiles();
+    var context = this;
+    var args = arguments;
+    var page = document.getElementById('pageClientes');
+    var active = !!(page && page.classList.contains('active'));
+    var openIds = labOpenClientIds();
+
+    if (!active || labClientReducedMotion()) {
+      var immediateResult = originalCliRender.apply(context, args);
+      labRenderClientProfiles(openIds);
+      return immediateResult;
+    }
+
+    // Primera pintura: datos inmediatos, solo una entrada suave.
     if (!labClientMotionReady) {
       labClientMotionReady = true;
-      labClientEnter(document.getElementById('pageClientes'));
+      var firstResult = originalCliRender.apply(context, args);
+      labRenderClientProfiles(openIds);
+      labClientEnter(page);
+      return firstResult;
     }
-    return result;
+
+    // Refrescos siguientes: conserva el contrato de micro-motion previo.
+    clearTimeout(labClientMotionTimer);
+    page.classList.remove('lab-client-refresh-in');
+    page.classList.add('lab-client-refresh-out');
+
+    labClientMotionTimer = setTimeout(function () {
+      originalCliRender.apply(context, args);
+      labRenderClientProfiles(openIds);
+      requestAnimationFrame(function () {
+        page.classList.remove('lab-client-refresh-out');
+      });
+    }, 850);
   }
   labClientRenderWrapper.__naLabFinancialWrapper = true;
 
