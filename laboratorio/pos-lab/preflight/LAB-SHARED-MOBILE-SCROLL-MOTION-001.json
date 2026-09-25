@@ -1,0 +1,128 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-SHARED-MOBILE-SCROLL-MOTION-001",
+  "base_ref": "46cad949f6c161ce74a7d028fdcfdfdce2d29ff6",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/inventory-integrity/SKILL.md",
+      ".agents/skills/cash-integrity/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/sections/inventario.html",
+      "laboratorio/pos-lab/sections/ventas.html",
+      "laboratorio/pos-lab/sections/caja.html",
+      "laboratorio/pos-lab/sections/gastos.html",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "POS/js/legacy-inline/inline-01.js and inline-11.js READ-ONLY for Caja dynamic DOM",
+      "Owner Android screenshots of Menu, Inventario, Ventas, Caja and Gastos"
+    ],
+    "WRITES": [
+      "Shared LAB mobile scroll-linked motion controller configuration",
+      "Generic LAB scroll-linked CSS for chrome clipping/fade",
+      "MOTION_MAP shared-controller documentation",
+      "Focused regression assertions for Clientes/Inventario/Ventas/Caja/Gastos",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes > .page-chrome; .filter-bar; .stats-strip",
+      "#pageInventario > .page-chrome; .filter-bar; .stats-strip",
+      "#pageVentas > .page-chrome; #ventasFilterBar; #ventasReportControls; #ventasKPI",
+      "#pageCaja > .page-chrome; #cajContent > .caj-banner-wrap; #cajContent > .cj-stats-grid",
+      "#pageGastos > .page-chrome; .stats-strip; .filter-bar"
+    ],
+    "STATE_AFFECTED": [
+      "Per-page visual collapseOffset/targetOffset/totalHeight",
+      "One requestAnimationFrame handle per configured module",
+      "Visual-only data-lab-motion-state/progress CSS variables"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2, Supabase, Railway or production storage"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Inventory stock, units, operationId, concurrency and persistence are not read or modified by motion.",
+      "Cash open/movement/close/session/atomicity state is not read or modified by motion.",
+      "Sales, credits, expenses, OUTBOX and sync behavior remain unchanged.",
+      "No configured content list/table receives scroll-linked translate compensation.",
+      "POS/** remains untouched and motion remains visual-only."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "One shared visual controller replaces module-specific duplication while preserving the existing Clientes behavior.",
+      "Inventario/Ventas/Gastos clip only secondary bands at the bottom of page-chrome; title and tabs stay visible.",
+      "Caja has no equivalent secondary page-chrome band, so its sticky title/tabs remain intact and only summary banner/KPIs receive optional visual fade/shift when natural scrolling exists.",
+      "No backend, data workspace, production or deployment service changes."
+    ],
+    "RISKS": [
+      "Different module heights and hidden report controls could make collapse distance stale after tab changes.",
+      "Caja content is dynamically re-rendered and its equivalent visual targets may not exist in every state.",
+      "Empty Ventas/Gastos/Caja pages may not have enough document height to trigger scroll; controller must remain harmless.",
+      "A shared controller bug could affect multiple modules, so each page needs isolated activation and reset."
+    ],
+    "ROLLBACK": [
+      "Revert page-transitions.js, transitions.css, MOTION_MAP and the focused test from this task.",
+      "No inventory/cash/sales/expense data or schema rollback is required."
+    ],
+    "TESTS": [
+      "Run repository SKILL_PREFLIGHT before first functional write.",
+      "Verify shared config contains Clientes, Inventario, Ventas, Caja and Gastos with page-specific secondary selectors.",
+      "Verify native window scroll delta is the only geometry input and visual writes are RAF-coalesced.",
+      "Verify Inventario/Ventas/Gastos clip only secondary chrome, preserving top-mod-bar/tabs.",
+      "Verify Caja uses visual-only summary targets and never mutates cash state.",
+      "Verify no list/table/content container receives scroll-linked translate compensation.",
+      "Run full LAB regression, build/check, scope guard, diff review, LAB CI and POS LAB Mobile Pages.",
+      "Perform owner Android validation after deployment."
+    ]
+  }
+}
