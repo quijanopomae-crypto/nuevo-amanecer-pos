@@ -1,0 +1,45 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-COMPACT-LIST-001",
+  "environment": "LABORATORIO",
+  "base_ref": "86a1818b2a5aad904a45144ad10488ecd684394a",
+  "objective": "Simplificar exclusivamente en POS-LAB la ficha financiera de Clientes a una lista compacta y accionable: deuda, próximo cobro, créditos activos con pagos realizados y saldo, moviendo línea de crédito/evaluación/comportamiento a secciones plegadas, sin inventar cuotas ni cambiar lógica financiera.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-COMPACT-LIST-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-COMPACT-LIST-001.json",
+    "tests/laboratorio-client-financial-profile.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/js/motion/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    ".github/**",
+    "evidence/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "D1/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-COMPACT-LIST-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
