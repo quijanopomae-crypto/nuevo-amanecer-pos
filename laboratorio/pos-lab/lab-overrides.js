@@ -370,15 +370,35 @@
     '</div>';
   }
 
+  function labClientIdForPanel(panel) {
+    if (!panel) return '';
+    var legacyId = String(panel.id || '');
+    if (/^cc-/.test(legacyId)) return legacyId.replace(/^cc-/, '');
+    var card = panel.closest ? panel.closest('.client-card[data-client-id]') : null;
+    return card && card.dataset ? String(card.dataset.clientId || '') : '';
+  }
+
+  function labClientPanelForId(clientId) {
+    var legacy = document.getElementById('cc-' + clientId);
+    if (legacy) return legacy;
+    var cards = document.querySelectorAll('#pageClientes .client-card[data-client-id]');
+    for (var i = 0; i < cards.length; i += 1) {
+      if (String(cards[i].dataset.clientId || '') === String(clientId)) {
+        return cards[i].querySelector('.client-creds');
+      }
+    }
+    return null;
+  }
+
   function labOpenClientIds() {
-    return Array.from(document.querySelectorAll('#pageClientes .client-creds.open')).map(function (node) {
-      return String(node.id || '').replace(/^cc-/, '');
-    }).filter(Boolean);
+    return Array.from(document.querySelectorAll('#pageClientes .client-creds.open'))
+      .map(labClientIdForPanel)
+      .filter(Boolean);
   }
 
   function labRestoreClientOpenState(ids) {
     ids.forEach(function (id) {
-      var node = document.getElementById('cc-' + id);
+      var node = labClientPanelForId(id);
       if (node) node.classList.add('open');
     });
   }
@@ -386,9 +406,9 @@
   function labRenderClientProfiles(openIds) {
     var list = document.getElementById('cliList');
     if (!list || !Array.isArray(clientes)) return;
-    Array.from(list.querySelectorAll('.client-creds[id^="cc-"]')).forEach(function (panel) {
-      var clientId = String(panel.id).replace(/^cc-/, '');
-      var client = clientes.find(function (item) { return String(item.id) === clientId; });
+    Array.from(list.querySelectorAll('.client-creds')).forEach(function (panel) {
+      var clientId = labClientIdForPanel(panel);
+      var client = clientes.find(function (item) { return String(item.id) === String(clientId); });
       if (!client) return;
       panel.innerHTML = labProfileHtml(client);
     });
@@ -398,7 +418,7 @@
   window.naLabClientFinancialSetView = function (clientId, view) {
     if (!['vencidos','hoy','proximos','activos','anteriores'].includes(view)) return;
     labClientCreditView[String(clientId)] = view;
-    var panel = document.getElementById('cc-' + clientId);
+    var panel = labClientPanelForId(clientId);
     var client = Array.isArray(clientes) ? clientes.find(function (item) { return String(item.id) === String(clientId); }) : null;
     if (panel && client) panel.innerHTML = labProfileHtml(client);
   };
@@ -486,8 +506,8 @@
   function labClientProfilesNeedEnhancement() {
     var list = document.getElementById('cliList');
     if (!list) return false;
-    return Array.from(list.querySelectorAll('.client-creds[id^="cc-"]')).some(function (panel) {
-      return !panel.querySelector('.lab-fin-profile');
+    return Array.from(list.querySelectorAll('.client-creds')).some(function (panel) {
+      return !!labClientIdForPanel(panel) && !panel.querySelector('.lab-fin-profile');
     });
   }
 

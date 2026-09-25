@@ -168,6 +168,18 @@ test('late cliRender binding is idempotent and reattaches after replacement', ()
   assert.match(source, /labClientProfilesNeedEnhancement/);
 });
 
+test('financial profile supports current secure client DOM and legacy cc-* panels', () => {
+  assert.match(source, /function labClientIdForPanel/);
+  assert.match(source, /\.client-card\[data-client-id\]/);
+  assert.match(source, /String\(panel\.id \|\| ''\)/);
+  assert.match(source, /list\.querySelectorAll\('\.client-creds'\)/);
+  assert.match(source, /labClientPanelForId\(clientId\)/);
+  assert.doesNotMatch(
+    source.slice(source.indexOf('function labRenderClientProfiles'), source.indexOf('window.naLabClientFinancialSetView')),
+    /client-creds\[id\^=/
+  );
+});
+
 test('profile reuses existing payment/detail/evaluation actions and adds no financial persistence path', () => {
   const start = source.indexOf('// ===== LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====');
   const end = source.indexOf('// ===== FIN LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====');
