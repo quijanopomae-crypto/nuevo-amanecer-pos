@@ -115,6 +115,31 @@ test('client without credits or line degrades to empty/unknown without inventing
   assert.equal(summary.evaluation.exists, false);
 });
 
+test('synthetic LAB fixtures cover A punctual, B overdue, C manual, D no history and E closed', () => {
+  const ctx = makeContext();
+  ctx.creditos.push(
+    cr('A1','2026-09-28',500,150,'vigente',{ cliId:'A' }),
+    cr('B1','2026-09-20',500,0,'vencido',{ cliId:'B' }),
+    cr('C1','2026-10-08',300,100,'vigente',{ cliId:'C' }),
+    cr('E1','2026-09-20',200,200,'cancelado',{ cliId:'E' })
+  );
+  const api = ctx.NA_LAB_CLIENT_FINANCIAL_PROFILE;
+  const a = api.summarizeClient({ id:'A', nombre:'Cliente A' });
+  const b = api.summarizeClient({ id:'B', nombre:'Cliente B' });
+  const c = api.summarizeClient({ id:'C', nombre:'Cliente C' });
+  const d = api.summarizeClient({ id:'D', nombre:'Cliente D' });
+  const e = api.summarizeClient({ id:'E', nombre:'Cliente E' });
+  assert.equal(a.debt, 350);
+  assert.equal(a.evaluation.available, 650);
+  assert.equal(b.overdue, 500);
+  assert.equal(b.evaluation.eligible, false);
+  assert.equal(c.evaluation.manualActive, true);
+  assert.equal(d.active.length, 0);
+  assert.equal(d.evaluation.exists, false);
+  assert.equal(e.active.length, 0);
+  assert.equal(e.closed.length, 1);
+});
+
 test('profile reuses existing payment/detail/evaluation actions and adds no financial persistence path', () => {
   const start = source.indexOf('// ===== LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====');
   const end = source.indexOf('// ===== FIN LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====');
@@ -132,6 +157,7 @@ test('history, closed credits and behavior are folded by default', () => {
   assert.match(source, /<details><summary>Historial de pagos/);
   assert.match(source, /<details><summary>Créditos cerrados/);
   assert.match(source, /<details><summary>Comportamiento del cliente/);
+  assert.match(source, /% pagado/);
   assert.doesNotMatch(source, /<details\s+open/);
 });
 
