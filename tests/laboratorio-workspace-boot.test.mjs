@@ -34,3 +34,22 @@ test('workspace boot fix remains LAB-only', () => {
   assert.equal(contract.canon_writes, false);
   assert.ok(contract.forbidden_files.includes('POS/**'));
 });
+
+
+test('LAB opens activation automatically when browser has no read/session credentials', () => {
+  assert.match(source, /updateBadge\('ACTIVA PARA CARGAR DATOS'\)/);
+  assert.match(source, /Activa este navegador para cargar productos y clientes desde D1 LAB/);
+  assert.match(source, /overlay\.style\.display = 'block'/);
+});
+
+test('activation keeps panel open until D1 LAB data actually loads', () => {
+  assert.match(source, /var loaded = await loadRemoteWorkspace\(\{ silent: false \}\)/);
+  assert.match(source, /if \(loaded\) overlay\.style\.display = 'none'/);
+  assert.doesNotMatch(source, /try \{ await loadRemoteWorkspace\(\{ silent: true \}\); \} catch \{\}/);
+});
+
+test('successful D1 load reports mirrored product and customer counts', () => {
+  assert.match(source, /payload\.snapshot\?\.data\?\.productos/);
+  assert.match(source, /payload\.snapshot\?\.data\?\.clientes/);
+  assert.match(source, /Datos LAB cargados:/);
+});
