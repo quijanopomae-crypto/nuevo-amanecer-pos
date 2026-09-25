@@ -17,7 +17,8 @@
     dirty: false,
     timer: null,
     credentials: null,
-    pendingOperation: null
+    pendingOperation: null,
+    conflict: false
   };
 
   var originalSaveAllData = typeof saveAllData === 'function' ? saveAllData : null;
@@ -86,6 +87,24 @@
   function clearPendingOperation() {
     try { localStorage.removeItem(PENDING_KEY); } catch {}
     state.pendingOperation = null;
+  }
+
+  async function discardPendingAndLoadRemote() {
+    if (!state.pendingOperation && !state.dirty && !state.conflict) {
+      return loadRemoteWorkspace({ silent: false });
+    }
+    if (!confirm('¿Descartar únicamente los cambios locales pendientes de este navegador y cargar la revisión actual de D1 LAB?')) {
+      return false;
+    }
+    clearTimeout(state.timer);
+    clearPendingOperation();
+    state.dirty = false;
+    state.conflict = false;
+    state.remoteReady = false;
+    renderStatus('Pendiente local descartado. Cargando D1 LAB…', 'info');
+    var loaded = await loadRemoteWorkspace({ silent: false });
+    if (document.getElementById('naLabWorkspaceOverlay')) fillPanel();
+    return loaded;
   }
 
   function newOperationId() {
@@ -278,6 +297,12 @@
     // operación durable pendiente (o capturamos la edición local temprana).
     if (state.pendingOperation || state.dirty) {
       refreshMetadata(payload);
+      if (state.conflict) {
+        updateBadge('CONFLICTO');
+        renderStatus('Hay un pendiente local de una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
+        if (document.getElementById('naLabWorkspaceOverlay')) fillPanel();
+        return false;
+      }
       updateBadge('PENDIENTE');
       renderStatus('Hay cambios locales pendientes. Se conservarán y se intentarán conciliar con D1 LAB.', 'info');
       if (hasWriterAccess(state.credentials)) await flushRemoteSave();
@@ -285,6 +310,7 @@
     }
 
     await applyRemoteWorkspace(payload);
+    state.conflict = false;
     var productos = Array.isArray(payload.snapshot?.data?.productos) ? payload.snapshot.data.productos.length : 0;
     var clientes = Array.isArray(payload.snapshot?.data?.clientes) ? payload.snapshot.data.clientes.length : 0;
     renderStatus('Datos LAB cargados: ' + productos + ' productos · ' + clientes + ' clientes. Los cambios se guardan solo en D1 LAB.', 'ok');
@@ -336,8 +362,15 @@
 
       if (response.status === 409 && payload.error === 'revision_conflict') {
         state.remoteReady = false;
+        state.conflict = true;
         updateBadge('CONFLICTO');
-        renderStatus('Conflicto de revisión. Se conserva la operación pendiente; vuelve a cargar D1 LAB para conciliar.', 'error');
+        renderStatus('Conflicto de revisión. El pendiente local pertenece a una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
+        var overlay = document.getElementById('naLabWorkspaceOverlay');
+        if (overlay) {
+          fillPanel();
+          overlay.scrollTop = 0;
+          overlay.style.display = 'block';
+        }
         return;
       }
       if ((response.status === 401 || response.status === 403) &&
@@ -351,6 +384,7 @@
 
       var completed = body;
       clearPendingOperation();
+      state.conflict = false;
       state.revision = Number(payload.revision || state.revision);
 
       // Si el snapshot local avanzó después de capturar la operación que acaba
@@ -418,6 +452,7 @@
       '<button id="naLabActivate" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Activar escritura</button>' +
       '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Guardar conexión</button>' +
       '<button id="naLabLoad" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Cargar D1 LAB</button>' +
+      '<button id="naLabUseRemote" type="button" style="display:none;padding:10px;border:0;border-radius:10px;background:#dc2626;color:#fff;font-weight:800">Usar D1 LAB</button>' +
       '<button id="naLabRefreshCanon" type="button" style="padding:10px;border:0;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:800">Actualizar CANON → LAB</button>' +
       '<button id="naLabResetBaseline" type="button" style="padding:10px;border:0;border-radius:10px;background:#f59e0b;color:#111827;font-weight:800">Restaurar baseline</button>' +
       '</div><button id="naLabClearCredentials" type="button" style="width:100%;margin-top:8px;padding:9px;border:0;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:800">Borrar sesión de este navegador</button>' +
@@ -479,6 +514,9 @@
     document.getElementById('naLabLoad').onclick = function () {
       loadRemoteWorkspace({ silent: false }).catch(function (error) { renderStatus(error.message, 'error'); });
     };
+    document.getElementById('naLabUseRemote').onclick = function () {
+      discardPendingAndLoadRemote().catch(function (error) { renderStatus(error.message, 'error'); });
+    };
     document.getElementById('naLabRefreshCanon').onclick = function () {
       refreshFromCanon().catch(function (error) { renderStatus(error.message, 'error'); });
     };
@@ -502,6 +540,8 @@
         ? '✓ Sesión de escritura activa en este navegador'
         : 'Sin sesión de escritura · ingresa tu clave una sola vez';
     }
+    var useRemote = document.getElementById('naLabUseRemote');
+    if (useRemote) useRemote.style.display = state.conflict ? 'block' : 'none';
     if (state.revision) refreshMetadata({
       revision: state.revision,
       baseline_id: state.baselineId,
@@ -592,7 +632,14 @@
       // semántica canónica de recuperación.
       hydrateFastLocalSnapshot();
 
-      var result = await originalLoadAllData.apply(this, arguments);
+      var previousSuppressRemoteSave = state.suppressRemoteSave;
+      state.suppressRemoteSave = true;
+      var result;
+      try {
+        result = await originalLoadAllData.apply(this, arguments);
+      } finally {
+        state.suppressRemoteSave = previousSuppressRemoteSave;
+      }
 
       // No bloquear el primer render esperando la red. Primero mostramos el
       // estado local y la pantalla guardada; luego D1 LAB se actualiza detrás.
@@ -627,6 +674,7 @@
     saveNow: flushRemoteSave,
     refreshFromCanon: refreshFromCanon,
     resetToBaseline: resetToBaseline,
+    useRemote: discardPendingAndLoadRemote,
     open: function () {
       var overlay = document.getElementById('naLabWorkspaceOverlay');
       if (overlay) { fillPanel(); overlay.scrollTop = 0; overlay.style.display = 'block'; }
@@ -639,6 +687,7 @@
         remoteReady: state.remoteReady,
         writerConfigured: hasWriterAccess(state.credentials),
         dirty: state.dirty,
+        conflict: state.conflict,
         pendingOperationId: state.pendingOperation ? state.pendingOperation.operation_id : null
       };
     }

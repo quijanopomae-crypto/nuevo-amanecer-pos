@@ -214,3 +214,38 @@ test('edición temprana antes de D1 se conserva y se guarda tras conocer la revi
   assert.equal(posts[0].snapshot.data.productos[0].id, 'EARLY-EDIT');
   assert.equal(h.current.data.productos[0].id, 'EARLY-EDIT');
 });
+
+
+test('conflicto de revisión puede descartarse y cargar D1 sin borrar todo el navegador', async () => {
+  const edited = snapshot('LOCAL-STALE');
+  const remote = snapshot('REMOTE-CURRENT');
+  const pending = { expected_revision: 4, operation_id: 'op-stale', snapshot: edited };
+  let reads = 0;
+  const h = makeHarness({
+    local: edited,
+    remote,
+    pending,
+    async onFetch(url, options) {
+      if (url.endsWith('/lab/workspace') && (!options.method || options.method === 'GET')) {
+        reads += 1;
+        return Response.json({ revision: 5, baseline_id: 'B1', source_ref: 'r2://canon', snapshot: remote });
+      }
+      if (url.endsWith('/lab/workspace/save')) {
+        return Response.json({ error: 'revision_conflict', current_revision: 5 }, { status: 409 });
+      }
+      throw new Error('unexpected fetch ' + url);
+    }
+  });
+
+  await h.context.window.NuevoAmanecerLabWorkspace.load();
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().conflict, true);
+  assert.ok(h.persistent.dump(PENDING_KEY));
+
+  const loaded = await h.context.window.NuevoAmanecerLabWorkspace.useRemote();
+  assert.equal(loaded, true);
+  assert.equal(reads, 2);
+  assert.equal(h.current.data.productos[0].id, 'REMOTE-CURRENT');
+  assert.equal(h.persistent.dump(PENDING_KEY), undefined);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().conflict, false);
+  assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().dirty, false);
+});
