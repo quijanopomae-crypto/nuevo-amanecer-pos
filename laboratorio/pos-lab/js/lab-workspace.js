@@ -285,7 +285,9 @@
     }
 
     await applyRemoteWorkspace(payload);
-    renderStatus('Datos LAB cargados. Los cambios se guardan solo en D1 LAB.', 'ok');
+    var productos = Array.isArray(payload.snapshot?.data?.productos) ? payload.snapshot.data.productos.length : 0;
+    var clientes = Array.isArray(payload.snapshot?.data?.clientes) ? payload.snapshot.data.clientes.length : 0;
+    renderStatus('Datos LAB cargados: ' + productos + ' productos · ' + clientes + ' clientes. Los cambios se guardan solo en D1 LAB.', 'ok');
     return true;
   }
 
@@ -454,9 +456,9 @@
         await activateWriter(secretInput.value);
         secretInput.value = '';
         fillPanel();
-        renderStatus('Sesión activada. No tendrás que volver a escribir la clave en este navegador.', 'ok');
-        try { await loadRemoteWorkspace({ silent: true }); } catch {}
-        overlay.style.display = 'none';
+        renderStatus('Sesión activada. Cargando productos y clientes desde D1 LAB…', 'info');
+        var loaded = await loadRemoteWorkspace({ silent: false });
+        if (loaded) overlay.style.display = 'none';
       } catch (error) {
         secretInput.value = '';
         renderStatus(error.message, 'error');
@@ -606,7 +608,19 @@
   }
 
   setupPanel();
-  updateBadge(hasReadAccess(state.credentials) ? 'CONECTANDO' : 'SIN CONEXIÓN');
+  if (hasReadAccess(state.credentials)) {
+    updateBadge('CONECTANDO');
+  } else {
+    updateBadge('ACTIVA PARA CARGAR DATOS');
+    setTimeout(function () {
+      var overlay = document.getElementById('naLabWorkspaceOverlay');
+      if (!overlay || hasReadAccess(state.credentials)) return;
+      fillPanel();
+      renderStatus('Activa este navegador para cargar productos y clientes desde D1 LAB. Sin sesión, el LAB permanece local y puede verse vacío.', 'info');
+      overlay.scrollTop = 0;
+      overlay.style.display = 'block';
+    }, 0);
+  }
 
   window.NuevoAmanecerLabWorkspace = {
     load: function () { return loadRemoteWorkspace({ silent: false }); },

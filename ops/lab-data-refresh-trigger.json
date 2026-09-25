@@ -1,0 +1,11 @@
+{
+  "format": "nuevo-amanecer-lab-data-refresh-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "refresh-canon-backup-into-d1-lab",
+  "require_nonempty": [
+    "productos",
+    "clientes"
+  ],
+  "note": "Refresh only LAB from latest validated CANON backup. No LAB-to-CANON writes."
+}
