@@ -79,13 +79,24 @@
     will-change:transform;
     backface-visibility:hidden;
   }
+
+  /* Estado terminal: se aplica una sola vez al llegar al 100% con el dedo
+     inactivo. Retira del layout el chrome ya invisible para que el scrollHeight
+     real no conserve un hueco fantasma al final de la lista. */
+  body.lab-client-scroll-linked #pageClientes.lab-client-chrome-committed .filter-bar,
+  body.lab-client-scroll-linked #pageClientes.lab-client-chrome-committed .stats-strip {
+    display:none !important;
+  }
+
+  body.lab-client-scroll-linked #pageClientes.lab-client-chrome-committed .cli-list {
+    transform:none !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   #pageClientes .stats-strip,
   #pageClientes .cli-list {
     transition:none !important;
-    transform:none !important;
   }
 
   body.lab-client-scroll-linked #pageClientes .filter-bar,
@@ -93,5 +104,12 @@
   body.lab-client-scroll-linked #pageClientes .cli-list {
     transition:none !important;
     animation:none !important;
+  }
+
+  /* El gesto directo mantiene la compensación geométrica incluso con reduced
+     motion; solo se eliminan fades/easing decorativos, no el seguimiento 1:1. */
+  body.lab-client-scroll-linked #pageClientes .filter-bar,
+  body.lab-client-scroll-linked #pageClientes .stats-strip {
+    opacity:1 !important;
   }
 }
