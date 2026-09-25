@@ -1,0 +1,111 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-SCROLL-LINKED-CHROME-001",
+  "base_ref": "54adcc063b5411a77d7668d2f3737521083d6726",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "POS/js/core/state.js READ-ONLY to identify abrupt g-page-chrome-hidden behavior"
+    ],
+    "WRITES": [
+      "LAB page motion controller",
+      "LAB transition CSS",
+      "LAB motion architecture map",
+      "Focused LAB test",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes",
+      "#pageClientes > .page-chrome",
+      "#pageClientes .filter-bar",
+      "#pageClientes .stats-strip",
+      "body > .g-topbar only to neutralize abrupt hidden class while Clientes LAB controller is active"
+    ],
+    "STATE_AFFECTED": [
+      "Visual normalized progress 0..1 for Clientes chrome collapse",
+      "Transient collapse offset and touch/scroll tracking only",
+      "No customer, credit, payment, sales, inventory, cash or sync state"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2 or network persistence changes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Clientes and credit data/rendering remain unchanged.",
+      "Payments, sales, inventory, cash, OUTBOX and synchronization remain unchanged.",
+      "LAB motion has zero business/storage/network authority.",
+      "POS/** remains READ-ONLY and unchanged.",
+      "Tabs and Clientes title remain visible; only the owner-marked filter/stat area collapses."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Controller activates only when pageClientes is active on mobile <=700px.",
+      "Existing canonical gesture classes may still toggle internally but are visually neutralized only for Clientes while the LAB controller is active.",
+      "Existing Clientes data-refresh animation remains intact; scroll-linked mode disables time transitions on the marked chrome only."
+    ],
+    "RISKS": [
+      "Touchmove and scroll could double-count one physical gesture.",
+      "Momentum scroll could jump if the scroll anchor is stale after touchend.",
+      "Canonical g-page-chrome-hidden/display:none could override progressive motion.",
+      "Partial visual state could leak when leaving/re-entering Clientes.",
+      "Responsive resize could retain measured heights."
+    ],
+    "ROLLBACK": [
+      "Revert page-transitions.js, transitions.css and MOTION_MAP.yaml changes from this task.",
+      "No database/storage rollback is required."
+    ],
+    "TESTS": [
+      "Run repository SKILL_PREFLIGHT before functional write.",
+      "Focused test verifies marked filter+stats are controlled by one normalized progress and no timed transition.",
+      "Focused test verifies touchmove drives offset directly and scroll only continues when touch is inactive.",
+      "Focused test verifies canonical abrupt hidden classes are neutralized only in Clientes LAB.",
+      "Run build/check, all laboratorio tests, scope guard and diff review.",
+      "Verify GitHub Pages deployment and perform owner mobile finger test."
+    ]
+  }
+}

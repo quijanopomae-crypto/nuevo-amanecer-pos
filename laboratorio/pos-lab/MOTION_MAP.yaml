@@ -49,6 +49,7 @@ controllers:
     js: laboratorio/pos-lab/js/motion/page-transitions.js
     css: laboratorio/pos-lab/animations/transitions.css
     responsibility: page_entry_feedback
+    secondary_responsibility: clientes_mobile_scroll_linked_chrome
   cart:
     js: laboratorio/pos-lab/js/motion/cart-motion.js
     responsibility: cart_feedback

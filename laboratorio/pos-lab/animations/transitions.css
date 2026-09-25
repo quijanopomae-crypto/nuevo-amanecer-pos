@@ -29,10 +29,54 @@
   transition-duration: 0ms;
 }
 
+/* Clientes móvil: la zona marcada por el owner (filtro + estadísticas) ya no
+   cambia por un estado visible/oculto. Su altura/opacity vienen del progreso
+   0..1 que el controlador actualiza directamente con touch/scroll. */
+@media (max-width:700px) {
+  body.lab-client-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden {
+    transform:none !important;
+    margin-top:0 !important;
+  }
+
+  body.lab-client-scroll-linked #pageClientes.g-page-chrome-hidden > .page-chrome {
+    display:block !important;
+  }
+
+  body.lab-client-scroll-linked #pageClientes.active > .page-chrome {
+    overflow-anchor:none;
+  }
+
+  body.lab-client-scroll-linked #pageClientes .filter-bar,
+  body.lab-client-scroll-linked #pageClientes .stats-strip {
+    box-sizing:border-box;
+    min-height:0 !important;
+    overflow:hidden !important;
+    opacity:var(--lab-client-chrome-opacity,1) !important;
+    transform:translate3d(0,var(--lab-client-chrome-shift,0px),0) !important;
+    transition:none !important;
+    pointer-events:var(--lab-client-chrome-pointer,auto);
+    will-change:height,opacity,transform;
+  }
+
+  body.lab-client-scroll-linked #pageClientes .filter-bar {
+    height:var(--lab-client-filter-height,auto);
+  }
+
+  body.lab-client-scroll-linked #pageClientes .stats-strip {
+    height:var(--lab-client-stats-height,auto);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #pageClientes .stats-strip,
   #pageClientes .cli-list {
     transition: none !important;
     transform: none !important;
+  }
+
+  body.lab-client-scroll-linked #pageClientes .filter-bar,
+  body.lab-client-scroll-linked #pageClientes .stats-strip {
+    transform:none !important;
+    transition:none !important;
   }
 }
