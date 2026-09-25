@@ -1,0 +1,81 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-SCROLL-LINKED-DOM-GUARD-001",
+  "base_ref": "d46d7036d414378bf01fc5dad4a9b13aec065613",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md","git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md","git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md","git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-animation-edit": {"path": ".agents/skills/lab-animation-edit/SKILL.md","git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"},
+    "lab-feature-edit": {"path": ".agents/skills/lab-feature-edit/SKILL.md","git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"}
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "tests/laboratorio-motion-infrastructure.test.mjs",
+      "GitHub Actions POS LAB Mobile run 37 failure log"
+    ],
+    "WRITES": [
+      "LAB page motion DOM capability guard",
+      "Focused LAB regression assertion",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "No new browser DOM behavior; initialization is skipped only when document.getElementById/body are unavailable"
+    ],
+    "STATE_AFFECTED": [
+      "No new state; existing Clientes normalized motion progress remains unchanged in a real browser"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2 or network persistence"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Clientes, credits and payments remain unchanged.",
+      "Sales, inventory, cash, OUTBOX and synchronization remain unchanged.",
+      "The mobile 1:1 gesture algorithm remains byte-equivalent except for the environment guard.",
+      "POS/** remains untouched."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Only prevents browser-specific Clientes controller initialization inside incomplete/non-browser test environments.",
+      "Shared motion core remains available in the VM test.",
+      "No changes to modal, cart or feedback controllers."
+    ],
+    "RISKS": [
+      "An overly broad capability guard could disable the controller in a real browser.",
+      "A narrow guard could still allow incomplete test DOMs to throw."
+    ],
+    "ROLLBACK": [
+      "Revert the DOM capability guard and focused assertion.",
+      "No data or schema rollback is required."
+    ],
+    "TESTS": [
+      "Run repository SKILL_PREFLIGHT before the functional write.",
+      "Focused test requires explicit non-browser DOM guard.",
+      "Run laboratorio-motion-infrastructure regression that previously failed.",
+      "Run all LAB regressions and scope guard.",
+      "Require LAB Canon Mirror CI and POS LAB Mobile publication to pass after merge."
+    ]
+  }
+}
