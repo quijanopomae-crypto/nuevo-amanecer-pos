@@ -1,0 +1,45 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-MOTION-INFRASTRUCTURE-001",
+  "environment": "LABORATORIO",
+  "base_ref": "33b4f872dd48923a48396553b1dccc2659630668",
+  "objective": "Evolucionar la infraestructura de animación POS-LAB para que IA y humanos puedan modificar motion con una API común, estados visuales explícitos, tokens CSS únicos, mapa de arquitectura y pruebas de regresión, preservando el swipe actual y sin tocar lógica comercial ni almacenamiento.",
+  "allowed_files": [
+    "laboratorio/pos-lab/MOTION_MAP.yaml",
+    "laboratorio/pos-lab/UI_MAP.yaml",
+    "laboratorio/pos-lab/animations/motion.css",
+    "laboratorio/pos-lab/animations/modals.css",
+    "laboratorio/pos-lab/js/motion/page-transitions.js",
+    "laboratorio/pos-lab/js/motion/cart-motion.js",
+    "laboratorio/pos-lab/js/motion/feedback-motion.js",
+    "laboratorio/pos-lab/js/motion/modal-motion.js",
+    "laboratorio/pos-lab/tasks/LAB-MOTION-INFRASTRUCTURE-001.json",
+    "laboratorio/pos-lab/preflight/LAB-MOTION-INFRASTRUCTURE-001.json",
+    "tests/laboratorio-motion-infrastructure.test.mjs",
+    "tests/laboratorio-workspace-swipe-dismiss.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-animation-edit",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-MOTION-INFRASTRUCTURE-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
