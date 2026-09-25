@@ -84,19 +84,31 @@ No tocar cambios ajenos ni evidence/v1.3 salvo autorización explícita.
 
 ## Preflight obligatorio para POS-LAB
 
-Antes de modificar `laboratorio/pos-lab/**`:
+Esta regla aplica a **ALL_WRITERS** sin excepción: ChatGPT, ChatGPT Work, conector GitHub, OpenCode, Claude, DeepSeek, Codex, agentes futuros y humanos asistidos por IA.
+
+Antes del **primer cambio funcional** en LAB:
 1. leer este archivo;
-2. leer `.agents/skills/lab-scope-guard/SKILL.md`;
-3. leer la skill específica (`lab-ui-edit`, `lab-animation-edit` o `lab-feature-edit`);
-4. leer `laboratorio/pos-lab/UI_MAP.yaml`;
-5. leer el contrato JSON de la tarea;
-6. verificar que todos los archivos previstos estén en `allowed_files`.
+2. leer `.agents/skills/impact-analysis/SKILL.md`;
+3. leer `.agents/skills/cross-module-impact/SKILL.md`;
+4. leer `.agents/skills/lab-scope-guard/SKILL.md`;
+5. leer la skill específica (`lab-ui-edit`, `lab-animation-edit` o `lab-feature-edit`);
+6. leer `laboratorio/pos-lab/UI_MAP.yaml` cuando aplique a POS-LAB;
+7. leer/crear el contrato JSON schema v3 de la tarea y verificar `allowed_files`;
+8. registrar un recibo `laboratorio/pos-lab/preflight/<TASK_ID>.json` con hashes de las skills y análisis de READS, WRITES, DOM, STATE, STORAGE, invariantes, impacto cruzado, riesgos, rollback y pruebas;
+9. ejecutar `node laboratorio/pos-lab/skill-preflight.mjs --task=<contrato> --receipt=<recibo>`;
+10. obtener `SKILL_PREFLIGHT_PASS`.
+
+**NO SKILL_PREFLIGHT_PASS → NO WRITE.**
+
+El Task Contract y el recibo deben estar versionados en Git **antes** del primer commit que cambie código/infraestructura LAB. En Pull Requests, CI verifica ese orden temporal. Crear o completar el preflight después de editar no satisface el gate.
 
 Reglas duras:
 - una tarea LAB no escribe `POS/**`;
 - `laboratorio/pos-lab/index.html` es generado y no se edita manualmente para cambios normales;
 - cambios de pantalla se realizan en `sections/` y capas `styles/` / `animations/`;
-- una IA no puede ampliar su propia allowlist;
+- ningún writer puede ampliar su propia allowlist;
+- el gate aplica también cuando el writer opera mediante ChatGPT o el conector GitHub;
+- cambios LAB protegidos se realizan en rama + Pull Request; no se usa push directo a la rama activa para saltar el orden temporal;
 - al terminar ejecutar build/check, tests LAB, scope guard y revisar diff;
 - cualquier archivo fuera de alcance convierte el resultado en FAIL;
 - la promoción a CANON requiere la skill `canon-promotion` y aprobación explícita del owner.
