@@ -29,9 +29,9 @@
   transition-duration: 0ms;
 }
 
-/* Clientes móvil: colapso ligado 1:1 al gesto sin mutar height por frame.
-   filter/stats se recortan; stats y lista compensan con transform para conservar
-   exactamente la geometría visual del colapso evitando re-layout continuo. */
+/* Clientes móvil: el scroll nativo mueve la lista. El sticky solo recorta su
+   parte inferior la misma cantidad recorrida, por lo que no existe una segunda
+   geometría con translate de la lista ni espacio fantasma al final. */
 @media (max-width:700px) {
   body.lab-client-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden {
     transform:none !important;
@@ -44,39 +44,18 @@
 
   body.lab-client-scroll-linked #pageClientes.active > .page-chrome {
     overflow-anchor:none;
+    clip-path:inset(0 0 var(--lab-client-collapse-y,0px) 0);
+    -webkit-clip-path:inset(0 0 var(--lab-client-collapse-y,0px) 0);
+    will-change:clip-path;
   }
 
   body.lab-client-scroll-linked #pageClientes .filter-bar,
   body.lab-client-scroll-linked #pageClientes .stats-strip {
-    box-sizing:border-box;
-    overflow:hidden !important;
     opacity:var(--lab-client-chrome-opacity,1) !important;
+    transform:translate3d(0,var(--lab-client-chrome-shift,0px),0) !important;
     transition:none !important;
     pointer-events:var(--lab-client-chrome-pointer,auto);
-    will-change:transform,opacity,clip-path;
-    backface-visibility:hidden;
-  }
-
-  body.lab-client-scroll-linked #pageClientes .filter-bar {
-    clip-path:inset(0 0 var(--lab-client-filter-hidden,0px) 0);
-    -webkit-clip-path:inset(0 0 var(--lab-client-filter-hidden,0px) 0);
-    transform:translate3d(0,var(--lab-client-chrome-shift,0px),0) !important;
-  }
-
-  body.lab-client-scroll-linked #pageClientes .stats-strip {
-    clip-path:inset(0 0 var(--lab-client-stats-hidden,0px) 0);
-    -webkit-clip-path:inset(0 0 var(--lab-client-stats-hidden,0px) 0);
-    transform:translate3d(
-      0,
-      calc(var(--lab-client-chrome-shift,0px) - var(--lab-client-filter-hidden,0px)),
-      0
-    ) !important;
-  }
-
-  body.lab-client-scroll-linked #pageClientes .cli-list {
-    transform:translate3d(0,calc(0px - var(--lab-client-total-hidden,0px)),0) !important;
-    transition:none !important;
-    will-change:transform;
+    will-change:transform,opacity;
     backface-visibility:hidden;
   }
 }
@@ -89,8 +68,9 @@
   }
 
   body.lab-client-scroll-linked #pageClientes .filter-bar,
-  body.lab-client-scroll-linked #pageClientes .stats-strip,
-  body.lab-client-scroll-linked #pageClientes .cli-list {
+  body.lab-client-scroll-linked #pageClientes .stats-strip {
+    opacity:1 !important;
+    transform:none !important;
     transition:none !important;
     animation:none !important;
   }

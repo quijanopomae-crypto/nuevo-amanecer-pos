@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENTES-NATIVE-SCROLL-CLIP-001",
+  "environment": "LABORATORIO",
+  "base_ref": "fa4def12ad2e31e92c0cca1acf5c84ecf0f65223",
+  "objective": "Eliminar huecos blancos y desfases del chrome de Clientes móvil usando el scroll nativo como geometría real: el page-chrome sticky se recorta progresivamente desde abajo según el delta real de scroll y la lista deja de recibir transformaciones de compensación.",
+  "allowed_files": [
+    "laboratorio/pos-lab/js/motion/page-transitions.js",
+    "laboratorio/pos-lab/animations/transitions.css",
+    "laboratorio/pos-lab/MOTION_MAP.yaml",
+    "laboratorio/pos-lab/tasks/LAB-CLIENTES-NATIVE-SCROLL-CLIP-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENTES-NATIVE-SCROLL-CLIP-001.json",
+    "tests/laboratorio-clientes-scroll-linked.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/pages/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-animation-edit",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENTES-NATIVE-SCROLL-CLIP-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

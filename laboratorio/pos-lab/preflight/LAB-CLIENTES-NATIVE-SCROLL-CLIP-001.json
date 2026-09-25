@@ -1,0 +1,109 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-NATIVE-SCROLL-CLIP-001",
+  "base_ref": "fa4def12ad2e31e92c0cca1acf5c84ecf0f65223",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "POS/css/base.css READ-ONLY for sticky page-chrome and mobile document-scroll behavior",
+      "Owner Android screenshot showing sticky blank area at end of scroll",
+      "Closed PR #66 diff, rejected before merge due terminal layout-shrink risk"
+    ],
+    "WRITES": [
+      "LAB Clientes native-scroll motion controller",
+      "LAB sticky page-chrome clipping CSS",
+      "MOTION_MAP render strategy",
+      "Focused LAB regression assertions",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes > .page-chrome",
+      "#pageClientes .filter-bar",
+      "#pageClientes .stats-strip"
+    ],
+    "STATE_AFFECTED": [
+      "Normalized visual progress 0..1",
+      "collapseOffset/targetOffset driven by actual window scroll delta",
+      "One pending requestAnimationFrame render"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2, Supabase, Railway or network persistence"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Clientes/credits data and rendering semantics remain unchanged.",
+      "Payments, sales, inventory, cash, OUTBOX and synchronization remain unchanged.",
+      "The client list remains in native document flow and receives no scroll-linked transform.",
+      "Motion remains visual-only and POS/** remains untouched."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Only Clientes mobile LAB chrome presentation changes.",
+      "Canonical gesture classes are visually neutralized only for Clientes LAB as before.",
+      "Other pages and motion controllers remain unchanged."
+    ],
+    "RISKS": [
+      "Sticky clip-path must never crop title/tabs; maximum clip equals filter+stats height only.",
+      "Rapid direction changes must reverse using the same native scroll delta without snap.",
+      "Resize must preserve normalized progress after remeasure.",
+      "Clip-path performance must remain one RAF write per frame."
+    ],
+    "ROLLBACK": [
+      "Revert page-transitions.js, transitions.css, MOTION_MAP and focused test from this task.",
+      "No data/schema/storage rollback required."
+    ],
+    "TESTS": [
+      "Run repository skill-preflight before first functional write.",
+      "Focused test requires native scroll delta as the only collapse input.",
+      "Focused test forbids scroll-linked transform on .cli-list and per-frame height mutation.",
+      "Focused test requires page-chrome bottom clip equal to collapse offset and max bound equal to filter+stats height.",
+      "Run motion infrastructure and all LAB regressions, build/check, scope guard and diff review.",
+      "Require LAB CI and GitHub Pages deploy PASS, then owner Android validation."
+    ]
+  }
+}
