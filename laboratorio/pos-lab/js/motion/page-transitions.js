@@ -134,159 +134,299 @@
     return motion.core.restartClass(element, 'lab-enter-fade');
   };
 
-  /* Clientes móvil: el scroll nativo es la geometría de referencia.
-     El sticky se recorta desde abajo con el mismo delta real del documento.
-     La lista permanece en flujo normal: sin translate compensatorio ni huecos. */
-  (function bindClientsScrollLinkedChrome() {
+  /* Módulos móviles: una sola geometría visual, basada en scroll nativo.
+     Clientes, Inventario, Ventas y Gastos recortan únicamente bandas secundarias
+     al pie del page-chrome. Caja conserva título/pestañas y aplica el mismo
+     feedback visual a su resumen superior cuando existe desplazamiento natural. */
+  (function bindMobileScrollLinkedChrome() {
     const core = motion.core;
     if (!core ||
         typeof document === 'undefined' ||
         typeof document.getElementById !== 'function' ||
         !document.body) return;
 
-    const page = document.getElementById('pageClientes');
-    const chrome = page && page.querySelector(':scope > .page-chrome');
-    const filter = page && page.querySelector('.filter-bar');
-    const stats = page && page.querySelector('.stats-strip');
-    if (!page || !chrome || !filter || !stats) return;
+    const configs = [
+      {
+        key: 'clientes',
+        pageId: 'pageClientes',
+        clipChrome: true,
+        secondarySelectors: ['.filter-bar', '.stats-strip']
+      },
+      {
+        key: 'inventario',
+        pageId: 'pageInventario',
+        clipChrome: true,
+        secondarySelectors: ['.filter-bar', '.stats-strip']
+      },
+      {
+        key: 'ventas',
+        pageId: 'pageVentas',
+        clipChrome: true,
+        secondarySelectors: ['#ventasFilterBar', '#ventasReportControls', '#ventasKPI']
+      },
+      {
+        key: 'caja',
+        pageId: 'pageCaja',
+        clipChrome: false,
+        secondarySelectors: [
+          '#cajContent > .caj-banner-wrap',
+          '#cajContent > .cj-stats-grid',
+          '#cajContent > div:first-child > .banner-cerrada-cj'
+        ],
+        observeSelector: '#cajContent'
+      },
+      {
+        key: 'gastos',
+        pageId: 'pageGastos',
+        clipChrome: true,
+        secondarySelectors: ['.stats-strip', '.filter-bar']
+      }
+    ];
 
-    let active = false;
-    let collapseOffset = 0;
-    let targetOffset = 0;
-    let totalHeight = 1;
-    let lastScroll = 0;
-    let renderFrame = 0;
+    const controllers = new Map();
 
     function currentScroll() {
       return window.scrollY || document.documentElement.scrollTop || 0;
     }
 
-    function mobileClientsActive() {
+    function pageIsMobileActive(page) {
       return window.innerWidth <= 700 &&
         page.classList.contains('active') &&
         document.body.classList.contains('module-mobile-scroll');
     }
 
-    function measure() {
-      const filterHeight = Math.max(0, filter.scrollHeight || filter.getBoundingClientRect().height || 0);
-      const statsHeight = Math.max(0, stats.scrollHeight || stats.getBoundingClientRect().height || 0);
-      totalHeight = Math.max(1, filterHeight + statsHeight);
+    function refreshBodyFlag() {
+      const anyActive = [...controllers.values()].some(controller => controller.inspect().active);
+      document.body.classList.toggle('lab-module-scroll-linked', anyActive);
     }
 
-    function renderOffset(nextOffset) {
-      collapseOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
-      targetOffset = collapseOffset;
-      const progress = core.setProgress(page, collapseOffset / totalHeight);
-      const visible = 1 - progress;
-      const reduced = core.reducedMotion();
+    function createController(config) {
+      const page = document.getElementById(config.pageId);
+      const chrome = page && page.querySelector(':scope > .page-chrome');
+      if (!page || !chrome) return null;
 
-      page.style.setProperty('--lab-client-collapse-y', collapseOffset.toFixed(2) + 'px');
-      page.style.setProperty('--lab-client-chrome-opacity', reduced ? '1' : visible.toFixed(4));
-      page.style.setProperty('--lab-client-chrome-shift', reduced ? '0px' : (-6 * progress).toFixed(2) + 'px');
-      page.style.setProperty('--lab-client-chrome-pointer', progress >= 0.98 ? 'none' : 'auto');
-      core.setState(page, 'idle');
-      return progress;
-    }
+      let active = false;
+      let collapseOffset = 0;
+      let targetOffset = 0;
+      let totalHeight = 1;
+      let lastScroll = 0;
+      let renderFrame = 0;
+      let secondaryElements = [];
 
-    function queueOffset(nextOffset) {
-      targetOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
-      if (renderFrame) return;
-
-      renderFrame = window.requestAnimationFrame(function () {
-        renderFrame = 0;
-        renderOffset(targetOffset);
-      });
-    }
-
-    function clearVisualState() {
-      if (renderFrame) {
-        window.cancelAnimationFrame(renderFrame);
-        renderFrame = 0;
+      function collectSecondary() {
+        const found = [];
+        for (const selector of config.secondarySelectors) {
+          for (const element of page.querySelectorAll(selector)) {
+            if (!found.includes(element)) found.push(element);
+          }
+        }
+        for (const element of secondaryElements) {
+          if (!found.includes(element) && element.classList) {
+            element.classList.remove('lab-scroll-secondary');
+          }
+        }
+        for (const element of found) element.classList.add('lab-scroll-secondary');
+        secondaryElements = found;
+        return found;
       }
-      collapseOffset = 0;
-      targetOffset = 0;
-      page.style.removeProperty('--lab-client-collapse-y');
-      page.style.removeProperty('--lab-client-chrome-opacity');
-      page.style.removeProperty('--lab-client-chrome-shift');
-      page.style.removeProperty('--lab-client-chrome-pointer');
-      page.style.removeProperty('--lab-motion-progress');
-      delete page.dataset.labMotionState;
+
+      function measurableHeight(element) {
+        if (!element || element.hidden) return 0;
+        if (typeof getComputedStyle === 'function' && getComputedStyle(element).display === 'none') return 0;
+        const rectHeight = element.getBoundingClientRect ? element.getBoundingClientRect().height : 0;
+        return Math.max(0, element.scrollHeight || rectHeight || 0);
+      }
+
+      function measure() {
+        const elements = collectSecondary();
+        const measured = elements.reduce((sum, element) => sum + measurableHeight(element), 0);
+        totalHeight = Math.max(1, measured);
+        return totalHeight;
+      }
+
+      function renderOffset(nextOffset) {
+        collapseOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
+        targetOffset = collapseOffset;
+        const progress = core.setProgress(page, collapseOffset / totalHeight);
+        const visible = 1 - progress;
+        const reduced = core.reducedMotion();
+
+        page.style.setProperty('--lab-scroll-collapse-y', collapseOffset.toFixed(2) + 'px');
+        page.style.setProperty('--lab-scroll-secondary-opacity', reduced ? '1' : visible.toFixed(4));
+        page.style.setProperty('--lab-scroll-secondary-shift', reduced ? '0px' : (-6 * progress).toFixed(2) + 'px');
+        page.style.setProperty('--lab-scroll-secondary-pointer', progress >= 0.98 ? 'none' : 'auto');
+        core.setState(page, 'idle');
+        return progress;
+      }
+
+      function queueOffset(nextOffset) {
+        targetOffset = core.clamp(Number(nextOffset) || 0, 0, totalHeight);
+        if (renderFrame) return;
+
+        renderFrame = window.requestAnimationFrame(function () {
+          renderFrame = 0;
+          renderOffset(targetOffset);
+        });
+      }
+
+      function remeasurePreservingProgress() {
+        if (!active) return;
+        const progress = totalHeight > 0 ? targetOffset / totalHeight : 0;
+        measure();
+        renderOffset(progress * totalHeight);
+        lastScroll = currentScroll();
+      }
+
+      function clearVisualState() {
+        if (renderFrame) {
+          window.cancelAnimationFrame(renderFrame);
+          renderFrame = 0;
+        }
+        collapseOffset = 0;
+        targetOffset = 0;
+        for (const element of secondaryElements) element.classList.remove('lab-scroll-secondary');
+        secondaryElements = [];
+        page.classList.remove('lab-scroll-linked');
+        delete page.dataset.labScrollClip;
+        page.style.removeProperty('--lab-scroll-collapse-y');
+        page.style.removeProperty('--lab-scroll-secondary-opacity');
+        page.style.removeProperty('--lab-scroll-secondary-shift');
+        page.style.removeProperty('--lab-scroll-secondary-pointer');
+        page.style.removeProperty('--lab-motion-progress');
+        delete page.dataset.labMotionState;
+      }
+
+      function activate() {
+        active = true;
+        page.classList.add('lab-scroll-linked');
+        page.dataset.labScrollClip = config.clipChrome ? 'chrome' : 'none';
+        measure();
+        collapseOffset = 0;
+        targetOffset = 0;
+        lastScroll = currentScroll();
+        renderOffset(0);
+        refreshBodyFlag();
+      }
+
+      function deactivate() {
+        active = false;
+        clearVisualState();
+        refreshBodyFlag();
+      }
+
+      function syncActivation() {
+        const next = pageIsMobileActive(page);
+        if (next === active) return;
+        if (next) activate();
+        else deactivate();
+      }
+
+      function onScroll() {
+        if (!active) return;
+        const now = currentScroll();
+        const delta = now - lastScroll;
+        lastScroll = now;
+        if (Math.abs(delta) < 0.5) return;
+        queueOffset(targetOffset + delta);
+      }
+
+      function onResize() {
+        const wasActive = active;
+        syncActivation();
+        if (!wasActive || !active) return;
+        remeasurePreservingProgress();
+      }
+
+      const pageObserver = typeof MutationObserver === 'function'
+        ? new MutationObserver(syncActivation)
+        : null;
+      if (pageObserver) {
+        pageObserver.observe(page, { attributes: true, attributeFilter: ['class'] });
+      }
+
+      const resizeObserver = typeof ResizeObserver === 'function'
+        ? new ResizeObserver(remeasurePreservingProgress)
+        : null;
+      if (resizeObserver) {
+        resizeObserver.observe(chrome);
+        const observed = config.observeSelector ? page.querySelector(config.observeSelector) : null;
+        if (observed) resizeObserver.observe(observed);
+      }
+
+      return {
+        key: config.key,
+        page,
+        syncActivation,
+        onScroll,
+        onResize,
+        remeasurePreservingProgress,
+        inspect: function () {
+          const base = core.inspect(page);
+          return Object.assign(base, {
+            active,
+            clipChrome: config.clipChrome,
+            collapseOffset,
+            targetOffset,
+            totalHeight,
+            secondaryCount: secondaryElements.length
+          });
+        },
+        reset: function () {
+          if (!active) return false;
+          measure();
+          renderOffset(0);
+          lastScroll = currentScroll();
+          return true;
+        }
+      };
     }
 
-    function activate() {
-      active = true;
-      document.body.classList.add('lab-client-scroll-linked');
-      measure();
-      collapseOffset = 0;
-      targetOffset = 0;
-      lastScroll = currentScroll();
-      renderOffset(0);
-    }
-
-    function deactivate() {
-      active = false;
-      document.body.classList.remove('lab-client-scroll-linked');
-      clearVisualState();
-    }
-
-    function syncActivation() {
-      const next = mobileClientsActive();
-      if (next === active) return;
-      if (next) activate();
-      else deactivate();
+    for (const config of configs) {
+      const controller = createController(config);
+      if (controller) controllers.set(config.pageId, controller);
     }
 
     window.addEventListener('scroll', function () {
-      if (!active) return;
-      const now = currentScroll();
-      const delta = now - lastScroll;
-      lastScroll = now;
-      if (Math.abs(delta) < 0.5) return;
-
-      // Una única fuente geométrica: el delta real del scroll nativo.
-      // Bajar oculta; subir revierte exactamente la misma distancia.
-      queueOffset(targetOffset + delta);
+      for (const controller of controllers.values()) controller.onScroll();
     }, { passive: true });
 
     window.addEventListener('resize', function () {
-      const wasActive = active;
-      syncActivation();
-      if (!wasActive || !active) return;
-      const progress = totalHeight > 0 ? targetOffset / totalHeight : 0;
-      measure();
-      renderOffset(progress * totalHeight);
-      lastScroll = currentScroll();
+      for (const controller of controllers.values()) controller.onResize();
     }, { passive: true });
 
     if (typeof MutationObserver === 'function') {
-      new MutationObserver(syncActivation).observe(page, {
-        attributes: true,
-        attributeFilter: ['class']
-      });
-      new MutationObserver(syncActivation).observe(document.body, {
+      new MutationObserver(function () {
+        for (const controller of controllers.values()) controller.syncActivation();
+      }).observe(document.body, {
         attributes: true,
         attributeFilter: ['class']
       });
     }
 
-    motion.clientsChrome = Object.assign(motion.clientsChrome || {}, {
-      inspect: function () {
-        const base = core.inspect(page);
-        return Object.assign(base, {
-          active,
-          collapseOffset,
-          targetOffset,
-          totalHeight
-        });
+    motion.moduleChrome = Object.assign(motion.moduleChrome || {}, {
+      inspect: function (pageId) {
+        const controller = controllers.get(pageId);
+        return controller ? controller.inspect() : null;
       },
-      reset: function () {
-        if (!active) return false;
-        renderOffset(0);
-        lastScroll = currentScroll();
-        return true;
+      reset: function (pageId) {
+        const controller = controllers.get(pageId);
+        return controller ? controller.reset() : false;
+      },
+      pages: function () {
+        return [...controllers.keys()];
       }
     });
 
-    syncActivation();
+    const clientsController = controllers.get('pageClientes');
+    motion.clientsChrome = Object.assign(motion.clientsChrome || {}, {
+      inspect: function () {
+        return clientsController ? clientsController.inspect() : null;
+      },
+      reset: function () {
+        return clientsController ? clientsController.reset() : false;
+      }
+    });
+
+    for (const controller of controllers.values()) controller.syncActivation();
   })();
 })();
