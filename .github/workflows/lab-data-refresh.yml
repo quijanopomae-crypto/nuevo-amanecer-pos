@@ -2,6 +2,11 @@ name: Refresh LAB Data
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/lab-data-refresh-trigger.json"
 
 permissions:
   contents: read
@@ -50,6 +55,20 @@ jobs:
       - name: Convert CANON SQL to POS snapshot
         working-directory: tools/cloudflare-lab
         run: python3 scripts/lab-snapshot-from-sql.py --sql /tmp/canon.sql --output /tmp/lab-snapshot.json
+
+      - name: Require products and customers in LAB snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('fs');
+          const snapshot = JSON.parse(fs.readFileSync('/tmp/lab-snapshot.json', 'utf8'));
+          const productos = Array.isArray(snapshot?.data?.productos) ? snapshot.data.productos.length : 0;
+          const clientes = Array.isArray(snapshot?.data?.clientes) ? snapshot.data.clientes.length : 0;
+          console.log(JSON.stringify({ state: 'LAB_SNAPSHOT_COUNTS', productos, clientes }));
+          if (productos < 1) throw new Error('LAB snapshot has zero productos');
+          if (clientes < 1) throw new Error('LAB snapshot has zero clientes');
+          NODE
 
       - name: Publish signed baseline to D1 LAB
         working-directory: tools/cloudflare-lab
