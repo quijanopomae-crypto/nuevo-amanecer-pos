@@ -1,0 +1,44 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-WORKSPACE-CONFLICT-LOOP-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "103ec8c321852b82c2c5407a466ddf63f441761d",
+  "objective": "Corregir exclusivamente en POS-LAB el bucle de revisión conflictiva del workspace remoto: evitar que navegación/UI sin cambios materiales genere guardados D1, conservar cambios reales de configuración/datos y asegurar que un mismo operation_id en revision_conflict no reabra repetidamente el modal en la misma sesión.",
+  "allowed_files": [
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/tasks/LAB-WORKSPACE-CONFLICT-LOOP-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-WORKSPACE-CONFLICT-LOOP-FIX-001.json",
+    "tests/laboratorio-workspace-recovery.test.mjs",
+    "tests/laboratorio-workspace-boot.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/js/motion/**",
+    "laboratorio/pos-lab/lab-overrides.js",
+    ".github/**",
+    "evidence/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "D1/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-WORKSPACE-CONFLICT-LOOP-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
