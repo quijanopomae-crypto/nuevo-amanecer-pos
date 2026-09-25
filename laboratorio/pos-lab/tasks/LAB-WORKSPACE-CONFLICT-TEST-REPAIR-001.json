@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-WORKSPACE-CONFLICT-TEST-REPAIR-001",
+  "environment": "LABORATORIO",
+  "base_ref": "8f1805b9d3ceb7b95e47d13882bbf3881eb6f9e2",
+  "objective": "Ajustar exclusivamente la regresión LAB de recuperación de revision_conflict para reflejar la lectura fresca adicional introducida por la verificación segura del pending, sin cambiar comportamiento funcional.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-WORKSPACE-CONFLICT-TEST-REPAIR-001.json",
+    "laboratorio/pos-lab/preflight/LAB-WORKSPACE-CONFLICT-TEST-REPAIR-001.json",
+    "tests/laboratorio-workspace-recovery.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    ".github/**",
+    "evidence/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "D1/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-WORKSPACE-CONFLICT-TEST-REPAIR-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

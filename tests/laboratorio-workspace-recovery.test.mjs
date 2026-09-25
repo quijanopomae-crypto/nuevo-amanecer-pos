@@ -243,7 +243,8 @@ test('conflicto de revisión puede descartarse y cargar D1 sin borrar todo el na
 
   const loaded = await h.context.window.NuevoAmanecerLabWorkspace.useRemote();
   assert.equal(loaded, true);
-  assert.equal(reads, 2);
+  // 1) lectura inicial, 2) verificación fresca tras 409, 3) carga final después de “Usar D1 LAB”.
+  assert.equal(reads, 3);
   assert.equal(h.current.data.productos[0].id, 'REMOTE-CURRENT');
   assert.equal(h.persistent.dump(PENDING_KEY), undefined);
   assert.equal(h.context.window.NuevoAmanecerLabWorkspace.state().conflict, false);
