@@ -103,7 +103,7 @@
     state.remoteReady = false;
     renderStatus('Pendiente local descartado. Cargando D1 LAB…', 'info');
     var loaded = await loadRemoteWorkspace({ silent: false });
-    fillPanel();
+    if (document.getElementById('naLabWorkspaceOverlay')) fillPanel();
     return loaded;
   }
 
@@ -300,7 +300,7 @@
       if (state.conflict) {
         updateBadge('CONFLICTO');
         renderStatus('Hay un pendiente local de una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
-        fillPanel();
+        if (document.getElementById('naLabWorkspaceOverlay')) fillPanel();
         return false;
       }
       updateBadge('PENDIENTE');
@@ -310,6 +310,7 @@
     }
 
     await applyRemoteWorkspace(payload);
+    state.conflict = false;
     var productos = Array.isArray(payload.snapshot?.data?.productos) ? payload.snapshot.data.productos.length : 0;
     var clientes = Array.isArray(payload.snapshot?.data?.clientes) ? payload.snapshot.data.clientes.length : 0;
     renderStatus('Datos LAB cargados: ' + productos + ' productos · ' + clientes + ' clientes. Los cambios se guardan solo en D1 LAB.', 'ok');
@@ -383,6 +384,7 @@
 
       var completed = body;
       clearPendingOperation();
+      state.conflict = false;
       state.revision = Number(payload.revision || state.revision);
 
       // Si el snapshot local avanzó después de capturar la operación que acaba
@@ -672,6 +674,7 @@
     saveNow: flushRemoteSave,
     refreshFromCanon: refreshFromCanon,
     resetToBaseline: resetToBaseline,
+    useRemote: discardPendingAndLoadRemote,
     open: function () {
       var overlay = document.getElementById('naLabWorkspaceOverlay');
       if (overlay) { fillPanel(); overlay.scrollTop = 0; overlay.style.display = 'block'; }
