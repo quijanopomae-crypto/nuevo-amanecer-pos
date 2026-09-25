@@ -1,0 +1,119 @@
+name: Repair LAB Workspace
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/lab-workspace-repair-trigger.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repair-lab-workspace
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      LAB_WORKER_URL: https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Require LAB activation secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$POS_ACTIVATION_SECRET"
+
+      - name: Checkout exact active branch head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Require current active branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Inspect and repair active LAB workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const base = process.env.LAB_WORKER_URL;
+          const secret = process.env.POS_ACTIVATION_SECRET;
+          if (!base || !secret) throw new Error('LAB repair environment incomplete');
+
+          async function jsonFetch(path, options = {}) {
+            const response = await fetch(base + path, options);
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(path + ' failed: status=' + response.status + ' error=' + (body.error || 'invalid_response'));
+            }
+            return body;
+          }
+
+          const activation = await jsonFetch('/auth/activate', {
+            method: 'POST',
+            headers: { 'x-activation-secret': secret }
+          });
+          if (typeof activation.session_token !== 'string' || !activation.session_token) {
+            throw new Error('LAB activation did not return session token');
+          }
+          const headers = { authorization: 'Bearer ' + activation.session_token };
+
+          function counts(payload) {
+            return {
+              productos: Array.isArray(payload?.snapshot?.data?.productos) ? payload.snapshot.data.productos.length : 0,
+              clientes: Array.isArray(payload?.snapshot?.data?.clientes) ? payload.snapshot.data.clientes.length : 0
+            };
+          }
+
+          const before = await jsonFetch('/lab/workspace', { headers });
+          const beforeCounts = counts(before);
+          console.log(JSON.stringify({
+            state: 'LAB_WORKSPACE_BEFORE',
+            revision: before.revision,
+            baseline_id: before.baseline_id,
+            reason: before.reason,
+            ...beforeCounts
+          }));
+
+          let repaired = false;
+          if (beforeCounts.productos < 1 || beforeCounts.clientes < 1) {
+            const reset = await jsonFetch('/lab/workspace/reset', {
+              method: 'POST',
+              headers: { ...headers, 'content-type': 'application/json' },
+              body: JSON.stringify({ expected_revision: Number(before.revision) })
+            });
+            console.log(JSON.stringify({
+              state: 'LAB_WORKSPACE_RESET',
+              status: reset.status,
+              revision: reset.revision,
+              baseline_id: reset.baseline_id
+            }));
+            repaired = true;
+          }
+
+          const after = await jsonFetch('/lab/workspace', { headers });
+          const afterCounts = counts(after);
+          if (afterCounts.productos < 1 || afterCounts.clientes < 1) {
+            throw new Error('LAB workspace still empty after repair');
+          }
+          console.log(JSON.stringify({
+            state: 'LAB_WORKSPACE_REPAIR_PASS',
+            repaired,
+            revision: after.revision,
+            baseline_id: after.baseline_id,
+            reason: after.reason,
+            ...afterCounts
+          }));
+          NODE
