@@ -1,0 +1,37 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-SKILL-PREFLIGHT-GATE-001",
+  "environment": "LABORATORIO",
+  "base_ref": "cd0082eb575f5fb0316c61aa447a5edbd219da9f",
+  "objective": "Hacer obligatorio y verificable que cualquier writer, incluido ChatGPT/conector GitHub, lea las skills LAB aplicables y complete análisis de impacto antes del primer cambio funcional.",
+  "allowed_files": [
+    "AGENTS.md",
+    ".opencode/commands/lab-preflight.md",
+    ".opencode/agents/pos-lab-implementer.md",
+    "laboratorio/pos-lab/skill-preflight.mjs",
+    "laboratorio/pos-lab/scope-guard.mjs",
+    "laboratorio/pos-lab/LAB_TASK.example.json",
+    "laboratorio/pos-lab/tasks/LAB-SKILL-PREFLIGHT-GATE-001.json",
+    "laboratorio/pos-lab/preflight/LAB-SKILL-PREFLIGHT-GATE-001.json",
+    "tests/laboratorio-skill-preflight.test.mjs",
+    "tests/laboratorio-scope-guard.test.mjs",
+    ".github/workflows/lab-cloud-ci.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/v1.3/**",
+    "infra/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-SKILL-PREFLIGHT-GATE-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
