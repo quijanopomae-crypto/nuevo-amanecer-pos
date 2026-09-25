@@ -3,8 +3,8 @@
   animation:lab-fade-in var(--lab-motion-fast) var(--lab-ease-standard) both;
 }
 
-/* Datos POS-LAB: el panel sigue el dedo 1:1 y el fondo se desvanece
-   progresivamente. Solo es feedback visual; no controla estado ni sync. */
+/* Datos POS-LAB: movimiento, opacidad y backdrop comparten el mismo progreso
+   del gesto. La fase settling continúa desde ese frame, nunca desde cero. */
 #naLabWorkspaceOverlay {
   --lab-workspace-drag-y:0px;
   --lab-workspace-panel-opacity:1;
@@ -23,13 +23,13 @@
 }
 
 #naLabWorkspaceOverlay.lab-workspace-settling {
-  transition:background-color 360ms cubic-bezier(.22,1,.36,1);
+  transition:background-color 560ms cubic-bezier(.22,1,.36,1);
 }
 
 #naLabWorkspaceOverlay.lab-workspace-settling > div {
   transition:
-    transform 360ms cubic-bezier(.22,1,.36,1),
-    opacity 360ms cubic-bezier(.22,1,.36,1);
+    transform 560ms cubic-bezier(.22,1,.36,1),
+    opacity 560ms cubic-bezier(.22,1,.36,1);
   will-change:transform,opacity;
 }
 
