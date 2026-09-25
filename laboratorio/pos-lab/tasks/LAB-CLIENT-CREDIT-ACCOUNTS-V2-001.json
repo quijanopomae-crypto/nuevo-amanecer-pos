@@ -1,0 +1,48 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-001",
+  "environment": "LABORATORIO",
+  "base_ref": "9109d22f3872a7ed5849913b4cc9ef104c037b0d",
+  "objective": "Evolucionar exclusivamente en POS-LAB la gestión de créditos por cliente hacia cuentas acumulativas y categorías manuales: Créditos pequeños como destino predeterminado independiente del monto/producto, categorías reutilizables creadas por el usuario, créditos separados con cuotas/fechas, historial y cancelados organizados, clasificación financiera explicable y ficha de cliente a pantalla completa; reutilizando el ledger, pagos, caja, reversión, evaluación y línea de crédito existentes sin modificar CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-CREDIT-ACCOUNTS-V2-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-ACCOUNTS-V2-001.json",
+    "tests/laboratorio-client-financial-profile.test.mjs",
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/js/motion/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    ".github/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-ACCOUNTS-V2-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
