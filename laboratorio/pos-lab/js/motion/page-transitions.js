@@ -74,15 +74,25 @@
     let done = false;
     let timer = null;
 
-    function finish() {
-      if (done) return;
-      done = true;
+    function cleanup() {
       if (timer !== null) window.clearTimeout(timer);
       if (element && element.removeEventListener) {
         element.removeEventListener('transitionend', onEnd);
         element.removeEventListener('transitioncancel', onCancel);
       }
+    }
+
+    function finish() {
+      if (done) return;
+      done = true;
+      cleanup();
       if (typeof callback === 'function') callback();
+    }
+
+    function cancel() {
+      if (done) return;
+      done = true;
+      cleanup();
     }
 
     function onEnd(event) {
@@ -98,13 +108,13 @@
 
     if (!element || !element.addEventListener) {
       timer = window.setTimeout(finish, fallbackMs);
-      return finish;
+      return cancel;
     }
 
     element.addEventListener('transitionend', onEnd);
     element.addEventListener('transitioncancel', onCancel);
     timer = window.setTimeout(finish, fallbackMs);
-    return finish;
+    return cancel;
   }
 
   motion.core = Object.assign(motion.core || {}, {
