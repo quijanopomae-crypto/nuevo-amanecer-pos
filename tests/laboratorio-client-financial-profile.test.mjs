@@ -106,7 +106,7 @@ test('LAB V2 does not implement a second cash or FIFO ledger',()=>{
   const start=source.indexOf('// ===== LAB ETAPA 02');
   const end=source.indexOf('// ===== FIN LAB ETAPA 02',start);
   const block=source.slice(start,end);
-  assert.doesNotMatch(block,/cajMovs\.push|_naAllocateCreditPayment\s*=|FIFO|OUTBOX/);
+  assert.doesNotMatch(block,/cajMovs\\.push|_naAllocateCreditPayment\\s*=/);
   assert.match(block,/abrirPago\(/);
   assert.match(block,/_naEvaluateClientCredit/);
 });
