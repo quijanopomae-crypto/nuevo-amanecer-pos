@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-PROFILE-001",
+  "environment": "LABORATORIO",
+  "base_ref": "15f3ced3ffc6c01bba4a7cff6c813e64f84a3c64",
+  "objective": "Construir exclusivamente en POS-LAB una ficha financiera de cliente orientada a decisión rápida, reutilizando los cálculos, pagos, historial y evaluación existentes sin cambiar reglas financieras, persistencia, caja, FIFO, OUTBOX, sincronización ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-PROFILE-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-PROFILE-001.json",
+    "tests/laboratorio-client-financial-profile.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/js/motion/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    ".github/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-PROFILE-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

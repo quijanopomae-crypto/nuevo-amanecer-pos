@@ -1,0 +1,125 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-PROFILE-001",
+  "base_ref": "15f3ced3ffc6c01bba4a7cff6c813e64f84a3c64",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/sections/clientes.html",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "POS/js/legacy-inline/inline-01.js READ-ONLY",
+      "POS/js/legacy-inline/inline-02.js READ-ONLY",
+      "POS/js/legacy-inline/inline-04.js READ-ONLY",
+      "tests/laboratorio-clientes-motion.test.mjs",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "Auditoria_CasaMarket_vs_Nuevo_Amanecer_POS.pdf"
+    ],
+    "WRITES": [
+      "LAB-only client financial profile rendering layered after the existing cliRender",
+      "LAB-only responsive financial profile styles scoped to #pageClientes",
+      "Focused synthetic regression test for financial profile hierarchy, urgency ordering and non-mutation invariants",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes #cliList .client-card .client-creds",
+      "LAB-only .lab-fin-* descendants injected inside existing client expansion panels",
+      "Existing client header remains the compact identity entry point"
+    ],
+    "STATE_AFFECTED": [
+      "Ephemeral LAB visual credit-view selection per client",
+      "Preservation of currently expanded client cards across cliRender refreshes",
+      "No clientes/creditos/payment/cash business state mutations"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1 LAB, R2, Supabase, Railway or production storage writes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Debt and pending balances are consumed from the existing credit model and are never recalculated into persisted fields.",
+      "Payments continue exclusively through the existing abrirPago flow; no second payment implementation is introduced.",
+      "Payment history remains sourced from each credit pagos ledger and existing credit-detail flow.",
+      "Credit-line eligibility and available amount are consumed from _naEvaluateClientCredit without changing its formula or policy.",
+      "FIFO, reversals, cash movements, OUTBOX, synchronization and historical balances remain unchanged.",
+      "POS/** remains untouched and LAB never becomes production data authority."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes becomes a richer read-only visual consumer of existing Créditos, Pagos and credit-evaluation state.",
+      "The existing payment modal, credit detail modal and evaluation modal remain the only action paths from the new profile.",
+      "The shared mobile scroll-linked controller is not modified; only dynamic content height changes and is covered by regression tests.",
+      "Products, inventory, sales, cash, expenses, OUTBOX and synchronization receive no code changes."
+    ],
+    "RISKS": [
+      "Legacy credits can have missing or imprecise due dates, so urgency must degrade to neutral labels instead of invented dates.",
+      "A normal cliRender refresh can rebuild client cards and accidentally collapse the currently opened profile.",
+      "Older payment records may omit operation, cashier or canonical time fields and must display a dash without fabrication.",
+      "The richer mobile profile increases page height and could expose regressions in sticky/scroll-linked chrome."
+    ],
+    "ROLLBACK": [
+      "Revert laboratorio/pos-lab/lab-overrides.js, laboratorio/pos-lab/styles/pages/clientes.css and the focused test from this task.",
+      "No data, schema, ledger, cash, sync or CANON rollback is required because this task performs no financial writes."
+    ],
+    "TESTS": [
+      "Run repository SKILL_PREFLIGHT before the first functional write.",
+      "Test normal debt, overdue debt, no credit line, multiple credits, closed credit, incomplete data and client without credits using synthetic test fixtures only.",
+      "Verify urgency ordering vencido -> hoy -> próximo -> vigente and closed credits excluded from the active default view.",
+      "Verify profile buttons call existing abrirPago, abrirDetalleCredito, abrirEvaluacionCredito and abrirCred functions rather than new financial flows.",
+      "Verify payment history exposes ID, date/time, method, cashier, amount, before/after balance, credit, digital operation and reversal state when available.",
+      "Run existing Clientes micro-motion and scroll-linked regression tests.",
+      "Run credit/payment engine and LAB regression suite, build/check, scope guard, diff review, CI and GitHub Pages validation.",
+      "Validate 360-430 px mobile layout with no horizontal overflow and confirm downward/upward scroll behavior."
+    ]
+  }
+}
