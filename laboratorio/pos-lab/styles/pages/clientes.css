@@ -71,6 +71,7 @@
 #pageClientes .lab-fin-credit-metrics .priority b{color:var(--red);font-size:13px}
 #pageClientes .lab-fin-progress{height:6px;margin-top:8px;background:#e2e8f0;border-radius:999px;overflow:hidden}
 #pageClientes .lab-fin-progress span{display:block;height:100%;background:var(--teal);border-radius:inherit}
+#pageClientes .lab-fin-progress-label{margin-top:4px;font-size:9px;font-weight:800;color:var(--slate);text-align:right}
 #pageClientes .lab-fin-credit-due,
 #pageClientes .lab-fin-installment{display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:10px;font-weight:700;color:var(--slate)}
 #pageClientes .lab-fin-credit-due span,
