@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-WORKSPACE-SWIPE-DISMISS-001",
+  "environment": "LABORATORIO",
+  "base_ref": "877546c328d3d18a56e30f3585b6e79c9ce4b405",
+  "objective": "Permitir que el panel Datos POS-LAB se oculte al deslizar hacia abajo, siguiendo el dedo de forma continua y completando el cierre suavemente, sin alterar estado comercial, storage ni sincronización.",
+  "allowed_files": [
+    "laboratorio/pos-lab/js/motion/modal-motion.js",
+    "laboratorio/pos-lab/animations/modals.css",
+    "laboratorio/pos-lab/tasks/LAB-WORKSPACE-SWIPE-DISMISS-001.json",
+    "laboratorio/pos-lab/preflight/LAB-WORKSPACE-SWIPE-DISMISS-001.json",
+    "tests/laboratorio-workspace-swipe-dismiss.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-WORKSPACE-SWIPE-DISMISS-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

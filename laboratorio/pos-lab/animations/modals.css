@@ -1,2 +1,41 @@
-/* Animaciones futuras de modales LAB. */
-.lab-modal-enter { animation:lab-fade-in var(--lab-motion-fast) var(--lab-ease-standard) both; }
+/* Motion LAB para modales. */
+.lab-modal-enter {
+  animation:lab-fade-in var(--lab-motion-fast) var(--lab-ease-standard) both;
+}
+
+/* Datos POS-LAB: el panel sigue el dedo 1:1 y el fondo se desvanece
+   progresivamente. Solo es feedback visual; no controla estado ni sync. */
+#naLabWorkspaceOverlay {
+  --lab-workspace-drag-y:0px;
+  --lab-workspace-panel-opacity:1;
+  --lab-workspace-backdrop-alpha:.62;
+  background-color:rgba(15,23,42,var(--lab-workspace-backdrop-alpha)) !important;
+  overscroll-behavior:contain;
+}
+
+#naLabWorkspaceOverlay > div {
+  transform:translate3d(0,var(--lab-workspace-drag-y),0);
+  opacity:var(--lab-workspace-panel-opacity);
+}
+
+#naLabWorkspaceOverlay.lab-workspace-dragging > div {
+  will-change:transform,opacity;
+}
+
+#naLabWorkspaceOverlay.lab-workspace-settling {
+  transition:background-color 360ms cubic-bezier(.22,1,.36,1);
+}
+
+#naLabWorkspaceOverlay.lab-workspace-settling > div {
+  transition:
+    transform 360ms cubic-bezier(.22,1,.36,1),
+    opacity 360ms cubic-bezier(.22,1,.36,1);
+  will-change:transform,opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #naLabWorkspaceOverlay.lab-workspace-settling,
+  #naLabWorkspaceOverlay.lab-workspace-settling > div {
+    transition-duration:.01ms !important;
+  }
+}
