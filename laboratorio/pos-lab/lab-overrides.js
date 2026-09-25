@@ -19,7 +19,10 @@
 
   var labClientMotionTimer = 0;
   var labClientMotionReady = false;
-  var originalCliRender = (typeof cliRender === 'function') ? cliRender : null;
+  var originalCliRender = null;
+  var labClientProfileObserver = null;
+  var labClientProfileRaf = 0;
+  var labClientProfileEnhancing = false;
 
 
   // ===== LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====
@@ -403,7 +406,8 @@
   window.NA_LAB_CLIENT_FINANCIAL_PROFILE = Object.freeze({
     classifyCredit: labCreditBucket,
     sortCredits: function (rows) { return (Array.isArray(rows) ? rows.slice() : []).sort(labCreditSort); },
-    summarizeClient: labClientSummary
+    summarizeClient: labClientSummary,
+    ensureRenderHook: labEnsureClientRenderHook
   });
   // ===== FIN LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====
 
@@ -423,44 +427,114 @@
     });
   }
 
-  if (originalCliRender) {
-    cliRender = function () {
-      var context = this;
-      var args = arguments;
-      var page = document.getElementById('pageClientes');
-      var active = !!(page && page.classList.contains('active'));
+  function labClientRenderWrapper() {
+    if (!originalCliRender) return undefined;
+    var context = this;
+    var args = arguments;
+    var page = document.getElementById('pageClientes');
+    var active = !!(page && page.classList.contains('active'));
+    var openIds = labOpenClientIds();
+
+    if (!active || labClientReducedMotion()) {
+      var immediateResult = originalCliRender.apply(context, args);
+      labRenderClientProfiles(openIds);
+      return immediateResult;
+    }
+
+    // Primera pintura: datos inmediatos, solo una entrada suave.
+    if (!labClientMotionReady) {
+      labClientMotionReady = true;
+      var firstResult = originalCliRender.apply(context, args);
+      labRenderClientProfiles(openIds);
+      labClientEnter(page);
+      return firstResult;
+    }
+
+    // Refrescos siguientes: la vista se desplaza lentamente sin desaparecer.
+    // El DOM se actualiza casi al final de la salida y luego vuelve desde la
+    // misma posición; no existe salto instantáneo de -Y a +Y.
+    clearTimeout(labClientMotionTimer);
+    page.classList.remove('lab-client-refresh-in');
+    page.classList.add('lab-client-refresh-out');
+
+    labClientMotionTimer = setTimeout(function () {
+      originalCliRender.apply(context, args);
+      labRenderClientProfiles(openIds);
+      requestAnimationFrame(function () {
+        page.classList.remove('lab-client-refresh-out');
+      });
+    }, 850);
+  }
+  labClientRenderWrapper.__naLabFinancialWrapper = true;
+
+  function labEnsureClientRenderHook() {
+    var current = (typeof cliRender === 'function') ? cliRender : null;
+    if (!current) return false;
+
+    if (current === labClientRenderWrapper || current.__naLabFinancialWrapper === true) {
+      return true;
+    }
+
+    originalCliRender = current;
+    cliRender = labClientRenderWrapper;
+
+    // Si el render CANON ya ocurrió antes del enganche, mejora ese DOM ahora.
+    labRenderClientProfiles(labOpenClientIds());
+    return true;
+  }
+
+  function labClientProfilesNeedEnhancement() {
+    var list = document.getElementById('cliList');
+    if (!list) return false;
+    return Array.from(list.querySelectorAll('.client-creds[id^="cc-"]')).some(function (panel) {
+      return !panel.querySelector('.lab-fin-profile');
+    });
+  }
+
+  function labScheduleClientProfileEnhancement() {
+    if (labClientProfileEnhancing || labClientProfileRaf) return;
+    labClientProfileRaf = requestAnimationFrame(function () {
+      labClientProfileRaf = 0;
+      labEnsureClientRenderHook();
+      if (!labClientProfilesNeedEnhancement()) return;
+
       var openIds = labOpenClientIds();
-
-      if (!active || labClientReducedMotion()) {
-        var immediateResult = originalCliRender.apply(context, args);
+      labClientProfileEnhancing = true;
+      try {
         labRenderClientProfiles(openIds);
-        return immediateResult;
+      } finally {
+        labClientProfileEnhancing = false;
       }
+    });
+  }
 
-      // Primera pintura: datos inmediatos, solo una entrada suave.
-      if (!labClientMotionReady) {
-        labClientMotionReady = true;
-        var firstResult = originalCliRender.apply(context, args);
-        labRenderClientProfiles(openIds);
-        labClientEnter(page);
-        return firstResult;
-      }
+  function labObserveClientProfileRenders() {
+    var list = document.getElementById('cliList');
+    if (!list || typeof MutationObserver !== 'function') return false;
 
-      // Refrescos siguientes: la vista se desplaza lentamente sin desaparecer.
-      // El DOM se actualiza casi al final de la salida y luego vuelve desde la
-      // misma posición; no existe salto instantáneo de -Y a +Y.
-      clearTimeout(labClientMotionTimer);
-      page.classList.remove('lab-client-refresh-in');
-      page.classList.add('lab-client-refresh-out');
+    if (labClientProfileObserver) labClientProfileObserver.disconnect();
+    labClientProfileObserver = new MutationObserver(function () {
+      // _baseCliRender reconstruye las tarjetas. Si otro código reemplazó
+      // cliRender, este ciclo vuelve a engancharlo y realza el DOM resultante.
+      labScheduleClientProfileEnhancement();
+    });
+    labClientProfileObserver.observe(list, { childList:true, subtree:true });
+    labScheduleClientProfileEnhancement();
+    return true;
+  }
 
-      labClientMotionTimer = setTimeout(function () {
-        originalCliRender.apply(context, args);
-        labRenderClientProfiles(openIds);
-        requestAnimationFrame(function () {
-          page.classList.remove('lab-client-refresh-out');
-        });
-      }, 850);
-    };
+  // Enganche inmediato + autocuración de renders tardíos/hidratación remota.
+  labEnsureClientRenderHook();
+  labObserveClientProfileRenders();
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('load', function () {
+      labEnsureClientRenderHook();
+      labObserveClientProfileRenders();
+    });
+    window.addEventListener('pageshow', function () {
+      labEnsureClientRenderHook();
+      labObserveClientProfileRenders();
+    });
   }
 
   function clearRouteRestoreShield() {

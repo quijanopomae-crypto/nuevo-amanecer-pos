@@ -1,0 +1,133 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-PROFILE-VISUAL-FIX-001",
+  "base_ref": "c58f12f0d2b111a34e042a2001e2f0275572f65b",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "source_hashes": {
+    "AGENTS.md": "7fc62ac9e9064b53aba95b467384200b56a6d217",
+    "laboratorio/pos-lab/AGENTS.md": "840088c8c342f69a4b973bdf2b2ca7e7d91eb339",
+    "laboratorio/pos-lab/UI_MAP.yaml": "b88fb28d8047a5dfccb61b99572d9e10686626fe",
+    "laboratorio/pos-lab/MOTION_MAP.yaml": "56830059c7601b83237cd940106d711bcb059073",
+    "laboratorio/pos-lab/lab-overrides.js": "0d3ef742c5308a482bb46b01c56ad0e092c73b40",
+    "laboratorio/pos-lab/styles/pages/clientes.css": "6913bd4edee1b4e622c102c905f0b3568082441f",
+    "tests/laboratorio-client-financial-profile.test.mjs": "453fcc0998de9e9c941f0b104bf0225c38372c39"
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/sections/clientes.html",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "POS/js/legacy-inline/inline-01.js READ-ONLY",
+      "POS/js/legacy-inline/inline-02.js READ-ONLY",
+      "POS/js/legacy-inline/inline-03.js READ-ONLY",
+      "POS/js/legacy-inline/inline-04.js READ-ONLY",
+      "POS/js/legacy-inline/inline-12.js READ-ONLY",
+      "laboratorio/pos-lab/js/lab-workspace.js READ-ONLY",
+      "tests/laboratorio-client-financial-profile.test.mjs",
+      "published POS-LAB DOM, CSS and console"
+    ],
+    "WRITES": [
+      "New LAB-only Task Contract and BEFORE_WRITE receipt",
+      "LAB-only render hook in laboratorio/pos-lab/lab-overrides.js",
+      "Focused LAB regression test for late render-hook binding",
+      "clientes.css only if live visual validation requires a scoped adjustment"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes #cliList .client-card .client-creds",
+      "LAB-only .lab-fin-profile and .lab-fin-* descendants within existing expansion panels",
+      "Existing client headers, filters and modals remain structurally owned by CANON"
+    ],
+    "STATE_AFFECTED": [
+      "Ephemeral client financial tab selection",
+      "Preservation of expanded client panel IDs through render refresh",
+      "Internal render-hook readiness flag only"
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, fetch, D1 LAB, R2, OUTBOX or production writes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Pending balances are consumed through _naCreditOutstanding and are not persisted or recalculated into financial records.",
+      "Credit eligibility and line values are read from _naEvaluateClientCredit and existing helpers without changing policy or formula.",
+      "Payments and history continue through abrirPago and abrirDetalleCredito; no second payment flow is introduced.",
+      "No writes or mutations are made to clientes, creditos, pagos, caja, FIFO, saldo, OUTBOX or synchronization state.",
+      "POS/** and production assets remain untouched."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes remains a read-only visual consumer of existing Créditos, Pagos and credit-evaluation state.",
+      "Rerenders triggered by filters, search, remote hydration and mobile navigation must converge to the same LAB visual profile.",
+      "Shared motion and scroll-linked controllers are not modified; only dynamic client-panel content is consumed by them.",
+      "Products, inventory, sales, cash, expenses, OUTBOX, sync and CANON have no implementation changes."
+    ],
+    "RISKS": [
+      "Double wrapping cliRender could recurse or duplicate enhancement if the hook marker is not idempotent.",
+      "Late hook binding could miss the first render unless existing cards are enhanced immediately after binding.",
+      "DOM rebuilds can collapse an open client or replace LAB markup; open IDs must remain ephemeral and restored.",
+      "Additional profile height could regress mobile scroll-linked chrome or horizontal overflow."
+    ],
+    "ROLLBACK": [
+      "Revert the single PR and remove the task/receipt/test changes from this branch.",
+      "No data or financial rollback is required because the change is presentation-only and storage-free."
+    ],
+    "TESTS": [
+      "Run node laboratorio/pos-lab/skill-preflight.mjs --task=<contract> --receipt=<receipt> before the first functional write.",
+      "Run build-lab --check, laboratorio/check.mjs, scope-guard and git diff --check.",
+      "Run the focused financial-profile test including late binding, idempotence, action reuse and no-persistence assertions.",
+      "Run tests/laboratorio-clientes-motion.test.mjs, tests/laboratorio-clientes-scroll-linked.test.mjs, tests/laboratorio-client-financial-profile.test.mjs and all tests/laboratorio-*.test.mjs.",
+      "Validate real published LAB at 360, 390, 412 and 430 CSS px with no horizontal overflow, usable tabs, minimum 40px touch targets and intact scroll.",
+      "Verify products, inventory, sales, clients, credits, payments, cash, expenses, OUTBOX and sync remain untouched by diff and regression."
+    ]
+  }
+}

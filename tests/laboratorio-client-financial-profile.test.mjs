@@ -140,6 +140,34 @@ test('synthetic LAB fixtures cover A punctual, B overdue, C manual, D no history
   assert.equal(e.closed.length, 1);
 });
 
+test('late cliRender binding is idempotent and reattaches after replacement', () => {
+  const ctx = makeContext();
+  const api = ctx.NA_LAB_CLIENT_FINANCIAL_PROFILE;
+  let calls = 0;
+
+  const firstRender = () => { calls += 1; };
+  ctx.cliRender = firstRender;
+  assert.equal(api.ensureRenderHook(), true);
+  const wrapper = ctx.cliRender;
+  assert.notEqual(wrapper, firstRender);
+  assert.equal(wrapper.__naLabFinancialWrapper, true);
+
+  assert.equal(api.ensureRenderHook(), true);
+  assert.equal(ctx.cliRender, wrapper);
+  ctx.cliRender();
+  assert.equal(calls, 1);
+
+  const replacementRender = () => { calls += 10; };
+  ctx.cliRender = replacementRender;
+  assert.equal(api.ensureRenderHook(), true);
+  assert.equal(ctx.cliRender, wrapper);
+  ctx.cliRender();
+  assert.equal(calls, 11);
+
+  assert.match(source, /new MutationObserver/);
+  assert.match(source, /labClientProfilesNeedEnhancement/);
+});
+
 test('profile reuses existing payment/detail/evaluation actions and adds no financial persistence path', () => {
   const start = source.indexOf('// ===== LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====');
   const end = source.indexOf('// ===== FIN LAB ETAPA 01: FICHA FINANCIERA DE CLIENTE =====');
