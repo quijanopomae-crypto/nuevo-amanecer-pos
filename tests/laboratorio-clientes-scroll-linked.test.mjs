@@ -48,7 +48,7 @@ test('clip and transforms reproduce the collapsing geometry without re-layout', 
   assert.match(linkedBlock, /clip-path:inset\(0 0 var\(--lab-client-filter-hidden/);
   assert.match(linkedBlock, /clip-path:inset\(0 0 var\(--lab-client-stats-hidden/);
   assert.match(linkedBlock, /calc\(var\(--lab-client-chrome-shift,0px\) - var\(--lab-client-filter-hidden,0px\)\)/);
-  assert.match(linkedBlock, /#pageClientes \.cli-list[\s\S]*calc\(-1 \* var\(--lab-client-total-hidden,0px\)\)/);
+  assert.match(linkedBlock, /#pageClientes \.cli-list[\s\S]*calc\(0px - var\(--lab-client-total-hidden,0px\)\)/);
   assert.match(linkedBlock, /will-change:transform,opacity,clip-path/);
 });
 

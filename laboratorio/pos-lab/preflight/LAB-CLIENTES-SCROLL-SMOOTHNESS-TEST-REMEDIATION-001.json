@@ -1,0 +1,80 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-SCROLL-SMOOTHNESS-TEST-REMEDIATION-001",
+  "base_ref": "667ed5aa568e75796623b4766dc251748393e97f",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "required LAB skills",
+      "UI_MAP.yaml",
+      "failed POS LAB Mobile run 39 log",
+      "tests/laboratorio-clientes-scroll-linked.test.mjs",
+      "merged CSS implementation"
+    ],
+    "WRITES": [
+      "Focused LAB test expectation only",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "None; test-only remediation"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No runtime change",
+      "No business logic change",
+      "POS untouched",
+      "No backend/storage/network change"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; test-only"
+    ],
+    "RISKS": [
+      "Changing an expectation incorrectly could hide a runtime defect; remediation must match exact shipped CSS text only"
+    ],
+    "ROLLBACK": [
+      "Revert the one test assertion and its task metadata"
+    ],
+    "TESTS": [
+      "Run skill-preflight before test change",
+      "Run focused test",
+      "Run LAB regressions",
+      "scope guard",
+      "CI",
+      "Pages deploy"
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENTES-SCROLL-SMOOTHNESS-TEST-REMEDIATION-001",
+  "environment": "LABORATORIO",
+  "base_ref": "667ed5aa568e75796623b4766dc251748393e97f",
+  "objective": "Corregir únicamente la expectativa obsoleta del test de Clientes para validar la sintaxis CSS compatible ya implementada, sin cambiar runtime ni comportamiento visual.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENTES-SCROLL-SMOOTHNESS-TEST-REMEDIATION-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENTES-SCROLL-SMOOTHNESS-TEST-REMEDIATION-001.json",
+    "tests/laboratorio-clientes-scroll-linked.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/animations/**",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENTES-SCROLL-SMOOTHNESS-TEST-REMEDIATION-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
