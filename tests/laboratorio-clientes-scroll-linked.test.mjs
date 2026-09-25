@@ -6,7 +6,7 @@ const js = readFileSync('laboratorio/pos-lab/js/motion/page-transitions.js', 'ut
 const css = readFileSync('laboratorio/pos-lab/animations/transitions.css', 'utf8');
 const map = readFileSync('laboratorio/pos-lab/MOTION_MAP.yaml', 'utf8');
 const contract = JSON.parse(readFileSync(
-  'laboratorio/pos-lab/tasks/LAB-CLIENTES-SCROLL-LINKED-CHROME-001.json',
+  'laboratorio/pos-lab/tasks/LAB-CLIENTES-SCROLL-LINKED-DOM-GUARD-001.json',
   'utf8'
 ));
 
@@ -14,6 +14,13 @@ const controller = js.slice(
   js.indexOf('function bindClientsScrollLinkedChrome'),
   js.indexOf('motion.clientsChrome = Object.assign')
 );
+
+test('Clientes controller skips incomplete non-browser DOM without disabling browser logic', () => {
+  assert.match(controller, /typeof document === 'undefined'/);
+  assert.match(controller, /typeof document\.getElementById !== 'function'/);
+  assert.match(controller, /!document\.body/);
+  assert.ok(controller.indexOf("document.getElementById('pageClientes')") > controller.indexOf("typeof document.getElementById !== 'function'"));
+});
 
 test('Clientes marked chrome follows one normalized progress source', () => {
   assert.match(controller, /touchStartY - event\.touches\[0\]\.clientY/);
