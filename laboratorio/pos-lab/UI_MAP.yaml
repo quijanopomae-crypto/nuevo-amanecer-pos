@@ -62,6 +62,10 @@ components:
   navigation: laboratorio/pos-lab/styles/components/navigation.css
 
 motion:
+  architecture_map: laboratorio/pos-lab/MOTION_MAP.yaml
+  runtime_namespace: window.NA_LAB_MOTION
+  runtime_bootstrap: laboratorio/pos-lab/js/motion/page-transitions.js
+  core_contract: window.NA_LAB_MOTION.core
   tokens: laboratorio/pos-lab/animations/motion.css
   transitions: laboratorio/pos-lab/animations/transitions.css
   modals: laboratorio/pos-lab/animations/modals.css

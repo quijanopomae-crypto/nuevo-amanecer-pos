@@ -1,0 +1,91 @@
+schema_version: 1
+environment: LABORATORIO
+authority: visual_only
+runtime:
+  namespace: window.NA_LAB_MOTION
+  bootstrap: laboratorio/pos-lab/js/motion/page-transitions.js
+  core_api:
+    - clamp
+    - reducedMotion
+    - parseTimeMs
+    - cssTimeMs
+    - restartClass
+    - setState
+    - getState
+    - setProgress
+    - inspect
+    - whenTransitionEnds
+
+contract:
+  business_authority: false
+  storage_authority: false
+  network_authority: false
+  source_of_truth: visual_state_only
+  state_attribute: data-lab-motion-state
+  progress_variable: --lab-motion-progress
+  progress_range: [0, 1]
+  completion:
+    primary: transitionend
+    fallback: timeout_only_for_visual_cleanup
+  reduced_motion: required
+
+states:
+  - idle
+  - opening
+  - open
+  - dragging
+  - settling
+  - closing
+  - closed
+
+tokens:
+  base: laboratorio/pos-lab/styles/tokens.css
+  motion_contract: laboratorio/pos-lab/animations/motion.css
+  modal_settle_duration: --lab-motion-modal-settle-duration
+  settle_easing: --lab-motion-ease-settle
+
+controllers:
+  page:
+    js: laboratorio/pos-lab/js/motion/page-transitions.js
+    css: laboratorio/pos-lab/animations/transitions.css
+    responsibility: page_entry_feedback
+  cart:
+    js: laboratorio/pos-lab/js/motion/cart-motion.js
+    responsibility: cart_feedback
+  modal:
+    js: laboratorio/pos-lab/js/motion/modal-motion.js
+    css: laboratorio/pos-lab/animations/modals.css
+    responsibility: modal_visual_lifecycle_and_workspace_swipe
+    current_input_adapter: touch_events
+    migration_note: pointer_events_may_be_added_later_without_changing_core_contract
+  feedback:
+    js: laboratorio/pos-lab/js/motion/feedback-motion.js
+    css: laboratorio/pos-lab/animations/notifications.css
+    responsibility: notification_feedback
+
+invariants:
+  - motion_never_confirms_sales_stock_cash_credit_or_persistence
+  - motion_never_reads_or_writes_localStorage_sessionStorage_IndexedDB_D1_or_R2
+  - motion_never_calls_production_or_lab_data_endpoints
+  - a_motion_failure_must_not_block_business_operations
+  - every_interactive_motion_has_reduced_motion_behavior
+  - one_interaction_uses_one_normalized_progress_source
+  - visual_hide_occurs_only_after_visual_exit_or_safe_fallback
+
+ai_edit_flow:
+  - read_AGENTS_and_required_skills
+  - read_UI_MAP_and_this_MOTION_MAP
+  - identify_controller_and_visual_states
+  - declare_DOM_state_storage_invariants_and_cross_module_impact
+  - obtain_SKILL_PREFLIGHT_PASS
+  - make_minimal_reversible_change
+  - add_or_update_focused_motion_test
+  - run_all_LAB_regressions_and_scope_guard
+  - validate_real_mobile_behavior_when_gesture_feel_is_changed
+
+do_not:
+  - add_business_logic_to_motion
+  - wait_for_animationend_or_transitionend_to_commit_business_data
+  - duplicate_duration_magic_numbers_between_JS_and_CSS
+  - create_global_monolithic_controller_for_unrelated_components
+  - edit_POS_from_LAB

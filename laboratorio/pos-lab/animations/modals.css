@@ -9,6 +9,8 @@
   --lab-workspace-drag-y:0px;
   --lab-workspace-panel-opacity:1;
   --lab-workspace-backdrop-alpha:.62;
+  --lab-workspace-settle-duration:var(--lab-motion-modal-settle-duration);
+  --lab-workspace-settle-ease:var(--lab-motion-ease-settle);
   background-color:rgba(15,23,42,var(--lab-workspace-backdrop-alpha)) !important;
   overscroll-behavior:contain;
 }
@@ -18,18 +20,20 @@
   opacity:var(--lab-workspace-panel-opacity);
 }
 
-#naLabWorkspaceOverlay.lab-workspace-dragging > div {
+#naLabWorkspaceOverlay.lab-workspace-dragging > div,
+#naLabWorkspaceOverlay[data-lab-motion-state="dragging"] > div {
   will-change:transform,opacity;
 }
 
 #naLabWorkspaceOverlay.lab-workspace-settling {
-  transition:background-color 560ms cubic-bezier(.22,1,.36,1);
+  transition:
+    background-color var(--lab-workspace-settle-duration) var(--lab-workspace-settle-ease);
 }
 
 #naLabWorkspaceOverlay.lab-workspace-settling > div {
   transition:
-    transform 560ms cubic-bezier(.22,1,.36,1),
-    opacity 560ms cubic-bezier(.22,1,.36,1);
+    transform var(--lab-workspace-settle-duration) var(--lab-workspace-settle-ease),
+    opacity var(--lab-workspace-settle-duration) var(--lab-workspace-settle-ease);
   will-change:transform,opacity;
 }
 
