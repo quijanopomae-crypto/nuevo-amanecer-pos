@@ -934,6 +934,7 @@
     var list = document.getElementById('cliList');
     if (!list) return;
     Array.from(list.querySelectorAll('.client-card')).forEach(function (card) {
+      if (card.dataset && card.dataset.naV2Native === 'true') return;
       var panel = card.querySelector('.client-creds');
       var id = panel && /^cc-/.test(String(panel.id || '')) ? String(panel.id).replace(/^cc-/, '') : String(card.dataset && card.dataset.clientId || '');
       if (!id) return;
@@ -1114,6 +1115,7 @@
     summarizeClient:labClientFinancialSummary,
     productSummary:labProductSummary,
     renderSaleDestination:labEnsureSaleDestinationUi,
+    renderClientList:naRenderClientList,
     bindClientCards:labBindClientCards,
     saleDraft:naCanonicalSaleDraft
   });
