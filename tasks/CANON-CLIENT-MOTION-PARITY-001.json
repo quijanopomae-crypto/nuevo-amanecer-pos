@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-MOTION-PARITY-001",
+  "environment": "CANON",
+  "base_ref": "815b2a699c20965e81f420ba13546cfc85d4855c",
+  "objective": "Restaurar en CANON el contrato de micro-motion aprobado en LAB para Clientes/Créditos V2, eliminando la simplificación de 180 ms y recuperando primera pintura inmediata, refresh coordinado de 850 ms, transiciones largas de lista/resumen y reduced-motion, sin afectar negocio.",
+  "owner_authorization": "Owner reportó que las animaciones CANON no están bien implementadas y pidió corregir lo faltante de LAB.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-MOTION-PARITY-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-MOTION-PARITY-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/client-credit-accounts-v2.css",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "canon-promotion",
+    "lab-animation-edit"
+  ],
+  "invariants": [
+    "Motion visual only",
+    "No business completion waits for animation",
+    "No storage/network writes from motion",
+    "Payments/FIFO/Caja/credits balances unchanged",
+    "prefers-reduced-motion supported"
+  ],
+  "rollback": "Revertir el PR de motion; no hay cambios de datos ni schema."
+}
