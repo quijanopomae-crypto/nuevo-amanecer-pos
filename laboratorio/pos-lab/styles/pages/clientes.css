@@ -22,35 +22,40 @@
 #pageClientes .lab-v2-client-head{display:flex;justify-content:space-between;gap:22px;align-items:flex-start;padding:20px;border:1px solid #bfeae4;border-left:3px solid var(--lab-v2-brand,#0f766e);border-radius:20px;background:var(--lab-v2-surface,#fff);box-shadow:0 8px 22px rgba(15,23,42,.05);position:relative;overflow:hidden;isolation:isolate}
 #pageClientes .lab-v2-client-head>*{position:relative;z-index:2}
 #pageClientes .lab-v2-client-head:before,#pageClientes .lab-v2-client-head:after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background-repeat:repeat-x;will-change:background-position}
+#pageClientes .lab-v2-client-head:before,#pageClientes .lab-v2-client-head:after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;will-change:background-position}
 #pageClientes .lab-v2-client-head:before{
-  opacity:.74;
+  opacity:1;
   background-image:
-    linear-gradient(135deg,#eefcf8 0%,#e8faff 48%,#f9ffff 100%),
-    radial-gradient(ellipse 76px 28px at 78px 72px,rgba(255,255,255,.94) 0 69%,transparent 72%),
-    radial-gradient(ellipse 56px 24px at 130px 64px,rgba(255,255,255,.88) 0 68%,transparent 72%),
-    radial-gradient(ellipse 48px 20px at 34px 82px,rgba(255,255,255,.84) 0 67%,transparent 72%);
-  background-repeat:no-repeat,repeat-x,repeat-x,repeat-x;
-  background-size:100% 100%,320px 150px,320px 150px,320px 150px;
-  background-position:0 0,0 8px,0 8px,0 8px;
-  animation:lab-v2-clouds-near 34s linear infinite;
+    radial-gradient(circle at 82% 12%,rgba(255,255,255,.82) 0 7%,rgba(255,255,255,.28) 20%,transparent 36%),
+    linear-gradient(180deg,#8fe8ee 0%,#b8f2f0 38%,#d8faf6 72%,#f9ffff 100%),
+    radial-gradient(ellipse 128px 58px at 84px 136px,rgba(255,255,255,.98) 0 68%,transparent 71%),
+    radial-gradient(ellipse 94px 66px at 166px 108px,rgba(255,255,255,.96) 0 67%,transparent 71%),
+    radial-gradient(ellipse 82px 50px at 238px 128px,rgba(255,255,255,.95) 0 67%,transparent 71%),
+    radial-gradient(ellipse 104px 48px at 314px 142px,rgba(255,255,255,.92) 0 66%,transparent 71%);
+  background-repeat:no-repeat,no-repeat,repeat-x,repeat-x,repeat-x,repeat-x;
+  background-size:100% 100%,100% 100%,520px 210px,520px 210px,520px 210px,520px 210px;
+  background-position:0 0,0 0,0 6px,0 6px,0 6px,0 6px;
+  animation:lab-v2-clouds-near 28s linear infinite;
 }
 #pageClientes .lab-v2-client-head:after{
-  opacity:.34;
+  opacity:.82;
   background-image:
-    radial-gradient(ellipse 54px 20px at 60px 42px,rgba(255,255,255,.92) 0 67%,transparent 72%),
-    radial-gradient(ellipse 40px 17px at 102px 48px,rgba(255,255,255,.86) 0 66%,transparent 72%),
-    radial-gradient(ellipse 35px 14px at 24px 54px,rgba(255,255,255,.78) 0 65%,transparent 72%);
-  background-size:240px 108px,240px 108px,240px 108px;
-  background-position:0 24px,0 24px,0 24px;
-  animation:lab-v2-clouds-far 52s linear infinite;
+    radial-gradient(ellipse 92px 40px at 54px 54px,rgba(255,255,255,.88) 0 66%,transparent 70%),
+    radial-gradient(ellipse 72px 54px at 116px 43px,rgba(255,255,255,.86) 0 66%,transparent 70%),
+    radial-gradient(ellipse 64px 36px at 172px 62px,rgba(255,255,255,.82) 0 65%,transparent 70%),
+    radial-gradient(ellipse 80px 34px at 224px 70px,rgba(255,255,255,.72) 0 64%,transparent 70%);
+  background-repeat:repeat-x,repeat-x,repeat-x,repeat-x;
+  background-size:410px 150px,410px 150px,410px 150px,410px 150px;
+  background-position:410px 8px,410px 8px,410px 8px,410px 8px;
+  animation:lab-v2-clouds-far 46s linear infinite;
 }
 @keyframes lab-v2-clouds-near{
-  from{background-position:0 0,0 8px,0 8px,0 8px}
-  to{background-position:0 0,320px 8px,320px 8px,320px 8px}
+  from{background-position:0 0,0 0,0 6px,0 6px,0 6px,0 6px}
+  to{background-position:0 0,0 0,520px 6px,520px 6px,520px 6px,520px 6px}
 }
 @keyframes lab-v2-clouds-far{
-  from{background-position:240px 24px,240px 24px,240px 24px}
-  to{background-position:0 24px,0 24px,0 24px}
+  from{background-position:410px 8px,410px 8px,410px 8px,410px 8px}
+  to{background-position:0 8px,0 8px,0 8px,0 8px}
 }
 #pageClientes .lab-v2-client-identity{min-width:0;position:relative;z-index:1}
 #pageClientes .lab-v2-name-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
