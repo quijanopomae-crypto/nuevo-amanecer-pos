@@ -4,11 +4,12 @@ import { readFileSync } from 'node:fs';
 
 const css=readFileSync('laboratorio/pos-lab/styles/pages/clientes.css','utf8');
 
-test('reference match keeps mobile hero in two columns with vertical debt divider',()=>{
-  assert.match(css,/REFERENCE MATCH 004/);
-  assert.match(css,/@media\(max-width:430px\)[\s\S]*grid-template-columns:minmax\(0,1\.08fr\) minmax\(0,\.92fr\)/);
-  assert.match(css,/\.lab-v2-head-money\{[\s\S]*border-left:1px solid rgba\(15,118,110,\.24\)/);
-  assert.match(css,/border-top:0/);
+test('reference match keeps mobile hero in two columns without a center divider',()=>{
+  const reference=css.slice(css.lastIndexOf('REFERENCE MATCH 004'));
+  assert.match(reference,/@media\(max-width:430px\)[\s\S]*grid-template-columns:minmax\(0,1\.08fr\) minmax\(0,\.92fr\)/);
+  assert.match(reference,/#pageClientes \.lab-v2-head-money\{[\s\S]*border-left:0/);
+  assert.match(reference,/border-top:0/);
+  assert.doesNotMatch(reference,/border-left:1px solid rgba\(15,118,110,\.24\)/);
 });
 
 test('client name has stronger display contrast without external fonts',()=>{
