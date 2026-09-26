@@ -170,7 +170,7 @@ try {
   if (status.authority !== 'canonical' || status.mode !== 'ACTIVE' || status.promotion_id !== PROMOTION) {
     throw new Error('canonical status invalid');
   }
-  if (!Number.isSafeInteger(Number(status.financial_revision)) || Number(status.financial_revision) <= 0) {
+  if (!Number.isSafeInteger(Number(status.financial_revision)) || Number(status.financial_revision) < 0) {
     throw new Error('financial revision invalid');
   }
 

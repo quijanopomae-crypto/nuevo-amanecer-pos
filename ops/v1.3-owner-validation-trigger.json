@@ -3,7 +3,9 @@
   "authorized": true,
   "authorized_by": "owner",
   "requested_action": "validate-production-canon-readonly",
-  "target_head": "fe970613ea49bf2413a61b40cadf3489a6224777",
-  "requested_at_utc": "2026-09-26T22:49:00Z",
-  "note": "Validate real CANON customers/products/credits/payments/credit-accounts with a temporary session, no business writes, and prove business counts are unchanged."
+  "target_head": "139cffcac54a7561cce90b0b36fe3150a7a2909b",
+  "requested_at_utc": "2026-09-26T22:52:00Z",
+  "note": "Validate real CANON customers/products/credits/payments/credit-accounts with a temporary session, no business writes, and prove business counts are unchanged.",
+  "retry_attempt": 2,
+  "retry_reason": "Retry readonly owner validation after aligning financial_revision semantics with canonical-client: zero is valid before the first live financial operation."
 }

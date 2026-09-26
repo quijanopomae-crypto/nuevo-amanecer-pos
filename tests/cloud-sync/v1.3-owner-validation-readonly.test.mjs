@@ -33,3 +33,9 @@ test('temporary session is always cleaned and workflow is secret-backed',()=>{
   assert.match(workflow,/CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
   assert.match(workflow,/ops\/v1\.3-owner-validation-trigger\.json/);
 });
+
+
+test('financial revision zero is valid before first live operation',()=>{
+  assert.ok(script.includes('Number(status.financial_revision) < 0'));
+  assert.ok(!script.includes('Number(status.financial_revision) <= 0'));
+});
