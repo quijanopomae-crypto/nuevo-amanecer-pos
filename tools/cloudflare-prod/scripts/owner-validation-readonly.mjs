@@ -188,7 +188,9 @@ try {
   if (credits.length === 0) throw new Error('production credits are empty');
   if (uniqueCount(products, 'product_id') !== products.length) throw new Error('duplicate product ids');
   if (uniqueCount(customers, 'customer_id') !== customers.length) throw new Error('duplicate customer ids');
-  if (uniqueCount(credits, 'read_key') !== credits.length) throw new Error('duplicate credit read keys');
+  const creditIdentities = credits.map(row => String(row.provenance || 'IMPORT') + ':' + String(row.credit_id || ''));
+  if (creditIdentities.some(value => /:$/.test(value))) throw new Error('credit identity missing');
+  if (new Set(creditIdentities).size !== credits.length) throw new Error('duplicate credit identities');
 
   const customerIds = new Set(customers.map(row => String(row.customer_id)));
   for (const account of creditAccounts) {
