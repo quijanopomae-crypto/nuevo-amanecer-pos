@@ -293,3 +293,30 @@ test('24 credit detail renders the complete schedule and polished semantic UI wi
   assert.match(clientCss,/\.lab-v2-installment-overdue/);
   assert.match(clientCss,/\.lab-v2-installment-paid/);
 });
+
+
+test('25 exact owner small-credit description derives all 11 installments',()=>{
+  const ctx=makeContext(), api=ctx.NA_LAB_CLIENT_CREDIT_ACCOUNTS_V2;
+  const cr=credit('25','A',4125,0,{
+    numeroCuotas:undefined,
+    montoCuota:undefined,
+    primerVencimiento:undefined,
+    desc:'Samsung Galaxy S25 Ultra — 11 cuotas mensuales de S/ 375; vence cada día 1, desde 01/10/2026'
+  });
+  const before=JSON.stringify(cr);
+  const plan=Array.from(api.installments(cr).plan);
+  assert.equal(plan.length,11);
+  assert.equal(plan[0].due,'2026-10-01');
+  assert.equal(plan[10].due,'2027-08-01');
+  assert.deepEqual(plan.map(x=>x.amount),Array(11).fill(375));
+  assert.equal(JSON.stringify(cr),before);
+});
+
+test('26 small-credit purchase detail renders complete installment schedule instead of only product and total',()=>{
+  const block=source.slice(source.indexOf('function labPurchaseHtml'),source.indexOf('function labPendingInstallmentsHtml'));
+  assert.match(block,/labInstallmentSummary\(cr\)/);
+  assert.match(block,/CRONOGRAMA DE CUOTAS/);
+  assert.match(block,/labPendingInstallmentsHtml\(installments\)/);
+  assert.match(block,/installments\.plan\.length > 1/);
+  assert.doesNotMatch(block,/slice\(0,\s*6\)/);
+});
