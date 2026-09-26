@@ -1,0 +1,39 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-TOUCH-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "97fb2473efe8b7d0473a4826f2f3ed07c8f3225c",
+  "objective": "Corregir exclusivamente el target táctil del botón de clasificación financiera en la ficha V2 de cliente publicada. Elevar su altura mínima a 44px sin cambiar lógica, saldos, clasificación, pagos, almacenamiento, CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-CREDIT-ACCOUNTS-V2-TOUCH-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-ACCOUNTS-V2-TOUCH-FIX-001.json",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-ui-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-ACCOUNTS-V2-TOUCH-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
