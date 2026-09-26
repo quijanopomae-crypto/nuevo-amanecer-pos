@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROMOTION-001",
+  "environment": "CANON",
+  "base_ref": "ccc98971fbd0a0b33cb28cb8d296d45c9b606378",
+  "objective": "Promover selectivamente a CANON la experiencia aprobada de Ficha Financiera / Cuentas y Créditos V2 del POS-LAB, incorporando persistencia sidecar aditiva para categorías reutilizables y cronogramas sin alterar ledger, pagos, FIFO, caja, saldos, evaluación financiera ni líneas de crédito.",
+  "owner_authorization": "AUTORIZADO: promoción LAB→CANON y migración CANON V2 sidecar; continuar hasta PR/CI/merge salvo P0/P1, corrupción de datos, credenciales, gasto o bloqueo real.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROMOTION-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROMOTION-001.json",
+    "tools/cloudflare-lab/migrations/0012_credit_accounts_v2.sql",
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tools/cloudflare-lab/src/a6-canonical.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-projection.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/client-credit-accounts-v2.css",
+    "POS/index.html",
+    "POS/sw.js",
+    "tests/cloud-sync/canonical-credit-accounts-v2.test.mjs",
+    "tests/canon-client-credit-accounts-v2.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/pos-lab/**",
+    "D1/**",
+    "R2/**",
+    "infra/**",
+    "POS/js/legacy-inline/inline-02.js",
+    "POS/js/legacy-inline/inline-12.js",
+    "POS/js/legacy-inline/inline-17.js"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "cash-integrity",
+    "canon-promotion"
+  ],
+  "preflight_receipt": "evidence/canon-preflight/CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROMOTION-001.json",
+  "migration_policy": {
+    "type": "additive_only",
+    "destructive_changes": false,
+    "reset_existing_data": false,
+    "legacy_metadata_optional": true
+  },
+  "production_data_authority": true,
+  "remote_migration_execution_authorized": false,
+  "production_credentials_allowed": false,
+  "paid_actions_allowed": false
+}
