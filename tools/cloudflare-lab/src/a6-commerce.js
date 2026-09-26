@@ -6,6 +6,29 @@ const validId = value => typeof value === 'string' && value.length > 0 && value.
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
 
+function validAccountName(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 60 && !/[\x00-\x1f\x7f]/.test(value);
+}
+function normalizeCreditAccount(value) {
+  if (value == null) return { account_id: 'small', name: 'Créditos pequeños', mode: 'accumulated', builtin: true };
+  if (!isObject(value) || !validId(value.account_id) || !validAccountName(value.name) || !['accumulated','separate'].includes(value.mode)) return null;
+  return { account_id: value.account_id, name: value.name.trim().replace(/\s+/g,' '), mode: value.mode, builtin: value.account_id === 'small' };
+}
+function normalizeInstallments(value,total) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length < 1 || value.length > 60) return null;
+  let sum=0;
+  const out=[];
+  for (let i=0;i<value.length;i+=1) {
+    const row=value[i];
+    if (!isObject(row) || row.number !== i+1 || !validDate(row.due_date) || !Number.isSafeInteger(row.amount_cents) || row.amount_cents<=0) return null;
+    sum+=row.amount_cents;
+    if (!Number.isSafeInteger(sum)) return null;
+    out.push({number:row.number,due_date:row.due_date,amount_cents:row.amount_cents});
+  }
+  return sum===total ? out : null;
+}
+
 export function validateCanonicalSale(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'invalid_body' };
   for (const key of ['operation_id','sale_id','promotion_id','client_contract']) if (!validId(body[key])) return { error: `invalid_${key}` };
@@ -36,9 +59,65 @@ export function validateCanonicalSale(body) {
   if (payment.reference !== undefined && payment.reference !== null && (typeof payment.reference !== 'string' || payment.reference.length > 160 || /[\x00-\x1f\x7f]/.test(payment.reference))) return { error: 'invalid_reference' };
   if (body.payment_method === 'credito' && (!validId(body.customer_id) || !validDate(body.credit_due))) return { error: 'invalid_credit' };
   if (body.customer_id != null && !validId(body.customer_id)) return { error: 'invalid_customer_id' };
+  if (body.payment_method !== 'credito' && (body.credit_account !== undefined || body.installments !== undefined)) return { error: 'invalid_credit_metadata' };
+  const creditAccount = body.payment_method === 'credito' ? normalizeCreditAccount(body.credit_account) : null;
+  const installments = body.payment_method === 'credito' ? normalizeInstallments(body.installments, body.total_cents) : [];
+  if (body.payment_method === 'credito' && (!creditAccount || installments === null)) return { error: 'invalid_credit_metadata' };
   if (body.session_id !== undefined && (!validId(body.session_id) || cash === 0)) return { error:'invalid_session_id' };
-  return { value: { ...body, created_at: new Date(body.created_at).toISOString(), payment: { cash_cents: cash, digital_cents: digital, credit_cents: credit,
-    digital_method: digital ? (body.payment_method === 'mixto' ? payment.digital_method : body.payment_method) : null, reference: payment.reference || null } } };
+  const value = { ...body, created_at: new Date(body.created_at).toISOString(), payment: { cash_cents: cash, digital_cents: digital, credit_cents: credit,
+    digital_method: digital ? (body.payment_method === 'mixto' ? payment.digital_method : body.payment_method) : null, reference: payment.reference || null } };
+  if (body.payment_method === 'credito') { value.credit_account = creditAccount; value.installments = installments; }
+  return { value };
+}
+
+export async function createCanonicalCreditAccount(request, env, auth, json) {
+  let body; try { body = await request.json(); } catch { return json({ error:'invalid_json' },400); }
+  if (!isObject(body) || !validId(body.operation_id) || !validId(body.promotion_id) || body.client_contract !== CANONICAL_CLIENT_CONTRACT ||
+      !Number.isSafeInteger(body.authority_epoch) || body.authority_epoch < 0 || !Number.isSafeInteger(body.expected_control_revision) || body.expected_control_revision < 0 ||
+      typeof body.created_at !== 'string' || !Number.isFinite(Date.parse(body.created_at)) || !validId(body.customer_id) ||
+      !validId(body.account_id) || body.account_id === 'small' || !validAccountName(body.name) || !['accumulated','separate'].includes(body.mode)) {
+    return json({error:'invalid_credit_account'},400);
+  }
+  const normalized={...body,name:body.name.trim().replace(/\s+/g,' '),created_at:new Date(body.created_at).toISOString()};
+  const db=env.nuevo_amanecer_lab, principalId=auth.principalId;
+  async function authorityError() {
+    const control=await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
+      LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId).first();
+    if(!control || control.mode!=='ACTIVE') return 'canonical_not_active';
+    if(control.active_promotion_id!==normalized.promotion_id || Number(control.authority_epoch)!==normalized.authority_epoch ||
+       Number(control.revision)!==normalized.expected_control_revision || control.minimum_client_contract!==normalized.client_contract ||
+       control.role!=='writer' || control.status!=='active' || control.credential_hash!==auth.credentialHash) return 'stale_authority';
+    return null;
+  }
+  const denied=await authorityError(); if(denied) return json({error:denied},409);
+  const requestHash=await sha256Hex(stableStringify(normalized));
+  const replay=await db.prepare('SELECT account_id,request_hash FROM canonical_credit_accounts WHERE operation_id=?1').bind(normalized.operation_id).first();
+  if(replay){
+    const stale=await authorityError(); if(stale) return json({error:stale},409);
+    return replay.request_hash===requestHash
+      ? json({status:'already_processed',command:'credit-account.create',operation_id:normalized.operation_id,promotion_id:normalized.promotion_id,
+          authority_epoch:normalized.authority_epoch,account_id:replay.account_id,idempotent:true})
+      : json({error:'operation_id_conflict',operation_id:normalized.operation_id},409);
+  }
+  if(!await db.prepare('SELECT 1 ok FROM customers WHERE promotion_id=?1 AND customer_id=?2').bind(normalized.promotion_id,normalized.customer_id).first())
+    return json({error:'customer_not_found'},409);
+  const duplicate=await db.prepare('SELECT account_id,name,mode FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id=?2 AND (account_id=?3 OR lower(name)=lower(?4))')
+    .bind(normalized.promotion_id,normalized.customer_id,normalized.account_id,normalized.name).first();
+  if(duplicate) return json({error:'credit_account_conflict',account_id:duplicate.account_id},409);
+  try {
+    const result=await db.prepare(`INSERT INTO canonical_credit_accounts
+      (promotion_id,customer_id,account_id,name,mode,operation_id,request_hash,principal_id,credential_hash,created_at)
+      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)`)
+      .bind(normalized.promotion_id,normalized.customer_id,normalized.account_id,normalized.name,normalized.mode,normalized.operation_id,requestHash,principalId,auth.credentialHash,normalized.created_at).run();
+    if(result?.meta?.changes!==1) throw new Error('insert_failed');
+  } catch {
+    const after=await db.prepare('SELECT account_id,request_hash FROM canonical_credit_accounts WHERE operation_id=?1').bind(normalized.operation_id).first();
+    if(after?.request_hash===requestHash) return json({status:'already_processed',command:'credit-account.create',operation_id:normalized.operation_id,
+      promotion_id:normalized.promotion_id,authority_epoch:normalized.authority_epoch,account_id:after.account_id,idempotent:true});
+    return json({error:'credit_account_conflict'},409);
+  }
+  return json({status:'created',command:'credit-account.create',operation_id:normalized.operation_id,promotion_id:normalized.promotion_id,
+    authority_epoch:normalized.authority_epoch,account_id:normalized.account_id,idempotent:false},201);
 }
 
 export async function createCanonicalSale(request, env, auth, json) {
@@ -83,6 +162,16 @@ export async function createCanonicalSale(request, env, auth, json) {
     const customer = await db.prepare('SELECT 1 ok FROM customers WHERE promotion_id=?1 AND customer_id=?2').bind(body.promotion_id,body.customer_id).first();
     if (!customer) return json({ error:'customer_not_found' },409);
   }
+  let accountExists=false;
+  if (body.payment_method === 'credito' && body.credit_account && body.credit_account.account_id !== 'small') {
+    const account=await db.prepare('SELECT account_id,name,mode FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id=?2 AND (account_id=?3 OR lower(name)=lower(?4))')
+      .bind(body.promotion_id,body.customer_id,body.credit_account.account_id,body.credit_account.name).first();
+    if(account){
+      if(account.account_id!==body.credit_account.account_id || account.name!==body.credit_account.name || account.mode!==body.credit_account.mode)
+        return json({error:'credit_account_conflict',account_id:account.account_id},409);
+      accountExists=true;
+    }
+  }
   const token = crypto.randomUUID();
   const statements = [
     db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash)
@@ -117,8 +206,24 @@ export async function createCanonicalSale(request, env, auth, json) {
   }
   statements.push(db.prepare(`INSERT INTO cash_movements(movement_id,operation_id,sale_id,payment_method,amount_cents,cash_cents,digital_cents,credit_cents,digital_method,reference,created_at)
     SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?2)`).bind(`${body.operation_id}:cash`,body.operation_id,body.sale_id,body.payment_method,body.total_cents,body.payment.cash_cents,body.payment.digital_cents,body.payment.credit_cents,body.payment.digital_method,body.payment.reference,body.created_at));
-  if (body.payment_method === 'credito') statements.push(db.prepare(`INSERT INTO live_credits(promotion_id,credit_id,operation_id,sale_id,customer_id,original_amount_cents,current_balance_cents,due_date,status,created_at)
-    SELECT ?1,?2,?3,?4,?5,?6,?6,?7,'LIVE',?8 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?3)`).bind(body.promotion_id,`${body.operation_id}:credit`,body.operation_id,body.sale_id,body.customer_id,body.total_cents,body.credit_due,body.created_at));
+  if (body.payment_method === 'credito') {
+    const creditId=`${body.operation_id}:credit`, account=body.credit_account || {account_id:'small',name:'Créditos pequeños',mode:'accumulated'};
+    statements.push(db.prepare(`INSERT INTO live_credits(promotion_id,credit_id,operation_id,sale_id,customer_id,original_amount_cents,current_balance_cents,due_date,status,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6,?6,?7,'LIVE',?8 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?3)`)
+      .bind(body.promotion_id,creditId,body.operation_id,body.sale_id,body.customer_id,body.total_cents,body.credit_due,body.created_at));
+    if(account.account_id!=='small' && !accountExists) statements.push(db.prepare(`INSERT INTO canonical_credit_accounts
+      (promotion_id,customer_id,account_id,name,mode,operation_id,request_hash,principal_id,credential_hash,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?6)`)
+      .bind(body.promotion_id,body.customer_id,account.account_id,account.name,account.mode,body.operation_id,payloadHash,principalId,auth.credentialHash,body.created_at));
+    statements.push(db.prepare(`INSERT INTO canonical_credit_metadata
+      (promotion_id,credit_id,credit_provenance,customer_id,account_id,account_name,account_mode,operation_id,assigned_at)
+      SELECT ?1,?2,'LIVE',?3,?4,?5,?6,?7,?8 WHERE EXISTS(SELECT 1 FROM live_credits WHERE promotion_id=?1 AND credit_id=?2 AND operation_id=?7)`)
+      .bind(body.promotion_id,creditId,body.customer_id,account.account_id,account.name,account.mode,body.operation_id,body.created_at));
+    for(const installment of body.installments || []) statements.push(db.prepare(`INSERT INTO canonical_credit_installments
+      (promotion_id,credit_id,credit_provenance,installment_number,due_date,amount_cents,operation_id,created_at)
+      SELECT ?1,?2,'LIVE',?3,?4,?5,?6,?7 WHERE EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE promotion_id=?1 AND credit_id=?2 AND operation_id=?6)`)
+      .bind(body.promotion_id,creditId,installment.number,installment.due_date,installment.amount_cents,body.operation_id,body.created_at));
+  }
   statements.push(db.prepare(`UPDATE canonical_control SET first_live_operation_id=COALESCE(first_live_operation_id,?1)
     WHERE id=1 AND mode='ACTIVE' AND active_promotion_id=?2 AND authority_epoch=?3 AND revision=?4
     AND EXISTS(SELECT 1 FROM sales WHERE operation_id=?1 AND commit_token=?5)`).bind(body.operation_id,body.promotion_id,body.authority_epoch,body.expected_control_revision,token));
