@@ -36,6 +36,6 @@ test('temporary session is always cleaned and workflow is secret-backed',()=>{
 
 
 test('financial revision zero is valid before first live operation',()=>{
-  assert.match(script,/Number\\(status\\.financial_revision\\) < 0/);
-  assert.doesNotMatch(script,/Number\\(status\\.financial_revision\\) <= 0/);
+  assert.ok(script.includes('Number(status.financial_revision) < 0'));
+  assert.ok(!script.includes('Number(status.financial_revision) <= 0'));
 });
