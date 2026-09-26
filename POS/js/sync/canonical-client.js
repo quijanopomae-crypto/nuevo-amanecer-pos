@@ -210,7 +210,7 @@
       var cache = await localReplica(), incoming = replicaOf(next);
       if (!validReplica(incoming)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, incoming)) {
-        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; return snapshot();
+        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
       }
       var same = cache && cache.promotion_id === incoming.promotion_id && cache.authority_epoch === incoming.authority_epoch &&
         cache.revision === incoming.revision && (cache.financial_revision || 0) === (incoming.financial_revision || 0) && (cache.canonical_digest || null) === (incoming.canonical_digest || null) &&
@@ -218,7 +218,7 @@
         JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.credit_accounts||[],incoming.cash_sessions||[],incoming.financial_events||[],incoming.digests||{}]);
       publishReplica(incoming, 'remote');
       if (!same && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
-      replicaState.validation = 'current'; if (!same) notifyReplicaUpdate(); return snapshot();
+      replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
     try { return await loading; } catch (error) { ready = false; if (data) { replicaState.validation = root.navigator.onLine === false ? 'offline' : 'stale'; notifyReplicaUpdate(); } throw error; } finally { loading = null; }
   }
@@ -700,6 +700,7 @@
     var cached = await localReplica();
     if (cached) {
       publishReplica(cached, 'cache');
+      notifyReplicaUpdate();
       refresh().catch(function () { replicaState.validation = 'offline'; notifyReplicaUpdate(); });
       return snapshot();
     }
