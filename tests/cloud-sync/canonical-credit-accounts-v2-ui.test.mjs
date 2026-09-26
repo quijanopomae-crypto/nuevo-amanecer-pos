@@ -8,6 +8,7 @@ const css=readFileSync(new URL('../../POS/css/client-credit-accounts-v2.css',imp
 const html=readFileSync(new URL('../../POS/index.html',import.meta.url),'utf8');
 const integration=readFileSync(new URL('../../POS/js/sync/canonical-sale-integration.js',import.meta.url),'utf8');
 const intent=readFileSync(new URL('../../POS/js/sync/canonical-sale-intent.js',import.meta.url),'utf8');
+const canonicalClient=readFileSync(new URL('../../POS/js/sync/canonical-client.js',import.meta.url),'utf8');
 
 function context() {
   const dueMap=new Map([['2026-09-20',-6],['2026-09-26',0],['2026-10-01',5],['2026-11-01',36]]);
@@ -151,7 +152,7 @@ test('client loader replaces only the list during canonical connection and respe
   assert.match(source,/logo\.textContent='🌅'/);
   assert.match(source,/title\.textContent='Cargando clientes…'/);
   assert.match(source,/copy\.textContent='Obteniendo datos, por favor espera\.'/);
-  assert.match(source,/state\.validation==='pending' \|\| state\.validation==='validating'/);
+  assert.match(source,/state\.source==='none' && \(state\.validation==='pending' \|\| state\.validation==='validating'\)/);
   assert.match(css,/#pageClientes\.na-client-loading-active #cliList\{\s*display:none!important/);
   assert.match(css,/@media\(prefers-reduced-motion:reduce\)[\s\S]*na-client-loading-ring[\s\S]*animation:none!important/);
 });
@@ -204,4 +205,13 @@ test('client refresh motion matches the approved LAB contract',()=>{
   assert.ok(css.includes('transition-duration:900ms,950ms'));
   assert.ok(css.includes('#pageClientes .stats-strip'));
   assert.ok(css.includes('prefers-reduced-motion:reduce'));
+});
+
+
+test('cached CANON clients remain visible while remote validation finishes',()=>{
+  assert.match(source,/state\.source==='none' && \(state\.validation==='pending' \|\| state\.validation==='validating'\)/);
+  assert.doesNotMatch(source,/loading=state\.validation==='pending' \|\| state\.validation==='validating'/);
+  assert.match(canonicalClient,/publishReplica\(cached, 'cache'\);\s*notifyReplicaUpdate\(\);/);
+  assert.match(canonicalClient,/replicaState\.validation = 'current';\s*notifyReplicaUpdate\(\);/);
+  assert.match(canonicalClient,/replicaState\.validation = 'remote-older';\s*notifyReplicaUpdate\(\);/);
 });

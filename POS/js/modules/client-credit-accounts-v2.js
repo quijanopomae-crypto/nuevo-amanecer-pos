@@ -1188,7 +1188,7 @@
     try {
       if(root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()) {
         var state=root.NuevoAmanecerCanonical.sourceState();
-        loading=state.validation==='pending' || state.validation==='validating';
+        loading=state.source==='none' && (state.validation==='pending' || state.validation==='validating');
       }
     } catch (_) {}
     page.classList.toggle('na-client-loading-active',loading);

@@ -1,0 +1,61 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-FAST-CACHE-LOADER-001",
+  "base_ref": "ff5e1f5965de6ad59b19aa3dec807ec2806eb92c",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Evitar que el loader de Clientes quede visible cuando ya existe una réplica CANON válida y acelerar la percepción de carga mostrando inmediatamente la caché válida mientras la validación remota corre en segundo plano.",
+    "READS": [
+      "POS/js/sync/canonical-client.js",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md"
+    ],
+    "WRITES": [
+      "Always notify UI when remote validation reaches current, even when data is identical",
+      "Do not show blocking client loader while valid cache is already rendered",
+      "Regression tests for fast-cache behavior"
+    ],
+    "DOM_AFFECTED": [
+      "#naClientLoading",
+      "#cliList",
+      "#pageClientes"
+    ],
+    "STATE_AFFECTED": [
+      "replicaState.validation UI synchronization only"
+    ],
+    "STORAGE_AFFECTED": [
+      "Reads existing replica cache only; no storage schema changes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No modificar datos de negocio",
+      "No modificar pagos/FIFO/Caja/inventario/saldos",
+      "Caché válida debe mostrarse inmediatamente",
+      "Validación remota continúa en segundo plano",
+      "Loader grande solo aparece cuando no existe réplica utilizable",
+      "El estado final de validación siempre notifica a la UI"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Canonical refresh state",
+      "Clientes loader visibility"
+    ],
+    "RISKS": [
+      "Loader hidden too early on cold start",
+      "duplicate UI notification"
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no hay cambios de datos ni schema."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "cold-start loader assertion",
+      "cache-validating non-blocking assertion",
+      "same-data validation notifies UI"
+    ]
+  }
+}
