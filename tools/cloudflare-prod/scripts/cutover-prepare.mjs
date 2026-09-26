@@ -57,7 +57,10 @@ async function productionState() {
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_write_guards') has_write_guards," +
     "COALESCE((SELECT instr(sql,'principal_id')>0 FROM sqlite_master WHERE type='table' AND name='canonical_write_guards'),0) has_principal_guard," +
     "COALESCE((SELECT instr(sql,'credential_hash')>0 FROM sqlite_master WHERE type='table' AND name='canonical_write_guards'),0) has_credential_guard," +
-    "COALESCE((SELECT instr(sql,'NEW.principal_id')>0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) has_session_trigger"))[0];
+    "COALESCE((SELECT instr(sql,'NEW.principal_id')>0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) has_session_trigger," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_accounts') has_credit_accounts," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_metadata') has_credit_metadata," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_installments') has_credit_installments"))[0];
 
   const traffic = (await query(PROD_DB, 'traffic',
     "SELECT " +
@@ -104,6 +107,9 @@ async function cmdPreflight() {
   env('HAS_AUTH_SESSIONS', state.schema.has_auth_sessions);
   env('HAS_PRINCIPAL_GUARD', state.schema.has_principal_guard);
   env('HAS_SESSION_TRIGGER', state.schema.has_session_trigger);
+  env('HAS_CREDIT_ACCOUNTS_V2', state.schema.has_credit_accounts);
+  env('HAS_CREDIT_METADATA_V2', state.schema.has_credit_metadata);
+  env('HAS_CREDIT_INSTALLMENTS_V2', state.schema.has_credit_installments);
   console.log(JSON.stringify({ state: 'PRE_CUTOVER_PASS', database_id: PROD_DB, ...state }));
 }
 
@@ -155,6 +161,9 @@ async function schemaReady(database) {
     "COALESCE((SELECT instr(sql,'NEW.principal_id')>0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) guard," +
     "(SELECT mode='ACTIVE' FROM canonical_control WHERE id=1) active," +
     "(SELECT first_live_operation_id IS NULL FROM canonical_control WHERE id=1) first_live_empty," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_accounts') credit_accounts," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_metadata') credit_metadata," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_installments') credit_installments," +
     "(SELECT COUNT(*) FROM sales) sales"))[0];
   return Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [key, Number(value)]));
 }
@@ -163,7 +172,7 @@ async function cmdVerifyRehearsal() {
   const id = process.env.REHEARSAL_DB_ID;
   if (!id) throw new Error('missing REHEARSAL_DB_ID');
   const row = await schemaReady(id);
-  for (const key of ['auth','principal','credential','guard','active','first_live_empty']) {
+  for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
     if (row[key] !== 1) throw new Error('rehearsal invariant failed: ' + key);
   }
   if (row.sales !== 0) throw new Error('rehearsal contains sales');
@@ -184,7 +193,7 @@ async function cmdVerifyProduction() {
   const state = await productionState();
   assertCleanPreFirstSale(state);
   const row = await schemaReady(PROD_DB);
-  for (const key of ['auth','principal','credential','guard','active','first_live_empty']) {
+  for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
     if (row[key] !== 1) throw new Error('production schema invariant failed: ' + key);
   }
   if (row.sales !== 0) throw new Error('production contains sales before first-live gate');
@@ -260,7 +269,7 @@ async function cmdFinal() {
   assertCleanPreFirstSale(state);
   if (state.traffic.active_sessions !== 0) throw new Error('probe session leaked');
   const row = await schemaReady(PROD_DB);
-  for (const key of ['auth','principal','credential','guard','active','first_live_empty']) {
+  for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
     if (row[key] !== 1) throw new Error('final invariant failed: ' + key);
   }
   console.log(JSON.stringify({
