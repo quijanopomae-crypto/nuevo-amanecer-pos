@@ -6,8 +6,9 @@ const script = readFileSync('tools/cloudflare-prod/scripts/owner-validation-read
 const workflow = readFileSync('.github/workflows/v1.3-owner-validation-readonly.yml','utf8');
 
 test('owner validation reads every CANON dataset required by Client Credit V2',()=>{
-  for (const route of ['status','products','customers','credits','credit-payments','credit-accounts']) {
-    assert.ok(script.includes('/read/canonical/' + route), 'missing route ' + route);
+  assert.match(script,/\/read\/canonical\/status/);
+  for (const route of ['products','customers','credits','credit-payments','credit-accounts']) {
+    assert.ok(script.includes("readAll('" + route + "'"), 'missing route ' + route);
   }
   assert.match(script,/production products are empty/);
   assert.match(script,/production customers are empty/);
