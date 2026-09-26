@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-CI-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "f394ea622f80fb5e84c16f5b17689579ebcd40d2",
+  "objective": "Resolver la regresión de test de paleta manteniendo la base neutral declarada de .lab-v2-client-head y moviendo cielo+gradiente a la capa decorativa ::before, conservando las dos capas de nubes animadas y reduced-motion. Sin cambios de lógica ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-CI-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-CI-FIX-001.json",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-client-financial-card-cloud-motion.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-ui-edit",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-CI-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
