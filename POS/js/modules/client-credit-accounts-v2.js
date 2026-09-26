@@ -921,12 +921,10 @@
     page.classList.add('na-client-refresh-out');
     naClientListMotionTimer = root.setTimeout(function () {
       draw();
-      page.classList.remove('na-client-refresh-out');
-      page.classList.add('na-client-refresh-in');
       root.requestAnimationFrame(function () {
-        root.requestAnimationFrame(function () { page.classList.remove('na-client-refresh-in'); });
+        page.classList.remove('na-client-refresh-out');
       });
-    }, 180);
+    }, 850);
     return true;
   }
 
