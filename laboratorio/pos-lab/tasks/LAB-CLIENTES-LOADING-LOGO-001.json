@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENTES-LOADING-LOGO-001",
+  "environment": "LABORATORIO",
+  "base_ref": "87f696201d2ae390395abb3f91a55741ac471073",
+  "objective": "Reemplazar visualmente las rayas/skeleton de la lista de Clientes durante el estado inicial CONECTANDO por un único cargador centrado con el icono existente de Nuevo Amanecer, aro animado y los textos 'Cargando clientes…' y 'Obteniendo datos, por favor espera.'. La lista real se conserva oculta y vuelve a mostrarse al salir de CONECTANDO. Sin cambios de datos, D1, lógica comercial, persistencia o CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENTES-LOADING-LOGO-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENTES-LOADING-LOGO-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-clientes-loading-logo.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENTES-LOADING-LOGO-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

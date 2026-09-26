@@ -23,6 +23,7 @@
   var labClientProfileObserver = null;
   var labClientProfileRaf = 0;
   var labClientProfileEnhancing = false;
+  var labClientLoadingBadgeObserver = null;
 
 
   // ===== LAB ETAPA 02: CUENTAS Y CRÉDITOS POR CLIENTE V2 =====
@@ -1046,6 +1047,84 @@
   });
   // ===== FIN LAB ETAPA 02: CUENTAS Y CRÉDITOS POR CLIENTE V2 =====
 
+  function labEnsureClientLoadingUi() {
+    var page = document.getElementById('pageClientes');
+    var list = document.getElementById('cliList');
+    if (!page || !list || !list.parentNode) return null;
+
+    var loader = document.getElementById('naLabClientLoading');
+    if (!loader) {
+      loader = document.createElement('div');
+      loader.id = 'naLabClientLoading';
+      loader.className = 'lab-client-loading';
+      loader.setAttribute('role', 'status');
+      loader.setAttribute('aria-live', 'polite');
+      loader.setAttribute('aria-atomic', 'true');
+      loader.hidden = true;
+
+      var mark = document.createElement('div');
+      mark.className = 'lab-client-loading-mark';
+
+      var ring = document.createElement('span');
+      ring.className = 'lab-client-loading-ring';
+      ring.setAttribute('aria-hidden', 'true');
+
+      var logo = document.createElement('img');
+      logo.className = 'lab-client-loading-logo';
+      logo.src = 'assets/icons/icon-192.png';
+      logo.alt = '';
+      logo.width = 64;
+      logo.height = 64;
+      logo.decoding = 'async';
+
+      var title = document.createElement('strong');
+      title.className = 'lab-client-loading-title';
+      title.textContent = 'Cargando clientes…';
+
+      var copy = document.createElement('span');
+      copy.className = 'lab-client-loading-copy';
+      copy.textContent = 'Obteniendo datos, por favor espera.';
+
+      mark.appendChild(ring);
+      mark.appendChild(logo);
+      loader.appendChild(mark);
+      loader.appendChild(title);
+      loader.appendChild(copy);
+      list.parentNode.insertBefore(loader, list);
+    }
+    return loader;
+  }
+
+  function labClientWorkspaceConnecting() {
+    var badge = document.getElementById('naLabBadge');
+    return !!(badge && /LAB\s*·\s*CONECTANDO\s*·/i.test(String(badge.textContent || '')));
+  }
+
+  function labSyncClientLoadingUi() {
+    var page = document.getElementById('pageClientes');
+    var loader = labEnsureClientLoadingUi();
+    if (!page || !loader) return false;
+
+    var connecting = labClientWorkspaceConnecting();
+    page.classList.toggle('lab-client-loading-active', connecting);
+    loader.hidden = !connecting;
+    loader.setAttribute('aria-hidden', connecting ? 'false' : 'true');
+    return connecting;
+  }
+
+  function labObserveClientWorkspaceLoading() {
+    var badge = document.getElementById('naLabBadge');
+    if (!badge) return false;
+
+    if (labClientLoadingBadgeObserver) labClientLoadingBadgeObserver.disconnect();
+    if (typeof MutationObserver === 'function') {
+      labClientLoadingBadgeObserver = new MutationObserver(labSyncClientLoadingUi);
+      labClientLoadingBadgeObserver.observe(badge, { childList:true, subtree:true, characterData:true });
+    }
+    labSyncClientLoadingUi();
+    return true;
+  }
+
   function labClientReducedMotion() {
     try { return !!window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
     catch { return false; }
@@ -1158,18 +1237,21 @@
   // Enganche inmediato + autocuración de renders tardíos/hidratación remota.
   labEnsureClientRenderHook();
   labObserveClientProfileRenders();
+  labObserveClientWorkspaceLoading();
   labInstallSaleHooks();
   labAttachSaleClientListener();
   if (typeof window.addEventListener === 'function') {
     window.addEventListener('load', function () {
       labEnsureClientRenderHook();
       labObserveClientProfileRenders();
+      labObserveClientWorkspaceLoading();
       labInstallSaleHooks();
       labAttachSaleClientListener();
     });
     window.addEventListener('pageshow', function () {
       labEnsureClientRenderHook();
       labObserveClientProfileRenders();
+      labObserveClientWorkspaceLoading();
     });
   }
 

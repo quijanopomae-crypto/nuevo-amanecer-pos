@@ -1,0 +1,100 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-LOADING-LOGO-001",
+  "base_ref": "87f696201d2ae390395abb3f91a55741ac471073",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Mostrar un loader con un solo logo durante CONECTANDO y ocultar temporalmente cliList sin destruirlo.",
+    "READS": [
+      "naLabBadge como estado visual ya existente",
+      "pageClientes / cliList",
+      "assets/icons/icon-192.png existente",
+      "clientes.css",
+      "lab-overrides.js"
+    ],
+    "WRITES": [
+      "lab-overrides.js: observador visual del badge + creación/toggle del loader",
+      "clientes.css: loader centrado, aro animado y reduced-motion",
+      "test focalizado"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes",
+      "#cliList (solo display temporal)",
+      "#naLabClientLoading (nuevo estado visual LAB)"
+    ],
+    "STATE_AFFECTED": [
+      "visual only: clase lab-client-loading-active"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No borrar/reemplazar datos ni tarjetas reales",
+      "No leer/escribir D1/R2/localStorage/IndexedDB",
+      "No cambiar lógica de sync o workspace",
+      "No bloquear carga remota",
+      "Loader se apaga al salir de CONECTANDO",
+      "prefers-reduced-motion detiene solo el aro",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; observa texto del badge LAB sin modificar workspace"
+    ],
+    "RISKS": [
+      "El loader podría quedar visible si el badge cambia antes de instalar el observador; se sincroniza inmediatamente al instalar.",
+      "El logo debe ser único dentro del loader; se usa una sola imagen.",
+      "No ocultar filtros ni estadísticas: solo cliList."
+    ],
+    "ROLLBACK": [
+      "Revertir este PR LAB."
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "un solo img dentro del loader",
+      "CONECTANDO activa clase y otros estados la quitan",
+      "cliList se oculta sin replaceChildren",
+      "reduced-motion detiene animación",
+      "suite LAB completa",
+      "POS LAB Mobile + Pages",
+      "validación publicada móvil"
+    ]
+  }
+}
