@@ -715,3 +715,43 @@
 #pageClientes .na-v2-client-head h2{
   text-transform:uppercase;
 }
+
+
+/* CLIENTES V2 NATIVE LIST — primary CANON renderer */
+#pageClientes #cliList[data-na-v2-native="true"]{min-width:0}
+#pageClientes .na-v2-client-list-card{overflow:hidden}
+#pageClientes .na-v2-client-list-trigger{
+  width:100%;
+  min-height:78px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:14px 15px;
+  cursor:pointer;
+}
+#pageClientes .na-v2-client-list-trigger:focus-visible{outline:3px solid rgba(15,118,110,.24);outline-offset:-3px}
+#pageClientes .na-v2-client-list-trigger .c-info{min-width:0;flex:1}
+#pageClientes .na-v2-client-list-trigger .c-name{display:block;overflow-wrap:anywhere}
+#pageClientes .na-v2-client-list-trigger .c-meta{display:block;margin-top:3px}
+#pageClientes .na-v2-client-list-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:0 0 auto}
+#pageClientes .na-v2-client-list-right .na-v2-risk{min-height:28px;padding:5px 8px;cursor:default}
+#pageClientes .na-v2-client-list-arrow{font-size:28px;line-height:1;color:#94a3b8;flex:0 0 auto}
+#pageClientes #cliList{transition:opacity .18s ease,transform .18s ease}
+#pageClientes.na-client-refresh-out #cliList{opacity:0;transform:translateY(5px)}
+#pageClientes.na-client-refresh-in #cliList{animation:na-client-list-in .24s ease both}
+@keyframes na-client-list-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(max-width:430px){
+  #pageClientes .na-v2-client-list-trigger{min-height:72px;padding:12px 11px;gap:9px}
+  #pageClientes .na-v2-client-list-right .c-deuda{font-size:14px}
+  #pageClientes .na-v2-client-list-right .na-v2-risk{font-size:9px;max-width:112px;white-space:normal;text-align:center}
+  #pageClientes .na-v2-client-list-arrow{font-size:24px}
+}
+@media(prefers-reduced-motion:reduce){
+  #pageClientes #cliList{transition:none!important}
+  #pageClientes.na-client-refresh-in #cliList{animation:none!important}
+}
