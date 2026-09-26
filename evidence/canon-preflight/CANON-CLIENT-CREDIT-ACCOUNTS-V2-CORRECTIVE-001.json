@@ -1,0 +1,77 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-CREDIT-ACCOUNTS-V2-CORRECTIVE-001",
+  "base_ref": "ed69e3d815046b032bc46d3e0309a6c19bb579b9",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Completar la promoción LAB→CANON de Clientes/Créditos V2 corrigiendo activación hosted, renderer nativo V2, motion/loader, versionado PWA y validación responsive sin alterar autoridad financiera.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/js/legacy-inline/inline-12.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "POS/sw.js",
+      ".github/workflows/v1.3-pos-web-deploy.yml",
+      "tools/cloudflare-pos-web/public/activate.js"
+    ],
+    "WRITES": [
+      "Native V2 client list renderer hook",
+      "Hosted CANON activation guard",
+      "PWA build-hash substitution",
+      "Client list motion/loader integration",
+      "Regression tests"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes",
+      "#cliList",
+      "#backBtn",
+      "#localStatus"
+    ],
+    "STATE_AFFECTED": [
+      "UI navigation/motion only; no financial state"
+    ],
+    "STORAGE_AFFECTED": [
+      "Reads existing canonical binding/session in localStorage; does not create new storage schema"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No second payment ledger",
+      "FIFO unchanged",
+      "Caja unchanged",
+      "_naEvaluateClientCredit unchanged",
+      "credit line rules unchanged",
+      "metadata/migration 0012 unchanged",
+      "hosted guard applies only to production hosted POS"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes UI consumes canonical hydrated arrays",
+      "Hosted launcher/session guards /app entry",
+      "PWA deploy versioning"
+    ],
+    "RISKS": [
+      "accidental redirect outside hosted production",
+      "double client renderer ownership",
+      "stale SW generation",
+      "filter/search regression"
+    ],
+    "ROLLBACK": [
+      "Revertir el PR correctivo; no toca datos ni schema."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "client renderer collision contract",
+      "V2 UI tests",
+      "hosted web deploy tests",
+      "live browser validation at 360/390/412/430/desktop after deploy"
+    ]
+  }
+}
