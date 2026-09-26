@@ -1,0 +1,84 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-CI-FIX-001",
+  "base_ref": "f394ea622f80fb5e84c16f5b17689579ebcd40d2",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Mantener compatibilidad con el contrato visual neutral mientras cielo/nubes viven en pseudo-elementos.",
+    "READS": [
+      "POS LAB Mobile run 36247319809",
+      "clientes.css",
+      "palette test",
+      "cloud-motion test"
+    ],
+    "WRITES": [
+      "clientes.css",
+      "cloud-motion test"
+    ],
+    "DOM_AFFECTED": [
+      ".lab-v2-client-head::before/::after"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No lógica financiera",
+      "No storage",
+      "No CANON",
+      "Reduced motion intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None"
+    ],
+    "RISKS": [
+      "Asegurar que el cielo decorativo siga visible con base neutral"
+    ],
+    "ROLLBACK": [
+      "Revertir hotfix"
+    ],
+    "TESTS": [
+      "preflight",
+      "palette test",
+      "cloud test",
+      "suite LAB",
+      "Pages"
+    ]
+  }
+}
