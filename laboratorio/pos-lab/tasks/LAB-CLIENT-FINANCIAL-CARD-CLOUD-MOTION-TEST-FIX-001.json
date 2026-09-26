@@ -1,0 +1,37 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-TEST-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "652c990b723a182bda1501b0a634526f4d11dc71",
+  "objective": "Corregir exclusivamente el SyntaxError del test de cloud motion reemplazando el literal \\\\n por un salto de línea real. No modificar CSS, runtime, lógica, storage ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-TEST-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-TEST-FIX-001.json",
+    "tests/laboratorio-client-financial-card-cloud-motion.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-TEST-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
