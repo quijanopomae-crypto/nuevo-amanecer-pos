@@ -6,7 +6,8 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const inline02 = read('../../POS/js/legacy-inline/inline-02.js');
 const inline03 = read('../../POS/js/legacy-inline/inline-03.js');
 const inline12 = read('../../POS/js/legacy-inline/inline-12.js');
-const index = read('../../POS/index.html');\nconst clientV2 = read('../../POS/js/modules/client-credit-accounts-v2.js');
+const index = read('../../POS/index.html');
+const clientV2 = read('../../POS/js/modules/client-credit-accounts-v2.js');
 
 test('canonical client renderer keeps fail-closed retry and advanced renderer', () => {
   assert.equal((inline12.match(/\bcliRender\s*=/g) || []).length, 0,
@@ -21,7 +22,13 @@ test('canonical client renderer keeps fail-closed retry and advanced renderer', 
       `${scriptPath} must not override cliRender after inline-03`);
   }
   assert.match(inline12, /_baseCliRender\s*=\s*function\s*\(/,
-    'inline-12 installs its advanced renderer as the dynamic base renderer');
+    'inline-12 keeps the canonical dynamic base renderer');
+  assert.match(inline12, /NA_CLIENT_CREDIT_ACCOUNTS_V2\.renderClientList\(rows,list\)/,
+    'canonical base renderer delegates the visible Clientes list to V2');
+  assert.match(clientV2, /function naRenderClientList\(rows, list\)/);
+  assert.match(clientV2, /renderClientList:naRenderClientList/);
+  assert.doesNotMatch(clientV2, /\bcliRender\s*=/,
+    'V2 must own list rendering through delegation, not replace canonical cliRender');
   assert.match(inline12, /cliSearch/);
   assert.match(inline12, /cliSort/);
   assert.match(inline12, /_naSecClientCard/);
