@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-FAST-CACHE-LOADER-001",
+  "environment": "CANON",
+  "base_ref": "ff5e1f5965de6ad59b19aa3dec807ec2806eb92c",
+  "objective": "Evitar que el loader de Clientes quede visible cuando ya existe una réplica CANON válida y acelerar la percepción de carga mostrando inmediatamente la caché válida mientras la validación remota corre en segundo plano.",
+  "owner_authorization": "Owner pidió corregir el loader atascado y hacer que los clientes carguen rápido.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-FAST-CACHE-LOADER-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-FAST-CACHE-LOADER-001.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No modificar datos de negocio",
+    "No modificar pagos/FIFO/Caja/inventario/saldos",
+    "Caché válida debe mostrarse inmediatamente",
+    "Validación remota continúa en segundo plano",
+    "Loader grande solo aparece cuando no existe réplica utilizable",
+    "El estado final de validación siempre notifica a la UI"
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos ni schema."
+}
