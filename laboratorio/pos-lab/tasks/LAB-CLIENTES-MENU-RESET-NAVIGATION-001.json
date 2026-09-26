@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENTES-MENU-RESET-NAVIGATION-001",
+  "environment": "LABORATORIO",
+  "base_ref": "5b3776848ca48fda5d3b52c7dd8d312f2dca956f",
+  "objective": "Separar la navegación interna de Clientes de la salida global al Menú. El botón superior #backBtn (Menú) debe cerrar y resetear labClientScreenState antes de ejecutar goMenu; la flecha interna naLabClientBack debe conservar su comportamiento nivel por nivel. Al reingresar a Clientes desde pageMenu debe mostrarse el listado principal, no la subvista anterior.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENTES-MENU-RESET-NAVIGATION-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENTES-MENU-RESET-NAVIGATION-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "tests/laboratorio-clientes-menu-reset-navigation.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENTES-MENU-RESET-NAVIGATION-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
