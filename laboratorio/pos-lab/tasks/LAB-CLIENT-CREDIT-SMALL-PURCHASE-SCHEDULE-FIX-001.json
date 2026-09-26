@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-CREDIT-SMALL-PURCHASE-SCHEDULE-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "a9ab57b23564b4d5c8ce68f6928b14027f0bfe20",
+  "objective": "Corregir la ruta Créditos pequeños -> VENTA para que una venta con plan de cuotas muestre el cronograma completo en la misma pantalla. Añadir fallback visual de solo lectura para descripciones que condensan cantidad de cuotas, monto por cuota y fecha inicial, como '11 cuotas mensuales de S/ 375; vence cada día 1, desde 01/10/2026'. No modificar ledger, pagos, saldo, persistencia, Caja ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-CREDIT-SMALL-PURCHASE-SCHEDULE-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-SMALL-PURCHASE-SCHEDULE-FIX-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/animations/**",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-CREDIT-SMALL-PURCHASE-SCHEDULE-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

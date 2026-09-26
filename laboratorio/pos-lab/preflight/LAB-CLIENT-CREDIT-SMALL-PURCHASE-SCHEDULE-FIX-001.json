@@ -1,0 +1,91 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-CREDIT-SMALL-PURCHASE-SCHEDULE-FIX-001",
+  "base_ref": "a9ab57b23564b4d5c8ce68f6928b14027f0bfe20",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Hacer visible el cronograma completo de cuotas en la ruta de compra acumulada que el owner mostró en captura.",
+    "READS": [
+      "captura del owner: Créditos pequeños -> VENTA 2026-09-19",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+      "Task/skills/UI map ya vigentes para V2 LAB"
+    ],
+    "WRITES": [
+      "labPurchaseHtml: añadir cronograma si la compra tiene más de una cuota",
+      "helpers de plan: derivar solo visualmente datos desde descripción cuando falten campos estructurados",
+      "pruebas de 11 cuotas sobre el formato real de la captura"
+    ],
+    "DOM_AFFECTED": [
+      "Vista LAB Créditos pequeños -> VENTA: sección CRONOGRAMA DE CUOTAS"
+    ],
+    "STATE_AFFECTED": [
+      "None; solo proyección visual en memoria"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No mutar creditos, pagos, saldo, pagado, ventaId ni ledger",
+      "No modificar abrirPago ni flujo de pagos",
+      "No cambiar Caja, Ventas, evaluación de crédito ni persistencia",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes LAB solo lee el mismo crédito; sin escrituras cruzadas"
+    ],
+    "RISKS": [
+      "Descripción libre podría ser ambigua; el parser exige el patrón explícito de cuotas mensuales + monto y una fecha inicial válida",
+      "No inferir un cronograma cuando falten datos suficientes"
+    ],
+    "ROLLBACK": [
+      "Revertir este PR LAB."
+    ],
+    "TESTS": [
+      "preflight temporal antes de JS",
+      "11 cuotas desde descripción exacta del caso del owner",
+      "fechas 01/10/2026 a 01/08/2027",
+      "S/375 por cuota",
+      "labPurchaseHtml contiene cronograma completo",
+      "suite LAB + Pages + validación publicada móvil"
+    ]
+  }
+}

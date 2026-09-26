@@ -294,6 +294,35 @@
     return { key:'pending', label:'Pendiente', next:false };
   }
 
+  function labDescriptionInstallmentHint(cr) {
+    var text = String(cr && cr.desc || '').trim();
+    if (!text) return { count:null, amount:null, firstDue:'', dueDay:null };
+    var countMatch = /(\d{1,2})\s+cuotas?\s+mensuales?/i.exec(text);
+    var amountMatch = /cuotas?\s+mensuales?\s+de\s+S\/\s*([\d.,]+)/i.exec(text);
+    var dateMatch = /desde\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i.exec(text);
+    var isoMatch = /desde\s+(\d{4})-(\d{2})-(\d{2})/i.exec(text);
+    var dayMatch = /cada\s+d[ií]a\s+(\d{1,2})/i.exec(text);
+    var amount = null;
+    if (amountMatch) {
+      var rawAmount = String(amountMatch[1] || '').trim();
+      if (rawAmount.includes('.') && rawAmount.includes(',')) rawAmount = rawAmount.replace(/,/g,'');
+      else if (!rawAmount.includes('.') && rawAmount.includes(',')) rawAmount = rawAmount.replace(',','.');
+      amount = Number(rawAmount);
+      if (!Number.isFinite(amount) || amount <= 0) amount = null;
+    }
+    var firstDue = '';
+    if (dateMatch) {
+      firstDue = dateMatch[3] + '-' + String(dateMatch[2]).padStart(2,'0') + '-' + String(dateMatch[1]).padStart(2,'0');
+    } else if (isoMatch) {
+      firstDue = isoMatch[1] + '-' + isoMatch[2] + '-' + isoMatch[3];
+    }
+    var count = countMatch ? Math.floor(Number(countMatch[1])) : null;
+    if (!Number.isFinite(count) || count < 2 || count > 60) count = null;
+    var dueDay = dayMatch ? Math.floor(Number(dayMatch[1])) : null;
+    if (!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) dueDay = null;
+    return { count:count, amount:amount, firstDue:firstDue, dueDay:dueDay };
+  }
+
   function labInstallmentCountHint(cr) {
     var candidates = [
       cr && cr.labInstallmentCount,
@@ -308,7 +337,7 @@
       var count = Math.floor(Number(candidates[i]));
       if (Number.isFinite(count) && count > 1 && count <= 60) return count;
     }
-    return 1;
+    return labDescriptionInstallmentHint(cr).count || 1;
   }
 
   function labFirstInstallmentDue(cr) {
@@ -316,16 +345,20 @@
       cr && cr.primerVencimiento,
       cr && cr.fechaPrimeraCuota,
       cr && cr.firstDue,
-      cr && cr.firstInstallmentDate,
-      cr && cr.vence
+      cr && cr.firstInstallmentDate
     ];
     for (var i = 0; i < direct.length; i += 1) {
       var value = String(direct[i] || '').slice(0,10);
       if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
     }
+    var descHint = labDescriptionInstallmentHint(cr);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(descHint.firstDue || '')) return descHint.firstDue;
+    var legacyDue = String(cr && cr.vence || '').slice(0,10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(legacyDue)) return legacyDue;
     var start = String(cr && (cr.fechaInicioCuotas || cr.fechaInicial || cr.fechaInicio || cr.fecha) || '').slice(0,10);
     var startMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
     var dueDay = Math.floor(Number(cr && (cr.diaVencimiento || cr.diaCuota || cr.installmentDay)));
+    if (!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) dueDay = descHint.dueDay;
     if (!startMatch || !Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) return '';
     var year = Number(startMatch[1]), monthIndex = Number(startMatch[2]) - 1, startDay = Number(startMatch[3]);
     if (dueDay < startDay) monthIndex += 1;
@@ -341,7 +374,9 @@
     var firstDue = labFirstInstallmentDue(cr);
     if (count > 1 && firstDue) {
       var total = Number(cr && cr.monto) || 0;
-      var explicitAmount = Number(cr && (cr.montoCuota ?? cr.cuotaMonto ?? cr.montoPorCuota ?? cr.installmentAmount));
+      var structuredAmount = cr && (cr.montoCuota ?? cr.cuotaMonto ?? cr.montoPorCuota ?? cr.installmentAmount);
+      var explicitAmount = Number(structuredAmount);
+      if (!Number.isFinite(explicitAmount) || explicitAmount <= 0) explicitAmount = Number(labDescriptionInstallmentHint(cr).amount);
       var useExplicit = Number.isFinite(explicitAmount) && explicitAmount > 0 &&
         (!total || Math.abs(explicitAmount * count - total) < 0.02);
       var amounts = useExplicit ? Array.from({length:count}, function () { return explicitAmount; }) : labSplitInstallmentAmounts(total, count);
@@ -467,8 +502,11 @@
 
   function labPurchaseHtml(client, cr) {
     var items = Array.isArray(cr.items) ? cr.items : [];
+    var installments = labInstallmentSummary(cr);
+    var hasInstallmentSchedule = installments.plan.length > 1;
     return '<div class="lab-v2-screen">' + labBackButton(LAB_SMALL_ACCOUNT_NAME) +
-      '<header class="lab-v2-subhead"><h2>VENTA ' + labEsc(cr.fecha || '') + '</h2></header>' +
+      '<header class="lab-v2-subhead lab-v2-tone-teal"><span class="lab-v2-eyebrow">Crédito pequeño</span><h2>VENTA ' + labEsc(cr.fecha || '') + '</h2>' +
+        (hasInstallmentSchedule ? '<small>' + installments.paidCount + ' cuotas pagadas · ' + installments.pendingCount + ' pendientes</small>' : '') + '</header>' +
       '<section class="lab-v2-product-list">' +
         (items.length ? items.map(function (item) {
           var qty = Number(item.cantidad ?? item.qty) || 1, unit = Number(item.precioUnitario ?? item.precio) || 0;
@@ -476,7 +514,11 @@
           if (!Number.isFinite(total)) total = qty * unit;
           return '<div class="lab-v2-product"><span><strong>' + labEsc(item.nombre || item.name || 'Producto') + '</strong><small>' + qty + ' × ' + labMoney(unit) + '</small></span><b>' + labMoney(total) + '</b></div>';
         }).join('') : '<div class="lab-v2-empty">El crédito heredado no conserva detalle de productos.</div>') +
-      '</section><div class="lab-v2-total"><span>Total</span><strong>' + labMoney(Number(cr.monto) || 0) + '</strong></div></div>';
+      '</section><div class="lab-v2-total"><span>Total</span><strong>' + labMoney(Number(cr.monto) || 0) + '</strong></div>' +
+      (hasInstallmentSchedule
+        ? '<section class="lab-v2-section lab-v2-schedule-section"><div class="lab-v2-section-title"><span>CRONOGRAMA DE CUOTAS</span><small>' + installments.plan.length + ' cuotas en total</small></div>' + labPendingInstallmentsHtml(installments) + '</section>'
+        : '') +
+    '</div>';
   }
 
   function labPendingInstallmentsHtml(summary) {
