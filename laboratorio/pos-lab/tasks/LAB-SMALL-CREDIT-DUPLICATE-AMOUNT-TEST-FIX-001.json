@@ -26,6 +26,7 @@
     "impact-analysis",
     "cross-module-impact",
     "lab-scope-guard",
+    "lab-feature-edit",
     "credits-integrity"
   ],
   "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-SMALL-CREDIT-DUPLICATE-AMOUNT-TEST-FIX-001.json",
