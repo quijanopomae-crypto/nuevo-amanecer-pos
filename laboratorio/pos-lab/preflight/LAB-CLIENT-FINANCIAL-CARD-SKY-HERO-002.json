@@ -1,0 +1,88 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-SKY-HERO-002",
+  "base_ref": "a468dd168c2674088ff5c0768f96384e8b2f110c",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Reforzar visualmente el cielo/nubes del hero sin alterar estructura ni negocio.",
+    "READS": [
+      "referencia visual del owner: hero celeste con nubes grandes",
+      "resultado real publicado actual",
+      "clientes.css",
+      "cloud motion test",
+      "palette test"
+    ],
+    "WRITES": [
+      "clientes.css: cielo más visible, nubes grandes, halo y profundidad",
+      "cloud motion test: expectativas del acabado reforzado"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .lab-v2-client-head::before",
+      "#pageClientes .lab-v2-client-head::after"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No modificar créditos, pagos, deuda, línea, clasificación o ledger",
+      "No JS, storage ni red",
+      "prefers-reduced-motion sigue desactivando movimiento",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; visual-only en Clientes LAB"
+    ],
+    "RISKS": [
+      "Nubes demasiado intensas pueden afectar legibilidad; contenido permanece por encima con z-index y contraste.",
+      "Overflow móvil; se mantiene overflow:hidden en la tarjeta.",
+      "Costo visual; solo background-position CSS, sin filtros pesados."
+    ],
+    "ROLLBACK": [
+      "Revertir un único PR LAB."
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "suite LAB completa",
+      "POS LAB Mobile",
+      "Pages",
+      "validación publicada en 390px con inspección del movimiento"
+    ]
+  }
+}
