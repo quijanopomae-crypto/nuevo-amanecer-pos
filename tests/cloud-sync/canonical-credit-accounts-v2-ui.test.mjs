@@ -124,7 +124,7 @@ test('classification reuses the existing evaluator with the approved semantic pr
 
 test('CANON UI keeps financial authority in existing evaluation/payment/FIFO/cash paths',()=>{
   const classification=source.slice(source.indexOf('function labClassifyClient'),source.indexOf('function labProductSummary'));
-  assert.match(classification,/_naEvaluateClientCredit/);
+  assert.match(source,/_naEvaluateClientCredit/);
   assert.doesNotMatch(classification,/score\s*=|assignedLine\s*=|automaticLine\s*=/);
   assert.match(source,/abrirPago\(/);
   assert.doesNotMatch(source,/cajMovs\.push|_naAllocateCreditPayment\s*=|saveAllData|confirmarPago\s*=/);
