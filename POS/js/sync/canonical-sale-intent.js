@@ -122,7 +122,15 @@
             !['accumulated','separate'].includes(account.mode)) fail('CREDIT_ACCOUNT_INVALID');
         creditAccount = { account_id: account.account_id, name: account.name.trim().replace(/\s+/g,' '), mode: account.mode };
       }
-      if (input.installments !== undefined) {
+      if (input.installment_dates !== undefined) {
+        if (!Array.isArray(input.installment_dates) || input.installment_dates.length < 1 || input.installment_dates.length > 60 ||
+            input.installment_dates.some(function (date) { return !validDue(date); })) fail('INSTALLMENTS_INVALID');
+        var baseAmount = Math.floor(total / input.installment_dates.length);
+        var remainder = total - baseAmount * input.installment_dates.length;
+        installments = input.installment_dates.map(function (date, index) {
+          return { number:index + 1, due_date:date, amount_cents:baseAmount + (index < remainder ? 1 : 0) };
+        });
+      } else if (input.installments !== undefined) {
         if (!Array.isArray(input.installments) || input.installments.length < 1 || input.installments.length > 60) fail('INSTALLMENTS_INVALID');
         var installmentTotal = 0;
         installments = input.installments.map(function (row, index) {
