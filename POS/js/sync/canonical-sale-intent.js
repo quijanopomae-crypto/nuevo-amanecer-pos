@@ -112,6 +112,37 @@
     var reference = sourcePayment.reference === undefined ? '' : sourcePayment.reference;
     if (typeof reference !== 'string' || reference.length > 160 || /[\u0000-\u001f\u007f-\u009f]/.test(reference)) fail('REFERENCE_INVALID');
     if (method === 'credito' && (!input.customer_id || !validDue(input.credit_due))) fail('CREDIT_CUSTOMER_OR_DUE_REQUIRED');
+    var creditAccount = null, installments = [];
+    if (method === 'credito') {
+      if (input.credit_account !== undefined) {
+        var account = input.credit_account;
+        if (!account || typeof account !== 'object' || Array.isArray(account) ||
+            typeof account.account_id !== 'string' || !account.account_id || account.account_id.length > 160 ||
+            typeof account.name !== 'string' || !account.name.trim() || account.name.trim().length > 60 ||
+            !['accumulated','separate'].includes(account.mode)) fail('CREDIT_ACCOUNT_INVALID');
+        creditAccount = { account_id: account.account_id, name: account.name.trim().replace(/\s+/g,' '), mode: account.mode };
+      }
+      if (input.installment_dates !== undefined) {
+        if (!Array.isArray(input.installment_dates) || input.installment_dates.length < 1 || input.installment_dates.length > 60 ||
+            input.installment_dates.some(function (date) { return !validDue(date); })) fail('INSTALLMENTS_INVALID');
+        var baseAmount = Math.floor(total / input.installment_dates.length);
+        var remainder = total - baseAmount * input.installment_dates.length;
+        installments = input.installment_dates.map(function (date, index) {
+          return { number:index + 1, due_date:date, amount_cents:baseAmount + (index < remainder ? 1 : 0) };
+        });
+      } else if (input.installments !== undefined) {
+        if (!Array.isArray(input.installments) || input.installments.length < 1 || input.installments.length > 60) fail('INSTALLMENTS_INVALID');
+        var installmentTotal = 0;
+        installments = input.installments.map(function (row, index) {
+          if (!row || typeof row !== 'object' || Array.isArray(row) || row.number !== index + 1 || !validDue(row.due_date) ||
+              !Number.isSafeInteger(row.amount_cents) || row.amount_cents <= 0) fail('INSTALLMENTS_INVALID');
+          installmentTotal += row.amount_cents;
+          if (!Number.isSafeInteger(installmentTotal)) fail('INSTALLMENTS_INVALID');
+          return { number: row.number, due_date: row.due_date, amount_cents: row.amount_cents };
+        });
+        if (installmentTotal !== total) fail('INSTALLMENTS_TOTAL_MISMATCH');
+      }
+    }
 
     var intent = {
       version: VERSION,
@@ -125,6 +156,8 @@
     };
     if (input.customer_id !== undefined && input.customer_id !== null && input.customer_id !== '') intent.customer_id = nonEmptyString(input.customer_id, 'CUSTOMER_ID_INVALID');
     if (input.credit_due !== undefined && input.credit_due !== null && input.credit_due !== '') intent.credit_due = input.credit_due;
+    if (creditAccount) intent.credit_account = creditAccount;
+    if (installments.length) intent.installments = installments;
     return intent;
   }
 
