@@ -1,0 +1,75 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-TEST-FIX-001",
+  "base_ref": "652c990b723a182bda1501b0a634526f4d11dc71",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Test-only syntax repair.",
+    "READS": [
+      "POS LAB Mobile run 36247483382",
+      "cloud motion test"
+    ],
+    "WRITES": [
+      "cloud motion test only"
+    ],
+    "DOM_AFFECTED": [
+      "None"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "CSS unchanged",
+      "Business logic unchanged",
+      "CANON unchanged"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None"
+    ],
+    "RISKS": [
+      "None beyond preserving exact regex intent"
+    ],
+    "ROLLBACK": [
+      "Revert test-only PR"
+    ],
+    "TESTS": [
+      "preflight",
+      "full LAB tests",
+      "POS LAB Mobile",
+      "Pages"
+    ]
+  }
+}
