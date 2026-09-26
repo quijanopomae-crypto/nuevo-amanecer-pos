@@ -89,7 +89,8 @@ async function readAll(route, headers, status) {
     if (cursor) url.searchParams.set('cursor', cursor);
     const page = await fetchJson(url.href, { headers });
     verifyAuthority(page, status);
-    if (page.read_only !== true) throw new Error(route + ' is not read_only');
+    if (typeof page.read_only !== 'boolean') throw new Error(route + ' read_only missing');
+    if (page.read_only !== (page.mode !== 'ACTIVE')) throw new Error(route + ' read_only/mode mismatch');
     if (!Array.isArray(page.items)) throw new Error(route + ' items missing');
     items.push(...page.items);
     cursor = page.next_cursor || null;

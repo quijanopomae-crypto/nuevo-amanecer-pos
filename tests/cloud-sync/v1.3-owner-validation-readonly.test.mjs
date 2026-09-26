@@ -39,3 +39,10 @@ test('financial revision zero is valid before first live operation',()=>{
   assert.ok(script.includes('Number(status.financial_revision) < 0'));
   assert.ok(!script.includes('Number(status.financial_revision) <= 0'));
 });
+
+
+test('ACTIVE canonical reads follow authority read_only semantics',()=>{
+  assert.ok(script.includes("typeof page.read_only !== 'boolean'"));
+  assert.ok(script.includes("page.read_only !== (page.mode !== 'ACTIVE')"));
+  assert.ok(!script.includes("page.read_only !== true"));
+});
