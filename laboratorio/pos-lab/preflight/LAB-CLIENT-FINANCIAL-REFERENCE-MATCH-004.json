@@ -1,0 +1,94 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-REFERENCE-MATCH-004",
+  "base_ref": "20b34f8c8d8079fbb861cdd27a10b96172fccade",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Aproximar visualmente la ficha publicada a la referencia 2 sin cambiar infraestructura ni lógica.",
+    "READS": [
+      "captura resultado actual",
+      "captura referencia aprobada",
+      "clientes.css",
+      "labHomeHtml",
+      "UI_MAP.yaml"
+    ],
+    "WRITES": [
+      "clientes.css: overrides finales de hero, tipografía, contraste y tarjetas",
+      "test focalizado responsive/reference-match"
+    ],
+    "DOM_AFFECTED": [
+      ".lab-v2-client-head",
+      ".lab-v2-client-identity",
+      ".lab-v2-name-line",
+      ".lab-v2-head-money",
+      ".lab-v2-risk",
+      ".lab-v2-row",
+      ".lab-v2-module-icon"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No modificar deuda, línea, clasificación, créditos, pagos o ledger",
+      "No modificar lab-overrides.js",
+      "No fuentes ni recursos externos",
+      "Animación de nubes continúa decorativa",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; Clientes LAB visual only"
+    ],
+    "RISKS": [
+      "Dos columnas en móvil podrían desbordar; usar minmax(0,...) y tamaños fluidos.",
+      "Nombre muy ancho podría invadir deuda; limitar con clamp y scale moderada.",
+      "Más contraste no debe perder legibilidad sobre nubes."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR LAB de reference-match."
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "hero mantiene dos columnas en <=430px",
+      "nombre usa tratamiento display oscuro y fluid sizing",
+      "badge queda visualmente debajo del DNI mediante CSS grid",
+      "deuda tiene separador vertical",
+      "filas aumentan jerarquía sin min-width fijo",
+      "suite LAB completa",
+      "POS LAB Mobile + Pages",
+      "validación publicada 390px sin overflow"
+    ]
+  }
+}
