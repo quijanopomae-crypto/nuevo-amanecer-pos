@@ -1,0 +1,47 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CUTOVER-ACTIVE-SESSION-BASELINE-001",
+  "base_ref": "7f5626c701aa83b9dcf25810531a356dadfeba1e",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Corregir el gate final de cutover para preservar y comparar la cantidad de sesiones activas legítimas observada en preflight, en vez de exigir cero sesiones.",
+    "READS": [
+      "production cutover run 36274058000 logs",
+      "cutover-prepare.mjs",
+      "v1.3-production-cutover.test.mjs"
+    ],
+    "WRITES": [
+      "Record baseline active_sessions in GITHUB_ENV",
+      "Require final active_sessions equals baseline",
+      "Retry guarded cutover trigger"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "No production state mutation by this patch; only validation semantics"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No borrar sesiones existentes",
+      "El probe solo puede limpiar su propia sesión",
+      "Ventas/pagos/caja siguen en cero en este gate",
+      "first_live_operation_id permanece NULL"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Activation/session probe",
+      "production cutover final gate"
+    ],
+    "RISKS": [
+      "Concurrent session creation/revocation during cutover will deliberately fail closed"
+    ],
+    "ROLLBACK": [
+      "Revertir PR; la migración 0012 ya es aditiva y queda intacta."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "production cutover tests",
+      "guarded cutover rerun"
+    ]
+  }
+}
