@@ -10,7 +10,7 @@ const TABLES = {
   credit_payments: ['payment_id','credit_id','source_payment_id','source_sequence','amount_cents','payment_date','payment_timestamp','payment_date_known','date_precision','method','source_method','source_origin','source_document_type','source_operation_reference','seller','date_observation','source_customer_document','source_customer_name','source_cumulative_paid_cents','source_balance_after_cents','source_progress_ratio','source_credit_original_cents','source_current_document_balance_cents'],
 };
 const PROVENANCE = ['promotion_id','source_import_id','source_entity_type','source_name','source_row','source_key','source_payload_json','source_payload_hash','mapping_version'];
-const READ_TABLES = new Set(['products','customers','credits','credit-payments','sales','sale-items','inventory-movements','cash-movements','cash-sessions','financial-events']);
+const READ_TABLES = new Set(['products','customers','credits','credit-payments','credit-accounts','sales','sale-items','inventory-movements','cash-movements','cash-sessions','financial-events']);
 const A3_PUBLIC_COLUMNS={
   sales:'sale_id,operation_id,payment_method,total_cents,payment_reference,created_at,received_at',
   sale_items:'sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at',
@@ -466,11 +466,32 @@ async function canonicalRead(url,db,json){
   }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
   const sqlName=type.replaceAll('-','_');let rows;
-  if(sqlName==='credits'&&before.mode==='ACTIVE'){
+  if(sqlName==='credit_accounts'){
+    rows=before.mode==='ACTIVE'
+      ? await db.prepare(`SELECT customer_id || char(0) || account_id AS read_key,customer_id,account_id,name,mode,created_at
+          FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id || char(0) || account_id>?2
+          ORDER BY customer_id,account_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all()
+      : {results:[]};
+  } else if(sqlName==='credits'&&before.mode==='ACTIVE'){
     const liveFields={credit_id:'l.credit_id',customer_id:'l.customer_id',sale_id:'l.sale_id',issued_value:'l.created_at',due_value:'l.due_date',original_amount_cents:'l.original_amount_cents',import_paid_cents:'0',opening_balance_cents:'l.original_amount_cents',current_balance_cents:'b.current_balance_cents',source_status:'NULL'};
-    rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || c.credit_id AS read_key,${TABLES.credits.map(column=>column==='current_balance_cents'?'b.current_balance_cents':`c.${column}`).join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS status,b.revision AS revision,NULL AS created_at,NULL AS due_date FROM credits c JOIN canonical_credit_balances b ON b.promotion_id=c.promotion_id AND b.credit_id=c.credit_id AND b.provenance='IMPORT' WHERE c.promotion_id=?1 UNION ALL
-      SELECT 'L:' || l.credit_id AS read_key,${TABLES.credits.map(column=>liveFields[column]??'NULL').join(',')},'LIVE',l.operation_id,l.status,b.revision,l.created_at,l.due_date
-      FROM live_credits l JOIN canonical_credit_balances b ON b.promotion_id=l.promotion_id AND b.credit_id=l.credit_id AND b.provenance='LIVE' WHERE l.promotion_id=?1) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+    const installmentJson=(alias,provenance)=>`(SELECT COALESCE(json_group_array(json_object('number',ci.installment_number,'due_date',ci.due_date,'amount_cents',ci.amount_cents)),'[]')
+      FROM canonical_credit_installments ci WHERE ci.promotion_id=${alias}.promotion_id AND ci.credit_id=${alias}.credit_id AND ci.credit_provenance='${provenance}'
+      ORDER BY ci.installment_number)`;
+    rows=await db.prepare(`SELECT * FROM (
+      SELECT 'I:' || c.credit_id AS read_key,${TABLES.credits.map(column=>column==='current_balance_cents'?'b.current_balance_cents':`c.${column}`).join(',')},
+        'IMPORT' AS provenance,NULL AS operation_id,NULL AS status,b.revision AS revision,NULL AS created_at,NULL AS due_date,
+        m.account_id,m.account_name,m.account_mode,${installmentJson('c','IMPORT')} AS installments_json
+      FROM credits c JOIN canonical_credit_balances b ON b.promotion_id=c.promotion_id AND b.credit_id=c.credit_id AND b.provenance='IMPORT'
+      LEFT JOIN canonical_credit_metadata m ON m.promotion_id=c.promotion_id AND m.credit_id=c.credit_id AND m.credit_provenance='IMPORT'
+      WHERE c.promotion_id=?1
+      UNION ALL
+      SELECT 'L:' || l.credit_id AS read_key,${TABLES.credits.map(column=>liveFields[column]??'NULL').join(',')},
+        'LIVE',l.operation_id,l.status,b.revision,l.created_at,l.due_date,
+        m.account_id,m.account_name,m.account_mode,${installmentJson('l','LIVE')} AS installments_json
+      FROM live_credits l JOIN canonical_credit_balances b ON b.promotion_id=l.promotion_id AND b.credit_id=l.credit_id AND b.provenance='LIVE'
+      LEFT JOIN canonical_credit_metadata m ON m.promotion_id=l.promotion_id AND m.credit_id=l.credit_id AND m.credit_provenance='LIVE'
+      WHERE l.promotion_id=?1
+    ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   } else if(sqlName==='credit_payments'&&before.mode==='ACTIVE'){
     const fields={payment_id:'event_id',credit_id:'credit_id',amount_cents:'-credit_delta_cents',payment_date:'substr(created_at,1,10)',payment_timestamp:'created_at',payment_date_known:'1',date_precision:"'TIMESTAMP'",method:'payment_method',source_origin:"'LIVE'",source_operation_reference:'reference'};
     rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || payment_id AS read_key,${TABLES.credit_payments.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS credit_provenance,NULL AS credit_delta_cents,NULL AS cash_delta_cents,NULL AS session_id,NULL AS reason,NULL AS compensates_operation_id FROM credit_payments WHERE promotion_id=?1 UNION ALL
