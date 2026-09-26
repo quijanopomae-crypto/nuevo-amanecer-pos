@@ -248,3 +248,266 @@
 #pageClientes .lab-v2-installment.is-next{
   box-shadow:none;
 }
+
+
+/* REFERENCE MATCH 004 — closer to approved owner reference */
+#pageClientes .lab-client-account-shell{
+  background:linear-gradient(180deg,#fbfdff 0%,#f6fafc 100%);
+}
+#pageClientes .lab-v2-client-head{
+  min-height:170px;
+  padding:22px 22px 20px;
+  border:1px solid rgba(15,118,110,.22);
+  border-left:4px solid #10b8ae;
+  border-radius:22px;
+  box-shadow:0 12px 30px rgba(15,23,42,.075),inset 0 1px 0 rgba(255,255,255,.7);
+}
+#pageClientes .lab-v2-client-head:before{
+  filter:saturate(1.16) contrast(1.035);
+}
+#pageClientes .lab-v2-client-head:after{
+  opacity:.9;
+}
+#pageClientes .lab-v2-client-identity{
+  display:grid;
+  grid-template-rows:auto auto auto auto;
+  align-content:center;
+  min-width:0;
+}
+#pageClientes .lab-v2-name-line{
+  display:contents;
+}
+#pageClientes .lab-v2-client-identity>.lab-v2-eyebrow{
+  grid-row:1;
+  margin:0 0 7px;
+  color:#37636a;
+  font-size:11px;
+  letter-spacing:.095em;
+  font-weight:950;
+}
+#pageClientes .lab-v2-client-head h2{
+  grid-row:2;
+  font-family:Impact,"Arial Black","Noto Sans",system-ui,sans-serif;
+  font-size:clamp(31px,4.25vw,38px);
+  line-height:.98;
+  font-weight:1000;
+  letter-spacing:-.045em;
+  color:#080c16;
+  -webkit-text-stroke:.55px #080c16;
+  text-shadow:0 1px 0 rgba(255,255,255,.12);
+  transform:scaleX(1.1);
+  transform-origin:left center;
+  max-width:88%;
+}
+#pageClientes .lab-v2-client-head p{
+  grid-row:3;
+  margin:8px 0 0;
+  color:#5f6f82;
+  font-size:13px;
+  line-height:1.2;
+  font-weight:750;
+}
+#pageClientes .lab-v2-client-head .lab-v2-risk{
+  grid-row:4;
+  justify-self:start;
+  align-self:start;
+  margin-top:13px;
+  min-height:40px;
+  padding:7px 14px;
+  font-size:11px;
+  letter-spacing:.04em;
+  box-shadow:0 3px 10px rgba(15,23,42,.045);
+}
+#pageClientes .lab-v2-client-head .lab-v2-risk-amber{
+  background:#fff5cf;
+  color:#9a5b00;
+  border-color:#f4d77d;
+}
+#pageClientes .lab-v2-client-head .lab-v2-risk-green{
+  background:#e9faef;
+  color:#137a38;
+  border-color:#bfe8cc;
+}
+#pageClientes .lab-v2-client-head .lab-v2-risk-red{
+  background:#ffedef;
+  color:#b91c32;
+  border-color:#f7c1c9;
+}
+#pageClientes .lab-v2-head-money{
+  align-self:center;
+  min-width:0;
+  padding-left:22px;
+  border-left:1px solid rgba(15,118,110,.24);
+  gap:5px;
+}
+#pageClientes .lab-v2-head-money span{
+  font-size:13px;
+  font-weight:760;
+  color:#43576a;
+}
+#pageClientes .lab-v2-head-money strong{
+  font-size:clamp(31px,4vw,37px);
+  line-height:1;
+  color:#0b3f49;
+  font-weight:900;
+  letter-spacing:-.045em;
+}
+#pageClientes .lab-v2-head-money small{
+  font-size:12px;
+  line-height:1.25;
+  color:#40566a;
+  font-weight:700;
+}
+#pageClientes .lab-v2-section{
+  padding-top:24px;
+}
+#pageClientes .lab-v2-section-title{
+  margin:0 4px 12px;
+}
+#pageClientes .lab-v2-section-title>span{
+  font-size:12px;
+  color:#53677c;
+  letter-spacing:.08em;
+  font-weight:950;
+}
+#pageClientes .lab-v2-section-title>small{
+  font-size:11px;
+  color:#73859a;
+  font-weight:700;
+}
+#pageClientes .lab-v2-list{
+  gap:11px;
+}
+#pageClientes .lab-v2-row{
+  min-height:74px;
+  padding:13px 15px;
+  border-radius:18px;
+  border-color:#d8e1e7;
+  box-shadow:0 5px 16px rgba(15,23,42,.045),inset 0 1px 0 rgba(255,255,255,.75);
+}
+#pageClientes .lab-v2-row strong{
+  font-size:14px;
+  line-height:1.18;
+  font-weight:850;
+  color:#111827;
+}
+#pageClientes .lab-v2-row small{
+  font-size:11px;
+  line-height:1.3;
+  color:#697b8f;
+  font-weight:690;
+}
+#pageClientes .lab-v2-row-value strong{
+  font-size:15px;
+  color:#0f5f61;
+  font-weight:850;
+}
+#pageClientes .lab-v2-row>b{
+  color:#6d7f92;
+  font-size:24px;
+  font-weight:600;
+}
+#pageClientes .lab-v2-module-icon,
+#pageClientes .lab-v2-nav-card .lab-v2-module-icon{
+  width:46px;
+  height:46px;
+  flex-basis:46px;
+  border-radius:14px;
+  font-size:17px;
+}
+#pageClientes .lab-v2-account-card{
+  border-left-width:4px;
+}
+#pageClientes .lab-v2-nav-card.lab-v2-tone-green{
+  border-color:#d6eadc;
+}
+#pageClientes .lab-v2-nav-card.lab-v2-tone-blue{
+  border-color:#d5e4ef;
+}
+#pageClientes .lab-v2-nav-card.lab-v2-tone-amber{
+  border-color:#efe4bd;
+}
+
+@media(max-width:430px){
+  #pageClientes .lab-v2-screen{padding:11px 14px 38px}
+  #pageClientes .lab-v2-client-head{
+    display:grid;
+    grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);
+    align-items:center;
+    gap:12px;
+    min-height:174px;
+    padding:18px 16px;
+  }
+  #pageClientes .lab-v2-client-head h2{
+    font-size:clamp(29px,8.5vw,34px);
+    max-width:92%;
+  }
+  #pageClientes .lab-v2-client-head p{
+    font-size:12px;
+    margin-top:7px;
+  }
+  #pageClientes .lab-v2-client-head .lab-v2-risk{
+    margin-top:11px;
+    min-height:38px;
+    padding:6px 12px;
+    font-size:10px;
+  }
+  #pageClientes .lab-v2-head-money{
+    width:auto;
+    text-align:right;
+    align-items:flex-end;
+    padding:0 0 0 13px;
+    border-top:0;
+    border-left:1px solid rgba(15,118,110,.24);
+  }
+  #pageClientes .lab-v2-head-money span{
+    font-size:11px;
+  }
+  #pageClientes .lab-v2-head-money strong{
+    font-size:clamp(27px,7.7vw,32px);
+  }
+  #pageClientes .lab-v2-head-money small{
+    font-size:10px;
+    max-width:150px;
+  }
+  #pageClientes .lab-v2-row{
+    min-height:72px;
+    padding:12px 13px;
+    gap:9px;
+    border-radius:17px;
+  }
+  #pageClientes .lab-v2-row strong{
+    font-size:13px;
+  }
+  #pageClientes .lab-v2-row small{
+    font-size:10.5px;
+  }
+  #pageClientes .lab-v2-row-value strong{
+    font-size:14px;
+  }
+  #pageClientes .lab-v2-module-icon,
+  #pageClientes .lab-v2-nav-card .lab-v2-module-icon{
+    width:44px;
+    height:44px;
+    flex-basis:44px;
+    border-radius:13px;
+    font-size:16px;
+  }
+}
+@media(max-width:360px){
+  #pageClientes .lab-v2-client-head{
+    grid-template-columns:minmax(0,1.04fr) minmax(0,.96fr);
+    gap:9px;
+    padding:16px 13px;
+  }
+  #pageClientes .lab-v2-client-head h2{
+    font-size:28px;
+    transform:scaleX(1.06);
+  }
+  #pageClientes .lab-v2-head-money{
+    padding-left:10px;
+  }
+  #pageClientes .lab-v2-head-money strong{
+    font-size:26px;
+  }
+}
