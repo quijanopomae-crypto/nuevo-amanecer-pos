@@ -706,3 +706,12 @@
     border-top-color:#14b8a6;
   }
 }
+
+
+/* CLIENT NAMES UPPERCASE 001 — visual only; stored values remain unchanged */
+#pageClientes #cliList .c-name{
+  text-transform:uppercase;
+}
+#pageClientes .lab-v2-client-head h2{
+  text-transform:uppercase;
+}
