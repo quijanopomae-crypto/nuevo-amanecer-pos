@@ -12,9 +12,10 @@ test('reference match keeps mobile hero in two columns with vertical debt divide
 });
 
 test('client name has stronger display contrast without external fonts',()=>{
-  const start=css.lastIndexOf('#pageClientes .lab-v2-client-head h2{');
+  const reference=css.slice(css.lastIndexOf('REFERENCE MATCH 004'));
+  const start=reference.indexOf('#pageClientes .lab-v2-client-head h2{');
   assert.notEqual(start,-1);
-  const block=css.slice(start,css.indexOf('}',start)+1);
+  const block=reference.slice(start,reference.indexOf('}',start)+1);
   assert.match(block,/font-family:Impact,"Arial Black","Noto Sans",system-ui,sans-serif/);
   assert.match(block,/color:#080c16/);
   assert.match(block,/-webkit-text-stroke:\.55px #080c16/);

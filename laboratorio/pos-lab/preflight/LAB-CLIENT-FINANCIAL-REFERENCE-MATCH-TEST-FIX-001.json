@@ -1,0 +1,77 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-REFERENCE-MATCH-TEST-FIX-001",
+  "base_ref": "ecd51c9a7d0bbcd443747b60d4a6e9ae51eb191b",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Test-only correction for reference-match typography assertion.",
+    "READS": [
+      "POS LAB Mobile run 36257160431",
+      "reference-match test",
+      "clientes.css"
+    ],
+    "WRITES": [
+      "tests/laboratorio-client-financial-reference-match.test.mjs only"
+    ],
+    "DOM_AFFECTED": [
+      "None"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "CSS unchanged",
+      "Runtime unchanged",
+      "Financial logic unchanged",
+      "CANON unchanged"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None"
+    ],
+    "RISKS": [
+      "None beyond keeping the assertion scoped to REFERENCE MATCH 004"
+    ],
+    "ROLLBACK": [
+      "Revert test-only PR"
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "full LAB suite",
+      "POS LAB Mobile",
+      "Pages"
+    ]
+  }
+}
