@@ -500,10 +500,33 @@
       '<section class="lab-v2-list lab-v2-card-list">' + (rows.length ? rows.join('') : '<div class="lab-v2-empty">No hay créditos activos en esta cuenta.</div>') + '</section></div>';
   }
 
+  function labCleanInstallmentProductName(value) {
+    var text = String(value || '').trim();
+    if (!text) return 'Producto';
+    var cleaned = text.replace(/\s*[—–-]\s*\d{1,2}\s+cuotas?\s+mensuales?[\s\S]*$/i,'').trim();
+    return cleaned || text;
+  }
+
+  function labPurchasePlanLabel(cr, installments) {
+    if (!installments || !Array.isArray(installments.plan) || installments.plan.length < 2) return '';
+    var hint = labDescriptionInstallmentHint(cr);
+    var firstDue = String(installments.plan[0] && installments.plan[0].due || hint.firstDue || '').slice(0,10);
+    var dueDay = hint.dueDay;
+    if ((!Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) && /^\d{4}-\d{2}-\d{2}$/.test(firstDue)) {
+      dueDay = Number(firstDue.slice(8,10));
+    }
+    var parts = [installments.plan.length + ' cuotas mensuales'];
+    if (Number.isFinite(dueDay) && dueDay >= 1 && dueDay <= 31) parts.push('vence cada día ' + dueDay);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(firstDue)) parts.push('desde ' + labDisplayDate(firstDue));
+    return parts.join(' · ');
+  }
+
   function labPurchaseHtml(client, cr) {
     var items = Array.isArray(cr.items) ? cr.items : [];
     var installments = labInstallmentSummary(cr);
     var hasInstallmentSchedule = installments.plan.length > 1;
+    var isSingleInstallmentItem = hasInstallmentSchedule && items.length === 1;
+    var planLabel = isSingleInstallmentItem ? labPurchasePlanLabel(cr, installments) : '';
     return '<div class="lab-v2-screen">' + labBackButton(LAB_SMALL_ACCOUNT_NAME) +
       '<header class="lab-v2-subhead lab-v2-tone-teal"><span class="lab-v2-eyebrow">Crédito pequeño</span><h2>VENTA ' + labEsc(cr.fecha || '') + '</h2>' +
         (hasInstallmentSchedule ? '<small>' + installments.paidCount + ' cuotas pagadas · ' + installments.pendingCount + ' pendientes</small>' : '') + '</header>' +
@@ -512,7 +535,13 @@
           var qty = Number(item.cantidad ?? item.qty) || 1, unit = Number(item.precioUnitario ?? item.precio) || 0;
           var total = Number(item.subtotal);
           if (!Number.isFinite(total)) total = qty * unit;
-          return '<div class="lab-v2-product"><span><strong>' + labEsc(item.nombre || item.name || 'Producto') + '</strong><small>' + qty + ' × ' + labMoney(unit) + '</small></span><b>' + labMoney(total) + '</b></div>';
+          var rawName = item.nombre || item.name || 'Producto';
+          var displayName = isSingleInstallmentItem ? labCleanInstallmentProductName(rawName) : rawName;
+          var secondary = isSingleInstallmentItem ? planLabel : (qty + ' × ' + labMoney(unit));
+          var lineAmount = isSingleInstallmentItem ? '' : '<b>' + labMoney(total) + '</b>';
+          return '<div class="lab-v2-product"><span><strong>' + labEsc(displayName) + '</strong>' +
+            (secondary ? '<small>' + labEsc(secondary) + '</small>' : '') +
+            '</span>' + lineAmount + '</div>';
         }).join('') : '<div class="lab-v2-empty">El crédito heredado no conserva detalle de productos.</div>') +
       '</section><div class="lab-v2-total"><span>Total</span><strong>' + labMoney(Number(cr.monto) || 0) + '</strong></div>' +
       (hasInstallmentSchedule
