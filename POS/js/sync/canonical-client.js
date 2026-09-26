@@ -123,10 +123,11 @@
     return !!(replica && replica.schema_version === 1 && typeof replica.promotion_id === 'string' && replica.promotion_id &&
       Number.isSafeInteger(replica.authority_epoch) && replica.authority_epoch >= 0 && Number.isSafeInteger(replica.revision) && replica.revision >= 0 &&
       typeof replica.cached_at === 'string' && Number.isFinite(Date.parse(replica.cached_at)) && ['CANONICAL_READ_ONLY','ACTIVE'].includes(replica.mode) && typeof replica.read_only === 'boolean' &&
-      (replica.financial_revision == null || uint(replica.financial_revision)) && ['products','customers','credits','credit_payments','credit_accounts'].every(function (key) { return Array.isArray(replica[key]); }) &&
+      (replica.financial_revision == null || uint(replica.financial_revision)) && ['products','customers','credits','credit_payments'].every(function (key) { return Array.isArray(replica[key]); }) &&
+      (replica.credit_accounts == null || Array.isArray(replica.credit_accounts)) &&
       (replica.cash_sessions == null || Array.isArray(replica.cash_sessions)) && (replica.financial_events == null || Array.isArray(replica.financial_events)) &&
       (replica.digests == null || (replica.digests && typeof replica.digests === 'object' && !Array.isArray(replica.digests))) &&
-      ['products','customers','credits','credit_payments','credit_accounts'].every(function (key) { return rowsValid(replica[key]); }) && rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) &&
+      ['products','customers','credits','credit_payments'].every(function (key) { return rowsValid(replica[key]); }) && rowsValid(replica.credit_accounts || []) && rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) &&
       !hasSecretKey(replica));
   }
   function replicaOf(value) { return { schema_version: 1, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
