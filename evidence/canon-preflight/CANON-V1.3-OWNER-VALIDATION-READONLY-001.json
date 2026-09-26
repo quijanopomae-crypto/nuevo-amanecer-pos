@@ -1,0 +1,61 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-V1.3-OWNER-VALIDATION-READONLY-001",
+  "base_ref": "fe970613ea49bf2413a61b40cadf3489a6224777",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Validar en producción, sin modificar datos de negocio, que el CANON activo entrega productos, clientes, créditos, pagos y cuentas V2 por las rutas canónicas y que una sesión temporal puede activarse, leer y limpiarse sin cambiar ventas, caja, inventario ni saldos.",
+    "READS": [
+      "production /health",
+      "/auth/activate",
+      "/auth/session",
+      "/read/canonical/status",
+      "/read/canonical/products",
+      "/read/canonical/customers",
+      "/read/canonical/credits",
+      "/read/canonical/credit-payments",
+      "/read/canonical/credit-accounts",
+      "production D1 count-only queries"
+    ],
+    "WRITES": [
+      "Temporary auth session/device only, then cleanup; repository validation workflow/script/tests"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Temporary auth session lifecycle only"
+    ],
+    "STORAGE_AFFECTED": [
+      "No business storage changes; auth_sessions/devices temporary rows cleaned after validation"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No sale.create",
+      "No payment.create",
+      "No cash.open/cash.close",
+      "No inventory mutation",
+      "No financial operation mutation",
+      "Temporary auth session/principal cleaned in finally",
+      "Business table counts identical before and after validation"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Hosted activation/session",
+      "canonical read model",
+      "Client Credit V2 sidecars"
+    ],
+    "RISKS": [
+      "Temporary session cleanup failure",
+      "production read inconsistency",
+      "stale authority during validation"
+    ],
+    "ROLLBACK": [
+      "Revertir PR de validación; no toca schema ni datos de negocio."
+    ],
+    "TEST_PLAN": [
+      "static safety test",
+      "CANON Critical CI",
+      "production readonly validation workflow",
+      "before/after business count equality"
+    ]
+  }
+}
