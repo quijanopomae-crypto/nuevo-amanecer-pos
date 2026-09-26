@@ -122,7 +122,7 @@
       var creditV2 = root.NA_CLIENT_CREDIT_ACCOUNTS_V2 && typeof root.NA_CLIENT_CREDIT_ACCOUNTS_V2.saleDraft === 'function'
         ? root.NA_CLIENT_CREDIT_ACCOUNTS_V2.saleDraft() : null;
       if (creditV2 && creditV2.account) input.credit_account = copy(creditV2.account);
-      if (creditV2 && Array.isArray(creditV2.installments) && creditV2.installments.length) input.installments = copy(creditV2.installments);
+      if (creditV2 && Array.isArray(creditV2.installment_dates) && creditV2.installment_dates.length) input.installment_dates = copy(creditV2.installment_dates);
     }
     var durable = false;
     setBusy(true);
