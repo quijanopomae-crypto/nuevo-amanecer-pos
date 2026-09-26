@@ -325,7 +325,7 @@ test('26 small-credit purchase detail renders complete installment schedule inst
 test('27 single-item installment purchase removes duplicated total from the product row',()=>{
   const block=source.slice(source.indexOf('function labPurchaseHtml'),source.indexOf('function labPendingInstallmentsHtml'));
   assert.match(block,/isSingleInstallmentItem = hasInstallmentSchedule && items\.length === 1/);
-  assert.match(block,/lineAmount = isSingleInstallmentItem \? '' : '<b>' \+ labMoney\(total\) \+ '<\\\/b>'/);
+  assert.ok(block.includes("var lineAmount = isSingleInstallmentItem ? '' : '<b>' + labMoney(total) + '</b>';"));
   assert.match(block,/lab-v2-total/);
 });
 
