@@ -212,6 +212,10 @@ test('19 mobile motion and scrolling are preserved without horizontal layouts',(
   assert.match(clientCss,/@media\(prefers-reduced-motion:reduce\)/);
 });
 
+test('19b classification button keeps a mobile-safe touch target',()=>{
+  assert.match(clientCss,/\\.lab-v2-risk\\{[^}]*min-height:44px/);
+});
+
 test('20 no horizontal overflow primitives are introduced',()=>{
   assert.match(clientCss,/min-width:0/);
   assert.match(clientCss,/overflow-wrap:anywhere/);
