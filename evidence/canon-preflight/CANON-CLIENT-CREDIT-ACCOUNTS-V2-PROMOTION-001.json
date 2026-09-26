@@ -8,11 +8,26 @@
   "migration_authorized": true,
   "remote_migration_execution_authorized": false,
   "skills": {
-    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
-    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
-    "credits-integrity": {"path": ".agents/skills/credits-integrity/SKILL.md", "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"},
-    "cash-integrity": {"path": ".agents/skills/cash-integrity/SKILL.md", "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"},
-    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
   },
   "source_hashes": {
     "AGENTS_Nuevo_Amanecer.md": "e7ac7bc00f0f4292967d00aece03d2bd5686b920",
@@ -20,15 +35,94 @@
   },
   "analysis": {
     "OBJECTIVE": "Mismo resultado funcional/visual aprobado en LAB, integrado limpiamente en CANON con metadata V2 durable sidecar.",
-    "READS": ["AGENTS.md","AGENTS_Nuevo_Amanecer.md",".agents/skills/impact-analysis/SKILL.md",".agents/skills/cross-module-impact/SKILL.md",".agents/skills/credits-integrity/SKILL.md",".agents/skills/cash-integrity/SKILL.md",".agents/skills/canon-promotion/SKILL.md","docs/LABORATORIO_A_CANON.md","docs/V1.3_A6_CANONICAL_PROMOTION_CUTOVER.md","laboratorio/pos-lab/UI_MAP.yaml","laboratorio/pos-lab/MOTION_MAP.yaml","laboratorio/pos-lab/lab-overrides.js","laboratorio/pos-lab/styles/pages/clientes.css","POS/js/legacy-inline/inline-02.js","POS/js/legacy-inline/inline-03.js","POS/js/legacy-inline/inline-12.js","POS/js/legacy-inline/inline-17.js","POS/js/sync/canonical-client.js","POS/js/sync/canonical-sale-intent.js","POS/js/sync/canonical-sale-integration.js","tools/cloudflare-lab/src/a6-commerce.js","tools/cloudflare-lab/src/a6-canonical.js","tools/cloudflare-lab/migrations/0008_canonical_commerce.sql","tools/cloudflare-lab/migrations/0009_canonical_financial.sql","tools/cloudflare-lab/migrations/0011_canonical_session_runtime.sql"],
-    "WRITES": ["Task Contract/receipt first","additive 0012 metadata sidecar","canonical read/write contract extensions","CANON client financial profile UI/styles","targeted tests and PWA asset registration"],
-    "DOM_AFFECTED": ["#pageClientes","#cliList","#mCreditoSection","internal client navigation","client loading state"],
-    "STATE_AFFECTED": ["optional credit account metadata","optional installment schedule","ephemeral internal navigation and sale destination state"],
-    "STORAGE_AFFECTED": ["new additive D1 sidecar tables only; no destructive migration; existing canonical ledger/tables remain authority"],
-    "DOMAIN_INVARIANTS": ["_naEvaluateClientCredit unchanged","abrirPago/payment.create unchanged","FIFO unchanged","Caja unchanged","canonical_credit_balances unchanged","sale/stock financial facts remain atomic and immutable","legacy credits default safely to Créditos pequeños"],
-    "CROSS_MODULE_IMPACT": ["Clientes consumes canonical credits/payments/sidecars","Ventas carries optional metadata with credit sale","D1 stores organization/schedule sidecars atomically without becoming a second payment ledger"],
-    "RISKS": ["sidecar drift from live credit","offline category creation/reuse","installment cent reconciliation","PWA cache mismatch","responsive overflow"],
-    "ROLLBACK": ["revert promotion commits/PR","sidecar tables are additive and can remain unused safely","no deletion/reset of existing data"],
-    "TEST_PLAN": ["backend validation/idempotency/sidecar persistence","legacy fallback","11-installment schedule","classification palette","uppercase visual-only","navigation reset/back","loader state","sale/account metadata","payments/FIFO/cash invariants","360/390/412/430/desktop overflow checks","canon-critical CI"]
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      ".agents/skills/cash-integrity/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "docs/LABORATORIO_A_CANON.md",
+      "docs/V1.3_A6_CANONICAL_PROMOTION_CUTOVER.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "POS/js/legacy-inline/inline-12.js",
+      "POS/js/legacy-inline/inline-17.js",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-intent.js",
+      "POS/js/sync/canonical-sale-integration.js",
+      "tools/cloudflare-lab/src/a6-commerce.js",
+      "tools/cloudflare-lab/src/a6-canonical.js",
+      "tools/cloudflare-lab/migrations/0008_canonical_commerce.sql",
+      "tools/cloudflare-lab/migrations/0009_canonical_financial.sql",
+      "tools/cloudflare-lab/migrations/0011_canonical_session_runtime.sql"
+    ],
+    "WRITES": [
+      "Task Contract/receipt first",
+      "additive 0012 metadata sidecar",
+      "canonical read/write contract extensions",
+      "CANON client financial profile UI/styles",
+      "targeted tests and PWA asset registration"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes",
+      "#cliList",
+      "#mCreditoSection",
+      "internal client navigation",
+      "client loading state"
+    ],
+    "STATE_AFFECTED": [
+      "optional credit account metadata",
+      "optional installment schedule",
+      "ephemeral internal navigation and sale destination state"
+    ],
+    "STORAGE_AFFECTED": [
+      "new additive D1 sidecar tables only; no destructive migration; existing canonical ledger/tables remain authority"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "_naEvaluateClientCredit unchanged",
+      "abrirPago/payment.create unchanged",
+      "FIFO unchanged",
+      "Caja unchanged",
+      "canonical_credit_balances unchanged",
+      "sale/stock financial facts remain atomic and immutable",
+      "legacy credits default safely to Créditos pequeños"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes consumes canonical credits/payments/sidecars",
+      "Ventas carries optional metadata with credit sale",
+      "D1 stores organization/schedule sidecars atomically without becoming a second payment ledger"
+    ],
+    "RISKS": [
+      "sidecar drift from live credit",
+      "offline category creation/reuse",
+      "installment cent reconciliation",
+      "PWA cache mismatch",
+      "responsive overflow"
+    ],
+    "ROLLBACK": [
+      "revert promotion commits/PR",
+      "sidecar tables are additive and can remain unused safely",
+      "no deletion/reset of existing data"
+    ],
+    "TEST_PLAN": [
+      "backend validation/idempotency/sidecar persistence",
+      "legacy fallback",
+      "11-installment schedule",
+      "classification palette",
+      "uppercase visual-only",
+      "navigation reset/back",
+      "loader state",
+      "sale/account metadata",
+      "payments/FIFO/cash invariants",
+      "360/390/412/430/desktop overflow checks",
+      "canon-critical CI",
+      "CANON UI promotion suite runs under tests/cloud-sync so CANON Critical CI executes it."
+    ]
   }
 }
