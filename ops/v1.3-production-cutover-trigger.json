@@ -3,10 +3,10 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "e9808125336004c9b67c6cc0e21760e0e85a6051",
+  "target_head": "7f5626c701aa83b9dcf25810531a356dadfeba1e",
   "requested_action": "prepare-production-to-ready-for-first-sale",
-  "requested_at_utc": "2026-09-26T21:47:00Z",
-  "note": "Owner-authorized V2 schema/Worker rollout. Backup + rehearsal + production recheck are mandatory; no fabricated first live sale.",
-  "retry_attempt": 3,
-  "retry_reason": "Owner-authorized Client Credit Accounts V2 promotion: rehearse/apply additive migration 0012, verify sidecar schema, then deploy the updated CANON Worker while preserving READY_FOR_FIRST_SALE."
+  "requested_at_utc": "2026-09-26T21:49:00Z",
+  "note": "Owner-authorized V2 rollout retry. Existing active browser sessions are preserved; the workflow fails closed if the session count changes unexpectedly during the probe.",
+  "retry_attempt": 4,
+  "retry_reason": "Retry after fixing the final gate to compare active browser sessions against the preflight baseline. Run 36274058000 began with 5 legitimate active sessions; migration 0012, schema verification, Worker deploy and authority probe all passed."
 }

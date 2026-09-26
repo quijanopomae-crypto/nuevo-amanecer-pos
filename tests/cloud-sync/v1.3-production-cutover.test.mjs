@@ -85,6 +85,8 @@ test('cutover helper fails closed before first live sale and never embeds secret
   assert.match(cutoverScript, /canonical_credit_metadata/);
   assert.match(cutoverScript, /canonical_credit_installments/);
   assert.match(cutoverScript, /probe session delete/);
+  assert.match(cutoverScript, /CUTOVER_ACTIVE_SESSIONS/);
+  assert.match(cutoverScript, /probe session baseline changed/);
   assert.match(cutoverScript, /PRODUCTION_ACTIVATION_WAIT/);
   assert.match(cutoverScript, /activation\.status === 503/);
   assert.match(cutoverScript, /activation_not_configured/);

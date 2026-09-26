@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CUTOVER-ACTIVE-SESSION-BASELINE-001",
+  "environment": "CANON_PRODUCTION_GATE",
+  "base_ref": "7f5626c701aa83b9dcf25810531a356dadfeba1e",
+  "objective": "Corregir el gate final de cutover para preservar y comparar la cantidad de sesiones activas legítimas observada en preflight, en vez de exigir cero sesiones.",
+  "owner_authorization": "Continuación de la promoción CANON Client Credit Accounts V2 autorizada por owner.",
+  "allowed_files": [
+    "tasks/CANON-CUTOVER-ACTIVE-SESSION-BASELINE-001.json",
+    "evidence/canon-preflight/CANON-CUTOVER-ACTIVE-SESSION-BASELINE-001.json",
+    "tools/cloudflare-prod/scripts/cutover-prepare.mjs",
+    "tests/cloud-sync/v1.3-production-cutover.test.mjs",
+    "ops/v1.3-production-cutover-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/**",
+    "tools/cloudflare-lab/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "domain_invariants": [
+    "No borrar sesiones existentes",
+    "El probe solo puede limpiar su propia sesión",
+    "Ventas/pagos/caja siguen en cero en este gate",
+    "first_live_operation_id permanece NULL"
+  ],
+  "rollback": [
+    "Revertir PR; la migración 0012 ya es aditiva y queda intacta."
+  ]
+}

@@ -110,6 +110,7 @@ async function cmdPreflight() {
   env('HAS_CREDIT_ACCOUNTS_V2', state.schema.has_credit_accounts);
   env('HAS_CREDIT_METADATA_V2', state.schema.has_credit_metadata);
   env('HAS_CREDIT_INSTALLMENTS_V2', state.schema.has_credit_installments);
+  env('CUTOVER_ACTIVE_SESSIONS', state.traffic.active_sessions);
   console.log(JSON.stringify({ state: 'PRE_CUTOVER_PASS', database_id: PROD_DB, ...state }));
 }
 
@@ -267,7 +268,9 @@ async function cmdProbeWorker() {
 async function cmdFinal() {
   const state = await productionState();
   assertCleanPreFirstSale(state);
-  if (state.traffic.active_sessions !== 0) throw new Error('probe session leaked');
+  const baselineActiveSessions = Number(process.env.CUTOVER_ACTIVE_SESSIONS);
+  if (!Number.isSafeInteger(baselineActiveSessions) || baselineActiveSessions < 0) throw new Error('missing active session baseline');
+  if (state.traffic.active_sessions !== baselineActiveSessions) throw new Error('probe session baseline changed');
   const row = await schemaReady(PROD_DB);
   for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
     if (row[key] !== 1) throw new Error('final invariant failed: ' + key);
