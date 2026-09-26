@@ -1,0 +1,78 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-TOUCH-TEST-FIX-001",
+  "base_ref": "9d33861b008f5c9c3609f83e77b03fce501cda50",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "POS LAB Mobile run 36205223076 failure log",
+      "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+      "clientes.css READ-ONLY"
+    ],
+    "WRITES": [
+      "Replace only the doubly escaped regex in test 19b."
+    ],
+    "DOM_AFFECTED": [
+      "None"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Runtime CSS remains min-height:44px",
+      "No financial logic changes",
+      "CANON untouched"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; test-only correction"
+    ],
+    "RISKS": [
+      "Over-broad regex could hide a real regression; keep selector and min-height value explicit."
+    ],
+    "ROLLBACK": [
+      "Revert test-only PR."
+    ],
+    "TESTS": [
+      "SKILL_PREFLIGHT_PASS before test edit",
+      "LAB Canon Mirror CI",
+      "POS LAB Mobile full suite and Pages deploy"
+    ]
+  }
+}
