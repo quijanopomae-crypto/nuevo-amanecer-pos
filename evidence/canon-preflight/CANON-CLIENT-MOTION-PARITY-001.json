@@ -1,0 +1,62 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-MOTION-PARITY-001",
+  "base_ref": "815b2a699c20965e81f420ba13546cfc85d4855c",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "lab_pr_76": "2b510de71e4fb0fa017de5975fbcd690af33c36c",
+    "lab_motion_contract": "laboratorio/pos-lab/MOTION_MAP.yaml"
+  },
+  "analysis": {
+    "OBJECTIVE": "Restaurar en CANON el contrato de micro-motion aprobado en LAB para Clientes/Créditos V2, eliminando la simplificación de 180 ms y recuperando primera pintura inmediata, refresh coordinado de 850 ms, transiciones largas de lista/resumen y reduced-motion, sin afectar negocio.",
+    "READS": [
+      "PR #76 restore client motion",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/css/client-credit-accounts-v2.css"
+    ],
+    "WRITES": [
+      "Restore 850ms coordinated refresh timing",
+      "Restore LAB transition geometry/easing for stats/list",
+      "Remove simplified 180ms replacement motion",
+      "Strengthen CANON motion regression tests"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .stats-strip",
+      "#pageClientes #cliList"
+    ],
+    "STATE_AFFECTED": [
+      "naClientListMotionReady",
+      "naClientListMotionTimer visual state only"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Motion visual only",
+      "No business completion waits for animation",
+      "No storage/network writes from motion",
+      "Payments/FIFO/Caja/credits balances unchanged",
+      "prefers-reduced-motion supported"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes visual refresh only; no Ventas/Caja/Inventario/credit ledger changes"
+    ],
+    "RISKS": [
+      "Too-long refresh if timing mismatches CSS",
+      "stale class after interrupted render"
+    ],
+    "ROLLBACK": [
+      "Revertir el PR de motion; no hay cambios de datos ni schema."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "assert exact 850ms timing",
+      "assert LAB-equivalent easing/durations",
+      "assert reduced-motion",
+      "assert no financial authority mutation"
+    ]
+  }
+}
