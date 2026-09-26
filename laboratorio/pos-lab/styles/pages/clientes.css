@@ -592,3 +592,112 @@
   background:#f2f4f7;
   border-color:#d8dde3;
 }
+
+
+/* CLIENTES LOADING LOGO 001 — branded refresh state instead of skeleton lines */
+#pageClientes .lab-client-loading{
+  display:none;
+  min-height:clamp(320px,44vh,520px);
+  padding:42px 20px 72px;
+  box-sizing:border-box;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  text-align:center;
+  color:#172033;
+}
+#pageClientes.lab-client-loading-active .lab-client-loading{
+  display:flex;
+}
+#pageClientes.lab-client-loading-active #cliList{
+  display:none!important;
+}
+#pageClientes .lab-client-loading-mark{
+  position:relative;
+  width:112px;
+  height:112px;
+  display:grid;
+  place-items:center;
+  margin:2px 0 24px;
+}
+#pageClientes .lab-client-loading-mark:after{
+  content:"";
+  position:absolute;
+  inset:18px;
+  border-radius:28px;
+  background:radial-gradient(circle,rgba(20,184,166,.16),rgba(20,184,166,0) 72%);
+  transform:scale(1.35);
+  pointer-events:none;
+}
+#pageClientes .lab-client-loading-ring{
+  position:absolute;
+  inset:0;
+  border:8px solid #d8f5f0;
+  border-top-color:#14b8a6;
+  border-right-color:#14b8a6;
+  border-radius:50%;
+  box-sizing:border-box;
+  animation:lab-client-loading-spin 1.15s linear infinite;
+}
+#pageClientes .lab-client-loading-logo{
+  position:relative;
+  z-index:1;
+  width:64px;
+  height:64px;
+  object-fit:cover;
+  border-radius:18px;
+  box-shadow:0 10px 26px rgba(15,118,110,.18);
+}
+#pageClientes .lab-client-loading-title{
+  display:block;
+  margin:0;
+  font-size:clamp(21px,5.5vw,28px);
+  line-height:1.15;
+  font-weight:900;
+  letter-spacing:-.025em;
+  color:#172033;
+}
+#pageClientes .lab-client-loading-copy{
+  display:block;
+  max-width:330px;
+  margin:10px auto 0;
+  font-size:14px;
+  line-height:1.45;
+  font-weight:650;
+  color:#708096;
+}
+@keyframes lab-client-loading-spin{
+  to{transform:rotate(360deg)}
+}
+@media(max-width:430px){
+  #pageClientes .lab-client-loading{
+    min-height:clamp(300px,43vh,470px);
+    padding:34px 18px 64px;
+  }
+  #pageClientes .lab-client-loading-mark{
+    width:104px;
+    height:104px;
+    margin-bottom:22px;
+  }
+  #pageClientes .lab-client-loading-ring{
+    border-width:7px;
+  }
+  #pageClientes .lab-client-loading-logo{
+    width:60px;
+    height:60px;
+    border-radius:17px;
+  }
+  #pageClientes .lab-client-loading-title{
+    font-size:23px;
+  }
+  #pageClientes .lab-client-loading-copy{
+    font-size:13px;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  #pageClientes .lab-client-loading-ring{
+    animation:none!important;
+    border-color:#d8f5f0;
+    border-top-color:#14b8a6;
+  }
+}
