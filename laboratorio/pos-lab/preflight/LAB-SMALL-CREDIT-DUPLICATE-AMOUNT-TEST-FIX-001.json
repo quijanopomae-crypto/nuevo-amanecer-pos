@@ -31,6 +31,10 @@
     "credits-integrity": {
       "path": ".agents/skills/credits-integrity/SKILL.md",
       "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
     }
   },
   "analysis": {
