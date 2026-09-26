@@ -21,7 +21,8 @@
     "POS/index.html",
     "POS/sw.js",
     "tests/cloud-sync/canonical-credit-accounts-v2.test.mjs",
-    "tests/canon-client-credit-accounts-v2.test.mjs"
+    "tests/canon-client-credit-accounts-v2.test.mjs",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
   ],
   "forbidden_files": [
     "laboratorio/pos-lab/**",
