@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROD-DEPLOY-001",
+  "environment": "CANON_PRODUCTION",
+  "base_ref": "47f68af823fc8b6cff8efbea0baebc91e6bb6eaa",
+  "objective": "Extender el cutover production gate para ensayar, verificar y aplicar de forma condicional la migración aditiva 0012 de Client Credit Accounts V2 antes de desplegar el Worker CANON actualizado.",
+  "owner_authorization": "Owner autorizó la migración V2 y la promoción LAB→CANON de principio a fin.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROD-DEPLOY-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROD-DEPLOY-001.json",
+    ".github/workflows/v1.3-prod-cutover.yml",
+    "tools/cloudflare-prod/scripts/cutover-prepare.mjs",
+    "tests/cloud-sync/v1.3-production-cutover.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/**",
+    "tools/cloudflare-lab/migrations/**",
+    "tools/cloudflare-lab/src/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "migration_policy": {
+    "migration": "0012_credit_accounts_v2.sql",
+    "rehearsal_required": true,
+    "backup_required": true,
+    "production_recheck_required": true,
+    "conditional_apply": true,
+    "destructive": false
+  },
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "cash-integrity",
+    "canon-promotion"
+  ],
+  "rollback": [
+    "Cutover workflow stores a fresh pre-mutation production backup in private R2.",
+    "If schema application fails, Worker deploy does not run.",
+    "Sidecar tables are additive and do not rewrite financial history."
+  ]
+}
