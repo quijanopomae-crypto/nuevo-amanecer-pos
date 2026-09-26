@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-REMOVE-DIVIDER-001",
+  "environment": "LABORATORIO",
+  "base_ref": "d58538dfbf2e4f12f7614062922a013757f271ab",
+  "objective": "Quitar exclusivamente la línea divisoria vertical entre el bloque de identidad del cliente y el bloque de deuda total en la tarjeta principal. Mantener separación mediante gap/espaciado, sin cambios de lógica, datos, storage o CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-REMOVE-DIVIDER-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-REMOVE-DIVIDER-001.json",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-client-financial-remove-divider.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-ui-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-REMOVE-DIVIDER-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
