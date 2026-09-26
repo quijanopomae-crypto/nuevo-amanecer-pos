@@ -65,12 +65,14 @@ test('cutover workflow requires backup and rehearsal before production migration
   const backup = cutoverWorkflow.indexOf('Export fresh production backup');
   const rehearsal = cutoverWorkflow.indexOf('Verify rehearsal after migrations');
   const recheck = cutoverWorkflow.indexOf('Recheck production before mutation');
-  const productionMigration = cutoverWorkflow.indexOf('Apply 0010 and 0011 to production');
+  const productionMigration = cutoverWorkflow.indexOf('Apply 0010 0011 and 0012 to production');
   const deploy = cutoverWorkflow.indexOf('Deploy isolated production Worker');
   const finalGate = cutoverWorkflow.indexOf('Final READY_FOR_FIRST_SALE verification');
   assert.ok(backup >= 0 && rehearsal > backup && recheck > rehearsal && productionMigration > recheck && deploy > productionMigration && finalGate > deploy);
   assert.match(cutoverWorkflow, /ops\/v1\.3-production-cutover-trigger\.json/);
   assert.match(cutoverWorkflow, /POS_ACTIVATION_SECRET: \$\{\{ secrets\.POS_ACTIVATION_SECRET \}\}/);
+  assert.match(cutoverWorkflow, /0012_credit_accounts_v2\.sql/);
+  assert.match(cutoverWorkflow, /HAS_CREDIT_ACCOUNTS_V2/);
   assert.doesNotMatch(cutoverWorkflow, /commands\/sale\.create/);
 });
 
@@ -79,6 +81,9 @@ test('cutover helper fails closed before first live sale and never embeds secret
   assert.match(cutoverScript, /unexpected pre-cutover traffic/);
   assert.match(cutoverScript, /production authority changed during rehearsal/);
   assert.match(cutoverScript, /READY_FOR_FIRST_SALE/);
+  assert.match(cutoverScript, /canonical_credit_accounts/);
+  assert.match(cutoverScript, /canonical_credit_metadata/);
+  assert.match(cutoverScript, /canonical_credit_installments/);
   assert.match(cutoverScript, /probe session delete/);
   assert.match(cutoverScript, /PRODUCTION_ACTIVATION_WAIT/);
   assert.match(cutoverScript, /activation\.status === 503/);
