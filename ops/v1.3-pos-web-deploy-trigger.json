@@ -7,7 +7,8 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Serve a secure launcher at root and the canonical POS under /app/. Browser activation is required before entering CANON production.",
-  "retry_attempt": 3,
-  "retry_reason": "Deployment and routing succeeded; previous verification used a pipefail-sensitive grep pipeline on the large POS HTML. Retry with file-based HTTP probes."
+  "note": "Deploy the canonical POS web bundle containing Client Credit Accounts V2. Backend CANON and migration 0012 are already READY_FOR_FIRST_SALE.",
+  "retry_attempt": 4,
+  "retry_reason": "Publish merged Client Credit Accounts V2 CANON shell after production migration 0012 and Worker cutover completed successfully in run 36274226544.",
+  "requested_at_utc": "2026-09-26T21:51:00Z"
 }
