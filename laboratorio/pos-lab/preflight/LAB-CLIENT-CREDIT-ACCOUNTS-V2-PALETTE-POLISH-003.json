@@ -1,0 +1,112 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-PALETTE-POLISH-003",
+  "base_ref": "3e7ad7491aeb43dc3fe3d995ee2a8aebe1ba31d5",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "source_hashes": {
+    "AGENTS.md": "7fc62ac9e9064b53aba95b467384200b56a6d217",
+    "laboratorio/pos-lab/AGENTS.md": "840088c8c342f69a4b973bdf2b2ca7e7d91eb339",
+    "laboratorio/pos-lab/UI_MAP.yaml": "b88fb28d8047a5dfccb61b99572d9e10686626fe",
+    "laboratorio/pos-lab/MOTION_MAP.yaml": "56830059c7601b83237cd940106d711bcb059073",
+    "laboratorio/pos-lab/styles/pages/clientes.css": "d462a9b702a9907ae3d175c1939b5411b6e26808"
+  },
+  "analysis": {
+    "OBJECTIVE": "Unificar la paleta visual de la ficha financiera V2 sin alterar estructura ni comportamiento.",
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "laboratorio/pos-lab/lab-overrides.js READ-ONLY",
+      "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+      "estado publicado de POS-LAB"
+    ],
+    "WRITES": [
+      "Task Contract y recibo BEFORE_WRITE.",
+      "Solo CSS de Clientes para unificar superficies, bordes, iconos, jerarquía y tonos semánticos.",
+      "Prueba focalizada de paleta para impedir regreso a colores decorativos."
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .lab-client-account-screen",
+      "#pageClientes .lab-v2-client-head",
+      "#pageClientes .lab-v2-account-card",
+      "#pageClientes .lab-v2-row",
+      "#pageClientes .lab-v2-fold",
+      "#pageClientes .lab-v2-installment",
+      "#pageClientes .lab-v2-risk"
+    ],
+    "STATE_AFFECTED": [
+      "None: no JavaScript ni estado financiero cambia."
+    ],
+    "STORAGE_AFFECTED": [
+      "None: no localStorage, sessionStorage, IndexedDB, D1, R2, OUTBOX o red."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No modificar créditos, pagos, saldo, pagado, cuotas, FIFO ni evaluación crediticia.",
+      "No modificar navegación o handlers de la ficha V2.",
+      "Rojo/ámbar/verde se reservan para significado financiero; teal es acento de marca; superficies neutras son la base.",
+      "CANON y POS/** permanecen intactos."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes conserva lectura de Créditos/Pagos sin nuevas escrituras.",
+      "Ventas, Inventario, Caja, Gastos, persistencia, OUTBOX y sync no reciben cambios.",
+      "Cronograma y acciones existentes conservan su DOM y comportamiento."
+    ],
+    "RISKS": [
+      "Un override demasiado amplio puede borrar señales de riesgo; mantener selectores semánticos de estados.",
+      "Contraste insuficiente puede degradar legibilidad; conservar tinta oscura y badges con contraste.",
+      "Cambios de borde/padding podrían afectar ancho móvil; no alterar geometría estructural."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR LAB de esta etapa; no requiere rollback de datos."
+    ],
+    "TESTS": [
+      "Ejecutar skill-preflight antes del primer cambio funcional.",
+      "Prueba focalizada de paleta CSS.",
+      "Suite tests/laboratorio-client-credit-accounts-v2.test.mjs.",
+      "build-lab --check, validate-lab, scope-guard y git diff --check.",
+      "LAB Canon Mirror CI y POS LAB Mobile.",
+      "Validación del Pages real en móvil y escritorio, sin overflow horizontal."
+    ]
+  }
+}
