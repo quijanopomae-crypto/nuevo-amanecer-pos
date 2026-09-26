@@ -1,0 +1,93 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-SMALL-CREDIT-REMOVE-DUPLICATE-AMOUNTS-001",
+  "base_ref": "31810e40ec317461f5552b0bcc8ca82e488ae3cf",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Eliminar montos repetidos en la cabecera del detalle de venta sin quitar el monto por cuota.",
+    "READS": [
+      "captura del owner de Créditos pequeños -> VENTA",
+      "labPurchaseHtml",
+      "labDescriptionInstallmentHint",
+      "labInstallmentSummary",
+      "tests V2"
+    ],
+    "WRITES": [
+      "helpers visuales de nombre/resumen sin montos",
+      "labPurchaseHtml para evitar total duplicado en venta de un solo ítem",
+      "pruebas de no duplicidad"
+    ],
+    "DOM_AFFECTED": [
+      "Detalle LAB Créditos pequeños -> VENTA"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Monto total del crédito no cambia",
+      "Monto individual de cada cuota no cambia",
+      "Pagos, saldo, FIFO, Caja y ventaId intactos",
+      "No persistir transformación visual",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; render visual de Clientes LAB"
+    ],
+    "RISKS": [
+      "No ocultar subtotales cuando hay múltiples productos, porque allí sí aportan desglose.",
+      "No eliminar S/375 de las filas de cuotas porque el owner pidió monto por cuota."
+    ],
+    "ROLLBACK": [
+      "Revertir este PR LAB."
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "un solo producto: total solo una vez",
+      "resumen de cuotas sin S/375 embebido",
+      "cronograma conserva S/375 por cuota",
+      "multi-producto mantiene desglose",
+      "suite LAB y Pages"
+    ]
+  }
+}
