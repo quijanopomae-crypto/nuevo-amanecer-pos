@@ -7,7 +7,7 @@
   var LOCK = 'na-canonical-financial-writer';
   var CREDENTIALS_KEY = 'na_cloud_sync_credentials';
   var METHODS = ['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto'];
-  var COMMANDS = ['sale.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create'];
+  var COMMANDS = ['sale.create', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
@@ -124,16 +124,17 @@
       Number.isSafeInteger(replica.authority_epoch) && replica.authority_epoch >= 0 && Number.isSafeInteger(replica.revision) && replica.revision >= 0 &&
       typeof replica.cached_at === 'string' && Number.isFinite(Date.parse(replica.cached_at)) && ['CANONICAL_READ_ONLY','ACTIVE'].includes(replica.mode) && typeof replica.read_only === 'boolean' &&
       (replica.financial_revision == null || uint(replica.financial_revision)) && ['products','customers','credits','credit_payments'].every(function (key) { return Array.isArray(replica[key]); }) &&
+      (replica.credit_accounts == null || Array.isArray(replica.credit_accounts)) &&
       (replica.cash_sessions == null || Array.isArray(replica.cash_sessions)) && (replica.financial_events == null || Array.isArray(replica.financial_events)) &&
       (replica.digests == null || (replica.digests && typeof replica.digests === 'object' && !Array.isArray(replica.digests))) &&
-      ['products','customers','credits','credit_payments'].every(function (key) { return rowsValid(replica[key]); }) && rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) &&
+      ['products','customers','credits','credit_payments'].every(function (key) { return rowsValid(replica[key]); }) && rowsValid(replica.credit_accounts || []) && rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) &&
       !hasSecretKey(replica));
   }
   function replicaOf(value) { return { schema_version: 1, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
     revision: value.revision, financial_revision: value.financial_revision == null ? null : value.financial_revision,
     canonical_digest: value.canonical_digest || null,
     digests: copy(value.digests || {}),
-    products: copy(value.products), customers: copy(value.customers), credits: copy(value.credits), credit_payments: copy(value.payments),
+    products: copy(value.products), customers: copy(value.customers), credits: copy(value.credits), credit_payments: copy(value.payments), credit_accounts: copy(value.creditAccounts || []),
     cash_sessions: copy(value.cashSessions || []), financial_events: copy(value.financialEvents || []),
     mode: value.mode, read_only: value.read_only, minimum_client_contract: value.minimum_client_contract }; }
   function cacheIsNewer(cache, remote) {
@@ -149,7 +150,7 @@
   function publishReplica(replica, source) {
     data = { authority: 'canonical', promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch, revision: replica.revision,
       financial_revision: replica.financial_revision, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
-      payments: copy(replica.credit_payments), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []),
+      payments: copy(replica.credit_payments), creditAccounts: copy(replica.credit_accounts || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []),
       mode: source === 'cache' ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
       read_only: source === 'cache' || replica.read_only !== false, minimum_client_contract: source === 'cache' ? 'a6-gate-p-v1' : (replica.minimum_client_contract || 'a6-gate-p-v1') };
     ready = true; replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
@@ -176,7 +177,7 @@
       if (statusMeta && statusMeta.mode === 'ACTIVE' && !uint(statusMeta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
       var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision };
       if (binding && !changed) assertBinding(expected);
-      var meta, firstMeta, entries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments']]; next.digests = {};
+      var meta, firstMeta, entries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']]; next.digests = {};
       for (var index = 0; index < entries.length; index++) {
         var entry = entries[index];
         var route = entry[0], name = entry[1], cursor = null, seen = new Set(); next[name] = [];
@@ -213,15 +214,15 @@
       }
       var same = cache && cache.promotion_id === incoming.promotion_id && cache.authority_epoch === incoming.authority_epoch &&
         cache.revision === incoming.revision && (cache.financial_revision || 0) === (incoming.financial_revision || 0) && (cache.canonical_digest || null) === (incoming.canonical_digest || null) &&
-        JSON.stringify([cache.products,cache.customers,cache.credits,cache.credit_payments,cache.cash_sessions||[],cache.financial_events||[],cache.digests||{}]) ===
-        JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.cash_sessions||[],incoming.financial_events||[],incoming.digests||{}]);
+        JSON.stringify([cache.products,cache.customers,cache.credits,cache.credit_payments,cache.credit_accounts||[],cache.cash_sessions||[],cache.financial_events||[],cache.digests||{}]) ===
+        JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.credit_accounts||[],incoming.cash_sessions||[],incoming.financial_events||[],incoming.digests||{}]);
       publishReplica(incoming, 'remote');
       if (!same && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
       replicaState.validation = 'current'; if (!same) notifyReplicaUpdate(); return snapshot();
     })();
     try { return await loading; } catch (error) { ready = false; if (data) { replicaState.validation = root.navigator.onLine === false ? 'offline' : 'stale'; notifyReplicaUpdate(); } throw error; } finally { loading = null; }
   }
-  function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], cashSessions: [], financialEvents: [] }); }
+  function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], cashSessions: [], financialEvents: [] }); }
   function sourceState() { return copy(replicaState); }
   function pendingSnapshot() {
     var value = journal();
@@ -258,6 +259,34 @@
     }
     return payment;
   }
+  function normalizeAccountInput(account) {
+    if (account == null) return null;
+    if (!account || typeof account !== 'object' || Array.isArray(account) || !validId(account.account_id) ||
+        typeof account.name !== 'string' || !account.name.trim() || account.name.trim().length > 60 ||
+        !['accumulated','separate'].includes(account.mode)) fail('INVALID_CANONICAL_CREDIT_ACCOUNT');
+    return { account_id: account.account_id, name: account.name.trim().replace(/\s+/g,' '), mode: account.mode };
+  }
+  function normalizeInstallmentInput(rows,total) {
+    if (rows == null) return [];
+    if (!Array.isArray(rows) || rows.length < 1 || rows.length > 60) fail('INVALID_CANONICAL_INSTALLMENTS');
+    var sum=0;
+    var out=rows.map(function (row,index) {
+      if (!row || typeof row !== 'object' || Array.isArray(row) || row.number !== index+1 || !validDate(row.due_date) ||
+          !uint(row.amount_cents) || row.amount_cents===0) fail('INVALID_CANONICAL_INSTALLMENTS');
+      sum+=row.amount_cents; if(!uint(sum)) fail('INVALID_CANONICAL_INSTALLMENTS');
+      return { number:row.number, due_date:row.due_date, amount_cents:row.amount_cents };
+    });
+    if(sum!==total) fail('INVALID_CANONICAL_INSTALLMENTS');
+    return out;
+  }
+  function makeCreditAccountPayload(input) {
+    input=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
+    var account=normalizeAccountInput(input);
+    if(!account || account.account_id==='small' || !validId(input.customer_id) ||
+       !data.customers.some(function (item) { return item.customer_id===input.customer_id; })) fail('INVALID_CANONICAL_CREDIT_ACCOUNT');
+    return Object.assign(commonPayload(), { customer_id:input.customer_id, account_id:account.account_id, name:account.name, mode:account.mode });
+  }
+
   function makePayload(sale) {
     if (!sale || typeof sale !== 'object' || !Array.isArray(sale.items) || !sale.items.length || sale.items.length > 500 || !METHODS.includes(sale.payment_method)) fail('INVALID_CANONICAL_SALE');
     var seen = new Set(), total = 0;
@@ -283,6 +312,10 @@
     if (sale.payment_method === 'credito') {
       if (!payload.customer_id || !validDate(sale.credit_due)) fail('INVALID_CANONICAL_CREDIT');
       payload.credit_due = sale.credit_due;
+      var account = normalizeAccountInput(sale.credit_account);
+      if (account) payload.credit_account = account;
+      var installments = normalizeInstallmentInput(sale.installments, total);
+      if (installments.length) payload.installments = installments;
     }
     return payload;
   }
@@ -324,7 +357,11 @@
     if (intent.payment_method === 'credito') {
       if (!payload.customer_id || !validDate(intent.credit_due)) fail('INVALID_CANONICAL_CREDIT');
       payload.credit_due = intent.credit_due;
-    } else if (intent.credit_due !== undefined) fail('INVALID_CANONICAL_CREDIT');
+      var account = normalizeAccountInput(intent.credit_account);
+      if (account) payload.credit_account = account;
+      var installments = normalizeInstallmentInput(intent.installments, total);
+      if (installments.length) payload.installments = installments;
+    } else if (intent.credit_due !== undefined || intent.credit_account !== undefined || intent.installments !== undefined) fail('INVALID_CANONICAL_CREDIT');
     return payload;
   }
   function openSession(requestedId) {
@@ -379,6 +416,11 @@
   }
   function validPayload(command, payload) {
     if (!validCommon(payload)) return false;
+    if (command === 'credit-account.create') {
+      return validId(payload.customer_id) && validId(payload.account_id) && payload.account_id !== 'small' &&
+        typeof payload.name === 'string' && payload.name.trim().length > 0 && payload.name.trim().length <= 60 &&
+        ['accumulated','separate'].includes(payload.mode);
+    }
     if (command === 'sale.create') {
       if (!validId(payload.sale_id) || !Array.isArray(payload.items) || !payload.items.length || payload.items.length > 500 || !METHODS.includes(payload.payment_method) || !uint(payload.total_cents) || payload.total_cents === 0 || !payload.payment) return false;
       var total = 0, seen = new Set();
@@ -390,7 +432,12 @@
       if (total !== payload.total_cents || (payload.customer_id !== undefined && !validId(payload.customer_id)) || (payload.payment_method === 'credito' && (!validId(payload.customer_id) || !validDate(payload.credit_due)))) return false;
       try {
         var payment = paymentFor(payload.payment_method, total, { cash_cents: payload.payment.cash_cents, digital_method: payload.payment.digital_method, reference: payload.payment.reference });
-        return ['cash_cents', 'digital_cents', 'credit_cents'].every(function (key) { return payment[key] === payload.payment[key]; });
+        if (!['cash_cents', 'digital_cents', 'credit_cents'].every(function (key) { return payment[key] === payload.payment[key]; })) return false;
+        if (payload.payment_method === 'credito') {
+          if (payload.credit_account !== undefined) normalizeAccountInput(payload.credit_account);
+          normalizeInstallmentInput(payload.installments, total);
+        } else if (payload.credit_account !== undefined || payload.installments !== undefined) return false;
+        return true;
       } catch (_) { return false; }
     }
     if (payload.session_id !== undefined && !validId(payload.session_id) || payload.expected_session_revision !== undefined && !uint(payload.expected_session_revision) ||
@@ -407,6 +454,8 @@
     if (!(result.status === 'created' && result.idempotent === false || result.status === 'already_processed' && result.idempotent === true)) return false;
     // The shipped backend's sale receipt has no command, including on replay.
     if (record.command === 'sale.create') return result.sale_id === record.payload.sale_id && (result.command === undefined || result.command === record.command);
+    if (record.command === 'credit-account.create') return result.command === record.command && result.account_id === record.payload.account_id &&
+      result.promotion_id === record.binding.promotion_id && result.authority_epoch === record.binding.authority_epoch;
     if (result.command !== record.command) return false;
     if (result.promotion_id !== record.binding.promotion_id || result.authority_epoch !== record.binding.authority_epoch) return false;
     if (record.command === 'payment.create' && result.credit_id !== record.payload.credit_id) return false;
@@ -479,7 +528,7 @@
       assertAction(command);
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
       var record = { state: 'PENDING', binding: copy(binding), command: command, route: '/commands/' + command,
-        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : makeFinancialPayload(command, input) };
+        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : makeFinancialPayload(command, input) };
       record.receipt_ids = {};
       if (command === 'payment.create') record.receipt_ids.credit_provenance = data.credits.find(function (item) { return item.credit_id === record.payload.credit_id; }).provenance;
       if (command === 'compensation.create') {
@@ -491,6 +540,7 @@
       return sendPending(record);
     });
   }
+  function createCreditAccount(input) { return createCommand('credit-account.create', input); }
   function createPayment(input) { return createCommand('payment.create', input); }
   function openCash(input) { return createCommand('cash.open', input); }
   function closeCash(input) { return createCommand('cash.close', input); }
@@ -657,7 +707,10 @@
   }
   function legacySnapshot() {
     if (!data || data.authority !== 'canonical') fail('CANONICAL_SNAPSHOT_UNAVAILABLE');
-    var customers = data.customers.map(function (c, i) { return { id: c.customer_id, nombre: c.name || 'Cliente', dni: c.document || '', tel: c.phone || '', dir: c.address || '', color: i % 8, totalCompras: Number(c.total_purchases_cents || 0) / 100 }; });
+    var accountsByCustomer = new Map();
+    (data.creditAccounts || []).forEach(function (a) { var key=String(a.customer_id), list=accountsByCustomer.get(key)||[]; list.push({id:a.account_id,name:a.name,mode:a.mode,createdAt:a.created_at||null}); accountsByCustomer.set(key,list); });
+    var customers = data.customers.map(function (c, i) { return { id: c.customer_id, nombre: c.name || 'Cliente', dni: c.document || '', tel: c.phone || '', dir: c.address || '', color: i % 8, totalCompras: Number(c.total_purchases_cents || 0) / 100,
+      creditCategories: (accountsByCustomer.get(String(c.customer_id)) || []).slice() }; });
     var customerById = new Map(customers.map(function (c) { return [String(c.id), c]; }));
     var paymentsByCredit = new Map();
     data.payments.forEach(function (p) { var list = paymentsByCredit.get(String(p.credit_id)) || []; list.push(p); paymentsByCredit.set(String(p.credit_id), list); });
@@ -674,6 +727,8 @@
         monto: amount, pagado: paid, vence: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : '', canonicalDueKnown: /^\d{4}-\d{2}-\d{2}$/.test(due),
         fecha: /^\d{4}-\d{2}-\d{2}/.test(issued) ? issued.slice(0, 10) : '', timestamp: /^\d{4}-\d{2}-\d{2}T/.test(issued) ? issued : null,
         cajero: c.seller || 'Hist?rico', status: c.source_status || '', anulado: false, pagos: payments,
+        creditAccount: c.account_id ? {version:2,categoryId:c.account_id,categoryName:c.account_name||'Categoría',mode:c.account_mode==='separate'?'separate':'accumulated',source:'canonical'} : null,
+        installments: (function(){try{return JSON.parse(c.installments_json||'[]').map(function(row){return{number:Number(row.number),due:String(row.due_date||'').slice(0,10),amount:Number(row.amount_cents||0)/100};});}catch(_){return[];}})(),
         items: [{ itemKey: 'canonical:' + c.credit_id, productoId: null, nombre: c.concept || c.document_number || 'Saldo hist?rico', cantidad: 1, precioUnitario: amount, subtotal: amount, modo: 'concepto' }] };
     });
     var products = data.products.map(function (p) { return { id: p.product_id, name: typeof p.name === 'string' && p.name.trim() ? p.name : 'PRODUCTO', nombre: p.name, sku: p.sku || '', codigo: p.barcode || '',
@@ -687,6 +742,6 @@
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending,
-    createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation,
+    createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);
