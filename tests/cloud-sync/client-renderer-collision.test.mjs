@@ -6,7 +6,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const inline02 = read('../../POS/js/legacy-inline/inline-02.js');
 const inline03 = read('../../POS/js/legacy-inline/inline-03.js');
 const inline12 = read('../../POS/js/legacy-inline/inline-12.js');
-const index = read('../../POS/index.html');
+const index = read('../../POS/index.html');\nconst clientV2 = read('../../POS/js/modules/client-credit-accounts-v2.js');
 
 test('canonical client renderer keeps fail-closed retry and advanced renderer', () => {
   assert.equal((inline12.match(/\bcliRender\s*=/g) || []).length, 0,
