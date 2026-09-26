@@ -3,10 +3,10 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "caf9afe62227c2f2464775011d43016e6f6a8901",
+  "target_head": "e9808125336004c9b67c6cc0e21760e0e85a6051",
   "requested_action": "prepare-production-to-ready-for-first-sale",
-  "requested_at_utc": "2026-09-24T20:20:00Z",
-  "note": "Owner-authorized continuation. Cutover remains fail-closed and must stop at READY_FOR_FIRST_SALE; no fabricated first live sale.",
-  "retry_attempt": 2,
-  "retry_reason": "Production activation probe ran immediately after secret deployment. Retry uses bounded propagation handling for activation_not_configured only."
+  "requested_at_utc": "2026-09-26T21:47:00Z",
+  "note": "Owner-authorized V2 schema/Worker rollout. Backup + rehearsal + production recheck are mandatory; no fabricated first live sale.",
+  "retry_attempt": 3,
+  "retry_reason": "Owner-authorized Client Credit Accounts V2 promotion: rehearse/apply additive migration 0012, verify sidecar schema, then deploy the updated CANON Worker while preserving READY_FOR_FIRST_SALE."
 }
