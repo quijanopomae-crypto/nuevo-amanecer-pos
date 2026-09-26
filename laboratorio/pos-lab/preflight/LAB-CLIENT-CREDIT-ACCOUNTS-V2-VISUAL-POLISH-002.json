@@ -1,0 +1,106 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-CREDIT-ACCOUNTS-V2-VISUAL-POLISH-002",
+  "base_ref": "de1cc8f8819d37710829fc700d4e3507969923a9",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Aplicar acabado visual premium y cronograma completo de cuotas en la estructura V2 existente, exclusivamente en LAB.",
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+      "estado publicado de Ficha financiera V2"
+    ],
+    "WRITES": [
+      "Actualizar solo markup dinámico LAB necesario para iconografía, jerarquía visual y cronograma completo.",
+      "Actualizar clientes.css con tarjetas, tonos semánticos, responsive y estados de cuotas.",
+      "Agregar pruebas LAB que aseguren 11 cuotas completas, monto/fecha/estado y ausencia de mutaciones financieras."
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .lab-client-account-screen",
+      ".lab-v2-client-head",
+      ".lab-v2-row",
+      ".lab-v2-metrics",
+      ".lab-v2-credit-title",
+      ".lab-v2-installment",
+      ".lab-v2-credit-info"
+    ],
+    "STATE_AFFECTED": [
+      "No se crea estado financiero nuevo.",
+      "La proyección visual de cuotas puede derivarse en memoria desde cantidad/monto/primer vencimiento cuando falte labInstallments."
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No modificar creditos, pagos, saldo, pagado, ventaId ni ledger.",
+      "No modificar abrirPago ni crear un segundo flujo de pagos.",
+      "No modificar _naEvaluateClientCredit, manualActive, assignedLine, automaticLine o available.",
+      "No modificar Caja, Ventas CANON, persistencia, OUTBOX o sync.",
+      "CANON permanece intacto."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes LAB lee Créditos para representación.",
+      "El botón Registrar pago continúa delegando a abrirPago existente.",
+      "No hay escritura cruzada en Ventas/Caja/Inventario."
+    ],
+    "RISKS": [
+      "Un cronograma visual derivado podría inferir fechas incorrectas si los datos de origen son insuficientes; solo derivar cuando cantidad y primer vencimiento sean válidos.",
+      "Tarjetas/sombras podrían introducir overflow móvil; validar 360/390/412/430.",
+      "Demasiados colores podrían degradar jerarquía; mantener tonos suaves y semánticos."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR LAB de esta etapa."
+    ],
+    "TESTS": [
+      "Temporal skill preflight antes de cambios funcionales.",
+      "Suite V2 existente completa.",
+      "Caso de 11 cuotas con fechas mensuales y S/375.00.",
+      "Estado visual pagada/vencida/hoy/próxima/pendiente sin alterar ledger.",
+      "LAB Canon Mirror CI.",
+      "POS LAB Mobile + Pages.",
+      "Validación publicada 360/390/412/430 y 1440."
+    ]
+  }
+}

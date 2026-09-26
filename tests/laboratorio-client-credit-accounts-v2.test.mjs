@@ -237,3 +237,59 @@ test('custom accumulated category groups purchases while keeping underlying cred
   const s=api.categorySummary(client,api.categoriesForClient(client)[1]);
   assert.equal(s.purchaseCount,2); assert.equal(s.pending,30); assert.equal(ctx.creditos.length,2);
 });
+
+
+test('21 full 11-installment schedule is derived visually with exact monthly dates and S/375 amounts',()=>{
+  const ctx=makeContext(), api=ctx.NA_LAB_CLIENT_CREDIT_ACCOUNTS_V2;
+  const cr=credit('21','A',4125,0,{
+    labInstallments:undefined,
+    numeroCuotas:11,
+    montoCuota:375,
+    primerVencimiento:'2026-10-01'
+  });
+  const before=JSON.stringify(cr);
+  const plan=Array.from(api.installments(cr).plan);
+  assert.equal(plan.length,11);
+  assert.deepEqual(plan.map(x=>x.due),[
+    '2026-10-01','2026-11-01','2026-12-01','2027-01-01','2027-02-01','2027-03-01',
+    '2027-04-01','2027-05-01','2027-06-01','2027-07-01','2027-08-01'
+  ]);
+  assert.deepEqual(plan.map(x=>x.amount),Array(11).fill(375));
+  assert.equal(plan.every(x=>x.visualDerived),true);
+  assert.equal(JSON.stringify(cr),before);
+});
+
+test('22 visual schedule can derive first due date from start date plus due day without ledger mutation',()=>{
+  const ctx=makeContext(), api=ctx.NA_LAB_CLIENT_CREDIT_ACCOUNTS_V2;
+  const cr=credit('22','A',900,0,{
+    vence:'',
+    numeroCuotas:3,
+    montoCuota:300,
+    fechaInicio:'2026-09-20',
+    diaVencimiento:1
+  });
+  const before=JSON.stringify(cr);
+  assert.deepEqual(Array.from(api.installments(cr).plan,x=>x.due),['2026-10-01','2026-11-01','2026-12-01']);
+  assert.equal(JSON.stringify(cr),before);
+});
+
+test('23 installment visual states distinguish paid overdue today next and pending',()=>{
+  const ctx=makeContext(), api=ctx.NA_LAB_CLIENT_CREDIT_ACCOUNTS_V2;
+  assert.deepEqual({...api.installmentVisualState({number:1,due:'2026-09-20',paid:true},2,'2026-09-25')},{key:'paid',label:'Pagada',next:false});
+  assert.deepEqual({...api.installmentVisualState({number:2,due:'2026-09-20',paid:false},2,'2026-09-25')},{key:'overdue',label:'Vencida',next:true});
+  assert.deepEqual({...api.installmentVisualState({number:3,due:'2026-09-25',paid:false},3,'2026-09-25')},{key:'today',label:'Hoy',next:true});
+  assert.deepEqual({...api.installmentVisualState({number:4,due:'2026-10-01',paid:false},4,'2026-09-25')},{key:'next',label:'Próxima',next:true});
+  assert.deepEqual({...api.installmentVisualState({number:5,due:'2026-11-01',paid:false},4,'2026-09-25')},{key:'pending',label:'Pendiente',next:false});
+});
+
+test('24 credit detail renders the complete schedule and polished semantic UI without the old six-row truncation',()=>{
+  assert.doesNotMatch(source,/summary\.pending\.slice\(0,\s*6\)/);
+  assert.match(source,/CRONOGRAMA DE CUOTAS/);
+  assert.match(source,/lab-v2-installment-amount/);
+  assert.match(source,/lab-v2-installment-status/);
+  assert.match(clientCss,/\.lab-v2-client-head\{[^}]*border-radius:20px/);
+  assert.match(clientCss,/\.lab-v2-account-card\{[^}]*border-left:3px/);
+  assert.match(clientCss,/\.lab-v2-installment\.is-next/);
+  assert.match(clientCss,/\.lab-v2-installment-overdue/);
+  assert.match(clientCss,/\.lab-v2-installment-paid/);
+});

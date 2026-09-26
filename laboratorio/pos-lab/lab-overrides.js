@@ -174,9 +174,7 @@
   }
 
   function labInstallmentPlan(cr) {
-    var raw = Array.isArray(cr && cr.labInstallments) && cr.labInstallments.length
-      ? cr.labInstallments.slice()
-      : [{ number:1, due:cr && cr.vence || '', amount:Number(cr && cr.monto) || 0 }];
+    var raw = labInstallmentRawPlan(cr);
     var amounts = labSplitInstallmentAmounts(Number(cr && cr.monto) || 0, raw.length);
     var paidTotal = Math.min(Number(cr && cr.monto) || 0, Math.max(0, Number(cr && cr.pagado) || 0));
     var payments = labEffectivePayments(cr), runningPayments = 0, paymentIndex = 0;
@@ -197,6 +195,7 @@
         due:String(item && item.due || item && item.fecha || cr && cr.vence || '').slice(0, 10),
         amount:Number(amount.toFixed(2)),
         paid:isPaid,
+        visualDerived:!!(item && item.visualDerived),
         paidAt:completionPayment ? (completionPayment.timestamp || ((completionPayment.fecha || '') + 'T' + (completionPayment.hora24 || completionPayment.hora || ''))) : null,
         paymentId:completionPayment ? (completionPayment.pagoId || completionPayment.id || null) : null
       };
@@ -258,6 +257,101 @@
     return items.length > 1 ? first + ' + ' + (items.length - 1) + (items.length - 1 === 1 ? ' producto' : ' productos') : first;
   }
 
+  function labCategoryVisual(category) {
+    var name = String(category && category.name || '').toLowerCase();
+    if (String(category && category.id || '') === LAB_SMALL_ACCOUNT_ID) return { tone:'teal', icon:'🧾' };
+    if (/tecnolog|celular|equipo|electr/.test(name)) return { tone:'blue', icon:'📱' };
+    if (/pr[eé]stamo|dinero|efectivo/.test(name)) return { tone:'amber', icon:'S/' };
+    return { tone:'slate', icon:'◈' };
+  }
+
+  function labNavRow(icon, tone, title, subtitle, action) {
+    return '<button type="button" class="lab-v2-row lab-v2-nav-card lab-v2-tone-' + labEsc(tone) + '" onclick="' + action + '">' +
+      '<span class="lab-v2-row-main"><span class="lab-v2-module-icon" aria-hidden="true">' + labEsc(icon) + '</span>' +
+      '<span class="lab-v2-row-copy"><strong>' + labEsc(title) + '</strong><small>' + labEsc(subtitle) + '</small></span></span><b>›</b></button>';
+  }
+
+  function labDisplayDate(value) {
+    var iso = String(value || '').slice(0,10);
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return match ? match[3] + '/' + match[2] + '/' + match[1] : (iso || 'Fecha no registrada');
+  }
+
+  function labTodayIso() {
+    var now = new Date();
+    var y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2,'0'), d = String(now.getDate()).padStart(2,'0');
+    return y + '-' + m + '-' + d;
+  }
+
+  function labInstallmentVisualState(item, nextPendingNumber, todayIso) {
+    if (item && item.paid) return { key:'paid', label:'Pagada', next:false };
+    var due = String(item && item.due || '').slice(0,10);
+    var today = todayIso || labTodayIso();
+    var isNext = Number(item && item.number) === Number(nextPendingNumber);
+    if (due && /^\d{4}-\d{2}-\d{2}$/.test(due) && due < today) return { key:'overdue', label:'Vencida', next:isNext };
+    if (due && due === today) return { key:'today', label:'Hoy', next:isNext };
+    if (isNext) return { key:'next', label:'Próxima', next:true };
+    return { key:'pending', label:'Pendiente', next:false };
+  }
+
+  function labInstallmentCountHint(cr) {
+    var candidates = [
+      cr && cr.labInstallmentCount,
+      cr && cr.installmentCount,
+      cr && cr.numeroCuotas,
+      cr && cr.cantidadCuotas,
+      cr && cr.cuotasTotal,
+      cr && cr.nroCuotas,
+      cr && (typeof cr.cuotas === 'number' ? cr.cuotas : null)
+    ];
+    for (var i = 0; i < candidates.length; i += 1) {
+      var count = Math.floor(Number(candidates[i]));
+      if (Number.isFinite(count) && count > 1 && count <= 60) return count;
+    }
+    return 1;
+  }
+
+  function labFirstInstallmentDue(cr) {
+    var direct = [
+      cr && cr.primerVencimiento,
+      cr && cr.fechaPrimeraCuota,
+      cr && cr.firstDue,
+      cr && cr.firstInstallmentDate,
+      cr && cr.vence
+    ];
+    for (var i = 0; i < direct.length; i += 1) {
+      var value = String(direct[i] || '').slice(0,10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    }
+    var start = String(cr && (cr.fechaInicioCuotas || cr.fechaInicial || cr.fechaInicio || cr.fecha) || '').slice(0,10);
+    var startMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
+    var dueDay = Math.floor(Number(cr && (cr.diaVencimiento || cr.diaCuota || cr.installmentDay)));
+    if (!startMatch || !Number.isFinite(dueDay) || dueDay < 1 || dueDay > 31) return '';
+    var year = Number(startMatch[1]), monthIndex = Number(startMatch[2]) - 1, startDay = Number(startMatch[3]);
+    if (dueDay < startDay) monthIndex += 1;
+    var target = new Date(year, monthIndex + 1, 0);
+    var day = Math.min(dueDay, target.getDate());
+    var resolved = new Date(year, monthIndex, day, 12, 0, 0, 0);
+    return resolved.toISOString().slice(0,10);
+  }
+
+  function labInstallmentRawPlan(cr) {
+    if (Array.isArray(cr && cr.labInstallments) && cr.labInstallments.length) return cr.labInstallments.slice();
+    var count = labInstallmentCountHint(cr);
+    var firstDue = labFirstInstallmentDue(cr);
+    if (count > 1 && firstDue) {
+      var total = Number(cr && cr.monto) || 0;
+      var explicitAmount = Number(cr && (cr.montoCuota ?? cr.cuotaMonto ?? cr.montoPorCuota ?? cr.installmentAmount));
+      var useExplicit = Number.isFinite(explicitAmount) && explicitAmount > 0 &&
+        (!total || Math.abs(explicitAmount * count - total) < 0.02);
+      var amounts = useExplicit ? Array.from({length:count}, function () { return explicitAmount; }) : labSplitInstallmentAmounts(total, count);
+      return labMonthlyDates(firstDue, count).map(function (due,index) {
+        return { number:index + 1, due:due, amount:Number((amounts[index] ?? 0).toFixed(2)), visualDerived:true };
+      });
+    }
+    return [{ number:1, due:cr && cr.vence || '', amount:Number(cr && cr.monto) || 0 }];
+  }
+
   function labScreen() {
     var page = document.getElementById('pageClientes');
     if (!page) return null;
@@ -298,13 +392,14 @@
   }
 
   function labAccountRow(client, category) {
-    var s = labCategorySummary(client, category);
+    var summary = labCategorySummary(client, category), visual = labCategoryVisual(category);
     var detail = category.mode === 'accumulated'
-      ? s.purchaseCount + (s.purchaseCount === 1 ? ' compra' : ' compras')
-      : s.activeCount + (s.activeCount === 1 ? ' crédito activo' : ' créditos activos');
-    return '<button type="button" class="lab-v2-row" onclick="naLabOpenCreditCategory(\'' + labEsc(String(category.id)) + '\')">' +
-      '<span><strong>' + labEsc(category.name) + '</strong><small>' + labEsc(detail) + '</small></span>' +
-      '<span class="lab-v2-row-value"><strong>' + labMoney(s.pending) + '</strong><small>pendiente</small></span><b>›</b>' +
+      ? summary.purchaseCount + (summary.purchaseCount === 1 ? ' compra' : ' compras')
+      : summary.activeCount + (summary.activeCount === 1 ? ' crédito activo' : ' créditos activos');
+    return '<button type="button" class="lab-v2-row lab-v2-account-card lab-v2-tone-' + visual.tone + '" onclick="naLabOpenCreditCategory(\'' + labEsc(String(category.id)) + '\')">' +
+      '<span class="lab-v2-row-main"><span class="lab-v2-module-icon" aria-hidden="true">' + labEsc(visual.icon) + '</span>' +
+      '<span class="lab-v2-row-copy"><strong>' + labEsc(category.name) + '</strong><small>' + labEsc(detail) + '</small></span></span>' +
+      '<span class="lab-v2-row-value"><strong>' + labMoney(summary.pending) + '</strong><small>pendiente</small></span><b>›</b>' +
     '</button>';
   }
 
@@ -316,21 +411,24 @@
     var available = Number.isFinite(Number(e.available)) ? Number(e.available) : null;
     return '<div class="lab-v2-screen">' +
       labBackButton('Clientes') +
-      '<header class="lab-v2-client-head"><div><div class="lab-v2-name-line"><h2>' + labEsc(client.nombre || 'Cliente') + '</h2>' +
-        '<button type="button" class="lab-v2-risk lab-v2-risk-' + c.tone + '" onclick="naLabOpenClientBehavior()">' + (c.tone === 'green' ? '● ' : c.tone === 'red' ? '● ' : '● ') + labEsc(c.label) + '</button></div>' +
-        '<p>' + (client.dni ? 'DNI ' + labEsc(client.dni) : 'Sin DNI') + (client.tel ? ' · ' + labEsc(client.tel) : '') + '</p></div>' +
+      '<header class="lab-v2-client-head lab-v2-tone-' + c.tone + '">' +
+        '<div class="lab-v2-client-identity"><span class="lab-v2-eyebrow">Ficha financiera</span>' +
+          '<div class="lab-v2-name-line"><h2>' + labEsc(client.nombre || 'Cliente') + '</h2>' +
+          '<button type="button" class="lab-v2-risk lab-v2-risk-' + c.tone + '" onclick="naLabOpenClientBehavior()">● ' + labEsc(c.label) + '</button></div>' +
+          '<p>' + (client.dni ? 'DNI ' + labEsc(client.dni) : 'Sin DNI') + (client.tel ? ' · ' + labEsc(client.tel) : '') + '</p>' +
+        '</div>' +
         '<div class="lab-v2-head-money"><span>Deuda total</span><strong>' + labMoney(s.debt) + '</strong>' +
-        '<small>Línea de crédito: ' + labMoney(line) + (available !== null ? ' · ' + labMoney(available) + ' disponible' : '') + '</small></div></header>' +
-      '<div class="lab-v2-divider"></div>' +
-      '<section class="lab-v2-section"><h3>CUENTAS Y CRÉDITOS</h3>' +
-        '<div class="lab-v2-list">' + categories.map(function (cat) { return labAccountRow(client, cat); }).join('') + '</div></section>' +
-      '<div class="lab-v2-divider"></div>' +
-      '<section class="lab-v2-section lab-v2-list">' +
-        '<button type="button" class="lab-v2-row" onclick="naLabOpenClientPaymentHistory()"><span><strong>HISTORIAL DE PAGOS</strong><small>' + paymentCount + ' pagos / cuotas canceladas</small></span><b>›</b></button>' +
-        '<button type="button" class="lab-v2-row" onclick="naLabOpenCanceledCredits()"><span><strong>CRÉDITOS CANCELADOS</strong><small>' + s.closed.length + ' créditos finalizados</small></span><b>›</b></button>' +
-        '<button type="button" class="lab-v2-row" onclick="naLabOpenCreditLine()"><span><strong>LÍNEA DE CRÉDITO</strong><small>' + (available === null ? 'Evaluación disponible' : labMoney(available) + ' disponible') + '</small></span><b>›</b></button>' +
-        '<button type="button" class="lab-v2-row" onclick="naLabOpenClientBehavior()"><span><strong>COMPORTAMIENTO</strong><small>' + labEsc(c.label) + '</small></span><b>›</b></button>' +
-      '</section>' +
+          '<small>Línea ' + labMoney(line) + (available !== null ? ' · ' + labMoney(available) + ' disponible' : '') + '</small></div>' +
+      '</header>' +
+      '<section class="lab-v2-section lab-v2-accounts-section"><div class="lab-v2-section-title"><span>CUENTAS Y CRÉDITOS</span><small>Organizado por tipo</small></div>' +
+        '<div class="lab-v2-list lab-v2-card-list">' + categories.map(function (cat) { return labAccountRow(client, cat); }).join('') + '</div></section>' +
+      '<section class="lab-v2-section"><div class="lab-v2-section-title"><span>GESTIÓN DEL CLIENTE</span><small>Consulta y seguimiento</small></div>' +
+        '<div class="lab-v2-list lab-v2-card-list lab-v2-nav-grid">' +
+          labNavRow('↺','slate','HISTORIAL DE PAGOS',paymentCount + ' pagos / cuotas canceladas','naLabOpenClientPaymentHistory()') +
+          labNavRow('✓','green','CRÉDITOS CANCELADOS',s.closed.length + ' créditos finalizados','naLabOpenCanceledCredits()') +
+          labNavRow('S/','blue','LÍNEA DE CRÉDITO',available === null ? 'Evaluación disponible' : labMoney(available) + ' disponible','naLabOpenCreditLine()') +
+          labNavRow('●',c.tone,'COMPORTAMIENTO',c.label,'naLabOpenClientBehavior()') +
+        '</div></section>' +
     '</div>';
   }
 
@@ -344,23 +442,27 @@
 
   function labCreditRow(cr) {
     var ins = labInstallmentSummary(cr), pending = labCreditPending(cr);
-    var next = ins.pending[0];
-    return '<button type="button" class="lab-v2-row lab-v2-credit-row" onclick="naLabOpenIndividualCredit(\'' + labEsc(String(cr.id)) + '\')">' +
-      '<span><strong>' + labEsc(cr.desc || labProductSummary(cr) || 'Crédito') + '</strong>' +
-        '<small>' + ins.paidCount + ' cuotas pagadas · ' + ins.pendingCount + ' pendientes' + (next && next.due ? ' · Próximo pago: ' + labEsc(next.due) : '') + '</small></span>' +
+    var next = ins.pending[0], account = labCreditAccountMeta(cr), visual = labCategoryVisual(account);
+    return '<button type="button" class="lab-v2-row lab-v2-credit-row lab-v2-tone-' + visual.tone + '" onclick="naLabOpenIndividualCredit(\'' + labEsc(String(cr.id)) + '\')">' +
+      '<span class="lab-v2-row-main"><span class="lab-v2-module-icon" aria-hidden="true">' + labEsc(visual.icon) + '</span>' +
+      '<span class="lab-v2-row-copy"><strong>' + labEsc(cr.desc || labProductSummary(cr) || 'Crédito') + '</strong>' +
+        '<small>' + ins.paidCount + ' pagadas · ' + ins.pendingCount + ' pendientes' + (next && next.due ? ' · Próxima ' + labDisplayDate(next.due) : '') + '</small></span></span>' +
       '<span class="lab-v2-row-value"><strong>' + labMoney(pending) + '</strong><small>pendiente</small></span><b>›</b>' +
     '</button>';
   }
 
   function labCategoryHtml(client, category) {
-    var s = labCategorySummary(client, category);
-    var rows = category.mode === 'accumulated' ? s.active.map(labPurchaseRow) : s.active.map(labCreditRow);
+    var summary = labCategorySummary(client, category), visual = labCategoryVisual(category);
+    var rows = category.mode === 'accumulated' ? summary.active.map(labPurchaseRow) : summary.active.map(labCreditRow);
     var detail = category.mode === 'accumulated'
-      ? s.purchaseCount + (s.purchaseCount === 1 ? ' compra' : ' compras')
-      : s.activeCount + (s.activeCount === 1 ? ' crédito activo' : ' créditos activos');
+      ? summary.purchaseCount + (summary.purchaseCount === 1 ? ' compra' : ' compras')
+      : summary.activeCount + (summary.activeCount === 1 ? ' crédito activo' : ' créditos activos');
     return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
-      '<header class="lab-v2-subhead"><h2>' + labEsc(category.name) + '</h2><span>Pendiente total</span><strong>' + labMoney(s.pending) + '</strong><small>' + labEsc(detail) + '</small></header>' +
-      '<section class="lab-v2-list">' + (rows.length ? rows.join('') : '<div class="lab-v2-empty">No hay créditos activos en esta cuenta.</div>') + '</section></div>';
+      '<header class="lab-v2-subhead lab-v2-category-head lab-v2-tone-' + visual.tone + '">' +
+        '<div class="lab-v2-category-title"><span class="lab-v2-module-icon" aria-hidden="true">' + labEsc(visual.icon) + '</span><div><span class="lab-v2-eyebrow">Cuenta</span><h2>' + labEsc(category.name) + '</h2><small>' + labEsc(detail) + '</small></div></div>' +
+        '<div class="lab-v2-category-balance"><span>Pendiente total</span><strong>' + labMoney(summary.pending) + '</strong></div>' +
+      '</header>' +
+      '<section class="lab-v2-list lab-v2-card-list">' + (rows.length ? rows.join('') : '<div class="lab-v2-empty">No hay créditos activos en esta cuenta.</div>') + '</section></div>';
   }
 
   function labPurchaseHtml(client, cr) {
@@ -378,11 +480,18 @@
   }
 
   function labPendingInstallmentsHtml(summary) {
-    if (!summary.pending.length) return '<div class="lab-v2-empty">No quedan cuotas pendientes.</div>';
-    var visible = summary.pending.slice(0, 6);
-    return visible.map(function (item) {
-      return '<div class="lab-v2-installment"><span><strong>Cuota ' + item.number + '</strong><small>' + labEsc(item.due || 'Fecha no registrada') + '</small></span></div>';
-    }).join('') + (summary.pending.length > visible.length ? '<div class="lab-v2-more">+ ' + (summary.pending.length - visible.length) + ' pendientes</div>' : '');
+    if (!summary.plan.length) return '<div class="lab-v2-empty">No hay cronograma de cuotas disponible.</div>';
+    var nextPendingNumber = summary.pending[0] && summary.pending[0].number;
+    var today = labTodayIso();
+    return '<div class="lab-v2-installment-list">' + summary.plan.map(function (item) {
+      var state = labInstallmentVisualState(item, nextPendingNumber, today);
+      return '<div class="lab-v2-installment lab-v2-installment-' + state.key + (state.next ? ' is-next' : '') + '">' +
+        '<span class="lab-v2-installment-index" aria-hidden="true">' + item.number + '</span>' +
+        '<span class="lab-v2-installment-copy"><strong>Cuota ' + item.number + '</strong><small>' + labEsc(labDisplayDate(item.due)) + '</small></span>' +
+        '<strong class="lab-v2-installment-amount">' + labMoney(item.amount) + '</strong>' +
+        '<span class="lab-v2-installment-status">' + labEsc(state.label) + '</span>' +
+      '</div>';
+    }).join('') + '</div>';
   }
 
   function labCreditInfoHtml(cr, account) {
@@ -400,17 +509,24 @@
   function labCreditHtml(client, cr) {
     var account = labCreditAccountMeta(cr), ins = labInstallmentSummary(cr);
     var total = Math.max(1, ins.plan.length), progress = Math.round(ins.paidCount / total * 100);
+    var visual = labCategoryVisual(account);
     return '<div class="lab-v2-screen">' + labBackButton(account.categoryName) +
-      '<header class="lab-v2-subhead lab-v2-credit-title"><h2>' + labEsc(cr.desc || labProductSummary(cr) || 'Crédito') + '</h2>' +
-        '<p>' + ins.paidCount + ' cuotas pagadas · ' + ins.pendingCount + ' pendientes</p></header>' +
-      '<div class="lab-v2-progress"><span style="width:' + progress + '%"></span></div>' +
-      '<section class="lab-v2-section"><h3>CUOTAS PENDIENTES</h3>' + labPendingInstallmentsHtml(ins) + '</section>' +
+      '<header class="lab-v2-subhead lab-v2-credit-title lab-v2-tone-' + visual.tone + '">' +
+        '<span class="lab-v2-eyebrow">' + labEsc(account.categoryName) + '</span>' +
+        '<h2>' + labEsc(cr.desc || labProductSummary(cr) || 'Crédito') + '</h2>' +
+        '<p>' + ins.paidCount + ' cuotas pagadas · ' + ins.pendingCount + ' pendientes</p>' +
+        '<div class="lab-v2-progress-meta"><span>Avance del crédito</span><strong>' + progress + '%</strong></div>' +
+        '<div class="lab-v2-progress" aria-label="' + progress + '% de cuotas pagadas"><span style="width:' + progress + '%"></span></div>' +
+      '</header>' +
+      '<section class="lab-v2-section lab-v2-schedule-section"><div class="lab-v2-section-title"><span>CRONOGRAMA DE CUOTAS</span><small>' + ins.plan.length + ' cuotas en total</small></div>' +
+        labPendingInstallmentsHtml(ins) + '</section>' +
       '<div class="lab-v2-credit-actions">' +
         (!labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="lab-v2-pay" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
         '<button type="button" class="lab-v2-info-btn" aria-label="Información del crédito" onclick="naLabToggleCreditInfo()">ⓘ</button>' +
       '</div>' +
       labCreditInfoHtml(cr, account) +
-      '<button type="button" class="lab-v2-row lab-v2-history-link" onclick="naLabOpenCreditHistory(\'' + labEsc(String(cr.id)) + '\')"><span><strong>Historial de este crédito</strong><small>' + ins.paidCount + ' cuotas canceladas</small></span><b>›</b></button>' +
+      '<button type="button" class="lab-v2-row lab-v2-history-link lab-v2-nav-card lab-v2-tone-slate" onclick="naLabOpenCreditHistory(\'' + labEsc(String(cr.id)) + '\')">' +
+        '<span class="lab-v2-row-main"><span class="lab-v2-module-icon" aria-hidden="true">↺</span><span class="lab-v2-row-copy"><strong>Historial de este crédito</strong><small>' + ins.paidCount + ' cuotas canceladas</small></span></span><b>›</b></button>' +
     '</div>';
   }
 
@@ -456,40 +572,50 @@
   }
 
   function labCanceledHtml(client) {
-    var s = labClientFinancialSummary(client);
+    var summary = labClientFinancialSummary(client);
     return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
-      '<header class="lab-v2-subhead"><h2>CRÉDITOS CANCELADOS</h2><small>' + s.closed.length + ' créditos finalizados</small></header>' +
-      '<section class="lab-v2-list">' + (s.closed.length ? s.closed.map(function (cr) {
+      '<header class="lab-v2-subhead lab-v2-simple-hero lab-v2-tone-green"><span class="lab-v2-eyebrow">Histórico</span><h2>CRÉDITOS CANCELADOS</h2><small>' + summary.closed.length + ' créditos finalizados</small></header>' +
+      '<section class="lab-v2-list lab-v2-card-list">' + (summary.closed.length ? summary.closed.map(function (cr) {
         var ins = labInstallmentSummary(cr);
-        return '<button type="button" class="lab-v2-row" onclick="naLabOpenIndividualCredit(\'' + labEsc(String(cr.id)) + '\')"><span><strong>' + labEsc(cr.desc || labProductSummary(cr) || 'Crédito') + '</strong><small>' + ins.paidCount + '/' + ins.plan.length + ' cuotas pagadas · Finalizado ' + labEsc(labLastPaymentDate(cr)) + '</small></span><b>›</b></button>';
+        return '<button type="button" class="lab-v2-row lab-v2-nav-card lab-v2-tone-green" onclick="naLabOpenIndividualCredit(\'' + labEsc(String(cr.id)) + '\')">' +
+          '<span class="lab-v2-row-main"><span class="lab-v2-module-icon" aria-hidden="true">✓</span><span class="lab-v2-row-copy"><strong>' + labEsc(cr.desc || labProductSummary(cr) || 'Crédito') + '</strong>' +
+          '<small>' + ins.paidCount + '/' + ins.plan.length + ' cuotas pagadas · Finalizado ' + labEsc(labLastPaymentDate(cr)) + '</small></span></span><b>›</b></button>';
       }).join('') : '<div class="lab-v2-empty">No hay créditos finalizados.</div>') + '</section></div>';
   }
 
   function labLineHtml(client) {
-    var s = labClientFinancialSummary(client), e = s.evaluation || {};
+    var summary = labClientFinancialSummary(client), e = summary.evaluation || {};
     var assigned = Number.isFinite(Number(e.assignedLine)) ? Number(e.assignedLine) : null;
     var automatic = Number.isFinite(Number(e.automaticLine)) ? Number(e.automaticLine) : null;
     var available = Number.isFinite(Number(e.available)) ? Number(e.available) : null;
     return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
-      '<header class="lab-v2-subhead"><h2>LÍNEA DE CRÉDITO</h2><strong>' + labMoney(assigned) + '</strong><small>' + (e.manualActive ? 'Línea manual vigente' : 'Línea calculada por la evaluación actual') + '</small></header>' +
-      '<section class="lab-v2-metrics"><div><span>Disponible</span><strong>' + labMoney(available) + '</strong></div><div><span>Deuda activa</span><strong>' + labMoney(s.debt) + '</strong></div><div><span>Línea automática</span><strong>' + labMoney(automatic) + '</strong></div></section>' +
-      '<p class="lab-v2-note">Esta pantalla reutiliza la evaluación vigente del POS. La clasificación visual del cliente no sustituye ni sobrescribe la línea manual o automática.</p>' +
+      '<header class="lab-v2-line-hero"><span class="lab-v2-eyebrow">Línea de crédito</span><strong>' + labMoney(assigned) + '</strong>' +
+        '<small>' + (e.manualActive ? 'Línea manual vigente' : 'Línea calculada por la evaluación actual') + '</small></header>' +
+      '<section class="lab-v2-metrics lab-v2-financial-metrics">' +
+        '<div class="lab-v2-metric-available"><span>Disponible</span><strong>' + labMoney(available) + '</strong></div>' +
+        '<div><span>Deuda activa</span><strong>' + labMoney(summary.debt) + '</strong></div>' +
+        '<div><span>Línea automática</span><strong>' + labMoney(automatic) + '</strong></div></section>' +
+      '<p class="lab-v2-note">Esta vista utiliza la evaluación financiera vigente del POS. La presentación visual no reemplaza ni modifica una línea manual o automática.</p>' +
       (typeof abrirEvaluacionCredito === 'function' ? '<button type="button" class="lab-v2-pay secondary" onclick="abrirEvaluacionCredito(\'' + labEsc(String(client.id)) + '\')">Ver evaluación existente</button>' : '') +
     '</div>';
   }
 
   function labBehaviorHtml(client) {
-    var c = labClassifyClient(client), s = c.summary, e = s.evaluation || {}, h = e.history || {};
+    var c = labClassifyClient(client), summary = c.summary, e = summary.evaluation || {}, h = e.history || {};
     var assigned = Number.isFinite(Number(e.assignedLine)) ? Number(e.assignedLine) : null;
     return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
-      '<header class="lab-v2-subhead"><h2>COMPORTAMIENTO</h2><span class="lab-v2-risk lab-v2-risk-' + c.tone + '">● ' + labEsc(c.label) + '</span></header>' +
-      '<section class="lab-v2-metrics"><div><span>Pagos puntuales</span><strong>' + labEsc(String(h.punctual ?? 0)) + '</strong></div>' +
+      '<header class="lab-v2-behavior-hero lab-v2-tone-' + c.tone + '">' +
+        '<div><span class="lab-v2-eyebrow">Comportamiento financiero</span><h2>' + labEsc(c.label) + '</h2><p>Lectura basada en el historial financiero disponible.</p></div>' +
+        '<span class="lab-v2-risk lab-v2-risk-' + c.tone + '">● ' + labEsc(c.label) + '</span></header>' +
+      '<section class="lab-v2-metrics lab-v2-behavior-metrics">' +
+        '<div><span>Pagos puntuales</span><strong>' + labEsc(String(h.punctual ?? 0)) + '</strong></div>' +
         '<div><span>Pagos atrasados</span><strong>' + labEsc(String(h.late ?? 0)) + '</strong></div>' +
-        '<div><span>Créditos finalizados</span><strong>' + labEsc(String(h.completed ?? s.closed.length)) + '</strong></div>' +
-        '<div><span>Deuda vencida</span><strong>' + labMoney(s.overdueDebt) + '</strong></div>' +
+        '<div><span>Créditos finalizados</span><strong>' + labEsc(String(h.completed ?? summary.closed.length)) + '</strong></div>' +
+        '<div class="' + (summary.overdueDebt > 0.001 ? 'lab-v2-metric-danger' : '') + '"><span>Deuda vencida</span><strong>' + labMoney(summary.overdueDebt) + '</strong></div>' +
         '<div><span>Línea actual</span><strong>' + labMoney(assigned) + '</strong></div></section>' +
-      '<section class="lab-v2-why"><h3>¿Por qué?</h3>' + c.reasons.map(function (reason) { return '<p>✓ ' + labEsc(reason) + '</p>'; }).join('') +
-        '<p>✓ La línea mostrada proviene de la evaluación financiera vigente del POS.</p></section>' +
+      '<section class="lab-v2-why"><div class="lab-v2-section-title"><span>¿POR QUÉ?</span><small>Explicación visible</small></div>' +
+        '<div class="lab-v2-reason-list">' + c.reasons.map(function (reason) { return '<p><span>✓</span>' + labEsc(reason) + '</p>'; }).join('') +
+        '<p><span>✓</span>La línea mostrada proviene de la evaluación financiera vigente del POS.</p></div></section>' +
     '</div>';
   }
 
@@ -821,6 +947,7 @@
     creditsForCategory:labCreditsForCategory,
     categorySummary:labCategorySummary,
     installments:labInstallmentSummary,
+    installmentVisualState:labInstallmentVisualState,
     splitInstallmentAmounts:labSplitInstallmentAmounts,
     classifyClient:labClassifyClient,
     summarizeClient:labClientFinancialSummary,
