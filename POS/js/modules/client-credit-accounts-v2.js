@@ -6,7 +6,7 @@
  */
 (function (root) {
   'use strict';
-// ===== LAB ETAPA 02: CUENTAS Y CRÉDITOS POR CLIENTE V2 =====
+// ===== CANON: CUENTAS Y CRÉDITOS POR CLIENTE V2 =====
   // CANON. El ledger financiero sigue siendo el existente; esta capa añade
   // organización, navegación y metadata opcional sin duplicar pagos/caja/FIFO.
   var NA_SMALL_ACCOUNT_ID = 'small';
@@ -909,32 +909,6 @@
   };
   window.naCanonCloseNewCreditCategory = function () { var m=document.getElementById('naNewCreditCategoryModal'); if(m)m.hidden=true; };
 
-  window.naCanonCreateCreditCategory = async function () {
-    var client = labSaleClient(); if (!client) return;
-    var name = String(document.getElementById('naNewCreditCategoryName')?.value || '').trim().replace(/\s+/g,' ');
-    if (!name) { if (typeof toast === 'function') toast('Escribe un nombre para la categoría','error'); return; }
-    var duplicate = labCustomCategories(client).find(function (c) { return c.name.toLowerCase() === name.toLowerCase(); });
-    if (duplicate) {
-      labSaleCreditState.categoryId = duplicate.id;
-      window.naCanonCloseNewCreditCategory(); labEnsureSaleDestinationUi();
-      if (typeof toast === 'function') toast('La categoría ya existía; se reutilizó.','success');
-      return;
-    }
-    var mode = document.querySelector('input[name="naNewCreditCategoryMode"]:checked')?.value === 'accumulated' ? 'accumulated' : 'separate';
-    var previous = Array.isArray(client.creditCategories) ? client.creditCategories.slice() : [];
-    var id = 'labcat_' + Date.now().toString(36);
-    client.creditCategories = previous.concat([{ id:id, name:name.slice(0,60), mode:mode, createdAt:new Date().toISOString() }]);
-    var result = typeof saveAllData === 'function' ? await saveAllData() : { ok:true, durable:true };
-    if (typeof _naWasPersisted === 'function' && !_naWasPersisted(result)) {
-      client.creditCategories = previous;
-      if (typeof toast === 'function') toast('No se pudo guardar la categoría en LAB','error');
-      return;
-    }
-    labSaleCreditState.categoryId = id; labSaleCreditState.installmentCount = 1;
-    window.naCanonCloseNewCreditCategory(); labEnsureSaleDestinationUi();
-    if (typeof toast === 'function') toast('Categoría creada y seleccionada','success');
-  };
-
   function labReadInstallmentDraft() {
     var client = labSaleClient(), category = labSelectedCategory(client);
     if (!client || category.mode !== 'separate') return [];
@@ -942,77 +916,6 @@
     var dates = inputs.map(function (input) { return String(input.value || '').slice(0,10); }).filter(Boolean);
     if (!dates.length) dates = labMonthlyDates(document.getElementById('mCreditoVence')?.value || '', labSaleCreditState.installmentCount);
     return dates.map(function (due,index) { return { number:index+1, due:due }; });
-  }
-
-  function labAnnotateNewCredit(beforeIds, clientId, category, installmentDraft) {
-    var candidates = labClientCredits(clientId).filter(function (cr) { return !beforeIds.has(String(cr.id)); });
-    if (!candidates.length) return null;
-    candidates.sort(function (a,b) { return String(b.timestamp || '').localeCompare(String(a.timestamp || '')); });
-    var cr = candidates[0];
-    cr.creditAccount = {
-      version:2,
-      categoryId:category.id,
-      categoryName:category.name,
-      mode:category.mode,
-      source:'sale',
-      assignedAt:new Date().toISOString()
-    };
-    if (category.mode === 'separate') {
-      var amounts = labSplitInstallmentAmounts(cr.monto, Math.max(1, installmentDraft.length));
-      cr.installments = (installmentDraft.length ? installmentDraft : [{number:1,due:cr.vence || ''}]).map(function (row,index) {
-        return { number:index+1, due:String(row.due || cr.vence || '').slice(0,10), amount:(amounts[index] ?? amounts[0] ?? Number(cr.monto) ?? 0) };
-      });
-    } else {
-      delete cr.installments;
-    }
-    return cr;
-  }
-
-  function labInstallSaleHooks() {
-    if (typeof abrirCobro === 'function' && !abrirCobro.__naCanonCreditAccountsV2) {
-      var baseOpen = abrirCobro;
-      abrirCobro = function () {
-        var out = baseOpen.apply(this, arguments);
-        setTimeout(labEnsureSaleDestinationUi, 0);
-        return out;
-      };
-      abrirCobro.__naCanonCreditAccountsV2 = true;
-    }
-    if (typeof selPM === 'function' && !selPM.__naCanonCreditAccountsV2) {
-      var baseSelect = selPM;
-      selPM = function () {
-        var out = baseSelect.apply(this, arguments);
-        if (typeof posPayM !== 'undefined' && posPayM === 'credito') setTimeout(labEnsureSaleDestinationUi, 0);
-        return out;
-      };
-      selPM.__naCanonCreditAccountsV2 = true;
-    }
-    if (typeof confirmarVenta === 'function' && !confirmarVenta.__naCanonCreditAccountsV2) {
-      var baseConfirm = confirmarVenta;
-      confirmarVenta = async function () {
-        var creditSale = typeof posPayM !== 'undefined' && posPayM === 'credito';
-        if (!creditSale) return await baseConfirm.apply(this, arguments);
-        var client = labSaleClient();
-        var category = labSelectedCategory(client);
-        var installmentDraft = labReadInstallmentDraft();
-        var beforeIds = new Set((Array.isArray(creditos) ? creditos : []).map(function (cr) { return String(cr.id); }));
-        var result = await baseConfirm.apply(this, arguments);
-        if (!client) return result;
-        var annotated = labAnnotateNewCredit(beforeIds, client.id, category, installmentDraft);
-        if (annotated && typeof saveAllData === 'function') {
-          try {
-            var persisted = await saveAllData();
-            if (typeof _naWasPersisted === 'function' && !_naWasPersisted(persisted) && typeof toast === 'function') {
-              toast('La venta quedó registrada; la organización LAB usará Créditos pequeños hasta el próximo guardado.','error');
-            }
-          } catch (error) {
-            console.warn('[NA-LAB] No se pudo persistir metadata de cuenta de crédito.', error && error.message || error);
-          }
-        }
-        return result;
-      };
-      confirmarVenta.__naCanonCreditAccountsV2 = true;
-    }
   }
 
   function labAttachSaleClientListener() {
