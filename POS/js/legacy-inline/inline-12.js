@@ -126,6 +126,8 @@ _baseCliRender=function(){
   if(sort==='deuda')rows.sort((a,b)=>deudaT(b)-deudaT(a));else rows.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
   const list=document.getElementById('cliList');
   if(!list)return;
+  if(window.NA_CLIENT_CREDIT_ACCOUNTS_V2&&typeof window.NA_CLIENT_CREDIT_ACCOUNTS_V2.renderClientList==='function'&&
+     window.NA_CLIENT_CREDIT_ACCOUNTS_V2.renderClientList(rows,list))return;
   list.replaceChildren();
   if(!rows.length){
     const empty=_naSecAppend(list,'div','empty-state');
