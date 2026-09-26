@@ -336,8 +336,8 @@
 #pageClientes .lab-v2-head-money{
   align-self:center;
   min-width:0;
-  padding-left:22px;
-  border-left:1px solid rgba(15,118,110,.24);
+  padding-left:0;
+  border-left:0;
   gap:5px;
 }
 #pageClientes .lab-v2-head-money span{
@@ -456,9 +456,9 @@
     width:auto;
     text-align:right;
     align-items:flex-end;
-    padding:0 0 0 13px;
+    padding:0;
     border-top:0;
-    border-left:1px solid rgba(15,118,110,.24);
+    border-left:0;
   }
   #pageClientes .lab-v2-head-money span{
     font-size:11px;
@@ -505,7 +505,7 @@
     transform:scaleX(1.06);
   }
   #pageClientes .lab-v2-head-money{
-    padding-left:10px;
+    padding-left:0;
   }
   #pageClientes .lab-v2-head-money strong{
     font-size:26px;
