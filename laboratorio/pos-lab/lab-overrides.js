@@ -441,6 +441,25 @@
     labClientScreenState = { clientId:null, route:'home', categoryId:null, creditId:null, purchaseId:null };
   }
 
+  function labResetClientNavigationForMenu() {
+    var page = document.getElementById('pageClientes');
+    if (!page || !page.classList.contains('active')) return false;
+    labCloseScreen();
+    return true;
+  }
+
+  function labBindClientMenuReset() {
+    var button = document.getElementById('backBtn');
+    if (!button) return false;
+    if (button.dataset.labClientMenuReset === 'true') return true;
+
+    button.dataset.labClientMenuReset = 'true';
+    button.addEventListener('click', function () {
+      labResetClientNavigationForMenu();
+    }, true);
+    return true;
+  }
+
   function labBackButton(label) {
     return '<button type="button" class="lab-v2-back" onclick="naLabClientBack()">← ' + labEsc(label || 'Clientes') + '</button>';
   }
@@ -1235,6 +1254,7 @@
   labEnsureClientRenderHook();
   labObserveClientProfileRenders();
   labObserveClientWorkspaceLoading();
+  labBindClientMenuReset();
   labInstallSaleHooks();
   labAttachSaleClientListener();
   if (typeof window.addEventListener === 'function') {
@@ -1242,6 +1262,7 @@
       labEnsureClientRenderHook();
       labObserveClientProfileRenders();
       labObserveClientWorkspaceLoading();
+      labBindClientMenuReset();
       labInstallSaleHooks();
       labAttachSaleClientListener();
     });
@@ -1249,6 +1270,7 @@
       labEnsureClientRenderHook();
       labObserveClientProfileRenders();
       labObserveClientWorkspaceLoading();
+      labBindClientMenuReset();
     });
   }
 
