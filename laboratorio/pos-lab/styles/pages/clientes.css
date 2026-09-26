@@ -19,17 +19,19 @@
 #pageClientes .lab-v2-tone-slate{--lab-accent:#64748b;--lab-soft:var(--lab-v2-surface-soft,#f7f9fa);--lab-border:var(--lab-v2-border,#e1e7eb);--lab-ink:#334155}
 
 #pageClientes .lab-v2-eyebrow{display:block;font-size:10px;line-height:1.2;font-weight:950;letter-spacing:.09em;text-transform:uppercase;color:var(--lab-accent,var(--teal,#0f766e));margin-bottom:7px}
-#pageClientes .lab-v2-client-head{display:flex;justify-content:space-between;gap:22px;align-items:flex-start;padding:20px;border:1px solid #bfeae4;border-left:3px solid var(--lab-v2-brand,#0f766e);border-radius:20px;background:linear-gradient(135deg,#eefcf8 0%,#e8faff 48%,#f9ffff 100%);box-shadow:0 8px 22px rgba(15,23,42,.05);position:relative;overflow:hidden;isolation:isolate}
+#pageClientes .lab-v2-client-head{display:flex;justify-content:space-between;gap:22px;align-items:flex-start;padding:20px;border:1px solid #bfeae4;border-left:3px solid var(--lab-v2-brand,#0f766e);border-radius:20px;background:var(--lab-v2-surface,#fff);box-shadow:0 8px 22px rgba(15,23,42,.05);position:relative;overflow:hidden;isolation:isolate}
 #pageClientes .lab-v2-client-head>*{position:relative;z-index:2}
 #pageClientes .lab-v2-client-head:before,#pageClientes .lab-v2-client-head:after{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background-repeat:repeat-x;will-change:background-position}
 #pageClientes .lab-v2-client-head:before{
-  opacity:.58;
+  opacity:.74;
   background-image:
+    linear-gradient(135deg,#eefcf8 0%,#e8faff 48%,#f9ffff 100%),
     radial-gradient(ellipse 76px 28px at 78px 72px,rgba(255,255,255,.94) 0 69%,transparent 72%),
     radial-gradient(ellipse 56px 24px at 130px 64px,rgba(255,255,255,.88) 0 68%,transparent 72%),
     radial-gradient(ellipse 48px 20px at 34px 82px,rgba(255,255,255,.84) 0 67%,transparent 72%);
-  background-size:320px 150px,320px 150px,320px 150px;
-  background-position:0 8px,0 8px,0 8px;
+  background-repeat:no-repeat,repeat-x,repeat-x,repeat-x;
+  background-size:100% 100%,320px 150px,320px 150px,320px 150px;
+  background-position:0 0,0 8px,0 8px,0 8px;
   animation:lab-v2-clouds-near 34s linear infinite;
 }
 #pageClientes .lab-v2-client-head:after{
@@ -43,8 +45,8 @@
   animation:lab-v2-clouds-far 52s linear infinite;
 }
 @keyframes lab-v2-clouds-near{
-  from{background-position:0 8px,0 8px,0 8px}
-  to{background-position:320px 8px,320px 8px,320px 8px}
+  from{background-position:0 0,0 8px,0 8px,0 8px}
+  to{background-position:0 0,320px 8px,320px 8px,320px 8px}
 }
 @keyframes lab-v2-clouds-far{
   from{background-position:240px 24px,240px 24px,240px 24px}
