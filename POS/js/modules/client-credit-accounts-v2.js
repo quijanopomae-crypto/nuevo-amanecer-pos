@@ -1042,15 +1042,6 @@
   }
 
   function naBindRuntime() {
-    if (typeof cliRender === 'function' && !cliRender.__naCreditAccountsV2) {
-      var base=cliRender;
-      cliRender=function () {
-        var result=base.apply(this,arguments);
-        naEnhanceClientCards(); naSyncClientLoadingUi();
-        return result;
-      };
-      cliRender.__naCreditAccountsV2=true;
-    }
     if (typeof abrirCobro === 'function' && !abrirCobro.__naCreditAccountsV2) {
       var open=abrirCobro;
       abrirCobro=function(){var result=open.apply(this,arguments);setTimeout(labEnsureSaleDestinationUi,0);return result;};
