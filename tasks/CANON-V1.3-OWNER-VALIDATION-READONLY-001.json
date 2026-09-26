@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-V1.3-OWNER-VALIDATION-READONLY-001",
+  "environment": "CANON_PRODUCTION_VALIDATION",
+  "base_ref": "fe970613ea49bf2413a61b40cadf3489a6224777",
+  "objective": "Validar en producción, sin modificar datos de negocio, que el CANON activo entrega productos, clientes, créditos, pagos y cuentas V2 por las rutas canónicas y que una sesión temporal puede activarse, leer y limpiarse sin cambiar ventas, caja, inventario ni saldos.",
+  "owner_authorization": "Owner autorizó ejecutar la etapa 1 de validación CANON.",
+  "allowed_files": [
+    "tasks/CANON-V1.3-OWNER-VALIDATION-READONLY-001.json",
+    "evidence/canon-preflight/CANON-V1.3-OWNER-VALIDATION-READONLY-001.json",
+    "tools/cloudflare-prod/scripts/owner-validation-readonly.mjs",
+    ".github/workflows/v1.3-owner-validation-readonly.yml",
+    "tests/cloud-sync/v1.3-owner-validation-readonly.test.mjs",
+    "ops/v1.3-owner-validation-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/migrations/**",
+    "tools/cloudflare-lab/src/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No sale.create",
+    "No payment.create",
+    "No cash.open/cash.close",
+    "No inventory mutation",
+    "No financial operation mutation",
+    "Temporary auth session/principal cleaned in finally",
+    "Business table counts identical before and after validation"
+  ],
+  "rollback": "Revertir PR de validación; no toca schema ni datos de negocio."
+}
