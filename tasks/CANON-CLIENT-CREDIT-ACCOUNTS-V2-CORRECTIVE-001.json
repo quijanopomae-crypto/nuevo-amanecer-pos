@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-CREDIT-ACCOUNTS-V2-CORRECTIVE-001",
+  "environment": "CANON",
+  "base_ref": "ed69e3d815046b032bc46d3e0309a6c19bb579b9",
+  "objective": "Completar la promoción LAB→CANON de Clientes/Créditos V2 corrigiendo activación hosted, renderer nativo V2, motion/loader, versionado PWA y validación responsive sin alterar autoridad financiera.",
+  "owner_authorization": "Owner solicitó terminar de subir a CANON todo lo faltante detectado por auditoría avanzada.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-CREDIT-ACCOUNTS-V2-CORRECTIVE-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-CREDIT-ACCOUNTS-V2-CORRECTIVE-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/js/legacy-inline/inline-12.js",
+    "POS/js/sync/hosted-canonical-guard.js",
+    "POS/index.html",
+    "POS/sw.js",
+    ".github/workflows/v1.3-pos-web-deploy.yml",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+    "tests/cloud-sync/client-renderer-collision.test.mjs",
+    "tests/cloud-sync/v1.3-pos-web-deploy.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/migrations/**",
+    "tools/cloudflare-lab/src/**",
+    "POS/js/legacy-inline/inline-17.js",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-integration.js"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "No second payment ledger",
+    "FIFO unchanged",
+    "Caja unchanged",
+    "_naEvaluateClientCredit unchanged",
+    "credit line rules unchanged",
+    "metadata/migration 0012 unchanged",
+    "hosted guard applies only to production hosted POS"
+  ],
+  "rollback": "Revertir el PR correctivo; no toca datos ni schema."
+}
