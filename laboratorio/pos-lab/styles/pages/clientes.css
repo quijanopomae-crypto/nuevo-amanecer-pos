@@ -644,9 +644,13 @@
   z-index:1;
   width:64px;
   height:64px;
-  object-fit:cover;
+  display:grid;
+  place-items:center;
   border-radius:18px;
-  box-shadow:0 10px 26px rgba(15,118,110,.18);
+  background:linear-gradient(145deg,#21d2c6 0%,#0fb6ae 58%,#08988f 100%);
+  box-shadow:0 10px 26px rgba(15,118,110,.18),inset 0 1px 0 rgba(255,255,255,.38);
+  font-size:34px;
+  line-height:1;
 }
 #pageClientes .lab-client-loading-title{
   display:block;
@@ -686,6 +690,7 @@
     width:60px;
     height:60px;
     border-radius:17px;
+    font-size:32px;
   }
   #pageClientes .lab-client-loading-title{
     font-size:23px;
