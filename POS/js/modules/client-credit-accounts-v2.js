@@ -12,7 +12,9 @@
   var NA_SMALL_ACCOUNT_ID = 'small';
   var NA_SMALL_ACCOUNT_NAME = 'Créditos pequeños';
   var labClientScreenState = { clientId:null, route:'home', categoryId:null, creditId:null, purchaseId:null };
-  var labSaleCreditState = { clientId:null, categoryId:NA_SMALL_ACCOUNT_ID, installmentCount:1 };\n  var naClientListMotionTimer = 0;\n  var naClientListMotionReady = false;
+  var labSaleCreditState = { clientId:null, categoryId:NA_SMALL_ACCOUNT_ID, installmentCount:1 };
+  var naClientListMotionTimer = 0;
+  var naClientListMotionReady = false;
 
   function labEsc(value) {
     if (typeof _naEsc === 'function') return _naEsc(String(value ?? ''));
