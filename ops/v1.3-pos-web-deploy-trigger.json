@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy corrective Client Credit Accounts V2 CANON bundle: native V2 client renderer, hosted activation guard, approved motion and commit-versioned PWA cache.",
-  "retry_attempt": 5,
-  "retry_reason": "Publish PR #106 corrective LAB→CANON runtime parity after CANON Critical CI passed.",
-  "requested_at_utc": "2026-09-26T22:34:00Z",
-  "target_head": "c8adaba55b71b07b596c77b8438a1e079e1fba88"
+  "note": "Deploy Client motion parity fix: restore owner-approved LAB refresh animation timing/easing in CANON Clientes V2.",
+  "retry_attempt": 6,
+  "retry_reason": "Publish PR #112 motion parity fix after CANON Critical CI success.",
+  "requested_at_utc": "2026-09-26T23:30:00Z",
+  "target_head": "0b99e744daa029dd76ebc68fffcec25958a2ea75"
 }
