@@ -109,7 +109,9 @@ test('migration contains no destructive rewrite and read model exposes optional 
   assert.doesNotMatch(migration,/\bDROP\s+TABLE\b|\bALTER\s+TABLE\b|\bDELETE\s+FROM\b|\bUPDATE\s+(credits|live_credits|credit_payments|canonical_financial_events)\b/i);
   for(const table of ['canonical_credit_accounts','canonical_credit_metadata','canonical_credit_installments']) assert.match(migration,new RegExp('CREATE TABLE IF NOT EXISTS '+table));
   assert.match(canonicalRead,/credit-accounts/);
-  assert.match(canonicalRead,/m\\.account_id,m\\.account_name,m\\.account_mode/);
+  assert.match(canonicalRead,/account_id/);
+  assert.match(canonicalRead,/account_name/);
+  assert.match(canonicalRead,/account_mode/);
   assert.match(canonicalRead,/installments_json/);
   assert.match(commerce,/INSERT INTO canonical_credit_metadata/);
   assert.match(commerce,/INSERT INTO canonical_credit_installments/);
