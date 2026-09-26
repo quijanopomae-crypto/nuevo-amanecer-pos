@@ -1,0 +1,90 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-CLOUD-MOTION-001",
+  "base_ref": "eae6a5dbf5845142d0129cc5945abceed3efbe7a",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Nubes animadas suaves dentro de la tarjeta principal de la ficha financiera, sin cambiar estructura ni lógica.",
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/AGENTS.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/styles/pages/clientes.css"
+    ],
+    "WRITES": [
+      "clientes.css: gradiente de cielo, dos capas de nubes CSS y keyframes continuos",
+      "test focalizado: animación aislada, loop y reduced motion"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .lab-v2-client-head::before",
+      " #pageClientes .lab-v2-client-head::after"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Animación visual no confirma ni bloquea operaciones",
+      "No modifica crédito, saldo, pagos, clasificación o línea",
+      "No usa JS, timers de negocio, storage ni red",
+      "prefers-reduced-motion desactiva el desplazamiento",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; Clientes LAB visual only"
+    ],
+    "RISKS": [
+      "Nubes demasiado opacas podrían afectar legibilidad; mantener baja opacidad y contenido sobre z-index.",
+      "Animación podría costar GPU; usar background-position/transform CSS simple y sin filtros costosos.",
+      "Overflow móvil; pseudo-elementos permanecen recortados por overflow:hidden de la tarjeta."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR LAB de esta etapa."
+    ],
+    "TESTS": [
+      "Temporal preflight antes de CSS",
+      "CSS contiene dos capas de nubes y keyframes infinitos",
+      "reduced-motion desactiva animation",
+      "LAB Canon Mirror CI",
+      "POS LAB Mobile + Pages",
+      "validación publicada móvil"
+    ]
+  }
+}
