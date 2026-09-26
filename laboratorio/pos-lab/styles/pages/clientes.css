@@ -60,6 +60,18 @@
 #pageClientes .lab-v2-client-identity{min-width:0;position:relative;z-index:1}
 #pageClientes .lab-v2-name-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 #pageClientes .lab-v2-client-head h2,#pageClientes .lab-v2-subhead h2,#pageClientes .lab-v2-behavior-hero h2{margin:0;font-size:25px;line-height:1.13;color:var(--ink,#172033);letter-spacing:-.025em}
+#pageClientes .lab-v2-client-head h2{
+  font-family:"Arial Black","Roboto Black","Noto Sans",system-ui,sans-serif;
+  font-weight:1000;
+  text-transform:uppercase;
+  letter-spacing:-.055em;
+  -webkit-text-stroke:.35px currentColor;
+  font-stretch:expanded;
+  display:inline-block;
+  transform:scaleX(1.06);
+  transform-origin:left center;
+  max-width:94%;
+}
 #pageClientes .lab-v2-client-head p,#pageClientes .lab-v2-credit-title p,#pageClientes .lab-v2-behavior-hero p{margin:7px 0 0;color:var(--slate,#64748b);font-size:12px;font-weight:700}
 #pageClientes .lab-v2-head-money{text-align:right;display:flex;flex-direction:column;gap:3px;flex:0 0 auto;position:relative;z-index:1}
 #pageClientes .lab-v2-head-money span,#pageClientes .lab-v2-head-money small,#pageClientes .lab-v2-subhead small{font-size:11px;color:var(--slate,#64748b);font-weight:750}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-NAME-DISPLAY-001",
+  "environment": "LABORATORIO",
+  "base_ref": "14bf06014ffa03aa58598537ba57e53933669392",
+  "objective": "Aplicar exclusivamente al nombre del cliente en la tarjeta principal una tipografía display pesada, geométrica y de alto contraste visual, inspirada en la referencia aprobada. Debe funcionar offline sin fuentes externas. No modificar ninguna lógica, estructura, datos o CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-NAME-DISPLAY-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-NAME-DISPLAY-001.json",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-client-financial-name-display.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-ui-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-NAME-DISPLAY-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
