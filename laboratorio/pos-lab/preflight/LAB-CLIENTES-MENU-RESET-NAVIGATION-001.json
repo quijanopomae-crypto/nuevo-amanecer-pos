@@ -1,0 +1,91 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-MENU-RESET-NAVIGATION-001",
+  "base_ref": "5b3776848ca48fda5d3b52c7dd8d312f2dca956f",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Menú superior resetea navegación interna de Clientes; flecha interna no.",
+    "READS": [
+      "labClientScreenState",
+      "labCloseScreen",
+      "naLabClientBack",
+      "#backBtn onclick=goMenu()",
+      "menu Clientes onclick=goPage('pageClientes')"
+    ],
+    "WRITES": [
+      "lab-overrides.js: listener capture LAB sobre #backBtn",
+      "test focalizado de separación Menu vs Back"
+    ],
+    "DOM_AFFECTED": [
+      "#backBtn listener only"
+    ],
+    "STATE_AFFECTED": [
+      "labClientScreenState resets only when pageClientes is active and #backBtn is clicked"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "naLabClientBack mantiene navegación route-by-route",
+      "No resetear filtros, search, clientes, créditos ni datos",
+      "No envolver ni modificar goMenu/goPage CANON",
+      "No tocar persistencia, sync, D1, Caja o ledger",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None; navegación LAB Clientes only"
+    ],
+    "RISKS": [
+      "backBtn es global: guard obligatorio pageClientes.active antes de resetear.",
+      "listener debe ejecutarse antes del inline onclick goMenu; usar capture=true.",
+      "no duplicar listeners en load/pageshow; usar dataset guard."
+    ],
+    "ROLLBACK": [
+      "Revertir este PR LAB."
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "backBtn listener capture=true",
+      "reset solo con pageClientes.active",
+      "labCloseScreen resetea state",
+      "naLabClientBack conserva ramas home/category/creditHistory",
+      "suite LAB completa",
+      "POS LAB Mobile + Pages",
+      "validación publicada: category -> Menú -> Clientes = listado"
+    ]
+  }
+}
