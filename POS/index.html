@@ -854,6 +854,7 @@
 
 <script src="js/core/utils.js"></script>
 <script src="js/sync/outbox.js"></script>
+<script src="js/sync/hosted-canonical-guard.js"></script>
 <script src="js/sync/canonical-client.js"></script>
 <script src="js/legacy-inline/inline-01.js"></script>
 <script src="js/modules/ticket/legacy.js"></script>
@@ -955,7 +956,9 @@
 <script>
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function (error) {
+    navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (registration) {
+      return registration.update().catch(function () {});
+    }).catch(function (error) {
       console.warn('No se pudo registrar el shell PWA.', error);
     });
   });

@@ -7,6 +7,9 @@ const launcher = readFileSync('tools/cloudflare-pos-web/public/index.html', 'utf
 const activation = readFileSync('tools/cloudflare-pos-web/public/activate.js', 'utf8');
 const workflow = readFileSync('.github/workflows/v1.3-pos-web-deploy.yml', 'utf8');
 const router = readFileSync('tools/cloudflare-pos-web/src/worker.js', 'utf8');
+const appIndex = readFileSync('POS/index.html', 'utf8');
+const hostedGuard = readFileSync('POS/js/sync/hosted-canonical-guard.js', 'utf8');
+const serviceWorker = readFileSync('POS/sw.js', 'utf8');
 
 test('hosted POS uses explicit Worker routing with a stable workers.dev name', () => {
   assert.match(config, /"name": "nuevo-amanecer-pos-web"/);
@@ -65,4 +68,23 @@ test('public verification is pipe-safe for the large POS HTML document', () => {
   assert.match(workflow, /grep -Fq 'Nuevo Amanecer POS' \/tmp\/pos-root\.html/);
   assert.match(workflow, /grep -Fq 'Nuevo Amanecer — ERP &amp; POS' \/tmp\/pos-app\.html/);
   assert.doesNotMatch(workflow, /printf '%s' "\$APP" \| grep -q/);
+});
+
+
+test('hosted app refuses silent local mode and loads the guard before canonical client', () => {
+  const guardIndex = appIndex.indexOf('js/sync/hosted-canonical-guard.js');
+  const canonicalIndex = appIndex.indexOf('js/sync/canonical-client.js');
+  assert.ok(guardIndex >= 0 && canonicalIndex > guardIndex);
+  assert.match(hostedGuard, /nuevo-amanecer-pos-web\.nuevo-amanecer-pos\.workers\.dev/);
+  assert.match(hostedGuard, /na_canonical_binding/);
+  assert.match(hostedGuard, /na_cloud_sync_credentials/);
+  assert.match(hostedGuard, /location\.replace/);
+  assert.match(serviceWorker, /hosted-canonical-guard\.js/);
+});
+
+test('hosted deploy replaces the service-worker build hash and verifies it remotely', () => {
+  assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$GITHUB_SHA\/g"/);
+  assert.match(workflow, /Service Worker build hash placeholder was not replaced/);
+  assert.match(workflow, /grep -Fq "\$GITHUB_SHA" \/tmp\/pos-sw\.js/);
+  assert.match(workflow, /hosted-canonical-guard\.js/);
 });

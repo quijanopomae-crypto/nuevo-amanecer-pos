@@ -180,3 +180,14 @@ test('production shell includes V2 module and stylesheet without LAB runtime ind
   assert.match(html,/js\/modules\/client-credit-accounts-v2\.js/);
   assert.doesNotMatch(source,/LAB\s*·\s*CONECTANDO|NO PRODUCCIÓN|naLabBadge|__NA_LAB__/);
 });
+
+
+test('native Clientes renderer owns the visible list and keeps legacy panels out of the primary route',()=>{
+  assert.match(source,/function naRenderClientList\(rows, list\)/);
+  assert.match(source,/dataset\.naV2Native = 'true'/);
+  assert.match(source,/na-v2-client-list-card/);
+  assert.match(source,/root\.naCanonOpenClientAccount\(client\.id\)/);
+  assert.match(css,/CLIENTES V2 NATIVE LIST/);
+  assert.match(css,/na-client-refresh-out/);
+  assert.match(css,/prefers-reduced-motion:reduce/);
+});

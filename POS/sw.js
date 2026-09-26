@@ -13,6 +13,7 @@ const PRECACHE_URLS = [
   './css/client-credit-accounts-v2.css',
   './js/core/utils.js',
   './js/sync/outbox.js',
+  './js/sync/hosted-canonical-guard.js',
   './js/sync/canonical-client.js',
   './js/sync/canonical-sale-intent.js',
   './js/sync/canonical-sale-outbox.js',

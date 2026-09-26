@@ -13,6 +13,8 @@
   var NA_SMALL_ACCOUNT_NAME = 'Créditos pequeños';
   var labClientScreenState = { clientId:null, route:'home', categoryId:null, creditId:null, purchaseId:null };
   var labSaleCreditState = { clientId:null, categoryId:NA_SMALL_ACCOUNT_ID, installmentCount:1 };
+  var naClientListMotionTimer = 0;
+  var naClientListMotionReady = false;
 
   function labEsc(value) {
     if (typeof _naEsc === 'function') return _naEsc(String(value ?? ''));
@@ -776,10 +778,163 @@
     var node = document.getElementById('naV2CreditInfo'); if (node) node.hidden = !node.hidden;
   };
 
+  function naClientReducedMotion() {
+    try { return !!root.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (_) { return false; }
+  }
+
+  function naClientDebt(client) {
+    if (typeof deudaT === 'function') {
+      try { return Math.max(0, Number(deudaT(client)) || 0); } catch (_) {}
+    }
+    return labClientFinancialSummary(client).debt;
+  }
+
+  function naClientBusinessStatus(client) {
+    if (typeof statusCli === 'function') {
+      try { return String(statusCli(client) || ''); } catch (_) {}
+    }
+    return '';
+  }
+
+  function naClientInitials(client) {
+    var name = String(client && client.nombre || 'Cliente').trim();
+    if (typeof initials === 'function') {
+      try { return initials(name); } catch (_) {}
+    }
+    return name.split(/\s+/).filter(Boolean).slice(0,2).map(function (part) { return part.charAt(0).toUpperCase(); }).join('') || 'C';
+  }
+
+  function naClientAvatarColor(client) {
+    if (typeof colorFor === 'function') {
+      try { return colorFor(client && client.color); } catch (_) {}
+    }
+    return '#0f766e';
+  }
+
+  function naCreateNativeClientCard(client) {
+    var classification = labClassifyClient(client);
+    var credits = labClientCredits(client && client.id);
+    var status = naClientBusinessStatus(client);
+    var card = document.createElement('article');
+    card.className = 'client-card na-v2-client-list-card';
+    card.dataset.clientId = String(client && client.id || '');
+    card.dataset.naV2Ready = 'true';
+    card.dataset.naV2Native = 'true';
+
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'client-header na-v2-client-list-trigger';
+    trigger.setAttribute('aria-label', 'Abrir ficha financiera de ' + labClientDisplayName(client));
+    trigger.addEventListener('click', function () { root.naCanonOpenClientAccount(client.id); });
+
+    var avatar = document.createElement('span');
+    avatar.className = 'c-avatar';
+    avatar.textContent = naClientInitials(client);
+    avatar.style.background = naClientAvatarColor(client);
+
+    var info = document.createElement('span');
+    info.className = 'c-info';
+    var name = document.createElement('span');
+    name.className = 'c-name';
+    name.textContent = labClientDisplayName(client);
+    var meta = document.createElement('span');
+    meta.className = 'c-meta';
+    var metaParts = [];
+    if (client && client.dni) metaParts.push('📋 ' + client.dni);
+    metaParts.push(credits.length + (credits.length === 1 ? ' crédito' : ' créditos'));
+    if (status) metaParts.push(status.toUpperCase());
+    meta.textContent = metaParts.join(' · ');
+    info.append(name, meta);
+
+    var right = document.createElement('span');
+    right.className = 'c-right na-v2-client-list-right';
+    var debt = document.createElement('strong');
+    debt.className = 'c-deuda';
+    debt.textContent = labMoney(naClientDebt(client));
+    var risk = document.createElement('span');
+    risk.className = 'na-v2-risk na-v2-risk-' + classification.tone;
+    risk.textContent = classification.label;
+    right.append(debt, risk);
+
+    var arrow = document.createElement('span');
+    arrow.className = 'na-v2-client-list-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '›';
+
+    trigger.append(avatar, info, right, arrow);
+    card.appendChild(trigger);
+    return card;
+  }
+
+  function naDrawClientList(rows, list) {
+    list.replaceChildren();
+    list.dataset.naV2Native = 'true';
+    if (!rows.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-state';
+      var icon = document.createElement('div');
+      icon.className = 'ei';
+      icon.textContent = '👥';
+      var copy = document.createElement('p');
+      copy.textContent = 'Sin clientes en esta vista';
+      empty.append(icon, copy);
+      list.appendChild(empty);
+      return;
+    }
+    var fragment = document.createDocumentFragment();
+    rows.forEach(function (client) { fragment.appendChild(naCreateNativeClientCard(client)); });
+    list.appendChild(fragment);
+  }
+
+  function naRenderClientList(rows, list) {
+    if (!list) return false;
+    rows = Array.isArray(rows) ? rows : [];
+    var page = document.getElementById('pageClientes');
+    var draw = function () {
+      naDrawClientList(rows, list);
+      if (labClientScreenState.clientId) {
+        var screen = labScreen();
+        if (screen && !screen.hidden) labRenderRoute();
+      }
+    };
+
+    if (!page || !page.classList.contains('active') || naClientReducedMotion()) {
+      clearTimeout(naClientListMotionTimer);
+      page && page.classList.remove('na-client-refresh-out','na-client-refresh-in');
+      draw();
+      return true;
+    }
+
+    if (!naClientListMotionReady) {
+      naClientListMotionReady = true;
+      draw();
+      page.classList.add('na-client-refresh-in');
+      root.requestAnimationFrame(function () {
+        root.requestAnimationFrame(function () { page.classList.remove('na-client-refresh-in'); });
+      });
+      return true;
+    }
+
+    clearTimeout(naClientListMotionTimer);
+    page.classList.remove('na-client-refresh-in');
+    page.classList.add('na-client-refresh-out');
+    naClientListMotionTimer = root.setTimeout(function () {
+      draw();
+      page.classList.remove('na-client-refresh-out');
+      page.classList.add('na-client-refresh-in');
+      root.requestAnimationFrame(function () {
+        root.requestAnimationFrame(function () { page.classList.remove('na-client-refresh-in'); });
+      });
+    }, 180);
+    return true;
+  }
+
   function labBindClientCards() {
     var list = document.getElementById('cliList');
     if (!list) return;
     Array.from(list.querySelectorAll('.client-card')).forEach(function (card) {
+      if (card.dataset && card.dataset.naV2Native === 'true') return;
       var panel = card.querySelector('.client-creds');
       var id = panel && /^cc-/.test(String(panel.id || '')) ? String(panel.id).replace(/^cc-/, '') : String(card.dataset && card.dataset.clientId || '');
       if (!id) return;
@@ -960,6 +1115,7 @@
     summarizeClient:labClientFinancialSummary,
     productSummary:labProductSummary,
     renderSaleDestination:labEnsureSaleDestinationUi,
+    renderClientList:naRenderClientList,
     bindClientCards:labBindClientCards,
     saleDraft:naCanonicalSaleDraft
   });
@@ -1039,6 +1195,13 @@
     } catch (_) {}
     page.classList.toggle('na-client-loading-active',loading);
     loader.hidden=!loading; loader.setAttribute('aria-hidden',loading?'false':'true');
+  }
+
+  function naRequestClientListRender() {
+    if (typeof cliRender !== 'function') return;
+    root.requestAnimationFrame(function () {
+      try { cliRender(); } catch (error) { console.warn('[Nuevo Amanecer] No se pudo refrescar Clientes V2.', error && error.message || error); }
+    });
   }
 
   function naBindRuntime() {
