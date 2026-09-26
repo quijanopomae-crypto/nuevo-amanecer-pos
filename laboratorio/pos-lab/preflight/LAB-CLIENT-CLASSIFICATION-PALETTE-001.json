@@ -1,0 +1,101 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENT-CLASSIFICATION-PALETTE-001",
+  "base_ref": "46816e235d2d50d1eeb9e08a954105f0bb71fabb",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Clasificación consistente: verde estable, amarillo regular, rojo peligro, gris nuevo/sin requisitos.",
+    "READS": [
+      "labClassifyClient",
+      "_naEvaluateClientCredit output (read-only)",
+      "labHomeHtml",
+      "labBehaviorHtml",
+      "clientes.css",
+      "tests V2"
+    ],
+    "WRITES": [
+      "lab-overrides.js: mapeo de estados y clase visual exclusiva del módulo comportamiento",
+      "clientes.css: paleta exclusiva de clasificación",
+      "tests: estados y colores"
+    ],
+    "DOM_AFFECTED": [
+      "badge de clasificación en ficha principal",
+      "tarjeta COMPORTAMIENTO",
+      "Comportamiento financiero"
+    ],
+    "STATE_AFFECTED": [
+      "None; derivación visual only"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "_naEvaluateClientCredit no se modifica",
+      "manualActive/assignedLine/automaticLine/available intactos",
+      "deuda, pagos, saldo, FIFO, Caja y ledger intactos",
+      "sin score nuevo ni persistencia",
+      "riesgo vencido/impuntual tiene precedencia roja",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Créditos se leen únicamente para deuda vencida; no hay escritura cruzada."
+    ],
+    "RISKS": [
+      "No confundir falta de historial con REGULAR: se mostrará NUEVO gris.",
+      "Un cliente no elegible sin riesgo activo se mostrará SIN REQUISITOS gris.",
+      "Un cliente con riesgo real vencido seguirá rojo aunque además sea no elegible."
+    ],
+    "ROLLBACK": [
+      "Revertir este PR LAB."
+    ],
+    "TESTS": [
+      "ESTABLE -> green",
+      "REGULAR -> amber",
+      "PELIGRO -> red",
+      "NUEVO -> slate",
+      "eligible=false sin riesgo -> SIN REQUISITOS slate",
+      "paleta visual sin tonos alternativos para clasificación",
+      "manual line intacta",
+      "suite LAB completa",
+      "POS LAB Mobile y Pages"
+    ]
+  }
+}

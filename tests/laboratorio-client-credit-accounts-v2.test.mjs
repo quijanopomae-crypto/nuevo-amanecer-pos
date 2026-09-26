@@ -164,13 +164,28 @@ test('12 canceled credits stay separate from active debt',()=>{
   assert.equal(s.active.length,1); assert.equal(s.closed.length,1); assert.equal(s.debt,100);
 });
 
-test('13 classification uses objective stable regular and high-risk states',()=>{
+test('13 classification uses only stable regular danger and neutral new/ineligible states',()=>{
   const ctx=makeContext(), api=ctx.NA_LAB_CLIENT_CREDIT_ACCOUNTS_V2;
-  ctx.clientes=[{id:'A',nombre:'A'},{id:'F',nombre:'F'},{id:'G',nombre:'G'}];
+  ctx.clientes=[
+    {id:'A',nombre:'A'},
+    {id:'F',nombre:'F'},
+    {id:'G',nombre:'G'},
+    {id:'B',nombre:'B'},
+    {id:'D',nombre:'D'}
+  ];
   ctx.creditos.push(credit('g','G',100,0,{vence:'2026-09-20',status:'vencido'}));
-  assert.equal(api.classifyClient(ctx.clientes[0]).label,'ESTABLE');
-  assert.equal(api.classifyClient(ctx.clientes[1]).label,'REGULAR');
-  assert.equal(api.classifyClient(ctx.clientes[2]).label,'RIESGO ALTO');
+
+  const stable=api.classifyClient(ctx.clientes[0]);
+  const regular=api.classifyClient(ctx.clientes[1]);
+  const danger=api.classifyClient(ctx.clientes[2]);
+  const fresh=api.classifyClient(ctx.clientes[3]);
+  const ineligible=api.classifyClient(ctx.clientes[4]);
+
+  assert.deepEqual([stable.label,stable.tone],['ESTABLE','green']);
+  assert.deepEqual([regular.label,regular.tone],['REGULAR','amber']);
+  assert.deepEqual([danger.label,danger.tone],['PELIGRO','red']);
+  assert.deepEqual([fresh.label,fresh.tone],['NUEVO','slate']);
+  assert.deepEqual([ineligible.label,ineligible.tone],['SIN REQUISITOS','slate']);
 });
 
 test('14 manual line remains intact',()=>{

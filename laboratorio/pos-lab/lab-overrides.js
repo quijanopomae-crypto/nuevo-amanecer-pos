@@ -232,20 +232,37 @@
 
   function labClassifyClient(client) {
     var summary = labClientFinancialSummary(client), e = summary.evaluation || {}, h = e.history || {};
-    var label = 'REGULAR', tone = 'amber', reasons = [];
-    if (summary.overdueDebt > 0.001 || Number(h.overdueActive || 0) > 0 || h.behavior === 'impuntual') {
-      label = 'RIESGO ALTO'; tone = 'red';
-      if (summary.overdueDebt > 0.001) reasons.push('Mantiene deuda vencida actualmente');
-      if (Number(h.late || 0) > 0) reasons.push('Registra pagos tardíos o créditos vencidos');
-    } else if (Number(h.punctual || 0) > 0 && Number(h.late || 0) === 0) {
+    var punctual = Number(h.punctual || 0);
+    var late = Number(h.late || 0);
+    var completed = Number(h.completed || 0);
+    var partial = Number(h.partial || 0);
+    var overdueActive = Number(h.overdueActive || 0);
+    var behavior = String(h.behavior || '').toLowerCase();
+    var hasBehaviorHistory = punctual > 0 || late > 0 || completed > 0 || partial > 0;
+    var label = 'NUEVO', tone = 'slate', reasons = [];
+
+    if (summary.overdueDebt > 0.001 || overdueActive > 0 || behavior === 'impuntual') {
+      label = 'PELIGRO'; tone = 'red';
+      if (summary.overdueDebt > 0.001 || overdueActive > 0) reasons.push('Mantiene deuda vencida o mora activa');
+      if (late > 0 || behavior === 'impuntual') reasons.push('Registra pagos tardíos o comportamiento impuntual');
+    } else if (e.eligible === false) {
+      label = 'SIN REQUISITOS'; tone = 'slate';
+      reasons.push('No cumple actualmente los requisitos de la evaluación financiera vigente');
+      reasons.push('Sin deuda vencida activa');
+    } else if (!hasBehaviorHistory || behavior === 'sin_historial') {
+      label = 'NUEVO'; tone = 'slate';
+      reasons.push('Historial financiero insuficiente para clasificar su comportamiento');
+      reasons.push('Aún no hay pagos suficientes para asignar una categoría de comportamiento');
+    } else if (punctual > 0 && late === 0) {
       label = 'ESTABLE'; tone = 'green';
       reasons.push('Pagos registrados mayormente puntuales');
       reasons.push('Sin deuda vencida actual');
-      if (Number(h.completed || 0) > 0) reasons.push('Tiene créditos finalizados');
+      if (completed > 0) reasons.push('Tiene créditos finalizados');
     } else {
-      if (Number(h.late || 0) > 0 || h.behavior === 'irregular') reasons.push('El historial incluye atrasos');
-      else reasons.push('Historial financiero todavía limitado o en proceso');
-      if (summary.overdueDebt <= 0.001) reasons.push('Sin deuda vencida actual');
+      label = 'REGULAR'; tone = 'amber';
+      if (late > 0 || behavior === 'irregular') reasons.push('El historial incluye atrasos o comportamiento irregular');
+      else reasons.push('El historial financiero está todavía en evaluación');
+      reasons.push('Sin deuda vencida activa');
     }
     return { label:label, tone:tone, reasons:reasons, summary:summary };
   }
@@ -266,7 +283,8 @@
   }
 
   function labNavRow(icon, tone, title, subtitle, action) {
-    return '<button type="button" class="lab-v2-row lab-v2-nav-card lab-v2-tone-' + labEsc(tone) + '" onclick="' + action + '">' +
+    var behaviorClass = title === 'COMPORTAMIENTO' ? ' lab-v2-behavior-nav' : '';
+    return '<button type="button" class="lab-v2-row lab-v2-nav-card lab-v2-tone-' + labEsc(tone) + behaviorClass + '" onclick="' + action + '">' +
       '<span class="lab-v2-row-main"><span class="lab-v2-module-icon" aria-hidden="true">' + labEsc(icon) + '</span>' +
       '<span class="lab-v2-row-copy"><strong>' + labEsc(title) + '</strong><small>' + labEsc(subtitle) + '</small></span></span><b>›</b></button>';
   }

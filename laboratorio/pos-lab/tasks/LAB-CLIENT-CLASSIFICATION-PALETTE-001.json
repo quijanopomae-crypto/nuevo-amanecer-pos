@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-CLASSIFICATION-PALETTE-001",
+  "environment": "LABORATORIO",
+  "base_ref": "46816e235d2d50d1eeb9e08a954105f0bb71fabb",
+  "objective": "Unificar la clasificación visual del cliente a cuatro estados permitidos: ESTABLE verde, REGULAR amarillo, PELIGRO rojo y NUEVO/SIN REQUISITOS gris. Reutilizar exclusivamente los datos de _naEvaluateClientCredit y deuda vencida ya existentes; no crear puntaje ni alterar línea de crédito, ledger, pagos, persistencia o CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-CLASSIFICATION-PALETTE-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-CLASSIFICATION-PALETTE-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+    "tests/laboratorio-client-classification-palette.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-CLASSIFICATION-PALETTE-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
