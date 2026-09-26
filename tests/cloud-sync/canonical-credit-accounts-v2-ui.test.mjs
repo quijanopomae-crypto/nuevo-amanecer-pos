@@ -191,3 +191,17 @@ test('native Clientes renderer owns the visible list and keeps legacy panels out
   assert.match(css,/na-client-refresh-out/);
   assert.match(css,/prefers-reduced-motion:reduce/);
 });
+
+
+test('client refresh motion matches the approved LAB contract',()=>{
+  assert.ok(source.includes("}, 850);"),'CANON must keep the approved 850ms coordinated refresh');
+  assert.ok(!source.includes("}, 180);"),'the simplified 180ms refresh must not return');
+  assert.ok(css.includes('opacity 1300ms cubic-bezier(.22,1,.36,1)'));
+  assert.ok(css.includes('transform 1400ms cubic-bezier(.22,1,.36,1)'));
+  assert.ok(css.includes('opacity:.82'));
+  assert.ok(css.includes('translateY(-6px) scale(.998)'));
+  assert.ok(css.includes('translateY(7px) scale(.998)'));
+  assert.ok(css.includes('transition-duration:900ms,950ms'));
+  assert.ok(css.includes('#pageClientes .stats-strip'));
+  assert.ok(css.includes('prefers-reduced-motion:reduce'));
+});
