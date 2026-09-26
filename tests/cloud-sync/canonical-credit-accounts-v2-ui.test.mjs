@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const source=readFileSync(new URL('../POS/js/modules/client-credit-accounts-v2.js',import.meta.url),'utf8');
-const css=readFileSync(new URL('../POS/css/client-credit-accounts-v2.css',import.meta.url),'utf8');
-const html=readFileSync(new URL('../POS/index.html',import.meta.url),'utf8');
-const integration=readFileSync(new URL('../POS/js/sync/canonical-sale-integration.js',import.meta.url),'utf8');
-const intent=readFileSync(new URL('../POS/js/sync/canonical-sale-intent.js',import.meta.url),'utf8');
+const source=readFileSync(new URL('../../POS/js/modules/client-credit-accounts-v2.js',import.meta.url),'utf8');
+const css=readFileSync(new URL('../../POS/css/client-credit-accounts-v2.css',import.meta.url),'utf8');
+const html=readFileSync(new URL('../../POS/index.html',import.meta.url),'utf8');
+const integration=readFileSync(new URL('../../POS/js/sync/canonical-sale-integration.js',import.meta.url),'utf8');
+const intent=readFileSync(new URL('../../POS/js/sync/canonical-sale-intent.js',import.meta.url),'utf8');
 
 function context() {
   const dueMap=new Map([['2026-09-20',-6],['2026-09-26',0],['2026-10-01',5],['2026-11-01',36]]);
