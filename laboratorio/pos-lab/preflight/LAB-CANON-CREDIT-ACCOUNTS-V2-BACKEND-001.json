@@ -1,0 +1,89 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CANON-CREDIT-ACCOUNTS-V2-BACKEND-001",
+  "base_ref": "ccc98971fbd0a0b33cb28cb8d296d45c9b606378",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "LAB approved V2 code/tests",
+      "tools/cloudflare-lab migrations 0008/0009/0011",
+      "a6-commerce.js",
+      "a6-canonical.js",
+      "worker.js"
+    ],
+    "WRITES": [
+      "Additive sidecar D1 schema",
+      "CANON credit account command/read support",
+      "sale metadata persistence",
+      "cloud-sync tests"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Optional credit account metadata",
+      "Optional installment schedule metadata"
+    ],
+    "STORAGE_AFFECTED": [
+      "Local CI D1 schema only during tests; repository migration file added; no remote D1 execution"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No second payment ledger",
+      "live_credits and canonical_credit_balances remain financial authority",
+      "payments/FIFO/Caja untouched",
+      "legacy credits remain valid without V2 metadata"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Shared Cloudflare worker serves CANON read/write contracts; POS-LAB runtime UI remains untouched"
+    ],
+    "RISKS": [
+      "Sidecar identity mismatch",
+      "invalid schedule totals",
+      "accidental destructive migration"
+    ],
+    "ROLLBACK": [
+      "Revert promotion branch/PR; additive sidecar tables can remain unused without altering existing ledgers"
+    ],
+    "TESTS": [
+      "Worker dry-run",
+      "cloud-sync tests",
+      "apply all migrations to isolated local D1",
+      "legacy compatibility",
+      "idempotency and immutability assertions"
+    ]
+  }
+}

@@ -3,7 +3,7 @@
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
 import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
 import { handleA6, isA6Path, canonicalRuntimeDenied } from './a6-canonical.js';
-import { createCanonicalSale, CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
+import { createCanonicalSale, createCanonicalCreditAccount, CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
 import { createCanonicalFinancial, FINANCIAL_COMMANDS } from './a6-financial.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 

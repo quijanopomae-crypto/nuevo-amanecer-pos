@@ -1,0 +1,39 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CANON-CREDIT-ACCOUNTS-V2-BACKEND-001",
+  "environment": "LABORATORIO",
+  "base_ref": "ccc98971fbd0a0b33cb28cb8d296d45c9b606378",
+  "objective": "Dar soporte backend compartido a la promoción CANON de Cuentas y Créditos V2 mediante cambios aditivos en tools/cloudflare-lab, sin modificar POS-LAB ni datos remotos durante la tarea.",
+  "allowed_files": [
+    "tools/cloudflare-lab/migrations/0012_credit_accounts_v2.sql",
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tools/cloudflare-lab/src/a6-canonical.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "laboratorio/pos-lab/tasks/LAB-CANON-CREDIT-ACCOUNTS-V2-BACKEND-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CANON-CREDIT-ACCOUNTS-V2-BACKEND-001.json",
+    "tests/cloud-sync/canonical-credit-accounts-v2.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/**",
+    "POS/**",
+    "infra/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CANON-CREDIT-ACCOUNTS-V2-BACKEND-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
