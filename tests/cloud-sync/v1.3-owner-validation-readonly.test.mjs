@@ -46,3 +46,10 @@ test('ACTIVE canonical reads follow authority read_only semantics',()=>{
   assert.ok(script.includes("page.read_only !== (page.mode !== 'ACTIVE')"));
   assert.ok(!script.includes("page.read_only !== true"));
 });
+
+
+test('public credit identity uses provenance plus credit_id',()=>{
+  assert.ok(script.includes("String(row.provenance || 'IMPORT') + ':' + String(row.credit_id || '')"));
+  assert.ok(script.includes("duplicate credit identities"));
+  assert.ok(!script.includes("duplicate credit read keys"));
+});

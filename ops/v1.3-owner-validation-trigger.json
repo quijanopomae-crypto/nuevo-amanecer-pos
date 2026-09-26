@@ -3,9 +3,9 @@
   "authorized": true,
   "authorized_by": "owner",
   "requested_action": "validate-production-canon-readonly",
-  "target_head": "d9897fc017ac5cc2250f274dd34756ec026cef48",
-  "requested_at_utc": "2026-09-26T22:57:00Z",
+  "target_head": "aaec95d5cc90a09b2ebdb425dd9f257166b594be",
+  "requested_at_utc": "2026-09-26T23:02:00Z",
   "note": "Validate real CANON customers/products/credits/payments/credit-accounts with a temporary session, no business writes, and prove business counts are unchanged.",
-  "retry_attempt": 3,
-  "retry_reason": "Retry readonly owner validation after aligning read_only metadata semantics with canonicalRead: ACTIVE mode reports read_only=false even on GET-only read routes."
+  "retry_attempt": 4,
+  "retry_reason": "Retry readonly owner validation after using public credit identity (provenance + credit_id); read_key is intentionally stripped by canonicalRead before returning items."
 }
