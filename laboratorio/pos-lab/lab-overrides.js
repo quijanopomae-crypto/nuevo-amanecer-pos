@@ -41,6 +41,10 @@
     });
   }
 
+  function labClientDisplayName(client) {
+    return String(client && client.nombre || 'Cliente').toUpperCase();
+  }
+
   function labMoney(value) {
     if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) return '—';
     if (typeof fmt === 'function') return fmt(Number(value));
@@ -486,7 +490,7 @@
       labBackButton('Clientes') +
       '<header class="lab-v2-client-head lab-v2-tone-' + c.tone + '">' +
         '<div class="lab-v2-client-identity"><span class="lab-v2-eyebrow">Ficha financiera</span>' +
-          '<div class="lab-v2-name-line"><h2>' + labEsc(client.nombre || 'Cliente') + '</h2>' +
+          '<div class="lab-v2-name-line"><h2>' + labEsc(labClientDisplayName(client)) + '</h2>' +
           '<button type="button" class="lab-v2-risk lab-v2-risk-' + c.tone + '" onclick="naLabOpenClientBehavior()">● ' + labEsc(c.label) + '</button></div>' +
           '<p>' + (client.dni ? 'DNI ' + labEsc(client.dni) : 'Sin DNI') + (client.tel ? ' · ' + labEsc(client.tel) : '') + '</p>' +
         '</div>' +
@@ -530,7 +534,7 @@
     var detail = category.mode === 'accumulated'
       ? summary.purchaseCount + (summary.purchaseCount === 1 ? ' compra' : ' compras')
       : summary.activeCount + (summary.activeCount === 1 ? ' crédito activo' : ' créditos activos');
-    return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
+    return '<div class="lab-v2-screen">' + labBackButton(labClientDisplayName(client)) +
       '<header class="lab-v2-subhead lab-v2-category-head lab-v2-tone-' + visual.tone + '">' +
         '<div class="lab-v2-category-title"><span class="lab-v2-module-icon" aria-hidden="true">' + labEsc(visual.icon) + '</span><div><span class="lab-v2-eyebrow">Cuenta</span><h2>' + labEsc(category.name) + '</h2><small>' + labEsc(detail) + '</small></div></div>' +
         '<div class="lab-v2-category-balance"><span>Pendiente total</span><strong>' + labMoney(summary.pending) + '</strong></div>' +
@@ -666,7 +670,7 @@
 
   function labGeneralHistoryHtml(client) {
     var groups = labPaymentGroups(client);
-    return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
+    return '<div class="lab-v2-screen">' + labBackButton(labClientDisplayName(client)) +
       '<header class="lab-v2-subhead"><h2>HISTORIAL DE PAGOS</h2></header>' +
       (groups.length ? groups.map(function (group) {
         var content = group.category.mode === 'accumulated'
@@ -682,7 +686,7 @@
 
   function labCanceledHtml(client) {
     var summary = labClientFinancialSummary(client);
-    return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
+    return '<div class="lab-v2-screen">' + labBackButton(labClientDisplayName(client)) +
       '<header class="lab-v2-subhead lab-v2-simple-hero lab-v2-tone-green"><span class="lab-v2-eyebrow">Histórico</span><h2>CRÉDITOS CANCELADOS</h2><small>' + summary.closed.length + ' créditos finalizados</small></header>' +
       '<section class="lab-v2-list lab-v2-card-list">' + (summary.closed.length ? summary.closed.map(function (cr) {
         var ins = labInstallmentSummary(cr);
@@ -697,7 +701,7 @@
     var assigned = Number.isFinite(Number(e.assignedLine)) ? Number(e.assignedLine) : null;
     var automatic = Number.isFinite(Number(e.automaticLine)) ? Number(e.automaticLine) : null;
     var available = Number.isFinite(Number(e.available)) ? Number(e.available) : null;
-    return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
+    return '<div class="lab-v2-screen">' + labBackButton(labClientDisplayName(client)) +
       '<header class="lab-v2-line-hero"><span class="lab-v2-eyebrow">Línea de crédito</span><strong>' + labMoney(assigned) + '</strong>' +
         '<small>' + (e.manualActive ? 'Línea manual vigente' : 'Línea calculada por la evaluación actual') + '</small></header>' +
       '<section class="lab-v2-metrics lab-v2-financial-metrics">' +
@@ -712,7 +716,7 @@
   function labBehaviorHtml(client) {
     var c = labClassifyClient(client), summary = c.summary, e = summary.evaluation || {}, h = e.history || {};
     var assigned = Number.isFinite(Number(e.assignedLine)) ? Number(e.assignedLine) : null;
-    return '<div class="lab-v2-screen">' + labBackButton(client.nombre || 'Cliente') +
+    return '<div class="lab-v2-screen">' + labBackButton(labClientDisplayName(client)) +
       '<header class="lab-v2-behavior-hero lab-v2-tone-' + c.tone + '">' +
         '<div><span class="lab-v2-eyebrow">Comportamiento financiero</span><h2>' + labEsc(c.label) + '</h2><p>Lectura basada en el historial financiero disponible.</p></div>' +
         '<span class="lab-v2-risk lab-v2-risk-' + c.tone + '">● ' + labEsc(c.label) + '</span></header>' +
