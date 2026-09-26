@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENT-FINANCIAL-CARD-SKY-HERO-002",
+  "environment": "LABORATORIO",
+  "base_ref": "a468dd168c2674088ff5c0768f96384e8b2f110c",
+  "objective": "Acercar visualmente la tarjeta principal de la ficha financiera a la referencia aprobada: cielo menta/celeste claramente visible, nubes blancas grandes y reconocibles, profundidad por capas, brillo suave y animación continua perceptible. Mantener estructura, contenido y toda la lógica financiera sin cambios.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENT-FINANCIAL-CARD-SKY-HERO-002.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-CARD-SKY-HERO-002.json",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-client-financial-card-cloud-motion.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-ui-edit",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENT-FINANCIAL-CARD-SKY-HERO-002.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
