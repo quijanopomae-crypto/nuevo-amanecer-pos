@@ -1,0 +1,59 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-CREDIT-ACCOUNTS-V2-PROD-DEPLOY-001",
+  "base_ref": "47f68af823fc8b6cff8efbea0baebc91e6bb6eaa",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "production_migration_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Extender el cutover production gate para ensayar, verificar y aplicar de forma condicional la migración aditiva 0012 de Client Credit Accounts V2 antes de desplegar el Worker CANON actualizado.",
+    "READS": [
+      "v1.3-prod-cutover.yml",
+      "cutover-prepare.mjs",
+      "0012_credit_accounts_v2.sql",
+      "V1.3 production status",
+      "production cutover tests"
+    ],
+    "WRITES": [
+      "Workflow rehearsal/apply logic for 0012",
+      "Schema readiness verification for V2 sidecars",
+      "Regression test updates"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Production D1 schema only after backup + rehearsal + recheck"
+    ],
+    "STORAGE_AFFECTED": [
+      "Additive tables canonical_credit_accounts/canonical_credit_metadata/canonical_credit_installments"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No ledger rewrite",
+      "No sale/payment/cash mutation",
+      "first_live_operation_id remains null",
+      "Production traffic remains zero during preparation"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Production Worker requires V2 sidecar schema before deploy",
+      "Hosted POS deploy follows backend readiness"
+    ],
+    "RISKS": [
+      "Deploying Worker before 0012",
+      "Schema drift between rehearsal and production"
+    ],
+    "ROLLBACK": [
+      "Cutover workflow stores a fresh pre-mutation production backup in private R2.",
+      "If schema application fails, Worker deploy does not run.",
+      "Sidecar tables are additive and do not rewrite financial history."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "production cutover tests",
+      "backup",
+      "rehearsal D1",
+      "production recheck",
+      "schema verify",
+      "Worker health/boundary probe"
+    ]
+  }
+}
