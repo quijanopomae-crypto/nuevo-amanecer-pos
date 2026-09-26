@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CLIENTES-LOADING-SUNRISE-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "2654544f01918f62dabf457463be3254e038f13a",
+  "objective": "Corregir exclusivamente la marca visual del loader de Clientes: sustituir icon-192.png (que muestra 'NA') por el mismo símbolo de amanecer 🌅 de la cabecera, dentro de un cuadro turquesa, conservando un único loader y el aro animado. Sin cambios de lógica, datos, workspace, storage o CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CLIENTES-LOADING-SUNRISE-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-CLIENTES-LOADING-SUNRISE-FIX-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/pages/clientes.css",
+    "tests/laboratorio-clientes-loading-logo.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "laboratorio/pos-lab/sections/**",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CLIENTES-LOADING-SUNRISE-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
