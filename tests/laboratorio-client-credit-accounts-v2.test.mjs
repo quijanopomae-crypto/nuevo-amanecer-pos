@@ -320,3 +320,23 @@ test('26 small-credit purchase detail renders complete installment schedule inst
   assert.match(block,/installments\.plan\.length > 1/);
   assert.doesNotMatch(block,/slice\(0,\s*6\)/);
 });
+
+
+test('27 single-item installment purchase removes duplicated total from the product row',()=>{
+  const block=source.slice(source.indexOf('function labPurchaseHtml'),source.indexOf('function labPendingInstallmentsHtml'));
+  assert.match(block,/isSingleInstallmentItem = hasInstallmentSchedule && items\.length === 1/);
+  assert.match(block,/lineAmount = isSingleInstallmentItem \? '' : '<b>' \+ labMoney\(total\) \+ '<\\\/b>'/);
+  assert.match(block,/lab-v2-total/);
+});
+
+test('28 installment purchase summary keeps plan context without repeating monetary amounts',()=>{
+  const cleanBlock=source.slice(source.indexOf('function labCleanInstallmentProductName'),source.indexOf('function labPurchaseHtml'));
+  assert.match(cleanBlock,/cuotas\?\\s\+mensuales\?/);
+  assert.match(cleanBlock,/parts = \[installments\.plan\.length \+ ' cuotas mensuales'\]/);
+  assert.match(cleanBlock,/vence cada día/);
+  assert.match(cleanBlock,/desde /);
+  assert.doesNotMatch(cleanBlock,/labMoney\(/);
+
+  const scheduleBlock=source.slice(source.indexOf('function labPendingInstallmentsHtml'),source.indexOf('function labCreditInfoHtml'));
+  assert.match(scheduleBlock,/labMoney\(item\.amount\)/);
+});
