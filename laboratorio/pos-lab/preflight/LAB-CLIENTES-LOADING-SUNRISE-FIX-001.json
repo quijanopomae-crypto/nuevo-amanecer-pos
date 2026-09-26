@@ -1,0 +1,89 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CLIENTES-LOADING-SUNRISE-FIX-001",
+  "base_ref": "2654544f01918f62dabf457463be3254e038f13a",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Alinear el símbolo del loader con la cabecera aprobada.",
+    "READS": [
+      "loader publicado real",
+      "g-logo-icon = 🌅",
+      "lab-overrides.js",
+      "clientes.css"
+    ],
+    "WRITES": [
+      "loader mark DOM/CSS",
+      "test del loader"
+    ],
+    "DOM_AFFECTED": [
+      "#naLabClientLoading .lab-client-loading-logo"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Carga, lista, D1 y negocio intactos",
+      "un solo mark en loader",
+      "aro/reduced-motion intactos",
+      "CANON intacto"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None"
+    ],
+    "RISKS": [
+      "Emoji puede variar ligeramente por SO; el contenedor turquesa fija identidad visual."
+    ],
+    "ROLLBACK": [
+      "Revertir este PR LAB."
+    ],
+    "TESTS": [
+      "preflight temporal",
+      "sin icon-192 en loader",
+      "un único sunrise mark",
+      "suite LAB",
+      "Pages",
+      "validación publicada"
+    ]
+  }
+}

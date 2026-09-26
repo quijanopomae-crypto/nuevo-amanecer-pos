@@ -1069,13 +1069,10 @@
       ring.className = 'lab-client-loading-ring';
       ring.setAttribute('aria-hidden', 'true');
 
-      var logo = document.createElement('img');
+      var logo = document.createElement('span');
       logo.className = 'lab-client-loading-logo';
-      logo.src = 'assets/icons/icon-192.png';
-      logo.alt = '';
-      logo.width = 64;
-      logo.height = 64;
-      logo.decoding = 'async';
+      logo.setAttribute('aria-hidden', 'true');
+      logo.textContent = '🌅';
 
       var title = document.createElement('strong');
       title.className = 'lab-client-loading-title';
