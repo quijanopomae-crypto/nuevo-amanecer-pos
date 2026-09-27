@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-MOBILE-MENU-NAV-001",
+  "environment": "CANON",
+  "base_ref": "6347e8a9419380b6c7a7918748560b08d03d75b8",
+  "objective": "Hacer que toda la tarjeta de los 7 módulos del menú CANON responda de forma confiable al toque en móvil/PWA, sin cambiar negocio ni datos.",
+  "owner_authorization": "El propietario mostró el fallo en el CANON publicado y pidió que Punto de Venta, Inventario, Ventas, Clientes, Caja, Gastos y Configuración funcionen al tocar el logo/tarjeta.",
+  "allowed_files": [
+    "docs/CANON_MOBILE_MENU_NAVIGATION_FIX.md",
+    "tasks/CANON-MOBILE-MENU-NAV-001.json",
+    "evidence/canon-preflight/CANON-MOBILE-MENU-NAV-001.json",
+    "POS/js/navigation/menu-navigation.js",
+    "POS/index.html",
+    "POS/sw.js",
+    "tests/product-fixes/canon-mobile-menu-navigation.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "POS/js/sync/**",
+    "POS/js/adapters/**",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No cambiar ventas, stock, caja, créditos, gastos, sync, outbox ni autoridad CANON.",
+    "No cambiar las 7 rutas de destino existentes.",
+    "No modificar el HTML de las tarjetas, preservando la paridad LAB→CANON.",
+    "Un gesto de scroll no debe abrir un módulo.",
+    "Un toque debe producir como máximo una llamada a goPage."
+  ],
+  "rollback": "Revertir el PR completo.",
+  "test_plan": [
+    "node --test tests/product-fixes/canon-mobile-menu-navigation.test.mjs",
+    "node --test tests/product-fixes/canon-navigation-performance.test.mjs",
+    "node tools/pos-experience/promote-lab-visuals.mjs --check",
+    "CANON Critical CI"
+  ]
+}
