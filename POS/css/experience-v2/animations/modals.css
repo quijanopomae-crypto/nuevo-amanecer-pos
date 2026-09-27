@@ -1,0 +1,45 @@
+/* Motion LAB para modales. */
+.lab-modal-enter {
+  animation:lab-fade-in var(--lab-motion-fast) var(--lab-ease-standard) both;
+}
+
+/* Datos POS-LAB: movimiento, opacidad y backdrop comparten el mismo progreso
+   del gesto. La fase settling continúa desde ese frame, nunca desde cero. */
+#naLabWorkspaceOverlay {
+  --lab-workspace-drag-y:0px;
+  --lab-workspace-panel-opacity:1;
+  --lab-workspace-backdrop-alpha:.62;
+  --lab-workspace-settle-duration:var(--lab-motion-modal-settle-duration);
+  --lab-workspace-settle-ease:var(--lab-motion-ease-settle);
+  background-color:rgba(15,23,42,var(--lab-workspace-backdrop-alpha)) !important;
+  overscroll-behavior:contain;
+}
+
+#naLabWorkspaceOverlay > div {
+  transform:translate3d(0,var(--lab-workspace-drag-y),0);
+  opacity:var(--lab-workspace-panel-opacity);
+}
+
+#naLabWorkspaceOverlay.lab-workspace-dragging > div,
+#naLabWorkspaceOverlay[data-lab-motion-state="dragging"] > div {
+  will-change:transform,opacity;
+}
+
+#naLabWorkspaceOverlay.lab-workspace-settling {
+  transition:
+    background-color var(--lab-workspace-settle-duration) var(--lab-workspace-settle-ease);
+}
+
+#naLabWorkspaceOverlay.lab-workspace-settling > div {
+  transition:
+    transform var(--lab-workspace-settle-duration) var(--lab-workspace-settle-ease),
+    opacity var(--lab-workspace-settle-duration) var(--lab-workspace-settle-ease);
+  will-change:transform,opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #naLabWorkspaceOverlay.lab-workspace-settling,
+  #naLabWorkspaceOverlay.lab-workspace-settling > div {
+    transition-duration:.01ms !important;
+  }
+}
