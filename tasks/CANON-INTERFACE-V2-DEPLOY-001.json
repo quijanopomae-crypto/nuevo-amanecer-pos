@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-INTERFACE-V2-DEPLOY-001",
+  "environment": "CANON",
+  "base_ref": "20b37dabf04ca6736f6a8689d1e31a83f9338efd",
+  "objective": "Publicar en el Worker web CANON la interfaz V2 promovida desde LAB y ya verificada por CANON Critical CI.",
+  "owner_authorization": "El propietario reportó que el Worker público seguía mostrando la interfaz antigua y pidió corregirla.",
+  "allowed_files": [
+    "tasks/CANON-INTERFACE-V2-DEPLOY-001.json",
+    "evidence/canon-preflight/CANON-INTERFACE-V2-DEPLOY-001.json",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "invariants": [
+    "Solo se publica el shell estático ya validado.",
+    "No se modifica backend ni D1.",
+    "No se ejecutan ventas ni movimientos reales.",
+    "Activación, sesión y autoridad CANON permanecen intactas."
+  ],
+  "rollback": "Redeploy del build anterior; no hay cambios de datos."
+}
