@@ -1,0 +1,57 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-ROOT-PROMOTION-DEPLOY-001",
+  "base_ref": "eea3d328dd4ff0fd272663e3495611cf0847c812",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "root_fix": {
+      "pr": 132,
+      "commit": "eea3d328dd4ff0fd272663e3495611cf0847c812",
+      "pr_ci": "CANON Critical CI run 104 PASS",
+      "post_merge_ci": "CANON Critical CI run 105 PASS"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el shell web con el adapter CANON->UI, lifecycle desacoplado y promoción Motion validada.",
+    "READS": [
+      "PR #132",
+      "CANON Critical CI #104",
+      "CANON Critical CI #105",
+      ".github/workflows/v1.3-pos-web-deploy.yml",
+      "ops/v1.3-pos-web-deploy-trigger.json"
+    ],
+    "WRITES": [
+      "Actualizar únicamente el trigger protegido para desplegar el HEAD integrado."
+    ],
+    "DOM_AFFECTED": [
+      "Worker público /app"
+    ],
+    "STATE_AFFECTED": [
+      "Versión publicada del shell estático"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin backend/D1/R2.",
+      "Sin operaciones comerciales reales.",
+      "Activación y autoridad CANON sin cambios."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Solo publicación del build ya validado."
+    ],
+    "RISKS": [
+      "El service worker anterior puede requerir cierre/reapertura de pestañas para tomar el nuevo build."
+    ],
+    "ROLLBACK": [
+      "Redeploy del shell anterior."
+    ],
+    "TEST_PLAN": [
+      "Hosted POS safety tests.",
+      "Static Worker dry-run.",
+      "Deploy.",
+      "Verify public launcher and POS assets.",
+      "Comprobar directamente el adapter y service-worker publicados."
+    ]
+  }
+}
