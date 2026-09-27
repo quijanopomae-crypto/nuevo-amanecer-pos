@@ -1,0 +1,54 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-MOBILE-MENU-NAV-001",
+  "base_ref": "6347e8a9419380b6c7a7918748560b08d03d75b8",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura del propietario muestra el CANON móvil con las tarjetas del menú visibles pero sin entrada al tocar los íconos/tarjetas.",
+    "POS/index.html contiene 7 module-card con onclick=goPage(...).",
+    "POS/js/legacy-inline/inline-02.js define goPage(id), activa la página objetivo antes de programar el render pesado y soporta los 7 destinos.",
+    "No existe un controlador externo/delegado para las tarjetas del menú.",
+    "El Worker hosted no agrega una Content-Security-Policy que explique por sí sola el bloqueo; el problema queda acotado al mecanismo de activación de las tarjetas / shell móvil."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Añadir una ruta de activación externa y robusta para touch, mouse y teclado en las tarjetas del menú.",
+    "READS": [
+      "README.md",
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".opencode/agents/pos-canon-implementer.md",
+      "POS/index.html",
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/css/base.css",
+      "tools/cloudflare-pos-web/src/worker.js",
+      "tests/product-fixes/canon-navigation-performance.test.mjs"
+    ],
+    "WRITES": [
+      "Crear POS/js/navigation/menu-navigation.js.",
+      "Cargar el script CANON después del core legacy y antes de Motion.",
+      "Precachear el script en POS/sw.js.",
+      "Añadir una prueba de regresión focal."
+    ],
+    "DOM_AFFECTED": ["#pageMenu .module-card (atributos runtime role/tabindex/data-page únicamente)"],
+    "STATE_AFFECTED": ["Página activa mediante la función goPage existente."],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "La nueva capa no escribe storage ni red.",
+      "No crea una segunda función de navegación comercial; delega en goPage existente.",
+      "Solo acepta pagePOS, pageInventario, pageVentas, pageClientes, pageCaja, pageGastos y pageConfig."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Entrada a los 7 módulos desde el menú.",
+      "Sin cambios internos dentro de cada módulo."
+    ],
+    "RISKS": [
+      "Doble navegación por pointerup + click sintético: se suprime el click posterior al touch.",
+      "Entrada accidental durante scroll: se exige desplazamiento <= 12 px para touch/pen."
+    ],
+    "ROLLBACK": ["Revertir el PR; no hay efectos de datos."]
+  }
+}
