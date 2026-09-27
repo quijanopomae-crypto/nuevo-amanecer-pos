@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy Client motion lifecycle fix: explicit exit → DOM swap → entry → double RAF → settle, with stale callback cancellation.",
-  "retry_attempt": 8,
-  "retry_reason": "Publish PR #116 motion lifecycle runtime correction after CANON Critical CI success.",
-  "requested_at_utc": "2026-09-27T00:31:00Z",
-  "target_head": "92d1ec3e8427b6e591f2ba671a6b08967658e825"
+  "note": "Deploy Client financial workspace swipe: touch drag/settle/dismiss and directional subview transitions without abrupt hidden.",
+  "retry_attempt": 9,
+  "retry_reason": "Publish PR #118 financial workspace swipe/subview motion after CANON Critical CI success.",
+  "requested_at_utc": "2026-09-27T00:58:00Z",
+  "target_head": "688582a32ae644bcf7c3c923cfcc24203715e45a"
 }
