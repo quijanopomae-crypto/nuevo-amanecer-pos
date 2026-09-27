@@ -83,7 +83,7 @@ jobs:
           node --test tests/security-secret-separation.test.mjs
           node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
           node --test tests/laboratorio-skill-preflight.test.mjs tests/laboratorio-scope-guard.test.mjs
-          node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs
+          node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs tests/laboratorio-pages-current-head.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
 

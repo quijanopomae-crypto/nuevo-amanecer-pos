@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-PAGES-CURRENT-HEAD-002",
+  "environment": "LABORATORIO",
+  "base_ref": "beede554a246d4c5a8b635e4d758b5d2de3e2746",
+  "objective": "Garantizar que GitHub Pages publique POS-LAB con POS/** del mismo HEAD, que falle si falta cualquier asset local referenciado y que verifique públicamente el SHA desplegado.",
+  "allowed_files": [
+    ".github/workflows/lab-pages.yml",
+    ".github/workflows/lab-cloud-ci.yml",
+    "laboratorio/pos-lab/verify-pages-site.mjs",
+    "laboratorio/pos-lab/tasks/LAB-PAGES-CURRENT-HEAD-002.json",
+    "laboratorio/pos-lab/preflight/LAB-PAGES-CURRENT-HEAD-002.json",
+    "tests/laboratorio-pages-current-head.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-PAGES-CURRENT-HEAD-002.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
