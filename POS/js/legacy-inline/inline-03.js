@@ -711,7 +711,7 @@ window.addEventListener('na:canonical-updated',()=>{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     productos=canonical.products;clientes=canonical.customers;creditos=canonical.credits;_naCanonicalLoadError=null;
     posRender();posUpdateCart(false);invRender();cfgUpdateStats();updateDashboard();cliRender();
-    if(status)status.textContent=state.validation==='offline'?'Cache canónico · sin conexión':state.validation==='stale'?'Cache canónico · reintentar actualización':state.validation==='validating'?'Cache canónico · validando':'Autoridad canónica validada';
+    if(status)status.textContent=state.validation==='offline'?(state.source==='cache'?'Cache CANON · sin conexión':'CANON · sin conexión'):state.validation==='stale'?(state.source==='cache'?'Cache CANON · reintentar':'CANON · reintentar'):state.validation==='validating'?(state.source==='cache'?'Cache CANON · validando':'CANON · validando'):'CANON validado';
     if(saveStatus)saveStatus.textContent='Persistencia canónica protegida';
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(canonical.customers.length)+' clientes';}
   }catch(error){
