@@ -21,7 +21,7 @@ test('LAB Pages stays LAB-scoped while following successful CANON CI head SHA',(
 test('LAB Pages pipeline validates and stamps the exact static artifact before upload',()=>{
   assert.match(workflow,/verify-pages-site\.mjs/);
   assert.match(workflow,/--site _site/);
-  assert.match(workflow,/--build "\$GITHUB_SHA"/);
+  assert.match(workflow,/--build "\$LAB_BUILD_SHA"/);
   assert.match(workflow,/--stamp/);
   assert.match(workflow,/na-lab-build/);
   assert.match(workflow,/POS\/js\/adapters\/canonical-ui-adapter\.js/);
