@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-OBSERVER-LOOP-001",
+  "environment": "CANON",
+  "base_ref": "85e3abf5269dbf304705d43f9fe74fee27e464a3",
+  "objective": "Eliminar el posible ciclo infinito DOM→MutationObserver→naEnhanceClientCards→DOM en Clientes V2 y coalescer refrescos del observer.",
+  "owner_authorization": "El owner reportó que todo el menú sigue sin responder en móvil y autorizó investigar/fijar la causa real.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-OBSERVER-LOOP-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-OBSERVER-LOOP-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tests/product-fixes/canon-client-observer-stability.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/sync/**",
+    "POS/js/adapters/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No cambiar reglas de negocio ni datos.",
+    "No cambiar navegación.",
+    "No cambiar contratos CANON.",
+    "El observer de Clientes no debe autoalimentarse ni programar múltiples RAF simultáneos."
+  ],
+  "rollback": "Revertir el PR."
+}
