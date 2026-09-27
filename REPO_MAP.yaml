@@ -36,6 +36,15 @@ zones:
       - laboratorio/pos-lab/styles/
       - laboratorio/pos-lab/animations/
       - laboratorio/pos-lab/js/
+  experience_promotion:
+    path: tools/pos-experience/
+    authority: build_time_promotion_tooling
+    source_visuals:
+      - laboratorio/pos-lab/styles/
+      - laboratorio/pos-lab/animations/
+    canon_mirror: POS/css/experience-v2/
+    runtime_dependency_on_lab: false
+    check_command: node tools/pos-experience/promote-lab-visuals.mjs --check
   cloudflare_lab:
     path: tools/cloudflare-lab/
     authority: isolated_lab_infrastructure
@@ -120,6 +129,7 @@ ci:
     actions_pinned_to_sha: true
     pages_pos_entrypoint: disabled
     manual_remote_workflows: do_not_dispatch_without_owner_operation
+    lab_canon_visual_parity_gate: true
 
 historical_or_gate_specific_docs:
   note: These documents are evidence or contracts for a specific gate; they do not override current status.
