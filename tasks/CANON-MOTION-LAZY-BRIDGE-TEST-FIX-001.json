@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-MOTION-LAZY-BRIDGE-TEST-FIX-001",
+  "environment": "CANON_TEST_ONLY",
+  "base_ref": "7b49162a4174b5e5448f4e643cc00a233a11b0bf",
+  "objective": "Corregir la aserción cross-realm del test lazy bridge que falla al ejecutarse por primera vez dentro de CANON Critical CI, sin modificar runtime Motion.",
+  "owner_authorization": "Derivado directamente de la autorización de corregir la infraestructura LAB→CANON y del fallo reproducido por el nuevo gate.",
+  "allowed_files": [
+    "tasks/CANON-MOTION-LAZY-BRIDGE-TEST-FIX-001.json",
+    "evidence/canon-preflight/CANON-MOTION-LAZY-BRIDGE-TEST-FIX-001.json",
+    "tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    ".github/workflows/**",
+    "tools/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No cambia el runtime Motion.",
+    "La expectativa funcional del test permanece idéntica.",
+    "Solo se normaliza el objeto emitido desde vm antes de compararlo."
+  ],
+  "rollback": "Revertir el cambio del test."
+}
