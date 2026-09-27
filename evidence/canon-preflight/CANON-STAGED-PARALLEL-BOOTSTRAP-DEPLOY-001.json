@@ -1,0 +1,24 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-STAGED-PARALLEL-BOOTSTRAP-DEPLOY-001",
+  "base_ref": "a7c4fd549cc40455b91c7c6c421cda0748ef4cfb",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "merged_fix": {"pr":129,"commit":"a7c4fd549cc40455b91c7c6c421cda0748ef4cfb","ci":"CANON Critical CI run 101 passed"}
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el shell web con bootstrap staged/paralelo y status móvil corregido.",
+    "READS": ["PR #129","workflow V1.3 Hosted POS Web Deploy","current deploy trigger"],
+    "WRITES": ["Actualizar solo el trigger de despliegue."],
+    "DOM_AFFECTED": ["Worker público /app"],
+    "STATE_AFFECTED": ["Versión publicada del shell"],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": ["Sin backend/D1/R2","Sin venta real","Activación intacta"],
+    "CROSS_MODULE_IMPACT": ["Publicación estática únicamente"],
+    "RISKS": ["Service worker puede requerir una recarga para tomar el nuevo build."],
+    "ROLLBACK": ["Redeploy del build anterior."],
+    "TEST_PLAN": ["Hosted deploy safety tests","Static Worker dry-run","Verify public launcher and assets"]
+  }
+}
