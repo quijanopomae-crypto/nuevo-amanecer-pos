@@ -74,6 +74,7 @@ const PRECACHE_URLS = [
   './js/motion/core.js',
   './js/motion/page-transitions.js',
   './js/motion/scroll-motion.js',
+  './js/motion/lab-parity-bridge.js',
   './js/motion/modal-motion.js',
   './js/motion/feedback-motion.js',
   './js/motion/cart-motion.js',
