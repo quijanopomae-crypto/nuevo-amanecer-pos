@@ -1,0 +1,56 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-NONBLOCKING-BOOTSTRAP-DEPLOY-001",
+  "base_ref": "c9b6788a6f09ad2d220d14ea2de6dc695efebc95",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "user_request": "El propietario pidió corregir la interfaz pública que quedaba pegada.",
+    "merged_fix": {
+      "pr": 127,
+      "commit": "c9b6788a6f09ad2d220d14ea2de6dc695efebc95",
+      "ci": "CANON Critical CI run 99 passed on the PR"
+    },
+    "deployment_contract": ".github/workflows/v1.3-pos-web-deploy.yml"
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el shell CANON con bootstrap no bloqueante y verificar el Worker público.",
+    "READS": [
+      "PR #127 merged commit c9b6788a6f09ad2d220d14ea2de6dc695efebc95",
+      ".github/workflows/v1.3-pos-web-deploy.yml",
+      "ops/v1.3-pos-web-deploy-trigger.json",
+      "docs/V1.3_STATUS.md"
+    ],
+    "WRITES": [
+      "Actualizar únicamente el trigger protegido de despliegue para apuntar al commit integrado."
+    ],
+    "DOM_AFFECTED": [
+      "Launcher público y /app estático"
+    ],
+    "STATE_AFFECTED": [
+      "Versión publicada del Worker web"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin D1/R2/backend writes.",
+      "Sin cambio de autoridad canónica.",
+      "Activación y primera venta real permanecen separadas."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Solo publicación del shell estático; backend comercial intacto."
+    ],
+    "RISKS": [
+      "Service Worker puede requerir recarga para tomar el nuevo build.",
+      "Un navegador sin sesión seguirá viendo la activación antes de /app."
+    ],
+    "ROLLBACK": [
+      "Redeploy del shell anterior."
+    ],
+    "TEST_PLAN": [
+      "CI del PR de deploy.",
+      "Workflow V1.3 Hosted POS Web Deploy tras merge.",
+      "Verificar root, /app, assets CANON y hash del service worker."
+    ]
+  }
+}
