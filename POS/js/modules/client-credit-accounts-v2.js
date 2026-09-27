@@ -72,6 +72,9 @@
   }
 
   function labClientCredits(clientId) {
+    if (typeof _naClientCreditsFast === 'function') {
+      try { return _naClientCreditsFast(clientId); } catch (_) {}
+    }
     return (Array.isArray(creditos) ? creditos : []).filter(function (cr) {
       return String(cr && (cr.cliId ?? cr.clienteId)) === String(clientId) && !cr.anulado && labCreditStatus(cr) !== 'anulado';
     });
@@ -1112,6 +1115,9 @@
   }
 
   function naClientDebt(client) {
+    if (typeof _naClientDebtFast === 'function') {
+      try { return Math.max(0, Number(_naClientDebtFast(client)) || 0); } catch (_) {}
+    }
     if (typeof deudaT === 'function') {
       try { return Math.max(0, Number(deudaT(client)) || 0); } catch (_) {}
     }
