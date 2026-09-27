@@ -30,3 +30,12 @@ test('linked mobile scroll neutralizes the legacy topbar/chrome hide while activ
 test('Motion remains visual-only and does not reference commerce persistence APIs',()=>{
   assert.doesNotMatch(scroll,/createSale|saveAllData|canonical-sale|openCash|closeCash|createPayment|fetch\s*\(/);
 });
+
+
+test('lazy parity bridge is the only runtime consumer of scroll presets',()=>{
+  const bridge=readFileSync('POS/js/motion/lab-parity-bridge.js','utf8');
+  assert.match(bridge,/motion\.scroll\.enablePreset\(preset\)/);
+  assert.match(bridge,/motion\.page\.enter\(page, 'lab-enter-fade'\)/);
+  assert.doesNotMatch(scroll,/Object\.keys\(motion\.scroll\.presets\)\.forEach/);
+  assert.doesNotMatch(bridge,/Object\.keys\(motion\.scroll\.presets\)\.forEach/);
+});
