@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish CANON cash command bridge from fe43aa4c87cd0fcf25fd8207132b5ee90fbe2e45; route open/close/manual cash adjustments through canonical commands.",
-  "retry_attempt": 22,
-  "retry_reason": "PR #150 merged; CANON Critical CI #124/#125 passed. Publish validated CANON cash command bridge.",
-  "requested_at_utc": "2026-09-27T20:20:00Z",
-  "target_head": "fe43aa4c87cd0fcf25fd8207132b5ee90fbe2e45"
+  "note": "Publish CANON mobile menu navigation fix from bccaa3d92f3e0c3ed1482c07793a05c7fa282c13; make all seven module cards reliably tappable on mobile/PWA.",
+  "retry_attempt": 23,
+  "retry_reason": "PR #155 merged and CANON Critical CI passed. Publish validated delegated touch/click/keyboard menu navigation.",
+  "requested_at_utc": "2026-09-27T22:05:00Z",
+  "target_head": "bccaa3d92f3e0c3ed1482c07793a05c7fa282c13"
 }
