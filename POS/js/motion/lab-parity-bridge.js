@@ -14,6 +14,7 @@
 
   var bound = typeof WeakSet === 'function' ? new WeakSet() : null;
   var activeState = typeof WeakMap === 'function' ? new WeakMap() : null;
+  var activationToken = typeof WeakMap === 'function' ? new WeakMap() : null;
   var observers = [];
 
   function wasActive(page) {
@@ -25,6 +26,28 @@
     else page.__naMotionParityActive = !!active;
   }
 
+  function nextToken(page) {
+    var token = {};
+    if (activationToken) activationToken.set(page, token);
+    else page.__naMotionParityToken = token;
+    return token;
+  }
+
+  function tokenIsCurrent(page, token) {
+    return activationToken
+      ? activationToken.get(page) === token
+      : page.__naMotionParityToken === token;
+  }
+
+  function afterPaint(callback) {
+    var raf = typeof root.requestAnimationFrame === 'function'
+      ? root.requestAnimationFrame.bind(root)
+      : function (cb) { return root.setTimeout(cb, 16); };
+    raf(function () {
+      raf(callback);
+    });
+  }
+
   function emit(page, preset) {
     try {
       root.dispatchEvent(new CustomEvent('na:motion-page-active', {
@@ -33,12 +56,9 @@
     } catch (_) {}
   }
 
-  function syncPage(page) {
-    if (!page || !page.classList) return;
-    var active = page.classList.contains('active');
-    var previous = wasActive(page);
-    remember(page, active);
-    if (!active || previous) return;
+  function startMotion(page, preset, token) {
+    if (!page || !page.classList || !page.classList.contains('active')) return;
+    if (!tokenIsCurrent(page, token)) return;
 
     try {
       if (motion.page && typeof motion.page.enter === 'function') {
@@ -46,7 +66,6 @@
       }
     } catch (_) {}
 
-    var preset = presetByPage[page.id] || null;
     if (preset) {
       try {
         var controller = motion.scroll && typeof motion.scroll.enablePreset === 'function'
@@ -57,6 +76,29 @@
     }
 
     emit(page, preset);
+  }
+
+  function scheduleMotion(page) {
+    var preset = presetByPage[page.id] || null;
+    var token = nextToken(page);
+    afterPaint(function () {
+      startMotion(page, preset, token);
+    });
+  }
+
+  function syncPage(page) {
+    if (!page || !page.classList) return;
+    var active = page.classList.contains('active');
+    var previous = wasActive(page);
+    remember(page, active);
+
+    if (!active) {
+      nextToken(page);
+      return;
+    }
+    if (previous) return;
+
+    scheduleMotion(page);
   }
 
   function bindPage(page) {

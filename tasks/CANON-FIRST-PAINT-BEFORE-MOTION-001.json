@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-FIRST-PAINT-BEFORE-MOTION-001",
+  "environment": "CANON",
+  "base_ref": "00a047907aef110c6d0f7ba2bc3b845c55412764",
+  "objective": "Garantizar que la navegación CANON pinte primero la página activa y difiera Motion/mediciones hasta después del primer paint, eliminando reflow forzado por offsetWidth.",
+  "owner_authorization": "El propietario confirmó en teléfono real que el parche de input no resolvió el congelamiento y pidió buscar otra alternativa sin seguir dando vueltas.",
+  "allowed_files": [
+    "tasks/CANON-FIRST-PAINT-BEFORE-MOTION-001.json",
+    "evidence/canon-preflight/CANON-FIRST-PAINT-BEFORE-MOTION-001.json",
+    "docs/CANON_FIRST_PAINT_BEFORE_MOTION.md",
+    "POS/js/motion/page-transitions.js",
+    "POS/js/motion/lab-parity-bridge.js",
+    "tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs",
+    "tests/product-fixes/canon-motion-bootstrap.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/**",
+    "POS/js/adapters/**",
+    "POS/js/modules/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No cambia goPage ni reglas de negocio.",
+    "No cambia persistencia ni autoridad CANON.",
+    "Motion sigue siendo visual-only.",
+    "La página debe quedar activa antes de cualquier trabajo Motion.",
+    "No se permite lectura síncrona de offsetWidth en page enter."
+  ],
+  "rollback": "Revertir el PR completo.",
+  "test_plan": [
+    "node --test tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs tests/product-fixes/canon-motion-bootstrap.test.mjs",
+    "node --test tests/product-fixes/canon-navigation-performance.test.mjs",
+    "CANON Critical CI"
+  ]
+}
