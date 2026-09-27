@@ -1,0 +1,312 @@
+(function (root) {
+  'use strict';
+
+  if (!root || !root.document) return;
+
+  var original = {
+    abrirModalApertura: root.abrirModalApertura,
+    abrirCaja: root.abrirCaja,
+    abrirMovCaja: root.abrirMovCaja,
+    guardarMovCaja: root.guardarMovCaja,
+    cerrarCaja: root.cerrarCaja
+  };
+
+  var openingBusy = false;
+  var movementBusy = false;
+  var closingBusy = false;
+
+  function api() {
+    return root.NuevoAmanecerCanonical;
+  }
+
+  function enabled() {
+    var client = api();
+    try {
+      return !!(client && typeof client.enabled === 'function' && client.enabled());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function number(value, fallback) {
+    var parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : (fallback === undefined ? 0 : fallback);
+  }
+
+  function cents(value) {
+    var amount = number(value, NaN);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    var result = Math.round(amount * 100);
+    return Number.isSafeInteger(result) ? result : null;
+  }
+
+  function clean(value) {
+    return String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
+  }
+
+  function toast(message, tone) {
+    if (typeof root.toast === 'function') root.toast(message, tone || 'error');
+  }
+
+  function renderCash() {
+    if (typeof root.cajRender === 'function') root.cajRender();
+    if (typeof root.updateDashboard === 'function') root.updateDashboard();
+  }
+
+  async function refreshCanonical() {
+    var client = api();
+    if (!client || typeof client.refresh !== 'function') throw new Error('CANONICAL_CLIENT_UNAVAILABLE');
+    await client.refresh();
+  }
+
+  function closeModal(id) {
+    if (typeof root.cerrarModal === 'function') root.cerrarModal(id);
+    else root.document.getElementById(id)?.classList.remove('open');
+  }
+
+  function authorizeCash(reason) {
+    if (typeof root._naF10AuthorizePermission === 'function') {
+      return root._naF10AuthorizePermission('cash', reason) !== false;
+    }
+    return true;
+  }
+
+  function authorizeClose() {
+    if (typeof root._naAuthorize === 'function') {
+      return root._naAuthorize('cerrarCaja', 'Cerrar caja del día') !== false;
+    }
+    return true;
+  }
+
+  function selectedCashier() {
+    var value = root.document.getElementById('cajCajero')?.value;
+    if (typeof root._naFindCashier === 'function') return root._naFindCashier(value);
+    if (typeof root._naCashierSnapshot === 'function') return root._naCashierSnapshot(value);
+    return value ? { id: value, nombre: value } : null;
+  }
+
+  function verifyCashierPin(cashier) {
+    if (typeof root._naF10VerifyCashierPin !== 'function') return true;
+    return root._naF10VerifyCashierPin(cashier, 'Abrir caja con esta identidad') !== false;
+  }
+
+  function setMovementMethodCanonical(active) {
+    var field = root.document.getElementById('cajMovMetodo');
+    if (!field) return;
+    if (active) {
+      field.value = 'efectivo';
+      field.disabled = true;
+      field.setAttribute('data-na-canonical-cash-only', 'true');
+    } else {
+      field.disabled = false;
+      field.removeAttribute('data-na-canonical-cash-only');
+    }
+  }
+
+  function showOpeningModal() {
+    var fund = root.document.getElementById('cajFondo');
+    if (fund) fund.value = '';
+    if (typeof root._naPopulateCashierSelect === 'function') {
+      var activeCashierId = root.appConfig && root.appConfig.activeCashierId;
+      root._naPopulateCashierSelect('cajCajero', activeCashierId);
+    }
+    root.document.getElementById('mApertura')?.classList.add('open');
+  }
+
+  function showMovementModal(type) {
+    var colors = { ing: 'green', egr: 'red' };
+    var icons = { ing: '💵', egr: '💸' };
+    var labels = { ing: 'Ingreso', egr: 'Egreso' };
+    var categories = {
+      ing: ['Venta retail','Venta bebidas','Venta snacks','Venta limpieza','Otro ingreso'],
+      egr: ['Retiro de caja','Pago a proveedor','Pago servicios','Otro egreso']
+    };
+
+    root.cajMovTipo = type;
+    var head = root.document.getElementById('mMovCajaHead');
+    var title = root.document.getElementById('mMovCajaTit');
+    var button = root.document.getElementById('cajMovBtn');
+    var amount = root.document.getElementById('cajMovMonto');
+    var desc = root.document.getElementById('cajMovDesc');
+    var cat = root.document.getElementById('cajMovCat');
+
+    if (head) head.className = 'mhead ' + colors[type];
+    if (title) title.textContent = icons[type] + ' ' + labels[type];
+    if (button) button.className = 'mbtn mbtn-ok ' + colors[type];
+    if (amount) amount.value = '';
+    if (desc) desc.value = '';
+    if (cat) {
+      cat.replaceChildren();
+      categories[type].forEach(function (name) {
+        var option = root.document.createElement('option');
+        option.textContent = name;
+        option.value = name;
+        cat.append(option);
+      });
+    }
+    setMovementMethodCanonical(true);
+    root.document.getElementById('mMovCaja')?.classList.add('open');
+  }
+
+  root.abrirModalApertura = function () {
+    if (!enabled()) return typeof original.abrirModalApertura === 'function' ? original.abrirModalApertura.apply(this, arguments) : undefined;
+    if (!authorizeCash('Abrir caja')) return;
+    showOpeningModal();
+  };
+
+  root.abrirCaja = async function () {
+    if (!enabled()) return typeof original.abrirCaja === 'function' ? original.abrirCaja.apply(this, arguments) : false;
+    if (openingBusy) return false;
+    if (!authorizeCash('Confirmar apertura de caja')) return false;
+
+    var cashier = selectedCashier();
+    if (!cashier || !cashier.id) {
+      toast('Selecciona un cajero activo', 'error');
+      return false;
+    }
+    if (!verifyCashierPin(cashier)) return false;
+
+    var openingCents = cents(root.document.getElementById('cajFondo')?.value || 0);
+    if (openingCents === null) {
+      toast('Ingresa un fondo inicial válido', 'error');
+      return false;
+    }
+
+    var button = root.document.querySelector('#mApertura .mbtn-ok');
+    var label = button?.textContent || '✅ Abrir caja';
+    openingBusy = true;
+    if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
+
+    try {
+      await refreshCanonical();
+      var client = api();
+      var id = root.crypto && typeof root.crypto.randomUUID === 'function'
+        ? root.crypto.randomUUID()
+        : 'cash-' + Date.now().toString(36);
+      await client.openCash({ session_id: id, opening_cents: openingCents });
+      await refreshCanonical();
+      closeModal('mApertura');
+      renderCash();
+      toast('Caja CANON abierta con S/ ' + (openingCents / 100).toFixed(2), 'success');
+      return true;
+    } catch (error) {
+      toast('No se pudo abrir la caja CANON: ' + clean(error && error.message), 'error');
+      return false;
+    } finally {
+      openingBusy = false;
+      if (button) { button.disabled = false; button.textContent = label; }
+    }
+  };
+
+  root.abrirMovCaja = function (type) {
+    if (!enabled()) {
+      setMovementMethodCanonical(false);
+      return typeof original.abrirMovCaja === 'function' ? original.abrirMovCaja.apply(this, arguments) : undefined;
+    }
+    if (!authorizeCash('Registrar movimiento de caja')) return;
+    if (typeof root._naSessionOpen === 'function' && !root._naSessionOpen()) {
+      toast('Abre la caja del día primero', 'error');
+      return;
+    }
+    if (type === 'cob') {
+      toast('Los cobros de crédito CANON se registran desde Clientes y Créditos.', 'error');
+      return;
+    }
+    if (type === 'gas') {
+      toast('Los gastos CANON aún no tienen una fuente financiera autorizada. No se registró ningún movimiento.', 'error');
+      return;
+    }
+    if (type !== 'ing' && type !== 'egr') {
+      toast('Movimiento de caja no compatible con CANON', 'error');
+      return;
+    }
+    showMovementModal(type);
+  };
+
+  root.guardarMovCaja = async function () {
+    if (!enabled()) return typeof original.guardarMovCaja === 'function' ? original.guardarMovCaja.apply(this, arguments) : undefined;
+    if (movementBusy) return false;
+    if (!authorizeCash('Guardar movimiento de caja')) return false;
+    if (typeof root._naSessionOpen === 'function' && !root._naSessionOpen()) {
+      toast('La caja no está abierta', 'error');
+      return false;
+    }
+
+    var type = root.cajMovTipo;
+    if (type !== 'ing' && type !== 'egr') {
+      toast(type === 'cob'
+        ? 'Registra el cobro desde Clientes y Créditos.'
+        : 'Este tipo de movimiento aún no tiene escritura CANON autorizada.', 'error');
+      return false;
+    }
+
+    var amountCents = cents(root.document.getElementById('cajMovMonto')?.value);
+    var description = clean(root.document.getElementById('cajMovDesc')?.value);
+    var category = clean(root.document.getElementById('cajMovCat')?.value);
+    if (!amountCents || !description) {
+      toast('Completa monto y concepto', 'error');
+      return false;
+    }
+
+    var signed = type === 'egr' ? -amountCents : amountCents;
+    var reason = (type === 'ing' ? 'Ingreso' : 'Egreso') + (category ? ' · ' + category : '') + ' · ' + description;
+    var button = root.document.getElementById('cajMovBtn');
+    var label = button?.textContent || '✅ Registrar';
+    movementBusy = true;
+    if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
+
+    try {
+      await refreshCanonical();
+      await api().createAdjustment({ amount_cents: signed, reason: reason.slice(0, 500) });
+      await refreshCanonical();
+      closeModal('mMovCaja');
+      renderCash();
+      toast((type === 'ing' ? 'Ingreso' : 'Egreso') + ' CANON de S/ ' + (amountCents / 100).toFixed(2) + ' registrado', 'success');
+      return true;
+    } catch (error) {
+      toast('No se pudo registrar el movimiento CANON: ' + clean(error && error.message), 'error');
+      return false;
+    } finally {
+      movementBusy = false;
+      if (button) { button.disabled = false; button.textContent = label; }
+    }
+  };
+
+  root.cerrarCaja = async function () {
+    if (!enabled()) return typeof original.cerrarCaja === 'function' ? original.cerrarCaja.apply(this, arguments) : undefined;
+    if (closingBusy) return false;
+    if (!authorizeClose()) return false;
+
+    var countedCents = cents(root.document.getElementById('cajContado')?.value);
+    if (countedCents === null) {
+      toast('Ingresa el efectivo contado', 'error');
+      return false;
+    }
+
+    var button = root.document.querySelector('#mCierre .mbtn-ok');
+    var label = button?.textContent || '🔒 Confirmar cierre';
+    closingBusy = true;
+    if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
+
+    try {
+      await refreshCanonical();
+      await api().closeCash({ counted_cents: countedCents });
+      await refreshCanonical();
+      closeModal('mCierre');
+      renderCash();
+      toast('Caja CANON cerrada correctamente', 'success');
+      return true;
+    } catch (error) {
+      toast('No se pudo cerrar la caja CANON: ' + clean(error && error.message), 'error');
+      return false;
+    } finally {
+      closingBusy = false;
+      if (button) { button.disabled = false; button.textContent = label; }
+    }
+  };
+
+  root.NuevoAmanecerCanonicalCashBridge = Object.freeze({
+    enabled: enabled,
+    originalHandlers: function () { return Object.assign({}, original); }
+  });
+})(globalThis);

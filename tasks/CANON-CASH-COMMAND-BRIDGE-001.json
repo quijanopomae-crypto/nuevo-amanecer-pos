@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CASH-COMMAND-BRIDGE-001",
+  "environment": "CANON",
+  "base_ref": "cfd0f45ea2271f6981986b9a7185755264d1c215",
+  "objective": "Conectar la UI de Caja ya aprobada a los comandos CANON cash.open, cash.close y adjustment.create sin reactivar saveAllData ni escrituras legacy.",
+  "owner_authorization": "El propietario pidió continuar corrigiendo la migración LAB -> CANON; LAB queda READ-ONLY.",
+  "allowed_files": [
+    "tasks/CANON-CASH-COMMAND-BRIDGE-001.json",
+    "evidence/canon-preflight/CANON-CASH-COMMAND-BRIDGE-001.json",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/sync/canonical-cash-bridge.js",
+    "POS/js/legacy-inline/inline-11.js",
+    "tests/cloud-sync/canonical-cash-bridge.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/css/**",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "tools/cloudflare-lab/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "required_skills": ["impact-analysis","cross-module-impact","canon-promotion"],
+  "invariants": [
+    "LAB permanece READ-ONLY.",
+    "Fuera de CANON, todos los handlers originales se delegan sin cambios.",
+    "En CANON, apertura/cierre/ajustes usan exclusivamente NuevoAmanecerCanonical.",
+    "No se llama saveAllData/saveAppState/localStorage desde el bridge.",
+    "Cobros de crédito no se convierten en ajustes de caja.",
+    "Gastos no se convierten en ajustes hasta existir fuente CANON explícita.",
+    "Ingreso/egreso manual CANON es efectivo únicamente.",
+    "Se preservan permisos/PIN existentes antes de comandos de caja.",
+    "Cada comando refresca snapshot CANON antes y después para evitar revisiones obsoletas."
+  ],
+  "rollback": "Revertir el PR; el bridge deja de cargarse y vuelven los handlers legacy bloqueados por CANON."
+}
