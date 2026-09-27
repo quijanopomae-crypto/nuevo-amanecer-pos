@@ -73,6 +73,7 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-16.js',
   './js/legacy-inline/inline-17.js',
   './js/legacy-inline/inline-18.js',
+  './js/navigation/menu-navigation.js',
   './js/motion/core.js',
   './js/motion/page-transitions.js',
   './js/motion/scroll-motion.js',
