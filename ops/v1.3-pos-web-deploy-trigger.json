@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish first-paint-before-motion fix from 606cd1d48fa988c88344d8770fc79a00e7c5acdb; defer Motion/scroll measurement until after page paint and remove forced offsetWidth reflow.",
-  "retry_attempt": 24,
-  "retry_reason": "PR #157 merged and CANON Critical CI passed. Publish validated first-paint-before-motion fix.",
-  "requested_at_utc": "2026-09-27T23:05:00Z",
-  "target_head": "606cd1d48fa988c88344d8770fc79a00e7c5acdb"
+  "note": "Publish mobile safe navigation fallback from c869d68d50aeaeaed529ae8f6f17ce21a251c997; bypass goPage on mobile menu entry and disable mobile parity Motion.",
+  "retry_attempt": 25,
+  "retry_reason": "PR #159 merged and CANON Critical CI passed. Publish validated mobile safe navigation fallback.",
+  "requested_at_utc": "2026-09-27T23:18:00Z",
+  "target_head": "c869d68d50aeaeaed529ae8f6f17ce21a251c997"
 }
