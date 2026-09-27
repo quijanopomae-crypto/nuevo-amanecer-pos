@@ -401,7 +401,7 @@ loadAllData=async function(){
   if(!chosen||seeded)await saveAllData();
 };
 loadAppState=function(){
-  const snap=_naReadLocalSnapshot()||_naReadSessionSnapshot(),legacy=_naGetJSON('na_app_state',{}),state=Object.keys(_naLoadedUIState||{}).length?_naLoadedUIState:(_naValidSnapshot(snap)?snap.ui||{}:legacy);isDark=!!state.isDark;document.body.classList.toggle('dark',isDark);const darkBtn=document.getElementById('btnDarkMode');if(darkBtn)darkBtn.textContent=isDark?'☀️':'🌙';_naApplyConfigUI();const pageId=state.currentPage;if(pageId&&pageId!=='pageMenu'&&document.getElementById(pageId))goPage(pageId);else updateDashboard();
+  const snap=_naReadLocalSnapshot()||_naReadSessionSnapshot(),legacy=_naGetJSON('na_app_state',{}),state=Object.keys(_naLoadedUIState||{}).length?_naLoadedUIState:(_naValidSnapshot(snap)?snap.ui||{}:legacy);isDark=!!state.isDark;document.body.classList.toggle('dark',isDark);const darkBtn=document.getElementById('btnDarkMode');if(darkBtn)darkBtn.textContent=isDark?'☀️':'🌙';_naApplyConfigUI();const pageId=state.currentPage;if(pageId&&pageId!=='pageMenu'&&document.getElementById(pageId))goPage(pageId);else _naSchedulePageRender('pageMenu');
 };
 
 
@@ -648,15 +648,16 @@ abrirMovInv=function(id,tipo){if(isModuleLocked('productos')){toast('Módulo de 
 guardarMovInv=async function(){if(isModuleLocked('productos')){toast('Módulo de productos bloqueado','error');return;}const qty=_naInt(document.getElementById('mMovCant').value);if(qty<=0){toast('Ingresa una cantidad válida','error');return;}const p=productos.find(x=>String(x.id)===String(invMovId));if(!p)return;if(invMovT==='salida'&&qty>p.stock){toast(`Stock insuficiente (${p.stock} disponibles)`,'error');return;}p.stock=invMovT==='entrada'?p.stock+qty:Math.max(0,p.stock-qty);cerrarModal('mMovInv');invRender();posRender();await _naFinalizeOperationPersistence(`${invMovT==='entrada'?'📥 Entrada':'📤 Salida'} de ${qty} unidades`,'No se pudo guardar el movimiento de inventario');};
 
 // Clientes y créditos
-let _naClientCreditIndexRef=null,_naClientCreditIndexLength=-1,_naClientCreditIndexDate='',_naClientCreditsIndex=new Map(),_naClientSummaryIndex=new Map();
+let _naClientCreditIndexRef=null,_naClientCreditIndexLength=-1,_naClientCreditIndexDate='',_naClientAllCreditsIndex=new Map(),_naClientCreditsIndex=new Map(),_naClientSummaryIndex=new Map();
 function _naRebuildClientCreditIndex(){
-  const byClient=new Map(),summary=new Map(),today=obtenerHoy();
+  const allByClient=new Map(),byClient=new Map(),summary=new Map(),today=obtenerHoy();
   (Array.isArray(creditos)?creditos:[]).forEach(cr=>{
     if(!cr)return;
     try{_naSyncCreditStatus(cr);}catch(_){}
-    if(cr.anulado||String(cr.status||cr.estado||'').toLowerCase()==='anulado')return;
     const key=String(cr.cliId??cr.clienteId??'');
     if(!key)return;
+    const allList=allByClient.get(key)||[];allList.push(cr);allByClient.set(key,allList);
+    if(cr.anulado||String(cr.status||cr.estado||'').toLowerCase()==='anulado')return;
     const list=byClient.get(key)||[];list.push(cr);byClient.set(key,list);
     let row=summary.get(key);if(!row){row={debt:0,status:'ninguno'};summary.set(key,row);}
     const status=String(cr.status||cr.estado||'').toLowerCase();
@@ -665,11 +666,12 @@ function _naRebuildClientCreditIndex(){
     if(status==='vencido')row.status='vencido';
     else if(row.status!=='vencido'){const d=diasHasta(cr.vence);row.status=d!==null&&d>=0&&d<=7?'proximo':(row.status==='proximo'?'proximo':'vigente');}
   });
-  _naClientCreditIndexRef=creditos;_naClientCreditIndexLength=Array.isArray(creditos)?creditos.length:0;_naClientCreditIndexDate=today;_naClientCreditsIndex=byClient;_naClientSummaryIndex=summary;
+  _naClientCreditIndexRef=creditos;_naClientCreditIndexLength=Array.isArray(creditos)?creditos.length:0;_naClientCreditIndexDate=today;_naClientAllCreditsIndex=allByClient;_naClientCreditsIndex=byClient;_naClientSummaryIndex=summary;
 }
 function _naEnsureClientCreditIndex(force=false){
   if(force||_naClientCreditIndexRef!==creditos||_naClientCreditIndexLength!==(Array.isArray(creditos)?creditos.length:0)||_naClientCreditIndexDate!==obtenerHoy())_naRebuildClientCreditIndex();
 }
+function _naClientAllCreditsFast(clientId){_naEnsureClientCreditIndex();return(_naClientAllCreditsIndex.get(String(clientId))||[]).slice();}
 function _naClientCreditsFast(clientId){_naEnsureClientCreditIndex();return(_naClientCreditsIndex.get(String(clientId))||[]).slice();}
 function _naClientDebtFast(client){_naEnsureClientCreditIndex();return _naClientSummaryIndex.get(String(client?.id??client))?.debt||0;}
 function _naClientStatusFast(client){_naEnsureClientCreditIndex();return _naClientSummaryIndex.get(String(client?.id??client))?.status||'ninguno';}
