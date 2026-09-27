@@ -4,12 +4,45 @@
   const API = 'https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev';
   const BINDING_KEY = 'na_canonical_binding';
   const CREDENTIALS_KEY = 'na_cloud_sync_credentials';
+  const SHELL_CACHE_PREFIX = 'nuevo-amanecer-pos-shell-';
   const status = document.getElementById('status');
   const panel = document.getElementById('activatePanel');
   const input = document.getElementById('activationSecret');
   const activateButton = document.getElementById('activateButton');
   const openPos = document.getElementById('openPos');
   const retryButton = document.getElementById('retryButton');
+
+  async function refreshShellOnly() {
+    panel.hidden = true;
+    openPos.hidden = true;
+    retryButton.hidden = true;
+    setStatus('Actualizando la interfaz del POS…');
+
+    try {
+      if ('serviceWorker' in navigator && typeof navigator.serviceWorker.getRegistrations === 'function') {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations
+          .filter(registration => typeof registration.scope === 'string' &&
+            registration.scope.startsWith(window.location.origin + '/app/'))
+          .map(registration => registration.unregister()));
+      }
+
+      if ('caches' in window && typeof caches.keys === 'function') {
+        const names = await caches.keys();
+        await Promise.all(names
+          .filter(name => name.startsWith(SHELL_CACHE_PREFIX))
+          .map(name => caches.delete(name)));
+      }
+
+      setStatus('Interfaz actualizada. Abriendo el POS con archivos nuevos…', 'ok');
+      const nonce = Date.now().toString(36);
+      window.location.replace('/app/?shell_refresh=' + encodeURIComponent(nonce));
+    } catch (error) {
+      console.warn('No se pudo refrescar el shell del POS.', error);
+      setStatus('No se pudo actualizar la interfaz automáticamente. Vuelve a intentarlo.', 'error');
+      retryButton.hidden = false;
+    }
+  }
 
   function setStatus(message, state = '') {
     status.textContent = message;
@@ -139,5 +172,7 @@
     if (event.key === 'Enter') activate();
   });
   retryButton.addEventListener('click', checkExisting);
-  checkExisting();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('refresh-shell') === '1') refreshShellOnly();
+  else checkExisting();
 })();

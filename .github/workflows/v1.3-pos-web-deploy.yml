@@ -63,12 +63,14 @@ jobs:
           cp -a POS/. tools/cloudflare-pos-web/_site/app/
           cp tools/cloudflare-pos-web/public/index.html tools/cloudflare-pos-web/_site/index.html
           cp tools/cloudflare-pos-web/public/activate.js tools/cloudflare-pos-web/_site/activate.js
+          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/index.html
           sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
-          if grep -Fq '__BUILD_HASH__' tools/cloudflare-pos-web/_site/app/sw.js; then
+          if grep -Fq '__BUILD_HASH__' tools/cloudflare-pos-web/_site/app/sw.js tools/cloudflare-pos-web/_site/index.html; then
             echo "Service Worker build hash placeholder was not replaced" >&2
             exit 1
           fi
           grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/index.html
 
       - name: Hosted POS safety tests
         shell: bash
@@ -93,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 20); do
-            ROOT_CODE="$(curl -sS -o /tmp/pos-root.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/" || true)"
+            ROOT_CODE="$(curl -sS -D /tmp/pos-root.headers -o /tmp/pos-root.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/" || true)"
             APP_CODE="$(curl -sS -o /tmp/pos-app.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/" || true)"
             JS_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/canonical-client.js" || true)"
             GUARD_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/hosted-canonical-guard.js" || true)"
@@ -105,6 +107,7 @@ jobs:
                test "$GUARD_CODE" = "200" &&
                test "$SW_CODE" = "200" &&
                grep -Fq 'Nuevo Amanecer POS' /tmp/pos-root.html &&
+               grep -Fiq 'cache-control: no-store' /tmp/pos-root.headers &&
                grep -Fq 'Nuevo Amanecer — ERP &amp; POS' /tmp/pos-app.html &&
                grep -Fq "$GITHUB_SHA" /tmp/pos-sw.js; then
               echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"

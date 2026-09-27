@@ -110,3 +110,33 @@ test('hosted PWA activates a fully cached new build without requiring all POS ta
   assert.match(serviceWorker, /self\.clients\.claim\(\)/);
   assert.match(appIndex, /updateViaCache:\s*'none'/);
 });
+
+
+test('launcher exposes a shell-only recovery path that preserves activation storage', () => {
+  assert.match(launcher, /activate\.js\?build=__BUILD_HASH__/);
+  assert.match(activation, /refresh-shell/);
+  assert.match(activation, /navigator\.serviceWorker\.getRegistrations\(\)/);
+  assert.match(activation, /registration\.scope\.startsWith\(window\.location\.origin \+ '\/app\/'\)/);
+  assert.match(activation, /registration\.unregister\(\)/);
+  assert.match(activation, /nuevo-amanecer-pos-shell-/);
+  assert.match(activation, /caches\.delete\(name\)/);
+  assert.match(activation, /window\.location\.replace\('\/app\/\?shell_refresh='/);
+  const refreshStart = activation.indexOf('async function refreshShellOnly()');
+  const refreshEnd = activation.indexOf('function setStatus', refreshStart);
+  const refreshBlock = activation.slice(refreshStart, refreshEnd);
+  assert.doesNotMatch(refreshBlock, /localStorage\.(?:clear|removeItem)/);
+  assert.doesNotMatch(refreshBlock, /sessionStorage\.(?:clear|removeItem)/);
+  assert.doesNotMatch(refreshBlock, /BINDING_KEY|CREDENTIALS_KEY/);
+});
+
+test('network shell responses are no-store so recovery cannot reuse stale HTTP assets', () => {
+  assert.match(router, /Cache-Control', 'no-store, max-age=0, must-revalidate'/);
+  assert.match(router, /url\.pathname\.startsWith\('\/app\/'\)/);
+  assert.match(router, /url\.pathname === '\/activate\.js'/);
+});
+
+test('deploy versions the launcher activation script with the exact hosted build hash', () => {
+  assert.match(workflow, /_site\/index\.html/);
+  assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$GITHUB_SHA\/g" tools\/cloudflare-pos-web\/_site\/index\.html/);
+  assert.match(workflow, /grep -Fq "\$GITHUB_SHA" tools\/cloudflare-pos-web\/_site\/index\.html/);
+});

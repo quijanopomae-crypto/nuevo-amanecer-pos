@@ -1,0 +1,47 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SHELL-REFRESH-RECOVERY-001",
+  "base_ref": "6f31fa2458db2f60b1c3c4a862a1f22ebb2d89d6",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "En el teléfono del propietario, el menú sigue sin entrar a módulos.",
+    "En un navegador aislado contra el mismo Worker, typeof window.goPage === function y click() sobre Inventario cambia pageMenu a pageInventario sin error de consola.",
+    "POS/sw.js usa un shell precacheado por generación y atiende navegación/assets desde Cache Storage.",
+    "La captura del propietario muestra Cache CANON, por lo que la sesión está usando datos cacheados mientras la red/autoridad no está validada."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Dar una vía reproducible para invalidar únicamente el shell PWA y forzar assets frescos de red.",
+    "READS": [
+      "POS/sw.js",
+      "tools/cloudflare-pos-web/public/index.html",
+      "tools/cloudflare-pos-web/public/activate.js",
+      "tools/cloudflare-pos-web/src/worker.js",
+      ".github/workflows/v1.3-pos-web-deploy.yml",
+      "tests/cloud-sync/v1.3-pos-web-deploy.test.mjs"
+    ],
+    "WRITES": [
+      "Añadir ?refresh-shell=1 al launcher como reparación explícita.",
+      "Desregistrar solo Service Workers con scope /app/.",
+      "Eliminar solo caches nuevo-amanecer-pos-shell-*.",
+      "Versionar activate.js con build hash.",
+      "Servir launcher/app/assets con Cache-Control no-store en respuestas de red."
+    ],
+    "DOM_AFFECTED": ["Launcher raíz únicamente."],
+    "STATE_AFFECTED": ["Registro Service Worker /app y Cache Storage del shell."],
+    "STORAGE_AFFECTED": ["Cache Storage solamente; localStorage/sessionStorage permanecen intactos."],
+    "DOMAIN_INVARIANTS": [
+      "No hay cambios de negocio ni autoridad.",
+      "No hay escrituras en D1/R2.",
+      "No hay operaciones comerciales."
+    ],
+    "TEST_PLAN": [
+      "Test de refresh-shell sin borrado de credenciales.",
+      "Test de versionado de activate.js por build hash.",
+      "Test de no-store en Worker.",
+      "Hosted POS safety tests.",
+      "Deploy y verificación pública."
+    ]
+  }
+}
