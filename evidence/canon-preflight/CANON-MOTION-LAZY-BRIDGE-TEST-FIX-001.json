@@ -1,0 +1,24 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-MOTION-LAZY-BRIDGE-TEST-FIX-001",
+  "base_ref": "7b49162a4174b5e5448f4e643cc00a233a11b0bf",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "CANON Critical CI run 36351904878 ejecutó por primera vez canon-lab-motion-lazy-bridge.test.mjs.",
+    "21 de 22 subtests pasaron.",
+    "El único fallo muestra actual y expected con la misma estructura, pero ERR_ASSERTION por identidad/prototipo cross-realm del objeto CustomEvent creado dentro de vm."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Hacer la comparación semántica estable entre realms sin debilitar la expectativa.",
+    "READS": ["tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs", "CI log run 36351904878"],
+    "WRITES": ["Normalizar h.events a JSON/plain object antes de deepEqual."],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": ["No cambia comportamiento productivo ni Motion."],
+    "CROSS_MODULE_IMPACT": ["Test-only."],
+    "ROLLBACK": ["Revertir el commit de test."]
+  }
+}

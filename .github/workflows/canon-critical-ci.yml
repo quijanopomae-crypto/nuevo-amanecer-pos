@@ -15,6 +15,7 @@ on:
       - "tools/cloudflare-lab/migrations/**"
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
+      - "tools/pos-experience/**"
       - ".github/workflows/canon-critical-ci.yml"
       - ".github/workflows/v1.3-prod-cutover.yml"
       - ".github/workflows/v1.3-prod-preflight.yml"
@@ -34,6 +35,7 @@ on:
       - "tools/cloudflare-lab/migrations/**"
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
+      - "tools/pos-experience/**"
       - ".github/workflows/canon-critical-ci.yml"
       - ".github/workflows/v1.3-prod-cutover.yml"
       - ".github/workflows/v1.3-prod-preflight.yml"
@@ -55,6 +57,17 @@ jobs:
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
+
+      - name: LAB to CANON promotion gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/pos-experience/promote-lab-visuals.mjs --check
+          node --test \
+            tests/product-fixes/canon-lab-interface-parity.test.mjs \
+            tests/product-fixes/canon-motion-bootstrap.test.mjs \
+            tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
+            tests/product-fixes/canonical-ui-contract.test.mjs
 
       - name: Install Cloudflare test dependencies
         working-directory: tools/cloudflare-lab

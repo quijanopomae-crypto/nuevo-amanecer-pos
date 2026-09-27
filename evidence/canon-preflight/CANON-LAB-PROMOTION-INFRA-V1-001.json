@@ -1,0 +1,57 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-PROMOTION-INFRA-V1-001",
+  "base_ref": "bbb8e747c2aafa3392447d2ead70e042e4bd0afe",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "Los 23 assets visuales aprobados LAB y CANON tienen el mismo blob SHA en el HEAD actual.",
+    "tests/product-fixes/canon-lab-interface-parity.test.mjs ya detecta drift, pero CANON Critical CI no ejecuta ese test.",
+    "La promoción actual depende de copiar manualmente el paquete visual a POS/css/experience-v2/**.",
+    "El deploy Hosted POS no valida explícitamente la paridad LAB→CANON antes de ensamblar el artefacto."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Eliminar la copia manual como mecanismo de promoción y volver obligatoria la paridad antes de CI/deploy.",
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "docs/LABORATORIO_A_CANON.md",
+      "REPO_MAP.yaml",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "tests/product-fixes/canon-lab-interface-parity.test.mjs",
+      ".github/workflows/canon-critical-ci.yml",
+      ".github/workflows/v1.3-pos-web-deploy.yml"
+    ],
+    "WRITES": [
+      "Centralizar la allowlist LAB→CANON en tools/pos-experience/visual-assets.mjs.",
+      "Añadir promote-lab-visuals.mjs con modo --check por defecto y --write --owner-approved para copia explícita.",
+      "Hacer que la prueba de paridad consuma la allowlist central.",
+      "Ejecutar el gate de paridad en CANON Critical CI y antes del deploy Hosted POS.",
+      "Documentar el nuevo flujo y registrar la herramienta en REPO_MAP.yaml."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Ninguna regla comercial cambia.",
+      "No se toca persistencia ni autoridad CANON.",
+      "No se modifican assets runtime en esta tarea.",
+      "El comando write solo puede tocar destinos CANON allowlisted."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "CI CANON obtiene un gate nuevo.",
+      "Deploy Hosted POS obtiene un gate fail-closed previo al ensamblado.",
+      "Las futuras promociones visuales dejan de requerir copiar manualmente 23 archivos."
+    ],
+    "RISKS": [
+      "Un gate demasiado amplio podría bloquear cambios CANON no relacionados; se limita a paridad de la allowlist aprobada.",
+      "LAB puede divergir durante experimentación; el gate se incorpora al flujo CANON/deploy, no al workflow de Pages LAB."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no hay efectos remotos ni mutaciones de datos."
+    ]
+  }
+}

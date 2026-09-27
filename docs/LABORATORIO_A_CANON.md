@@ -63,3 +63,32 @@ Solo existen tres salidas:
 - `CANDIDATO_A_CANON`: habilita revisión; todavía no es producción.
 
 La aprobación promueve el cambio funcional mínimo, no el directorio experimental completo.
+
+
+## Promoción visual determinista
+
+La capa visual aprobada ya no debe copiarse manualmente archivo por archivo.
+
+Fuente de promoción:
+- estilos LAB: `laboratorio/pos-lab/styles/**`;
+- animaciones CSS LAB: `laboratorio/pos-lab/animations/**`;
+- mirror CANON: `POS/css/experience-v2/**`;
+- allowlist única: `tools/pos-experience/visual-assets.mjs`.
+
+Comprobación segura, sin escrituras:
+
+```bash
+node tools/pos-experience/promote-lab-visuals.mjs --check
+```
+
+Después de que el owner apruebe un candidato concreto, la promoción visual se ejecuta con:
+
+```bash
+node tools/pos-experience/promote-lab-visuals.mjs --write --owner-approved
+```
+
+El modo write solo puede copiar los assets de la allowlist a `POS/css/experience-v2/**`; no copia `index.html`, `lab-overrides.css`, JavaScript LAB, datos ni infraestructura.
+
+El JavaScript Motion no se trata como copia byte-a-byte porque LAB y CANON tienen namespaces y lifecycles distintos. Su equivalencia se valida mediante los tests CANON de bootstrap, lazy bridge y contrato UI.
+
+CANON Critical CI y Hosted POS Deploy ejecutan `--check` y fallan cerrado ante drift, orden CSS incorrecto o precache PWA incompleto.
