@@ -109,8 +109,8 @@ export async function createCanonicalExpense(request,env,auth,json) {
       VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)`).bind(token + ':' + label));
   }
 
-  pushChecked(db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract)
-    VALUES(?1,?2,?3,?4,?5,?6)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract),'guard');
+  pushChecked(db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash)
+    VALUES(?1,?2,?3,?4,?5,?6,?7,?8)`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,body.expected_control_revision,body.client_contract,auth.principalId,auth.credentialHash),'guard');
 
   pushChecked(db.prepare(`INSERT INTO canonical_expense_operations(operation_id,request_hash,result_json,promotion_id,authority_epoch,control_revision,
     client_contract,device_id,credential_hash,expected_session_revision,created_at)
