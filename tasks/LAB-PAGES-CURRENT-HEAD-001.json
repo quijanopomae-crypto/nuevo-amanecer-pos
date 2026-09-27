@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "LAB-PAGES-CURRENT-HEAD-001",
+  "environment": "LAB",
+  "base_ref": "beede554a246d4c5a8b635e4d758b5d2de3e2746",
+  "objective": "Garantizar que GitHub Pages publique POS-LAB desde el mismo HEAD que POS/**, invalide assets por SHA y falle si el artifact contiene referencias locales faltantes.",
+  "owner_authorization": "El propietario mostró el LAB visualmente roto y pidió corregirlo de raíz.",
+  "allowed_files": [
+    "tasks/LAB-PAGES-CURRENT-HEAD-001.json",
+    "evidence/lab-preflight/LAB-PAGES-CURRENT-HEAD-001.json",
+    ".github/workflows/lab-pages.yml",
+    "laboratorio/pos-lab/verify-pages-site.mjs",
+    "tests/laboratorio-pages-current-head.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "invariants": [
+    "No cambia la UI ni lógica funcional de LAB o CANON.",
+    "No toca datos, backend, D1/R2 ni operaciones comerciales.",
+    "El artifact de Pages incluye exactamente POS/** y laboratorio/pos-lab/** del mismo commit.",
+    "Cada referencia local src/href del LAB debe existir en el artifact antes de publicar.",
+    "Los assets locales publicados quedan versionados con el SHA del commit.",
+    "El deploy debe verificarse públicamente contra el mismo SHA."
+  ],
+  "rollback": "Revertir el PR; GitHub Pages puede redeployar el artifact anterior."
+}
