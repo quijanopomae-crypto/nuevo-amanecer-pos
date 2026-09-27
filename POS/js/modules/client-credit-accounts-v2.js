@@ -1493,7 +1493,11 @@
 
   function naUppercaseClientCards() {
     var list=document.getElementById('cliList'); if(!list) return;
-    list.querySelectorAll('.client-card .c-name').forEach(function (node) { node.textContent=String(node.textContent||'').toUpperCase(); });
+    list.querySelectorAll('.client-card .c-name').forEach(function (node) {
+      var current=String(node.textContent||'');
+      var next=current.toUpperCase();
+      if(current!==next) node.textContent=next;
+    });
   }
 
   function naEnhanceClientCards() {
@@ -1608,7 +1612,14 @@
   root.addEventListener('pageshow',naBindRuntime);
   if (typeof MutationObserver === 'function') {
     var list=document.getElementById('cliList');
-    if(list) new MutationObserver(function(){requestAnimationFrame(naEnhanceClientCards);}).observe(list,{childList:true,subtree:true});
+    var naClientEnhanceFrame=0;
+    if(list) new MutationObserver(function(){
+      if(naClientEnhanceFrame) return;
+      naClientEnhanceFrame=requestAnimationFrame(function(){
+        naClientEnhanceFrame=0;
+        naEnhanceClientCards();
+      });
+    }).observe(list,{childList:true,subtree:true});
   }
   naBindRuntime();
 
