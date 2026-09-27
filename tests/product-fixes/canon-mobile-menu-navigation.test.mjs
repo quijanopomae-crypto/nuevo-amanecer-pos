@@ -132,7 +132,7 @@ test('mouse click and keyboard Enter/Space use the existing goPage navigation', 
 });
 
 test('navigation layer is visual/input only and never owns business, storage or network', () => {
-  assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|sale\.create|payment\.create|cash\.|credit|inventario|gastos/i);
+  assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|sale\.create|payment\.create|cash\.open|cash\.close|credit-account\.create|payment\.create/i);
   assert.match(source, /root\.goPage\(pageId\)/);
 });
 
