@@ -685,8 +685,9 @@ abrirModalGasto=function(){if(isModuleLocked('gastos')){toast('Gastos y egresos 
 window.addEventListener('resize',_naApplyConfigUI);
 let _naCanonicalLoadError=null;
 function _naEmptyCanonicalCashState(){return{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',cerrada:false,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null,canonical:true};}
+function _naClearCanonicalOperationalView(){ventas=[];cajMovs=[];inventoryMovements=[];cajEstado=_naEmptyCanonicalCashState();}
 function _naClearCanonicalLegacyView(){
-  productos=[];clientes=[];creditos=[];ventas=[];cajMovs=[];inventoryMovements=[];cajEstado=_naEmptyCanonicalCashState();
+  productos=[];clientes=[];creditos=[];_naClearCanonicalOperationalView();
 }
 function _naApplyCanonicalLegacyView(canonical){
   if(!canonical||!Array.isArray(canonical.products)||!Array.isArray(canonical.customers)||!Array.isArray(canonical.credits)||!Array.isArray(canonical.sales)||!Array.isArray(canonical.cashMovements)||!Array.isArray(canonical.inventoryMovements)||!canonical.cashState)throw new Error('CANONICAL_OPERATIONAL_SNAPSHOT_INVALID');
@@ -735,7 +736,8 @@ document.addEventListener('DOMContentLoaded',async()=>{
   document.getElementById('fechaHoy').textContent=new Date().toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});document.getElementById('backBtn').style.display='none';
   await loadAllData();
   const canonicalEnabled=typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled();
-  if(canonicalEnabled){_naClearCanonicalLegacyView();}
+  if(canonicalEnabled){productos=[];clientes=[];creditos=[];}
+  if(canonicalEnabled){_naClearCanonicalOperationalView();}
   loadAppState();loadMasterConfig();_naInitSecurity();_naNormalizeData();renderCategorySelects();_naApplyConfigUI();_naInitFreeSaleShortcut();_naInitBarcodeScanner();creditos.forEach(_naSyncCreditStatus);posUpdateCart(canonicalEnabled?false:true);_naSchedulePageRender(_naActivePageId());
   const cliBadge=document.getElementById('cliAuthorityBadge');if(canonicalEnabled&&cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico · conectando';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:800';}
   const localStatus=document.querySelector('#localStatus span'),saveStatus=document.getElementById('saveStatus');if(localStatus&&canonicalEnabled){localStatus.textContent='Conectando a CANON…';if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
