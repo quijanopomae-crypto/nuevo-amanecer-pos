@@ -1,0 +1,60 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-MOTION-LIFECYCLE-001",
+  "base_ref": "2ef0a566720674dd58b1368629f8849ae6291235",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Corregir el lifecycle runtime de animación de Clientes V2 para que el motion LAB aprobado se ejecute realmente en Android/Chrome: salida, swap DOM, preparación de entrada, doble RAF y reposo; además cancelar callbacks obsoletos para evitar carreras.",
+    "READS": [
+      "Investigación avanzada de motion LAB→CANON",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
+    ],
+    "WRITES": [
+      "Explicit exit→DOM swap→entry→double-RAF→rest lifecycle",
+      "Motion epoch to ignore stale timeout/RAF callbacks",
+      "Runtime motion test with controlled timers/RAF"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes",
+      "#cliList",
+      ".stats-strip"
+    ],
+    "STATE_AFFECTED": [
+      "naClientListMotionTimer",
+      "naClientListMotionReady",
+      "new visual motion epoch only"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Motion visual only",
+      "No business logic waits on animation completion",
+      "No D1/storage/network writes",
+      "Payments/FIFO/Caja/inventory/credit balances unchanged",
+      "prefers-reduced-motion remains immediate",
+      "stale timers/RAF callbacks cannot mutate the current motion state"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes presentation only; no financial or sync modules modified"
+    ],
+    "RISKS": [
+      "stale RAF removing a newer class",
+      "DOM swap before entry state is painted",
+      "refresh race during cache validation"
+    ],
+    "ROLLBACK": [
+      "Revertir este PR; no hay cambios de datos, schema ni autoridad financiera."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "runtime class sequence test with fake timeout/RAF",
+      "reduced-motion immediate render test",
+      "existing business/cloud-sync regression suite"
+    ]
+  }
+}
