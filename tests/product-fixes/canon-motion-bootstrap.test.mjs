@@ -5,12 +5,13 @@ import { readFileSync } from 'node:fs';
 const scroll=readFileSync('POS/js/motion/scroll-motion.js','utf8');
 const transitions=readFileSync('POS/css/motion/transitions.css','utf8');
 
-test('mobile scroll motion auto-registers all approved module presets',()=>{
+test('mobile scroll motion exposes approved presets without eager global bootstrap',()=>{
   for(const page of ['pageClientes','pageInventario','pageVentas','pageCaja','pageGastos']){
     assert.ok(scroll.includes(`pageId:'${page}'`),`missing preset ${page}`);
   }
-  assert.match(scroll,/Object\.keys\(motion\.scroll\.presets\)\.forEach/);
-  assert.match(scroll,/register\(motion\.scroll\.presets\[name\]\)/);
+  assert.match(scroll,/enablePreset:\s*function \(name\)/);
+  assert.doesNotMatch(scroll,/Object\.keys\(motion\.scroll\.presets\)\.forEach/);
+  assert.doesNotMatch(scroll,/register\(motion\.scroll\.presets\[name\]\)/);
 });
 
 test('Caja observes its dynamic content and does not clip its chrome',()=>{
