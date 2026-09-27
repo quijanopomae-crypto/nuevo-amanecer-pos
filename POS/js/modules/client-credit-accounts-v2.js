@@ -16,6 +16,11 @@
   var naClientListMotionTimer = 0;
   var naClientListMotionReady = false;
   var naClientListMotionEpoch = 0;
+  var naClientWorkspaceCleanupTimer = 0;
+  var naClientWorkspaceEpoch = 0;
+  var naClientViewTimer = 0;
+  var naClientViewEpoch = 0;
+  var NA_CLIENT_INTERACTIVE_SELECTOR = 'button,input,textarea,select,option,a,label,[contenteditable="true"],[role="button"]';
 
   function labEsc(value) {
     if (typeof _naEsc === 'function') return _naEsc(String(value ?? ''));
@@ -393,6 +398,239 @@
     return [{ number:1, due:cr && cr.vence || '', amount:Number(cr && cr.monto) || 0 }];
   }
 
+  function naClientNow() {
+    try { return root.performance && typeof root.performance.now === 'function' ? root.performance.now() : Date.now(); }
+    catch (_) { return Date.now(); }
+  }
+
+  function naClientCssTimeMs(element, propertyName, fallback) {
+    try {
+      if (!element || typeof root.getComputedStyle !== 'function') return fallback;
+      var raw = String(root.getComputedStyle(element).getPropertyValue(propertyName) || '').trim();
+      if (!raw) return fallback;
+      if (/ms$/i.test(raw)) return Math.max(0, Number.parseFloat(raw) || fallback);
+      if (/s$/i.test(raw)) return Math.max(0, (Number.parseFloat(raw) || 0) * 1000);
+    } catch (_) {}
+    return fallback;
+  }
+
+  function naClientWorkspacePanel(screen) {
+    return screen && screen.querySelector ? screen.querySelector('.na-client-account-shell') : null;
+  }
+
+  function naClientClearWorkspaceCleanup() {
+    if (naClientWorkspaceCleanupTimer) root.clearTimeout(naClientWorkspaceCleanupTimer);
+    naClientWorkspaceCleanupTimer = 0;
+  }
+
+  function naClientResetWorkspaceVisual(screen) {
+    if (!screen) return;
+    naClientClearWorkspaceCleanup();
+    screen.classList.remove('na-client-workspace-dragging','na-client-workspace-settling','na-client-workspace-opening','na-client-workspace-closing');
+    screen.style.removeProperty('--na-client-workspace-drag-y');
+    screen.style.removeProperty('--na-client-workspace-panel-opacity');
+    screen.style.removeProperty('--na-client-workspace-backdrop-alpha');
+    screen.dataset.naMotionState = screen.hidden ? 'closed' : 'open';
+  }
+
+  function naClientWorkspaceTravel(panel) {
+    var height = panel && panel.getBoundingClientRect ? Number(panel.getBoundingClientRect().height) || Number(panel.offsetHeight) || 1 : 1;
+    return Math.min(640, Math.max(360, height * 0.58));
+  }
+
+  function naClientSetWorkspaceVisual(screen, panel, distance) {
+    var progress = Math.max(0, Math.min(1, distance / naClientWorkspaceTravel(panel)));
+    screen.style.setProperty('--na-client-workspace-drag-y', Number(distance).toFixed(1) + 'px');
+    screen.style.setProperty('--na-client-workspace-panel-opacity', (1 - progress * 0.94).toFixed(3));
+    screen.style.setProperty('--na-client-workspace-backdrop-alpha', (1 - progress).toFixed(3));
+    screen.dataset.naMotionState = 'dragging';
+  }
+
+  function naClientWatchWorkspaceCleanup(screen, panel, callback) {
+    naClientClearWorkspaceCleanup();
+    var epoch = ++naClientWorkspaceEpoch;
+    var settled = false;
+    var finish = function () {
+      if (settled || epoch !== naClientWorkspaceEpoch) return;
+      settled = true;
+      if (panel && panel.removeEventListener) panel.removeEventListener('transitionend', onTransitionEnd);
+      naClientClearWorkspaceCleanup();
+      callback();
+    };
+    var onTransitionEnd = function (event) {
+      if (!event || event.target !== panel || event.propertyName === 'transform') finish();
+    };
+    if (panel && panel.addEventListener) panel.addEventListener('transitionend', onTransitionEnd);
+    var fallback = naClientReducedMotion() ? 24 : naClientCssTimeMs(screen, '--na-client-workspace-settle-duration', 350) + 100;
+    naClientWorkspaceCleanupTimer = root.setTimeout(finish, fallback);
+  }
+
+  function naClientBeginWorkspaceSettle(screen, panel, target, state, done) {
+    naClientClearWorkspaceCleanup();
+    screen.classList.remove('na-client-workspace-dragging');
+    screen.classList.add('na-client-workspace-settling');
+    screen.dataset.naMotionState = state || 'settling';
+    if (typeof screen.offsetWidth === 'number') void screen.offsetWidth;
+    root.requestAnimationFrame(function () { target(); });
+    naClientWatchWorkspaceCleanup(screen, panel, function () {
+      screen.classList.remove('na-client-workspace-settling','na-client-workspace-opening','na-client-workspace-closing');
+      if (done) done();
+    });
+  }
+
+  function naClientSettleWorkspaceBack(screen, panel) {
+    naClientBeginWorkspaceSettle(screen, panel, function () {
+      screen.style.setProperty('--na-client-workspace-drag-y', '0px');
+      screen.style.setProperty('--na-client-workspace-panel-opacity', '1');
+      screen.style.setProperty('--na-client-workspace-backdrop-alpha', '1');
+    }, 'settling', function () { naClientResetWorkspaceVisual(screen); });
+  }
+
+  function naClientFinishWorkspaceClose(screen) {
+    screen.hidden = true;
+    document.getElementById('pageClientes')?.classList.remove('na-client-detail-open');
+    labClientScreenState = { clientId:null, route:'home', categoryId:null, creditId:null, purchaseId:null };
+    naClientResetWorkspaceVisual(screen);
+  }
+
+  function naClientDismissWorkspace(screen) {
+    var panel = naClientWorkspacePanel(screen);
+    if (!screen || !panel) return naClientFinishWorkspaceClose(screen);
+    if (naClientReducedMotion()) return naClientFinishWorkspaceClose(screen);
+    screen.classList.add('na-client-workspace-closing');
+    naClientBeginWorkspaceSettle(screen, panel, function () {
+      var panelHeight = panel.getBoundingClientRect ? Number(panel.getBoundingClientRect().height) || Number(panel.offsetHeight) || 0 : 0;
+      var exitDistance = Math.max(Number(root.innerHeight) || 0, panelHeight + 80) + 32;
+      screen.style.setProperty('--na-client-workspace-drag-y', exitDistance + 'px');
+      screen.style.setProperty('--na-client-workspace-panel-opacity', '0');
+      screen.style.setProperty('--na-client-workspace-backdrop-alpha', '0');
+    }, 'closing', function () { naClientFinishWorkspaceClose(screen); });
+  }
+
+  function naClientOpenWorkspace(screen) {
+    var page = document.getElementById('pageClientes');
+    var panel = naClientWorkspacePanel(screen);
+    screen.hidden = false;
+    page?.classList.add('na-client-detail-open');
+    screen.scrollTop = 0;
+    if (!panel || naClientReducedMotion()) {
+      naClientResetWorkspaceVisual(screen);
+      return;
+    }
+    screen.classList.add('na-client-workspace-opening');
+    screen.style.setProperty('--na-client-workspace-drag-y', '26px');
+    screen.style.setProperty('--na-client-workspace-panel-opacity', '.96');
+    screen.style.setProperty('--na-client-workspace-backdrop-alpha', '.72');
+    naClientBeginWorkspaceSettle(screen, panel, function () {
+      screen.style.setProperty('--na-client-workspace-drag-y', '0px');
+      screen.style.setProperty('--na-client-workspace-panel-opacity', '1');
+      screen.style.setProperty('--na-client-workspace-backdrop-alpha', '1');
+    }, 'opening', function () { naClientResetWorkspaceVisual(screen); });
+  }
+
+  function naClientResetViewMotion(content) {
+    if (naClientViewTimer) root.clearTimeout(naClientViewTimer);
+    naClientViewTimer = 0;
+    if (!content) return;
+    content.classList.remove('na-client-view-transitioning');
+    var current = content.firstElementChild;
+    if (current && current.classList) {
+      current.classList.remove('na-client-view-exit-forward','na-client-view-exit-back','na-client-view-enter-forward','na-client-view-enter-back');
+    }
+  }
+
+  function naClientRenderSubview(screen, content, html, direction) {
+    direction = direction || 'replace';
+    if (!content) return;
+    if (direction === 'replace' || naClientReducedMotion() || !content.firstElementChild) {
+      naClientViewEpoch += 1;
+      naClientResetViewMotion(content);
+      content.innerHTML = html;
+      screen.scrollTop = 0;
+      return;
+    }
+
+    var epoch = ++naClientViewEpoch;
+    naClientResetViewMotion(content);
+    content.classList.add('na-client-view-transitioning');
+    var current = content.firstElementChild;
+    var isBack = direction === 'back';
+    current.classList.add(isBack ? 'na-client-view-exit-back' : 'na-client-view-exit-forward');
+    var duration = naClientCssTimeMs(content, '--na-client-view-duration', 220);
+    naClientViewTimer = root.setTimeout(function () {
+      if (epoch !== naClientViewEpoch) return;
+      content.innerHTML = html;
+      screen.scrollTop = 0;
+      var incoming = content.firstElementChild;
+      if (!incoming) {
+        naClientResetViewMotion(content);
+        return;
+      }
+      incoming.classList.add(isBack ? 'na-client-view-enter-back' : 'na-client-view-enter-forward');
+      root.requestAnimationFrame(function () {
+        if (epoch !== naClientViewEpoch) return;
+        root.requestAnimationFrame(function () {
+          if (epoch !== naClientViewEpoch) return;
+          incoming.classList.remove('na-client-view-enter-back','na-client-view-enter-forward');
+          content.classList.remove('na-client-view-transitioning');
+          naClientViewTimer = 0;
+        });
+      });
+    }, duration);
+  }
+
+  function naBindClientWorkspaceSwipe(screen) {
+    if (!screen || screen.dataset.naSwipeBound === 'true') return false;
+    var panel = naClientWorkspacePanel(screen);
+    if (!panel || !panel.addEventListener) return false;
+    screen.dataset.naSwipeBound = 'true';
+
+    var tracking = false, dragging = false, startX = 0, startY = 0, startAt = 0, lastDistance = 0;
+    var reset = function () { tracking=false;dragging=false;startX=0;startY=0;startAt=0;lastDistance=0; };
+    var interactive = function (target) { return !!(target && target.closest && target.closest(NA_CLIENT_INTERACTIVE_SELECTOR)); };
+
+    panel.addEventListener('touchstart', function (event) {
+      if (naClientReducedMotion() || !event.touches || event.touches.length !== 1 || screen.hidden || screen.scrollTop > 0 || interactive(event.target)) return;
+      if (screen.dataset.naMotionState === 'settling' || screen.dataset.naMotionState === 'closing') return;
+      naClientClearWorkspaceCleanup();
+      var touch = event.touches[0];
+      tracking = true; dragging = false; startX = touch.clientX; startY = touch.clientY; startAt = naClientNow(); lastDistance = 0;
+    }, {passive:true});
+
+    panel.addEventListener('touchmove', function (event) {
+      if (!tracking || !event.touches || event.touches.length !== 1) return;
+      var touch = event.touches[0], dx = touch.clientX - startX, dy = touch.clientY - startY;
+      if (!dragging) {
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) { reset(); return; }
+        if (dy <= 6) return;
+        if (screen.scrollTop > 0) { reset(); return; }
+        dragging = true;
+        screen.classList.add('na-client-workspace-dragging');
+        screen.dataset.naMotionState = 'dragging';
+      }
+      if (dy <= 0) return;
+      if (event.preventDefault) event.preventDefault();
+      lastDistance = dy;
+      naClientSetWorkspaceVisual(screen, panel, dy);
+    }, {passive:false});
+
+    var finish = function (cancelled) {
+      if (!tracking) return;
+      var wasDragging = dragging, distance = lastDistance, elapsed = Math.max(1, naClientNow() - startAt);
+      var velocity = distance / elapsed;
+      var panelHeight = panel.getBoundingClientRect ? Number(panel.getBoundingClientRect().height) || Number(panel.offsetHeight) || 1 : 1;
+      var threshold = Math.min(190, Math.max(110, panelHeight * .22));
+      var dismiss = !cancelled && wasDragging && (distance >= threshold || (distance >= 60 && velocity >= .85));
+      reset();
+      if (!wasDragging) return;
+      if (dismiss) naClientDismissWorkspace(screen);
+      else naClientSettleWorkspaceBack(screen, panel);
+    };
+    panel.addEventListener('touchend', function () { finish(false); }, {passive:true});
+    panel.addEventListener('touchcancel', function () { finish(true); }, {passive:true});
+    return true;
+  }
+
   function labScreen() {
     var page = document.getElementById('pageClientes');
     if (!page) return null;
@@ -401,8 +639,10 @@
       screen = document.createElement('section');
       screen.className = 'na-client-account-screen';
       screen.hidden = true;
+      screen.dataset.naMotionState = 'closed';
       screen.innerHTML = '<div class="na-client-account-shell"><div class="na-client-account-content"></div></div>';
       page.appendChild(screen);
+      naBindClientWorkspaceSwipe(screen);
     }
     return screen;
   }
@@ -411,27 +651,30 @@
     return Array.isArray(clientes) ? clientes.find(function (c) { return String(c.id) === String(clientId); }) : null;
   }
 
-  function labRenderScreen(html) {
+  function labRenderScreen(html, direction) {
     var screen = labScreen();
     if (!screen) return;
     var content = screen.querySelector('.na-client-account-content');
-    if (content) content.innerHTML = html;
-    screen.hidden = false;
-    document.getElementById('pageClientes')?.classList.add('na-client-detail-open');
-    screen.scrollTop = 0;
+    var wasHidden = screen.hidden;
+    if (wasHidden) {
+      if (content) content.innerHTML = html;
+      naClientOpenWorkspace(screen);
+      return;
+    }
+    naClientRenderSubview(screen, content, html, direction || 'replace');
   }
 
-  function labCloseScreen() {
+  function labCloseScreen(immediate) {
     var screen = labScreen();
-    if (screen) screen.hidden = true;
-    document.getElementById('pageClientes')?.classList.remove('na-client-detail-open');
-    labClientScreenState = { clientId:null, route:'home', categoryId:null, creditId:null, purchaseId:null };
+    if (!screen) return;
+    if (immediate || naClientReducedMotion() || screen.hidden) return naClientFinishWorkspaceClose(screen);
+    naClientDismissWorkspace(screen);
   }
 
   function labResetClientNavigationForMenu() {
     var page = document.getElementById('pageClientes');
     if (!page || !page.classList.contains('active')) return false;
-    labCloseScreen();
+    labCloseScreen(true);
     return true;
   }
 
@@ -715,35 +958,35 @@
     '</div>';
   }
 
-  function labRenderRoute() {
+  function labRenderRoute(direction) {
     var client = labClientById(labClientScreenState.clientId);
-    if (!client) { labCloseScreen(); return; }
-    if (labClientScreenState.route === 'home') return labRenderScreen(labHomeHtml(client));
+    if (!client) { labCloseScreen(false); return; }
+    if (labClientScreenState.route === 'home') return labRenderScreen(labHomeHtml(client), direction);
     if (labClientScreenState.route === 'category') {
       var cat = labCategoriesForClient(client).find(function (x) { return String(x.id) === String(labClientScreenState.categoryId); });
-      if (!cat) { labClientScreenState.route = 'home'; return labRenderRoute(); }
-      return labRenderScreen(labCategoryHtml(client, cat));
+      if (!cat) { labClientScreenState.route = 'home'; return labRenderRoute('replace'); }
+      return labRenderScreen(labCategoryHtml(client, cat), direction);
     }
     var cr = labClientCredits(client.id).find(function (x) { return String(x.id) === String(labClientScreenState.creditId || labClientScreenState.purchaseId); });
-    if (labClientScreenState.route === 'purchase' && cr) return labRenderScreen(labPurchaseHtml(client, cr));
-    if (labClientScreenState.route === 'credit' && cr) return labRenderScreen(labCreditHtml(client, cr));
-    if (labClientScreenState.route === 'creditHistory' && cr) return labRenderScreen(labCreditHistoryHtml(client, cr));
-    if (labClientScreenState.route === 'history') return labRenderScreen(labGeneralHistoryHtml(client));
-    if (labClientScreenState.route === 'canceled') return labRenderScreen(labCanceledHtml(client));
-    if (labClientScreenState.route === 'line') return labRenderScreen(labLineHtml(client));
-    if (labClientScreenState.route === 'behavior') return labRenderScreen(labBehaviorHtml(client));
+    if (labClientScreenState.route === 'purchase' && cr) return labRenderScreen(labPurchaseHtml(client, cr), direction);
+    if (labClientScreenState.route === 'credit' && cr) return labRenderScreen(labCreditHtml(client, cr), direction);
+    if (labClientScreenState.route === 'creditHistory' && cr) return labRenderScreen(labCreditHistoryHtml(client, cr), direction);
+    if (labClientScreenState.route === 'history') return labRenderScreen(labGeneralHistoryHtml(client), direction);
+    if (labClientScreenState.route === 'canceled') return labRenderScreen(labCanceledHtml(client), direction);
+    if (labClientScreenState.route === 'line') return labRenderScreen(labLineHtml(client), direction);
+    if (labClientScreenState.route === 'behavior') return labRenderScreen(labBehaviorHtml(client), direction);
     labClientScreenState.route = 'home';
-    return labRenderRoute();
+    return labRenderRoute('replace');
   }
 
   window.naCanonOpenClientAccount = function (clientId) {
     if (!labClientById(clientId)) return;
     labClientScreenState = { clientId:String(clientId), route:'home', categoryId:null, creditId:null, purchaseId:null };
-    labRenderRoute();
+    labRenderRoute('open');
   };
 
   window.naCanonClientBack = function () {
-    if (labClientScreenState.route === 'home') return labCloseScreen();
+    if (labClientScreenState.route === 'home') return labCloseScreen(false);
     if (labClientScreenState.route === 'purchase' || labClientScreenState.route === 'credit') {
       labClientScreenState.route = 'category'; labClientScreenState.creditId = null; labClientScreenState.purchaseId = null;
     } else if (labClientScreenState.route === 'creditHistory') {
@@ -751,30 +994,30 @@
     } else {
       labClientScreenState.route = 'home'; labClientScreenState.categoryId = null; labClientScreenState.creditId = null;
     }
-    labRenderRoute();
+    labRenderRoute('back');
   };
 
   window.naCanonOpenCreditCategory = function (categoryId) {
     labClientScreenState.route = 'category'; labClientScreenState.categoryId = String(categoryId || NA_SMALL_ACCOUNT_ID);
-    labRenderRoute();
+    labRenderRoute('forward');
   };
   window.naCanonOpenSmallPurchase = function (creditId) {
-    labClientScreenState.route = 'purchase'; labClientScreenState.purchaseId = String(creditId); labRenderRoute();
+    labClientScreenState.route = 'purchase'; labClientScreenState.purchaseId = String(creditId); labRenderRoute('forward');
   };
   window.naCanonOpenIndividualCredit = function (creditId) {
     var client = labClientById(labClientScreenState.clientId);
     var cr = client && labClientCredits(client.id).find(function (x) { return String(x.id) === String(creditId); });
     if (!cr) return;
     labClientScreenState.categoryId = creditAccountMeta(cr).categoryId;
-    labClientScreenState.route = 'credit'; labClientScreenState.creditId = String(creditId); labRenderRoute();
+    labClientScreenState.route = 'credit'; labClientScreenState.creditId = String(creditId); labRenderRoute('forward');
   };
   window.naCanonOpenCreditHistory = function (creditId) {
-    labClientScreenState.route = 'creditHistory'; labClientScreenState.creditId = String(creditId); labRenderRoute();
+    labClientScreenState.route = 'creditHistory'; labClientScreenState.creditId = String(creditId); labRenderRoute('forward');
   };
-  window.naCanonOpenClientPaymentHistory = function () { labClientScreenState.route = 'history'; labRenderRoute(); };
-  window.naCanonOpenCanceledCredits = function () { labClientScreenState.route = 'canceled'; labRenderRoute(); };
-  window.naCanonOpenCreditLine = function () { labClientScreenState.route = 'line'; labRenderRoute(); };
-  window.naCanonOpenClientBehavior = function () { labClientScreenState.route = 'behavior'; labRenderRoute(); };
+  window.naCanonOpenClientPaymentHistory = function () { labClientScreenState.route = 'history'; labRenderRoute('forward'); };
+  window.naCanonOpenCanceledCredits = function () { labClientScreenState.route = 'canceled'; labRenderRoute('forward'); };
+  window.naCanonOpenCreditLine = function () { labClientScreenState.route = 'line'; labRenderRoute('forward'); };
+  window.naCanonOpenClientBehavior = function () { labClientScreenState.route = 'behavior'; labRenderRoute('forward'); };
   window.naCanonToggleCreditInfo = function () {
     var node = document.getElementById('naV2CreditInfo'); if (node) node.hidden = !node.hidden;
   };
