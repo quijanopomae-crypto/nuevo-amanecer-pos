@@ -1,0 +1,25 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-OBSERVER-LOOP-001",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "observed": [
+    "client-credit-accounts-v2.js observa #cliList con childList:true, subtree:true.",
+    "Cada mutación programa requestAnimationFrame(naEnhanceClientCards).",
+    "naEnhanceClientCards llama naUppercaseClientCards.",
+    "naUppercaseClientCards asigna node.textContent en cada .c-name incluso si el texto ya está en mayúsculas.",
+    "La asignación de textContent puede producir mutaciones childList en el mismo subárbol observado, creando una realimentación repetitiva.",
+    "El observer existe aunque pageClientes esté oculto."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Romper la realimentación y coalescer el trabajo del observer.",
+    "WRITES": [
+      "Solo escribir textContent cuando el valor realmente cambia.",
+      "Usar un único RAF pendiente para el observer."
+    ],
+    "DOM_AFFECTED": ["#cliList .c-name"],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "ROLLBACK": ["Revertir el PR."]
+  }
+}
