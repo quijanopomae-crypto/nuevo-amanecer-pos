@@ -403,6 +403,50 @@
     };
   }
 
+  function uiExpense(row) {
+    row = row && typeof row === 'object' ? row : {};
+    var when = localParts(row.created_at);
+    return {
+      id: row.expense_id,
+      expenseId: row.expense_id,
+      operationId: row.operation_id,
+      desc: text(row.concept),
+      monto: cents(row.amount_cents),
+      cat: text(row.category),
+      metodo: text(row.payment_method),
+      fecha: text(row.expense_date),
+      nota: text(row.note),
+      sessionId: row.session_id || null,
+      timestamp: when.timestamp,
+      canonical: true,
+      canonicalReadOnly: true
+    };
+  }
+
+  function uiExpenseCashMovement(row) {
+    if (!row || !row.session_id) return null;
+    var when = localParts(row.created_at);
+    var amount = cents(row.amount_cents);
+    return {
+      id: 'expense:' + text(row.expense_id),
+      operationId: row.operation_id,
+      tipo: 'gas',
+      monto: amount,
+      efectivo: row.payment_method === 'efectivo' ? amount : 0,
+      digital: row.payment_method === 'efectivo' ? 0 : amount,
+      desc: text(row.concept),
+      cat: text(row.category),
+      metodo: text(row.payment_method),
+      hora: when.time,
+      hora24: when.time,
+      timestamp: when.timestamp,
+      fecha: text(row.expense_date),
+      sessionId: row.session_id,
+      expenseId: row.expense_id,
+      canonical: true
+    };
+  }
+
   function uiCashState(sessions) {
     var rows = (Array.isArray(sessions) ? sessions : []).filter(Boolean).slice();
     var open = rows.filter(function (row) { return row.status === 'OPEN'; });
@@ -463,8 +507,11 @@
     var sales = (Array.isArray(data.sales) ? data.sales : []).map(function (row) {
       return uiSale(row, itemsBySale, productById, customerById, cashBySale);
     });
+    var expenses = (Array.isArray(data.expenses) ? data.expenses : []).map(uiExpense);
+    var expenseCashMovements = (Array.isArray(data.expenses) ? data.expenses : []).map(uiExpenseCashMovement).filter(Boolean);
     var cashMovements = (Array.isArray(data.cashMovements) ? data.cashMovements : []).map(uiSaleCashMovement)
       .concat((Array.isArray(data.financialEvents) ? data.financialEvents : []).map(uiFinancialMovement))
+      .concat(expenseCashMovements)
       .sort(function (a, b) { return text(a.timestamp).localeCompare(text(b.timestamp)); });
     return {
       products: products,
@@ -472,6 +519,7 @@
       credits: credits,
       payments: (Array.isArray(data.payments) ? data.payments : []).slice(),
       sales: sales,
+      expenses: expenses,
       cashState: uiCashState(data.cashSessions),
       cashMovements: cashMovements,
       inventoryMovements: (Array.isArray(data.inventoryMovements) ? data.inventoryMovements : []).map(uiInventoryMovement),
@@ -491,6 +539,7 @@
     credit: uiCredit,
     payment: uiPayment,
     sale: uiSale,
+    expense: uiExpense,
     cashState: uiCashState,
     snapshot: snapshot
   });
