@@ -177,3 +177,16 @@ owner_finalizer:
     - branch_protection_verified
     - current_lab_deploy_pass
     - real_backup_r2_temporary_d1_drill_pass
+
+
+motion:
+  architecture_map: docs/MOTION_MAP.yaml
+  namespace: window.NA_MOTION
+  js_root: POS/js/motion/
+  css_root: POS/css/motion/
+  authority: visual_only
+  business_authority: false
+  storage_authority: false
+  network_authority: false
+  reduced_motion: required
+  pilot_consumer: POS/js/modules/client-credit-accounts-v2.js

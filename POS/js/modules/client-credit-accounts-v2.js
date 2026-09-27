@@ -403,7 +403,34 @@
     catch (_) { return Date.now(); }
   }
 
+  function naMotionCore() {
+    return root.NA_MOTION && root.NA_MOTION.core ? root.NA_MOTION.core : null;
+  }
+
+  function naClientSetMotionState(element, state) {
+    var core = naMotionCore();
+    if (core && typeof core.setState === 'function') return core.setState(element, state);
+    if (element && element.dataset) element.dataset.naMotionState = state || 'idle';
+    return state || 'idle';
+  }
+
+  function naClientGetMotionState(element) {
+    var core = naMotionCore();
+    if (core && typeof core.getState === 'function') return core.getState(element);
+    return element && element.dataset ? (element.dataset.naMotionState || 'idle') : 'idle';
+  }
+
+  function naClientSetMotionProgress(element, value) {
+    var core = naMotionCore();
+    if (core && typeof core.setProgress === 'function') return core.setProgress(element, value);
+    var progress = Math.max(0, Math.min(1, Number(value) || 0));
+    if (element && element.style) element.style.setProperty('--na-motion-progress', progress.toFixed(4));
+    return progress;
+  }
+
   function naClientCssTimeMs(element, propertyName, fallback) {
+    var core = naMotionCore();
+    if (core && typeof core.cssTimeMs === 'function') return core.cssTimeMs(element, propertyName, fallback);
     try {
       if (!element || typeof root.getComputedStyle !== 'function') return fallback;
       var raw = String(root.getComputedStyle(element).getPropertyValue(propertyName) || '').trim();
@@ -430,7 +457,8 @@
     screen.style.removeProperty('--na-client-workspace-drag-y');
     screen.style.removeProperty('--na-client-workspace-panel-opacity');
     screen.style.removeProperty('--na-client-workspace-backdrop-alpha');
-    screen.dataset.naMotionState = screen.hidden ? 'closed' : 'open';
+    naClientSetMotionProgress(screen, 0);
+    naClientSetMotionState(screen, screen.hidden ? 'closed' : 'open');
   }
 
   function naClientWorkspaceTravel(panel) {
@@ -439,11 +467,11 @@
   }
 
   function naClientSetWorkspaceVisual(screen, panel, distance) {
-    var progress = Math.max(0, Math.min(1, distance / naClientWorkspaceTravel(panel)));
+    var progress = naClientSetMotionProgress(screen, distance / naClientWorkspaceTravel(panel));
     screen.style.setProperty('--na-client-workspace-drag-y', Number(distance).toFixed(1) + 'px');
     screen.style.setProperty('--na-client-workspace-panel-opacity', (1 - progress * 0.94).toFixed(3));
     screen.style.setProperty('--na-client-workspace-backdrop-alpha', (1 - progress).toFixed(3));
-    screen.dataset.naMotionState = 'dragging';
+    naClientSetMotionState(screen, 'dragging');
   }
 
   function naClientWatchWorkspaceCleanup(screen, panel, callback) {
@@ -469,7 +497,7 @@
     naClientClearWorkspaceCleanup();
     screen.classList.remove('na-client-workspace-dragging');
     screen.classList.add('na-client-workspace-settling');
-    screen.dataset.naMotionState = state || 'settling';
+    naClientSetMotionState(screen, state || 'settling');
     if (typeof screen.offsetWidth === 'number') void screen.offsetWidth;
     root.requestAnimationFrame(function () { target(); });
     naClientWatchWorkspaceCleanup(screen, panel, function () {
@@ -591,7 +619,8 @@
 
     panel.addEventListener('touchstart', function (event) {
       if (naClientReducedMotion() || !event.touches || event.touches.length !== 1 || screen.hidden || screen.scrollTop > 0 || interactive(event.target)) return;
-      if (screen.dataset.naMotionState === 'settling' || screen.dataset.naMotionState === 'closing') return;
+      var motionState = naClientGetMotionState(screen);
+      if (motionState === 'settling' || motionState === 'closing') return;
       naClientClearWorkspaceCleanup();
       var touch = event.touches[0];
       tracking = true; dragging = false; startX = touch.clientX; startY = touch.clientY; startAt = naClientNow(); lastDistance = 0;
@@ -606,7 +635,7 @@
         if (screen.scrollTop > 0) { reset(); return; }
         dragging = true;
         screen.classList.add('na-client-workspace-dragging');
-        screen.dataset.naMotionState = 'dragging';
+        naClientSetMotionState(screen, 'dragging');
       }
       if (dy <= 0) return;
       if (event.preventDefault) event.preventDefault();
@@ -639,7 +668,7 @@
       screen = document.createElement('section');
       screen.className = 'na-client-account-screen';
       screen.hidden = true;
-      screen.dataset.naMotionState = 'closed';
+      naClientSetMotionState(screen, 'closed');
       screen.innerHTML = '<div class="na-client-account-shell"><div class="na-client-account-content"></div></div>';
       page.appendChild(screen);
       naBindClientWorkspaceSwipe(screen);
@@ -1023,6 +1052,8 @@
   };
 
   function naClientReducedMotion() {
+    var core = naMotionCore();
+    if (core && typeof core.reducedMotion === 'function') return core.reducedMotion();
     try { return !!root.matchMedia('(prefers-reduced-motion: reduce)').matches; }
     catch (_) { return false; }
   }

@@ -1,0 +1,32 @@
+/*
+ * Nuevo Amanecer CANON Motion contract.
+ * Motion is visual feedback only. It never owns business, storage, auth or sync state.
+ */
+:root{
+  --na-motion-fast:160ms;
+  --na-motion-normal:240ms;
+  --na-motion-slow:560ms;
+  --na-motion-modal-settle-duration:560ms;
+  --na-motion-ease-standard:cubic-bezier(.2,.7,.2,1);
+  --na-motion-ease-settle:cubic-bezier(.22,1,.36,1);
+}
+
+.na-motion{
+  transition-duration:var(--na-motion-normal);
+  transition-timing-function:var(--na-motion-ease-standard);
+}
+
+[data-na-motion-state]{
+  --na-motion-progress:0;
+}
+
+@media(prefers-reduced-motion:reduce){
+  .na-motion,
+  .na-motion *,
+  [data-na-motion-state]{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+    scroll-behavior:auto!important;
+  }
+}

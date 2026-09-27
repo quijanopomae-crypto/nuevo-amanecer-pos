@@ -1,0 +1,81 @@
+schema_version: 1
+environment: CANON
+namespace: window.NA_MOTION
+authority: visual_only
+
+contract:
+  source_of_truth: visual_state_only
+  state_attribute: data-na-motion-state
+  progress_variable: --na-motion-progress
+  progress_range: [0, 1]
+  states:
+    - idle
+    - opening
+    - open
+    - dragging
+    - settling
+    - closing
+    - closed
+  reduced_motion: required
+  failure_mode: fail_soft_static_ui
+  business_authority: false
+  storage_authority: false
+  network_authority: false
+  auth_authority: false
+  sync_authority: false
+
+runtime:
+  core: POS/js/motion/core.js
+  page: POS/js/motion/page-transitions.js
+  scroll: POS/js/motion/scroll-motion.js
+  modal: POS/js/motion/modal-motion.js
+  feedback: POS/js/motion/feedback-motion.js
+  cart: POS/js/motion/cart-motion.js
+
+styles:
+  contract: POS/css/motion/motion.css
+  transitions: POS/css/motion/transitions.css
+  modals: POS/css/motion/modals.css
+  notifications: POS/css/motion/notifications.css
+
+core_api:
+  - clamp
+  - reducedMotion
+  - parseTimeMs
+  - cssTimeMs
+  - restartClass
+  - setState
+  - getState
+  - setProgress
+  - inspect
+  - whenTransitionEnds
+  - registerController
+  - controller
+
+controllers:
+  page:
+    responsibility: opt_in_page_entry_feedback
+  scroll:
+    responsibility: opt_in_mobile_scroll_linked_secondary_chrome
+    default_activation: false
+  modal:
+    responsibility: reusable_visual_swipe_dismiss
+    default_activation: false
+  feedback:
+    responsibility: notification_feedback
+  cart:
+    responsibility: cart_feedback
+
+pilot_consumers:
+  - module: client_credit_accounts_v2
+    js: POS/js/modules/client-credit-accounts-v2.js
+    rule: reuse_core_primitives_keep_financial_logic_outside_motion
+
+invariants:
+  - motion_never_confirms_sales_stock_cash_credit_or_persistence
+  - motion_never_reads_or_writes_localStorage_sessionStorage_IndexedDB_D1_or_R2
+  - motion_never_calls_network_endpoints
+  - motion_never_authorizes_or_denies_user_actions
+  - a_motion_failure_must_not_block_business_operations
+  - every_interactive_motion_must_respect_prefers_reduced_motion
+  - POS_runtime_must_not_depend_on_laboratorio
