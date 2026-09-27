@@ -1,0 +1,27 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-NAVIGATION-PERFORMANCE-ROOT-DEPLOY-001",
+  "base_ref": "2470f5f0d274e6da431f84d9d0cd19a6efbe66e3",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "pr": 138,
+    "merge_commit": "2470f5f0d274e6da431f84d9d0cd19a6efbe66e3",
+    "pr_ci": "CANON Critical CI #111 PASS",
+    "post_merge_ci": "CANON Critical CI #112 PASS"
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el fix de navegación no bloqueante e índice de créditos.",
+    "READS": ["PR #138","CANON Critical CI #111","CANON Critical CI #112","ops/v1.3-pos-web-deploy-trigger.json"],
+    "WRITES": ["Actualizar solo trigger protegido de deploy."],
+    "DOM_AFFECTED": ["Worker público /app"],
+    "STATE_AFFECTED": ["Versión publicada del shell"],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": ["Sin backend/D1/R2","Sin operaciones comerciales","UI V2 intacta"],
+    "CROSS_MODULE_IMPACT": ["Navegación de módulos y Clientes"],
+    "RISKS": ["El navegador puede conservar el service worker anterior hasta reapertura."],
+    "ROLLBACK": ["Redeploy del build anterior."],
+    "TEST_PLAN": ["Hosted POS safety tests","Static Worker dry-run","Deploy","Verify launcher/assets","Verificar código público de scheduler e índice"]
+  }
+}
