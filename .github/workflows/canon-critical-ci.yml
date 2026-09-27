@@ -65,6 +65,7 @@ jobs:
           node tools/pos-experience/promote-lab-visuals.mjs --check
           node --test \
             tests/product-fixes/canon-lab-interface-parity.test.mjs \
+            tests/product-fixes/lab-canon-promotion-parity.test.mjs \
             tests/product-fixes/canon-motion-bootstrap.test.mjs \
             tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
             tests/product-fixes/canonical-ui-contract.test.mjs

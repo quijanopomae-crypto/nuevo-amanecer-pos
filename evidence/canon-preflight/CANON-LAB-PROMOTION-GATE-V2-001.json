@@ -1,0 +1,32 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-PROMOTION-GATE-V2-001",
+  "base_ref": "cc7d92300b2eb685a846529aec94bc3d0d0ccbbc",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "tests/product-fixes/lab-canon-promotion-parity.test.mjs existe en la rama activa.",
+    "El test valida las 8 secciones LAB contra el shell CANON con diferencias explícitas permitidas.",
+    "También verifica core scripts compartidos, aislamiento LAB, capabilities financieras de Clientes y existencia de contrapartes Motion CANON.",
+    "Ese test no estaba incluido en CANON Critical CI ni en el gate previo al Hosted POS Deploy."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Hacer obligatoria la paridad integral ya definida por el repositorio.",
+    "READS": [
+      "tests/product-fixes/lab-canon-promotion-parity.test.mjs",
+      ".github/workflows/canon-critical-ci.yml",
+      ".github/workflows/v1.3-pos-web-deploy.yml"
+    ],
+    "WRITES": [
+      "Añadir el test existente a ambos gates.",
+      "Documentar que el gate cubre DOM/runtime shared además de CSS."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": ["Sin cambios comerciales ni productivos."],
+    "CROSS_MODULE_IMPACT": ["CI/deploy fail-closed ante drift estructural LAB→CANON."],
+    "ROLLBACK": ["Revertir el PR."]
+  }
+}

@@ -26,8 +26,8 @@ El JavaScript Motion NO se copia byte por byte porque LAB y CANON usan lifecycle
 
 ## Gates
 
-1. CANON Critical CI ejecuta la comprobación de paridad y los tests Motion relacionados.
-2. Hosted POS Deploy repite el gate antes de ensamblar el sitio productivo.
+1. CANON Critical CI ejecuta la comprobación de paridad visual, la paridad integral de las 8 secciones DOM, el core compartido y los tests Motion/UI relacionados.
+2. Hosted POS Deploy repite el mismo gate antes de ensamblar el sitio productivo.
 3. Un drift visual hace fallar el pipeline antes del deploy.
 
 ## Límites
