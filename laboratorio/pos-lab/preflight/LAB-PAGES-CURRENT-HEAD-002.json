@@ -1,0 +1,82 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-PAGES-CURRENT-HEAD-002",
+  "base_ref": "beede554a246d4c5a8b635e4d758b5d2de3e2746",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/build-lab.mjs",
+      ".github/workflows/lab-pages.yml",
+      ".github/workflows/lab-cloud-ci.yml",
+      "GitHub Pages public assets and recent workflow runs"
+    ],
+    "WRITES": [
+      "LAB Pages workflow trigger/verification logic, a static-artifact verifier, and LAB pipeline regression tests only."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "GitHub Pages artifact build identity and deployment freshness."
+    ],
+    "STORAGE_AFFECTED": [
+      "GitHub Pages static artifact only; no browser storage, D1, R2, or production data."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No change to POS business logic or CANON runtime.",
+      "No writes to POS/**.",
+      "LAB artifact must include POS/** support assets from the exact same commit.",
+      "LAB must fail closed if a referenced local asset is absent.",
+      "Pages deploy must expose the exact git SHA in the published LAB HTML."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "POS/** changes now trigger a LAB Pages rebuild because LAB resolves support assets through ../../POS/.",
+      "LAB Canon Mirror CI must run the Pages regression test before merge.",
+      "GitHub Pages deployment verification prevents stale LAB/CANON comparisons."
+    ],
+    "RISKS": [
+      "More POS changes will trigger Pages deploys, increasing CI frequency.",
+      "Asset URL stamping must not rewrite external CDN URLs.",
+      "Post-deploy verification must tolerate normal Pages propagation delay."
+    ],
+    "ROLLBACK": [
+      "Revert the workflow/verifier PR; no product or data migration is involved."
+    ],
+    "TESTS": [
+      "Run skill preflight with schema v3 and exact skill blob hashes.",
+      "Run LAB Canon Mirror CI.",
+      "Run node --test tests/laboratorio-*.test.mjs.",
+      "Build the static Pages artifact and verify every local src/href exists.",
+      "Post-deploy verify the published SHA and critical current-head assets."
+    ]
+  }
+}
