@@ -10,6 +10,10 @@ const PRECACHE_URLS = [
   './css/components.css',
   './css/responsive.css',
   './css/print.css',
+  './css/motion/motion.css',
+  './css/motion/transitions.css',
+  './css/motion/modals.css',
+  './css/motion/notifications.css',
   './css/client-credit-accounts-v2.css',
   './js/core/utils.js',
   './js/sync/outbox.js',
@@ -43,6 +47,12 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-16.js',
   './js/legacy-inline/inline-17.js',
   './js/legacy-inline/inline-18.js',
+  './js/motion/core.js',
+  './js/motion/page-transitions.js',
+  './js/motion/scroll-motion.js',
+  './js/motion/modal-motion.js',
+  './js/motion/feedback-motion.js',
+  './js/motion/cart-motion.js',
   './js/modules/client-credit-accounts-v2.js',
   './js/compat/legacy-globals.js',
   './js/app.js',
@@ -77,18 +87,24 @@ function isExcluded(request, url) {
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(
-    [...PRECACHE_URLS_ABSOLUTE].map((url) => new Request(url, { cache: 'reload' }))
-  )));
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(
+        [...PRECACHE_URLS_ABSOLUTE].map((url) => new Request(url, { cache: 'reload' }))
+      ))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((names) => Promise.all(
-      names
-        .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
-        .map((name) => caches.delete(name))
-    ))
+    caches.keys()
+      .then((names) => Promise.all(
+        names
+          .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
+          .map((name) => caches.delete(name))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
@@ -97,8 +113,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (isExcluded(request, url)) return;
 
-  // Keep HTML and its dependencies pinned until the waiting worker can activate.
-  // A missing entry must not pull a different generation from network/other caches.
+  // Keep HTML and its precached dependencies pinned to one build generation.
+  // The new worker activates only after the complete shell cache succeeds.
   const key = request.mode === 'navigate' ? START_URL : request.url;
   event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(key)).then((cached) =>
     cached || new Response('Shell PWA incompleto. Cierre las pestanas del POS y vuelva a abrir con conexion.', {
