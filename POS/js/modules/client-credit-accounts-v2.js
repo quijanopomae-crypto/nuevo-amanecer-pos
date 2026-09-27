@@ -19,7 +19,9 @@
   var naClientWorkspaceCleanupTimer = 0;
   var naClientWorkspaceEpoch = 0;
   var naClientViewTimer = 0;
+  var naClientViewCancel = null;
   var naClientViewEpoch = 0;
+  var naClientMotionBound = false;
   var NA_CLIENT_INTERACTIVE_SELECTOR = 'button,input,textarea,select,option,a,label,[contenteditable="true"],[role="button"]';
 
   function labEsc(value) {
@@ -441,6 +443,41 @@
     return fallback;
   }
 
+  function naClientWatchTransition(element, propertyName, fallbackMs, callback) {
+    var core = naMotionCore();
+    if (core && typeof core.whenTransitionEnds === 'function') {
+      return core.whenTransitionEnds(element, {
+        propertyName:propertyName || '',
+        fallbackMs:Math.max(0, Number(fallbackMs) || 0)
+      }, callback);
+    }
+
+    var done = false;
+    var timer = null;
+    function cleanup() {
+      if (timer !== null) root.clearTimeout(timer);
+      if (element && element.removeEventListener) element.removeEventListener('transitionend', onEnd);
+    }
+    function finish() {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (typeof callback === 'function') callback();
+    }
+    function onEnd(event) {
+      if (!event || event.target !== element) return;
+      if (propertyName && event.propertyName !== propertyName) return;
+      finish();
+    }
+    if (element && element.addEventListener) element.addEventListener('transitionend', onEnd);
+    timer = root.setTimeout(finish, Math.max(0, Number(fallbackMs) || 0));
+    return function () {
+      if (done) return;
+      done = true;
+      cleanup();
+    };
+  }
+
   function naClientWorkspacePanel(screen) {
     return screen && screen.querySelector ? screen.querySelector('.na-client-account-shell') : null;
   }
@@ -557,10 +594,15 @@
   }
 
   function naClientResetViewMotion(content) {
+    if (naClientViewCancel) {
+      naClientViewCancel();
+      naClientViewCancel = null;
+    }
     if (naClientViewTimer) root.clearTimeout(naClientViewTimer);
     naClientViewTimer = 0;
     if (!content) return;
     content.classList.remove('na-client-view-transitioning');
+    naClientSetMotionState(content, 'idle');
     var current = content.firstElementChild;
     if (current && current.classList) {
       current.classList.remove('na-client-view-exit-forward','na-client-view-exit-back','na-client-view-enter-forward','na-client-view-enter-back');
@@ -575,18 +617,22 @@
       naClientResetViewMotion(content);
       content.innerHTML = html;
       screen.scrollTop = 0;
+      naClientSetMotionState(content, 'open');
       return;
     }
 
     var epoch = ++naClientViewEpoch;
     naClientResetViewMotion(content);
     content.classList.add('na-client-view-transitioning');
+    naClientSetMotionState(content, 'closing');
     var current = content.firstElementChild;
     var isBack = direction === 'back';
     current.classList.add(isBack ? 'na-client-view-exit-back' : 'na-client-view-exit-forward');
     var duration = naClientCssTimeMs(content, '--na-client-view-duration', 220);
-    naClientViewTimer = root.setTimeout(function () {
+
+    naClientViewCancel = naClientWatchTransition(current, 'transform', duration + 90, function () {
       if (epoch !== naClientViewEpoch) return;
+      naClientViewCancel = null;
       content.innerHTML = html;
       screen.scrollTop = 0;
       var incoming = content.firstElementChild;
@@ -594,17 +640,24 @@
         naClientResetViewMotion(content);
         return;
       }
+
       incoming.classList.add(isBack ? 'na-client-view-enter-back' : 'na-client-view-enter-forward');
+      naClientSetMotionState(content, 'opening');
+
       root.requestAnimationFrame(function () {
         if (epoch !== naClientViewEpoch) return;
         root.requestAnimationFrame(function () {
           if (epoch !== naClientViewEpoch) return;
           incoming.classList.remove('na-client-view-enter-back','na-client-view-enter-forward');
-          content.classList.remove('na-client-view-transitioning');
-          naClientViewTimer = 0;
+          naClientViewCancel = naClientWatchTransition(incoming, 'transform', duration + 90, function () {
+            if (epoch !== naClientViewEpoch) return;
+            naClientViewCancel = null;
+            content.classList.remove('na-client-view-transitioning');
+            naClientSetMotionState(content, 'open');
+          });
         });
       });
-    }, duration);
+    });
   }
 
   function naBindClientWorkspaceSwipe(screen) {
@@ -1489,6 +1542,40 @@
     });
   }
 
+  function naBindClientMotion() {
+    if (naClientMotionBound) return true;
+    var motion = root.NA_MOTION;
+    var page = document.getElementById('pageClientes');
+    if (!motion || !motion.core || !page) return false;
+
+    page.classList.add('na-motion');
+
+    if (motion.page && typeof motion.page.bind === 'function') {
+      var pageController = motion.page.bind('pageClientes', { enterClass:'na-enter-fade' });
+      if (pageController && page.classList.contains('active') && typeof pageController.enter === 'function') {
+        pageController.enter();
+      }
+    }
+
+    if (typeof motion.core.registerController === 'function') {
+      motion.core.registerController('clientes-v2', {
+        inspect:function () {
+          var screen = page.querySelector('.na-client-account-screen');
+          return {
+            pageActive:page.classList.contains('active'),
+            detailOpen:!!(screen && !screen.hidden),
+            workspaceState:screen ? naClientGetMotionState(screen) : 'closed',
+            viewState:screen ? naClientGetMotionState(screen.querySelector('.na-client-account-content')) : 'idle',
+            reducedMotion:naClientReducedMotion()
+          };
+        }
+      });
+    }
+
+    naClientMotionBound = true;
+    return true;
+  }
+
   function naBindRuntime() {
     if (typeof abrirCobro === 'function' && !abrirCobro.__naCreditAccountsV2) {
       var open=abrirCobro;
@@ -1506,6 +1593,7 @@
       back.dataset.naClientMenuReset='true';
       back.addEventListener('click',naResetClientNavigationForMenu,true);
     }
+    naBindClientMotion();
     naEnhanceClientCards(); naSyncClientLoadingUi();
   }
 
