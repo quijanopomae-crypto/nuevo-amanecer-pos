@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish the LAB/CANON root-promotion fix from commit eea3d328dd4ff0fd272663e3495611cf0847c812: unified CANON->UI adapter, event-based renderer composition and validated Motion wiring; keep activation, financial gates and backend unchanged.",
-  "retry_attempt": 15,
-  "retry_reason": "Owner requested completion of the root LAB -> CANON integration after deep audit.",
-  "requested_at_utc": "2026-09-27T15:45:00Z",
-  "target_head": "eea3d328dd4ff0fd272663e3495611cf0847c812"
+  "note": "Publish CANON interface V2 from commit 20b37dabf04ca6736f6a8689d1e31a83f9338efd; preserve activation, financial gates and backend unchanged.",
+  "retry_attempt": 16,
+  "retry_reason": "Owner verified the public Worker still showed the old interface; deploy the approved LAB visual layer promoted in PR #134.",
+  "requested_at_utc": "2026-09-27T16:10:00Z",
+  "target_head": "20b37dabf04ca6736f6a8689d1e31a83f9338efd"
 }
