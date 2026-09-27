@@ -66,7 +66,7 @@ jobs:
           sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/index.html
           sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
           if grep -Fq '__BUILD_HASH__' tools/cloudflare-pos-web/_site/app/sw.js tools/cloudflare-pos-web/_site/index.html; then
-            echo "Hosted build hash placeholder was not replaced" >&2
+            echo "Service Worker build hash placeholder was not replaced" >&2
             exit 1
           fi
           grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/app/sw.js
