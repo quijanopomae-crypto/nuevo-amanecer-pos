@@ -148,3 +148,29 @@ test('index script order keeps canonical view after dependencies and inline-18',
   assert.ok(at('js/compat/legacy-globals.js') < at('js/app.js'));
   assert.ok(at('js/sync/canonical-client.js') < at('js/sync/canonical-sale-view.js'));
 });
+
+
+test('canonical sale view composes through lifecycle events without taking renderer ownership', () => {
+  const h = harness({ intents: [intent('S-EVENT', 1, { payment_method:'credito', customer_id:'c1', credit_due:'2026-10-01' })] });
+  const ventasIdentity = h.globals.ventasRender;
+  const clientesIdentity = h.globals.cliRender;
+  h.run();
+  assert.equal(h.globals.ventasRender, ventasIdentity);
+  assert.equal(h.globals.cliRender, clientesIdentity);
+
+  h.nodes.get('ventasContent').replaceChildren();
+  h.nodes.get('cliList').replaceChildren();
+  h.globals.dispatchEvent({ type:'na:sales-rendered' });
+  h.globals.dispatchEvent({ type:'na:clients-rendered' });
+  assert.match(h.nodes.get('ventasContent').children[0].textContent, /Pendiente de sincronización/);
+  assert.match(h.nodes.get('cliList').children[0].textContent, /Crédito pendiente de sincronización/);
+});
+
+test('authoritative sales and clients renderers emit post-render lifecycle events', () => {
+  const clients = fs.readFileSync(new URL('../../POS/js/legacy-inline/inline-03.js', import.meta.url), 'utf8');
+  const sales = fs.readFileSync(new URL('../../POS/js/legacy-inline/inline-10.js', import.meta.url), 'utf8');
+  assert.match(clients,/new CustomEvent\('na:clients-rendered'\)/);
+  assert.match(sales,/new CustomEvent\('na:sales-rendered'\)/);
+  assert.doesNotMatch(script,/root\[name\]\s*=/);
+  assert.doesNotMatch(script,/installRenderHooks/);
+});

@@ -1,0 +1,81 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-ROOT-PROMOTION-001",
+  "base_ref": "c8431c0bb1407ab0364e444049ca817db54c4967",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Cerrar la doble integración LAB/CANON con un contrato de UI estable y una promoción diferencial verificable.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "docs/LABORATORIO_A_CANON.md",
+      "docs/LAB_CANON_MIRROR.md",
+      "docs/V1.3_STATUS.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/MOTION_MAP.yaml",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "POS/index.html",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "PR #131",
+      "auditoría externa LAB -> CANON aportada por el propietario"
+    ],
+    "WRITES": [
+      "Crear adapter CANON->UI dedicado y delegar legacySnapshot.",
+      "Promover solo Motion carrito/toast válido del PR #131.",
+      "No crear un segundo wrapper de cliRender.",
+      "Añadir eventos/hook solo si son necesarios para eliminar ownership tardío.",
+      "Añadir gate de paridad y contrato de UI."
+    ],
+    "DOM_AFFECTED": [
+      "Catálogo POS",
+      "Inventario",
+      "Clientes",
+      "toast",
+      "badge del carrito",
+      "vistas pendientes de ventas/créditos"
+    ],
+    "STATE_AFFECTED": [
+      "Forma visual de products/customers/credits/payments derivada de snapshot CANON.",
+      "No cambia el estado autoritativo CANON."
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno; el adapter es transformación en memoria."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Venta, stock y caja se actualizan una sola vez.",
+      "El adapter no escribe.",
+      "No se alteran IDs canónicos.",
+      "No se habilita comercio si CANON no está ACTIVE.",
+      "Motion nunca confirma ni bloquea lógica financiera."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Productos: búsqueda, categorías, mayorista, inventario, impuestos y scanner.",
+      "Clientes/créditos: misma forma visual con datos canónicos.",
+      "Motion: solo feedback visual posterior al cambio de DOM.",
+      "PWA: cualquier nuevo asset productivo debe quedar versionado en el shell."
+    ],
+    "RISKS": [
+      "Cambiar aliases puede afectar normalización heredada: mitigado conservando aliases actuales y añadiendo los consumidos.",
+      "Duplicar Motion de Clientes: mitigado prohibiendo client-list-motion.js y preservando el renderer V2 actual.",
+      "Wrapper tardío de canonical-sale-view: se revisa con test sin debilitar garantías."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR."
+    ],
+    "TEST_PLAN": [
+      "Test focal CANON->UI con fixture sintético completo.",
+      "Test de categorías/barcode/icon/controlInventario/mayorista/impuestos.",
+      "Test visual carrito/toast sin cliRender wrapper.",
+      "client-renderer-collision existente intacto.",
+      "CANON Critical CI completo.",
+      "Diff review y smoke estático antes de cualquier deploy."
+    ]
+  }
+}

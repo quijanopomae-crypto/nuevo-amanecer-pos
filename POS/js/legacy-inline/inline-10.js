@@ -141,14 +141,15 @@ function _naSecRenderSaleCard(list,sale,index){
   if(!sale.anulada)actions.appendChild(_naSecButton('btn-det btn-anul','🚫 Anular','annul',sale.id));
   else _naSecAppend(actions,'span','', 'Anulada').style.cssText='font-size:11px;color:var(--red);font-weight:700';
 }
+function _naSecSalesRendered(){try{window.dispatchEvent(new CustomEvent('na:sales-rendered'));}catch(_){}}
 function _naSecRenderSales(){
   _naF8ToggleReportControls();
-  if(ventasTab==='reportes'){_naF8RenderReport();return;}
+  if(ventasTab==='reportes'){_naF8RenderReport();_naSecSalesRendered();return;}
   _naSecRenderSaleKpis();
   const container=document.getElementById('ventasContent');
-  if(!container)return;
+  if(!container){_naSecSalesRendered();return;}
   container.replaceChildren();
-  if(ventasTab==='productos'){_naSecRenderTopProducts(container);return;}
+  if(ventasTab==='productos'){_naSecRenderTopProducts(container);_naSecSalesRendered();return;}
   const rows=ventasTab==='historial'?ventas.filter(sale=>{
     const search=sinTildes((document.getElementById('ventasSearch')?.value||'').toLowerCase()),method=document.getElementById('ventasMetodo')?.value||'';
     return _naSaleMatchesSearch(sale,search)&&(!method||sale.metodo===method);
@@ -157,10 +158,12 @@ function _naSecRenderSales(){
     const empty=_naSecAppend(container,'div','empty-state');
     _naSecAppend(empty,'div','ei','📊');
     _naSecAppend(empty,'p','','Sin ventas en este período');
+    _naSecSalesRendered();
     return;
   }
   const list=_naSecAppend(container,'div','v-list-wrap');
   rows.forEach((sale,index)=>_naSecRenderSaleCard(list,sale,index));
+  _naSecSalesRendered();
 }
 ventasRender=_naSecRenderSales;
 document.getElementById('ventasContent')?.addEventListener('click',event=>{

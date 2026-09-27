@@ -3,7 +3,6 @@
 
   var VERSION = 1;
   var last = null;
-  var wrapped = Object.create(null);
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function sameId(a, b) { return a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b); }
@@ -72,21 +71,6 @@
       panel.appendChild(card);
     });
   }
-  function afterRender(name) {
-    if (typeof root[name] !== 'function' || wrapped[name] === root[name]) return;
-    var original = root[name];
-    var replacement = function () {
-      var result = original.apply(this, arguments);
-      if (last) name === 'ventasRender' ? pendingSales(last) : pendingCredits(last);
-      return result;
-    };
-    wrapped[name] = replacement;
-    root[name] = replacement;
-  }
-  function installRenderHooks() {
-    afterRender('ventasRender');
-    afterRender('cliRender');
-  }
   function rebuild() {
     var canonical = root.NuevoAmanecerCanonical;
     if (!enabled(canonical)) {
@@ -118,7 +102,6 @@
       });
       last = copy(projected);
       root.productos = visualProducts;
-      installRenderHooks();
       if (typeof root.posRender === 'function') root.posRender();
       if (typeof root.invRender === 'function') root.invRender();
       pendingSales(last);
@@ -137,6 +120,8 @@
   if (typeof root.addEventListener === 'function') {
     root.addEventListener('na:canonical-sale-projection', rebuild);
     root.addEventListener('na:canonical-updated', rebuild);
+    root.addEventListener('na:sales-rendered', function () { if (last) pendingSales(last); });
+    root.addEventListener('na:clients-rendered', function () { if (last) pendingCredits(last); });
     root.addEventListener('storage', function (event) {
       var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
       if (outbox && event && event.key === outbox.KEY) rebuild();

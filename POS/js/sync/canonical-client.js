@@ -753,36 +753,9 @@
   }
   function legacySnapshot() {
     if (!data || data.authority !== 'canonical') fail('CANONICAL_SNAPSHOT_UNAVAILABLE');
-    var accountsByCustomer = new Map();
-    (data.creditAccounts || []).forEach(function (a) { var key=String(a.customer_id), list=accountsByCustomer.get(key)||[]; list.push({id:a.account_id,name:a.name,mode:a.mode,createdAt:a.created_at||null}); accountsByCustomer.set(key,list); });
-    var customers = data.customers.map(function (c, i) { return { id: c.customer_id, nombre: c.name || 'Cliente', dni: c.document || '', tel: c.phone || '', dir: c.address || '', color: i % 8, totalCompras: Number(c.total_purchases_cents || 0) / 100,
-      creditCategories: (accountsByCustomer.get(String(c.customer_id)) || []).slice() }; });
-    var customerById = new Map(customers.map(function (c) { return [String(c.id), c]; }));
-    var paymentsByCredit = new Map();
-    data.payments.forEach(function (p) { var list = paymentsByCredit.get(String(p.credit_id)) || []; list.push(p); paymentsByCredit.set(String(p.credit_id), list); });
-    var credits = data.credits.map(function (c) {
-      var issued = typeof c.issued_value === 'string' ? c.issued_value : '', due = typeof c.due_value === 'string' ? c.due_value : '';
-      var client = customerById.get(String(c.customer_id)), amount = Number(c.original_amount_cents) / 100, paid = (Number(c.original_amount_cents) - Number(c.current_balance_cents)) / 100;
-      var payments = (paymentsByCredit.get(String(c.credit_id)) || []).map(function (p) { return { id: p.payment_id, pagoId: p.payment_id,
-        creditoId: c.credit_id, clienteId: c.customer_id, monto: Number(p.amount_cents) / 100,
-        fecha: p.payment_date_known ? p.payment_date : '', timestamp: p.payment_date_known ? p.payment_timestamp || p.payment_date : null,
-        canonicalDateKnown: !!p.payment_date_known, datePrecision: p.date_precision, metodo: p.method || p.source_method || 'efectivo',
-        operacion: p.source_operation_reference || '', referencia: p.source_operation_reference || '', cajero: p.seller || 'Hist?rico', cajeroNombre: p.seller || 'Hist?rico' }; });
-      return { id: c.credit_id, cliId: c.customer_id, clienteId: c.customer_id, clienteNombre: client && client.nombre || c.customer_id,
-        clienteDni: client && client.dni || '', desc: c.concept || c.document_number || c.reference || 'Cr?dito hist?rico',
-        monto: amount, pagado: paid, vence: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : '', canonicalDueKnown: /^\d{4}-\d{2}-\d{2}$/.test(due),
-        fecha: /^\d{4}-\d{2}-\d{2}/.test(issued) ? issued.slice(0, 10) : '', timestamp: /^\d{4}-\d{2}-\d{2}T/.test(issued) ? issued : null,
-        cajero: c.seller || 'Hist?rico', status: c.source_status || '', anulado: false, pagos: payments,
-        creditAccount: c.account_id ? {version:2,categoryId:c.account_id,categoryName:c.account_name||'Categoría',mode:c.account_mode==='separate'?'separate':'accumulated',source:'canonical'} : null,
-        installments: (function(){try{return JSON.parse(c.installments_json||'[]').map(function(row){return{number:Number(row.number),due:String(row.due_date||'').slice(0,10),amount:Number(row.amount_cents||0)/100};});}catch(_){return[];}})(),
-        items: [{ itemKey: 'canonical:' + c.credit_id, productoId: null, nombre: c.concept || c.document_number || 'Saldo hist?rico', cantidad: 1, precioUnitario: amount, subtotal: amount, modo: 'concepto' }] };
-    });
-    var products = data.products.map(function (p) { return { id: p.product_id, name: typeof p.name === 'string' && p.name.trim() ? p.name : 'PRODUCTO', nombre: p.name, sku: p.sku || '', codigo: p.barcode || '',
-      codigosAlternativos: p.alternate_codes_json ? JSON.parse(p.alternate_codes_json) : [], categoria: p.category || '', marca: p.brand || '', descripcion: p.description || '',
-      icono: p.icon || '', imagen: p.image || null, unidad: p.unit || 'unidad', costo: Number(p.cost_cents || 0) / 100, precio: Number(p.price_cents || 0) / 100,
-      stock: Number(p.current_stock_quantity || 0), stockMin: Number(p.stock_min_quantity || 0), venc: p.expiry_date || '', incluyeIGV: p.includes_igv !== 0,
-      controlaStock: p.tracks_inventory !== 0, canonical: true }; });
-    return { products: products, customers: customers, credits: credits, payments: data.payments.slice(), mode: data.mode, promotion_id: data.promotion_id, read_only: data.read_only };
+    var adapter = root.NuevoAmanecerCanonicalUIAdapter;
+    if (!adapter || typeof adapter.snapshot !== 'function') fail('CANONICAL_UI_ADAPTER_UNAVAILABLE');
+    return adapter.snapshot(data);
   }
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
   root.addEventListener('offline', function () { ready = false; });

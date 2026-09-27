@@ -693,6 +693,7 @@ cliRender=function(){
   }
   _naLocalCliRender();
   if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&!_naCanonicalLoadError){const today=obtenerHoy();cobradoHoy=creditos.reduce((sum,cr)=>sum+(Array.isArray(cr.pagos)?cr.pagos.filter(pay=>pay.canonicalDateKnown&&pay.fecha===today&&pay.status!=='REVERTED').reduce((paid,pay)=>paid+Number(pay.monto||0),0):0),0);const paidToday=document.getElementById('cliS3');if(paidToday)paidToday.textContent=`S/${cobradoHoy.toFixed(0)}`;}
+  try{window.dispatchEvent(new CustomEvent('na:clients-rendered'));}catch(_){}
 };
 window.addEventListener('offline',()=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),status=document.querySelector('#localStatus span'),badge=document.getElementById('cliAuthorityBadge');if(state.source==='cache'){if(status)status.textContent='Cache canónico · sin conexión';if(badge){badge.hidden=false;badge.textContent='Cache canónico · sin conexión';}}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');cliRender();if(status)status.textContent='Canónico no disponible';}}});
 window.addEventListener('na:canonical-updated',()=>{
