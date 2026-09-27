@@ -1,0 +1,136 @@
+(function (root) {
+  'use strict';
+
+  if (!root || !root.document) return;
+
+  var original = {
+    abrirModalGasto: root.abrirModalGasto,
+    guardarGasto: root.guardarGasto,
+    abrirMovCaja: root.abrirMovCaja
+  };
+  var busy = false;
+
+  function api() { return root.NuevoAmanecerCanonical; }
+  function enabled() {
+    var client = api();
+    try { return !!(client && typeof client.enabled === 'function' && client.enabled()); }
+    catch (_) { return false; }
+  }
+  function clean(value) { return String(value == null ? '' : value).trim().replace(/\s+/g, ' '); }
+  function moneyCents(value) {
+    var amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    var cents = Math.round(amount * 100);
+    return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  }
+  function toast(message, tone) {
+    if (typeof root.toast === 'function') root.toast(message, tone || 'error');
+  }
+  function authorized() {
+    if (typeof root._naF10AuthorizePermission === 'function') {
+      return root._naF10AuthorizePermission('cash', 'Registrar gasto') !== false;
+    }
+    return true;
+  }
+  function today() {
+    return typeof root.obtenerHoy === 'function'
+      ? root.obtenerHoy()
+      : new Date().toLocaleDateString('en-CA');
+  }
+  function resetAndOpen() {
+    ['gasDesc','gasNota'].forEach(function (id) {
+      var field = root.document.getElementById(id);
+      if (field) field.value = '';
+    });
+    var amount = root.document.getElementById('gasMonto');
+    var date = root.document.getElementById('gasFecha');
+    if (amount) amount.value = '';
+    if (date) date.value = today();
+    root.document.getElementById('mGasto')?.classList.add('open');
+  }
+  function closeModal() {
+    if (typeof root.cerrarModal === 'function') root.cerrarModal('mGasto');
+    else root.document.getElementById('mGasto')?.classList.remove('open');
+  }
+  function renderExpenseViews() {
+    if (typeof root.gasRender === 'function') root.gasRender();
+    if (typeof root.cajRender === 'function') root.cajRender();
+    if (typeof root.updateDashboard === 'function') root.updateDashboard();
+  }
+  async function refreshCanonical() {
+    var client = api();
+    if (!client || typeof client.refresh !== 'function') throw new Error('CANONICAL_CLIENT_UNAVAILABLE');
+    await client.refresh();
+    if (typeof client.legacySnapshot !== 'function') throw new Error('CANONICAL_SNAPSHOT_UNAVAILABLE');
+    return client.legacySnapshot();
+  }
+
+  root.abrirModalGasto = function () {
+    if (!enabled()) return typeof original.abrirModalGasto === 'function' ? original.abrirModalGasto.apply(this, arguments) : undefined;
+    if (!authorized()) return;
+    resetAndOpen();
+  };
+
+  root.abrirMovCaja = function (type) {
+    if (!enabled() || type !== 'gas') {
+      return typeof original.abrirMovCaja === 'function' ? original.abrirMovCaja.apply(this, arguments) : undefined;
+    }
+    return root.abrirModalGasto();
+  };
+
+  root.guardarGasto = async function () {
+    if (!enabled()) return typeof original.guardarGasto === 'function' ? original.guardarGasto.apply(this, arguments) : false;
+    if (busy) return false;
+    if (!authorized()) return false;
+
+    var description = clean(root.document.getElementById('gasDesc')?.value);
+    var amountCents = moneyCents(root.document.getElementById('gasMonto')?.value);
+    var method = clean(root.document.getElementById('gasMetodo')?.value);
+    var date = clean(root.document.getElementById('gasFecha')?.value) || today();
+    var category = clean(root.document.getElementById('gasCat')?.value);
+    var note = clean(root.document.getElementById('gasNota')?.value);
+    if (!description || !amountCents) {
+      toast('Verifica concepto y monto', 'error');
+      return false;
+    }
+
+    var button = root.document.querySelector('#mGasto .mbtn-ok');
+    var label = button?.textContent || '💾 Registrar';
+    busy = true;
+    if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
+
+    try {
+      var snapshot = await refreshCanonical();
+      var input = {
+        amount_cents: amountCents,
+        concept: description,
+        category: category || 'Otro',
+        payment_method: method || 'efectivo',
+        expense_date: date,
+        note: note
+      };
+      var cash = snapshot && snapshot.cashState;
+      if (cash && cash.abierta && cash.sessionId && date === today()) input.session_id = cash.sessionId;
+
+      var receipt = await api().createExpense(input);
+      await refreshCanonical();
+      closeModal();
+      renderExpenseViews();
+      toast(receipt && receipt.session_id
+        ? 'Gasto CANON registrado en la caja'
+        : 'Gasto CANON guardado fuera de la caja', 'success');
+      return true;
+    } catch (error) {
+      toast('No se pudo guardar el gasto CANON: ' + clean(error && error.message), 'error');
+      return false;
+    } finally {
+      busy = false;
+      if (button) { button.disabled = false; button.textContent = label; }
+    }
+  };
+
+  root.NuevoAmanecerCanonicalExpenseBridge = Object.freeze({
+    enabled: enabled,
+    busy: function () { return busy; }
+  });
+})(globalThis);
