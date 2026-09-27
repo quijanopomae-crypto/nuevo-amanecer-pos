@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SALE-CUSTOMER-SELECTION-DEPLOY-001",
+  "environment": "CANON",
+  "base_ref": "83fce417f1c2871b555b81bac43806f3394b6d7e",
+  "objective": "Publicar en el Worker web de CANON el arreglo ya integrado para seleccionar clientes en ventas y comprobar sus assets públicos sin cambiar backend, datos ni ejecutar ventas.",
+  "owner_authorization": "El propietario pidió corregir la selección de clientes en el POS del Worker público y comprobar que funcione.",
+  "allowed_files": [
+    "tasks/CANON-SALE-CUSTOMER-SELECTION-DEPLOY-001.json",
+    "evidence/canon-preflight/CANON-SALE-CUSTOMER-SELECTION-DEPLOY-001.json",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "canon-promotion"
+  ],
+  "invariants": [
+    "Desplegar solo el shell estático CANON del Worker nuevo-amanecer-pos-web.",
+    "El backend de producción nuevo-amanecer-pos-prod y su D1 no cambian.",
+    "No se embebe ni se transmite la clave de activación al agente.",
+    "La pantalla de activación y la autoridad CANON se conservan.",
+    "No se confirma ni registra una venta real.",
+    "El despliegue no declara V1.3 como release final ni cierra la puerta de primera venta controlada."
+  ],
+  "rollback": "Revertir el despliegue al commit del shell actualmente publicado; no se mutan datos ni esquema.",
+  "release_boundary": "Desplegar y verificar assets públicos del Worker. La activación y la primera venta controlada quedan para el propietario."
+}
