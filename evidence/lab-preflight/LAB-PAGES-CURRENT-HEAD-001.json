@@ -26,10 +26,13 @@
       "Añadir verificador local del artifact.",
       "Estampar referencias locales con build=<SHA> solo dentro de _site.",
       "Añadir verificación post-deploy de SHA y assets críticos.",
-      "Añadir tests de regresión del pipeline."
+      "Añadir tests de regresión del pipeline.",
+      "Ejecutar el nuevo test de Pages dentro de LAB Canon Mirror CI antes del merge."
     ],
     "DOM_AFFECTED": [],
-    "STATE_AFFECTED": ["Artifact estático de GitHub Pages."],
+    "STATE_AFFECTED": [
+      "Artifact estático de GitHub Pages."
+    ],
     "STORAGE_AFFECTED": [],
     "DOMAIN_INVARIANTS": [
       "No hay cambios funcionales del POS.",
