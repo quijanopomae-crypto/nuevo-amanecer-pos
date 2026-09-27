@@ -406,6 +406,9 @@ loadAppState=function(){
 
 
 
+const _naBaseUpdateDashboard=updateDashboard;
+updateDashboard=function(){const menu=document.getElementById('pageMenu');if(menu&&!menu.classList.contains('active'))return;return _naBaseUpdateDashboard();};
+
 getLunesSemana=function(){const d=new Date(obtenerHoy()+'T12:00:00'),day=d.getDay(),diff=day===0?6:day-1;d.setDate(d.getDate()-diff);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${dd}`;};
 let _naPageRenderEpoch=0;
 function _naActivePageId(){return document.querySelector('.page.active')?.id||'pageMenu';}
@@ -789,7 +792,7 @@ revertirPagoCredito=async function(creditoId,pagoId){
   catch(error){if(backup){creditos=backup.creditos;cajMovs=backup.cajMovs;await saveAllData();cliRender();}toast('No se revertió el pago porque no existe guardado permanente verificado','error');}
   finally{pagoRevProc=false;}
 };
-cliRender=function(){creditos=creditos.map((cr,index)=>_naNormalizeCreditRecord(cr,index));_naRebuildClientCreditIndex();cobradoHoy=_naCreditCollectionsNetForDate(obtenerHoy());_baseCliRender();if(_naActivePageId()==='pageMenu')updateDashboard();};
+cliRender=function(){creditos=creditos.map((cr,index)=>_naNormalizeCreditRecord(cr,index));_naRebuildClientCreditIndex();cobradoHoy=_naCreditCollectionsNetForDate(obtenerHoy());_baseCliRender();updateDashboard();};
 
 // Caja por sesiones
 function _naIsSaleIncomeMove(move){return move?.tipo==='ing'&&(move.ventaId!==undefined&&move.ventaId!==null||/\bventa\b/i.test(`${move?.cat||''} ${move?.desc||''}`));}
