@@ -138,7 +138,8 @@ function _naSecRenderSaleCard(list,sale,index){
   }
   const actions=_naSecAppend(detail,'div','det-acts');
   actions.appendChild(_naSecButton('btn-det btn-reimp','🧾 Ticket','ticket',sale.id));
-  if(!sale.anulada)actions.appendChild(_naSecButton('btn-det btn-anul','🚫 Anular','annul',sale.id));
+  if(!sale.anulada&&!sale.canonicalReadOnly)actions.appendChild(_naSecButton('btn-det btn-anul','🚫 Anular','annul',sale.id));
+  else if(sale.canonicalReadOnly)_naSecAppend(actions,'span','', 'CANON · solo lectura').style.cssText='font-size:11px;color:var(--slate);font-weight:700';
   else _naSecAppend(actions,'span','', 'Anulada').style.cssText='font-size:11px;color:var(--red);font-weight:700';
 }
 function _naSecSalesRendered(){try{window.dispatchEvent(new CustomEvent('na:sales-rendered'));}catch(_){}}
@@ -206,8 +207,8 @@ _naF10RenderSalesAdmin=function(){
     if(lastNote)_naSecAppend(card,'div','f10-note',`📝 ${lastNote.text||''} · ${lastNote.cashierNombre||'Admin'}`);
     const actions=_naSecAppend(card,'div','f10-sale-actions');
     actions.appendChild(_naSecButton('f10-btn','🧾 Ticket','ticket',sale.id));
-    actions.appendChild(_naSecButton('f10-btn primary','📝 Nota','note',sale.id));
-    if(!sale.anulada)actions.appendChild(_naSecButton('f10-btn danger','🚫 Anular','admin-annul',sale.id));
+    if(!sale.canonicalReadOnly)actions.appendChild(_naSecButton('f10-btn primary','📝 Nota','note',sale.id));
+    if(!sale.anulada&&!sale.canonicalReadOnly)actions.appendChild(_naSecButton('f10-btn danger','🚫 Anular','admin-annul',sale.id));
   });
 };
 document.getElementById('masterSalesContent')?.addEventListener('click',event=>{
