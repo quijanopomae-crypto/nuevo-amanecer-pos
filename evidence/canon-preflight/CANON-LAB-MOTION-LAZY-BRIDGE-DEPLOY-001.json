@@ -1,0 +1,23 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-MOTION-LAZY-BRIDGE-DEPLOY-001",
+  "base_ref": "46a966f8b8ab006560e3ae9d7ac095dff2eacb90",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "pr": 144,
+    "pr_ci": "CANON Critical CI #116 PASS",
+    "post_merge_ci": "CANON Critical CI #117 PASS"
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el bridge Motion perezoso ya validado.",
+    "READS": ["PR #144","CANON Critical CI #116","CANON Critical CI #117","ops/v1.3-pos-web-deploy-trigger.json"],
+    "WRITES": ["Actualizar solo el trigger protegido de deploy."],
+    "DOM_AFFECTED": ["Worker público /app"],
+    "STATE_AFFECTED": ["Versión publicada del shell"],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": ["Sin backend/D1/R2","Sin operaciones comerciales"],
+    "TEST_PLAN": ["Hosted POS safety tests","Worker dry-run","Deploy","Verify public assets"]
+  }
+}
