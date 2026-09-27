@@ -7,10 +7,15 @@ import { spawnSync } from 'node:child_process';
 
 const workflow = readFileSync('.github/workflows/lab-pages.yml','utf8');
 
-test('LAB Pages deploy is triggered by POS runtime changes and by its own pipeline changes',()=>{
-  assert.match(workflow,/\- "POS\/\*\*"/);
-  assert.match(workflow,/\- "\.github\/workflows\/lab-pages\.yml"/);
-  assert.match(workflow,/\- "laboratorio\/pos-lab\/\*\*"/);
+test('LAB Pages stays LAB-scoped while following successful CANON CI head SHA',()=>{
+  const pushBlock=workflow.split('workflow_dispatch:')[0];
+  assert.doesNotMatch(pushBlock,/"POS\/\*\*"/);
+  assert.doesNotMatch(pushBlock,/\.github\/workflows\/lab-pages\.yml/);
+  assert.match(workflow,/workflow_run:/);
+  assert.match(workflow,/CANON Critical CI/);
+  assert.match(workflow,/github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(workflow,/github\.event\.workflow_run\.head_sha/);
+  assert.match(workflow,/ref:\s*\$\{\{ env\.LAB_BUILD_SHA \}\}/);
 });
 
 test('LAB Pages pipeline validates and stamps the exact static artifact before upload',()=>{
