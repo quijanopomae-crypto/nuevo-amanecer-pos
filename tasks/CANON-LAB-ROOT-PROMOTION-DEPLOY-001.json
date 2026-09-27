@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-LAB-ROOT-PROMOTION-DEPLOY-001",
+  "environment": "CANON",
+  "base_ref": "eea3d328dd4ff0fd272663e3495611cf0847c812",
+  "objective": "Publicar en el Worker web CANON la corrección de raíz LAB/CANON ya integrada y verificada por CANON Critical CI.",
+  "owner_authorization": "El propietario pidió implementar la corrección de raíz y terminar la integración LAB -> CANON.",
+  "allowed_files": [
+    "tasks/CANON-LAB-ROOT-PROMOTION-DEPLOY-001.json",
+    "evidence/canon-preflight/CANON-LAB-ROOT-PROMOTION-DEPLOY-001.json",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "invariants": [
+    "Solo se publica el shell estático CANON ya integrado.",
+    "No se modifica el backend productivo ni D1.",
+    "No se ejecutan ventas, pagos, caja ni ajustes.",
+    "Activación, sesión y gates financieros permanecen intactos.",
+    "El deploy debe verificar launcher, /app, assets y service worker."
+  ],
+  "rollback": "Redeploy del shell anterior; no existe rollback de datos porque no se modifican datos."
+}
