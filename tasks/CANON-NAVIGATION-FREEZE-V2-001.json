@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-NAVIGATION-FREEZE-V2-001",
+  "environment": "CANON",
+  "base_ref": "2429dabda9f3907f7d5a1a80f03a4cf080f660df",
+  "objective": "Eliminar el congelamiento al entrar a módulos en móvil conservando la interfaz V2 y desactivando únicamente el auto-bootstrap global del scroll Motion introducido en el deploy #16.",
+  "owner_authorization": "El propietario probó el Worker público y reportó que al tocar Clientes, Inventario u otras pestañas la interfaz se congela y no entra.",
+  "allowed_files": [
+    "tasks/CANON-NAVIGATION-FREEZE-V2-001.json",
+    "evidence/canon-preflight/CANON-NAVIGATION-FREEZE-V2-001.json",
+    "POS/js/motion/scroll-motion.js",
+    "tests/product-fixes/canon-motion-bootstrap.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/css/experience-v2/**",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/sync/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/modules/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "La interfaz V2 permanece cargada sin cambios.",
+    "No se tocan datos, autoridad CANON ni backend.",
+    "No se ejecutan ventas.",
+    "Scroll Motion queda disponible mediante registro explícito, pero no se autoactiva en todas las páginas al cargar.",
+    "Navegación base vuelve a depender únicamente de goPage y renderers existentes."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos."
+}

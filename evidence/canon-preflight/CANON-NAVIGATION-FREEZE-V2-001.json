@@ -1,0 +1,53 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-NAVIGATION-FREEZE-V2-001",
+  "base_ref": "2429dabda9f3907f7d5a1a80f03a4cf080f660df",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Recuperar navegación inmediatamente sin retirar la interfaz LAB V2 ya aprobada.",
+    "READS": [
+      "captura del propietario del Worker público",
+      "POS/js/legacy-inline/inline-02.js goPage/goMenu",
+      "POS/js/motion/scroll-motion.js",
+      "POS/css/motion/transitions.css",
+      "POS/index.html",
+      "persistencia CANON en inline-02.js"
+    ],
+    "WRITES": [
+      "Retirar únicamente el auto-registro global de presets de scroll Motion.",
+      "Exponer enablePreset(name) para reactivación explícita posterior.",
+      "Actualizar el test para prohibir auto-bootstrap eager."
+    ],
+    "DOM_AFFECTED": [
+      "Ninguno de forma permanente; se evita instalar observers visuales automáticamente."
+    ],
+    "STATE_AFFECTED": [
+      "Controllers de Motion dejan de registrarse durante el boot."
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "goPage, datos CANON y renderers no cambian.",
+      "La interfaz V2 permanece intacta.",
+      "No se alteran ventas, caja, créditos, stock ni sync."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes, Inventario, Ventas, Caja y Gastos dejan de instalar scroll observers al arranque."
+    ],
+    "RISKS": [
+      "Se pierde temporalmente el scroll Motion sincronizado, pero se prioriza navegación funcional.",
+      "La UI V2 visual permanece."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR."
+    ],
+    "TEST_PLAN": [
+      "Test que prohíbe Object.keys(presets).forEach auto-bootstrap.",
+      "Test que conserva presets y registro explícito.",
+      "CANON Critical CI completo.",
+      "Deploy protegido.",
+      "Prueba del propietario en móvil."
+    ]
+  }
+}
