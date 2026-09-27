@@ -50,9 +50,9 @@ function _naSecCreditCard(parent,credit){
   actions.appendChild(history);
 }
 function _naSecClientCard(parent,client){
-  const debt=deudaT(client),status=statusCli(client),debtClass=status==='vencido'?'mal':status==='proximo'?'parcial':'ok',statusClass=status==='vencido'?'cs-m':status==='proximo'?'cs-p':status==='vigente'?'cs-v':'cs-c';
+  const debt=_naClientDebtFast(client),status=statusCli(client),debtClass=status==='vencido'?'mal':status==='proximo'?'parcial':'ok',statusClass=status==='vencido'?'cs-m':status==='proximo'?'cs-p':status==='vigente'?'cs-v':'cs-c';
   const statusLabel=status==='vencido'?'VENCIDO':status==='proximo'?'PR\u00d3XIMO':status==='vigente'?'VIGENTE':'AL D\u00cdA',cardClass=status==='vencido'?'vencido-c':status==='proximo'?'proximo-c':'';
-  const credits=creditos.filter(row=>String(row.cliId)===String(client.id)),evaluation=_naEvaluateClientCredit(client.id);
+  const credits=_naClientAllCreditsFast(client.id),evaluation=_naEvaluateClientCredit(client.id);
 
   credits.forEach(_naSyncCreditStatus);
 
@@ -117,13 +117,13 @@ function _naSecClientCard(parent,client){
 }
 _baseCliRender=function(){
   const expired=clientes.filter(client=>statusCli(client)==='vencido').length,soon=clientes.filter(client=>statusCli(client)==='proximo').length,current=clientes.filter(client=>statusCli(client)==='vigente').length;
-  [['cliB0',clientes.length],['cliB1',expired],['cliB2',soon],['cliB3',current],['cliS0',clientes.length],['cliS1',`S/${clientes.reduce((sum,client)=>sum+deudaT(client),0).toFixed(0)}`],['cliS2',expired],['cliS3',`S/${cobradoHoy.toFixed(0)}`]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=String(value);});
+  [['cliB0',clientes.length],['cliB1',expired],['cliB2',soon],['cliB3',current],['cliS0',clientes.length],['cliS1',`S/${clientes.reduce((sum,client)=>sum+_naClientDebtFast(client),0).toFixed(0)}`],['cliS2',expired],['cliS3',`S/${cobradoHoy.toFixed(0)}`]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=String(value);});
   const search=sinTildes((document.getElementById('cliSearch')?.value||'').toLowerCase()),sort=document.getElementById('cliSort')?.value||'';
   let rows=clientes.filter(client=>{
     const matches=sinTildes((client.nombre||'').toLowerCase()).includes(search)||(client.dni||'').includes(search),status=statusCli(client);
     return cliTab==='vencidos'?matches&&status==='vencido':cliTab==='proximos'?matches&&status==='proximo':cliTab==='vigentes'?matches&&status==='vigente':matches;
   });
-  if(sort==='deuda')rows.sort((a,b)=>deudaT(b)-deudaT(a));else rows.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  if(sort==='deuda')rows.sort((a,b)=>_naClientDebtFast(b)-_naClientDebtFast(a));else rows.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
   const list=document.getElementById('cliList');
   if(!list)return;
   if(window.NA_CLIENT_CREDIT_ACCOUNTS_V2&&typeof window.NA_CLIENT_CREDIT_ACCOUNTS_V2.renderClientList==='function'&&
