@@ -442,7 +442,6 @@
     if (input.note != null && input.note !== '') payload.note = input.note;
     if (input.session_id !== undefined) {
       var session = openSession(input.session_id);
-      if (input.expense_date !== new Date().toISOString().slice(0,10) && input.attach_to_session !== true) fail('INVALID_CANONICAL_EXPENSE_SESSION');
       payload.session_id = session.session_id;
       payload.expected_session_revision = session.revision;
     }
