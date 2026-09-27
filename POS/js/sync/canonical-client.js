@@ -126,9 +126,13 @@
       typeof replica.cached_at === 'string' && Number.isFinite(Date.parse(replica.cached_at)) && ['CANONICAL_READ_ONLY','ACTIVE'].includes(replica.mode) && typeof replica.read_only === 'boolean' &&
       (replica.financial_revision == null || uint(replica.financial_revision)) && ['products','customers','credits','credit_payments'].every(function (key) { return Array.isArray(replica[key]); }) &&
       (replica.credit_accounts == null || Array.isArray(replica.credit_accounts)) &&
+      (replica.sales == null || Array.isArray(replica.sales)) && (replica.sale_items == null || Array.isArray(replica.sale_items)) &&
+      (replica.inventory_movements == null || Array.isArray(replica.inventory_movements)) && (replica.cash_movements == null || Array.isArray(replica.cash_movements)) &&
       (replica.cash_sessions == null || Array.isArray(replica.cash_sessions)) && (replica.financial_events == null || Array.isArray(replica.financial_events)) &&
       (replica.digests == null || (replica.digests && typeof replica.digests === 'object' && !Array.isArray(replica.digests))) &&
-      ['products','customers','credits','credit_payments'].every(function (key) { return rowsValid(replica[key]); }) && rowsValid(replica.credit_accounts || []) && rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) &&
+      ['products','customers','credits','credit_payments'].every(function (key) { return rowsValid(replica[key]); }) && rowsValid(replica.credit_accounts || []) &&
+      rowsValid(replica.sales || []) && rowsValid(replica.sale_items || []) && rowsValid(replica.inventory_movements || []) && rowsValid(replica.cash_movements || []) &&
+      rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) &&
       !hasSecretKey(replica));
   }
   function replicaOf(value) { return { schema_version: 1, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
@@ -136,6 +140,7 @@
     canonical_digest: value.canonical_digest || null,
     digests: copy(value.digests || {}),
     products: copy(value.products), customers: copy(value.customers), credits: copy(value.credits), credit_payments: copy(value.payments), credit_accounts: copy(value.creditAccounts || []),
+    sales: copy(value.sales || []), sale_items: copy(value.saleItems || []), inventory_movements: copy(value.inventoryMovements || []), cash_movements: copy(value.cashMovements || []),
     cash_sessions: copy(value.cashSessions || []), financial_events: copy(value.financialEvents || []),
     mode: value.mode, read_only: value.read_only, minimum_client_contract: value.minimum_client_contract }; }
   function cacheIsNewer(cache, remote) {
@@ -152,7 +157,8 @@
     var provisional = source === 'cache' || source === 'bootstrap';
     data = { authority: 'canonical', promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch, revision: replica.revision,
       financial_revision: replica.financial_revision, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
-      payments: copy(replica.credit_payments), creditAccounts: copy(replica.credit_accounts || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []),
+      payments: copy(replica.credit_payments), creditAccounts: copy(replica.credit_accounts || []), sales: copy(replica.sales || []), saleItems: copy(replica.sale_items || []),
+      inventoryMovements: copy(replica.inventory_movements || []), cashMovements: copy(replica.cash_movements || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []),
       mode: provisional ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
       read_only: provisional || replica.read_only !== false, minimum_client_contract: provisional ? 'a6-gate-p-v1' : (replica.minimum_client_contract || 'a6-gate-p-v1') };
     ready = true; replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
@@ -235,7 +241,7 @@
       }
       var coreEntries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']];
       applyEntries(await Promise.all(coreEntries.map(readEntry)));
-      next.cashSessions = []; next.financialEvents = [];
+      next.sales = []; next.saleItems = []; next.inventoryMovements = []; next.cashMovements = []; next.cashSessions = []; next.financialEvents = [];
       next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
       if (statusDigest) next.canonical_digest = statusDigest;
@@ -248,6 +254,7 @@
 
       if (statusMeta.mode === 'ACTIVE') {
         applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
+        applyEntries(await Promise.all([['sales','sales'], ['sale-items','saleItems'], ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements']].map(readEntry)));
       }
       if (binding && !changed) assertBinding(expected);
       next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
@@ -259,15 +266,15 @@
       }
       var same = cache && cache.promotion_id === incoming.promotion_id && cache.authority_epoch === incoming.authority_epoch &&
         cache.revision === incoming.revision && (cache.financial_revision || 0) === (incoming.financial_revision || 0) && (cache.canonical_digest || null) === (incoming.canonical_digest || null) &&
-        JSON.stringify([cache.products,cache.customers,cache.credits,cache.credit_payments,cache.credit_accounts||[],cache.cash_sessions||[],cache.financial_events||[],cache.digests||{}]) ===
-        JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.credit_accounts||[],incoming.cash_sessions||[],incoming.financial_events||[],incoming.digests||{}]);
+        JSON.stringify([cache.products,cache.customers,cache.credits,cache.credit_payments,cache.credit_accounts||[],cache.sales||[],cache.sale_items||[],cache.inventory_movements||[],cache.cash_movements||[],cache.cash_sessions||[],cache.financial_events||[],cache.digests||{}]) ===
+        JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.credit_accounts||[],incoming.sales||[],incoming.sale_items||[],incoming.inventory_movements||[],incoming.cash_movements||[],incoming.cash_sessions||[],incoming.financial_events||[],incoming.digests||{}]);
       publishReplica(incoming, 'remote');
       if (!same && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
       replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
     try { return await loading; } catch (error) { ready = false; replicaState.validation = root.navigator.onLine === false ? 'offline' : (data ? 'stale' : 'unavailable'); notifyReplicaUpdate(); throw error; } finally { loading = null; }
   }
-  function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], cashSessions: [], financialEvents: [] }); }
+  function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], sales: [], saleItems: [], inventoryMovements: [], cashMovements: [], cashSessions: [], financialEvents: [] }); }
   function sourceState() { return copy(replicaState); }
   function pendingSnapshot() {
     var value = journal();
