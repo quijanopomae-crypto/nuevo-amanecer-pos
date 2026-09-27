@@ -778,7 +778,7 @@
         items: [{ itemKey: 'canonical:' + c.credit_id, productoId: null, nombre: c.concept || c.document_number || 'Saldo hist?rico', cantidad: 1, precioUnitario: amount, subtotal: amount, modo: 'concepto' }] };
     });
     var products = data.products.map(function (p) { return { id: p.product_id, name: typeof p.name === 'string' && p.name.trim() ? p.name : 'PRODUCTO', nombre: p.name, sku: p.sku || '', codigo: p.barcode || '',
-      codigosAlternativos: p.alternate_codes_json ? JSON.parse(p.alternate_codes_json) : [], categoria: p.category || '', marca: p.brand || '', descripcion: p.description || '',
+      codigosAlternativos: p.alternate_codes_json ? JSON.parse(p.alternate_codes_json) : [], cat: String(p.category || '').trim().toLowerCase(), categoria: p.category || '', marca: p.brand || '', descripcion: p.description || '',
       icono: p.icon || '', imagen: p.image || null, unidad: p.unit || 'unidad', costo: Number(p.cost_cents || 0) / 100, precio: Number(p.price_cents || 0) / 100,
       stock: Number(p.current_stock_quantity || 0), stockMin: Number(p.stock_min_quantity || 0), venc: p.expiry_date || '', incluyeIGV: p.includes_igv !== 0,
       controlaStock: p.tracks_inventory !== 0, canonical: true }; });
