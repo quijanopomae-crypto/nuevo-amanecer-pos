@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish the nonblocking CANON bootstrap fix merged in commit c9b6788a6f09ad2d220d14ea2de6dc695efebc95; keep activation, financial gates and production backend unchanged.",
-  "retry_attempt": 13,
-  "retry_reason": "Owner reported the hosted POS interface stuck across browsers and requested the correction.",
-  "requested_at_utc": "2026-09-27T12:34:00Z",
-  "target_head": "c9b6788a6f09ad2d220d14ea2de6dc695efebc95"
+  "note": "Publish staged/parallel CANON bootstrap and truthful mobile status from commit a7c4fd549cc40455b91c7c6c421cda0748ef4cfb; keep activation, financial gates and backend unchanged.",
+  "retry_attempt": 14,
+  "retry_reason": "Owner tested hosted POS and still saw empty data / misleading Local status.",
+  "requested_at_utc": "2026-09-27T12:56:00Z",
+  "target_head": "a7c4fd549cc40455b91c7c6c421cda0748ef4cfb"
 }
