@@ -7,7 +7,7 @@
   "allowed_files": [
     "laboratorio/pos-lab/tasks/CANON-EXPENSES-V1-001.json",
     "laboratorio/pos-lab/preflight/CANON-EXPENSES-V1-001.json",
-    "tools/cloudflare-lab/migrations/0012_canonical_expenses.sql",
+    "tools/cloudflare-lab/migrations/0013_canonical_expenses.sql",
     "tools/cloudflare-lab/src/a6-expenses.js",
     "tools/cloudflare-lab/src/worker.js",
     "tools/cloudflare-lab/src/a6-canonical.js",
