@@ -7,10 +7,26 @@
 
   var page = motion.page = motion.page || {};
   var bindings = new Map();
+  var pending = typeof WeakMap === 'function' ? new WeakMap() : null;
+
+  function frame(callback) {
+    if (typeof root.requestAnimationFrame === 'function') return root.requestAnimationFrame(callback);
+    return root.setTimeout(callback, 16);
+  }
 
   function enter(element, className) {
-    if (!element || core.reducedMotion()) return false;
-    return core.restartClass(element, className || 'na-enter-fade');
+    if (!element || !element.classList || core.reducedMotion()) return false;
+    var nextClass = className || 'na-enter-fade';
+    var token = {};
+    if (pending) pending.set(element, token);
+
+    element.classList.remove(nextClass);
+    frame(function () {
+      if (pending && pending.get(element) !== token) return;
+      if (element.classList && element.classList.contains('page') && !element.classList.contains('active')) return;
+      element.classList.add(nextClass);
+    });
+    return true;
   }
 
   function bind(pageId, options) {
