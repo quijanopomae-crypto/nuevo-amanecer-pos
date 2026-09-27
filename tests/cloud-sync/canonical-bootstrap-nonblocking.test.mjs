@@ -31,8 +31,9 @@ test('canonical read requests are bounded without changing command write transpo
   assert.match(canonical,/reject\(new Error\('CANONICAL_READ_TIMEOUT'\)\)/);
   assert.match(canonical,/await readFetch\(endpoint \+ '\/read\/canonical\/status'/);
   assert.match(canonical,/await readFetch\(endpoint \+ '\/read\/canonical\/' \+ route/);
-  assert.doesNotMatch(canonical,/readFetch\(expected\.endpoint \+ '\/commands\//);
-  assert.match(canonical,/root\.fetch\(expected\.endpoint \+ '\/commands\/' \+ record\.command/);
+  const sendPending=canonical.slice(canonical.indexOf('async function sendPending'),canonical.indexOf('async function createSale'));
+  assert.doesNotMatch(sendPending,/readFetch\(/);
+  assert.match(sendPending,/root\.fetch\(expected\.endpoint \+ record\.route/);
 });
 
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
