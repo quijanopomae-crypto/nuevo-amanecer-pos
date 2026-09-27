@@ -253,7 +253,8 @@
       publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
 
       if (statusMeta.mode === 'ACTIVE') {
-        applyEntries(await Promise.all([['sales','sales'], ['sale-items','saleItems'], ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements'], ['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
+        applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
+        applyEntries(await Promise.all([['sales','sales'], ['sale-items','saleItems'], ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements']].map(readEntry)));
       }
       if (binding && !changed) assertBinding(expected);
       next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
