@@ -5,6 +5,7 @@ import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest
 import { handleA6, isA6Path, canonicalRuntimeDenied } from './a6-canonical.js';
 import { createCanonicalSale, createCanonicalCreditAccount, CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
 import { createCanonicalFinancial, FINANCIAL_COMMANDS } from './a6-financial.js';
+import { createCanonicalExpense, EXPENSE_COMMAND } from './a6-expenses.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 
 const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
@@ -70,6 +71,14 @@ export default {
         return await createSale(request, env);
       }
       const financialCommand = url.pathname.startsWith('/commands/') ? url.pathname.slice('/commands/'.length) : '';
+      if (financialCommand === EXPENSE_COMMAND) {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        const denied = canonicalRuntimeDenied(url, env, json);
+        if (denied) return denied;
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return await createCanonicalExpense(request, env, auth, json);
+      }
       if (FINANCIAL_COMMANDS.has(financialCommand)) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
         const denied = canonicalRuntimeDenied(url, env, json);
