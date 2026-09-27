@@ -1,0 +1,67 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENT-WORKSPACE-SWIPE-001",
+  "base_ref": "33f6873cc0a0a98070c42f6f2681d8635c690bc3",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_contract": {
+    "motion_map": "laboratorio/pos-lab/MOTION_MAP.yaml",
+    "controller": "laboratorio/pos-lab/js/motion/modal-motion.js",
+    "css": "laboratorio/pos-lab/animations/modals.css"
+  },
+  "analysis": {
+    "OBJECTIVE": "Portar al panel financiero CANON el contrato de workspace swipe aprobado en LAB: arrastre vertical sincronizado, settle desde el frame alcanzado, cierre visual antes de hidden y transiciones direccionales entre subvistas sin desapariciones bruscas.",
+    "READS": [
+      "MOTION_MAP.yaml",
+      "modal-motion.js",
+      "modals.css",
+      "client-credit-accounts-v2.js",
+      "client-credit-accounts-v2.css",
+      "advanced motion audit"
+    ],
+    "WRITES": [
+      "Client financial workspace swipe controller",
+      "Animated open/close lifecycle",
+      "Directional subview transitions with outgoing visual clone",
+      "Runtime tests for gesture/close/navigation"
+    ],
+    "DOM_AFFECTED": [
+      ".na-client-account-screen",
+      ".na-client-account-shell",
+      ".na-client-account-content",
+      ".na-v2-screen"
+    ],
+    "STATE_AFFECTED": [
+      "visual workspace state and transient gesture coordinates only"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Visual-only motion",
+      "No business writes or waits",
+      "No changes to payments/FIFO/Caja/stock/saldos/evaluator",
+      "Visual hide occurs only after exit or reduced-motion immediate path",
+      "prefers-reduced-motion remains safe",
+      "Touch gesture ignores interactive controls and only begins at scrollTop 0"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes/Créditos presentation only"
+    ],
+    "RISKS": [
+      "hidden applied before close completes",
+      "interactive touch mistaken for swipe",
+      "stale transition cleanup",
+      "scroll conflict"
+    ],
+    "ROLLBACK": [
+      "Revertir este PR; no hay schema ni datos que revertir."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "touch swipe dismissal test",
+      "settle-back test",
+      "forward/back subview transition test",
+      "reduced-motion immediate close test"
+    ]
+  }
+}

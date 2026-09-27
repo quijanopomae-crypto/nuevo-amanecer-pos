@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-WORKSPACE-SWIPE-001",
+  "environment": "CANON",
+  "base_ref": "33f6873cc0a0a98070c42f6f2681d8635c690bc3",
+  "objective": "Portar al panel financiero CANON el contrato de workspace swipe aprobado en LAB: arrastre vertical sincronizado, settle desde el frame alcanzado, cierre visual antes de hidden y transiciones direccionales entre subvistas sin desapariciones bruscas.",
+  "owner_authorization": "Owner reportó que la animación sigue sin funcionar y pidió corregirla.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-WORKSPACE-SWIPE-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-WORKSPACE-SWIPE-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/client-credit-accounts-v2.css",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "canon-promotion",
+    "lab-animation-edit"
+  ],
+  "invariants": [
+    "Visual-only motion",
+    "No business writes or waits",
+    "No changes to payments/FIFO/Caja/stock/saldos/evaluator",
+    "Visual hide occurs only after exit or reduced-motion immediate path",
+    "prefers-reduced-motion remains safe",
+    "Touch gesture ignores interactive controls and only begins at scrollTop 0"
+  ],
+  "rollback": "Revertir este PR; no hay schema ni datos que revertir."
+}
