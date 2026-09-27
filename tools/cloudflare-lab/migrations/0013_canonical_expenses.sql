@@ -48,7 +48,7 @@ WHEN NOT EXISTS(
   SELECT 1 FROM canonical_control c JOIN devices d ON d.device_id=NEW.device_id
   WHERE c.id=1 AND c.mode='ACTIVE' AND c.active_promotion_id=NEW.promotion_id
     AND c.authority_epoch=NEW.authority_epoch AND c.revision=NEW.control_revision
-    AND c.minimum_client_contract=NEW.client_contract AND c.writer_device_id=NEW.device_id
+    AND c.minimum_client_contract=NEW.client_contract
     AND d.role='writer' AND d.status='active' AND d.credential_hash=NEW.credential_hash
 )
 BEGIN SELECT RAISE(ABORT,'stale_authority'); END;
@@ -143,7 +143,9 @@ WHEN (NEW.mode='ACTIVE' OR (OLD.mode<>'LEGACY' AND NEW.mode='LEGACY') OR NEW.rev
     JOIN canonical_sale_context x ON x.sale_id=s.sale_id AND x.operation_id=g.operation_id
     WHERE g.promotion_id=OLD.active_promotion_id AND g.authority_epoch=OLD.authority_epoch
     AND g.control_revision=OLD.revision AND g.client_contract=OLD.minimum_client_contract
-    AND s.device_id=OLD.writer_device_id
+    AND s.device_id=g.principal_id AND g.credential_hash IS NOT NULL
+    AND EXISTS(SELECT 1 FROM devices sale_writer WHERE sale_writer.device_id=g.principal_id
+      AND sale_writer.role='writer' AND sale_writer.status='active' AND sale_writer.credential_hash=g.credential_hash)
     AND x.promotion_id=g.promotion_id AND x.authority_epoch=g.authority_epoch
     AND x.control_revision=g.control_revision AND x.client_contract=g.client_contract
     AND (OLD.first_live_operation_id IS NOT NULL OR (NEW.first_live_operation_id=g.operation_id
@@ -160,7 +162,8 @@ WHEN (NEW.mode='ACTIVE' OR (OLD.mode<>'LEGACY' AND NEW.mode='LEGACY') OR NEW.rev
     AND g.control_revision=OLD.revision AND g.client_contract=OLD.minimum_client_contract
     AND o.promotion_id=g.promotion_id AND o.authority_epoch=g.authority_epoch
     AND o.control_revision=g.control_revision AND o.client_contract=g.client_contract
-    AND o.device_id=OLD.writer_device_id AND d.role='writer' AND d.status='active' AND d.credential_hash=o.credential_hash
+    AND o.device_id=g.principal_id AND g.credential_hash=o.credential_hash
+    AND d.role='writer' AND d.status='active' AND d.credential_hash=o.credential_hash
     AND (OLD.first_live_operation_id IS NOT NULL OR (NEW.first_live_operation_id=o.operation_id
       AND NOT EXISTS(SELECT 1 FROM canonical_financial_operations prior WHERE prior.operation_id<>o.operation_id)
       AND NOT EXISTS(SELECT 1 FROM canonical_sale_context)))
@@ -188,8 +191,8 @@ WHEN (NEW.mode='ACTIVE' OR (OLD.mode<>'LEGACY' AND NEW.mode='LEGACY') OR NEW.rev
     AND g.control_revision=OLD.revision AND g.client_contract=OLD.minimum_client_contract
     AND o.promotion_id=g.promotion_id AND o.authority_epoch=g.authority_epoch
     AND o.control_revision=g.control_revision AND o.client_contract=g.client_contract
-    AND o.device_id=OLD.writer_device_id AND d.role='writer' AND d.status='active'
-    AND d.credential_hash=o.credential_hash
+    AND o.device_id=g.principal_id AND g.credential_hash=o.credential_hash
+    AND d.role='writer' AND d.status='active' AND d.credential_hash=o.credential_hash
     AND (OLD.first_live_operation_id IS NOT NULL OR (NEW.first_live_operation_id=o.operation_id
       AND NOT EXISTS(SELECT 1 FROM canonical_sale_context)
       AND NOT EXISTS(SELECT 1 FROM canonical_financial_operations)
