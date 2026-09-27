@@ -9,6 +9,7 @@
     "tasks/LAB-PAGES-CURRENT-HEAD-001.json",
     "evidence/lab-preflight/LAB-PAGES-CURRENT-HEAD-001.json",
     ".github/workflows/lab-pages.yml",
+    ".github/workflows/lab-cloud-ci.yml",
     "laboratorio/pos-lab/verify-pages-site.mjs",
     "tests/laboratorio-pages-current-head.test.mjs"
   ],
