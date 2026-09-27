@@ -1,0 +1,68 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-STAGED-PARALLEL-BOOTSTRAP-001",
+  "base_ref": "50fd0996d68e7d0637181bb417e03f8f1ec7064c",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Reducir drásticamente el cold-start visible publicando primero catálogo/clientes/créditos validados en solo lectura, completar finanzas en segundo paso y corregir el indicador móvil falso Local.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "docs/V1.3_STATUS.md",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "POS/css/layout.css",
+      "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs",
+      "captura del propietario del Worker público"
+    ],
+    "WRITES": [
+      "Ejecutar lecturas CANON independientes en paralelo manteniendo verificación por ruta.",
+      "Publicar una replica bootstrap en memoria con mode CANONICAL_READ_ONLY.",
+      "Publicar ACTIVE solo tras completar cash-sessions y financial-events.",
+      "Cambiar estado visual validating para distinguir bootstrap remoto de cache.",
+      "Eliminar pseudo-elemento móvil que fuerza Local y mostrar el estado real truncado.",
+      "Agregar regresiones estructurales."
+    ],
+    "DOM_AFFECTED": [
+      "#localStatus span",
+      "Dashboard",
+      "POS",
+      "Inventario",
+      "Clientes"
+    ],
+    "STATE_AFFECTED": [
+      "replicaState.source puede usar bootstrap",
+      "data durante bootstrap remoto se mantiene read_only"
+    ],
+    "STORAGE_AFFECTED": [
+      "La replica bootstrap no se persiste; solo la replica final completa conserva persistencia existente."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "assertAction continúa exigiendo ready + ACTIVE + read_only false.",
+      "No se habilitan escrituras durante bootstrap.",
+      "No se alteran payloads ni transportes financieros."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Catálogo/clientes/créditos visibles antes.",
+      "Caja/finanzas permanecen cerradas hasta validación completa.",
+      "Estado superior móvil deja de mentir sobre Local."
+    ],
+    "RISKS": [
+      "Publicar datos parciales como ACTIVE: mitigado forzando CANONICAL_READ_ONLY en source bootstrap.",
+      "Metadatos inconsistentes entre rutas paralelas: cada página se verifica contra statusMeta/digest/financial_revision.",
+      "Carrera entre bootstrap y final: ambas publicaciones son secuenciales dentro del mismo refresh."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no se requiere rollback remoto de datos."
+    ],
+    "TEST_PLAN": [
+      "Regresión de bootstrap staged/read-only.",
+      "Regresión que exige lecturas Promise.all para core y finanzas.",
+      "Regresión que comprueba que indicador móvil ya no contiene content:'Local'.",
+      "CANON Critical CI completo.",
+      "Deploy protegido y verificación pública."
+    ]
+  }
+}

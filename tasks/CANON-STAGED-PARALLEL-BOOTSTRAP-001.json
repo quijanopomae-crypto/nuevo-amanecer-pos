@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-STAGED-PARALLEL-BOOTSTRAP-001",
+  "environment": "CANON",
+  "base_ref": "50fd0996d68e7d0637181bb417e03f8f1ec7064c",
+  "objective": "Evitar que el POS móvil muestre datos en cero durante demasiado tiempo: cargar en paralelo el núcleo CANON, publicarlo inmediatamente en modo seguro de solo lectura y completar después caja/eventos financieros antes de habilitar ACTIVE. Corregir además el indicador móvil que fuerza la palabra Local.",
+  "owner_authorization": "El propietario probó el Worker público después del arreglo anterior y reportó que todavía no funciona; la captura muestra la UI pero sin datos visibles.",
+  "allowed_files": [
+    "tasks/CANON-STAGED-PARALLEL-BOOTSTRAP-001.json",
+    "evidence/canon-preflight/CANON-STAGED-PARALLEL-BOOTSTRAP-001.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "POS/css/layout.css",
+    "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-projection.js"
+  ],
+  "invariants": [
+    "El núcleo remoto se muestra antes de terminar las rutas financieras.",
+    "La etapa bootstrap se publica CANONICAL_READ_ONLY y no puede autorizar ventas/caja/pagos.",
+    "ACTIVE solo se publica cuando todas las rutas financieras requeridas terminan y pasan verificación.",
+    "No se modifica D1, backend, reglas comerciales ni saldos.",
+    "El indicador móvil refleja el texto real de estado y no una palabra fija.",
+    "Cache CANON válida conserva su comportamiento inmediato."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos, esquema ni backend."
+}
