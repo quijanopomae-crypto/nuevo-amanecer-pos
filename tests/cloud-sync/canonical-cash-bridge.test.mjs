@@ -102,12 +102,16 @@ test('CANON ingreso and egreso use signed adjustment cents and cash-only UI',asy
   incoming.context.abrirMovCaja('ing');
   assert.equal(incoming.ids.cajMovMetodo.value,'efectivo');
   assert.equal(incoming.ids.cajMovMetodo.disabled,true);
+  incoming.ids.cajMovMonto.value='7.25';
+  incoming.ids.cajMovDesc.value='Cambio sencillo';
   incoming.context.cajMovTipo='ing';
   assert.equal(await incoming.context.guardarMovCaja(),true);
   assert.equal(incoming.calls.find(x=>x[0]==='adjust')[1].amount_cents,725);
 
   const outgoing=harness(true);
   outgoing.context.abrirMovCaja('egr');
+  outgoing.ids.cajMovMonto.value='7.25';
+  outgoing.ids.cajMovDesc.value='Retiro de prueba';
   outgoing.context.cajMovTipo='egr';
   assert.equal(await outgoing.context.guardarMovCaja(),true);
   assert.equal(outgoing.calls.find(x=>x[0]==='adjust')[1].amount_cents,-725);
