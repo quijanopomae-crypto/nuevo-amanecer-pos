@@ -50,6 +50,17 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Verify LAB to CANON experience contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/pos-experience/promote-lab-visuals.mjs --check
+          node --test \
+            tests/product-fixes/canon-lab-interface-parity.test.mjs \
+            tests/product-fixes/canon-motion-bootstrap.test.mjs \
+            tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
+            tests/product-fixes/canonical-ui-contract.test.mjs
+
       - name: Install pinned Wrangler
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
