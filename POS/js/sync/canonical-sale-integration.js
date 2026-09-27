@@ -95,9 +95,13 @@
       failClosed('Ese número de operación ya fue registrado.', null); return;
     }
     var customer = null, due = null;
-    if (method === 'credito') {
-      var customerId = root.document && root.document.getElementById('mCreditoCliente')?.value;
+    var customerInputId = method === 'credito' ? 'mCreditoCliente' : 'mVentaCliente';
+    var customerId = root.document && root.document.getElementById(customerInputId)?.value;
+    if (customerId) {
       customer = (Array.isArray(root.clientes) ? root.clientes : []).find(function (candidate) { return String(candidate.id) === String(customerId); });
+      if (!customer) { failClosed('El cliente seleccionado ya no está disponible. Actualiza la lista y vuelve a intentarlo.', null); return; }
+    }
+    if (method === 'credito') {
       due = root.document && root.document.getElementById('mCreditoVence')?.value;
       if (!customer || !due) { failClosed('Selecciona cliente y fecha de vencimiento', null); return; }
     }
