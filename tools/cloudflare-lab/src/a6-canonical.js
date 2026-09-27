@@ -510,7 +510,10 @@ async function canonicalRead(url,db,json){
     const key=sqlName==='sale_items'?"r.sale_id || char(0) || printf('%020d',r.line_number)":sqlName==='sales'?'r.sale_id':'r.movement_id';
     const join=sqlName==='inventory_movements'?'canonical_inventory_effects x JOIN inventory_movements r ON r.movement_id=x.movement_id':'canonical_sale_context x JOIN '+sqlName+' r ON r.sale_id=x.sale_id';
     const context=sqlName==='sales'?',x.customer_id,x.promotion_id,x.authority_epoch,x.control_revision,x.client_contract':'';
-    rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName].split(',').map(c=>'r.'+c).join(',')}${context} FROM ${join} WHERE x.promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+    const cashSession=sqlName==='cash_movements'?`,(SELECT s.session_id FROM canonical_cash_state s
+      WHERE s.promotion_id=x.promotion_id AND r.rowid>s.cash_movement_watermark AND r.rowid<=s.closing_watermark
+      ORDER BY s.opened_at DESC LIMIT 1) AS session_id`:'';
+    rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName].split(',').map(c=>'r.'+c).join(',')}${context}${cashSession} FROM ${join} WHERE x.promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   }
   else {const key=sqlName==='sale_items'?"sale_id || char(0) || printf('%020d',line_number)":sqlName==='sales'?'sale_id':'movement_id';rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName]} FROM ${sqlName} WHERE ${key}>?1 ORDER BY ${key} LIMIT ?2`).bind(page.key,page.limit+1).all();}
   const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
