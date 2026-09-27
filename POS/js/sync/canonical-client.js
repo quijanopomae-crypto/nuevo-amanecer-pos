@@ -149,13 +149,14 @@
     try { var value = await root._naReadCanonicalReplica(); return validReplica(value) ? value : null; } catch (_) { return null; }
   }
   function publishReplica(replica, source) {
+    var provisional = source === 'cache' || source === 'bootstrap';
     data = { authority: 'canonical', promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch, revision: replica.revision,
       financial_revision: replica.financial_revision, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
       payments: copy(replica.credit_payments), creditAccounts: copy(replica.credit_accounts || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []),
-      mode: source === 'cache' ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
-      read_only: source === 'cache' || replica.read_only !== false, minimum_client_contract: source === 'cache' ? 'a6-gate-p-v1' : (replica.minimum_client_contract || 'a6-gate-p-v1') };
+      mode: provisional ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
+      read_only: provisional || replica.read_only !== false, minimum_client_contract: provisional ? 'a6-gate-p-v1' : (replica.minimum_client_contract || 'a6-gate-p-v1') };
     ready = true; replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
-      revision: replica.revision, financial_revision: replica.financial_revision }, validation: source === 'cache' ? 'validating' : 'current' };
+      revision: replica.revision, financial_revision: replica.financial_revision }, validation: provisional ? 'validating' : 'current' };
   }
   function notifyReplicaUpdate() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-updated', { detail: sourceState() })); } catch (_) {} }
   function readFetch(url, options) {
@@ -201,39 +202,57 @@
       verify(statusMeta, expected);
       var statusDigest = statusMeta && (statusMeta.canonical_digest || statusMeta.revision_digest || statusMeta.digest);
       if (statusMeta && statusMeta.mode === 'ACTIVE' && !uint(statusMeta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
-      var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision };
+      var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision, digests: {} };
       if (binding && !changed) assertBinding(expected);
-      var meta, firstMeta, entries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']]; next.digests = {};
-      for (var index = 0; index < entries.length; index++) {
-        var entry = entries[index];
-        var route = entry[0], name = entry[1], cursor = null, seen = new Set(); next[name] = [];
+      var expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : null]);
+      async function readEntry(entry) {
+        var route = entry[0], name = entry[1], cursor = null, seen = new Set(), items = [], digest = null;
         do {
           if (binding && !changed) assertBinding(expected);
           var response = await readFetch(endpoint + '/read/canonical/' + route + '?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), {
             credentials: 'omit', redirect: 'error', cache: 'no-store', headers: authHeaders
           });
           if (!response.ok) fail('CANONICAL_READ_' + response.status);
-          meta = await response.json(); verify(meta, expected);
+          var meta = await response.json(); verify(meta, expected);
           if (meta.mode === 'ACTIVE' && !uint(meta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
           if (statusMeta && meta.mode === 'ACTIVE' && meta.financial_revision !== statusMeta.financial_revision) fail('STALE_AUTHORITY_BINDING');
           var routeDigest = meta.canonical_digest || meta.revision_digest || meta.digest;
           if (statusDigest && routeDigest && routeDigest !== statusDigest) fail('STALE_AUTHORITY_BINDING');
-          if (routeDigest) next.digests[route] = routeDigest;
-          var pageMeta = JSON.stringify([meta.mode, meta.read_only, meta.minimum_client_contract, meta.mode === 'ACTIVE' ? meta.financial_revision : null]);
-          if (firstMeta && firstMeta !== pageMeta) fail('STALE_AUTHORITY_BINDING');
-          firstMeta = pageMeta;
+          if (JSON.stringify([meta.mode, meta.read_only, meta.minimum_client_contract, meta.mode === 'ACTIVE' ? meta.financial_revision : null]) !== expectedPageMeta) fail('STALE_AUTHORITY_BINDING');
           if (!Array.isArray(meta.items)) fail('INVALID_CANONICAL_PAGE');
-          next[name].push.apply(next[name], meta.items); cursor = meta.next_cursor;
+          if (routeDigest) digest = routeDigest;
+          items.push.apply(items, meta.items); cursor = meta.next_cursor;
           if (cursor && seen.has(cursor)) fail('REPEATED_CANONICAL_CURSOR');
           seen.add(cursor);
         } while (cursor);
-        if (index === 0 && meta.mode === 'ACTIVE') entries.push(['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']);
+        return { route: route, name: name, items: items, digest: digest };
+      }
+      function applyEntries(results) {
+        results.forEach(function (result) {
+          next[result.name] = result.items;
+          if (result.digest) next.digests[result.route] = result.digest;
+        });
+      }
+      var coreEntries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']];
+      applyEntries(await Promise.all(coreEntries.map(readEntry)));
+      next.cashSessions = []; next.financialEvents = [];
+      next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
+      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
+      if (statusDigest) next.canonical_digest = statusDigest;
+      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
+      if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
+      if (cache && cacheIsNewer(cache, bootstrapReplica)) {
+        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
+      }
+      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
+
+      if (statusMeta.mode === 'ACTIVE') {
+        applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
       }
       if (binding && !changed) assertBinding(expected);
-      next.read_only = meta.read_only; next.mode = meta.mode; next.minimum_client_contract = meta.minimum_client_contract;
-      if (meta.mode === 'ACTIVE') next.financial_revision = meta.financial_revision;
-      if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), incoming = replicaOf(next);
+      next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
+      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
+      var incoming = replicaOf(next);
       if (!validReplica(incoming)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, incoming)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
