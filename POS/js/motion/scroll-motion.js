@@ -190,6 +190,10 @@
 
   motion.scroll = Object.assign(motion.scroll || {}, {
     register: register,
+    enablePreset: function (name) {
+      var preset = motion.scroll && motion.scroll.presets ? motion.scroll.presets[String(name || '')] : null;
+      return preset ? register(preset) : null;
+    },
     inspect: function (pageId) {
       var controller = controllers.get(String(pageId || ''));
       return controller ? controller.inspect() : null;
@@ -203,7 +207,4 @@
     }
   });
 
-  Object.keys(motion.scroll.presets).forEach(function (name) {
-    register(motion.scroll.presets[name]);
-  });
 })(window);
