@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-NONBLOCKING-BOOTSTRAP-001",
+  "environment": "CANON",
+  "base_ref": "acc459ed97b4847d3f9d22dfaf613ecab17c236c",
+  "objective": "Evitar que el POS CANON parezca congelado en un arranque sin replica: montar la interfaz sin esperar la lectura remota completa, finalizar correctamente el estado de carga ante fallos y limitar el tiempo de espera de lecturas CANON sin relajar los bloqueos de comercio.",
+  "owner_authorization": "El propietario reportó que la interfaz queda pegada incluso en otro navegador y pidió corregirla.",
+  "allowed_files": [
+    "tasks/CANON-NONBLOCKING-BOOTSTRAP-001.json",
+    "evidence/canon-preflight/CANON-NONBLOCKING-BOOTSTRAP-001.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-projection.js",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/**"
+  ],
+  "invariants": [
+    "La UI puede montarse antes de completar la red CANON.",
+    "Ventas, caja y comandos financieros siguen fail-closed hasta autoridad ACTIVE validada.",
+    "No se muestran datos legacy como autoridad CANON durante cold start.",
+    "Una lectura remota lenta o fallida no deja validation en pending indefinidamente.",
+    "No se modifican D1, reglas de pagos, FIFO, inventario, saldos, caja ni créditos.",
+    "La cache CANON valida sigue apareciendo inmediatamente y se valida en segundo plano."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de schema, datos ni backend."
+}
