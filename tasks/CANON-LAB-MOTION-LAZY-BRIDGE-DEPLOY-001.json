@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-LAB-MOTION-LAZY-BRIDGE-DEPLOY-001",
+  "environment": "CANON",
+  "base_ref": "46a966f8b8ab006560e3ae9d7ac095dff2eacb90",
+  "objective": "Publicar en el Worker web CANON el bridge Motion LAB aprobado e integrado en la rama canónica.",
+  "owner_authorization": "El propietario pidió continuar la corrección de la migración LAB -> CANON.",
+  "allowed_files": [
+    "tasks/CANON-LAB-MOTION-LAZY-BRIDGE-DEPLOY-001.json",
+    "evidence/canon-preflight/CANON-LAB-MOTION-LAZY-BRIDGE-DEPLOY-001.json",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": ["POS/**","laboratorio/**","D1/**","R2/**","secrets/**"],
+  "invariants": [
+    "Solo se publica el shell ya validado.",
+    "No se modifica backend ni datos.",
+    "No se ejecutan operaciones comerciales."
+  ],
+  "rollback": "Redeploy del build anterior."
+}
