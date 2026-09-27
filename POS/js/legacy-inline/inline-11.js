@@ -100,7 +100,7 @@ function _naSecCashClosing(container,totals){
   }
 }
 cajRender=function(){
-  if(isModuleLocked('caja'))toast('Módulo de caja protegido','error');
+  if(isModuleLocked('caja')&&!(globalThis.NuevoAmanecerCanonical&&typeof NuevoAmanecerCanonical.enabled==='function'&&NuevoAmanecerCanonical.enabled()))toast('Módulo de caja protegido','error');
   if(cajEstado.abierta&&!cajEstado.cerrada&&cajEstado.fechaApertura&&cajEstado.fechaApertura!==obtenerHoy())toast('⚠️ Caja de otro día, ciérrala primero','error');
   const container=document.getElementById('cajContent');
   if(!container)return;
