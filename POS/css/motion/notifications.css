@@ -1,0 +1,21 @@
+@keyframes na-feedback-in{
+  from{opacity:0;transform:translateY(4px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+@keyframes na-cart-pulse-keyframes{
+  0%,100%{transform:scale(1)}
+  45%{transform:scale(1.12)}
+}
+
+.na-feedback-enter{
+  animation:na-feedback-in var(--na-motion-fast) var(--na-motion-ease-standard) both;
+}
+
+.na-cart-pulse{
+  animation:na-cart-pulse-keyframes var(--na-motion-normal) var(--na-motion-ease-standard) both;
+}
+
+@media(prefers-reduced-motion:reduce){
+  .na-feedback-enter,.na-cart-pulse{animation:none!important}
+}
