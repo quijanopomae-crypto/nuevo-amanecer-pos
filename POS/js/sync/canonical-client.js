@@ -9,6 +9,7 @@
   var METHODS = ['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto'];
   var COMMANDS = ['sale.create', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
+  var READ_TIMEOUT_MS = 8000;
   var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
@@ -157,6 +158,31 @@
       revision: replica.revision, financial_revision: replica.financial_revision }, validation: source === 'cache' ? 'validating' : 'current' };
   }
   function notifyReplicaUpdate() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-updated', { detail: sourceState() })); } catch (_) {} }
+  function readFetch(url, options) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var controller = typeof root.AbortController === 'function' ? new root.AbortController() : null;
+      var timer = root.setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        if (controller) controller.abort();
+        reject(new Error('CANONICAL_READ_TIMEOUT'));
+      }, READ_TIMEOUT_MS);
+      var requestOptions = Object.assign({}, options || {});
+      if (controller) requestOptions.signal = controller.signal;
+      Promise.resolve(root.fetch(url, requestOptions)).then(function (response) {
+        if (settled) return;
+        settled = true;
+        root.clearTimeout(timer);
+        resolve(response);
+      }, function (error) {
+        if (settled) return;
+        settled = true;
+        root.clearTimeout(timer);
+        reject(error);
+      });
+    });
+  }
   async function refresh() {
     if (loading) return loading;
     if (!data) ready = false;
@@ -167,7 +193,7 @@
       var endpoint = expected.endpoint, session = sessionCredentials(expected);
       if (!session) fail('SESSION_NOT_AVAILABLE');
       var authHeaders = { authorization: 'Bearer ' + session.token };
-      var status = await root.fetch(endpoint + '/read/canonical/status', {
+      var status = await readFetch(endpoint + '/read/canonical/status', {
         credentials: 'omit', redirect: 'error', cache: 'no-store', headers: authHeaders
       });
       if (!status.ok) fail('CANONICAL_READ_' + status.status);
@@ -183,7 +209,7 @@
         var route = entry[0], name = entry[1], cursor = null, seen = new Set(); next[name] = [];
         do {
           if (binding && !changed) assertBinding(expected);
-          var response = await root.fetch(endpoint + '/read/canonical/' + route + '?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), {
+          var response = await readFetch(endpoint + '/read/canonical/' + route + '?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), {
             credentials: 'omit', redirect: 'error', cache: 'no-store', headers: authHeaders
           });
           if (!response.ok) fail('CANONICAL_READ_' + response.status);
@@ -220,7 +246,7 @@
       if (!same && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
       replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
-    try { return await loading; } catch (error) { ready = false; if (data) { replicaState.validation = root.navigator.onLine === false ? 'offline' : 'stale'; notifyReplicaUpdate(); } throw error; } finally { loading = null; }
+    try { return await loading; } catch (error) { ready = false; replicaState.validation = root.navigator.onLine === false ? 'offline' : (data ? 'stale' : 'unavailable'); notifyReplicaUpdate(); throw error; } finally { loading = null; }
   }
   function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], cashSessions: [], financialEvents: [] }); }
   function sourceState() { return copy(replicaState); }
