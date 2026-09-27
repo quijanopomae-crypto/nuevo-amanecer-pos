@@ -339,3 +339,37 @@ test('stale client motion callbacks cannot cancel a newer refresh',()=>{
   stale.fn();
   assert.equal(m.drawLog.length,1,'stale callback must not draw after epoch changed');
 });
+
+
+test('financial workspace swipe follows the approved LAB visual contract',()=>{
+  assert.match(source,/touchstart/);
+  assert.match(source,/touchmove/);
+  assert.match(source,/touchend/);
+  assert.match(source,/touchcancel/);
+  assert.match(source,/screen\.scrollTop > 0/);
+  assert.match(source,/NA_CLIENT_INTERACTIVE_SELECTOR/);
+  assert.match(source,/distance >= threshold/);
+  assert.match(source,/velocity >= \.85/);
+  assert.match(source,/naClientSettleWorkspaceBack/);
+  assert.match(source,/naClientDismissWorkspace/);
+  assert.match(css,/--na-client-workspace-drag-y/);
+  assert.match(css,/--na-client-workspace-panel-opacity/);
+  assert.match(css,/--na-client-workspace-backdrop-alpha/);
+  assert.match(css,/transform:translate3d\(0,var\(--na-client-workspace-drag-y\),0\)/);
+  assert.match(css,/na-client-workspace-settling/);
+});
+
+test('financial panel is hidden only after visual close and subviews slide directionally',()=>{
+  const close=source.slice(source.indexOf('function labCloseScreen'),source.indexOf('function labResetClientNavigationForMenu'));
+  assert.doesNotMatch(close,/screen\.hidden\s*=\s*true/);
+  assert.match(close,/naClientDismissWorkspace/);
+  const finish=source.slice(source.indexOf('function naClientFinishWorkspaceClose'),source.indexOf('function naClientDismissWorkspace'));
+  assert.match(finish,/screen\.hidden\s*=\s*true/);
+  assert.match(source,/labRenderRoute\('forward'\)/);
+  assert.match(source,/labRenderRoute\('back'\)/);
+  assert.match(css,/na-client-view-exit-forward/);
+  assert.match(css,/na-client-view-exit-back/);
+  assert.match(css,/na-client-view-enter-forward/);
+  assert.match(css,/na-client-view-enter-back/);
+  assert.doesNotMatch(css,/#pageClientes\.na-client-detail-open #cliList\{visibility:hidden\}/);
+});
