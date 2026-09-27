@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-LAB-MOTION-LAZY-BRIDGE-001",
+  "environment": "CANON",
+  "base_ref": "1ad6c77d0635f50f21de634e5a01d9517af57da1",
+  "objective": "Cerrar la promoción incompleta de Motion LAB -> CANON conectando perezosamente la animación de entrada y el scroll sincronizado únicamente cuando cada módulo se activa, sin volver al auto-bootstrap global.",
+  "owner_authorization": "El propietario confirmó que LAB está correcto y pidió continuar corrigiendo exclusivamente la migración a CANON.",
+  "allowed_files": [
+    "tasks/CANON-LAB-MOTION-LAZY-BRIDGE-001.json",
+    "evidence/canon-preflight/CANON-LAB-MOTION-LAZY-BRIDGE-001.json",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/motion/lab-parity-bridge.js",
+    "tests/product-fixes/canon-motion-bootstrap.test.mjs",
+    "tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/sync/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "LAB permanece READ-ONLY y baseline.",
+    "No se toca autoridad CANON, datos, sync, outbox ni negocio.",
+    "No se auto-registran todos los controladores de scroll durante el boot.",
+    "Cada módulo obtiene scroll Motion solo en su primera activación.",
+    "La animación de entrada usa la clase aprobada lab-enter-fade ya promovida en CSS.",
+    "prefers-reduced-motion permanece respetado por NA_MOTION.page.enter().",
+    "Ninguna operación comercial espera a Motion."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos, schema ni backend."
+}
