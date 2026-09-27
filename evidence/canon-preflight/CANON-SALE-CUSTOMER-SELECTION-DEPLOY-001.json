@@ -1,0 +1,62 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SALE-CUSTOMER-SELECTION-DEPLOY-001",
+  "base_ref": "83fce417f1c2871b555b81bac43806f3394b6d7e",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "user_request": "El propietario pidió corregir el POS del Worker público y verificar que funciona.",
+    "merged_fix": {
+      "pr": 125,
+      "commit": "83fce417f1c2871b555b81bac43806f3394b6d7e",
+      "ci": "CANON Critical CI run 97 passed"
+    },
+    "branch_head": "83fce417f1c2871b555b81bac43806f3394b6d7e",
+    "deployment_contract": ".github/workflows/v1.3-pos-web-deploy.yml",
+    "existing_trigger": "ops/v1.3-pos-web-deploy-trigger.json currently records an earlier Motion shell publish targeting f8c9ca3bd7c4e0f2b81c70fe0730b6ff563a81f4."
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el shell web CANON que contiene la captura de cliente arreglada y validar el Worker público.",
+    "READS": [
+      "Merged commit 83fce417f1c2871b555b81bac43806f3394b6d7e",
+      ".github/workflows/v1.3-pos-web-deploy.yml",
+      "tests/cloud-sync/v1.3-pos-web-deploy.test.mjs",
+      "docs/V1.3_STATUS.md release boundary and READY_FOR_FIRST_SALE state",
+      "Current deployment trigger record"
+    ],
+    "WRITES": [
+      "Refresh the existing deploy trigger record to authorize publication of the merged customer-selection correction.",
+      "Keep the current branch-only guarded deployment workflow and its worker build-hash verification."
+    ],
+    "DOM_AFFECTED": [
+      "Public Worker launcher and /app static assets"
+    ],
+    "STATE_AFFECTED": [
+      "Worker version only"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No D1/R2/backend write or migration.",
+      "No change to canonical authority or activation-secret material.",
+      "The public app remains behind its existing owner activation gate."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Static Worker shell only; production commerce Worker and D1 untouched.",
+      "The deploy workflow assembles the merged POS tree, including Motion assets and service-worker precache."
+    ],
+    "RISKS": [
+      "Service worker activates the new fully cached shell for browser clients after publish.",
+      "The activation gate prevents this browser from completing an authenticated application session."
+    ],
+    "ROLLBACK": [
+      "Redeploy the prior hosted shell commit; no data rollback is needed."
+    ],
+    "TEST_PLAN": [
+      "PR CI must run the hosted Worker static dry-run and CANON critical regressions.",
+      "After merge, wait for V1.3 Hosted POS Web Deploy workflow to finish.",
+      "Confirm public root, /app, canonical sale asset, hosted guard, and service worker build hash.",
+      "Do not activate the browser or confirm a real sale."
+    ]
+  }
+}
