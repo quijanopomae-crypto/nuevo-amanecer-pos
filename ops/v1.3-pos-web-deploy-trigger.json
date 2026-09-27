@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy fast client cache loader fix: show valid cached clients immediately and clear loader on every validation terminal state.",
-  "retry_attempt": 7,
-  "retry_reason": "Publish PR #114 fast cached client loading fix after CANON Critical CI success.",
-  "requested_at_utc": "2026-09-26T23:49:00Z",
-  "target_head": "24a33ecfcbe032dad48b61e4fc649097644c1024"
+  "note": "Deploy Client motion lifecycle fix: explicit exit → DOM swap → entry → double RAF → settle, with stale callback cancellation.",
+  "retry_attempt": 8,
+  "retry_reason": "Publish PR #116 motion lifecycle runtime correction after CANON Critical CI success.",
+  "requested_at_utc": "2026-09-27T00:31:00Z",
+  "target_head": "92d1ec3e8427b6e591f2ba671a6b08967658e825"
 }
