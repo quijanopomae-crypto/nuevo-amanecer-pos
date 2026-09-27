@@ -1,0 +1,51 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-FIRST-PAINT-BEFORE-MOTION-001",
+  "base_ref": "00a047907aef110c6d0f7ba2bc3b845c55412764",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "El usuario confirmó en un teléfono real que tocar una tarjeta sigue congelando la UI aun con la nueva capa de input.",
+    "goPage activa la página y difiere el renderer pesado mediante requestAnimationFrame + setTimeout.",
+    "saveAppState sale inmediatamente en modo CANON y no construye el snapshot legacy.",
+    "lab-parity-bridge observa el cambio de clase active y llama Motion antes del paint.",
+    "motion.page.enter usa core.restartClass y core.restartClass lee element.offsetWidth, forzando layout síncrono.",
+    "Para módulos con scroll preset, lab-parity-bridge también habilita scroll-motion en ese mismo ciclo y éste mide scrollHeight."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Mover toda activación Motion fuera del ciclo crítico de navegación y eliminar el reflow forzado.",
+    "READS": [
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/js/core/state.js",
+      "POS/js/motion/core.js",
+      "POS/js/motion/page-transitions.js",
+      "POS/js/motion/scroll-motion.js",
+      "POS/js/motion/lab-parity-bridge.js",
+      "tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs",
+      "tests/product-fixes/canon-motion-bootstrap.test.mjs"
+    ],
+    "WRITES": [
+      "page-transitions.js: page enter sin core.restartClass/offsetWidth.",
+      "lab-parity-bridge.js: Motion diferido dos frames y cancelable si la página deja de estar activa.",
+      "Tests focales actualizados para exigir first-paint-before-motion."
+    ],
+    "DOM_AFFECTED": [".page active class observada por Motion"],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin escrituras comerciales.",
+      "Sin cambios a renderers ni navegación base.",
+      "Motion no puede bloquear el primer paint."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Punto de Venta, Inventario, Ventas, Clientes, Caja, Gastos y Configuración comparten page enter.",
+      "Inventario/Clientes/Ventas/Caja/Gastos además difieren activación de scroll preset."
+    ],
+    "RISKS": [
+      "La animación puede comenzar ~1-2 frames más tarde, intencionalmente.",
+      "Si el usuario cambia de página muy rápido, el Motion pendiente debe cancelarse por token/estado."
+    ],
+    "ROLLBACK": ["Revertir el PR."]
+  }
+}
