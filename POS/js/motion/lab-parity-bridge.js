@@ -79,6 +79,7 @@
   }
 
   function scheduleMotion(page) {
+    if (Number(root.innerWidth || 0) <= 700 || root.NA_MOBILE_SAFE_NAV_ACTIVE === true) return;
     var preset = presetByPage[page.id] || null;
     var token = nextToken(page);
     afterPaint(function () {

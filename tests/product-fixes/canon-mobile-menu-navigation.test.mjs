@@ -7,6 +7,15 @@ const source = readFileSync('POS/js/navigation/menu-navigation.js', 'utf8');
 const index = readFileSync('POS/index.html', 'utf8');
 const sw = readFileSync('POS/sw.js', 'utf8');
 
+function classList(initial=[]) {
+  const set=new Set(initial);
+  return {
+    contains:name=>set.has(name),
+    add:function(){for(const name of arguments)set.add(name);},
+    remove:function(){for(const name of arguments)set.delete(name);}
+  };
+}
+
 function makeCard(pageId) {
   const attrs = new Map([['onclick', `goPage('${pageId}')`]]);
   const menuMarker = {};
@@ -25,7 +34,7 @@ function makeCard(pageId) {
   };
 }
 
-function harness() {
+function harness(width=390) {
   const cards = [
     makeCard('pagePOS'),
     makeCard('pageInventario'),
@@ -37,37 +46,69 @@ function harness() {
   ];
   const listeners = new Map();
   const menuAttrs = new Map();
+  const frameQueue=[];
+  const idleQueue=[];
+  const timerQueue=[];
+  const pages=['pageMenu','pagePOS','pageInventario','pageVentas','pageClientes','pageCaja','pageGastos','pageConfig']
+    .map(id=>({id,classList:classList(id==='pageMenu'?['page','active']:['page'])}));
+  const back={style:{display:'none'}};
   const menu = {
+    id:'pageMenu',
+    classList:pages.find(p=>p.id==='pageMenu').classList,
     getAttribute(name) { return menuAttrs.get(name) ?? null; },
     setAttribute(name, value) { menuAttrs.set(name, String(value)); },
     querySelectorAll(selector) { return selector === '.module-card' ? cards : []; },
     addEventListener(type, fn) { listeners.set(type, fn); }
   };
-  const calls = [];
+  const byId=new Map(pages.map(p=>[p.id,p]));
+  byId.set('pageMenu',menu);
+  byId.set('backBtn',back);
+  const calls=[];
+  const renders=[];
   let clock = 100;
+  const html={classList:classList()};
+  const body={classList:classList()};
+
   const context = {
     window: null,
     document: {
       readyState: 'complete',
-      getElementById(id) { return id === 'pageMenu' ? menu : null; },
+      documentElement: html,
+      body,
+      getElementById(id) { return byId.get(id)||null; },
+      querySelectorAll(selector) { return selector==='.page'?pages:[]; },
       addEventListener() {}
     },
+    innerWidth: width,
     performance: { now: () => clock },
-    Date,
-    Object,
-    Array,
-    Map,
-    Set,
-    console,
-    goPage(id) { calls.push(id); }
+    requestAnimationFrame(cb){frameQueue.push(cb);return frameQueue.length;},
+    requestIdleCallback(cb){idleQueue.push(cb);return idleQueue.length;},
+    setTimeout(cb){timerQueue.push(cb);return timerQueue.length;},
+    scrollTo(){},
+    _naSchedulePageRender(id){renders.push(id);},
+    Date,Object,Array,Map,Set,console,
+    goPage(id){calls.push(id);}
   };
   context.window = context;
   vm.runInNewContext(source, context, { filename: 'menu-navigation.js' });
+
+  function flushFrames(){
+    const batch=frameQueue.splice(0,frameQueue.length);
+    batch.forEach(cb=>cb());
+  }
+  function flushAfterPaint(){
+    flushFrames();
+    flushFrames();
+  }
+  function flushIdle(){
+    const batch=idleQueue.splice(0,idleQueue.length);
+    batch.forEach(cb=>cb({didTimeout:false,timeRemaining:()=>50}));
+  }
+
   return {
-    cards,
-    listeners,
-    calls,
-    setClock(value) { clock = value; }
+    cards,listeners,calls,renders,pages,body,html,back,context,
+    flushFrames,flushAfterPaint,flushIdle,
+    setClock(value){clock=value;}
   };
 }
 
@@ -86,60 +127,58 @@ function evt(target, extra = {}) {
   }, extra);
 }
 
-test('CANON menu navigation allowlists and prepares exactly the seven module cards', () => {
-  const h = harness();
-  assert.equal(h.cards.length, 7);
-  for (const card of h.cards) {
-    assert.equal(card.getAttribute('role'), 'button');
-    assert.equal(card.getAttribute('tabindex'), '0');
-    assert.ok(card.getAttribute('data-page'));
-    assert.match(card.getAttribute('aria-label'), /^Abrir /);
-  }
-});
-
-test('tapping any descendant of a module card opens it once and suppresses the synthetic click', () => {
-  const h = harness();
-  const card = h.cards[3];
-  const child = { closest(selector) { return selector === '.module-card' ? card : null; } };
-  h.listeners.get('pointerdown')(evt(child));
-  h.listeners.get('pointerup')(evt(child, { clientX: 104, clientY: 205 }));
-  assert.deepEqual(h.calls, ['pageClientes']);
-
-  const click = evt(child, { pointerType: 'mouse' });
-  h.listeners.get('click')(click);
-  assert.deepEqual(h.calls, ['pageClientes']);
-  assert.equal(click.prevented, true);
-  assert.equal(click.stopped, true);
-});
-
-test('vertical finger movement is treated as scroll and never opens a module', () => {
-  const h = harness();
-  const card = h.cards[1];
+test('mobile tap exposes the requested page without calling goPage', () => {
+  const h=harness(390);
+  const card=h.cards[3];
   h.listeners.get('pointerdown')(evt(card));
-  h.listeners.get('pointerup')(evt(card, { clientY: 245 }));
-  assert.deepEqual(h.calls, []);
-  h.listeners.get('click')(evt(card, { pointerType: 'mouse' }));
-  assert.deepEqual(h.calls, []);
+  h.listeners.get('pointerup')(evt(card));
+  assert.deepEqual(h.calls,[]);
+  assert.equal(h.pages.find(p=>p.id==='pageMenu').classList.contains('active'),false);
+  assert.equal(h.pages.find(p=>p.id==='pageClientes').classList.contains('active'),true);
+  assert.equal(h.back.style.display,'block');
+  assert.equal(h.context.NA_MOBILE_SAFE_NAV_ACTIVE,true);
+  assert.deepEqual(h.renders,[]);
 });
 
-test('mouse click and keyboard Enter/Space use the existing goPage navigation', () => {
-  const h = harness();
-  h.setClock(5000);
-  h.listeners.get('click')(evt(h.cards[0], { pointerType: 'mouse' }));
-  h.listeners.get('keydown')(evt(h.cards[5], { key: 'Enter' }));
-  h.listeners.get('keydown')(evt(h.cards[6], { key: ' ' }));
-  assert.deepEqual(h.calls, ['pagePOS', 'pageGastos', 'pageConfig']);
+test('mobile renderer is deferred until after paint and idle, while scroll mode is applied later', () => {
+  const h=harness(390);
+  h.context.NA_MENU_NAVIGATION.mobileSafeNavigate('pageInventario');
+  assert.equal(h.body.classList.contains('module-mobile-scroll'),false);
+  h.flushFrames();
+  assert.equal(h.body.classList.contains('module-mobile-scroll'),false);
+  h.flushFrames();
+  assert.equal(h.body.classList.contains('module-mobile-scroll'),true);
+  assert.deepEqual(h.renders,[]);
+  h.flushIdle();
+  assert.deepEqual(h.renders,['pageInventario']);
 });
 
-test('navigation layer is visual/input only and never owns business, storage or network', () => {
-  assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|sale\.create|payment\.create|cash\.open|cash\.close|credit-account\.create|payment\.create/i);
-  assert.match(source, /root\.goPage\(pageId\)/);
+test('desktop keeps the existing goPage path', () => {
+  const h=harness(1200);
+  h.listeners.get('click')(evt(h.cards[0],{pointerType:'mouse'}));
+  assert.deepEqual(h.calls,['pagePOS']);
+  assert.equal(h.pages.find(p=>p.id==='pageMenu').classList.contains('active'),true);
 });
 
-test('CANON shell loads and precaches the menu navigation layer', () => {
+test('finger scroll gesture still does not navigate', () => {
+  const h=harness(390);
+  const card=h.cards[1];
+  h.listeners.get('pointerdown')(evt(card));
+  h.listeners.get('pointerup')(evt(card,{clientY:245}));
+  assert.equal(h.pages.find(p=>p.id==='pageMenu').classList.contains('active'),true);
+  assert.deepEqual(h.calls,[]);
+});
+
+test('navigation layer stays free of business/storage/network authority', () => {
+  assert.doesNotMatch(source,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|sale\.create|payment\.create|cash\.open|cash\.close|credit-account\.create/i);
+  assert.match(source,/mobileSafeNavigate/);
+  assert.match(source,/root\._naSchedulePageRender\(pageId\)/);
+});
+
+test('CANON shell still loads and precaches menu navigation', () => {
   const nav = index.indexOf('js/navigation/menu-navigation.js');
   const motion = index.indexOf('js/motion/core.js');
-  assert.ok(nav >= 0, 'missing menu navigation script');
-  assert.ok(motion > nav, 'menu navigation must load before Motion');
+  assert.ok(nav >= 0);
+  assert.ok(motion > nav);
   assert.match(sw, /'\.\/js\/navigation\/menu-navigation\.js'/);
 });

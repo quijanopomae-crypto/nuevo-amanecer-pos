@@ -1,0 +1,47 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-MOBILE-SAFE-NAV-001",
+  "base_ref": "4a368c55acaa47bcae1d38d0bcb97ba7b8a37969",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "Real-device validation still freezes after the touch-layer fix and the first-paint-before-Motion fix.",
+    "The public Worker is serving the expected build and updated Motion files.",
+    "POS base CSS makes pages display:none / display:flex when active, so a direct active-class switch is sufficient to expose the destination shell.",
+    "The existing mobile menu controller currently always calls root.goPage(pageId).",
+    "goPage is wrapped by another navigation layer in POS/js/core/state.js and also changes scroll/config classes before the module shell is visibly confirmed."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Create a minimal mobile-only navigation path that paints the target page first and defers every optional operation.",
+    "READS": [
+      "POS/js/navigation/menu-navigation.js",
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/js/core/state.js",
+      "POS/js/motion/lab-parity-bridge.js",
+      "POS/css/base.css"
+    ],
+    "WRITES": [
+      "Mobile direct page activation in menu-navigation.js.",
+      "Deferred module class setup and renderer scheduling after paint/idle.",
+      "Mobile Motion bypass in lab-parity-bridge.js.",
+      "Focused regression tests."
+    ],
+    "DOM_AFFECTED": [".page.active", "#backBtn", "body module/config scroll classes"],
+    "STATE_AFFECTED": ["Visible page only; no business state."],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No writes to commerce data.",
+      "Desktop behavior unchanged.",
+      "Mobile renderer still uses the existing canonical renderer scheduler."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Punto de Venta, Inventario, Ventas, Clientes, Caja, Gastos and Configuración menu entry."
+    ],
+    "RISKS": [
+      "Navigation UI state is not persisted during the mobile-safe entry; acceptable because CANON legacy persistence is blocked and this path prioritizes operability.",
+      "Motion is temporarily disabled on mobile until physical validation succeeds."
+    ],
+    "ROLLBACK": ["Revert the PR."]
+  }
+}

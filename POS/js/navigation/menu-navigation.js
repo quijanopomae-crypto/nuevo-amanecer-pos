@@ -12,6 +12,13 @@
     'pageGastos',
     'pageConfig'
   ]);
+  var MOBILE_SCROLL_PAGES = Object.freeze({
+    pageInventario:true,
+    pageClientes:true,
+    pageVentas:true,
+    pageCaja:true,
+    pageGastos:true
+  });
   var allowed = Object.create(null);
   ALLOWED_PAGES.forEach(function (id) { allowed[id] = true; });
 
@@ -24,6 +31,10 @@
     return root.performance && typeof root.performance.now === 'function'
       ? root.performance.now()
       : Date.now();
+  }
+
+  function isMobile() {
+    return Number(root.innerWidth || 0) <= 700;
   }
 
   function pageForCard(card) {
@@ -49,10 +60,74 @@
     if (typeof event.stopPropagation === 'function') event.stopPropagation();
   }
 
+  function paintThen(callback) {
+    var raf = typeof root.requestAnimationFrame === 'function'
+      ? root.requestAnimationFrame.bind(root)
+      : function (cb) { return root.setTimeout(cb, 16); };
+    raf(function () { raf(callback); });
+  }
+
+  function scheduleRenderer(pageId) {
+    var run = function () {
+      if (typeof root._naSchedulePageRender === 'function') {
+        root._naSchedulePageRender(pageId);
+      }
+    };
+    if (typeof root.requestIdleCallback === 'function') {
+      root.requestIdleCallback(run, { timeout: 700 });
+    } else {
+      root.setTimeout(run, 80);
+    }
+  }
+
+  function mobileSafeNavigate(pageId) {
+    if (!allowed[pageId]) return false;
+    var target = document.getElementById(pageId);
+    if (!target) return false;
+
+    root.NA_MOBILE_SAFE_NAV_ACTIVE = true;
+
+    document.documentElement.classList.remove('config-page-scroll', 'cfg-menu-lock');
+    if (document.body) {
+      document.body.classList.remove('config-page-scroll', 'module-mobile-scroll');
+    }
+
+    document.querySelectorAll('.page').forEach(function (page) {
+      page.classList.remove('active');
+    });
+    target.classList.add('active');
+
+    var back = document.getElementById('backBtn');
+    if (back) back.style.display = 'block';
+
+    try { root.scrollTo(0, 0); } catch (_) {}
+
+    paintThen(function () {
+      if (!target.classList.contains('active')) return;
+
+      var configMode = pageId === 'pageConfig' && Number(root.innerWidth || 0) <= 960;
+      if (configMode) {
+        document.documentElement.classList.add('config-page-scroll');
+        if (document.body) document.body.classList.add('config-page-scroll');
+      }
+
+      if (document.body && MOBILE_SCROLL_PAGES[pageId]) {
+        document.body.classList.add('module-mobile-scroll');
+      }
+
+      scheduleRenderer(pageId);
+    });
+
+    return true;
+  }
+
   function activateCard(card, event) {
     var pageId = pageForCard(card);
-    if (!pageId || typeof root.goPage !== 'function') return false;
+    if (!pageId) return false;
     stopEvent(event);
+
+    if (isMobile()) return mobileSafeNavigate(pageId);
+    if (typeof root.goPage !== 'function') return false;
     root.goPage(pageId);
     return true;
   }
@@ -137,6 +212,7 @@
 
   root.NA_MENU_NAVIGATION = Object.freeze({
     bind: bind,
+    mobileSafeNavigate: mobileSafeNavigate,
     pages: ALLOWED_PAGES.slice()
   });
 })(window);
