@@ -52,7 +52,7 @@ function _naSecCreditCard(parent,credit){
 function _naSecClientCard(parent,client){
   const debt=_naClientDebtFast(client),status=statusCli(client),debtClass=status==='vencido'?'mal':status==='proximo'?'parcial':'ok',statusClass=status==='vencido'?'cs-m':status==='proximo'?'cs-p':status==='vigente'?'cs-v':'cs-c';
   const statusLabel=status==='vencido'?'VENCIDO':status==='proximo'?'PR\u00d3XIMO':status==='vigente'?'VIGENTE':'AL D\u00cdA',cardClass=status==='vencido'?'vencido-c':status==='proximo'?'proximo-c':'';
-  const credits=_naClientCreditsFast(client.id),evaluation=_naEvaluateClientCredit(client.id);
+  const credits=_naClientAllCreditsFast(client.id),evaluation=_naEvaluateClientCredit(client.id);
 
   credits.forEach(_naSyncCreditStatus);
 
