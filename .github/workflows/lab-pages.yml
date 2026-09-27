@@ -5,10 +5,15 @@ on:
     branches:
       - feature/v1.3-mobile-cloud
     paths:
-      - "POS/**"
       - "laboratorio/pos-lab/**"
       - "tests/laboratorio-*.test.mjs"
-      - ".github/workflows/lab-pages.yml"
+  workflow_run:
+    workflows:
+      - "CANON Critical CI"
+    types:
+      - completed
+    branches:
+      - feature/v1.3-mobile-cloud
   workflow_dispatch:
 
 permissions:
@@ -20,12 +25,16 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    env:
+      LAB_BUILD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout exact LAB build source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          ref: ${{ env.LAB_BUILD_SHA }}
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -63,11 +72,11 @@ jobs:
 
           node laboratorio/pos-lab/verify-pages-site.mjs \
             --site _site \
-            --build "$GITHUB_SHA" \
+            --build "$LAB_BUILD_SHA" \
             --stamp
 
-          grep -Fq "name=\"na-lab-build\" content=\"$GITHUB_SHA\"" _site/laboratorio/pos-lab/index.html
-          grep -Fq "build=$GITHUB_SHA" _site/laboratorio/pos-lab/index.html
+          grep -Fq "name=\"na-lab-build\" content=\"$LAB_BUILD_SHA\"" _site/laboratorio/pos-lab/index.html
+          grep -Fq "build=$LAB_BUILD_SHA" _site/laboratorio/pos-lab/index.html
 
           test -f _site/POS/js/adapters/canonical-ui-adapter.js
           test -f _site/POS/js/motion/scroll-motion.js
@@ -101,11 +110,12 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     needs: deploy
+    env:
+      BUILD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Verify public LAB matches this exact commit
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
-          BUILD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           BASE="${PAGE_URL%/}/"
