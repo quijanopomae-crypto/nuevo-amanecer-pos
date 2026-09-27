@@ -1,0 +1,82 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-OPERATIONAL-READ-PROJECTION-001",
+  "base_ref": "41f69680d16c956781789920ddaadbac1be7f60c",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Cerrar la brecha donde el backend CANON expone datos operativos pero el frontend no los descarga ni los proyecta.",
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "tools/cloudflare-lab/src/a6-canonical.js",
+      "tools/cloudflare-lab/src/a6-commerce.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tools/cloudflare-lab/migrations/0009_canonical_financial.sql",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "POS/js/legacy-inline/inline-10.js",
+      "POS/js/legacy-inline/inline-11.js"
+    ],
+    "WRITES": [
+      "Ampliar la lectura canonical-client con sales, sale-items, inventory-movements y cash-movements.",
+      "Derivar session_id de cash-movements en el backend usando watermarks exactos de canonical_cash_state.",
+      "Extender el adapter CANON->UI con ventas, estado de caja, movimientos de caja e inventario.",
+      "Aplicar la proyección en los globals legacy únicamente para lectura CANON.",
+      "Ocultar/deshabilitar acciones legacy no implementadas para ventas CANON sin alterar ticket/lectura.",
+      "Añadir pruebas de regresión."
+    ],
+    "DOM_AFFECTED": [
+      "Dashboard",
+      "Ventas",
+      "Caja"
+    ],
+    "STATE_AFFECTED": [
+      "ventas[]",
+      "cajEstado",
+      "cajMovs[]",
+      "inventoryMovements[] derivados del snapshot CANON"
+    ],
+    "STORAGE_AFFECTED": [
+      "Replica CANON cacheada localmente; sin cambios de claves ni autoridad."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "CANON sigue siendo autoridad única.",
+      "La proyección es read-only.",
+      "No se usa saveAllData para persistir datos canónicos.",
+      "No se convierte un movimiento digital en efectivo.",
+      "No se asigna una venta a un turno por heurística de fecha.",
+      "Las ventas pendientes del outbox siguen tratándose por canonical-sale-view y no se duplican en historial confirmado."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas recibe historial remoto confirmado.",
+      "Dashboard usa ventas y estado de caja autoritativos.",
+      "Caja recibe sesión actual/cerrada y movimientos exactos por session_id.",
+      "Inventario conserva productos CANON y puede observar movimientos remotos sin escribir.",
+      "canonical-sale-view continúa superponiendo pendientes del outbox sobre la base remota."
+    ],
+    "RISKS": [
+      "Duplicar ventas pendientes y confirmadas: mitigado separando ventas remotas confirmadas de outbox pendiente.",
+      "Asignar cash_movements a sesión incorrecta: mitigado derivando por watermarks en SQL.",
+      "Acción de anulación legacy sobre venta CANON: mitigado ocultando la acción y manteniendo isModuleLocked.",
+      "Cache antiguo sin arrays operativos: mitigado con defaults [] y validReplica backward-safe solo tras actualización controlada."
+    ],
+    "ROLLBACK": [
+      "Revertir PR."
+    ],
+    "TEST_PLAN": [
+      "Test backend: cash-movements devuelve session_id exacto por watermark.",
+      "Test client: descarga y cachea rutas operativas.",
+      "Test adapter: filas CANON -> ventas/caja/inventario legacy sin inventar campos.",
+      "Test UI: acciones de anulación no aparecen para venta canonical.",
+      "CANON Critical CI completo.",
+      "Sin deploy backend/productivo hasta que todos los gates pasen."
+    ]
+  }
+}
