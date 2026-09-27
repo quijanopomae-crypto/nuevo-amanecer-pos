@@ -1,0 +1,3 @@
+/* Animaciones futuras exclusivas de pagePOS/carrito. */
+#pagePOS .lab-cart-pulse { animation:lab-cart-pulse var(--lab-motion-normal) var(--lab-ease-emphasis); }
+@keyframes lab-cart-pulse { 50% { transform:scale(1.025); } }

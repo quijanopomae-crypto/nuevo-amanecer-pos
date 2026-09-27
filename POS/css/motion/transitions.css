@@ -8,6 +8,15 @@
 }
 
 @media(max-width:700px){
+  body.na-module-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden{
+    transform:none!important;
+    margin-top:0!important;
+  }
+
+  body.na-module-scroll-linked .page.na-scroll-linked.g-page-chrome-hidden > .page-chrome{
+    display:block!important;
+  }
+
   body.na-module-scroll-linked .page.na-scroll-linked[data-na-scroll-clip="chrome"].active>.page-chrome{
     overflow-anchor:none;
     clip-path:inset(0 0 var(--na-scroll-collapse-y,0px) 0);

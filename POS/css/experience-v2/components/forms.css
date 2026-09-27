@@ -1,0 +1,2 @@
+/* Formularios experimentales. */
+.lab-field { display:flex; flex-direction:column; gap:var(--lab-space-1); }

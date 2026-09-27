@@ -1,0 +1,2 @@
+/* Animaciones futuras de feedback/notificaciones LAB. */
+.lab-feedback-enter { animation:lab-fade-in var(--lab-motion-fast) var(--lab-ease-standard) both; }

@@ -1,0 +1,3 @@
+/* Botones experimentales: aplica clases lab-btn-* explícitamente. */
+.lab-btn { border-radius:var(--lab-radius-sm); transition:transform var(--lab-motion-fast) var(--lab-ease-standard); }
+.lab-btn:active { transform:scale(.98); }

@@ -134,10 +134,14 @@
       : null;
     if (pageObserver) pageObserver.observe(page, { attributes:true, attributeFilter:['class'] });
 
-    var resizeObserver = typeof ResizeObserver === 'function' && chrome
+    var resizeObserver = typeof ResizeObserver === 'function'
       ? new ResizeObserver(remeasure)
       : null;
-    if (resizeObserver) resizeObserver.observe(chrome);
+    if (resizeObserver) {
+      if (chrome) resizeObserver.observe(chrome);
+      var observed = config.observeSelector ? page.querySelector(config.observeSelector) : null;
+      if (observed && observed !== chrome) resizeObserver.observe(observed);
+    }
 
     var controller = {
       page: page,
@@ -194,7 +198,12 @@
       clientes: { pageId:'pageClientes', clipChrome:true, secondarySelectors:['.filter-bar','.stats-strip'] },
       inventario: { pageId:'pageInventario', clipChrome:true, secondarySelectors:['.filter-bar','.stats-strip'] },
       ventas: { pageId:'pageVentas', clipChrome:true, secondarySelectors:['#ventasFilterBar','#ventasReportControls','#ventasKPI'] },
+      caja: { pageId:'pageCaja', clipChrome:false, secondarySelectors:['#cajContent > .caj-banner-wrap','#cajContent > .cj-stats-grid','#cajContent > div:first-child > .banner-cerrada-cj'], observeSelector:'#cajContent' },
       gastos: { pageId:'pageGastos', clipChrome:true, secondarySelectors:['.stats-strip','.filter-bar'] }
     }
+  });
+
+  Object.keys(motion.scroll.presets).forEach(function (name) {
+    register(motion.scroll.presets[name]);
   });
 })(window);
