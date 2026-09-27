@@ -1,0 +1,67 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SALE-CUSTOMER-SELECTION-001",
+  "base_ref": "1f468df3d4f8fa2fd883808171dc0969cb792473",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "user_request": "Se pidió corregir la migración LAB→CANON, revisar el POS/animaciones y comprobar selección de clientes al vender.",
+    "canon_status": "V1.3 está preparado para primera venta controlada; este parche no la ejecuta.",
+    "files": [
+      "POS/index.html (mVentaCliente y mCreditoCliente)",
+      "POS/js/legacy-inline/inline-02.js (flujo heredado de selección del cliente)",
+      "POS/js/sync/canonical-sale-integration.js (captura CANON)",
+      "tests/cloud-sync/canonical-sale-integration.test.mjs",
+      "docs/CANON_MOTION_INFRASTRUCTURE.md",
+      "docs/CANON_CLIENTES_MOTION_ACTIVATION.md"
+    ]
+  },
+  "analysis": {
+    "OBJECTIVE": "Retener customer_id opcional para clientes seleccionados en pagos no crédito; fallar cerrado si la selección está obsoleta.",
+    "ROOT_CAUSE": "capture() solo leía mCreditoCliente en el caso crédito. La UI llena mVentaCliente, pero la integración CANON construía la venta con customer=null para los demás métodos.",
+    "READS": [
+      "Selector opcional mVentaCliente y selector obligatorio mCreditoCliente en el modal de cobro",
+      "Captura heredada de venta en inline-02.js",
+      "Integración y contrato de intención/outbox canónicos",
+      "Prueba de integración de venta canónica y orden de scripts",
+      "Estado y contratos aprobados de Motion CANON"
+    ],
+    "WRITES": [
+      "Leer mVentaCliente para métodos distintos de crédito y mCreditoCliente para crédito.",
+      "Resolver el ID en clientes antes de construir la intención.",
+      "Rechazar un ID no resuelto antes del enqueue sin limpiar el carrito.",
+      "Añadir pruebas de regresión para cliente opcional y selección obsoleta."
+    ],
+    "DOM_AFFECTED": [
+      "select#mVentaCliente",
+      "select#mCreditoCliente"
+    ],
+    "STATE_AFFECTED": [
+      "customer_id de la intención de venta"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "El backend conserva su validación actual de customer_id.",
+      "No se alteran reglas financieras, inventario, caja ni créditos.",
+      "Motion solo visual; este parche no cambia assets ni temporizadores."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas CANON solo; no cambia Clientes, Caja, Inventario, backend ni D1.",
+      "El despliegue sigue bajo el disparador operativo existente; el archivo disparador queda fuera del parche."
+    ],
+    "RISKS": [
+      "Un cliente retirado de la lista entre selección y confirmación bloqueará el guardado hasta refrescar la lista."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no hay mutaciones remotas ni migración de esquema."
+    ],
+    "TEST_PLAN": [
+      "Observar primero el fallo de regresión: customer_id indefinido aunque se seleccionó cust-9.",
+      "node --test tests/cloud-sync/canonical-sale-integration.test.mjs",
+      "node --check POS/js/sync/canonical-sale-integration.js",
+      "Ejecutar CI CANON en el PR.",
+      "No completar una venta en CANON durante esta comprobación."
+    ]
+  }
+}
