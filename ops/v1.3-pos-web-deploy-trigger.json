@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish navigation-freeze hotfix from commit 87ac36a80c4293d56a3db72fb79e70821b247b01; keep interface V2, activation, financial gates and backend unchanged.",
-  "retry_attempt": 17,
-  "retry_reason": "Owner reports module navigation freezes after interface V2 deploy; remove eager mobile scroll bootstrap.",
-  "requested_at_utc": "2026-09-27T16:30:00Z",
-  "target_head": "87ac36a80c4293d56a3db72fb79e70821b247b01"
+  "note": "Publish navigation performance root fix from commit 2470f5f0d274e6da431f84d9d0cd19a6efbe66e3; keep interface V2, activation, financial gates and backend unchanged.",
+  "retry_attempt": 18,
+  "retry_reason": "Owner reports module navigation freezes with real CANON dataset; deploy deferred active-view rendering and indexed client credit lookup.",
+  "requested_at_utc": "2026-09-27T17:16:00Z",
+  "target_head": "2470f5f0d274e6da431f84d9d0cd19a6efbe66e3"
 }
