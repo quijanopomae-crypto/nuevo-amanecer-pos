@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SHELL-REFRESH-RECOVERY-001",
+  "environment": "CANON",
+  "base_ref": "6f31fa2458db2f60b1c3c4a862a1f22ebb2d89d6",
+  "objective": "Permitir recuperar un navegador atrapado en un shell PWA viejo sin borrar activación ni datos, y evitar que el navegador HTTP reutilice assets obsoletos al reconstruir el shell.",
+  "owner_authorization": "El propietario confirmó que el Worker sigue sin navegar en su teléfono aunque el build público sí navega en una sesión aislada.",
+  "allowed_files": [
+    "tasks/CANON-SHELL-REFRESH-RECOVERY-001.json",
+    "evidence/canon-preflight/CANON-SHELL-REFRESH-RECOVERY-001.json",
+    "tools/cloudflare-pos-web/public/index.html",
+    "tools/cloudflare-pos-web/public/activate.js",
+    "tools/cloudflare-pos-web/src/worker.js",
+    ".github/workflows/v1.3-pos-web-deploy.yml",
+    "tests/cloud-sync/v1.3-pos-web-deploy.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "invariants": [
+    "No se toca lógica de navegación del POS.",
+    "No se toca Motion.",
+    "No se tocan clientes, inventario, créditos, ventas, caja ni backend.",
+    "El modo refresh-shell no llama localStorage.clear ni sessionStorage.clear.",
+    "El modo refresh-shell no elimina na_canonical_binding ni na_cloud_sync_credentials.",
+    "Solo desregistra Service Workers cuyo scope sea /app/ y elimina caches con prefijo nuevo-amanecer-pos-shell-.",
+    "El acceso normal sin refresh-shell conserva el flujo de activación actual."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos."
+}
