@@ -1,0 +1,47 @@
+{
+  "schema": "nuevo-amanecer.lab-preflight/v1",
+  "task_id": "LAB-PAGES-CURRENT-HEAD-001",
+  "base_ref": "beede554a246d4c5a8b635e4d758b5d2de3e2746",
+  "phase": "BEFORE_WRITE",
+  "status": "LAB_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "El workflow POS LAB Mobile solo escucha cambios laboratorio/pos-lab/** y tests/laboratorio-*.test.mjs.",
+    "POS-LAB usa <base href=\"../../POS/\"> y depende directamente de POS/**.",
+    "El último deploy Pages observado fue 47f68af823fc8b6cff8efbea0baebc91e6bb6eaa del 26/09, mientras la rama está en beede554a246d4c5a8b635e4d758b5d2de3e2746.",
+    "El LAB público devuelve 404 para POS/js/adapters/canonical-ui-adapter.js y POS/js/motion/scroll-motion.js, aunque esos archivos existen en el HEAD actual.",
+    "CSS principales públicos responden 200; el problema es mezcla/desfase de artifact, no ausencia permanente de CSS fuente."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Eliminar la divergencia temporal entre POS/** y el artifact de GitHub Pages.",
+    "READS": [
+      ".github/workflows/lab-pages.yml",
+      "laboratorio/pos-lab/build-lab.mjs",
+      "laboratorio/pos-lab/index.template.html",
+      "GitHub Actions recientes",
+      "assets públicos de GitHub Pages"
+    ],
+    "WRITES": [
+      "Ampliar paths del workflow a POS/** y al workflow mismo.",
+      "Añadir verificador local del artifact.",
+      "Estampar referencias locales con build=<SHA> solo dentro de _site.",
+      "Añadir verificación post-deploy de SHA y assets críticos.",
+      "Añadir tests de regresión del pipeline."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": ["Artifact estático de GitHub Pages."],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No hay cambios funcionales del POS.",
+      "No se promueve CANON por Pages.",
+      "POS/index.html dentro de Pages continúa reemplazado por la página de soporte.",
+      "Sin datos reales."
+    ],
+    "TEST_PLAN": [
+      "node laboratorio/pos-lab/build-lab.mjs --check",
+      "node --test tests/laboratorio-*.test.mjs",
+      "verificación local de referencias dentro de _site",
+      "verificación pública del meta na-lab-build y assets críticos del mismo SHA"
+    ]
+  }
+}
