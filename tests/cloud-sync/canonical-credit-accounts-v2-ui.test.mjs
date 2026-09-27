@@ -215,3 +215,127 @@ test('cached CANON clients remain visible while remote validation finishes',()=>
   assert.match(canonicalClient,/replicaState\.validation = 'current';\s*notifyReplicaUpdate\(\);/);
   assert.match(canonicalClient,/replicaState\.validation = 'remote-older';\s*notifyReplicaUpdate\(\);/);
 });
+
+
+function motionContext(){
+  const timers=[];
+  const rafs=[];
+  const classes=new Set(['active']);
+  const classLog=[];
+  const drawLog=[];
+  const lookup={};
+
+  function classList(){
+    return {
+      add(...names){for(const name of names){classes.add(name);classLog.push('add:'+name);}},
+      remove(...names){for(const name of names){classes.delete(name);classLog.push('remove:'+name);}},
+      contains(name){return classes.has(name);},
+      toggle(name,force){
+        if(force===true){classes.add(name);return true;}
+        if(force===false){classes.delete(name);return false;}
+        if(classes.has(name)){classes.delete(name);return false;}
+        classes.add(name);return true;
+      }
+    };
+  }
+  function element(){
+    return {
+      className:'',hidden:false,dataset:{},style:{},textContent:'',
+      classList:classList(),setAttribute(){},append(){},appendChild(){},
+      replaceChildren(){drawLog.push('draw');},querySelector(){return null;},
+      querySelectorAll(){return[];},addEventListener(){},
+    };
+  }
+
+  const page=element();
+  page.classList=classList();
+  const list=element();
+  lookup.pageClientes=page;
+  lookup.cliList=list;
+
+  const document={
+    body:{appendChild(){}},
+    getElementById(id){return lookup[id]||null;},
+    querySelector(){return null;},
+    querySelectorAll(){return[];},
+    createElement(){return element();},
+    createDocumentFragment(){return {appendChild(){}};}
+  };
+
+  const ctx={
+    console:{info(){},warn(){},error(){}},
+    Date,Number,String,Object,Array,Set,Map,Math,JSON,RegExp,Error,Promise,crypto,
+    document,clientes:[],creditos:[],cart:[],posPayM:'credito',
+    setTimeout(fn,ms){const item={fn,ms,cancelled:false};timers.push(item);return item;},
+    clearTimeout(id){if(id&&typeof id==='object')id.cancelled=true;},
+    requestAnimationFrame(fn){rafs.push(fn);return rafs.length;},
+    MutationObserver:undefined,
+    matchMedia(){return{matches:false};},
+    addEventListener(){},
+    _naEsc(value){return String(value);},
+    fmt(value){return 'S/ '+Number(value||0).toFixed(2);},
+    _naEvaluateClientCredit(){return{exists:true,enabled:true,eligible:true,assignedLine:0,automaticLine:0,available:0,manualActive:false,history:{punctual:0,late:0,completed:0,partial:0,overdueActive:0,behavior:'sin_historial'}};},
+    _naCreditOutstanding(){return 0;},
+    _naSyncCreditStatus(){return'vigente';},
+    diasHasta(){return 1;}
+  };
+  ctx.window=ctx;ctx.globalThis=ctx;
+  vm.createContext(ctx);
+  vm.runInContext(source,ctx,{filename:'client-credit-accounts-v2.js'});
+
+  return {
+    ctx,page,list,classes,classLog,drawLog,timers,rafs,
+    runTimer(){
+      const item=timers.shift();
+      assert.ok(item,'expected timer');
+      if(!item.cancelled)item.fn();
+      return item;
+    },
+    runRaf(){
+      const queue=rafs.splice(0,rafs.length);
+      assert.ok(queue.length,'expected RAF callback');
+      queue.forEach(fn=>fn());
+    }
+  };
+}
+
+test('runtime client motion performs exit, DOM swap, entry and settle in order',()=>{
+  const m=motionContext();
+  const api=m.ctx.NA_CLIENT_CREDIT_ACCOUNTS_V2;
+
+  api.renderClientList([],m.list);
+  assert.equal(m.drawLog.length,1,'first paint must render immediately');
+  assert.ok(m.classes.has('na-client-refresh-in'),'first paint starts in entry state');
+  m.runRaf();
+  assert.ok(m.classes.has('na-client-refresh-in'),'entry survives first frame');
+  m.runRaf();
+  assert.ok(!m.classes.has('na-client-refresh-in'),'entry settles after second frame');
+
+  m.drawLog.length=0;
+  api.renderClientList([],m.list);
+  assert.ok(m.classes.has('na-client-refresh-out'),'refresh starts with exit state');
+  assert.equal(m.drawLog.length,0,'DOM must not swap before exit window');
+  const timer=m.runTimer();
+  assert.equal(timer.ms,850,'approved LAB coordination window must be preserved');
+  assert.equal(m.drawLog.length,1,'DOM swaps after exit window');
+  assert.ok(!m.classes.has('na-client-refresh-out'),'exit state is removed after DOM swap');
+  assert.ok(m.classes.has('na-client-refresh-in'),'new DOM is prepared in entry state');
+  m.runRaf();
+  assert.ok(m.classes.has('na-client-refresh-in'),'entry state must paint for one frame');
+  m.runRaf();
+  assert.ok(!m.classes.has('na-client-refresh-in'),'new DOM settles to rest after second frame');
+});
+
+test('stale client motion callbacks cannot cancel a newer refresh',()=>{
+  const m=motionContext();
+  const api=m.ctx.NA_CLIENT_CREDIT_ACCOUNTS_V2;
+  api.renderClientList([],m.list);
+  m.runRaf();m.runRaf();
+
+  api.renderClientList([],m.list);
+  const stale=m.timers[0];
+  api.renderClientList([],m.list);
+  assert.equal(stale.cancelled,true,'new refresh cancels previous timer');
+  stale.fn();
+  assert.equal(m.drawLog.length,1,'stale callback must not draw after epoch changed');
+});
