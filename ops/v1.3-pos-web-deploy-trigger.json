@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy PWA shell refresh fix: Motion CSS/JS precache + immediate service-worker activation + updateViaCache none.",
-  "retry_attempt": 11,
-  "retry_reason": "Publish PR #123 so Hosted POS no longer remains on a waiting stale shell after Motion deploys.",
-  "requested_at_utc": "2026-09-27T02:33:30Z",
-  "target_head": "f8c9ca3bd7c4e0f2b81c70fe0730b6ff563a81f4"
+  "note": "Publish the CANON customer-selection fix merged in commit 83fce417f1c2871b555b81bac43806f3394b6d7e; keep the activation gate and production backend unchanged.",
+  "retry_attempt": 12,
+  "retry_reason": "Owner requested correction and verification of client selection in the public hosted POS.",
+  "requested_at_utc": "2026-09-27T11:41:11.002Z",
+  "target_head": "83fce417f1c2871b555b81bac43806f3394b6d7e"
 }
