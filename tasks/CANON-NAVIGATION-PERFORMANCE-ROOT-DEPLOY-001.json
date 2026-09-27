@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-NAVIGATION-PERFORMANCE-ROOT-DEPLOY-001",
+  "environment": "CANON",
+  "base_ref": "2470f5f0d274e6da431f84d9d0cd19a6efbe66e3",
+  "objective": "Publicar el fix de rendimiento de navegación ya validado por CANON Critical CI.",
+  "owner_authorization": "El propietario pidió corregir el congelamiento de módulos.",
+  "allowed_files": [
+    "tasks/CANON-NAVIGATION-PERFORMANCE-ROOT-DEPLOY-001.json",
+    "evidence/canon-preflight/CANON-NAVIGATION-PERFORMANCE-ROOT-DEPLOY-001.json",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": ["POS/**","laboratorio/**","tools/cloudflare-lab/**","tools/cloudflare-prod/**","D1/**","R2/**","secrets/**"],
+  "invariants": [
+    "Solo se publica el shell estático ya validado.",
+    "No se modifica backend ni D1.",
+    "No se ejecutan ventas ni movimientos reales.",
+    "La interfaz V2 permanece intacta."
+  ],
+  "rollback": "Redeploy del build anterior; no hay cambios de datos."
+}
