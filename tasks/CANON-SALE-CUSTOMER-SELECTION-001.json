@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SALE-CUSTOMER-SELECTION-001",
+  "environment": "CANON",
+  "base_ref": "1f468df3d4f8fa2fd883808171dc0969cb792473",
+  "objective": "Conservar en la venta CANON el cliente opcional seleccionado en mVentaCliente para pagos no crédito, mantener la selección obligatoria y el vencimiento del crédito, y bloquear la venta si un ID seleccionado ya no existe en la lista cargada.",
+  "owner_authorization": "El propietario pidió corregir y verificar la ruta de venta CANON y señaló que la migración desde LAB ya estaba aprobada.",
+  "allowed_files": [
+    "tasks/CANON-SALE-CUSTOMER-SELECTION-001.json",
+    "evidence/canon-preflight/CANON-SALE-CUSTOMER-SELECTION-001.json",
+    "POS/js/sync/canonical-sale-integration.js",
+    "tests/cloud-sync/canonical-sale-integration.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "ops/v1.3-pos-web-deploy-trigger.json",
+    "POS/js/legacy-inline/**",
+    "POS/css/**",
+    "POS/js/modules/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "required_skills": [
+    "canon-promotion",
+    "systematic-debugging",
+    "test-driven-development"
+  ],
+  "invariants": [
+    "La selección opcional del cliente se conserva para efectivo, Yape, Plin, transferencia y mixto.",
+    "Crédito mantiene su selector obligatorio y fecha de vencimiento.",
+    "Sin cliente seleccionado, la venta no incluye customer_id.",
+    "Si el ID elegido no está en la lista actual, no se encola la venta y el carrito permanece disponible.",
+    "No cambian pagos, inventario, caja, deuda, esquema, almacenamiento ni animaciones aprobadas.",
+    "La ruta LAB no se usa en producción."
+  ],
+  "rollback": "Revertir este PR. No hay migración de datos ni cambio de esquema.",
+  "release_boundary": "Preparar una corrección revisable y comprobar CI. No activar el Worker, disparar despliegue ni registrar una venta real."
+}
