@@ -38,7 +38,7 @@ async function authorityError(db,body,auth) {
     FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first();
   if (!row || row.mode !== 'ACTIVE' || row.active_promotion_id !== body.promotion_id ||
       Number(row.authority_epoch) !== body.authority_epoch || Number(row.revision) !== body.expected_control_revision ||
-      row.minimum_client_contract !== body.client_contract || row.writer_device_id !== auth.principalId ||
+      row.minimum_client_contract !== body.client_contract ||
       row.role !== 'writer' || row.status !== 'active' || row.credential_hash !== auth.credentialHash) return 'stale_authority';
   return null;
 }
