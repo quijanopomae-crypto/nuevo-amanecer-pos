@@ -1,0 +1,69 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-MOTION-LAZY-BRIDGE-001",
+  "base_ref": "1ad6c77d0635f50f21de634e5a01d9517af57da1",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Conectar el Motion productivo ya portado sin reinstalar el bootstrap global que causó regresión.",
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "POS/js/motion/core.js",
+      "POS/js/motion/page-transitions.js",
+      "POS/js/motion/scroll-motion.js",
+      "POS/css/experience-v2/animations/transitions.css",
+      "tasks/CANON-NAVIGATION-FREEZE-V2-001.json",
+      "tests/product-fixes/canon-motion-bootstrap.test.mjs"
+    ],
+    "WRITES": [
+      "Añadir un bridge visual CANON que observa activación de .page.",
+      "Ejecutar page.enter(page, 'lab-enter-fade') para la página activa.",
+      "Llamar enablePreset únicamente para el módulo activo.",
+      "Cargar y precachear el bridge.",
+      "Añadir tests de lazy activation."
+    ],
+    "DOM_AFFECTED": [
+      ".page.active",
+      "pageClientes",
+      "pageInventario",
+      "pageVentas",
+      "pageCaja",
+      "pageGastos"
+    ],
+    "STATE_AFFECTED": [
+      "Controladores visuales NA_MOTION en memoria únicamente."
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Motion visual-only.",
+      "No fetch/storage/D1/R2 desde el bridge.",
+      "No reemplazo de goPage/goMenu/renderers.",
+      "No wrapper de cliRender ni otros renderers."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "La navegación existente sigue siendo owner.",
+      "Scroll Motion se materializa solo en módulos móviles que LAB ya contempla.",
+      "Menú/POS/Configuración reciben solo entrada visual, no controlador de scroll."
+    ],
+    "RISKS": [
+      "Un observer global mal diseñado podría duplicar activaciones; mitigado con WeakSet/estado por página.",
+      "Reentrada de clase active; mitigado activando solo cuando la página está realmente active."
+    ],
+    "ROLLBACK": [
+      "Revertir PR."
+    ],
+    "TEST_PLAN": [
+      "Test estructural de bridge sin APIs de negocio.",
+      "Test funcional con DOM mínimo: solo página activa habilita preset.",
+      "Test existente conserva prohibición de bootstrap global.",
+      "CANON Critical CI completo.",
+      "Deploy protegido y prueba móvil."
+    ]
+  }
+}
