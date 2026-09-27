@@ -1,0 +1,81 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-PROMOTE-LAB-INTERFACE-V2-001",
+  "base_ref": "1606621d117f25e80cb3ae5d4acdacbb240463c4",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Hacer que CANON use la experiencia visual aprobada en POS-LAB, incluyendo estilos de menú/POS/Clientes y el scroll móvil sincronizado.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "docs/LABORATORIO_A_CANON.md",
+      "laboratorio/pos-lab/index.html",
+      "laboratorio/pos-lab/styles/**",
+      "laboratorio/pos-lab/animations/**",
+      "laboratorio/pos-lab/lab-overrides.css",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "POS/index.html",
+      "POS/sw.js",
+      "POS/js/motion/scroll-motion.js",
+      "POS/css/motion/transitions.css",
+      "captura del propietario del Worker público"
+    ],
+    "WRITES": [
+      "Copiar el paquete CSS visual aprobado a POS/css/experience-v2/ sin dependencia runtime a laboratorio.",
+      "Cargar experience-v2 después del CSS productivo actual para que la experiencia LAB sea la capa final.",
+      "Precachear todos los nuevos CSS.",
+      "Auto-registrar presets de scroll móvil y añadir Caja.",
+      "Añadir las dos reglas de compatibilidad visual que LAB ya usa durante scroll móvil.",
+      "Añadir tests de identidad/paridad y bootstrap."
+    ],
+    "DOM_AFFECTED": [
+      "#pageMenu",
+      "#pagePOS",
+      "#pageClientes",
+      "#pageInventario",
+      "#pageVentas",
+      "#pageCaja",
+      "#pageGastos",
+      "#pageConfig",
+      ".page-chrome",
+      "bandas secundarias de módulos móviles"
+    ],
+    "STATE_AFFECTED": [
+      "Solo estado visual Motion en dataset/classes/CSS variables."
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Motion no decide ventas, stock, caja, créditos, persistencia, auth ni sync.",
+      "No se cambian objetos de negocio.",
+      "No se promueve html::before LAB ni rutas de workspace LAB."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Shell visual completo.",
+      "Clientes V2 usa las clases lab-v2 ya presentes en su módulo productivo.",
+      "POS crédito usa clases lab-credit-* ya presentes.",
+      "Scroll móvil se activa para Clientes, Inventario, Ventas, Caja y Gastos."
+    ],
+    "RISKS": [
+      "Conflicto CSS con estilos productivos actuales: mitigado porque LAB ya carga este paquete después del CSS base y la promoción mantiene el mismo orden.",
+      "Assets PWA faltantes: mitigado añadiendo todos al precache.",
+      "Scroll controller dormido: mitigado por auto-registro probado."
+    ],
+    "ROLLBACK": [
+      "Revertir PR y redeploy del build anterior."
+    ],
+    "TEST_PLAN": [
+      "Comparación byte a byte LAB CSS -> experience-v2 para todos los archivos promovidos.",
+      "Verificar exclusión de lab-overrides.css.",
+      "Verificar orden de carga y precache.",
+      "Verificar hero de menú oculto por CSS promovido.",
+      "Verificar auto-registro Motion y preset Caja.",
+      "CANON Critical CI completo.",
+      "Deploy protegido y captura pública posterior."
+    ]
+  }
+}
