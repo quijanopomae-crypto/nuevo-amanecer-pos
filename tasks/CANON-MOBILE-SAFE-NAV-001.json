@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-MOBILE-SAFE-NAV-001",
+  "environment": "CANON",
+  "base_ref": "4a368c55acaa47bcae1d38d0bcb97ba7b8a37969",
+  "objective": "Bypass goPage and disable Motion on mobile menu entry so the target page is painted before any renderer or scroll/layout work.",
+  "owner_authorization": "Owner confirmed the published first-paint Motion fix still freezes on a real phone and requested another alternative without further loops.",
+  "allowed_files": [
+    "tasks/CANON-MOBILE-SAFE-NAV-001.json",
+    "evidence/canon-preflight/CANON-MOBILE-SAFE-NAV-001.json",
+    "docs/CANON_MOBILE_SAFE_NAVIGATION.md",
+    "POS/js/navigation/menu-navigation.js",
+    "POS/js/motion/lab-parity-bridge.js",
+    "tests/product-fixes/canon-mobile-menu-navigation.test.mjs",
+    "tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/**",
+    "POS/js/adapters/**",
+    "POS/js/modules/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "invariants": [
+    "No change to business logic, CANON authority, persistence, sync, D1 or R2.",
+    "Desktop navigation continues through existing goPage.",
+    "Mobile menu entry switches page synchronously without goPage.",
+    "Motion is disabled for mobile safe navigation.",
+    "Module renderer is scheduled only after the page has had a paint opportunity."
+  ],
+  "rollback": "Revert the PR.",
+  "test_plan": [
+    "node --test tests/product-fixes/canon-mobile-menu-navigation.test.mjs tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs",
+    "node --test tests/product-fixes/canon-navigation-performance.test.mjs",
+    "CANON Critical CI"
+  ]
+}
