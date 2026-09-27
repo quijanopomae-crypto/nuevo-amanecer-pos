@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-NAVIGATION-PERFORMANCE-ROOT-001",
+  "environment": "CANON",
+  "base_ref": "e38c599799b2ea2e43993b9d0c41bbda6ce8a90f",
+  "objective": "Eliminar el congelamiento de navegación separando el primer paint del render pesado, renderizando solo el módulo visible y reduciendo el costo O(N*C) de Clientes mediante un índice de créditos por cliente.",
+  "owner_authorization": "El propietario reportó congelamiento al entrar a cualquier módulo y pidió corregirlo.",
+  "allowed_files": [
+    "tasks/CANON-NAVIGATION-PERFORMANCE-ROOT-001.json",
+    "evidence/canon-preflight/CANON-NAVIGATION-PERFORMANCE-ROOT-001.json",
+    "docs/CANON_NAVIGATION_PERFORMANCE_ROOT.md",
+    "POS/js/legacy-inline/inline-02.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "POS/js/legacy-inline/inline-12.js",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tests/product-fixes/canon-navigation-performance.test.mjs",
+    "tests/product-fixes/canon-client-credit-index.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/css/**",
+    "POS/js/motion/**",
+    "POS/js/sync/**",
+    "POS/sw.js",
+    "POS/index.html",
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "invariants": [
+    "La interfaz V2 permanece intacta.",
+    "No se cambian reglas de venta, stock, caja, créditos ni persistencia.",
+    "No se ejecutan ventas reales.",
+    "El primer cambio visual de página ocurre antes del render pesado.",
+    "Las actualizaciones CANON no renderizan módulos ocultos.",
+    "Clientes no vuelve a recorrer toda la lista de créditos por cada tarjeta.",
+    "Los estados y montos de crédito conservan la misma semántica actual."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos ni esquema."
+}
