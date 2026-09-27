@@ -31,6 +31,7 @@ runtime:
   modal: POS/js/motion/modal-motion.js
   feedback: POS/js/motion/feedback-motion.js
   cart: POS/js/motion/cart-motion.js
+  client_list: POS/js/motion/client-list-motion.js
 
 styles:
   contract: POS/css/motion/motion.css
@@ -69,7 +70,13 @@ controllers:
 pilot_consumers:
   - module: client_credit_accounts_v2
     js: POS/js/modules/client-credit-accounts-v2.js
+    motion_bridge: POS/js/motion/client-list-motion.js
+    css: POS/css/client-credit-accounts-v2.css
     rule: reuse_core_primitives_keep_financial_logic_outside_motion
+  - module: client_list_refresh
+    js: POS/js/motion/client-list-motion.js
+    css: POS/css/client-credit-accounts-v2.css
+    rule: adapt_LAB_approved_timing_without_LAB_runtime_dependency
 
 invariants:
   - motion_never_confirms_sales_stock_cash_credit_or_persistence
