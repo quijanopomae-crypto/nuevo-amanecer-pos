@@ -60,7 +60,7 @@ test('lazy bridge enables only the scroll preset for the page that is active at 
   const h=harness('pageClientes');
   assert.deepEqual(h.enters,[['pageClientes','lab-enter-fade']]);
   assert.deepEqual(h.presets,['clientes','clientes:sync']);
-  assert.deepEqual(h.events,[{pageId:'pageClientes',preset:'clientes'}]);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.events)),[{pageId:'pageClientes',preset:'clientes'}]);
 });
 
 test('a module receives its preset only when it transitions from inactive to active',()=>{
