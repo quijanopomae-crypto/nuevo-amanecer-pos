@@ -132,3 +132,58 @@ test('hosted shell loads and precaches the adapter before canonical-client', () 
   assert.ok(adapterIndex>=0 && clientIndex>adapterIndex);
   assert.match(swSource,/\.\/js\/adapters\/canonical-ui-adapter\.js/);
 });
+
+
+test('canonical snapshot projects confirmed sales, exact cash session movements and inventory history', () => {
+  const adapter = loadAdapter();
+  const out = adapter.snapshot({
+    authority:'canonical',
+    promotion_id:'promo-ops',
+    authority_epoch:9,
+    revision:12,
+    financial_revision:4,
+    mode:'ACTIVE',
+    read_only:false,
+    products:[{product_id:'p-1',name:'Arroz',category:'abarrotes',icon:'📦',cost_cents:300,price_cents:500,current_stock_quantity:8,stock_revision:2,stock_min_quantity:1,tracks_inventory:1}],
+    customers:[{customer_id:'c-1',name:'Misael',document:'70000001',phone:'999000001',address:'Ica',total_purchases_cents:1000}],
+    creditAccounts:[],
+    credits:[],
+    payments:[],
+    sales:[{sale_id:'s-1',operation_id:'op-sale-1',payment_method:'mixto',total_cents:1000,payment_reference:'REF-1',created_at:'2026-09-27T17:00:00.000Z',customer_id:'c-1'}],
+    saleItems:[{sale_id:'s-1',line_number:1,operation_id:'op-sale-1',product_id:'p-1',quantity:2,unit_price_cents:500,line_total_cents:1000,created_at:'2026-09-27T17:00:00.000Z'}],
+    inventoryMovements:[{movement_id:'im-1',operation_id:'op-sale-1',sale_id:'s-1',line_number:1,product_id:'p-1',quantity:-2,created_at:'2026-09-27T17:00:00.000Z'}],
+    cashMovements:[{movement_id:'cm-1',operation_id:'op-sale-1',sale_id:'s-1',payment_method:'mixto',amount_cents:1000,cash_cents:400,digital_cents:600,credit_cents:0,digital_method:'transferencia',reference:'REF-1',created_at:'2026-09-27T17:00:00.000Z',session_id:'sess-1'}],
+    cashSessions:[{session_id:'sess-1',opening_cents:10000,opened_at:'2026-09-27T16:00:00.000Z',status:'OPEN',expected_cents:10600,revision:2}],
+    financialEvents:[{event_id:'pay-1',operation_id:'pay-1',event_type:'PAYMENT',session_id:'sess-1',credit_id:'cr-1',credit_delta_cents:-200,cash_delta_cents:200,payment_method:'efectivo',reference:'PAY-REF',created_at:'2026-09-27T17:05:00.000Z'}]
+  });
+
+  assert.equal(out.sales.length,1);
+  assert.equal(out.sales[0].id,'s-1');
+  assert.equal(out.sales[0].clienteNombre,'Misael');
+  assert.equal(out.sales[0].canonicalReadOnly,true);
+  assert.equal(out.sales[0].items.length,1);
+  assert.equal(out.sales[0].items[0].qty,2);
+  assert.equal(out.sales[0].items[0].precio,5);
+  assert.equal(out.sales[0].items.reduce((sum,item)=>sum+item.qty*item.precio,0),10);
+  assert.deepEqual(JSON.parse(JSON.stringify(out.sales[0].paymentBreakdown)),{efectivo:4,digital:6,digitalMethod:'transferencia',reference:'REF-1'});
+
+  assert.equal(out.cashState.sessionId,'sess-1');
+  assert.equal(out.cashState.abierta,true);
+  assert.equal(out.cashState.fondo,100);
+  assert.equal(out.cashState.esperado,106);
+
+  assert.equal(out.cashMovements.length,2);
+  const saleMove=out.cashMovements.find(row=>row.ventaId==='s-1');
+  assert.equal(saleMove.sessionId,'sess-1');
+  assert.equal(saleMove.monto,10);
+  assert.equal(saleMove.efectivo,4);
+  const payMove=out.cashMovements.find(row=>row.creditoId==='cr-1');
+  assert.equal(payMove.tipo,'cob');
+  assert.equal(payMove.monto,2);
+  assert.equal(payMove.efectivo,2);
+  assert.equal(payMove.sessionId,'sess-1');
+
+  assert.equal(out.inventoryMovements.length,1);
+  assert.equal(out.inventoryMovements[0].delta,-2);
+  assert.equal(out.inventoryMovements[0].referenceId,'s-1');
+});
