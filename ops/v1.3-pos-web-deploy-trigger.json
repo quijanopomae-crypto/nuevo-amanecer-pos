@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish navigation performance root fix from commit 2470f5f0d274e6da431f84d9d0cd19a6efbe66e3; keep interface V2, activation, financial gates and backend unchanged.",
-  "retry_attempt": 18,
-  "retry_reason": "Owner reports module navigation freezes with real CANON dataset; deploy deferred active-view rendering and indexed client credit lookup.",
-  "requested_at_utc": "2026-09-27T17:16:00Z",
-  "target_head": "2470f5f0d274e6da431f84d9d0cd19a6efbe66e3"
+  "note": "Publish shell refresh recovery from commit 51460a80ba2e18694182590238a3061900896ab1; preserve activation data and all business state.",
+  "retry_attempt": 19,
+  "retry_reason": "Owner browser remains on stale PWA shell while fresh isolated browser navigates correctly.",
+  "requested_at_utc": "2026-09-27T17:32:00Z",
+  "target_head": "51460a80ba2e18694182590238a3061900896ab1"
 }
