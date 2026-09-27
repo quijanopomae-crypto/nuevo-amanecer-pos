@@ -88,3 +88,25 @@ test('hosted deploy replaces the service-worker build hash and verifies it remot
   assert.match(workflow, /grep -Fq "\$GITHUB_SHA" \/tmp\/pos-sw\.js/);
   assert.match(workflow, /hosted-canonical-guard\.js/);
 });
+
+
+test('hosted PWA precaches the complete CANON Motion runtime as one shell generation', () => {
+  for (const asset of [
+    './css/motion/motion.css',
+    './css/motion/transitions.css',
+    './css/motion/modals.css',
+    './css/motion/notifications.css',
+    './js/motion/core.js',
+    './js/motion/page-transitions.js',
+    './js/motion/scroll-motion.js',
+    './js/motion/modal-motion.js',
+    './js/motion/feedback-motion.js',
+    './js/motion/cart-motion.js'
+  ]) assert.match(serviceWorker, new RegExp(asset.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&')));
+});
+
+test('hosted PWA activates a fully cached new build without requiring all POS tabs to close', () => {
+  assert.match(serviceWorker, /cache\.addAll\([\s\S]*self\.skipWaiting\(\)/);
+  assert.match(serviceWorker, /self\.clients\.claim\(\)/);
+  assert.match(appIndex, /updateViaCache:\s*'none'/);
+});

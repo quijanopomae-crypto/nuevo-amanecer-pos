@@ -966,7 +966,7 @@
 <script>
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (registration) {
+    navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).then(function (registration) {
       return registration.update().catch(function () {});
     }).catch(function (error) {
       console.warn('No se pudo registrar el shell PWA.', error);
