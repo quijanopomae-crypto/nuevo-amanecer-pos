@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish operational CANON UI projection from 2cb6c98d1de274fa3485a14d56efe1de7110d64a; sales/cash/dashboard now consume authoritative operational reads.",
-  "retry_attempt": 21,
-  "retry_reason": "PR #147 operational reader/UI projection merged and production backend reader deployed successfully.",
-  "requested_at_utc": "2026-09-27T20:05:00Z",
-  "target_head": "2cb6c98d1de274fa3485a14d56efe1de7110d64a"
+  "note": "Publish CANON cash command bridge from fe43aa4c87cd0fcf25fd8207132b5ee90fbe2e45; route open/close/manual cash adjustments through canonical commands.",
+  "retry_attempt": 22,
+  "retry_reason": "PR #150 merged; CANON Critical CI #124/#125 passed. Publish validated CANON cash command bridge.",
+  "requested_at_utc": "2026-09-27T20:20:00Z",
+  "target_head": "fe43aa4c87cd0fcf25fd8207132b5ee90fbe2e45"
 }
