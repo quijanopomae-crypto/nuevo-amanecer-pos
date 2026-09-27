@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-LAB-PROMOTION-INFRA-V1-001",
+  "environment": "CANON_INFRA",
+  "base_ref": "bbb8e747c2aafa3392447d2ead70e042e4bd0afe",
+  "objective": "Convertir la promoción visual LAB→CANON en un proceso determinista y verificable: una única lista de assets aprobados, un comando de promoción explícito, gates obligatorios en CANON CI y en deploy, sin modificar runtime comercial.",
+  "owner_authorization": "El propietario pidió ejecutar la corrección estructural después del diagnóstico LAB→CANON.",
+  "allowed_files": [
+    "tasks/CANON-LAB-PROMOTION-INFRA-V1-001.json",
+    "evidence/canon-preflight/CANON-LAB-PROMOTION-INFRA-V1-001.json",
+    "docs/CANON_LAB_PROMOTION_INFRA_V1.md",
+    "docs/LABORATORIO_A_CANON.md",
+    "REPO_MAP.yaml",
+    "tools/pos-experience/**",
+    "tests/product-fixes/canon-lab-interface-parity.test.mjs",
+    ".github/workflows/canon-critical-ci.yml",
+    ".github/workflows/v1.3-pos-web-deploy.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-backup/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "No cambia el runtime de ventas, caja, créditos, inventario ni gastos.",
+    "No se escribe en producción ni se ejecutan ventas.",
+    "LAB sigue siendo editable/aislado y CANON no depende en runtime de laboratorio.",
+    "La promoción visual solo copia assets allowlisted y exige autorización explícita para modo write.",
+    "El deploy productivo falla cerrado si existe drift visual LAB→CANON."
+  ],
+  "rollback": "Revertir el PR completo; no existen migraciones de datos ni cambios de schema.",
+  "test_plan": [
+    "node tools/pos-experience/promote-lab-visuals.mjs --check",
+    "node --test tests/product-fixes/canon-lab-interface-parity.test.mjs",
+    "node --test tests/product-fixes/canon-motion-bootstrap.test.mjs tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs",
+    "CANON Critical CI",
+    "Hosted POS deploy safety gate en un despliegue posterior autorizado"
+  ]
+}
