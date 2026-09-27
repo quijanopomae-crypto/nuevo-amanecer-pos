@@ -15,6 +15,7 @@
   var labSaleCreditState = { clientId:null, categoryId:NA_SMALL_ACCOUNT_ID, installmentCount:1 };
   var naClientListMotionTimer = 0;
   var naClientListMotionReady = false;
+  var naClientListMotionEpoch = 0;
 
   function labEsc(value) {
     if (typeof _naEsc === 'function') return _naEsc(String(value ?? ''));
@@ -891,6 +892,7 @@
     if (!list) return false;
     rows = Array.isArray(rows) ? rows : [];
     var page = document.getElementById('pageClientes');
+    var motionEpoch = ++naClientListMotionEpoch;
     var draw = function () {
       naDrawClientList(rows, list);
       if (labClientScreenState.clientId) {
@@ -898,9 +900,19 @@
         if (screen && !screen.hidden) labRenderRoute();
       }
     };
+    var settleEntry = function () {
+      root.requestAnimationFrame(function () {
+        if (motionEpoch !== naClientListMotionEpoch) return;
+        root.requestAnimationFrame(function () {
+          if (motionEpoch !== naClientListMotionEpoch) return;
+          page.classList.remove('na-client-refresh-in');
+        });
+      });
+    };
 
     if (!page || !page.classList.contains('active') || naClientReducedMotion()) {
       clearTimeout(naClientListMotionTimer);
+      naClientListMotionTimer = 0;
       page && page.classList.remove('na-client-refresh-out','na-client-refresh-in');
       draw();
       return true;
@@ -909,10 +921,9 @@
     if (!naClientListMotionReady) {
       naClientListMotionReady = true;
       draw();
+      page.classList.remove('na-client-refresh-out');
       page.classList.add('na-client-refresh-in');
-      root.requestAnimationFrame(function () {
-        root.requestAnimationFrame(function () { page.classList.remove('na-client-refresh-in'); });
-      });
+      settleEntry();
       return true;
     }
 
@@ -920,10 +931,12 @@
     page.classList.remove('na-client-refresh-in');
     page.classList.add('na-client-refresh-out');
     naClientListMotionTimer = root.setTimeout(function () {
+      if (motionEpoch !== naClientListMotionEpoch) return;
       draw();
-      root.requestAnimationFrame(function () {
-        page.classList.remove('na-client-refresh-out');
-      });
+      page.classList.remove('na-client-refresh-out');
+      page.classList.add('na-client-refresh-in');
+      naClientListMotionTimer = 0;
+      settleEntry();
     }, 850);
     return true;
   }

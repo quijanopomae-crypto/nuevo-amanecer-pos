@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENT-MOTION-LIFECYCLE-001",
+  "environment": "CANON",
+  "base_ref": "2ef0a566720674dd58b1368629f8849ae6291235",
+  "objective": "Corregir el lifecycle runtime de animación de Clientes V2 para que el motion LAB aprobado se ejecute realmente en Android/Chrome: salida, swap DOM, preparación de entrada, doble RAF y reposo; además cancelar callbacks obsoletos para evitar carreras.",
+  "owner_authorization": "Owner pidió corregir la animación después de auditoría avanzada que confirmó paridad CSS pero lifecycle incompleto.",
+  "allowed_files": [
+    "tasks/CANON-CLIENT-MOTION-LIFECYCLE-001.json",
+    "evidence/canon-preflight/CANON-CLIENT-MOTION-LIFECYCLE-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/**",
+    "D1/**",
+    "R2/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "canon-promotion",
+    "lab-animation-edit"
+  ],
+  "invariants": [
+    "Motion visual only",
+    "No business logic waits on animation completion",
+    "No D1/storage/network writes",
+    "Payments/FIFO/Caja/inventory/credit balances unchanged",
+    "prefers-reduced-motion remains immediate",
+    "stale timers/RAF callbacks cannot mutate the current motion state"
+  ],
+  "rollback": "Revertir este PR; no hay cambios de datos, schema ni autoridad financiera."
+}
