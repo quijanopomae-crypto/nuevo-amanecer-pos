@@ -123,6 +123,12 @@ test('expense bridge attaches only todays open CANON session and redirects Caja 
 
   context.abrirMovCaja('gas');
   assert.equal(calls.some(x=>x[0]==='legacy-cash'),false);
+  fields.gasDesc.value='Compra bolsas';
+  fields.gasMonto.value='12.50';
+  fields.gasMetodo.value='efectivo';
+  fields.gasFecha.value='2026-09-27';
+  fields.gasCat.value='Operativo';
+  fields.gasNota.value='turno';
   await context.guardarGasto();
   const first=calls.find(x=>x[0]==='expense')[1];
   assert.equal(first.amount_cents,1250);
