@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-PROMOTE-LAB-INTERFACE-V2-001",
+  "environment": "CANON",
+  "base_ref": "1606621d117f25e80cb3ae5d4acdacbb240463c4",
+  "objective": "Promover a CANON la capa visual aprobada de POS-LAB y activar el Motion móvil ya portado pero no inicializado, sin tocar datos, backend ni reglas comerciales.",
+  "owner_authorization": "El propietario comprobó en el Worker público que CANON sigue mostrando la interfaz antigua y pidió corregirlo.",
+  "allowed_files": [
+    "tasks/CANON-PROMOTE-LAB-INTERFACE-V2-001.json",
+    "evidence/canon-preflight/CANON-PROMOTE-LAB-INTERFACE-V2-001.json",
+    "docs/CANON_PROMOTE_LAB_INTERFACE_V2.md",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/motion/scroll-motion.js",
+    "POS/css/motion/transitions.css",
+    "POS/css/experience-v2/**",
+    "tests/product-fixes/canon-lab-interface-parity.test.mjs",
+    "tests/product-fixes/canon-motion-bootstrap.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-backup/**",
+    "D1/**",
+    "R2/**",
+    "secrets/**",
+    "POS/js/sync/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/modules/client-credit-accounts-v2.js"
+  ],
+  "invariants": [
+    "Los datos y la autoridad CANON no cambian.",
+    "No se ejecutan ventas ni operaciones financieras.",
+    "POS no depende en runtime de laboratorio.",
+    "La capa visual promovida conserva el contenido aprobado de LAB salvo exclusiones explícitas de marcadores LAB.",
+    "El indicador LAB y lab-route-restoring no se promueven.",
+    "El scroll Motion solo afecta presentación y respeta prefers-reduced-motion.",
+    "El Service Worker precachea todos los nuevos assets productivos."
+  ],
+  "rollback": "Revertir el PR y redeploy del shell anterior; no requiere rollback de datos."
+}
