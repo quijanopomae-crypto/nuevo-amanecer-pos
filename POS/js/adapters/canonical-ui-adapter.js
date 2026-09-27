@@ -225,6 +225,218 @@
     };
   }
 
+
+  function localParts(value) {
+    var raw = text(value);
+    var parsed = raw ? new Date(raw) : null;
+    if (!parsed || !Number.isFinite(parsed.getTime())) {
+      return { date: /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : '', time: /^\d{4}-\d{2}-\d{2}T/.test(raw) ? raw.slice(11, 16) : '', timestamp: raw || null };
+    }
+    function pad(v) { return String(v).padStart(2, '0'); }
+    return {
+      date: parsed.getFullYear() + '-' + pad(parsed.getMonth() + 1) + '-' + pad(parsed.getDate()),
+      time: pad(parsed.getHours()) + ':' + pad(parsed.getMinutes()),
+      timestamp: raw
+    };
+  }
+
+  function groupBy(rows, keyName) {
+    var out = new Map();
+    (Array.isArray(rows) ? rows : []).forEach(function (row) {
+      if (!row || row[keyName] === undefined || row[keyName] === null) return;
+      var key = String(row[keyName]), list = out.get(key) || [];
+      list.push(row); out.set(key, list);
+    });
+    return out;
+  }
+
+  function uiSaleItem(row, productById) {
+    row = row && typeof row === 'object' ? row : {};
+    var product = productById.get(String(row.product_id)) || {};
+    var qty = number(row.quantity, 0);
+    var price = cents(row.unit_price_cents);
+    return {
+      id: row.product_id,
+      product_id: row.product_id,
+      name: text(product.name || product.nombre, 'Producto'),
+      nombre: text(product.name || product.nombre, 'Producto'),
+      icon: text(product.icon || product.icono, '📦'),
+      qty: qty,
+      cantidad: qty,
+      precio: price,
+      precioUnitario: price,
+      subtotal: cents(row.line_total_cents),
+      costo: number(product.costo, 0),
+      tipoImpuesto: text(product.tipoImpuesto),
+      incluyeIGV: product.incluyeIGV !== false,
+      canonical: true
+    };
+  }
+
+  function uiSale(row, itemsBySale, productById, customerById, cashBySale) {
+    row = row && typeof row === 'object' ? row : {};
+    var when = localParts(row.created_at);
+    var items = (itemsBySale.get(String(row.sale_id)) || []).slice().sort(function (a, b) {
+      return integer(a.line_number, 0) - integer(b.line_number, 0);
+    }).map(function (item) { return uiSaleItem(item, productById); });
+    var customer = customerById.get(String(row.customer_id));
+    var cash = cashBySale.get(String(row.sale_id)) || {};
+    var method = text(row.payment_method, 'efectivo');
+    var breakdown = null;
+    if (method === 'mixto') {
+      breakdown = {
+        efectivo: cents(cash.cash_cents),
+        digital: cents(cash.digital_cents),
+        digitalMethod: text(cash.digital_method),
+        reference: text(cash.reference || row.payment_reference)
+      };
+    }
+    return {
+      id: row.sale_id,
+      sale_id: row.sale_id,
+      operation_id: row.operation_id,
+      operation: row.operation_id,
+      fecha: when.date,
+      hora: when.time,
+      hora24: when.time,
+      timestamp: when.timestamp,
+      total: cents(row.total_cents),
+      metodo: method,
+      metodoPago: method,
+      estado: method === 'credito' ? 'credito' : 'completada',
+      paymentRef: text(row.payment_reference || cash.reference),
+      paymentBreakdown: breakdown,
+      anulada: false,
+      clienteId: row.customer_id || null,
+      customer_id: row.customer_id || null,
+      clienteNombre: customer ? customer.nombre : (row.customer_id ? String(row.customer_id) : 'Consumidor final'),
+      clienteDni: customer ? customer.dni : '',
+      cantidadLineas: items.length,
+      unidadesFisicas: items.reduce(function (sum, item) { return sum + number(item.qty, 0); }, 0),
+      items: items,
+      canonical: true,
+      canonicalReadOnly: true
+    };
+  }
+
+  function uiInventoryMovement(row) {
+    row = row && typeof row === 'object' ? row : {};
+    var when = localParts(row.created_at);
+    return {
+      id: row.movement_id,
+      movementId: row.movement_id,
+      operationId: row.operation_id,
+      productId: row.product_id,
+      type: 'SALE',
+      delta: number(row.quantity, 0),
+      quantity: number(row.quantity, 0),
+      source: 'CANONICAL',
+      referenceId: row.sale_id || null,
+      saleId: row.sale_id || null,
+      lineNumber: integer(row.line_number, 0),
+      fecha: when.date,
+      hora: when.time,
+      hora24: when.time,
+      timestamp: when.timestamp,
+      canonical: true
+    };
+  }
+
+  function uiSaleCashMovement(row) {
+    row = row && typeof row === 'object' ? row : {};
+    var when = localParts(row.created_at);
+    return {
+      id: row.movement_id,
+      operationId: row.operation_id,
+      tipo: 'ing',
+      monto: cents(row.amount_cents),
+      efectivo: cents(row.cash_cents),
+      digital: cents(row.digital_cents),
+      credito: cents(row.credit_cents),
+      desc: 'Venta ' + text(row.sale_id),
+      cat: 'Venta',
+      metodo: text(row.payment_method, 'efectivo'),
+      referencia: text(row.reference),
+      numeroOperacion: text(row.reference),
+      hora: when.time,
+      hora24: when.time,
+      timestamp: when.timestamp,
+      fecha: when.date,
+      sessionId: row.session_id || null,
+      ventaId: row.sale_id || null,
+      digitalMethod: text(row.digital_method),
+      canonical: true
+    };
+  }
+
+  function uiFinancialMovement(event) {
+    event = event && typeof event === 'object' ? event : {};
+    var when = localParts(event.created_at);
+    var kind = text(event.event_type);
+    var cashDelta = number(event.cash_delta_cents, 0);
+    var creditDelta = number(event.credit_delta_cents, 0);
+    var method = text(event.payment_method, 'efectivo');
+    var type = kind === 'PAYMENT' ? 'cob' : (cashDelta >= 0 ? 'ing' : 'egr');
+    var amount = kind === 'PAYMENT' ? Math.abs(creditDelta) / 100 : Math.abs(cashDelta) / 100;
+    var isCash = method === 'efectivo';
+    return {
+      id: event.event_id,
+      operationId: event.operation_id,
+      tipo: type,
+      monto: amount,
+      efectivo: isCash ? Math.abs(cashDelta) / 100 : 0,
+      digital: kind === 'PAYMENT' && !isCash ? amount : 0,
+      desc: kind === 'PAYMENT' ? 'Cobro de crédito' : (kind === 'ADJUSTMENT' ? text(event.reason, 'Ajuste de caja') : text(event.reason, 'Compensación')),
+      cat: kind === 'PAYMENT' ? 'Cobro' : (kind === 'ADJUSTMENT' ? 'Ajuste' : 'Compensación'),
+      metodo: method,
+      referencia: text(event.reference),
+      numeroOperacion: text(event.reference),
+      hora: when.time,
+      hora24: when.time,
+      timestamp: when.timestamp,
+      fecha: when.date,
+      sessionId: event.session_id || null,
+      creditoId: event.credit_id || null,
+      reversal: kind === 'COMPENSATION',
+      reversalOf: event.compensates_operation_id || null,
+      canonical: true
+    };
+  }
+
+  function uiCashState(sessions) {
+    var rows = (Array.isArray(sessions) ? sessions : []).filter(Boolean).slice();
+    var open = rows.filter(function (row) { return row.status === 'OPEN'; });
+    var selected = open.length === 1 ? open[0] : rows.sort(function (a, b) {
+      return text(b.closed_at || b.opened_at).localeCompare(text(a.closed_at || a.opened_at));
+    })[0];
+    if (!selected) {
+      return { abierta: false, cerrada: false, fondo: 0, cajero: '', cajeroNombre: '', cajeroId: null, hora: '', hora24: '', fechaApertura: '', cerradaAt: null, horaCierre: null, horaCierre24: null, sessionId: null, contado: null, esperado: null, diferencia: null, canonical: true };
+    }
+    var opened = localParts(selected.opened_at), closed = localParts(selected.closed_at);
+    var isOpen = selected.status === 'OPEN';
+    return {
+      abierta: isOpen,
+      cerrada: !isOpen,
+      fondo: cents(selected.opening_cents),
+      cajero: '',
+      cajeroNombre: '',
+      cajeroId: null,
+      hora: opened.time,
+      hora24: opened.time,
+      fechaApertura: opened.date,
+      timestampApertura: opened.timestamp,
+      horaCierre: closed.time || null,
+      horaCierre24: closed.time || null,
+      timestampCierre: closed.timestamp,
+      sessionId: selected.session_id || null,
+      contado: selected.counted_cents == null ? null : cents(selected.counted_cents),
+      esperado: selected.expected_cents == null ? null : cents(selected.expected_cents),
+      diferencia: selected.difference_cents == null ? null : cents(selected.difference_cents),
+      revision: integer(selected.revision, 0),
+      canonical: true
+    };
+  }
+
   function snapshot(data) {
     if (!data || data.authority !== 'canonical') throw new Error('CANONICAL_SNAPSHOT_UNAVAILABLE');
     var accountsByCustomer = accountMap(data.creditAccounts);
@@ -241,11 +453,28 @@
     var credits = (Array.isArray(data.credits) ? data.credits : []).map(function (c) {
       return uiCredit(c, customerById, paymentsByCredit);
     });
+    var products = (Array.isArray(data.products) ? data.products : []).map(uiProduct);
+    var productById = new Map(products.map(function (p) { return [String(p.id), p]; }));
+    var itemsBySale = groupBy(data.saleItems, 'sale_id');
+    var cashBySale = new Map();
+    (Array.isArray(data.cashMovements) ? data.cashMovements : []).forEach(function (row) {
+      if (row && row.sale_id != null) cashBySale.set(String(row.sale_id), row);
+    });
+    var sales = (Array.isArray(data.sales) ? data.sales : []).map(function (row) {
+      return uiSale(row, itemsBySale, productById, customerById, cashBySale);
+    });
+    var cashMovements = (Array.isArray(data.cashMovements) ? data.cashMovements : []).map(uiSaleCashMovement)
+      .concat((Array.isArray(data.financialEvents) ? data.financialEvents : []).map(uiFinancialMovement))
+      .sort(function (a, b) { return text(a.timestamp).localeCompare(text(b.timestamp)); });
     return {
-      products: (Array.isArray(data.products) ? data.products : []).map(uiProduct),
+      products: products,
       customers: customers,
       credits: credits,
       payments: (Array.isArray(data.payments) ? data.payments : []).slice(),
+      sales: sales,
+      cashState: uiCashState(data.cashSessions),
+      cashMovements: cashMovements,
+      inventoryMovements: (Array.isArray(data.inventoryMovements) ? data.inventoryMovements : []).map(uiInventoryMovement),
       mode: data.mode,
       promotion_id: data.promotion_id,
       authority_epoch: data.authority_epoch,
@@ -261,6 +490,8 @@
     customer: uiCustomer,
     credit: uiCredit,
     payment: uiPayment,
+    sale: uiSale,
+    cashState: uiCashState,
     snapshot: snapshot
   });
 })(globalThis);
