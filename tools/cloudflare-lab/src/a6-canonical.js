@@ -10,7 +10,7 @@ const TABLES = {
   credit_payments: ['payment_id','credit_id','source_payment_id','source_sequence','amount_cents','payment_date','payment_timestamp','payment_date_known','date_precision','method','source_method','source_origin','source_document_type','source_operation_reference','seller','date_observation','source_customer_document','source_customer_name','source_cumulative_paid_cents','source_balance_after_cents','source_progress_ratio','source_credit_original_cents','source_current_document_balance_cents'],
 };
 const PROVENANCE = ['promotion_id','source_import_id','source_entity_type','source_name','source_row','source_key','source_payload_json','source_payload_hash','mapping_version'];
-const READ_TABLES = new Set(['products','customers','credits','credit-payments','credit-accounts','sales','sale-items','inventory-movements','cash-movements','cash-sessions','financial-events']);
+const READ_TABLES = new Set(['products','customers','credits','credit-payments','credit-accounts','sales','sale-items','inventory-movements','cash-movements','cash-sessions','financial-events','expenses']);
 const A3_PUBLIC_COLUMNS={
   sales:'sale_id,operation_id,payment_method,total_cents,payment_reference,created_at,received_at',
   sale_items:'sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at',
@@ -460,6 +460,7 @@ async function canonicalRead(url,db,json){
       counts.credit_payments+=Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL').bind(before.active_promotion_id).first()).count);
       for(const [name,sql] of Object.entries({sales:'canonical_sale_context x',sale_items:'canonical_sale_context x JOIN sale_items r ON r.sale_id=x.sale_id',inventory_movements:'canonical_inventory_effects',cash_movements:'canonical_sale_context x JOIN cash_movements r ON r.sale_id=x.sale_id'}))
         counts[name]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${sql} WHERE ${name==='inventory_movements'?'promotion_id':'x.promotion_id'}=?1`).bind(before.active_promotion_id).first()).count);
+      counts.expenses=await expenseLedgerCount(db,before.active_promotion_id);
     }
     const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
     if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});
@@ -497,6 +498,14 @@ async function canonicalRead(url,db,json){
     rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || payment_id AS read_key,${TABLES.credit_payments.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS credit_provenance,NULL AS credit_delta_cents,NULL AS cash_delta_cents,NULL AS session_id,NULL AS reason,NULL AS compensates_operation_id FROM credit_payments WHERE promotion_id=?1 UNION ALL
       SELECT 'L:' || event_id AS read_key,${TABLES.credit_payments.map(c=>fields[c]??'NULL').join(',')},'LIVE',operation_id,credit_provenance,credit_delta_cents,cash_delta_cents,session_id,reason,compensates_operation_id FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL)
       WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='expenses'){
+    const expenseReady=await expenseLedgerAvailable(db);
+    rows=before.mode==='ACTIVE'&&expenseReady
+      ? await db.prepare(`SELECT expense_id AS read_key,expense_id,operation_id,promotion_id,session_id,amount_cents,cash_delta_cents,
+          concept,category,payment_method,expense_date,note,created_at
+          FROM canonical_expenses WHERE promotion_id=?1 AND expense_id>?2 ORDER BY expense_id LIMIT ?3`)
+          .bind(before.active_promotion_id,page.key,page.limit+1).all()
+      : {results:[]};
   } else if(sqlName==='cash_sessions'){
     rows=await db.prepare(`SELECT session_id AS read_key,session_id,promotion_id,open_operation_id,opening_cents,cash_movement_watermark,opened_at,status,
       close_operation_id,expected_cents,counted_cents,difference_cents,closing_watermark,closed_at,revision FROM canonical_cash_state
@@ -545,11 +554,24 @@ function sameControl(a,b){return b&&a.mode===b.mode&&a.active_promotion_id===b.a
 function readMeta(c){return{authority:'canonical',promotion_id:c.active_promotion_id,authority_epoch:Number(c.authority_epoch),revision:Number(c.revision),...(c.mode==='ACTIVE'?{financial_revision:c.financial_revision}:{}),read_only:c.mode!=='ACTIVE',mode:c.mode,minimum_client_contract:c.minimum_client_contract};}
 // One SQL snapshot binds authority and the append-only commit count. Counts do
 // not change on replay, and a rolled-back batch cannot advance the read version.
-async function readControl(db){return db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
-  c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
-  (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
-  (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
-  ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();}
+async function expenseLedgerAvailable(db){
+  const row=await db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='canonical_expenses'").first();
+  return row?.ok===1;
+}
+async function expenseLedgerCount(db,promotionId){
+  if(!promotionId||!await expenseLedgerAvailable(db))return 0;
+  const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_expense_operations WHERE promotion_id=?1').bind(promotionId).first();
+  return Number(row?.count)||0;
+}
+async function readControl(db){
+  const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
+    c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
+    (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
+    (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
+    ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
+  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id);
+  return row;
+}
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}
 async function candidateCount(db,id){let total=0;for(const table of Object.keys(TABLES))total+=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(id).first()).count);return total;}
 async function receiptReplay(db,id,hash,json){const row=await db.prepare('SELECT request_hash,result_json FROM canonical_command_receipts WHERE operation_id=?1').bind(id).first();if(!row)return null;return row.request_hash===hash?json(JSON.parse(row.result_json)):json({error:'operation_id_conflict'},409);}

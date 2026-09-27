@@ -49,6 +49,7 @@ const PRECACHE_URLS = [
   './js/sync/canonical-sale-integration.js',
   './js/sync/canonical-sale-view.js',
   './js/sync/canonical-cash-bridge.js',
+  './js/sync/canonical-expense-bridge.js',
   './js/legacy-inline/inline-01.js',
   './js/modules/ticket/legacy.js',
   './js/legacy-inline/inline-02.js',

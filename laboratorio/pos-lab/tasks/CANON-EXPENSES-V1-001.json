@@ -1,0 +1,50 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-EXPENSES-V1-001",
+  "environment": "LABORATORIO",
+  "base_ref": "ef54725f15a49b11395893b461812f46def074af",
+  "objective": "Promover Gastos a CANON con persistencia propia, lectura autoritativa y bridge UI, preservando exactamente la semántica legacy: gasto siempre persistente; asociación a sesión solo cuando hay caja abierta y la fecha es hoy; efectivo reduce caja; métodos digitales no reducen efectivo; categoría/nota/fecha se conservan.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-EXPENSES-V1-001.json",
+    "laboratorio/pos-lab/preflight/CANON-EXPENSES-V1-001.json",
+    "tools/cloudflare-lab/migrations/0013_canonical_expenses.sql",
+    "tools/cloudflare-lab/src/a6-expenses.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "tools/cloudflare-lab/src/a6-canonical.js",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/adapters/canonical-ui-adapter.js",
+    "POS/js/sync/canonical-expense-bridge.js",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "tests/cloud-sync/canonical-expenses-backend.test.mjs",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/product-fixes/canon-expenses-bridge.test.mjs",
+    "tests/product-fixes/canonical-ui-contract.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "POS/css/**",
+    "POS/js/motion/**",
+    "POS/js/sync/canonical-sale-intent.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-EXPENSES-V1-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

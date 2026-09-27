@@ -685,13 +685,13 @@ abrirModalGasto=function(){if(isModuleLocked('gastos')){toast('Gastos y egresos 
 window.addEventListener('resize',_naApplyConfigUI);
 let _naCanonicalLoadError=null;
 function _naEmptyCanonicalCashState(){return{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',cerrada:false,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null,canonical:true};}
-function _naClearCanonicalOperationalView(){ventas=[];cajMovs=[];inventoryMovements=[];cajEstado=_naEmptyCanonicalCashState();}
+function _naClearCanonicalOperationalView(){ventas=[];gastos=[];cajMovs=[];inventoryMovements=[];cajEstado=_naEmptyCanonicalCashState();}
 function _naClearCanonicalLegacyView(){
   productos=[];clientes=[];creditos=[];_naClearCanonicalOperationalView();
 }
 function _naApplyCanonicalLegacyView(canonical){
-  if(!canonical||!Array.isArray(canonical.products)||!Array.isArray(canonical.customers)||!Array.isArray(canonical.credits)||!Array.isArray(canonical.sales)||!Array.isArray(canonical.cashMovements)||!Array.isArray(canonical.inventoryMovements)||!canonical.cashState)throw new Error('CANONICAL_OPERATIONAL_SNAPSHOT_INVALID');
-  productos=canonical.products;clientes=canonical.customers;creditos=canonical.credits;ventas=canonical.sales;cajMovs=canonical.cashMovements;inventoryMovements=canonical.inventoryMovements;cajEstado=canonical.cashState;
+  if(!canonical||!Array.isArray(canonical.products)||!Array.isArray(canonical.customers)||!Array.isArray(canonical.credits)||!Array.isArray(canonical.sales)||!Array.isArray(canonical.expenses)||!Array.isArray(canonical.cashMovements)||!Array.isArray(canonical.inventoryMovements)||!canonical.cashState)throw new Error('CANONICAL_OPERATIONAL_SNAPSHOT_INVALID');
+  productos=canonical.products;clientes=canonical.customers;creditos=canonical.credits;ventas=canonical.sales;gastos=canonical.expenses;cajMovs=canonical.cashMovements;inventoryMovements=canonical.inventoryMovements;cajEstado=canonical.cashState;
 }
 const _naLocalCliRender=cliRender;
 cliRender=function(){
