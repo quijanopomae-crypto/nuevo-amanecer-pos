@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy Client financial workspace swipe: touch drag/settle/dismiss and directional subview transitions without abrupt hidden.",
-  "retry_attempt": 9,
-  "retry_reason": "Publish PR #118 financial workspace swipe/subview motion after CANON Critical CI success.",
-  "requested_at_utc": "2026-09-27T00:58:00Z",
-  "target_head": "688582a32ae644bcf7c3c923cfcc24203715e45a"
+  "note": "Deploy CANON Motion infrastructure + Clientes V2 active page/subview animation using transitionend synchronization.",
+  "retry_attempt": 10,
+  "retry_reason": "Publish PR #120 Motion infrastructure and PR #121 Clientes Motion activation after CANON Critical CI success.",
+  "requested_at_utc": "2026-09-27T02:06:30Z",
+  "target_head": "756140bca79dcfa966884bf15495bdbdb56060db"
 }
