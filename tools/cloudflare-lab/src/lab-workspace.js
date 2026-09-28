@@ -1,3 +1,4 @@
+import { getDatabase } from './database-binding.js';
 const WORKSPACE_ID = 'primary';
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
@@ -13,7 +14,7 @@ export function isLabWorkspacePath(pathname) {
 
 export async function handleLabWorkspace(request, url, env, deps) {
   const { jsonLab, authorizeRead, authorizeSession } = deps;
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   if (!db) return jsonLab({ error: 'lab_database_missing' }, 503);
 
   if (request.method === 'GET' && (url.pathname === '/lab/workspace' || url.pathname === '/lab/workspace/status')) {
