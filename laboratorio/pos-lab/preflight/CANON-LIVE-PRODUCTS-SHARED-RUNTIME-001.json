@@ -1,0 +1,75 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-LIVE-PRODUCTS-SHARED-RUNTIME-001",
+  "base_ref": "0b14f51519eb7ce8b6fdb2a0fae1d45011586668",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md y laboratorio/pos-lab/UI_MAP.yaml",
+      "Migraciones CANON 0006/0008/0011 y contratos de lectura/venta existentes",
+      "tools/cloudflare-lab/src/a6-commerce.js, a6-canonical.js y worker.js"
+    ],
+    "WRITES": [
+      "Solo módulos compartidos tools/cloudflare-lab/src declarados en allowed_files para esta sub-tarea protegida",
+      "Task Contract y recibo de preflight; ningún archivo de UI POS-LAB"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Catálogo CANON LIVE y resolución de productos durante pruebas Worker/D1 aisladas",
+      "Revisión operacional usada por lecturas canónicas y cursores"
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 aislado de pruebas al aplicar el esquema CANON; no D1 de producción",
+      "Sin localStorage, R2 ni credenciales de producción como autoridad"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "products importados conserva provenance e inmutabilidad",
+      "product.create requiere autoridad ACTIVE y sesión writer válida",
+      "producto LIVE vendible debe usar CAS de stock_revision e idempotencia",
+      "LAB no realiza escrituras ni despliegues de producción"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Catálogo alimenta POS, inventario y sale.create",
+      "Venta de producto LIVE cruza catálogo, inventory ledger y lectura canónica"
+    ],
+    "RISKS": [
+      "Colisión de product_id/SKU/barcode entre IMPORT y LIVE",
+      "Producto visible pero no vendible si venta y FKs no se alinean",
+      "Paginación inconsistente si un product write no cambia la revisión operacional"
+    ],
+    "ROLLBACK": [
+      "Revertir módulos compartidos de esta rama antes de merge",
+      "No existe mutación remota de producción que requiera rollback de datos"
+    ],
+    "TESTS": [
+      "Worker + SQLite/D1 local para product.create, replay y colisiones",
+      "Venta de producto LIVE con decremento CAS e inventory effect",
+      "CANON Critical CI y aplicación de todas las migraciones en D1 local"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  }
+}
