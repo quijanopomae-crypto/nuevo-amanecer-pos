@@ -3,9 +3,9 @@
   "authorized": true,
   "authorized_by": "owner",
   "requested_action": "validate-production-canon-readonly",
-  "target_head": "aaec95d5cc90a09b2ebdb425dd9f257166b594be",
-  "requested_at_utc": "2026-09-26T23:02:00Z",
-  "note": "Validate real CANON customers/products/credits/payments/credit-accounts with a temporary session, no business writes, and prove business counts are unchanged.",
-  "retry_attempt": 4,
-  "retry_reason": "Retry readonly owner validation after using public credit identity (provenance + credit_id); read_key is intentionally stripped by canonicalRead before returning items."
+  "target_head": "3c1620e4390b189ad62b551e6563c9d59fc86539",
+  "requested_at_utc": "2026-09-28T16:50:00Z",
+  "note": "Read-only production CANON validation at current active HEAD prior to any first-live-sale decision. No business writes; proves business counts unchanged and temporary session cleaned.",
+  "retry_attempt": 5,
+  "retry_reason": "Re-validate production CANON authority/reads at the post-Phase-6 HEAD before considering the irreversible first-live-sale gate."
 }
