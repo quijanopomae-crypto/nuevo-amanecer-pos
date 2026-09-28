@@ -1,0 +1,199 @@
+name: Production Release — Promote STAGING Artifact
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/production-release-trigger.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-change
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ARTIFACT_BUCKET: nuevo-amanecer-staging-artifacts
+      PROD_WEB_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout authorization event
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate owner-authorized production release trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          PROD_TARGET_HEAD="$(node <<'NODE'
+          const { readFileSync } = require("node:fs");
+          const t = JSON.parse(readFileSync("ops/production-release-trigger.json","utf8"));
+          if (t.authorized !== true || t.authorized_by !== "owner") throw new Error("production release not owner-authorized");
+          if (t.target_branch !== "feature/v1.3-mobile-cloud") throw new Error("wrong production target branch");
+          if (t.requested_action !== "promote-staging-artifact") throw new Error("wrong production release action");
+          if (!/^[0-9a-f]{40}$/.test(t.target_head || "")) throw new Error("invalid production target head");
+          process.stdout.write(t.target_head);
+          NODE
+          )"
+          echo "PROD_TARGET_HEAD=$PROD_TARGET_HEAD" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor "$PROD_TARGET_HEAD" "$GITHUB_SHA"
+
+      - name: Checkout exact release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/v1.3-mobile-cloud --depth=100
+          git cat-file -e "$PROD_TARGET_HEAD^{commit}"
+          git checkout --detach "$PROD_TARGET_HEAD"
+
+      - name: Require Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Wrangler
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Download smoke-verified candidate descriptor
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_KEY="release-candidates/$PROD_TARGET_HEAD/candidate.json"
+          npx wrangler r2 object get "$ARTIFACT_BUCKET/$CANDIDATE_KEY" --file=/tmp/release-candidate.json
+          node <<'NODE'
+          const { readFileSync, appendFileSync } = require("node:fs");
+          const c = JSON.parse(readFileSync("/tmp/release-candidate.json","utf8"));
+          const target = process.env.PROD_TARGET_HEAD;
+          if (c.format !== "nuevo-amanecer-pos-release-candidate-v1") throw new Error("invalid candidate format");
+          if (c.status !== "STAGING_SMOKE_PASS") throw new Error("candidate did not pass staging smoke");
+          if (c.target_head !== target) throw new Error("candidate target mismatch");
+          if (!/^[0-9a-f]{64}$/.test(c.artifact_sha256 || "")) throw new Error("invalid artifact sha256");
+          if (!/^[0-9a-f]{64}$/.test(c.site_manifest_sha256 || "")) throw new Error("invalid manifest sha256");
+          if (!Number.isSafeInteger(Number(c.staging_run_id)) || Number(c.staging_run_id) <= 0) throw new Error("invalid staging run id");
+          const prefix = "release-candidates/" + target + "/";
+          if (typeof c.artifact_key !== "string" || !c.artifact_key.startsWith(prefix) ||
+              c.artifact_key.includes("..") || c.artifact_key.startsWith("/")) {
+            throw new Error("candidate artifact key outside target namespace");
+          }
+          if (c.data_policy !== "synthetic-only") throw new Error("candidate staging data policy mismatch");
+          appendFileSync(process.env.GITHUB_ENV, "RELEASE_ARTIFACT_KEY="+c.artifact_key+"\n");
+          appendFileSync(process.env.GITHUB_ENV, "RELEASE_ARTIFACT_SHA256="+c.artifact_sha256+"\n");
+          appendFileSync(process.env.GITHUB_ENV, "RELEASE_MANIFEST_SHA256="+c.site_manifest_sha256+"\n");
+          appendFileSync(process.env.GITHUB_ENV, "RELEASE_STAGING_RUN_ID="+String(c.staging_run_id)+"\n");
+          NODE
+
+      - name: Download and verify immutable site artifact
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/na-prod-release /tmp/na-prod-site.tar.gz /tmp/na-prod-tar-list.txt
+          mkdir -p /tmp/na-prod-release
+          npx wrangler r2 object get "$ARTIFACT_BUCKET/$RELEASE_ARTIFACT_KEY" --file=/tmp/na-prod-site.tar.gz
+          test "$(sha256sum /tmp/na-prod-site.tar.gz | awk '{print $1}')" = "$RELEASE_ARTIFACT_SHA256"
+          tar -tzf /tmp/na-prod-site.tar.gz > /tmp/na-prod-tar-list.txt
+          node <<'NODE'
+          const { readFileSync } = require("node:fs");
+          const entries = readFileSync("/tmp/na-prod-tar-list.txt","utf8").split(/\r?\n/).filter(Boolean);
+          if (!entries.length) throw new Error("empty release archive");
+          for (const entry of entries) {
+            if (entry.startsWith("/") || entry.includes("../") || entry.includes("\\")) throw new Error("unsafe release archive entry");
+            if (!(entry === "site/" || entry.startsWith("site/") || entry === "site-manifest.json")) {
+              throw new Error("unexpected release archive entry: " + entry);
+            }
+          }
+          if (!entries.includes("site-manifest.json")) throw new Error("site manifest missing from release archive");
+          NODE
+          tar -xzf /tmp/na-prod-site.tar.gz -C /tmp/na-prod-release
+          test -d /tmp/na-prod-release/site
+          test -f /tmp/na-prod-release/site-manifest.json
+          test "$(sha256sum /tmp/na-prod-release/site-manifest.json | awk '{print $1}')" = "$RELEASE_MANIFEST_SHA256"
+          cd "$GITHUB_WORKSPACE"
+          node tools/release/site-artifact.mjs verify             /tmp/na-prod-release/site             /tmp/na-prod-release/site-manifest.json             "$PROD_TARGET_HEAD"
+
+      - name: Install exact verified site without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/cloudflare-pos-web/_site
+          mv /tmp/na-prod-release/site tools/cloudflare-pos-web/_site
+          node tools/release/site-artifact.mjs verify             tools/cloudflare-pos-web/_site             /tmp/na-prod-release/site-manifest.json             "$PROD_TARGET_HEAD"
+
+      - name: Hosted production safety checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/v1.3-pos-web-deploy.test.mjs
+          test -f tools/cloudflare-pos-web/_site/app/index.html
+          test -f tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$PROD_TARGET_HEAD" tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$PROD_TARGET_HEAD" tools/cloudflare-pos-web/_site/index.html
+
+      - name: Production web Worker dry-run
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Deploy exact verified site to production web Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Verify production serves promoted artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            ROOT_CODE="$(curl -sS -D /tmp/prod-root.headers -o /tmp/prod-root.html -w '%{http_code}' --max-time 15 "$PROD_WEB_URL/" || true)"
+            APP_CODE="$(curl -sS -o /tmp/prod-app.html -w '%{http_code}' --max-time 15 "$PROD_WEB_URL/app/" || true)"
+            SW_CODE="$(curl -sS -o /tmp/prod-sw.js -w '%{http_code}' --max-time 15 "$PROD_WEB_URL/app/sw.js" || true)"
+            CONFIG_CODE="$(curl -sS -o /tmp/prod-runtime-config.js -w '%{http_code}' --max-time 15 "$PROD_WEB_URL/runtime-config.js" || true)"
+            if test "$ROOT_CODE" = "200" &&
+               test "$APP_CODE" = "200" &&
+               test "$SW_CODE" = "200" &&
+               test "$CONFIG_CODE" = "200" &&
+               grep -Fq "Nuevo Amanecer POS" /tmp/prod-root.html &&
+               grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/prod-app.html &&
+               grep -Fq "$PROD_TARGET_HEAD" /tmp/prod-sw.js &&
+               grep -Fq '"environment":"production"' /tmp/prod-runtime-config.js &&
+               grep -Fq "nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev" /tmp/prod-runtime-config.js &&
+               grep -Fiq "cache-control: no-store" /tmp/prod-root.headers; then
+              echo "PRODUCTION_ARTIFACT_PROMOTION_PASS target=$PROD_TARGET_HEAD"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Production artifact verification failed" >&2
+          exit 1
+
+      - name: Production release summary
+        shell: bash
+        run: |
+          {
+            echo "## Nuevo Amanecer — Production Artifact Promotion"
+            echo "- Status: DEPLOYED_AND_VERIFIED"
+            echo "- Target: $PROD_TARGET_HEAD"
+            echo "- Artifact SHA-256: $RELEASE_ARTIFACT_SHA256"
+            echo "- Site manifest SHA-256: $RELEASE_MANIFEST_SHA256"
+            echo "- STAGING validation run: $RELEASE_STAGING_RUN_ID"
+            echo "- Rebuilt static POS in production: NO"
+            echo "- Production D1 writes: NO"
+          } >> "$GITHUB_STEP_SUMMARY"

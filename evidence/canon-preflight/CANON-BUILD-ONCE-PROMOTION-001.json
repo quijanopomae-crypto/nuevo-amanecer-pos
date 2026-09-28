@@ -1,0 +1,54 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-BUILD-ONCE-PROMOTION-001",
+  "base_ref": "98cc13be335f60fe8c0baf4c8ae36b53017e78e8",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Definir promoción web PROD desde el artefacto exacto validado en STAGING, sin reconstrucción estática y sin ejecutar despliegue en este PR.",
+    "READS": [
+      "Successful STAGING run 36412251893",
+      "Current hosted production web deploy workflow",
+      "STAGING artifact bucket contract"
+    ],
+    "WRITES": [
+      "Release manifest tool",
+      "STAGING candidate upload",
+      "Production artifact promotion workflow",
+      "Regression tests"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Web release orchestration only"
+    ],
+    "STORAGE_AFFECTED": [
+      "Future R2 candidate objects; no write during PR"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No production deployment from this PR.",
+      "Production release requires a later owner trigger with exact target_head.",
+      "Static POS bytes come only from the sealed STAGING artifact.",
+      "Artifact SHA and per-file manifest must pass before deploy.",
+      "Production release does not write D1."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "STAGING workflow",
+      "production web release",
+      "rollback foundation"
+    ],
+    "RISKS": [
+      "Using target source instead of artifact would violate build-once",
+      "Archive mismatch could deploy untested bytes"
+    ],
+    "ROLLBACK": [
+      "Revert PR before release trigger; no remote state changes"
+    ],
+    "TEST_PLAN": [
+      "Manifest deterministic ordering",
+      "Tamper detection",
+      "Workflow requires R2 candidate + SHA verification",
+      "Workflow contains no POS source assembly"
+    ]
+  }
+}

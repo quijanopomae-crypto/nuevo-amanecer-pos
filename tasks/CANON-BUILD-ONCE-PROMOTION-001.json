@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-BUILD-ONCE-PROMOTION-001",
+  "environment": "CANON",
+  "base_ref": "98cc13be335f60fe8c0baf4c8ae36b53017e78e8",
+  "objective": "Definir promoción web PROD desde el artefacto exacto validado en STAGING, sin reconstrucción estática y sin ejecutar despliegue en este PR.",
+  "owner_authorization": "El owner autorizó completar las fases restantes de hardening.",
+  "allowed_files": [
+    "tasks/CANON-BUILD-ONCE-PROMOTION-001.json",
+    "evidence/canon-preflight/CANON-BUILD-ONCE-PROMOTION-001.json",
+    ".github/workflows/production-release.yml",
+    ".github/workflows/staging-deploy.yml",
+    "tools/release/site-artifact.mjs",
+    "tests/cloud-sync/release-artifact-contract.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_5_BUILD_ONCE.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "ops/*trigger.json"
+  ],
+  "invariants": [
+    "No production deployment from this PR.",
+    "Production release requires a later owner trigger with exact target_head.",
+    "Static POS bytes come only from the sealed STAGING artifact.",
+    "Artifact SHA and per-file manifest must pass before deploy.",
+    "Production release does not write D1."
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 3,
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-5-ARTIFACT-001",
+  "environment": "LABORATORIO",
+  "base_ref": "98cc13be335f60fe8c0baf4c8ae36b53017e78e8",
+  "objective": "Construir una vez el sitio validado por STAGING, sellarlo con manifiesto/checksum en R2 STAGING y definir una promoción PROD que descargue/verifique exactamente ese artefacto sin reconstruir.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/INFRA-PRODUCTION-HARDENING-PHASE-5-ARTIFACT-001.json",
+    "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-PHASE-5-ARTIFACT-001.json",
+    "tasks/CANON-BUILD-ONCE-PROMOTION-001.json",
+    "evidence/canon-preflight/CANON-BUILD-ONCE-PROMOTION-001.json",
+    ".github/workflows/staging-deploy.yml",
+    ".github/workflows/production-release.yml",
+    "tools/release/site-artifact.mjs",
+    "tests/cloud-sync/release-artifact-contract.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_5_BUILD_ONCE.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "ops/*trigger.json"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-PHASE-5-ARTIFACT-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

@@ -196,6 +196,23 @@ jobs:
           grep -Fq "$STAGING_TARGET_HEAD" tools/cloudflare-pos-web/_site/index.html
           grep -Fq "$STAGING_TARGET_HEAD" tools/cloudflare-pos-web/_site/app/sw.js
 
+      - name: Seal immutable STAGING site candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/na-release-candidate /tmp/na-site.tar /tmp/na-site.tar.gz
+          mkdir -p /tmp/na-release-candidate/site
+          cp -a tools/cloudflare-pos-web/_site/. /tmp/na-release-candidate/site/
+          node tools/release/site-artifact.mjs build             /tmp/na-release-candidate/site             "$STAGING_TARGET_HEAD"             /tmp/na-release-candidate/site-manifest.json
+          SITE_MANIFEST_SHA256="$(sha256sum /tmp/na-release-candidate/site-manifest.json | awk '{print $1}')"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner             -C /tmp/na-release-candidate -cf /tmp/na-site.tar site site-manifest.json
+          gzip -n -c /tmp/na-site.tar > /tmp/na-site.tar.gz
+          SITE_ARTIFACT_SHA256="$(sha256sum /tmp/na-site.tar.gz | awk '{print $1}')"
+          test -n "$SITE_MANIFEST_SHA256"
+          test -n "$SITE_ARTIFACT_SHA256"
+          echo "SITE_MANIFEST_SHA256=$SITE_MANIFEST_SHA256" >> "$GITHUB_ENV"
+          echo "SITE_ARTIFACT_SHA256=$SITE_ARTIFACT_SHA256" >> "$GITHUB_ENV"
+
       - name: STAGING web dry-run and deploy
         working-directory: tools/cloudflare-lab
         shell: bash
@@ -235,15 +252,34 @@ jobs:
           grep -Fq "Nuevo Amanecer POS" /tmp/staging-root.html
           grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html
 
-      - name: Verify isolated STAGING R2 write
+      - name: Publish smoke-verified immutable release candidate
         working-directory: tools/cloudflare-lab
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/staging-provision.json <<EOF
-          {"environment":"staging","data_policy":"synthetic-only","target_head":"$STAGING_TARGET_HEAD","github_run_id":"$GITHUB_RUN_ID"}
+          test -f /tmp/na-site.tar.gz
+          test -f /tmp/na-release-candidate/site-manifest.json
+          test "$(sha256sum /tmp/na-site.tar.gz | awk '{print $1}')" = "$SITE_ARTIFACT_SHA256"
+          test "$(sha256sum /tmp/na-release-candidate/site-manifest.json | awk '{print $1}')" = "$SITE_MANIFEST_SHA256"
+          ARTIFACT_KEY="release-candidates/$STAGING_TARGET_HEAD/$SITE_ARTIFACT_SHA256/pos-site.tar.gz"
+          CANDIDATE_KEY="release-candidates/$STAGING_TARGET_HEAD/candidate.json"
+          npx wrangler r2 object put "$STAGING_R2_BUCKET/$ARTIFACT_KEY" --file=/tmp/na-site.tar.gz
+          cat > /tmp/release-candidate.json <<EOF
+          {
+            "format": "nuevo-amanecer-pos-release-candidate-v1",
+            "status": "STAGING_SMOKE_PASS",
+            "target_head": "$STAGING_TARGET_HEAD",
+            "artifact_key": "$ARTIFACT_KEY",
+            "artifact_sha256": "$SITE_ARTIFACT_SHA256",
+            "site_manifest_sha256": "$SITE_MANIFEST_SHA256",
+            "staging_run_id": "$GITHUB_RUN_ID",
+            "staging_web_url": "$STAGING_WEB_URL",
+            "data_policy": "synthetic-only"
+          }
           EOF
-          npx wrangler r2 object put "$STAGING_R2_BUCKET/provisioning/$STAGING_TARGET_HEAD.json" --file=/tmp/staging-provision.json
+          npx wrangler r2 object put "$STAGING_R2_BUCKET/$CANDIDATE_KEY" --file=/tmp/release-candidate.json
+          echo "STAGING_ARTIFACT_KEY=$ARTIFACT_KEY" >> "$GITHUB_ENV"
+          echo "STAGING_CANDIDATE_KEY=$CANDIDATE_KEY" >> "$GITHUB_ENV"
 
       - name: Cleanup smoke browser session
         if: ${{ always() && env.STAGING_SMOKE_SESSION_ID != '' && env.STAGING_D1_DATABASE_ID != '' }}
@@ -264,5 +300,8 @@ jobs:
             echo "- D1: $STAGING_D1_NAME"
             echo "- R2: $STAGING_R2_BUCKET"
             echo "- Target: $STAGING_TARGET_HEAD"
+            echo "- Candidate: $STAGING_CANDIDATE_KEY"
+            echo "- Artifact SHA-256: $SITE_ARTIFACT_SHA256"
+            echo "- Site manifest SHA-256: $SITE_MANIFEST_SHA256"
             echo "- Production resources touched: NO"
           } >> "$GITHUB_STEP_SUMMARY"
