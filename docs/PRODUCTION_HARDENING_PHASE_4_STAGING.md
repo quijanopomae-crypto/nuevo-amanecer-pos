@@ -41,3 +41,14 @@ escribe D1/R2 productivos ni usa datos comerciales.
 El seed sintético se ejecuta mediante `wrangler d1 execute --file` sobre D1 remota. El
 archivo no contiene `BEGIN` ni `COMMIT` explícitos; D1 administra la transacción del
 import internamente. El orden de las sentencias sintéticas permanece intacto.
+
+
+## Orden del bootstrap sintético
+
+La secuencia está validada ejecutando las 13 migraciones y el seed en SQLite:
+
+`LEGACY → import_runs/import_staging → FROZEN → PREPARED → candidate rows → COMMITTED → CANONICAL_READ_ONLY`.
+
+Esto respeta tanto el fence de importación como los triggers de candidato CANON. La transición
+posterior `CANONICAL_READ_ONLY → ACTIVE` continúa siendo exclusiva del workflow STAGING y
+restaura el guard inmediatamente.
