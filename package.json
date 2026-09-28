@@ -1,0 +1,13 @@
+{
+  "name": "nuevo-amanecer-pos-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "E2E smoke test harness for the Nuevo Amanecer POS CANON app. Test infrastructure only; does not ship with the product.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.47.2"
+  }
+}
