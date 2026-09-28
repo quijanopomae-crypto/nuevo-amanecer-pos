@@ -13,7 +13,7 @@ POS V9 (autoridad local) → OUTBOX durable → POST /commands/sale.create → D
 | Recurso | Valor |
 |---|---|
 | D1 | `nuevo-amanecer-lab` · `e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e` · ENAM |
-| Binding | `env.nuevo_amanecer_lab` |
+| Binding | `env.DB` |
 | Worker | `nuevo-amanecer-sync-lab` |
 | URL | `https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev` |
 
@@ -270,3 +270,5 @@ snapshot POS V9. El snapshot se firma y se publica en
 `POST /lab/workspace/import-baseline`.
 
 El Worker no interpreta ni ejecuta el dump SQL remoto y no escribe en R2.
+
+> Compatibilidad: el runtime acepta temporalmente el binding legacy `nuevo_amanecer_lab` mediante `database-binding.js`, pero las configuraciones activas usan `DB`.
