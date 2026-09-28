@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: v1-3-first-live-sale-finalization
+  group: nuevo-amanecer-production-change
   cancel-in-progress: false
 
 jobs:
