@@ -152,15 +152,14 @@ export async function createCanonicalSale(request, env, auth, json) {
       : json({ error:'operation_id_conflict',operation_id:body.operation_id },409);
   }
   if (await db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  const liveProductsReady=Number((await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects')").first())?.count)===3;
+  if (liveProductsReady && await db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
   const products = [];
   for (const item of body.items) {
-    const product = await db.prepare(`SELECT * FROM (
-      SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
-        FROM products WHERE promotion_id=?1 AND product_id=?2
-      UNION ALL
-      SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance
-        FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
-    ) LIMIT 1`).bind(body.promotion_id,item.product_id).first();
+    let product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
+      FROM products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
+    if (!product && liveProductsReady) product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance
+      FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
     if (!product || ![0,1].includes(product.tracks_inventory) || Number(product.stock_revision) !== item.expected_stock_revision ||
         (product.tracks_inventory === 1 && (product.current_stock_quantity === null || Number(product.current_stock_quantity) < item.quantity))) return json({ error:'stale_stock',product_id:item.product_id },409);
     products.push(product);
