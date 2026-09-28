@@ -72,31 +72,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_canonical_live_products_barcode
   ON canonical_live_products(promotion_id,lower(barcode))
   WHERE barcode IS NOT NULL AND trim(barcode)<>'';
 
-DROP VIEW IF EXISTS canonical_product_codes;
-CREATE VIEW canonical_product_codes AS
-  SELECT promotion_id,product_id,lower(trim(sku)) AS code,'sku' AS code_type
-    FROM products WHERE sku IS NOT NULL AND trim(sku)<>''
-  UNION ALL
-  SELECT promotion_id,product_id,lower(trim(barcode)),'barcode'
-    FROM products WHERE barcode IS NOT NULL AND trim(barcode)<>''
-  UNION ALL
-  SELECT promotion_id,product_id,lower(trim(legacy_alternate_code)),'alternate'
-    FROM products WHERE legacy_alternate_code IS NOT NULL AND trim(legacy_alternate_code)<>''
-  UNION ALL
-  SELECT p.promotion_id,p.product_id,lower(trim(CAST(j.value AS TEXT))),'alternate'
-    FROM products p,json_each(p.alternate_codes_json) j
-    WHERE j.type='text' AND trim(CAST(j.value AS TEXT))<>''
-  UNION ALL
-  SELECT promotion_id,product_id,lower(trim(sku)),'sku'
-    FROM canonical_live_products WHERE sku IS NOT NULL AND trim(sku)<>''
-  UNION ALL
-  SELECT promotion_id,product_id,lower(trim(barcode)),'barcode'
-    FROM canonical_live_products WHERE barcode IS NOT NULL AND trim(barcode)<>''
-  UNION ALL
-  SELECT p.promotion_id,p.product_id,lower(trim(CAST(j.value AS TEXT))),'alternate'
-    FROM canonical_live_products p,json_each(p.alternate_codes_json) j
-    WHERE j.type='text' AND trim(CAST(j.value AS TEXT))<>'';
-
 CREATE TRIGGER IF NOT EXISTS canonical_product_operations_authorized_insert
 BEFORE INSERT ON canonical_product_operations
 WHEN NOT EXISTS(
@@ -136,24 +111,46 @@ WHEN
   OR (NEW.alternate_codes_json IS NOT NULL AND (json_type(NEW.alternate_codes_json)<>'array' OR json_array_length(NEW.alternate_codes_json)>10))
   OR EXISTS(SELECT 1 FROM json_each(NEW.alternate_codes_json) WHERE type<>'text' OR trim(CAST(value AS TEXT))='')
   OR EXISTS(SELECT 1 FROM products p WHERE p.promotion_id=NEW.promotion_id AND p.product_id=NEW.product_id)
-  OR EXISTS(SELECT 1 FROM canonical_product_codes c
-      WHERE c.promotion_id=NEW.promotion_id AND c.code IN (
-        SELECT lower(trim(NEW.sku)) WHERE NEW.sku IS NOT NULL AND trim(NEW.sku)<>''
-        UNION ALL SELECT lower(trim(NEW.barcode)) WHERE NEW.barcode IS NOT NULL AND trim(NEW.barcode)<>''
-        UNION ALL SELECT lower(trim(CAST(value AS TEXT))) FROM json_each(NEW.alternate_codes_json) WHERE type='text' AND trim(CAST(value AS TEXT))<>''
-      ))
+  OR EXISTS(
+    SELECT 1
+    FROM json_each(json_insert(json_insert(COALESCE(NEW.alternate_codes_json,'[]'),'$[#]',NEW.sku),'$[#]',NEW.barcode)) incoming
+    WHERE incoming.type='text' AND trim(CAST(incoming.value AS TEXT))<>''
+      AND (
+        EXISTS(
+          SELECT 1 FROM products p
+          WHERE p.promotion_id=NEW.promotion_id AND (
+            lower(trim(COALESCE(p.sku,'')))=lower(trim(CAST(incoming.value AS TEXT)))
+            OR lower(trim(COALESCE(p.barcode,'')))=lower(trim(CAST(incoming.value AS TEXT)))
+            OR lower(trim(COALESCE(p.legacy_alternate_code,'')))=lower(trim(CAST(incoming.value AS TEXT)))
+            OR EXISTS(
+              SELECT 1 FROM json_each(p.alternate_codes_json) existing
+              WHERE existing.type='text'
+                AND lower(trim(CAST(existing.value AS TEXT)))=lower(trim(CAST(incoming.value AS TEXT)))
+            )
+          )
+        )
+        OR EXISTS(
+          SELECT 1 FROM canonical_live_products p
+          WHERE p.promotion_id=NEW.promotion_id AND (
+            lower(trim(COALESCE(p.sku,'')))=lower(trim(CAST(incoming.value AS TEXT)))
+            OR lower(trim(COALESCE(p.barcode,'')))=lower(trim(CAST(incoming.value AS TEXT)))
+            OR EXISTS(
+              SELECT 1 FROM json_each(p.alternate_codes_json) existing
+              WHERE existing.type='text'
+                AND lower(trim(CAST(existing.value AS TEXT)))=lower(trim(CAST(incoming.value AS TEXT)))
+            )
+          )
+        )
+      )
+  )
   OR (
-    SELECT COUNT(*) FROM (
-      SELECT lower(trim(NEW.sku)) AS code WHERE NEW.sku IS NOT NULL AND trim(NEW.sku)<>''
-      UNION ALL SELECT lower(trim(NEW.barcode)) WHERE NEW.barcode IS NOT NULL AND trim(NEW.barcode)<>''
-      UNION ALL SELECT lower(trim(CAST(value AS TEXT))) FROM json_each(NEW.alternate_codes_json) WHERE type='text' AND trim(CAST(value AS TEXT))<>''
-    )
+    SELECT COUNT(*)
+    FROM json_each(json_insert(json_insert(COALESCE(NEW.alternate_codes_json,'[]'),'$[#]',NEW.sku),'$[#]',NEW.barcode))
+    WHERE type='text' AND trim(CAST(value AS TEXT))<>''
   ) <> (
-    SELECT COUNT(DISTINCT code) FROM (
-      SELECT lower(trim(NEW.sku)) AS code WHERE NEW.sku IS NOT NULL AND trim(NEW.sku)<>''
-      UNION ALL SELECT lower(trim(NEW.barcode)) WHERE NEW.barcode IS NOT NULL AND trim(NEW.barcode)<>''
-      UNION ALL SELECT lower(trim(CAST(value AS TEXT))) FROM json_each(NEW.alternate_codes_json) WHERE type='text' AND trim(CAST(value AS TEXT))<>''
-    )
+    SELECT COUNT(DISTINCT lower(trim(CAST(value AS TEXT))))
+    FROM json_each(json_insert(json_insert(COALESCE(NEW.alternate_codes_json,'[]'),'$[#]',NEW.sku),'$[#]',NEW.barcode))
+    WHERE type='text' AND trim(CAST(value AS TEXT))<>''
   )
 BEGIN SELECT RAISE(ABORT,'invalid_live_product'); END;
 
