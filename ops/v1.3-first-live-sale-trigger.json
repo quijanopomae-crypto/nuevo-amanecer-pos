@@ -4,9 +4,11 @@
   "authorized_by": "owner",
   "requested_action": "complete-first-live-canon-validation-and-release-v1.3",
   "safety": "fail-closed-non-inventory-canary-only",
+  "target_head": "3c1620e4390b189ad62b551e6563c9d59fc86539",
   "production_tag": "v1.3-production",
   "rollback_tag": "v1.2-production",
-  "note": "Complete the remaining V1.3 release gate. If no safe existing tracks_inventory=0 product exists, stop before any sale mutation.",
-  "retry_attempt": 2,
-  "retry_reason": "Read-only candidate summary after fail-closed first attempt."
+  "requested_at_utc": "2026-09-28T16:56:00Z",
+  "note": "Owner authorized completion of the V1.3 release gate at the post-Phase-6 HEAD. Fail-closed: if no safe tracks_inventory=0 product exists, stop before any sale mutation. Creates the technical NO-FUNDS non-inventory canary sale (<=100.00), writes the R2 manifest and the immutable v1.3-production tag.",
+  "retry_attempt": 3,
+  "retry_reason": "Owner re-authorization to execute the first-live finalization directly after skipping the optional read-only pre-check."
 }
