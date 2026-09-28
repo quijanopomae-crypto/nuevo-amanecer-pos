@@ -11,8 +11,10 @@ test('staging deployment is owner-triggered and serialized outside production', 
   assert.match(workflow,/ops\/staging-deploy-trigger\.json/);
   assert.match(workflow,/authorized_by !== "owner"/);
   assert.match(workflow,/requested_action !== "deploy-staging"/);
-  assert.match(workflow,/STAGING_TARGET_HEAD/);
-  assert.match(workflow,/git merge-base --is-ancestor/);
+  assert.match(workflow,/STAGING_TARGET_HEAD="\$\(node <<'NODE'/);
+  assert.match(workflow,/process\.stdout\.write\(t\.target_head\)/);
+  assert.match(workflow,/echo "STAGING_TARGET_HEAD=\$STAGING_TARGET_HEAD" >> "\$GITHUB_ENV"/);
+  assert.match(workflow,/git merge-base --is-ancestor "\$STAGING_TARGET_HEAD" "\$GITHUB_SHA"/);
   assert.match(workflow,/group: nuevo-amanecer-staging-change/);
   assert.match(workflow,/cancel-in-progress: false/);
   assert.doesNotMatch(workflow,/workflow_dispatch:/);
