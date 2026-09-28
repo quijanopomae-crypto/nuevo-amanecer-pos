@@ -36,3 +36,15 @@ El JavaScript Motion NO se copia byte por byte porque LAB y CANON usan lifecycle
 - No modifica `laboratorio/**`.
 - No toca datos, D1, R2, sesión, sync, outbox ni negocio.
 - No despliega producción.
+
+## Traducción de namespace runtime
+
+La paridad visual no significa que todo asset deba ser idéntico byte por byte. LAB y CANON usan namespaces runtime distintos en dos superficies:
+
+- `styles/pages/clientes.css`: LAB emite `lab-v2-*` / `lab-client-*`; CANON emite `na-v2-*` / `na-client-*`.
+- `animations/transitions.css`: LAB usa `lab-enter-*`, `lab-client-*`, `lab-scroll-*` y `lab-module-*`; CANON usa sus equivalentes `na-*`.
+
+El manifest marca únicamente esos dos assets con `transform: canon-namespace`. El promotor aplica una transformación determinista antes de escribir o comparar el mirror CANON. Los otros 21 assets mantienen identidad byte por byte.
+
+El gate debe comparar CANON contra la **salida promovida**, no contra el texto LAB crudo, y además comprobar que los selectores resultantes coinciden con las clases que el runtime CANON realmente genera.
+
