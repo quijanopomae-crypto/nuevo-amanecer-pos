@@ -129,6 +129,14 @@ test('launcher exposes a shell-only recovery path that preserves activation stor
   assert.doesNotMatch(refreshBlock, /BINDING_KEY|CREDENTIALS_KEY/);
 });
 
+test('launcher and app load no-store runtime configuration before hosted logic', () => {
+  assert.match(launcher, /<script src="\/runtime-config\.js"><\/script>[\s\S]*activate\.js/);
+  assert.match(appIndex, /<script src="\/runtime-config\.js"><\/script>[\s\S]*hosted-canonical-guard\.js/);
+  assert.match(router, /url\.pathname === '\/runtime-config\.js'/);
+  assert.match(router, /HOSTED_ENVIRONMENT/);
+  assert.match(router, /CANON_API_ORIGIN/);
+});
+
 test('network shell responses are no-store so recovery cannot reuse stale HTTP assets', () => {
   assert.match(router, /Cache-Control', 'no-store, max-age=0, must-revalidate'/);
   assert.match(router, /url\.pathname\.startsWith\('\/app\/'\)/);
