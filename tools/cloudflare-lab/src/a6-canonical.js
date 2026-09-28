@@ -455,8 +455,9 @@ async function canonicalRead(url,db,json){
   if(type==='status'){
     const counts={};for(const table of Object.keys(TABLES))counts[table]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(before.active_promotion_id).first()).count);
     if(before.mode==='ACTIVE'){
+      const liveProductsReady=await liveProductSchemaAvailable(db);
       counts.imported_products=counts.products;
-      counts.live_products=Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_live_products WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
+      counts.live_products=liveProductsReady?Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_live_products WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count):0;
       counts.products+=counts.live_products;
       counts.imported_credits=counts.credits;
       counts.live_credits=Number((await db.prepare('SELECT COUNT(*) AS count FROM live_credits WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
@@ -464,10 +465,12 @@ async function canonicalRead(url,db,json){
       counts.credit_payments+=Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL').bind(before.active_promotion_id).first()).count);
       for(const [name,sql] of Object.entries({sales:'canonical_sale_context x',sale_items:'canonical_sale_context x JOIN sale_items r ON r.sale_id=x.sale_id',cash_movements:'canonical_sale_context x JOIN cash_movements r ON r.sale_id=x.sale_id'}))
         counts[name]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${sql} WHERE x.promotion_id=?1`).bind(before.active_promotion_id).first()).count);
-      counts.inventory_movements=Number((await db.prepare(`SELECT COUNT(*) AS count FROM (
-        SELECT movement_id FROM canonical_inventory_effects WHERE promotion_id=?1
-        UNION ALL SELECT movement_id FROM canonical_live_inventory_effects WHERE promotion_id=?1
-      )`).bind(before.active_promotion_id).first()).count);
+      counts.inventory_movements=liveProductsReady
+        ?Number((await db.prepare(`SELECT COUNT(*) AS count FROM (
+          SELECT movement_id FROM canonical_inventory_effects WHERE promotion_id=?1
+          UNION ALL SELECT movement_id FROM canonical_live_inventory_effects WHERE promotion_id=?1
+        )`).bind(before.active_promotion_id).first()).count)
+        :Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_inventory_effects WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
       counts.expenses=await expenseLedgerCount(db,before.active_promotion_id);
     }
     const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
@@ -475,7 +478,7 @@ async function canonicalRead(url,db,json){
   }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
   const sqlName=type.replaceAll('-','_');let rows;
-  if(sqlName==='products'&&before.mode==='ACTIVE'){
+  if(sqlName==='products'&&before.mode==='ACTIVE'&&await liveProductSchemaAvailable(db)){
     rows=await db.prepare(`SELECT * FROM (
       SELECT 'I:' || product_id AS read_key,${TABLES.products.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS created_at
         FROM products WHERE promotion_id=?1
@@ -533,10 +536,11 @@ async function canonicalRead(url,db,json){
   } else if(TABLES[sqlName]){const key=TABLES[sqlName][0];rows=await db.prepare(`SELECT ${TABLES[sqlName].join(',')} FROM ${sqlName} WHERE promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();}
   else if(before.mode==='ACTIVE'){
     const key=sqlName==='sale_items'?"r.sale_id || char(0) || printf('%020d',r.line_number)":sqlName==='sales'?'r.sale_id':'r.movement_id';
-    const join=sqlName==='inventory_movements'?`(
+    const liveProductsReady=sqlName==='inventory_movements'?await liveProductSchemaAvailable(db):false;
+    const join=sqlName==='inventory_movements'?(liveProductsReady?`(
       SELECT movement_id,promotion_id FROM canonical_inventory_effects
       UNION ALL SELECT movement_id,promotion_id FROM canonical_live_inventory_effects
-    ) x JOIN inventory_movements r ON r.movement_id=x.movement_id`:'canonical_sale_context x JOIN '+sqlName+' r ON r.sale_id=x.sale_id';
+    ) x JOIN inventory_movements r ON r.movement_id=x.movement_id`:'canonical_inventory_effects x JOIN inventory_movements r ON r.movement_id=x.movement_id'):'canonical_sale_context x JOIN '+sqlName+' r ON r.sale_id=x.sale_id';
     const context=sqlName==='sales'?',x.customer_id,x.promotion_id,x.authority_epoch,x.control_revision,x.client_contract':'';
     const cashSession=sqlName==='cash_movements'?`,(SELECT s.session_id FROM canonical_cash_state s
       WHERE s.promotion_id=x.promotion_id AND r.rowid>s.cash_movement_watermark AND r.rowid<=s.closing_watermark
@@ -590,6 +594,11 @@ async function productLedgerCount(db,promotionId){
   if(!promotionId||!await productLedgerAvailable(db))return 0;
   const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_product_operations WHERE promotion_id=?1').bind(promotionId).first();
   return Number(row?.count)||0;
+}
+async function liveProductSchemaAvailable(db){
+  const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects')`).first();
+  return Number(row?.count)===3;
 }
 async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
