@@ -14,7 +14,7 @@
   "observability": { "enabled": false },
   "d1_databases": [
     {
-      "binding": "nuevo_amanecer_lab",
+      "binding": "DB",
       "database_name": "nuevo-amanecer-lab",
       "database_id": "e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e",
       "migrations_dir": "../../infra/database/migrations"
