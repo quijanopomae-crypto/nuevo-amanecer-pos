@@ -1,12 +1,35 @@
 (function (root) {
   'use strict';
 
-  var HOSTED_POS_HOST = 'nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev';
-  var CANON_API = 'https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev';
+  var HOSTED_SUFFIX = '.nuevo-amanecer-pos.workers.dev';
   var BINDING_KEY = 'na_canonical_binding';
   var CREDENTIALS_KEY = 'na_cloud_sync_credentials';
+  var config = root.NA_HOSTED_CONFIG || null;
+  var isHosted = !!(root.location && root.location.hostname.endsWith(HOSTED_SUFFIX));
 
-  if (!root.location || root.location.hostname !== HOSTED_POS_HOST) return;
+  if (!isHosted) return;
+
+  function validConfig(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value) ||
+        !['production', 'staging'].includes(value.environment) ||
+        value.hostedHost !== root.location.hostname ||
+        typeof value.apiOrigin !== 'string') return false;
+    try {
+      var url = new URL(value.apiOrigin);
+      return url.protocol === 'https:' && url.origin === value.apiOrigin &&
+        !url.username && !url.password && !url.search && !url.hash;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  if (!validConfig(config)) {
+    root.document.documentElement.dataset.naHostedCanon = 'config-error';
+    if (/^\/app(?:\/|$)/.test(root.location.pathname)) root.location.replace(root.location.origin + '/');
+    return;
+  }
+
+  var CANON_API = config.apiOrigin;
 
   function readJson(key) {
     try { return JSON.parse(root.localStorage.getItem(key) || 'null'); }
@@ -32,6 +55,7 @@
   var credentials = readJson(CREDENTIALS_KEY);
   if (validBinding(binding) && validCredentials(credentials)) {
     root.document.documentElement.dataset.naHostedCanon = 'bound';
+    root.document.documentElement.dataset.naHostedEnvironment = config.environment;
     return;
   }
 
