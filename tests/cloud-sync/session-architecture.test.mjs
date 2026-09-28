@@ -36,7 +36,7 @@ test('active authentication surface has no per-device lock/provisioning contract
 
 test('worker exchanges one activation secret for persistent sessions', () => {
   const worker = readFileSync('tools/cloudflare-lab/src/worker.js', 'utf8');
-  const migration = readFileSync('tools/cloudflare-lab/migrations/0010_session_auth.sql', 'utf8');
+  const migration = readFileSync('infra/database/migrations/0010_session_auth.sql', 'utf8');
   assert.match(worker, /\/auth\/activate/);
   assert.match(worker, /POS_ACTIVATION_SECRET/);
   assert.match(worker, /auth_sessions/);
