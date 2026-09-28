@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-4-STAGING-001",
+  "environment": "LABORATORIO",
+  "base_ref": "b96604968287fde99297b4aaaefe561fee40c7c9",
+  "objective": "Implementar el aprovisionamiento real y aislado de STAGING CANON con Worker web/backend, D1, R2 y dataset sintético, sin tocar ningún recurso productivo.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/INFRA-PRODUCTION-HARDENING-PHASE-4-STAGING-001.json",
+    "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-PHASE-4-STAGING-001.json",
+    "tools/cloudflare-lab/src/worker.js",
+    "tools/cloudflare-lab/wrangler.jsonc",
+    "tools/cloudflare-staging/README.md",
+    "tools/cloudflare-staging/environment-contract.json",
+    "tools/cloudflare-staging/wrangler.backend.template.jsonc",
+    "tools/cloudflare-staging/wrangler.web.template.jsonc",
+    "tools/cloudflare-staging/synthetic-seed.sql",
+    "tools/cloudflare-staging/scripts/render-backend-config.mjs",
+    ".github/workflows/staging-deploy.yml",
+    "tests/cloud-sync/staging-runtime-boundary.test.mjs",
+    "tests/cloud-sync/staging-deploy-workflow.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_4_STAGING.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "ops/*trigger.json",
+    "infra/database/migrations/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-PHASE-4-STAGING-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": true,
+  "production_writes": false,
+  "canon_writes": false
+}
