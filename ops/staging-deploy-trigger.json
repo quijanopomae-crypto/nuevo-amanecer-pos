@@ -3,13 +3,13 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "a078ac24687ecfdbb750b4d2388fa354c0dad4fc",
+  "target_head": "f796e802e1b4339650322be0fcf43f6e15ecd60e",
   "requested_action": "deploy-staging",
   "requested_reason": "Owner-authorized completion of production hardening Phase 4: provision isolated synthetic STAGING CANON after PR #174 passed LAB Mirror and CANON Critical CI.",
   "phase": "4B",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
-  "retry_attempt": 5,
-  "retry_reason": "Retry after A6 canonical reads were migrated from legacy env.nuevo_amanecer_lab to neutral DB; DB-only ACTIVE read regression is green.",
-  "trigger_base": "a078ac24687ecfdbb750b4d2388fa354c0dad4fc"
+  "retry_attempt": 6,
+  "retry_reason": "Final Phase 4 retry after pipe-safe hosted HTML smoke fix. Previous run passed ACTIVE canonical backend smoke; only curl|grep broken-pipe remained.",
+  "trigger_base": "f796e802e1b4339650322be0fcf43f6e15ecd60e"
 }
