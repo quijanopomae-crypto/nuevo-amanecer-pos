@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "task_id": "STAGING-DEPLOY-TARGET-HANDOFF-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "ca83941ed7af6e9fd0f917654d227b0b0e8d7df5",
+  "objective": "Corregir el handoff de STAGING_TARGET_HEAD dentro del mismo step del workflow STAGING sin tocar recursos remotos ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/STAGING-DEPLOY-TARGET-HANDOFF-FIX-001.json",
+    "laboratorio/pos-lab/preflight/STAGING-DEPLOY-TARGET-HANDOFF-FIX-001.json",
+    ".github/workflows/staging-deploy.yml",
+    "tests/cloud-sync/staging-deploy-workflow.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_4_STAGING.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "ops/*trigger.json"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/STAGING-DEPLOY-TARGET-HANDOFF-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
