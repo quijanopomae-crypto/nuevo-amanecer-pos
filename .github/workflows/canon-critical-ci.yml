@@ -18,7 +18,8 @@ on:
       - "tools/pos-experience/**"
       - ".github/workflows/canon-critical-ci.yml"
       - ".github/workflows/v1.3-prod-cutover.yml"
-      - ".github/workflows/v1.3-prod-preflight.yml"
+      - ".github/workflows/*.yml"
+      - "tools/cloudflare-staging/**"
   push:
     branches:
       - feature/v1.3-mobile-cloud
@@ -38,7 +39,8 @@ on:
       - "tools/pos-experience/**"
       - ".github/workflows/canon-critical-ci.yml"
       - ".github/workflows/v1.3-prod-cutover.yml"
-      - ".github/workflows/v1.3-prod-preflight.yml"
+      - ".github/workflows/*.yml"
+      - "tools/cloudflare-staging/**"
 
 permissions:
   contents: read
@@ -73,6 +75,9 @@ jobs:
       - name: Install Cloudflare test dependencies
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
+
+      - name: Production workflow serialization and staging isolation guards
+        run: node --test tests/cloud-sync/production-workflow-lock.test.mjs tests/cloud-sync/staging-isolation-contract.test.mjs
 
       - name: Production Worker dry-run
         working-directory: tools/cloudflare-lab
