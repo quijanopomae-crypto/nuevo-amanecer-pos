@@ -77,7 +77,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Production workflow serialization and staging isolation guards
-        run: node --test tests/cloud-sync/production-workflow-lock.test.mjs tests/cloud-sync/staging-isolation-contract.test.mjs
+        run: node --test tests/cloud-sync/production-workflow-lock.test.mjs tests/cloud-sync/staging-isolation-contract.test.mjs tests/cloud-sync/database-binding-compat.test.mjs
 
       - name: Production Worker dry-run
         working-directory: tools/cloudflare-lab

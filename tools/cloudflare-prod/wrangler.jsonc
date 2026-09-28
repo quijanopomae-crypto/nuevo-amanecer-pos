@@ -1,7 +1,7 @@
 {
   "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
   "name": "nuevo-amanecer-pos-prod",
-  "main": "../cloudflare-lab/src/worker.js",
+  "main": "../cloudflare-lab/src/worker-entry.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
   "observability": { "enabled": false },
