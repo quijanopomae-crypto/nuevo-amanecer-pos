@@ -90,3 +90,26 @@ test('LAB motion controllers have productive CANON counterparts rather than runt
     assert.ok(existsSync(canon),`missing CANON counterpart ${canon}`);
   }
 });
+
+test('promoted Clientes and Motion selectors match the namespaces emitted by CANON runtime',()=>{
+  const clientJs=read('POS/js/modules/client-credit-accounts-v2.js');
+  const pageMotion=read('POS/js/motion/page-transitions.js');
+  const scrollMotion=read('POS/js/motion/scroll-motion.js');
+  const clientCss=read('POS/css/experience-v2/pages/clientes.css');
+  const transitionCss=read('POS/css/experience-v2/animations/transitions.css');
+
+  for(const marker of ['na-v2-screen','na-client-account-screen','na-client-refresh-out','na-client-refresh-in']){
+    assert.ok(clientJs.includes(marker),`CANON client runtime missing ${marker}`);
+    assert.ok(clientCss.includes(marker) || transitionCss.includes(marker),`promoted CSS missing runtime selector ${marker}`);
+  }
+  assert.ok(pageMotion.includes('na-enter-fade'));
+  assert.ok(transitionCss.includes('na-enter-fade'));
+  assert.ok(scrollMotion.includes('na-scroll-linked'));
+  assert.ok(transitionCss.includes('na-scroll-linked'));
+  assert.ok(scrollMotion.includes('na-module-scroll-linked'));
+  assert.ok(transitionCss.includes('na-module-scroll-linked'));
+
+  assert.doesNotMatch(clientCss,/\blab-(?:v2|client)-/);
+  assert.doesNotMatch(transitionCss,/\blab-(?:enter|client|scroll|module|fade)-/);
+});
+
