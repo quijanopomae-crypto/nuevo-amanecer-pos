@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "authorized": true,
+  "authorized_by": "owner",
+  "target_branch": "feature/v1.3-mobile-cloud",
+  "target_head": "d9c06026eb730701d447e8e776c5d9c443f6b05a",
+  "requested_action": "deploy-staging",
+  "requested_reason": "Owner-authorized completion of production hardening Phase 4: provision isolated synthetic STAGING CANON after PR #174 passed LAB Mirror and CANON Critical CI.",
+  "phase": "4B",
+  "production_resources_allowed": false,
+  "data_policy": "synthetic-only"
+}
