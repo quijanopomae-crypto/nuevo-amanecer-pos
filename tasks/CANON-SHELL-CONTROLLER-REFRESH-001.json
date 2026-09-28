@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SHELL-CONTROLLER-REFRESH-001",
+  "environment": "CANON",
+  "base_ref": "11d2e7cfea524f53501bf0f36a84578268ca08be",
+  "objective": "Garantizar que un navegador que ya tiene abierto el POS cambie al shell CANON recién desplegado cuando un Service Worker nuevo toma control, sin exigir cerrar pestañas ni borrar datos.",
+  "owner_authorization": "El propietario reportó que tras el deploy la interfaz sigue igual y pidió corregir la causa real.",
+  "allowed_files": [
+    "tasks/CANON-SHELL-CONTROLLER-REFRESH-001.json",
+    "evidence/canon-preflight/CANON-SHELL-CONTROLLER-REFRESH-001.json",
+    "POS/index.html",
+    "tests/product-fixes/canon-shell-controller-refresh.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "POS/js/sync/**",
+    "POS/js/modules/**",
+    "POS/js/legacy-inline/**"
+  ],
+  "invariants": [
+    "No cambia lógica comercial, datos, autenticación, créditos, caja, inventario ni sync.",
+    "El primer registro de Service Worker en un navegador sin controller previo no fuerza recarga.",
+    "Un cambio real de controller en una sesión ya controlada fuerza como máximo una recarga por carga de página.",
+    "Se conserva registration.update() y updateViaCache none.",
+    "El cambio es reversible por revert del commit."
+  ],
+  "acceptance": [
+    "Con controller previo, controllerchange provoca exactamente una recarga aunque el evento se dispare más de una vez.",
+    "Sin controller previo, controllerchange no provoca recarga.",
+    "registration.update() continúa ejecutándose.",
+    "La regresión focal pasa y CANON Critical CI queda verde."
+  ],
+  "rollback": "Revertir el commit del cambio y volver a desplegar el build anterior."
+}
