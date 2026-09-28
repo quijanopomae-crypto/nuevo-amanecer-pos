@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "task_id": "INFRA-PRODUCTION-HARDENING-V2-001",
+  "environment": "LABORATORIO",
+  "base_ref": "c11b4692dd579ee1a351f58762b584b18b9b04dd",
+  "objective": "Blindar incrementalmente la infraestructura de Nuevo Amanecer POS sin desplegar: serializar escritores productivos, definir STAGING CANON aislado y preparar una capa compatible para el binding D1 neutral DB conservando el contrato legacy durante la transición.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/INFRA-PRODUCTION-HARDENING-V2-001.json",
+    "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-V2-001.json",
+    ".github/workflows/canon-critical-ci.yml",
+    ".github/workflows/owner-backup-recovery-drill.yml",
+    ".github/workflows/v1.3-first-live-sale.yml",
+    ".github/workflows/v1.3-pos-web-deploy.yml",
+    ".github/workflows/v1.3-prod-browser-cors-hotfix.yml",
+    ".github/workflows/v1.3-prod-cutover.yml",
+    "docs/PRODUCTION_HARDENING_PHASE_1.md",
+    "tests/cloud-sync/database-binding-compat.test.mjs",
+    "tests/cloud-sync/production-workflow-lock.test.mjs",
+    "tests/cloud-sync/staging-isolation-contract.test.mjs",
+    "tools/cloudflare-lab/src/database-binding.js",
+    "tools/cloudflare-lab/src/worker-entry.js",
+    "tools/cloudflare-lab/wrangler.jsonc",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-staging/README.md",
+    "tools/cloudflare-staging/environment-contract.json",
+    "tools/cloudflare-staging/wrangler.backend.template.jsonc",
+    "tools/cloudflare-staging/wrangler.web.template.jsonc"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "tools/cloudflare-lab/migrations/**",
+    "evidence/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-V2-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
