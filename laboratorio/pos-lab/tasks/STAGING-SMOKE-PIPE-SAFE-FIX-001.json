@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "task_id": "STAGING-SMOKE-PIPE-SAFE-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "89383c40085a111e0ac8c9dbe8022b9082bda965",
+  "objective": "Hacer el smoke web STAGING pipe-safe descargando HTML a archivos antes de grep, eliminando falsos FAIL curl 23.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/STAGING-SMOKE-PIPE-SAFE-FIX-001.json",
+    "laboratorio/pos-lab/preflight/STAGING-SMOKE-PIPE-SAFE-FIX-001.json",
+    ".github/workflows/staging-deploy.yml",
+    "tests/cloud-sync/staging-deploy-workflow.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_4_STAGING.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "ops/*trigger.json"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/STAGING-SMOKE-PIPE-SAFE-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
