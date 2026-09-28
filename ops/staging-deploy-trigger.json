@@ -3,13 +3,13 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "17418560f75617386e94d893a9c01280b77efd82",
+  "target_head": "a078ac24687ecfdbb750b4d2388fa354c0dad4fc",
   "requested_action": "deploy-staging",
   "requested_reason": "Owner-authorized completion of production hardening Phase 4: provision isolated synthetic STAGING CANON after PR #174 passed LAB Mirror and CANON Critical CI.",
   "phase": "4B",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
-  "retry_attempt": 4,
-  "retry_reason": "Retry after canonical promotion-order fix validated by end-to-end local migrations+seed test; prior run failed at authority_frozen before any backend/web deploy.",
-  "trigger_base": "17418560f75617386e94d893a9c01280b77efd82"
+  "retry_attempt": 5,
+  "retry_reason": "Retry after A6 canonical reads were migrated from legacy env.nuevo_amanecer_lab to neutral DB; DB-only ACTIVE read regression is green.",
+  "trigger_base": "a078ac24687ecfdbb750b4d2388fa354c0dad4fc"
 }
