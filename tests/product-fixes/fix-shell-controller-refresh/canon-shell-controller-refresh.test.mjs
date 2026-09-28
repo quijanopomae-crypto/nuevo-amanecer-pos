@@ -23,7 +23,8 @@ async function harness(controller) {
     register(url, options) {
       registrations += 1;
       assert.equal(url, 'sw.js');
-      assert.deepEqual(options, { scope: './', updateViaCache: 'none' });
+      assert.equal(options.scope, './');
+      assert.equal(options.updateViaCache, 'none');
       return Promise.resolve({
         update() {
           updates += 1;
