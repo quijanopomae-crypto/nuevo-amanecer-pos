@@ -1,0 +1,12 @@
+{
+  "format": "nuevo-amanecer-staging-contract-v1",
+  "environment": "staging",
+  "frontend_worker_name": "nuevo-amanecer-pos-web-staging",
+  "backend_worker_name": "nuevo-amanecer-pos-staging",
+  "d1_database_name": "nuevo-amanecer-staging",
+  "d1_binding": "DB",
+  "r2_bucket_name": "nuevo-amanecer-staging-artifacts",
+  "data_policy": "synthetic-only",
+  "production_resource_access": false,
+  "immutable_artifact_required": true
+}

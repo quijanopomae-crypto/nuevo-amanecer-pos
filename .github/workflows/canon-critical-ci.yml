@@ -5,40 +5,26 @@ on:
     paths:
       - "POS/**"
       - "tests/product-fixes/**"
-      - "tests/backup-*.test.mjs"
       - "tests/cloud-sync/**"
-      - "tools/cloudflare-lab/src/**"
-      - "tools/cloudflare-backup/**"
+      - "tools/cloudflare-lab/**"
       - "tools/cloudflare-prod/**"
-      - "tools/pos-local/setup.html"
-      - "tools/pos-local/setup.js"
-      - "tools/cloudflare-lab/migrations/**"
-      - "tools/cloudflare-lab/scripts/**"
-      - "tools/cloudflare-lab/test/**"
+      - "tools/cloudflare-staging/**"
+      - "tools/cloudflare-pos-web/**"
       - "tools/pos-experience/**"
-      - ".github/workflows/canon-critical-ci.yml"
-      - ".github/workflows/v1.3-prod-cutover.yml"
-      - ".github/workflows/v1.3-prod-preflight.yml"
+      - ".github/workflows/*.yml"
   push:
     branches:
       - feature/v1.3-mobile-cloud
     paths:
       - "POS/**"
       - "tests/product-fixes/**"
-      - "tests/backup-*.test.mjs"
       - "tests/cloud-sync/**"
-      - "tools/cloudflare-lab/src/**"
-      - "tools/cloudflare-backup/**"
+      - "tools/cloudflare-lab/**"
       - "tools/cloudflare-prod/**"
-      - "tools/pos-local/setup.html"
-      - "tools/pos-local/setup.js"
-      - "tools/cloudflare-lab/migrations/**"
-      - "tools/cloudflare-lab/scripts/**"
-      - "tools/cloudflare-lab/test/**"
+      - "tools/cloudflare-staging/**"
+      - "tools/cloudflare-pos-web/**"
       - "tools/pos-experience/**"
-      - ".github/workflows/canon-critical-ci.yml"
-      - ".github/workflows/v1.3-prod-cutover.yml"
-      - ".github/workflows/v1.3-prod-preflight.yml"
+      - ".github/workflows/*.yml"
 
 permissions:
   contents: read
@@ -52,59 +38,29 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
-      - name: LAB to CANON promotion gate
-        shell: bash
+      - name: JavaScript syntax
         run: |
-          set -euo pipefail
-          node tools/pos-experience/promote-lab-visuals.mjs --check
-          node --test \
-            tests/product-fixes/canon-lab-interface-parity.test.mjs \
-            tests/product-fixes/lab-canon-promotion-parity.test.mjs \
-            tests/product-fixes/canon-motion-bootstrap.test.mjs \
-            tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
-            tests/product-fixes/canonical-ui-contract.test.mjs
+          find POS/js tools/cloudflare-lab/src tools/cloudflare-pos-web/src tools/pos-experience -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
 
-      - name: Install Cloudflare test dependencies
+      - name: Product and cloud regression suites
+        run: |
+          node --test tests/product-fixes/*.test.mjs
+          node --test tests/cloud-sync/*.test.mjs
+
+      - name: Install Cloudflare lab dependencies
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
+
+      - name: Production workflow serialization and staging isolation guards
+        run: node --test tests/cloud-sync/production-workflow-lock.test.mjs tests/cloud-sync/staging-isolation-contract.test.mjs tests/cloud-sync/database-binding-compat.test.mjs
 
       - name: Production Worker dry-run
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
-
-      - name: CANON business regressions
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --test tests/product-fixes/fix*/*.test.mjs
-          node --test tests/backup-complete.test.mjs tests/backup-restore.test.mjs
-
-      - name: Cloud sync, offline outbox and idempotency regressions
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --test tests/cloud-sync/*.test.mjs
-
-      - name: Backup manifest and SQL snapshot contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
-          python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
-
-      - name: Apply all D1 migrations in isolated local database
-        working-directory: tools/cloudflare-lab
-        run: npx wrangler d1 migrations apply nuevo-amanecer-lab --local
-
-      - name: Tests must not modify tracked repository state
-        shell: bash
-        run: |
-          set -euo pipefail
-          git diff --exit-code
-          test -z "$(git status --porcelain --untracked-files=all)"

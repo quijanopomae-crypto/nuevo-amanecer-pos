@@ -1,0 +1,14 @@
+{
+  "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
+  "name": "nuevo-amanecer-pos-web-staging",
+  "main": "../cloudflare-pos-web/src/worker.js",
+  "compatibility_date": "2026-09-24",
+  "workers_dev": true,
+  "assets": {
+    "directory": "../cloudflare-pos-web/_site",
+    "binding": "ASSETS",
+    "run_worker_first": ["/", "/app", "/app/"],
+    "html_handling": "none",
+    "not_found_handling": "none"
+  }
+}
