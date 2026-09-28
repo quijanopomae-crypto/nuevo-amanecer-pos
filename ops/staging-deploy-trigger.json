@@ -3,13 +3,12 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "f796e802e1b4339650322be0fcf43f6e15ecd60e",
+  "target_head": "e8fb2db963141301a258c023204355a16c707d29",
   "requested_action": "deploy-staging",
-  "requested_reason": "Owner-authorized completion of production hardening Phase 4: provision isolated synthetic STAGING CANON after PR #174 passed LAB Mirror and CANON Critical CI.",
-  "phase": "4B",
+  "requested_reason": "Phase 5 build-once validation: deploy exact merged target to isolated STAGING, smoke it, then seal and publish immutable release candidate.",
+  "phase": "5",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
-  "retry_attempt": 6,
-  "retry_reason": "Final Phase 4 retry after pipe-safe hosted HTML smoke fix. Previous run passed ACTIVE canonical backend smoke; only curl|grep broken-pipe remained.",
-  "trigger_base": "f796e802e1b4339650322be0fcf43f6e15ecd60e"
+  "retry_attempt": 0,
+  "trigger_base": "e8fb2db963141301a258c023204355a16c707d29"
 }
