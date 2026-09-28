@@ -1,0 +1,69 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LAB-RUNTIME-NAMESPACE-PARITY-001",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "LAB Clientes genera lab-v2-* y lab-client-*; CANON client-credit-accounts-v2.js genera na-v2-* y na-client-*.",
+    "POS/css/experience-v2/pages/clientes.css es copia LAB y conserva lab-v2-* / lab-client-* pese a ejecutarse en CANON.",
+    "POS/css/experience-v2/animations/transitions.css conserva lab-enter-*, lab-client-*, lab-scroll-* y lab-module-*.",
+    "El runtime CANON usa na-enter-*, na-client-refresh-*, na-scroll-* y na-module-*.",
+    "El gate actual considera correcto el byte-for-byte LAB→CANON y por eso no detecta que los selectores productivos no casan con el DOM runtime.",
+    "Los únicos assets V2 productivos encontrados con estos namespaces runtime LAB son pages/clientes.css y animations/transitions.css."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Convertir la paridad visual de esos dos assets en equivalencia semántica LAB→CANON mediante transformación determinista de namespace.",
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "laboratorio/pos-lab/styles/pages/clientes.css",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/js/motion/page-transitions.js",
+      "POS/js/motion/scroll-motion.js",
+      "POS/css/motion/motion.css",
+      "POS/css/motion/transitions.css",
+      "tools/pos-experience/visual-assets.mjs",
+      "tools/pos-experience/promote-lab-visuals.mjs",
+      "tests/product-fixes/canon-lab-interface-parity.test.mjs",
+      "tests/product-fixes/lab-canon-promotion-parity.test.mjs"
+    ],
+    "WRITES": [
+      "Marcar dos assets como canon-namespace.",
+      "Transformar lab-* a na-* de forma determinista al escribir/verificar esos assets, preservando mapeos especiales de motion/easing.",
+      "Regenerar solo los dos mirrors CANON afectados.",
+      "Cambiar tests para validar la salida efectiva de producción y el contrato runtime."
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes workspace V2 dinámico",
+      "clases de transición de Clientes",
+      "clases de scroll/motion CANON"
+    ],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin cambios financieros ni comerciales.",
+      "Sin mutación de datos.",
+      "Sin cambio de API o persistencia."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Transitions es compartido por scroll visual de Clientes, Inventario, Ventas, Caja y Gastos; la transformación lo alinea con el namespace CANON ya usado por scroll-motion.js."
+    ],
+    "RISKS": [
+      "Transformar tokens de easing incorrectamente: se usa mapeo especial --lab-ease-standard → --na-motion-ease-standard.",
+      "Cambiar assets no afectados: la transformación queda opt-in por manifest solo para dos paths.",
+      "Drift futuro: CI compara CANON contra la salida transformada del LAB, no contra el fuente crudo."
+    ],
+    "ROLLBACK": ["Revertir el PR y redeploy."],
+    "TEST_PLAN": [
+      "Verificar 21 assets identity byte-for-byte.",
+      "Verificar dos assets canon-namespace contra su transformación determinista.",
+      "Afirmar ausencia de lab-v2/lab-client/lab-scroll/lab-module/lab-enter en los mirrors productivos afectados.",
+      "Afirmar presencia de na-v2/na-client/na-scroll/na-module/na-enter.",
+      "Ejecutar CANON Critical CI completo."
+    ]
+  }
+}
