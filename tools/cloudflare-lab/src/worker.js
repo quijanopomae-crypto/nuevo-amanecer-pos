@@ -20,6 +20,18 @@ const READ_TYPES = new Set(['sales', 'sale_items', 'inventory_movements']);
 const PAYMENT_METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
+const RUNTIME_ENVIRONMENTS = new Set(['lab', 'staging', 'production']);
+
+function runtimeEnvironment(env) {
+  const value = String(env.RUNTIME_ENVIRONMENT || 'lab').trim().toLowerCase();
+  return RUNTIME_ENVIRONMENTS.has(value) ? value : null;
+}
+
+function runtimeServiceName(environment) {
+  if (environment === 'production') return 'nuevo-amanecer-pos-prod';
+  if (environment === 'staging') return 'nuevo-amanecer-pos-staging';
+  return 'nuevo-amanecer-sync-lab';
+}
 
 export default {
   async fetch(request, env) {
@@ -28,7 +40,7 @@ export default {
     const isLabWorkspace = isLabWorkspacePath(url.pathname);
     try {
       if (isLabWorkspace) {
-        if (env.RUNTIME_ENVIRONMENT === 'production') return json({ error: 'not_found' }, 404);
+        if (runtimeEnvironment(env) !== 'lab') return json({ error: 'not_found' }, 404);
         if (request.method === 'OPTIONS') return labCors(new Response(null, { status: 204 }));
         return await handleLabWorkspace(request, url, env, { jsonLab, authorizeRead, authorizeSession });
       }
@@ -130,11 +142,18 @@ async function isCanonicalSaleRequest(request) {
 }
 
 async function health(env) {
+  const environment = runtimeEnvironment(env);
+  if (!environment) return json({ ok: false, error: 'invalid_runtime_environment', d1: 'not_checked' }, 503);
   if (!getDatabase(env)) {
-    return json({ ok: false, d1: 'binding_missing' }, 503);
+    return json({ ok: false, service: runtimeServiceName(environment), d1: 'binding_missing' }, 503);
   }
   const row = await getDatabase(env).prepare('SELECT 1 AS one').first();
-  return json({ ok: row?.one === 1, service: env.RUNTIME_ENVIRONMENT === 'production' ? 'nuevo-amanecer-pos-prod' : 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
+  return json({
+    ok: row?.one === 1,
+    service: runtimeServiceName(environment),
+    environment,
+    d1: row?.one === 1 ? 'ok' : 'error'
+  });
 }
 
 // A one-time activation secret issues a persistent session token.
