@@ -3,13 +3,13 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "d9c06026eb730701d447e8e776c5d9c443f6b05a",
+  "target_head": "20408f2c3ea49574260a7cda12dc9ade5aa7a596",
   "requested_action": "deploy-staging",
   "requested_reason": "Owner-authorized completion of production hardening Phase 4: provision isolated synthetic STAGING CANON after PR #174 passed LAB Mirror and CANON Critical CI.",
   "phase": "4B",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
-  "retry_attempt": 2,
-  "retry_reason": "Retry after fixing same-step STAGING_TARGET_HEAD handoff; original deployment run 36379550383 failed before any remote access.",
-  "trigger_base": "a85ebd8ea9e59cb3dc05b005506608cf3a42b92b"
+  "retry_attempt": 3,
+  "retry_reason": "Retry after D1 seed import compatibility fix; prior run applied schema successfully but seed import failed before backend/web deployment.",
+  "trigger_base": "20408f2c3ea49574260a7cda12dc9ade5aa7a596"
 }
