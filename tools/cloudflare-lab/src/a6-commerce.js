@@ -1,3 +1,4 @@
+import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
 const METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
@@ -79,7 +80,7 @@ export async function createCanonicalCreditAccount(request, env, auth, json) {
     return json({error:'invalid_credit_account'},400);
   }
   const normalized={...body,name:body.name.trim().replace(/\s+/g,' '),created_at:new Date(body.created_at).toISOString()};
-  const db=env.nuevo_amanecer_lab, principalId=auth.principalId;
+  const db=getDatabase(env), principalId=auth.principalId;
   async function authorityError() {
     const control=await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
       LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId).first();
@@ -126,7 +127,7 @@ export async function createCanonicalSale(request, env, auth, json) {
   if (checked.error) return json({ error: checked.error }, 400);
   body = checked.value;
   const principalId = auth.principalId;
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   // Authorization and the authority contract apply even to a durable replay.
   // Recheck again after replay lookup (including recovery from a lost ACK).
   async function authorityError() {
