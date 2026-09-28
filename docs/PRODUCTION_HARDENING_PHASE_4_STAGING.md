@@ -34,3 +34,10 @@ posteriores.
 
 STAGING puede eliminarse y recrearse sin afectar producción. Ningún paso de esta fase
 escribe D1/R2 productivos ni usa datos comerciales.
+
+
+## Compatibilidad de import D1
+
+El seed sintético se ejecuta mediante `wrangler d1 execute --file` sobre D1 remota. El
+archivo no contiene `BEGIN` ni `COMMIT` explícitos; D1 administra la transacción del
+import internamente. El orden de las sentencias sintéticas permanece intacto.
