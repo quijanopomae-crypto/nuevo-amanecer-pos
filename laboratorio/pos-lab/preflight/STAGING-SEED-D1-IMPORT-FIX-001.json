@@ -1,0 +1,73 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "STAGING-SEED-D1-IMPORT-FIX-001",
+  "base_ref": "dcc9a8d1c5c0e177098d75d53f685c6e3b6acd9f",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "GitHub Actions",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "STAGING run 36410159549 logs",
+      "synthetic-seed.sql",
+      "Cloudflare D1 import behavior",
+      "staging deploy workflow contract test"
+    ],
+    "WRITES": [
+      "Remove BEGIN IMMEDIATE/COMMIT from synthetic seed",
+      "Add regression forbidding explicit transactions in D1 seed",
+      "Document D1 import compatibility"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "No remote state in this PR"
+    ],
+    "STORAGE_AFFECTED": [
+      "Repository only"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Seed remains synthetic-only",
+      "SQL row contents remain unchanged",
+      "No production resources or migrations change",
+      "No remote STAGING action occurs in this PR"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "STAGING seed import only"
+    ],
+    "RISKS": [
+      "Removing transaction wrappers must not alter statement order"
+    ],
+    "ROLLBACK": [
+      "Revert PR; existing STAGING D1 currently contains schema only"
+    ],
+    "TESTS": [
+      "Seed contains no BEGIN/COMMIT",
+      "Seed still contains synthetic product/customer/promotion",
+      "LAB Mirror CI",
+      "CANON Critical CI"
+    ]
+  }
+}
