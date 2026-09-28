@@ -31,7 +31,7 @@ test('ACTIVE canonical reads work with DB-only environment like STAGING', async 
 
   const auth = { authorization:'Bearer staging-session-token' };
   const status = await f.fetch('https://staging.example/read/canonical/status', { headers:auth });
-  assert.equal(status.status, 200, await status.text());
+  assert.equal(status.status, 200, await status.clone().text());
   const statusBody = await status.json();
   assert.equal(statusBody.mode, 'ACTIVE');
   assert.equal(statusBody.authority, 'canonical');
@@ -40,7 +40,7 @@ test('ACTIVE canonical reads work with DB-only environment like STAGING', async 
 
   for (const route of ['products','customers']) {
     const res = await f.fetch('https://staging.example/read/canonical/' + route + '?limit=5', { headers:auth });
-    assert.equal(res.status, 200, route + ': ' + await res.text());
+    assert.equal(res.status, 200, route + ': ' + await res.clone().text());
     const body = await res.json();
     assert.ok(Array.isArray(body.items), route + ' response is not paginated items');
     assert.ok(body.items.length > 0, route + ' should expose synthetic canonical rows');
