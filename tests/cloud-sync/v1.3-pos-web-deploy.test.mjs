@@ -10,21 +10,23 @@ const router = readFileSync('tools/cloudflare-pos-web/src/worker.js', 'utf8');
 const appIndex = readFileSync('POS/index.html', 'utf8');
 const hostedGuard = readFileSync('POS/js/sync/hosted-canonical-guard.js', 'utf8');
 const serviceWorker = readFileSync('POS/sw.js', 'utf8');
+const parsedConfig = JSON.parse(config);
 
 test('hosted POS uses explicit Worker routing with a stable workers.dev name', () => {
-  assert.match(config, /"name": "nuevo-amanecer-pos-web"/);
-  assert.match(config, /"main": "\.\/src\/worker\.js"/);
-  assert.match(config, /"directory": "\.\/_site"/);
-  assert.match(config, /"binding": "ASSETS"/);
-  assert.match(config, /"run_worker_first": \["\/", "\/app", "\/app\/"\]/);
-  assert.match(config, /"html_handling": "none"/);
-  assert.match(config, /"workers_dev": true/);
+  assert.equal(parsedConfig.name, 'nuevo-amanecer-pos-web');
+  assert.equal(parsedConfig.main, './src/worker.js');
+  assert.equal(parsedConfig.assets.directory, './_site');
+  assert.equal(parsedConfig.assets.binding, 'ASSETS');
+  assert.deepEqual(parsedConfig.assets.run_worker_first, ['/', '/app', '/app/']);
+  assert.equal(parsedConfig.assets.html_handling, 'none');
+  assert.equal(parsedConfig.workers_dev, true);
 });
 
 test('launcher requires browser activation and never embeds the activation secret', () => {
   assert.match(launcher, /Clave de activación/);
   assert.match(activation, /x-activation-secret/);
-  assert.match(activation, /nuevo-amanecer-pos-prod\.nuevo-amanecer-pos\.workers\.dev/);
+  assert.match(activation, /NA_HOSTED_CONFIG/);
+  assert.doesNotMatch(activation, /nuevo-amanecer-pos-prod\.nuevo-amanecer-pos\.workers\.dev/);
   assert.match(activation, /na_canonical_binding/);
   assert.match(activation, /na_cloud_sync_credentials/);
   assert.doesNotMatch(launcher + activation, /POS_ACTIVATION_SECRET|sk-[A-Za-z0-9_-]{20,}/);
@@ -75,7 +77,8 @@ test('hosted app refuses silent local mode and loads the guard before canonical 
   const guardIndex = appIndex.indexOf('js/sync/hosted-canonical-guard.js');
   const canonicalIndex = appIndex.indexOf('js/sync/canonical-client.js');
   assert.ok(guardIndex >= 0 && canonicalIndex > guardIndex);
-  assert.match(hostedGuard, /nuevo-amanecer-pos-web\.nuevo-amanecer-pos\.workers\.dev/);
+  assert.match(hostedGuard, /NA_HOSTED_CONFIG/);
+  assert.match(hostedGuard, /HOSTED_SUFFIX/);
   assert.match(hostedGuard, /na_canonical_binding/);
   assert.match(hostedGuard, /na_cloud_sync_credentials/);
   assert.match(hostedGuard, /location\.replace/);
