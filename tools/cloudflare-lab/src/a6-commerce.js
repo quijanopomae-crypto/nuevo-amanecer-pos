@@ -152,9 +152,14 @@ export async function createCanonicalSale(request, env, auth, json) {
       : json({ error:'operation_id_conflict',operation_id:body.operation_id },409);
   }
   if (await db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  const liveProductsReady=Number((await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects')").first())?.count)===3;
+  if (liveProductsReady && await db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
   const products = [];
   for (const item of body.items) {
-    const product = await db.prepare('SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory FROM products WHERE promotion_id=?1 AND product_id=?2').bind(body.promotion_id,item.product_id).first();
+    let product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
+      FROM products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
+    if (!product && liveProductsReady) product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance
+      FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
     if (!product || ![0,1].includes(product.tracks_inventory) || Number(product.stock_revision) !== item.expected_stock_revision ||
         (product.tracks_inventory === 1 && (product.current_stock_quantity === null || Number(product.current_stock_quantity) < item.quantity))) return json({ error:'stale_stock',product_id:item.product_id },409);
     products.push(product);
@@ -191,17 +196,19 @@ export async function createCanonicalSale(request, env, auth, json) {
     .bind(`${token}:session`,body.promotion_id,body.session_id));
   for (let index=0; index<body.items.length; index++) {
     const item=body.items[index], line=index+1, product=products[index];
+    const stockTable=product.provenance==='LIVE'?'canonical_live_products':'products';
     statements.push(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok) SELECT ?1,CASE WHEN EXISTS(
-      SELECT 1 FROM products WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4 AND tracks_inventory=?5
+      SELECT 1 FROM ${stockTable} WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4 AND tracks_inventory=?5
       AND (tracks_inventory=0 OR current_stock_quantity>=?6)) THEN 1 ELSE 0 END`).bind(`${token}:stock:${line}`,body.promotion_id,item.product_id,item.expected_stock_revision,product.tracks_inventory,item.quantity));
     statements.push(db.prepare(`INSERT INTO sale_items(sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at)
       SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?3)`).bind(body.sale_id,line,body.operation_id,item.product_id,item.quantity,item.unit_price_cents,item.line_total_cents,body.created_at));
     if (product.tracks_inventory !== 0) {
-      statements.push(db.prepare(`UPDATE products SET current_stock_quantity=current_stock_quantity-?1,stock_revision=stock_revision+1
+      const effectTable=product.provenance==='LIVE'?'canonical_live_inventory_effects':'canonical_inventory_effects';
+      statements.push(db.prepare(`UPDATE ${stockTable} SET current_stock_quantity=current_stock_quantity-?1,stock_revision=stock_revision+1
         WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4 AND current_stock_quantity>=?1`).bind(item.quantity,body.promotion_id,item.product_id,item.expected_stock_revision));
       statements.push(db.prepare(`INSERT INTO inventory_movements(movement_id,operation_id,sale_id,line_number,product_id,quantity,created_at)
         SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE changes()=1`).bind(`${body.operation_id}:inventory:${line}`,body.operation_id,body.sale_id,line,item.product_id,-item.quantity,body.created_at));
-      statements.push(db.prepare(`INSERT INTO canonical_inventory_effects(movement_id,operation_id,promotion_id,product_id,stock_revision_before,stock_revision_after,quantity)
+      statements.push(db.prepare(`INSERT INTO ${effectTable}(movement_id,operation_id,promotion_id,product_id,stock_revision_before,stock_revision_after,quantity)
         SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE changes()=1`).bind(`${body.operation_id}:inventory:${line}`,body.operation_id,body.promotion_id,item.product_id,item.expected_stock_revision,item.expected_stock_revision+1,-item.quantity));
     }
   }
