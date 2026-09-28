@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const worker = readFileSync(new URL('../../tools/cloudflare-lab/src/worker.js', import.meta.url), 'utf8');
-const commerce = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0008_canonical_commerce.sql', import.meta.url), 'utf8');
-const financial = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0009_canonical_financial.sql', import.meta.url), 'utf8');
-const sessionRuntime = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0011_canonical_session_runtime.sql', import.meta.url), 'utf8');
+const commerce = readFileSync(new URL('../../infra/database/migrations/0008_canonical_commerce.sql', import.meta.url), 'utf8');
+const financial = readFileSync(new URL('../../infra/database/migrations/0009_canonical_financial.sql', import.meta.url), 'utf8');
+const sessionRuntime = readFileSync(new URL('../../infra/database/migrations/0011_canonical_session_runtime.sql', import.meta.url), 'utf8');
 const a6 = readFileSync(new URL('../../tools/cloudflare-lab/src/a6-canonical.js', import.meta.url), 'utf8');
 
 test('CANON runtime is wired but remote activation remains fail-closed', () => {
@@ -18,7 +18,7 @@ test('CANON runtime is wired but remote activation remains fail-closed', () => {
 });
 
 test('renumbered migrations follow LAB workspace and exclude activation migration', () => {
-  const names = readdirSync(new URL('../../tools/cloudflare-lab/migrations/', import.meta.url))
+  const names = readdirSync(new URL('../../infra/database/migrations/', import.meta.url))
     .filter(name => /^\d{4}_.*\.sql$/.test(name))
     .sort();
   assert.ok(names.includes('0007_lab_workspace.sql'));
