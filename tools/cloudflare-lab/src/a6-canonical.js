@@ -586,7 +586,8 @@ async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
     c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
     (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
-    (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
+    (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)+
+    (SELECT COUNT(*) FROM canonical_product_operations WHERE promotion_id=c.active_promotion_id)
     ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
   if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id);
   return row;
