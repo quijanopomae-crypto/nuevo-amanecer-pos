@@ -98,9 +98,23 @@ async function authorityError(db, auth, body) {
 
 async function conflictingCode(db, body) {
   for (const code of [body.sku,body.barcode,...body.alternate_codes].filter(Boolean)) {
-    const row=await db.prepare('SELECT product_id FROM canonical_product_codes WHERE promotion_id=?1 AND code=lower(trim(?2)) LIMIT 1')
-      .bind(body.promotion_id,code).first();
-    if (row) return { code, product_id:row.product_id };
+    const imported=await db.prepare(`SELECT p.product_id FROM products p
+      WHERE p.promotion_id=?1 AND (
+        lower(trim(COALESCE(p.sku,'')))=lower(trim(?2))
+        OR lower(trim(COALESCE(p.barcode,'')))=lower(trim(?2))
+        OR lower(trim(COALESCE(p.legacy_alternate_code,'')))=lower(trim(?2))
+        OR EXISTS(SELECT 1 FROM json_each(p.alternate_codes_json) j
+          WHERE j.type='text' AND lower(trim(CAST(j.value AS TEXT)))=lower(trim(?2)))
+      ) LIMIT 1`).bind(body.promotion_id,code).first();
+    if (imported) return { code, product_id:imported.product_id };
+    const live=await db.prepare(`SELECT p.product_id FROM canonical_live_products p
+      WHERE p.promotion_id=?1 AND (
+        lower(trim(COALESCE(p.sku,'')))=lower(trim(?2))
+        OR lower(trim(COALESCE(p.barcode,'')))=lower(trim(?2))
+        OR EXISTS(SELECT 1 FROM json_each(p.alternate_codes_json) j
+          WHERE j.type='text' AND lower(trim(CAST(j.value AS TEXT)))=lower(trim(?2)))
+      ) LIMIT 1`).bind(body.promotion_id,code).first();
+    if (live) return { code, product_id:live.product_id };
   }
   return null;
 }
