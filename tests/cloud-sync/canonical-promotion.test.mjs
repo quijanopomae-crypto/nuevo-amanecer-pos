@@ -733,7 +733,7 @@ test('migración 0006 es acumulativa sobre 0001..0005 y restricciones quedan act
     for (let i = 1; i <= 6; i++) {
       const match = i === 1 ? '0001_sync_operations.sql' : i === 2 ? '0002_read_only_indexes.sql' : i === 3 ? '0003_device_auth.sql'
         : i === 4 ? '0004_sale_create.sql' : i === 5 ? '0005_import_staging.sql' : '0006_canonical_promotion.sql';
-      db.exec(readFileSync(new URL(`../../tools/cloudflare-lab/migrations/${match}`, import.meta.url), 'utf8'));
+      db.exec(readFileSync(new URL(`../../infra/database/migrations/${match}`, import.meta.url), 'utf8'));
     }
     assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     assert.equal(db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name IN ('canonical_promotions','canonical_control','products','customers','credits','credit_payments')").get().n, 6);
@@ -745,9 +745,9 @@ test('migración 0006 es reaplicable sin destruir generaciones ni control', () =
   const db = new DatabaseSync(':memory:');
   try {
     for (const name of ['0001_sync_operations.sql','0002_read_only_indexes.sql','0003_device_auth.sql','0004_sale_create.sql','0005_import_staging.sql','0006_canonical_promotion.sql']) {
-      db.exec(readFileSync(new URL(`../../tools/cloudflare-lab/migrations/${name}`, import.meta.url), 'utf8'));
+      db.exec(readFileSync(new URL(`../../infra/database/migrations/${name}`, import.meta.url), 'utf8'));
     }
-    const migration = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8');
+    const migration = readFileSync(new URL('../../infra/database/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8');
     assert.doesNotThrow(() => db.exec(migration));
     assert.equal(db.prepare('SELECT COUNT(*) n FROM canonical_control').get().n, 1);
   } finally { db.close(); }
