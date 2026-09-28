@@ -18,7 +18,7 @@ test('production worker config is isolated from LAB and points only to productio
   assert.equal(config.d1_databases.length, 1);
   assert.equal(config.d1_databases[0].database_name, 'nuevo-amanecer-prod-v2');
   assert.equal(config.d1_databases[0].database_id, 'cf2c83d3-f187-472e-967b-0ad24be969eb');
-  assert.equal(config.d1_databases[0].binding, 'nuevo_amanecer_lab');
+  assert.equal(config.d1_databases[0].binding, 'DB');
   assert.equal(prodConfig.includes('e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e'), false);
 });
 
