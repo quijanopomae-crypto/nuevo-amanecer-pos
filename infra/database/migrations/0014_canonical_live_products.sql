@@ -214,3 +214,19 @@ BEGIN SELECT RAISE(ABORT,'immutable_live_inventory_effect'); END;
 CREATE TRIGGER IF NOT EXISTS canonical_live_inventory_effects_no_delete
 BEFORE DELETE ON canonical_live_inventory_effects
 BEGIN SELECT RAISE(ABORT,'immutable_live_inventory_effect'); END;
+
+
+-- Sale item authorization must accept the unified IMPORT + LIVE catalog.
+DROP TRIGGER IF EXISTS canonical_sale_item_authorized_insert;
+CREATE TRIGGER canonical_sale_item_authorized_insert BEFORE INSERT ON sale_items
+WHEN (SELECT mode FROM canonical_control WHERE id=1)<>'LEGACY' AND NOT EXISTS(
+  SELECT 1 FROM canonical_write_guards g
+    JOIN canonical_sale_context x ON x.operation_id=g.operation_id
+  WHERE g.operation_id=NEW.operation_id AND x.sale_id=NEW.sale_id
+    AND NEW.line_total_cents=round(NEW.quantity*NEW.unit_price_cents)
+    AND (
+      EXISTS(SELECT 1 FROM products p WHERE p.promotion_id=g.promotion_id AND p.product_id=NEW.product_id)
+      OR EXISTS(SELECT 1 FROM canonical_live_products p WHERE p.promotion_id=g.promotion_id AND p.product_id=NEW.product_id)
+    )
+)
+BEGIN SELECT RAISE(ABORT,'invalid_sale_item'); END;
