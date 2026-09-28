@@ -1,0 +1,77 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "STAGING-A6-DB-BINDING-FIX-001",
+  "base_ref": "94ef3450a4472b4849b7961839e8440c3aa084b4",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "GitHub Actions",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Failed STAGING smoke run 36410885974",
+      "a6-canonical.js canonical read path",
+      "database-binding.js",
+      "Phase 3 neutral-binding regression"
+    ],
+    "WRITES": [
+      "Import/use getDatabase(env) in a6-canonical.js",
+      "Replace five direct legacy binding reads",
+      "Change test from fixed module list to full src scan",
+      "Add ACTIVE synthetic canonical read regression"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Worker database lookup only; no business state changes"
+    ],
+    "STORAGE_AFFECTED": [
+      "Repository only"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Legacy binding knowledge exists only in database-binding.js",
+      "Fixtures may emulate legacy binding but runtime source may not read it directly",
+      "DB remains preferred binding",
+      "No production deploy in this PR"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "A6 canonical reads/promotion/provenance",
+      "STAGING smoke",
+      "LAB/PROD Worker runtime"
+    ],
+    "RISKS": [
+      "Missing any of the five call sites would preserve the 500",
+      "Incorrect import could create a module cycle"
+    ],
+    "ROLLBACK": [
+      "Revert PR; STAGING deployed version can remain until retry"
+    ],
+    "TESTS": [
+      "Recursive runtime legacy-binding scan",
+      "Synthetic ACTIVE canonical status/products/customers using DB only",
+      "LAB Mirror CI",
+      "CANON Critical CI"
+    ]
+  }
+}
