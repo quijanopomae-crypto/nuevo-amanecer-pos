@@ -10,6 +10,17 @@
   var COMMANDS = ['sale.create', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var READ_TIMEOUT_MS = 8000;
+  var HOSTED_API_ORIGIN = null;
+  try {
+    var hostedConfig = root.NA_HOSTED_CONFIG;
+    if (hostedConfig && typeof hostedConfig.apiOrigin === 'string') {
+      var hostedUrl = new URL(hostedConfig.apiOrigin);
+      if (hostedUrl.protocol === 'https:' && hostedUrl.origin === hostedConfig.apiOrigin &&
+          !hostedUrl.username && !hostedUrl.password && !hostedUrl.search && !hostedUrl.hash) {
+        HOSTED_API_ORIGIN = hostedUrl.origin;
+      }
+    }
+  } catch (_) {}
   var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
@@ -25,7 +36,7 @@
       var url = new URL(value.endpoint);
       var local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
       var sameOrigin = !!(root.location && url.origin === root.location.origin);
-      var trustedWorker = ['nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev', 'nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev'].includes(url.hostname);
+      var trustedWorker = url.hostname === 'nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev' || (!!HOSTED_API_ORIGIN && url.origin === HOSTED_API_ORIGIN);
       return typeof value.endpoint === 'string' && value.endpoint === value.endpoint.replace(/\/+$/, '') &&
         !url.username && !url.password && !url.search && !url.hash &&
         ((local && ['http:', 'https:'].includes(url.protocol)) || (url.protocol === 'https:' && (sameOrigin || trustedWorker)));
