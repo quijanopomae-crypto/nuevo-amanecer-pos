@@ -1,6 +1,6 @@
 /* Transiciones opt-in entre estados/páginas. */
-@keyframes lab-fade-in { from { opacity:0; } to { opacity:1; } }
-.lab-enter-fade { animation:lab-fade-in var(--lab-motion-normal) var(--lab-ease-standard) both; }
+@keyframes na-motion-fade-in { from { opacity:0; } to { opacity:1; } }
+.na-enter-fade { animation:na-motion-fade-in var(--na-motion-normal) var(--na-motion-ease-standard) both; }
 
 /* Clientes/Créditos: transición más lenta, continua y coordinada.
    El encabezado/filtros permanecen estables; solo se mueve el contenido que cambia. */
@@ -14,16 +14,16 @@
 }
 
 /* Salida a mitad de transición: el contenido sigue claramente visible. */
-#pageClientes.lab-client-refresh-out .stats-strip,
-#pageClientes.lab-client-refresh-out .cli-list {
+#pageClientes.na-client-refresh-out .stats-strip,
+#pageClientes.na-client-refresh-out .cli-list {
   opacity: .82;
   transform: translateY(-6px) scale(.998);
   transition-duration: 900ms, 950ms;
 }
 
 /* Primera entrada: parte apenas desplazada y vuelve a reposo suavemente. */
-#pageClientes.lab-client-refresh-in .stats-strip,
-#pageClientes.lab-client-refresh-in .cli-list {
+#pageClientes.na-client-refresh-in .stats-strip,
+#pageClientes.na-client-refresh-in .cli-list {
   opacity: .82;
   transform: translateY(7px) scale(.998);
   transition-duration: 0ms;
@@ -33,27 +33,27 @@
    Solo las bandas secundarias reciben feedback visual; las listas/tablas/contenidos
    siguen en flujo nativo y el page-chrome se recorta únicamente cuando aplica. */
 @media (max-width:700px) {
-  body.lab-module-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden {
+  body.na-module-scroll-linked.module-mobile-scroll > .g-topbar.g-topbar-hidden {
     transform:none !important;
     margin-top:0 !important;
   }
 
-  body.lab-module-scroll-linked .page.lab-scroll-linked.g-page-chrome-hidden > .page-chrome {
+  body.na-module-scroll-linked .page.na-scroll-linked.g-page-chrome-hidden > .page-chrome {
     display:block !important;
   }
 
-  body.lab-module-scroll-linked .page.lab-scroll-linked[data-lab-scroll-clip="chrome"].active > .page-chrome {
+  body.na-module-scroll-linked .page.na-scroll-linked[data-na-scroll-clip="chrome"].active > .page-chrome {
     overflow-anchor:none;
-    clip-path:inset(0 0 var(--lab-scroll-collapse-y,0px) 0);
-    -webkit-clip-path:inset(0 0 var(--lab-scroll-collapse-y,0px) 0);
+    clip-path:inset(0 0 var(--na-scroll-collapse-y,0px) 0);
+    -webkit-clip-path:inset(0 0 var(--na-scroll-collapse-y,0px) 0);
     will-change:clip-path;
   }
 
-  body.lab-module-scroll-linked .page.lab-scroll-linked .lab-scroll-secondary {
-    opacity:var(--lab-scroll-secondary-opacity,1) !important;
-    transform:translate3d(0,var(--lab-scroll-secondary-shift,0px),0) !important;
+  body.na-module-scroll-linked .page.na-scroll-linked .na-scroll-secondary {
+    opacity:var(--na-scroll-secondary-opacity,1) !important;
+    transform:translate3d(0,var(--na-scroll-secondary-shift,0px),0) !important;
     transition:none !important;
-    pointer-events:var(--lab-scroll-secondary-pointer,auto);
+    pointer-events:var(--na-scroll-secondary-pointer,auto);
     will-change:transform,opacity;
     backface-visibility:hidden;
   }
@@ -66,7 +66,7 @@
     transform:none !important;
   }
 
-  body.lab-module-scroll-linked .page.lab-scroll-linked .lab-scroll-secondary {
+  body.na-module-scroll-linked .page.na-scroll-linked .na-scroll-secondary {
     opacity:1 !important;
     transform:none !important;
     transition:none !important;
