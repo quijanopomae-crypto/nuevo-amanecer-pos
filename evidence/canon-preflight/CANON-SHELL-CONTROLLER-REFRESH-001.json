@@ -25,7 +25,7 @@
     ],
     "WRITES": [
       "POS/index.html: listener controllerchange con guardia de una sola recarga.",
-      "tests/product-fixes/canon-shell-controller-refresh.test.mjs: regresión determinista del lifecycle."
+      "tests/product-fixes/fix-shell-controller-refresh/canon-shell-controller-refresh.test.mjs: regresión determinista del lifecycle."
     ],
     "DOM_AFFECTED": [],
     "STATE_AFFECTED": ["lifecycle del documento cuando cambia el Service Worker controlador"],
