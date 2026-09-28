@@ -8,5 +8,11 @@
   "r2_bucket_name": "nuevo-amanecer-staging-artifacts",
   "data_policy": "synthetic-only",
   "production_resource_access": false,
-  "immutable_artifact_required": true
+  "immutable_artifact_required": true,
+  "backend_url": "https://nuevo-amanecer-pos-staging.nuevo-amanecer-pos.workers.dev",
+  "frontend_url": "https://nuevo-amanecer-pos-web-staging.nuevo-amanecer-pos.workers.dev",
+  "deployment_workflow": ".github/workflows/staging-deploy.yml",
+  "deploy_requires_authorized_trigger": true,
+  "production_lock_group": "nuevo-amanecer-staging-change",
+  "bootstrap_policy": "synthetic-canonical-active-only"
 }
