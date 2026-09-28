@@ -1,0 +1,70 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "STAGING-DEPLOY-TARGET-HANDOFF-FIX-001",
+  "base_ref": "ca83941ed7af6e9fd0f917654d227b0b0e8d7df5",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "GitHub Actions",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Failed STAGING run 36379550383 logs",
+      "staging-deploy.yml",
+      "staging-deploy-workflow.test.mjs"
+    ],
+    "WRITES": [
+      "Use a same-step shell variable for target_head before persisting it to GITHUB_ENV",
+      "Add regression for same-step use"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "GitHub Actions control flow only"
+    ],
+    "STORAGE_AFFECTED": [
+      "Repository only; no D1/R2/Cloudflare writes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Owner authorization remains required",
+      "Exact target_head remains required",
+      "No production resources are touched",
+      "No STAGING remote action occurs in this PR"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "STAGING deployment workflow only"
+    ],
+    "RISKS": [
+      "A malformed shell capture could bypass or break target validation"
+    ],
+    "ROLLBACK": [
+      "Revert PR; no remote state changed"
+    ],
+    "TESTS": [
+      "Workflow contract test",
+      "LAB Mirror CI",
+      "CANON Critical CI"
+    ]
+  }
+}
