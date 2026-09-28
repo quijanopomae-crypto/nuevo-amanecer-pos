@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-LAB-RUNTIME-NAMESPACE-PARITY-001",
+  "environment": "CANON",
+  "base_ref": "7efce960ba9ce7f21afda936bdbb058e955a3944",
+  "objective": "Corregir la promoción visual LAB→CANON para que los estilos aprobados de Clientes y sus transiciones apunten al namespace runtime real de producción (na-*) en lugar del namespace exclusivo LAB (lab-*).",
+  "owner_authorization": "El propietario aprobó la migración LAB→CANON y reportó que la interfaz publicada sigue sin reflejarla; solicita corregir la causa de raíz.",
+  "allowed_files": [
+    "tasks/CANON-LAB-RUNTIME-NAMESPACE-PARITY-001.json",
+    "evidence/canon-preflight/CANON-LAB-RUNTIME-NAMESPACE-PARITY-001.json",
+    "tools/pos-experience/visual-assets.mjs",
+    "tools/pos-experience/promote-lab-visuals.mjs",
+    "POS/css/experience-v2/pages/clientes.css",
+    "POS/css/experience-v2/animations/transitions.css",
+    "tests/product-fixes/canon-lab-interface-parity.test.mjs",
+    "tests/product-fixes/lab-canon-promotion-parity.test.mjs",
+    "docs/CANON_LAB_PROMOTION_INFRA_V1.md"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/**",
+    "POS/css/client-credit-accounts-v2.css",
+    "D1/**",
+    "R2/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**"
+  ],
+  "invariants": [
+    "LAB permanece fuente aprobada y no se modifica.",
+    "Los 21 assets sin namespace runtime continúan byte-for-byte.",
+    "Solo Clientes y transitions reciben transformación determinista de namespace.",
+    "No cambia negocio, datos, pagos, FIFO, Caja, inventario, sync, autenticación ni backend.",
+    "El promotor sigue fail-closed y requiere --owner-approved para escribir.",
+    "El Service Worker continúa precacheando los mismos paths."
+  ],
+  "acceptance": [
+    "pages/clientes.css productivo no contiene selectores/clases runtime lab-* y sí contiene na-v2-* / na-client-*.",
+    "animations/transitions.css productivo no contiene clases runtime lab-* y coincide con na-enter / na-client / na-scroll / na-module del JS CANON.",
+    "El check LAB→CANON valida la salida transformada, no una igualdad byte-a-byte inválida.",
+    "El test integral comprueba explícitamente que los selectores productivos corresponden al namespace generado por CANON.",
+    "CANON Critical CI completo pasa."
+  ],
+  "rollback": "Revertir el PR y desplegar el build anterior."
+}
