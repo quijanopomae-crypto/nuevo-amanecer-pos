@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish hidden Clientes V2 observer feedback-loop fix from 0a4dabbcb98d2c4585b7349d1c8e17e4571b8a9a.",
-  "retry_attempt": 26,
-  "retry_reason": "PR #161 merged and CANON Critical CI passed. Publish observer stability fix.",
-  "requested_at_utc": "2026-09-27T23:44:00Z",
-  "target_head": "0a4dabbcb98d2c4585b7349d1c8e17e4571b8a9a"
+  "note": "Publish confirmed Clientes page Motion observer feedback-loop fix from commit 9c9b55665986977836b001943e96b8fd57c61891 after CANON Critical CI PASS.",
+  "retry_attempt": 27,
+  "retry_reason": "PR #163 merged; CANON Critical CI run 36363839606 passed for the exact fix tree. Publish the Clientes Motion loop fix.",
+  "requested_at_utc": "2026-09-28T00:57:29Z",
+  "target_head": "9c9b55665986977836b001943e96b8fd57c61891"
 }
