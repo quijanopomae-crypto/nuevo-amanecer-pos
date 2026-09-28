@@ -9,7 +9,7 @@
     "tasks/CANON-SHELL-CONTROLLER-REFRESH-001.json",
     "evidence/canon-preflight/CANON-SHELL-CONTROLLER-REFRESH-001.json",
     "POS/index.html",
-    "tests/product-fixes/canon-shell-controller-refresh.test.mjs"
+    "tests/product-fixes/fix-shell-controller-refresh/canon-shell-controller-refresh.test.mjs"
   ],
   "forbidden_files": [
     "laboratorio/**",
