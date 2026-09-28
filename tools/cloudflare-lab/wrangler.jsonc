@@ -4,14 +4,24 @@
   "main": "src/worker-entry.js",
   "compatibility_date": "2026-06-01",
   "workers_dev": true,
-  "build": { "command": "node scripts/build-reader.mjs" },
+  "build": {
+    "command": "node scripts/build-reader.mjs"
+  },
   "assets": {
     "directory": ".reader-assets",
     "html_handling": "none",
     "not_found_handling": "none",
-    "run_worker_first": ["/health", "/commands/*", "/imports/*", "/read/*", "/sync/*"]
+    "run_worker_first": [
+      "/health",
+      "/commands/*",
+      "/imports/*",
+      "/read/*",
+      "/sync/*"
+    ]
   },
-  "observability": { "enabled": false },
+  "observability": {
+    "enabled": false
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -19,5 +29,9 @@
       "database_id": "e734e6f1-41c4-4bfa-ab1f-5acbcdd2272e",
       "migrations_dir": "../../infra/database/migrations"
     }
-  ]
+  ],
+  "vars": {
+    "RUNTIME_ENVIRONMENT": "lab",
+    "DATA_POLICY": "lab-only"
+  }
 }
