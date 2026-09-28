@@ -14,3 +14,9 @@ laboratorio/private/**
 laboratorio/**/.env*
 laboratorio/**/.dev.vars
 laboratorio/**/node_modules/**
+
+# Fase 6 — E2E Playwright (infraestructura de prueba)
+node_modules/
+test-results/
+playwright-report/
+playwright/.cache/

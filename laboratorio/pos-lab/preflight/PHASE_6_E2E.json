@@ -1,0 +1,33 @@
+{
+  "task_id": "PHASE_6_E2E",
+  "title": "POS E2E smoke suite (Playwright)",
+  "spec": "docs/PHASE_6_E2E.md",
+  "authorized_by": "owner",
+  "branch": "hardening/phase-6-e2e-playwright",
+  "allowed_files": [
+    "package.json",
+    "package-lock.json",
+    "playwright.config.ts",
+    "tests/e2e/**",
+    ".github/workflows/e2e-smoke-ci.yml",
+    ".gitignore",
+    "docs/PHASE_6_E2E.md",
+    "laboratorio/pos-lab/preflight/PHASE_6_E2E.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/**",
+    "tools/**",
+    "infra/**",
+    "orchestrator/**",
+    "MANIFEST.yaml"
+  ],
+  "data_policy": "synthetic-only",
+  "touches_canon": false,
+  "touches_cloudflare": false,
+  "receipt": {
+    "kind": "SKILL_PREFLIGHT",
+    "order": "receipt-before-functional-change",
+    "notes": "Selectors verified against POS/index.html at SHA 050bd199. Spec committed at 0b8561c3 prior to any functional file."
+  }
+}
