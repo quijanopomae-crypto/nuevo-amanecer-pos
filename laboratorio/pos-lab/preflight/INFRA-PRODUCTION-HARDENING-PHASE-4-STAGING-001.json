@@ -1,0 +1,91 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-4-STAGING-001",
+  "base_ref": "b96604968287fde99297b4aaaefe561fee40c7c9",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "GitHub Actions",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md and LAB skills",
+      "Shared Worker environment boundaries",
+      "STAGING contracts/templates",
+      "Neutral migrations",
+      "Existing production/LAB deployment credential conventions"
+    ],
+    "WRITES": [
+      "Make LAB identity explicit and hide LAB workspace outside lab",
+      "Add idempotent STAGING provisioning workflow",
+      "Create synthetic-only seed and generated backend config",
+      "Add isolation/runtime tests and documentation"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "New isolated Cloudflare STAGING resources only after separate authorized trigger",
+      "No production business state"
+    ],
+    "STORAGE_AFFECTED": [
+      "STAGING D1 and STAGING R2 only when deployment trigger runs",
+      "No production D1/R2"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "STAGING resource names are distinct from PROD and LAB.",
+      "STAGING never imports or reads production data.",
+      "Only synthetic seed data is permitted.",
+      "LAB workspace routes are available only when RUNTIME_ENVIRONMENT=lab.",
+      "Production D1 IDs/names/Worker URLs are forbidden in the STAGING deployment workflow.",
+      "Activation secret is generated per STAGING deployment and never logged.",
+      "Synthetic ACTIVE bootstrap restores canonical_control_no_legacy immediately from migration 0013.",
+      "No staging deploy occurs merely by merging this PR; deployment requires a separate trigger."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Shared Worker runtime identity",
+      "Wrangler LAB/STAGING",
+      "Cloudflare Actions",
+      "Canonical activation/read status",
+      "Future E2E"
+    ],
+    "RISKS": [
+      "Accidental PROD endpoint access",
+      "Leaving canonical guard dropped after seed",
+      "Idempotency on repeated deploy",
+      "Cloudflare token permissions"
+    ],
+    "ROLLBACK": [
+      "Before trigger: revert PR only.",
+      "After trigger: staging resources may be deleted independently; no production rollback."
+    ],
+    "TESTS": [
+      "STAGING resource isolation static gate",
+      "LAB workspace boundary",
+      "Health identity for lab/staging/production",
+      "Workflow forbids PROD resources",
+      "Generated config requires staging D1 id",
+      "Full LAB and CANON CI"
+    ]
+  }
+}
