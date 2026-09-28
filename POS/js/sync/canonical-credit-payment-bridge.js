@@ -39,19 +39,31 @@
     }
   }
 
-  function toast(message, tone) {
-    if (typeof root.toast === 'function') root.toast(message, tone || 'error');
+  // inline-01 declares `toast` and `cerrarModal` as top-level `const`, so they
+  // are global lexical bindings and NOT properties of window. Resolve the
+  // lexical binding first; fall back to a window property for other shells.
+  function notify(message, tone) {
+    var fn = null;
+    try { if (typeof toast === 'function') fn = toast; } catch (_) {}
+    if (!fn && typeof root.toast === 'function') fn = root.toast;
+    if (fn) fn(message, tone || 'error');
   }
 
   function closeModal() {
-    if (typeof root.cerrarModal === 'function') root.cerrarModal('mPagoCred');
+    var fn = null;
+    try { if (typeof cerrarModal === 'function') fn = cerrarModal; } catch (_) {}
+    if (!fn && typeof root.cerrarModal === 'function') fn = root.cerrarModal;
+    if (fn) fn('mPagoCred');
     else root.document.getElementById('mPagoCred')?.classList.remove('open');
   }
 
+  // Read-only lookup: the bridge never replaces the canonical client renderer
+  // installed by inline-03 (see client-renderer-collision invariant).
   function renderViews() {
-    if (typeof root.cliRender === 'function') root.cliRender();
-    if (typeof root.cajRender === 'function') root.cajRender();
-    if (typeof root.updateDashboard === 'function') root.updateDashboard();
+    ['cliRender', 'cajRender', 'updateDashboard'].forEach(function (name) {
+      var render = root[name];
+      if (typeof render === 'function') render.call(root);
+    });
   }
 
   async function refreshCanonical() {
@@ -63,48 +75,121 @@
     return client.legacySnapshot();
   }
 
+  function pendingRecord() {
+    var client = api();
+    if (!client || typeof client.pendingSnapshot !== 'function') return null;
+    try { return client.pendingSnapshot(); } catch (_) { return { command: 'unknown', invalid: true }; }
+  }
+
   function findCredit(snapshot, id) {
     return (snapshot && Array.isArray(snapshot.credits) ? snapshot.credits : []).find(function (credit) {
       return credit && String(credit.id !== undefined ? credit.id : credit.credit_id) === String(id);
     }) || null;
   }
 
+  // Same scope as legacy _naCreditPaymentOperationUsed (credit payments, sales
+  // and cash movements). A payment reversed by a canonical COMPENSATION no
+  // longer consumes its bank reference, so it is not a duplicate.
   function referenceUsed(snapshot, reference) {
     var key = clean(reference).toLowerCase();
     if (!key) return false;
-    return (snapshot && Array.isArray(snapshot.credits) ? snapshot.credits : []).some(function (credit) {
+    var reversed = new Set();
+    (snapshot && Array.isArray(snapshot.payments) ? snapshot.payments : []).forEach(function (row) {
+      if (row && row.compensates_operation_id) reversed.add(String(row.compensates_operation_id));
+    });
+    (snapshot && Array.isArray(snapshot.cashMovements) ? snapshot.cashMovements : []).forEach(function (row) {
+      if (row && row.reversalOf) reversed.add(String(row.reversalOf));
+    });
+    function same(value) { value = clean(value); return !!value && value.toLowerCase() === key; }
+    var inCredits = (snapshot && Array.isArray(snapshot.credits) ? snapshot.credits : []).some(function (credit) {
       return Array.isArray(credit && credit.pagos) && credit.pagos.some(function (payment) {
-        var value = clean(payment && (payment.numeroOperacion || payment.operacion || payment.referencia));
-        return value && value.toLowerCase() === key;
+        if (!payment || reversed.has(String(payment.id))) return false;
+        return [payment.numeroOperacion, payment.operacion, payment.referencia].some(same);
       });
     });
+    if (inCredits) return true;
+    var inSales = (snapshot && Array.isArray(snapshot.sales) ? snapshot.sales : []).some(function (sale) {
+      return sale && !sale.anulada && same(sale.paymentRef);
+    });
+    if (inSales) return true;
+    return (snapshot && Array.isArray(snapshot.cashMovements) ? snapshot.cashMovements : []).some(function (row) {
+      if (!row || row.reversal || reversed.has(String(row.operationId)) || reversed.has(String(row.id))) return false;
+      return same(row.referencia || row.numeroOperacion);
+    });
+  }
+
+  // The command is durable server-side once a receipt exists. A later refresh
+  // failure must never be reported as a failed payment.
+  async function afterCommit(receipt, amountCents, replayed) {
+    closeModal();
+    var operation = clean(receipt && receipt.operation_id);
+    var amount = typeof amountCents === 'number' ? ' de S/ ' + (amountCents / 100).toFixed(2) : '';
+    try {
+      await refreshCanonical();
+      renderViews();
+      notify(replayed
+        ? 'Se confirmó el pago CANON pendiente' + amount + ' (no se registró otro pago). Revisa el saldo antes de registrar otro abono.'
+        : 'Pago CANON' + amount + ' registrado', 'success');
+    } catch (error) {
+      notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
+        clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');
+    }
+    return true;
+  }
+
+  function describePendingFailure(error) {
+    var pending = pendingRecord();
+    var code = clean(error && error.message);
+    if (pending && pending.command === 'payment.create' && !pending.invalid) {
+      if (pending.last_error) {
+        return 'CANON rechazó el pago (' + clean(pending.last_error) + '). No se registró ningún abono.';
+      }
+      return 'El pago se envió pero CANON no confirmó la recepción (' + code + '). NO lo registres de nuevo con otro monto: ' +
+        'pulsa Confirmar otra vez para reintentar la MISMA operación.';
+    }
+    return 'No se registró el pago CANON' + (code ? ': ' + code : '');
   }
 
   async function confirm() {
     if (!enabled()) return false;
     if (busy) return false;
 
+    var client = api();
+    var pending = pendingRecord();
+    if (pending) {
+      if (pending.command !== 'payment.create' || pending.invalid) {
+        notify('Hay otra operación CANON pendiente (' + clean(pending.command) + '). Resuélvela antes de registrar un pago.', 'error');
+        return false;
+      }
+      if (pending.last_error) {
+        notify('Un pago anterior fue rechazado por CANON (' + clean(pending.last_error) + ') y bloquea nuevas operaciones. No se registró ningún pago nuevo.', 'error');
+        return false;
+      }
+    }
+
     var amountCents = moneyCents(root.document.getElementById('pagoMonto')?.value);
     var method = clean(root.document.getElementById('pagoMetodo')?.value) || 'efectivo';
     var reference = clean(root.document.getElementById('pagoOperacion')?.value);
     var creditId = selectedCreditId();
 
-    if (!creditId) {
-      toast('No se encontró el crédito seleccionado', 'error');
-      return false;
-    }
-    if (!amountCents) {
-      toast('Ingresa un monto válido', 'error');
-      return false;
-    }
-    if (!['efectivo', 'yape', 'transferencia'].includes(method)) {
-      toast('Método de pago inválido', 'error');
-      return false;
-    }
-    if (method !== 'efectivo' && reference.length < 4) {
-      toast('Ingresa al menos 4 caracteres del número de operación', 'error');
-      root.document.getElementById('pagoOperacion')?.focus?.();
-      return false;
+    if (!pending) {
+      if (!creditId) {
+        notify('No se encontró el crédito seleccionado', 'error');
+        return false;
+      }
+      if (!amountCents) {
+        notify('Ingresa un monto válido', 'error');
+        return false;
+      }
+      if (!['efectivo', 'yape', 'transferencia'].includes(method)) {
+        notify('Método de pago inválido', 'error');
+        return false;
+      }
+      if (method !== 'efectivo' && reference.length < 4) {
+        notify('Ingresa al menos 4 caracteres del número de operación', 'error');
+        root.document.getElementById('pagoOperacion')?.focus?.();
+        return false;
+      }
     }
 
     var button = root.document.getElementById('pagoConfirmBtn');
@@ -116,24 +201,50 @@
     }
 
     try {
-      var snapshot = await refreshCanonical();
+      if (pending) {
+        // ACK lost earlier: retry the SAME operation_id. The Worker replays the
+        // stored receipt if the server already committed it; it never creates a second payment.
+        if (!client || typeof client.retryPending !== 'function') throw new Error('CANONICAL_PAYMENT_UNAVAILABLE');
+        var pendingAmount = pending.payload && pending.payload.amount_cents;
+        var replay;
+        try {
+          replay = await client.retryPending();
+        } catch (error) {
+          notify(describePendingFailure(error), 'error');
+          return false;
+        }
+        return await afterCommit(replay, pendingAmount, true);
+      }
+
+      var snapshot;
+      try {
+        snapshot = await refreshCanonical();
+      } catch (error) {
+        notify('No se registró el pago: CANON no disponible (' + clean(error && error.message) + ')', 'error');
+        return false;
+      }
       var credit = findCredit(snapshot, creditId);
-      if (!credit) throw new Error('CANONICAL_CREDIT_NOT_FOUND');
+      if (!credit) {
+        notify('No se encontró el crédito CANON seleccionado', 'error');
+        return false;
+      }
 
       var outstandingCents = Math.round(Number(credit.saldo || 0) * 100);
       if (!Number.isSafeInteger(outstandingCents) || outstandingCents <= 0) {
-        toast('Este crédito ya está pagado completamente', 'error');
+        notify('Este crédito ya está pagado completamente', 'error');
         return false;
       }
       if (amountCents > outstandingCents) {
-        toast('El abono supera el saldo pendiente', 'error');
+        notify('El abono supera el saldo pendiente', 'error');
         return false;
       }
       if (method !== 'efectivo' && referenceUsed(snapshot, reference)) {
-        toast('Ese número de operación ya fue registrado', 'error');
+        notify('Ese número de operación ya fue registrado', 'error');
         return false;
       }
 
+      // expected_credit_revision is derived by canonical-client from the fresh
+      // canonical replica; the bridge never supplies revisions itself.
       var input = {
         credit_id: String(credit.credit_id !== undefined ? credit.credit_id : credit.id),
         amount_cents: amountCents,
@@ -143,7 +254,7 @@
       if (method === 'efectivo') {
         var cash = snapshot.cashState;
         if (!cash || !cash.abierta || !cash.sessionId) {
-          toast('Abre la caja antes de registrar un cobro en efectivo', 'error');
+          notify('Abre la caja antes de registrar un cobro en efectivo', 'error');
           return false;
         }
         input.session_id = String(cash.sessionId);
@@ -151,19 +262,18 @@
         input.reference = reference;
       }
 
-      var client = api();
-      if (!client || typeof client.createPayment !== 'function') throw new Error('CANONICAL_PAYMENT_UNAVAILABLE');
-      await client.createPayment(input);
-      await refreshCanonical();
-
-      closeModal();
-      renderViews();
-      toast('Pago CANON de S/ ' + (amountCents / 100).toFixed(2) + ' registrado', 'success');
-      return true;
-    } catch (error) {
-      var detail = clean(error && error.message);
-      toast('No se pudo registrar el pago CANON' + (detail ? ': ' + detail : ''), 'error');
-      return false;
+      if (!client || typeof client.createPayment !== 'function') {
+        notify('No se registró el pago CANON: CANONICAL_PAYMENT_UNAVAILABLE', 'error');
+        return false;
+      }
+      var receipt;
+      try {
+        receipt = await client.createPayment(input);
+      } catch (error) {
+        notify(describePendingFailure(error), 'error');
+        return false;
+      }
+      return await afterCommit(receipt, amountCents, false);
     } finally {
       busy = false;
       if (button) {
