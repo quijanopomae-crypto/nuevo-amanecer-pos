@@ -38,9 +38,13 @@
 
     if (bindings.has(id)) return bindings.get(id);
 
+    var wasActive = element.classList.contains('active');
     var observer = typeof MutationObserver === 'function'
       ? new MutationObserver(function () {
-          if (element.classList.contains('active')) enter(element, config.enterClass || 'na-enter-fade');
+          var isActive = element.classList.contains('active');
+          var becameActive = isActive && !wasActive;
+          wasActive = isActive;
+          if (becameActive) enter(element, config.enterClass || 'na-enter-fade');
         })
       : null;
 
