@@ -50,8 +50,8 @@ zones:
     authority: isolated_lab_infrastructure
     worker: tools/cloudflare-lab/src/worker.js
     workspace: tools/cloudflare-lab/src/lab-workspace.js
-    migrations: tools/cloudflare-lab/migrations/
-    session_auth_migration: tools/cloudflare-lab/migrations/0010_session_auth.sql
+    migrations: infra/database/migrations/
+    session_auth_migration: infra/database/migrations/0010_session_auth.sql
     private_inputs: tools/cloudflare-lab/private/
   backup_recovery:
     path: tools/cloudflare-backup/
@@ -85,7 +85,7 @@ zones:
 
 cloud_data:
   d1:
-    repository_schema: tools/cloudflare-lab/migrations/
+    repository_schema: infra/database/migrations/
     remote_database: not_source_controlled
     local_ci_migrations: allowed
     remote_migrations: owner_only
