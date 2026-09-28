@@ -30,23 +30,16 @@
     return cents;
   }
 
-  function lexical(name) {
-    try {
-      /* eslint-disable-next-line no-new-func */
-      return new Function('return typeof ' + name + ' !== "undefined" ? ' + name + ' : null;')();
-    } catch (_) {
-      return null;
-    }
-  }
-
   function notify(message, tone) {
-    var fn = lexical('toast');
+    var fn = null;
+    try { if (typeof toast === 'function') fn = toast; } catch (_) {}
     if (!fn && typeof root.toast === 'function') fn = root.toast;
     if (typeof fn === 'function') fn(message, tone || 'error');
   }
 
   function closeModal() {
-    var fn = lexical('cerrarModal');
+    var fn = null;
+    try { if (typeof cerrarModal === 'function') fn = cerrarModal; } catch (_) {}
     if (!fn && typeof root.cerrarModal === 'function') fn = root.cerrarModal;
     if (typeof fn === 'function') fn('mProd');
     else root.document.getElementById('mProd')?.classList.remove('open');
@@ -69,7 +62,9 @@
   }
 
   function readAlternateCodes() {
-    var fn = lexical('readAltBarcodes');
+    var fn = null;
+    try { if (typeof readAltBarcodes === 'function') fn = readAltBarcodes; } catch (_) {}
+    if (!fn && typeof root.readAltBarcodes === 'function') fn = root.readAltBarcodes;
     if (typeof fn !== 'function') return [];
     var result = fn();
     return result === null ? null : (Array.isArray(result) ? result.map(clean).filter(Boolean) : []);
