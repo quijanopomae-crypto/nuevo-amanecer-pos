@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { visualAssets } from './visual-assets.mjs';
+import { visualAssets, canonicalVisualSource } from './visual-assets.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const args = new Set(process.argv.slice(2));
@@ -20,6 +20,10 @@ function absolute(rel) {
 
 function read(rel) {
   return readFileSync(absolute(rel), 'utf8');
+}
+
+function promotedSource(asset) {
+  return canonicalVisualSource(asset, read(asset.lab));
 }
 
 function assertSafeMapping(asset) {
@@ -46,7 +50,7 @@ if (wantsWrite) {
     fail('WRITE_DENIED: use --write --owner-approved only after explicit owner approval');
   } else if (!failures.length) {
     for (const asset of visualAssets) {
-      const source = read(asset.lab);
+      const source = promotedSource(asset);
       const destination = absolute(asset.canon);
       mkdirSync(dirname(destination), { recursive: true });
       writeFileSync(destination, source, 'utf8');
@@ -59,8 +63,8 @@ for (const asset of visualAssets) {
     fail('Missing CANON mirror: ' + asset.canon);
     continue;
   }
-  if (read(asset.canon) !== read(asset.lab)) {
-    fail('Visual drift: ' + asset.canon + ' != ' + asset.lab);
+  if (read(asset.canon) !== promotedSource(asset)) {
+    fail('Visual drift: ' + asset.canon + ' != promoted output from ' + asset.lab);
   }
 }
 
