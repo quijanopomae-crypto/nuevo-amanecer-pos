@@ -994,6 +994,15 @@
 <script>
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
+    var hadController = !!navigator.serviceWorker.controller;
+    var reloadingForWorkerUpdate = false;
+
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloadingForWorkerUpdate) return;
+      reloadingForWorkerUpdate = true;
+      window.location.reload();
+    });
+
     navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).then(function (registration) {
       return registration.update().catch(function () {});
     }).catch(function (error) {
