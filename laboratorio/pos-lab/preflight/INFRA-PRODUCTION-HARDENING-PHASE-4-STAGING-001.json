@@ -8,7 +8,7 @@
   "writer_classes": [
     "ChatGPT",
     "GitHub connector",
-    "GitHub Actions"
+    "OpenCode"
   ],
   "skills": {
     "impact-analysis": {
