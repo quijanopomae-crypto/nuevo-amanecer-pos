@@ -23,6 +23,8 @@ const MAX_LIMIT = 100;
 const RUNTIME_ENVIRONMENTS = new Set(['lab', 'staging', 'production']);
 
 function runtimeEnvironment(env) {
+  // Keep the production boundary explicit in source as a fail-closed review invariant.
+  if (env.RUNTIME_ENVIRONMENT === 'production') return 'production';
   const value = String(env.RUNTIME_ENVIRONMENT || 'lab').trim().toLowerCase();
   return RUNTIME_ENVIRONMENTS.has(value) ? value : null;
 }
