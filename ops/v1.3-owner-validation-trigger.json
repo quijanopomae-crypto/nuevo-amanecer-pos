@@ -3,9 +3,9 @@
   "authorized": true,
   "authorized_by": "owner",
   "requested_action": "validate-production-canon-readonly",
-  "target_head": "3c1620e4390b189ad62b551e6563c9d59fc86539",
-  "requested_at_utc": "2026-09-28T16:50:00Z",
-  "note": "Read-only production CANON validation at current active HEAD prior to any first-live-sale decision. No business writes; proves business counts unchanged and temporary session cleaned.",
-  "retry_attempt": 5,
-  "retry_reason": "Re-validate production CANON authority/reads at the post-Phase-6 HEAD before considering the irreversible first-live-sale gate."
+  "target_head": "5509634413c7478faca0a923d418ff8f6905c9a3",
+  "requested_at_utc": "2026-09-28T18:22:00Z",
+  "note": "Read-only production CANON validation at the current active HEAD (5509634) prior to any first-live-sale decision. No business writes; proves business counts unchanged and temporary session cleaned. Rebuilt from stale target_head 3c1620e4.",
+  "retry_attempt": 6,
+  "retry_reason": "Rebuild PR #191 onto the current active-branch HEAD; previous trigger targeted the stale post-Phase-6 HEAD 3c1620e4."
 }
