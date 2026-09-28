@@ -1,3 +1,4 @@
+import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
 export const EXPENSE_COMMAND = 'expense.create';
@@ -68,7 +69,7 @@ export async function createCanonicalExpense(request,env,auth,json) {
   const invalid = validate(body);
   if (invalid) return json({error:invalid},400);
 
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   const hash = await sha256Hex(stableStringify({command:EXPENSE_COMMAND,body}));
   const existing = await replay(db,body,hash,json,auth);
   if (existing) return existing;

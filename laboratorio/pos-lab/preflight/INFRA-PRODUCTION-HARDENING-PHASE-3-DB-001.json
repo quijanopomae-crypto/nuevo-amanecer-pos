@@ -1,0 +1,85 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-3-DB-001",
+  "base_ref": "3a1f13ea41d692bbf5e72fc63b4ea789921ae76a",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md, LAB skills and UI_MAP",
+      "database-binding.js and common worker entrypoint",
+      "Five runtime consumers of env.nuevo_amanecer_lab",
+      "LAB/PROD/STAGING Wrangler binding declarations and binding tests"
+    ],
+    "WRITES": [
+      "Neutral database accessor and entrypoint normalization",
+      "Five runtime modules switched to getDatabase(env)",
+      "LAB/PROD binding names changed to DB",
+      "Regression tests and phase documentation"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Worker environment binding lookup only after future authorized deploy",
+      "No business/domain state transition"
+    ],
+    "STORAGE_AFFECTED": [
+      "Git repository only; no D1/R2 writes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "DB is the preferred runtime binding.",
+      "Legacy nuevo_amanecer_lab remains fallback only inside database-binding.js.",
+      "No business module directly reads env.nuevo_amanecer_lab.",
+      "Production database_name and database_id do not change.",
+      "LAB database_name and database_id do not change.",
+      "No deployment is executed in this phase."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Worker gateway",
+      "Canonical commerce/financial/expenses",
+      "LAB workspace",
+      "Wrangler LAB/PROD",
+      "D1 local integration tests"
+    ],
+    "RISKS": [
+      "Missing one direct binding access would break DB-only deployments.",
+      "Miniflare fixtures may assume the legacy binding key.",
+      "Changing config binding without runtime normalization could make health/auth fail."
+    ],
+    "ROLLBACK": [
+      "Revert PR before any deployment; remote resources are unchanged."
+    ],
+    "TESTS": [
+      "DB preference and legacy fallback",
+      "No direct legacy binding reads in runtime modules",
+      "Wrangler LAB/PROD use DB while preserving database IDs",
+      "Production Worker dry-run",
+      "Local D1 integration tests",
+      "Full cloud-sync regression",
+      "SKILL_PREFLIGHT temporal gate"
+    ]
+  }
+}

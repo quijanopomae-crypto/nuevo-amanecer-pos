@@ -1,3 +1,4 @@
+import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
 export const FINANCIAL_COMMANDS = new Set(['payment.create','cash.open','cash.close','adjustment.create','compensation.create']);
@@ -43,7 +44,7 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   try { body = await request.json(); } catch { return json({error:'invalid_json'},400); }
   const invalid = validate(command,body);
   if (invalid) return json({error:invalid},400);
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   const hash = await sha256Hex(stableStringify({command,body}));
   async function authorityError() {
     const c = await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c

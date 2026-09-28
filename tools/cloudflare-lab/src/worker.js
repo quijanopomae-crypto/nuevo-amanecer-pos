@@ -1,3 +1,4 @@
+import { getDatabase } from './database-binding.js';
 // Gateway mínimo: POS OUTBOX -> Worker -> D1 sync_operations.
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
@@ -55,9 +56,9 @@ export default {
         if (request.method !== 'GET') return cors(json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' }), true);
         const denied = authorizeRead(request, env);
         if (denied) return cors(denied, true);
-        const frozen = await authorityFence(env.nuevo_amanecer_lab);
+        const frozen = await authorityFence(getDatabase(env));
         if (frozen) return cors(frozen, true);
-        return cors(await readRoute(url, env.nuevo_amanecer_lab), true);
+        return cors(await readRoute(url, getDatabase(env)), true);
       }
       if (url.pathname === SALE_CREATE_PATH) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
@@ -96,7 +97,7 @@ export default {
         if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' });
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return auth;
-        return await readImport(decodeURIComponent(importMatch[1]), env.nuevo_amanecer_lab);
+        return await readImport(decodeURIComponent(importMatch[1]), getDatabase(env));
       }
       if (url.pathname.startsWith('/sync/operations')) {
         if (request.method === 'POST' && url.pathname === '/sync/operations') {
@@ -106,7 +107,7 @@ export default {
         if (request.method === 'GET' && match) {
           const auth = await authorizeSession(request, env);
           if (auth instanceof Response) return auth;
-          return await lookupOperation(decodeURIComponent(match[1]), env.nuevo_amanecer_lab);
+          return await lookupOperation(decodeURIComponent(match[1]), getDatabase(env));
         }
       }
       return json({ error: 'not_found' }, 404);
@@ -129,10 +130,10 @@ async function isCanonicalSaleRequest(request) {
 }
 
 async function health(env) {
-  if (!env.nuevo_amanecer_lab) {
+  if (!getDatabase(env)) {
     return json({ ok: false, d1: 'binding_missing' }, 503);
   }
-  const row = await env.nuevo_amanecer_lab.prepare('SELECT 1 AS one').first();
+  const row = await getDatabase(env).prepare('SELECT 1 AS one').first();
   return json({ ok: row?.one === 1, service: env.RUNTIME_ENVIRONMENT === 'production' ? 'nuevo-amanecer-pos-prod' : 'nuevo-amanecer-sync-lab', d1: row?.one === 1 ? 'ok' : 'error' });
 }
 
@@ -148,7 +149,7 @@ async function activateSession(request, env) {
   const principalId = 'session:' + sessionId;
   const token = randomToken();
   const tokenHash = await sha256Hex(token);
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   await db.batch([
     db.prepare(
       `INSERT INTO devices (device_id, role, status, credential_hash, last_seen_at)
@@ -171,7 +172,7 @@ async function authorizeSession(request, env) {
   if (!provided || provided.length > 1024) return json({ error: 'unauthorized' }, 401);
   if (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
   const tokenHash = await sha256Hex(provided);
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   const session = await db.prepare(
     `SELECT s.session_id, s.status AS session_status, d.device_id, d.role,
             d.status AS principal_status, d.credential_hash
@@ -314,7 +315,7 @@ function decodeBase64Url(value) {
 }
 
 async function insertOperation(request, env) {
-  const frozen = await authorityFence(env.nuevo_amanecer_lab);
+  const frozen = await authorityFence(getDatabase(env));
   if (frozen) return frozen;
   const auth = await authorizeSession(request, env);
   if (auth instanceof Response) return auth;
@@ -326,7 +327,7 @@ async function insertOperation(request, env) {
   }
   const problem = validateOperation(body);
   if (problem) return json({ error: 'invalid_operation', message: problem }, 400);
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
 
   const computedHash = await sha256Hex(body.payload);
   if (computedHash !== body.payload_hash) {
@@ -407,7 +408,7 @@ async function sha256Hex(text) {
 }
 
 async function createSale(request, env) {
-  const frozen = await authorityFence(env.nuevo_amanecer_lab);
+  const frozen = await authorityFence(getDatabase(env));
   if (frozen) return frozen;
   const auth = await authorizeSession(request, env);
   if (auth instanceof Response) return auth;
@@ -421,7 +422,7 @@ async function createSale(request, env) {
   const normalized = validateSale(body);
   if (normalized.error) return json({ status: 'error', error: 'invalid_sale', message: normalized.error }, 400);
 
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   const payload = stableStringify(body);
   const payloadHash = await sha256Hex(payload);
   const existing = await db
@@ -593,7 +594,7 @@ function validatePayment(method, totalCents, payment) {
 }
 
 async function stageImport(request, env) {
-  const frozen = await authorityFence(env.nuevo_amanecer_lab);
+  const frozen = await authorityFence(getDatabase(env));
   if (frozen) return frozen;
   const auth = await authorizeSession(request, env);
   if (auth instanceof Response) return auth;
@@ -601,7 +602,7 @@ async function stageImport(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
   if (!body || !validId(body.import_id) || !['start', 'rows', 'issues', 'finish'].includes(body.action)) return json({ error: 'invalid_import_request' }, 400);
-  const db = env.nuevo_amanecer_lab;
+  const db = getDatabase(env);
   if (body.action === 'start') return startImport(body, deviceId, auth.credentialHash, db);
   const run = await db.prepare('SELECT * FROM import_runs WHERE import_id = ?1').bind(body.import_id).first();
   if (!run) return json({ error: 'import_not_found' }, 404);

@@ -1,5 +1,9 @@
+export function getDatabase(env) {
+  return env?.DB ?? env?.nuevo_amanecer_lab;
+}
+
 export function normalizeDatabaseBinding(env) {
-  const db = env?.DB ?? env?.nuevo_amanecer_lab;
-  if (!db || env?.nuevo_amanecer_lab === db) return env;
-  return { ...env, nuevo_amanecer_lab: db };
+  const db = getDatabase(env);
+  if (!db || env?.DB === db) return env;
+  return { ...env, DB: db };
 }
