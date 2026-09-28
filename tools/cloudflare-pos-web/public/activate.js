@@ -1,7 +1,10 @@
 (() => {
   'use strict';
 
-  const API = 'https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev';
+  const CONFIG = globalThis.NA_HOSTED_CONFIG || null;
+  const API = CONFIG && typeof CONFIG.apiOrigin === 'string' ? CONFIG.apiOrigin.replace(/\/+$/, '') : '';
+  const ENVIRONMENT = CONFIG && CONFIG.environment;
+  const HOSTED_HOST = CONFIG && CONFIG.hostedHost;
   const BINDING_KEY = 'na_canonical_binding';
   const CREDENTIALS_KEY = 'na_cloud_sync_credentials';
   const SHELL_CACHE_PREFIX = 'nuevo-amanecer-pos-shell-';
@@ -42,6 +45,20 @@
       setStatus('No se pudo actualizar la interfaz automáticamente. Vuelve a intentarlo.', 'error');
       retryButton.hidden = false;
     }
+  }
+
+  function validRuntimeConfig() {
+    if (!CONFIG || !['production', 'staging'].includes(ENVIRONMENT) || typeof HOSTED_HOST !== 'string' || HOSTED_HOST !== window.location.hostname) return false;
+    try {
+      const url = new URL(API);
+      return url.protocol === 'https:' && url.origin === API && !url.username && !url.password && !url.search && !url.hash;
+    } catch {
+      return false;
+    }
+  }
+
+  function environmentName() {
+    return ENVIRONMENT === 'staging' ? 'STAGING CANON' : 'CANON producción';
   }
 
   function setStatus(message, state = '') {
@@ -118,7 +135,7 @@
     try {
       const authority = await fetchAuthority(saved.token);
       saveSession(saved.token, authority);
-      setStatus('CANON producción está activo. Puedes abrir el punto de venta.', 'ok');
+      setStatus(environmentName() + ' está activo. Puedes abrir el punto de venta.', 'ok');
       openPos.hidden = false;
     } catch {
       clearSession();
@@ -156,10 +173,10 @@
       input.value = '';
       panel.hidden = true;
       retryButton.hidden = true;
-      setStatus('Activación correcta. CANON producción está listo.', 'ok');
+      setStatus('Activación correcta. ' + environmentName() + ' está listo.', 'ok');
       openPos.hidden = false;
     } catch {
-      showActivation('No se pudo conectar con producción. Comprueba internet y vuelve a intentar.');
+      showActivation('No se pudo conectar con ' + environmentName() + '. Comprueba internet y vuelve a intentar.');
     } finally {
       activateButton.disabled = false;
       input.disabled = false;
@@ -173,6 +190,14 @@
   });
   retryButton.addEventListener('click', checkExisting);
   const params = new URLSearchParams(window.location.search);
-  if (params.get('refresh-shell') === '1') refreshShellOnly();
+  if (!validRuntimeConfig()) {
+    clearSession();
+    panel.hidden = true;
+    openPos.hidden = true;
+    retryButton.hidden = true;
+    input.disabled = true;
+    activateButton.disabled = true;
+    setStatus('Configuración segura del entorno no disponible. El POS permanece bloqueado.', 'error');
+  } else if (params.get('refresh-shell') === '1') refreshShellOnly();
   else checkExisting();
 })();

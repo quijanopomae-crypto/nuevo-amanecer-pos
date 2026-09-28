@@ -1,0 +1,63 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-HOSTED-RUNTIME-CONFIG-001",
+  "base_ref": "9478c4a281801db2c56a9cf172429095e1d4f9e8",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Desacoplar el artefacto web del endpoint PROD mediante /runtime-config.js no cacheado, fail-closed en Workers hospedados y configuración separada para PROD/STAGING sin desplegar.",
+    "READS": [
+      "POS/index.html, hosted-canonical-guard.js y canonical-client.js",
+      "Launcher activate.js/index.html",
+      "Cloudflare web Worker y configs PROD/STAGING",
+      "v1.3-pos-web-deploy tests"
+    ],
+    "WRITES": [
+      "Añadir carga de /runtime-config.js antes de guard/activation.",
+      "Servir config pública no-store desde el Worker web usando vars no secretas.",
+      "Quitar endpoint PROD hardcoded de assets compartidos.",
+      "Configurar vars distintas en Wrangler PROD/STAGING.",
+      "Añadir regresiones de aislamiento y fail-closed."
+    ],
+    "DOM_AFFECTED": [
+      "Launcher: etiqueta de entorno dinámica",
+      "POS: orden de scripts antes del hosted guard"
+    ],
+    "STATE_AFFECTED": [
+      "Binding localStorage conserva endpoint, pero proviene de config autenticada por origen del Worker"
+    ],
+    "STORAGE_AFFECTED": [
+      "No cambia claves; no borra localStorage/IndexedDB/Cache Storage"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No despliegue ni escritura Cloudflare/D1/R2.",
+      "El endpoint PROD deja de estar embebido en los assets POS/activate.js.",
+      "La configuración hospedada se sirve no-store y no contiene secretos.",
+      "Un host workers.dev del proyecto sin configuración válida falla cerrado y no entra en modo local.",
+      "El mismo POS estático puede utilizarse con PROD o STAGING."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Launcher de activación",
+      "Hosted guard",
+      "Canonical client endpoint validation",
+      "Web Worker routing",
+      "STAGING isolation"
+    ],
+    "RISKS": [
+      "Config ausente podría permitir modo local si el guard no falla cerrado.",
+      "Config cacheada podría mezclar entorno.",
+      "Permitir cualquier endpoint configurado sin validar HTTPS/origen sería inseguro."
+    ],
+    "ROLLBACK": [
+      "Revertir PR; no existe estado remoto modificado."
+    ],
+    "TEST_PLAN": [
+      "Runtime config endpoint syntax/headers/vars.",
+      "Assets no contienen endpoint PROD.",
+      "Hosted guard falla cerrado sin config.",
+      "Canonical client acepta el endpoint exacto configurado y LAB legacy.",
+      "CANON Critical CI."
+    ]
+  }
+}
