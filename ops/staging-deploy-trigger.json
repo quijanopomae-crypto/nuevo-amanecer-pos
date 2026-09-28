@@ -8,5 +8,8 @@
   "requested_reason": "Owner-authorized completion of production hardening Phase 4: provision isolated synthetic STAGING CANON after PR #174 passed LAB Mirror and CANON Critical CI.",
   "phase": "4B",
   "production_resources_allowed": false,
-  "data_policy": "synthetic-only"
+  "data_policy": "synthetic-only",
+  "retry_attempt": 2,
+  "retry_reason": "Retry after fixing same-step STAGING_TARGET_HEAD handoff; original deployment run 36379550383 failed before any remote access.",
+  "trigger_base": "a85ebd8ea9e59cb3dc05b005506608cf3a42b92b"
 }
