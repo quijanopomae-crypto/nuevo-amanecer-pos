@@ -1,0 +1,88 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-1-001",
+  "base_ref": "c11b4692dd579ee1a351f58762b584b18b9b04dd",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md and repository LAB governance",
+      "Current production workflows and Wrangler configurations",
+      "Current Worker entrypoint and D1 binding consumers",
+      "Current CI tests and STAGING design requirements"
+    ],
+    "WRITES": [
+      "GitHub workflow configuration only; no workflow execution",
+      "Compatibility adapter and Worker entrypoint source",
+      "Non-deployable STAGING templates and regression tests",
+      "Task contract, preflight receipt and phase documentation"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "GitHub Actions production-write scheduling",
+      "Worker environment binding normalization at runtime when a later deployment is explicitly authorized",
+      "CI validation state for production workflow and staging isolation contracts"
+    ],
+    "STORAGE_AFFECTED": [
+      "Git repository files only",
+      "No D1, R2, browser storage, Cloudflare secret or commercial data writes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No production workflow is executed by this task.",
+      "All production writers share one lock and use cancel-in-progress false.",
+      "Read-only and LAB-only workflows stay outside the production write lock.",
+      "The neutral DB binding is preferred while the legacy binding remains compatible.",
+      "STAGING templates contain no production or LAB resource IDs and cannot deploy as committed.",
+      "No POS CANON product file or trigger file is modified."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "GitHub Actions scheduling across frontend deploy, Worker deploy, cutover, first-live-sale and backup drill",
+      "Wrangler LAB and PROD entrypoints",
+      "D1 binding access across Worker runtime modules through compatibility normalization",
+      "CANON critical CI path filters and regression execution"
+    ],
+    "RISKS": [
+      "A missing production writer could remain outside the global lock.",
+      "An entrypoint adapter regression could affect Worker request dispatch after a future authorized deploy.",
+      "Over-broad CI path filters could increase run frequency.",
+      "A STAGING placeholder could be mistaken for deployable configuration without explicit guards."
+    ],
+    "ROLLBACK": [
+      "Revert the Git commits before merge or revert the merged PR; no remote state rollback is required.",
+      "Restore Wrangler main paths to worker.js if dry-run or integration tests fail.",
+      "Remove the non-deployable STAGING scaffold without affecting Cloudflare resources."
+    ],
+    "TESTS": [
+      "Validate exact shared concurrency group and cancel-in-progress false for every production writer.",
+      "Validate read-only and LAB workflows do not consume the production write lock.",
+      "Validate DB preference, legacy fallback and common Worker entrypoint.",
+      "Validate STAGING synthetic-only policy, unresolved D1 placeholder and absence of production identifiers.",
+      "Run Wrangler dry-run for LAB and PROD without deployment.",
+      "Run SKILL_PREFLIGHT with temporal order and LAB scope guard."
+    ]
+  }
+}

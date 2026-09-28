@@ -1,0 +1,48 @@
+{
+  "schema_version": 3,
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-1-001",
+  "environment": "LABORATORIO",
+  "base_ref": "c11b4692dd579ee1a351f58762b584b18b9b04dd",
+  "objective": "Serializar las operaciones productivas existentes, documentar un STAGING CANON aislado y preparar compatibilidad neutral del binding D1 sin desplegar ni modificar recursos remotos.",
+  "allowed_files": [
+    ".github/workflows/canon-critical-ci.yml",
+    ".github/workflows/owner-backup-recovery-drill.yml",
+    ".github/workflows/v1.3-first-live-sale.yml",
+    ".github/workflows/v1.3-pos-web-deploy.yml",
+    ".github/workflows/v1.3-prod-browser-cors-hotfix.yml",
+    ".github/workflows/v1.3-prod-cutover.yml",
+    "docs/PRODUCTION_HARDENING_PHASE_1.md",
+    "laboratorio/pos-lab/tasks/INFRA-PRODUCTION-HARDENING-PHASE-1-001.json",
+    "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-PHASE-1-001.json",
+    "tests/cloud-sync/database-binding-compat.test.mjs",
+    "tests/cloud-sync/production-concurrency-lock.test.mjs",
+    "tests/cloud-sync/production-workflow-lock.test.mjs",
+    "tests/cloud-sync/staging-isolation-contract.test.mjs",
+    "tools/cloudflare-lab/src/database-binding.js",
+    "tools/cloudflare-lab/src/worker-entry.js",
+    "tools/cloudflare-lab/wrangler.jsonc",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-staging/README.md",
+    "tools/cloudflare-staging/environment-contract.json",
+    "tools/cloudflare-staging/wrangler.backend.template.jsonc",
+    "tools/cloudflare-staging/wrangler.web.template.jsonc"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "evidence/**",
+    "infra/**",
+    "ops/*trigger.json"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/INFRA-PRODUCTION-HARDENING-PHASE-1-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
