@@ -230,8 +230,10 @@ jobs:
           printf '%s' "$CONFIG" | grep -Fq '"environment":"staging"'
           printf '%s' "$CONFIG" | grep -Fq "$STAGING_BACKEND_URL"
           ! printf '%s' "$CONFIG" | grep -Fq "nuevo-amanecer-pos-prod"
-          curl --fail --silent --show-error "$STAGING_WEB_URL/" | grep -Fq "Nuevo Amanecer POS"
-          curl --fail --silent --show-error "$STAGING_WEB_URL/app/" | grep -Fq "Nuevo Amanecer — ERP &amp; POS"
+          curl --fail --silent --show-error -o /tmp/staging-root.html "$STAGING_WEB_URL/"
+          curl --fail --silent --show-error -o /tmp/staging-app.html "$STAGING_WEB_URL/app/"
+          grep -Fq "Nuevo Amanecer POS" /tmp/staging-root.html
+          grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html
 
       - name: Verify isolated STAGING R2 write
         working-directory: tools/cloudflare-lab

@@ -1,0 +1,70 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "STAGING-SMOKE-PIPE-SAFE-FIX-001",
+  "base_ref": "89383c40085a111e0ac8c9dbe8022b9082bda965",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "GitHub Actions",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "STAGING run 36411897831 logs",
+      "staging-deploy.yml",
+      "production pipe-safe hosted verification precedent"
+    ],
+    "WRITES": [
+      "Download staging root/app HTML to /tmp before grep",
+      "Add regression forbidding HTML curl-to-grep pipeline"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "GitHub Actions smoke implementation only"
+    ],
+    "STORAGE_AFFECTED": [
+      "Repository only"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Smoke still verifies exact launcher/app markers",
+      "No remote deploy in this PR",
+      "No production resources touched"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "STAGING deployment smoke only"
+    ],
+    "RISKS": [
+      "A weakened check could hide wrong HTML; retain exact text checks and curl --fail"
+    ],
+    "ROLLBACK": [
+      "Revert PR"
+    ],
+    "TESTS": [
+      "Workflow test checks -o files then grep",
+      "Workflow test rejects direct HTML curl pipeline",
+      "LAB Mirror CI",
+      "CANON Critical CI"
+    ]
+  }
+}

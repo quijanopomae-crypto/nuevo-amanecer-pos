@@ -52,3 +52,10 @@ La secuencia está validada ejecutando las 13 migraciones y el seed en SQLite:
 Esto respeta tanto el fence de importación como los triggers de candidato CANON. La transición
 posterior `CANONICAL_READ_ONLY → ACTIVE` continúa siendo exclusiva del workflow STAGING y
 restaura el guard inmediatamente.
+
+
+## Smoke web pipe-safe
+
+El smoke remoto descarga launcher y app completa a archivos temporales antes de buscar sus
+marcadores. Esto evita falsos FAIL `curl: (23)` causados por `grep -q` cerrando una
+tubería mientras el HTML grande todavía se está descargando.
