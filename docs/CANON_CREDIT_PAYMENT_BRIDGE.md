@@ -89,3 +89,59 @@ Focused tests must prove:
 - the bridge contains no `saveAllData()`, `creditos.push` or `cajMovs.push`.
 - `inline-07` preserves permission authorization and legacy fallback.
 - the bridge is loaded by `POS/index.html` and precached by `POS/sw.js`.
+
+## Independent review of PR #194 (fix round)
+
+### CANON Critical CI failure — root cause
+
+`tests/cloud-sync/client-renderer-collision.test.mjs` forbids `/\bcliRender\s*=/` in every
+script loaded after `inline-03.js` (invariant: nobody may replace the canonical fail-closed
+`cliRender` wrapper). The first bridge version contained
+`typeof root.cliRender === 'function'`; the regex matches the first `=` of `===`.
+It was an **invariant collision (false positive)**: the bridge never reassigned `cliRender`.
+The invariant and its test are kept unchanged. The bridge now resolves renderers through a
+read-only name lookup (`root[name]`), which cannot look like an assignment.
+
+### Functional defects found and fixed
+
+1. **Lexical globals.** `toast` and `cerrarModal` are top-level `const` in `inline-01.js`,
+   so they are NOT `window` properties. `root.toast(...)` was always `undefined`: the bridge
+   showed no success and no error feedback in the real browser. The bridge now resolves the
+   global lexical binding first (`typeof toast`), then falls back to `root.toast`.
+2. **COMMAND COMMITTED BUT REFRESH FAILED.** `canonical-client.sendPending()` sets
+   `ready=false` after a confirmed receipt, and the old bridge reported any post-commit
+   refresh error as "No se pudo registrar el pago". The bridge now separates phases: once a
+   receipt exists the modal closes and the user is told the payment is CONFIRMED and must
+   not be repeated, even if the refresh fails.
+3. **Lost ACK / PENDING journal.** When the POST outcome is unknown the canonical journal
+   stays `PENDING`. The next tap now calls `retryPending()` with the SAME `operation_id`
+   (Worker replays `already_processed`) instead of trying a new command. A rejected pending
+   (`last_error`) or a foreign pending command is reported and blocks new payments.
+4. **Digital reference dedupe.** Scope aligned with legacy `_naCreditPaymentOperationUsed`
+   (credit payments + sales + cash movements). Payments reversed by a canonical
+   `COMPENSATION` no longer count as used (false-positive fix).
+
+### Verified (no change needed)
+
+- `abrirPago()` sets `pagoCredId = cr.id`; in CANON `creditos` comes from the UI adapter
+  where `id === credit_id`.
+- `expected_credit_revision` is derived by `canonical-client` from the refreshed replica and
+  validated by the Worker (`stale_credit`); the bridge must not supply it.
+- Cash payments use `cashState.sessionId` from canonical `cash-sessions`; `canonical-client`
+  re-checks it is the single OPEN session.
+- Pre-command `refresh()` is required (fresh revision, fewer `stale_credit` rejections);
+  post-command `refresh()` is required (`ready=false` after receipt and UI projection).
+
+### Tests
+
+- `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs` runs the real bridge,
+  `canonical-client`, UI adapter and Worker against SQLite with the D1 migrations: cash and
+  digital payments, F5 (new runtime, same storage), second device, lost ACK replay,
+  committed-but-refresh-failed, server rejection, double tap, reference dedupe.
+- `tests/cloud-sync/canon-browser-harness.mjs` is the reusable test-only harness.
+
+### Pre-existing risk (not changed here)
+
+A `PENDING` record with `last_error` (definitive 4xx rejection) is never cleared by
+`canonical-client`, so it blocks every later financial command on that device. Fixing it
+changes shared journal semantics for sales/cash/expenses and needs its own task.
