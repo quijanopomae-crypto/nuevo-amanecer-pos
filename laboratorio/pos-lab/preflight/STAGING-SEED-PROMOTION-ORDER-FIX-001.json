@@ -1,0 +1,75 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "STAGING-SEED-PROMOTION-ORDER-FIX-001",
+  "base_ref": "9c2252b175893465ccdbcdc651575406ae2b712b",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "GitHub Actions",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "STAGING run 36410526230 logs",
+      "migration 0006 canonical state/fence triggers",
+      "synthetic-seed.sql",
+      "existing SQLite cloud-sync fixtures"
+    ],
+    "WRITES": [
+      "Move import_staging inserts before FROZEN transition",
+      "Add full local migrations+seed execution regression",
+      "Document promotion order"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "No remote state in this PR"
+    ],
+    "STORAGE_AFFECTED": [
+      "Repository only"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Import run/staging rows are created only in LEGACY",
+      "Candidate rows are inserted only in FROZEN",
+      "Final seed state is CANONICAL_READ_ONLY with committed synthetic promotion",
+      "No migrations change",
+      "No production data or resources touched"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "STAGING synthetic bootstrap only"
+    ],
+    "RISKS": [
+      "Candidate_revision/control_revision constraints must remain consistent after reorder"
+    ],
+    "ROLLBACK": [
+      "Revert PR; current STAGING D1 remains schema-only because failed seed import rolled back"
+    ],
+    "TESTS": [
+      "Apply all 13 migrations locally then execute synthetic seed",
+      "Assert final mode, promotion, product/customer counts",
+      "Assert guard trigger still exists",
+      "LAB Mirror CI",
+      "CANON Critical CI"
+    ]
+  }
+}
