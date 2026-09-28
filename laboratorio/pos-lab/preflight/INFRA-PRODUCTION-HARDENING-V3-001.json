@@ -1,0 +1,88 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "INFRA-PRODUCTION-HARDENING-V3-001",
+  "base_ref": "c11b4692dd579ee1a351f58762b584b18b9b04dd",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "human-assisted agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md and the four required LAB skills",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "current production and LAB Wrangler configurations",
+      "all workflows capable of changing production",
+      "existing Worker entrypoint and D1 binding consumers"
+    ],
+    "WRITES": [
+      "GitHub workflow concurrency metadata and regression guards only",
+      "non-deployable STAGING contract files with unresolved placeholders",
+      "a reversible Worker entry adapter that preserves the legacy binding contract"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "GitHub Actions scheduling state for production writers",
+      "Worker environment normalization before request dispatch"
+    ],
+    "STORAGE_AFFECTED": [
+      "No D1 or R2 content is modified",
+      "No migration is moved or executed",
+      "STAGING names are documentation-only placeholders"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No production deployment or commercial operation",
+      "No production, LAB or STAGING database identifier changes",
+      "The existing nuevo_amanecer_lab binding remains valid",
+      "env.DB is preferred only when explicitly supplied",
+      "Read-only workflows stay outside the production write lock",
+      "Production writers never cancel an in-progress mutation"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "All current production writers become mutually exclusive",
+      "LAB and PROD Wrangler entrypoints pass through the same binding adapter",
+      "Existing Worker modules continue receiving nuevo_amanecer_lab during transition",
+      "STAGING is constrained to synthetic data and isolated resource names"
+    ],
+    "RISKS": [
+      "A missing production writer could remain outside the lock; mitigated by an explicit regression inventory",
+      "Entrypoint indirection could alter Worker exports; mitigated by dry-run and focused tests",
+      "A neutral binding could mask the legacy binding; mitigated by deterministic DB-first behavior and fallback tests",
+      "STAGING templates could be deployed accidentally; mitigated by unresolved identifiers and absence of deploy commands"
+    ],
+    "ROLLBACK": [
+      "Revert the hardening pull request; no remote resource or stored data requires rollback"
+    ],
+    "TESTS": [
+      "Temporal SKILL_PREFLIGHT CI gate",
+      "LAB scope guard against this allowlist",
+      "production workflow lock tests",
+      "STAGING isolation contract tests",
+      "database binding compatibility tests",
+      "LAB and production Wrangler deploy dry-runs",
+      "CANON Critical CI and LAB Canon Mirror CI"
+    ]
+  }
+}
