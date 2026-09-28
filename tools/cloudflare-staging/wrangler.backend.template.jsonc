@@ -1,19 +1,20 @@
 {
   "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
-  "name": "nuevo-amanecer-pos-prod",
+  "name": "nuevo-amanecer-pos-staging",
   "main": "../cloudflare-lab/src/worker-entry.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
   "observability": { "enabled": false },
   "vars": {
-    "RUNTIME_ENVIRONMENT": "production",
-    "CANONICAL_RUNTIME_ENABLED": "enabled"
+    "RUNTIME_ENVIRONMENT": "staging",
+    "CANONICAL_RUNTIME_ENABLED": "enabled",
+    "DATA_POLICY": "synthetic-only"
   },
   "d1_databases": [
     {
-      "binding": "nuevo_amanecer_lab",
-      "database_name": "nuevo-amanecer-prod-v2",
-      "database_id": "cf2c83d3-f187-472e-967b-0ad24be969eb",
+      "binding": "DB",
+      "database_name": "nuevo-amanecer-staging",
+      "database_id": "__STAGING_D1_DATABASE_ID__",
       "migrations_dir": "../cloudflare-lab/migrations"
     }
   ]
