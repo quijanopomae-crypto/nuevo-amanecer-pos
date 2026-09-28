@@ -290,6 +290,17 @@
       var receipt;
       try { receipt = await client.createProduct(input); }
       catch (error) {
+        var pendingAfterError=pendingRecord();
+        if(pendingAfterError && pendingAfterError.command==='product.create' && pendingAfterError.last_error &&
+           typeof client.discardRejectedProduct==='function') {
+          try {
+            var discarded=await client.discardRejectedProduct();
+            if(discarded) {
+              notify('CANON rechazó el producto (' + clean(pendingAfterError.last_error) + '). No se creó ningún producto; puedes corregir los datos y volver a guardar.', 'error');
+              return false;
+            }
+          } catch (_) {}
+        }
         notify(pendingMessage(error), 'error');
         return false;
       }
