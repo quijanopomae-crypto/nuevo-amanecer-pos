@@ -667,7 +667,10 @@
     try { result = await response.json(); } catch (_) { fail('CANONICAL_FINANCIAL_PENDING'); }
     unchanged();
     if (!response.ok) {
-      durableJournal(Object.assign({}, record, { last_error: validId(result && result.error) ? result.error : 'HTTP_' + response.status }));
+      durableJournal(Object.assign({}, record, {
+        last_error: validId(result && result.error) ? result.error : 'HTTP_' + response.status,
+        last_status: response.status
+      }));
       fail('CANONICAL_FINANCIAL_REJECTED_' + response.status);
     }
     if (!result || !(response.status === 201 && result.status === 'created' && result.idempotent === false || response.status === 200 && result.status === 'already_processed' && result.idempotent === true) ||
@@ -717,6 +720,17 @@
       var record = journal();
       if (!record || record.state !== 'PENDING') fail('NO_CANONICAL_FINANCIAL_PENDING');
       return sendPending(record);
+    });
+  }
+  async function discardRejectedProduct() {
+    return withWriterLock(function () {
+      var record=journal();
+      if(!record || record.state!=='PENDING' || record.command!=='product.create') return false;
+      var safeErrors=['invalid_product_request','duplicate_product_code','product_id_conflict','product_code_conflict','operation_id_conflict','stale_authority','canonical_not_active','canonical_product_conflict'];
+      if(![400,409].includes(record.last_status) || !safeErrors.includes(record.last_error)) return false;
+      root.localStorage.removeItem(JOURNAL);
+      if(root.localStorage.getItem(JOURNAL)!==null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+      return true;
     });
   }
   function renderCredits(container) {
@@ -881,7 +895,7 @@
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedProduct: discardRejectedProduct,
     createProduct: createProduct, createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);
