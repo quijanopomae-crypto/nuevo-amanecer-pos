@@ -206,7 +206,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
   const nodeWorker = (await import(pathToFileURL(bundlePath).href)).default;
   let outboundAttempts = 0;
   const withBindings = (options, bindings) => ({ ...options, workers: options.workers.map(worker => ({ ...worker,
-    config: { ...worker.config, env: { nuevo_amanecer_lab: worker.config.env.nuevo_amanecer_lab,
+    config: { ...worker.config, env: { DB: worker.config.env.DB,
       ...Object.fromEntries(Object.entries(bindings).map(([key, value]) => [key, { type: 'text', value }])) } } })) });
   const makeInstance = async (label, bindings = {}) => {
     const persist = await mkdtemp(join(root, `${label}-`));
@@ -215,13 +215,13 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
       resourcePersistencePath: persist, isolatedResourcePersistencePath: persist, resourceTmpPath: join(persist, 'tmp'),
       unsafeDevRegistryPath: join(persist, 'registry'), workers: [{ config: { name: 'a6-local-test', type: 'worker', compatibilityDate: '2026-09-01',
         manifest: { mainModule: 'worker.mjs', modules: { 'worker.mjs': { type: 'esm', contents: Buffer.from(bundle).toString('utf8') } } },
-        env: { nuevo_amanecer_lab: { type: 'd1', id: databaseId, dev: { remote: false } } } },
+        env: { DB: { type: 'd1', id: databaseId, dev: { remote: false } } } },
       dev: { rootPath: persist, unsafeRegisterWorker: false, outboundService: { type: 'fetcher', handler: () => {
         outboundAttempts++; throw new Error('No outbound network allowed in local D1 test');
       } } } }] }, bindings);
     const mf = new Miniflare(options);
     instances.push(mf);
-    return { mf, options, persist, databaseId, db: await mf.getD1Database('nuevo_amanecer_lab') };
+    return { mf, options, persist, databaseId, db: await mf.getD1Database('DB') };
   };
   const f = await makeInstance('primary');
   metrics.local_database_id = f.databaseId;
@@ -267,7 +267,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     .bind(writer['x-device-id'], createHmac('sha256', env.DEVICE_CREDENTIAL_PEPPER).update(credential).digest('hex')).run();
   const configure = async () => {
     await f.mf.setOptions(withBindings(f.options, env));
-    db = await f.mf.getD1Database('nuevo_amanecer_lab');
+    db = await f.mf.getD1Database('DB');
     auditDb = db;
   };
   await configure();
@@ -280,7 +280,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     return f.mf.dispatchFetch(req.url, { method: req.method, headers: req.headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   };
   const read = path => send(path, undefined, { 'x-read-token': env.READ_TOKEN });
-  const nodeSend = (path, body, binding) => nodeWorker.fetch(request(path, body), { ...env, nuevo_amanecer_lab: binding });
+  const nodeSend = (path, body, binding) => nodeWorker.fetch(request(path, body), { ...env, DB: binding });
 
   // This is NOT a second approved source: a materialized, clearly labelled JSON
   // derivative of the exact normalized rows, with its own genuine byte digest.
@@ -762,7 +762,7 @@ test('REAL local workerd/D1: exact private A5 baseline, canonical generations an
     instances.splice(instances.indexOf(f.mf), 1);
     const reopened = new Miniflare(withBindings(f.options, env));
     instances.push(reopened);
-    const durable = await reopened.getD1Database('nuevo_amanecer_lab');
+    const durable = await reopened.getD1Database('DB');
     auditDb = durable;
     assert.equal(sha(stableStringify(await exportDatabase(durable))), sha(stableStringify(before)));
     assert.equal((await control(durable)).active_promotion_id, approvedRequest.promotion_id);
