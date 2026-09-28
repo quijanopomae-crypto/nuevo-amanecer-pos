@@ -19,13 +19,6 @@ INSERT INTO import_runs(
   0
 );
 
-UPDATE canonical_control
-SET mode='FROZEN',
-    revision=revision+1,
-    authority_epoch=authority_epoch+1,
-    writer_device_id=NULL
-WHERE id=1 AND mode='LEGACY' AND active_promotion_id IS NULL;
-
 INSERT INTO import_staging(
   import_id, entity_type, source_key, source_name, source_row,
   payload_json, payload_hash, validation_status
@@ -53,6 +46,13 @@ INSERT INTO import_staging(
   '5555555555555555555555555555555555555555555555555555555555555555',
   'VALID'
 );
+
+UPDATE canonical_control
+SET mode='FROZEN',
+    revision=revision+1,
+    authority_epoch=authority_epoch+1,
+    writer_device_id=NULL
+WHERE id=1 AND mode='LEGACY' AND active_promotion_id IS NULL;
 
 INSERT INTO canonical_promotions(
   promotion_id, operation_id, request_hash, import_id, source_hash, manifest_hash,
