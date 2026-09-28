@@ -38,15 +38,17 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
-          node <<'NODE'
-          const { readFileSync, appendFileSync } = require("node:fs");
+          STAGING_TARGET_HEAD="$(node <<'NODE'
+          const { readFileSync } = require("node:fs");
           const t = JSON.parse(readFileSync("ops/staging-deploy-trigger.json","utf8"));
           if (t.authorized !== true || t.authorized_by !== "owner") throw new Error("staging deploy not owner-authorized");
           if (t.target_branch !== "feature/v1.3-mobile-cloud") throw new Error("wrong staging target branch");
           if (t.requested_action !== "deploy-staging") throw new Error("wrong staging action");
           if (!/^[0-9a-f]{40}$/.test(t.target_head || "")) throw new Error("invalid staging target head");
-          appendFileSync(process.env.GITHUB_ENV, "STAGING_TARGET_HEAD="+t.target_head+"\n");
+          process.stdout.write(t.target_head);
           NODE
+          )"
+          echo "STAGING_TARGET_HEAD=$STAGING_TARGET_HEAD" >> "$GITHUB_ENV"
           git merge-base --is-ancestor "$STAGING_TARGET_HEAD" "$GITHUB_SHA"
 
       - name: Checkout exact staging target
