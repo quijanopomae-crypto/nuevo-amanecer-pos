@@ -16,7 +16,7 @@ permission:
     "tests/product-fixes/**": allow
     "tests/cloud-sync/**": allow
     "tools/cloudflare-lab/src/**": allow
-    "tools/cloudflare-lab/migrations/**": allow
+    "infra/database/migrations/**": allow
     "tools/cloudflare-backup/**": allow
     "docs/**": allow
     ".github/workflows/canon-critical-ci.yml": allow

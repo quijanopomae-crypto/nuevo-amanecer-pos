@@ -1,0 +1,84 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "INFRA-PRODUCTION-HARDENING-PHASE-2-MIGRATIONS-001",
+  "base_ref": "2f01a5f791fbedfe30f23d53d4b5fc4e21e901f1",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md, LAB skills and UI_MAP",
+      "All 13 current D1 migrations and their Git blob SHAs",
+      "Wrangler LAB/PROD/STAGING migration paths",
+      "Active test/runtime references to the legacy migrations directory"
+    ],
+    "WRITES": [
+      "Move existing migration blobs to infra/database/migrations without content changes",
+      "Update Wrangler migration directories and active test/tooling references",
+      "Add exact-blob integrity regression and phase documentation"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Repository migration source-of-truth path",
+      "CI path filters and test fixture paths",
+      "Wrangler migration discovery only; no remote migration execution"
+    ],
+    "STORAGE_AFFECTED": [
+      "Git repository files only",
+      "No D1/R2/browser/Cloudflare writes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "All 13 migration file contents remain byte-identical.",
+      "No SQL is added, removed, reordered or executed remotely.",
+      "LAB, STAGING and PROD resolve the same neutral migration directory.",
+      "Historical evidence files are not rewritten.",
+      "Production database_id negative guard remains intact.",
+      "No POS product file or trigger file is modified."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Local D1 tests and fixtures",
+      "Wrangler LAB/PROD migration discovery",
+      "CANON Critical CI",
+      "Repository map and agent path policy"
+    ],
+    "RISKS": [
+      "Broken relative paths could make CI fail or Wrangler see migrations as missing.",
+      "A content-changing move could appear as a new migration.",
+      "Leaving active consumers on the legacy path would create split ownership."
+    ],
+    "ROLLBACK": [
+      "Revert this PR before any remote migration command is authorized; no remote rollback required."
+    ],
+    "TESTS": [
+      "Exact Git blob hash contract for 13 migrations",
+      "Wrangler LAB/PROD dry-run",
+      "Local D1 migrations apply",
+      "All cloud-sync tests",
+      "repo-map test",
+      "SKILL_PREFLIGHT temporal-order gate"
+    ]
+  }
+}

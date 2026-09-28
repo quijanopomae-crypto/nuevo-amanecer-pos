@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { a6Fixture, response } from './a6-fixture.mjs';
 
-const commerce = readFileSync('tools/cloudflare-lab/migrations/0008_canonical_commerce.sql','utf8');
-const financial = readFileSync('tools/cloudflare-lab/migrations/0009_canonical_financial.sql','utf8');
-const sessions = readFileSync('tools/cloudflare-lab/migrations/0011_canonical_session_runtime.sql','utf8');
+const commerce = readFileSync('infra/database/migrations/0008_canonical_commerce.sql','utf8');
+const financial = readFileSync('infra/database/migrations/0009_canonical_financial.sql','utf8');
+const sessions = readFileSync('infra/database/migrations/0011_canonical_session_runtime.sql','utf8');
 const source = readFileSync('tools/cloudflare-lab/src/a6-canonical.js','utf8');
 const auth = token => ({ authorization:'Bearer '+token, 'content-type':'application/json' });
 

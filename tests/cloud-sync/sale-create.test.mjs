@@ -213,6 +213,6 @@ test('Wrangler enruta comandos al Worker y la migración A3 es reaplicable', (t)
   const config = readFileSync(new URL('../../tools/cloudflare-lab/wrangler.jsonc', import.meta.url), 'utf8');
   assert.match(config, /"\/commands\/\*"/);
   const fixture = workerFixture(); t.after(() => fixture.close());
-  const migration = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0004_sale_create.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../../infra/database/migrations/0004_sale_create.sql', import.meta.url), 'utf8');
   assert.doesNotThrow(() => fixture.database.exec(migration));
 });

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { validateCanonicalSale } from '../../tools/cloudflare-lab/src/a6-commerce.js';
 
-const migration = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0012_credit_accounts_v2.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../../infra/database/migrations/0012_credit_accounts_v2.sql', import.meta.url), 'utf8');
 const canonicalRead = readFileSync(new URL('../../tools/cloudflare-lab/src/a6-canonical.js', import.meta.url), 'utf8');
 const commerce = readFileSync(new URL('../../tools/cloudflare-lab/src/a6-commerce.js', import.meta.url), 'utf8');
 

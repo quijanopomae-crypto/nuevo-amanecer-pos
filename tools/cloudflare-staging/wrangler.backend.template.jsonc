@@ -15,7 +15,7 @@
       "binding": "DB",
       "database_name": "nuevo-amanecer-staging",
       "database_id": "__STAGING_D1_DATABASE_ID__",
-      "migrations_dir": "../cloudflare-lab/migrations"
+      "migrations_dir": "../../infra/database/migrations"
     }
   ]
 }

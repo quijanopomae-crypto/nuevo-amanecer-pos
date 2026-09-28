@@ -22,7 +22,7 @@ test('REPO_MAP canonical navigation paths exist', () => {
     'laboratorio/pos-lab',
     'tools/cloudflare-lab/src/worker.js',
     'tools/cloudflare-lab/src/lab-workspace.js',
-    'tools/cloudflare-lab/migrations',
+    'infra/database/migrations',
     'tools/cloudflare-backup',
     '.opencode/ROLE_MAP.md',
     '.opencode/agents/pos-canon-implementer.md',

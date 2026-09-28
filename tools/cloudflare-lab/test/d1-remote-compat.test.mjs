@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const files = [
-  'tools/cloudflare-lab/migrations/0006_canonical_promotion.sql',
-  'tools/cloudflare-lab/migrations/0007_lab_workspace.sql'
+  'infra/database/migrations/0006_canonical_promotion.sql',
+  'infra/database/migrations/0007_lab_workspace.sql'
 ];
 
 test('remote D1 trigger migrations avoid known parser traps', () => {

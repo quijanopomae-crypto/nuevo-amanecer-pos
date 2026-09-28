@@ -1,1 +1,1 @@
-tools/cloudflare-lab/migrations/*.sql text eol=lf
+infra/database/migrations/*.sql text eol=lf

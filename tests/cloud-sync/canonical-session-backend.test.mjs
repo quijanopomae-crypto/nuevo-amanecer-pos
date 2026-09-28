@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { a6Fixture, response } from './a6-fixture.mjs';
 
-const commerce = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0008_canonical_commerce.sql', import.meta.url), 'utf8');
-const financial = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0009_canonical_financial.sql', import.meta.url), 'utf8');
-const sessions = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0011_canonical_session_runtime.sql', import.meta.url), 'utf8');
+const commerce = readFileSync(new URL('../../infra/database/migrations/0008_canonical_commerce.sql', import.meta.url), 'utf8');
+const financial = readFileSync(new URL('../../infra/database/migrations/0009_canonical_financial.sql', import.meta.url), 'utf8');
+const sessions = readFileSync(new URL('../../infra/database/migrations/0011_canonical_session_runtime.sql', import.meta.url), 'utf8');
 
 async function active(t) {
   const f = await a6Fixture(t);

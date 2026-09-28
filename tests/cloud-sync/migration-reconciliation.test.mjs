@@ -363,7 +363,7 @@ test('run finalizado solo acepta retry de finish con el mismo manifiesto', async
 
 test('migración A5 es reaplicable y las rutas están configuradas', (t) => {
   const fixture = workerFixture(); t.after(() => fixture.close());
-  const migration = readFileSync(new URL('../../tools/cloudflare-lab/migrations/0005_import_staging.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../../infra/database/migrations/0005_import_staging.sql', import.meta.url), 'utf8');
   assert.doesNotThrow(() => fixture.database.exec(migration));
   assert.match(readFileSync(new URL('../../tools/cloudflare-lab/wrangler.jsonc', import.meta.url), 'utf8'), /"\/imports\/\*"/);
 });

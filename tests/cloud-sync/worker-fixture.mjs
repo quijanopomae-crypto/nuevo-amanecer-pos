@@ -5,13 +5,13 @@ import worker from '../../tools/cloudflare-lab/src/worker.js';
 
 export function workerFixture(token = 'fixture-token', readToken = 'fixture-read-token') {
   const database = new DatabaseSync(':memory:');
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0001_sync_operations.sql', import.meta.url), 'utf8'));
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0002_read_only_indexes.sql', import.meta.url), 'utf8'));
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0003_device_auth.sql', import.meta.url), 'utf8'));
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0004_sale_create.sql', import.meta.url), 'utf8'));
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0005_import_staging.sql', import.meta.url), 'utf8'));
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8'));
-  database.exec(readFileSync(new URL('../../tools/cloudflare-lab/migrations/0010_session_auth.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0001_sync_operations.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0002_read_only_indexes.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0003_device_auth.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0004_sale_create.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0005_import_staging.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0006_canonical_promotion.sql', import.meta.url), 'utf8'));
+  database.exec(readFileSync(new URL('../../infra/database/migrations/0010_session_auth.sql', import.meta.url), 'utf8'));
   const hash = (credential) => createHash('sha256').update(credential).digest('hex');
   let batchFailureAt = null;
   const binding = {
