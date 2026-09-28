@@ -7,7 +7,7 @@
   var LOCK = 'na-canonical-financial-writer';
   var CREDENTIALS_KEY = 'na_cloud_sync_credentials';
   var METHODS = ['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto'];
-  var COMMANDS = ['sale.create', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
+  var COMMANDS = ['sale.create', 'product.create', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var READ_TIMEOUT_MS = 8000;
   var HOSTED_API_ORIGIN = null;
@@ -352,6 +352,49 @@
     return Object.assign(commonPayload(), { customer_id:input.customer_id, account_id:account.account_id, name:account.name, mode:account.mode });
   }
 
+  function makeProductPayload(input) {
+    input=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
+    function text(value,max,required) {
+      if(value===undefined||value===null||String(value).trim()==='') {
+        if(required) fail('INVALID_CANONICAL_PRODUCT');
+        return null;
+      }
+      var out=String(value).trim().replace(/\s+/g,' ');
+      if(out.length>max||/[\x00-\x1f\x7f]/.test(out)) fail('INVALID_CANONICAL_PRODUCT');
+      return out;
+    }
+    var name=text(input.name,240,true),unit=text(input.unit,80,true),purchaseUnit=text(input.purchase_unit,80,true);
+    var sku=text(input.sku,160,false),barcode=text(input.barcode,160,false);
+    var alternate=Array.isArray(input.alternate_codes)?input.alternate_codes.map(function(value){return text(value,160,true);}):[];
+    if(alternate.length>10) fail('INVALID_CANONICAL_PRODUCT');
+    var codes=[sku,barcode].concat(alternate).filter(Boolean).map(function(value){return value.toLowerCase();});
+    if(new Set(codes).size!==codes.length) fail('INVALID_CANONICAL_PRODUCT');
+    if(!uint(input.cost_cents)||!Number.isSafeInteger(input.price_cents)||input.price_cents<=0||
+       input.box_price_cents!=null&&(!Number.isSafeInteger(input.box_price_cents)||input.box_price_cents<=0)||
+       typeof input.purchase_factor!=='number'||!Number.isFinite(input.purchase_factor)||input.purchase_factor<=0||
+       input.units_per_box!=null&&(typeof input.units_per_box!=='number'||!Number.isFinite(input.units_per_box)||input.units_per_box<=0)||
+       typeof input.initial_stock_quantity!=='number'||!Number.isFinite(input.initial_stock_quantity)||input.initial_stock_quantity<0||
+       typeof input.stock_min_quantity!=='number'||!Number.isFinite(input.stock_min_quantity)||input.stock_min_quantity<0||
+       ![true,false].includes(input.includes_igv)||![true,false].includes(input.tracks_inventory)||
+       input.expiry_date!=null&&input.expiry_date!==''&&!validDate(input.expiry_date)) fail('INVALID_CANONICAL_PRODUCT');
+    var tax=String(input.tax_type||'').trim().toLowerCase(),comp=String(input.complementary_tax||'').trim().toLowerCase();
+    if(!['','gravado','exonerado','inafecto','gratuito'].includes(tax)||!['','isc','icbper'].includes(comp)) fail('INVALID_CANONICAL_PRODUCT');
+    var tracks=input.tracks_inventory;
+    return Object.assign(commonPayload(),{
+      product_id:validId(input.product_id)?input.product_id:'P-'+root.crypto.randomUUID(),
+      name:name,sku:sku,barcode:barcode,alternate_codes:alternate,
+      category:text(input.category,120,false),brand:text(input.brand,160,false),description:text(input.description,2000,false),
+      icon:text(input.icon,24,false),image:text(input.image,250000,false),unit:unit,purchase_unit:purchaseUnit,
+      purchase_factor:input.purchase_factor,cost_cents:input.cost_cents,price_cents:input.price_cents,
+      box_price_cents:input.box_price_cents==null?null:input.box_price_cents,
+      units_per_box:input.units_per_box==null?null:input.units_per_box,
+      initial_stock_quantity:tracks?input.initial_stock_quantity:0,
+      stock_min_quantity:tracks?input.stock_min_quantity:0,
+      expiry_date:tracks&&input.expiry_date?input.expiry_date:null,
+      includes_igv:input.includes_igv,tax_type:tax,complementary_tax:comp,tracks_inventory:tracks
+    });
+  }
+
   function makePayload(sale) {
     if (!sale || typeof sale !== 'object' || !Array.isArray(sale.items) || !sale.items.length || sale.items.length > 500 || !METHODS.includes(sale.payment_method)) fail('INVALID_CANONICAL_SALE');
     var seen = new Set(), total = 0;
@@ -510,6 +553,25 @@
         typeof payload.name === 'string' && payload.name.trim().length > 0 && payload.name.trim().length <= 60 &&
         ['accumulated','separate'].includes(payload.mode);
     }
+    if (command === 'product.create') {
+      if (!validId(payload.product_id) || typeof payload.name!=='string' || !payload.name.trim() || payload.name.length>240 ||
+          typeof payload.unit!=='string' || !payload.unit.trim() || payload.unit.length>80 ||
+          typeof payload.purchase_unit!=='string' || !payload.purchase_unit.trim() || payload.purchase_unit.length>80 ||
+          !uint(payload.cost_cents) || !Number.isSafeInteger(payload.price_cents) || payload.price_cents<=0 ||
+          payload.box_price_cents!==null && (!Number.isSafeInteger(payload.box_price_cents)||payload.box_price_cents<=0) ||
+          typeof payload.purchase_factor!=='number' || !Number.isFinite(payload.purchase_factor) || payload.purchase_factor<=0 ||
+          payload.units_per_box!==null && (typeof payload.units_per_box!=='number'||!Number.isFinite(payload.units_per_box)||payload.units_per_box<=0) ||
+          typeof payload.initial_stock_quantity!=='number'||!Number.isFinite(payload.initial_stock_quantity)||payload.initial_stock_quantity<0 ||
+          typeof payload.stock_min_quantity!=='number'||!Number.isFinite(payload.stock_min_quantity)||payload.stock_min_quantity<0 ||
+          ![true,false].includes(payload.includes_igv)||![true,false].includes(payload.tracks_inventory) ||
+          !Array.isArray(payload.alternate_codes)||payload.alternate_codes.length>10 ||
+          payload.expiry_date!==null&&!validDate(payload.expiry_date) ||
+          !['','gravado','exonerado','inafecto','gratuito'].includes(payload.tax_type) ||
+          !['','isc','icbper'].includes(payload.complementary_tax)) return false;
+      var productCodes=[payload.sku,payload.barcode].concat(payload.alternate_codes).filter(Boolean);
+      if(productCodes.some(function(value){return typeof value!=='string'||!value.trim()||value.length>160||/[\x00-\x1f\x7f]/.test(value);}))return false;
+      return new Set(productCodes.map(function(value){return value.toLowerCase();})).size===productCodes.length;
+    }
     if (command === 'sale.create') {
       if (!validId(payload.sale_id) || !Array.isArray(payload.items) || !payload.items.length || payload.items.length > 500 || !METHODS.includes(payload.payment_method) || !uint(payload.total_cents) || payload.total_cents === 0 || !payload.payment) return false;
       var total = 0, seen = new Set();
@@ -547,6 +609,8 @@
   function validReceipt(record, result) {
     if (!result || result.operation_id !== record.payload.operation_id) return false;
     if (!(result.status === 'created' && result.idempotent === false || result.status === 'already_processed' && result.idempotent === true)) return false;
+    if (record.command === 'product.create') return result.command===record.command && result.product_id===record.payload.product_id &&
+      result.promotion_id===record.binding.promotion_id && result.authority_epoch===record.binding.authority_epoch;
     // The shipped backend's sale receipt has no command, including on replay.
     if (record.command === 'sale.create') return result.sale_id === record.payload.sale_id && (result.command === undefined || result.command === record.command);
     if (record.command === 'expense.create') return result.command === record.command && result.expense_id === record.payload.expense_id &&
@@ -626,8 +690,9 @@
       assertAction(command);
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
       var record = { state: 'PENDING', binding: copy(binding), command: command, route: '/commands/' + command,
-        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
+        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'product.create' ? makeProductPayload(input) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
       record.receipt_ids = {};
+      if (command === 'product.create') record.receipt_ids.product_id = record.payload.product_id;
       if (command === 'expense.create') record.receipt_ids.expense_id = record.payload.expense_id;
       if (command === 'payment.create') record.receipt_ids.credit_provenance = data.credits.find(function (item) { return item.credit_id === record.payload.credit_id; }).provenance;
       if (command === 'compensation.create') {
@@ -639,6 +704,7 @@
       return sendPending(record);
     });
   }
+  function createProduct(input) { return createCommand('product.create', input); }
   function createCreditAccount(input) { return createCommand('credit-account.create', input); }
   function createPayment(input) { return createCommand('payment.create', input); }
   function openCash(input) { return createCommand('cash.open', input); }
@@ -816,6 +882,6 @@
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending,
-    createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
+    createProduct: createProduct, createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);
