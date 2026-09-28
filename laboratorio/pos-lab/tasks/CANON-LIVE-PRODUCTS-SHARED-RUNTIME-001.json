@@ -1,0 +1,36 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-LIVE-PRODUCTS-SHARED-RUNTIME-001",
+  "environment": "LABORATORIO",
+  "base_ref": "0b14f51519eb7ce8b6fdb2a0fae1d45011586668",
+  "objective": "Validar y evolucionar exclusivamente la infraestructura compartida bajo tools/cloudflare-lab necesaria para que CANON soporte product.create y venta de productos LIVE en pruebas aisladas, sin modificar POS-LAB, sin credenciales ni escrituras remotas de producción y sin convertir LAB en autoridad comercial.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-LIVE-PRODUCTS-SHARED-RUNTIME-001.json",
+    "laboratorio/pos-lab/preflight/CANON-LIVE-PRODUCTS-SHARED-RUNTIME-001.json",
+    "tools/cloudflare-lab/src/a6-products.js",
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tools/cloudflare-lab/src/a6-canonical.js",
+    "tools/cloudflare-lab/src/worker.js"
+  ],
+  "forbidden_files": [
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-LIVE-PRODUCTS-SHARED-RUNTIME-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
