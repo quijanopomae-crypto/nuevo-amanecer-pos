@@ -112,7 +112,7 @@ guardarCred=async function(...args){if(!_naF10AuthorizePermission('credits','Gua
 const _naF10BaseAbrirPago=abrirPago;
 abrirPago=function(...args){if(!_naF10AuthorizePermission('credits','Registrar un pago de crédito'))return;return _naF10BaseAbrirPago.apply(this,args);};
 const _naF10BaseConfirmarPago=confirmarPago;
-confirmarPago=async function(...args){if(!_naF10AuthorizePermission('credits','Confirmar un pago de crédito'))return;return await _naF10BaseConfirmarPago.apply(this,args);};
+confirmarPago=async function(...args){if(!_naF10AuthorizePermission('credits','Confirmar un pago de crédito'))return;const bridge=globalThis.NuevoAmanecerCanonicalCreditPaymentBridge;if(bridge&&typeof bridge.enabled==='function'&&bridge.enabled()&&typeof bridge.confirm==='function')return await bridge.confirm();return await _naF10BaseConfirmarPago.apply(this,args);};
 const _naF10BaseRevertirPagoCredito=revertirPagoCredito;
 revertirPagoCredito=async function(...args){if(!_naF10AuthorizePermission('credits','Revertir un pago de crédito'))return;return await _naF10BaseRevertirPagoCredito.apply(this,args);};
 const _naF10BaseAbrirModalApertura=abrirModalApertura;
