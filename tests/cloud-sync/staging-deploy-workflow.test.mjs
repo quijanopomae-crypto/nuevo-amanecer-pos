@@ -50,6 +50,8 @@ test('staging provisioning is idempotent and renders an exact isolated D1 config
 });
 
 test('staging canonical bootstrap is synthetic-only and restores production-grade guard', () => {
+  assert.doesNotMatch(seed,/\bBEGIN(?:\s+IMMEDIATE|\s+TRANSACTION)?\b/i);
+  assert.doesNotMatch(seed,/\bCOMMIT\b/i);
   assert.match(seed,/staging-synthetic-promotion-v1/);
   assert.match(seed,/Producto Sintético/);
   assert.match(seed,/Cliente Sintético/);

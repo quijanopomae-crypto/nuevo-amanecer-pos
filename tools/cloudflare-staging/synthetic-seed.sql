@@ -1,6 +1,4 @@
 PRAGMA foreign_keys = ON;
-BEGIN IMMEDIATE;
-
 INSERT INTO devices(device_id, role, status, credential_hash)
 VALUES('staging-seed-device', 'read_only', 'active', '1111111111111111111111111111111111111111111111111111111111111111');
 
@@ -149,5 +147,3 @@ SET mode='CANONICAL_READ_ONLY',
     minimum_client_contract='a6-gate-p-v1'
 WHERE id=1
   AND mode='FROZEN';
-
-COMMIT;

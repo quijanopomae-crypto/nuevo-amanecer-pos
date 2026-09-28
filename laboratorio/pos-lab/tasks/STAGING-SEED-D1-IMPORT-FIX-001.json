@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "STAGING-SEED-D1-IMPORT-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "dcc9a8d1c5c0e177098d75d53f685c6e3b6acd9f",
+  "objective": "Hacer el seed sintético STAGING compatible con el importador remoto D1 eliminando transacciones explícitas del archivo SQL y añadiendo una regresión.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/STAGING-SEED-D1-IMPORT-FIX-001.json",
+    "laboratorio/pos-lab/preflight/STAGING-SEED-D1-IMPORT-FIX-001.json",
+    "tools/cloudflare-staging/synthetic-seed.sql",
+    "tests/cloud-sync/staging-deploy-workflow.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_4_STAGING.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "ops/*trigger.json",
+    ".github/workflows/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/STAGING-SEED-D1-IMPORT-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
