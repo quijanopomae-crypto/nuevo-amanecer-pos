@@ -3,9 +3,9 @@
   "authorized": true,
   "authorized_by": "owner",
   "requested_action": "validate-production-canon-readonly",
-  "target_head": "aaec95d5cc90a09b2ebdb425dd9f257166b594be",
-  "requested_at_utc": "2026-09-26T23:02:00Z",
-  "note": "Validate real CANON customers/products/credits/payments/credit-accounts with a temporary session, no business writes, and prove business counts are unchanged.",
-  "retry_attempt": 4,
-  "retry_reason": "Retry readonly owner validation after using public credit identity (provenance + credit_id); read_key is intentionally stripped by canonicalRead before returning items."
+  "target_head": "5509634413c7478faca0a923d418ff8f6905c9a3",
+  "requested_at_utc": "2026-09-28T18:22:00Z",
+  "note": "Read-only production CANON validation at the current active HEAD (5509634) prior to any first-live-sale decision. No business writes; proves business counts unchanged and temporary session cleaned. Rebuilt from stale target_head 3c1620e4.",
+  "retry_attempt": 6,
+  "retry_reason": "Rebuild PR #191 onto the current active-branch HEAD; previous trigger targeted the stale post-Phase-6 HEAD 3c1620e4."
 }
