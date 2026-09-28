@@ -40,9 +40,8 @@ function fillProduct(tab, overrides={}) {
 }
 
 async function productTab(f, options={}) {
-  return device(f, {
+  const deviceOptions={
     token: options.token || 'device-a-token',
-    deviceId: options.deviceId || 'device-a',
     localStorage: options.localStorage,
     scripts,
     globals:{
@@ -53,7 +52,10 @@ async function productTab(f, options={}) {
       ...(options.globals || {}),
     },
     onFetch:options.onFetch,
-  });
+  };
+  if (Object.prototype.hasOwnProperty.call(options,'deviceId')) deviceOptions.deviceId=options.deviceId;
+  else if (!options.localStorage) deviceOptions.deviceId='device-a';
+  return device(f,deviceOptions);
 }
 
 test('product.create persists in D1, survives F5, is visible to another device and is sellable', async (t) => {
