@@ -96,7 +96,7 @@ confirmarVenta=async function(...args){if(!_naF10AuthorizePermission('sell','Con
 const _naF10BaseAbrirModalProd=abrirModalProd;
 abrirModalProd=function(...args){if(!_naF10AuthorizePermission('products','Crear un producto'))return;return _naF10BaseAbrirModalProd.apply(this,args);};
 const _naF10BaseGuardarProd=guardarProd;
-guardarProd=async function(...args){if(!_naF10AuthorizePermission('products','Guardar un producto'))return;return await _naF10BaseGuardarProd.apply(this,args);};
+guardarProd=async function(...args){if(!_naF10AuthorizePermission('products','Guardar un producto'))return;const bridge=globalThis.NuevoAmanecerCanonicalProductBridge;if(bridge&&typeof bridge.enabled==='function'&&bridge.enabled()&&typeof bridge.save==='function')return await bridge.save();return await _naF10BaseGuardarProd.apply(this,args);};
 const _naF10BaseAbrirMovInv=abrirMovInv;
 abrirMovInv=function(...args){if(!_naF10AuthorizePermission('inventoryMoves','Registrar movimiento de inventario'))return;return _naF10BaseAbrirMovInv.apply(this,args);};
 const _naF10BaseGuardarMovInv=guardarMovInv;
