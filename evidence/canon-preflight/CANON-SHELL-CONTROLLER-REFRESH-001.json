@@ -1,0 +1,53 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SHELL-CONTROLLER-REFRESH-001",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "El build público actual sirve activate.js con hash 11d2e7cfea524f53501bf0f36a84578268ca08be.",
+    "El CSS V2 público de menu coincide con LAB y contiene la regla aprobada que oculta hero-welcome-only.",
+    "POS/sw.js usa cache versionada por BUILD_HASH, skipWaiting() y clients.claim().",
+    "POS/index.html registra el Service Worker y llama registration.update(), pero no reacciona a controllerchange.",
+    "Una página ya cargada no vuelve a construir su DOM ni reaplica la nueva generación del shell solo porque un Service Worker nuevo tome control."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Forzar una única recarga cuando una sesión ya controlada cambia al Service Worker de un build nuevo.",
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "POS/index.html",
+      "POS/sw.js",
+      "tools/cloudflare-pos-web/public/activate.js",
+      ".github/workflows/v1.3-pos-web-deploy.yml"
+    ],
+    "WRITES": [
+      "POS/index.html: listener controllerchange con guardia de una sola recarga.",
+      "tests/product-fixes/canon-shell-controller-refresh.test.mjs: regresión determinista del lifecycle."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": ["lifecycle del documento cuando cambia el Service Worker controlador"],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin mutaciones de datos comerciales.",
+      "Sin cambios de autenticación ni credenciales.",
+      "Sin cambios de reglas financieras."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Afecta el shell común de todos los módulos únicamente al actualizar versión."
+    ],
+    "RISKS": [
+      "Bucle de recarga: mitigado con guardia en memoria y solo cuando existía controller al comenzar la carga.",
+      "Recarga innecesaria en primera instalación: impedida por hadController."
+    ],
+    "ROLLBACK": ["Revertir el cambio y redeploy."],
+    "TEST_PLAN": [
+      "Simular controller previo y dos controllerchange: una sola recarga.",
+      "Simular primer install sin controller: cero recargas.",
+      "Comprobar que register y update siguen ejecutándose.",
+      "Ejecutar CANON Critical CI."
+    ]
+  }
+}
