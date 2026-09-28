@@ -1,0 +1,34 @@
+{
+  "task_id": "PHASE_SESSION_CENSUS",
+  "title": "V1.3 production session census (strictly read-only)",
+  "spec": "docs/PHASE_SESSION_CENSUS.md",
+  "authorized_by": "owner",
+  "branch": "hardening/v1.3-session-census-readonly",
+  "allowed_files": [
+    "docs/PHASE_SESSION_CENSUS.md",
+    "laboratorio/pos-lab/preflight/PHASE_SESSION_CENSUS.json",
+    "tools/cloudflare-prod/scripts/session-census-readonly.mjs",
+    "tests/cloud-sync/v1.3-session-census-readonly.test.mjs",
+    ".github/workflows/v1.3-session-census-readonly.yml",
+    "ops/v1.3-session-census-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/index.html",
+    "tools/cloudflare-prod/scripts/first-live-sale.mjs",
+    "tools/cloudflare-prod/scripts/owner-validation-readonly.mjs",
+    "infra/**",
+    "orchestrator/**",
+    "MANIFEST.yaml"
+  ],
+  "data_policy": "read-only-no-business-writes",
+  "touches_canon": false,
+  "touches_cloudflare": true,
+  "cloudflare_access": "read-only",
+  "receipt": {
+    "kind": "SKILL_PREFLIGHT",
+    "order": "receipt-before-functional-change",
+    "notes": "Mirrors the governance of v1.3-owner-validation-readonly. READS: canonical_control, auth_sessions, devices, sales, sale_items, cash_movements, inventory_movements, sync_operations, canonical_financial_operations. WRITES: none. No /auth/activate, no temporary session. Static test forbids INSERT/UPDATE/DELETE and /commands/."
+  }
+}
