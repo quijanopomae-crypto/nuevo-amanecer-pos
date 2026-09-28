@@ -582,14 +582,22 @@ async function expenseLedgerCount(db,promotionId){
   const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_expense_operations WHERE promotion_id=?1').bind(promotionId).first();
   return Number(row?.count)||0;
 }
+async function productLedgerAvailable(db){
+  const row=await db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='canonical_product_operations'").first();
+  return row?.ok===1;
+}
+async function productLedgerCount(db,promotionId){
+  if(!promotionId||!await productLedgerAvailable(db))return 0;
+  const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_product_operations WHERE promotion_id=?1').bind(promotionId).first();
+  return Number(row?.count)||0;
+}
 async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
     c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
     (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
-    (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)+
-    (SELECT COUNT(*) FROM canonical_product_operations WHERE promotion_id=c.active_promotion_id)
+    (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
     ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
-  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id);
+  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id);
   return row;
 }
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}
