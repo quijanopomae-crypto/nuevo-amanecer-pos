@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-HOSTED-RUNTIME-CONFIG-001",
+  "environment": "CANON",
+  "base_ref": "9478c4a281801db2c56a9cf172429095e1d4f9e8",
+  "objective": "Desacoplar el artefacto web del endpoint PROD mediante /runtime-config.js no cacheado, fail-closed en Workers hospedados y configuración separada para PROD/STAGING sin desplegar.",
+  "owner_authorization": "El owner ordenó completar las 9 fases de remediación de infraestructura.",
+  "allowed_files": [
+    "tasks/CANON-HOSTED-RUNTIME-CONFIG-001.json",
+    "evidence/canon-preflight/CANON-HOSTED-RUNTIME-CONFIG-001.json",
+    "POS/index.html",
+    "POS/js/sync/hosted-canonical-guard.js",
+    "POS/js/sync/canonical-client.js",
+    "tools/cloudflare-pos-web/public/index.html",
+    "tools/cloudflare-pos-web/public/activate.js",
+    "tools/cloudflare-pos-web/src/worker.js",
+    "tools/cloudflare-pos-web/wrangler.jsonc",
+    "tools/cloudflare-staging/wrangler.web.template.jsonc",
+    "tests/cloud-sync/hosted-runtime-config.test.mjs",
+    "tests/cloud-sync/v1.3-pos-web-deploy.test.mjs",
+    "docs/PRODUCTION_HARDENING_PHASE_4_RUNTIME_CONFIG.md"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "infra/database/migrations/**",
+    "ops/*trigger.json",
+    "tools/cloudflare-prod/**"
+  ],
+  "invariants": [
+    "No despliegue ni escritura Cloudflare/D1/R2.",
+    "El endpoint PROD deja de estar embebido en los assets POS/activate.js.",
+    "La configuración hospedada se sirve no-store y no contiene secretos.",
+    "Un host workers.dev del proyecto sin configuración válida falla cerrado y no entra en modo local.",
+    "El mismo POS estático puede utilizarse con PROD o STAGING."
+  ]
+}
