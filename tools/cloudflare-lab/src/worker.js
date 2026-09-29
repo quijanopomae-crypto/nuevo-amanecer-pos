@@ -113,6 +113,14 @@ export default {
         if (auth instanceof Response) return auth;
         return await adjustCanonicalInventory(request, env, auth, json);
       }
+      if (financialCommand === 'credit-account.create') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        const denied = canonicalRuntimeDenied(url, env, json);
+        if (denied) return denied;
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return await createCanonicalCreditAccount(request, env, auth, json);
+      }
       if (financialCommand === EXPENSE_COMMAND) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
         const denied = canonicalRuntimeDenied(url, env, json);
