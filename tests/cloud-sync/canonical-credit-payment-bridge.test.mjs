@@ -36,10 +36,17 @@ function harness(options={}){
     cashState:{abierta:true,sessionId:'CASH-1'}
   };
   let releasePayment;
+  let releasePostRefresh;
+  let refreshCount=0;
   const paymentGate=options.blockPayment ? new Promise(resolve=>{releasePayment=resolve;}) : null;
+  const postRefreshGate=options.blockPostRefresh ? new Promise(resolve=>{releasePostRefresh=resolve;}) : null;
   const api={
     enabled(){return options.canonical !== false;},
-    async refresh(){calls.push(['refresh']);},
+    async refresh(){
+      refreshCount+=1;
+      calls.push(['refresh',refreshCount]);
+      if(postRefreshGate && refreshCount===2) await postRefreshGate;
+    },
     legacySnapshot(){calls.push(['snapshot']);return JSON.parse(JSON.stringify(snapshot));},
     async createPayment(payload){
       calls.push(['createPayment',JSON.parse(JSON.stringify(payload))]);
@@ -67,7 +74,8 @@ function harness(options={}){
   return {
     context,calls,ids,
     setSnapshot(value){snapshot=value;},
-    releasePayment(value){if(releasePayment)releasePayment(value);}
+    releasePayment(value){if(releasePayment)releasePayment(value);},
+    releasePostRefresh(value){if(releasePostRefresh)releasePostRefresh(value);}
   };
 }
 
@@ -86,6 +94,18 @@ test('CANON cash credit payment sends exact cents and open canonical cash sessio
   assert.ok(h.calls.some(x=>x[0]==='cliRender'));
   assert.ok(h.calls.some(x=>x[0]==='cajRender'));
   assert.equal(h.ids.pagoConfirmBtn.disabled,false);
+});
+
+test('confirmed payment does not keep the user waiting for the post-commit full refresh',async()=>{
+  const h=harness({amount:'5',blockPostRefresh:true});
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm();
+  assert.equal(result,true);
+  assert.ok(h.calls.some(x=>x[0]==='closeModal'&&x[1]==='mPagoCred'));
+  assert.ok(h.calls.some(x=>x[0]==='toast'&&/registrado/i.test(x[1])&&x[2]==='success'));
+  assert.equal(h.calls.filter(x=>x[0]==='createPayment').length,1);
+  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2);
+  h.releasePostRefresh();
+  await new Promise(resolve=>setImmediate(resolve));
 });
 
 test('CANON digital payment sends reference and never attaches cash session',async()=>{
