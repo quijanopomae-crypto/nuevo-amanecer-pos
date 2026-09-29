@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish the validated CANON sale UI lock fix from PR #211. Allow only sale preparation UI under canonical authority while preserving legacy financial-write blocking.",
-  "retry_attempt": 32,
-  "retry_reason": "PR #211 merged at 3b741aa47cfebb565489ab918afd9cce730f2928 after CANON Critical #234 and E2E Smoke #26 passed. Root cause confirmed independently: posAdd, quick payment and abrirCobro were calling isModuleLocked('ventas') without CANON UI context.",
-  "requested_at_utc": "2026-09-29T11:50:00Z",
-  "target_head": "3b741aa47cfebb565489ab918afd9cce730f2928"
+  "note": "Publish validated client payment modal stacking fix from PR #213. Only #mPagoCred is raised above the V2 client workspace; security overlays remain above it.",
+  "retry_attempt": 33,
+  "retry_reason": "Perplexity forensic review and RED/GREEN TDD confirmed mPagoCred inherited z-index 200 while the V2 client workspace is z-index 1200. CANON Critical and E2E passed after setting #mPagoCred to 1300.",
+  "requested_at_utc": "2026-09-29T12:45:00Z",
+  "target_head": "d99de6d1beab3a1b7ca0065f04b3567af7fadfef"
 }
