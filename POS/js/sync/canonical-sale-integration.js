@@ -60,7 +60,9 @@
     } catch (lockError) { failClosed('Las ventas están bloqueadas', lockError); return; }
     var cart = Array.isArray(root.cart) ? root.cart : [];
     if (!cart.length) { failClosed('El carrito está vacío.', null); return; }
-    var cartFingerprint = JSON.stringify(cart.map(function (item) { return [item.id, item.qty, item.precio]; }));
+    var cartFingerprint = JSON.stringify(cart.map(function (item) {
+      return [item.id, item.qty, item.precio, item.ventaLibre ? item.name : null, item.ventaLibre ? item.codigoIngresado : null, item.canonicalGenericId || null];
+    }));
     if (durableCartFingerprint === cartFingerprint) {
       failClosed('Esta venta ya quedó guardada localmente y está pendiente de sincronización.', null); return;
     }
@@ -112,10 +114,18 @@
       created_at: createdAt,
       payment_method: method,
       items: cart.map(function (item) {
-        return { product_id: String(item.id), quantity: Number(item.qty), precio: item.precio,
+        var line = { quantity: Number(item.qty), precio: item.precio,
           unitsPerQty: root._naUnitsPerQty ? root._naUnitsPerQty(item) : 1,
           ventaModo: item.ventaModo, modo: item.modo, ventaLibre: !!item.ventaLibre,
           ventaSinStock: !!item.ventaSinStock, unidadesSinStock: item.unidadesSinStock };
+        if (item.ventaLibre) {
+          line.canonicalGenericId = item.canonicalGenericId;
+          line.name = item.name || item.nombre || 'VARIOS';
+          line.codigoIngresado = item.codigoIngresado || item.barcode || '';
+          line.barcode = item.barcode || '';
+          line.sku = item.sku || '';
+        } else line.product_id = String(item.id);
+        return line;
       })
     };
     if (method === 'mixto') input.payment = { cash_cents: cents(mixed.cash), digital_cents: cents(mixed.digital), digital_method: mixed.digitalMethod, reference: reference };

@@ -48,6 +48,15 @@ test('marks accumulated stock shortage deterministically', () => {
   assert.equal(result.sales[1].reason, 'INSUFFICIENT_PROJECTED_STOCK');
   assert.equal(result.products[0].projected_stock, 3);
 });
+test('generic VARIOS line stays pending without product conflict or projected stock', () => {
+  const genericItem={product_id:'GENERIC:test-1',quantity:2,unit_price_cents:125,line_total_cents:250,generic_line:{name:'Recarga libre',code:'REC-01'}};
+  const generic=intent('G','GENERIC:test-1',2,{items:[genericItem],total_cents:250});
+  const result=fixture().project(base(),snapshot(generic));
+  assert.equal(result.sales[0].conflict,false);
+  assert.deepEqual(copy(result.sales[0].items),[genericItem]);
+  assert.equal(Object.hasOwn(result.products[0],'projected_stock'),false);
+  assert.equal(result.products.length,1);
+});
 test('missing product conflicts without creating a product', () => {
   const result = fixture().project(base(), snapshot(intent('A', 'missing')));
   assert.equal(result.sales[0].conflict, true);

@@ -22,6 +22,16 @@
       : nonEmptyString(value, code);
   }
 
+  function boundedText(value, max, code, optional) {
+    if (value === undefined || value === null || String(value).trim() === '') {
+      if (optional) return '';
+      fail(code);
+    }
+    var out = String(value).trim().replace(/\s+/g, ' ');
+    if (out.length > max || /[\u0000-\u001f\u007f-\u009f]/.test(out)) fail(code);
+    return out;
+  }
+
   function cents(value, code) {
     if (!Number.isSafeInteger(value) || value < 0) fail(code);
     return value;
@@ -64,16 +74,22 @@
     var seen = new Set();
     var items = itemsInput.map(function (item) {
       if (!item || typeof item !== 'object' || Array.isArray(item)) fail('ITEM_INVALID');
-      if (item.ventaLibre === true) fail('VENTA_LIBRE_UNSUPPORTED');
       if (item.ventaModo === 'caja' || item.modo === 'mayorista') fail('VENTA_MODO_CAJA_UNSUPPORTED');
       if (item.unitsPerQty !== undefined && item.unitsPerQty !== 1) fail('UNITS_PER_QTY_UNSUPPORTED');
       if (item.ventaSinStock === true) fail('VENTA_SIN_STOCK');
       if (item.unidadesSinStock !== undefined && Number(item.unidadesSinStock) > 0) fail('STOCK_NEGATIVO');
-      var productId = nonEmptyString(item.product_id !== undefined ? item.product_id : item.productId, 'PRODUCT_ID_INVALID');
+      if (item.generic_line !== undefined && (!item.generic_line || typeof item.generic_line !== 'object' || Array.isArray(item.generic_line))) fail('GENERIC_LINE_INVALID');
+      var generic = item.ventaLibre === true || item.generic_line !== undefined;
+      var productId = generic
+        ? stableId(item.generic_product_id !== undefined ? item.generic_product_id :
+            (item.canonicalGenericId !== undefined ? item.canonicalGenericId : item.product_id), 'GENERIC:', 'GENERIC_ID_INVALID')
+        : nonEmptyString(item.product_id !== undefined ? item.product_id : item.productId, 'PRODUCT_ID_INVALID');
+      if (generic && (productId.length > 160 || productId.slice(0, 8) !== 'GENERIC:' || /[\u0000-\u001f\u007f-\u009f]/.test(productId))) fail('GENERIC_ID_INVALID');
       if (seen.has(productId)) fail('PRODUCT_ID_DUPLICATE');
       seen.add(productId);
       var quantity = item.quantity !== undefined ? item.quantity : item.cantidad;
       if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) fail('QUANTITY_INVALID');
+      if (generic && (!Number.isSafeInteger(quantity) || quantity > 9999)) fail('GENERIC_QUANTITY_INVALID');
       var unitPrice;
       if (Object.prototype.hasOwnProperty.call(item, 'unit_price_cents') || Object.prototype.hasOwnProperty.call(item, 'unit_price')) {
         unitPrice = amount(item, 'unit_price_cents', 'unit_price', 'PRICE_INVALID');
@@ -81,11 +97,20 @@
         // Local cart rows may carry their effective price as precio/precioUnitario (soles).
         unitPrice = solesToCents(item.precio !== undefined ? item.precio : item.precioUnitario, 'PRICE_INVALID');
       }
+      if (generic && unitPrice <= 0) fail('PRICE_INVALID');
       var rawLine = quantity * unitPrice;
       if (!Number.isSafeInteger(rawLine)) fail('TOTAL_UNSAFE');
       var lineTotal = item.line_total_cents === undefined ? rawLine : cents(item.line_total_cents, 'TOTAL_UNSAFE');
       if (lineTotal !== rawLine) fail('LINE_TOTAL_MISMATCH');
-      return { product_id: productId, quantity: quantity, unit_price_cents: unitPrice, line_total_cents: lineTotal };
+      var out = { product_id: productId, quantity: quantity, unit_price_cents: unitPrice, line_total_cents: lineTotal };
+      if (generic) {
+        var genericMeta = item.generic_line || null;
+        out.generic_line = {
+          name: boundedText(genericMeta ? genericMeta.name : (item.name !== undefined ? item.name : item.nombre), 240, 'GENERIC_NAME_INVALID', false),
+          code: boundedText(genericMeta ? genericMeta.code : (item.codigoIngresado !== undefined ? item.codigoIngresado : (item.barcode !== undefined ? item.barcode : item.sku)), 160, 'GENERIC_CODE_INVALID', true)
+        };
+      }
+      return out;
     });
 
     var total = items.reduce(function (sum, item) {

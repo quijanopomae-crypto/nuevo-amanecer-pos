@@ -454,13 +454,25 @@
       if (!requested || !validId(requested.product_id) || seen.has(requested.product_id) || !Number.isSafeInteger(requested.quantity) || requested.quantity <= 0 ||
           !uint(requested.unit_price_cents) || !uint(requested.line_total_cents)) fail('INVALID_CANONICAL_ITEM');
       seen.add(requested.product_id);
-      var product = data.products.find(function (item) { return item.product_id === requested.product_id; });
-      if (!product || !uint(product.stock_revision)) fail('INVALID_CANONICAL_PRODUCT');
+      var generic = requested.generic_line;
+      var expectedRevision = 0;
+      if (generic !== undefined) {
+        if (!generic || typeof generic !== 'object' || Array.isArray(generic) || requested.product_id.slice(0,8) !== 'GENERIC:' ||
+            requested.quantity > 9999 || requested.unit_price_cents <= 0 ||
+            typeof generic.name !== 'string' || !generic.name.trim() || generic.name.length > 240 || /[\x00-\x1f\x7f]/.test(generic.name) ||
+            typeof generic.code !== 'string' || generic.code.length > 160 || /[\x00-\x1f\x7f]/.test(generic.code)) fail('INVALID_CANONICAL_GENERIC_LINE');
+      } else {
+        var product = data.products.find(function (item) { return item.product_id === requested.product_id; });
+        if (!product || !uint(product.stock_revision)) fail('INVALID_CANONICAL_PRODUCT');
+        expectedRevision = product.stock_revision;
+      }
       var line = requested.quantity * requested.unit_price_cents;
       if (!Number.isSafeInteger(line) || requested.line_total_cents !== line) fail('INVALID_CANONICAL_ITEM');
       total += line; if (!Number.isSafeInteger(total)) fail('UNSAFE_CANONICAL_TOTAL');
-      return { product_id: requested.product_id, quantity: requested.quantity, unit_price_cents: requested.unit_price_cents,
-        line_total_cents: requested.line_total_cents, expected_stock_revision: product.stock_revision };
+      var out = { product_id: requested.product_id, quantity: requested.quantity, unit_price_cents: requested.unit_price_cents,
+        line_total_cents: requested.line_total_cents, expected_stock_revision: expectedRevision };
+      if (generic !== undefined) out.generic_line = { name: generic.name.trim().replace(/\s+/g,' '), code: generic.code.trim() };
+      return out;
     });
     if (total !== intent.total_cents) fail('INVALID_CANONICAL_TOTAL');
     var inputPayment = intent.payment;
@@ -600,6 +612,12 @@
       for (var item of payload.items) {
         if (!item || !validId(item.product_id) || seen.has(item.product_id) || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > Number.MAX_SAFE_INTEGER ||
             !uint(item.unit_price_cents) || !uint(item.expected_stock_revision) || !uint(item.line_total_cents) || item.line_total_cents !== Math.round(item.quantity * item.unit_price_cents)) return false;
+        if (item.generic_line !== undefined) {
+          if (!item.generic_line || typeof item.generic_line !== 'object' || Array.isArray(item.generic_line) || item.product_id.slice(0,8)!=='GENERIC:' ||
+              !Number.isSafeInteger(item.quantity) || item.quantity>9999 || item.unit_price_cents<=0 || item.expected_stock_revision!==0 ||
+              typeof item.generic_line.name!=='string' || !item.generic_line.name.trim() || item.generic_line.name.length>240 || /[\x00-\x1f\x7f]/.test(item.generic_line.name) ||
+              typeof item.generic_line.code!=='string' || item.generic_line.code.length>160 || /[\x00-\x1f\x7f]/.test(item.generic_line.code)) return false;
+        }
         seen.add(item.product_id); total += item.line_total_cents; if (!uint(total)) return false;
       }
       if (total !== payload.total_cents || (payload.customer_id !== undefined && !validId(payload.customer_id)) || (payload.payment_method === 'credito' && (!validId(payload.customer_id) || !validDate(payload.credit_due)))) return false;

@@ -535,6 +535,19 @@ async function canonicalRead(url,db,json){
     rows=await db.prepare(`SELECT event_id AS read_key,event_id,operation_id,promotion_id,event_type,session_id,credit_id,credit_provenance,
       credit_delta_cents,cash_delta_cents,payment_method,reference,reason,compensates_operation_id,created_at FROM canonical_financial_events
       WHERE promotion_id=?1 AND event_id>?2 ORDER BY event_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='sale_items'&&before.mode==='ACTIVE'&&await genericSaleSchemaAvailable(db)){
+    const keyExpr="r.sale_id || char(0) || printf('%020d',r.line_number)";
+    rows=await db.prepare(`SELECT ${keyExpr} AS read_key,
+      r.sale_id,r.line_number,r.operation_id,r.product_id,r.quantity,r.unit_price_cents,r.line_total_cents,r.created_at,
+      CASE WHEN g.sale_id IS NULL THEN 'PRODUCT' ELSE 'GENERIC' END AS line_type,
+      g.name AS generic_name,g.code AS generic_code
+      FROM canonical_sale_context x
+      JOIN sale_items r ON r.sale_id=x.sale_id
+      LEFT JOIN canonical_generic_sale_lines g
+        ON g.sale_id=r.sale_id AND g.line_number=r.line_number AND g.operation_id=r.operation_id
+      WHERE x.promotion_id=?1 AND ${keyExpr}>?2
+      ORDER BY r.sale_id,r.line_number LIMIT ?3`)
+      .bind(before.active_promotion_id,page.key,page.limit+1).all();
   } else if(sqlName==='inventory_movements'&&before.mode==='ACTIVE'){
     const liveProductsReady=await liveProductSchemaAvailable(db);
     const inventoryAdjustReady=await inventoryLedgerAvailable(db);
@@ -635,6 +648,10 @@ async function inventoryLedgerAvailable(db){
   const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
     WHERE type='table' AND name IN ('canonical_inventory_operations','canonical_manual_inventory_movements')`).first();
   return Number(row?.count)===2;
+}
+async function genericSaleSchemaAvailable(db){
+  const row=await db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines'").first();
+  return row?.ok===1;
 }
 async function inventoryLedgerCount(db,promotionId){
   if(!promotionId||!await inventoryLedgerAvailable(db))return 0;
