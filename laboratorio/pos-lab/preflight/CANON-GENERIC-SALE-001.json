@@ -21,7 +21,8 @@
       "metadata inmutable de líneas genéricas ligadas a sale_items",
       "extensión compatible de sale.create para líneas VARIOS",
       "proyección UI de nombre/código genérico",
-      "ruta CANON del modal Venta libre"
+      "ruta CANON del modal Venta libre",
+      "proyección OUTBOX de línea genérica sin stock ni PRODUCT_NOT_FOUND"
     ],
     "DOM_AFFECTED": [
       "#mVentaLibre",
@@ -54,7 +55,8 @@
       "POS carrito y cobro",
       "sale.create backend",
       "historial de ventas y tickets",
-      "crédito opcional sobre venta genérica"
+      "crédito opcional sobre venta genérica",
+      "proyección local PENDING_SYNC antes de confirmar D1"
     ],
     "RISKS": [
       "abrir sale_items a IDs no autorizados",
@@ -72,7 +74,8 @@
       "read/projection en segundo dispositivo",
       "línea normal sin regresión",
       "idempotencia/replay",
-      "CI Mirror/Critical/E2E"
+      "CI Mirror/Critical/E2E",
+      "proyección OUTBOX genérica sin conflicto de producto"
     ]
   },
   "skills": {
