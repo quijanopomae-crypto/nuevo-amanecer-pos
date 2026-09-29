@@ -36,6 +36,19 @@ test('production read-only preflight proves migrations 0014 through 0017 and D1 
   assert.match(workflow, /read_only_preflight/);
 });
 
+test('failed production preflight prints enough read-only evidence to identify exact D1 drift', () => {
+  for (const marker of [
+    'observed_migrations',
+    'missing_migrations',
+    'missing_schema_objects',
+    'missing_customer_registry_fks',
+    'v17_residue_objects',
+  ]) {
+    assert.ok(workflow.includes(marker), 'missing diagnostic marker ' + marker);
+  }
+  assert.match(workflow, /console\.log\(JSON\.stringify\(result\)\)/);
+});
+
 test('production D1 preflight contains no SQL business or schema mutation', () => {
   assert.doesNotMatch(workflow, /\bINSERT\s+INTO\b/i);
   assert.doesNotMatch(workflow, /\bUPDATE\s+[A-Za-z_]/i);
