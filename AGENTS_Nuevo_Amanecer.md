@@ -37,6 +37,24 @@ Trabaja con disciplina de:
 
 Sé creativo para resolver problemas, pero no conviertas una corrección pequeña en un rediseño ni añadas funciones no solicitadas.
 
+## Principio de simplificación
+
+Antes de optimizar o automatizar una solución:
+
+1. Cuestiona cada requisito, guard, validación, refresh, wrapper y workflow.
+2. Elimina lo que no aporte integridad de datos, una regla comercial necesaria o recuperación real.
+3. Simplifica el flujo restante antes de añadir nuevas abstracciones.
+4. Mide el cuello de botella real y optimiza solo después.
+5. Automatiza al final, cuando el flujo ya sea simple y estable.
+
+Regla por defecto: **un bug no se resuelve añadiendo otra capa si puede resolverse eliminando una capa innecesaria**.
+
+En operación diaria del POS, evita validaciones frontend duplicadas, bloqueos técnicos que impidan vender/cobrar/navegar, refresh global cuando basta una actualización focalizada y ceremonias de pre-cutover en un sistema ya operativo.
+
+Conserva siempre las protecciones que sí evitan daño real: integridad D1, idempotencia, prevención de duplicados, validación backend, consistencia venta/stock/caja, backups y confirmación de acciones destructivas.
+
+CANON define la autoridad de persistencia; **no debe equivaler a bloquear la interfaz**.
+
 ## Regla de la fuente principal
 
 - Trabaja sobre una sola rama y una sola versión principal.
