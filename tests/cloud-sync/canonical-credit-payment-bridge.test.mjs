@@ -36,10 +36,19 @@ function harness(options={}){
     cashState:{abierta:true,sessionId:'CASH-1'}
   };
   let releasePayment;
+  let releasePostRefresh;
+  let refreshCount=0;
   const paymentGate=options.blockPayment ? new Promise(resolve=>{releasePayment=resolve;}) : null;
+  const postRefreshGate=options.blockPostRefresh ? new Promise(resolve=>{releasePostRefresh=resolve;}) : null;
   const api={
     enabled(){return options.canonical !== false;},
-    async refresh(){calls.push(['refresh']);},
+    sourceState(){return options.currentSnapshot ? {validation:'current'} : {validation:'stale'};},
+    assertAction(action){calls.push(['assertAction',action]); if(options.currentSnapshot===false) throw new Error('CANONICAL_COMMERCE_CLOSED'); return true;},
+    async refresh(){
+      refreshCount+=1;
+      calls.push(['refresh',refreshCount]);
+      if(postRefreshGate && refreshCount===2) await postRefreshGate;
+    },
     legacySnapshot(){calls.push(['snapshot']);return JSON.parse(JSON.stringify(snapshot));},
     async createPayment(payload){
       calls.push(['createPayment',JSON.parse(JSON.stringify(payload))]);
@@ -67,7 +76,8 @@ function harness(options={}){
   return {
     context,calls,ids,
     setSnapshot(value){snapshot=value;},
-    releasePayment(value){if(releasePayment)releasePayment(value);}
+    releasePayment(value){if(releasePayment)releasePayment(value);},
+    releasePostRefresh(value){if(releasePostRefresh)releasePostRefresh(value);}
   };
 }
 
@@ -83,9 +93,33 @@ test('CANON cash credit payment sends exact cents and open canonical cash sessio
   });
   assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2);
   assert.ok(h.calls.some(x=>x[0]==='closeModal'&&x[1]==='mPagoCred'));
-  assert.ok(h.calls.some(x=>x[0]==='cliRender'));
-  assert.ok(h.calls.some(x=>x[0]==='cajRender'));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(x=>['cliRender','cajRender','dashboard'].includes(x[0])).length,0,
+    'canonical update event owns the page render; the bridge does not duplicate it');
   assert.equal(h.ids.pagoConfirmBtn.disabled,false);
+});
+
+test('confirmed payment does not keep the user waiting for the post-commit full refresh',async()=>{
+  const h=harness({amount:'5',blockPostRefresh:true});
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm();
+  assert.equal(result,true);
+  assert.ok(h.calls.some(x=>x[0]==='closeModal'&&x[1]==='mPagoCred'));
+  assert.ok(h.calls.some(x=>x[0]==='toast'&&/CONFIRMADO/.test(x[1])&&x[2]==='success'));
+  assert.equal(h.calls.filter(x=>x[0]==='createPayment').length,1);
+  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2);
+  h.releasePostRefresh();
+  await new Promise(resolve=>setImmediate(resolve));
+});
+
+test('current CANON snapshot skips the redundant full refresh before payment',async()=>{
+  const h=harness({amount:'5',currentSnapshot:true});
+  assert.equal(await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(),true);
+  await new Promise(resolve=>setImmediate(resolve));
+  const refreshes=h.calls.filter(x=>x[0]==='refresh');
+  assert.equal(refreshes.length,1,'only background reconciliation should refresh');
+  const createIndex=h.calls.findIndex(x=>x[0]==='createPayment');
+  const refreshIndex=h.calls.findIndex(x=>x[0]==='refresh');
+  assert.ok(createIndex>=0 && refreshIndex>createIndex,'payment ACK should happen before the full refresh');
 });
 
 test('CANON digital payment sends reference and never attaches cash session',async()=>{

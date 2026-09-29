@@ -37,6 +37,24 @@ Trabaja con disciplina de:
 
 Sé creativo para resolver problemas, pero no conviertas una corrección pequeña en un rediseño ni añadas funciones no solicitadas.
 
+## Principio de simplificación
+
+Antes de optimizar o automatizar una solución:
+
+1. Cuestiona cada requisito, guard, validación, refresh, wrapper y workflow.
+2. Elimina lo que no aporte integridad de datos, una regla comercial necesaria o recuperación real.
+3. Simplifica el flujo restante antes de añadir nuevas abstracciones.
+4. Mide el cuello de botella real y optimiza solo después.
+5. Automatiza al final, cuando el flujo ya sea simple y estable.
+
+Regla por defecto: **un bug no se resuelve añadiendo otra capa si puede resolverse eliminando una capa innecesaria**.
+
+En operación diaria del POS, evita validaciones frontend duplicadas, bloqueos técnicos que impidan vender/cobrar/navegar, refresh global cuando basta una actualización focalizada y ceremonias de pre-cutover en un sistema ya operativo.
+
+Conserva siempre las protecciones que sí evitan daño real: integridad D1, idempotencia, prevención de duplicados, validación backend, consistencia venta/stock/caja, backups y confirmación de acciones destructivas.
+
+CANON define la autoridad de persistencia; **no debe equivaler a bloquear la interfaz**.
+
 ## Regla de la fuente principal
 
 - Trabaja sobre una sola rama y una sola versión principal.
@@ -210,3 +228,12 @@ Para V1.3 CANON/cloud, lee la especificación V1.3 aplicable existente en `docs/
 Para V1.2/recovery, usa los documentos `docs/V1.2_*.md` existentes solo cuando esa versión o recuperación sea relevante.
 
 Si descubres comandos reales para ejecutar o probar, documéntalos en `README.md`. No inventes comandos ni documentos.
+
+
+## Invariante: skipStatus en payment.create
+
+- `sendPending(record, skipStatus)` omite el GET `/read/canonical/status` únicamente para un `payment.create` nuevo.
+- Esa omisión es segura SOLO porque el Worker valida `authority_epoch`, `expected_control_revision` y `expected_credit_revision` atómicamente al escribir el evento PAYMENT en D1.
+- Los reintentos de comandos pendientes SIEMPRE deben verificar el status remoto antes de reenviar la intención.
+- Si alguna vez se relaja esa validación en el Worker, hay que eliminar `skipStatus` del cliente.
+- Cobertura: `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs` (stale_credit, ACK perdido, doble toque).

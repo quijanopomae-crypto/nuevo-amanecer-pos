@@ -57,15 +57,6 @@
     else root.document.getElementById('mPagoCred')?.classList.remove('open');
   }
 
-  // Read-only lookup: the bridge never replaces the canonical client renderer
-  // installed by inline-03 (see client-renderer-collision invariant).
-  function renderViews() {
-    ['cliRender', 'cajRender', 'updateDashboard'].forEach(function (name) {
-      var render = root[name];
-      if (typeof render === 'function') render.call(root);
-    });
-  }
-
   async function refreshCanonical() {
     var client = api();
     if (!client || typeof client.refresh !== 'function' || typeof client.legacySnapshot !== 'function') {
@@ -73,6 +64,25 @@
     }
     await client.refresh();
     return client.legacySnapshot();
+  }
+
+  function currentPaymentSnapshot() {
+    var client = api();
+    if (!client || typeof client.sourceState !== 'function' || typeof client.legacySnapshot !== 'function' ||
+        typeof client.assertAction !== 'function') return null;
+    try {
+      var state = client.sourceState();
+      if (!state || state.validation !== 'current') return null;
+      client.assertAction('payment.create');
+      return client.legacySnapshot();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function paymentSnapshot() {
+    var current = currentPaymentSnapshot();
+    return current || await refreshCanonical();
   }
 
   function pendingRecord() {
@@ -118,22 +128,27 @@
     });
   }
 
-  // The command is durable server-side once a receipt exists. A later refresh
-  // failure must never be reported as a failed payment.
-  async function afterCommit(receipt, amountCents, replayed) {
-    closeModal();
+  // Once the Worker returns a durable receipt, the payment is authoritative.
+  // Do not keep the cashier waiting for a full CANON reconciliation: close and
+  // acknowledge immediately, then refresh the wider UI in the background.
+  function reconcileAfterCommit(receipt, amountCents) {
     var operation = clean(receipt && receipt.operation_id);
     var amount = typeof amountCents === 'number' ? ' de S/ ' + (amountCents / 100).toFixed(2) : '';
-    try {
-      await refreshCanonical();
-      renderViews();
-      notify(replayed
-        ? 'Se confirmó el pago CANON pendiente' + amount + ' (no se registró otro pago). Revisa el saldo antes de registrar otro abono.'
-        : 'Pago CANON' + amount + ' registrado', 'success');
-    } catch (error) {
-      notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
-        clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');
-    }
+    Promise.resolve()
+      .then(refreshCanonical)
+      .catch(function (error) {
+        notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
+          clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');
+      });
+  }
+
+  async function afterCommit(receipt, amountCents, replayed) {
+    closeModal();
+    var amount = typeof amountCents === 'number' ? ' de S/ ' + (amountCents / 100).toFixed(2) : '';
+    notify(replayed
+      ? 'Pago CANON pendiente' + amount + ' CONFIRMADO (no se registró otro pago).'
+      : 'Pago CANON' + amount + ' CONFIRMADO', 'success');
+    reconcileAfterCommit(receipt, amountCents);
     return true;
   }
 
@@ -218,7 +233,7 @@
 
       var snapshot;
       try {
-        snapshot = await refreshCanonical();
+        snapshot = await paymentSnapshot();
       } catch (error) {
         notify('No se registró el pago: CANON no disponible (' + clean(error && error.message) + ')', 'error');
         return false;

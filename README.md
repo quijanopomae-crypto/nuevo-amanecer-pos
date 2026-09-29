@@ -61,6 +61,12 @@ node --test tests/release-local-server.test.mjs
 
 No cambiar el origen de una caja existente sin exportar y comprobar antes el respaldo completo. El repositorio no debe contener datos comerciales reales ni valores de credenciales.
 
+Pruebas focalizadas de abonos CANON (Worker/SQLite local con datos sintéticos):
+
+```powershell
+node --test tests/cloud-sync/canonical-credit-payment-e2e.test.mjs tests/cloud-sync/canonical-credit-payment-bridge.test.mjs tests/cloud-sync/client-renderer-collision.test.mjs
+```
+
 ## LAB móvil
 
 El LAB se abre localmente desde `laboratorio/pos-lab/` y puede publicarse como vista LAB por GitHub Pages. El Pages build no sirve el `POS/index.html` canónico como aplicación de producción.
