@@ -101,19 +101,14 @@ jobs:
               '0016_canonical_generic_sale_lines.sql',
               '0017_canonical_live_customers.sql',
             ];
-            const migrationRows = await query('d1_migrations',
-              "SELECT name FROM d1_migrations WHERE name IN ('0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0017_canonical_live_customers.sql') ORDER BY name;");
-            const migrationNames = migrationRows.map(row => String(row.name));
-            if (JSON.stringify(migrationNames) !== JSON.stringify(requiredMigrations)) {
-              throw new Error('production migrations 0014-0017 are not all recorded');
-            }
+            const allMigrationRows = await query('d1_migrations',
+              'SELECT name FROM d1_migrations ORDER BY name;');
+            const observedMigrations = allMigrationRows.map(row => String(row.name));
+            const missingMigrations = requiredMigrations.filter(name => !observedMigrations.includes(name));
 
             const quickRows = await query('quick_check', 'PRAGMA quick_check;');
             const quickCheck = String(Object.values(quickRows[0] || {})[0] || '').toLowerCase();
-            if (quickCheck !== 'ok') throw new Error('PRAGMA quick_check failed');
-
             const foreignKeyRows = await query('foreign_key_check', 'PRAGMA foreign_key_check;');
-            if (foreignKeyRows.length !== 0) throw new Error('PRAGMA foreign_key_check reported violations');
 
             const requiredObjects = {
               table: [
@@ -149,15 +144,12 @@ jobs:
             const quotedObjectNames = expectedObjects.map(item => "'" + item.name + "'").join(',');
             const objectRows = await query('sqlite_master 0017 objects',
               'SELECT type,name FROM sqlite_master WHERE name IN (' + quotedObjectNames + ') ORDER BY type,name;');
-            for (const expected of expectedObjects) {
-              if (!objectRows.some(row => String(row.type) === expected.type && String(row.name) === expected.name)) {
-                throw new Error('missing production schema object ' + expected.type + ':' + expected.name);
-              }
-            }
+            const missingSchemaObjects = expectedObjects
+              .filter(expected => !objectRows.some(row => String(row.type) === expected.type && String(row.name) === expected.name))
+              .map(item => item.type + ':' + item.name);
 
             const residueRows = await query('__v17 residue',
               "SELECT type,name FROM sqlite_master WHERE name LIKE '%__v17%' OR instr(COALESCE(sql,''),'__v17') > 0;");
-            if (residueRows.length !== 0) throw new Error('temporary __v17 schema residue remains');
 
             const customerFkTables = [
               'canonical_sale_context',
@@ -165,23 +157,37 @@ jobs:
               'canonical_credit_accounts',
               'canonical_credit_metadata',
             ];
+            const existingTableNames = new Set(objectRows.filter(row => String(row.type) === 'table').map(row => String(row.name)));
+            const missingCustomerRegistryFks = [];
             for (const table of customerFkTables) {
+              if (!existingTableNames.has(table)) {
+                missingCustomerRegistryFks.push(table + ':table_missing');
+                continue;
+              }
               const rows = await query('foreign key ' + table, 'PRAGMA foreign_key_list("' + table + '");');
               if (!rows.some(row => String(row.table) === 'canonical_customer_registry')) {
-                throw new Error(table + ' does not reference canonical_customer_registry');
+                missingCustomerRegistryFks.push(table);
               }
             }
 
-            const customerSchemaCounts = (await query('0017 row counts', `
-              SELECT
-                (SELECT COUNT(*) FROM canonical_customer_operations) AS customer_operations,
-                (SELECT COUNT(*) FROM canonical_customer_registry) AS customer_registry,
-                (SELECT COUNT(*) FROM canonical_live_customers) AS live_customers,
-                (SELECT COUNT(*) FROM canonical_sale_context) AS sale_context,
-                (SELECT COUNT(*) FROM live_credits) AS live_credits,
-                (SELECT COUNT(*) FROM canonical_credit_accounts) AS credit_accounts,
-                (SELECT COUNT(*) FROM canonical_credit_metadata) AS credit_metadata;
-            `))[0];
+            const customerSchemaCounts = {};
+            for (const table of [
+              'canonical_customer_operations',
+              'canonical_customer_registry',
+              'canonical_live_customers',
+              'canonical_sale_context',
+              'live_credits',
+              'canonical_credit_accounts',
+              'canonical_credit_metadata',
+            ]) {
+              if (!existingTableNames.has(table)) {
+                customerSchemaCounts[table] = null;
+                continue;
+              }
+              const count = (await query('row count ' + table, 'SELECT COUNT(*) AS n FROM "' + table + '";'))[0]?.n;
+              customerSchemaCounts[table] = Number(count || 0);
+            }
+
             let financialOperations = 0;
             if (Number(schema.has_financial_operations) === 1) {
               financialOperations = Number((await query('financial_operations',
@@ -207,21 +213,38 @@ jobs:
               },
               schema: Object.fromEntries(Object.entries(schema).map(([k,v]) => [k, Number(v)])),
               traffic: Object.fromEntries(Object.entries(traffic).map(([k,v]) => [k, Number(v)])),
-              migrations: migrationNames,
+              observed_migrations: observedMigrations,
+              missing_migrations: missingMigrations,
               integrity: {
                 quick_check: quickCheck,
                 foreign_key_violations: foreignKeyRows.length,
                 v17_residue_objects: residueRows.length,
-                customer_fk_tables: customerFkTables.length,
               },
-              customer_schema_counts: Object.fromEntries(Object.entries(customerSchemaCounts || {}).map(([k,v]) => [k, Number(v)])),
-              schema_objects_verified: expectedObjects.length,
-              migration_0017_readonly_proof: 'PASS',
+              missing_schema_objects: missingSchemaObjects,
+              missing_customer_registry_fks: missingCustomerRegistryFks,
+              customer_schema_counts: customerSchemaCounts,
+              schema_objects_verified: expectedObjects.length - missingSchemaObjects.length,
+              migration_0017_readonly_proof:
+                missingMigrations.length === 0 &&
+                quickCheck === 'ok' &&
+                foreignKeyRows.length === 0 &&
+                residueRows.length === 0 &&
+                missingSchemaObjects.length === 0 &&
+                missingCustomerRegistryFks.length === 0 ? 'PASS' : 'FAIL',
               read_only_preflight: 'PASS',
             };
             console.log(JSON.stringify(result));
-            if (control.mode !== 'ACTIVE') throw new Error('production canonical authority is not ACTIVE');
-            if (!control.active_promotion_id) throw new Error('active promotion missing');
+
+            const failures = [];
+            if (control.mode !== 'ACTIVE') failures.push('production canonical authority is not ACTIVE');
+            if (!control.active_promotion_id) failures.push('active promotion missing');
+            if (missingMigrations.length) failures.push('missing migrations: ' + missingMigrations.join(','));
+            if (quickCheck !== 'ok') failures.push('PRAGMA quick_check=' + quickCheck);
+            if (foreignKeyRows.length) failures.push('foreign key violations=' + foreignKeyRows.length);
+            if (residueRows.length) failures.push('__v17 residue=' + residueRows.length);
+            if (missingSchemaObjects.length) failures.push('missing schema objects: ' + missingSchemaObjects.join(','));
+            if (missingCustomerRegistryFks.length) failures.push('missing customer registry FKs: ' + missingCustomerRegistryFks.join(','));
+            if (failures.length) throw new Error(failures.join(' | '));
           })().catch(error => {
             console.error(error.message);
             process.exit(1);
