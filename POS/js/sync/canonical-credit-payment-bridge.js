@@ -75,6 +75,25 @@
     return client.legacySnapshot();
   }
 
+  function currentPaymentSnapshot() {
+    var client = api();
+    if (!client || typeof client.sourceState !== 'function' || typeof client.legacySnapshot !== 'function' ||
+        typeof client.assertAction !== 'function') return null;
+    try {
+      var state = client.sourceState();
+      if (!state || state.validation !== 'current') return null;
+      client.assertAction('payment.create');
+      return client.legacySnapshot();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function paymentSnapshot() {
+    var current = currentPaymentSnapshot();
+    return current || await refreshCanonical();
+  }
+
   function pendingRecord() {
     var client = api();
     if (!client || typeof client.pendingSnapshot !== 'function') return null;
