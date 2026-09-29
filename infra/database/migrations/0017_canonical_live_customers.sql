@@ -194,6 +194,11 @@ DROP TRIGGER IF EXISTS expense_operation_namespace;
 DROP TRIGGER IF EXISTS canonical_live_products_guarded_update;
 DROP TRIGGER IF EXISTS canonical_generic_sale_line_authorized_insert;
 DROP TRIGGER IF EXISTS canonical_customer_operations_namespace_insert;
+DROP TRIGGER IF EXISTS cash_session_unique_open;
+DROP TRIGGER IF EXISTS cash_close_reconciles;
+DROP TRIGGER IF EXISTS financial_event_cash_open;
+DROP TRIGGER IF EXISTS financial_event_credit_safe;
+DROP TRIGGER IF EXISTS expense_effect_authorized;
 
 -- Rebuild the four operational customer-reference tables. Their business
 -- constraints are preserved; only the customer FK parent changes to the
@@ -398,6 +403,33 @@ BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 CREATE TRIGGER IF NOT EXISTS credit_metadata_customer_operation_collision BEFORE INSERT ON canonical_credit_metadata
 WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
 BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
+
+-- Restore dependent views before any trigger that queries them.
+CREATE VIEW IF NOT EXISTS canonical_credit_balances AS
+SELECT b.*, b.opening_balance_cents+COALESCE((SELECT SUM(e.credit_delta_cents) FROM canonical_financial_events e
+ WHERE e.promotion_id=b.promotion_id AND e.credit_id=b.credit_id AND e.credit_provenance=b.provenance),0) AS current_balance_cents,
+ (SELECT COUNT(*) FROM canonical_financial_events e WHERE e.promotion_id=b.promotion_id AND e.credit_id=b.credit_id
+ AND e.credit_provenance=b.provenance) AS revision
+FROM (SELECT promotion_id,credit_id,'IMPORT' AS provenance,opening_balance_cents FROM credits
+ UNION ALL SELECT promotion_id,credit_id,'LIVE',original_amount_cents FROM live_credits) b;
+
+CREATE VIEW canonical_cash_state AS
+SELECT s.*, CASE WHEN c.session_id IS NULL THEN 'OPEN' ELSE 'CLOSED' END AS status,
+ c.close_operation_id,c.counted_cents,c.difference_cents,c.closed_at,
+ COALESCE(c.cash_movement_watermark,(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)) AS closing_watermark,
+ s.opening_cents
+ + COALESCE((SELECT SUM(e.cash_delta_cents) FROM canonical_financial_events e WHERE e.session_id=s.session_id),0)
+ + COALESCE((SELECT SUM(x.cash_delta_cents) FROM canonical_expenses x WHERE x.session_id=s.session_id),0)
+ + COALESCE((SELECT SUM(m.cash_cents) FROM cash_movements m JOIN canonical_sale_context x ON x.sale_id=m.sale_id
+ WHERE x.promotion_id=s.promotion_id AND m.rowid>s.cash_movement_watermark
+ AND m.rowid<=COALESCE(c.cash_movement_watermark,(SELECT COALESCE(MAX(rowid),0) FROM cash_movements))),0) AS expected_cents,
+ (SELECT COUNT(*) FROM canonical_financial_events e WHERE e.session_id=s.session_id)
+ + (SELECT COUNT(*) FROM canonical_expenses x WHERE x.session_id=s.session_id)
+ + (SELECT COUNT(*) FROM cash_movements m JOIN canonical_sale_context x ON x.sale_id=m.sale_id
+ WHERE x.promotion_id=s.promotion_id AND m.cash_cents>0 AND m.rowid>s.cash_movement_watermark
+ AND m.rowid<=COALESCE(c.cash_movement_watermark,(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)))
+ + CASE WHEN c.session_id IS NULL THEN 0 ELSE 1 END AS revision
+FROM canonical_cash_sessions s LEFT JOIN canonical_cash_closures c ON c.session_id=s.session_id;
 
 -- Restore every external invariant that references a rebuilt table.
 CREATE TRIGGER IF NOT EXISTS expenses_no_replace BEFORE INSERT ON canonical_expenses
@@ -727,3 +759,44 @@ WHEN
   EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE operation_id=NEW.operation_id)
 BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
+
+
+CREATE TRIGGER IF NOT EXISTS cash_session_unique_open BEFORE INSERT ON canonical_cash_sessions
+WHEN EXISTS(SELECT 1 FROM canonical_cash_state WHERE promotion_id=NEW.promotion_id AND status='OPEN')
+ OR NEW.cash_movement_watermark<>(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)
+BEGIN SELECT RAISE(ABORT,'cash_session_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS cash_close_reconciles BEFORE INSERT ON canonical_cash_closures
+WHEN NOT EXISTS(SELECT 1 FROM canonical_cash_state s WHERE s.session_id=NEW.session_id AND s.status='OPEN'
+ AND s.expected_cents=NEW.expected_cents AND NEW.cash_movement_watermark=(SELECT COALESCE(MAX(rowid),0) FROM cash_movements))
+BEGIN SELECT RAISE(ABORT,'cash_close_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS financial_event_cash_open BEFORE INSERT ON canonical_financial_events
+WHEN NEW.session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canonical_cash_state WHERE session_id=NEW.session_id
+ AND promotion_id=NEW.promotion_id AND status='OPEN'
+ AND expected_cents+NEW.cash_delta_cents BETWEEN 0 AND 9007199254740991)
+BEGIN SELECT RAISE(ABORT,'cash_session_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS financial_event_credit_safe BEFORE INSERT ON canonical_financial_events
+WHEN NEW.credit_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canonical_credit_balances b
+ WHERE b.promotion_id=NEW.promotion_id AND b.credit_id=NEW.credit_id AND b.provenance=NEW.credit_provenance
+ AND b.current_balance_cents+NEW.credit_delta_cents BETWEEN 0 AND b.opening_balance_cents
+ AND b.current_balance_cents+NEW.credit_delta_cents<=9007199254740991)
+BEGIN SELECT RAISE(ABORT,'credit_balance_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS expense_effect_authorized BEFORE INSERT ON canonical_expenses
+WHEN NOT EXISTS(
+  SELECT 1 FROM canonical_expense_operations o
+  WHERE o.operation_id=NEW.operation_id AND o.promotion_id=NEW.promotion_id
+    AND (
+      NEW.session_id IS NULL AND o.expected_session_revision IS NULL AND NEW.cash_delta_cents=0
+      OR NEW.session_id IS NOT NULL AND o.expected_session_revision IS NOT NULL
+        AND EXISTS(
+          SELECT 1 FROM canonical_cash_state s
+          WHERE s.promotion_id=NEW.promotion_id AND s.session_id=NEW.session_id
+            AND s.status='OPEN' AND s.revision=o.expected_session_revision
+            AND s.expected_cents+NEW.cash_delta_cents BETWEEN 0 AND 9007199254740991
+        )
+    )
+)
+BEGIN SELECT RAISE(ABORT,'expense_session_conflict'); END;
