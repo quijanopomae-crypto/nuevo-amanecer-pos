@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish the validated CANON sale-lock diagnostics from PR #207 after production cutover 0014-0017 completed successfully.",
-  "retry_attempt": 30,
-  "retry_reason": "PR #207 merged at 1ef3567f7f033370bcebcd08b0d5425c653f11ce with E2E Smoke green and CANON Critical job green; publish exact browser lock reason without changing lock semantics.",
-  "requested_at_utc": "2026-09-29T11:00:00Z",
-  "target_head": "1ef3567f7f033370bcebcd08b0d5425c653f11ce"
+  "note": "Publish effective CANON sale-lock diagnostics from PR #209 using the same security/lock state sources as runtime isModuleLocked().",
+  "retry_attempt": 31,
+  "retry_reason": "PR #209 merged at 8a6196dbe3aa235114a70c7436ed33a343d94338 after CANON Critical and E2E passed. Chrome and Opera both reproduced the generic sale lock, proving the prior localStorage-only diagnostic was insufficient.",
+  "requested_at_utc": "2026-09-29T11:10:00Z",
+  "target_head": "8a6196dbe3aa235114a70c7436ed33a343d94338"
 }
