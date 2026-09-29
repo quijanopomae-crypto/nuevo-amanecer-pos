@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish effective CANON sale-lock diagnostics from PR #209 using the same security/lock state sources as runtime isModuleLocked().",
-  "retry_attempt": 31,
-  "retry_reason": "PR #209 merged at 8a6196dbe3aa235114a70c7436ed33a343d94338 after CANON Critical and E2E passed. Chrome and Opera both reproduced the generic sale lock, proving the prior localStorage-only diagnostic was insufficient.",
-  "requested_at_utc": "2026-09-29T11:10:00Z",
-  "target_head": "8a6196dbe3aa235114a70c7436ed33a343d94338"
+  "note": "Publish the validated CANON sale UI lock fix from PR #211. Allow only sale preparation UI under canonical authority while preserving legacy financial-write blocking.",
+  "retry_attempt": 32,
+  "retry_reason": "PR #211 merged at 3b741aa47cfebb565489ab918afd9cce730f2928 after CANON Critical #234 and E2E Smoke #26 passed. Root cause confirmed independently: posAdd, quick payment and abrirCobro were calling isModuleLocked('ventas') without CANON UI context.",
+  "requested_at_utc": "2026-09-29T11:50:00Z",
+  "target_head": "3b741aa47cfebb565489ab918afd9cce730f2928"
 }
