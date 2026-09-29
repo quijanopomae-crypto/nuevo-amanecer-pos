@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish validated CANON interface runtime-namespace parity fix plus automatic shell refresh from merged PRs #166 and #165.",
-  "retry_attempt": 28,
-  "retry_reason": "PR #166 merged at a23addbe069eec83cc853ac4e4a1e55eed9757de after CANON Critical CI run 36366051764 PASS; publish semantic LAB→CANON namespace parity and shell refresh.",
-  "requested_at_utc": "2026-09-28T01:28:38Z",
-  "target_head": "a23addbe069eec83cc853ac4e4a1e55eed9757de"
+  "note": "Publish the validated CANON runtime through PR #200 so the hosted POS matches the current functional HEAD, including authoritative products, inventory, generic sale lines and LIVE customers.",
+  "retry_attempt": 29,
+  "retry_reason": "PR #200 merged at abc8633fbc863bd70f13fab33598a80932eb2ec0 with LAB Canon Mirror CI, CANON Critical CI and E2E Smoke CI green; public CANON is still serving the older c11b4692dd579ee1a351f58762b584b18b9b04dd artifact.",
+  "requested_at_utc": "2026-09-29T04:34:00Z",
+  "target_head": "abc8633fbc863bd70f13fab33598a80932eb2ec0"
 }
