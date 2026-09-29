@@ -42,6 +42,8 @@ function harness(options={}){
   const postRefreshGate=options.blockPostRefresh ? new Promise(resolve=>{releasePostRefresh=resolve;}) : null;
   const api={
     enabled(){return options.canonical !== false;},
+    sourceState(){return options.currentSnapshot ? {validation:'current'} : {validation:'stale'};},
+    assertAction(action){calls.push(['assertAction',action]); if(options.currentSnapshot===false) throw new Error('CANONICAL_COMMERCE_CLOSED'); return true;},
     async refresh(){
       refreshCount+=1;
       calls.push(['refresh',refreshCount]);
@@ -106,6 +108,17 @@ test('confirmed payment does not keep the user waiting for the post-commit full 
   assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2);
   h.releasePostRefresh();
   await new Promise(resolve=>setImmediate(resolve));
+});
+
+test('current CANON snapshot skips the redundant full refresh before payment',async()=>{
+  const h=harness({amount:'5',currentSnapshot:true});
+  assert.equal(await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(),true);
+  await new Promise(resolve=>setImmediate(resolve));
+  const refreshes=h.calls.filter(x=>x[0]==='refresh');
+  assert.equal(refreshes.length,1,'only background reconciliation should refresh');
+  const createIndex=h.calls.findIndex(x=>x[0]==='createPayment');
+  const refreshIndex=h.calls.findIndex(x=>x[0]==='refresh');
+  assert.ok(createIndex>=0 && refreshIndex>createIndex,'payment ACK should happen before the full refresh');
 });
 
 test('CANON digital payment sends reference and never attaches cash session',async()=>{
