@@ -493,14 +493,33 @@ async function canonicalRead(url,db,json){
         FROM canonical_live_products WHERE promotion_id=?1
     ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   } else if(sqlName==='customers'&&before.mode==='ACTIVE'&&await customerSchemaAvailable(db)){
-    const liveCustomerFields={customer_id:'customer_id',name:'name',document:'document',phone:'phone',address:'address',color:'color',total_purchases_cents:'total_purchases_cents'};
-    rows=await db.prepare(`SELECT * FROM (
-      SELECT 'I:' || customer_id AS read_key,${TABLES.customers.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS created_at
-        FROM customers WHERE promotion_id=?1
-      UNION ALL
-      SELECT 'L:' || customer_id AS read_key,${TABLES.customers.map(column=>liveCustomerFields[column]??'NULL').join(',')},'LIVE' AS provenance,operation_id,created_at
-        FROM canonical_live_customers WHERE promotion_id=?1
-    ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+    const liveCustomerFields={customer_id:'l.customer_id',name:'l.name',document:'l.document',phone:'l.phone',address:'l.address',color:'l.color',total_purchases_cents:'l.total_purchases_cents'};
+    const policyReady=await customerCreditPolicySchemaAvailable(db);
+    if(policyReady){
+      const policyColumns=`p.mode AS credit_policy_mode,p.manual_limit_cents AS credit_policy_manual_limit_cents,
+        p.reason AS credit_policy_reason,p.administrator_id AS credit_policy_administrator_id,
+        p.administrator_name AS credit_policy_administrator_name,p.updated_at AS credit_policy_updated_at,
+        p.revision AS credit_policy_revision`;
+      rows=await db.prepare(`SELECT * FROM (
+        SELECT 'I:' || c.customer_id AS read_key,${TABLES.customers.map(column=>`c.${column}`).join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS created_at,${policyColumns}
+          FROM customers c LEFT JOIN canonical_customer_credit_policies p
+            ON p.promotion_id=c.promotion_id AND p.customer_id=c.customer_id
+          WHERE c.promotion_id=?1
+        UNION ALL
+        SELECT 'L:' || l.customer_id AS read_key,${TABLES.customers.map(column=>liveCustomerFields[column]??'NULL').join(',')},'LIVE' AS provenance,l.operation_id,l.created_at,${policyColumns}
+          FROM canonical_live_customers l LEFT JOIN canonical_customer_credit_policies p
+            ON p.promotion_id=l.promotion_id AND p.customer_id=l.customer_id
+          WHERE l.promotion_id=?1
+      ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+    }else{
+      rows=await db.prepare(`SELECT * FROM (
+        SELECT 'I:' || customer_id AS read_key,${TABLES.customers.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS created_at
+          FROM customers WHERE promotion_id=?1
+        UNION ALL
+        SELECT 'L:' || customer_id AS read_key,${TABLES.customers.map(column=>liveCustomerFields[column]?.replace(/^l\./,'')??'NULL').join(',')},'LIVE' AS provenance,operation_id,created_at
+          FROM canonical_live_customers WHERE promotion_id=?1
+      ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+    }
   } else if(sqlName==='credit_accounts'){
     rows=before.mode==='ACTIVE'
       ? await db.prepare(`SELECT customer_id || char(0) || account_id AS read_key,customer_id,account_id,name,mode,created_at
@@ -681,13 +700,23 @@ async function customerLedgerCount(db,promotionId){
   const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_customer_operations WHERE promotion_id=?1').bind(promotionId).first();
   return Number(row?.count)||0;
 }
+async function customerCreditPolicySchemaAvailable(db){
+  const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type='table' AND name IN ('canonical_customer_credit_policy_operations','canonical_customer_credit_policies')`).first();
+  return Number(row?.count)===2;
+}
+async function customerCreditPolicyLedgerCount(db,promotionId){
+  if(!promotionId||!await customerCreditPolicySchemaAvailable(db))return 0;
+  const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_customer_credit_policy_operations WHERE promotion_id=?1').bind(promotionId).first();
+  return Number(row?.count)||0;
+}
 async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
     c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
     (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
     (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
     ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
-  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id);
+  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id)+await customerCreditPolicyLedgerCount(db,row.active_promotion_id);
   return row;
 }
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}
