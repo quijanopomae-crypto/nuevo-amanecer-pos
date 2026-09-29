@@ -459,6 +459,10 @@ async function canonicalRead(url,db,json){
       counts.imported_products=counts.products;
       counts.live_products=liveProductsReady?Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_live_products WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count):0;
       counts.products+=counts.live_products;
+      const liveCustomersReady=await customerSchemaAvailable(db);
+      counts.imported_customers=counts.customers;
+      counts.live_customers=liveCustomersReady?Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_live_customers WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count):0;
+      counts.customers+=counts.live_customers;
       counts.imported_credits=counts.credits;
       counts.live_credits=Number((await db.prepare('SELECT COUNT(*) AS count FROM live_credits WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
       counts.credits+=counts.live_credits;
@@ -487,6 +491,15 @@ async function canonicalRead(url,db,json){
       UNION ALL
       SELECT 'L:' || product_id AS read_key,${TABLES.products.join(',')},'LIVE' AS provenance,operation_id,created_at
         FROM canonical_live_products WHERE promotion_id=?1
+    ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
+  } else if(sqlName==='customers'&&before.mode==='ACTIVE'&&await customerSchemaAvailable(db)){
+    const liveCustomerFields={customer_id:'customer_id',name:'name',document:'document',phone:'phone',address:'address',color:'color',total_purchases_cents:'total_purchases_cents'};
+    rows=await db.prepare(`SELECT * FROM (
+      SELECT 'I:' || customer_id AS read_key,${TABLES.customers.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS created_at
+        FROM customers WHERE promotion_id=?1
+      UNION ALL
+      SELECT 'L:' || customer_id AS read_key,${TABLES.customers.map(column=>liveCustomerFields[column]??'NULL').join(',')},'LIVE' AS provenance,operation_id,created_at
+        FROM canonical_live_customers WHERE promotion_id=?1
     ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   } else if(sqlName==='credit_accounts'){
     rows=before.mode==='ACTIVE'
@@ -658,13 +671,23 @@ async function inventoryLedgerCount(db,promotionId){
   const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_inventory_operations WHERE promotion_id=?1').bind(promotionId).first();
   return Number(row?.count)||0;
 }
+async function customerSchemaAvailable(db){
+  const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers')`).first();
+  return Number(row?.count)===3;
+}
+async function customerLedgerCount(db,promotionId){
+  if(!promotionId||!await customerSchemaAvailable(db))return 0;
+  const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_customer_operations WHERE promotion_id=?1').bind(promotionId).first();
+  return Number(row?.count)||0;
+}
 async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
     c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
     (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
     (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
     ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
-  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id);
+  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id);
   return row;
 }
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}
