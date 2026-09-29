@@ -129,3 +129,69 @@ test('CANON UI bridge owns manual/automatic policy writes and never calls legacy
   assert.match(index,/js\/sync\/canonical-customer-credit-policy-bridge\.js/);
   assert.match(sw,/\.\/js\/sync\/canonical-customer-credit-policy-bridge\.js/);
 });
+
+
+test('lost ACK retries the same policy operation and never advances revision twice',async t=>{
+  const f=await activeCanon(t,{migrations:MIGRATIONS});
+  let dropAck=true;
+  const tab=await policyTab(f,{
+    async onFetch(url,options,forward){
+      if(url.endsWith('/commands/customer.credit-policy.set')&&dropAck){
+        dropAck=false;
+        await forward();
+        throw new TypeError('network lost after commit');
+      }
+      return null;
+    }
+  });
+  const id=tab.api.snapshot().customers[0].customer_id;
+  const policyBridge=tab.context.NuevoAmanecerCanonicalCustomerCreditPolicyBridge;
+  assert.equal(await policyBridge.saveManual({
+    customer_id:id,manual_limit_cents:10000,
+    reason:'Excepción manual con ACK perdido',
+    administrator_id:'admin-a',administrator_name:'Admin A'
+  }),false);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_customer_credit_policy_operations').n,1);
+  let current=f.sql('SELECT mode,manual_limit_cents,revision FROM canonical_customer_credit_policies WHERE customer_id=?',id);
+  assert.equal(current.mode,'MANUAL');
+  assert.equal(current.manual_limit_cents,10000);
+  assert.equal(current.revision,1);
+  const pending=tab.api.pendingSnapshot();
+  assert.equal(pending.command,'customer.credit-policy.set');
+
+  assert.equal(await policyBridge.saveManual({
+    customer_id:id,manual_limit_cents:20000,
+    reason:'Estos valores no deben crear otra operación',
+    administrator_id:'admin-a',administrator_name:'Admin A'
+  }),true);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_customer_credit_policy_operations').n,1);
+  current=f.sql('SELECT mode,manual_limit_cents,revision FROM canonical_customer_credit_policies WHERE customer_id=?',id);
+  assert.equal(current.manual_limit_cents,10000);
+  assert.equal(current.revision,1);
+  assert.equal(tab.api.pendingSnapshot(),null);
+  assert.equal(tab.api.receiptSnapshot().status,'already_processed');
+});
+
+test('pre-0018 customer reads remain compatible and policy command fails closed',async t=>{
+  const f=await activeCanon(t,{migrations:[
+    '0014_canonical_live_products.sql',
+    '0015_canonical_inventory_adjust.sql',
+    '0016_canonical_generic_sale_lines.sql',
+    '0017_canonical_live_customers.sql',
+  ]});
+  const tab=await policyTab(f);
+  const id=tab.api.snapshot().customers[0].customer_id;
+  assert.ok(id);
+  assert.equal(tab.api.legacySnapshot().customers.some(c=>String(c.id)===String(id)),true);
+  await assert.rejects(
+    tab.api.setCustomerCreditPolicy({
+      customer_id:id,mode:'MANUAL',manual_limit_cents:5000,expected_policy_revision:0,
+      reason:'Intento antes de aplicar migración 0018',
+      administrator_id:'admin-a',administrator_name:'Admin A'
+    }),
+    /CANONICAL_FINANCIAL_REJECTED_503/
+  );
+  assert.equal(tab.api.pendingSnapshot().last_error,'customer_credit_policy_schema_not_ready');
+  await tab.api.refresh();
+  assert.equal(tab.api.legacySnapshot().customers.some(c=>String(c.id)===String(id)),true);
+});
