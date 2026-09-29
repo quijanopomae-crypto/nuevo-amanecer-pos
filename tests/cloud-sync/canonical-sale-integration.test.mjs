@@ -8,6 +8,7 @@ const intentSource = readFileSync(new URL('../../POS/js/sync/canonical-sale-inte
 const outboxSource = readFileSync(new URL('../../POS/js/sync/canonical-sale-outbox.js', import.meta.url), 'utf8');
 const projectionSource = readFileSync(new URL('../../POS/js/sync/canonical-sale-projection.js', import.meta.url), 'utf8');
 const html = readFileSync(new URL('../../POS/index.html', import.meta.url), 'utf8');
+const inline02 = readFileSync(new URL('../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
 const inline03 = readFileSync(new URL('../../POS/js/legacy-inline/inline-03.js', import.meta.url), 'utf8');
 
 function harness({ enabled = true, method = 'efectivo', cart = [{ id: 7, qty: 2, precio: 4.25, unitsPerQty: 1 }], enqueueError = null, projectionError = false, lock = false, storageFailure = false, sessionOpen = true, stock = 10, paymentValid = true, verified = true, duplicateReference = false } = {}) {
@@ -123,4 +124,52 @@ test('canonical sale lock diagnostics read the same effective lock state as isMo
   await h2.context.confirmarVenta();
   assert.equal(h2.calls.enqueue,0);
   assert.match(h2.calls.toast.at(-1)[0],/sesión de seguridad/i);
+});
+
+
+test('CANON sale UI context skips only the technical blanket lock and still honors real POS locks',()=>{
+  const lockLine=inline03.split('\n').find(line=>line.startsWith('isModuleLocked=function(moduleName,options)'));
+  assert.ok(lockLine);
+  const state={security:false,master:false,readonly:false,ventas:false};
+  const context=vm.createContext({
+    NuevoAmanecerCanonical:{enabled:()=>true},
+    securityIsLocked:()=>state.security,
+    storage:{getItem:key=>{
+      if(key==='master') return state.master?'true':'false';
+      if(key==='readonly') return state.readonly?'true':'false';
+      if(key==='ventas') return state.ventas?'true':'false';
+      return 'false';
+    }},
+    LOCK_KEYS:{master:'master',readOnly:'readonly',modules:{ventas:'ventas',productos:'productos'}}
+  });
+  vm.runInContext(lockLine,context);
+  assert.equal(context.isModuleLocked('ventas'),true);
+  assert.equal(context.isModuleLocked('ventas',{canonicalSaleUi:true}),false);
+  assert.equal(context.isModuleLocked('productos',{canonicalSaleUi:true}),true);
+  state.security=true; assert.equal(context.isModuleLocked('ventas',{canonicalSaleUi:true}),true);
+  state.security=false; state.master=true; assert.equal(context.isModuleLocked('ventas',{canonicalSaleUi:true}),true);
+  state.master=false; state.readonly=true; assert.equal(context.isModuleLocked('ventas',{canonicalSaleUi:true}),true);
+  state.readonly=false; state.ventas=true; assert.equal(context.isModuleLocked('ventas',{canonicalSaleUi:true}),true);
+});
+
+test('only sale preparation routes use canonicalSaleUi while legacy financial writes remain blocked',()=>{
+  assert.match(inline02,/function _naSaleUiLocked\(\).*canonicalSaleUi:true/);
+  const posAddLine=inline02.split('\n').find(line=>line.startsWith('posAdd=function(id)'));
+  assert.ok(posAddLine); assert.match(posAddLine,/_naSaleUiLocked\(\)/);
+  const quickStart=inline02.indexOf('function _naOpenQuickPayment()');
+  const quickEnd=inline02.indexOf('async function confirmarPagoRapido',quickStart);
+  assert.ok(quickStart>=0&&quickEnd>quickStart);
+  assert.match(inline02.slice(quickStart,quickEnd),/_naSaleUiLocked\(\)/);
+  const openPayLine=inline02.split('\n').find(line=>line.startsWith('abrirCobro=function(tipo)'));
+  assert.ok(openPayLine); assert.match(openPayLine,/_naSaleUiLocked\(\)/);
+
+  const legacyConfirm=inline02.split('\n').find(line=>line.startsWith('confirmarVenta=async function()'));
+  assert.ok(legacyConfirm);
+  const legacyConfirmBlock=inline02.slice(inline02.indexOf('confirmarVenta=async function()'),inline02.indexOf('anularV=',inline02.indexOf('confirmarVenta=async function()')));
+  assert.match(legacyConfirmBlock,/isModuleLocked\('ventas'\)/);
+  assert.doesNotMatch(legacyConfirmBlock,/canonicalSaleUi:true/);
+
+  const cancelBlock=inline02.slice(inline02.indexOf('anularV='),inline02.indexOf('anularV=')+500);
+  assert.match(cancelBlock,/isModuleLocked\('ventas'\)/);
+  assert.doesNotMatch(cancelBlock,/canonicalSaleUi:true/);
 });
