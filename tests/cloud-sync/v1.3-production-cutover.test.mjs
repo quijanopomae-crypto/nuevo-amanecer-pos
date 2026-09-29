@@ -93,3 +93,49 @@ test('cutover helper fails closed before first live sale and never embeds secret
   assert.match(cutoverScript, /production activation probe failed: status=/);
   assert.doesNotMatch(cutoverScript, /sk-[A-Za-z0-9_-]+|Bearer [A-Za-z0-9_-]{16,}/);
 });
+
+test('cutover safely rehearses and applies canonical migrations 0014 through 0017 before deploying current Worker', () => {
+  for (const migration of [
+    '0014_canonical_live_products.sql',
+    '0015_canonical_inventory_adjust.sql',
+    '0016_canonical_generic_sale_lines.sql',
+    '0017_canonical_live_customers.sql',
+  ]) assert.match(cutoverWorkflow, new RegExp(migration.replaceAll('.','\\.')));
+
+  const backup = cutoverWorkflow.indexOf('Export fresh production backup');
+  const rehearsalApply = cutoverWorkflow.indexOf('Rehearse 0014 0015 0016 and 0017');
+  const rehearsalVerify = cutoverWorkflow.indexOf('Verify rehearsal after migrations');
+  const recheck = cutoverWorkflow.indexOf('Recheck production before mutation');
+  const productionApply = cutoverWorkflow.indexOf('Apply 0014 0015 0016 and 0017 to production');
+  const verifyProduction = cutoverWorkflow.indexOf('Verify production schema');
+  const deploy = cutoverWorkflow.indexOf('Deploy isolated production Worker');
+  assert.ok(
+    backup >= 0 &&
+    rehearsalApply > backup &&
+    rehearsalVerify > rehearsalApply &&
+    recheck > rehearsalVerify &&
+    productionApply > recheck &&
+    verifyProduction > productionApply &&
+    deploy > verifyProduction
+  );
+});
+
+test('cutover helper verifies the effective 0014-0017 schema and SQLite integrity', () => {
+  for (const marker of [
+    'canonical_product_operations',
+    'canonical_live_products',
+    'canonical_inventory_operations',
+    'canonical_manual_inventory_movements',
+    'canonical_generic_sale_lines',
+    'canonical_customer_operations',
+    'canonical_customer_registry',
+    'canonical_live_customers',
+    'PRAGMA quick_check',
+    'PRAGMA foreign_key_check',
+    '__v17',
+    'HAS_LIVE_PRODUCTS',
+    'HAS_INVENTORY_ADJUST',
+    'HAS_GENERIC_SALE_LINES',
+    'HAS_LIVE_CUSTOMERS',
+  ]) assert.ok(cutoverScript.includes(marker), 'missing cutover proof marker ' + marker);
+});
