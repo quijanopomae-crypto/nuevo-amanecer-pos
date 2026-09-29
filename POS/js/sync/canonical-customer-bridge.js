@@ -22,12 +22,10 @@
     else root.document.getElementById('mCli')?.classList.remove('open');
   }
   function renderViews(){
-    var names=['cliRender','posRender','updateDashboard'];
-    names.forEach(function(name){
+    ['cliRender','posRender','updateDashboard'].forEach(function(name){
       var fn=root[name];
       if(typeof fn==='function')try{fn.call(root);}catch(_){}
     });
-    try{if(typeof cliRender==='function')cliRender();}catch(_){}
   }
   function userLocked(){
     try{if(typeof securityIsLocked==='function'&&securityIsLocked())return true;}catch(_){}
