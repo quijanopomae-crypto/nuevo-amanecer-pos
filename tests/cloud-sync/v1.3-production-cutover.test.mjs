@@ -139,3 +139,41 @@ test('cutover helper verifies the effective 0014-0017 schema and SQLite integrit
     'HAS_LIVE_CUSTOMERS',
   ]) assert.ok(cutoverScript.includes(marker), 'missing cutover proof marker ' + marker);
 });
+
+
+test('cutover safely rehearses and conditionally applies customer credit policy migration 0018', () => {
+  assert.match(cutoverWorkflow, /0018_canonical_customer_credit_policy\.sql/);
+  assert.match(cutoverWorkflow, /HAS_CUSTOMER_CREDIT_POLICY/);
+
+  const backup = cutoverWorkflow.indexOf('Export fresh production backup');
+  const rehearsalApply = cutoverWorkflow.indexOf('Rehearse 0018 customer credit policy if missing');
+  const rehearsalVerify = cutoverWorkflow.indexOf('Verify rehearsal after migrations');
+  const recheck = cutoverWorkflow.indexOf('Recheck production before mutation');
+  const productionApply = cutoverWorkflow.indexOf('Apply 0018 customer credit policy if missing to production');
+  const verifyProduction = cutoverWorkflow.indexOf('Verify production schema');
+  const deploy = cutoverWorkflow.indexOf('Deploy isolated production Worker');
+
+  assert.ok(
+    backup >= 0 &&
+    rehearsalApply > backup &&
+    rehearsalVerify > rehearsalApply &&
+    recheck > rehearsalVerify &&
+    productionApply > recheck &&
+    verifyProduction > productionApply &&
+    deploy > verifyProduction
+  );
+});
+
+test('cutover helper recognizes complete/absent 0018 and proves its CAS + immutable journal invariants', () => {
+  for (const marker of [
+    'canonical_customer_credit_policy_operations',
+    'canonical_customer_credit_policies',
+    'customer_credit_policy_update_guard',
+    'customer_credit_policy_operations_no_update',
+    'customer_credit_policy_operations_no_delete',
+    'customer_credit_policy_no_delete',
+    'HAS_CUSTOMER_CREDIT_POLICY',
+    'customer_credit_policy_fks',
+    'customer_credit_policy_guards',
+  ]) assert.ok(cutoverScript.includes(marker), 'missing 0018 cutover proof marker ' + marker);
+});
