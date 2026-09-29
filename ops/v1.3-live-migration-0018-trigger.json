@@ -1,0 +1,10 @@
+{
+  "format": "nuevo-amanecer-v1.3-live-migration-0018-trigger-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "target_branch": "feature/v1.3-mobile-cloud",
+  "target_head": "44523b8b5729ad186db07259e093f6924c5945f3",
+  "requested_action": "apply-live-migration-0018-and-redeploy-worker",
+  "requested_at_utc": "2026-09-29T15:31:00Z",
+  "note": "Owner-authorized live migration 0018 after production already recorded first live activity. Use post-cutover workflow; do not require empty ledger or first_live_operation_id=NULL."
+}
