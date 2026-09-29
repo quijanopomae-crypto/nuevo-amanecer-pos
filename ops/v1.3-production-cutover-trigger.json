@@ -3,10 +3,10 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "e185d8f80127ff603e0ac119092351f68de05c4d",
+  "target_head": "ad105223ea88ab542b4fd3ae8445ea336b466817",
   "requested_action": "prepare-production-to-ready-for-first-sale",
-  "requested_at_utc": "2026-09-29T10:32:00Z",
-  "note": "Owner-authorized guarded production cutover for canonical migrations 0014 through 0017. Preserve existing active browser sessions; fail closed on rehearsal, integrity, FK, schema, authority, session-baseline, Worker or route-probe drift.",
-  "retry_attempt": 5,
-  "retry_reason": "Run the validated 0014-0017 rollout after PR #205 passed CANON Critical #225 and production read-only diagnostics proved effective schema is pre-0014 with quick_check=ok, foreign_key_check=0 and zero operational traffic."
+  "requested_at_utc": "2026-09-29T15:20:00Z",
+  "note": "Owner-authorized guarded rollout for canonical customer credit policy migration 0018 after PR #219. Preserve active browser sessions and keep existing backup, rehearsal, integrity, FK, CAS, Worker and route-probe checks.",
+  "retry_attempt": 6,
+  "retry_reason": "Apply validated migration 0018 and deploy the production Worker after PR #217 prepared the rollout and PR #219 fixed CANON credit-policy authority plus the missing payment action. CANON Critical and E2E are green."
 }
