@@ -18,7 +18,9 @@
     "tests/cloud-sync/canonical-generic-sale.test.mjs",
     "tests/cloud-sync/canonical-sale-intent.test.mjs",
     "tests/cloud-sync/canonical-sale-integration.test.mjs",
-    "docs/CANON_GENERIC_SALE.md"
+    "docs/CANON_GENERIC_SALE.md",
+    "POS/js/sync/canonical-sale-projection.js",
+    "tests/cloud-sync/canonical-sale-projection.test.mjs"
   ],
   "forbidden_files": [
     "laboratorio/pos-lab/index.html",
