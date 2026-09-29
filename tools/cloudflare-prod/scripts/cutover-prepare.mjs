@@ -167,6 +167,58 @@ function assertCleanPreFirstSale(state) {
   }
 }
 
+function assertLiveMigrationBase(state) {
+  assertMigrationGroupsCompleteOrAbsent(state);
+  const c = state.control;
+  if (c.mode !== 'ACTIVE') throw new Error('production authority is not ACTIVE');
+  if (c.active_promotion_id !== PROMOTION) throw new Error('unexpected active promotion');
+  if (c.minimum_client_contract !== 'a6-gate-c-v1') throw new Error('unexpected client contract');
+  const required = [
+    'has_auth_sessions','has_write_guards','has_principal_guard','has_session_trigger',
+    'has_credit_accounts','has_credit_metadata','has_credit_installments',
+    'has_expense_operations','has_expenses',
+    'has_product_operations','has_live_products_table','has_live_inventory_effects',
+    'has_inventory_operations','has_manual_inventory_movements',
+    'has_generic_sale_lines_table',
+    'has_customer_operations','has_customer_registry','has_live_customers_table',
+  ];
+  for (const key of required) {
+    if (Number(state.schema[key]) !== 1) throw new Error('live production schema missing: ' + key);
+  }
+}
+
+async function cmdLive0018Preflight() {
+  const state = await productionState();
+  assertLiveMigrationBase(state);
+  env('HAS_CUSTOMER_CREDIT_POLICY', state.schema.has_customer_credit_policy);
+  console.log(JSON.stringify({
+    state: 'LIVE_0018_PREFLIGHT_PASS',
+    database_id: PROD_DB,
+    first_live_operation_id: state.control.first_live_operation_id,
+    has_customer_credit_policy: state.schema.has_customer_credit_policy,
+    traffic: state.traffic,
+  }));
+}
+
+async function cmdLive0018Verify() {
+  const state = await productionState();
+  assertLiveMigrationBase(state);
+  if (Number(state.schema.has_customer_credit_policy) !== 1) {
+    throw new Error('customer credit policy 0018 is not complete');
+  }
+  const quickRows = await query(PROD_DB, 'quick check', 'PRAGMA quick_check;');
+  const quick = String(Object.values(quickRows[0] || {})[0] || '');
+  if (quick !== 'ok') throw new Error('production PRAGMA quick_check failed');
+  const fkRows = await query(PROD_DB, 'foreign key check', 'PRAGMA foreign_key_check;');
+  if (fkRows.length !== 0) throw new Error('production PRAGMA foreign_key_check failed');
+  console.log(JSON.stringify({
+    state: 'LIVE_0018_VERIFY_PASS',
+    database_id: PROD_DB,
+    first_live_operation_id: state.control.first_live_operation_id,
+    quick_check: quick,
+    foreign_key_violations: fkRows.length,
+  }));
+}
 async function cmdPreflight() {
   const state = await productionState();
   assertCleanPreFirstSale(state);
@@ -425,6 +477,8 @@ async function cmdFinal() {
 
 const commands = {
   preflight: cmdPreflight,
+  'live-0018-preflight': cmdLive0018Preflight,
+  'live-0018-verify': cmdLive0018Verify,
   export: cmdExport,
   'create-rehearsal': cmdCreateRehearsal,
   'verify-rehearsal': cmdVerifyRehearsal,
