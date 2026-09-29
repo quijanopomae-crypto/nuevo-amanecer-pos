@@ -1,0 +1,99 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-CUSTOMER-CREDIT-POLICY-0018",
+  "base_ref": "18675d677eb9322a400841cf1981933ba6a13b5a",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md, skill-preflight.mjs y skills obligatorias",
+      "guardarLineaCreditoManual/restaurarLineaCreditoAutomatica legacy",
+      "canonical_customer_registry, canonical_live_customers y read model de Clientes",
+      "canonical-client journal/retry/idempotencia y patrones customer.create/payment.create"
+    ],
+    "WRITES": [
+      "0018_canonical_customer_credit_policy.sql en D1 aislado de pruebas",
+      "journal customer.credit-policy.set y estado actual con CAS",
+      "handler Worker + canonical-client + bridge CANON",
+      "hidratación de política manual en réplica de Clientes"
+    ],
+    "DOM_AFFECTED": [
+      "#mLineaCreditoManual",
+      "#lineaManualMonto",
+      "#lineaManualMotivo",
+      "ficha/evaluación financiera de cliente"
+    ],
+    "STATE_AFFECTED": [
+      "modo MANUAL/AUTOMATIC de línea de crédito",
+      "límite manual y revisión de política por cliente",
+      "motivo/administrador/fecha auditables",
+      "réplica CANON de clientes"
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 aislado: canonical_customer_credit_policy_operations",
+      "D1 aislado: canonical_customer_credit_policies",
+      "journal local CANON reutilizado para pending/receipt",
+      "saveAllData legacy permanece bloqueado en CANON"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "clientes IMPORT y LIVE se referencian mediante canonical_customer_registry",
+      "un cambio de política requiere writer ACTIVE y autoridad vigente",
+      "CAS expected_policy_revision impide lost updates",
+      "operation_id es idempotente y no colisiona con otros dominios",
+      "MANUAL usa centavos enteros y AUTOMATIC no conserva límite manual",
+      "CANON nunca cae a saveAllData para esta política",
+      "LAB conserva la persistencia legacy existente"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "evaluación de crédito consume lineaCreditoManual* hidratado desde CANON",
+      "Créditos usa la línea asignada para disponibilidad",
+      "Clientes refresca después del receipt",
+      "revisión de lectura CANON avanza con cambios de política"
+    ],
+    "RISKS": [
+      "lost update si CAS no cubre creación y actualización",
+      "política durable pero invisible si read model no la proyecta",
+      "duplicidad de autoridad si CANON permite fallback a saveAllData",
+      "colisiones de operation_id entre journals de dominios",
+      "romper compatibilidad pre-0018 si lectura exige tablas nuevas"
+    ],
+    "ROLLBACK": [
+      "revertir PR antes de cualquier deploy",
+      "no aplicar 0018 a D1 producción durante esta tarea",
+      "mantener ruta legacy LAB intacta"
+    ],
+    "TESTS": [
+      "RED/GREEN de migración, command handler y bridge",
+      "MANUAL sobrevive F5 y segundo dispositivo",
+      "AUTOMATIC restaura y avanza revisión",
+      "dos writers con misma revisión: uno gana y otro recibe stale_policy",
+      "lost ACK/idempotencia y rechazo fail-closed",
+      "pre-0018 read model continúa funcionando",
+      "CANON Critical, E2E Smoke y LAB Canon Mirror"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  }
+}
