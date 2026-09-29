@@ -3,10 +3,10 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "7f5626c701aa83b9dcf25810531a356dadfeba1e",
+  "target_head": "e185d8f80127ff603e0ac119092351f68de05c4d",
   "requested_action": "prepare-production-to-ready-for-first-sale",
-  "requested_at_utc": "2026-09-26T21:49:00Z",
-  "note": "Owner-authorized V2 rollout retry. Existing active browser sessions are preserved; the workflow fails closed if the session count changes unexpectedly during the probe.",
-  "retry_attempt": 4,
-  "retry_reason": "Retry after fixing the final gate to compare active browser sessions against the preflight baseline. Run 36274058000 began with 5 legitimate active sessions; migration 0012, schema verification, Worker deploy and authority probe all passed."
+  "requested_at_utc": "2026-09-29T10:32:00Z",
+  "note": "Owner-authorized guarded production cutover for canonical migrations 0014 through 0017. Preserve existing active browser sessions; fail closed on rehearsal, integrity, FK, schema, authority, session-baseline, Worker or route-probe drift.",
+  "retry_attempt": 5,
+  "retry_reason": "Run the validated 0014-0017 rollout after PR #205 passed CANON Critical #225 and production read-only diagnostics proved effective schema is pre-0014 with quick_check=ok, foreign_key_check=0 and zero operational traffic."
 }
