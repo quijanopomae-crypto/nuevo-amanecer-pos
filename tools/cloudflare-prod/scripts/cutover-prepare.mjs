@@ -71,7 +71,13 @@ async function productionState() {
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines') has_generic_sale_lines_table," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_operations') has_customer_operations," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_registry') has_customer_registry," +
-    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_customers') has_live_customers_table"))[0];
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_customers') has_live_customers_table," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policy_operations') has_customer_credit_policy_operations," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policies') has_customer_credit_policies," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='customer_credit_policy_update_guard') has_customer_credit_policy_update_guard," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='customer_credit_policy_operations_no_update') has_customer_credit_policy_operations_no_update," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='customer_credit_policy_operations_no_delete') has_customer_credit_policy_operations_no_delete," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='customer_credit_policy_no_delete') has_customer_credit_policy_no_delete"))[0];
 
   const traffic = (await query(PROD_DB, 'traffic',
     "SELECT " +
@@ -105,6 +111,14 @@ async function productionState() {
     numericSchema.has_customer_registry === 1 &&
     numericSchema.has_live_customers_table === 1
   );
+  numericSchema.has_customer_credit_policy = Number(
+    numericSchema.has_customer_credit_policy_operations === 1 &&
+    numericSchema.has_customer_credit_policies === 1 &&
+    numericSchema.has_customer_credit_policy_update_guard === 1 &&
+    numericSchema.has_customer_credit_policy_operations_no_update === 1 &&
+    numericSchema.has_customer_credit_policy_operations_no_delete === 1 &&
+    numericSchema.has_customer_credit_policy_no_delete === 1
+  );
 
   return {
     control: {
@@ -124,6 +138,14 @@ function assertMigrationGroupsCompleteOrAbsent(state) {
     '0015_canonical_inventory_adjust.sql': ['has_inventory_operations','has_manual_inventory_movements'],
     '0016_canonical_generic_sale_lines.sql': ['has_generic_sale_lines_table'],
     '0017_canonical_live_customers.sql': ['has_customer_operations','has_customer_registry','has_live_customers_table'],
+    '0018_canonical_customer_credit_policy.sql': [
+      'has_customer_credit_policy_operations',
+      'has_customer_credit_policies',
+      'has_customer_credit_policy_update_guard',
+      'has_customer_credit_policy_operations_no_update',
+      'has_customer_credit_policy_operations_no_delete',
+      'has_customer_credit_policy_no_delete',
+    ],
   };
   for (const [migration, keys] of Object.entries(groups)) {
     const present = keys.reduce((sum, key) => sum + Number(state.schema[key] === 1), 0);
@@ -161,6 +183,7 @@ async function cmdPreflight() {
   env('HAS_INVENTORY_ADJUST', state.schema.has_inventory_adjust);
   env('HAS_GENERIC_SALE_LINES', state.schema.has_generic_sale_lines);
   env('HAS_LIVE_CUSTOMERS', state.schema.has_live_customers);
+  env('HAS_CUSTOMER_CREDIT_POLICY', state.schema.has_customer_credit_policy);
   env('CUTOVER_ACTIVE_SESSIONS', state.traffic.active_sessions);
   console.log(JSON.stringify({ state: 'PRE_CUTOVER_PASS', database_id: PROD_DB, ...state }));
 }
@@ -221,6 +244,7 @@ async function schemaReady(database) {
     "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_inventory_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_manual_inventory_movements')) inventory_adjust," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines') generic_sale_lines," +
     "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_registry') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_customers')) live_customers," +
+    "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policy_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policies')) customer_credit_policy," +
     "(SELECT COUNT(*) FROM sales) sales"))[0];
 
   const ready = Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [key, Number(value)]));
@@ -229,6 +253,29 @@ async function schemaReady(database) {
   ready.foreign_key_violations = (await query(database, 'PRAGMA foreign_key_check', 'PRAGMA foreign_key_check;')).length;
   ready.v17_residue_objects = (await query(database, '__v17 residue',
     "SELECT type,name FROM sqlite_master WHERE name LIKE '%__v17%' OR instr(COALESCE(sql,''),'__v17') > 0;")).length;
+
+  const policyTables = ['canonical_customer_credit_policy_operations','canonical_customer_credit_policies'];
+  let policyFks = 0;
+  for (const table of policyTables) {
+    const rows = await query(database, 'customer credit policy FK ' + table, 'PRAGMA foreign_key_list("' + table + '");');
+    if (rows.some(item => String(item.table) === 'canonical_customer_registry')) policyFks++;
+  }
+  ready.customer_credit_policy_fks = policyFks;
+  ready.customer_credit_policy_guards = Number((await query(database, 'customer credit policy guards',
+    "SELECT COUNT(*) n FROM sqlite_master WHERE type='trigger' AND name IN (" +
+    "'customer_credit_policy_operation_authorized_insert'," +
+    "'customer_credit_policy_operations_no_update'," +
+    "'customer_credit_policy_operations_no_delete'," +
+    "'customer_credit_policy_operations_no_replace'," +
+    "'customer_credit_policy_insert_guard'," +
+    "'customer_credit_policy_update_guard'," +
+    "'customer_credit_policy_no_delete'," +
+    "'customer_credit_policy_no_replace')"))[0]?.n || 0);
+  const policyCas = (await query(database, 'customer credit policy CAS',
+    "SELECT " +
+    "COALESCE((SELECT instr(sql,'expected_policy_revision')>0 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policy_operations'),0) has_expected_revision," +
+    "COALESCE((SELECT instr(sql,'OLD.revision')>0 AND instr(sql,'NEW.revision=OLD.revision+1')>0 FROM sqlite_master WHERE type='trigger' AND name='customer_credit_policy_update_guard'),0) has_revision_guard"))[0] || {};
+  ready.customer_credit_policy_cas = Number(policyCas.has_expected_revision === 1 && policyCas.has_revision_guard === 1);
 
   const customerTables = ['canonical_sale_context','live_credits','canonical_credit_accounts','canonical_credit_metadata'];
   let registryFks = 0;
@@ -244,10 +291,13 @@ function assertSchemaReady(row, label) {
   for (const key of [
     'auth','principal','credential','guard','active','first_live_empty',
     'credit_accounts','credit_metadata','credit_installments','expenses_v1',
-    'live_products','inventory_adjust','generic_sale_lines','live_customers',
+    'live_products','inventory_adjust','generic_sale_lines','live_customers','customer_credit_policy',
   ]) {
     if (row[key] !== 1) throw new Error(label + ' invariant failed: ' + key);
   }
+  if (row.customer_credit_policy_fks !== 2) throw new Error(label + ' customer credit policy FK graph incomplete');
+  if (row.customer_credit_policy_guards !== 8) throw new Error(label + ' customer credit policy guard set incomplete');
+  if (row.customer_credit_policy_cas !== 1) throw new Error(label + ' customer credit policy CAS guard incomplete');
   if (row.sales !== 0) throw new Error(label + ' contains sales');
   if (row.quick_check !== 'ok') throw new Error(label + ' PRAGMA quick_check failed');
   if (row.foreign_key_violations !== 0) throw new Error(label + ' PRAGMA foreign_key_check failed');
