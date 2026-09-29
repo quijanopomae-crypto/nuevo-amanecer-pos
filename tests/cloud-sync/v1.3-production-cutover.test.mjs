@@ -9,6 +9,7 @@ const setupJs = readFileSync('tools/pos-local/setup.js', 'utf8');
 const workerSource = readFileSync('tools/cloudflare-lab/src/worker.js', 'utf8');
 const cutoverScript = readFileSync('tools/cloudflare-prod/scripts/cutover-prepare.mjs', 'utf8');
 const cutoverWorkflow = readFileSync('.github/workflows/v1.3-prod-cutover.yml', 'utf8');
+const liveMigration0018Workflow = readFileSync('.github/workflows/v1.3-live-migration-0018.yml', 'utf8');
 
 test('production worker config is isolated from LAB and points only to production D1', () => {
   const config = JSON.parse(prodConfig);
@@ -74,6 +75,26 @@ test('cutover workflow requires backup and rehearsal before production migration
   assert.match(cutoverWorkflow, /0012_credit_accounts_v2\.sql/);
   assert.match(cutoverWorkflow, /HAS_CREDIT_ACCOUNTS_V2/);
   assert.doesNotMatch(cutoverWorkflow, /commands\/sale\.create/);
+});
+
+test('live 0018 migration is post-cutover and does not require an empty production ledger', () => {
+  assert.match(liveMigration0018Workflow, /ops\/v1\.3-live-migration-0018-trigger\.json/);
+  assert.match(liveMigration0018Workflow, /live-0018-preflight/);
+  assert.match(liveMigration0018Workflow, /Export fresh production backup/);
+  assert.match(liveMigration0018Workflow, /0018_canonical_customer_credit_policy\.sql/);
+  assert.match(liveMigration0018Workflow, /live-0018-verify/);
+  assert.match(liveMigration0018Workflow, /Deploy production Worker/);
+  assert.match(liveMigration0018Workflow, /probe-worker/);
+  assert.doesNotMatch(liveMigration0018Workflow, /Final READY_FOR_FIRST_SALE verification/);
+
+  const liveBlock = cutoverScript.slice(
+    cutoverScript.indexOf('function assertLiveMigrationBase'),
+    cutoverScript.indexOf('async function cmdPreflight')
+  );
+  assert.match(liveBlock, /production authority is not ACTIVE/);
+  assert.match(liveBlock, /has_customer_credit_policy/);
+  assert.doesNotMatch(liveBlock, /first live operation already exists/);
+  assert.doesNotMatch(liveBlock, /unexpected pre-cutover traffic/);
 });
 
 test('cutover helper fails closed before first live sale and never embeds secrets', () => {
