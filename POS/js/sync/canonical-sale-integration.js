@@ -17,9 +17,18 @@
   }
   function browserLockReason() {
     try {
-      if (root.sessionStorage && root.sessionStorage.getItem('na_security_locked') === 'true') return 'sesión de seguridad bloqueada';
+      if (typeof root.securityIsLocked === 'function' && root.securityIsLocked()) return 'sesión de seguridad bloqueada';
     } catch (_) {}
     try {
+      if (typeof root._naGetLocks === 'function') {
+        var locks = root._naGetLocks() || {};
+        if (locks.master) return 'Bloquear edición crítica está activado';
+        if (locks.readOnly) return 'Modo solo lectura está activado';
+        if (locks.modules && locks.modules.ventas) return 'Ventas y POS está protegido';
+      }
+    } catch (_) {}
+    try {
+      if (root.sessionStorage && root.sessionStorage.getItem('na_security_locked') === 'true') return 'sesión de seguridad bloqueada';
       if (root.localStorage) {
         if (root.localStorage.getItem('na_master_lock') === 'true') return 'Bloquear edición crítica está activado';
         if (root.localStorage.getItem('na_readonly') === 'true') return 'Modo solo lectura está activado';
