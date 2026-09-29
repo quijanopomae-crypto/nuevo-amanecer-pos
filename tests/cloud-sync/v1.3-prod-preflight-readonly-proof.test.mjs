@@ -49,6 +49,22 @@ test('failed production preflight prints enough read-only evidence to identify e
   assert.match(workflow, /console\.log\(JSON\.stringify\(result\)\)/);
 });
 
+test('production preflight identifies the effective schema status of migrations 0014 through 0017', () => {
+  for (const marker of [
+    'migration_schema_status',
+    'canonical_product_operations',
+    'canonical_live_products',
+    'canonical_inventory_operations',
+    'canonical_manual_inventory_movements',
+    'canonical_generic_sale_lines',
+    'canonical_customer_operations',
+    'canonical_customer_registry',
+    'canonical_live_customers',
+  ]) {
+    assert.ok(workflow.includes(marker), 'missing effective migration schema marker ' + marker);
+  }
+});
+
 test('production D1 preflight contains no SQL business or schema mutation', () => {
   assert.doesNotMatch(workflow, /\bINSERT\s+INTO\b/i);
   assert.doesNotMatch(workflow, /\bUPDATE\s+[A-Za-z_]/i);

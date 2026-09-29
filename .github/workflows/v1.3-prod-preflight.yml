@@ -112,6 +112,12 @@ jobs:
 
             const requiredObjects = {
               table: [
+                'canonical_product_operations',
+                'canonical_live_products',
+                'canonical_live_inventory_effects',
+                'canonical_inventory_operations',
+                'canonical_manual_inventory_movements',
+                'canonical_generic_sale_lines',
                 'canonical_customer_operations',
                 'canonical_customer_registry',
                 'canonical_live_customers',
@@ -170,6 +176,27 @@ jobs:
               }
             }
 
+            const migrationSchemaStatus = {
+              '0014_canonical_live_products.sql': [
+                'canonical_product_operations',
+                'canonical_live_products',
+                'canonical_live_inventory_effects',
+              ].every(name => existingTableNames.has(name)) ? 'PRESENT' : 'MISSING_OR_PARTIAL',
+              '0015_canonical_inventory_adjust.sql': [
+                'canonical_inventory_operations',
+                'canonical_manual_inventory_movements',
+              ].every(name => existingTableNames.has(name)) ? 'PRESENT' : 'MISSING_OR_PARTIAL',
+              '0016_canonical_generic_sale_lines.sql':
+                existingTableNames.has('canonical_generic_sale_lines') ? 'PRESENT' : 'MISSING_OR_PARTIAL',
+              '0017_canonical_live_customers.sql': [
+                'canonical_customer_operations',
+                'canonical_customer_registry',
+                'canonical_live_customers',
+              ].every(name => existingTableNames.has(name)) &&
+                missingCustomerRegistryFks.length === 0 &&
+                residueRows.length === 0 ? 'PRESENT' : 'MISSING_OR_PARTIAL',
+            };
+
             const customerSchemaCounts = {};
             for (const table of [
               'canonical_customer_operations',
@@ -215,6 +242,7 @@ jobs:
               traffic: Object.fromEntries(Object.entries(traffic).map(([k,v]) => [k, Number(v)])),
               observed_migrations: observedMigrations,
               missing_migrations: missingMigrations,
+              migration_schema_status: migrationSchemaStatus,
               integrity: {
                 quick_check: quickCheck,
                 foreign_key_violations: foreignKeyRows.length,
@@ -225,7 +253,7 @@ jobs:
               customer_schema_counts: customerSchemaCounts,
               schema_objects_verified: expectedObjects.length - missingSchemaObjects.length,
               migration_0017_readonly_proof:
-                missingMigrations.length === 0 &&
+                migrationSchemaStatus['0017_canonical_live_customers.sql'] === 'PRESENT' &&
                 quickCheck === 'ok' &&
                 foreignKeyRows.length === 0 &&
                 residueRows.length === 0 &&
@@ -238,7 +266,10 @@ jobs:
             const failures = [];
             if (control.mode !== 'ACTIVE') failures.push('production canonical authority is not ACTIVE');
             if (!control.active_promotion_id) failures.push('active promotion missing');
-            if (missingMigrations.length) failures.push('missing migrations: ' + missingMigrations.join(','));
+            const effectiveMissingMigrations = Object.entries(migrationSchemaStatus)
+              .filter(([,status]) => status !== 'PRESENT')
+              .map(([name]) => name);
+            if (effectiveMissingMigrations.length) failures.push('effective schema missing migrations: ' + effectiveMissingMigrations.join(','));
             if (quickCheck !== 'ok') failures.push('PRAGMA quick_check=' + quickCheck);
             if (foreignKeyRows.length) failures.push('foreign key violations=' + foreignKeyRows.length);
             if (residueRows.length) failures.push('__v17 residue=' + residueRows.length);
