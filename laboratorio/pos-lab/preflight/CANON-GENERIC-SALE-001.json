@@ -1,0 +1,96 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-GENERIC-SALE-001",
+  "base_ref": "185f82e980767571574bf9013e7c87ffd3813d03",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md y reglas de skills requeridas",
+      "Venta libre legacy en inline-01",
+      "canonical-sale-intent, canonical-sale-integration y canonical-client",
+      "a6-commerce, a6-canonical y sale_items/canonical triggers"
+    ],
+    "WRITES": [
+      "metadata inmutable de líneas genéricas ligadas a sale_items",
+      "extensión compatible de sale.create para líneas VARIOS",
+      "proyección UI de nombre/código genérico",
+      "ruta CANON del modal Venta libre"
+    ],
+    "DOM_AFFECTED": [
+      "#mVentaLibre",
+      "#vlNombre",
+      "#vlPrecio",
+      "#vlCantidad",
+      "#vlCodigo",
+      "#btnVentaLibre"
+    ],
+    "STATE_AFFECTED": [
+      "cart temporal de la venta actual",
+      "sale intent/outbox",
+      "saleItems proyectados al historial"
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 aislado: canonical_generic_sale_lines",
+      "outbox/journal de venta existente",
+      "sin catálogo Products ni stock para VARIOS"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "VARIOS no crea productos del catálogo",
+      "VARIOS no modifica stock ni inventory_movements",
+      "cada línea genérica conserva nombre/código/precio/cantidad exactos",
+      "líneas normales siguen requiriendo producto IMPORT/LIVE",
+      "sale.create conserva idempotencia y payment rules",
+      "reintento perdido usa el mismo intent",
+      "sin saveAllData como autoridad en CANON"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "POS carrito y cobro",
+      "sale.create backend",
+      "historial de ventas y tickets",
+      "crédito opcional sobre venta genérica"
+    ],
+    "RISKS": [
+      "abrir sale_items a IDs no autorizados",
+      "perder nombre de VARIOS en segundo dispositivo",
+      "crear inventario fantasma",
+      "duplicar línea genérica en replay"
+    ],
+    "ROLLBACK": [
+      "revertir PR antes de producción",
+      "sin escrituras remotas de producción durante esta tarea"
+    ],
+    "TESTS": [
+      "intent genérico exacto",
+      "venta Worker+SQLite sin producto/catalog stock",
+      "read/projection en segundo dispositivo",
+      "línea normal sin regresión",
+      "idempotencia/replay",
+      "CI Mirror/Critical/E2E"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  }
+}
