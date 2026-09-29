@@ -832,3 +832,6 @@
     transform:none!important;
   }
 }
+
+/* Payment modal must render above the V2 financial workspace but below security overlays. */
+#mPagoCred{z-index:1300}
