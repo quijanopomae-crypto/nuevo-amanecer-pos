@@ -118,22 +118,28 @@
     });
   }
 
-  // The command is durable server-side once a receipt exists. A later refresh
-  // failure must never be reported as a failed payment.
-  async function afterCommit(receipt, amountCents, replayed) {
-    closeModal();
+  // Once the Worker returns a durable receipt, the payment is authoritative.
+  // Do not keep the cashier waiting for a full CANON reconciliation: close and
+  // acknowledge immediately, then refresh the wider UI in the background.
+  function reconcileAfterCommit(receipt, amountCents) {
     var operation = clean(receipt && receipt.operation_id);
     var amount = typeof amountCents === 'number' ? ' de S/ ' + (amountCents / 100).toFixed(2) : '';
-    try {
-      await refreshCanonical();
-      renderViews();
-      notify(replayed
-        ? 'Se confirmó el pago CANON pendiente' + amount + ' (no se registró otro pago). Revisa el saldo antes de registrar otro abono.'
-        : 'Pago CANON' + amount + ' registrado', 'success');
-    } catch (error) {
-      notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
-        clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');
-    }
+    Promise.resolve()
+      .then(refreshCanonical)
+      .then(renderViews)
+      .catch(function (error) {
+        notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
+          clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');
+      });
+  }
+
+  async function afterCommit(receipt, amountCents, replayed) {
+    closeModal();
+    var amount = typeof amountCents === 'number' ? ' de S/ ' + (amountCents / 100).toFixed(2) : '';
+    notify(replayed
+      ? 'Pago CANON pendiente' + amount + ' CONFIRMADO (no se registró otro pago).'
+      : 'Pago CANON' + amount + ' CONFIRMADO', 'success');
+    reconcileAfterCommit(receipt, amountCents);
     return true;
   }
 
