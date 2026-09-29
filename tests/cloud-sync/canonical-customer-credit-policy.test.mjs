@@ -130,6 +130,26 @@ test('CANON UI bridge owns manual/automatic policy writes and never calls legacy
   assert.match(sw,/\.\/js\/sync\/canonical-customer-credit-policy-bridge\.js/);
 });
 
+test('CANON authority never falls back to legacy saveAllData when the credit-policy bridge is unavailable',()=>{
+  const manual=inline04.slice(
+    inline04.indexOf('async function guardarLineaCreditoManual'),
+    inline04.indexOf('async function restaurarLineaCreditoAutomatica')
+  );
+  const automatic=inline04.slice(
+    inline04.indexOf('async function restaurarLineaCreditoAutomatica'),
+    inline04.indexOf('function _naCreditModalSummaryHtml')
+  );
+  assert.match(inline04,/function _naCanonicalCreditPolicyAuthority\(\)/);
+  assert.match(manual,/_naCanonicalCreditPolicyAuthority\(\)/);
+  assert.match(automatic,/_naCanonicalCreditPolicyAuthority\(\)/);
+  assert.match(manual,/canonicalPolicyBridge\.saveManual/);
+  assert.match(automatic,/canonicalPolicyBridge\.restoreAutomatic/);
+  assert.doesNotMatch(manual,/canonicalPolicyBridge\.enabled/);
+  assert.doesNotMatch(automatic,/canonicalPolicyBridge\.enabled/);
+  assert.match(manual,/integración CANON no disponible/);
+  assert.match(automatic,/integración CANON no disponible/);
+});
+
 
 test('lost ACK retries the same policy operation and never advances revision twice',async t=>{
   const f=await activeCanon(t,{migrations:MIGRATIONS});

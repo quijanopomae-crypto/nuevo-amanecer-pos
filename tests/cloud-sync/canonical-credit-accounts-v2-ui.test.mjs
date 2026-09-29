@@ -123,6 +123,15 @@ test('classification reuses the existing evaluator with the approved semantic pr
   assert.equal(api.classifyClient(ctx.clientes[4]).tone,'slate');
 });
 
+test('small-credit purchase detail exposes the existing payment flow when balance is pending',()=>{
+  const purchase=source.slice(source.indexOf('function labPurchaseHtml'),source.indexOf('function labPendingInstallmentsHtml'));
+  assert.match(purchase,/labCreditPending\(cr\) > 0\.001/);
+  assert.match(purchase,/!labIsCanceled\(cr\)/);
+  assert.match(purchase,/class="na-v2-pay"/);
+  assert.match(purchase,/abrirPago\(/);
+  assert.match(purchase,/Registrar pago/);
+});
+
 test('CANON UI keeps financial authority in existing evaluation/payment/FIFO/cash paths',()=>{
   const classification=source.slice(source.indexOf('function labClassifyClient'),source.indexOf('function labProductSummary'));
   assert.match(source,/_naEvaluateClientCredit/);
