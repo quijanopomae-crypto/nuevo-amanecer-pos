@@ -95,6 +95,93 @@ jobs:
                 (SELECT COUNT(*) FROM sync_operations) AS sync_operations;
             `))[0];
 
+            const requiredMigrations = [
+              '0014_canonical_live_products.sql',
+              '0015_canonical_inventory_adjust.sql',
+              '0016_canonical_generic_sale_lines.sql',
+              '0017_canonical_live_customers.sql',
+            ];
+            const migrationRows = await query('d1_migrations',
+              "SELECT name FROM d1_migrations WHERE name IN ('0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0017_canonical_live_customers.sql') ORDER BY name;");
+            const migrationNames = migrationRows.map(row => String(row.name));
+            if (JSON.stringify(migrationNames) !== JSON.stringify(requiredMigrations)) {
+              throw new Error('production migrations 0014-0017 are not all recorded');
+            }
+
+            const quickRows = await query('quick_check', 'PRAGMA quick_check;');
+            const quickCheck = String(Object.values(quickRows[0] || {})[0] || '').toLowerCase();
+            if (quickCheck !== 'ok') throw new Error('PRAGMA quick_check failed');
+
+            const foreignKeyRows = await query('foreign_key_check', 'PRAGMA foreign_key_check;');
+            if (foreignKeyRows.length !== 0) throw new Error('PRAGMA foreign_key_check reported violations');
+
+            const requiredObjects = {
+              table: [
+                'canonical_customer_operations',
+                'canonical_customer_registry',
+                'canonical_live_customers',
+                'canonical_sale_context',
+                'live_credits',
+                'canonical_credit_accounts',
+                'canonical_credit_metadata',
+              ],
+              view: ['canonical_credit_balances','canonical_cash_state'],
+              index: [
+                'ux_canonical_live_customers_document',
+                'idx_sale_context_promotion',
+                'idx_live_credits_customer',
+                'idx_credit_accounts_name',
+                'idx_credit_metadata_customer',
+              ],
+              trigger: [
+                'canonical_customer_operations_authorized_insert',
+                'canonical_customer_registry_live_guard',
+                'canonical_live_customers_authorized_insert',
+                'canonical_sale_context_authorized_insert',
+                'live_credits_authorized_insert',
+                'credit_accounts_authorized_insert',
+                'credit_metadata_live_guard',
+                'cash_session_unique_open',
+                'sale_cash_requires_open_session',
+              ],
+            };
+            const expectedObjects = Object.entries(requiredObjects).flatMap(([type,names]) => names.map(name => ({ type, name })));
+            const quotedObjectNames = expectedObjects.map(item => "'" + item.name + "'").join(',');
+            const objectRows = await query('sqlite_master 0017 objects',
+              'SELECT type,name FROM sqlite_master WHERE name IN (' + quotedObjectNames + ') ORDER BY type,name;');
+            for (const expected of expectedObjects) {
+              if (!objectRows.some(row => String(row.type) === expected.type && String(row.name) === expected.name)) {
+                throw new Error('missing production schema object ' + expected.type + ':' + expected.name);
+              }
+            }
+
+            const residueRows = await query('__v17 residue',
+              "SELECT type,name FROM sqlite_master WHERE name LIKE '%__v17%' OR instr(COALESCE(sql,''),'__v17') > 0;");
+            if (residueRows.length !== 0) throw new Error('temporary __v17 schema residue remains');
+
+            const customerFkTables = [
+              'canonical_sale_context',
+              'live_credits',
+              'canonical_credit_accounts',
+              'canonical_credit_metadata',
+            ];
+            for (const table of customerFkTables) {
+              const rows = await query('foreign key ' + table, 'PRAGMA foreign_key_list("' + table + '");');
+              if (!rows.some(row => String(row.table) === 'canonical_customer_registry')) {
+                throw new Error(table + ' does not reference canonical_customer_registry');
+              }
+            }
+
+            const customerSchemaCounts = (await query('0017 row counts', `
+              SELECT
+                (SELECT COUNT(*) FROM canonical_customer_operations) AS customer_operations,
+                (SELECT COUNT(*) FROM canonical_customer_registry) AS customer_registry,
+                (SELECT COUNT(*) FROM canonical_live_customers) AS live_customers,
+                (SELECT COUNT(*) FROM canonical_sale_context) AS sale_context,
+                (SELECT COUNT(*) FROM live_credits) AS live_credits,
+                (SELECT COUNT(*) FROM canonical_credit_accounts) AS credit_accounts,
+                (SELECT COUNT(*) FROM canonical_credit_metadata) AS credit_metadata;
+            `))[0];
             let financialOperations = 0;
             if (Number(schema.has_financial_operations) === 1) {
               financialOperations = Number((await query('financial_operations',
@@ -120,6 +207,16 @@ jobs:
               },
               schema: Object.fromEntries(Object.entries(schema).map(([k,v]) => [k, Number(v)])),
               traffic: Object.fromEntries(Object.entries(traffic).map(([k,v]) => [k, Number(v)])),
+              migrations: migrationNames,
+              integrity: {
+                quick_check: quickCheck,
+                foreign_key_violations: foreignKeyRows.length,
+                v17_residue_objects: residueRows.length,
+                customer_fk_tables: customerFkTables.length,
+              },
+              customer_schema_counts: Object.fromEntries(Object.entries(customerSchemaCounts || {}).map(([k,v]) => [k, Number(v)])),
+              schema_objects_verified: expectedObjects.length,
+              migration_0017_readonly_proof: 'PASS',
               read_only_preflight: 'PASS',
             };
             console.log(JSON.stringify(result));
