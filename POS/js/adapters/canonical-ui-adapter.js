@@ -112,6 +112,8 @@
     c = c && typeof c === 'object' ? c : {};
     var id = c.customer_id;
     var name = text(c.name, 'Cliente');
+    var policyMode = text(c.credit_policy_mode).toUpperCase();
+    var manual = policyMode === 'MANUAL';
     return {
       id: id,
       customer_id: id,
@@ -126,6 +128,13 @@
       color: Number.isFinite(Number(c.color)) ? Number(c.color) : (Number(index) || 0) % 8,
       totalCompras: cents(c.total_purchases_cents),
       creditCategories: (accountsByCustomer.get(String(id)) || []).slice(),
+      lineaCreditoPolicyRevision: integer(c.credit_policy_revision, 0),
+      lineaCreditoManualActiva: manual,
+      lineaCreditoManual: manual ? cents(c.credit_policy_manual_limit_cents) : 0,
+      lineaCreditoManualMotivo: manual ? text(c.credit_policy_reason) : '',
+      lineaCreditoManualAt: manual ? text(c.credit_policy_updated_at) : '',
+      lineaCreditoManualPor: manual ? text(c.credit_policy_administrator_name) : '',
+      lineaCreditoManualPorId: manual ? text(c.credit_policy_administrator_id) : '',
       canonical: true
     };
   }
