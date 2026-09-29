@@ -252,23 +252,32 @@
 
   function uiSaleItem(row, productById) {
     row = row && typeof row === 'object' ? row : {};
-    var product = productById.get(String(row.product_id)) || {};
+    var generic = text(row.line_type).toUpperCase() === 'GENERIC';
+    var product = generic ? {} : (productById.get(String(row.product_id)) || {});
     var qty = number(row.quantity, 0);
     var price = cents(row.unit_price_cents);
+    var name = generic ? text(row.generic_name, 'VARIOS') : text(product.name || product.nombre, 'Producto');
+    var code = generic ? text(row.generic_code) : text(product.sku || product.barcode);
     return {
       id: row.product_id,
       product_id: row.product_id,
-      name: text(product.name || product.nombre, 'Producto'),
-      nombre: text(product.name || product.nombre, 'Producto'),
-      icon: text(product.icon || product.icono, '📦'),
+      name: name,
+      nombre: name,
+      sku: code,
+      barcode: code,
+      codigoIngresado: code,
+      icon: generic ? '📋' : text(product.icon || product.icono, '📦'),
       qty: qty,
       cantidad: qty,
       precio: price,
       precioUnitario: price,
       subtotal: cents(row.line_total_cents),
-      costo: number(product.costo, 0),
-      tipoImpuesto: text(product.tipoImpuesto),
-      incluyeIGV: product.incluyeIGV !== false,
+      costo: generic ? 0 : number(product.costo, 0),
+      tipoImpuesto: generic ? '' : text(product.tipoImpuesto),
+      incluyeIGV: generic ? true : product.incluyeIGV !== false,
+      ventaLibre: generic,
+      tipoLinea: generic ? 'venta_libre' : 'producto',
+      controlInventario: generic ? false : product.controlInventario,
       canonical: true
     };
   }

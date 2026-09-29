@@ -45,6 +45,14 @@ export function validateCanonicalSale(body) {
         !Number.isSafeInteger(item.unit_price_cents) || item.unit_price_cents < 0 || !Number.isSafeInteger(item.line_total_cents) ||
         item.line_total_cents !== Math.round(item.quantity * item.unit_price_cents) ||
         !Number.isSafeInteger(item.expected_stock_revision) || item.expected_stock_revision < 0) return { error: 'invalid_item' };
+    if (item.generic_line !== undefined) {
+      const generic=item.generic_line;
+      if (!isObject(generic) || item.product_id.slice(0,8)!=='GENERIC:' || !Number.isSafeInteger(item.quantity) || item.quantity>9999 ||
+          item.unit_price_cents<=0 || item.expected_stock_revision!==0 ||
+          typeof generic.name!=='string' || !generic.name.trim() || generic.name.trim().length>240 || /[\x00-\x1f\x7f]/.test(generic.name) ||
+          typeof generic.code!=='string' || generic.code.trim().length>160 || /[\x00-\x1f\x7f]/.test(generic.code)) return { error:'invalid_generic_line' };
+      item.generic_line={name:generic.name.trim().replace(/\s+/g,' '),code:generic.code.trim()};
+    }
     seen.add(item.product_id); total += item.line_total_cents;
     if (!Number.isSafeInteger(total)) return { error: 'unsafe_total' };
   }
@@ -154,8 +162,20 @@ export async function createCanonicalSale(request, env, auth, json) {
   if (await db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
   const liveProductsReady=Number((await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects')").first())?.count)===3;
   if (liveProductsReady && await db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  const genericRequested=body.items.some(item=>item.generic_line!==undefined);
+  const genericSchemaReady=!genericRequested || Number((await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines'").first())?.count)===1;
+  if (!genericSchemaReady) return json({error:'generic_sale_schema_not_ready'},503);
   const products = [];
   for (const item of body.items) {
+    if (item.generic_line !== undefined) {
+      const collision=await db.prepare(`SELECT product_id FROM (
+        SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2
+        UNION ALL SELECT product_id FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
+      ) LIMIT 1`).bind(body.promotion_id,item.product_id).first();
+      if (collision) return json({error:'generic_product_id_conflict',product_id:item.product_id},409);
+      products.push({product_id:item.product_id,current_stock_quantity:0,stock_revision:0,tracks_inventory:0,provenance:'GENERIC'});
+      continue;
+    }
     let product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
       FROM products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
     if (!product && liveProductsReady) product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance
@@ -196,6 +216,18 @@ export async function createCanonicalSale(request, env, auth, json) {
     .bind(`${token}:session`,body.promotion_id,body.session_id));
   for (let index=0; index<body.items.length; index++) {
     const item=body.items[index], line=index+1, product=products[index];
+    if (product.provenance==='GENERIC') {
+      statements.push(db.prepare(`INSERT INTO canonical_generic_sale_lines
+        (sale_id,line_number,operation_id,promotion_id,generic_product_id,name,code,quantity,unit_price_cents,line_total_cents,created_at)
+        SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11
+        WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?3)`)
+        .bind(body.sale_id,line,body.operation_id,body.promotion_id,item.product_id,item.generic_line.name,item.generic_line.code||null,
+          item.quantity,item.unit_price_cents,item.line_total_cents,body.created_at));
+      statements.push(db.prepare(`INSERT INTO sale_items(sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at)
+        SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?3)`)
+        .bind(body.sale_id,line,body.operation_id,item.product_id,item.quantity,item.unit_price_cents,item.line_total_cents,body.created_at));
+      continue;
+    }
     const stockTable=product.provenance==='LIVE'?'canonical_live_products':'products';
     statements.push(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok) SELECT ?1,CASE WHEN EXISTS(
       SELECT 1 FROM ${stockTable} WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4 AND tracks_inventory=?5

@@ -49,7 +49,29 @@ test('canonical cash captures effective cart economics and projects after one du
 test('mixed and credit payments retain their exact POS fields',async()=>{const mixed=harness({method:'mixto'});await mixed.context.confirmarVenta();assert.deepEqual(JSON.parse(JSON.stringify(mixed.calls.input.payment)),{cash_cents:300,digital_cents:550,digital_method:'plin',reference:'mixed-ref'});const credit=harness({method:'credito'});await credit.context.confirmarVenta();assert.equal(credit.calls.input.customer_id,'cust-9');assert.equal(credit.calls.input.credit_due,'2026-11-03');});
 test('digital payment retains the POS reference and never uses it as operation identity',async()=>{for(const method of ['yape','plin','transferencia']){const h=harness({method});await h.context.confirmarVenta();assert.equal(h.stored.payment.reference,'real-ref');assert.notEqual(h.stored.operation_id,'real-ref');}});
 test('cash, stock, payment, digital verification, duplicate reference and lock validations block capture',async()=>{for(const options of [{sessionOpen:false},{stock:1},{paymentValid:false},{method:'yape',verified:false},{method:'yape',duplicateReference:true},{lock:true}]){const h=harness(options),initialLength=h.context.cart.length;await h.context.confirmarVenta();assert.equal(h.calls.enqueue,0);assert.equal(h.context.cart.length,initialLength);assert.equal(h.calls.close,0);}});
-test('unsupported cart entries and storage failure leave cart and modal intact',async()=>{for(const item of [{ventaLibre:true},{ventaModo:'caja'},{unidadesSinStock:1}]){const h=harness({cart:[{id:7,qty:1,precio:4.25,unitsPerQty:1,...item}]});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,0);assert.equal(h.context.cart.length,1);}const h=harness({storageFailure:true});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.equal(h.context.cart.length,1);assert.equal(h.calls.close,0);assert.equal(h.calls.project,0);assert.equal(h.calls.save,0);});
+test('VARIOS enters canonical outbox while unsupported modes and storage failure remain fail-closed',async()=>{
+  const generic=harness({cart:[{id:-101,qty:2,precio:3.5,unitsPerQty:1,ventaLibre:true,name:'Recarga libre',codigoIngresado:'REC-01',barcode:'REC-01',sku:'REC-01',canonicalGenericId:'GENERIC:test-varios-1'}]});
+  await generic.context.confirmarVenta();
+  assert.equal(generic.calls.enqueue,1);
+  assert.equal(generic.calls.save,0);
+  assert.equal(generic.context.cart.length,0);
+  assert.equal(generic.stored.items[0].product_id,'GENERIC:test-varios-1');
+  assert.deepEqual(JSON.parse(JSON.stringify(generic.stored.items[0].generic_line)),{name:'Recarga libre',code:'REC-01'});
+  assert.equal(generic.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection().sales[0].conflict,false);
+  for(const item of [{ventaModo:'caja'},{unidadesSinStock:1}]){
+    const h=harness({cart:[{id:7,qty:1,precio:4.25,unitsPerQty:1,...item}]});
+    await h.context.confirmarVenta();
+    assert.equal(h.calls.enqueue,0);
+    assert.equal(h.context.cart.length,1);
+  }
+  const h=harness({storageFailure:true});
+  await h.context.confirmarVenta();
+  assert.equal(h.calls.enqueue,1);
+  assert.equal(h.context.cart.length,1);
+  assert.equal(h.calls.close,0);
+  assert.equal(h.calls.project,0);
+  assert.equal(h.calls.save,0);
+});
 test('projection failure after enqueue never retries automatically or rolls back the durable intent',async()=>{const h=harness({projectionError:true});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.ok(h.stored);assert.equal(h.context.cart.length,0);assert.match(h.calls.toast.at(-1)[0],/guardada localmente/);h.context.cart=[{id:7,qty:2,precio:4.25,unitsPerQty:1}];await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);});
 test('capture lock option skips only canonical blanket lock and still evaluates all POS locks',()=>{const lockLine=inline03.split('\n').find(line=>line.startsWith('isModuleLocked=function(moduleName,options)'));assert.ok(lockLine);const context=vm.createContext({NuevoAmanecerCanonical:{enabled:()=>true},securityIsLocked:()=>false,storage:{getItem:key=>key==='master'?'false':'false'},LOCK_KEYS:{master:'master',readOnly:'readonly',modules:{ventas:'ventas',productos:'productos'}}});vm.runInContext(lockLine,context);assert.equal(context.isModuleLocked('ventas'),true);assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),false);assert.equal(context.isModuleLocked('productos',{canonicalSaleCapture:true}),true);context.securityIsLocked=()=>true;assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.securityIsLocked=()=>false;context.storage.getItem=key=>key==='master'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.storage.getItem=key=>key==='readonly'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.storage.getItem=key=>key==='ventas'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);});
 test('parsed script order places canonical dependencies before integration between inline 03 and 07',()=>{const scripts=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(match=>match[1]);const pos=needle=>scripts.findIndex(src=>src.endsWith(needle));assert.ok(pos('js/legacy-inline/inline-03.js')<pos('js/sync/canonical-sale-integration.js'));assert.ok(pos('js/sync/canonical-sale-integration.js')<pos('js/legacy-inline/inline-07.js'));for(const dep of ['canonical-sale-intent.js','canonical-sale-outbox.js','canonical-sale-projection.js'])assert.ok(pos(dep)<pos('js/sync/canonical-sale-integration.js'));});
