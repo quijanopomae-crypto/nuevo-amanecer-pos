@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish the validated CANON runtime through PR #200 so the hosted POS matches the current functional HEAD, including authoritative products, inventory, generic sale lines and LIVE customers.",
-  "retry_attempt": 29,
-  "retry_reason": "PR #200 merged at abc8633fbc863bd70f13fab33598a80932eb2ec0 with LAB Canon Mirror CI, CANON Critical CI and E2E Smoke CI green; public CANON is still serving the older c11b4692dd579ee1a351f58762b584b18b9b04dd artifact.",
-  "requested_at_utc": "2026-09-29T04:34:00Z",
-  "target_head": "abc8633fbc863bd70f13fab33598a80932eb2ec0"
+  "note": "Publish the validated CANON sale-lock diagnostics from PR #207 after production cutover 0014-0017 completed successfully.",
+  "retry_attempt": 30,
+  "retry_reason": "PR #207 merged at 1ef3567f7f033370bcebcd08b0d5425c653f11ce with E2E Smoke green and CANON Critical job green; publish exact browser lock reason without changing lock semantics.",
+  "requested_at_utc": "2026-09-29T11:00:00Z",
+  "target_head": "1ef3567f7f033370bcebcd08b0d5425c653f11ce"
 }
