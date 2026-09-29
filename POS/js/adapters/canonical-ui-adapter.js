@@ -322,18 +322,21 @@
   function uiInventoryMovement(row) {
     row = row && typeof row === 'object' ? row : {};
     var when = localParts(row.created_at);
+    var kind = text(row.movement_type, 'SALE').toUpperCase();
+    var manual = text(row.movement_source).toUpperCase() === 'MANUAL' || kind === 'ENTRADA' || kind === 'SALIDA';
     return {
       id: row.movement_id,
       movementId: row.movement_id,
       operationId: row.operation_id,
       productId: row.product_id,
-      type: 'SALE',
+      type: kind,
       delta: number(row.quantity, 0),
       quantity: number(row.quantity, 0),
-      source: 'CANONICAL',
-      referenceId: row.sale_id || null,
+      reason: text(row.reason),
+      source: manual ? 'INVENTORY_MOVE' : 'CANONICAL',
+      referenceId: row.sale_id || row.product_id || null,
       saleId: row.sale_id || null,
-      lineNumber: integer(row.line_number, 0),
+      lineNumber: row.line_number == null ? 0 : integer(row.line_number, 0),
       fecha: when.date,
       hora: when.time,
       hora24: when.time,
