@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish validated client payment modal stacking fix from PR #213. Only #mPagoCred is raised above the V2 client workspace; security overlays remain above it.",
-  "retry_attempt": 33,
-  "retry_reason": "Perplexity forensic review and RED/GREEN TDD confirmed mPagoCred inherited z-index 200 while the V2 client workspace is z-index 1200. CANON Critical and E2E passed after setting #mPagoCred to 1300.",
-  "requested_at_utc": "2026-09-29T12:45:00Z",
-  "target_head": "d99de6d1beab3a1b7ca0065f04b3567af7fadfef"
+  "note": "Publish CANON credit-line authority fix, canonical customer credit policy bridge, and Registrar pago action for small-credit purchase detail after live migration 0018 passed.",
+  "retry_attempt": 34,
+  "retry_reason": "PR #219 fixed credit-policy authority and payment action; live migration 0018 run 36590673331 passed backup, schema verification and Worker probe. Publish current POS shell.",
+  "requested_at_utc": "2026-09-29T15:32:00Z",
+  "target_head": "91730dd865e79c3f93096ebf64b1aada99bb99d7"
 }
