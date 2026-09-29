@@ -57,15 +57,6 @@
     else root.document.getElementById('mPagoCred')?.classList.remove('open');
   }
 
-  // Read-only lookup: the bridge never replaces the canonical client renderer
-  // installed by inline-03 (see client-renderer-collision invariant).
-  function renderViews() {
-    ['cliRender', 'cajRender', 'updateDashboard'].forEach(function (name) {
-      var render = root[name];
-      if (typeof render === 'function') render.call(root);
-    });
-  }
-
   async function refreshCanonical() {
     var client = api();
     if (!client || typeof client.refresh !== 'function' || typeof client.legacySnapshot !== 'function') {
@@ -145,7 +136,6 @@
     var amount = typeof amountCents === 'number' ? ' de S/ ' + (amountCents / 100).toFixed(2) : '';
     Promise.resolve()
       .then(refreshCanonical)
-      .then(renderViews)
       .catch(function (error) {
         notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
           clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');

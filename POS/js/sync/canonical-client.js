@@ -764,21 +764,25 @@
       return work();
     });
   }
-  async function sendPending(record) {
+  async function sendPending(record, skipStatus) {
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
     if (!session) fail('CANONICAL_COMMERCE_CLOSED');
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
-    // Retry verifies only authority. Never rebuild the intent from newer financial data.
-    var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
-      credentials: 'omit', redirect: 'error', cache: 'no-store',
-      headers: { authorization: 'Bearer ' + session.token }
-    });
-    if (!statusResponse.ok) fail('CANONICAL_READ_' + statusResponse.status);
-    var meta = await statusResponse.json(); verify(meta, expected);
-    if (meta.mode !== 'ACTIVE') fail('CANONICAL_COMMERCE_CLOSED');
+    // A new payment already has a validated current replica. The Worker checks
+    // authority and credit revision atomically with payment.create. Retried
+    // pending commands still verify remote authority before replaying the intent.
+    if (!skipStatus) {
+      var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
+        credentials: 'omit', redirect: 'error', cache: 'no-store',
+        headers: { authorization: 'Bearer ' + session.token }
+      });
+      if (!statusResponse.ok) fail('CANONICAL_READ_' + statusResponse.status);
+      var meta = await statusResponse.json(); verify(meta, expected);
+      if (meta.mode !== 'ACTIVE') fail('CANONICAL_COMMERCE_CLOSED');
+    }
     assertBinding(expected);
     var raw = JSON.stringify(record);
     function unchanged() { if (root.localStorage.getItem(JOURNAL) !== raw) fail('CANONICAL_PENDING_CHANGED'); }
@@ -836,7 +840,7 @@
       }
       if (!validPayload(command, record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
       durableJournal(record);
-      return sendPending(record);
+      return sendPending(record, command === 'payment.create');
     });
   }
   function createProduct(input) { return createCommand('product.create', input); }
