@@ -228,3 +228,12 @@ Para V1.3 CANON/cloud, lee la especificación V1.3 aplicable existente en `docs/
 Para V1.2/recovery, usa los documentos `docs/V1.2_*.md` existentes solo cuando esa versión o recuperación sea relevante.
 
 Si descubres comandos reales para ejecutar o probar, documéntalos en `README.md`. No inventes comandos ni documentos.
+
+
+## Invariante: skipStatus en payment.create
+
+- `sendPending(record, skipStatus)` omite el GET `/read/canonical/status` únicamente para un `payment.create` nuevo.
+- Esa omisión es segura SOLO porque el Worker valida `authority_epoch`, `expected_control_revision` y `expected_credit_revision` atómicamente al escribir el evento PAYMENT en D1.
+- Los reintentos de comandos pendientes SIEMPRE deben verificar el status remoto antes de reenviar la intención.
+- Si alguna vez se relaja esa validación en el Worker, hay que eliminar `skipStatus` del cliente.
+- Cobertura: `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs` (stale_credit, ACK perdido, doble toque).
