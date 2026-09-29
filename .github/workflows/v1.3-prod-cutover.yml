@@ -135,6 +135,15 @@ jobs:
             npx wrangler d1 execute "$REHEARSAL_DB_NAME" --remote --file=../../infra/database/migrations/0017_canonical_live_customers.sql
           fi
 
+      - name: Rehearse 0018 customer credit policy if missing
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_CUSTOMER_CREDIT_POLICY" = "0" ]; then
+            npx wrangler d1 execute "$REHEARSAL_DB_NAME" --remote --file=../../infra/database/migrations/0018_canonical_customer_credit_policy.sql
+          fi
+
       - name: Verify rehearsal after migrations
         run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs verify-rehearsal
 
@@ -181,6 +190,15 @@ jobs:
           fi
           if [ "$HAS_LIVE_CUSTOMERS" = "0" ]; then
             npx wrangler d1 execute "$PROD_DATABASE_NAME" --remote --file=../../infra/database/migrations/0017_canonical_live_customers.sql
+          fi
+
+      - name: Apply 0018 customer credit policy if missing to production
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_CUSTOMER_CREDIT_POLICY" = "0" ]; then
+            npx wrangler d1 execute "$PROD_DATABASE_NAME" --remote --file=../../infra/database/migrations/0018_canonical_customer_credit_policy.sql
           fi
 
       - name: Verify production schema
@@ -234,7 +252,7 @@ jobs:
             echo "- Production D1: $PROD_DATABASE_ID"
             echo "- Fresh private backup: $CUTOVER_R2_KEY"
             echo "- Production Worker: $PROD_WORKER_URL"
-            echo "- Session + Client Credit V2 + canonical 0013-0017 migrations: PASS"
+            echo "- Session + Client Credit V2 + canonical 0013-0018 migrations: PASS"
             echo "- Probe session cleanup: PASS"
             echo "- first_live_operation_id: NULL"
             echo "- Operational traffic: 0"
