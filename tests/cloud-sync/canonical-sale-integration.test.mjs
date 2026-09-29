@@ -77,3 +77,28 @@ test('capture lock option skips only canonical blanket lock and still evaluates 
 test('parsed script order places canonical dependencies before integration between inline 03 and 07',()=>{const scripts=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(match=>match[1]);const pos=needle=>scripts.findIndex(src=>src.endsWith(needle));assert.ok(pos('js/legacy-inline/inline-03.js')<pos('js/sync/canonical-sale-integration.js'));assert.ok(pos('js/sync/canonical-sale-integration.js')<pos('js/legacy-inline/inline-07.js'));for(const dep of ['canonical-sale-intent.js','canonical-sale-outbox.js','canonical-sale-projection.js'])assert.ok(pos(dep)<pos('js/sync/canonical-sale-integration.js'));});
 test('canonical non-credit sale keeps the selected optional POS customer', async()=>{const h=harness();h.els.get('mVentaCliente').value='cust-9';await h.context.confirmarVenta();assert.equal(h.calls.input.customer_id,'cust-9');});
 test('canonical sale does not discard a selected customer that is missing from the current list', async()=>{const h=harness();h.els.get('mVentaCliente').value='cust-9';h.context.clientes=[];await h.context.confirmarVenta();assert.equal(h.calls.enqueue,0);assert.equal(h.context.cart.length,1);assert.match(h.calls.toast.at(-1)[0],/cliente seleccionado ya no está disponible/);});
+
+test('canonical sale reports the exact browser lock reason instead of a generic block', async()=>{
+  const cases=[
+    [{securityLocked:true},/sesión de seguridad/i],
+    [{masterLocked:true},/edición crítica/i],
+    [{readOnlyLocked:true},/solo lectura/i],
+    [{salesLocked:true},/Ventas y POS/i],
+  ];
+  for(const [flags,pattern] of cases){
+    const h=harness();
+    h.context.sessionStorage={
+      getItem:key=>key==='na_security_locked'&&flags.securityLocked?'true':null
+    };
+    h.context.localStorage.getItem=key=>{
+      if(key==='na_master_lock'&&flags.masterLocked)return 'true';
+      if(key==='na_readonly'&&flags.readOnlyLocked)return 'true';
+      if(key==='na_lock_ventas'&&flags.salesLocked)return 'true';
+      return null;
+    };
+    h.context.isModuleLocked=()=>true;
+    await h.context.confirmarVenta();
+    assert.equal(h.calls.enqueue,0);
+    assert.match(h.calls.toast.at(-1)[0],pattern);
+  }
+});
