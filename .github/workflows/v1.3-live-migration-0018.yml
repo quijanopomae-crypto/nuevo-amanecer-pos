@@ -1,0 +1,114 @@
+name: V1.3 Live Migration 0018
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-live-migration-0018-trigger.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-change
+  cancel-in-progress: false
+
+jobs:
+  migrate-0018:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      PROD_DATABASE_NAME: nuevo-amanecer-prod-v2
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Require production credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$POS_ACTIVATION_SECRET"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Checkout exact branch HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Require exact active branch head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate 0018 and Worker build
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/cloudflare-prod/scripts/cutover-prepare.mjs
+          node --test tests/cloud-sync/canonical-customer-credit-policy.test.mjs
+          cd tools/cloudflare-lab
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
+
+      - name: Live production preflight
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs live-0018-preflight
+
+      - name: Export fresh production backup
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs export
+
+      - name: Store backup in private R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-live-migrations/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA-0018.sql"
+          echo "LIVE_0018_R2_KEY=$KEY" >> "$GITHUB_ENV"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --file=/tmp/v1.3-pre-cutover.sql
+
+      - name: Apply 0018 if missing
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_CUSTOMER_CREDIT_POLICY" = "0" ]; then
+            npx wrangler d1 execute "$PROD_DATABASE_NAME" --remote --file=../../infra/database/migrations/0018_canonical_customer_credit_policy.sql
+          else
+            echo "0018 already present; migration step skipped."
+          fi
+
+      - name: Verify live production schema
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs live-0018-verify
+
+      - name: Deploy production Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-prod/wrangler.jsonc
+
+      - name: Probe production Worker
+        run: node tools/cloudflare-prod/scripts/cutover-prepare.mjs probe-worker
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### V1.3 live migration 0018"
+            echo "- Backup: $LIVE_0018_R2_KEY"
+            echo "- Migration 0018: verified"
+            echo "- Production Worker: deployed and probed"
+          } >> "$GITHUB_STEP_SUMMARY"
