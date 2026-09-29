@@ -156,6 +156,31 @@ WHEN EXISTS(
 )
 BEGIN SELECT RAISE(ABORT,'live_customer_replace_forbidden'); END;
 
+-- Every trigger owned by a table being rebuilt is removed first. Some
+-- of those triggers reference another target table (for example
+-- live_credits_authorized_insert -> canonical_sale_context), so relying on
+-- DROP TABLE to remove them is too late for SQLite schema reparsing.
+DROP TRIGGER IF EXISTS live_credits_no_import_collision;
+DROP TRIGGER IF EXISTS canonical_sale_context_authorized_insert;
+DROP TRIGGER IF EXISTS live_credits_authorized_insert;
+DROP TRIGGER IF EXISTS canonical_sale_context_no_update;
+DROP TRIGGER IF EXISTS canonical_sale_context_no_delete;
+DROP TRIGGER IF EXISTS live_credits_no_update;
+DROP TRIGGER IF EXISTS live_credits_no_delete;
+DROP TRIGGER IF EXISTS live_credits_no_replace;
+DROP TRIGGER IF EXISTS sale_context_no_replace;
+DROP TRIGGER IF EXISTS credit_accounts_authorized_insert;
+DROP TRIGGER IF EXISTS credit_metadata_live_guard;
+DROP TRIGGER IF EXISTS credit_metadata_import_guard;
+DROP TRIGGER IF EXISTS credit_accounts_no_update;
+DROP TRIGGER IF EXISTS credit_accounts_no_delete;
+DROP TRIGGER IF EXISTS credit_metadata_no_update;
+DROP TRIGGER IF EXISTS credit_metadata_no_delete;
+DROP TRIGGER IF EXISTS credit_accounts_no_replace;
+DROP TRIGGER IF EXISTS credit_metadata_no_replace;
+DROP TRIGGER IF EXISTS credit_account_expense_operation_collision;
+DROP TRIGGER IF EXISTS credit_metadata_expense_operation_collision;
+
 -- External triggers are temporarily removed because SQLite reparses trigger SQL
 -- after each DROP TABLE. They are restored from the effective pre-0017 schema
 -- only after all four operational tables exist again.
