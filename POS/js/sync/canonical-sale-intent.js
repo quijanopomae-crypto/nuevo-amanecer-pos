@@ -78,9 +78,11 @@
       if (item.unitsPerQty !== undefined && item.unitsPerQty !== 1) fail('UNITS_PER_QTY_UNSUPPORTED');
       if (item.ventaSinStock === true) fail('VENTA_SIN_STOCK');
       if (item.unidadesSinStock !== undefined && Number(item.unidadesSinStock) > 0) fail('STOCK_NEGATIVO');
-      var generic = item.ventaLibre === true;
+      if (item.generic_line !== undefined && (!item.generic_line || typeof item.generic_line !== 'object' || Array.isArray(item.generic_line))) fail('GENERIC_LINE_INVALID');
+      var generic = item.ventaLibre === true || item.generic_line !== undefined;
       var productId = generic
-        ? stableId(item.generic_product_id !== undefined ? item.generic_product_id : item.canonicalGenericId, 'GENERIC:', 'GENERIC_ID_INVALID')
+        ? stableId(item.generic_product_id !== undefined ? item.generic_product_id :
+            (item.canonicalGenericId !== undefined ? item.canonicalGenericId : item.product_id), 'GENERIC:', 'GENERIC_ID_INVALID')
         : nonEmptyString(item.product_id !== undefined ? item.product_id : item.productId, 'PRODUCT_ID_INVALID');
       if (generic && (productId.length > 160 || productId.slice(0, 8) !== 'GENERIC:' || /[\u0000-\u001f\u007f-\u009f]/.test(productId))) fail('GENERIC_ID_INVALID');
       if (seen.has(productId)) fail('PRODUCT_ID_DUPLICATE');
@@ -101,10 +103,13 @@
       var lineTotal = item.line_total_cents === undefined ? rawLine : cents(item.line_total_cents, 'TOTAL_UNSAFE');
       if (lineTotal !== rawLine) fail('LINE_TOTAL_MISMATCH');
       var out = { product_id: productId, quantity: quantity, unit_price_cents: unitPrice, line_total_cents: lineTotal };
-      if (generic) out.generic_line = {
-        name: boundedText(item.name !== undefined ? item.name : item.nombre, 240, 'GENERIC_NAME_INVALID', false),
-        code: boundedText(item.codigoIngresado !== undefined ? item.codigoIngresado : (item.barcode !== undefined ? item.barcode : item.sku), 160, 'GENERIC_CODE_INVALID', true)
-      };
+      if (generic) {
+        var genericMeta = item.generic_line || null;
+        out.generic_line = {
+          name: boundedText(genericMeta ? genericMeta.name : (item.name !== undefined ? item.name : item.nombre), 240, 'GENERIC_NAME_INVALID', false),
+          code: boundedText(genericMeta ? genericMeta.code : (item.codigoIngresado !== undefined ? item.codigoIngresado : (item.barcode !== undefined ? item.barcode : item.sku)), 160, 'GENERIC_CODE_INVALID', true)
+        };
+      }
       return out;
     });
 
