@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { activeCanon, device } from './canon-browser-harness.mjs';
+import { deferred, intercept } from './a6-fixture.mjs';
 
 // Real path: bridge -> canonical-client.createPayment -> Worker -> SQLite(D1
 // contract) -> receipt -> refresh -> UI adapter. Synthetic data only.
@@ -23,6 +24,75 @@ async function openCash(tab) {
   await tab.api.refresh();
 }
 
+test('payment latency: one POST before receipt; full HTTP reconciliation and renders never hold Procesando', async (t) => {
+  const f = await activeCanon(t);
+  const gate = deferred();
+  const stages = {};
+  const restore = intercept(f, async (event) => {
+    if (event.method !== 'batch' || !event.entries?.some(row => row.sql.includes('INSERT INTO canonical_financial_operations('))) return;
+    stages.d1 ??= {};
+    stages.d1[event.when] = performance.now();
+  });
+  t.after(restore);
+  let posted = false;
+  const renders = [];
+  const tab = await device(f, {
+    token: 'device-a-token', deviceId: 'device-a', scripts,
+    globals: {
+      cliRender() { renders.push('clients'); },
+      cajRender() { renders.push('cash'); },
+      updateDashboard() { renders.push('dashboard'); },
+    },
+    async onFetch(url, options, forward) {
+      if (url.endsWith('/commands/payment.create')) {
+        posted = true;
+        stages.postStart = performance.now();
+        const reply = await forward();
+        stages.postEnd = performance.now();
+        return reply;
+      }
+      if (posted && url.includes('/read/canonical/')) {
+        stages.refreshStart ??= performance.now();
+        if (url.endsWith('/status')) await gate.promise;
+      }
+      return null;
+    },
+  });
+  const close = tab.context.__closed.push.bind(tab.context.__closed);
+  tab.context.__closed.push = (...ids) => { stages.modalClosed = performance.now(); return close(...ids); };
+  fill(tab, { amount: '1', method: 'yape', reference: 'LATENCY-1' });
+  const before = tab.fetchLog.length;
+  stages.tap = performance.now();
+  assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
+  stages.uiReleased = performance.now();
+  assert.equal(tab.api.receiptSnapshot().status, 'created');
+  assert.equal(tab.el('pagoConfirmBtn').disabled, false);
+  assert.notEqual(tab.el('pagoConfirmBtn').textContent, 'Procesando…');
+  assert.deepEqual([...tab.context.__closed], ['mPagoCred']);
+  assert.deepEqual(tab.fetchLog.slice(before).map(x => x.method + ' ' + new URL(x.url).pathname),
+    ['POST /commands/payment.create', 'GET /read/canonical/status']);
+  assert.deepEqual(renders, [], 'no bridge-driven full renders on the receipt path');
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1);
+  assert.ok(stages.d1.before >= stages.postStart && stages.d1.after <= stages.postEnd);
+  gate.resolve();
+  await tab.api.refresh();
+  stages.refreshEnd = performance.now();
+  const after = tab.fetchLog.slice(before);
+  assert.equal(after.filter(x => x.method === 'POST').length, 1);
+  assert.equal(after.filter(x => x.method === 'GET').length, 13, 'status + 12 single-page collections');
+  assert.equal(creditOf(tab).saldo, 6);
+  assert.deepEqual(renders, [], 'the canonical-updated listener, not the bridge, owns page rendering');
+  t.diagnostic(JSON.stringify({
+    httpBeforeReceipt: 1, httpAfterReceipt: after.length - 1,
+    tapToPostMs: +(stages.postStart - stages.tap).toFixed(2),
+    workerAndD1Ms: +(stages.postEnd - stages.postStart).toFixed(2),
+    d1BatchMs: +(stages.d1.after - stages.d1.before).toFixed(2),
+    receiptToModalCloseMs: +(stages.modalClosed - stages.postEnd).toFixed(2),
+    postToUiReleaseMs: +(stages.uiReleased - stages.postEnd).toFixed(2),
+    backgroundRefreshMs: +(stages.refreshEnd - stages.refreshStart).toFixed(2),
+  }));
+});
+
 test('Registrar pago (efectivo) persists through payment.create, survives F5 and is seen by a second device', async (t) => {
   const f = await activeCanon(t);
   const tab = await device(f, { token: 'device-a-token', deviceId: 'device-a', scripts });
@@ -31,6 +101,7 @@ test('Registrar pago (efectivo) persists through payment.create, survives F5 and
 
   fill(tab, { amount: '2.50' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
+  await tab.api.refresh();
 
   const events = f.all("SELECT * FROM canonical_financial_events WHERE event_type='PAYMENT'");
   assert.equal(events.length, 1);
@@ -47,7 +118,7 @@ test('Registrar pago (efectivo) persists through payment.create, survives F5 and
   assert.ok(credit.pagos.some((p) => p.id === events[0].event_id && p.monto === 2.5 && p.metodo === 'efectivo'));
   assert.equal(tab.api.legacySnapshot().cashState.esperado, 52.5);
   assert.deepEqual(tab.context.__closed, ['mPagoCred']);
-  assert.ok(tab.toasts.some(([m, tone]) => /Pago CANON de S\/ 2\.50 registrado/.test(m) && tone === 'success'));
+  assert.ok(tab.toasts.some(([m, tone]) => /Pago CANON de S\/ 2\.50 CONFIRMADO/.test(m) && tone === 'success'));
 
   // F5: same localStorage, brand-new runtime.
   const reloaded = await device(f, { token: 'device-a-token', localStorage: tab.localStorage, scripts });
@@ -65,6 +136,7 @@ test('digital payment keeps the reference, attaches no cash session and duplicat
   const tab = await device(f, { token: 'device-a-token', deviceId: 'device-a', scripts });
   fill(tab, { amount: '1', method: 'yape', reference: 'YAPE-7788' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
+  await tab.api.refresh();
   const event = f.sql("SELECT * FROM canonical_financial_events WHERE event_type='PAYMENT'");
   assert.equal(event.reference, 'YAPE-7788');
   assert.equal(event.session_id, null);
@@ -88,7 +160,10 @@ test('lost ACK after commit: retry reuses the same operation_id and never duplic
     },
   });
   fill(tab, { amount: '3', method: 'yape', reference: 'OP-ACK-1' });
+  const initialStatusReads = tab.fetchLog.filter(x => x.url.endsWith('/read/canonical/status')).length;
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), false);
+  const afterFirstStatusReads = tab.fetchLog.filter(x => x.url.endsWith('/read/canonical/status')).length;
+  assert.equal(afterFirstStatusReads - initialStatusReads, 0, 'no additional status GET before first payment POST');
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1, 'server committed');
   assert.ok(tab.toasts.some(([m]) => /NO lo registres de nuevo/.test(m)));
   assert.deepEqual(tab.context.__closed, [], 'modal stays open while unconfirmed');
@@ -97,6 +172,7 @@ test('lost ACK after commit: retry reuses the same operation_id and never duplic
 
   // The user taps again (even with other values): the SAME operation is retried.
   fill(tab, { amount: '5', method: 'yape', reference: 'OP-OTHER' });
+  const statusBeforeRetry = tab.fetchLog.filter(x => x.url.endsWith('/read/canonical/status')).length;
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
   const rows = f.all("SELECT * FROM canonical_financial_events WHERE event_type='PAYMENT'");
   assert.equal(rows.length, 1);
@@ -104,7 +180,11 @@ test('lost ACK after commit: retry reuses the same operation_id and never duplic
   assert.equal(rows[0].credit_delta_cents, -300);
   assert.equal(tab.api.pendingSnapshot(), null);
   assert.equal(tab.api.receiptSnapshot().status, 'already_processed');
-  assert.ok(tab.toasts.some(([m]) => /pago CANON pendiente de S\/ 3\.00/.test(m)));
+  assert.ok(tab.toasts.some(([m]) => /Pago CANON pendiente de S\/ 3\.00/.test(m)));
+  assert.equal(tab.fetchLog.filter(x => x.url.endsWith('/commands/payment.create')).length, 2);
+  assert.ok(tab.fetchLog.filter(x => x.url.endsWith('/read/canonical/status')).length > statusBeforeRetry,
+    'authority status is checked before retrying the same operation');
+  await tab.api.refresh();
   assert.equal(creditOf(tab).saldo, 4);
 });
 
@@ -123,6 +203,7 @@ test('committed payment whose post-commit refresh fails is reported as CONFIRMED
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1);
   assert.deepEqual(tab.context.__closed, ['mPagoCred']);
+  await new Promise(resolve => setTimeout(resolve, 0));
   assert.ok(tab.toasts.some(([m]) => /CONFIRMADO/.test(m) && /NO repitas el pago/.test(m)));
   assert.equal(tab.toasts.some(([m]) => /No se registró/.test(m)), false);
   assert.equal(tab.api.receiptSnapshot().status, 'created');
@@ -146,6 +227,20 @@ test('server rejection is a definitive failure and does not create a second comm
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events").n, 0);
 });
 
+test('second device with an old credit revision cannot overwrite the new balance (stale_credit)', async (t) => {
+  const f = await activeCanon(t);
+  const first = await device(f, { token: 'device-a-token', deviceId: 'device-a', scripts });
+  const second = await device(f, { token: 'device-b-token', deviceId: 'device-b', scripts });
+  fill(first, { amount: '1', method: 'yape', reference: 'DEVICE-A-1' });
+  assert.equal(await first.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
+  fill(second, { amount: '1', method: 'transferencia', reference: 'DEVICE-B-1' });
+  assert.equal(await second.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), false);
+  assert.equal(second.api.pendingSnapshot().last_error, 'stale_credit');
+  assert.deepEqual(second.context.__closed, []);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1);
+  assert.equal(f.sql('SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?', CREDIT).b, 600);
+});
+
 test('reference dedupe matches legacy scope (sales) and ignores payments reversed by COMPENSATION', async (t) => {
   const f = await activeCanon(t);
   const tab = await device(f, { token: 'device-a-token', deviceId: 'device-a', scripts });
@@ -157,14 +252,15 @@ test('reference dedupe matches legacy scope (sales) and ignores payments reverse
 
   fill(tab, { amount: '1', method: 'yape', reference: 'WRONG-CREDIT-9' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
-  const paid = f.sql("SELECT operation_id FROM canonical_financial_events WHERE event_type='PAYMENT'");
   await tab.api.refresh();
+  const paid = f.sql("SELECT operation_id FROM canonical_financial_events WHERE event_type='PAYMENT'");
   await tab.api.createCompensation({ compensates_operation_id: paid.operation_id, reason: 'Registrado por error' });
   await tab.api.refresh();
   assert.equal(creditOf(tab).saldo, 7);
 
   fill(tab, { amount: '1', method: 'yape', reference: 'WRONG-CREDIT-9' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true, 'reversed reference is not a false positive');
+  await tab.api.refresh();
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 2);
   assert.equal(creditOf(tab).saldo, 6);
 });

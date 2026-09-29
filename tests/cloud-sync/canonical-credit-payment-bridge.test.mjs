@@ -93,8 +93,9 @@ test('CANON cash credit payment sends exact cents and open canonical cash sessio
   });
   assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2);
   assert.ok(h.calls.some(x=>x[0]==='closeModal'&&x[1]==='mPagoCred'));
-  assert.ok(h.calls.some(x=>x[0]==='cliRender'));
-  assert.ok(h.calls.some(x=>x[0]==='cajRender'));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(x=>['cliRender','cajRender','dashboard'].includes(x[0])).length,0,
+    'canonical update event owns the page render; the bridge does not duplicate it');
   assert.equal(h.ids.pagoConfirmBtn.disabled,false);
 });
 
@@ -103,7 +104,7 @@ test('confirmed payment does not keep the user waiting for the post-commit full 
   const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm();
   assert.equal(result,true);
   assert.ok(h.calls.some(x=>x[0]==='closeModal'&&x[1]==='mPagoCred'));
-  assert.ok(h.calls.some(x=>x[0]==='toast'&&/registrado/i.test(x[1])&&x[2]==='success'));
+  assert.ok(h.calls.some(x=>x[0]==='toast'&&/CONFIRMADO/.test(x[1])&&x[2]==='success'));
   assert.equal(h.calls.filter(x=>x[0]==='createPayment').length,1);
   assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2);
   h.releasePostRefresh();
