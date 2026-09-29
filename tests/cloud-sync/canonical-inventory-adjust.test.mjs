@@ -12,7 +12,8 @@ const sw=readFileSync('POS/sw.js','utf8');
 const migration=readFileSync('infra/database/migrations/0015_canonical_inventory_adjust.sql','utf8');
 const scripts=[['canonical-inventory-bridge.js',bridge]];
 
-async function inventoryTab(f,{productId,type='entrada',token='device-a-token',deviceId='device-a',localStorage,onFetch,locked=false}={}){
+async function inventoryTab(f,options={}){
+  const {productId,type='entrada',token='device-a-token',localStorage,onFetch,locked=false}=options;
   const globals={
     invMovId:productId,
     invMovT:type,
@@ -22,7 +23,8 @@ async function inventoryTab(f,{productId,type='entrada',token='device-a-token',d
     invRender(){},posRender(){},updateDashboard(){}
   };
   const opts={token,localStorage,scripts,globals,onFetch};
-  if(deviceId!==undefined)opts.deviceId=deviceId;
+  if(Object.prototype.hasOwnProperty.call(options,'deviceId'))opts.deviceId=options.deviceId;
+  else if(!localStorage)opts.deviceId='device-a';
   return device(f,opts);
 }
 
@@ -94,7 +96,8 @@ test('manual SALIDA works for LIVE product and updates stock revision exactly on
 
 test('stale stock revision is rejected and does not change stock',async(t)=>{
   const f=await activeCanon(t,{migrations:['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql']});
-  const product=trackedImport(f,2);
+  const product=trackedImport(f,0);
+  assert.ok(product?.product_id);
   const a=await inventoryTab(f,{productId:product.product_id,token:'device-a-token',deviceId:'device-a'});
   const b=await inventoryTab(f,{productId:product.product_id,token:'device-b-token',deviceId:'device-b'});
 
@@ -102,7 +105,7 @@ test('stale stock revision is rejected and does not change stock',async(t)=>{
   assert.equal(first.status,'created');
 
   await assert.rejects(
-    b.api.adjustInventory({product_id:product.product_id,movement_type:'SALIDA',quantity:1,reason:'Concurrent B'}),
+    b.api.adjustInventory({product_id:product.product_id,movement_type:'ENTRADA',quantity:1,reason:'Concurrent B'}),
     /CANONICAL_FINANCIAL_REJECTED_409/
   );
   assert.equal(b.api.pendingSnapshot().last_error,'stale_stock');
@@ -153,7 +156,8 @@ test('SALIDA above stock is rejected before D1 mutation',async(t)=>{
   assert.equal(await tab.context.NuevoAmanecerCanonicalInventoryBridge.save(),false);
   assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_inventory_operations').n,0);
   const after=f.sql('SELECT current_stock_quantity,stock_revision FROM products WHERE product_id=?',product.product_id);
-  assert.deepEqual(after,{current_stock_quantity:product.current_stock_quantity,stock_revision:product.stock_revision});
+  assert.equal(after.current_stock_quantity,product.current_stock_quantity);
+  assert.equal(after.stock_revision,product.stock_revision);
 });
 
 test('user security lock blocks inventory.adjust without falling into legacy persistence',async(t)=>{
