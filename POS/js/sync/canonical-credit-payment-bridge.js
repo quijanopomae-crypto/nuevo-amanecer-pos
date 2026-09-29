@@ -243,7 +243,7 @@
 
       var snapshot;
       try {
-        snapshot = await refreshCanonical();
+        snapshot = await paymentSnapshot();
       } catch (error) {
         notify('No se registró el pago: CANON no disponible (' + clean(error && error.message) + ')', 'error');
         return false;
