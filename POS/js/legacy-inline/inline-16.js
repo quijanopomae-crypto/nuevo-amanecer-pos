@@ -2,6 +2,11 @@
 // Operación crítica: no se deja una variación de stock en memoria si no fue persistida.
 let _naInventoryMoveBusy=false;
 guardarMovInv=async function(){
+  const canonicalBridge=globalThis.NuevoAmanecerCanonicalInventoryBridge;
+  if(canonicalBridge&&typeof canonicalBridge.enabled==='function'&&canonicalBridge.enabled()&&typeof canonicalBridge.save==='function'){
+    if(!_naF10AuthorizePermission('inventoryMoves','Guardar movimiento de inventario'))return;
+    return await canonicalBridge.save();
+  }
   if(_naInventoryMoveBusy||isModuleLocked('productos')){if(isModuleLocked('productos'))toast('Módulo de productos bloqueado','error');return;}
   if(!_naF10AuthorizePermission('inventoryMoves','Guardar movimiento de inventario'))return;
   const quantity=_naInt(document.getElementById('mMovCant')?.value),product=productos.find(item=>String(item.id)===String(invMovId));
