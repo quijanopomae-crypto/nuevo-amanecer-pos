@@ -156,10 +156,7 @@ WHEN EXISTS(
 )
 BEGIN SELECT RAISE(ABORT,'live_customer_replace_forbidden'); END;
 
--- Every trigger owned by a table being rebuilt is removed first. Some
--- of those triggers reference another target table (for example
--- live_credits_authorized_insert -> canonical_sale_context), so relying on
--- DROP TABLE to remove them is too late for SQLite schema reparsing.
+-- Remove the complete dependency graph before replacing any table.
 DROP TRIGGER IF EXISTS live_credits_no_import_collision;
 DROP TRIGGER IF EXISTS canonical_sale_context_authorized_insert;
 DROP TRIGGER IF EXISTS live_credits_authorized_insert;
@@ -180,29 +177,26 @@ DROP TRIGGER IF EXISTS credit_accounts_no_replace;
 DROP TRIGGER IF EXISTS credit_metadata_no_replace;
 DROP TRIGGER IF EXISTS credit_account_expense_operation_collision;
 DROP TRIGGER IF EXISTS credit_metadata_expense_operation_collision;
-
--- External triggers are temporarily removed because SQLite reparses trigger SQL
--- after each DROP TABLE. They are restored from the effective pre-0017 schema
--- only after all four operational tables exist again.
-DROP TRIGGER IF EXISTS canonical_control_no_legacy;
-DROP TRIGGER IF EXISTS products_no_update;
-DROP TRIGGER IF EXISTS canonical_sale_item_authorized_insert;
-DROP TRIGGER IF EXISTS sale_cash_requires_open_session;
-DROP TRIGGER IF EXISTS credit_installments_live_guard;
-DROP TRIGGER IF EXISTS credit_installments_import_guard;
-DROP TRIGGER IF EXISTS expense_operation_namespace;
-DROP TRIGGER IF EXISTS canonical_live_products_guarded_update;
-DROP TRIGGER IF EXISTS canonical_generic_sale_line_authorized_insert;
-DROP TRIGGER IF EXISTS canonical_customer_operations_namespace_insert;
 DROP TRIGGER IF EXISTS cash_session_unique_open;
 DROP TRIGGER IF EXISTS cash_close_reconciles;
 DROP TRIGGER IF EXISTS financial_event_cash_open;
 DROP TRIGGER IF EXISTS financial_event_credit_safe;
+DROP TRIGGER IF EXISTS sale_cash_requires_open_session;
+DROP TRIGGER IF EXISTS credit_installments_live_guard;
+DROP TRIGGER IF EXISTS credit_installments_import_guard;
 DROP TRIGGER IF EXISTS expense_effect_authorized;
+DROP TRIGGER IF EXISTS expense_operation_namespace;
+DROP TRIGGER IF EXISTS canonical_control_no_legacy;
+DROP TRIGGER IF EXISTS products_no_update;
+DROP TRIGGER IF EXISTS canonical_live_products_guarded_update;
+DROP TRIGGER IF EXISTS canonical_generic_sale_line_authorized_insert;
+DROP TRIGGER IF EXISTS canonical_sale_item_authorized_insert;
+DROP TRIGGER IF EXISTS canonical_customer_operations_namespace_insert;
+DROP VIEW IF EXISTS canonical_credit_balances;
+DROP VIEW IF EXISTS canonical_cash_state;
 
--- Rebuild the four operational customer-reference tables. Their business
--- constraints are preserved; only the customer FK parent changes to the
--- effective IMPORT+LIVE registry.
+-- Rebuild customer-referencing operational tables only after every dependent
+-- trigger and view is removed. Existing rows are copied losslessly.
 
 CREATE TABLE canonical_sale_context__v17 (
   sale_id TEXT PRIMARY KEY NOT NULL REFERENCES sales(sale_id),
@@ -289,13 +283,14 @@ FROM canonical_credit_metadata;
 DROP TABLE canonical_credit_metadata;
 ALTER TABLE canonical_credit_metadata__v17 RENAME TO canonical_credit_metadata;
 
+-- Restore effective indexes and target-table invariants exactly as shipped
+-- before 0017.
 CREATE INDEX IF NOT EXISTS idx_live_credits_customer ON live_credits(promotion_id,customer_id);
 CREATE INDEX IF NOT EXISTS idx_sale_context_promotion ON canonical_sale_context(promotion_id,sale_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_accounts_name
   ON canonical_credit_accounts(promotion_id,customer_id,lower(name));
 CREATE INDEX IF NOT EXISTS idx_credit_metadata_customer
   ON canonical_credit_metadata(promotion_id,customer_id,account_id);
-
 CREATE TRIGGER IF NOT EXISTS live_credits_no_import_collision BEFORE INSERT ON live_credits
 WHEN EXISTS(SELECT 1 FROM credits WHERE promotion_id=NEW.promotion_id AND credit_id=NEW.credit_id)
 BEGIN SELECT RAISE(ABORT,'credit_id_conflict'); END;
@@ -315,12 +310,17 @@ WHEN NOT EXISTS(SELECT 1 FROM canonical_write_guards g JOIN sales s ON s.operati
 BEGIN SELECT RAISE(ABORT,'invalid_live_credit'); END;
 
 CREATE TRIGGER IF NOT EXISTS canonical_sale_context_no_update BEFORE UPDATE ON canonical_sale_context BEGIN SELECT RAISE(ABORT,'immutable_live_sale'); END;
+
 CREATE TRIGGER IF NOT EXISTS canonical_sale_context_no_delete BEFORE DELETE ON canonical_sale_context BEGIN SELECT RAISE(ABORT,'immutable_live_sale'); END;
+
 CREATE TRIGGER IF NOT EXISTS live_credits_no_update BEFORE UPDATE ON live_credits BEGIN SELECT RAISE(ABORT,'unsupported_credit_mutation'); END;
+
 CREATE TRIGGER IF NOT EXISTS live_credits_no_delete BEFORE DELETE ON live_credits BEGIN SELECT RAISE(ABORT,'unsupported_credit_mutation'); END;
+
 CREATE TRIGGER IF NOT EXISTS live_credits_no_replace BEFORE INSERT ON live_credits
 WHEN EXISTS(SELECT 1 FROM live_credits WHERE rowid=NEW.rowid OR (promotion_id=NEW.promotion_id AND credit_id=NEW.credit_id) OR operation_id=NEW.operation_id OR sale_id=NEW.sale_id)
 BEGIN SELECT RAISE(ABORT,'financial_replace_forbidden'); END;
+
 CREATE TRIGGER IF NOT EXISTS sale_context_no_replace BEFORE INSERT ON canonical_sale_context
 WHEN EXISTS(SELECT 1 FROM canonical_sale_context WHERE rowid=NEW.rowid OR sale_id=NEW.sale_id OR operation_id=NEW.operation_id)
 BEGIN SELECT RAISE(ABORT,'financial_replace_forbidden'); END;
@@ -351,10 +351,13 @@ BEGIN SELECT RAISE(ABORT,'invalid_credit_metadata'); END;
 
 CREATE TRIGGER IF NOT EXISTS credit_accounts_no_update BEFORE UPDATE ON canonical_credit_accounts
 BEGIN SELECT RAISE(ABORT,'immutable_credit_account'); END;
+
 CREATE TRIGGER IF NOT EXISTS credit_accounts_no_delete BEFORE DELETE ON canonical_credit_accounts
 BEGIN SELECT RAISE(ABORT,'immutable_credit_account'); END;
+
 CREATE TRIGGER IF NOT EXISTS credit_metadata_no_update BEFORE UPDATE ON canonical_credit_metadata
 BEGIN SELECT RAISE(ABORT,'immutable_credit_metadata'); END;
+
 CREATE TRIGGER IF NOT EXISTS credit_metadata_no_delete BEFORE DELETE ON canonical_credit_metadata
 BEGIN SELECT RAISE(ABORT,'immutable_credit_metadata'); END;
 
@@ -377,34 +380,12 @@ BEGIN SELECT RAISE(ABORT,'credit_metadata_replace_forbidden'); END;
 CREATE TRIGGER IF NOT EXISTS credit_account_expense_operation_collision BEFORE INSERT ON canonical_credit_accounts
 WHEN EXISTS(SELECT 1 FROM canonical_expense_operations WHERE operation_id=NEW.operation_id)
 BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
+
 CREATE TRIGGER IF NOT EXISTS credit_metadata_expense_operation_collision BEFORE INSERT ON canonical_credit_metadata
 WHEN EXISTS(SELECT 1 FROM canonical_expense_operations WHERE operation_id=NEW.operation_id)
 BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
--- Customer operation namespace must also be visible to all other authoritative writers.
-CREATE TRIGGER IF NOT EXISTS sales_customer_operation_collision BEFORE INSERT ON sales
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-CREATE TRIGGER IF NOT EXISTS financial_customer_operation_collision BEFORE INSERT ON canonical_financial_operations
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-CREATE TRIGGER IF NOT EXISTS expense_customer_operation_collision BEFORE INSERT ON canonical_expense_operations
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-CREATE TRIGGER IF NOT EXISTS product_customer_operation_collision BEFORE INSERT ON canonical_product_operations
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-CREATE TRIGGER IF NOT EXISTS inventory_customer_operation_collision BEFORE INSERT ON canonical_inventory_operations
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-CREATE TRIGGER IF NOT EXISTS credit_account_customer_operation_collision BEFORE INSERT ON canonical_credit_accounts
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-CREATE TRIGGER IF NOT EXISTS credit_metadata_customer_operation_collision BEFORE INSERT ON canonical_credit_metadata
-WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-
--- Restore dependent views before any trigger that queries them.
+-- Restore dependent views before external triggers that query them.
 CREATE VIEW IF NOT EXISTS canonical_credit_balances AS
 SELECT b.*, b.opening_balance_cents+COALESCE((SELECT SUM(e.credit_delta_cents) FROM canonical_financial_events e
  WHERE e.promotion_id=b.promotion_id AND e.credit_id=b.credit_id AND e.credit_provenance=b.provenance),0) AS current_balance_cents,
@@ -431,33 +412,77 @@ SELECT s.*, CASE WHEN c.session_id IS NULL THEN 'OPEN' ELSE 'CLOSED' END AS stat
  + CASE WHEN c.session_id IS NULL THEN 0 ELSE 1 END AS revision
 FROM canonical_cash_sessions s LEFT JOIN canonical_cash_closures c ON c.session_id=s.session_id;
 
--- Restore every external invariant that references a rebuilt table.
-CREATE TRIGGER IF NOT EXISTS expenses_no_replace BEFORE INSERT ON canonical_expenses
-WHEN EXISTS(SELECT 1 FROM canonical_expenses WHERE rowid=NEW.rowid OR expense_id=NEW.expense_id OR operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'expense_replace_forbidden'); END;
+-- Restore external effective invariants from the 0001-0016 schema.
+CREATE TRIGGER IF NOT EXISTS cash_session_unique_open BEFORE INSERT ON canonical_cash_sessions
+WHEN EXISTS(SELECT 1 FROM canonical_cash_state WHERE promotion_id=NEW.promotion_id AND status='OPEN')
+ OR NEW.cash_movement_watermark<>(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)
+BEGIN SELECT RAISE(ABORT,'cash_session_conflict'); END;
 
--- Expenses participate in expected cash only when explicitly attached to a session.
--- Digital methods remain operational expenses but have zero cash impact.
-DROP VIEW IF EXISTS canonical_cash_state;
-CREATE VIEW canonical_cash_state AS
-SELECT s.*, CASE WHEN c.session_id IS NULL THEN 'OPEN' ELSE 'CLOSED' END AS status,
- c.close_operation_id,c.counted_cents,c.difference_cents,c.closed_at,
- COALESCE(c.cash_movement_watermark,(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)) AS closing_watermark,
- s.opening_cents
- + COALESCE((SELECT SUM(e.cash_delta_cents) FROM canonical_financial_events e WHERE e.session_id=s.session_id),0)
- + COALESCE((SELECT SUM(x.cash_delta_cents) FROM canonical_expenses x WHERE x.session_id=s.session_id),0)
- + COALESCE((SELECT SUM(m.cash_cents) FROM cash_movements m JOIN canonical_sale_context x ON x.sale_id=m.sale_id
- WHERE x.promotion_id=s.promotion_id AND m.rowid>s.cash_movement_watermark
- AND m.rowid<=COALESCE(c.cash_movement_watermark,(SELECT COALESCE(MAX(rowid),0) FROM cash_movements))),0) AS expected_cents,
- (SELECT COUNT(*) FROM canonical_financial_events e WHERE e.session_id=s.session_id)
- + (SELECT COUNT(*) FROM canonical_expenses x WHERE x.session_id=s.session_id)
- + (SELECT COUNT(*) FROM cash_movements m JOIN canonical_sale_context x ON x.sale_id=m.sale_id
- WHERE x.promotion_id=s.promotion_id AND m.cash_cents>0 AND m.rowid>s.cash_movement_watermark
- AND m.rowid<=COALESCE(c.cash_movement_watermark,(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)))
- + CASE WHEN c.session_id IS NULL THEN 0 ELSE 1 END AS revision
-FROM canonical_cash_sessions s LEFT JOIN canonical_cash_closures c ON c.session_id=s.session_id;
+CREATE TRIGGER IF NOT EXISTS cash_close_reconciles BEFORE INSERT ON canonical_cash_closures
+WHEN NOT EXISTS(SELECT 1 FROM canonical_cash_state s WHERE s.session_id=NEW.session_id AND s.status='OPEN'
+ AND s.expected_cents=NEW.expected_cents AND NEW.cash_movement_watermark=(SELECT COALESCE(MAX(rowid),0) FROM cash_movements))
+BEGIN SELECT RAISE(ABORT,'cash_close_conflict'); END;
 
-DROP TRIGGER IF EXISTS canonical_control_no_legacy;
+CREATE TRIGGER IF NOT EXISTS financial_event_cash_open BEFORE INSERT ON canonical_financial_events
+WHEN NEW.session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canonical_cash_state WHERE session_id=NEW.session_id
+ AND promotion_id=NEW.promotion_id AND status='OPEN'
+ AND expected_cents+NEW.cash_delta_cents BETWEEN 0 AND 9007199254740991)
+BEGIN SELECT RAISE(ABORT,'cash_session_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS financial_event_credit_safe BEFORE INSERT ON canonical_financial_events
+WHEN NEW.credit_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canonical_credit_balances b
+ WHERE b.promotion_id=NEW.promotion_id AND b.credit_id=NEW.credit_id AND b.provenance=NEW.credit_provenance
+ AND b.current_balance_cents+NEW.credit_delta_cents BETWEEN 0 AND b.opening_balance_cents
+ AND b.current_balance_cents+NEW.credit_delta_cents<=9007199254740991)
+BEGIN SELECT RAISE(ABORT,'credit_balance_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS sale_cash_requires_open_session BEFORE INSERT ON cash_movements
+WHEN NEW.cash_cents>0 AND EXISTS(SELECT 1 FROM canonical_cash_sessions s JOIN canonical_sale_context x
+ ON x.promotion_id=s.promotion_id WHERE x.sale_id=NEW.sale_id)
+ AND NOT EXISTS(SELECT 1 FROM canonical_cash_state s JOIN canonical_sale_context x ON x.promotion_id=s.promotion_id
+ WHERE x.sale_id=NEW.sale_id AND s.status='OPEN' AND s.expected_cents+NEW.cash_cents<=9007199254740991)
+BEGIN SELECT RAISE(ABORT,'cash_session_required'); END;
+
+CREATE TRIGGER IF NOT EXISTS credit_installments_live_guard BEFORE INSERT ON canonical_credit_installments
+WHEN NEW.credit_provenance='LIVE' AND NOT EXISTS(
+  SELECT 1 FROM canonical_credit_metadata m
+  WHERE m.promotion_id=NEW.promotion_id AND m.credit_id=NEW.credit_id
+    AND m.credit_provenance='LIVE' AND m.operation_id=NEW.operation_id
+)
+BEGIN SELECT RAISE(ABORT,'invalid_credit_installment'); END;
+
+CREATE TRIGGER IF NOT EXISTS credit_installments_import_guard BEFORE INSERT ON canonical_credit_installments
+WHEN NEW.credit_provenance='IMPORT' AND NOT EXISTS(
+  SELECT 1 FROM canonical_credit_metadata m
+  WHERE m.promotion_id=NEW.promotion_id AND m.credit_id=NEW.credit_id
+    AND m.credit_provenance='IMPORT'
+)
+BEGIN SELECT RAISE(ABORT,'invalid_credit_installment'); END;
+
+CREATE TRIGGER IF NOT EXISTS expense_effect_authorized BEFORE INSERT ON canonical_expenses
+WHEN NOT EXISTS(
+  SELECT 1 FROM canonical_expense_operations o
+  WHERE o.operation_id=NEW.operation_id AND o.promotion_id=NEW.promotion_id
+    AND (
+      NEW.session_id IS NULL AND o.expected_session_revision IS NULL AND NEW.cash_delta_cents=0
+      OR NEW.session_id IS NOT NULL AND o.expected_session_revision IS NOT NULL
+        AND EXISTS(
+          SELECT 1 FROM canonical_cash_state s
+          WHERE s.promotion_id=NEW.promotion_id AND s.session_id=NEW.session_id
+            AND s.status='OPEN' AND s.revision=o.expected_session_revision
+            AND s.expected_cents+NEW.cash_delta_cents BETWEEN 0 AND 9007199254740991
+        )
+    )
+)
+BEGIN SELECT RAISE(ABORT,'expense_session_conflict'); END;
+
+CREATE TRIGGER IF NOT EXISTS expense_operation_namespace BEFORE INSERT ON canonical_expense_operations
+WHEN EXISTS(SELECT 1 FROM sales WHERE operation_id=NEW.operation_id)
+ OR EXISTS(SELECT 1 FROM canonical_financial_operations WHERE operation_id=NEW.operation_id)
+ OR EXISTS(SELECT 1 FROM canonical_credit_accounts WHERE operation_id=NEW.operation_id)
+ OR EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
+
 CREATE TRIGGER canonical_control_no_legacy BEFORE UPDATE ON canonical_control
 WHEN (NEW.mode='ACTIVE' OR (OLD.mode<>'LEGACY' AND NEW.mode='LEGACY') OR NEW.revision<>OLD.revision+1 OR NEW.authority_epoch<>OLD.authority_epoch+1 OR
   (NEW.mode='CANONICAL_READ_ONLY' AND NOT EXISTS(SELECT 1 FROM canonical_promotions p WHERE p.promotion_id=NEW.active_promotion_id AND p.status='COMMITTED')))
@@ -535,13 +560,6 @@ WHEN (NEW.mode='ACTIVE' OR (OLD.mode<>'LEGACY' AND NEW.mode='LEGACY') OR NEW.rev
  )
 BEGIN SELECT RAISE(ABORT,'gate_p_control'); END;
 
-CREATE TRIGGER IF NOT EXISTS canonical_manual_inventory_no_delete
-BEFORE DELETE ON canonical_manual_inventory_movements
-BEGIN SELECT RAISE(ABORT,'immutable_manual_inventory_movement'); END;
-
--- Imported product metadata/provenance stays sealed. Stock may change only
--- through an authorized sale or an authorized inventory.adjust operation.
-DROP TRIGGER IF EXISTS products_no_update;
 CREATE TRIGGER products_no_update BEFORE UPDATE ON products
 WHEN NEW.promotion_id<>OLD.promotion_id OR NEW.product_id<>OLD.product_id OR NEW.opening_stock_quantity IS NOT OLD.opening_stock_quantity OR
  NEW.name IS NOT OLD.name OR NEW.sku IS NOT OLD.sku OR NEW.barcode IS NOT OLD.barcode OR NEW.price_cents IS NOT OLD.price_cents OR
@@ -575,118 +593,6 @@ WHEN NEW.promotion_id<>OLD.promotion_id OR NEW.product_id<>OLD.product_id OR NEW
  )
 BEGIN SELECT RAISE(ABORT,'immutable_canonical_candidate'); END;
 
-CREATE TRIGGER IF NOT EXISTS canonical_generic_sale_line_no_replace
-BEFORE INSERT ON canonical_generic_sale_lines
-WHEN EXISTS(
-  SELECT 1 FROM canonical_generic_sale_lines
-  WHERE rowid=NEW.rowid
-    OR (sale_id=NEW.sale_id AND line_number=NEW.line_number)
-    OR (operation_id=NEW.operation_id AND line_number=NEW.line_number)
-    OR generic_product_id=NEW.generic_product_id
-)
-BEGIN SELECT RAISE(ABORT,'generic_sale_line_replace_forbidden'); END;
-
--- Keep the normal product fence and add one narrow alternative for a generic
--- line whose immutable metadata matches this exact sale line.
-DROP TRIGGER IF EXISTS canonical_sale_item_authorized_insert;
-CREATE TRIGGER canonical_sale_item_authorized_insert BEFORE INSERT ON sale_items
-WHEN (SELECT mode FROM canonical_control WHERE id=1)<>'LEGACY' AND NOT EXISTS(
-  SELECT 1
-  FROM canonical_write_guards g
-    JOIN canonical_sale_context x ON x.operation_id=g.operation_id
-  WHERE g.operation_id=NEW.operation_id
-    AND x.sale_id=NEW.sale_id
-    AND NEW.line_total_cents=round(NEW.quantity*NEW.unit_price_cents)
-    AND (
-      EXISTS(
-        SELECT 1 FROM products p
-        WHERE p.promotion_id=g.promotion_id AND p.product_id=NEW.product_id
-      )
-      OR EXISTS(
-        SELECT 1 FROM canonical_live_products p
-        WHERE p.promotion_id=g.promotion_id AND p.product_id=NEW.product_id
-      )
-      OR EXISTS(
-        SELECT 1 FROM canonical_generic_sale_lines v
-        WHERE v.sale_id=NEW.sale_id
-          AND v.line_number=NEW.line_number
-          AND v.operation_id=NEW.operation_id
-          AND v.promotion_id=g.promotion_id
-          AND v.generic_product_id=NEW.product_id
-          AND v.quantity=NEW.quantity
-          AND v.unit_price_cents=NEW.unit_price_cents
-          AND v.line_total_cents=NEW.line_total_cents
-      )
-    )
-)
-BEGIN SELECT RAISE(ABORT,'invalid_sale_item'); END;
-
-CREATE TRIGGER IF NOT EXISTS sale_cash_requires_open_session BEFORE INSERT ON cash_movements
-WHEN NEW.cash_cents>0 AND EXISTS(SELECT 1 FROM canonical_cash_sessions s JOIN canonical_sale_context x
- ON x.promotion_id=s.promotion_id WHERE x.sale_id=NEW.sale_id)
- AND NOT EXISTS(SELECT 1 FROM canonical_cash_state s JOIN canonical_sale_context x ON x.promotion_id=s.promotion_id
- WHERE x.sale_id=NEW.sale_id AND s.status='OPEN' AND s.expected_cents+NEW.cash_cents<=9007199254740991)
-BEGIN SELECT RAISE(ABORT,'cash_session_required'); END;
-
-CREATE TRIGGER IF NOT EXISTS credit_installments_live_guard BEFORE INSERT ON canonical_credit_installments
-WHEN NEW.credit_provenance='LIVE' AND NOT EXISTS(
-  SELECT 1 FROM canonical_credit_metadata m
-  WHERE m.promotion_id=NEW.promotion_id AND m.credit_id=NEW.credit_id
-    AND m.credit_provenance='LIVE' AND m.operation_id=NEW.operation_id
-)
-BEGIN SELECT RAISE(ABORT,'invalid_credit_installment'); END;
-
-CREATE TRIGGER IF NOT EXISTS credit_installments_import_guard BEFORE INSERT ON canonical_credit_installments
-WHEN NEW.credit_provenance='IMPORT' AND NOT EXISTS(
-  SELECT 1 FROM canonical_credit_metadata m
-  WHERE m.promotion_id=NEW.promotion_id AND m.credit_id=NEW.credit_id
-    AND m.credit_provenance='IMPORT'
-)
-BEGIN SELECT RAISE(ABORT,'invalid_credit_installment'); END;
-
-CREATE TRIGGER IF NOT EXISTS expense_operation_namespace BEFORE INSERT ON canonical_expense_operations
-WHEN EXISTS(SELECT 1 FROM sales WHERE operation_id=NEW.operation_id)
- OR EXISTS(SELECT 1 FROM canonical_financial_operations WHERE operation_id=NEW.operation_id)
- OR EXISTS(SELECT 1 FROM canonical_credit_accounts WHERE operation_id=NEW.operation_id)
- OR EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE operation_id=NEW.operation_id)
-BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
-
-CREATE TRIGGER products_no_update BEFORE UPDATE ON products
-WHEN NEW.promotion_id<>OLD.promotion_id OR NEW.product_id<>OLD.product_id OR NEW.opening_stock_quantity IS NOT OLD.opening_stock_quantity OR
- NEW.name IS NOT OLD.name OR NEW.sku IS NOT OLD.sku OR NEW.barcode IS NOT OLD.barcode OR NEW.price_cents IS NOT OLD.price_cents OR
- NEW.alternate_codes_json IS NOT OLD.alternate_codes_json OR NEW.legacy_alternate_code IS NOT OLD.legacy_alternate_code OR
- NEW.category IS NOT OLD.category OR NEW.brand IS NOT OLD.brand OR NEW.description IS NOT OLD.description OR
- NEW.icon IS NOT OLD.icon OR NEW.image IS NOT OLD.image OR NEW.unit IS NOT OLD.unit OR NEW.purchase_unit IS NOT OLD.purchase_unit OR
- NEW.purchase_factor IS NOT OLD.purchase_factor OR NEW.cost_cents IS NOT OLD.cost_cents OR NEW.box_price_cents IS NOT OLD.box_price_cents OR
- NEW.units_per_box IS NOT OLD.units_per_box OR NEW.stock_min_quantity IS NOT OLD.stock_min_quantity OR NEW.expiry_date IS NOT OLD.expiry_date OR
- NEW.includes_igv IS NOT OLD.includes_igv OR NEW.tax_type IS NOT OLD.tax_type OR NEW.complementary_tax IS NOT OLD.complementary_tax OR
- NEW.source_import_id<>OLD.source_import_id OR NEW.source_entity_type<>OLD.source_entity_type OR NEW.source_name<>OLD.source_name OR
- NEW.source_row<>OLD.source_row OR NEW.source_key<>OLD.source_key OR NEW.mapping_version<>OLD.mapping_version OR
- NEW.tracks_inventory IS NOT OLD.tracks_inventory OR NEW.source_payload_hash<>OLD.source_payload_hash OR NEW.source_payload_json<>OLD.source_payload_json OR
- NEW.current_stock_quantity IS NULL OR NEW.current_stock_quantity<0 OR NEW.stock_revision<>OLD.stock_revision+1 OR NOT (
-   EXISTS(
-     SELECT 1 FROM canonical_write_guards g JOIN canonical_control c ON c.id=1
-       JOIN canonical_sale_context x ON x.operation_id=g.operation_id
-       JOIN sale_items i ON i.operation_id=g.operation_id AND i.sale_id=x.sale_id
-     WHERE g.promotion_id=OLD.promotion_id AND c.mode='ACTIVE' AND c.active_promotion_id=g.promotion_id
-       AND c.authority_epoch=g.authority_epoch AND c.revision=g.control_revision
-       AND i.product_id=OLD.product_id AND NEW.current_stock_quantity=OLD.current_stock_quantity-i.quantity
-       AND i.line_total_cents=round(i.quantity*i.unit_price_cents)
-   )
-   OR EXISTS(
-     SELECT 1 FROM canonical_inventory_operations o JOIN canonical_control c ON c.id=1
-     WHERE o.promotion_id=OLD.promotion_id AND o.product_id=OLD.product_id
-       AND c.mode='ACTIVE' AND c.active_promotion_id=o.promotion_id
-       AND c.authority_epoch=o.authority_epoch AND c.revision=o.control_revision
-       AND o.expected_stock_revision=OLD.stock_revision
-       AND NEW.current_stock_quantity=OLD.current_stock_quantity+o.delta
-   )
- )
-BEGIN SELECT RAISE(ABORT,'immutable_canonical_candidate'); END;
-
--- LIVE metadata stays immutable. Stock may change only through an authorized
--- sale or an authorized inventory.adjust operation.
-DROP TRIGGER IF EXISTS canonical_live_products_guarded_update;
 CREATE TRIGGER canonical_live_products_guarded_update
 BEFORE UPDATE ON canonical_live_products
 WHEN NEW.promotion_id<>OLD.promotion_id OR NEW.product_id<>OLD.product_id OR NEW.operation_id<>OLD.operation_id
@@ -747,6 +653,39 @@ WHEN NOT EXISTS(
 )
 BEGIN SELECT RAISE(ABORT,'invalid_generic_sale_line'); END;
 
+CREATE TRIGGER canonical_sale_item_authorized_insert BEFORE INSERT ON sale_items
+WHEN (SELECT mode FROM canonical_control WHERE id=1)<>'LEGACY' AND NOT EXISTS(
+  SELECT 1
+  FROM canonical_write_guards g
+    JOIN canonical_sale_context x ON x.operation_id=g.operation_id
+  WHERE g.operation_id=NEW.operation_id
+    AND x.sale_id=NEW.sale_id
+    AND NEW.line_total_cents=round(NEW.quantity*NEW.unit_price_cents)
+    AND (
+      EXISTS(
+        SELECT 1 FROM products p
+        WHERE p.promotion_id=g.promotion_id AND p.product_id=NEW.product_id
+      )
+      OR EXISTS(
+        SELECT 1 FROM canonical_live_products p
+        WHERE p.promotion_id=g.promotion_id AND p.product_id=NEW.product_id
+      )
+      OR EXISTS(
+        SELECT 1 FROM canonical_generic_sale_lines v
+        WHERE v.sale_id=NEW.sale_id
+          AND v.line_number=NEW.line_number
+          AND v.operation_id=NEW.operation_id
+          AND v.promotion_id=g.promotion_id
+          AND v.generic_product_id=NEW.product_id
+          AND v.quantity=NEW.quantity
+          AND v.unit_price_cents=NEW.unit_price_cents
+          AND v.line_total_cents=NEW.line_total_cents
+      )
+    )
+)
+BEGIN SELECT RAISE(ABORT,'invalid_sale_item'); END;
+
+-- Restore customer operation namespace after rebuilt tables exist.
 CREATE TRIGGER IF NOT EXISTS canonical_customer_operations_namespace_insert
 BEFORE INSERT ON canonical_customer_operations
 WHEN
@@ -759,44 +698,31 @@ WHEN
   EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE operation_id=NEW.operation_id)
 BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
+-- Expose the customer operation namespace to all authoritative writers.
+CREATE TRIGGER IF NOT EXISTS sales_customer_operation_collision BEFORE INSERT ON sales
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
+CREATE TRIGGER IF NOT EXISTS financial_customer_operation_collision BEFORE INSERT ON canonical_financial_operations
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
-CREATE TRIGGER IF NOT EXISTS cash_session_unique_open BEFORE INSERT ON canonical_cash_sessions
-WHEN EXISTS(SELECT 1 FROM canonical_cash_state WHERE promotion_id=NEW.promotion_id AND status='OPEN')
- OR NEW.cash_movement_watermark<>(SELECT COALESCE(MAX(rowid),0) FROM cash_movements)
-BEGIN SELECT RAISE(ABORT,'cash_session_conflict'); END;
+CREATE TRIGGER IF NOT EXISTS expense_customer_operation_collision BEFORE INSERT ON canonical_expense_operations
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
-CREATE TRIGGER IF NOT EXISTS cash_close_reconciles BEFORE INSERT ON canonical_cash_closures
-WHEN NOT EXISTS(SELECT 1 FROM canonical_cash_state s WHERE s.session_id=NEW.session_id AND s.status='OPEN'
- AND s.expected_cents=NEW.expected_cents AND NEW.cash_movement_watermark=(SELECT COALESCE(MAX(rowid),0) FROM cash_movements))
-BEGIN SELECT RAISE(ABORT,'cash_close_conflict'); END;
+CREATE TRIGGER IF NOT EXISTS product_customer_operation_collision BEFORE INSERT ON canonical_product_operations
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
-CREATE TRIGGER IF NOT EXISTS financial_event_cash_open BEFORE INSERT ON canonical_financial_events
-WHEN NEW.session_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canonical_cash_state WHERE session_id=NEW.session_id
- AND promotion_id=NEW.promotion_id AND status='OPEN'
- AND expected_cents+NEW.cash_delta_cents BETWEEN 0 AND 9007199254740991)
-BEGIN SELECT RAISE(ABORT,'cash_session_conflict'); END;
+CREATE TRIGGER IF NOT EXISTS inventory_customer_operation_collision BEFORE INSERT ON canonical_inventory_operations
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
-CREATE TRIGGER IF NOT EXISTS financial_event_credit_safe BEFORE INSERT ON canonical_financial_events
-WHEN NEW.credit_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM canonical_credit_balances b
- WHERE b.promotion_id=NEW.promotion_id AND b.credit_id=NEW.credit_id AND b.provenance=NEW.credit_provenance
- AND b.current_balance_cents+NEW.credit_delta_cents BETWEEN 0 AND b.opening_balance_cents
- AND b.current_balance_cents+NEW.credit_delta_cents<=9007199254740991)
-BEGIN SELECT RAISE(ABORT,'credit_balance_conflict'); END;
+CREATE TRIGGER IF NOT EXISTS credit_account_customer_operation_collision BEFORE INSERT ON canonical_credit_accounts
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
 
-CREATE TRIGGER IF NOT EXISTS expense_effect_authorized BEFORE INSERT ON canonical_expenses
-WHEN NOT EXISTS(
-  SELECT 1 FROM canonical_expense_operations o
-  WHERE o.operation_id=NEW.operation_id AND o.promotion_id=NEW.promotion_id
-    AND (
-      NEW.session_id IS NULL AND o.expected_session_revision IS NULL AND NEW.cash_delta_cents=0
-      OR NEW.session_id IS NOT NULL AND o.expected_session_revision IS NOT NULL
-        AND EXISTS(
-          SELECT 1 FROM canonical_cash_state s
-          WHERE s.promotion_id=NEW.promotion_id AND s.session_id=NEW.session_id
-            AND s.status='OPEN' AND s.revision=o.expected_session_revision
-            AND s.expected_cents+NEW.cash_delta_cents BETWEEN 0 AND 9007199254740991
-        )
-    )
-)
-BEGIN SELECT RAISE(ABORT,'expense_session_conflict'); END;
+CREATE TRIGGER IF NOT EXISTS credit_metadata_customer_operation_collision BEFORE INSERT ON canonical_credit_metadata
+WHEN EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=NEW.operation_id)
+BEGIN SELECT RAISE(ABORT,'operation_id_conflict'); END;
