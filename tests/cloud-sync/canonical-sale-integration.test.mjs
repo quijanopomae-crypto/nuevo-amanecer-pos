@@ -102,3 +102,25 @@ test('canonical sale reports the exact browser lock reason instead of a generic 
     assert.match(h.calls.toast.at(-1)[0],pattern);
   }
 });
+
+test('canonical sale lock diagnostics read the same effective lock state as isModuleLocked', async()=>{
+  const h=harness();
+  h.context.localStorage.getItem=()=>null;
+  h.context.sessionStorage={getItem:()=>null};
+  h.context.securityIsLocked=()=>false;
+  h.context._naGetLocks=()=>({master:false,readOnly:true,modules:{ventas:false}});
+  h.context.isModuleLocked=()=>true;
+  await h.context.confirmarVenta();
+  assert.equal(h.calls.enqueue,0);
+  assert.match(h.calls.toast.at(-1)[0],/solo lectura/i);
+
+  const h2=harness();
+  h2.context.localStorage.getItem=()=>null;
+  h2.context.sessionStorage={getItem:()=>null};
+  h2.context.securityIsLocked=()=>true;
+  h2.context._naGetLocks=()=>({master:false,readOnly:false,modules:{ventas:false}});
+  h2.context.isModuleLocked=()=>true;
+  await h2.context.confirmarVenta();
+  assert.equal(h2.calls.enqueue,0);
+  assert.match(h2.calls.toast.at(-1)[0],/sesión de seguridad/i);
+});
