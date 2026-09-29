@@ -67,6 +67,9 @@ test('admite línea VARIOS trazable y sigue bloqueando modos no soportados', () 
   assert.deepEqual(JSON.parse(JSON.stringify(generic.items[0].generic_line)),{name:'Recarga libre',code:'REC-01'});
   assert.equal(generic.items[0].line_total_cents,250);
   assert.equal(generic.total_cents,250);
+  const rebuilt=api.build(generic);
+  assert.equal(rebuilt.items[0].product_id,generic.items[0].product_id);
+  assert.deepEqual(JSON.parse(JSON.stringify(rebuilt.items[0].generic_line)),{name:'Recarga libre',code:'REC-01'});
   assert.throws(() => api.build({ payment_method: 'efectivo', items: [{ product_id: 'p', quantity: 1, unit_price_cents: 10, ventaModo: 'caja', unitsPerQty: 1 }] }), { code: 'VENTA_MODO_CAJA_UNSUPPORTED' });
   assert.throws(() => api.build({ payment_method: 'efectivo', items: [{ product_id: 'p', quantity: 1, unit_price_cents: 10, modo: 'mayorista', unitsPerQty: 1 }] }), { code: 'VENTA_MODO_CAJA_UNSUPPORTED' });
   assert.throws(() => api.build({ payment_method: 'efectivo', items: [{ product_id: 'p', quantity: 1, unit_price_cents: 10, ventaSinStock: true }] }), { code: 'VENTA_SIN_STOCK' });
