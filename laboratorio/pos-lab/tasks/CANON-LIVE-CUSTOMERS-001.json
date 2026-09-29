@@ -1,0 +1,44 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-LIVE-CUSTOMERS-001",
+  "environment": "LABORATORIO",
+  "base_ref": "f7d7eb2b0e318fc62911683529c9aafab712d201",
+  "objective": "Migrar alta de clientes a customer.create CANON autoritativo preservando customers importados y permitiendo que clientes LIVE participen en ventas, cuentas de crédito, créditos LIVE y pagos.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-LIVE-CUSTOMERS-001.json",
+    "laboratorio/pos-lab/preflight/CANON-LIVE-CUSTOMERS-001.json",
+    "infra/database/migrations/0017_canonical_live_customers.sql",
+    "tools/cloudflare-lab/src/a6-customers.js",
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tools/cloudflare-lab/src/a6-canonical.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-customer-bridge.js",
+    "POS/js/legacy-inline/inline-07.js",
+    "POS/index.html",
+    "POS/sw.js",
+    "tests/cloud-sync/canonical-live-customers.test.mjs",
+    "docs/CANON_LIVE_CUSTOMERS.md"
+  ],
+  "forbidden_files": [
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-LIVE-CUSTOMERS-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

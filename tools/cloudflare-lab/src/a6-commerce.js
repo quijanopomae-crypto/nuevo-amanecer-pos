@@ -3,6 +3,24 @@ import { sha256Hex, stableStringify } from './a5-import-core.js';
 
 const METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
 export const CANONICAL_CLIENT_CONTRACT = 'a6-gate-c-v1';
+
+
+async function customerSchemaAvailable(db) {
+  const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers')`).first();
+  return Number(row?.count)===3;
+}
+
+async function canonicalCustomerExists(db,promotionId,customerId) {
+  if(!customerId)return false;
+  const imported=await db.prepare('SELECT 1 AS ok FROM customers WHERE promotion_id=?1 AND customer_id=?2')
+    .bind(promotionId,customerId).first();
+  if(imported)return true;
+  if(!await customerSchemaAvailable(db))return false;
+  const live=await db.prepare(`SELECT 1 AS ok FROM canonical_customer_registry
+    WHERE promotion_id=?1 AND customer_id=?2 AND provenance='LIVE'`).bind(promotionId,customerId).first();
+  return !!live;
+}
 const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 160 && !/[\x00-\x1f\x7f]/.test(value);
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
@@ -108,7 +126,7 @@ export async function createCanonicalCreditAccount(request, env, auth, json) {
           authority_epoch:normalized.authority_epoch,account_id:replay.account_id,idempotent:true})
       : json({error:'operation_id_conflict',operation_id:normalized.operation_id},409);
   }
-  if(!await db.prepare('SELECT 1 ok FROM customers WHERE promotion_id=?1 AND customer_id=?2').bind(normalized.promotion_id,normalized.customer_id).first())
+  if(!await canonicalCustomerExists(db,normalized.promotion_id,normalized.customer_id))
     return json({error:'customer_not_found'},409);
   const duplicate=await db.prepare('SELECT account_id,name,mode FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id=?2 AND (account_id=?3 OR lower(name)=lower(?4))')
     .bind(normalized.promotion_id,normalized.customer_id,normalized.account_id,normalized.name).first();
@@ -184,9 +202,8 @@ export async function createCanonicalSale(request, env, auth, json) {
         (product.tracks_inventory === 1 && (product.current_stock_quantity === null || Number(product.current_stock_quantity) < item.quantity))) return json({ error:'stale_stock',product_id:item.product_id },409);
     products.push(product);
   }
-  if (body.customer_id) {
-    const customer = await db.prepare('SELECT 1 ok FROM customers WHERE promotion_id=?1 AND customer_id=?2').bind(body.promotion_id,body.customer_id).first();
-    if (!customer) return json({ error:'customer_not_found' },409);
+  if (body.customer_id && !await canonicalCustomerExists(db,body.promotion_id,body.customer_id)) {
+    return json({ error:'customer_not_found' },409);
   }
   let accountExists=false;
   if (body.payment_method === 'credito' && body.credit_account && body.credit_account.account_id !== 'small') {

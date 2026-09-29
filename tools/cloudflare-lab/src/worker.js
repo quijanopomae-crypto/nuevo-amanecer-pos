@@ -8,6 +8,7 @@ import { createCanonicalSale, createCanonicalCreditAccount, CANONICAL_CLIENT_CON
 import { createCanonicalFinancial, FINANCIAL_COMMANDS } from './a6-financial.js';
 import { createCanonicalExpense, EXPENSE_COMMAND } from './a6-expenses.js';
 import { createCanonicalProduct, PRODUCT_COMMANDS } from './a6-products.js';
+import { createCanonicalCustomer, CUSTOMER_COMMANDS } from './a6-customers.js';
 import { adjustCanonicalInventory, INVENTORY_COMMANDS } from './a6-inventory.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 
@@ -96,6 +97,14 @@ export default {
         if (auth instanceof Response) return auth;
         return await createCanonicalProduct(request, env, auth, json);
       }
+      if (CUSTOMER_COMMANDS.has(financialCommand)) {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        const denied = canonicalRuntimeDenied(url, env, json);
+        if (denied) return denied;
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return await createCanonicalCustomer(request, env, auth, json);
+      }
       if (INVENTORY_COMMANDS.has(financialCommand)) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
         const denied = canonicalRuntimeDenied(url, env, json);
@@ -103,6 +112,14 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return auth;
         return await adjustCanonicalInventory(request, env, auth, json);
+      }
+      if (financialCommand === 'credit-account.create') {
+        if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+        const denied = canonicalRuntimeDenied(url, env, json);
+        if (denied) return denied;
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return await createCanonicalCreditAccount(request, env, auth, json);
       }
       if (financialCommand === EXPENSE_COMMAND) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });

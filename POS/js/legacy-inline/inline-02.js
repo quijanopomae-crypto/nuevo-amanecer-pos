@@ -681,6 +681,10 @@ function _naClientStatusFast(client){_naEnsureClientCreditIndex();return _naClie
 statusCli=function(c){return _naClientStatusFast(c);};
 calcularScoreCredito=function(clienteId){const cliente=clientes.find(c=>String(c.id)===String(clienteId));if(!cliente)return{score:0,lineaMaxima:5};const totalCompras=_naNumber(cliente.totalCompras),margenEstimado=totalCompras*.5,history=creditos.filter(cr=>String(cr.cliId)===String(clienteId)&&!cr.anulado);let punctuality=0;history.forEach(cr=>{_naSyncCreditStatus(cr);if(cr.status==='cancelado')punctuality+=10;else if(cr.status==='vencido')punctuality-=20;else if(cr.pagado>0)punctuality+=5;});let score=totalCompras>=1000?30:totalCompras>=500?20:totalCompras>=100?10:0;score+=(margenEstimado>=400?20:margenEstimado>=200?10:0)+punctuality;let line=Math.max(5,margenEstimado*.05);if(punctuality>=20)line*=1.5;else if(punctuality<-10)line*=.5;line=Math.max(5,Math.min(line,Math.max(5,margenEstimado*.1)));return{score:Math.max(0,score),lineaMaxima:Math.round(line)};};
 guardarCli=async function(){
+  const canonicalBridge=globalThis.NuevoAmanecerCanonicalCustomerBridge;
+  if(canonicalBridge&&typeof canonicalBridge.enabled==='function'&&canonicalBridge.enabled()&&typeof canonicalBridge.save==='function'){
+    return await canonicalBridge.save();
+  }
   if(isModuleLocked('clientes')){toast('El sistema está en modo solo lectura','error');return;}
   const btnOk=document.querySelector('#mCli .mbtn-ok'),btnText=btnOk?.textContent||'Guardar';
   if(btnOk?.disabled)return;

@@ -1,0 +1,95 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-LIVE-CUSTOMERS-001",
+  "base_ref": "f7d7eb2b0e318fc62911683529c9aafab712d201",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md y skills obligatorias",
+      "customers importado y triggers de inmutabilidad",
+      "canonical_sale_context, live_credits, canonical_credit_accounts y canonical_credit_metadata",
+      "guardarCli legacy y canonical-client/a6-canonical"
+    ],
+    "WRITES": [
+      "0017_canonical_live_customers.sql",
+      "customer.create CANON y bridge del modal",
+      "lectura unificada IMPORT + LIVE customers",
+      "adaptación de referencias operativas a registry IMPORT+LIVE"
+    ],
+    "DOM_AFFECTED": [
+      "#mCli",
+      "#cNombre",
+      "#cDni",
+      "#cTel",
+      "#cDir"
+    ],
+    "STATE_AFFECTED": [
+      "lista de clientes CANON",
+      "selector de cliente en ventas",
+      "referencias de cliente en ventas y créditos LIVE"
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 aislado de pruebas: canonical_customer_operations, canonical_live_customers",
+      "customers importado permanece inmutable",
+      "sin localStorage/arrays legacy como autoridad"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "customers importado conserva provenance",
+      "cliente LIVE usa identidad distinta y durable",
+      "documento/DNI no colisiona entre IMPORT y LIVE",
+      "customer.create idempotente",
+      "cliente LIVE puede ser referenciado por sale.create y créditos",
+      "no fake import_staging ni fake provenance",
+      "no saveAllData en CANON"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes alimenta selector de venta",
+      "crédito LIVE y cuentas de crédito dependen de customer_id",
+      "lectura owner-validation debe seguir viendo customer IDs válidos"
+    ],
+    "RISKS": [
+      "FK históricas apuntan solo a customers importado",
+      "cliente visible pero inutilizable en venta/crédito si no se adapta registry",
+      "romper créditos existentes al reconstruir tablas operativas"
+    ],
+    "ROLLBACK": [
+      "revertir PR antes de deploy",
+      "sin escrituras remotas de producción durante esta tarea"
+    ],
+    "TESTS": [
+      "customer.create D1",
+      "F5 y segundo dispositivo",
+      "DNI duplicado",
+      "lost ACK/idempotencia",
+      "venta con cliente LIVE",
+      "crédito con cliente LIVE",
+      "migración conserva filas operativas existentes",
+      "Critical/Mirror/E2E"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  }
+}
