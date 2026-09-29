@@ -7,7 +7,7 @@
   var LOCK = 'na-canonical-financial-writer';
   var CREDENTIALS_KEY = 'na_cloud_sync_credentials';
   var METHODS = ['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto'];
-  var COMMANDS = ['sale.create', 'product.create', 'inventory.adjust', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
+  var COMMANDS = ['sale.create', 'product.create', 'customer.create', 'inventory.adjust', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var READ_TIMEOUT_MS = 8000;
   var HOSTED_API_ORIGIN = null;
@@ -352,6 +352,31 @@
     return Object.assign(commonPayload(), { customer_id:input.customer_id, account_id:account.account_id, name:account.name, mode:account.mode });
   }
 
+  function makeCustomerPayload(input) {
+    input=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
+    function text(value,max,required) {
+      if(value===undefined||value===null||String(value).trim()==='') {
+        if(required) fail('INVALID_CANONICAL_CUSTOMER');
+        return null;
+      }
+      var out=String(value).trim().replace(/\s+/g,' ');
+      if(out.length>max||/[\x00-\x1f\x7f]/.test(out)) fail('INVALID_CANONICAL_CUSTOMER');
+      return out;
+    }
+    var name=text(input.name,240,true);
+    var color=Number.isInteger(input.color)&&input.color>=0&&input.color<=7
+      ? input.color
+      : ((data&&Array.isArray(data.customers)?data.customers.length:0)%8);
+    return Object.assign(commonPayload(),{
+      customer_id:validId(input.customer_id)?input.customer_id:'C-'+root.crypto.randomUUID(),
+      name:name,
+      document:text(input.document,32,false),
+      phone:text(input.phone,64,false),
+      address:text(input.address,500,false),
+      color:color
+    });
+  }
+
   function makeProductPayload(input) {
     input=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
     function text(value,max,required) {
@@ -582,6 +607,14 @@
         typeof payload.name === 'string' && payload.name.trim().length > 0 && payload.name.trim().length <= 60 &&
         ['accumulated','separate'].includes(payload.mode);
     }
+    if (command === 'customer.create') {
+      return validId(payload.customer_id) &&
+        typeof payload.name==='string' && payload.name.trim().length>0 && payload.name.length<=240 &&
+        (payload.document===null || typeof payload.document==='string' && payload.document.trim().length>0 && payload.document.length<=32 && !/[\x00-\x1f\x7f]/.test(payload.document)) &&
+        (payload.phone===null || typeof payload.phone==='string' && payload.phone.trim().length>0 && payload.phone.length<=64 && !/[\x00-\x1f\x7f]/.test(payload.phone)) &&
+        (payload.address===null || typeof payload.address==='string' && payload.address.trim().length>0 && payload.address.length<=500 && !/[\x00-\x1f\x7f]/.test(payload.address)) &&
+        Number.isInteger(payload.color) && payload.color>=0 && payload.color<=7;
+    }
     if (command === 'inventory.adjust') {
       return validId(payload.product_id) && ['ENTRADA','SALIDA'].includes(payload.movement_type) &&
         typeof payload.quantity==='number' && Number.isFinite(payload.quantity) && payload.quantity>0 &&
@@ -649,6 +682,10 @@
   function validReceipt(record, result) {
     if (!result || result.operation_id !== record.payload.operation_id) return false;
     if (!(result.status === 'created' && result.idempotent === false || result.status === 'already_processed' && result.idempotent === true)) return false;
+    if (record.command === 'customer.create') return result.command===record.command &&
+      result.customer_id===record.payload.customer_id &&
+      result.promotion_id===record.binding.promotion_id &&
+      result.authority_epoch===record.binding.authority_epoch;
     if (record.command === 'inventory.adjust') return result.command===record.command &&
       result.product_id===record.payload.product_id && result.movement_type===record.payload.movement_type &&
       result.quantity===record.payload.quantity && result.promotion_id===record.binding.promotion_id &&
@@ -741,9 +778,10 @@
       assertAction(command);
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
       var record = { state: 'PENDING', binding: copy(binding), command: command, route: '/commands/' + command,
-        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'product.create' ? makeProductPayload(input) : command === 'inventory.adjust' ? makeInventoryPayload(input) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
+        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'product.create' ? makeProductPayload(input) : command === 'customer.create' ? makeCustomerPayload(input) : command === 'inventory.adjust' ? makeInventoryPayload(input) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
       record.receipt_ids = {};
       if (command === 'product.create') record.receipt_ids.product_id = record.payload.product_id;
+      if (command === 'customer.create') record.receipt_ids.customer_id = record.payload.customer_id;
       if (command === 'expense.create') record.receipt_ids.expense_id = record.payload.expense_id;
       if (command === 'payment.create') record.receipt_ids.credit_provenance = data.credits.find(function (item) { return item.credit_id === record.payload.credit_id; }).provenance;
       if (command === 'compensation.create') {
@@ -756,6 +794,7 @@
     });
   }
   function createProduct(input) { return createCommand('product.create', input); }
+  function createCustomer(input) { return createCommand('customer.create', input); }
   function adjustInventory(input) { return createCommand('inventory.adjust', input); }
   function createCreditAccount(input) { return createCommand('credit-account.create', input); }
   function createPayment(input) { return createCommand('payment.create', input); }
@@ -779,6 +818,17 @@
       if(![400,409].includes(record.last_status) || !safeErrors.includes(record.last_error)) return false;
       root.localStorage.removeItem(JOURNAL);
       if(root.localStorage.getItem(JOURNAL)!==null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+      return true;
+    });
+  }
+  async function discardRejectedCustomer() {
+    return withWriterLock(function () {
+      var record=journal();
+      if(!record||record.state!=='PENDING'||record.command!=='customer.create')return false;
+      var safeErrors=['invalid_customer_request','customer_id_conflict','customer_document_conflict','operation_id_conflict','stale_authority','canonical_not_active','canonical_customer_conflict'];
+      if(![400,409].includes(record.last_status)||!safeErrors.includes(record.last_error))return false;
+      root.localStorage.removeItem(JOURNAL);
+      if(root.localStorage.getItem(JOURNAL)!==null)fail('CANONICAL_STORAGE_NOT_DURABLE');
       return true;
     });
   }
@@ -955,7 +1005,7 @@
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedProduct: discardRejectedProduct, discardRejectedInventory: discardRejectedInventory,
-    createProduct: createProduct, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedInventory: discardRejectedInventory,
+    createProduct: createProduct, createCustomer: createCustomer, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);
