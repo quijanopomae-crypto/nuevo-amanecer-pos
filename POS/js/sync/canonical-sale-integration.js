@@ -15,6 +15,19 @@
     if (typeof root.toast === 'function') root.toast(message, 'error');
     if (error && root.console && typeof root.console.error === 'function') root.console.error('[Venta canónica]', error.code || error.message || 'Error');
   }
+  function browserLockReason() {
+    try {
+      if (root.sessionStorage && root.sessionStorage.getItem('na_security_locked') === 'true') return 'sesión de seguridad bloqueada';
+    } catch (_) {}
+    try {
+      if (root.localStorage) {
+        if (root.localStorage.getItem('na_master_lock') === 'true') return 'Bloquear edición crítica está activado';
+        if (root.localStorage.getItem('na_readonly') === 'true') return 'Modo solo lectura está activado';
+        if (root.localStorage.getItem('na_lock_ventas') === 'true') return 'Ventas y POS está protegido';
+      }
+    } catch (_) {}
+    return '';
+  }
   function nextSaleId() {
     var ids = (Array.isArray(root.ventas) ? root.ventas : []).map(function (sale) {
       return parseInt(String(sale.id).replace('V-', ''), 10) || 0;
@@ -55,9 +68,13 @@
     if (busy || root.posProc) return;
     try {
       if (typeof root.isModuleLocked !== 'function' || root.isModuleLocked('ventas', { canonicalSaleCapture: true })) {
-        failClosed('Las ventas están bloqueadas', null); return;
+        var lockReason = browserLockReason();
+        failClosed(lockReason ? 'Venta bloqueada: ' + lockReason : 'Las ventas están bloqueadas', null); return;
       }
-    } catch (lockError) { failClosed('Las ventas están bloqueadas', lockError); return; }
+    } catch (lockError) {
+      var caughtReason = browserLockReason();
+      failClosed(caughtReason ? 'Venta bloqueada: ' + caughtReason : 'Las ventas están bloqueadas por un error interno de seguridad', lockError); return;
+    }
     var cart = Array.isArray(root.cart) ? root.cart : [];
     if (!cart.length) { failClosed('El carrito está vacío.', null); return; }
     var cartFingerprint = JSON.stringify(cart.map(function (item) {
