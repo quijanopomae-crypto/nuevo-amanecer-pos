@@ -60,7 +60,18 @@ async function productionState() {
     "COALESCE((SELECT instr(sql,'NEW.principal_id')>0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) has_session_trigger," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_accounts') has_credit_accounts," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_metadata') has_credit_metadata," +
-    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_installments') has_credit_installments"))[0];
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_installments') has_credit_installments," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_expense_operations') has_expense_operations," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_expenses') has_expenses," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_product_operations') has_product_operations," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_products') has_live_products_table," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_inventory_effects') has_live_inventory_effects," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_inventory_operations') has_inventory_operations," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_manual_inventory_movements') has_manual_inventory_movements," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines') has_generic_sale_lines_table," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_operations') has_customer_operations," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_registry') has_customer_registry," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_customers') has_live_customers_table"))[0];
 
   const traffic = (await query(PROD_DB, 'traffic',
     "SELECT " +
@@ -77,18 +88,53 @@ async function productionState() {
     ? Number((await query(PROD_DB, 'active sessions', "SELECT COUNT(*) n FROM auth_sessions WHERE status='active'"))[0]?.n || 0)
     : 0;
 
+  const numericSchema = Object.fromEntries(Object.entries(schema).map(([key, value]) => [key, Number(value)]));
+  numericSchema.has_expenses_v1 = Number(numericSchema.has_expense_operations === 1 && numericSchema.has_expenses === 1);
+  numericSchema.has_live_products = Number(
+    numericSchema.has_product_operations === 1 &&
+    numericSchema.has_live_products_table === 1 &&
+    numericSchema.has_live_inventory_effects === 1
+  );
+  numericSchema.has_inventory_adjust = Number(
+    numericSchema.has_inventory_operations === 1 &&
+    numericSchema.has_manual_inventory_movements === 1
+  );
+  numericSchema.has_generic_sale_lines = Number(numericSchema.has_generic_sale_lines_table === 1);
+  numericSchema.has_live_customers = Number(
+    numericSchema.has_customer_operations === 1 &&
+    numericSchema.has_customer_registry === 1 &&
+    numericSchema.has_live_customers_table === 1
+  );
+
   return {
     control: {
       ...control,
       revision: Number(control.revision),
       authority_epoch: Number(control.authority_epoch),
     },
-    schema: Object.fromEntries(Object.entries(schema).map(([key, value]) => [key, Number(value)])),
+    schema: numericSchema,
     traffic: Object.fromEntries(Object.entries(traffic).map(([key, value]) => [key, Number(value)])),
   };
 }
 
+function assertMigrationGroupsCompleteOrAbsent(state) {
+  const groups = {
+    '0013_canonical_expenses.sql': ['has_expense_operations','has_expenses'],
+    '0014_canonical_live_products.sql': ['has_product_operations','has_live_products_table','has_live_inventory_effects'],
+    '0015_canonical_inventory_adjust.sql': ['has_inventory_operations','has_manual_inventory_movements'],
+    '0016_canonical_generic_sale_lines.sql': ['has_generic_sale_lines_table'],
+    '0017_canonical_live_customers.sql': ['has_customer_operations','has_customer_registry','has_live_customers_table'],
+  };
+  for (const [migration, keys] of Object.entries(groups)) {
+    const present = keys.reduce((sum, key) => sum + Number(state.schema[key] === 1), 0);
+    if (present !== 0 && present !== keys.length) {
+      throw new Error('partial production schema for ' + migration);
+    }
+  }
+}
+
 function assertCleanPreFirstSale(state) {
+  assertMigrationGroupsCompleteOrAbsent(state);
   const c = state.control;
   if (c.mode !== 'ACTIVE') throw new Error('production authority is not ACTIVE');
   if (c.active_promotion_id !== PROMOTION) throw new Error('unexpected active promotion');
@@ -110,6 +156,11 @@ async function cmdPreflight() {
   env('HAS_CREDIT_ACCOUNTS_V2', state.schema.has_credit_accounts);
   env('HAS_CREDIT_METADATA_V2', state.schema.has_credit_metadata);
   env('HAS_CREDIT_INSTALLMENTS_V2', state.schema.has_credit_installments);
+  env('HAS_EXPENSES_V1', state.schema.has_expenses_v1);
+  env('HAS_LIVE_PRODUCTS', state.schema.has_live_products);
+  env('HAS_INVENTORY_ADJUST', state.schema.has_inventory_adjust);
+  env('HAS_GENERIC_SALE_LINES', state.schema.has_generic_sale_lines);
+  env('HAS_LIVE_CUSTOMERS', state.schema.has_live_customers);
   env('CUTOVER_ACTIVE_SESSIONS', state.traffic.active_sessions);
   console.log(JSON.stringify({ state: 'PRE_CUTOVER_PASS', database_id: PROD_DB, ...state }));
 }
@@ -165,18 +216,50 @@ async function schemaReady(database) {
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_accounts') credit_accounts," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_metadata') credit_metadata," +
     "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_credit_installments') credit_installments," +
+    "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_expense_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_expenses')) expenses_v1," +
+    "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_product_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_products') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_inventory_effects')) live_products," +
+    "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_inventory_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_manual_inventory_movements')) inventory_adjust," +
+    "EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines') generic_sale_lines," +
+    "(EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_operations') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_registry') AND EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_live_customers')) live_customers," +
     "(SELECT COUNT(*) FROM sales) sales"))[0];
-  return Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [key, Number(value)]));
+
+  const ready = Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [key, Number(value)]));
+  const quickRows = await query(database, 'PRAGMA quick_check', 'PRAGMA quick_check;');
+  ready.quick_check = String(Object.values(quickRows[0] || {})[0] || '').toLowerCase();
+  ready.foreign_key_violations = (await query(database, 'PRAGMA foreign_key_check', 'PRAGMA foreign_key_check;')).length;
+  ready.v17_residue_objects = (await query(database, '__v17 residue',
+    "SELECT type,name FROM sqlite_master WHERE name LIKE '%__v17%' OR instr(COALESCE(sql,''),'__v17') > 0;")).length;
+
+  const customerTables = ['canonical_sale_context','live_credits','canonical_credit_accounts','canonical_credit_metadata'];
+  let registryFks = 0;
+  for (const table of customerTables) {
+    const rows = await query(database, 'customer registry FK ' + table, 'PRAGMA foreign_key_list("' + table + '");');
+    if (rows.some(item => String(item.table) === 'canonical_customer_registry')) registryFks++;
+  }
+  ready.customer_registry_fks = registryFks;
+  return ready;
+}
+
+function assertSchemaReady(row, label) {
+  for (const key of [
+    'auth','principal','credential','guard','active','first_live_empty',
+    'credit_accounts','credit_metadata','credit_installments','expenses_v1',
+    'live_products','inventory_adjust','generic_sale_lines','live_customers',
+  ]) {
+    if (row[key] !== 1) throw new Error(label + ' invariant failed: ' + key);
+  }
+  if (row.sales !== 0) throw new Error(label + ' contains sales');
+  if (row.quick_check !== 'ok') throw new Error(label + ' PRAGMA quick_check failed');
+  if (row.foreign_key_violations !== 0) throw new Error(label + ' PRAGMA foreign_key_check failed');
+  if (row.v17_residue_objects !== 0) throw new Error(label + ' __v17 residue remains');
+  if (row.customer_registry_fks !== 4) throw new Error(label + ' customer registry FK graph incomplete');
 }
 
 async function cmdVerifyRehearsal() {
   const id = process.env.REHEARSAL_DB_ID;
   if (!id) throw new Error('missing REHEARSAL_DB_ID');
   const row = await schemaReady(id);
-  for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
-    if (row[key] !== 1) throw new Error('rehearsal invariant failed: ' + key);
-  }
-  if (row.sales !== 0) throw new Error('rehearsal contains sales');
+  assertSchemaReady(row, 'rehearsal');
   console.log(JSON.stringify({ state: 'REHEARSAL_PASS', schema: row }));
 }
 
@@ -187,17 +270,17 @@ async function cmdRecheck() {
       state.control.authority_epoch !== Number(process.env.CUTOVER_AUTHORITY_EPOCH)) {
     throw new Error('production authority changed during rehearsal');
   }
-  console.log(JSON.stringify({ state: 'PRODUCTION_RECHECK_PASS', revision: state.control.revision, authority_epoch: state.control.authority_epoch }));
+  const baselineActiveSessions = Number(process.env.CUTOVER_ACTIVE_SESSIONS);
+  if (!Number.isSafeInteger(baselineActiveSessions) || baselineActiveSessions < 0) throw new Error('missing active session baseline');
+  if (state.traffic.active_sessions !== baselineActiveSessions) throw new Error('active session baseline changed before production mutation');
+  console.log(JSON.stringify({ state: 'PRODUCTION_RECHECK_PASS', revision: state.control.revision, authority_epoch: state.control.authority_epoch, active_sessions: state.traffic.active_sessions }));
 }
 
 async function cmdVerifyProduction() {
   const state = await productionState();
   assertCleanPreFirstSale(state);
   const row = await schemaReady(PROD_DB);
-  for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
-    if (row[key] !== 1) throw new Error('production schema invariant failed: ' + key);
-  }
-  if (row.sales !== 0) throw new Error('production contains sales before first-live gate');
+  assertSchemaReady(row, 'production');
   console.log(JSON.stringify({ state: 'PRODUCTION_MIGRATIONS_PASS', schema: row }));
 }
 
@@ -249,6 +332,11 @@ async function cmdProbeWorker() {
     if (!status.ok || canonical?.authority !== 'canonical' || canonical?.mode !== 'ACTIVE' || canonical?.promotion_id !== PROMOTION) {
       throw new Error('canonical production read probe failed');
     }
+    for (const path of ['/read/canonical/products?limit=5','/read/canonical/customers?limit=5']) {
+      const response = await fetch(PROD_WORKER + path, { headers: { authorization: 'Bearer ' + sessionToken } });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || body == null) throw new Error('canonical production route probe failed: ' + path);
+    }
     console.log(JSON.stringify({
       state: 'PRODUCTION_WORKER_PROBE_PASS',
       mode: canonical.mode,
@@ -272,9 +360,7 @@ async function cmdFinal() {
   if (!Number.isSafeInteger(baselineActiveSessions) || baselineActiveSessions < 0) throw new Error('missing active session baseline');
   if (state.traffic.active_sessions !== baselineActiveSessions) throw new Error('probe session baseline changed');
   const row = await schemaReady(PROD_DB);
-  for (const key of ['auth','principal','credential','guard','active','first_live_empty','credit_accounts','credit_metadata','credit_installments']) {
-    if (row[key] !== 1) throw new Error('final invariant failed: ' + key);
-  }
+  assertSchemaReady(row, 'final');
   console.log(JSON.stringify({
     state: 'READY_FOR_FIRST_SALE',
     database_id: PROD_DB,
