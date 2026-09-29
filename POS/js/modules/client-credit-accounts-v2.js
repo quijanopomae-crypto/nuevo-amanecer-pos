@@ -900,6 +900,9 @@
       (hasInstallmentSchedule
         ? '<section class="na-v2-section na-v2-schedule-section"><div class="na-v2-section-title"><span>CRONOGRAMA DE CUOTAS</span><small>' + installments.plan.length + ' cuotas en total</small></div>' + labPendingInstallmentsHtml(installments) + '</section>'
         : '') +
+      '<div class="na-v2-credit-actions">' +
+        (!labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="na-v2-pay" data-credit-id="' + labEsc(String(cr.id)) + '">Registrar pago</button>' : '') +
+      '</div>' +
     '</div>';
   }
 
