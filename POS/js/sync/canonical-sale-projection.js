@@ -62,6 +62,13 @@
             !Number.isFinite(item.quantity) || item.quantity <= 0 ||
             !Number.isSafeInteger(item.unit_price_cents) || item.unit_price_cents < 0 ||
             !Number.isSafeInteger(item.line_total_cents) || item.line_total_cents < 0) fail('OUTBOX_SNAPSHOT_INVALID');
+        if (item.generic_line !== undefined) {
+          if (!isRecord(item.generic_line) || typeof item.product_id !== 'string' || item.product_id.slice(0,8) !== 'GENERIC:' ||
+              !Number.isSafeInteger(item.quantity) || item.quantity > 9999 || item.unit_price_cents <= 0 ||
+              typeof item.generic_line.name !== 'string' || !item.generic_line.name.trim() || item.generic_line.name.length > 240 ||
+              typeof item.generic_line.code !== 'string' || item.generic_line.code.length > 160) fail('OUTBOX_SNAPSHOT_INVALID');
+          return;
+        }
         var product = result.products.find(function (candidate) { return isRecord(candidate) && sameId(candidate.id, item.product_id); });
         if (!product) {
           if (!sale.conflict) { sale.conflict = true; sale.reason = 'PRODUCT_NOT_FOUND'; }
