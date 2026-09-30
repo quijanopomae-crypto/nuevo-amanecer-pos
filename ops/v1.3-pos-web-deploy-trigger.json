@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON Clientes mobile return fix: reveal secondary chrome without covering client cards.",
-  "retry_attempt": 43,
-  "retry_reason": "PR #253 merged at f27f321d03fa893b215b0edf1d433d98a7d99374 after CANON Critical CI #313 PASS and E2E Smoke CI #67 PASS. Publish the visual-only reverse-scroll fix.",
-  "requested_at_utc": "2026-09-30T13:17:33Z",
-  "target_head": "f27f321d03fa893b215b0edf1d433d98a7d99374"
+  "note": "Deploy CANON Clientes mobile top-reset Motion fix: clear residual collapse state at scroll top before the next downward gesture.",
+  "retry_attempt": 44,
+  "retry_reason": "PR #258 merged at 301114e5559bec858a3a0444abb4ce1ea7389bff after CANON Critical CI #321 PASS and E2E Smoke CI #74 PASS. Publish the visual-only top reset fix.",
+  "requested_at_utc": "2026-09-30T13:34:58Z",
+  "target_head": "301114e5559bec858a3a0444abb4ce1ea7389bff"
 }
