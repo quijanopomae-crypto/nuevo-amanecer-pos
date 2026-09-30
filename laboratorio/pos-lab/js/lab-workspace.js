@@ -49,7 +49,7 @@
       var endpoint = String(persistent.endpoint || '').replace(/\/+$/, '');
       if (endpoint === LEGACY_D1_ENDPOINT) {
         // Cambiar de backend invalida credenciales y operaciones pendientes:
-        // una sesión/revisión emitida por D1 no debe reutilizarse contra Turso.
+        // una sesión/revisión emitida por Turso no debe reutilizarse contra Turso.
         var migrated = {
           endpoint: DEFAULT_ENDPOINT,
           readToken: '',
@@ -136,7 +136,7 @@
     if (!state.pendingOperation && !state.dirty && !state.conflict) {
       return loadRemoteWorkspace({ silent: false });
     }
-    if (!confirm('¿Descartar únicamente los cambios locales pendientes de este navegador y cargar la revisión actual de D1 LAB?')) {
+    if (!confirm('¿Descartar únicamente los cambios locales pendientes de este navegador y cargar la revisión actual de Turso LAB?')) {
       return false;
     }
     clearTimeout(state.timer);
@@ -144,7 +144,7 @@
     state.dirty = false;
     state.conflict = false;
     state.remoteReady = false;
-    renderStatus('Pendiente local descartado. Cargando D1 LAB…', 'info');
+    renderStatus('Pendiente local descartado. Cargando Turso LAB…', 'info');
     var loaded = await loadRemoteWorkspace({ silent: false });
     if (document.getElementById('naLabWorkspaceOverlay')) fillPanel();
     return loaded;
@@ -305,7 +305,7 @@
       try { state.remoteComparable = comparableSnapshot(payload.snapshot); } catch {}
     }
     state.remoteReady = true;
-    updateBadge('D1 R' + state.revision);
+    updateBadge('Turso R' + state.revision);
     var meta = document.getElementById('naLabWorkspaceMeta');
     if (meta) {
       meta.textContent = 'Revisión ' + state.revision +
@@ -357,18 +357,18 @@
       if (!silent) renderStatus('Configura READ_TOKEN para solo lectura o activa una sesión de escritura.');
       return false;
     }
-    if (!silent) renderStatus('Cargando D1 LAB…');
+    if (!silent) renderStatus('Cargando Turso LAB…');
     var response = await api('/lab/workspace', { mode: 'read' });
     if (response.status === 404) {
       state.remoteReady = false;
-      updateBadge('D1 VACÍA');
-      renderStatus('D1 LAB todavía no tiene baseline. Usa “Actualizar desde CANON”.');
+      updateBadge('TURSO VACÍO');
+      renderStatus('Turso LAB todavía no tiene baseline. Usa “Actualizar desde CANON”.');
       return false;
     }
     if (!response.ok) {
       state.remoteReady = false;
       updateBadge('ERROR DATOS');
-      throw new Error('No se pudo leer D1 LAB (' + response.status + ')');
+      throw new Error('No se pudo leer Turso LAB (' + response.status + ')');
     }
     var payload = await response.json();
 
@@ -379,12 +379,12 @@
       refreshMetadata(payload);
       if (state.conflict) {
         updateBadge('CONFLICTO');
-        renderStatus('Hay un pendiente local de una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
+        renderStatus('Hay un pendiente local de una revisión anterior. Pulsa “Usar Turso LAB” para descartarlo y cargar la revisión actual.', 'error');
         if (document.getElementById('naLabWorkspaceOverlay')) fillPanel();
         return false;
       }
       updateBadge('PENDIENTE');
-      renderStatus('Hay cambios locales pendientes. Se conservarán y se intentarán conciliar con D1 LAB.', 'info');
+      renderStatus('Hay cambios locales pendientes. Se conservarán y se intentarán conciliar con Turso LAB.', 'info');
       if (hasWriterAccess(state.credentials)) await flushRemoteSave();
       return true;
     }
@@ -393,7 +393,7 @@
     state.conflict = false;
     var productos = Array.isArray(payload.snapshot?.data?.productos) ? payload.snapshot.data.productos.length : 0;
     var clientes = Array.isArray(payload.snapshot?.data?.clientes) ? payload.snapshot.data.clientes.length : 0;
-    renderStatus('Datos LAB cargados: ' + productos + ' productos · ' + clientes + ' clientes. Los cambios se guardan solo en D1 LAB.', 'ok');
+    renderStatus('Datos LAB cargados: ' + productos + ' productos · ' + clientes + ' clientes. Los cambios se guardan solo en Turso LAB.', 'ok');
     return true;
   }
 
@@ -408,10 +408,10 @@
     if (state.suppressRemoteSave || !hasWriterAccess(state.credentials)) return;
 
     // saveAppState también se usa para navegación. currentPage/updatedAt no son
-    // cambios de negocio y no deben fabricar una nueva revisión D1 LAB.
+    // cambios de negocio y no deben fabricar una nueva revisión Turso LAB.
     if (!state.pendingOperation && !hasMaterialLocalChanges()) {
       state.dirty = false;
-      if (state.remoteReady && state.revision && !state.conflict) updateBadge('D1 R' + state.revision);
+      if (state.remoteReady && state.revision && !state.conflict) updateBadge('Turso R' + state.revision);
       return;
     }
 
@@ -450,7 +450,7 @@
       try { payload = await response.json(); } catch {}
 
       if (response.status === 409 && payload.error === 'revision_conflict') {
-        // Antes de bloquear al usuario, compara contra una lectura FRESCA de D1.
+        // Antes de bloquear al usuario, compara contra una lectura FRESCA de Turso.
         // Si el pendiente solo cambió currentPage/updatedAt/cloudSync, no existe
         // una edición de negocio que proteger y puede descartarse con seguridad.
         if (await pendingMatchesCurrentRemote(body)) {
@@ -459,15 +459,15 @@
           state.conflict = false;
           state.remoteReady = true;
           state.localComparable = state.remoteComparable || currentComparableSnapshot();
-          updateBadge('D1 R' + state.revision);
-          renderStatus('Pendiente local obsoleto sin cambios materiales descartado automáticamente. D1 LAB está actualizado.', 'ok');
+          updateBadge('Turso R' + state.revision);
+          renderStatus('Pendiente local obsoleto sin cambios materiales descartado automáticamente. Turso LAB está actualizado.', 'ok');
           return;
         }
 
         state.remoteReady = false;
         state.conflict = true;
         updateBadge('CONFLICTO');
-        renderStatus('Conflicto de revisión. El pendiente local contiene cambios reales de una revisión anterior. Pulsa “Usar D1 LAB” para descartarlo y cargar la revisión actual.', 'error');
+        renderStatus('Conflicto de revisión. El pendiente local contiene cambios reales de una revisión anterior. Pulsa “Usar Turso LAB” para descartarlo y cargar la revisión actual.', 'error');
         var overlay = document.getElementById('naLabWorkspaceOverlay');
         var operationId = body && body.operation_id;
         if (shouldOpenConflictNotice(operationId)) {
@@ -502,16 +502,16 @@
       // de recibir ACK, hay una segunda intención que todavía debe guardarse.
       if (localChangedAfterPending(completed)) state.dirty = true;
 
-      updateBadge(state.dirty ? 'PENDIENTE' : 'D1 R' + state.revision);
+      updateBadge(state.dirty ? 'PENDIENTE' : 'Turso R' + state.revision);
       renderStatus(
         state.dirty
           ? 'Una operación quedó confirmada; hay cambios locales posteriores pendientes.'
-          : 'Cambios guardados en D1 LAB · revisión ' + state.revision,
+          : 'Cambios guardados en Turso LAB · revisión ' + state.revision,
         state.dirty ? 'info' : 'ok'
       );
     } catch (error) {
       updateBadge('PENDIENTE');
-      renderStatus('No se pudo guardar D1 LAB: ' + error.message, 'error');
+      renderStatus('No se pudo guardar Turso LAB: ' + error.message, 'error');
     } finally {
       state.saving = false;
       if ((state.dirty || state.pendingOperation) && state.remoteReady) {
@@ -523,7 +523,7 @@
 
   async function refreshFromCanon() {
     var actionUrl = 'https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/workflows/lab-data-refresh.yml';
-    renderStatus('La copia CANON → LAB usa el backup SQL real. Ejecuta “Refresh LAB Data” en GitHub y luego pulsa “Cargar D1 LAB”.', 'info');
+    renderStatus('La copia CANON → LAB usa el backup SQL real. Ejecuta “Refresh LAB Data” en GitHub y luego pulsa “Cargar Turso LAB”.', 'info');
     try { window.open(actionUrl, '_blank', 'noopener'); } catch {}
   }
 
@@ -551,7 +551,7 @@
   function panelMarkup() {
     return '<div id="naLabWorkspaceOverlay" style="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.62);padding:16px;overflow:auto">' +
       '<div style="max-width:520px;margin:5vh auto;background:#fff;color:#111827;border-radius:18px;padding:18px;box-shadow:0 18px 60px rgba(0,0,0,.35);font-family:system-ui,sans-serif">' +
-      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><strong style="font-size:18px">🧪 Datos POS-LAB</strong><div style="font-size:12px;color:#64748b;margin-top:4px">CANON → D1 LAB. Nunca LAB → CANON.</div></div><button id="naLabWorkspaceClose" type="button" style="border:0;background:#f1f5f9;border-radius:9px;padding:7px 10px">✕</button></div>' +
+      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:start"><div><strong style="font-size:18px">🧪 Datos POS-LAB</strong><div style="font-size:12px;color:#64748b;margin-top:4px">CANON → Turso LAB. Nunca LAB → CANON.</div></div><button id="naLabWorkspaceClose" type="button" style="border:0;background:#f1f5f9;border-radius:9px;padding:7px 10px">✕</button></div>' +
       '<div id="naLabWorkspaceStatus" style="margin:14px 0;padding:10px;border-radius:10px;background:#f8fafc;font-size:12px;font-weight:700">Configura la conexión LAB.</div>' +
       '<pre id="naLabWorkspaceMeta" style="white-space:pre-wrap;font-size:10px;color:#64748b;background:#f8fafc;border-radius:10px;padding:9px"></pre>' +
       '<label style="display:block;font-size:11px;font-weight:800;margin-top:10px">Worker LAB</label><input id="naLabEndpoint" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid #cbd5e1;border-radius:9px" />' +
@@ -562,8 +562,8 @@
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">' +
       '<button id="naLabActivate" type="button" style="padding:10px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:800">Activar escritura</button>' +
       '<button id="naLabSaveConfig" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Guardar conexión</button>' +
-      '<button id="naLabLoad" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Cargar D1 LAB</button>' +
-      '<button id="naLabUseRemote" type="button" style="display:none;padding:10px;border:0;border-radius:10px;background:#dc2626;color:#fff;font-weight:800">Usar D1 LAB</button>' +
+      '<button id="naLabLoad" type="button" style="padding:10px;border:0;border-radius:10px;background:#e2e8f0;font-weight:800">Cargar Turso LAB</button>' +
+      '<button id="naLabUseRemote" type="button" style="display:none;padding:10px;border:0;border-radius:10px;background:#dc2626;color:#fff;font-weight:800">Usar Turso LAB</button>' +
       '<button id="naLabRefreshCanon" type="button" style="padding:10px;border:0;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:800">Actualizar CANON → LAB</button>' +
       '<button id="naLabResetBaseline" type="button" style="padding:10px;border:0;border-radius:10px;background:#f59e0b;color:#111827;font-weight:800">Restaurar baseline</button>' +
       '</div><button id="naLabClearCredentials" type="button" style="width:100%;margin-top:8px;padding:9px;border:0;border-radius:10px;background:#fee2e2;color:#991b1b;font-weight:800">Borrar sesión de este navegador</button>' +
@@ -602,7 +602,7 @@
         await activateWriter(secretInput.value);
         secretInput.value = '';
         fillPanel();
-        renderStatus('Sesión activada. Cargando productos y clientes desde D1 LAB…', 'info');
+        renderStatus('Sesión activada. Cargando productos y clientes desde Turso LAB…', 'info');
         var loaded = await loadRemoteWorkspace({ silent: false });
         if (loaded) overlay.style.display = 'none';
       } catch (error) {
@@ -753,14 +753,14 @@
       }
 
       // Baseline material local: permite distinguir una navegación de una
-      // edición real incluso antes de que responda D1 LAB.
+      // edición real incluso antes de que responda Turso LAB.
       rememberLocalComparable();
 
       // No bloquear el primer render esperando la red. Primero mostramos el
-      // estado local y la pantalla guardada; luego D1 LAB se actualiza detrás.
+      // estado local y la pantalla guardada; luego Turso LAB se actualiza detrás.
       setTimeout(function () {
         loadRemoteWorkspace({ silent: true }).catch(function (error) {
-          console.warn('[NA-LAB] No se pudo cargar D1 LAB.', error && error.message || error);
+          console.warn('[NA-LAB] No se pudo cargar Turso LAB.', error && error.message || error);
           updateBadge('LOCAL');
         });
       }, 0);
@@ -778,7 +778,7 @@
       var overlay = document.getElementById('naLabWorkspaceOverlay');
       if (!overlay || hasReadAccess(state.credentials)) return;
       fillPanel();
-      renderStatus('Activa este navegador para cargar productos y clientes desde D1 LAB. Sin sesión, el LAB permanece local y puede verse vacío.', 'info');
+      renderStatus('Activa este navegador para cargar productos y clientes desde Turso LAB. Sin sesión, el LAB permanece local y puede verse vacío.', 'info');
       overlay.scrollTop = 0;
       overlay.style.display = 'block';
     }, 0);
