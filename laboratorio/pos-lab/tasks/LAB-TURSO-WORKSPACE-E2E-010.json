@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-WORKSPACE-E2E-010",
+  "environment": "LABORATORIO",
+  "base_ref": "07961a0af8c54bfa5026560a21ad9fc51c0801a6",
+  "objective": "Validar de extremo a extremo el workspace LAB sobre el Worker Turso aislado: import de baseline sintético firmado, lectura, save, replay idempotente, conflicto de revisión, reset y cleanup, sin tocar CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-WORKSPACE-E2E-010.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-WORKSPACE-E2E-010.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKSPACE-E2E-010.json",
+    ".github/workflows/turso-lab-workspace-e2e.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-WORKSPACE-E2E-010.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
