@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-SCHEMA-003-R1",
+  "environment": "LABORATORIO",
+  "base_ref": "61f01228a5c288156bbc65cb0bee0366860bb0ea",
+  "objective": "Reintentar el bootstrap del esquema Turso LAB corrigiendo únicamente el runner Node del workflow fallido, sin modificar migraciones ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-SCHEMA-003-R1.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-SCHEMA-003-R1.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-SCHEMA-003.json",
+    ".github/workflows/turso-lab-schema-bootstrap.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/database/migrations/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-SCHEMA-003-R1.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

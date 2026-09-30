@@ -40,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           node <<'NODE'
+          (async () => {
           const fs = require('node:fs');
           const path = require('node:path');
 
@@ -178,4 +179,8 @@ jobs:
           console.log('TURSO_FOREIGN_KEYS=PASS');
           console.log('TURSO_TRANSACTION_ROLLBACK=PASS');
           console.log('TURSO_SCHEMA_BOOTSTRAP=PASS');
+          })().catch((error) => {
+            console.error(String(error?.message || error));
+            process.exitCode = 1;
+          });
           NODE
