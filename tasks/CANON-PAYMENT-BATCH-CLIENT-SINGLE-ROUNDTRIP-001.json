@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-PAYMENT-BATCH-CLIENT-SINGLE-ROUNDTRIP-001",
+  "environment": "CANON",
+  "base_ref": "2e443fbe9b0241f7ed06bddd20d68de0885f05ed",
+  "objective": "Cambiar el cliente CANON de cobro múltiple para enviar hasta 20 deudas en un único POST /commands/payment.batch al backend ya desplegado, conservando un child payment.create por deuda, journal durable, retry idempotente y una sola reconciliación posterior.",
+  "owner_authorization": "El owner reportó ~30 segundos para 14 deudas y autorizó aplicar primeros principios para eliminar viajes de red redundantes.",
+  "allowed_files": [
+    "tasks/CANON-PAYMENT-BATCH-CLIENT-SINGLE-ROUNDTRIP-001.json",
+    "evidence/canon-preflight/CANON-PAYMENT-BATCH-CLIENT-SINGLE-ROUNDTRIP-001.json",
+    "POS/js/sync/canonical-client.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "cash-integrity"
+  ],
+  "invariants": [
+    "Backend /commands/payment.batch is already deployed before this frontend is published.",
+    "Each selected debt remains a distinct payment.create child with its own operation_id and receipt.",
+    "For up to 20 selected debts the browser performs one payment.batch POST, not N payment.create POSTs.",
+    "The remote status read remains before a new batch, preserving the repository invariant that only a new single payment.create may skip it.",
+    "ACK-loss retry replays the exact same batch payload and child operation_ids.",
+    "No full canonical refresh occurs between child debts.",
+    "Exactly one background full reconciliation remains after a confirmed batch.",
+    "Individual payment.create behavior is unchanged.",
+    "No business-rule, D1 schema, CSS, Motion or module changes."
+  ],
+  "rollback": "Revertir el frontend PR y desplegar el Hosted POS previo. El backend batch endpoint puede permanecer compatible y sin uso."
+}

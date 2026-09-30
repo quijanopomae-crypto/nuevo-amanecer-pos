@@ -20,21 +20,26 @@ El flujo individual **Registrar pago** continúa disponible dentro de cada créd
 
 ## Autoridad financiera
 
-No existe un segundo ledger ni un nuevo comando backend. Cada asignación del lote se registra usando el `payment.create` CANON existente. El `canonical-client` continúa derivando la revisión del crédito, mantiene el journal PENDING/CONFIRMED y usa el mismo mecanismo idempotente de recibos.
+No existe un segundo ledger. Cada deuda del lote continúa registrada en D1 como una operación inmutable **`payment.create`**, con su propio `operation_id`, request hash y receipt.
 
-El cobro múltiple usa un **fast path** del cliente CANON: mantiene un único writer lock, crea un `payment.create` idempotente por deuda y **no ejecuta un refresh completo entre deudas distintas**. La revisión inicial de cada crédito distinto sigue siendo válida porque pagar otro crédito no modifica esa revisión, y el Worker vuelve a validar autoridad, revisión del crédito y sesión de caja en cada POST.
+Para eliminar la latencia de red multiplicada por el número de deudas, el Worker expone **`POST /commands/payment.batch` únicamente como transporte**. Ese endpoint no es un nuevo tipo de asiento financiero: empaqueta hasta 20 intents `payment.create` distintos y los valida/commitea juntos mediante una sola `db.batch()` de D1. Si cualquiera de las revisiones de crédito o la sesión de caja ya no coincide, la transacción completa falla y no se confirma ninguna deuda de ese chunk.
 
-Una vez confirmados los recibos durables del lote, se dispara **una sola reconciliación CANON en segundo plano** para actualizar toda la vista. Así el cajero deja de esperar N lecturas completas del snapshot por un cobro de N deudas.
+El `canonical-client` mantiene un único writer lock y un journal PENDING/CONFIRMED del chunk. Un cobro de 14 deudas pasa de **14 POST secuenciales a 1 POST**. Si alguna vez se seleccionan más de 20 deudas, el cliente las divide en chunks de 20 para respetar los límites de consultas/bindings del runtime sin volver a un POST por deuda.
+
+Una vez confirmados los receipts durables, se dispara **una sola reconciliación CANON en segundo plano** para actualizar toda la vista.
 
 ## Fallo parcial
 
-El backend actual define `payment.create` para un solo crédito, por lo que un cobro multi-crédito no es una transacción D1 única. Para preservar integridad:
+Para lotes de hasta 20 deudas, el primer intento es **atómico**: todos los `payment.create` hijos se confirman o ninguno se confirma.
 
-- el lote se detiene ante el primer rechazo o estado incierto;
-- una confirmación ya recibida nunca se vuelve a fabricar como un pago nuevo;
-- ante ACK perdido se permite un único `retryPending()` de la misma `operation_id`;
-- si ya hubo asignaciones confirmadas, la UI informa exactamente cuánto quedó aplicado y advierte que ese monto no debe repetirse;
-- si no se puede refrescar después de una asignación confirmada, no se continúa con la siguiente.
+- cada hijo conserva un `operation_id` estable;
+- un CAS dentro de D1 comprueba simultáneamente las revisiones y saldos de todos los créditos;
+- Efectivo comprueba además que la misma sesión CANON continúe abierta;
+- un fallo en cualquier sentencia aborta/rollback de toda la `db.batch()`;
+- ante ACK perdido se reenvía exactamente el mismo payload de lote y los mismos operation_id hijos;
+- un replay completo devuelve los receipts ya procesados sin duplicar pagos.
+
+Solo un lote excepcional de más de 20 deudas requiere varios chunks. Entre chunks sigue aplicando la regla de detenerse ante el primer rechazo o resultado incierto; los chunks ya confirmados no se repiten.
 
 ## Referencias digitales
 
@@ -43,7 +48,7 @@ Una sola transferencia/Yape puede cubrir varias deudas. El número de operación
 ## Fuera de alcance
 
 - cambios de schema D1;
-- nuevo comando `payment.batch`;
+- nuevo tipo de ledger D1 `payment.batch` (el endpoint HTTP de transporte sí existe, pero persiste únicamente hijos `payment.create`);
 - cambios de FIFO, Caja o evaluación crediticia;
 - escritura directa en `creditos[]` o `cajMovs[]`;
 - cambios en LAB;
@@ -73,10 +78,15 @@ Antes del fast path, un lote de varias deudas ejecutaba el patrón
 `payment.create -> refresh completo -> payment.create -> refresh completo`.
 El refresh completo consulta múltiples rutas CANON y dominaba la latencia.
 
-Ahora el lote mantiene exactamente las mismas escrituras `payment.create` y
-sus operation_id individuales, pero elimina los refresh intermedios. Un lote de
-4 deudas realiza 4 escrituras confirmadas y una sola reconciliación posterior,
-en vez de 4 escrituras + 4 reconciliaciones completas.
+La primera optimización eliminó los refresh intermedios, pero todavía quedaba un
+round-trip HTTP por deuda. En una prueba Android real con **14 deudas / S/ 88.60**
+ese patrón todavía mantuvo `Procesando...` alrededor de 30 segundos.
+
+El fast path actual elimina también esa serialización de red: hasta 20 deudas viajan
+en **un solo POST** y D1 las ejecuta en una transacción `db.batch()`. Se conservan
+las mismas escrituras `payment.create`, operation_id y receipts individuales, pero
+sin pagar N veces la latencia navegador → Worker → D1 → navegador.
 
 No se muestra éxito antes de recibir los receipts durables del Worker. La mejora
-proviene de quitar lecturas redundantes, no de simular un pago optimista.
+proviene de **eliminar trabajo y viajes de red redundantes**, no de ocultar el
+indicador ni de simular un pago optimista.

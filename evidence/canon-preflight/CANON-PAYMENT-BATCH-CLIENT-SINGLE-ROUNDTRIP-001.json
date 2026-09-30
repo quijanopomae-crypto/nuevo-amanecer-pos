@@ -1,0 +1,74 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-PAYMENT-BATCH-CLIENT-SINGLE-ROUNDTRIP-001",
+  "base_ref": "2e443fbe9b0241f7ed06bddd20d68de0885f05ed",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "Prueba Android real: 14 deudas seleccionadas por S/ 88.60 permanecieron aproximadamente 30 segundos en Procesando.",
+    "El cliente actual elimina refresh completos intermedios pero todavía itera y espera un POST payment.create por deuda.",
+    "El backend /commands/payment.batch ya fue integrado en PR #243 y desplegado a producción por PR #244 con workflow PASS.",
+    "El backend persiste solo hijos payment.create y confirma hasta 20 en una db.batch atómica."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Reducir el camino móvil de 14 POST financieros secuenciales a un status GET + un POST batch + reconciliación background.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+      "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+      "backend payment.batch desplegado en producción"
+    ],
+    "WRITES": [
+      "Reescribir createPaymentBatch para construir los child payment.create desde la misma réplica y enviarlos en chunks máximos de 20.",
+      "Añadir validación local de payload/receipt batch sin introducir un nuevo ledger financiero.",
+      "Mantener un journal PENDING/CONFIRMED por chunk y replay del mismo payload ante ACK incierto.",
+      "Añadir regresión que impida volver al POST por deuda."
+    ],
+    "DOM_AFFECTED": [
+      "Ningún DOM nuevo; el botón existente Procesando permanece menos tiempo porque hay menos round-trips."
+    ],
+    "STATE_AFFECTED": [
+      "Journal CANON existente pasa temporalmente a command payment.batch para el transporte del chunk.",
+      "Receipts hijos continúan siendo payment.create."
+    ],
+    "STORAGE_AFFECTED": [
+      "localStorage journal existente, sin nuevas claves.",
+      "No schema ni D1 desde este PR frontend."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Un operation_id por deuda.",
+      "No éxito visible sin receipt durable.",
+      "Pago individual intacto.",
+      "Efectivo y referencias digitales conservan reglas actuales.",
+      "Un crédito no puede repetirse dentro del mismo batch."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes/Créditos consume createPaymentBatch pero no cambia.",
+      "canonical-client cambia transporte.",
+      "Worker producción ya entiende payment.batch.",
+      "Caja y saldos siguen derivados de PAYMENT children.",
+      "UI adapter se reconcilia una sola vez después."
+    ],
+    "ROOT_CAUSE": "Serialización de red residual: N selected debts todavía equivalen a N POST secuenciales pese a haber eliminado N refresh completos.",
+    "RISKS": [
+      "Frontend publicado antes del backend produciría 404; backend ya está desplegado.",
+      "Un batch de demasiadas deudas puede exceder límites de bindings; se limita a 20 por chunk.",
+      "Omitir status GET violaría una invariante del repo; el batch usa sendPending(..., false)."
+    ],
+    "ROLLBACK": [
+      "Revertir PR frontend y Hosted POS; backend endpoint permanece compatible y sin efecto si no se usa."
+    ],
+    "TEST_PLAN": [
+      "Static guard: createPaymentBatch usa /commands/payment.batch y no /commands/payment.create dentro de su bloque.",
+      "Hasta 20 deudas: un chunk y un sendPending.",
+      "ACK perdido: replay exacto del mismo batch.",
+      "Individual payment.create sin cambios.",
+      "CANON Critical CI, E2E Smoke y hosted deploy."
+    ]
+  }
+}
