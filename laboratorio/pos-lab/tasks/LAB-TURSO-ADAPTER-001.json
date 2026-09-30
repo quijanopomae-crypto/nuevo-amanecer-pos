@@ -1,0 +1,39 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-ADAPTER-001",
+  "environment": "LABORATORIO",
+  "base_ref": "4563dc94b1e2af615d47763eebc18c17dd5d479e",
+  "objective": "Prototipar en infraestructura LAB un adaptador Turso/libSQL compatible con el contrato D1 usado por el Worker, sin tocar CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-ADAPTER-001.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-ADAPTER-001.json",
+    "tools/cloudflare-lab/package.json",
+    "tools/cloudflare-lab/package-lock.json",
+    "tools/cloudflare-lab/.dev.vars.example",
+    "tools/cloudflare-lab/README.md",
+    "tools/cloudflare-lab/wrangler.turso.jsonc",
+    "tools/cloudflare-lab/src/database-binding.js",
+    "tools/cloudflare-lab/src/turso-d1-adapter.js",
+    "tools/cloudflare-lab/test/turso-d1-adapter.test.mjs",
+    ".github/workflows/lab-cloud-ci.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "ops/**",
+    "infra/database/migrations/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-ADAPTER-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
