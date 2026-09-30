@@ -1,0 +1,222 @@
+name: V1.3 Turso Production Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type PREPARE_TURSO_PRODUCTION_CANDIDATE"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v1-3-turso-production-candidate
+  cancel-in-progress: false
+
+jobs:
+  prepare-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+      CANDIDATE_WORKER_URL: https://nuevo-amanecer-pos-prod-turso-candidate.nuevo-amanecer-pos.workers.dev
+      TURSO_PROD_DATABASE_URL: \${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: \${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+      TURSO_LAB_DATABASE_URL: \${{ secrets.TURSO_DATABASE_URL }}
+      POS_ACTIVATION_SECRET: \${{ secrets.POS_ACTIVATION_SECRET }}
+
+    steps:
+      - name: Require explicit candidate confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "\${{ inputs.confirm }}" = "PREPARE_TURSO_PRODUCTION_CANDIDATE"
+
+      - name: Checkout exact active branch head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Require active branch and isolated credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test -n "$TURSO_PROD_AUTH_TOKEN"
+          test -n "$POS_ACTIVATION_SECRET"
+          test "$TURSO_PROD_DATABASE_URL" != "$TURSO_LAB_DATABASE_URL"
+          case "$TURSO_PROD_DATABASE_URL" in
+            libsql://*|https://*) ;;
+            *) echo "Production Turso URL must use libsql:// or https://" >&2; exit 1 ;;
+          esac
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+          echo "TURSO_PROD_ISOLATION=PASS"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Install Worker dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate candidate tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/cloudflare-prod/scripts/turso-seed-from-sqlite.py
+          node --test tests/cloud-sync/turso-production-candidate.test.mjs
+          cd tools/cloudflare-lab
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-candidate.jsonc >/tmp/turso-candidate-dry-run.txt
+          grep -Fq "nuevo-amanecer-pos-prod-turso-candidate" ../cloudflare-prod/wrangler.turso-candidate.jsonc
+          echo "TURSO_PROD_CANDIDATE_STATIC=PASS"
+
+      - name: Export fresh production D1 backup read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/cloudflare-prod/scripts/cutover-prepare.mjs export
+          test -s /tmp/v1.3-pre-cutover.sql
+          test -s /tmp/v1.3-pre-cutover.sha256
+          echo "TURSO_PROD_CANDIDATE_D1_EXPORT=PASS"
+
+      - name: Restore export into isolated local SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f /tmp/turso-prod-candidate.db /tmp/turso-prod-candidate.db-wal /tmp/turso-prod-candidate.db-shm
+          sqlite3 /tmp/turso-prod-candidate.db < /tmp/v1.3-pre-cutover.sql
+          QUICK="$(sqlite3 /tmp/turso-prod-candidate.db 'PRAGMA quick_check;')"
+          test "$QUICK" = "ok"
+          test -z "$(sqlite3 /tmp/turso-prod-candidate.db 'PRAGMA foreign_key_check;')"
+          sqlite3 /tmp/turso-prod-candidate.db 'PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null
+          echo "TURSO_PROD_CANDIDATE_LOCAL_RESTORE=PASS"
+
+      - name: Seed isolated Turso production candidate and prove parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/cloudflare-prod/scripts/turso-seed-from-sqlite.py \
+            --sqlite /tmp/turso-prod-candidate.db \
+            --url "$TURSO_PROD_DATABASE_URL" \
+            --token "$TURSO_PROD_AUTH_TOKEN"
+
+      - name: Deploy isolated Turso production candidate Worker
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-candidate.jsonc
+          node <<'NODE'
+          const fs = require('node:fs');
+          fs.writeFileSync('/tmp/turso-prod-candidate-secrets.json', JSON.stringify({
+            TURSO_DATABASE_URL: process.env.TURSO_PROD_DATABASE_URL,
+            TURSO_AUTH_TOKEN: process.env.TURSO_PROD_AUTH_TOKEN,
+            POS_ACTIVATION_SECRET: process.env.POS_ACTIVATION_SECRET
+          }));
+          NODE
+          npx wrangler secret bulk /tmp/turso-prod-candidate-secrets.json --config ../cloudflare-prod/wrangler.turso-candidate.jsonc
+          rm -f /tmp/turso-prod-candidate-secrets.json
+          echo "TURSO_PROD_CANDIDATE_WORKER_DEPLOY=PASS"
+
+      - name: Probe candidate production boundary and canonical read
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+
+          const worker = process.env.CANDIDATE_WORKER_URL.replace(/\/+$/, '');
+          const activationSecret = process.env.POS_ACTIVATION_SECRET;
+          const db = new TursoD1Adapter({
+            url: process.env.TURSO_PROD_DATABASE_URL,
+            authToken: process.env.TURSO_PROD_AUTH_TOKEN
+          });
+
+          let sessionId = '';
+          let sessionToken = '';
+
+          async function waitHealth() {
+            let last = null;
+            for (let i = 1; i <= 20; i += 1) {
+              try {
+                const response = await fetch(worker + '/health', {headers:{'cache-control':'no-cache'}});
+                const body = await response.json().catch(() => null);
+                last = {http:response.status,ok:body?.ok,environment:body?.environment,service:body?.service};
+                if (response.ok && body?.ok === true && body?.environment === 'production' &&
+                    body?.service === 'nuevo-amanecer-pos-prod') return;
+              } catch {}
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+            throw new Error('candidate health failed: ' + JSON.stringify(last));
+          }
+
+          try {
+            await waitHealth();
+            console.log('TURSO_PROD_CANDIDATE_HEALTH=PASS');
+
+            const labRoute = await fetch(worker + '/lab/workspace/status');
+            if (labRoute.status !== 404) throw new Error('candidate exposes LAB workspace route');
+            console.log('TURSO_PROD_CANDIDATE_PRODUCTION_BOUNDARY=PASS');
+
+            const activation = await fetch(worker + '/auth/activate', {
+              method:'POST',
+              headers:{'x-activation-secret':activationSecret}
+            });
+            const activationBody = await activation.json().catch(() => null);
+            if (!activation.ok || activationBody?.status !== 'activated' ||
+                typeof activationBody?.session_token !== 'string' || !activationBody.session_token) {
+              throw new Error('candidate activation failed http=' + activation.status);
+            }
+            sessionToken = activationBody.session_token;
+
+            const session = await fetch(worker + '/auth/session', {
+              headers:{authorization:'Bearer ' + sessionToken}
+            });
+            const sessionBody = await session.json().catch(() => null);
+            if (!session.ok || sessionBody?.status !== 'ok' || typeof sessionBody?.session_id !== 'string') {
+              throw new Error('candidate session failed http=' + session.status);
+            }
+            sessionId = sessionBody.session_id;
+
+            const status = await fetch(worker + '/read/canonical/status', {
+              headers:{authorization:'Bearer ' + sessionToken}
+            });
+            const statusBody = await status.json().catch(() => null);
+            if (!status.ok) throw new Error('candidate canonical status failed http=' + status.status);
+            const mode = statusBody?.status?.mode ?? statusBody?.mode ?? statusBody?.control?.mode;
+            if (mode !== 'ACTIVE') throw new Error('candidate canonical mode is not ACTIVE: ' + String(mode));
+            console.log('TURSO_PROD_CANDIDATE_CANONICAL_READ=PASS');
+          } finally {
+            if (sessionId) {
+              const principal = 'session:' + sessionId;
+              await db.batch([
+                db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId),
+                db.prepare('DELETE FROM devices WHERE device_id=?1').bind(principal)
+              ]);
+            }
+          }
+
+          console.log('TURSO_PROD_CANDIDATE=PASS');
+          NODE
+
+      - name: Confirm active production targets were not changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '"name": "nuevo-amanecer-pos-prod"' tools/cloudflare-prod/wrangler.jsonc
+          grep -Fq '"database_name": "nuevo-amanecer-prod-v2"' tools/cloudflare-prod/wrangler.jsonc
+          grep -Fq 'nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev' tools/cloudflare-pos-web/wrangler.jsonc
+          echo "ACTIVE_PRODUCTION_UNCHANGED=PASS"
