@@ -80,3 +80,11 @@ test('candidate parity keeps strict digest and permits only sub-ULP float-to-flo
   assert.match(seeder, /rel_tol=2e-16/);
   assert.match(seeder, /abs_tol=0\.0/);
 });
+
+
+test('candidate activation waits for secret propagation and retries only transient server states', () => {
+  assert.match(workflow, /sleep 8/);
+  assert.match(workflow, /attempt <= 12/);
+  assert.match(workflow, /activation\.status === 500 \|\| activation\.status === 503/);
+  assert.match(workflow, /TURSO_PROD_CANDIDATE_ACTIVATION=PASS/);
+});
