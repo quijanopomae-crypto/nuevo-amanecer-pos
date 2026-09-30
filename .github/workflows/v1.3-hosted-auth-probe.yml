@@ -23,7 +23,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
       PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
-      PROD_WORKER_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
+      HOSTED_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
 
     steps:
       - name: Require probe credentials
@@ -44,9 +44,88 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Probe hosted activation session and canonical reads
+      - name: Probe exact hosted auth stages
         shell: bash
         run: |
           set -euo pipefail
-          node tools/cloudflare-prod/scripts/cutover-prepare.mjs probe-worker
-          echo "HOSTED_AUTH_E2E_PASS"
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const base = process.env.HOSTED_URL;
+          const secret = process.env.POS_ACTIVATION_SECRET;
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const db = process.env.PROD_DATABASE_ID;
+          let sessionToken = '';
+          let tokenHash = '';
+
+          async function cfQuery(sql, params=[]) {
+            const r = await fetch('https://api.cloudflare.com/client/v4/accounts/'+account+'/d1/database/'+db+'/query', {
+              method:'POST',
+              headers:{authorization:'Bearer '+token,'content-type':'application/json'},
+              body:JSON.stringify({sql,params})
+            });
+            const x=await r.json().catch(()=>null);
+            if(!r.ok || x?.success!==true) throw new Error('cleanup_query_failed_'+r.status);
+            const result=Array.isArray(x.result)?x.result[0]:x.result;
+            return result?.results||[];
+          }
+
+          async function cleanup() {
+            if(!tokenHash) return;
+            try {
+              const rows=await cfQuery('SELECT session_id FROM auth_sessions WHERE token_hash=?1',[tokenHash]);
+              for(const row of rows){
+                const id=String(row.session_id||'');
+                if(!id) continue;
+                await cfQuery('DELETE FROM auth_sessions WHERE session_id=?1',[id]);
+                await cfQuery('DELETE FROM devices WHERE device_id=?1',['session:'+id]);
+              }
+              console.log('cleanup=PASS sessions='+rows.length);
+            } catch(e) {
+              console.log('cleanup=FAIL error='+String(e.message||e));
+            }
+          }
+
+          function safeBody(body){
+            if(!body || typeof body!=='object') return {};
+            const out={};
+            for(const k of ['error','status','session_id','authority','mode','promotion_id','authority_epoch','revision','financial_revision']) {
+              if(body[k]!==undefined) out[k]=body[k];
+            }
+            return out;
+          }
+
+          (async()=>{
+            try {
+              const a=await fetch(base+'/auth/activate',{method:'POST',headers:{'x-activation-secret':secret}});
+              const ab=await a.json().catch(()=>({}));
+              console.log('stage=activate http='+a.status+' body='+JSON.stringify(safeBody(ab)));
+              if(!a.ok || typeof ab.session_token!=='string' || !ab.session_token) process.exitCode=11;
+              else {
+                sessionToken=ab.session_token;
+                tokenHash=createHash('sha256').update(sessionToken).digest('hex');
+
+                const s=await fetch(base+'/auth/session',{headers:{authorization:'Bearer '+sessionToken}});
+                const sb=await s.json().catch(()=>({}));
+                console.log('stage=session http='+s.status+' body='+JSON.stringify(safeBody(sb)));
+                if(!s.ok) process.exitCode=12;
+                else {
+                  const c=await fetch(base+'/read/canonical/status',{headers:{authorization:'Bearer '+sessionToken}});
+                  const cb=await c.json().catch(()=>({}));
+                  console.log('stage=canonical-status http='+c.status+' body='+JSON.stringify(safeBody(cb)));
+                  if(!c.ok) process.exitCode=13;
+                  else {
+                    for(const path of ['/read/canonical/products?limit=1','/read/canonical/customers?limit=1']){
+                      const rr=await fetch(base+path,{headers:{authorization:'Bearer '+sessionToken}});
+                      const rb=await rr.json().catch(()=>({}));
+                      console.log('stage='+path+' http='+rr.status+' error='+(rb?.error||'none'));
+                      if(!rr.ok) process.exitCode=14;
+                    }
+                  }
+                }
+              }
+            } finally {
+              await cleanup();
+            }
+          })().catch(async e=>{console.log('probe_exception='+String(e.message||e)); await cleanup(); process.exitCode=20;});
+          NODE
