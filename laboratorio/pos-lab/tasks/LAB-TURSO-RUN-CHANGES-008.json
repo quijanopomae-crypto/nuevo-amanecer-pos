@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-RUN-CHANGES-008",
+  "environment": "LABORATORIO",
+  "base_ref": "97e4db090a672d14b2a196df91e206360281b94e",
+  "objective": "Alinear meta.changes del adaptador Turso: run() debe usar affected_row_count directo mientras batch() conserva rows_written para semántica de triggers, y reejecutar E2E.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-RUN-CHANGES-008.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-RUN-CHANGES-008.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json",
+    "tools/cloudflare-lab/src/turso-d1-adapter.js",
+    "tools/cloudflare-lab/test/turso-d1-adapter.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-RUN-CHANGES-008.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
