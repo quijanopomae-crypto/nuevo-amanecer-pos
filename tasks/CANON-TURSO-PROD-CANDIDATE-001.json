@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-PROD-CANDIDATE-001",
+  "environment": "CANON",
+  "base_ref": "79ebb5686d753521949585ae2f18b2af793ac49b",
+  "objective": "Preparar un candidato Turso de producción completamente aislado del CANON activo: copiar un backup fresco D1 a una base Turso separada, verificar paridad e integridad, desplegar un Worker candidato separado y no realizar cutover ni enrutar tráfico real.",
+  "owner_authorization": "El propietario indicó explícitamente 'Aslo' para continuar con el paso CANON -> Turso después de aprobar LAB Turso E2E.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-PROD-CANDIDATE-001.json",
+    "evidence/canon-preflight/CANON-TURSO-PROD-CANDIDATE-001.json",
+    "tools/cloudflare-prod/wrangler.turso-candidate.jsonc",
+    "tools/cloudflare-prod/scripts/turso-seed-from-sqlite.py",
+    ".github/workflows/v1.3-turso-prod-candidate.yml",
+    "tests/cloud-sync/turso-production-candidate.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "ops/v1.3-production-cutover-trigger.json",
+    "ops/v1.3-first-live-sale-trigger.json"
+  ],
+  "invariants": [
+    "El Worker CANON activo nuevo-amanecer-pos-prod no se modifica ni se redeploya.",
+    "La base D1 de producción es solo lectura durante la preparación del candidato.",
+    "La base Turso de producción candidata debe ser distinta de la base Turso LAB y estar vacía antes de importar.",
+    "No se enruta el frontend productivo al Worker candidato.",
+    "No se ejecuta ninguna venta real ni primer-live-sale en este task.",
+    "El importador falla cerrado si Turso no está vacío, si falta una tabla, si difieren conteos, si quick_check no es ok o si existen violaciones FK.",
+    "Los secretos TURSO_PROD_DATABASE_URL y TURSO_PROD_AUTH_TOKEN nunca se versionan ni se muestran en logs.",
+    "V1.2 sigue siendo rollback oficial y D1 producción continúa como autoridad activa hasta un cutover separado."
+  ],
+  "rollback": "Revertir el PR elimina únicamente scaffolding inactivo. Si una ejecución futura del workflow falla, descartar/recrear solo la base Turso candidata y el Worker candidato; D1/CANON activo permanecen intactos."
+}
