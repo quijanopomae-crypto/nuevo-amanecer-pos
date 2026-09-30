@@ -50,3 +50,16 @@ Una sola transferencia/Yape puede cubrir varias deudas. El número de operación
 ## Rollback
 
 Revertir el PR de esta tarea. No requiere reversión de migraciones ni de schema. Los pagos que ya hayan sido confirmados en producción son operaciones financieras reales y no deben borrarse; una corrección posterior debe usar los mecanismos de compensación existentes.
+
+
+## Corrección de selección CANON
+
+En la interacción de selección, **Seleccionar todo** completa automáticamente el
+monto con la suma pendiente de las deudas seleccionadas. Mientras el monto siga
+en modo automático, marcar o desmarcar deudas mantiene ese total sincronizado.
+Si el cajero edita el monto manualmente, la selección posterior no lo
+sobrescribe; **Aplicar automáticamente** conserva el monto escrito y decide qué
+deudas necesita seleccionar.
+
+El campo **Número de operación** permanece oculto con **Efectivo** y solo se
+muestra para Yape/Plin o transferencia.

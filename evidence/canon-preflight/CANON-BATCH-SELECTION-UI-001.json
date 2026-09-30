@@ -1,0 +1,68 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-BATCH-SELECTION-UI-001",
+  "base_ref": "7894a445fa4c4b4cfaa25a325cc7714177dc52e0",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura real muestra 14 deudas seleccionadas por S/ 88.60, pero el campo de monto permanece en 0.00 y el botón Registrar pago sigue deshabilitado.",
+    "La captura también muestra Número de operación aun cuando Método de pago es Efectivo.",
+    "El HTML ya marca el contenedor de referencia con hidden para Efectivo, pero una regla CSS de autor aplica display:flex a todos los label del método y vence el display:none del atributo hidden.",
+    "El selector múltiple actual cambia checkboxes y recalcula el preview, pero no sincroniza el monto con la suma seleccionada cuando la selección es automática/total."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Corregir los dos defectos visibles sin modificar autoridad financiera ni backend.",
+    "READS": [
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/css/client-credit-accounts-v2.css",
+      "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+      "docs/CANON_BATCH_CREDIT_PAYMENTS.md"
+    ],
+    "WRITES": [
+      "Regla CSS explícita para que [hidden] gane sobre display:flex.",
+      "Estado visual auto/manual del monto dentro del DOM del panel de cobro múltiple.",
+      "Seleccionar todo completa el monto exacto pendiente; quitar selección limpia el monto si era automático.",
+      "Selección individual sincroniza el total mientras el monto siga en modo automático.",
+      "Entrada manual del operador cambia el monto a modo manual.",
+      "Aplicar automáticamente conserva el monto manual y solo selecciona deudas suficientes."
+    ],
+    "DOM_AFFECTED": [
+      "#naV2BatchAmount",
+      "#naV2BatchReferenceWrap",
+      ".na-v2-batch-check",
+      "#naV2BatchToggleAllBtn",
+      "#naV2BatchSubmit"
+    ],
+    "STATE_AFFECTED": [
+      "Solo dataset visual naBatchAmountMode=auto|manual en el input del monto"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "payment.create sigue siendo la única escritura financiera",
+      "No mutación directa de creditos[] o cajMovs[]",
+      "No cambio de saldo durante selección/preview",
+      "Referencia digital solo para métodos no efectivo"
+    ],
+    "ROOT_CAUSE": [
+      "CSS: #pageClientes .na-v2-batch-method-row label { display:flex } sobreescribe el user-agent [hidden] { display:none }.",
+      "UX/JS: naCanonBatchToggleAll y el onchange de checkbox solo cambian selección; nunca escriben el total seleccionado en #naV2BatchAmount."
+    ],
+    "RISKS": [
+      "Sobrescribir un monto que el cajero escribió manualmente; se evita separando modo auto/manual.",
+      "Cambiar selección después de ingresar un abono parcial; en modo manual el monto se conserva.",
+      "Hacer que Quitar selección deje un monto huérfano; si el monto era automático se limpia."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no hay migraciones ni datos financieros afectados."
+    ],
+    "TEST_PLAN": [
+      "CSS garantiza hidden efectivo",
+      "Select all auto-completa el monto seleccionado",
+      "Selección individual auto-sincroniza mientras no exista edición manual",
+      "Edición manual no se sobrescribe por selección posterior",
+      "Aplicar automáticamente preserva el monto ingresado",
+      "CANON Critical CI y E2E Smoke CI"
+    ]
+  }
+}

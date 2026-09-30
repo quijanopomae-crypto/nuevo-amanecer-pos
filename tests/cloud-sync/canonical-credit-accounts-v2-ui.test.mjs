@@ -154,6 +154,17 @@ test('batch payment allocation uses the selected debts oldest-first without muta
   assert.equal(JSON.stringify(credits),before,'allocation preview must not mutate balances');
 });
 
+test('batch selection total helper sums only selected outstanding amounts',()=>{
+  const ctx=context(),api=ctx.NA_CLIENT_CREDIT_ACCOUNTS_V2;
+  const rows=[
+    credit('a','stable',25.50,10.70),
+    credit('b','stable',8,0),
+    credit('c','stable',16.50,0)
+  ];
+  assert.equal(api.batchSelectedTotalCents(rows),3930);
+  assert.equal(api.batchSelectedTotalCents([]),0);
+});
+
 test('category view exposes select-all, automatic allocation and one final batch payment action',()=>{
   const category=source.slice(source.indexOf('function labCategoryHtml'),source.indexOf('function labCleanInstallmentProductName'));
   assert.match(source,/Cobro múltiple/);
@@ -162,12 +173,19 @@ test('category view exposes select-all, automatic allocation and one final batch
   assert.match(source,/Aplicar automáticamente/);
   assert.match(source,/naCanonBatchToggleAll/);
   assert.match(source,/naCanonBatchAutoSelect/);
+  assert.match(source,/naCanonBatchSelectionChanged/);
+  assert.match(source,/naCanonBatchAmountChanged/);
+  assert.match(source,/labBatchSetAutoAmountFromSelection/);
+  assert.match(source,/dataset\.naBatchAmountMode = 'manual'/);
   assert.match(source,/naCanonSubmitBatchPayment/);
   assert.match(source,/confirmBatch\(/);
   assert.match(category,/labBatchPanelHtml\(summary\)/);
   assert.match(category,/labBatchRow\(cr, row\)/);
+  assert.match(source,/onchange="naCanonBatchSelectionChanged\(\)"/);
+  assert.match(source,/oninput="naCanonBatchAmountChanged\(\)"/);
   assert.match(css,/CANON BATCH CREDIT PAYMENTS 001/);
   assert.match(css,/\.na-v2-batch-check:checked\+\.na-v2-batch-check-ui/);
+  assert.match(css,/#pageClientes \.na-v2-batch-method-row \[hidden\]\{\s*display:none!important;/);
   assert.match(css,/@media\(max-width:430px\)[\s\S]*\.na-v2-batch-method-row\{grid-template-columns:1fr\}/);
 });
 
