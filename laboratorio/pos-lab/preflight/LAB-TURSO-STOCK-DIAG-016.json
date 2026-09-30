@@ -1,0 +1,52 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-STOCK-DIAG-016",
+  "base_ref": "848122081c0702bacd19e9eb0d9bff5a68ba43de",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md", "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-feature-edit": {"path": ".agents/skills/lab-feature-edit/SKILL.md", "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"}
+  },
+  "analysis": {
+    "READS": [
+      "La venta V-001 reapareció una sola vez tras recarga y Caja muestra un único ingreso S/1.00.",
+      "La pantalla de Inventario mostró CUATES X 44 GR con stock 172, igual que antes de la venta.",
+      "El flujo legacy confirmarVenta aplica applyInventoryMovement antes del saveAllData cuando _naTracksStock(product) es true.",
+      "Turso LAB guarda snapshots completos por revisión en lab_workspace_revisions."
+    ],
+    "WRITES": [
+      "Añadir un workflow diagnóstico aislado que ejecuta solo SELECT contra Turso LAB y publica en logs únicamente revisión, nombre/id de producto, stock, presencia de V-001, movimiento de caja V-001 y ledger de inventario V-001."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ninguno: diagnóstico read-only."
+    ],
+    "STORAGE_AFFECTED": [
+      "Turso LAB se consulta mediante SELECT; no se ejecutan INSERT, UPDATE, DELETE, DDL ni transacciones de escritura."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Stock es HIGH/CRITICAL y no se corrige a ciegas.",
+      "No modificar CANON ni producción.",
+      "No exponer TURSO_AUTH_TOKEN ni TURSO_DATABASE_URL.",
+      "No cambiar inventario durante el diagnóstico."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Se contrastan venta, caja e inventario porque deben permanecer atómicamente coherentes dentro del mismo snapshot LAB."
+    ],
+    "RISKS": [
+      "Un diagnóstico incompleto podría confundir un fallo de render con un fallo persistido; se inspeccionan todas las revisiones para separarlos."
+    ],
+    "ROLLBACK": [
+      "La rama diagnóstica no se fusiona; no altera el branch activo ni datos remotos."
+    ],
+    "TESTS": [
+      "Workflow read-only debe completar sin escrituras y mostrar la evolución de V-001/CUATES por revisión."
+    ]
+  }
+}
