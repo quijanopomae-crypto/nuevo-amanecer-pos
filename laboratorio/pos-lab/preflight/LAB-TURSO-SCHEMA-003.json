@@ -1,0 +1,70 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-SCHEMA-003",
+  "base_ref": "423b16507d9cf410a743bf3a05fa07d5de67d328",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Todos los SQL versionados en infra/database/migrations/** en orden ascendente",
+      "sqlite_schema de Turso antes y después del bootstrap"
+    ],
+    "WRITES": [
+      "Solo creación del esquema LAB en la base Turso actualmente vacía",
+      "Workflow y trigger LAB para bootstrap reproducible"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "La base Turso LAB pasa de vacía a contener el esquema de Nuevo Amanecer; no contiene datos comerciales reales"
+    ],
+    "STORAGE_AFFECTED": [
+      "Se crean tablas, índices, triggers y filas de control definidas por las migraciones en Turso LAB"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Las migraciones se aplican sin modificarlas",
+      "El workflow falla si Turso no está vacío antes del primer bootstrap",
+      "Cada migración se ejecuta dentro de transacción y una falla no debe dejarla parcialmente confirmada",
+      "No se copian datos reales ni se toca D1/CANON"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "El esquema soporta sesiones, clientes, productos, créditos, ventas, inventario, caja y gastos; todavía no se habilita tráfico del POS"
+    ],
+    "RISKS": [
+      "Alguna construcción SQLite usada por D1 puede no ser compatible con Turso",
+      "Una migración podría fallar por triggers, constraints o PRAGMA",
+      "Un bootstrap parcial debe detectarse y detener el avance"
+    ],
+    "ROLLBACK": [
+      "Al ser una base Turso LAB vacía, si el bootstrap falla se descarta/recrea la base antes de reintentar; CANON permanece intacto"
+    ],
+    "TESTS": [
+      "Verificar que la base esté vacía antes del bootstrap",
+      "Aplicar migraciones 0001-0018 por Hrana sequence con transacción",
+      "Verificar tablas críticas, cantidad de tablas/triggers/índices y rollback transaccional"
+    ]
+  }
+}
