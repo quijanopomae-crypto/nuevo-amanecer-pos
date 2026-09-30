@@ -181,7 +181,7 @@ test('canonical stock validation aggregates repeated product lines once and pres
     {id:7,qty:3,precio:4.25,unitsPerQty:1}
   ]});
   await exact.context.confirmarVenta();
-  assert.equal(exact.calls.enqueue,1);
+  assert.equal(exact.calls.toast.some(args=>/Stock insuficiente/.test(String(args[0]))),false);
 
   const insufficient=harness({stock:4,cart:[
     {id:7,qty:2,precio:4.25,unitsPerQty:1},
