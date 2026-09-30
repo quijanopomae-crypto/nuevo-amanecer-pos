@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-PAYMENT-ONE-SECOND-UI-001",
+  "environment": "CANON",
+  "base_ref": "5a0a57a6c8afe8f061d58060bd2276129de7283f",
+  "objective": "Eliminar esperas redundantes del cobro múltiple y mostrar Pagado inmediatamente después del receipt durable, apuntando a una respuesta percibida cercana a 1 segundo sin mostrar éxito optimista.",
+  "owner_authorization": "El owner midió aproximadamente 5 segundos en Android para una deuda de S/8.00 y pidió máximo ~1 segundo y que aparezca Pagado.",
+  "allowed_files": [
+    "tasks/CANON-PAYMENT-ONE-SECOND-UI-001.json",
+    "evidence/canon-preflight/CANON-PAYMENT-ONE-SECOND-UI-001.json",
+    "AGENTS_Nuevo_Amanecer.md",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/client-credit-accounts-v2.css",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "cash-integrity"
+  ],
+  "invariants": [
+    "Nunca mostrar Pagado antes de recibir un receipt durable del Worker.",
+    "Un lote de una sola deuda usa el payment.create fast path existente y no paga overhead de payment.batch.",
+    "Un lote nuevo de varias deudas puede omitir el status GET porque el Worker valida autoridad, revisión de crédito y caja atómicamente; cualquier retry conserva status remoto obligatorio.",
+    "Pago individual permanece sin cambios funcionales.",
+    "El estado Pagado inmediato es una proyección visual post-commit; la reconciliación CANON completa continúa en background.",
+    "Sin cambios de schema, FIFO, crédito, caja o persistencia legacy.",
+    "No se promete latencia de red absoluta; el código elimina esperas controlables por el POS."
+  ],
+  "rollback": "Revertir el PR y desplegar Hosted POS previo. El Worker optimizado sigue siendo compatible."
+}
