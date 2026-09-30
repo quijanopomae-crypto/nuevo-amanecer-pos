@@ -148,15 +148,19 @@
     return true;
   }
 
-  function activateCard(card, event) {
-    var pageId = pageForCard(card);
-    if (!pageId) return false;
-    stopEvent(event);
-
+  function navigate(pageId) {
+    if (!allowed[pageId]) return false;
     if (isMobile()) return mobileSafeNavigate(pageId);
     if (typeof root.goPage !== 'function') return false;
     root.goPage(pageId);
     return true;
+  }
+
+  function activateCard(card, event) {
+    var pageId = pageForCard(card);
+    if (!pageId) return false;
+    stopEvent(event);
+    return navigate(pageId);
   }
 
   function prepareCards(menu) {
@@ -239,6 +243,7 @@
 
   root.NA_MENU_NAVIGATION = Object.freeze({
     bind: bind,
+    navigate: navigate,
     mobileSafeNavigate: mobileSafeNavigate,
     pages: ALLOWED_PAGES.slice()
   });
