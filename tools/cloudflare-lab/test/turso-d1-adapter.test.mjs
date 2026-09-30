@@ -149,3 +149,30 @@ test('database binding remains D1 by default and selects Turso only explicitly',
     /TURSO_AUTH_TOKEN/
   );
 });
+
+
+test('fetch implementation is bound to globalThis for Cloudflare Worker compatibility', async () => {
+  let observedThis = null;
+  async function receiverSensitiveFetch() {
+    observedThis = this;
+    return jsonResponse({
+      results:[
+        {type:'ok',response:{type:'execute',result:{
+          cols:[{name:'ok'}],
+          rows:[[{type:'integer',value:'1'}]],
+          affected_row_count:0,rows_read:1,rows_written:0
+        }}},
+        {type:'ok',response:{type:'close'}}
+      ]
+    });
+  }
+
+  const db=new TursoD1Adapter({
+    url:'libsql://lab-example.turso.io',
+    authToken:'test-token',
+    fetchImpl:receiverSensitiveFetch
+  });
+  const row=await db.prepare('SELECT 1 AS ok').first();
+  assert.deepEqual(row,{ok:1});
+  assert.equal(observedThis,globalThis);
+});

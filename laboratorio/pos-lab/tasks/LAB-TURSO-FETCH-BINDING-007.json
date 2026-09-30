@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-FETCH-BINDING-007",
+  "environment": "LABORATORIO",
+  "base_ref": "bbf080b026af9ac3024c1c6737f943389b94e9fe",
+  "objective": "Corregir el TypeError runtime del adaptador Turso en Cloudflare Workers preservando el receiver de global fetch, y reejecutar el E2E del Worker aislado.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-FETCH-BINDING-007.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-FETCH-BINDING-007.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json",
+    "tools/cloudflare-lab/src/turso-d1-adapter.js",
+    "tools/cloudflare-lab/test/turso-d1-adapter.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-FETCH-BINDING-007.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

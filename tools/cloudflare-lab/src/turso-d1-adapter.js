@@ -134,7 +134,10 @@ export class TursoD1Adapter {
     this.baseUrl = normalizeBaseUrl(url);
     this.authToken = String(authToken || '').trim();
     if (!this.authToken) throw new Error('TURSO_AUTH_TOKEN is required when DB_PROVIDER=turso');
-    this.fetchImpl = fetchImpl;
+    // Cloudflare's Web fetch is receiver-sensitive. Calling a stored bare
+    // global fetch later as this.fetchImpl(...) changes `this` to the adapter
+    // instance and can throw "Illegal invocation" in workerd.
+    this.fetchImpl = fetchImpl.bind(globalThis);
   }
 
   prepare(sql) {
