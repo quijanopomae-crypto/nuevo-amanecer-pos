@@ -39,19 +39,7 @@ async function proxyCanonical(request, env) {
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
     }));
   }
-  const incoming = new URL(request.url);
-  const target = new URL(backend);
-  target.pathname = incoming.pathname;
-  target.search = incoming.search;
-  const headers = new Headers(request.headers);
-  headers.delete('host');
-  const proxied = new Request(target.toString(), {
-    method: request.method,
-    headers,
-    body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
-    redirect: 'manual',
-  });
-  return withNoStore(await service.fetch(proxied));
+  return withNoStore(await service.fetch(request));
 }
 
 function runtimeConfig(request, env) {
