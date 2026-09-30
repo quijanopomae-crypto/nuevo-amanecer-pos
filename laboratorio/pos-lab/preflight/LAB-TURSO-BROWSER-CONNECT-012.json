@@ -1,0 +1,80 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-BROWSER-CONNECT-012",
+  "base_ref": "be50db2e963c93d00c4466b3edbbc500e3f56f4e",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "POS-LAB usa laboratorio/pos-lab/js/lab-workspace.js como cliente de workspace remoto.",
+      "El endpoint por defecto actual todavía apunta a nuevo-amanecer-sync-lab, mientras el Worker Turso aislado validado es nuevo-amanecer-sync-lab-turso.",
+      "Worker E2E y Workspace E2E Turso ya pasaron sobre el backend aislado antes de conectar tráfico del navegador."
+    ],
+    "WRITES": [
+      "Cambiar únicamente el endpoint remoto por defecto del cliente POS-LAB al Worker Turso aislado.",
+      "Migrar de forma explícita solo credenciales locales cuyo endpoint sea exactamente el Worker D1 LAB heredado.",
+      "Al cambiar de backend, invalidar read/session tokens y pendientes de sincronización heredados para impedir replay cruzado entre D1 y Turso.",
+      "Añadir regresiones estáticas focalizadas en el test de boot del workspace."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "state.credentials usará Turso como destino por defecto después de la migración controlada.",
+      "state.pendingOperation no heredará operaciones capturadas contra el backend D1 anterior."
+    ],
+    "STORAGE_AFFECTED": [
+      "localStorage na_lab_workspace_auth_v2: solo se reescribe cuando el endpoint almacenado coincide exactamente con el Worker D1 LAB heredado.",
+      "localStorage na_lab_workspace_pending_v1 y sessionStorage na_lab_workspace_conflict_notice_v1: se limpian durante esa migración de backend.",
+      "Endpoints personalizados distintos del Worker heredado deben conservarse sin cambio."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "CANON y producción no reciben escrituras.",
+      "No se versionan ni exponen secretos.",
+      "La clave de activación sigue enviándose solo al Worker y no se guarda.",
+      "Un pending operation creado contra D1 no puede reproducirse automáticamente contra Turso.",
+      "La lógica de ventas, inventario, caja, clientes y créditos no cambia."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "El workspace remoto es persistencia compartida para ventas, inventario, caja, clientes, créditos y configuración; el cambio altera solo el transporte/backend, no los modelos de negocio.",
+      "La compatibilidad del contrato remoto ya fue validada por Turso LAB Workspace E2E y debe conservarse."
+    ],
+    "RISKS": [
+      "Una sesión emitida por el Worker D1 no existe en Turso; conservarla produciría 401, por eso debe invalidarse en la migración.",
+      "Un pendiente local de D1 podría contener una revisión incompatible con Turso; por eso debe eliminarse al cambiar de backend.",
+      "Si Turso no tiene baseline real todavía, el navegador podrá conectar pero el workspace remoto seguirá vacío hasta ejecutar el flujo de carga autorizado."
+    ],
+    "ROLLBACK": [
+      "Revertir el commit funcional restaura nuevo-amanecer-sync-lab como endpoint por defecto.",
+      "No hay migración destructiva de CANON ni producción que revertir."
+    ],
+    "TESTS": [
+      "node --test tests/laboratorio-workspace-boot.test.mjs",
+      "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-BROWSER-CONNECT-012.json --receipt=laboratorio/pos-lab/preflight/LAB-TURSO-BROWSER-CONNECT-012.json",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-BROWSER-CONNECT-012.json",
+      "node laboratorio/check.mjs"
+    ]
+  }
+}
