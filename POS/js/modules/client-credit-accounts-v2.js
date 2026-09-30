@@ -23,6 +23,7 @@
   var naClientViewEpoch = 0;
   var naClientMotionBound = false;
   var labBatchSubmitInFlight = false;
+  var labBatchAwaitingReconcile = false;
   var NA_CLIENT_INTERACTIVE_SELECTOR = 'button,input,textarea,select,option,a,label,[contenteditable="true"],[role="button"]';
 
   function labEsc(value) {
@@ -1055,6 +1056,90 @@
     labBatchUpdatePreview();
   };
 
+  function labBatchShowConfirmed(result, state) {
+    var screen = labScreen();
+    if (!screen || !result || !Array.isArray(result.completed) || !result.completed.length) return false;
+
+    var currentCredits = labBatchCurrentCredits();
+    var completedCents = 0;
+    var fullyPaid = 0;
+
+    result.completed.forEach(function (item) {
+      var creditId = String(item && item.credit_id || '');
+      var amountCents = Math.max(0, Number(item && item.amount_cents) || 0);
+      if (!creditId || !Number.isSafeInteger(amountCents) || amountCents <= 0) return;
+      completedCents += amountCents;
+
+      var credit = currentCredits.find(function (row) { return String(row && row.id) === creditId; });
+      var pendingCents = credit ? Math.max(0, Math.round(labCreditPending(credit) * 100)) : amountCents;
+      var paidInFull = amountCents >= pendingCents;
+      if (paidInFull) fullyPaid += 1;
+
+      var row = Array.from(screen.querySelectorAll('[data-na-batch-credit-id]')).find(function (candidate) {
+        return String(candidate.getAttribute('data-na-batch-credit-id') || '') === creditId;
+      });
+      if (!row) return;
+      row.classList.add('na-v2-batch-row-confirmed');
+      if (paidInFull) row.classList.add('na-v2-batch-row-paid');
+
+      var check = row.querySelector('.na-v2-batch-check');
+      if (check) { check.checked = true; check.disabled = true; }
+
+      var allocation = row.querySelector('[data-na-batch-allocation]');
+      if (allocation) allocation.textContent = paidInFull
+        ? '✓ Pagado ' + labMoney(amountCents / 100)
+        : '✓ Abono confirmado ' + labMoney(amountCents / 100);
+
+      var value = row.querySelector('.na-v2-row-value');
+      if (value) {
+        var status = value.querySelector('small');
+        if (!status) {
+          status = document.createElement('small');
+          value.appendChild(status);
+        }
+        status.textContent = paidInFull ? 'Pagado ✓' : 'Abono confirmado ✓';
+      }
+    });
+
+    if (!completedCents) return false;
+
+    var panel = screen.querySelector('.na-v2-batch-pay');
+    if (panel) panel.classList.add('na-v2-batch-confirmed');
+
+    var summary = screen.querySelector('#naV2BatchSummary');
+    if (summary) {
+      summary.textContent = fullyPaid === result.completed.length
+        ? '✓ Pagado: ' + labMoney(completedCents / 100) + ' · ' + fullyPaid + (fullyPaid === 1 ? ' deuda pagada.' : ' deudas pagadas.')
+        : '✓ Pago confirmado: ' + labMoney(completedCents / 100) + '.';
+    }
+
+    var submit = screen.querySelector('#naV2BatchSubmit');
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = fullyPaid === result.completed.length ? '✓ Pagado' : '✓ Pago confirmado';
+    }
+
+    var amount = screen.querySelector('#naV2BatchAmount');
+    if (amount) amount.disabled = true;
+    var toggle = screen.querySelector('#naV2BatchToggleAllBtn');
+    if (toggle) toggle.disabled = true;
+    var auto = screen.querySelector('.na-v2-batch-auto');
+    if (auto) auto.disabled = true;
+
+    var client = labClientById(labClientScreenState.clientId);
+    var category = client && labCategoriesForClient(client).find(function (entry) {
+      return String(entry.id) === String(labClientScreenState.categoryId);
+    });
+    if (client && category) {
+      var currentSummary = labCategorySummary(client, category);
+      var balance = screen.querySelector('.na-v2-category-balance strong');
+      if (balance) balance.textContent = labMoney(Math.max(0, currentSummary.pending - completedCents / 100));
+    }
+
+    labBatchAwaitingReconcile = true;
+    return true;
+  }
+
   root.naCanonSubmitBatchPayment = async function () {
     if (labBatchSubmitInFlight) return false;
     var state = labBatchUpdatePreview();
@@ -1069,13 +1154,19 @@
     }
     labBatchSubmitInFlight = true;
     labBatchUpdatePreview();
+    var confirmedVisual = false;
     try {
       var result = await bridge.confirmBatch({
         allocations:state.plan.allocations,
         payment_method:state.method,
         reference:state.reference
       });
-      if (result && (result.ok || result.completed_count > 0)) labRenderRoute('replace');
+      if (result && result.completed_count > 0) {
+        // Never render stale replica data after a durable receipt. Show a
+        // post-commit "Pagado" projection immediately, then let the background
+        // canonical reconciliation replace it with the authoritative snapshot.
+        confirmedVisual = labBatchShowConfirmed(result, state);
+      }
       return !!(result && result.ok);
     } catch (error) {
       console.warn('[Nuevo Amanecer] Cobro múltiple no completado.', error && error.message || error);
@@ -1083,7 +1174,7 @@
       return false;
     } finally {
       labBatchSubmitInFlight = false;
-      labBatchUpdatePreview();
+      if (!confirmedVisual) labBatchUpdatePreview();
     }
   };
 
@@ -1885,7 +1976,13 @@
     naEnhanceClientCards(); naSyncClientLoadingUi();
   }
 
-  root.addEventListener('na:canonical-updated',function(){setTimeout(function(){naBindRuntime();naEnhanceClientCards();naSyncClientLoadingUi();},0);});
+  root.addEventListener('na:canonical-updated',function(){setTimeout(function(){
+    naBindRuntime(); naEnhanceClientCards(); naSyncClientLoadingUi();
+    if (labBatchAwaitingReconcile && labClientScreenState && labClientScreenState.clientId) {
+      labBatchAwaitingReconcile = false;
+      labRenderRoute('replace');
+    }
+  },0);});
   root.addEventListener('load',naBindRuntime);
   root.addEventListener('pageshow',naBindRuntime);
   if (typeof MutationObserver === 'function') {
