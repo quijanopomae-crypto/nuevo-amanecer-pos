@@ -124,3 +124,28 @@ verificación remota obligatoria.
 El objetivo es que el POS no agregue espera innecesaria. La latencia absoluta de
 Internet móvil no puede garantizarse por código cliente; nunca se muestra **Pagado**
 antes de una confirmación durable.
+
+
+## Simplificación de latencia — camino único del panel Cobro múltiple
+
+La prueba Android posterior mostró aproximadamente **4 s** incluso con una sola
+deuda. La causa era que esa única deuda se desviaba al endpoint genérico
+`payment.create`, cuyo servidor ejecuta más comprobaciones D1 secuenciales que
+el endpoint especializado de lote.
+
+El panel **Cobro múltiple** ahora usa un solo camino para **1 a 20 deudas**:
+
+`POST /commands/payment.batch`
+
+Esto no cambia el ledger: una deuda sigue persistiendo como un único hijo
+`payment.create` con su propio `operation_id`, receipt, evento PAYMENT, método,
+referencia y efecto de caja.
+
+En el Worker, las prelecturas independientes de autoridad, replay, créditos y
+sesión de caja se envían mediante **una sola llamada `db.batch()` de lectura**,
+mientras los hashes se calculan localmente en paralelo. Después se mantiene una
+segunda `db.batch()` como frontera de escritura atómica con CAS.
+
+Así se elimina transporte y espera del backend sin eliminar información ni
+convertir el resultado en optimista. **Pagado** continúa apareciendo únicamente
+después del receipt durable.
