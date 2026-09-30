@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-DIRECT-CUTOVER-004",
+  "environment": "CANON",
+  "base_ref": "133fcfd22af28b2a8fad465d9feff271abced6e2",
+  "objective": "Migrar directamente el Worker CANON activo a la base Turso de producción ya validada, omitiendo los gates de lectura D1 que están bloqueados por cuota, porque el propietario confirmó que los datos actuales son solo de prueba y acepta perderlos.",
+  "owner_authorization": "El propietario indicó: 'No importa si lo perdemos ahun esos datos solo eran de prueba migra directamente a tursor' y luego 'Continua'.",
+  "accepted_data_risk": true,
+  "allowed_files": [
+    "tasks/CANON-TURSO-DIRECT-CUTOVER-004.json",
+    "evidence/canon-preflight/CANON-TURSO-DIRECT-CUTOVER-004.json",
+    ".github/workflows/v1.3-turso-prod-direct-cutover.yml",
+    "ops/v1.3-turso-prod-direct-trigger.json",
+    "tests/cloud-sync/turso-production-direct-cutover.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-prod/wrangler.turso-prod.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "infra/database/migrations/**",
+    "ops/v1.3-first-live-sale-trigger.json"
+  ],
+  "invariants": [
+    "No ejecutar una venta real.",
+    "No modificar ni borrar D1; solo dejar de usarlo como backend activo.",
+    "No reutilizar Turso LAB.",
+    "El Worker candidato Turso debe pasar health/auth/session/canonical reads inmediatamente antes del cambio.",
+    "El Turso de producción debe pasar quick_check, foreign_key_check y autoridad ACTIVE antes del cambio.",
+    "El mismo Worker público nuevo-amanecer-pos-prod debe conservar su URL.",
+    "Si falla el smoke del Worker activo tras el deploy, restaurar el config D1 anterior.",
+    "No exponer secretos ni tokens."
+  ],
+  "rollback": "Redeploy de tools/cloudflare-prod/wrangler.jsonc. D1 no se elimina y sigue disponible cuando su cuota permita lecturas."
+}
