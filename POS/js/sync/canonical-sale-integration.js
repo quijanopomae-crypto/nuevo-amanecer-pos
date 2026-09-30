@@ -93,11 +93,21 @@
       failClosed('Esta venta ya quedó guardada localmente y está pendiente de sincronización.', null); return;
     }
     if (typeof root._naSessionOpen === 'function' && !root._naSessionOpen()) { failClosed('La caja no está abierta', null); return; }
+    var productsById = new Map();
+    (Array.isArray(root.productos) ? root.productos : []).forEach(function (product) {
+      productsById.set(String(product.id), product);
+    });
+    var reservedByProduct = new Map();
+    cart.forEach(function (item) {
+      var key = String(item.id);
+      var units = root._naUnitsSold ? root._naUnitsSold(item) : Number(item.qty);
+      reservedByProduct.set(key, (reservedByProduct.get(key) || 0) + units);
+    });
     for (var i = 0; i < cart.length; i += 1) {
       var item = cart[i];
-      var product = (Array.isArray(root.productos) ? root.productos : []).find(function (candidate) { return String(candidate.id) === String(item.id); });
+      var product = productsById.get(String(item.id));
       if (product && (!root._naTracksStock || root._naTracksStock(product))) {
-        var reserved = cart.filter(function (candidate) { return String(candidate.id) === String(item.id); }).reduce(function (sum, candidate) { return sum + (root._naUnitsSold ? root._naUnitsSold(candidate) : Number(candidate.qty)); }, 0);
+        var reserved = reservedByProduct.get(String(item.id)) || 0;
         if (reserved > Number(product.stock)) { failClosed('Stock insuficiente para ' + (product.name || item.name || item.id) + ': quedan ' + product.stock + ' unidades', null); return; }
       }
     }
