@@ -37,7 +37,7 @@ test('page entry no longer forces synchronous layout via offsetWidth',()=>{
 
 test('parity bridge waits two animation frames before page motion or scroll measurement',()=>{
   assert.match(bridge,/raf\(function \(\) \{\s*raf\(callback\);\s*\}\);/);
-  assert.match(bridge,/motion\.page\.enter\(page, 'lab-enter-fade'\)/);
+  assert.match(bridge,/motion\.page\.enter\(page, 'na-enter-fade'\)/);
   assert.match(bridge,/motion\.scroll\.enablePreset\(preset\)/);
 });
 
