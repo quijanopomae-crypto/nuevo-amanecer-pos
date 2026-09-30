@@ -1,0 +1,293 @@
+name: V1.3 Turso Production Direct Cutover
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-turso-prod-direct-trigger.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-change
+  cancel-in-progress: false
+
+jobs:
+  cutover-direct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+      TURSO_LAB_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+      CANDIDATE_WORKER_URL: https://nuevo-amanecer-pos-prod-turso-candidate.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Require explicit direct-cutover authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const t=JSON.parse(fs.readFileSync('ops/v1.3-turso-prod-direct-trigger.json','utf8'));
+          if(t.action!=='DIRECT_CUTOVER_CANON_TO_TURSO') throw new Error('invalid action');
+          if(t.owner_authorized!==true) throw new Error('owner authorization missing');
+          if(t.accept_test_data_loss!==true) throw new Error('data-loss acceptance missing');
+          if(t.one_shot!==true) throw new Error('trigger must be one-shot');
+          if(t.no_live_sale!==true) throw new Error('live sale must remain disabled');
+          if(t.candidate_run_id!==36782779872) throw new Error('unexpected candidate run');
+          NODE
+
+      - name: Require exact branch and isolated secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+          test -n "$POS_ACTIVATION_SECRET"
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test -n "$TURSO_PROD_AUTH_TOKEN"
+          test "$TURSO_PROD_DATABASE_URL" != "$TURSO_LAB_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+          echo "TURSO_DIRECT_CUTOVER_SECRETS=PASS"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate direct-cutover contracts and configs
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/turso-production-direct-cutover.test.mjs tests/cloud-sync/turso-production-candidate.test.mjs
+          cd tools/cloudflare-lab
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc >/tmp/turso-prod-direct-dry-run.txt
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc >/tmp/d1-rollback-dry-run.txt
+          echo "TURSO_DIRECT_CUTOVER_STATIC=PASS"
+
+      - name: Verify Turso production database directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+          const db=new TursoD1Adapter({
+            url:process.env.TURSO_PROD_DATABASE_URL,
+            authToken:process.env.TURSO_PROD_AUTH_TOKEN
+          });
+
+          const quick=await db.prepare('PRAGMA quick_check').all();
+          const q=quick?.results?.[0];
+          const quickValue=q ? String(Object.values(q)[0] ?? '').toLowerCase() : '';
+          if(quickValue!=='ok') throw new Error('Turso quick_check failed');
+
+          const fk=await db.prepare('PRAGMA foreign_key_check').all();
+          if((fk?.results||[]).length!==0) throw new Error('Turso foreign_key_check failed');
+
+          const control=await db.prepare(
+            'SELECT mode,active_promotion_id,first_live_operation_id FROM canonical_control WHERE id=1'
+          ).first();
+          if(control?.mode!=='ACTIVE') throw new Error('Turso canonical authority is not ACTIVE');
+
+          const tableRow=await db.prepare(
+            "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+          ).first();
+          if(Number(tableRow?.n)!==44) throw new Error('unexpected Turso table count');
+
+          const counts=await db.prepare(
+            'SELECT (SELECT COUNT(*) FROM products) products,'+
+            '(SELECT COUNT(*) FROM customers) customers,'+
+            '(SELECT COUNT(*) FROM credits) credits,'+
+            '(SELECT COUNT(*) FROM credit_payments) credit_payments'
+          ).first();
+
+          console.log('TURSO_DIRECT_CUTOVER_DB_INTEGRITY=PASS');
+          console.log('TURSO_DIRECT_CUTOVER_TABLES=44');
+          console.log('TURSO_DIRECT_CUTOVER_COUNTS='+JSON.stringify(counts));
+          NODE
+
+      - name: Re-probe isolated Turso candidate immediately before switch
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+
+          const worker=process.env.CANDIDATE_WORKER_URL.replace(/\/+$/,'');
+          const db=new TursoD1Adapter({
+            url:process.env.TURSO_PROD_DATABASE_URL,
+            authToken:process.env.TURSO_PROD_AUTH_TOKEN
+          });
+          let sessionId='';
+          let token='';
+
+          async function get(path){
+            const r=await fetch(worker+path,{headers:{authorization:'Bearer '+token,'cache-control':'no-cache'}});
+            const b=await r.json().catch(()=>null);
+            if(!r.ok) throw new Error('candidate read failed '+path+' http='+r.status);
+            return b;
+          }
+
+          try{
+            const h=await fetch(worker+'/health',{headers:{'cache-control':'no-cache'}});
+            const hb=await h.json().catch(()=>null);
+            if(!h.ok||hb?.ok!==true||hb?.environment!=='production') throw new Error('candidate health failed');
+
+            const a=await fetch(worker+'/auth/activate',{
+              method:'POST',
+              headers:{'x-activation-secret':process.env.POS_ACTIVATION_SECRET}
+            });
+            const ab=await a.json().catch(()=>null);
+            if(!a.ok||ab?.status!=='activated'||typeof ab?.session_token!=='string'||!ab.session_token){
+              throw new Error('candidate activation failed http='+a.status);
+            }
+            token=ab.session_token;
+
+            const ss=await get('/auth/session');
+            sessionId=ss?.session_id||'';
+            if(!sessionId) throw new Error('candidate session missing');
+
+            const status=await get('/read/canonical/status');
+            if(status?.authority!=='canonical'||status?.mode!=='ACTIVE') throw new Error('candidate status invalid');
+            await get('/read/canonical/products?limit=5');
+            await get('/read/canonical/customers?limit=5');
+            console.log('TURSO_DIRECT_CUTOVER_CANDIDATE_REPROBE=PASS');
+          } finally {
+            if(sessionId){
+              const principal='session:'+sessionId;
+              await db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId).run();
+              await db.prepare('DELETE FROM devices WHERE device_id=?1').bind(principal).run();
+            }
+          }
+          NODE
+
+      - name: Bind Turso secrets to active production Worker
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$TURSO_PROD_DATABASE_URL" | npx wrangler secret put TURSO_DATABASE_URL --config ../cloudflare-prod/wrangler.jsonc
+          printf '%s' "$TURSO_PROD_AUTH_TOKEN" | npx wrangler secret put TURSO_AUTH_TOKEN --config ../cloudflare-prod/wrangler.jsonc
+          printf '%s' "$POS_ACTIVATION_SECRET" | npx wrangler secret put POS_ACTIVATION_SECRET --config ../cloudflare-prod/wrangler.jsonc
+          echo "TURSO_DIRECT_CUTOVER_SECRETS_BOUND=PASS"
+
+      - name: Deploy active CANON Worker on Turso
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+          echo "TURSO_DIRECT_DEPLOYED=1" >> "$GITHUB_ENV"
+          echo "TURSO_DIRECT_CUTOVER_DEPLOY=PASS"
+
+      - name: Verify active CANON on Turso
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+
+          const worker=process.env.PROD_WORKER_URL.replace(/\/+$/,'');
+          const db=new TursoD1Adapter({
+            url:process.env.TURSO_PROD_DATABASE_URL,
+            authToken:process.env.TURSO_PROD_AUTH_TOKEN
+          });
+          let sessionId='';
+          let token='';
+
+          async function waitHealth(){
+            let last=null;
+            for(let i=0;i<20;i++){
+              try{
+                const r=await fetch(worker+'/health',{headers:{'cache-control':'no-cache'}});
+                const b=await r.json().catch(()=>null);
+                last={http:r.status,ok:b?.ok,service:b?.service,environment:b?.environment};
+                if(r.ok&&b?.ok===true&&b?.service==='nuevo-amanecer-pos-prod'&&b?.environment==='production') return;
+              }catch{}
+              await new Promise(resolve=>setTimeout(resolve,1000));
+            }
+            throw new Error('active health failed '+JSON.stringify(last));
+          }
+
+          async function get(path){
+            const r=await fetch(worker+path,{headers:{authorization:'Bearer '+token,'cache-control':'no-cache'}});
+            const b=await r.json().catch(()=>null);
+            if(!r.ok) throw new Error('active read failed '+path+' http='+r.status);
+            return b;
+          }
+
+          try{
+            await waitHealth();
+            console.log('TURSO_DIRECT_ACTIVE_HEALTH=PASS');
+
+            const lab=await fetch(worker+'/lab/workspace/status');
+            if(lab.status!==404) throw new Error('LAB route exposed in production');
+            console.log('TURSO_DIRECT_ACTIVE_BOUNDARY=PASS');
+
+            const a=await fetch(worker+'/auth/activate',{
+              method:'POST',
+              headers:{'x-activation-secret':process.env.POS_ACTIVATION_SECRET}
+            });
+            const ab=await a.json().catch(()=>null);
+            if(!a.ok||ab?.status!=='activated'||typeof ab?.session_token!=='string'||!ab.session_token){
+              throw new Error('active activation failed http='+a.status);
+            }
+            token=ab.session_token;
+
+            const ss=await get('/auth/session');
+            sessionId=ss?.session_id||'';
+            if(!sessionId) throw new Error('active session missing');
+
+            const status=await get('/read/canonical/status');
+            if(status?.authority!=='canonical'||status?.mode!=='ACTIVE') throw new Error('active canonical status invalid');
+            await get('/read/canonical/products?limit=5');
+            await get('/read/canonical/customers?limit=5');
+            console.log('TURSO_DIRECT_ACTIVE_CANONICAL_READ=PASS');
+          } finally {
+            if(sessionId){
+              const principal='session:'+sessionId;
+              await db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId).run();
+              await db.prepare('DELETE FROM devices WHERE device_id=?1').bind(principal).run();
+            }
+          }
+
+          const quick=await db.prepare('PRAGMA quick_check').all();
+          const q=quick?.results?.[0];
+          const quickValue=q ? String(Object.values(q)[0] ?? '').toLowerCase() : '';
+          if(quickValue!=='ok') throw new Error('post-deploy Turso quick_check failed');
+
+          const fk=await db.prepare('PRAGMA foreign_key_check').all();
+          if((fk?.results||[]).length!==0) throw new Error('post-deploy Turso FK check failed');
+
+          console.log('TURSO_DIRECT_CUTOVER=PASS');
+          NODE
+
+      - name: Roll back Worker config to D1 on post-deploy failure
+        if: ${{ failure() && env.TURSO_DIRECT_DEPLOYED == '1' }}
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config ../cloudflare-prod/wrangler.jsonc
+          printf '%s' "$POS_ACTIVATION_SECRET" | npx wrangler secret put POS_ACTIVATION_SECRET --config ../cloudflare-prod/wrangler.jsonc
+          echo "TURSO_DIRECT_CUTOVER_ROLLBACK_D1_CONFIG=PASS"
