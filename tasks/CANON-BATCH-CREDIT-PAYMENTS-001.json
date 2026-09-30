@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-BATCH-CREDIT-PAYMENTS-001",
+  "environment": "CANON",
+  "base_ref": "759e3189f588ea0a7b72d7c8afe8a30415510af8",
+  "objective": "Permitir cobrar varias deudas de una misma cuenta de cliente desde CANON con selección múltiple, monto total recibido y distribución automática, conservando payment.create como única autoridad financiera.",
+  "owner_authorization": "Owner solicitó explícitamente implementar en CANON selección múltiple, Seleccionar todo y cobro conjunto en lugar de registrar cada deuda una por una.",
+  "allowed_files": [
+    "tasks/CANON-BATCH-CREDIT-PAYMENTS-001.json",
+    "evidence/canon-preflight/CANON-BATCH-CREDIT-PAYMENTS-001.json",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/client-credit-accounts-v2.css",
+    "POS/js/sync/canonical-credit-payment-bridge.js",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/migrations/**",
+    "tools/cloudflare-lab/src/**",
+    "infra/database/migrations/**",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/legacy-inline/**",
+    "POS/index.html",
+    "POS/sw.js"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "invariants": [
+    "payment.create remains the only authoritative credit-payment write",
+    "No second payment ledger or local balance mutation",
+    "No new D1 schema or backend command",
+    "Each allocation uses canonical idempotency and stops on uncertainty",
+    "Existing single-credit payment flow remains available",
+    "Caja and payment-method rules remain unchanged",
+    "Digital reference duplicate guard remains enforced before the batch starts",
+    "No payment may exceed the selected canonical outstanding balance"
+  ],
+  "rollback": "Revertir el PR completo. No hay migración de datos ni schema; el flujo individual previo permanece intacto."
+}
