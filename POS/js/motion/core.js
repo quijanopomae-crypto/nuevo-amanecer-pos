@@ -3,6 +3,7 @@
 
   var motion = root.NA_MOTION = root.NA_MOTION || {};
   var controllers = motion.controllers = motion.controllers || Object.create(null);
+  var restarts = new WeakMap();
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value));
@@ -37,9 +38,18 @@
 
   function restartClass(element, className) {
     if (!element || !className || !element.classList) return false;
+    if (reducedMotion()) return false;
+    var tokens = restarts.get(element) || Object.create(null), token = {};
+    tokens[className] = token;
+    restarts.set(element, tokens);
     element.classList.remove(className);
-    if (typeof element.offsetWidth === 'number') void element.offsetWidth;
-    element.classList.add(className);
+    var frame = typeof root.requestAnimationFrame === 'function'
+      ? root.requestAnimationFrame.bind(root) : function (callback) { root.setTimeout(callback, 16); };
+    frame(function () { frame(function () {
+      if (tokens[className] !== token || reducedMotion() || element.isConnected === false) return;
+      element.classList.add(className);
+      delete tokens[className];
+    }); });
     return true;
   }
 

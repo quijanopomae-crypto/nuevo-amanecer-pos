@@ -9,7 +9,6 @@
     if (motion.core && motion.core.reducedMotion && motion.core.reducedMotion()) return false;
     if (motion.core && motion.core.restartClass) return motion.core.restartClass(element, 'na-cart-pulse');
     element.classList.remove('na-cart-pulse');
-    void element.offsetWidth;
     element.classList.add('na-cart-pulse');
     return true;
   };
