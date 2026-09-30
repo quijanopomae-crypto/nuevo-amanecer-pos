@@ -80,6 +80,32 @@
     }
   }
 
+  function scheduleClientScrollMotion(pageId, target) {
+    if (pageId !== 'pageClientes') return;
+
+    var run = function () {
+      if (!target || !target.classList || !target.classList.contains('active')) return;
+      if (!document.body || !document.body.classList.contains('module-mobile-scroll')) return;
+
+      var motion = root.NA_MOTION;
+      if (!motion || !motion.scroll || typeof motion.scroll.enablePreset !== 'function') return;
+
+      try {
+        var controller = motion.scroll.enablePreset('clientes');
+        if (controller && typeof controller.sync === 'function') controller.sync();
+      } catch (_) {
+        // Motion is optional. Navigation and rendering must remain usable even
+        // when the visual runtime is unavailable on a phone.
+      }
+    };
+
+    if (typeof root.requestIdleCallback === 'function') {
+      root.requestIdleCallback(run, { timeout: 900 });
+    } else {
+      root.setTimeout(run, 120);
+    }
+  }
+
   function mobileSafeNavigate(pageId) {
     if (!allowed[pageId]) return false;
     var target = document.getElementById(pageId);
@@ -116,6 +142,7 @@
       }
 
       scheduleRenderer(pageId);
+      scheduleClientScrollMotion(pageId, target);
     });
 
     return true;

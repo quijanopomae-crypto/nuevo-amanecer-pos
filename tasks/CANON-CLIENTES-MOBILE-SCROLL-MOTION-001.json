@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CLIENTES-MOBILE-SCROLL-MOTION-001",
+  "environment": "CANON",
+  "base_ref": "5306cd4521621ff4035f0e70aebe1fa34179237b",
+  "objective": "Corregir exclusivamente la animación móvil del bloque filtros + resumen de Clientes en CANON, restaurando el scroll-linked aprobado de LAB después del primer paint sin reactivar la transición completa de página que antes congeló teléfonos reales.",
+  "owner_authorization": "Owner reportó con captura real que la zona Buscar/ordenar/resumen de Clientes no está animada correctamente en CANON y pidió corregirla.",
+  "allowed_files": [
+    "tasks/CANON-CLIENTES-MOBILE-SCROLL-MOTION-001.json",
+    "evidence/canon-preflight/CANON-CLIENTES-MOBILE-SCROLL-MOTION-001.json",
+    "docs/CANON_MOBILE_SAFE_NAVIGATION.md",
+    "POS/js/navigation/menu-navigation.js",
+    "tests/product-fixes/canon-mobile-menu-navigation.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/sync/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "tools/cloudflare-lab/**",
+    "infra/database/migrations/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact"
+  ],
+  "invariants": [
+    "Mobile safe navigation still paints the destination page before optional motion/layout work",
+    "LAB parity page-enter Motion remains disabled on mobile",
+    "Only Clientes scroll-linked secondary chrome is restored in this task",
+    "No business renderer, persistence, sync, D1, R2, sales, credits or caja logic changes",
+    "Desktop navigation remains unchanged",
+    "If Motion runtime is unavailable the navigation still succeeds"
+  ],
+  "rollback": "Revertir el PR completo; no toca datos ni schema."
+}

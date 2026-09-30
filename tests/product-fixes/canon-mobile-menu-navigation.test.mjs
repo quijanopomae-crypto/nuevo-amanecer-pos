@@ -65,6 +65,7 @@ function harness(width=390) {
   byId.set('backBtn',back);
   const calls=[];
   const renders=[];
+  const motionPresets=[];
   let clock = 100;
   const html={classList:classList()};
   const body={classList:classList()};
@@ -86,6 +87,14 @@ function harness(width=390) {
     setTimeout(cb){timerQueue.push(cb);return timerQueue.length;},
     scrollTo(){},
     _naSchedulePageRender(id){renders.push(id);},
+    NA_MOTION:{
+      scroll:{
+        enablePreset(name){
+          motionPresets.push(name);
+          return {sync(){motionPresets.push(name+':sync');}};
+        }
+      }
+    },
     Date,Object,Array,Map,Set,console,
     goPage(id){calls.push(id);}
   };
@@ -106,7 +115,7 @@ function harness(width=390) {
   }
 
   return {
-    cards,listeners,calls,renders,pages,body,html,back,context,
+    cards,listeners,calls,renders,motionPresets,pages,body,html,back,context,
     flushFrames,flushAfterPaint,flushIdle,
     setClock(value){clock=value;}
   };
@@ -138,6 +147,32 @@ test('mobile tap exposes the requested page without calling goPage', () => {
   assert.equal(h.back.style.display,'block');
   assert.equal(h.context.NA_MOBILE_SAFE_NAV_ACTIVE,true);
   assert.deepEqual(h.renders,[]);
+});
+
+test('Clientes restores only its scroll-linked chrome after safe paint and idle', () => {
+  const h=harness(390);
+  h.context.NA_MENU_NAVIGATION.mobileSafeNavigate('pageClientes');
+
+  assert.deepEqual(h.motionPresets,[],'scroll Motion must not run before the destination paints');
+  h.flushFrames();
+  assert.deepEqual(h.motionPresets,[],'first frame remains paint-only');
+  h.flushFrames();
+
+  assert.equal(h.body.classList.contains('module-mobile-scroll'),true);
+  assert.deepEqual(h.motionPresets,[],'preset is still deferred until idle');
+  h.flushIdle();
+
+  assert.deepEqual(h.motionPresets,['clientes','clientes:sync']);
+  assert.deepEqual(h.renders,['pageClientes']);
+});
+
+test('other mobile modules remain on safe navigation without re-enabling parity Motion in this fix', () => {
+  const h=harness(390);
+  h.context.NA_MENU_NAVIGATION.mobileSafeNavigate('pageInventario');
+  h.flushAfterPaint();
+  h.flushIdle();
+  assert.deepEqual(h.motionPresets,[]);
+  assert.deepEqual(h.renders,['pageInventario']);
 });
 
 test('mobile renderer is deferred until after paint and idle, while scroll mode is applied later', () => {
@@ -173,6 +208,8 @@ test('navigation layer stays free of business/storage/network authority', () => 
   assert.doesNotMatch(source,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|sale\.create|payment\.create|cash\.open|cash\.close|credit-account\.create/i);
   assert.match(source,/mobileSafeNavigate/);
   assert.match(source,/root\._naSchedulePageRender\(pageId\)/);
+  assert.match(source,/scheduleClientScrollMotion/);
+  assert.match(source,/enablePreset\('clientes'\)/);
 });
 
 test('CANON shell still loads and precaches menu navigation', () => {
