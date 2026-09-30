@@ -1,0 +1,72 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-ADAPTER-001",
+  "base_ref": "4563dc94b1e2af615d47763eebc18c17dd5d479e",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "tools/cloudflare-lab/src/database-binding.js y worker-entry.js para preservar el contrato actual del Worker",
+      "tools/cloudflare-lab/package.json/package-lock.json y wrangler.jsonc para compatibilidad de runtime",
+      "infra/database/migrations/** solo como referencia de SQL/trigger semantics, sin modificarlas"
+    ],
+    "WRITES": [
+      "Adaptador Turso exclusivo de tools/cloudflare-lab y selector de proveedor LAB",
+      "Configuración Turso LAB, ejemplos sin secretos, pruebas focales y CI LAB"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Solo selección del backend de persistencia del Worker LAB: D1 por defecto o Turso cuando se configure explícitamente"
+    ],
+    "STORAGE_AFFECTED": [
+      "Turso LAB con datos sintéticos durante la prueba; no se escribe D1/CANON producción"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Idempotencia por operation_id no cambia",
+      "Autorización/sesiones y Gate-C mantienen exactamente las mismas validaciones SQL",
+      "db.batch debe conservar atomicidad suficiente para no crear ventas/pagos parciales",
+      "Triggers, constraints, rows changed y resultados first/all/run deben conservar semántica esperada por el Worker"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas, inventario, caja, créditos, clientes y productos consumen indirectamente el mismo contrato DB; por eso el adaptador se valida sin alterar lógica de dominio"
+    ],
+    "RISKS": [
+      "Diferencias entre D1 y libSQL/Turso en batch, meta.changes, triggers, RETURNING o tipos",
+      "Latencia/red remota y errores transitorios",
+      "Filtración accidental de TURSO_AUTH_TOKEN si se versionara; queda prohibido"
+    ],
+    "ROLLBACK": [
+      "Eliminar la rama/PR o mantener DB_PROVIDER=d1; CANON y producción permanecen intactos"
+    ],
+    "TESTS": [
+      "Unit tests del adaptador con cliente sintético",
+      "LAB Cloud CI + npm ci",
+      "skill-preflight temporal-order gate y scope guard",
+      "Prueba posterior de conexión real Turso solo con secretos fuera del repositorio"
+    ]
+  }
+}

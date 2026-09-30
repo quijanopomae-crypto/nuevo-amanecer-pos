@@ -69,6 +69,8 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check tools/cloudflare-lab/src/lab-workspace.js
+          node --check tools/cloudflare-lab/src/turso-d1-adapter.js
+          node --check tools/cloudflare-lab/src/database-binding.js
           node --check tools/cloudflare-lab/src/worker.js
           node --check laboratorio/pos-lab/js/lab-workspace.js
           node --check laboratorio/pos-lab/skill-preflight.mjs
@@ -79,6 +81,7 @@ jobs:
           python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
           node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
+          node --test tools/cloudflare-lab/test/turso-d1-adapter.test.mjs
           node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           node --test tests/security-secret-separation.test.mjs
           node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
