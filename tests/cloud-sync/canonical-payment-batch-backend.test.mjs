@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { activeCanon, device } from './canon-browser-harness.mjs';
 
+const LIVE_MIGRATIONS = [
+  '0014_canonical_live_products.sql',
+  '0015_canonical_inventory_adjust.sql',
+  '0016_canonical_generic_sale_lines.sql',
+  '0017_canonical_live_customers.sql',
+];
+
 async function createSellableProduct(tab, suffix) {
   const id = 'LIVE-BATCH-' + suffix + '-' + randomUUID().slice(0,8);
   const receipt = await tab.api.createProduct({
@@ -69,7 +76,7 @@ async function postBatch(f, token, body) {
 }
 
 test('payment.batch persists multiple payment.create children atomically and exact replay is idempotent', async (t) => {
-  const f = await activeCanon(t);
+  const f = await activeCanon(t,{migrations:LIVE_MIGRATIONS});
   const token = 'device-a-token';
   const tab = await device(f, { token, deviceId:'device-a' });
   const productId = await createSellableProduct(tab,'atomic');
@@ -103,7 +110,7 @@ test('payment.batch persists multiple payment.create children atomically and exa
 });
 
 test('payment.batch stale child rejects the whole transaction and leaves valid sibling untouched', async (t) => {
-  const f = await activeCanon(t);
+  const f = await activeCanon(t,{migrations:LIVE_MIGRATIONS});
   const token = 'device-a-token';
   const tab = await device(f, { token, deviceId:'device-a' });
   const productId = await createSellableProduct(tab,'stale');
@@ -133,7 +140,7 @@ test('payment.batch stale child rejects the whole transaction and leaves valid s
 });
 
 test('payment.batch cash children share one open session and accumulate cash exactly once', async (t) => {
-  const f = await activeCanon(t);
+  const f = await activeCanon(t,{migrations:LIVE_MIGRATIONS});
   const token = 'device-a-token';
   const tab = await device(f, { token, deviceId:'device-a' });
   const productId = await createSellableProduct(tab,'cash');
