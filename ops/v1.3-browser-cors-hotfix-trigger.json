@@ -2,11 +2,11 @@
   "format": "nuevo-amanecer-v1.3-browser-cors-hotfix-v1",
   "authorized": true,
   "authorized_by": "owner",
-  "requested_action": "deploy-read-only-canonical-operational-reader-to-production",
+  "requested_action": "deploy-production-worker-payment-batch-transport",
   "hosted_pos_origin": "https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev",
   "production_worker": "nuevo-amanecer-pos-prod",
-  "scope": "Production Worker code only: canonical operational read projection and exact cash session derivation; no schema changes, no D1 writes.",
-  "reason": "PR #147 merged at 08327c7e7e733b81746830f141748f52c9dd669f; CANON Critical CI #121/#122 and LAB Mirror #235 passed. Frontend requires updated /read/canonical sales/cash/inventory payloads.",
-  "target_head": "08327c7e7e733b81746830f141748f52c9dd669f",
-  "requested_at_utc": "2026-09-27T19:00:00Z"
+  "scope": "Production Worker code only: add POST /commands/payment.batch transport that persists existing child payment.create operations atomically; no schema migration.",
+  "reason": "PR #243 merged at a33ccf4bfab9d02133ea84853b4e653809b316cc after LAB Canon Mirror CI #325 PASS and CANON Critical CI #303 PASS. Deploy backend before publishing the frontend client that consumes payment.batch.",
+  "target_head": "a33ccf4bfab9d02133ea84853b4e653809b316cc",
+  "requested_at_utc": "2026-09-30T12:43:00Z"
 }
