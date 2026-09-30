@@ -151,3 +151,21 @@ test('deploy versions the launcher activation script with the exact hosted build
   assert.match(workflow, /sed -i "s\/__BUILD_HASH__\/\$GITHUB_SHA\/g" tools\/cloudflare-pos-web\/_site\/index\.html/);
   assert.match(workflow, /grep -Fq "\$GITHUB_SHA" tools\/cloudflare-pos-web\/_site\/index\.html/);
 });
+
+
+test('hosted browser talks to CANON through the same-origin Worker proxy', () => {
+  assert.match(router, /function isCanonicalApiPath\(pathname\)/);
+  assert.match(router, /pathname\.startsWith\('\/auth\/'\)/);
+  assert.match(router, /pathname\.startsWith\('\/read\/'\)/);
+  assert.match(router, /pathname\.startsWith\('\/commands\/'\)/);
+  assert.match(router, /return proxyCanonical\(request, env\)/);
+  assert.match(router, /apiOrigin: hostedOrigin/);
+  assert.match(router, /CANON_API_ORIGIN/);
+  assert.match(workflow, /POS_WEB_URL\/health/);
+  assert.match(workflow, /pos-health\.json/);
+  assert.match(workflow, /'"ok":true'/);
+});
+
+test('launcher source does not render a literal newline escape after runtime config', () => {
+  assert.doesNotMatch(launcher, /<\/script>\\n\s*<script/);
+});

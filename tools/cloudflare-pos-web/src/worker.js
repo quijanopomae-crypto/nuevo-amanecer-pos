@@ -9,14 +9,55 @@ function withNoStore(response) {
   });
 }
 
+function canonicalBackendOrigin(env) {
+  const raw = String(env.CANON_API_ORIGIN || '').replace(/\/+$/, '');
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.origin !== raw || url.username || url.password || url.search || url.hash) return '';
+    return raw;
+  } catch {
+    return '';
+  }
+}
+
+function isCanonicalApiPath(pathname) {
+  return pathname === '/health' ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/read/') ||
+    pathname.startsWith('/commands/') ||
+    pathname.startsWith('/imports/') ||
+    pathname === '/sync/operations' ||
+    pathname.startsWith('/sync/operations/');
+}
+
+async function proxyCanonical(request, env) {
+  const backend = canonicalBackendOrigin(env);
+  if (!backend) {
+    return withNoStore(new Response(JSON.stringify({ error: 'canonical_proxy_not_configured' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    }));
+  }
+  const incoming = new URL(request.url);
+  const target = new URL(backend);
+  target.pathname = incoming.pathname;
+  target.search = incoming.search;
+  const headers = new Headers(request.headers);
+  headers.delete('host');
+  const proxied = new Request(target.toString(), {
+    method: request.method,
+    headers,
+    body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+    redirect: 'manual',
+  });
+  return withNoStore(await fetch(proxied));
+}
+
 function runtimeConfig(request, env) {
   const environment = String(env.HOSTED_ENVIRONMENT || '');
-  const apiOrigin = String(env.CANON_API_ORIGIN || '').replace(/\/+$/, '');
-  let api;
-  try { api = new URL(apiOrigin); } catch { api = null; }
-  const valid = ['production', 'staging'].includes(environment) &&
-    api && api.protocol === 'https:' && api.origin === apiOrigin &&
-    !api.username && !api.password && !api.search && !api.hash;
+  const backendOrigin = canonicalBackendOrigin(env);
+  const hostedOrigin = new URL(request.url).origin;
+  const valid = ['production', 'staging'].includes(environment) && !!backendOrigin;
 
   if (!valid) {
     return withNoStore(new Response(
@@ -27,7 +68,7 @@ function runtimeConfig(request, env) {
 
   const hostedHost = new URL(request.url).hostname;
   const body = 'globalThis.NA_HOSTED_CONFIG=Object.freeze(' +
-    JSON.stringify({ environment, apiOrigin, hostedHost }) + ');\n';
+    JSON.stringify({ environment, apiOrigin: hostedOrigin, hostedHost }) + ');\n';
   return withNoStore(new Response(body, {
     status: 200,
     headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
@@ -38,6 +79,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/runtime-config.js') return runtimeConfig(request, env);
+    if (isCanonicalApiPath(url.pathname)) return proxyCanonical(request, env);
     if (url.pathname === '/') {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = '/index.html';

@@ -112,15 +112,18 @@ jobs:
             JS_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/canonical-client.js" || true)"
             GUARD_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/hosted-canonical-guard.js" || true)"
             SW_CODE="$(curl -sS -o /tmp/pos-sw.js -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/sw.js" || true)"
-            echo "probe attempt=$attempt root=$ROOT_CODE app=$APP_CODE canonical_client=$JS_CODE guard=$GUARD_CODE sw=$SW_CODE"
+            API_PROXY_CODE="$(curl -sS -o /tmp/pos-health.json -w '%{http_code}' --max-time 15 "$POS_WEB_URL/health" || true)"
+            echo "probe attempt=$attempt root=$ROOT_CODE app=$APP_CODE canonical_client=$JS_CODE guard=$GUARD_CODE sw=$SW_CODE api_proxy=$API_PROXY_CODE"
             if test "$ROOT_CODE" = "200" &&
                test "$APP_CODE" = "200" &&
                test "$JS_CODE" = "200" &&
                test "$GUARD_CODE" = "200" &&
                test "$SW_CODE" = "200" &&
+               test "$API_PROXY_CODE" = "200" &&
                grep -Fq 'Nuevo Amanecer POS' /tmp/pos-root.html &&
                grep -Fiq 'cache-control: no-store' /tmp/pos-root.headers &&
                grep -Fq 'Nuevo Amanecer — ERP &amp; POS' /tmp/pos-app.html &&
+               grep -Fq '"ok":true' /tmp/pos-health.json &&
                grep -Fq "$GITHUB_SHA" /tmp/pos-sw.js; then
               echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"
               exit 0
