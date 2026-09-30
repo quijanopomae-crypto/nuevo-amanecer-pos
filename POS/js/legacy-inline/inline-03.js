@@ -683,6 +683,24 @@ abrirModalGasto=function(){if(isModuleLocked('gastos')){toast('Gastos y egresos 
 
 
 window.addEventListener('resize',_naApplyConfigUI);
+let _naVersionUpdatePending=false;
+function _naSetHeaderConnectionState(state,label){
+  const status=document.getElementById('localStatus');
+  if(!status)return;
+  const requested=state==='connected'||state==='disconnected'||state==='update'?state:'disconnected';
+  const effective=requested!=='disconnected'&&_naVersionUpdatePending?'update':requested;
+  const fallback=effective==='connected'?'Conectado':effective==='update'?'Nueva versión pendiente':'Desconectado';
+  const text=String(label||fallback);
+  status.dataset.state=effective;
+  status.setAttribute('aria-label',text);
+  status.setAttribute('title',text);
+  const hidden=status.querySelector('.g-status-label');
+  if(hidden)hidden.textContent=text;
+}
+window.addEventListener('na:version-update-pending',()=>{
+  _naVersionUpdatePending=true;
+  _naSetHeaderConnectionState(navigator.onLine===false?'disconnected':'connected',navigator.onLine===false?'Desconectado':'Nueva versión pendiente');
+});
 let _naCanonicalLoadError=null;
 function _naEmptyCanonicalCashState(){return{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',cerrada:false,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null,canonical:true};}
 function _naClearCanonicalOperationalView(){ventas=[];gastos=[];cajMovs=[];inventoryMovements=[];cajEstado=_naEmptyCanonicalCashState();}
@@ -704,15 +722,15 @@ cliRender=function(){
   if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&!_naCanonicalLoadError){const today=obtenerHoy();cobradoHoy=creditos.reduce((sum,cr)=>sum+(Array.isArray(cr.pagos)?cr.pagos.filter(pay=>pay.canonicalDateKnown&&pay.fecha===today&&pay.status!=='REVERTED').reduce((paid,pay)=>paid+Number(pay.monto||0),0):0),0);const paidToday=document.getElementById('cliS3');if(paidToday)paidToday.textContent=`S/${cobradoHoy.toFixed(0)}`;}
   try{window.dispatchEvent(new CustomEvent('na:clients-rendered'));}catch(_){}
 };
-window.addEventListener('offline',()=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),status=document.querySelector('#localStatus span'),badge=document.getElementById('cliAuthorityBadge');if(state.source==='cache'){if(status)status.textContent='Cache canónico · sin conexión';if(badge){badge.hidden=false;badge.textContent='Cache canónico · sin conexión';}}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());if(status)status.textContent='Canónico no disponible';}}});
+window.addEventListener('offline',()=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),badge=document.getElementById('cliAuthorityBadge');_naSetHeaderConnectionState('disconnected','Desconectado');if(state.source==='cache'){if(badge){badge.hidden=false;badge.textContent='Cache canónico · sin conexión';}}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());}}});
 window.addEventListener('na:canonical-updated',()=>{
   if(typeof NuevoAmanecerCanonical==='undefined'||!NuevoAmanecerCanonical.enabled())return;
-  const state=NuevoAmanecerCanonical.sourceState(),status=document.querySelector('#localStatus span'),saveStatus=document.getElementById('saveStatus'),badge=document.getElementById('cliAuthorityBadge');
+  const state=NuevoAmanecerCanonical.sourceState(),saveStatus=document.getElementById('saveStatus'),badge=document.getElementById('cliAuthorityBadge');
   if(state.source==='none'){
     _naCanonicalLoadError=new Error(state.validation==='offline'?'AUTHORITY_UNAVAILABLE':'CANONICAL_LOAD_FAILED');
     _naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    if(status)status.textContent=state.validation==='offline'?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta';
+    _naSetHeaderConnectionState('disconnected',state.validation==='offline'?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
     if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
     if(badge){badge.hidden=false;badge.textContent='Canónico no disponible';}
     return;
@@ -721,17 +739,17 @@ window.addEventListener('na:canonical-updated',()=>{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     _naApplyCanonicalLegacyView(canonical);_naCanonicalLoadError=null;
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    if(status)status.textContent=state.validation==='offline'?(state.source==='cache'?'Cache CANON · sin conexión':'CANON · sin conexión'):state.validation==='stale'?(state.source==='cache'?'Cache CANON · reintentar':'CANON · reintentar'):state.validation==='validating'?(state.source==='cache'?'Cache CANON · validando':'CANON · validando'):'CANON validado';
+    _naSetHeaderConnectionState(state.validation==='current'?'connected':'disconnected',state.validation==='current'?'CANON validado':state.validation==='validating'?'CANON · validando':'CANON · reintentar');
     if(saveStatus)saveStatus.textContent='Persistencia canónica protegida';
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(canonical.customers.length)+' clientes';}
   }catch(error){
     _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    if(status)status.textContent='Canónico no disponible · reintenta';
+    _naSetHeaderConnectionState('disconnected','Canónico no disponible · reintenta');
     if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
   }
 });
-window.addEventListener('storage',event=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&(!event.key||event.key==='na_canonical_binding'||event.key==='na_cloud_sync_credentials')){_naCanonicalLoadError=new Error('STALE_AUTHORITY_BINDING');_naSchedulePageRender(_naActivePageId());const status=document.querySelector('#localStatus span');if(status)status.textContent='Canónico no disponible';}});
+window.addEventListener('storage',event=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&(!event.key||event.key==='na_canonical_binding'||event.key==='na_cloud_sync_credentials')){_naCanonicalLoadError=new Error('STALE_AUTHORITY_BINDING');_naSchedulePageRender(_naActivePageId());_naSetHeaderConnectionState('disconnected','Desconectado');}});
 document.addEventListener('DOMContentLoaded',async()=>{
   document.getElementById('fechaHoy').textContent=new Date().toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});document.getElementById('backBtn').style.display='none';
   await loadAllData();
@@ -740,14 +758,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
   if(canonicalEnabled){_naClearCanonicalOperationalView();}
   loadAppState();loadMasterConfig();_naInitSecurity();_naNormalizeData();renderCategorySelects();_naApplyConfigUI();_naInitFreeSaleShortcut();_naInitBarcodeScanner();creditos.forEach(_naSyncCreditStatus);posUpdateCart(canonicalEnabled?false:true);_naSchedulePageRender(_naActivePageId());
   const cliBadge=document.getElementById('cliAuthorityBadge');if(canonicalEnabled&&cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico · conectando';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:800';}
-  const localStatus=document.querySelector('#localStatus span'),saveStatus=document.getElementById('saveStatus');if(localStatus&&canonicalEnabled){localStatus.textContent='Conectando a CANON…';if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
+  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled){_naSetHeaderConnectionState('disconnected','Conectando a CANON…');if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
   document.querySelectorAll('.module-card').forEach(card=>{card.setAttribute('role','button');card.setAttribute('tabindex','0');card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}});});
   if(!canonicalEnabled)await saveAllData();
   if(canonicalEnabled){
     NuevoAmanecerCanonical.startPOS().catch(error=>{
       _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
       renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-      if(localStatus)localStatus.textContent=navigator.onLine===false?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta';
+      _naSetHeaderConnectionState('disconnected',navigator.onLine===false?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
       if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
       if(cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico no disponible';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800';}
     });

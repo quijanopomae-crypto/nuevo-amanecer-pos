@@ -7,6 +7,7 @@ const posIndex = read('POS/index.html');
 const labIndex = read('laboratorio/pos-lab/index.html');
 
 const sectionNames = ['menu','punto-venta','inventario','clientes','caja','ventas','gastos','configuracion'];
+const labConfigMenuCard = `            <div class="module-card" style="--accent:#64748b;--icon-bg:#f8fafc" onclick="goPage('pageConfig')"><div class="module-icon">⚙️</div><div class="module-label">Configuración</div><div class="module-desc">Personaliza productos, ticket y el sistema.</div><div class="module-arrow">Entrar →</div></div>`;
 
 function srcs(html) {
   return [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(m=>m[1]);
@@ -18,7 +19,13 @@ function css(html) {
 test('LAB approved page sections are the CANON shell with only explicit production chrome differences',()=>{
   for (const name of sectionNames) {
     const section=read(`laboratorio/pos-lab/sections/${name}.html`).replace(/\n$/,'');
-    if (name === 'clientes') {
+    if (name === 'menu') {
+      assert.ok(section.includes(labConfigMenuCard),'LAB menu must retain its protected Configuración card');
+      const normalized=section.replace(labConfigMenuCard + '\n','');
+      assert.ok(posIndex.includes(normalized),'menu differs beyond the approved CANON settings shortcut');
+      assert.match(posIndex,/id="topSettingsBtn"/);
+      assert.equal(posIndex.includes(labConfigMenuCard),false,'CANON must not retain the menu Configuración card');
+    } else if (name === 'clientes') {
       const normalized=posIndex.replace('<span id="cliAuthorityBadge" hidden></span>','');
       assert.ok(normalized.includes(section),`Clientes differs beyond the allowed CANON authority badge`);
     } else {
