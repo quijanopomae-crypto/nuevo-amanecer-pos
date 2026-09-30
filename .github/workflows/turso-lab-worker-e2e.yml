@@ -89,17 +89,30 @@ jobs:
             const tursoPipeline = tursoBase + '/v3/pipeline';
 
             async function waitHealth() {
+              let last = null;
               for (let attempt = 1; attempt <= 20; attempt += 1) {
                 try {
                   const response = await fetch(worker + '/health', { headers:{'cache-control':'no-cache'} });
                   const body = await response.json().catch(() => null);
+                  last = {
+                    http: response.status,
+                    ok: body?.ok,
+                    error: body?.error,
+                    environment: body?.environment,
+                    d1: body?.d1,
+                    service: body?.service,
+                    diagnostic: body?.diagnostic
+                  };
                   if (response.ok && body?.ok === true && body?.environment === 'lab') {
                     console.log('TURSO_WORKER_HEALTH=PASS attempt=' + attempt);
                     return;
                   }
-                } catch {}
+                } catch (error) {
+                  last = { fetch_error: String(error?.name || 'Error') };
+                }
                 await new Promise(resolve => setTimeout(resolve, 1500));
               }
+              console.log('TURSO_WORKER_HEALTH_LAST=' + JSON.stringify(last || {}));
               throw new Error('worker_health_failed');
             }
 

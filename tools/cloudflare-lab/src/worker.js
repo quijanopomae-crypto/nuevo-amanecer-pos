@@ -39,6 +39,23 @@ function runtimeServiceName(environment) {
   return 'nuevo-amanecer-sync-lab';
 }
 
+export function classifyDatabaseHealthError(error) {
+  const message = String(error?.message || '');
+  const code = String(error?.code || '');
+
+  const http = message.match(/Turso (?:protocol returned non-JSON )?HTTP\s+(\d{3})/i);
+  if (http) return 'turso_http_' + http[1];
+
+  if (/missing execute result/i.test(message)) return 'turso_protocol_execute_missing';
+  if (/Turso SQL error/i.test(message)) {
+    return /^[A-Z0-9_:-]{1,80}$/i.test(code) && code ? 'turso_sql_' + code.toLowerCase() : 'turso_sql_error';
+  }
+  if (/different request|request context|global scope/i.test(message)) return 'worker_request_context';
+  if (/fetch failed|network|connection|dns|tls|socket/i.test(message)) return 'turso_fetch_failed';
+  if (/TypeError/i.test(String(error?.name || '')) || /TypeError/i.test(message)) return 'runtime_type_error';
+  return 'backend_unknown';
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -201,13 +218,29 @@ async function health(env) {
   if (!getDatabase(env)) {
     return json({ ok: false, service: runtimeServiceName(environment), d1: 'binding_missing' }, 503);
   }
-  const row = await getDatabase(env).prepare('SELECT 1 AS one').first();
-  return json({
-    ok: row?.one === 1,
-    service: runtimeServiceName(environment),
-    environment,
-    d1: row?.one === 1 ? 'ok' : 'error'
-  });
+  try {
+    const row = await getDatabase(env).prepare('SELECT 1 AS one').first();
+    return json({
+      ok: row?.one === 1,
+      service: runtimeServiceName(environment),
+      environment,
+      d1: row?.one === 1 ? 'ok' : 'error'
+    });
+  } catch (error) {
+    if (environment === 'lab' &&
+        String(env.DB_PROVIDER || '').toLowerCase() === 'turso' &&
+        env.TURSO_HEALTH_DIAGNOSTIC === 'enabled') {
+      return json({
+        ok: false,
+        error: 'database_health_error',
+        service: runtimeServiceName(environment),
+        environment,
+        d1: 'error',
+        diagnostic: classifyDatabaseHealthError(error)
+      }, 500);
+    }
+    throw error;
+  }
 }
 
 // A one-time activation secret issues a persistent session token.

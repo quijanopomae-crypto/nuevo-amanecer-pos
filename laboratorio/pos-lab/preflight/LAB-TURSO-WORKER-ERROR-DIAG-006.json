@@ -1,0 +1,67 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-WORKER-ERROR-DIAG-006",
+  "base_ref": "905823c9bd81bb08d9d10f0385ac67cb576f0f86",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Error capturado durante SELECT 1 del health en Worker Turso LAB",
+      "Respuesta /health registrada por GitHub Actions"
+    ],
+    "WRITES": [
+      "Solo código diagnóstico LAB y redeploy del Worker aislado Turso"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún estado comercial; cambia temporalmente el detalle del health solo en DB_PROVIDER=turso + TURSO_HEALTH_DIAGNOSTIC=enabled"
+    ],
+    "STORAGE_AFFECTED": [
+      "Sin escrituras adicionales a Turso por el diagnóstico health"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No incluir token, URL, Authorization ni SQL dinámico en el diagnóstico",
+      "CANON/producción no cambian",
+      "El detalle diagnóstico queda deshabilitado fuera del Worker Turso LAB"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Solo health de infraestructura; rutas de negocio permanecen iguales"
+    ],
+    "RISKS": [
+      "Mensaje de excepción podría contener detalle no deseado; se reduce a categorías allowlisted",
+      "Redeploy del Worker aislado puede seguir fallando y requerir un segundo diagnóstico"
+    ],
+    "ROLLBACK": [
+      "Retirar TURSO_HEALTH_DIAGNOSTIC y revertir el helper tras identificar la causa"
+    ],
+    "TESTS": [
+      "Unit test de clasificación segura",
+      "LAB Canon Mirror CI",
+      "Redeploy E2E y captura de WORKER_HEALTH_BODY seguro"
+    ]
+  }
+}
