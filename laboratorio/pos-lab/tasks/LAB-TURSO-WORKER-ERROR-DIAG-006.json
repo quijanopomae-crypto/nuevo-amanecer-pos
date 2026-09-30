@@ -1,0 +1,36 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-WORKER-ERROR-DIAG-006",
+  "environment": "LABORATORIO",
+  "base_ref": "905823c9bd81bb08d9d10f0385ac67cb576f0f86",
+  "objective": "Exponer temporalmente en /health del Worker Turso LAB una clasificación segura del error de base de datos y registrar esa respuesta en el E2E, para localizar el 500 sin revelar secretos.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-WORKER-ERROR-DIAG-006.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-WORKER-ERROR-DIAG-006.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json",
+    "tools/cloudflare-lab/src/worker.js",
+    "tools/cloudflare-lab/wrangler.turso.jsonc",
+    "tools/cloudflare-lab/test/turso-health-diagnostic.test.mjs",
+    ".github/workflows/turso-lab-worker-e2e.yml",
+    ".github/workflows/lab-cloud-ci.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-WORKER-ERROR-DIAG-006.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
