@@ -118,6 +118,13 @@
       var now = currentScroll();
       var delta = now - lastScroll;
       lastScroll = now;
+
+      var resetAtTopPx = Number(config.resetAtTopPx);
+      if (Number.isFinite(resetAtTopPx) && now <= Math.max(0, resetAtTopPx)) {
+        queue(0);
+        return;
+      }
+
       if (Math.abs(delta) < 0.5) return;
 
       var appliedDelta = delta;
@@ -222,7 +229,7 @@
       return controller ? controller.inspect() : null;
     },
     presets: {
-      clientes: { pageId:'pageClientes', clipChrome:true, revealRate:0.5, secondarySelectors:['.filter-bar','.stats-strip'] },
+      clientes: { pageId:'pageClientes', clipChrome:true, revealRate:0.5, resetAtTopPx:2, secondarySelectors:['.filter-bar','.stats-strip'] },
       inventario: { pageId:'pageInventario', clipChrome:true, secondarySelectors:['.filter-bar','.stats-strip'] },
       ventas: { pageId:'pageVentas', clipChrome:true, secondarySelectors:['#ventasFilterBar','#ventasReportControls','#ventasKPI'] },
       caja: { pageId:'pageCaja', clipChrome:false, secondarySelectors:['#cajContent > .caj-banner-wrap','#cajContent > .cj-stats-grid','#cajContent > div:first-child > .banner-cerrada-cj'], observeSelector:'#cajContent' },
