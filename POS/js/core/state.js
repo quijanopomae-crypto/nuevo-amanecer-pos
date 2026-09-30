@@ -85,8 +85,21 @@
     return fallback;
   }
   function activeScrollEl(preferred){return scrollOwnerFromTarget(preferred);}
+  function clientesMotionOwnsMobileScroll(){
+    var page=activePageEl(),motion=window.NA_MOTION;
+    return window.innerWidth<=700
+      &&page&&page.id==='pageClientes'
+      &&motion&&motion.scroll
+      &&typeof motion.scroll.enablePreset==='function';
+  }
   function gesturesActive(){
-    if(document.body.classList.contains('module-mobile-scroll'))return true;
+    if(document.body.classList.contains('module-mobile-scroll')){
+      // Clientes ya tiene un único controlador visual (NA_MOTION.scroll).
+      // Evita que la máquina legacy compita durante refresh/bootstrap y produzca
+      // el salto: animación anterior -> pausa -> Motion estable.
+      if(clientesMotionOwnsMobileScroll())return false;
+      return true;
+    }
     if(document.documentElement.classList.contains('config-page-scroll'))return true;
     return desktopMode();
   }

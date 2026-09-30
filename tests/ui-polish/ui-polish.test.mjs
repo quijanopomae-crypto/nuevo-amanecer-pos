@@ -12,6 +12,7 @@
 // T10 todos los guards de procesamiento impiden cierre por backdrop.
 // T11 el cierre por backdrop usa exactamente el mismo camino que la X (cerrarModal(id)).
 // T12 navegación y scroll existentes siguen funcionando (gestos repetibles, desktop inmune).
+// T13 Clientes móvil cede el scroll visual a NA_MOTION para evitar doble animación tras refresh.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -232,4 +233,25 @@ test('T12 — navegación y scroll existentes siguen funcionando', async () => {
   sb.run("document.body.classList.add('module-mobile-scroll')");
   await scrollTo(sb, 200);
   assert.equal(sb.headerHidden(), true, 'el sistema sigue operativo tras desactivar/activar');
+});
+
+
+test('T13 — Clientes móvil tiene un solo dueño de animación cuando NA_MOTION está disponible', async () => {
+  const sb = fresh();
+  sb.run(`
+    document.getElementById('pageClientes').classList.add('active');
+    window.NA_MOTION={scroll:{enablePreset:function(){}}};
+    window._naTopbarGesture.sync();
+  `);
+
+  assert.equal(sb.run('window._naTopbarGesture.isActive()'), false,
+    'la máquina legacy debe quedar inactiva cuando Clientes ya tiene NA_MOTION.scroll');
+
+  await scrollTo(sb, 0);
+  await scrollTo(sb, 220);
+
+  assert.equal(sb.headerHidden(), false,
+    'el listener legacy no debe volver a ocultar/saltar el header durante el bootstrap');
+  assert.equal(sb.pageChromeHidden('pageClientes'), false,
+    'el chrome de Clientes queda exclusivamente bajo el controlador Motion');
 });
