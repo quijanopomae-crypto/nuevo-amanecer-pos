@@ -165,3 +165,20 @@ test('adapter projects canonical expenses to Gastos and only session expenses to
   assert.equal(gas[0].efectivo,12.5);
   assert.equal(out.cashState.esperado,87.5);
 });
+
+
+test('payment batch fast path holds one writer lock and never refreshes between allocations',()=>{
+  const start=source.indexOf('async function createPaymentBatch(inputs)');
+  const end=source.indexOf('function createProduct(input)',start);
+  assert.ok(start>=0&&end>start,'createPaymentBatch must exist before command wrappers');
+  const block=source.slice(start,end);
+  assert.match(block,/return withWriterLock\(async function \(\)/);
+  assert.match(block,/assertAction\('payment\.create'\)/);
+  assert.match(block,/seen\.has\(creditId\)/);
+  assert.match(block,/makeFinancialPayload\('payment\.create', input\)/);
+  assert.match(block,/durableJournal\(record\)/);
+  assert.match(block,/sendPending\(record, true\)/);
+  assert.match(block,/sendPending\(retryRecord, false\)/);
+  assert.doesNotMatch(block,/\brefresh\s*\(/,'batch fast path must not perform full replica refreshes between payments');
+  assert.match(source,/createPaymentBatch:\s*createPaymentBatch/);
+});

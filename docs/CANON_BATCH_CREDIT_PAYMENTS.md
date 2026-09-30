@@ -22,7 +22,9 @@ El flujo individual **Registrar pago** continúa disponible dentro de cada créd
 
 No existe un segundo ledger ni un nuevo comando backend. Cada asignación del lote se registra usando el `payment.create` CANON existente. El `canonical-client` continúa derivando la revisión del crédito, mantiene el journal PENDING/CONFIRMED y usa el mismo mecanismo idempotente de recibos.
 
-Después de cada pago confirmado se refresca CANON antes de enviar la siguiente asignación. Esto evita reutilizar una réplica/revisión obsoleta.
+El cobro múltiple usa un **fast path** del cliente CANON: mantiene un único writer lock, crea un `payment.create` idempotente por deuda y **no ejecuta un refresh completo entre deudas distintas**. La revisión inicial de cada crédito distinto sigue siendo válida porque pagar otro crédito no modifica esa revisión, y el Worker vuelve a validar autoridad, revisión del crédito y sesión de caja en cada POST.
+
+Una vez confirmados los recibos durables del lote, se dispara **una sola reconciliación CANON en segundo plano** para actualizar toda la vista. Así el cajero deja de esperar N lecturas completas del snapshot por un cobro de N deudas.
 
 ## Fallo parcial
 
@@ -63,3 +65,18 @@ deudas necesita seleccionar.
 
 El campo **Número de operación** permanece oculto con **Efectivo** y solo se
 muestra para Yape/Plin o transferencia.
+
+
+## Rendimiento del cobro múltiple
+
+Antes del fast path, un lote de varias deudas ejecutaba el patrón
+`payment.create -> refresh completo -> payment.create -> refresh completo`.
+El refresh completo consulta múltiples rutas CANON y dominaba la latencia.
+
+Ahora el lote mantiene exactamente las mismas escrituras `payment.create` y
+sus operation_id individuales, pero elimina los refresh intermedios. Un lote de
+4 deudas realiza 4 escrituras confirmadas y una sola reconciliación posterior,
+en vez de 4 escrituras + 4 reconciliaciones completas.
+
+No se muestra éxito antes de recibir los receipts durables del Worker. La mejora
+proviene de quitar lecturas redundantes, no de simular un pago optimista.

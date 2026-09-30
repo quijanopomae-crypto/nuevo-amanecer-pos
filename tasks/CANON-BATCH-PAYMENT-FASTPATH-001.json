@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-BATCH-PAYMENT-FASTPATH-001",
+  "environment": "CANON",
+  "base_ref": "b3dced654a892a624debce32ebb155ec4a04657b",
+  "objective": "Reducir drásticamente la latencia del cobro múltiple CANON eliminando el refresh completo entre cada deuda, conservando payment.create, idempotencia y validación backend.",
+  "owner_authorization": "Owner reportó demora visible en Procesando... durante un cobro múltiple y pidió que el procesamiento sea al instante.",
+  "allowed_files": [
+    "tasks/CANON-BATCH-PAYMENT-FASTPATH-001.json",
+    "evidence/canon-preflight/CANON-BATCH-PAYMENT-FASTPATH-001.json",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-credit-payment-bridge.js",
+    "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+    "tests/cloud-sync/canonical-client.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "infra/database/migrations/**",
+    "tools/cloudflare-lab/src/**",
+    "POS/index.html",
+    "POS/sw.js"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "invariants": [
+    "payment.create remains the only backend payment command",
+    "Each allocation keeps its own operation_id and durable PENDING/CONFIRMED journal transition",
+    "The fast path holds the CANON writer lock for the whole selected batch",
+    "A new payment still skips the redundant status GET because the Worker validates authority and credit revision atomically",
+    "ACK-loss retry must replay the same operation_id exactly once before continuing",
+    "No full canonical refresh occurs between selected debts",
+    "Exactly one background reconciliation refresh occurs after the batch finishes or partially stops",
+    "No optimistic success is shown before all required payment receipts are durable",
+    "No D1, schema, backend, Caja, credit balance or business-rule changes"
+  ],
+  "rollback": "Revertir el PR completo; no hay migraciones ni cambios de datos."
+}
