@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-SCHEMA-003",
+  "environment": "LABORATORIO",
+  "base_ref": "423b16507d9cf410a743bf3a05fa07d5de67d328",
+  "objective": "Aplicar en la base Turso LAB vacía el mismo esquema SQLite versionado en infra/database/migrations y verificar compatibilidad estructural, sin datos reales ni cambios en CANON/producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-SCHEMA-003.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-SCHEMA-003.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-SCHEMA-003.json",
+    ".github/workflows/turso-lab-schema-bootstrap.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/database/migrations/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-SCHEMA-003.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
