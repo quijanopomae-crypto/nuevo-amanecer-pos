@@ -835,3 +835,199 @@
 
 /* Payment modal must render above the V2 financial workspace but below security overlays. */
 #mPagoCred{z-index:1300}
+
+
+/* CANON BATCH CREDIT PAYMENTS 001 — multi-select payment without a second ledger */
+#pageClientes .na-v2-batch-pay{
+  margin:14px 0 15px;
+  padding:15px;
+  border:1px solid #cfe1df;
+  border-radius:18px;
+  background:#fff;
+  box-shadow:0 6px 18px rgba(15,23,42,.045);
+}
+#pageClientes .na-v2-batch-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:12px;
+}
+#pageClientes .na-v2-batch-head>div{min-width:0}
+#pageClientes .na-v2-batch-head .na-v2-eyebrow{margin-bottom:4px}
+#pageClientes .na-v2-batch-head strong{
+  display:block;
+  color:#172033;
+  font-size:14px;
+  line-height:1.25;
+}
+#pageClientes .na-v2-batch-selectall,
+#pageClientes .na-v2-batch-auto{
+  min-height:40px;
+  border:1px solid #b9d8d4;
+  border-radius:12px;
+  background:#f3faf8;
+  color:#0f6b64;
+  font:800 11px/1.2 inherit;
+  padding:8px 11px;
+  cursor:pointer;
+  flex:0 0 auto;
+}
+#pageClientes .na-v2-batch-amount{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+#pageClientes .na-v2-batch-amount>span,
+#pageClientes .na-v2-batch-method-row label>span{
+  color:#64748b;
+  font-size:10px;
+  font-weight:800;
+}
+#pageClientes .na-v2-batch-amount input{
+  width:100%;
+  min-height:48px;
+  border:1px solid #cfd9df;
+  border-radius:13px;
+  background:#fff;
+  color:#172033;
+  font:900 20px/1.1 inherit;
+  padding:10px 12px;
+  outline:none;
+}
+#pageClientes .na-v2-batch-amount input:focus,
+#pageClientes .na-v2-batch-method-row select:focus,
+#pageClientes .na-v2-batch-method-row input:focus{
+  border-color:#67bdb5;
+  box-shadow:0 0 0 3px rgba(15,118,110,.10);
+}
+#pageClientes .na-v2-batch-actions{
+  display:flex;
+  justify-content:flex-end;
+  margin:8px 0 10px;
+}
+#pageClientes .na-v2-batch-method-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:9px;
+}
+#pageClientes .na-v2-batch-method-row label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-width:0;
+}
+#pageClientes .na-v2-batch-method-row select,
+#pageClientes .na-v2-batch-method-row input{
+  width:100%;
+  min-height:42px;
+  border:1px solid #d6dfe4;
+  border-radius:11px;
+  background:#fff;
+  color:#253247;
+  font:750 12px/1.2 inherit;
+  padding:8px 10px;
+  outline:none;
+}
+#pageClientes .na-v2-batch-summary{
+  margin:11px 0 10px;
+  min-height:38px;
+  display:flex;
+  align-items:center;
+  border-radius:11px;
+  background:#f7fafb;
+  border:1px solid #e3e9ed;
+  color:#526276;
+  font-size:11px;
+  line-height:1.35;
+  font-weight:720;
+  padding:9px 10px;
+}
+#pageClientes .na-v2-batch-submit{
+  width:100%;
+  min-height:46px;
+  border:0;
+  border-radius:13px;
+  background:#0f766e;
+  color:#fff;
+  font:900 13px/1.2 inherit;
+  padding:11px 14px;
+  cursor:pointer;
+  box-shadow:0 7px 16px rgba(15,118,110,.16);
+}
+#pageClientes .na-v2-batch-submit:disabled{
+  background:#d8e0e3;
+  color:#7b8794;
+  box-shadow:none;
+  cursor:not-allowed;
+}
+#pageClientes .na-v2-batch-list{gap:10px}
+#pageClientes .na-v2-batch-row{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  align-items:stretch;
+  gap:8px;
+}
+#pageClientes .na-v2-batch-check-wrap{
+  min-width:42px;
+  border:1px solid #d9e2e6;
+  border-radius:15px;
+  background:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  box-shadow:0 4px 12px rgba(15,23,42,.03);
+}
+#pageClientes .na-v2-batch-check{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+#pageClientes .na-v2-batch-check-ui{
+  width:24px;
+  height:24px;
+  border:2px solid #b9c7ce;
+  border-radius:8px;
+  display:grid;
+  place-items:center;
+  color:transparent;
+  font-size:14px;
+  font-weight:950;
+  background:#fff;
+}
+#pageClientes .na-v2-batch-check:checked+.na-v2-batch-check-ui{
+  color:#fff;
+  border-color:#0f766e;
+  background:#0f766e;
+}
+#pageClientes .na-v2-batch-check:focus-visible+.na-v2-batch-check-ui{
+  outline:3px solid rgba(15,118,110,.20);
+  outline-offset:2px;
+}
+#pageClientes .na-v2-batch-row-body{min-width:0}
+#pageClientes .na-v2-batch-row-body>.na-v2-row{width:100%}
+#pageClientes .na-v2-batch-allocation{
+  min-height:0;
+  color:#0f766e;
+  font-size:10px;
+  line-height:1.25;
+  font-weight:850;
+  padding:0 12px;
+}
+#pageClientes .na-v2-batch-allocation:not(:empty){padding-top:5px;padding-bottom:2px}
+
+@media(max-width:430px){
+  #pageClientes .na-v2-batch-pay{padding:13px;margin-top:12px}
+  #pageClientes .na-v2-batch-head{align-items:center}
+  #pageClientes .na-v2-batch-head strong{font-size:13px}
+  #pageClientes .na-v2-batch-selectall,
+  #pageClientes .na-v2-batch-auto{min-height:42px}
+  #pageClientes .na-v2-batch-method-row{grid-template-columns:1fr}
+  #pageClientes .na-v2-batch-row{grid-template-columns:40px minmax(0,1fr);gap:7px}
+  #pageClientes .na-v2-batch-check-wrap{min-width:40px;border-radius:14px}
+}
+@media(max-width:360px){
+  #pageClientes .na-v2-batch-head{flex-direction:column;align-items:stretch}
+  #pageClientes .na-v2-batch-selectall{width:100%}
+}
