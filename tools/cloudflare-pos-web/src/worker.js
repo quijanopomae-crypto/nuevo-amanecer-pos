@@ -32,7 +32,8 @@ function isCanonicalApiPath(pathname) {
 
 async function proxyCanonical(request, env) {
   const backend = canonicalBackendOrigin(env);
-  if (!backend) {
+  const service = env.CANON_BACKEND;
+  if (!backend || !service || typeof service.fetch !== 'function') {
     return withNoStore(new Response(JSON.stringify({ error: 'canonical_proxy_not_configured' }), {
       status: 503,
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
@@ -50,14 +51,15 @@ async function proxyCanonical(request, env) {
     body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
     redirect: 'manual',
   });
-  return withNoStore(await fetch(proxied));
+  return withNoStore(await service.fetch(proxied));
 }
 
 function runtimeConfig(request, env) {
   const environment = String(env.HOSTED_ENVIRONMENT || '');
   const backendOrigin = canonicalBackendOrigin(env);
   const hostedOrigin = new URL(request.url).origin;
-  const valid = ['production', 'staging'].includes(environment) && !!backendOrigin;
+  const valid = ['production', 'staging'].includes(environment) && !!backendOrigin &&
+    env.CANON_BACKEND && typeof env.CANON_BACKEND.fetch === 'function';
 
   if (!valid) {
     return withNoStore(new Response(
