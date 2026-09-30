@@ -298,9 +298,210 @@
     }
   }
 
+  function batchFailure(message, requestedCents, completed, code) {
+    var completedCents = completed.reduce(function (sum, item) { return sum + item.amount_cents; }, 0);
+    var partial = completed.length > 0;
+    if (partial) {
+      notify('Lote detenido. S/ ' + (completedCents / 100).toFixed(2) + ' ya quedó CONFIRMADO en ' +
+        completed.length + (completed.length === 1 ? ' crédito. ' : ' créditos. ') +
+        'NO repitas ese monto. ' + message, 'error');
+    } else {
+      notify(message, 'error');
+    }
+    return {
+      ok:false,
+      partial:partial,
+      code:code || 'BATCH_PAYMENT_FAILED',
+      requested_cents:requestedCents,
+      completed_cents:completedCents,
+      completed_count:completed.length,
+      completed:completed.slice(),
+      remaining_cents:Math.max(0, requestedCents - completedCents)
+    };
+  }
+
+  async function confirmBatch(request) {
+    if (!enabled()) return { ok:false, partial:false, code:'CANONICAL_PAYMENT_DISABLED', completed:[] };
+    if (busy) return { ok:false, partial:false, code:'CANONICAL_PAYMENT_BUSY', completed:[] };
+
+    request = request && typeof request === 'object' && !Array.isArray(request) ? request : {};
+    var rawAllocations = Array.isArray(request.allocations) ? request.allocations : [];
+    var method = clean(request.payment_method) || 'efectivo';
+    var reference = clean(request.reference);
+    var seen = new Set();
+    var allocations = [];
+
+    for (var i = 0; i < rawAllocations.length; i += 1) {
+      var row = rawAllocations[i] && typeof rawAllocations[i] === 'object' ? rawAllocations[i] : {};
+      var creditId = clean(row.credit_id);
+      var amountCents = Number(row.amount_cents);
+      if (!creditId || seen.has(creditId) || !Number.isSafeInteger(amountCents) || amountCents <= 0) {
+        notify('La selección del cobro múltiple no es válida', 'error');
+        return { ok:false, partial:false, code:'INVALID_BATCH_ALLOCATION', completed:[] };
+      }
+      seen.add(creditId);
+      allocations.push({ credit_id:creditId, amount_cents:amountCents });
+    }
+
+    if (!allocations.length) {
+      notify('Selecciona al menos una deuda para registrar el pago', 'error');
+      return { ok:false, partial:false, code:'EMPTY_BATCH', completed:[] };
+    }
+    if (!['efectivo', 'yape', 'transferencia'].includes(method)) {
+      notify('Método de pago inválido', 'error');
+      return { ok:false, partial:false, code:'INVALID_BATCH_METHOD', completed:[] };
+    }
+    if (method !== 'efectivo' && reference.length < 4) {
+      notify('Ingresa al menos 4 caracteres del número de operación', 'error');
+      return { ok:false, partial:false, code:'INVALID_BATCH_REFERENCE', completed:[] };
+    }
+
+    var requestedCents = allocations.reduce(function (sum, row) {
+      return Number.isSafeInteger(sum + row.amount_cents) ? sum + row.amount_cents : Number.MAX_SAFE_INTEGER;
+    }, 0);
+    if (!Number.isSafeInteger(requestedCents) || requestedCents <= 0 || requestedCents === Number.MAX_SAFE_INTEGER) {
+      notify('El monto total del cobro múltiple no es válido', 'error');
+      return { ok:false, partial:false, code:'INVALID_BATCH_TOTAL', completed:[] };
+    }
+
+    var client = api();
+    var pending = pendingRecord();
+    if (pending) {
+      notify('Hay una operación CANON pendiente. Resuélvela antes de iniciar un cobro múltiple.', 'error');
+      return { ok:false, partial:false, code:'CANONICAL_PENDING_BLOCKS_BATCH', completed:[] };
+    }
+
+    var snapshot;
+    try {
+      snapshot = await paymentSnapshot();
+    } catch (error) {
+      return batchFailure('No se pudo iniciar el lote: CANON no está disponible (' + clean(error && error.message) + ').',
+        requestedCents, [], 'CANONICAL_BATCH_SNAPSHOT_FAILED');
+    }
+
+    if (method !== 'efectivo' && referenceUsed(snapshot, reference)) {
+      return batchFailure('Ese número de operación ya fue registrado.', requestedCents, [], 'BATCH_REFERENCE_ALREADY_USED');
+    }
+
+    for (var j = 0; j < allocations.length; j += 1) {
+      var initialCredit = findCredit(snapshot, allocations[j].credit_id);
+      var initialOutstanding = initialCredit ? Math.round(Number(initialCredit.saldo || 0) * 100) : 0;
+      if (!initialCredit || !Number.isSafeInteger(initialOutstanding) || initialOutstanding <= 0 ||
+          allocations[j].amount_cents > initialOutstanding) {
+        return batchFailure('La deuda seleccionada cambió o el monto supera su saldo actual.',
+          requestedCents, [], 'BATCH_CREDIT_BALANCE_CHANGED');
+      }
+    }
+
+    if (method === 'efectivo' && (!snapshot.cashState || !snapshot.cashState.abierta || !snapshot.cashState.sessionId)) {
+      return batchFailure('Abre la caja antes de registrar un cobro en efectivo.',
+        requestedCents, [], 'BATCH_CASH_SESSION_REQUIRED');
+    }
+
+    busy = true;
+    var completed = [];
+    try {
+      for (var index = 0; index < allocations.length; index += 1) {
+        var allocation = allocations[index];
+        var credit = findCredit(snapshot, allocation.credit_id);
+        var outstandingCents = credit ? Math.round(Number(credit.saldo || 0) * 100) : 0;
+        if (!credit || !Number.isSafeInteger(outstandingCents) || outstandingCents <= 0 ||
+            allocation.amount_cents > outstandingCents) {
+          return batchFailure('El saldo cambió antes de aplicar la siguiente deuda. Revisa lo pendiente antes de continuar.',
+            requestedCents, completed, 'BATCH_CREDIT_CHANGED_DURING_RUN');
+        }
+
+        var input = {
+          credit_id:String(credit.credit_id !== undefined ? credit.credit_id : credit.id),
+          amount_cents:allocation.amount_cents,
+          payment_method:method
+        };
+        if (method === 'efectivo') {
+          var cash = snapshot.cashState;
+          if (!cash || !cash.abierta || !cash.sessionId) {
+            return batchFailure('La caja dejó de estar disponible durante el lote.',
+              requestedCents, completed, 'BATCH_CASH_SESSION_CHANGED');
+          }
+          input.session_id = String(cash.sessionId);
+        } else {
+          // One external transfer/Yape reference can fund several selected debts.
+          // It is validated once before the batch and then kept identical on each
+          // canonical allocation so the audit trail points to the real operation.
+          input.reference = reference;
+        }
+
+        var receipt;
+        try {
+          if (!client || typeof client.createPayment !== 'function') throw new Error('CANONICAL_PAYMENT_UNAVAILABLE');
+          receipt = await client.createPayment(input);
+        } catch (error) {
+          var retryable = pendingRecord();
+          if (retryable && retryable.command === 'payment.create' && !retryable.invalid && !retryable.last_error &&
+              client && typeof client.retryPending === 'function') {
+            try {
+              // Exactly one replay of the SAME operation_id. Never manufacture a
+              // second command when the ACK outcome is uncertain.
+              receipt = await client.retryPending();
+            } catch (retryError) {
+              return batchFailure('Existe una operación pendiente sin confirmar. Reintenta esa operación antes de continuar; no vuelvas a ingresar el total.',
+                requestedCents, completed, 'BATCH_PENDING_UNRESOLVED');
+            }
+          } else {
+            return batchFailure(describePendingFailure(error),
+              requestedCents, completed, 'BATCH_PAYMENT_REJECTED');
+          }
+        }
+
+        completed.push({
+          credit_id:allocation.credit_id,
+          amount_cents:allocation.amount_cents,
+          operation_id:clean(receipt && receipt.operation_id)
+        });
+
+        // createPayment marks the canonical replica stale. Refresh before the
+        // next allocation so its revision and cash state are current.
+        try {
+          snapshot = await refreshCanonical();
+        } catch (refreshError) {
+          if (index < allocations.length - 1) {
+            return batchFailure('La última asignación quedó confirmada, pero no se pudo refrescar CANON para continuar. Recarga y cobra solo el saldo restante.',
+              requestedCents, completed, 'BATCH_REFRESH_FAILED');
+          }
+          notify('Cobro múltiple CONFIRMADO por S/ ' + (requestedCents / 100).toFixed(2) +
+            '. La vista no pudo actualizarse; recarga la pantalla y NO repitas el pago.', 'success');
+          return {
+            ok:true,
+            partial:false,
+            refresh_failed:true,
+            requested_cents:requestedCents,
+            completed_cents:requestedCents,
+            completed_count:completed.length,
+            completed:completed.slice(),
+            remaining_cents:0
+          };
+        }
+      }
+
+      notify('Cobro múltiple CANON CONFIRMADO: S/ ' + (requestedCents / 100).toFixed(2) +
+        ' aplicado a ' + completed.length + (completed.length === 1 ? ' deuda.' : ' deudas.'), 'success');
+      return {
+        ok:true,
+        partial:false,
+        requested_cents:requestedCents,
+        completed_cents:requestedCents,
+        completed_count:completed.length,
+        completed:completed.slice(),
+        remaining_cents:0
+      };
+    } finally {
+      busy = false;
+    }
+  }
+
   root.NuevoAmanecerCanonicalCreditPaymentBridge = Object.freeze({
     enabled: enabled,
     confirm: confirm,
+    confirmBatch: confirmBatch,
     busy: function () { return busy; }
   });
 })(globalThis);
