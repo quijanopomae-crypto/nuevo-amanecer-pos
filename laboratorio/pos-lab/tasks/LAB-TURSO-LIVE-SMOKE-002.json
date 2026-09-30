@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-LIVE-SMOKE-002",
+  "environment": "LABORATORIO",
+  "base_ref": "b160bf72d70c8f385e43468eacbbb4db66b1f3b4",
+  "objective": "Verificar desde GitHub Actions que TURSO_DATABASE_URL y TURSO_AUTH_TOKEN permiten una conexión real de solo lectura a la base Turso LAB, sin exponer secretos ni tocar CANON/producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-LIVE-SMOKE-002.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-LIVE-SMOKE-002.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-SMOKE-002.json",
+    ".github/workflows/turso-lab-smoke.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-LIVE-SMOKE-002.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
