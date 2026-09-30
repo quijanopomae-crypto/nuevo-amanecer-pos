@@ -1,0 +1,261 @@
+name: Turso LAB Worker E2E
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: turso-lab-worker-e2e
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      WORKER_URL: https://nuevo-amanecer-sync-lab-turso.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Require LAB deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$TURSO_DATABASE_URL"
+          test -n "$TURSO_AUTH_TOKEN"
+          test -n "$POS_ACTIVATION_SECRET"
+
+      - name: Install Worker dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Deploy isolated Turso LAB Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config wrangler.turso.jsonc
+
+      - name: Install Turso and activation secrets on isolated Worker
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          fs.writeFileSync('/tmp/turso-worker-secrets.json', JSON.stringify({
+            TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
+            TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN,
+            POS_ACTIVATION_SECRET: process.env.POS_ACTIVATION_SECRET
+          }));
+          NODE
+          npx wrangler secret bulk /tmp/turso-worker-secrets.json --config wrangler.turso.jsonc
+          rm -f /tmp/turso-worker-secrets.json
+
+      - name: Verify health activation session write replay and cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { createHash, randomUUID } = require('node:crypto');
+
+          (async () => {
+            const worker = String(process.env.WORKER_URL || '').replace(/\/+$/, '');
+            const activation = String(process.env.POS_ACTIVATION_SECRET || '');
+            const rawTurso = String(process.env.TURSO_DATABASE_URL || '');
+            const tursoToken = String(process.env.TURSO_AUTH_TOKEN || '');
+            const tursoBase = (rawTurso.startsWith('libsql://')
+              ? 'https://' + rawTurso.slice('libsql://'.length)
+              : rawTurso).replace(/\/+$/, '');
+            const tursoPipeline = tursoBase + '/v3/pipeline';
+
+            async function waitHealth() {
+              for (let attempt = 1; attempt <= 20; attempt += 1) {
+                try {
+                  const response = await fetch(worker + '/health', { headers:{'cache-control':'no-cache'} });
+                  const body = await response.json().catch(() => null);
+                  if (response.ok && body?.ok === true && body?.environment === 'lab') {
+                    console.log('TURSO_WORKER_HEALTH=PASS attempt=' + attempt);
+                    return;
+                  }
+                } catch {}
+                await new Promise(resolve => setTimeout(resolve, 1500));
+              }
+              throw new Error('worker_health_failed');
+            }
+
+            async function directPipeline(requests) {
+              const response = await fetch(tursoPipeline, {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + tursoToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify({baton:null,requests})
+              });
+              const body = await response.json().catch(() => null);
+              if (!response.ok || !body) throw new Error('turso_cleanup_http_' + response.status);
+              return body;
+            }
+
+            function text(value) {
+              return {type:'text',value:String(value)};
+            }
+
+            let sessionToken = '';
+            let sessionId = '';
+            let operationId = '';
+            try {
+              await waitHealth();
+
+              const activated = await fetch(worker + '/auth/activate', {
+                method:'POST',
+                headers:{'x-activation-secret':activation}
+              });
+              const activationBody = await activated.json().catch(() => null);
+              if (!activated.ok || activationBody?.status !== 'activated' ||
+                  typeof activationBody?.session_token !== 'string' || !activationBody.session_token) {
+                throw new Error('activation_failed_http_' + activated.status);
+              }
+              sessionToken = activationBody.session_token;
+              console.log('TURSO_WORKER_ACTIVATION=PASS');
+
+              const session = await fetch(worker + '/auth/session', {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const sessionBody = await session.json().catch(() => null);
+              if (!session.ok || sessionBody?.status !== 'ok' || typeof sessionBody?.session_id !== 'string') {
+                throw new Error('session_failed_http_' + session.status);
+              }
+              sessionId = sessionBody.session_id;
+              console.log('TURSO_WORKER_SESSION=PASS');
+
+              operationId = 'turso-e2e-' + randomUUID();
+              const payload = JSON.stringify({kind:'turso-worker-e2e',version:1});
+              const payloadHash = createHash('sha256').update(payload).digest('hex');
+              const operation = {
+                operation_id:operationId,
+                device_sequence:1,
+                entity_type:'diagnostic',
+                entity_id:'synthetic',
+                payload,
+                payload_hash:payloadHash,
+                created_at:new Date().toISOString()
+              };
+
+              const inserted = await fetch(worker + '/sync/operations', {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + sessionToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify(operation)
+              });
+              const insertedBody = await inserted.json().catch(() => null);
+              if (inserted.status !== 201 || insertedBody?.status !== 'inserted') {
+                throw new Error('sync_insert_failed_http_' + inserted.status);
+              }
+              console.log('TURSO_WORKER_SYNC_WRITE=PASS');
+
+              const lookup = await fetch(worker + '/sync/operations/' + encodeURIComponent(operationId), {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const lookupBody = await lookup.json().catch(() => null);
+              if (!lookup.ok || lookupBody?.operation?.operation_id !== operationId ||
+                  lookupBody?.operation?.payload_hash !== payloadHash) {
+                throw new Error('sync_lookup_failed_http_' + lookup.status);
+              }
+              console.log('TURSO_WORKER_SYNC_READ=PASS');
+
+              const replay = await fetch(worker + '/sync/operations', {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + sessionToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify(operation)
+              });
+              const replayBody = await replay.json().catch(() => null);
+              if (!replay.ok || replayBody?.status !== 'already_processed') {
+                throw new Error('sync_replay_failed_http_' + replay.status);
+              }
+              console.log('TURSO_WORKER_IDEMPOTENCY=PASS');
+            } finally {
+              if (sessionId) {
+                const principalId = 'session:' + sessionId;
+                const steps = [
+                  {stmt:{sql:'BEGIN IMMEDIATE',args:[],want_rows:false}},
+                ];
+                if (operationId) {
+                  steps.push({
+                    condition:{type:'ok',step:steps.length - 1},
+                    stmt:{sql:'DELETE FROM sync_operations WHERE operation_id=?1',args:[text(operationId)],want_rows:false}
+                  });
+                }
+                steps.push({
+                  condition:{type:'ok',step:steps.length - 1},
+                  stmt:{sql:'DELETE FROM auth_sessions WHERE session_id=?1',args:[text(sessionId)],want_rows:false}
+                });
+                steps.push({
+                  condition:{type:'ok',step:steps.length - 1},
+                  stmt:{sql:'DELETE FROM devices WHERE device_id=?1',args:[text(principalId)],want_rows:false}
+                });
+                const commitStep = steps.length;
+                steps.push({
+                  condition:{type:'ok',step:commitStep - 1},
+                  stmt:{sql:'COMMIT',args:[],want_rows:false}
+                });
+                steps.push({
+                  condition:{type:'not',cond:{type:'ok',step:commitStep}},
+                  stmt:{sql:'ROLLBACK',args:[],want_rows:false}
+                });
+                const cleanup = await directPipeline([
+                  {type:'batch',batch:{steps}},
+                  {type:'close'}
+                ]);
+                const batch = cleanup?.results?.[0];
+                if (!batch || batch.type !== 'ok' || batch.response?.type !== 'batch') {
+                  throw new Error('cleanup_batch_failed');
+                }
+
+                const verify = await directPipeline([
+                  {type:'execute',stmt:{
+                    sql:"SELECT (SELECT COUNT(*) FROM auth_sessions WHERE session_id=?1) + (SELECT COUNT(*) FROM devices WHERE device_id=?2) + (SELECT COUNT(*) FROM sync_operations WHERE operation_id=?3) AS leftovers",
+                    args:[text(sessionId),text(principalId),text(operationId || '__none__')],
+                    want_rows:true
+                  }},
+                  {type:'close'}
+                ]);
+                const value = verify?.results?.[0]?.response?.result?.rows?.[0]?.[0];
+                if (value?.type !== 'integer' || value.value !== '0') {
+                  throw new Error('cleanup_verification_failed');
+                }
+                console.log('TURSO_WORKER_CLEANUP=PASS');
+              }
+            }
+
+            console.log('TURSO_WORKER_E2E=PASS');
+          })().catch((error) => {
+            console.error(String(error?.message || error));
+            process.exitCode = 1;
+          });
+          NODE
