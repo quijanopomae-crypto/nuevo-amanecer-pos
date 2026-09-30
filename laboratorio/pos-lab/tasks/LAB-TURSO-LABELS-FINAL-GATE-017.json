@@ -1,0 +1,35 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-LABELS-FINAL-GATE-017",
+  "environment": "LABORATORIO",
+  "base_ref": "848122081c0702bacd19e9eb0d9bff5a68ba43de",
+  "objective": "Actualizar únicamente las etiquetas visibles y mensajes del workspace POS-LAB para reflejar Turso LAB en lugar del backend D1 legado, sin cambiar lógica de negocio, persistencia, rutas, seguridad ni CANON, y ejecutar el gate final de LAB.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-LABELS-FINAL-GATE-017.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-LABELS-FINAL-GATE-017.json",
+    "laboratorio/pos-lab/js/lab-workspace.js",
+    "tests/laboratorio-workspace-boot.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**",
+    ".github/workflows/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-LABELS-FINAL-GATE-017.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
