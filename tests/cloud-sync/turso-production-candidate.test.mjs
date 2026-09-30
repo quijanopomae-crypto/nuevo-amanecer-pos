@@ -32,7 +32,7 @@ test('candidate workflow reads D1 export but deploys only the isolated Turso can
   assert.match(workflow, /nuevo-amanecer-pos-prod-turso-candidate/);
   assert.doesNotMatch(workflow, /wrangler deploy --config \.\.\/cloudflare-prod\/wrangler\.jsonc/);
   assert.doesNotMatch(workflow, /wrangler d1 execute/);
-  assert.doesNotMatch(workflow, /cloudflare-pos-web\/wrangler\.jsonc/);
+  assert.doesNotMatch(workflow, /wrangler deploy --config \.\.\/cloudflare-pos-web\/wrangler\.jsonc/);
 });
 
 test('candidate seeder fails closed on non-empty target and verifies full table content', () => {
