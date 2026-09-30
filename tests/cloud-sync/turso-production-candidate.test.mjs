@@ -72,3 +72,11 @@ test('workflow can verify a populated candidate without reseeding', () => {
   assert.match(workflow, /verify_existing_candidate/);
   assert.match(workflow, /--verify-existing/);
 });
+
+
+test('candidate parity keeps strict digest and permits only sub-ULP float-to-float fallback', () => {
+  assert.match(seeder, /semantic_table_equal/);
+  assert.match(seeder, /isinstance\(local_value, float\) and isinstance\(remote_value, float\)/);
+  assert.match(seeder, /rel_tol=2e-16/);
+  assert.match(seeder, /abs_tol=0\.0/);
+});
