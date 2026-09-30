@@ -173,3 +173,28 @@ test('only sale preparation routes use canonicalSaleUi while legacy financial wr
   assert.match(cancelBlock,/isModuleLocked\('ventas'\)/);
   assert.doesNotMatch(cancelBlock,/canonicalSaleUi:true/);
 });
+
+
+test('canonical stock validation aggregates repeated product lines once and preserves insufficient-stock rejection',async()=>{
+  const exact=harness({stock:5,cart:[
+    {id:7,qty:2,precio:4.25,unitsPerQty:1},
+    {id:7,qty:3,precio:4.25,unitsPerQty:1}
+  ]});
+  await exact.context.confirmarVenta();
+  assert.equal(exact.calls.enqueue,1);
+
+  const insufficient=harness({stock:4,cart:[
+    {id:7,qty:2,precio:4.25,unitsPerQty:1},
+    {id:7,qty:3,precio:4.25,unitsPerQty:1}
+  ]});
+  await insufficient.context.confirmarVenta();
+  assert.equal(insufficient.calls.enqueue,0);
+  assert.equal(insufficient.context.cart.length,2);
+  assert.match(insufficient.calls.toast.at(-1)[0],/Stock insuficiente/);
+});
+
+test('canonical stock validation indexes products and reserved units before validating the cart',()=>{
+  assert.match(source,/var productsById = new Map\(\)/);
+  assert.match(source,/var reservedByProduct = new Map\(\)/);
+  assert.doesNotMatch(source,/cart\.filter\(function \(candidate\) \{ return String\(candidate\.id\) === String\(item\.id\); \}\)\.reduce/);
+});
