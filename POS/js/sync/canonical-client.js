@@ -940,7 +940,9 @@
         try {
           // One HTTP request transports up to 20 distinct payment.create intents.
           // The Worker CAS-validates every credit and commits them in one D1 batch.
-          batchReceipt = await sendPending(record, true);
+          // Repository invariant: only a NEW single payment.create may skip
+          // the remote status read. The batch still collapses N writes to one POST.
+          batchReceipt = await sendPending(record, false);
         } catch (error) {
           var retryRecord = journal();
           if (retryRecord && retryRecord.state === 'PENDING' && retryRecord.command === 'payment.batch' && !retryRecord.last_error) {
