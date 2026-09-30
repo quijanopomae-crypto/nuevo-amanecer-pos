@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish CANON batch payment fast path: keep payment.create idempotency while removing full canonical refresh between selected debts.",
-  "retry_attempt": 38,
-  "retry_reason": "PR #235 merged at e0ac2a835ceb32b30e58ed4f82efbf2b83b24f83 after CANON Critical CI and E2E Smoke CI passed; deploy current hosted POS shell.",
-  "requested_at_utc": "2026-09-30T03:42:00Z",
-  "target_head": "e0ac2a835ceb32b30e58ed4f82efbf2b83b24f83"
+  "note": "Deploy nightly stabilization CANON: stock validation linearization, Service Worker build diagnostic, duplicate batch-submit guard, and mobile Motion cleanup.",
+  "retry_attempt": 39,
+  "retry_reason": "Nightly stabilization PRs #237, #238, #239 and #240 are merged; final CANON head d84e3a08cdebbcdc0384f62640ab837d87144172 has CANON Critical CI PASS. Publish current hosted POS and verify public assets.",
+  "requested_at_utc": "2026-09-30T12:12:00Z",
+  "target_head": "d84e3a08cdebbcdc0384f62640ab837d87144172"
 }
