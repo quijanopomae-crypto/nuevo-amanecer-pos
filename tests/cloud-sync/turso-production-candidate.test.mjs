@@ -49,6 +49,8 @@ test('candidate seeder fails closed on non-empty target and verifies full table 
   assert.match(seeder, /compare_all_tables/);
   assert.match(seeder, /CONTENT_PARITY=PASS/);
   assert.match(seeder, /SCHEMA_PARITY=PASS/);
+  assert.match(seeder, /--verify-existing/);
+  assert.match(seeder, /format\(value, "\.15g"\)/);
 });
 
 test('candidate workflow keeps active production endpoints unchanged', () => {
@@ -63,4 +65,10 @@ test('checkout must precede one-shot trigger validation on push runs', () => {
   const checkout = workflow.indexOf('Checkout exact active branch head');
   const confirm = workflow.indexOf('Require explicit candidate confirmation');
   assert.ok(checkout >= 0 && confirm >= 0 && checkout < confirm);
+});
+
+
+test('workflow can verify a populated candidate without reseeding', () => {
+  assert.match(workflow, /verify_existing_candidate/);
+  assert.match(workflow, /--verify-existing/);
 });
