@@ -13,3 +13,12 @@ LAB_IMPORT_HMAC_SECRET=replace-with-a-distinct-random-import-secret
 
 # R2_CANON_READ_TOKEN NO es un secreto del Worker.
 # Solo se entrega al proceso GitHub Actions/CLI que ejecuta fetch-latest-canon-backup.mjs.
+
+
+# Backend alternativo LAB: mantener d1 por defecto.
+# Para probar Turso, copia este archivo a .dev.vars (ignorado por Git)
+# y configura los secretos localmente. NUNCA versionar valores reales.
+DB_PROVIDER=d1
+# DB_PROVIDER=turso
+# TURSO_DATABASE_URL=libsql://database-org.turso.io
+# TURSO_AUTH_TOKEN=replace-with-local-secret
