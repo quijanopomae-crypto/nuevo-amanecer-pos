@@ -18,6 +18,27 @@ const MIGRATIONS=[
   '0018_canonical_customer_credit_policy.sql',
 ];
 
+test('manual S/50000 policy succeeds under production D1 compound SELECT limit', async t => {
+  const f = await activeCanon(t, { migrations: MIGRATIONS });
+  const db = f.env.nuevo_amanecer_lab;
+  const prepare = db.prepare.bind(db);
+  db.prepare = sql => {
+    if ((sql.match(/UNION\s+ALL/gi) || []).length >= 5) {
+      throw new Error('too many terms in compound SELECT: SQLITE_ERROR');
+    }
+    return prepare(sql);
+  };
+  const tab = await policyTab(f);
+  const receipt = await tab.api.setCustomerCreditPolicy({
+    customer_id: tab.api.snapshot().customers[0].customer_id,
+    mode: 'MANUAL', manual_limit_cents: 5000000,
+    reason: 'Ampliación autorizada por administrador', administrator_name: 'Administrador'
+  });
+  assert.equal(receipt.status, 'created');
+  assert.equal(receipt.manual_limit_cents, 5000000);
+  assert.equal(receipt.policy_revision, 1);
+});
+
 async function policyTab(f,options={}){
   const opts={
     token:options.token||'device-a-token',

@@ -52,18 +52,19 @@ async function authorityError(db,auth,b){
   return null;
 }
 async function operationConflict(db,id){
-  const row=await db.prepare(`SELECT operation_id FROM (
-    SELECT operation_id FROM sales WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_expense_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_inventory_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_accounts WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_metadata WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_customer_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_command_receipts WHERE operation_id=?1
-  ) LIMIT 1`).bind(id).first();
-  return !!row;
+  // D1 limits compound SELECT terms; EXISTS retains every collision check.
+  const row=await db.prepare(`SELECT
+    EXISTS(SELECT 1 FROM sales WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_financial_operations WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_expense_operations WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_product_operations WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_inventory_operations WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_credit_accounts WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_customer_operations WHERE operation_id=?1)
+    OR EXISTS(SELECT 1 FROM canonical_command_receipts WHERE operation_id=?1)
+    AS collision`).bind(id).first();
+  return !!row?.collision;
 }
 
 export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
