@@ -24,5 +24,11 @@
   "vars": {
     "HOSTED_ENVIRONMENT": "production",
     "CANON_API_ORIGIN": "https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev"
-  }
+  },
+  "services": [
+    {
+      "binding": "CANON_BACKEND",
+      "service": "nuevo-amanecer-pos-prod"
+    }
+  ]
 }
