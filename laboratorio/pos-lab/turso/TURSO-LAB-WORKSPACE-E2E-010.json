@@ -1,0 +1,10 @@
+{
+  "schema": "nuevo-amanecer.turso-lab-workspace-e2e/v1",
+  "task_id": "LAB-TURSO-WORKSPACE-E2E-010",
+  "authorized": true,
+  "target_worker": "nuevo-amanecer-sync-lab-turso",
+  "target_database": "TURSO_LAB",
+  "data_policy": "SYNTHETIC_TEMPORARY",
+  "requested_at_utc": "2026-09-30T19:30:00Z",
+  "note": "Validate signed baseline import, workspace read/save/replay/conflict/reset and cleanup on Turso before pointing the LAB browser at Turso."
+}
