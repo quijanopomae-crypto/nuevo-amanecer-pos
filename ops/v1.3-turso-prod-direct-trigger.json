@@ -7,6 +7,8 @@
   "no_live_sale": true,
   "candidate_run_id": 36782779872,
   "blocked_d1_run_id": 36785938457,
-  "requested_at": "2026-09-30T17:40:00-05:00",
-  "scope": "Switch active CANON directly to the already validated Turso production database without any new D1 read/export dependency. Preserve D1 untouched as fallback config. Do not execute a real sale."
+  "requested_at": "2026-09-30T17:48:00-05:00",
+  "scope": "Switch active CANON directly to the already validated Turso production database without any new D1 read/export dependency. Preserve D1 untouched as fallback config. Do not execute a real sale.",
+  "attempt": 2,
+  "note": "Retry direct Turso cutover after proving candidate PASS; tolerate Cloudflare Worker propagation and clean synthetic Turso sessions. No D1 dependency."
 }
