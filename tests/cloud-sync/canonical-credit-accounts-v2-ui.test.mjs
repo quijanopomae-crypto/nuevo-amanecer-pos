@@ -98,6 +98,14 @@ test('persisted 11 installments stay individual and compute paid/pending progres
   assert.equal(summary.plan[1].paidAt,'2026-09-26T11:00:00.000Z');
   assert.equal(summary.plan.at(-1).due,'2027-08-01');
   assert.equal(JSON.stringify(cr),before,'presentation must not mutate credit ledger');
+
+  cr.pagado=1125;
+  cr.saldo=3000;
+  cr.pagos.push({id:'receipt-3',pagoId:'receipt-3',monto:375,fecha:'2026-09-26',timestamp:'2026-09-26T12:00:00.000Z'});
+  const afterReceipt=api.installments(cr);
+  assert.equal(afterReceipt.paidCount,3,'a new confirmed amount immediately marks the next installment paid');
+  assert.equal(afterReceipt.pendingCount,8,'the remaining installment count updates with the same projection');
+  assert.equal(afterReceipt.plan[2].paymentId,'receipt-3');
 });
 
 test('installment states distinguish paid, overdue, today, next and pending',()=>{

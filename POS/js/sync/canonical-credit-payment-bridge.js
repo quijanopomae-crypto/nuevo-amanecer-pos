@@ -137,8 +137,8 @@
     Promise.resolve()
       .then(refreshCanonical)
       .catch(function (error) {
-        notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '). No se pudo actualizar la vista: ' +
-          clean(error && error.message) + '. NO repitas el pago; recarga la pantalla para ver el saldo.', 'success');
+        notify('Pago CANON' + amount + ' CONFIRMADO (operación ' + operation + '); la ficha ya refleja el recibo. Conciliación pendiente: ' +
+          clean(error && error.message) + '. NO repitas el pago.', 'success');
       });
   }
 
@@ -172,6 +172,10 @@
     var client = api();
     var pending = pendingRecord();
     if (pending) {
+      if(pending.command==='customer.credit-policy.set'){
+        notify('Hay un cambio de línea CANON sin confirmar. No se registró el pago. Abre Clientes > Ajuste manual de línea y pulsa Guardar excepción para reintentar la MISMA operación; no cambies el importe hasta que CANON la confirme.','error');
+        return false;
+      }
       if (pending.command !== 'payment.create' || pending.invalid) {
         notify('Hay otra operación CANON pendiente (' + clean(pending.command) + '). Resuélvela antes de registrar un pago.', 'error');
         return false;

@@ -47,7 +47,8 @@ No visual redesign is authorized.
 CANON mode only:
 - canonical credit balance/payment history after `payment.create`;
 - canonical cash expected balance for cash payments;
-- refreshed legacy UI projection after the confirmed canonical receipt.
+- receipt-backed local UI projection immediately after a confirmed canonical receipt;
+- full canonical reconciliation in the background after that projection.
 
 Legacy/non-CANON behavior remains delegated to the existing winner.
 
@@ -64,7 +65,7 @@ The bridge must not call `saveAllData()`, mutate `creditos[]`, mutate `cajMovs[]
 3. Digital payments require the existing operation/reference UX validation.
 4. Double tap/click cannot create two payments.
 5. Canonical client's durable PENDING/CONFIRMED journal and operation idempotency remain authoritative.
-6. A successful command is followed by `refresh()`; the existing `na:canonical-updated` projection repopulates Clients/Credits/Cash views.
+6. A validated durable receipt patches only its returned credit/payment/cash result into the local canonical projection and emits `na:canonical-updated`; a full `refresh()` reconciles the global revision and collections in the background.
 7. Legacy payment behavior remains unchanged when CANON is disabled.
 8. No remote deploy, D1 migration, production mutation or secret change is part of this task.
 
@@ -86,6 +87,7 @@ Focused tests must prove:
 - CANON digital payment sends a reference and no cash session id.
 - overpayment and cash-without-session are rejected before command creation.
 - double submission is blocked.
+- a blocked post-receipt full refresh does not delay the local balance, payment history, installment calculation or available-credit view.
 - the bridge contains no `saveAllData()`, `creditos.push` or `cajMovs.push`.
 - `inline-07` preserves permission authorization and legacy fallback.
 - the bridge is loaded by `POS/index.html` and precached by `POS/sw.js`.
@@ -129,8 +131,10 @@ read-only name lookup (`root[name]`), which cannot look like an assignment.
   validated by the Worker (`stale_credit`); the bridge must not supply it.
 - Cash payments use `cashState.sessionId` from canonical `cash-sessions`; `canonical-client`
   re-checks it is the single OPEN session.
-- Pre-command `refresh()` is required (fresh revision, fewer `stale_credit` rejections);
-  post-command `refresh()` is required (`ready=false` after receipt and UI projection).
+- A current replica is required before `payment.create`; when the replica is stale,
+  the bridge refreshes before building the command.
+- After a valid receipt the client marks the projection as receipt-patched, disables
+  further writes until reconciliation, and starts the full `refresh()` in the background.
 
 ### Tests
 

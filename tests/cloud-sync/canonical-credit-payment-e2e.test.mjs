@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { activeCanon, device } from './canon-browser-harness.mjs';
 import { deferred, intercept } from './a6-fixture.mjs';
 
@@ -9,6 +10,12 @@ import { deferred, intercept } from './a6-fixture.mjs';
 const bridge = readFileSync('POS/js/sync/canonical-credit-payment-bridge.js', 'utf8');
 const scripts = [['canonical-credit-payment-bridge.js', bridge]];
 const CREDIT = 'CR:001';
+const POLICY_MIGRATIONS = [
+  '0014_canonical_live_products.sql', '0015_canonical_inventory_adjust.sql',
+  '0016_canonical_generic_sale_lines.sql', '0017_canonical_live_customers.sql',
+  '0018_canonical_customer_credit_policy.sql',
+];
+const creditEvaluator = readFileSync('POS/js/legacy-inline/inline-04.js', 'utf8');
 
 function creditOf(tab) {
   return tab.api.legacySnapshot().credits.find((credit) => credit.id === CREDIT);
@@ -19,13 +26,27 @@ function fill(tab, { amount, method = 'efectivo', reference = '' }) {
   tab.el('pagoMetodo').value = method;
   tab.el('pagoOperacion').value = reference;
 }
+function creditLineView(snapshot, customerId) {
+  const context = vm.createContext({
+    clientes: snapshot.customers, creditos: snapshot.credits, ventas: snapshot.sales,
+    productos: snapshot.products, appConfig: { creditPolicy: { enabled: true } },
+    _naNumber(value, fallback = 0) { const number = Number(value); return Number.isFinite(number) ? number : fallback; },
+    _naInt(value, fallback = 0) { const number = Number(value); return Number.isInteger(number) ? number : fallback; },
+    _naRoundMoney(value) { return Math.round((Number(value) || 0) * 100) / 100; },
+    _naSyncCreditStatus() {},
+    _naCreditOutstanding(credit) { return Number(credit.saldo) || 0; },
+    diasHasta() { return null; },
+  });
+  vm.runInContext(creditEvaluator.slice(0, creditEvaluator.indexOf('function _naCreditBadge')), context);
+  return vm.runInContext(`calcularScoreCredito(${JSON.stringify(String(customerId))})`, context);
+}
 async function openCash(tab) {
   await tab.api.openCash({ session_id: 'e2e-cash-session', opening_cents: 5000 });
   await tab.api.refresh();
 }
 
 test('payment latency: one POST before receipt; full HTTP reconciliation and renders never hold Procesando', async (t) => {
-  const f = await activeCanon(t);
+  const f = await activeCanon(t, { migrations: POLICY_MIGRATIONS });
   const gate = deferred();
   const stages = {};
   const restore = intercept(f, async (event) => {
@@ -58,6 +79,17 @@ test('payment latency: one POST before receipt; full HTTP reconciliation and ren
       return null;
     },
   });
+  const customerId = tab.api.snapshot().customers[0].customer_id;
+  await tab.api.setCustomerCreditPolicy({
+    customer_id: customerId, mode: 'MANUAL', manual_limit_cents: 50000,
+    reason: 'Línea aprobada para prueba de actualización', administrator_id: 'admin-test', administrator_name: 'Admin test',
+  });
+  await tab.api.refresh();
+  const beforeCredit = creditOf(tab);
+  const beforeLine = creditLineView(tab.api.legacySnapshot(), customerId);
+  assert.equal(beforeLine.lineaMaxima, 500);
+  assert.equal(beforeLine.deudaActual, 7);
+  assert.equal(beforeLine.lineaDisponible, 493);
   const close = tab.context.__closed.push.bind(tab.context.__closed);
   tab.context.__closed.push = (...ids) => { stages.modalClosed = performance.now(); return close(...ids); };
   fill(tab, { amount: '1', method: 'yape', reference: 'LATENCY-1' });
@@ -71,6 +103,15 @@ test('payment latency: one POST before receipt; full HTTP reconciliation and ren
   assert.deepEqual([...tab.context.__closed], ['mPagoCred']);
   assert.deepEqual(tab.fetchLog.slice(before).map(x => x.method + ' ' + new URL(x.url).pathname),
     ['POST /commands/payment.create', 'GET /read/canonical/status']);
+  const receiptCredit = creditOf(tab);
+  assert.equal(receiptCredit.saldo, 6, 'the receipt updates the local balance before full reconciliation');
+  assert.equal(receiptCredit.pagado, 4, 'the projected total paid updates from the authoritative balance');
+  assert.ok(receiptCredit.pagos.some(p => p.monto === 1 && p.metodo === 'yape' && p.numeroOperacion === 'LATENCY-1'),
+    'the confirmed payment is immediately visible in the local payment history');
+  assert.deepEqual(receiptCredit.installments, beforeCredit.installments, 'the existing installment schedule remains attached');
+  const receiptLine = creditLineView(tab.api.legacySnapshot(), customerId);
+  assert.equal(receiptLine.deudaActual, 6, 'used credit recalculates from the new balance');
+  assert.equal(receiptLine.lineaDisponible, 494, 'available credit immediately reflects the new use');
   assert.deepEqual(renders, [], 'no bridge-driven full renders on the receipt path');
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1);
   assert.ok(stages.d1.before >= stages.postStart && stages.d1.after <= stages.postEnd);
@@ -101,6 +142,8 @@ test('Registrar pago (efectivo) persists through payment.create, survives F5 and
 
   fill(tab, { amount: '2.50' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
+  assert.equal(creditOf(tab).saldo, 4.5, 'cash receipt updates the credit before reconciliation');
+  assert.equal(tab.api.legacySnapshot().cashState.esperado, 52.5, 'cash receipt updates the open-session projection');
   await tab.api.refresh();
 
   const events = f.all("SELECT * FROM canonical_financial_events WHERE event_type='PAYMENT'");
@@ -184,6 +227,8 @@ test('lost ACK after commit: retry reuses the same operation_id and never duplic
   assert.equal(tab.fetchLog.filter(x => x.url.endsWith('/commands/payment.create')).length, 2);
   assert.ok(tab.fetchLog.filter(x => x.url.endsWith('/read/canonical/status')).length > statusBeforeRetry,
     'authority status is checked before retrying the same operation');
+  assert.equal(creditOf(tab).saldo, 4, 'the replayed durable receipt patches the local projection immediately');
+  assert.equal(creditOf(tab).pagos.filter(p => p.id === rows[0].event_id).length, 1);
   await tab.api.refresh();
   assert.equal(creditOf(tab).saldo, 4);
 });
@@ -202,6 +247,9 @@ test('committed payment whose post-commit refresh fails is reported as CONFIRMED
   fill(tab, { amount: '1', method: 'transferencia', reference: 'TRF-0001' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), true);
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1);
+  assert.equal(creditOf(tab).saldo, 6, 'the immediate receipt patch remains visible even when reconciliation fails');
+  assert.ok(creditOf(tab).pagos.some(p => p.numeroOperacion === 'TRF-0001' && p.monto === 1),
+    'the committed payment appears once alongside imported history');
   assert.deepEqual(tab.context.__closed, ['mPagoCred']);
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.ok(tab.toasts.some(([m]) => /CONFIRMADO/.test(m) && /NO repitas el pago/.test(m)));

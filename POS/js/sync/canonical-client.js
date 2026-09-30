@@ -750,11 +750,97 @@
       result.promotion_id === record.binding.promotion_id && result.authority_epoch === record.binding.authority_epoch;
     if (result.command !== record.command) return false;
     if (result.promotion_id !== record.binding.promotion_id || result.authority_epoch !== record.binding.authority_epoch) return false;
-    if (record.command === 'payment.create' && result.credit_id !== record.payload.credit_id) return false;
+    if (record.command === 'payment.create') {
+      var payment = record.payload, amount = payment.amount_cents, expected = record.expected_state;
+      if (result.credit_id !== payment.credit_id || result.credit_provenance !== record.receipt_ids.credit_provenance ||
+          !uint(result.current_balance_cents) || result.credit_revision !== payment.expected_credit_revision + 1 ||
+          result.credit_delta_cents !== -amount || result.cash_delta_cents !== (payment.payment_method === 'efectivo' ? amount : 0)) return false;
+      if (expected && (expected.credit_revision !== payment.expected_credit_revision ||
+          expected.credit_provenance !== result.credit_provenance ||
+          !uint(expected.current_balance_cents) || expected.current_balance_cents - amount !== result.current_balance_cents)) return false;
+      if (payment.session_id !== undefined && (!uint(result.session_revision) || result.session_revision < 1 ||
+          !uint(result.expected_cents) || result.expected_cents < amount)) return false;
+    }
     if (record.payload.session_id !== undefined && result.session_id !== record.payload.session_id) return false;
     if (['payment.create', 'adjustment.create', 'compensation.create'].includes(record.command) && result.event_id !== record.payload.operation_id) return false;
     if (record.command === 'compensation.create' && result.compensates_operation_id !== record.payload.compensates_operation_id) return false;
     if (!record.receipt_ids || Object.keys(record.receipt_ids).some(function (key) { return result[key] !== record.receipt_ids[key]; })) return false;
+    return true;
+  }
+  function applyReceiptProjection(record, result) {
+    if (!data || !record || !result || !['payment.create','customer.credit-policy.set'].includes(record.command)) return false;
+    var next = snapshot(), payload = record.payload, now = new Date().toISOString(), changedProjection = false;
+    if (record.command === 'customer.credit-policy.set') {
+      var customer = next.customers.find(function (item) { return String(item.customer_id) === String(result.customer_id); });
+      var policyRevision = Number(customer && customer.credit_policy_revision) || 0;
+      if (!customer || policyRevision > result.policy_revision ||
+          policyRevision !== payload.expected_policy_revision && policyRevision !== result.policy_revision) return false;
+      customer.credit_policy_mode = result.mode;
+      customer.credit_policy_manual_limit_cents = result.manual_limit_cents;
+      customer.credit_policy_reason = result.mode === 'MANUAL' ? payload.reason : null;
+      customer.credit_policy_updated_at = payload.created_at;
+      customer.credit_policy_administrator_id = payload.administrator_id;
+      customer.credit_policy_administrator_name = payload.administrator_name;
+      customer.credit_policy_revision = result.policy_revision;
+      changedProjection = true;
+    } else {
+      var credit = next.credits.find(function (item) { return item.credit_id === result.credit_id; });
+      if (!credit || credit.provenance !== result.credit_provenance) return false;
+      var creditRevision = Number(credit.revision), expectedRevision = record.expected_state
+        ? record.expected_state.credit_revision : payload.expected_credit_revision;
+      if (creditRevision === expectedRevision || creditRevision === result.credit_revision &&
+          Number(credit.current_balance_cents) === result.current_balance_cents) {
+        credit.current_balance_cents = result.current_balance_cents;
+        credit.revision = result.credit_revision;
+      } else if (creditRevision < result.credit_revision) {
+        return false;
+      }
+      var paymentExists = next.payments.some(function (item) {
+        return item && (item.payment_id === result.event_id || item.operation_id === result.operation_id);
+      });
+      if (!paymentExists) next.payments.push({
+        payment_id: result.event_id, credit_id: result.credit_id, amount_cents: payload.amount_cents,
+        payment_date: payload.created_at.slice(0,10), payment_timestamp: payload.created_at, payment_date_known: 1,
+        date_precision: 'TIMESTAMP', method: payload.payment_method, source_origin: 'LIVE',
+        source_operation_reference: payload.reference || null, provenance: 'LIVE', operation_id: result.operation_id,
+        credit_provenance: result.credit_provenance, credit_delta_cents: result.credit_delta_cents,
+        cash_delta_cents: result.cash_delta_cents, session_id: payload.session_id || null,
+        reason: null, compensates_operation_id: null
+      });
+      var eventExists = next.financialEvents.some(function (item) {
+        return item && (item.event_id === result.event_id || item.operation_id === result.operation_id);
+      });
+      if (!eventExists) next.financialEvents.push({
+        event_id: result.event_id, operation_id: result.operation_id, promotion_id: result.promotion_id,
+        event_type: 'PAYMENT', session_id: payload.session_id || null, credit_id: result.credit_id,
+        credit_provenance: result.credit_provenance, credit_delta_cents: result.credit_delta_cents,
+        cash_delta_cents: result.cash_delta_cents, payment_method: payload.payment_method,
+        reference: payload.reference || null, reason: null, compensates_operation_id: null, created_at: payload.created_at
+      });
+      if (payload.session_id !== undefined) {
+        var session = next.cashSessions.find(function (item) { return item.session_id === payload.session_id; });
+        if (session && Number(session.revision) <= result.session_revision) {
+          session.expected_cents = result.expected_cents;
+          session.revision = result.session_revision;
+        }
+      }
+      changedProjection = true;
+    }
+    if (!changedProjection) return false;
+    var replica = replicaOf(next);
+    replica.cached_at = now;
+    // A receipt advances one projection but does not carry the global read digest
+    // or financial revision. Mark those as needing reconciliation.
+    replica.canonical_digest = null;
+    replica.digests = {};
+    if (!validReplica(replica)) return false;
+    publishReplica(replica, 'receipt');
+    ready = false;
+    replicaState.validation = 'receipt-patched';
+    notifyReplicaUpdate();
+    if (typeof root._naWriteCanonicalReplica === 'function') {
+      try { Promise.resolve(root._naWriteCanonicalReplica(replica)).catch(function () {}); } catch (_) {}
+    }
     return true;
   }
   async function withWriterLock(work) {
@@ -813,6 +899,7 @@
     // One atomic storage replacement both saves the receipt and clears PENDING.
     var confirmed = Object.assign({}, record, { state: 'CONFIRMED', receipt: copy(result) });
     durableJournal(confirmed);
+    applyReceiptProjection(record, result);
     ready = false;
     return copy(confirmed.receipt);
   }
@@ -833,7 +920,11 @@
       if (command === 'customer.create') record.receipt_ids.customer_id = record.payload.customer_id;
       if (command === 'customer.credit-policy.set') record.receipt_ids.customer_id = record.payload.customer_id;
       if (command === 'expense.create') record.receipt_ids.expense_id = record.payload.expense_id;
-      if (command === 'payment.create') record.receipt_ids.credit_provenance = data.credits.find(function (item) { return item.credit_id === record.payload.credit_id; }).provenance;
+      if (command === 'payment.create') {
+        var paymentCredit = data.credits.find(function (item) { return item.credit_id === record.payload.credit_id; });
+        record.receipt_ids.credit_provenance = paymentCredit.provenance;
+        record.expected_state = { credit_revision: paymentCredit.revision, current_balance_cents: paymentCredit.current_balance_cents, credit_provenance: paymentCredit.provenance };
+      }
       if (command === 'compensation.create') {
         var target = data.financialEvents.find(function (item) { return item.operation_id === record.payload.compensates_operation_id; });
         if (target.credit_id != null) record.receipt_ids = { credit_id: target.credit_id, credit_provenance: target.credit_provenance };
