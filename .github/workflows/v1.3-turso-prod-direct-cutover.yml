@@ -126,6 +126,27 @@ jobs:
           console.log('TURSO_DIRECT_CUTOVER_COUNTS='+JSON.stringify(counts));
           NODE
 
+      - name: Clean synthetic Turso sessions from prior cutover attempts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+          const db=new TursoD1Adapter({
+            url:process.env.TURSO_PROD_DATABASE_URL,
+            authToken:process.env.TURSO_PROD_AUTH_TOKEN
+          });
+          const active=await db.prepare("SELECT session_id FROM auth_sessions WHERE status='active'").all();
+          const rows=active?.results||[];
+          for(const row of rows){
+            const sessionId=String(row.session_id||'');
+            if(!sessionId) continue;
+            await db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId).run();
+            await db.prepare('DELETE FROM devices WHERE device_id=?1').bind('session:'+sessionId).run();
+          }
+          console.log('TURSO_DIRECT_SYNTHETIC_SESSION_CLEANUP=PASS count='+rows.length);
+          NODE
+
       - name: Re-probe isolated Turso candidate immediately before switch
         shell: bash
         run: |
@@ -205,6 +226,7 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
           import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
 
           const worker=process.env.PROD_WORKER_URL.replace(/\/+$/,'');
@@ -215,55 +237,118 @@ jobs:
           let sessionId='';
           let token='';
 
+          const sleep=(ms)=>new Promise(resolve=>setTimeout(resolve,ms));
+
           async function waitHealth(){
             let last=null;
-            for(let i=0;i<20;i++){
+            for(let i=1;i<=30;i++){
               try{
                 const r=await fetch(worker+'/health',{headers:{'cache-control':'no-cache'}});
                 const b=await r.json().catch(()=>null);
                 last={http:r.status,ok:b?.ok,service:b?.service,environment:b?.environment};
                 if(r.ok&&b?.ok===true&&b?.service==='nuevo-amanecer-pos-prod'&&b?.environment==='production') return;
               }catch{}
-              await new Promise(resolve=>setTimeout(resolve,1000));
+              await sleep(1000);
             }
             throw new Error('active health failed '+JSON.stringify(last));
           }
 
-          async function get(path){
-            const r=await fetch(worker+path,{headers:{authorization:'Bearer '+token,'cache-control':'no-cache'}});
-            const b=await r.json().catch(()=>null);
-            if(!r.ok) throw new Error('active read failed '+path+' http='+r.status);
-            return b;
+          async function activateWithRetry(){
+            let last=null;
+            for(let i=1;i<=20;i++){
+              try{
+                const r=await fetch(worker+'/auth/activate',{
+                  method:'POST',
+                  headers:{'x-activation-secret':process.env.POS_ACTIVATION_SECRET,'cache-control':'no-cache'}
+                });
+                const b=await r.json().catch(()=>null);
+                last={http:r.status,error:b?.error||null};
+                if(r.ok&&b?.status==='activated'&&typeof b?.session_token==='string'&&b.session_token){
+                  return b.session_token;
+                }
+              }catch{}
+              await sleep(1000);
+            }
+            throw new Error('active activation failed after propagation '+JSON.stringify(last));
+          }
+
+          async function findTursoSessionByToken(value){
+            const hash=createHash('sha256').update(value).digest('hex');
+            for(let i=1;i<=15;i++){
+              const row=await db.prepare(
+                'SELECT session_id FROM auth_sessions WHERE token_hash=?1'
+              ).bind(hash).first();
+              if(row?.session_id) return String(row.session_id);
+              await sleep(500);
+            }
+            return '';
+          }
+
+          async function waitSession(){
+            let last=null;
+            for(let i=1;i<=30;i++){
+              try{
+                const r=await fetch(worker+'/auth/session',{
+                  headers:{authorization:'Bearer '+token,'cache-control':'no-cache'}
+                });
+                const b=await r.json().catch(()=>null);
+                last={http:r.status,error:b?.error||null};
+                if(r.ok&&b?.status==='ok'&&typeof b?.session_id==='string'&&b.session_id){
+                  return b;
+                }
+              }catch{}
+              await sleep(1000);
+            }
+            throw new Error('active session failed after propagation '+JSON.stringify(last));
+          }
+
+          async function getWithRetry(path){
+            let last=null;
+            for(let i=1;i<=30;i++){
+              try{
+                const r=await fetch(worker+path,{
+                  headers:{authorization:'Bearer '+token,'cache-control':'no-cache'}
+                });
+                const b=await r.json().catch(()=>null);
+                last={http:r.status,error:b?.error||null};
+                if(r.ok&&b!=null) return b;
+              }catch{}
+              await sleep(1000);
+            }
+            throw new Error('active read failed after propagation '+path+' '+JSON.stringify(last));
           }
 
           try{
+            // A short hold avoids mixing the old D1 version and the new Turso version
+            // immediately after Cloudflare reports the deploy as complete.
+            await sleep(6000);
             await waitHealth();
             console.log('TURSO_DIRECT_ACTIVE_HEALTH=PASS');
 
-            const lab=await fetch(worker+'/lab/workspace/status');
+            const lab=await fetch(worker+'/lab/workspace/status',{headers:{'cache-control':'no-cache'}});
             if(lab.status!==404) throw new Error('LAB route exposed in production');
             console.log('TURSO_DIRECT_ACTIVE_BOUNDARY=PASS');
 
-            const a=await fetch(worker+'/auth/activate',{
-              method:'POST',
-              headers:{'x-activation-secret':process.env.POS_ACTIVATION_SECRET}
-            });
-            const ab=await a.json().catch(()=>null);
-            if(!a.ok||ab?.status!=='activated'||typeof ab?.session_token!=='string'||!ab.session_token){
-              throw new Error('active activation failed http='+a.status);
-            }
-            token=ab.session_token;
+            token=await activateWithRetry();
 
-            const ss=await get('/auth/session');
-            sessionId=ss?.session_id||'';
-            if(!sessionId) throw new Error('active session missing');
+            // Prove the activation landed in Turso before relying on the public session route.
+            sessionId=await findTursoSessionByToken(token);
+            if(!sessionId) throw new Error('activation token not found in Turso');
+            console.log('TURSO_DIRECT_ACTIVE_SESSION_IN_TURSO=PASS');
 
-            const status=await get('/read/canonical/status');
+            const ss=await waitSession();
+            if(ss.session_id!==sessionId) throw new Error('active session id mismatch');
+            console.log('TURSO_DIRECT_ACTIVE_SESSION_ROUTE=PASS');
+
+            const status=await getWithRetry('/read/canonical/status');
             if(status?.authority!=='canonical'||status?.mode!=='ACTIVE') throw new Error('active canonical status invalid');
-            await get('/read/canonical/products?limit=5');
-            await get('/read/canonical/customers?limit=5');
+            await getWithRetry('/read/canonical/products?limit=5');
+            await getWithRetry('/read/canonical/customers?limit=5');
             console.log('TURSO_DIRECT_ACTIVE_CANONICAL_READ=PASS');
           } finally {
+            if(!sessionId && token){
+              try{ sessionId=await findTursoSessionByToken(token); }catch{}
+            }
             if(sessionId){
               const principal='session:'+sessionId;
               await db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId).run();

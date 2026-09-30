@@ -1,0 +1,44 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-DIRECT-PROPAGATION-005",
+  "base_ref": "eb6099f81d87920a83b05f38fa6a0aac1101577c",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"},
+    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+  },
+  "analysis": {
+    "READS": [
+      "Run 36787115286: Turso DB integrity PASS, 44 tables, products=408, customers=31, credits=313, credit_payments=131.",
+      "Run 36787115286: candidate reprobe PASS immediately before active deploy.",
+      "Run 36787115286: active Turso deploy PASS, health PASS, production boundary PASS, then /auth/session returned HTTP 500 about 0.7s after deploy.",
+      "Run 36787115286: rollback D1 config PASS.",
+      "Run 36787115283: CANON Critical CI PASS."
+    ],
+    "ROOT_CAUSE_HYPOTHESIS": "The active smoke began immediately after deploy; Cloudflare can briefly serve mixed old/new Worker versions during propagation. Activation succeeded on the new Turso version, while the following session request could hit the old D1 version whose daily read quota is exhausted, producing HTTP 500. The same Turso candidate Worker passed the identical auth/session path seconds earlier.",
+    "WRITES": [
+      "Add bounded propagation wait/retry for active auth/session/canonical reads.",
+      "Clean Turso synthetic active sessions before retry.",
+      "Bump one-shot trigger for a second direct attempt."
+    ],
+    "STATE_AFFECTED": ["Only synthetic auth session rows in Turso."],
+    "DOMAIN_INVARIANTS": [
+      "No business rows changed.",
+      "No first live sale.",
+      "No D1 dependency in retry.",
+      "Same public CANON URL."
+    ],
+    "ROLLBACK": ["Restore D1 Worker config if Turso active smoke still fails after retry window."],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "candidate reprobe",
+      "deploy Turso active",
+      "wait for propagation then retry auth/session/status/products/customers",
+      "post-success Turso integrity"
+    ]
+  }
+}

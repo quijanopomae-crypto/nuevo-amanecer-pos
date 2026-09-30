@@ -60,3 +60,19 @@ test('post-deploy failure restores the prior D1 Worker config without deleting T
   assert.match(workflow, /wrangler deploy --config \.\.\/cloudflare-prod\/wrangler\.jsonc/);
   assert.doesNotMatch(workflow, /DELETE FROM products|DELETE FROM customers|DELETE FROM sales/);
 });
+
+test('active smoke tolerates Worker propagation and proves the session landed in Turso', () => {
+  assert.match(workflow, /await sleep\(6000\)/);
+  assert.match(workflow, /active session failed after propagation/);
+  assert.match(workflow, /findTursoSessionByToken/);
+  assert.match(workflow, /TURSO_DIRECT_ACTIVE_SESSION_IN_TURSO=PASS/);
+  assert.match(workflow, /TURSO_DIRECT_ACTIVE_SESSION_ROUTE=PASS/);
+});
+
+test('retry cleans synthetic active Turso sessions before candidate reprobe', () => {
+  const cleanup = workflow.indexOf('Clean synthetic Turso sessions from prior cutover attempts');
+  const candidate = workflow.indexOf('Re-probe isolated Turso candidate immediately before switch');
+  assert.ok(cleanup >= 0 && candidate > cleanup);
+  assert.match(workflow, /SELECT session_id FROM auth_sessions WHERE status='active'/);
+  assert.match(workflow, /TURSO_DIRECT_SYNTHETIC_SESSION_CLEANUP=PASS/);
+});
