@@ -50,7 +50,7 @@ test('candidate seeder fails closed on non-empty target and verifies full table 
   assert.match(seeder, /CONTENT_PARITY=PASS/);
   assert.match(seeder, /SCHEMA_PARITY=PASS/);
   assert.match(seeder, /--verify-existing/);
-  assert.match(seeder, /format\(value, "\.15g"\)/);
+  assert.match(seeder, /format\(value, "\.17g"\)/);
 });
 
 test('candidate workflow keeps active production endpoints unchanged', () => {
