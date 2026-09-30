@@ -3,10 +3,24 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { activeCanon, device } from './canon-browser-harness.mjs';
 
-async function liveCredit(tab, suffix) {
+async function createSellableProduct(tab, suffix) {
+  const id = 'LIVE-BATCH-' + suffix + '-' + randomUUID().slice(0,8);
+  const receipt = await tab.api.createProduct({
+    product_id:id,name:'Producto batch ' + suffix,sku:id+'-SKU',barcode:id+'-BAR',
+    alternate_codes:[],category:'test',brand:'Test',description:null,icon:'📦',image:null,
+    unit:'unidad',purchase_unit:'unidad',purchase_factor:1,cost_cents:100,price_cents:250,
+    box_price_cents:null,units_per_box:null,initial_stock_quantity:10,stock_min_quantity:0,
+    expiry_date:null,includes_igv:true,tax_type:'gravado',complementary_tax:'',tracks_inventory:true
+  });
+  assert.equal(receipt.status,'created',suffix);
+  await tab.api.refresh();
+  return id;
+}
+
+async function liveCredit(tab, suffix, productId) {
   const before = new Set(tab.api.snapshot().credits.map((row) => row.credit_id));
   const sale = await tab.api.createSale({
-    items: [{ product_id: '00001', quantity: 1 }],
+    items: [{ product_id: productId, quantity: 1 }],
     payment_method: 'credito',
     customer_id: '000C',
     credit_due: '2099-12-31'
@@ -58,8 +72,9 @@ test('payment.batch persists multiple payment.create children atomically and exa
   const f = await activeCanon(t);
   const token = 'device-a-token';
   const tab = await device(f, { token, deviceId:'device-a' });
-  const first = await liveCredit(tab,'first');
-  const second = await liveCredit(tab,'second');
+  const productId = await createSellableProduct(tab,'atomic');
+  const first = await liveCredit(tab,'first',productId);
+  const second = await liveCredit(tab,'second',productId);
   const control = f.control();
   const body = batch(control, [
     payment(control,first,100,'yape',{reference:'BATCH-BACKEND-1'}),
@@ -91,8 +106,9 @@ test('payment.batch stale child rejects the whole transaction and leaves valid s
   const f = await activeCanon(t);
   const token = 'device-a-token';
   const tab = await device(f, { token, deviceId:'device-a' });
-  const stale = await liveCredit(tab,'stale');
-  const sibling = await liveCredit(tab,'sibling');
+  const productId = await createSellableProduct(tab,'stale');
+  const stale = await liveCredit(tab,'stale',productId);
+  const sibling = await liveCredit(tab,'sibling',productId);
   const control = f.control();
 
   await tab.api.createPayment({
@@ -120,8 +136,9 @@ test('payment.batch cash children share one open session and accumulate cash exa
   const f = await activeCanon(t);
   const token = 'device-a-token';
   const tab = await device(f, { token, deviceId:'device-a' });
-  const first = await liveCredit(tab,'cash-first');
-  const second = await liveCredit(tab,'cash-second');
+  const productId = await createSellableProduct(tab,'cash');
+  const first = await liveCredit(tab,'cash-first',productId);
+  const second = await liveCredit(tab,'cash-second',productId);
   await tab.api.openCash({session_id:'batch-cash-session',opening_cents:5000});
   await tab.api.refresh();
 
