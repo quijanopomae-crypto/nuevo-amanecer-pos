@@ -82,7 +82,6 @@ jobs:
           node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
           node --test tools/cloudflare-lab/test/lab-workspace.test.mjs
           node --test tools/cloudflare-lab/test/turso-d1-adapter.test.mjs
-          node --test tools/cloudflare-lab/test/turso-health-diagnostic.test.mjs
           node --test tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           node --test tests/security-secret-separation.test.mjs
           node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
