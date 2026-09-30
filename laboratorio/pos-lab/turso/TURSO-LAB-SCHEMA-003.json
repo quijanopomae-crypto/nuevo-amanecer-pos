@@ -6,6 +6,7 @@
   "expected_initial_table_count": 0,
   "migration_source": "infra/database/migrations/0001-0018",
   "commercial_data": "SYNTHETIC_ONLY",
-  "requested_at_utc": "2026-09-30T18:03:00Z",
-  "note": "Apply the repository SQLite schema to the empty Turso LAB database and verify critical structures plus rollback. No real business data."
+  "requested_at_utc": "2026-09-30T18:06:00Z",
+  "note": "Retry after fixing Node execution wrapper. Previous attempt failed before database access due mixed CommonJS/top-level await.",
+  "attempt": 2
 }
