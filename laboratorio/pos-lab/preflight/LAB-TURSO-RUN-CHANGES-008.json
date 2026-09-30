@@ -1,0 +1,69 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-RUN-CHANGES-008",
+  "base_ref": "97e4db090a672d14b2a196df91e206360281b94e",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "E2E #3: health/activation/session PASS y sync insert respondió HTTP 200 tras crear y limpiar la fila sintética",
+      "Hrana StmtResult: affected_row_count y rows_written son métricas distintas"
+    ],
+    "WRITES": [
+      "Cambiar solo la proyección meta.changes de run() a affected_row_count",
+      "Mantener batch() con rows_written y reintentar E2E"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Contrato de metadatos del adaptador Turso para escrituras directas; SQL y datos no cambian"
+    ],
+    "STORAGE_AFFECTED": [
+      "E2E escribe y limpia una operación sintética temporal"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "run() informa filas directamente afectadas por la sentencia",
+      "batch() conserva rows_written para validaciones que incluyen efectos de triggers",
+      "Idempotencia y transacciones no cambian",
+      "CANON y producción permanecen intactos"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Las rutas que usan .run() recuperan el conteo directo esperado; las rutas atómicas batch no cambian"
+    ],
+    "RISKS": [
+      "Otra diferencia de metadatos Hrana/D1 podría aparecer en etapas posteriores del E2E",
+      "No debe cambiarse batch porque promociones usan efectos de triggers"
+    ],
+    "ROLLBACK": [
+      "Revertir la selección de changes y mantener el Worker Turso fuera de tráfico"
+    ],
+    "TESTS": [
+      "run() con affected_row_count=1 y rows_written=3 debe reportar changes=1",
+      "batch() debe seguir reportando rows_written",
+      "E2E health/auth/session/sync/read/replay/cleanup"
+    ]
+  }
+}
