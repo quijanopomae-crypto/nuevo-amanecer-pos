@@ -66,23 +66,24 @@ function mapRows(result) {
   });
 }
 
-function mapMeta(result) {
+function mapMeta(result, changesMode = 'written') {
   const direct = Number(result?.affected_row_count || 0);
   const written = Number(result?.rows_written ?? direct);
+  const selected = changesMode === 'direct' ? direct : written;
   return {
     duration: Number(result?.query_duration_ms || 0),
-    changes: Number.isSafeInteger(written) ? written : direct,
+    changes: Number.isSafeInteger(selected) ? selected : direct,
     last_row_id: result?.last_insert_rowid == null ? null : decodeInteger(result.last_insert_rowid),
     rows_read: Number(result?.rows_read || 0),
     rows_written: Number(result?.rows_written || 0),
   };
 }
 
-function mapD1Result(result) {
+function mapD1Result(result, changesMode = 'written') {
   return {
     success:true,
     results:mapRows(result),
-    meta:mapMeta(result),
+    meta:mapMeta(result, changesMode),
   };
 }
 
@@ -123,7 +124,7 @@ class TursoPreparedStatement {
   }
 
   async run() {
-    const out = await this.database._execute(this, false);
+    const out = await this.database._execute(this, false, 'direct');
     return { success:true, meta:out.meta };
   }
 }
@@ -161,7 +162,7 @@ export class TursoD1Adapter {
     return body;
   }
 
-  async _execute(statement, wantRows) {
+  async _execute(statement, wantRows, changesMode = 'written') {
     const body = await this._pipeline([
       { type:'execute', stmt:statement._protocolStatement(wantRows) },
       { type:'close' },
@@ -170,7 +171,7 @@ export class TursoD1Adapter {
     if (!first || first.type !== 'ok' || first.response?.type !== 'execute') {
       throw protocolError(first?.error || { message:'missing execute result' });
     }
-    return mapD1Result(first.response.result);
+    return mapD1Result(first.response.result, changesMode);
   }
 
   async batch(statements) {

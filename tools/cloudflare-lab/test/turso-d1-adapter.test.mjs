@@ -45,7 +45,7 @@ test('first/all map Turso protocol rows to the D1-style contract', async () => {
   assert.equal(calls[0].init.headers.authorization,'Bearer test-token');
 });
 
-test('run maps rows_written to D1 meta.changes', async () => {
+test('run maps affected_row_count to D1 meta.changes even when trigger writes differ', async () => {
   const db=new TursoD1Adapter({
     url:'https://lab-example.turso.io',
     authToken:'test-token',
@@ -60,7 +60,7 @@ test('run maps rows_written to D1 meta.changes', async () => {
     })
   });
   const result=await db.prepare('UPDATE x SET y=?1 WHERE id=?2').bind('v',7).run();
-  assert.equal(result.meta.changes,3);
+  assert.equal(result.meta.changes,1);
   assert.equal(result.meta.last_row_id,7);
 });
 

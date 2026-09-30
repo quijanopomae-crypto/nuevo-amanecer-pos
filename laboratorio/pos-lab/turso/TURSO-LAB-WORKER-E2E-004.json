@@ -5,7 +5,7 @@
   "target_worker": "nuevo-amanecer-sync-lab-turso",
   "target_database": "TURSO_LAB",
   "test_data": "SYNTHETIC_TEMPORARY",
-  "requested_at_utc": "2026-09-30T18:23:00Z",
-  "note": "Redeploy after binding fetch to globalThis. Previous safe diagnostic classified the health failure as runtime_type_error.",
-  "attempt": 3
+  "requested_at_utc": "2026-09-30T18:27:00Z",
+  "note": "Redeploy after mapping run().meta.changes to affected_row_count. E2E #3 passed health/activation/session but returned HTTP 200 after insert due metadata mismatch.",
+  "attempt": 4
 }
