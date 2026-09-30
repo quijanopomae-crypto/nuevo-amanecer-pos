@@ -1,0 +1,64 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-PAYMENT-LEAN-PATH-001",
+  "base_ref": "efc209b0e3829ed8e6e80aa94414ceadba849f92",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "analysis": {
+    "SYMPTOM": "Android real: una sola deuda de S/18.50 tarda aproximadamente 4 s desde Procesando hasta Pagado, aunque la UI post-receipt ya responde correctamente.",
+    "ROOT_CAUSE": [
+      "El fast path de una sola deuda fue desviado a createCanonicalFinancial(payment.create), que es un camino genérico mucho más pesado que el endpoint payment.batch especializado.",
+      "payment.create genérico realiza varias consultas D1 secuenciales: autoridad, replay/collision, autoridad nuevamente, crédito, caja y recién después la transacción.",
+      "payment.batch ya tiene semántica correcta para un solo hijo y conserva ese hijo como payment.create, pero sus prelecturas todavía se envían como varias llamadas D1 concurrentes en vez de una sola llamada batch de lectura."
+    ],
+    "READS": [
+      "POS/js/sync/canonical-client.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tools/cloudflare-lab/src/worker.js",
+      "AGENTS_Nuevo_Amanecer.md",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+      "tests/cloud-sync/canonical-payment-batch-backend.test.mjs"
+    ],
+    "WRITES": [
+      "Eliminar el desvío especial de una deuda hacia payment.create dentro de createPaymentBatch.",
+      "Mantener un solo endpoint batch para 1..20 deudas del panel Cobro múltiple.",
+      "Agrupar autoridad, replay, créditos y caja en una sola db.batch() de lectura, en paralelo solo con el hash local.",
+      "Conservar la db.batch() de escritura actual como frontera durable."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún cambio de estado comercial; solo transporte y scheduling de consultas."
+    ],
+    "STORAGE_AFFECTED": [
+      "Mismas tablas y mismos registros payment.create; sin schema nuevo."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Receipt durable antes de Pagado.",
+      "Un payment.create hijo por deuda.",
+      "No duplicados ante retry/ACK perdido.",
+      "Saldo y caja protegidos por CAS.",
+      "Referencia digital preservada.",
+      "Sin escritura legacy."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes/Créditos usa el mismo confirmBatch.",
+      "Caja recibe los mismos eventos PAYMENT.",
+      "Historial conserva los mismos child operation_id y receipts.",
+      "Pago individual sigue en createCanonicalFinancial."
+    ],
+    "RISKS": [
+      "db.batch de SELECT debe devolver exactamente los mismos rows que las consultas actuales.",
+      "La red móvil externa puede seguir aportando latencia aunque eliminemos llamadas controlables.",
+      "No debe cambiar el formato de receipt esperado por canonical-client."
+    ],
+    "TEST_PLAN": [
+      "1 deuda Cobro múltiple: exactamente POST /commands/payment.batch y cero POST /commands/payment.create.",
+      "1..20 deudas: un POST batch.",
+      "Worker: una sola db.batch de prelecturas y una db.batch de escritura.",
+      "Replay, stale credit, stale session y atomicidad siguen pasando.",
+      "CANON Critical CI, LAB Canon Mirror CI, E2E Smoke, deploy backend y frontend, verificación pública."
+    ]
+  }
+}
