@@ -36,6 +36,11 @@ jobs:
       POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
 
     steps:
+      - name: Checkout exact active branch head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
       - name: Require explicit candidate confirmation
         shell: bash
         run: |
@@ -45,11 +50,6 @@ jobs:
           else
             node -e "const fs=require('node:fs');const t=JSON.parse(fs.readFileSync('ops/v1.3-turso-prod-candidate-trigger.json','utf8'));if(t.action!=='PREPARE_TURSO_PRODUCTION_CANDIDATE')throw new Error('invalid trigger action');if(t.owner_authorized!==true)throw new Error('owner authorization missing');if(t.one_shot!==true)throw new Error('trigger must be one-shot');"
           fi
-
-      - name: Checkout exact active branch head
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
 
       - name: Require active branch and isolated credentials
         shell: bash

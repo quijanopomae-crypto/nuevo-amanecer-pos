@@ -57,3 +57,10 @@ test('candidate workflow keeps active production endpoints unchanged', () => {
   assert.match(workflow, /"database_name": "nuevo-amanecer-prod-v2"/);
   assert.match(workflow, /nuevo-amanecer-pos-prod\.nuevo-amanecer-pos\.workers\.dev/);
 });
+
+
+test('checkout must precede one-shot trigger validation on push runs', () => {
+  const checkout = workflow.indexOf('Checkout exact active branch head');
+  const confirm = workflow.indexOf('Require explicit candidate confirmation');
+  assert.ok(checkout >= 0 && confirm >= 0 && checkout < confirm);
+});
