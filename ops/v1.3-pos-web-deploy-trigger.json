@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON Clientes mobile top-reset Motion fix: clear residual collapse state at scroll top before the next downward gesture.",
-  "retry_attempt": 44,
-  "retry_reason": "PR #258 merged at 301114e5559bec858a3a0444abb4ce1ea7389bff after CANON Critical CI #321 PASS and E2E Smoke CI #74 PASS. Publish the visual-only top reset fix.",
-  "requested_at_utc": "2026-09-30T13:34:58Z",
-  "target_head": "301114e5559bec858a3a0444abb4ce1ea7389bff"
+  "note": "Deploy CANON configuration persistence fix: settings save locally with verified durable storage and survive refresh without opening legacy commercial persistence.",
+  "retry_attempt": 45,
+  "retry_reason": "PR #261 merged at 7629f52398d39f97384811ce395ab4cbbb706283 after CANON Critical CI and E2E Smoke CI passed. Publish the configuration persistence fix requested by the owner.",
+  "requested_at_utc": "2026-09-30T13:38:44.951Z",
+  "target_head": "7629f52398d39f97384811ce395ab4cbbb706283"
 }
