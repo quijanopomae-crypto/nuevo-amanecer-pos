@@ -23,6 +23,7 @@
     element.classList.remove(nextClass);
     frame(function () {
       if (pending && pending.get(element) !== token) return;
+      if (core.reducedMotion() || element.isConnected === false) return;
       if (element.classList && element.classList.contains('page') && !element.classList.contains('active')) return;
       element.classList.add(nextClass);
     });
