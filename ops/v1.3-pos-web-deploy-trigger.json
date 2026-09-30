@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON single-roundtrip multi-credit payment client: up to 20 debts use one /commands/payment.batch POST; backend already deployed.",
-  "retry_attempt": 40,
-  "retry_reason": "PR #245 merged at 7090c86bc00e390a583e9364b1da8cb3ba60a64d after CANON Critical CI #305 PASS and E2E Smoke CI #64 PASS. Production backend payment.batch was deployed first by PR #244.",
-  "requested_at_utc": "2026-09-30T12:50:00Z",
-  "target_head": "7090c86bc00e390a583e9364b1da8cb3ba60a64d"
+  "note": "Deploy CANON Clientes mobile refresh Motion owner fix: keep NA_MOTION.scroll as the single visual owner after reload.",
+  "retry_attempt": 41,
+  "retry_reason": "PR #247 merged at 2b05865153559bb53e368666fd3ae455b5b72f86 after CANON Critical CI #307 PASS and E2E Smoke CI #65 PASS. Publish the visual-only Clientes refresh stability fix.",
+  "requested_at_utc": "2026-09-30T12:50:20Z",
+  "target_head": "2b05865153559bb53e368666fd3ae455b5b72f86"
 }
