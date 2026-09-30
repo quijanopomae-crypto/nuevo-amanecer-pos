@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-PROD-CANDIDATE-RUN-002",
+  "environment": "CANON",
+  "base_ref": "5bd57d97200788b4a3ef1d63b4367bf805d2067d",
+  "objective": "Ejecutar una sola vez la preparación del candidato Turso de producción ya aprobada, usando los secrets TURSO_PROD_* confirmados por el owner, sin cutover ni cambio de tráfico productivo.",
+  "owner_authorization": "El propietario confirmó TURSO_PROD_DATABASE_URL: CREADO y TURSO_PROD_AUTH_TOKEN: CREADO y pidió continuar.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-PROD-CANDIDATE-RUN-002.json",
+    "evidence/canon-preflight/CANON-TURSO-PROD-CANDIDATE-RUN-002.json",
+    ".github/workflows/v1.3-turso-prod-candidate.yml",
+    "ops/v1.3-turso-prod-candidate-trigger.json",
+    "tests/cloud-sync/turso-production-candidate.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "ops/v1.3-production-cutover-trigger.json",
+    "ops/v1.3-first-live-sale-trigger.json"
+  ],
+  "invariants": [
+    "El trigger automático queda limitado al archivo ops/v1.3-turso-prod-candidate-trigger.json y a feature/v1.3-mobile-cloud.",
+    "La ejecución solo prepara Turso candidato y Worker candidato; no modifica el Worker CANON activo ni el frontend productivo.",
+    "No se realiza primera venta real ni cutover.",
+    "Los secrets TURSO_PROD_* no se imprimen ni versionan.",
+    "D1 producción permanece solo lectura durante el export."
+  ],
+  "rollback": "Si el candidato falla, no hay rollback de producción porque el CANON activo no cambia. Se puede descartar la base Turso candidata y el Worker candidato."
+}
