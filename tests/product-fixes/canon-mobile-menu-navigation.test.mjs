@@ -222,10 +222,10 @@ test('CANON header uses a color-only connection indicator and direct settings ge
   assert.match(baseCss,/#localStatus\[data-state="update"\]/);
   assert.match(baseCss,/\.g-status-label\{position:absolute/);
   assert.match(baseCss,/\.g-avatar\{/);
-  assert.match(layoutCss,/\.g-status:not\(\[data-state\]\) span\{/);
+  assert.match(layoutCss,/\.g-status span\{/);
   assert.match(layoutCss,/#localStatus\[data-state\]\{padding:0/);
-  assert.match(inline03,/_naSetHeaderConnectionState\('connected','Conectado'\)/);
-  assert.match(inline03,/_naSetHeaderConnectionState\('disconnected','Desconectado'\)/);
+  assert.match(inline03,/CANON validado/);
+  assert.match(inline03,/Canónico no disponible · reintenta/);
   assert.match(inline03,/na:version-update-pending/);
   assert.match(index,/registration\.addEventListener\('updatefound'/);
 });
