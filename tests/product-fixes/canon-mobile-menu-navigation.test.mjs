@@ -217,11 +217,13 @@ test('CANON header uses a color-only connection indicator and direct settings ge
   assert.doesNotMatch(index,/id="topAvatar"/);
   assert.doesNotMatch(menu,/module-label">Configuración</);
   assert.match(menu,/module-label">Gastos</);
-  assert.match(baseCss,/g-status\[data-state="connected"\]/);
-  assert.match(baseCss,/g-status\[data-state="disconnected"\]/);
-  assert.match(baseCss,/g-status\[data-state="update"\]/);
+  assert.match(baseCss,/#localStatus\[data-state="connected"\]/);
+  assert.match(baseCss,/#localStatus\[data-state="disconnected"\]/);
+  assert.match(baseCss,/#localStatus\[data-state="update"\]/);
   assert.match(baseCss,/\.g-status-label\{position:absolute/);
-  assert.doesNotMatch(layoutCss,/\.g-status span\{/);
+  assert.match(baseCss,/\.g-avatar\{/);
+  assert.match(layoutCss,/\.g-status:not\(\[data-state\]\) span\{/);
+  assert.match(layoutCss,/#localStatus\[data-state\]\{padding:0/);
   assert.match(inline03,/_naSetHeaderConnectionState\('connected','Conectado'\)/);
   assert.match(inline03,/_naSetHeaderConnectionState\('disconnected','Desconectado'\)/);
   assert.match(inline03,/na:version-update-pending/);
