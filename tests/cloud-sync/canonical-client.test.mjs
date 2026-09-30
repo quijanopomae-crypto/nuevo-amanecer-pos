@@ -167,7 +167,7 @@ test('adapter projects canonical expenses to Gastos and only session expenses to
 });
 
 
-test('payment batch fast path holds one writer lock and never refreshes between allocations',()=>{
+test('payment batch fast path uses one transport request per <=20 debts and never refreshes between allocations',()=>{
   const start=source.indexOf('async function createPaymentBatch(inputs)');
   const end=source.indexOf('function createProduct(input)',start);
   assert.ok(start>=0&&end>start,'createPaymentBatch must exist before command wrappers');
@@ -176,9 +176,15 @@ test('payment batch fast path holds one writer lock and never refreshes between 
   assert.match(block,/assertAction\('payment\.create'\)/);
   assert.match(block,/seen\.has\(creditId\)/);
   assert.match(block,/makeFinancialPayload\('payment\.create', input\)/);
+  assert.match(block,/var CHUNK = 20/);
+  assert.match(block,/command: 'payment\.batch'/);
+  assert.match(block,/route: '\/commands\/payment\.batch'/);
+  assert.match(block,/Object\.assign\(commonPayload\(\), \{ payments: payments \}\)/);
   assert.match(block,/durableJournal\(record\)/);
-  assert.match(block,/sendPending\(record, true\)/);
+  assert.match(block,/sendPending\(record, false\)/);
   assert.match(block,/sendPending\(retryRecord, false\)/);
+  assert.doesNotMatch(block,/route: '\/commands\/payment\.create'/,'multi-payment transport must not POST each debt separately');
   assert.doesNotMatch(block,/\brefresh\s*\(/,'batch fast path must not perform full replica refreshes between payments');
+  assert.match(source,/record\.command === 'payment\.batch'/);
   assert.match(source,/createPaymentBatch:\s*createPaymentBatch/);
 });
