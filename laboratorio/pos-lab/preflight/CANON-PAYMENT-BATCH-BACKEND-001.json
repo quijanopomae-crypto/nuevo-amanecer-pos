@@ -1,0 +1,91 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-PAYMENT-BATCH-BACKEND-001",
+  "base_ref": "6cfa0e7a1a579b5703d91070826b8e232af6d872",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "laboratorio/LAB_POLICY.json",
+      "laboratorio/pos-lab/README.md",
+      "laboratorio/pos-lab/skill-preflight.mjs",
+      "tools/cloudflare-lab/src/worker.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "infra/database/migrations/0006_canonical_promotion.sql",
+      "infra/database/migrations/0008_canonical_commerce.sql",
+      "infra/database/migrations/0009_canonical_financial.sql"
+    ],
+    "WRITES": [
+      "Agregar handler payment.batch a la fuente compartida del Worker.",
+      "Persistir únicamente operaciones hijas payment.create existentes dentro de una sola db.batch.",
+      "Agregar prueba backend sintética; sin deploy ni datos reales en esta tarea."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Journal financiero server-side solo mediante filas canonical_financial_operations y canonical_financial_events existentes.",
+      "Saldos de créditos y caja derivados por vistas existentes cuando la futura promoción a CANON sea autorizada."
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 LAB sintética en pruebas: canonical_financial_operations, canonical_financial_events, canonical_assertions y canonical_write_guards.",
+      "Sin schema nuevo, sin migraciones, sin datos comerciales reales."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Cada deuda conserva command payment.create y operation_id propio.",
+      "Un stale credit aborta el lote completo.",
+      "Efectivo requiere sesión OPEN.",
+      "ACK perdido puede reusar exactamente los mismos child operation_id.",
+      "No hay segundo ledger ni mutación directa de saldos."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Créditos produce deltas negativos de saldo.",
+      "Caja consume deltas positivos solo para efectivo.",
+      "Worker y D1 son la autoridad durable; POS queda fuera de esta tarea backend."
+    ],
+    "RISKS": [
+      "Una validación fuera de la transacción podría quedar stale; por eso se añade CAS dentro de db.batch.",
+      "Demasiadas sentencias pueden acercarse a límites D1; el transporte se limita a 20 hijos.",
+      "Un endpoint de lote no debe introducir command payment.batch en el schema financiero."
+    ],
+    "ROLLBACK": [
+      "Revertir los dos archivos Worker y la prueba backend.",
+      "No existe migración ni dato de producción que revertir."
+    ],
+    "TESTS": [
+      "Múltiples créditos distintos se confirman en una sola petición backend.",
+      "stale child deja cero efectos nuevos del lote.",
+      "replay exacto devuelve receipts already_processed sin duplicar.",
+      "cash batch acumula expected_cents correctamente.",
+      "payment.create individual permanece intacto."
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    }
+  }
+}
