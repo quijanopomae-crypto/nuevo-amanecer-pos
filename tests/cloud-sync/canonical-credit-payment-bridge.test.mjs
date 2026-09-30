@@ -251,6 +251,8 @@ test('bridge never writes legacy persistence or local financial arrays',()=>{
   assert.doesNotMatch(source,/creditos\s*\.(?:push|unshift)|cajMovs\s*\.(?:push|unshift)/);
   assert.doesNotMatch(source,/fetch\s*\(|D1|R2/);
   assert.match(source,/createPayment\s*\(/);
+  assert.match(source,/createPaymentBatch/);
+  assert.match(source,/reconcileBatchAfterCommit/);
   assert.match(source,/refreshCanonical\s*\(/);
 });
 
@@ -270,7 +272,7 @@ test('CANON shell loads and precaches credit payment bridge after canonical clie
 });
 
 
-test('batch cash payment applies selected allocations sequentially with a fresh canonical refresh between them',async()=>{
+test('batch cash payment uses one client batch call and only one background canonical refresh',async()=>{
   const h=harness({
     currentSnapshot:true,
     applyPayments:true,
@@ -297,7 +299,10 @@ test('batch cash payment applies selected allocations sequentially with a fresh 
     {credit_id:'CR-1',amount_cents:6000,payment_method:'efectivo',session_id:'CASH-1'},
     {credit_id:'CR-2',amount_cents:1000,payment_method:'efectivo',session_id:'CASH-1'}
   ]);
-  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2,'each confirmed allocation refreshes canonical state before continuing/finishing');
+  assert.equal(h.calls.filter(x=>x[0]==='createPaymentBatch').length,1,'bridge must hand the selected debts to one locked client batch');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,1,'full canonical reconciliation runs once after the confirmed batch, never between debts');
+  assert.equal(result.reconciling,true);
   assert.equal(h.calls.some(x=>x[0]==='closeModal'),false,'batch flow is inline and must not close the single-payment modal');
   assert.ok(h.calls.some(x=>x[0]==='toast'&&/Cobro múltiple CANON CONFIRMADO/.test(x[1])&&x[2]==='success'));
 });
