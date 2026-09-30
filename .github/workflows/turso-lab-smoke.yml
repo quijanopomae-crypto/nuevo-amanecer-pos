@@ -1,0 +1,116 @@
+name: Turso LAB Live Smoke
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "laboratorio/pos-lab/turso/TURSO-LAB-SMOKE-002.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: turso-lab-live-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+    steps:
+      - name: Require Turso secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TURSO_DATABASE_URL"
+          test -n "$TURSO_AUTH_TOKEN"
+          case "$TURSO_DATABASE_URL" in
+            libsql://*) ;;
+            *) echo "TURSO_LAB_SMOKE_FAIL reason=invalid_url_scheme"; exit 1 ;;
+          esac
+
+      - name: Probe Turso over Hrana v3 without revealing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const rawUrl = String(process.env.TURSO_DATABASE_URL || '').trim();
+          const token = String(process.env.TURSO_AUTH_TOKEN || '').trim();
+          if (!rawUrl || !token) throw new Error('missing_turso_secret');
+
+          const endpoint = rawUrl.startsWith('libsql://')
+            ? 'https://' + rawUrl.slice('libsql://'.length)
+            : rawUrl;
+          const url = endpoint.replace(/\/+$/, '') + '/v3/pipeline';
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              baton: null,
+              requests: [
+                {
+                  type: 'execute',
+                  stmt: {
+                    sql: 'SELECT 1 AS ok',
+                    args: [],
+                    want_rows: true,
+                  },
+                },
+                {
+                  type: 'execute',
+                  stmt: {
+                    sql: "SELECT COUNT(*) AS table_count FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+                    args: [],
+                    want_rows: true,
+                  },
+                },
+                { type: 'close' },
+              ],
+            }),
+          });
+
+          const body = await response.json().catch(() => null);
+          if (!response.ok || !body) {
+            throw new Error('turso_http_' + response.status);
+          }
+
+          function executeResult(index) {
+            const item = body.results?.[index];
+            if (!item || item.type !== 'ok' || item.response?.type !== 'execute') {
+              const code = item?.error?.code || 'protocol_error';
+              throw new Error('turso_' + code);
+            }
+            return item.response.result;
+          }
+
+          const ping = executeResult(0);
+          const pingValue = ping.rows?.[0]?.[0];
+          if (!pingValue || pingValue.type !== 'integer' || pingValue.value !== '1') {
+            throw new Error('unexpected_select_1_result');
+          }
+
+          const schema = executeResult(1);
+          const countValue = schema.rows?.[0]?.[0];
+          if (!countValue || countValue.type !== 'integer') {
+            throw new Error('unexpected_schema_count_result');
+          }
+
+          const tableCount = Number(countValue.value);
+          if (!Number.isSafeInteger(tableCount) || tableCount < 0) {
+            throw new Error('invalid_table_count');
+          }
+
+          console.log('TURSO_CONNECTIVITY=PASS');
+          console.log('TURSO_SQL_READ=PASS');
+          console.log('TURSO_TABLE_COUNT=' + tableCount);
+          console.log('TURSO_LAB_SMOKE=PASS');
+          NODE
