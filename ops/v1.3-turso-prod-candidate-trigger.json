@@ -5,6 +5,7 @@
   "one_shot": true,
   "requested_at": "2026-09-30T16:29:00-05:00",
   "scope": "Prepare isolated Turso production candidate only. No cutover. No live sale. No production traffic switch.",
-  "attempt": 3,
-  "note": "Retry after moving checkout before trigger validation; scope unchanged."
+  "attempt": 4,
+  "note": "Verify populated candidate after diagnosing only sub-ULP REAL serialization differences; no reseed.",
+  "verify_existing_candidate": true
 }

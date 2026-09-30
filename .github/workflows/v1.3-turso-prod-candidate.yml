@@ -113,14 +113,19 @@ jobs:
           sqlite3 /tmp/turso-prod-candidate.db 'PRAGMA journal_mode=WAL; PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null
           echo "TURSO_PROD_CANDIDATE_LOCAL_RESTORE=PASS"
 
-      - name: Seed isolated Turso production candidate and prove parity
+      - name: Seed or verify isolated Turso production candidate
         shell: bash
         run: |
           set -euo pipefail
+          EXTRA=""
+          if [ "${{ github.event_name }}" = "push" ] && grep -Fq '"verify_existing_candidate": true' ops/v1.3-turso-prod-candidate-trigger.json; then
+            EXTRA="--verify-existing"
+          fi
           python3 tools/cloudflare-prod/scripts/turso-seed-from-sqlite.py \
             --sqlite /tmp/turso-prod-candidate.db \
             --url "$TURSO_PROD_DATABASE_URL" \
-            --token "$TURSO_PROD_AUTH_TOKEN"
+            --token "$TURSO_PROD_AUTH_TOKEN" \
+            $EXTRA
 
       - name: Deploy isolated Turso production candidate Worker
         working-directory: tools/cloudflare-lab
