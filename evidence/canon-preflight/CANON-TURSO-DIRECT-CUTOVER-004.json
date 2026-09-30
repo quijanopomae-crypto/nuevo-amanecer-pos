@@ -1,0 +1,56 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-DIRECT-CUTOVER-004",
+  "base_ref": "133fcfd22af28b2a8fad465d9feff271abced6e2",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "accepted_data_risk": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"},
+    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+  },
+  "analysis": {
+    "OBJECTIVE": "Hacer el switch directo del proveedor de persistencia del Worker CANON a Turso sin depender de nuevas lecturas D1.",
+    "READS": [
+      "Run 36782779872: Turso candidato PASS con 44 tablas, 2034 filas, schema/content parity, auth y canonical reads.",
+      "Run 36785938457: abortó antes del deploy por límite diario D1; no hubo mutación productiva.",
+      "tools/cloudflare-prod/wrangler.turso-prod.jsonc ya define el mismo Worker público con DB_PROVIDER=turso."
+    ],
+    "WRITES": [
+      "Añadir workflow one-shot directo a Turso.",
+      "Añadir trigger explícito con aceptación de pérdida de datos de prueba.",
+      "Añadir regresiones estáticas."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "El Worker CANON activo empezará a leer/escribir en Turso producción.",
+      "D1 queda preservado pero deja de ser autoridad operativa."
+    ],
+    "STORAGE_AFFECTED": [
+      "Turso producción: sesión sintética temporal para smoke y futuras operaciones reales.",
+      "D1: sin escrituras ni borrados."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No venta real durante este task.",
+      "No tocar inventario, caja, ventas, créditos ni clientes mediante comandos de negocio.",
+      "Autoridad canonical ACTIVE se conserva.",
+      "URL pública CANON no cambia."
+    ],
+    "RISKS": [
+      "El estado D1 podría diferir del Turso candidato desde la última validación; el propietario acepta perder esos datos porque son solo de prueba.",
+      "Un error de configuración del Worker activo puede afectar disponibilidad; se mitiga probando primero el Worker candidato y manteniendo rollback D1."
+    ],
+    "ROLLBACK": ["Redeploy inmediato del config D1 si falla el smoke post-deploy."],
+    "TEST_PLAN": [
+      "CANON Critical CI en PR.",
+      "Dry-run de config Turso y D1 rollback.",
+      "Probe del Worker Turso candidato antes del switch.",
+      "Integridad directa Turso: quick_check, foreign_key_check, canonical_control ACTIVE.",
+      "Deploy mismo Worker público con DB_PROVIDER=turso.",
+      "Smoke active: health, boundary, auth/session, canonical status/products/customers y limpieza de sesión."
+    ]
+  }
+}
