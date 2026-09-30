@@ -5,6 +5,7 @@
   "target_worker": "nuevo-amanecer-sync-lab-turso",
   "target_database": "TURSO_LAB",
   "test_data": "SYNTHETIC_TEMPORARY",
-  "requested_at_utc": "2026-09-30T18:12:00Z",
-  "note": "Deploy isolated LAB Worker using Turso, verify health/auth/session/sync write+read+idempotency, then clean synthetic rows."
+  "requested_at_utc": "2026-09-30T18:18:00Z",
+  "note": "Redeploy isolated Turso LAB Worker with safe health error classification; log only allowlisted diagnostic category if health still fails.",
+  "attempt": 2
 }
