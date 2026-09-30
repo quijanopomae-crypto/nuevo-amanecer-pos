@@ -1,0 +1,54 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-PAYMENT-ONE-SECOND-UI-001",
+  "base_ref": "5a0a57a6c8afe8f061d58060bd2276129de7283f",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "Captura Android: cobro de S/8.00 confirmado, pero la tarjeta todavía muestra S/8.00 pendiente mientras aparece el toast CONFIRMADO.",
+    "El flujo de una sola deuda entra por createPaymentBatch aunque existe payment.create con fast path sin status GET.",
+    "Para múltiples deudas, el primer payment.batch todavía hace GET /read/canonical/status antes del POST aunque el Worker revalida autoridad/créditos/caja en la escritura.",
+    "naCanonSubmitBatchPayment vuelve a renderizar la ruta inmediatamente con la réplica todavía stale; por eso la deuda visualmente sigue pendiente hasta la reconciliación."
+  ],
+  "analysis": {
+    "ROOT_CAUSE": "Quedan dos latencias evitables: status GET previo al batch y overhead de batch para una sola deuda. Además, el rerender inmediato usa datos viejos en lugar de reflejar el receipt durable.",
+    "READS": [
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/css/client-credit-accounts-v2.css",
+      "AGENTS_Nuevo_Amanecer.md",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs"
+    ],
+    "WRITES": [
+      "Una deuda: delegar createPaymentBatch a payment.create y conservar retry idempotente.",
+      "Varias deudas: omitir status GET solo en el primer envío; retry continúa verificando status.",
+      "Después del receipt: pintar Pagado, saldo pendiente visual ajustado y bloquear la fila sin esperar el refresh completo.",
+      "Cuando llegue la reconciliación CANON, reemplazar la proyección temporal con datos reales."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Receipt antes de éxito visual.",
+      "operation_id estable y replay seguro.",
+      "Worker/D1 sigue siendo autoridad.",
+      "No escritura legacy.",
+      "No éxito optimista."
+    ],
+    "RISKS": [
+      "La red móvil puede superar 1 segundo aunque el POS no agregue esperas.",
+      "La proyección temporal debe desaparecer al llegar na:canonical-updated.",
+      "Un retry no puede usar skipStatus."
+    ],
+    "ROLLBACK": [
+      "Revertir frontend y restaurar Hosted POS anterior."
+    ],
+    "TEST_PLAN": [
+      "Una deuda batch => un POST payment.create y cero status GET antes del receipt.",
+      "Múltiples deudas => primer sendPending skipStatus=true; retry=false.",
+      "UI => tras receipt muestra texto Pagado y no rerenderiza datos stale.",
+      "Reconciliación posterior sustituye el estado temporal.",
+      "CANON Critical CI + E2E Smoke."
+    ]
+  }
+}
