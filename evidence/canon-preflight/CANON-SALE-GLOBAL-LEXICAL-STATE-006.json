@@ -1,0 +1,70 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SALE-GLOBAL-LEXICAL-STATE-006",
+  "base_ref": "0d995d5e1321cc88e2f856f48123e96a0f974139",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "cash-integrity": {"path": ".agents/skills/cash-integrity/SKILL.md", "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"}
+  },
+  "analysis": {
+    "OBJECTIVE": "Restaurar Confirmar venta y Pago rápido en el navegador real sin cambiar semántica comercial.",
+    "READS": [
+      "Capturas del propietario: ambos modales muestran carrito y botones habilitados, pero Confirmar venta y Pago rápido no ejecutan la venta.",
+      "POS/js/legacy-inline/inline-01.js declara con let global: cart, posProc, posPayM, clientes y ventas; productos también es let global.",
+      "POS/js/sync/canonical-sale-integration.js lee root.cart/root.productos/root.ventas/root.clientes/root.posPayM y escribe root.cart/root.posProc.",
+      "En un navegador, un binding global let no se expone como propiedad window/globalThis; por eso la integración ve un carrito distinto/vacío aunque la UI legacy vea el carrito real.",
+      "tests/cloud-sync/canonical-sale-integration.test.mjs modela incorrectamente esos bindings como propiedades del objeto global y no detecta el fallo real."
+    ],
+    "WRITES": [
+      "Añadir adaptadores mínimos en canonical-sale-integration.js para leer los bindings léxicos globales reales con fallback a root.* solo para harness/compatibilidad.",
+      "Vaciar el binding cart real solo después de enqueue durable.",
+      "Usar el binding posProc real para el bloqueo de doble clic y el binding posPayM real para el método de pago.",
+      "Añadir una regresión que declare el estado con let en el mismo vm realm y demuestre que root.cart/root.posProc no existen."
+    ],
+    "DOM_AFFECTED": [
+      "#mBtnConf",
+      "#mCobro",
+      "#mCobroRapido"
+    ],
+    "STATE_AFFECTED": [
+      "cart real del POS",
+      "posProc real del POS",
+      "posPayM real del POS",
+      "lectura de productos, ventas y clientes para validar/capturar la venta"
+    ],
+    "STORAGE_AFFECTED": [
+      "Mismo outbox local na_canonical_sale_outbox_v1; sin cambio de formato.",
+      "Sin cambios directos en Turso durante captura local."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No duplicación por doble clic.",
+      "Stock validado antes de captura.",
+      "Cliente opcional/crédito conservado.",
+      "Durabilidad local antes de vaciar carrito.",
+      "No venta legacy autoritativa en CANON."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas/POS: restaura captura.",
+      "Inventario: solo lectura de stock para validación; sin cambio de lógica.",
+      "Caja: solo exige sesión abierta; sin cambio de apertura/cierre.",
+      "Créditos: conserva selección y fechas existentes."
+    ],
+    "RISKS": [
+      "Asignar al binding equivocado podría dejar carrito visible tras captura; mitigado con regresión de binding let real.",
+      "Cambiar busy flag podría permitir doble clic; mitigado verificando posProc lexical y busy interno."
+    ],
+    "ROLLBACK": [
+      "Revertir canonical-sale-integration.js y test; no hay datos/schema que revertir."
+    ],
+    "TEST_PLAN": [
+      "Regresión funcional con bindings globales let no expuestos en globalThis.",
+      "Suite canonical-sale-integration completa.",
+      "CANON Critical CI.",
+      "Hosted POS deploy y verificación pública de asset/build hash."
+    ]
+  }
+}
