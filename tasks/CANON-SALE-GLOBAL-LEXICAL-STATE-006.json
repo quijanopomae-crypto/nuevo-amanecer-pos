@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SALE-GLOBAL-LEXICAL-STATE-006",
+  "environment": "CANON",
+  "base_ref": "0d995d5e1321cc88e2f856f48123e96a0f974139",
+  "objective": "Corregir el bloqueo total de Confirmar venta y Pago rápido en CANON haciendo que la integración canónica lea y escriba el estado real del POS declarado con let global, en vez de propiedades distintas de window/globalThis.",
+  "owner_authorization": "El propietario reportó en producción móvil que Confirmar venta y Pago rápido no responden y pidió continuar corrigiendo.",
+  "allowed_files": [
+    "tasks/CANON-SALE-GLOBAL-LEXICAL-STATE-006.json",
+    "evidence/canon-preflight/CANON-SALE-GLOBAL-LEXICAL-STATE-006.json",
+    "POS/js/sync/canonical-sale-integration.js",
+    "tests/cloud-sync/canonical-sale-integration.test.mjs",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "POS/index.html",
+    "POS/js/legacy-inline/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/src/**",
+    "infra/database/**",
+    "secrets/**"
+  ],
+  "invariants": [
+    "No cambiar reglas comerciales, precios, stock, caja, crédito ni métodos de pago.",
+    "No ejecutar venta real durante CI o deploy.",
+    "La corrección solo debe conectar la integración canónica con los bindings let reales: cart, productos, ventas, clientes, posProc y posPayM.",
+    "No reactivar saveAllData como autoridad de venta CANON.",
+    "Pago rápido y Confirmar venta deben converger en el mismo capture canónico.",
+    "La venta solo puede vaciar el carrito después de enqueue durable.",
+    "El deploy web no modifica Turso ni el Worker backend."
+  ],
+  "rollback": "Revertir el PR o redeploy del commit web anterior; no hay migración de datos ni schema."
+}
