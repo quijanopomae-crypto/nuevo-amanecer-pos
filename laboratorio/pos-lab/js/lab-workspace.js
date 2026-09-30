@@ -49,7 +49,7 @@
       var endpoint = String(persistent.endpoint || '').replace(/\/+$/, '');
       if (endpoint === LEGACY_D1_ENDPOINT) {
         // Cambiar de backend invalida credenciales y operaciones pendientes:
-        // una sesión/revisión emitida por Turso no debe reutilizarse contra Turso.
+        // una sesión/revisión emitida por D1 no debe reutilizarse contra Turso.
         var migrated = {
           endpoint: DEFAULT_ENDPOINT,
           readToken: '',
@@ -318,7 +318,7 @@
     if (!payload || !payload.snapshot || typeof _naValidSnapshot !== 'function' || !_naValidSnapshot(payload.snapshot)) {
       throw new Error('El snapshot LAB recibido no es válido');
     }
-    // La ruta/pantalla abierta pertenece al navegador actual. El workspace D1
+    // La ruta/pantalla abierta pertenece al navegador actual. El workspace Turso
     // comparte datos de negocio, pero no debe mandar al usuario a otra pantalla.
     var localPageId = document.querySelector('.page.active')?.id || 'pageMenu';
     state.suppressRemoteSave = true;
