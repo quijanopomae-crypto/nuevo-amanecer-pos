@@ -1,0 +1,66 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-PROD-CUTOVER-003",
+  "base_ref": "05dc3833fd2f3beaa5c1e0a2d2b773d5a43b245f",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"},
+    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+  },
+  "analysis": {
+    "OBJECTIVE": "Promover el backend Turso candidato ya validado al mismo Worker CANON público, manteniendo D1 intacto como rollback y sin ejecutar tráfico de negocio.",
+    "READS": [
+      "Run 36782779872: candidato Turso PASS, 44 tablas/2034 filas, schema/content parity PASS, auth/session/read PASS.",
+      "Run 36782779887: CANON Critical CI PASS.",
+      "tools/cloudflare-prod/wrangler.jsonc: config D1 actual y ruta de rollback.",
+      "tools/cloudflare-lab/src/database-binding.js: DB_PROVIDER=turso selecciona Turso sin cambiar runtime de negocio.",
+      "tools/cloudflare-prod/scripts/cutover-prepare.mjs: preflight/export/final fail-closed y verificación de cero tráfico antes de primera venta."
+    ],
+    "WRITES": [
+      "Añadir config Turso con el mismo nombre del Worker CANON activo, sin binding D1.",
+      "Añadir workflow one-shot que verifica cero tráfico/sesiones, exporta D1, guarda backup R2, prueba paridad completa contra Turso, despliega Turso al Worker activo y hace smoke de autenticación/lecturas.",
+      "Añadir rollback automático al config D1 previo ante fallo post-deploy.",
+      "Añadir tests estáticos del contrato."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "El endpoint CANON público pasa a persistir/leer en Turso después del deploy exitoso.",
+      "No se ejecutan comandos de negocio ni venta en el workflow."
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 producción: export/read-only y backup; no INSERT/UPDATE/DELETE de negocio.",
+      "Turso producción: solo sesión sintética temporal del smoke, eliminada en finally.",
+      "R2 privado: backup fresco D1 y manifest de cutover."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Ventas, inventario, caja, créditos y clientes deben ser idénticos entre D1 y Turso al instante previo.",
+      "Stock se considera HIGH/CRITICAL; ninguna venta ni ajuste se ejecuta durante cutover.",
+      "Idempotencia y authority ACTIVE se mantienen.",
+      "La URL pública y frontend permanecen iguales."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Cambio de proveedor de persistencia afecta todos los módulos, por eso se exige paridad integral y smoke canónico antes de declarar PASS."
+    ],
+    "RISKS": [
+      "CRITICAL: drift D1→Turso; mitigado con export fresco + verify-existing completo justo antes de deploy.",
+      "CRITICAL: fallo del Worker Turso tras deploy; mitigado con rollback automático al config D1.",
+      "HIGH: sesión nueva durante ventana; mitigado exigiendo active_sessions=0 y revalidando estado inmediatamente antes del deploy."
+    ],
+    "ROLLBACK": [
+      "Redeploy automático D1 si falla secret binding o smoke Turso.",
+      "D1 no se elimina ni modifica y V1.2 sigue preservado."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI completo antes del merge.",
+      "Workflow de cutover ejecuta tests focales y wrangler dry-run antes de cualquier deploy.",
+      "Preflight D1 exige cero tráfico y cero sesiones.",
+      "Paridad Turso verify-existing sobre export fresco.",
+      "Smoke post-deploy: health, boundary 404, activate, session, canonical status/products/customers, cleanup.",
+      "Manifest privado R2 y confirmación de D1 rollback disponible."
+    ]
+  }
+}
