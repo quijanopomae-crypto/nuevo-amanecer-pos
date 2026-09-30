@@ -1,0 +1,76 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-WORKSPACE-E2E-010",
+  "base_ref": "07961a0af8c54bfa5026560a21ad9fc51c0801a6",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Worker Turso LAB aislado ya validado por E2E #5",
+      "Repository Secrets Turso/POS activation/LAB import HMAC solo dentro de GitHub Actions",
+      "Rutas /lab/workspace, /save, /reset e /import-baseline"
+    ],
+    "WRITES": [
+      "Baseline y revisiones exclusivamente sintéticos en Turso LAB durante la prueba",
+      "Sesión sintética temporal para autorizar save/reset"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Solo workspace sintético temporal en la base Turso LAB; se limpia al finalizar"
+    ],
+    "STORAGE_AFFECTED": [
+      "lab_workspace_baselines, lab_workspace_revisions, lab_workspace_control, auth_sessions y devices de Turso LAB durante el probe"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Import baseline debe validar firma HMAC",
+      "Save debe incrementar revisión una sola vez y replay debe ser idempotente",
+      "Expected revision obsoleta debe devolver conflicto 409",
+      "Reset debe restaurar exactamente el baseline",
+      "Cleanup debe dejar cero filas sintéticas del workspace y sesión"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "El workspace es la capa que hidrata datos completos del POS LAB; aprobarlo es requisito previo a cambiar el endpoint del navegador LAB hacia Turso"
+    ],
+    "RISKS": [
+      "Diferencias D1/libSQL en batch meta.changes o constraints pueden romper save/reset",
+      "Secret LAB_IMPORT_HMAC_SECRET puede no estar disponible en Repository Secrets",
+      "Un fallo a mitad del E2E podría dejar filas sintéticas; finally ejecuta cleanup directo"
+    ],
+    "ROLLBACK": [
+      "No conectar el navegador LAB a Turso; cleanup directo borra baseline/revisiones/sesión sintéticos"
+    ],
+    "TESTS": [
+      "Import baseline firmado -> revision 1",
+      "GET workspace y status",
+      "Save -> revision 2",
+      "Replay -> already_saved",
+      "Stale save -> 409 revision_conflict",
+      "Reset -> revision 3 + baseline restaurado",
+      "Cleanup + verificación de cero residuos"
+    ]
+  }
+}
