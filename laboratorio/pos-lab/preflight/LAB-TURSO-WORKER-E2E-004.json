@@ -1,0 +1,75 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-WORKER-E2E-004",
+  "base_ref": "75786401c205b33b7431b3a34dbb28fb55c26f6e",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Código Worker LAB ya validado y wrangler.turso.jsonc ya fusionado",
+      "Repository Secrets de Turso, Cloudflare y POS activation solo dentro de GitHub Actions",
+      "Base Turso LAB con esquema 0001-0018 ya validado"
+    ],
+    "WRITES": [
+      "Despliegue de un Worker nuevo y aislado llamado nuevo-amanecer-sync-lab-turso",
+      "Secretos del Worker LAB Turso mediante Wrangler secret bulk",
+      "Una sesión sintética temporal en Turso, eliminada al finalizar"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Se crea un endpoint Worker LAB separado; ningún endpoint CANON cambia"
+    ],
+    "STORAGE_AFFECTED": [
+      "Turso LAB recibe temporalmente una sesión/principal sintéticos y luego se limpian"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No desplegar sobre nuevo-amanecer-pos-prod ni nuevo-amanecer-sync-lab existente",
+      "No exponer valores de secrets en logs",
+      "No escribir datos comerciales reales",
+      "Health, auth/activate y auth/session deben pasar usando Turso antes de conectar el POS"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Valida la capa común de persistencia que luego usarán clientes, ventas, créditos, inventario y caja, sin habilitar aún tráfico de esos módulos"
+    ],
+    "RISKS": [
+      "Wrangler podría apuntar al Worker equivocado si cambia el nombre del config",
+      "El adaptador Turso podría fallar en batch de activación o lectura de sesión",
+      "Una sesión de prueba podría quedar si falla cleanup"
+    ],
+    "ROLLBACK": [
+      "Eliminar el Worker LAB Turso o dejarlo sin uso; CANON/producción no cambian",
+      "Cleanup directo en Turso elimina cualquier sesión sintética creada por el probe"
+    ],
+    "TESTS": [
+      "Deploy exacto con wrangler.turso.jsonc",
+      "GET /health devuelve ok",
+      "POST /auth/activate crea sesión con secreto sin imprimir token",
+      "GET /auth/session valida la sesión",
+      "Cleanup directo confirma cero sesiones sintéticas remanentes"
+    ]
+  }
+}
