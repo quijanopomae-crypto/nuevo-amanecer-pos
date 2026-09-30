@@ -1,0 +1,60 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-LABELS-FINAL-GATE-017",
+  "base_ref": "848122081c0702bacd19e9eb0d9bff5a68ba43de",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md", "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-feature-edit": {"path": ".agents/skills/lab-feature-edit/SKILL.md", "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"},
+    "lab-ui-edit": {"path": ".agents/skills/lab-ui-edit/SKILL.md", "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"}
+  },
+  "analysis": {
+    "READS": [
+      "UI_MAP.yaml confirma que lab-workspace.js es el cliente de datos del POS-LAB y que CANON permanece fuera de alcance.",
+      "El navegador ya usa el Worker Turso LAB aislado como DEFAULT_ENDPOINT.",
+      "La revisión activa y el E2E real demostraron venta, caja e inventario coherentes en Turso; las referencias D1 restantes son texto/UI legado."
+    ],
+    "WRITES": [
+      "Sustituir únicamente textos visibles y mensajes diagnósticos D1 LAB por Turso LAB.",
+      "Cambiar badge de D1 R<n> a Turso R<n>.",
+      "Renombrar botones Cargar/Usar D1 LAB a Cargar/Usar Turso LAB.",
+      "Actualizar tests estáticos para fijar la nueva terminología sin tocar comportamiento."
+    ],
+    "DOM_AFFECTED": [
+      "Texto de panel de Datos POS-LAB, botones y badge; sin cambios de estructura, ids ni eventos."
+    ],
+    "STATE_AFFECTED": [
+      "Ninguno. state, revisiones, sesiones y operaciones pendientes conservan la misma lógica."
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno. No cambia localStorage/sessionStorage/Turso."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No cambiar ventas, inventario, caja, clientes, créditos, sync, idempotencia ni persistencia.",
+      "No tocar CANON ni producción.",
+      "No modificar endpoints ni secretos."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Solo mejora claridad operacional en todos los módulos al mostrar correctamente el backend Turso LAB."
+    ],
+    "RISKS": [
+      "Cambiar ids o lógica del panel podría afectar activación/carga; se preservan exactamente.",
+      "Tests antiguos esperan texto D1 y deben actualizarse de forma focal."
+    ],
+    "ROLLBACK": [
+      "Revertir el commit restaura las etiquetas D1 anteriores sin afectar datos."
+    ],
+    "TESTS": [
+      "node --test tests/laboratorio-workspace-boot.test.mjs",
+      "node laboratorio/pos-lab/build-lab.mjs",
+      "node laboratorio/pos-lab/build-lab.mjs --check",
+      "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-LABELS-FINAL-GATE-017.json --receipt=laboratorio/pos-lab/preflight/LAB-TURSO-LABELS-FINAL-GATE-017.json",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-LABELS-FINAL-GATE-017.json"
+    ]
+  }
+}
