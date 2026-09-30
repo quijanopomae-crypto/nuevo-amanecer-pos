@@ -2,11 +2,11 @@
   "format": "nuevo-amanecer-v1.3-browser-cors-hotfix-v1",
   "authorized": true,
   "authorized_by": "owner",
-  "requested_action": "deploy-production-worker-payment-subsecond-latency",
+  "requested_action": "deploy-production-worker-payment-lean-path",
   "hosted_pos_origin": "https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev",
   "production_worker": "nuevo-amanecer-pos-prod",
-  "scope": "Production Worker code only: parallelize independent payment.batch D1 pre-reads; no schema migration and no business-rule change.",
-  "reason": "PR #249 merged at 267a671b693f047c80322374ab28ffb1e99a50f8 after LAB Canon Mirror CI #327 PASS and CANON Critical CI #309 PASS.",
-  "target_head": "267a671b693f047c80322374ab28ffb1e99a50f8",
-  "requested_at_utc": "2026-09-30T13:05:00Z"
+  "scope": "Production Worker code only: payment.batch preloads authority, replay, credits and optional cash session through one packed D1 SELECT, then preserves the existing atomic write batch; no schema migration.",
+  "reason": "PR #259 merged at bb37d1bfddb1ba8aaf5ae1577b8c8b263c69ecec after LAB Canon Mirror CI #332 PASS, CANON Critical CI #323 PASS and E2E Smoke CI #75 PASS.",
+  "target_head": "bb37d1bfddb1ba8aaf5ae1577b8c8b263c69ecec",
+  "requested_at_utc": "2026-09-30T13:38:00Z"
 }
