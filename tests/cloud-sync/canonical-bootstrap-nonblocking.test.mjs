@@ -38,7 +38,8 @@ test('canonical read requests are bounded without changing command write transpo
 });
 
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
-  assert.match(canonical,/!ready \|\| changed \|\| !data \|\| data\.read_only !== false \|\| data\.mode !== 'ACTIVE'/);
+  assert.match(canonical,/\(!ready && !confirmedPaymentView\) \|\| changed \|\| !data \|\| data\.read_only !== false \|\| data\.mode !== 'ACTIVE'/);
+  assert.match(canonical,/confirmedPaymentView = action === 'payment.create' && replicaState.validation === 'receipt-patched'/);
   assert.match(canonical,/fail\('CANONICAL_COMMERCE_CLOSED'\)/);
 });
 
@@ -49,7 +50,7 @@ test('CANON core bootstrap is parallel and visible before financial completion',
   assert.match(canonical,/publishReplica\(bootstrapReplica, 'bootstrap'\); notifyReplicaUpdate\(\)/);
   assert.match(canonical,/mode: provisional \? 'CANONICAL_READ_ONLY'/);
   assert.match(canonical,/read_only: provisional \|\| replica\.read_only !== false/);
-  assert.match(canonical,/Promise\.all\(\[\['cash-sessions', 'cashSessions'\], \['financial-events', 'financialEvents'\]\]\.map\(readEntry\)\)/);
+  assert.match(canonical,/Promise\.all\(\[\['cash-sessions', 'cashSessions'\], \['financial-events', 'financialEvents'\],[\s\S]*?\['cash-movements','cashMovements'\]\]\.map\(readEntry\)\)/);
   const bootstrapPos=canonical.indexOf("publishReplica(bootstrapReplica, 'bootstrap')");
   const financialPos=canonical.indexOf("['cash-sessions', 'cashSessions']");
   assert.ok(bootstrapPos>=0 && financialPos>bootstrapPos,'bootstrap must publish before financial routes finish');

@@ -46,8 +46,21 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   if (invalid) return json({error:invalid},400);
   const db = getDatabase(env);
   const hash = await sha256Hex(stableStringify({command,body}));
-  async function authorityError() {
-    const c = await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
+  // One read obtains the payment preconditions together. The durable batch
+  // still checks authority, credit and cash revisions atomically before writing.
+  const paymentState = command === 'payment.create' ? await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash,
+    (SELECT json_object('command',command,'request_hash',request_hash,'result_json',result_json)
+      FROM canonical_financial_operations WHERE operation_id=?2) AS operation_json,
+    EXISTS(SELECT 1 FROM sales WHERE operation_id=?2) AS sale_collision,
+    (SELECT json_object('provenance',provenance,'revision',revision,'current_balance_cents',current_balance_cents,
+      'opening_balance_cents',opening_balance_cents)
+      FROM canonical_credit_balances WHERE promotion_id=?3 AND credit_id=?4) AS credit_json,
+    (SELECT json_object('status',status,'revision',revision,'expected_cents',expected_cents,'closing_watermark',closing_watermark)
+      FROM canonical_cash_state WHERE promotion_id=?3 AND session_id=?5) AS session_json
+    FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`)
+    .bind(auth.principalId,body.operation_id,body.promotion_id,body.credit_id,body.session_id??null).first() : undefined;
+  async function authorityError(preloaded) {
+    const c = preloaded !== undefined ? preloaded : await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
       LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first();
     if (!c || c.mode !== 'ACTIVE') return 'canonical_not_active';
     if (c.active_promotion_id !== body.promotion_id || c.authority_epoch !== body.authority_epoch ||
@@ -55,17 +68,19 @@ export async function createCanonicalFinancial(command, request, env, auth, json
         c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
-  async function replay() {
-    const row = await db.prepare('SELECT command,request_hash,result_json FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first();
-    const collision = row ? null : await db.prepare('SELECT operation_id FROM sales WHERE operation_id=?1').bind(body.operation_id).first();
-    const denied = await authorityError();
+  async function replay(preloaded) {
+    const row = preloaded ? (preloaded.operation_json ? JSON.parse(preloaded.operation_json) : null)
+      : await db.prepare('SELECT command,request_hash,result_json FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first();
+    const collision = row ? null : preloaded ? preloaded.sale_collision
+      : await db.prepare('SELECT operation_id FROM sales WHERE operation_id=?1').bind(body.operation_id).first();
+    const denied = await authorityError(preloaded);
     if (denied) return json({error:denied},409);
     if (collision || (row && (row.command !== command || row.request_hash !== hash))) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
     return row ? json({...JSON.parse(row.result_json),status:'already_processed',idempotent:true}) : null;
   }
-  const denied = await authorityError();
+  const denied = await authorityError(paymentState);
   if (denied) return json({error:denied},409);
-  const previous = await replay();
+  const previous = await replay(paymentState);
   if (previous) return previous;
 
   const token = crypto.randomUUID();
@@ -90,7 +105,8 @@ export async function createCanonicalFinancial(command, request, env, auth, json
   if (command === 'adjustment.create') cashDelta = body.amount_cents;
   const creditId = command === 'payment.create' ? body.credit_id : target?.credit_id;
   if (creditId) {
-    credit = await db.prepare('SELECT * FROM canonical_credit_balances WHERE promotion_id=?1 AND credit_id=?2').bind(body.promotion_id,creditId).first();
+    credit = paymentState ? (paymentState.credit_json ? JSON.parse(paymentState.credit_json) : null)
+      : await db.prepare('SELECT * FROM canonical_credit_balances WHERE promotion_id=?1 AND credit_id=?2').bind(body.promotion_id,creditId).first();
     if (!credit || credit.revision !== body.expected_credit_revision) return json({error:'stale_credit'},409);
     const balance = credit.current_balance_cents + creditDelta;
     if (!uint(balance) || balance > credit.opening_balance_cents) return json({error:'credit_balance_conflict'},409);
@@ -99,7 +115,8 @@ export async function createCanonicalFinancial(command, request, env, auth, json
     Object.assign(result,{credit_id:creditId,credit_provenance:credit.provenance,current_balance_cents:balance,credit_revision:credit.revision+1});
   }
   if (body.session_id && command !== 'cash.open') {
-    session = await db.prepare('SELECT * FROM canonical_cash_state WHERE promotion_id=?1 AND session_id=?2').bind(body.promotion_id,body.session_id).first();
+    session = paymentState ? (paymentState.session_json ? JSON.parse(paymentState.session_json) : null)
+      : await db.prepare('SELECT * FROM canonical_cash_state WHERE promotion_id=?1 AND session_id=?2').bind(body.promotion_id,body.session_id).first();
     if (!session || session.status !== 'OPEN' || (body.expected_session_revision !== undefined && session.revision !== body.expected_session_revision)) return json({error:'stale_session'},409);
     if (!uint(session.expected_cents + cashDelta)) return json({error:'cash_balance_conflict'},409);
     assert(`EXISTS(SELECT 1 FROM canonical_cash_state WHERE promotion_id=?2 AND session_id=?3 AND status='OPEN'

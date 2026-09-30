@@ -43,6 +43,7 @@ function harness(options={}){
   const api={
     enabled(){return options.canonical !== false;},
     sourceState(){return options.currentSnapshot ? {validation:'current'} : {validation:'stale'};},
+    pendingSnapshot(){return options.pending??null;},
     assertAction(action){calls.push(['assertAction',action]); if(options.currentSnapshot===false) throw new Error('CANONICAL_COMMERCE_CLOSED'); return true;},
     async refresh(){
       refreshCount+=1;
@@ -190,6 +191,17 @@ test('failed CANON command does not close modal or report success',async()=>{
   assert.equal(await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(),false);
   assert.equal(h.calls.some(x=>x[0]==='closeModal'),false);
   assert.ok(h.calls.some(x=>x[0]==='toast'&&/CANONICAL_FINANCIAL_PENDING/.test(x[1])&&x[2]==='error'));
+});
+
+test('a pending credit policy explains how to resolve it before attempting the payment again',async()=>{
+  const h=harness({pending:{command:'customer.credit-policy.set',last_error:'internal_error',payload:{customer_id:'MISAEL'}}});
+  assert.equal(await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(),false);
+  assert.equal(h.calls.some(x=>x[0]==='createPayment'),false);
+  const message=h.calls.find(x=>x[0]==='toast'&&x[2]==='error')?.[1]||'';
+  assert.match(message,/ajuste manual de línea/i);
+  assert.match(message,/reintentar/i);
+  assert.match(message,/misma operación/i);
+  assert.match(message,/no se registró el pago/i);
 });
 
 test('bridge never writes legacy persistence or local financial arrays',()=>{

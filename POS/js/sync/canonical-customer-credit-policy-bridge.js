@@ -46,27 +46,38 @@
   function pendingMessage(error){
     var pending=pendingRecord(),code=clean(error&&error.message);
     if(pending&&pending.command==='customer.credit-policy.set'&&!pending.invalid){
-      if(pending.last_error)return 'CANON rechazó el cambio de línea ('+clean(pending.last_error)+'). No se modificó la política.';
+      if(pending.last_error&&[400,409].includes(Number(pending.last_status)))return 'CANON rechazó el cambio de línea ('+clean(pending.last_error)+'). No se modificó la política.';
+      if(pending.last_error)return 'CANON no confirmó el cambio de línea ('+clean(pending.last_error)+'); sigue pendiente y no se puede asegurar si se aplicó. Reintenta esta misma operación desde Ajuste manual de línea; no registres otro importe.';
       return 'El cambio de línea se envió pero CANON no confirmó la recepción ('+code+'). Reintenta la MISMA operación.';
     }
     return 'No se guardó la política de crédito CANON'+(code?': '+code:'');
   }
-  async function afterCommit(receipt,replayed,customerId){
-    closeModal();
+  function mayRetryUnconfirmed(pending){
+    return !!(pending&&pending.command==='customer.credit-policy.set'&&!pending.invalid&&
+      Number.isInteger(pending.last_status)&&pending.last_status>=500);
+  }
+  function reconcileAfterCommit(receipt,customerId){
     var operation=clean(receipt&&receipt.operation_id);
-    try{
-      await refreshCanonical();
+    Promise.resolve().then(refreshCanonical).then(function(){
       renderViews(customerId);
-      notify(replayed
-        ? 'Se confirmó el cambio de línea CANON pendiente. No se creó otra operación.'
-        : receipt&&receipt.mode==='MANUAL'
-          ? 'Línea manual guardada en CANON'
-          : 'Se restauró la línea automática en CANON','success');
-    }catch(error){
-      notify('Política de crédito CONFIRMADA en CANON (operación '+operation+'). No se pudo actualizar la vista: '+
-        clean(error&&error.message)+'. NO repitas el cambio; recarga la pantalla.','success');
-    }
-    return true;
+    }).catch(function(error){
+      notify('Política de crédito CONFIRMADA en CANON (operación '+operation+'); la ficha ya refleja el recibo. Conciliación pendiente: '+
+        clean(error&&error.message)+'. NO repitas el cambio.','success');
+    });
+  }
+  function afterCommit(receipt,replayed,customerId){
+    closeModal();
+    // canonical-client has already applied the validated receipt to its local
+    // projection and emitted na:canonical-updated. Render the ficha now; the
+    // full collection refresh only reconciles that projection in the background.
+    renderViews(customerId);
+    notify(replayed
+      ? 'Se confirmó el cambio de línea CANON pendiente. No se creó otra operación.'
+      : receipt&&receipt.mode==='MANUAL'
+        ? 'Línea manual guardada en CANON'
+        : 'Se restauró la línea automática en CANON','success');
+    reconcileAfterCommit(receipt,customerId);
+    return Promise.resolve(true);
   }
   async function commit(input){
     if(!enabled()||busy)return false;
@@ -122,6 +133,12 @@
               return false;
             }
           }catch(_){}
+        }
+        if(mayRetryUnconfirmed(rejected)&&typeof client.retryPending==='function'){
+          try{
+            receipt=await client.retryPending();
+            return afterCommit(receipt,true,rejected.payload&&rejected.payload.customer_id);
+          }catch(retryError){error=retryError;}
         }
         notify(pendingMessage(error),'error');return false;
       }
