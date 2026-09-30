@@ -1,0 +1,9 @@
+{
+  "schema": "nuevo-amanecer.turso-lab-smoke/v1",
+  "task_id": "LAB-TURSO-LIVE-SMOKE-002",
+  "authorized": true,
+  "mode": "READ_ONLY",
+  "target": "TURSO_LAB",
+  "requested_at_utc": "2026-09-30T17:00:00Z",
+  "note": "Verify repository secrets and real Turso SQL connectivity. Do not write data or print credentials."
+}
