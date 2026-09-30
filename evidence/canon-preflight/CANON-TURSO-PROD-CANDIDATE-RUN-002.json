@@ -1,0 +1,57 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-PROD-CANDIDATE-RUN-002",
+  "base_ref": "5bd57d97200788b4a3ef1d63b4367bf805d2067d",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Disparar una ejecución única del candidato Turso de producción usando los secrets TURSO_PROD_* ya creados, sin cutover ni cambio de tráfico.",
+    "READS": [
+      ".github/workflows/v1.3-turso-prod-candidate.yml",
+      "tasks/CANON-TURSO-PROD-CANDIDATE-001.json",
+      "evidence/canon-preflight/CANON-TURSO-PROD-CANDIDATE-001.json",
+      "tests/cloud-sync/turso-production-candidate.test.mjs"
+    ],
+    "WRITES": [
+      "Añadir un trigger push limitado a feature/v1.3-mobile-cloud y al archivo ops/v1.3-turso-prod-candidate-trigger.json.",
+      "Permitir la autorización del workflow por workflow_dispatch o por contenido exacto del trigger versionado.",
+      "Crear el trigger versionado con autorización one-shot del owner.",
+      "Actualizar las regresiones para exigir el alcance estrecho del trigger."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "No cambia el estado del CANON activo.",
+      "La ejecución puede poblar solamente la base Turso candidata y desplegar el Worker candidato."
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 producción solo lectura durante export.",
+      "Turso candidato recibe copia completa solo si está vacío.",
+      "No se escribe en producción activa."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No cutover.",
+      "No primera venta real.",
+      "No deploy del Worker CANON activo.",
+      "No cambio del frontend productivo.",
+      "No exposición de secrets."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ningún módulo comercial cambia de autoridad; Turso candidato se valida fuera de tráfico."
+    ],
+    "RISKS": [
+      "Un trigger demasiado amplio podría volver a ejecutar la copia accidentalmente; se limita a un único archivo y branch.",
+      "Si Turso candidato no está vacío, el seeder falla cerrado.",
+      "Si falta o es incorrecto algún secret, el workflow falla antes de modificar producción."
+    ],
+    "ROLLBACK": [
+      "No hay rollback de producción. Si falla el candidato, se descarta candidato y D1 sigue activo."
+    ],
+    "TEST_PLAN": [
+      "CANON Critical CI en PR.",
+      "Ejecución post-merge del workflow candidato.",
+      "Verificar paridad, integridad, health, boundary productivo y ACTIVE read.",
+      "Verificar que el Worker CANON y frontend siguen sin cambios."
+    ]
+  }
+}
