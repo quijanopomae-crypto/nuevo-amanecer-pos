@@ -1,0 +1,68 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-FETCH-BINDING-007",
+  "base_ref": "bbf080b026af9ac3024c1c6737f943389b94e9fe",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Diagnóstico E2E runtime_type_error del Worker Turso LAB",
+      "Implementación actual que almacena globalThis.fetch y luego la invoca como this.fetchImpl"
+    ],
+    "WRITES": [
+      "Bind explícito de fetch al globalThis dentro del adaptador Turso LAB",
+      "Prueba de regresión del receiver y reintento del E2E"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Solo transporte HTTP del adaptador Turso; contrato SQL/D1 no cambia"
+    ],
+    "STORAGE_AFFECTED": [
+      "El E2E vuelve a crear datos sintéticos temporales y debe limpiarlos"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No cambiar SQL, transacciones, idempotencia ni reglas de dominio",
+      "No tocar CANON/producción",
+      "El fetch debe ejecutarse con receiver compatible con WorkerGlobalScope"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "El adaptador es compartido por todas las rutas LAB; la corrección solo afecta cómo sale la petición HTTPS hacia Turso"
+    ],
+    "RISKS": [
+      "El TypeError podría tener otra causa y el E2E seguir fallando",
+      "Un cambio de receiver podría afectar mocks de tests si no se cubre explícitamente"
+    ],
+    "ROLLBACK": [
+      "Revertir el bind de fetch y mantener el Worker Turso fuera de tráfico"
+    ],
+    "TESTS": [
+      "Test que exige receiver globalThis en fetchImpl",
+      "Suite existente del adaptador",
+      "LAB CI y E2E completo health/auth/session/sync/idempotency/cleanup"
+    ]
+  }
+}
