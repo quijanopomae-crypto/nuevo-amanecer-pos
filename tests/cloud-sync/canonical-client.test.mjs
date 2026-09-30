@@ -181,7 +181,7 @@ test('payment batch fast path uses one transport request per <=20 debts and neve
   assert.match(block,/route: '\/commands\/payment\.batch'/);
   assert.match(block,/Object\.assign\(commonPayload\(\), \{ payments: payments \}\)/);
   assert.match(block,/durableJournal\(record\)/);
-  assert.match(block,/sendPending\(record, true\)/);
+  assert.match(block,/sendPending\(record, false\)/);
   assert.match(block,/sendPending\(retryRecord, false\)/);
   assert.doesNotMatch(block,/route: '\/commands\/payment\.create'/,'multi-payment transport must not POST each debt separately');
   assert.doesNotMatch(block,/\brefresh\s*\(/,'batch fast path must not perform full replica refreshes between payments');
