@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish CANON Clientes mobile scroll-motion correction: restore post-paint animation for search/sort and stats while keeping safe page-entry Motion disabled.",
-  "retry_attempt": 36,
-  "retry_reason": "PR #231 merged at 86a3f1b12b5a61d63a9e6b20c6fc09d663146560 after CANON Critical CI and E2E Smoke CI passed; deploy current hosted POS shell.",
-  "requested_at_utc": "2026-09-30T03:03:00Z",
-  "target_head": "86a3f1b12b5a61d63a9e6b20c6fc09d663146560"
+  "note": "Publish CANON batch-selection UI fix: auto-fill selected total, preserve manual amount, and hide digital operation field for cash.",
+  "retry_attempt": 37,
+  "retry_reason": "PR #233 merged at 50cc5547ad010f0fb17546cf9a1d900679dddcd6 after CANON Critical CI and E2E Smoke CI passed; deploy current hosted POS shell.",
+  "requested_at_utc": "2026-09-30T03:16:00Z",
+  "target_head": "50cc5547ad010f0fb17546cf9a1d900679dddcd6"
 }
