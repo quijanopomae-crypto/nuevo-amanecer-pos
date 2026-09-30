@@ -167,11 +167,14 @@ test('adapter projects canonical expenses to Gastos and only session expenses to
 });
 
 
-test('payment batch fast path uses one transport request per <=20 debts and never refreshes between allocations',()=>{
+test('payment batch fast path removes redundant waits while retries stay authority-checked',()=>{
   const start=source.indexOf('async function createPaymentBatch(inputs)');
   const end=source.indexOf('function createProduct(input)',start);
   assert.ok(start>=0&&end>start,'createPaymentBatch must exist before command wrappers');
   const block=source.slice(start,end);
+  assert.match(block,/inputs\.length === 1/);
+  assert.match(block,/await createPayment\(inputs\[0\]\)/,'one debt must reuse the payment.create fast path');
+  assert.match(block,/await retryPending\(\)/,'uncertain one-debt ACK must replay the same payment');
   assert.match(block,/return withWriterLock\(async function \(\)/);
   assert.match(block,/assertAction\('payment\.create'\)/);
   assert.match(block,/seen\.has\(creditId\)/);
@@ -181,8 +184,8 @@ test('payment batch fast path uses one transport request per <=20 debts and neve
   assert.match(block,/route: '\/commands\/payment\.batch'/);
   assert.match(block,/Object\.assign\(commonPayload\(\), \{ payments: payments \}\)/);
   assert.match(block,/durableJournal\(record\)/);
-  assert.match(block,/sendPending\(record, false\)/);
-  assert.match(block,/sendPending\(retryRecord, false\)/);
+  assert.match(block,/sendPending\(record, true\)/,'new atomically validated batch must skip the redundant status GET');
+  assert.match(block,/sendPending\(retryRecord, false\)/,'retry must still verify remote authority');
   assert.doesNotMatch(block,/route: '\/commands\/payment\.create'/,'multi-payment transport must not POST each debt separately');
   assert.doesNotMatch(block,/\brefresh\s*\(/,'batch fast path must not perform full replica refreshes between payments');
   assert.match(source,/record\.command === 'payment\.batch'/);

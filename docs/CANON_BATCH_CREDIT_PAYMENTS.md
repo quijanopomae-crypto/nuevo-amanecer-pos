@@ -102,3 +102,25 @@ continúa siendo la única decisión de escritura atómica.
 
 Esta optimización no cambia saldos, receipts, revisiones ni reglas de caja. Solo
 elimina espera serial dentro del Worker.
+
+
+## Respuesta inmediata post-commit
+
+La optimización de UX no marca una deuda como pagada de forma optimista. El orden es:
+
+1. el Worker confirma y devuelve el receipt durable;
+2. inmediatamente la fila muestra **Pagado ✓** (o **Abono confirmado ✓** si fue parcial);
+3. se ajusta visualmente el pendiente de la cuenta;
+4. la reconciliación CANON completa continúa en segundo plano;
+5. al llegar la réplica autoritativa, reemplaza esa proyección temporal.
+
+Para una sola deuda seleccionada, el cliente evita el overhead de `payment.batch` y
+reutiliza el fast path `payment.create`: un solo POST y sin GET de status redundante
+en el primer intento. Para varias deudas, el primer `payment.batch` también omite
+ese GET redundante porque el Worker revalida autoridad, revisiones de todos los
+créditos y sesión de caja dentro de la transacción. Cualquier retry mantiene la
+verificación remota obligatoria.
+
+El objetivo es que el POS no agregue espera innecesaria. La latencia absoluta de
+Internet móvil no puede garantizarse por código cliente; nunca se muestra **Pagado**
+antes de una confirmación durable.

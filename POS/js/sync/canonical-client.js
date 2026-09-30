@@ -810,9 +810,10 @@
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
-    // A new payment or payment batch already has a validated current replica.
-    // The Worker checks authority and credit revision atomically on write.
-    // Retried pending commands still verify remote authority before replaying the intent.
+    // A new payment.create or payment.batch already has a validated current
+    // replica. The Worker checks authority and credit revision atomically on
+    // write, so the first send may skip a redundant status GET. Retried pending
+    // commands still verify remote authority before replaying the intent.
     if (!skipStatus) {
       var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
         credentials: 'omit', redirect: 'error', cache: 'no-store',
@@ -885,6 +886,35 @@
   async function createPaymentBatch(inputs) {
     if (!Array.isArray(inputs) || !inputs.length || inputs.length > 60) fail('INVALID_CANONICAL_PAYMENT_BATCH');
 
+    // A one-debt "batch" has no batching work to do. Reuse the proven
+    // payment.create fast path: one POST, no redundant status GET on the first
+    // attempt, and an authority-checked replay only if the ACK is uncertain.
+    if (inputs.length === 1) {
+      try {
+        var singleReceipt = await createPayment(inputs[0]);
+        return { ok:true, receipts:[singleReceipt], single_fast_path:true };
+      } catch (singleError) {
+        var singlePending = journal();
+        if (singlePending && singlePending.state === 'PENDING' && singlePending.command === 'payment.create' && !singlePending.last_error) {
+          try {
+            var replayReceipt = await retryPending();
+            return { ok:true, receipts:[replayReceipt], single_fast_path:true, replayed:true };
+          } catch (singleRetryError) {
+            return {
+              ok:false, pending_unresolved:true, rejected:false, failed_index:0,
+              error:String(singleRetryError && singleRetryError.message || singleRetryError || 'CANONICAL_FINANCIAL_PENDING'),
+              receipts:[]
+            };
+          }
+        }
+        return {
+          ok:false, pending_unresolved:false, rejected:true, failed_index:0,
+          error:String(singleError && singleError.message || singleError || 'CANONICAL_FINANCIAL_REJECTED'),
+          receipts:[]
+        };
+      }
+    }
+
     return withWriterLock(async function () {
       var existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
@@ -939,10 +969,11 @@
         var batchReceipt;
         try {
           // One HTTP request transports up to 20 distinct payment.create intents.
-          // The Worker CAS-validates every credit and commits them in one D1 batch.
-          // Repository invariant: only a NEW single payment.create may skip
-          // the remote status read. The batch still collapses N writes to one POST.
-          batchReceipt = await sendPending(record, false);
+          // The replica was already validated by assertAction(), and the Worker
+          // atomically rechecks authority, every credit revision and cash session.
+          // Therefore the NEW batch may skip a redundant status GET exactly like
+          // a new payment.create. Retries below still require remote status.
+          batchReceipt = await sendPending(record, true);
         } catch (error) {
           var retryRecord = journal();
           if (retryRecord && retryRecord.state === 'PENDING' && retryRecord.command === 'payment.batch' && !retryRecord.last_error) {

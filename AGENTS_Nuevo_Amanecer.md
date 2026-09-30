@@ -230,10 +230,11 @@ Para V1.2/recovery, usa los documentos `docs/V1.2_*.md` existentes solo cuando e
 Si descubres comandos reales para ejecutar o probar, documéntalos en `README.md`. No inventes comandos ni documentos.
 
 
-## Invariante: skipStatus en payment.create
+## Invariante: skipStatus en pagos nuevos
 
-- `sendPending(record, skipStatus)` omite el GET `/read/canonical/status` únicamente para un `payment.create` nuevo.
-- Esa omisión es segura SOLO porque el Worker valida `authority_epoch`, `expected_control_revision` y `expected_credit_revision` atómicamente al escribir el evento PAYMENT en D1.
+- `sendPending(record, skipStatus)` puede omitir el GET `/read/canonical/status` únicamente en el **primer envío** de un `payment.create` nuevo o un `payment.batch` nuevo construido desde una réplica CANON validada como `current`.
+- En `payment.create` la omisión es segura porque el Worker valida `authority_epoch`, `expected_control_revision` y `expected_credit_revision` atómicamente al escribir el evento PAYMENT en D1.
+- En `payment.batch` la omisión es segura porque el Worker revalida autoridad y hace CAS de **todas** las revisiones/saldos de crédito y, para efectivo, de la sesión de caja dentro de la misma `db.batch()` atómica.
 - Los reintentos de comandos pendientes SIEMPRE deben verificar el status remoto antes de reenviar la intención.
-- Si alguna vez se relaja esa validación en el Worker, hay que eliminar `skipStatus` del cliente.
-- Cobertura: `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs` (stale_credit, ACK perdido, doble toque).
+- Si alguna vez se relaja cualquiera de esas validaciones en el Worker, hay que eliminar `skipStatus` del camino afectado.
+- Cobertura: `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs` y `tests/cloud-sync/canonical-payment-batch-backend.test.mjs`.
