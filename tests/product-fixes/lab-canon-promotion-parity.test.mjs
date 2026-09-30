@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
-const read = path => readFileSync(path,'utf8');
+const read = path => readFileSync(path,'utf8').replace(/\r\n/g, '\n');
 const posIndex = read('POS/index.html');
 const labIndex = read('laboratorio/pos-lab/index.html');
 

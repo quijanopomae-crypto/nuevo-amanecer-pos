@@ -37,6 +37,7 @@
     var startY = 0;
     var startAt = 0;
     var lastDistance = 0;
+    var gestureHeight = 1;
 
     function resetGesture() {
       tracking = false;
@@ -48,8 +49,7 @@
     }
 
     function travel() {
-      var height = panel.getBoundingClientRect ? panel.getBoundingClientRect().height : panel.offsetHeight;
-      return Math.min(640, Math.max(360, Number(height) * 0.58 || 360));
+      return Math.min(640, Math.max(360, gestureHeight * 0.58 || 360));
     }
 
     function render(distance) {
@@ -73,7 +73,6 @@
       overlay.classList.remove('na-motion-dragging');
       overlay.classList.add('na-motion-settling');
       core.setState(overlay, state || 'settling');
-      void overlay.offsetWidth;
       root.requestAnimationFrame(target);
       var fallback = core.reducedMotion() ? 24 : core.cssTimeMs(overlay, '--na-motion-modal-settle-duration', 560) + 90;
       cleanup.set(overlay, core.whenTransitionEnds(panel, { propertyName:'transform', fallbackMs:fallback }, function () {
@@ -99,8 +98,7 @@
         return;
       }
       settle(function () {
-        var height = panel.getBoundingClientRect ? panel.getBoundingClientRect().height : panel.offsetHeight;
-        var distance = Math.max(root.innerHeight || 0, Number(height) + 80) + 32;
+        var distance = Math.max(root.innerHeight || 0, gestureHeight + 80) + 32;
         core.setProgress(overlay, 1);
         overlay.style.setProperty('--na-modal-drag-y', distance + 'px');
         overlay.style.setProperty('--na-modal-panel-opacity', '0');
@@ -120,6 +118,7 @@
       if (state === 'settling' || state === 'closing') return;
       clearCleanup(overlay);
       var touch = event.touches[0];
+      gestureHeight = Number(panel.getBoundingClientRect ? panel.getBoundingClientRect().height : panel.offsetHeight) || 1;
       tracking = true;
       startX = touch.clientX;
       startY = touch.clientY;
@@ -152,8 +151,7 @@
       var now = root.performance && root.performance.now ? root.performance.now() : Date.now();
       var elapsed = Math.max(1, now - startAt);
       var velocity = distance / elapsed;
-      var panelHeight = panel.getBoundingClientRect ? Number(panel.getBoundingClientRect().height) || panel.offsetHeight || 1 : 1;
-      var threshold = Math.min(190, Math.max(110, panelHeight * 0.22));
+      var threshold = Math.min(190, Math.max(110, gestureHeight * 0.22));
       var shouldDismiss = !cancelled && wasDragging &&
         (distance >= threshold || (distance >= 60 && velocity >= 0.85));
       resetGesture();

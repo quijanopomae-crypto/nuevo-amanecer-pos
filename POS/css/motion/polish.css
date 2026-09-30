@@ -1,0 +1,43 @@
+/* CANON refinements over the unchanged LAB visual mirror. Visual only. */
+:root {
+  --na-motion-fast:140ms;
+  --na-motion-normal:220ms;
+  --na-motion-page:180ms;
+  --na-motion-modal-settle-duration:320ms;
+}
+
+@keyframes na-page-arrive {
+  from { opacity:.92; }
+  to { opacity:1; }
+}
+@keyframes na-panel-arrive {
+  from { opacity:.86; transform:translate3d(0,8px,0) scale(.99); }
+  to { opacity:1; transform:translate3d(0,0,0) scale(1); }
+}
+.na-enter-fade {
+  animation:na-page-arrive var(--na-motion-page) var(--na-motion-ease-standard) backwards;
+}
+.modal-overlay.open > .modal {
+  animation:na-panel-arrive var(--na-motion-page) var(--na-motion-ease-standard) backwards;
+}
+[data-na-motion-state="dragging"] > .modal,
+[data-na-motion-state="settling"] > .modal,
+[data-na-motion-state="closing"] > .modal {
+  animation:none;
+}
+
+#pageClientes .stats-strip,
+#pageClientes .cli-list,
+#pageClientes.na-client-refresh-out .stats-strip,
+#pageClientes.na-client-refresh-out .cli-list {
+  transition-duration:180ms,220ms;
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .na-enter-fade,
+  .modal-overlay.open > .modal,
+  .na-feedback-enter,
+  .na-cart-pulse { animation:none!important; }
+  #pageClientes .stats-strip,
+  #pageClientes .cli-list { transition:none!important; }
+}

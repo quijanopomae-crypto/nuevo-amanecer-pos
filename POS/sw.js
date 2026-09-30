@@ -14,6 +14,7 @@ const PRECACHE_URLS = [
   './css/motion/transitions.css',
   './css/motion/modals.css',
   './css/motion/notifications.css',
+  './css/motion/polish.css',
   './css/client-credit-accounts-v2.css',
   './css/experience-v2/tokens.css',
   './css/experience-v2/layout.css',

@@ -47,16 +47,16 @@ test('desktop still gets deferred parity Motion',()=>{
   const h=harness(1200,'pageClientes',false);
   assert.deepEqual(h.enters,[]);
   h.flush(); h.flush();
-  assert.deepEqual(h.enters,[['pageClientes','lab-enter-fade']]);
+  assert.deepEqual(h.enters,[['pageClientes','na-enter-fade']]);
   assert.deepEqual(h.presets,['clientes','clientes:sync']);
 });
 
-test('mobile safe navigation disables parity Motion entirely',()=>{
+test('mobile safe navigation gets the same deferred entry and lazy scroll preset',()=>{
   const h=harness(390,'pageClientes',true);
   h.flush(); h.flush(); h.flush();
-  assert.deepEqual(h.enters,[]);
-  assert.deepEqual(h.presets,[]);
-  assert.deepEqual(h.events,[]);
+  assert.deepEqual(h.enters,[['pageClientes','na-enter-fade']]);
+  assert.deepEqual(h.presets,['clientes','clientes:sync']);
+  assert.equal(h.events.length,1);
 });
 
 test('bridge stays visual-only',()=>{

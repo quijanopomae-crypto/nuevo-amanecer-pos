@@ -53,6 +53,7 @@
 
     function shouldActivate() {
       return root.innerWidth <= breakpoint &&
+        !core.reducedMotion() &&
         page.classList.contains('active') &&
         document.body &&
         document.body.classList.contains('module-mobile-scroll');
@@ -152,6 +153,11 @@
         if (pageObserver) pageObserver.disconnect();
         if (resizeObserver) resizeObserver.disconnect();
         clear();
+        active = false;
+        controllers.delete(config.pageId);
+        delete motion.controllers['scroll:' + config.pageId];
+        document.body && document.body.classList.toggle('na-module-scroll-linked',
+          Array.from(controllers.values()).some(function (controller) { return controller.inspect().active; }));
       },
       inspect: function () {
         return Object.assign(core.inspect(page), {
@@ -173,6 +179,8 @@
     var controller = create(config);
     if (!controller) return null;
     controllers.set(config.pageId, controller);
+    document.body && document.body.classList.toggle('na-module-scroll-linked',
+      Array.from(controllers.values()).some(function (item) { return item.inspect().active; }));
     core.registerController('scroll:' + config.pageId, controller);
     return controller;
   }
@@ -187,6 +195,11 @@
 
   root.addEventListener('scroll', onScroll, { passive:true });
   root.addEventListener('resize', onResize, { passive:true });
+  try {
+    var preference = root.matchMedia('(prefers-reduced-motion: reduce)');
+    if (preference.addEventListener) preference.addEventListener('change', onResize);
+    else if (preference.addListener) preference.addListener(onResize);
+  } catch (_) {}
 
   motion.scroll = Object.assign(motion.scroll || {}, {
     register: register,

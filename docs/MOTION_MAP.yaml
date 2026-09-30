@@ -37,6 +37,7 @@ styles:
   transitions: POS/css/motion/transitions.css
   modals: POS/css/motion/modals.css
   notifications: POS/css/motion/notifications.css
+  polish: POS/css/motion/polish.css
 
 core_api:
   - clamp
@@ -55,6 +56,7 @@ core_api:
 controllers:
   page:
     responsibility: opt_in_page_entry_feedback
+    activation: lazy_after_first_paint_mobile_and_desktop
   scroll:
     responsibility: opt_in_mobile_scroll_linked_secondary_chrome
     default_activation: false
