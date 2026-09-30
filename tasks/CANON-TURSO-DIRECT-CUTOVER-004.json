@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-DIRECT-CUTOVER-004",
+  "environment": "CANON",
+  "base_ref": "133fcfd22af28b2a8fad465d9feff271abced6e2",
+  "objective": "Cambiar inmediatamente el Worker CANON activo a la base Turso de producción ya validada, sin leer ni respaldar D1 porque el propietario confirmó que los datos actuales de D1 son de prueba y acepta descartarlos.",
+  "owner_authorization": "El propietario indicó: 'No importa si lo perdemos ahun esos datos solo eran de prueba migra directamente a tursor' y aclaró que no desea una tarea programada.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-DIRECT-CUTOVER-004.json",
+    "evidence/canon-preflight/CANON-TURSO-DIRECT-CUTOVER-004.json",
+    ".github/workflows/v1.3-turso-direct-cutover.yml",
+    "ops/v1.3-turso-direct-cutover-trigger.json",
+    "tests/cloud-sync/turso-direct-cutover.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-prod/wrangler.turso-prod.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "infra/database/migrations/**",
+    "ops/v1.3-first-live-sale-trigger.json"
+  ],
+  "invariants": [
+    "No ejecutar ninguna venta real durante este task.",
+    "No leer ni escribir D1 en el workflow directo.",
+    "Usar exclusivamente TURSO_PROD_DATABASE_URL/TURSO_PROD_AUTH_TOKEN, nunca los secrets LAB.",
+    "La URL pública del Worker CANON permanece igual.",
+    "Validar Turso directamente antes del deploy y hacer smoke completo después del deploy.",
+    "No mostrar secrets ni tokens en logs.",
+    "Si falla el smoke post-deploy, redeployar el config D1 anterior como reversión de configuración, aunque D1 pueda seguir limitado por cuota."
+  ],
+  "rollback": "Redeploy de tools/cloudflare-prod/wrangler.jsonc al Worker activo si falla el smoke Turso posterior."
+}
