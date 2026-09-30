@@ -4,5 +4,7 @@
   "owner_authorized": true,
   "one_shot": true,
   "requested_at": "2026-09-30T16:29:00-05:00",
-  "scope": "Prepare isolated Turso production candidate only. No cutover. No live sale. No production traffic switch."
+  "scope": "Prepare isolated Turso production candidate only. No cutover. No live sale. No production traffic switch.",
+  "attempt": 2,
+  "note": "Retry after shell-safe trigger parser fix; scope unchanged."
 }
