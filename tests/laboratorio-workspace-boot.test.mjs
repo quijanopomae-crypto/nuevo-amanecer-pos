@@ -80,3 +80,12 @@ test('revision conflict exposes an explicit Use Turso LAB recovery path', () => 
   assert.match(source, /discardPendingAndLoadRemote/);
   assert.match(source, /clearPendingOperation\(\)/);
 });
+
+
+test('workspace UI names the active backend as Turso LAB', () => {
+  assert.match(source, /CANON → Turso LAB\. Nunca LAB → CANON\./);
+  assert.match(source, /Cargar Turso LAB/);
+  assert.match(source, /Usar Turso LAB/);
+  assert.match(source, /updateBadge\('Turso R' \+ state\.revision\)/);
+  assert.doesNotMatch(source, /Cargar D1 LAB|Usar D1 LAB|CANON → D1 LAB|updateBadge\('D1 R'/);
+});
