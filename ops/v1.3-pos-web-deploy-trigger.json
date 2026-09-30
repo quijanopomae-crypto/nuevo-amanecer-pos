@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy hosted POS CANON same-origin proxy backed by Cloudflare Service Binding.",
-  "retry_attempt": 50,
-  "retry_reason": "PR #273 merged at 5eb438ecb721995048d92b109da2e24c68395a62 after CANON Critical CI #344 PASS. Replace public Worker-to-Worker fetch with CANON_BACKEND service binding.",
-  "requested_at_utc": "2026-09-30T14:35:23Z",
-  "target_head": "5eb438ecb721995048d92b109da2e24c68395a62"
+  "note": "Deploy hosted proxy forwarding the original browser Request through CANON_BACKEND service binding.",
+  "retry_attempt": 51,
+  "retry_reason": "PR #277 merged at 0dadcae561bda5aa2f80506798df2a47af477528 after CANON Critical CI #346 PASS. Hosted auth probe proved activate=200 then session=500 with reconstructed proxy Request.",
+  "requested_at_utc": "2026-09-30T15:33:00Z",
+  "target_head": "0dadcae561bda5aa2f80506798df2a47af477528"
 }
