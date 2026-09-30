@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nuevo-amanecer-sync-lab-turso",
+  "main": "src/worker-entry.js",
+  "compatibility_date": "2026-06-01",
+  "workers_dev": true,
+  "build": {
+    "command": "node scripts/build-reader.mjs"
+  },
+  "assets": {
+    "directory": ".reader-assets",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": [
+      "/health",
+      "/commands/*",
+      "/imports/*",
+      "/read/*",
+      "/sync/*"
+    ]
+  },
+  "observability": {
+    "enabled": false
+  },
+  "vars": {
+    "RUNTIME_ENVIRONMENT": "lab",
+    "DATA_POLICY": "lab-only",
+    "DB_PROVIDER": "turso"
+  }
+}
