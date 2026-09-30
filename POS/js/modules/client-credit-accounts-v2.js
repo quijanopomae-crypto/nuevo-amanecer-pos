@@ -22,6 +22,7 @@
   var naClientViewCancel = null;
   var naClientViewEpoch = 0;
   var naClientMotionBound = false;
+  var labBatchSubmitInFlight = false;
   var NA_CLIENT_INTERACTIVE_SELECTOR = 'button,input,textarea,select,option,a,label,[contenteditable="true"],[role="button"]';
 
   function labEsc(value) {
@@ -987,8 +988,10 @@
     }
 
     if (submit) {
-      submit.disabled = !(plan.valid && referenceOk);
-      submit.textContent = plan.valid ? 'Registrar pago ' + labMoney(amountCents / 100) : 'Registrar pago';
+      submit.disabled = labBatchSubmitInFlight || !(plan.valid && referenceOk);
+      submit.textContent = labBatchSubmitInFlight
+        ? 'Procesando…'
+        : (plan.valid ? 'Registrar pago ' + labMoney(amountCents / 100) : 'Registrar pago');
     }
     return { selected:selected, amount_cents:amountCents, plan:plan, method:method, reference:reference, valid:!!(plan.valid && referenceOk) };
   }
@@ -1053,6 +1056,7 @@
   };
 
   root.naCanonSubmitBatchPayment = async function () {
+    if (labBatchSubmitInFlight) return false;
     var state = labBatchUpdatePreview();
     if (!state || !state.valid) {
       if (typeof toast === 'function') toast('Revisa el monto y las deudas seleccionadas','error');
@@ -1063,10 +1067,8 @@
       if (typeof toast === 'function') toast('El cobro múltiple CANON no está disponible','error');
       return false;
     }
-    var screen = labScreen();
-    var button = screen && screen.querySelector('#naV2BatchSubmit');
-    var label = button && button.textContent || 'Registrar pago';
-    if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
+    labBatchSubmitInFlight = true;
+    labBatchUpdatePreview();
     try {
       var result = await bridge.confirmBatch({
         allocations:state.plan.allocations,
@@ -1074,18 +1076,14 @@
         reference:state.reference
       });
       if (result && (result.ok || result.completed_count > 0)) labRenderRoute('replace');
-      else labBatchUpdatePreview();
       return !!(result && result.ok);
     } catch (error) {
       console.warn('[Nuevo Amanecer] Cobro múltiple no completado.', error && error.message || error);
       if (typeof toast === 'function') toast('No se pudo completar el cobro múltiple','error');
-      labBatchUpdatePreview();
       return false;
     } finally {
-      if (button && button.isConnected !== false) {
-        button.disabled = false;
-        button.textContent = label;
-      }
+      labBatchSubmitInFlight = false;
+      labBatchUpdatePreview();
     }
   };
 
