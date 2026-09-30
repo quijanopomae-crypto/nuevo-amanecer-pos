@@ -143,6 +143,7 @@ jobs:
           NODE
           npx wrangler secret bulk /tmp/turso-prod-candidate-secrets.json --config ../cloudflare-prod/wrangler.turso-candidate.jsonc
           rm -f /tmp/turso-prod-candidate-secrets.json
+          sleep 8
           echo "TURSO_PROD_CANDIDATE_WORKER_DEPLOY=PASS"
 
       - name: Probe candidate production boundary and canonical read
@@ -185,14 +186,25 @@ jobs:
             if (labRoute.status !== 404) throw new Error('candidate exposes LAB workspace route');
             console.log('TURSO_PROD_CANDIDATE_PRODUCTION_BOUNDARY=PASS');
 
-            const activation = await fetch(worker + '/auth/activate', {
-              method:'POST',
-              headers:{'x-activation-secret':activationSecret}
-            });
-            const activationBody = await activation.json().catch(() => null);
-            if (!activation.ok || activationBody?.status !== 'activated' ||
-                typeof activationBody?.session_token !== 'string' || !activationBody.session_token) {
-              throw new Error('candidate activation failed http=' + activation.status);
+            let activation = null;
+            let activationBody = null;
+            for (let attempt = 1; attempt <= 12; attempt += 1) {
+              activation = await fetch(worker + '/auth/activate', {
+                method:'POST',
+                headers:{'x-activation-secret':activationSecret}
+              });
+              activationBody = await activation.json().catch(() => null);
+              if (activation.ok && activationBody?.status === 'activated' &&
+                  typeof activationBody?.session_token === 'string' && activationBody.session_token) {
+                console.log('TURSO_PROD_CANDIDATE_ACTIVATION=PASS attempt=' + attempt);
+                break;
+              }
+              const retryable = activation.status === 500 || activation.status === 503;
+              if (!retryable || attempt === 12) {
+                throw new Error('candidate activation failed http=' + activation.status +
+                  ' error=' + String(activationBody?.error || 'invalid_response'));
+              }
+              await new Promise(resolve => setTimeout(resolve, 1500));
             }
             sessionToken = activationBody.session_token;
 
