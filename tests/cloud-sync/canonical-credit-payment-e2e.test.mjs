@@ -24,6 +24,21 @@ async function openCash(tab) {
   await tab.api.refresh();
 }
 
+async function createLiveCredit(tab, suffix) {
+  const before = new Set(tab.api.snapshot().credits.map((credit) => credit.credit_id));
+  const sale = await tab.api.createSale({
+    items: [{ product_id: '00001', quantity: 1 }],
+    payment_method: 'credito',
+    customer_id: '000C',
+    credit_due: '2099-12-31'
+  });
+  assert.equal(sale.status, 'created', suffix);
+  await tab.api.refresh();
+  const credit = tab.api.snapshot().credits.find((row) => row.provenance === 'LIVE' && !before.has(row.credit_id));
+  assert.ok(credit, 'LIVE credit created: ' + suffix);
+  return credit;
+}
+
 test('payment latency: one POST before receipt; full HTTP reconciliation and renders never hold Procesando', async (t) => {
   const f = await activeCanon(t);
   const gate = deferred();
@@ -91,6 +106,53 @@ test('payment latency: one POST before receipt; full HTTP reconciliation and ren
     postToUiReleaseMs: +(stages.uiReleased - stages.postEnd).toFixed(2),
     backgroundRefreshMs: +(stages.refreshEnd - stages.refreshStart).toFixed(2),
   }));
+});
+
+test('multi-credit payment <=20 uses exactly one HTTP POST and one atomic D1 batch', async (t) => {
+  const f = await activeCanon(t);
+  const tab = await device(f, { token: 'device-a-token', deviceId: 'device-a', scripts });
+  const first = await createLiveCredit(tab, 'batch-1');
+  const second = await createLiveCredit(tab, 'batch-2');
+  const beforeEvents = f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n;
+  const beforeFetch = tab.fetchLog.length;
+
+  const result = await tab.api.createPaymentBatch([
+    { credit_id:first.credit_id, amount_cents:100, payment_method:'yape', reference:'BATCH-ONE-HTTP' },
+    { credit_id:second.credit_id, amount_cents:150, payment_method:'yape', reference:'BATCH-ONE-HTTP' }
+  ]);
+  assert.equal(result.ok,true);
+  assert.equal(result.receipts.length,2);
+
+  const requests = tab.fetchLog.slice(beforeFetch).filter((row) => row.method === 'POST');
+  assert.deepEqual(requests.map((row) => new URL(row.url).pathname), ['/commands/payment.batch']);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,beforeEvents+2);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_operations WHERE command='payment.create'").n >= 2,true);
+  assert.equal(f.sql('SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?',first.credit_id).b,first.current_balance_cents-100);
+  assert.equal(f.sql('SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?',second.credit_id).b,second.current_balance_cents-150);
+});
+
+test('payment.batch stale child rolls back every new child payment', async (t) => {
+  const f = await activeCanon(t);
+  const firstTab = await device(f, { token:'device-a-token', deviceId:'device-a', scripts });
+  const stale = await createLiveCredit(firstTab,'stale-batch-1');
+  const untouched = await createLiveCredit(firstTab,'stale-batch-2');
+
+  const secondTab = await device(f, { token:'device-b-token', deviceId:'device-b', scripts });
+  await secondTab.api.createPayment({
+    credit_id:stale.credit_id,amount_cents:50,payment_method:'yape',reference:'OTHER-DEVICE'
+  });
+  const afterOther = f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n;
+  const untouchedBefore = f.sql('SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?',untouched.credit_id).b;
+
+  const result = await firstTab.api.createPaymentBatch([
+    {credit_id:stale.credit_id,amount_cents:100,payment_method:'transferencia',reference:'ATOMIC-STALE'},
+    {credit_id:untouched.credit_id,amount_cents:100,payment_method:'transferencia',reference:'ATOMIC-STALE'}
+  ]);
+  assert.equal(result.ok,false);
+  assert.equal(result.rejected,true);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,afterOther,
+    'stale batch must not commit the valid sibling credit');
+  assert.equal(f.sql('SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?',untouched.credit_id).b,untouchedBefore);
 });
 
 test('Registrar pago (efectivo) persists through payment.create, survives F5 and is seen by a second device', async (t) => {
