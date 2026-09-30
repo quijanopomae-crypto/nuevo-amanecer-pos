@@ -917,6 +917,9 @@
   gap:6px;
   min-width:0;
 }
+#pageClientes .na-v2-batch-method-row [hidden]{
+  display:none!important;
+}
 #pageClientes .na-v2-batch-method-row select,
 #pageClientes .na-v2-batch-method-row input{
   width:100%;
