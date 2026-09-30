@@ -1,0 +1,138 @@
+name: Turso PROD Parity Diagnostic
+
+on:
+  push:
+    branches:
+      - diag/turso-prod-parity-v1
+    paths:
+      - ".github/workflows/turso-prod-parity-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Export fresh D1 and restore local SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test -n "$TURSO_PROD_AUTH_TOKEN"
+          node tools/cloudflare-prod/scripts/cutover-prepare.mjs export
+          rm -f /tmp/turso-parity.db
+          sqlite3 /tmp/turso-parity.db < /tmp/v1.3-pre-cutover.sql
+          test "$(sqlite3 /tmp/turso-parity.db 'PRAGMA quick_check;')" = "ok"
+
+      - name: Diagnose parity differences without logging commercial values
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, math, os, sqlite3, urllib.request
+
+          def enc(v):
+              if v is None: return {"type":"null"}
+              if isinstance(v, bool): return {"type":"integer","value":"1" if v else "0"}
+              if isinstance(v, int): return {"type":"integer","value":str(v)}
+              if isinstance(v, float): return {"type":"float","value":v}
+              return {"type":"text","value":str(v)}
+
+          def dec(v):
+              if not v or v.get("type") == "null": return None
+              t=v.get("type")
+              if t=="integer": return int(v["value"])
+              if t=="float": return float(v["value"])
+              if t=="text": return v.get("value","")
+              return "<unsupported>"
+
+          raw=os.environ["TURSO_PROD_DATABASE_URL"].strip()
+          if raw.startswith("libsql://"): raw="https://"+raw[len("libsql://"):]
+          base=raw.rstrip("/")
+          token=os.environ["TURSO_PROD_AUTH_TOKEN"].strip()
+
+          def remote(sql):
+              body=json.dumps({"baton":None,"requests":[
+                  {"type":"execute","stmt":{"sql":sql,"args":[],"want_rows":True}},
+                  {"type":"close"}
+              ]}).encode()
+              req=urllib.request.Request(base+"/v3/pipeline",data=body,method="POST",headers={
+                  "authorization":"Bearer "+token,
+                  "content-type":"application/json"
+              })
+              with urllib.request.urlopen(req,timeout=60) as resp:
+                  out=json.loads(resp.read().decode())
+              item=out["results"][0]
+              result=item["response"]["result"]
+              return [tuple(dec(x) for x in row) for row in result.get("rows",[])]
+
+          db=sqlite3.connect("file:/tmp/turso-parity.db?mode=ro",uri=True)
+
+          for table in ("credits","credit_payments"):
+              info=db.execute(f'PRAGMA table_info("{table}")').fetchall()
+              cols=[r[1] for r in info]
+              pk=[r[1] for r in sorted((r for r in info if r[5]), key=lambda r:r[5])]
+              order=",".join('"'+c.replace('"','""')+'"' for c in pk)
+              select="SELECT "+",".join('"'+c.replace('"','""')+'"' for c in cols)+f' FROM "{table}" ORDER BY '+order
+              local=[tuple(r) for r in db.execute(select).fetchall()]
+              rem=remote(select)
+              if len(local)!=len(rem):
+                  print(json.dumps({"table":table,"count_mismatch":[len(local),len(rem)]}))
+                  continue
+
+              summary={}
+              actual_rows=0
+              type_only_rows=0
+              close_rows=0
+              for lr,rr in zip(local,rem):
+                  row_actual=False
+                  row_type=False
+                  row_close=False
+                  for i,(a,b) in enumerate(zip(lr,rr)):
+                      if a==b and type(a) is type(b):
+                          continue
+                      key=cols[i]
+                      ent=summary.setdefault(key,{"type_only":0,"numeric_close":0,"actual":0,"type_pairs":{}})
+                      pair=type(a).__name__+"->"+type(b).__name__
+                      ent["type_pairs"][pair]=ent["type_pairs"].get(pair,0)+1
+                      if a==b:
+                          ent["type_only"]+=1
+                          row_type=True
+                      elif isinstance(a,(int,float)) and isinstance(b,(int,float)) and math.isclose(float(a),float(b),rel_tol=1e-15,abs_tol=0.0):
+                          ent["numeric_close"]+=1
+                          row_close=True
+                      else:
+                          ent["actual"]+=1
+                          row_actual=True
+                  actual_rows += int(row_actual)
+                  type_only_rows += int(row_type)
+                  close_rows += int(row_close)
+
+              print(json.dumps({
+                  "table":table,
+                  "rows":len(local),
+                  "rows_with_actual_value_difference":actual_rows,
+                  "rows_with_type_only_difference":type_only_rows,
+                  "rows_with_numeric_close_difference":close_rows,
+                  "columns":summary
+              },sort_keys=True))
+          PY
