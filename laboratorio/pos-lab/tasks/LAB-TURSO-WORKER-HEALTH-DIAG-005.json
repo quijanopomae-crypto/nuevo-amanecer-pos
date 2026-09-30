@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-WORKER-HEALTH-DIAG-005",
+  "environment": "LABORATORIO",
+  "base_ref": "060886ad92f5b433c915c01b4416f4690e9cfdb3",
+  "objective": "Diagnosticar por qué el Worker LAB Turso desplegado devuelve fallo en /health, registrando solo HTTP y campos de error no sensibles, sin tocar CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-WORKER-HEALTH-DIAG-005.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-WORKER-HEALTH-DIAG-005.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-HEALTH-DIAG-005.json",
+    ".github/workflows/turso-lab-worker-health-diag.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-WORKER-HEALTH-DIAG-005.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
