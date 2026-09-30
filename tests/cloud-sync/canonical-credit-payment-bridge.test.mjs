@@ -71,6 +71,27 @@ function harness(options={}){
       pending=null;
       return receipt;
     },
+    async createPaymentBatch(inputs){
+      calls.push(['createPaymentBatch',JSON.parse(JSON.stringify(inputs))]);
+      const receipts=[];
+      for(let i=0;i<inputs.length;i+=1){
+        try{
+          receipts.push(await api.createPayment(inputs[i]));
+        }catch(error){
+          const retryable=pending;
+          if(retryable&&retryable.command==='payment.create'&&!retryable.invalid&&!retryable.last_error){
+            try{
+              receipts.push(await api.retryPending());
+              continue;
+            }catch(retryError){
+              return {ok:false,pending_unresolved:true,rejected:false,failed_index:i,error:String(retryError?.message||retryError),receipts};
+            }
+          }
+          return {ok:false,pending_unresolved:false,rejected:true,failed_index:i,error:String(error?.message||error),receipts};
+        }
+      }
+      return {ok:true,receipts};
+    },
     async createPayment(payload){
       createCount+=1;
       calls.push(['createPayment',JSON.parse(JSON.stringify(payload))]);
