@@ -3,9 +3,9 @@
   "action": "PREPARE_TURSO_PRODUCTION_CANDIDATE",
   "owner_authorized": true,
   "one_shot": true,
-  "requested_at": "2026-09-30T16:29:00-05:00",
+  "requested_at": "2026-09-30T16:55:00-05:00",
   "scope": "Prepare isolated Turso production candidate only. No cutover. No live sale. No production traffic switch.",
-  "attempt": 5,
-  "note": "Verify populated candidate with strict digest plus sub-ULP float-only fallback; no reseed.",
+  "attempt": 6,
+  "note": "Verify the populated Turso candidate, run direct session-auth batch diagnostics, then probe candidate activation. No reseed, no cutover.",
   "verify_existing_candidate": true
 }
