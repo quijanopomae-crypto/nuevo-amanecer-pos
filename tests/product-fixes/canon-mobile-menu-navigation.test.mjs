@@ -5,6 +5,9 @@ import vm from 'node:vm';
 
 const source = readFileSync('POS/js/navigation/menu-navigation.js', 'utf8');
 const index = readFileSync('POS/index.html', 'utf8');
+const baseCss = readFileSync('POS/css/base.css', 'utf8');
+const layoutCss = readFileSync('POS/css/layout.css', 'utf8');
+const inline03 = readFileSync('POS/js/legacy-inline/inline-03.js', 'utf8');
 const sw = readFileSync('POS/sw.js', 'utf8');
 
 function classList(initial=[]) {
@@ -193,6 +196,36 @@ test('desktop keeps the existing goPage path', () => {
   h.listeners.get('click')(evt(h.cards[0],{pointerType:'mouse'}));
   assert.deepEqual(h.calls,['pagePOS']);
   assert.equal(h.pages.find(p=>p.id==='pageMenu').classList.contains('active'),true);
+});
+
+test('top settings shortcut uses the same safe navigation API', () => {
+  const mobile=harness(390);
+  assert.equal(mobile.context.NA_MENU_NAVIGATION.navigate('pageConfig'),true);
+  assert.equal(mobile.pages.find(p=>p.id==='pageConfig').classList.contains('active'),true);
+  assert.deepEqual(mobile.calls,[]);
+
+  const desktop=harness(1200);
+  assert.equal(desktop.context.NA_MENU_NAVIGATION.navigate('pageConfig'),true);
+  assert.deepEqual(desktop.calls,['pageConfig']);
+});
+
+test('CANON header uses a color-only connection indicator and direct settings gear', () => {
+  const menu=index.slice(index.indexOf('<div class="page active" id="pageMenu">'),index.indexOf('<!-- POS -->'));
+  assert.match(index,/id="localStatus" data-state="disconnected"/);
+  assert.match(index,/id="topSettingsBtn"/);
+  assert.match(index,/NA_MENU_NAVIGATION\.navigate\('pageConfig'\)/);
+  assert.doesNotMatch(index,/id="topAvatar"/);
+  assert.doesNotMatch(menu,/module-label">Configuración</);
+  assert.match(menu,/module-label">Gastos</);
+  assert.match(baseCss,/g-status\[data-state="connected"\]/);
+  assert.match(baseCss,/g-status\[data-state="disconnected"\]/);
+  assert.match(baseCss,/g-status\[data-state="update"\]/);
+  assert.match(baseCss,/\.g-status-label\{position:absolute/);
+  assert.doesNotMatch(layoutCss,/\.g-status span\{/);
+  assert.match(inline03,/_naSetHeaderConnectionState\('connected','Conectado'\)/);
+  assert.match(inline03,/_naSetHeaderConnectionState\('disconnected','Desconectado'\)/);
+  assert.match(inline03,/na:version-update-pending/);
+  assert.match(index,/registration\.addEventListener\('updatefound'/);
 });
 
 test('finger scroll gesture still does not navigate', () => {
