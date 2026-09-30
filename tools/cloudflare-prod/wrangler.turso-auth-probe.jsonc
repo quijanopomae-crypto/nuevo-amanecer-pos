@@ -1,0 +1,11 @@
+{
+  "$schema": "../cloudflare-lab/node_modules/wrangler/config-schema.json",
+  "name": "nuevo-amanecer-pos-prod-turso-auth-probe",
+  "main": "turso-auth-probe-worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "vars": {
+    "DB_PROVIDER": "turso"
+  }
+}
