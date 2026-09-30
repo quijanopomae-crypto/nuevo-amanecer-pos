@@ -198,3 +198,98 @@ test('canonical stock validation indexes products and reserved units before vali
   assert.match(source,/var reservedByProduct = new Map\(\)/);
   assert.doesNotMatch(source,/cart\.filter\(function \(candidate\) \{ return String\(candidate\.id\) === String\(item\.id\); \}\)\.reduce/);
 });
+
+
+test('real browser global let state is used even when window properties do not exist', async()=>{
+  const els=new Map([
+    ['mMontoRec',{value:'2.00'}],
+    ['mDigitalRef',{value:''}],
+    ['mVentaCliente',{value:''}],
+    ['mBtnConf',{disabled:false}],
+    ['mCobro',{classList:{remove(){}}}],
+    ['cartDrawer',{classList:{remove(){}}}],
+    ['cartBackdrop',{classList:{remove(){}}}]
+  ]);
+  const calls={enqueue:0,legacy:0,close:0,toast:[]};
+  const context=vm.createContext({
+    console,Date,Number,String,Object,Array,Math,JSON,Promise,Error,RegExp,Set,Map,crypto,
+    navigator:{onLine:true},
+    localStorage:{getItem(){return null;},setItem(){}},
+    sessionStorage:{getItem(){return null;}},
+    CustomEvent:class{constructor(type,init){this.type=type;this.detail=init&&init.detail;}},
+    dispatchEvent(){},
+    document:{
+      getElementById:id=>els.get(id)||null,
+      querySelector:()=>null
+    },
+    NuevoAmanecerCanonical:{
+      enabled:()=>true,
+      snapshot:()=>({products:[{id:'7'}],customers:[],credits:[]})
+    },
+    NuevoAmanecerCanonicalSaleIntent:{
+      build(input){
+        return {
+          version:1,
+          operation_id:'op-lexical-1',
+          sale_id:input.sale_id,
+          created_at:input.created_at,
+          payment_method:input.payment_method,
+          items:input.items
+        };
+      }
+    },
+    NuevoAmanecerCanonicalSaleOutbox:{
+      async enqueue(intent){calls.enqueue++;return intent;},
+      snapshot(){return {version:1,intents:[]};}
+    },
+    NuevoAmanecerCanonicalSaleProjection:{
+      project(){return {sales:[]};}
+    },
+    isModuleLocked:()=>false,
+    _naSessionOpen:()=>true,
+    _naTracksStock:()=>true,
+    _naUnitsSold:item=>item.qty,
+    _naUnitsPerQty:()=>1,
+    _naPaymentState:()=>({valid:true,message:'ok'}),
+    _naDigitalSalePayment:()=>false,
+    _naDigitalPaymentVerified:()=>true,
+    _naClean:value=>String(value||'').trim(),
+    _naSetPaymentHint(){},
+    _naPaymentFocusTarget:()=>null,
+    toast:(...args)=>calls.toast.push(args),
+    posUpdateCart(){},
+    posRender(){},
+    cerrarModal(){calls.close++;}
+  });
+  context.confirmarVenta=async()=>{calls.legacy++;};
+  context.globalThis=context;
+  vm.runInContext(`
+    let cart=[{id:7,qty:1,precio:2,unitsPerQty:1}];
+    let productos=[{id:7,stock:5,precio:2,name:'Producto'}];
+    let ventas=[];
+    let clientes=[];
+    let posProc=false;
+    let posPayM='efectivo';
+  `,context);
+  assert.equal(context.cart,undefined);
+  assert.equal(context.posProc,undefined);
+  vm.runInContext(source,context,{filename:'canonical-sale-integration.js'});
+  await vm.runInContext('confirmarVenta()',context);
+  assert.equal(calls.legacy,0);
+  assert.equal(calls.enqueue,1);
+  assert.equal(vm.runInContext('cart.length',context),0);
+  assert.equal(vm.runInContext('posProc',context),false);
+  assert.equal(context.cart,undefined);
+  assert.equal(context.posProc,undefined);
+});
+
+test('canonical sale integration does not regress to window-only POS state access',()=>{
+  assert.match(source,/function liveCart\(\)/);
+  assert.match(source,/typeof cart !== 'undefined'/);
+  assert.match(source,/typeof productos !== 'undefined'/);
+  assert.match(source,/typeof ventas !== 'undefined'/);
+  assert.match(source,/typeof clientes !== 'undefined'/);
+  assert.match(source,/typeof posPayM !== 'undefined'/);
+  assert.match(source,/typeof posProc !== 'undefined'/);
+  assert.doesNotMatch(source,/var cart = Array\.isArray\(root\.cart\)/);
+});

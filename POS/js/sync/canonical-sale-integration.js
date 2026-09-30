@@ -15,6 +15,48 @@
     if (typeof root.toast === 'function') root.toast(message, 'error');
     if (error && root.console && typeof root.console.error === 'function') root.console.error('[Venta canónica]', error.code || error.message || 'Error');
   }
+
+  // The legacy POS keeps its authoritative runtime state in top-level `let`
+  // bindings. In classic browser scripts those bindings are shared by the same
+  // global lexical environment, but they are NOT properties of window/globalThis.
+  // Read/write the lexical binding first and keep root.* only as a compatibility
+  // fallback for isolated tests or alternate hosts.
+  function liveCart() {
+    try { if (typeof cart !== 'undefined' && Array.isArray(cart)) return cart; } catch (_) {}
+    return Array.isArray(root.cart) ? root.cart : [];
+  }
+  function liveProducts() {
+    try { if (typeof productos !== 'undefined' && Array.isArray(productos)) return productos; } catch (_) {}
+    return Array.isArray(root.productos) ? root.productos : [];
+  }
+  function liveSales() {
+    try { if (typeof ventas !== 'undefined' && Array.isArray(ventas)) return ventas; } catch (_) {}
+    return Array.isArray(root.ventas) ? root.ventas : [];
+  }
+  function liveCustomers() {
+    try { if (typeof clientes !== 'undefined' && Array.isArray(clientes)) return clientes; } catch (_) {}
+    return Array.isArray(root.clientes) ? root.clientes : [];
+  }
+  function livePaymentMethod() {
+    try { if (typeof posPayM !== 'undefined') return posPayM; } catch (_) {}
+    return root.posPayM;
+  }
+  function liveProcessing() {
+    try { if (typeof posProc !== 'undefined') return !!posProc; } catch (_) {}
+    return !!root.posProc;
+  }
+  function setLiveProcessing(value) {
+    try {
+      if (typeof posProc !== 'undefined') posProc = value;
+      else root.posProc = value;
+    } catch (_) { root.posProc = value; }
+  }
+  function clearLiveCart() {
+    try {
+      if (typeof cart !== 'undefined') { cart = []; return; }
+    } catch (_) {}
+    clearLiveCart();
+  }
   function browserLockReason() {
     try {
       if (typeof root.securityIsLocked === 'function' && root.securityIsLocked()) return 'sesión de seguridad bloqueada';
@@ -38,7 +80,7 @@
     return '';
   }
   function nextSaleId() {
-    var ids = (Array.isArray(root.ventas) ? root.ventas : []).map(function (sale) {
+    var ids = liveSales().map(function (sale) {
       return parseInt(String(sale.id).replace('V-', ''), 10) || 0;
     });
     return 'V-' + String(Math.max.apply(Math, [0].concat(ids)) + 1).padStart(3, '0');
@@ -46,7 +88,7 @@
   function cents(value) { return Math.round(Number(value) * 100); }
   function setBusy(value) {
     busy = value;
-    root.posProc = value;
+    setLiveProcessing(value);
     var button = root.document && root.document.getElementById('mBtnConf');
     if (button) button.disabled = value;
   }
@@ -74,7 +116,7 @@
   }
   async function capture() {
     if (!enabled()) return;
-    if (busy || root.posProc) return;
+    if (busy || liveProcessing()) return;
     try {
       if (typeof root.isModuleLocked !== 'function' || root.isModuleLocked('ventas', { canonicalSaleCapture: true })) {
         var lockReason = browserLockReason();
@@ -84,7 +126,7 @@
       var caughtReason = browserLockReason();
       failClosed(caughtReason ? 'Venta bloqueada: ' + caughtReason : 'Las ventas están bloqueadas por un error interno de seguridad', lockError); return;
     }
-    var cart = Array.isArray(root.cart) ? root.cart : [];
+    var cart = liveCart();
     if (!cart.length) { failClosed('El carrito está vacío.', null); return; }
     var cartFingerprint = JSON.stringify(cart.map(function (item) {
       return [item.id, item.qty, item.precio, item.ventaLibre ? item.name : null, item.ventaLibre ? item.codigoIngresado : null, item.canonicalGenericId || null];
@@ -94,7 +136,7 @@
     }
     if (typeof root._naSessionOpen === 'function' && !root._naSessionOpen()) { failClosed('La caja no está abierta', null); return; }
     var productsById = new Map();
-    (Array.isArray(root.productos) ? root.productos : []).forEach(function (product) {
+    liveProducts().forEach(function (product) {
       productsById.set(String(product.id), product);
     });
     var reservedByProduct = new Map();
@@ -118,7 +160,7 @@
       if (typeof root._naPaymentFocusTarget === 'function') root._naPaymentFocusTarget()?.focus();
       return;
     }
-    var method = root.posPayM;
+    var method = livePaymentMethod();
     var mixed = method === 'mixto' && typeof root._naMixedPaymentData === 'function' ? root._naMixedPaymentData() : null;
     var digital = typeof root._naDigitalSalePayment === 'function' && root._naDigitalSalePayment();
     var verified = typeof root._naDigitalPaymentVerified === 'function' && root._naDigitalPaymentVerified();
@@ -129,14 +171,14 @@
       var referenceInput = root.document && root.document.getElementById('mDigitalRef');
       reference = typeof root._naClean === 'function' ? root._naClean(referenceInput && referenceInput.value) : String(referenceInput && referenceInput.value || '').trim();
     }
-    if (reference && (Array.isArray(root.ventas) ? root.ventas : []).some(function (sale) { return !sale.anulada && sale.paymentRef === reference; })) {
+    if (reference && liveSales().some(function (sale) { return !sale.anulada && sale.paymentRef === reference; })) {
       failClosed('Ese número de operación ya fue registrado.', null); return;
     }
     var customer = null, due = null;
     var customerInputId = method === 'credito' ? 'mCreditoCliente' : 'mVentaCliente';
     var customerId = root.document && root.document.getElementById(customerInputId)?.value;
     if (customerId) {
-      customer = (Array.isArray(root.clientes) ? root.clientes : []).find(function (candidate) { return String(candidate.id) === String(customerId); });
+      customer = liveCustomers().find(function (candidate) { return String(candidate.id) === String(customerId); });
       if (!customer) { failClosed('El cliente seleccionado ya no está disponible. Actualiza la lista y vuelve a intentarlo.', null); return; }
     }
     if (method === 'credito') {
