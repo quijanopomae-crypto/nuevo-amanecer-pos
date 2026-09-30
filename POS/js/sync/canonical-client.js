@@ -877,8 +877,8 @@
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
-    // A new payment already has a validated current replica. The Worker checks
-    // authority and credit revision atomically with payment.create. Retried
+    // New payments and sales already have a validated replica. The Worker checks
+    // authority and credit/stock revisions atomically with the command. Retried
     // pending commands still verify remote authority before replaying the intent.
     if (!skipStatus) {
       var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
@@ -951,7 +951,7 @@
       }
       if (!validPayload(command, record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
       durableJournal(record);
-      return sendPending(record, command === 'payment.create');
+      return sendPending(record, command === 'payment.create' || command === 'sale.create');
     });
   }
   function createProduct(input) { return createCommand('product.create', input); }
