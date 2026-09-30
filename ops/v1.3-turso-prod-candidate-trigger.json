@@ -5,7 +5,7 @@
   "one_shot": true,
   "requested_at": "2026-09-30T16:29:00-05:00",
   "scope": "Prepare isolated Turso production candidate only. No cutover. No live sale. No production traffic switch.",
-  "attempt": 5,
-  "note": "Verify populated candidate with strict digest plus sub-ULP float-only fallback; no reseed.",
+  "attempt": 6,
+  "note": "Retry after explicit secret-propagation wait and bounded activation retry; candidate remains verify-existing.",
   "verify_existing_candidate": true
 }
