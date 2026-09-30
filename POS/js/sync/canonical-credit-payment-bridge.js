@@ -407,6 +407,64 @@
         requestedCents, [], 'BATCH_CASH_SESSION_REQUIRED');
     }
 
+    if (client && typeof client.createPaymentBatch === 'function') {
+      busy = true;
+      var fastCompleted = [];
+      try {
+        var fastInputs = allocations.map(function (allocation) {
+          var credit = findCredit(snapshot, allocation.credit_id);
+          var input = {
+            credit_id:String(credit.credit_id !== undefined ? credit.credit_id : credit.id),
+            amount_cents:allocation.amount_cents,
+            payment_method:method
+          };
+          if (method === 'efectivo') input.session_id = String(snapshot.cashState.sessionId);
+          else input.reference = reference;
+          return input;
+        });
+
+        var batchResult = await client.createPaymentBatch(fastInputs);
+        var receipts = batchResult && Array.isArray(batchResult.receipts) ? batchResult.receipts : [];
+        receipts.forEach(function (receipt, index) {
+          var allocation = allocations[index];
+          if (!allocation) return;
+          fastCompleted.push({
+            credit_id:allocation.credit_id,
+            amount_cents:allocation.amount_cents,
+            operation_id:clean(receipt && receipt.operation_id)
+          });
+        });
+
+        if (!batchResult || batchResult.ok !== true) {
+          if (fastCompleted.length) reconcileBatchAfterCommit(requestedCents, fastCompleted.length);
+          if (batchResult && batchResult.pending_unresolved) {
+            return batchFailure('Existe una operación pendiente sin confirmar. Reintenta esa operación antes de continuar; no vuelvas a ingresar el total.',
+              requestedCents, fastCompleted, 'BATCH_PENDING_UNRESOLVED');
+          }
+          return batchFailure(describePendingFailure(new Error(clean(batchResult && batchResult.error) || 'CANONICAL_FINANCIAL_REJECTED')),
+            requestedCents, fastCompleted, 'BATCH_PAYMENT_REJECTED');
+        }
+
+        notify('Cobro múltiple CANON CONFIRMADO: S/ ' + (requestedCents / 100).toFixed(2) +
+          ' aplicado a ' + fastCompleted.length + (fastCompleted.length === 1 ? ' deuda.' : ' deudas.'), 'success');
+        reconcileBatchAfterCommit(requestedCents, fastCompleted.length);
+        return {
+          ok:true,
+          partial:false,
+          reconciling:true,
+          requested_cents:requestedCents,
+          completed_cents:requestedCents,
+          completed_count:fastCompleted.length,
+          completed:fastCompleted.slice(),
+          remaining_cents:0
+        };
+      } catch (error) {
+        return batchFailure(describePendingFailure(error), requestedCents, fastCompleted, 'BATCH_PAYMENT_REJECTED');
+      } finally {
+        busy = false;
+      }
+    }
+
     busy = true;
     var completed = [];
     try {
