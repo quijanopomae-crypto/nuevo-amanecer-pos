@@ -1,0 +1,84 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-PROD-CANDIDATE-001",
+  "base_ref": "79ebb5686d753521949585ae2f18b2af793ac49b",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Construir un camino reversible D1 CANON -> Turso candidato -> Worker candidato sin modificar el runtime productivo ni ejecutar cutover.",
+    "READS": [
+      "REPO_MAP.yaml",
+      "docs/V1.3_STATUS.md",
+      "docs/OWNER_FINALIZATION.md",
+      "tools/cloudflare-prod/wrangler.jsonc",
+      "tools/cloudflare-lab/src/database-binding.js",
+      "tools/cloudflare-lab/src/turso-d1-adapter.js",
+      "tools/cloudflare-prod/scripts/cutover-prepare.mjs",
+      ".github/workflows/v1.3-prod-cutover.yml",
+      ".github/workflows/v1.3-prod-preflight.yml",
+      "tests/cloud-sync/v1.3-production-cutover.test.mjs"
+    ],
+    "WRITES": [
+      "Añadir config de Worker candidato separado con DB_PROVIDER=turso y sin binding D1.",
+      "Añadir importador SQLite local -> Turso remoto que exige destino vacío y replica tablas/datos/índices/vistas/triggers.",
+      "Añadir workflow manual-only que exporta D1 productivo en modo lectura, restaura un SQLite local, valida integridad, importa a Turso candidato, compara todas las tablas por conteo y despliega/probea únicamente el Worker candidato.",
+      "Añadir regresiones estáticas para bloquear cualquier cambio accidental al Worker CANON activo o al frontend productivo."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún estado del CANON activo cambia.",
+      "Una futura ejecución autorizada poblará únicamente una base Turso candidata separada."
+    ],
+    "STORAGE_AFFECTED": [
+      "D1 producción: solo export/read.",
+      "R2: no requerido para la copia candidata porque el workflow parte de un export fresco temporal; los backups productivos existentes permanecen intactos.",
+      "Turso candidato: escritura de una réplica completa únicamente si la base está vacía."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Ventas, inventario, caja, clientes, créditos y sesiones del CANON activo continúan en D1.",
+      "operationId, concurrencia, integridad física de stock y autoridad ACTIVE no se alteran.",
+      "Ningún secreto se imprime ni se versiona.",
+      "No se reutiliza la base Turso LAB.",
+      "No se modifica nuevo-amanecer-pos-prod ni nuevo-amanecer-pos-web."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "El candidato copia toda la base porque ventas, caja, inventario, créditos, auth y control canónico comparten integridad referencial y no deben migrarse por partes.",
+      "La validación compara cada tabla y los invariantes canónicos antes de considerar el candidato utilizable."
+    ],
+    "RISKS": [
+      "CRITICAL: copiar parcialmente stock/caja/ventas produciría divergencia; mitigado con réplica integral, destino vacío, conteos por tabla, quick_check y foreign_key_check.",
+      "HIGH: desplegar sobre el Worker productivo causaría cutover implícito; mitigado con nombre/config separados y test que prohíbe nuevo-amanecer-pos-prod.",
+      "HIGH: usar las credenciales LAB contaminaría producción; mitigado con nombres de secrets TURSO_PROD_* exclusivos y comprobación de URL distinta en el workflow.",
+      "MEDIUM: triggers de autorización pueden bloquear la carga; mitigado importando tablas/datos antes de crear índices/vistas/triggers."
+    ],
+    "ROLLBACK": [
+      "El PR es scaffolding inactivo y se revierte por commit.",
+      "Una ejecución futura fallida solo requiere destruir/recrear la base Turso candidata y el Worker candidato; D1 producción no cambia."
+    ],
+    "TEST_PLAN": [
+      "node --check tools/cloudflare-prod/scripts/turso-seed-from-sqlite.py no aplica; validar con python3 -m py_compile.",
+      "node --test tests/cloud-sync/turso-production-candidate.test.mjs",
+      "CANON Critical CI completo.",
+      "No ejecutar el workflow remoto hasta que existan una base Turso separada y TURSO_PROD_DATABASE_URL/TURSO_PROD_AUTH_TOKEN."
+    ]
+  }
+}
