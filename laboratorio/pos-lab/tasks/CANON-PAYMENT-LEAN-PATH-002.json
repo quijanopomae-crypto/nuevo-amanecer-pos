@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-PAYMENT-LEAN-PATH-002",
+  "environment": "LABORATORIO",
+  "base_ref": "efc209b0e3829ed8e6e80aa94414ceadba849f92",
+  "objective": "Simplificar el cobro múltiple CANON para que 1..20 deudas usen el endpoint payment.batch optimizado y para que las prelecturas D1 del Worker viajen en una sola llamada batch de lectura, sin perder receipts, saldos, caja, idempotencia ni historial.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-PAYMENT-LEAN-PATH-002.json",
+    "laboratorio/pos-lab/preflight/CANON-PAYMENT-LEAN-PATH-002.json",
+    "POS/js/sync/canonical-client.js",
+    "tools/cloudflare-lab/src/a6-financial.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+    "tests/cloud-sync/canonical-payment-batch-backend.test.mjs",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md"
+  ],
+  "forbidden_files": [
+    "infra/database/migrations/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**",
+    "tools/cloudflare-prod/**",
+    "ops/**",
+    ".github/workflows/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "credits-integrity",
+    "cash-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-PAYMENT-LEAN-PATH-002.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
