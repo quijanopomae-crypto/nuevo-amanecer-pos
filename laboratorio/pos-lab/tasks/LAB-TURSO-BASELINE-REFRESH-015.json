@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-BASELINE-REFRESH-015",
+  "environment": "LABORATORIO",
+  "base_ref": "2d1ce99ed12839415da5b6e36f91ea6e9989dc68",
+  "objective": "Redirigir el flujo autorizado CANON -> backup R2 -> snapshot LAB para publicar el baseline inicial en el Worker Turso LAB aislado, mantener CANON/producción solo lectura y disparar una carga real validada.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-BASELINE-REFRESH-015.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-BASELINE-REFRESH-015.json",
+    ".github/workflows/lab-data-refresh.yml",
+    "ops/lab-data-refresh-trigger.json",
+    "tests/laboratorio-remote-preflight-order.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-BASELINE-REFRESH-015.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
