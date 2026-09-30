@@ -1,0 +1,39 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-PAYMENT-BATCH-BACKEND-001",
+  "environment": "LABORATORIO",
+  "base_ref": "6cfa0e7a1a579b5703d91070826b8e232af6d872",
+  "objective": "Implementar y probar en la fuente compartida del Worker un transporte payment.batch que confirme hasta 20 payment.create distintos en una sola transacción D1, sin tocar POS ni desplegar producción desde esta tarea.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-PAYMENT-BATCH-BACKEND-001.json",
+    "laboratorio/pos-lab/preflight/CANON-PAYMENT-BATCH-BACKEND-001.json",
+    "tools/cloudflare-lab/src/a6-financial.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "tests/cloud-sync/canonical-payment-batch-backend.test.mjs",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "infra/database/migrations/**",
+    "tools/cloudflare-prod/**",
+    "ops/*trigger.json",
+    ".github/workflows/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/styles/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "credits-integrity",
+    "cash-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-PAYMENT-BATCH-BACKEND-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
