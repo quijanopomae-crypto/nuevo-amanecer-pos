@@ -201,8 +201,29 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
   if (invalid) return json({error:invalid},400);
 
   const db = getDatabase(env);
-  const authority = await db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
-    LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first();
+  const payments = body.payments;
+  const operationIds = payments.map(payment => payment.operation_id);
+  const creditIds = payments.map(payment => payment.credit_id);
+  const method = payments[0].payment_method;
+
+  // First-principles latency rule: these reads are independent. Do not pay D1
+  // network latency four times in series before the atomic write. The write
+  // batch below still revalidates credits/cash with CAS, so concurrency here
+  // changes only waiting time, never financial authority.
+  const [hashes, authority, existing, creditsResult, session] = await Promise.all([
+    Promise.all(payments.map(payment => sha256Hex(stableStringify({command:'payment.create',body:payment})))),
+    db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
+      LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first(),
+    db.prepare(`SELECT operation_id,command,request_hash,result_json FROM canonical_financial_operations
+      WHERE operation_id IN (${inClause(operationIds.length)})`).bind(...operationIds).all(),
+    db.prepare(`SELECT * FROM canonical_credit_balances
+      WHERE promotion_id=?1 AND credit_id IN (${inClause(creditIds.length,2)})`).bind(body.promotion_id,...creditIds).all(),
+    method === 'efectivo'
+      ? db.prepare('SELECT * FROM canonical_cash_state WHERE promotion_id=?1 AND session_id=?2')
+          .bind(body.promotion_id,payments[0].session_id).first()
+      : Promise.resolve(null)
+  ]);
+
   if (!authority || authority.mode !== 'ACTIVE') return json({error:'canonical_not_active'},409);
   if (authority.active_promotion_id !== body.promotion_id || authority.authority_epoch !== body.authority_epoch ||
       authority.revision !== body.expected_control_revision || authority.minimum_client_contract !== body.client_contract ||
@@ -210,11 +231,6 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
     return json({error:'stale_authority'},409);
   }
 
-  const payments = body.payments;
-  const hashes = await Promise.all(payments.map(payment => sha256Hex(stableStringify({command:'payment.create',body:payment}))));
-  const operationIds = payments.map(payment => payment.operation_id);
-  const existing = await db.prepare(`SELECT operation_id,command,request_hash,result_json FROM canonical_financial_operations
-    WHERE operation_id IN (${inClause(operationIds.length)})`).bind(...operationIds).all();
   const existingRows = existing?.results || [];
   if (existingRows.length) {
     const byId = new Map(existingRows.map(row => [row.operation_id,row]));
@@ -233,19 +249,12 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
     },200);
   }
 
-  const creditIds = payments.map(payment => payment.credit_id);
-  const creditsResult = await db.prepare(`SELECT * FROM canonical_credit_balances
-    WHERE promotion_id=?1 AND credit_id IN (${inClause(creditIds.length,2)})`).bind(body.promotion_id,...creditIds).all();
   const creditRows = creditsResult?.results || [];
   if (creditRows.length !== payments.length) return json({error:'credit_not_found'},409);
   const creditById = new Map(creditRows.map(row => [row.credit_id,row]));
 
-  const method = payments[0].payment_method;
-  let session = null;
-  if (method === 'efectivo') {
-    session = await db.prepare('SELECT * FROM canonical_cash_state WHERE promotion_id=?1 AND session_id=?2')
-      .bind(body.promotion_id,payments[0].session_id).first();
-    if (!session || session.status !== 'OPEN') return json({error:'stale_session'},409);
+  if (method === 'efectivo' && (!session || session.status !== 'OPEN')) {
+    return json({error:'stale_session'},409);
   }
 
   const results = [];
