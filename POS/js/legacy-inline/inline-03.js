@@ -730,7 +730,7 @@ window.addEventListener('na:canonical-updated',()=>{
     _naCanonicalLoadError=new Error(state.validation==='offline'?'AUTHORITY_UNAVAILABLE':'CANONICAL_LOAD_FAILED');
     _naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    _naSetHeaderConnectionState('disconnected','Desconectado');
+    _naSetHeaderConnectionState('disconnected',state.validation==='offline'?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
     if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
     if(badge){badge.hidden=false;badge.textContent='Canónico no disponible';}
     return;
@@ -739,13 +739,13 @@ window.addEventListener('na:canonical-updated',()=>{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     _naApplyCanonicalLegacyView(canonical);_naCanonicalLoadError=null;
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    _naSetHeaderConnectionState(state.validation==='current'?'connected':'disconnected',state.validation==='current'?'Conectado':'Desconectado');
+    _naSetHeaderConnectionState(state.validation==='current'?'connected':'disconnected',state.validation==='current'?'CANON validado':state.validation==='validating'?'CANON · validando':'CANON · reintentar');
     if(saveStatus)saveStatus.textContent='Persistencia canónica protegida';
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(canonical.customers.length)+' clientes';}
   }catch(error){
     _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    _naSetHeaderConnectionState('disconnected','Desconectado');
+    _naSetHeaderConnectionState('disconnected','Canónico no disponible · reintenta');
     if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
   }
 });
@@ -758,14 +758,14 @@ document.addEventListener('DOMContentLoaded',async()=>{
   if(canonicalEnabled){_naClearCanonicalOperationalView();}
   loadAppState();loadMasterConfig();_naInitSecurity();_naNormalizeData();renderCategorySelects();_naApplyConfigUI();_naInitFreeSaleShortcut();_naInitBarcodeScanner();creditos.forEach(_naSyncCreditStatus);posUpdateCart(canonicalEnabled?false:true);_naSchedulePageRender(_naActivePageId());
   const cliBadge=document.getElementById('cliAuthorityBadge');if(canonicalEnabled&&cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico · conectando';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:800';}
-  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled){_naSetHeaderConnectionState('disconnected','Conectando…');if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
+  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled){_naSetHeaderConnectionState('disconnected','Conectando a CANON…');if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
   document.querySelectorAll('.module-card').forEach(card=>{card.setAttribute('role','button');card.setAttribute('tabindex','0');card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}});});
   if(!canonicalEnabled)await saveAllData();
   if(canonicalEnabled){
     NuevoAmanecerCanonical.startPOS().catch(error=>{
       _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
       renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-      _naSetHeaderConnectionState('disconnected','Desconectado');
+      _naSetHeaderConnectionState('disconnected',navigator.onLine===false?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
       if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
       if(cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico no disponible';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800';}
     });
