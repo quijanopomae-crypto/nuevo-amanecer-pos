@@ -31,6 +31,15 @@ function fixture({ local = storage(), lock = locks(), canonical = {} } = {}) {
 }
 async function enqueueAll(f, ...items) { for (const item of items) await f.api.enqueue(item); }
 
+test('validated sale view sends queued credit without a redundant full refresh', async () => {
+  const f = fixture();
+  f.context.NuevoAmanecerCanonical.assertAction = () => true;
+  await enqueueAll(f, makeIntent('FAST'));
+  assert.equal((await f.api.sync()).status, 'DRAINED');
+  assert.equal(f.calls.filter(x => x === 'refresh').length, 0);
+  assert.equal(f.calls.filter(x => Array.isArray(x) && x[0] === 'createSale').length, 1);
+});
+
 test('FIFO durable across reconstructed context', async () => {
   const first = fixture(); await enqueueAll(first, makeIntent('A'), makeIntent('B'), makeIntent('C'));
   const second = fixture({ local: first.local });

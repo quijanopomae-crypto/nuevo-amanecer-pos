@@ -23,6 +23,7 @@
   } catch (_) {}
   var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
+  var receiptGeneration = 0;
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function fail(code) { throw new Error(code); }
   function validId(value) { return typeof value === 'string' && value.length > 0 && value.length <= 160 && !/[\x00-\x1f\x7f]/.test(value); }
@@ -206,6 +207,7 @@
     if (loading) return loading;
     if (!data) ready = false;
     loading = (async function () {
+      var generation = receiptGeneration, hadActiveView = data && data.mode === 'ACTIVE';
       if (root.navigator.onLine === false) fail('AUTHORITY_UNAVAILABLE');
       var expected = binding && !changed ? copy(binding) : null, statusMeta = null;
       if (!expected) fail('CANONICAL_NOT_CONFIGURED');
@@ -262,13 +264,15 @@
       if (cache && cacheIsNewer(cache, bootstrapReplica)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
       }
-      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
+      if (generation !== receiptGeneration) return snapshot();
+      if (!hadActiveView) { publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate(); }
 
       if (statusMeta.mode === 'ACTIVE') {
-        applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
-        applyEntries(await Promise.all([['expenses','expenses']].map(readEntry)));
-        applyEntries(await Promise.all([['sales','sales'], ['sale-items','saleItems'], ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements']].map(readEntry)));
+        applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents'],
+          ['expenses','expenses'], ['sales','sales'], ['sale-items','saleItems'],
+          ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements']].map(readEntry)));
       }
+      if (generation !== receiptGeneration) return snapshot();
       if (binding && !changed) assertBinding(expected);
       next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
@@ -299,7 +303,8 @@
   }
   function assertAction(action) {
     if (!COMMANDS.includes(action)) fail('UNSUPPORTED_CANONICAL_ACTION');
-    if (!ready || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.minimum_client_contract !== CONTRACT || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
+    var confirmedPaymentView = action === 'payment.create' && replicaState.validation === 'receipt-patched';
+    if ((!ready && !confirmedPaymentView) || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.minimum_client_contract !== CONTRACT || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     assertBinding(binding);
     return true;
   }
@@ -768,9 +773,23 @@
     return true;
   }
   function applyReceiptProjection(record, result) {
-    if (!data || !record || !result || !['payment.create','customer.credit-policy.set'].includes(record.command)) return false;
+    if (!data || !record || !result || !['payment.create','customer.credit-policy.set','sale.create'].includes(record.command)) return false;
     var next = snapshot(), payload = record.payload, now = new Date().toISOString(), changedProjection = false;
-    if (record.command === 'customer.credit-policy.set') {
+    if (record.command === 'sale.create') {
+      if (payload.payment_method !== 'credito') return false;
+      var creditId = payload.operation_id + ':credit';
+      if (!next.credits.some(function (item) { return item.credit_id === creditId; })) {
+        var account = payload.credit_account || { account_id: 'small', name: 'Créditos pequeños', mode: 'accumulated' };
+        next.credits.push({ credit_id: creditId, customer_id: payload.customer_id, sale_id: result.sale_id,
+          original_amount_cents: payload.total_cents, opening_balance_cents: payload.total_cents,
+          current_balance_cents: payload.total_cents, import_paid_cents: 0, revision: 0,
+          issued_value: payload.created_at, due_value: payload.credit_due, provenance: 'LIVE',
+          operation_id: payload.operation_id, account_id: account.account_id, account_name: account.name,
+          account_mode: account.mode, installments_json: JSON.stringify(payload.installments || []),
+          concept: 'Venta a crédito ' + result.sale_id, created_at: payload.created_at });
+      }
+      changedProjection = true;
+    } else if (record.command === 'customer.credit-policy.set') {
       var customer = next.customers.find(function (item) { return String(item.customer_id) === String(result.customer_id); });
       var policyRevision = Number(customer && customer.credit_policy_revision) || 0;
       if (!customer || policyRevision > result.policy_revision ||
@@ -834,6 +853,7 @@
     replica.canonical_digest = null;
     replica.digests = {};
     if (!validReplica(replica)) return false;
+    receiptGeneration += 1;
     publishReplica(replica, 'receipt');
     ready = false;
     replicaState.validation = 'receipt-patched';
@@ -904,7 +924,7 @@
     return copy(confirmed.receipt);
   }
   async function createSale(sale) {
-    if (sale && typeof sale === 'object' && sale.version === 1) await refresh();
+    if (sale && typeof sale === 'object' && sale.version === 1 && !ready) await refresh();
     return createCommand('sale.create', sale);
   }
   async function createCommand(command, input) {

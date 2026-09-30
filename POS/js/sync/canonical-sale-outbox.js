@@ -92,7 +92,11 @@
         removeHead(head); processed += 1; continue;
       }
       try {
-        await canonical.refresh();
+        var needsRefresh = true;
+        if (typeof canonical.assertAction === 'function') {
+          try { canonical.assertAction('sale.create'); needsRefresh = false; } catch (_) {}
+        }
+        if (needsRefresh) await canonical.refresh();
       } catch (error) { return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'REFRESH_FAILED')); }
       try {
         await canonical.createSale(head);
