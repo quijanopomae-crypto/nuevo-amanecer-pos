@@ -22,6 +22,9 @@ test('hosted POS uses explicit Worker routing with a stable workers.dev name', (
     '/commands/*', '/imports/*', '/sync/operations*'
   ]);
   assert.equal(parsedConfig.assets.html_handling, 'none');
+  assert.deepEqual(parsedConfig.services, [
+    { binding: 'CANON_BACKEND', service: 'nuevo-amanecer-pos-prod' }
+  ]);
   assert.equal(parsedConfig.workers_dev, true);
 });
 
@@ -160,6 +163,12 @@ test('canonical API proxy routes invoke the Worker before static assets', () => 
   for (const route of ['/health','/auth/*','/read/*','/commands/*','/imports/*','/sync/operations*']) {
     assert.ok(parsedConfig.assets.run_worker_first.includes(route), route + ' must run Worker first');
   }
+});
+
+test('same-origin proxy reaches CANON through a Cloudflare service binding', () => {
+  assert.match(router, /env\.CANON_BACKEND/);
+  assert.match(router, /service\.fetch\(proxied\)/);
+  assert.doesNotMatch(router, /await fetch\(proxied\)/);
 });
 
 test('hosted browser talks to CANON through the same-origin Worker proxy', () => {
