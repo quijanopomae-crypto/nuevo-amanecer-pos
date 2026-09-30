@@ -5,7 +5,7 @@
   "target_worker": "nuevo-amanecer-sync-lab-turso",
   "target_database": "TURSO_LAB",
   "test_data": "SYNTHETIC_TEMPORARY",
-  "requested_at_utc": "2026-09-30T18:18:00Z",
-  "note": "Redeploy isolated Turso LAB Worker with safe health error classification; log only allowlisted diagnostic category if health still fails.",
-  "attempt": 2
+  "requested_at_utc": "2026-09-30T18:23:00Z",
+  "note": "Redeploy after binding fetch to globalThis. Previous safe diagnostic classified the health failure as runtime_type_error.",
+  "attempt": 3
 }
