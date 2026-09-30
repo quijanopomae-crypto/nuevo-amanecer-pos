@@ -1,0 +1,78 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CLIENTES-MOBILE-SCROLL-MOTION-001",
+  "base_ref": "5306cd4521621ff4035f0e70aebe1fa34179237b",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura real del owner muestra Clientes CANON en móvil con la zona Buscar/ordenar/resumen visible pero sin el comportamiento animado esperado.",
+    "LAB registra controladores de scroll móvil para Clientes al cargar y activa .filter-bar + .stats-strip cuando body entra en module-mobile-scroll.",
+    "CANON contiene el mismo preset scroll de Clientes, pero el puente de paridad omite Motion completo en <=700 px y durante NA_MOBILE_SAFE_NAV_ACTIVE.",
+    "menu-navigation añade module-mobile-scroll después de dos RAF, pero no registra después el preset de Clientes; por eso el controlador no existe y esas bandas quedan estáticas.",
+    "La omisión original fue deliberada para evitar congelamientos antes del primer paint, por lo que no se debe reactivar la transición completa de página en móvil."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Restaurar únicamente el scroll-linked de filtros/resumen de Clientes después del primer paint seguro.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      "docs/CANON_MOBILE_SAFE_NAVIGATION.md",
+      "tasks/CANON-MOBILE-SAFE-NAV-001.json",
+      "evidence/canon-preflight/CANON-MOBILE-SAFE-NAV-001.json",
+      "POS/js/navigation/menu-navigation.js",
+      "POS/js/motion/lab-parity-bridge.js",
+      "POS/js/motion/scroll-motion.js",
+      "POS/css/experience-v2/animations/transitions.css",
+      "laboratorio/pos-lab/js/motion/page-transitions.js",
+      "laboratorio/pos-lab/animations/transitions.css",
+      "tests/product-fixes/canon-mobile-menu-navigation.test.mjs",
+      "tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs"
+    ],
+    "WRITES": [
+      "Registrar de forma diferida el preset scroll 'clientes' después de que mobileSafeNavigate ya pintó y añadió module-mobile-scroll.",
+      "No reactivar page.enter ni el puente LAB parity en móvil.",
+      "Añadir regresión que pruebe que el preset no corre antes del paint y sí corre después en Clientes."
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .filter-bar",
+      "#pageClientes .stats-strip",
+      "#pageClientes.page.active",
+      "body.module-mobile-scroll"
+    ],
+    "STATE_AFFECTED": [
+      "Solo estado visual del controlador NA_MOTION.scroll de pageClientes"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin cambios de datos o autoridad CANON",
+      "Sin cambios de render financiero",
+      "Sin cambios de navegación desktop",
+      "Sin transición de entrada de página en móvil",
+      "Fallo/no disponibilidad de Motion no bloquea navegación"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "menu-navigation coordina primer paint",
+      "scroll-motion aplica clip/fade/shift a filtros y stats",
+      "CSS experience-v2 ya contiene las reglas promovidas desde LAB"
+    ],
+    "ROOT_CAUSE": "El safe-nav móvil activa la página y luego module-mobile-scroll, pero el único registrador del preset CANON (lab-parity-bridge) retorna antes en <=700 px. Resultado: el preset clientes nunca se registra en móvil, aunque el runtime y CSS sí existen.",
+    "RISKS": [
+      "Reactivar todo Motion podría reintroducir el freeze histórico; se evita.",
+      "Registrar el controlador antes del paint podría forzar layout temprano; se evita.",
+      "Duplicar registro podría crear listeners repetidos; enablePreset/register ya es idempotente por pageId."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no hay migraciones ni datos tocados."
+    ],
+    "TEST_PLAN": [
+      "Mobile Clientes: página visible antes de preset",
+      "Después de double-RAF + idle: module-mobile-scroll activo y preset clientes sincronizado",
+      "Inventario no recibe este preset en esta tarea",
+      "Desktop sigue usando goPage",
+      "CANON Critical CI y E2E Smoke CI"
+    ]
+  }
+}
