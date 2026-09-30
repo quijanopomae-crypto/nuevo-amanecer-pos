@@ -1,0 +1,181 @@
+name: Turso LAB Schema Bootstrap
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "laboratorio/pos-lab/turso/TURSO-LAB-SCHEMA-003.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: turso-lab-schema-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Require Turso secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TURSO_DATABASE_URL"
+          test -n "$TURSO_AUTH_TOKEN"
+
+      - name: Apply repository migrations to empty Turso LAB
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const rawUrl = String(process.env.TURSO_DATABASE_URL || '').trim();
+          const token = String(process.env.TURSO_AUTH_TOKEN || '').trim();
+          if (!rawUrl || !token) throw new Error('missing_turso_secret');
+
+          const endpoint = (rawUrl.startsWith('libsql://')
+            ? 'https://' + rawUrl.slice('libsql://'.length)
+            : rawUrl).replace(/\/+$/, '');
+          const pipelineUrl = endpoint + '/v3/pipeline';
+
+          async function pipeline(requests) {
+            const response = await fetch(pipelineUrl, {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({ baton:null, requests }),
+            });
+            const body = await response.json().catch(() => null);
+            if (!response.ok || !body) throw new Error('turso_http_' + response.status);
+            return body;
+          }
+
+          function executeValue(result, row = 0, col = 0) {
+            const item = result?.results?.[0];
+            if (!item || item.type !== 'ok' || item.response?.type !== 'execute') {
+              throw new Error('execute_protocol_error');
+            }
+            const value = item.response.result?.rows?.[row]?.[col];
+            if (!value) throw new Error('missing_execute_value');
+            return value;
+          }
+
+          function integer(value) {
+            if (value?.type !== 'integer') throw new Error('expected_integer');
+            const n = Number(value.value);
+            if (!Number.isSafeInteger(n)) throw new Error('invalid_integer');
+            return n;
+          }
+
+          async function scalar(sql) {
+            const body = await pipeline([
+              { type:'execute', stmt:{ sql, args:[], want_rows:true } },
+              { type:'close' },
+            ]);
+            return executeValue(body);
+          }
+
+          const beforeTables = integer(await scalar(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+          ));
+          if (beforeTables !== 0) {
+            throw new Error('turso_lab_not_empty_table_count_' + beforeTables);
+          }
+
+          const migrationDir = path.join(process.cwd(), 'infra/database/migrations');
+          const files = fs.readdirSync(migrationDir)
+            .filter(name => /^\d{4}_.+\.sql$/.test(name))
+            .sort();
+          if (files.length !== 18) throw new Error('unexpected_migration_count_' + files.length);
+
+          for (const file of files) {
+            const sql = fs.readFileSync(path.join(migrationDir, file), 'utf8');
+            const body = await pipeline([
+              {
+                type:'sequence',
+                sql:'PRAGMA foreign_keys=ON;\nBEGIN IMMEDIATE;\n' + sql + '\nCOMMIT;'
+              },
+              { type:'close' },
+            ]);
+            const first = body?.results?.[0];
+            if (!first || first.type !== 'ok' || first.response?.type !== 'sequence') {
+              const code = first?.error?.code || 'sequence_error';
+              throw new Error('migration_failed_' + file + '_' + code);
+            }
+            console.log('TURSO_MIGRATION_PASS=' + file);
+          }
+
+          const countsBody = await pipeline([
+            { type:'execute', stmt:{ sql:"SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'", args:[], want_rows:true } },
+            { type:'execute', stmt:{ sql:"SELECT COUNT(*) FROM sqlite_schema WHERE type='trigger'", args:[], want_rows:true } },
+            { type:'execute', stmt:{ sql:"SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name NOT LIKE 'sqlite_%'", args:[], want_rows:true } },
+            { type:'execute', stmt:{ sql:"SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('canonical_control','auth_sessions','customers','products','canonical_credit_accounts','canonical_expenses','sales','inventory_movements','cash_movements')", args:[], want_rows:true } },
+            { type:'execute', stmt:{ sql:"SELECT COUNT(*) FROM canonical_control WHERE id=1", args:[], want_rows:true } },
+            { type:'execute', stmt:{ sql:"PRAGMA foreign_keys", args:[], want_rows:true } },
+            { type:'close' },
+          ]);
+
+          function scalarAt(index) {
+            const item = countsBody?.results?.[index];
+            if (!item || item.type !== 'ok' || item.response?.type !== 'execute') {
+              throw new Error('verify_protocol_error_' + index);
+            }
+            return integer(item.response.result?.rows?.[0]?.[0]);
+          }
+
+          const tableCount = scalarAt(0);
+          const triggerCount = scalarAt(1);
+          const indexCount = scalarAt(2);
+          const requiredTables = scalarAt(3);
+          const controlRows = scalarAt(4);
+          const foreignKeys = scalarAt(5);
+
+          if (tableCount < 20) throw new Error('too_few_tables_' + tableCount);
+          if (triggerCount < 10) throw new Error('too_few_triggers_' + triggerCount);
+          if (requiredTables !== 9) throw new Error('missing_required_tables_' + requiredTables);
+          if (controlRows !== 1) throw new Error('canonical_control_not_seeded');
+          if (foreignKeys !== 1) throw new Error('foreign_keys_not_enabled_on_turso_stream');
+
+          const rollback = await pipeline([
+            {
+              type:'sequence',
+              sql:[
+                'PRAGMA foreign_keys=ON',
+                'BEGIN IMMEDIATE',
+                'CREATE TABLE turso_lab_rollback_probe(id INTEGER PRIMARY KEY, value TEXT NOT NULL)',
+                "INSERT INTO turso_lab_rollback_probe(value) VALUES('probe')",
+                'ROLLBACK'
+              ].join(';') + ';'
+            },
+            { type:'close' },
+          ]);
+          if (rollback?.results?.[0]?.type !== 'ok') throw new Error('rollback_probe_sequence_failed');
+
+          const rollbackLeftovers = integer(await scalar(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='turso_lab_rollback_probe'"
+          ));
+          if (rollbackLeftovers !== 0) throw new Error('rollback_probe_left_schema');
+
+          console.log('TURSO_SCHEMA_TABLES=' + tableCount);
+          console.log('TURSO_SCHEMA_TRIGGERS=' + triggerCount);
+          console.log('TURSO_SCHEMA_INDEXES=' + indexCount);
+          console.log('TURSO_FOREIGN_KEYS=PASS');
+          console.log('TURSO_TRANSACTION_ROLLBACK=PASS');
+          console.log('TURSO_SCHEMA_BOOTSTRAP=PASS');
+          NODE
