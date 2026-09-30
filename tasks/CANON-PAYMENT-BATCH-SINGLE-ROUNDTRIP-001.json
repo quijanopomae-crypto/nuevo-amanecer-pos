@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-PAYMENT-BATCH-SINGLE-ROUNDTRIP-001",
+  "environment": "CANON",
+  "base_ref": "6cfa0e7a1a579b5703d91070826b8e232af6d872",
+  "objective": "Reducir el cobro múltiple de N deudas de N POST secuenciales a un solo round-trip HTTP y una sola transacción D1, manteniendo un operation_id y receipt payment.create por deuda.",
+  "owner_authorization": "El owner probó en Android un cobro múltiple de 14 deudas y reportó ~30 segundos en Procesando; pidió aplicar un enfoque de primeros principios para eliminar el cuello de botella.",
+  "allowed_files": [
+    "tasks/CANON-PAYMENT-BATCH-SINGLE-ROUNDTRIP-001.json",
+    "evidence/canon-preflight/CANON-PAYMENT-BATCH-SINGLE-ROUNDTRIP-001.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-credit-payment-bridge.js",
+    "tools/cloudflare-lab/src/a6-financial.js",
+    "tools/cloudflare-lab/src/worker.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+    ".github/workflows/v1.3-prod-worker-deploy.yml",
+    "ops/v1.3-prod-worker-deploy-trigger.json",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "infra/database/migrations/**",
+    "laboratorio/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "invariants": [
+    "No D1 schema migration.",
+    "Every debt remains an immutable canonical financial operation whose stored command is payment.create.",
+    "Every debt keeps a unique child operation_id and an independently replayable receipt.",
+    "The browser sends one POST /commands/payment.batch for a multi-debt payment instead of N sequential payment.create POSTs.",
+    "The Worker validates authority and every expected_credit_revision inside the same D1 transaction before success becomes visible.",
+    "A rejected child aborts the entire new batch; the first attempt cannot partially commit.",
+    "Lost ACK retry replays the exact same batch payload and child operation_ids.",
+    "Individual payment.create behavior remains unchanged.",
+    "Cash payments still require an OPEN canonical cash session; digital reference behavior remains unchanged.",
+    "No optimistic success before a durable Worker receipt.",
+    "Exactly one background canonical reconciliation remains after the confirmed batch."
+  ],
+  "rollback": "Deploy the prior production Worker and revert the feature PR. No schema rollback is required."
+}
