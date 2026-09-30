@@ -119,7 +119,17 @@
       var delta = now - lastScroll;
       lastScroll = now;
       if (Math.abs(delta) < 0.5) return;
-      queue(target + delta);
+
+      var appliedDelta = delta;
+      if (delta < 0) {
+        var revealRate = Number(config.revealRate);
+        if (Number.isFinite(revealRate)) {
+          revealRate = core.clamp(revealRate, 0.2, 1);
+          appliedDelta = delta * revealRate;
+        }
+      }
+
+      queue(target + appliedDelta);
     }
 
     function remeasure() {
@@ -212,7 +222,7 @@
       return controller ? controller.inspect() : null;
     },
     presets: {
-      clientes: { pageId:'pageClientes', clipChrome:true, secondarySelectors:['.filter-bar','.stats-strip'] },
+      clientes: { pageId:'pageClientes', clipChrome:true, revealRate:0.5, secondarySelectors:['.filter-bar','.stats-strip'] },
       inventario: { pageId:'pageInventario', clipChrome:true, secondarySelectors:['.filter-bar','.stats-strip'] },
       ventas: { pageId:'pageVentas', clipChrome:true, secondarySelectors:['#ventasFilterBar','#ventasReportControls','#ventasKPI'] },
       caja: { pageId:'pageCaja', clipChrome:false, secondarySelectors:['#cajContent > .caj-banner-wrap','#cajContent > .cj-stats-grid','#cajContent > div:first-child > .banner-cerrada-cj'], observeSelector:'#cajContent' },
