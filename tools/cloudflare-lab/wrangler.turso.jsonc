@@ -25,7 +25,6 @@
   "vars": {
     "RUNTIME_ENVIRONMENT": "lab",
     "DATA_POLICY": "lab-only",
-    "DB_PROVIDER": "turso",
-    "TURSO_HEALTH_DIAGNOSTIC": "enabled"
+    "DB_PROVIDER": "turso"
   }
 }
