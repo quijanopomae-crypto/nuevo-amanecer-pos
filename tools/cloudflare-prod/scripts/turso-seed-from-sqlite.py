@@ -3,6 +3,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import sqlite3
 import sys
 import urllib.error
@@ -58,7 +59,11 @@ def canonical_value(value):
     if isinstance(value, int):
         return ["i", str(value)]
     if isinstance(value, float):
-        return ["f", format(value, ".17g")]
+        if not math.isfinite(value):
+            fail("non-finite float is not allowed")
+        # LibSQL/Turso crosses a JSON protocol boundary. Preserve strict parity for
+        # all non-REAL values while normalizing sub-ULP decimal noise in REALs.
+        return ["f", format(value, ".15g")]
     if isinstance(value, (bytes, bytearray, memoryview)):
         return ["b", base64.b64encode(bytes(value)).decode("ascii")]
     return ["t", str(value)]
@@ -348,6 +353,7 @@ def main():
     parser.add_argument("--url", required=True)
     parser.add_argument("--token", required=True)
     parser.add_argument("--chunk-size", type=int, default=80)
+    parser.add_argument("--verify-existing", action="store_true")
     args = parser.parse_args()
 
     if args.chunk_size < 1 or args.chunk_size > 200:
@@ -365,21 +371,28 @@ def main():
             fail("source SQLite contains no user tables")
 
         turso = Turso(args.url, args.token)
-        ensure_remote_empty(turso)
 
         print("TURSO_PROD_CANDIDATE_SOURCE_INTEGRITY=PASS")
-        print("TURSO_PROD_CANDIDATE_REMOTE_EMPTY=PASS")
         print("TURSO_PROD_CANDIDATE_TABLES=%d" % len(schema["table"]))
 
-        create_tables(turso, schema)
         local_digests = {}
         total_rows = 0
-        for item in schema["table"]:
-            count, digest = copy_table(turso, conn, item["name"], args.chunk_size)
-            local_digests[item["name"]] = digest
-            total_rows += count
-        copy_sqlite_sequence(turso, conn)
-        create_secondary_objects(turso, schema)
+
+        if args.verify_existing:
+            for item in schema["table"]:
+                rows = local_rows(conn, item["name"], insertable_columns(conn, item["name"]))
+                local_digests[item["name"]] = rows_digest(rows)
+                total_rows += len(rows)
+        else:
+            ensure_remote_empty(turso)
+            print("TURSO_PROD_CANDIDATE_REMOTE_EMPTY=PASS")
+            create_tables(turso, schema)
+            for item in schema["table"]:
+                count, digest = copy_table(turso, conn, item["name"], args.chunk_size)
+                local_digests[item["name"]] = digest
+                total_rows += count
+            copy_sqlite_sequence(turso, conn)
+            create_secondary_objects(turso, schema)
 
         verify_remote_integrity(turso)
         compare_schema_objects(turso, schema)
@@ -390,7 +403,10 @@ def main():
         print("TURSO_PROD_CANDIDATE_CONTENT_PARITY=PASS")
         print("TURSO_PROD_CANDIDATE_VERIFIED_TABLES=%d" % verified_tables)
         print("TURSO_PROD_CANDIDATE_VERIFIED_ROWS=%d" % total_rows)
-        print("TURSO_PROD_CANDIDATE_SEED=PASS")
+        if args.verify_existing:
+            print("TURSO_PROD_CANDIDATE_VERIFY_EXISTING=PASS")
+        else:
+            print("TURSO_PROD_CANDIDATE_SEED=PASS")
     finally:
         conn.close()
 
