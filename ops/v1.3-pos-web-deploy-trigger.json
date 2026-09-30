@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON header: color-only connection/version status and direct Configuración gear.",
-  "retry_attempt": 49,
-  "retry_reason": "PR #266 merged at db55e933a436006f3fdb046a7963bfbca64b11b8 after CANON Critical CI #339 PASS and E2E Smoke CI #86 PASS. Publish the owner-approved header/navigation adjustment.",
-  "requested_at_utc": "2026-09-30T14:30:53Z",
-  "target_head": "db55e933a436006f3fdb046a7963bfbca64b11b8"
+  "note": "Deploy hosted POS CANON same-origin proxy backed by Cloudflare Service Binding.",
+  "retry_attempt": 50,
+  "retry_reason": "PR #273 merged at 5eb438ecb721995048d92b109da2e24c68395a62 after CANON Critical CI #344 PASS. Replace public Worker-to-Worker fetch with CANON_BACKEND service binding.",
+  "requested_at_utc": "2026-09-30T14:35:23Z",
+  "target_head": "5eb438ecb721995048d92b109da2e24c68395a62"
 }
