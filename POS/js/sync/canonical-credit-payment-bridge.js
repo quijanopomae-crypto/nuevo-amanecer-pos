@@ -320,6 +320,15 @@
     };
   }
 
+  function reconcileBatchAfterCommit(requestedCents, completedCount) {
+    Promise.resolve().then(refreshCanonical).catch(function (error) {
+      notify('Cobro múltiple CANON CONFIRMADO por S/ ' + (requestedCents / 100).toFixed(2) +
+        ' en ' + completedCount + (completedCount === 1 ? ' deuda. ' : ' deudas. ') +
+        'No se pudo actualizar la vista todavía: ' + clean(error && error.message) +
+        '. NO repitas el pago; recarga la pantalla para ver los saldos.', 'success');
+    });
+  }
+
   async function confirmBatch(request) {
     if (!enabled()) return { ok:false, partial:false, code:'CANONICAL_PAYMENT_DISABLED', completed:[] };
     if (busy) return { ok:false, partial:false, code:'CANONICAL_PAYMENT_BUSY', completed:[] };
