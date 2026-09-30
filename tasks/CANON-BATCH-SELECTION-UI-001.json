@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-BATCH-SELECTION-UI-001",
+  "environment": "CANON",
+  "base_ref": "7894a445fa4c4b4cfaa25a325cc7714177dc52e0",
+  "objective": "Corregir el flujo de selección del cobro múltiple en CANON: ocultar Número de operación cuando el método es Efectivo y hacer que la selección automática/total complete el monto correspondiente sin obligar a reingresarlo.",
+  "owner_authorization": "Owner reportó con captura real un bug al seleccionar deudas en el cobro múltiple CANON.",
+  "allowed_files": [
+    "tasks/CANON-BATCH-SELECTION-UI-001.json",
+    "evidence/canon-preflight/CANON-BATCH-SELECTION-UI-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "POS/css/client-credit-accounts-v2.css",
+    "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+    "docs/CANON_BATCH_CREDIT_PAYMENTS.md"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/js/sync/**",
+    "POS/js/legacy-inline/**",
+    "POS/index.html",
+    "POS/sw.js",
+    "tools/cloudflare-lab/**",
+    "infra/database/migrations/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "invariants": [
+    "No change to payment.create authority or payment ledger",
+    "No D1/schema/backend changes",
+    "Selecting all may auto-fill the exact selected outstanding balance",
+    "Manual amount entry remains possible and must not be overwritten by later selection changes unless the amount is still auto-managed",
+    "Aplicar automáticamente preserves the amount entered by the operator",
+    "Digital reference is required only for Yape/Plin or transferencia",
+    "Efectivo must never show or require Número de operación"
+  ],
+  "rollback": "Revertir el PR completo; no toca datos, pagos confirmados ni schema."
+}
