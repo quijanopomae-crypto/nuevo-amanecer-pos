@@ -1,0 +1,16 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-STOCK-DIAG-016",
+  "environment": "LABORATORIO",
+  "base_ref": "848122081c0702bacd19e9eb0d9bff5a68ba43de",
+  "objective": "Diagnosticar en modo READ-ONLY la divergencia venta/caja/stock observada tras V-001 en Turso LAB.",
+  "allowed_files": ["laboratorio/pos-lab/tasks/LAB-TURSO-STOCK-DIAG-016.json", "laboratorio/pos-lab/preflight/LAB-TURSO-STOCK-DIAG-016.json", ".github/workflows/lab-turso-stock-diagnostic.yml"],
+  "forbidden_files": ["POS/**", "tools/cloudflare-prod/**", "infra/**", "ops/**", "evidence/v1.3/**"],
+  "required_skills": ["impact-analysis", "cross-module-impact", "lab-scope-guard", "lab-feature-edit", "inventory-integrity"],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-STOCK-DIAG-016.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
