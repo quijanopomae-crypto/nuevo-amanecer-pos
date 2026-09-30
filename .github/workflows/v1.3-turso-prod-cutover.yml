@@ -86,13 +86,19 @@ jobs:
           npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc >/tmp/turso-prod-dry-run.txt
           echo "TURSO_PROD_CUTOVER_STATIC=PASS"
 
-      - name: D1 preflight must be zero-traffic and session-free
+      - name: D1 preflight must be zero-traffic
         shell: bash
         run: |
           set -euo pipefail
           node tools/cloudflare-prod/scripts/cutover-prepare.mjs preflight
-          test "${CUTOVER_ACTIVE_SESSIONS:-}" = "0"
           echo "TURSO_PROD_CUTOVER_D1_PREFLIGHT=PASS"
+
+      - name: Require zero active D1 sessions before cutover
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${CUTOVER_ACTIVE_SESSIONS:-}" = "0"
+          echo "TURSO_PROD_CUTOVER_D1_SESSIONS_ZERO=PASS"
 
       - name: Export fresh D1 production backup
         shell: bash
@@ -259,8 +265,14 @@ jobs:
         run: |
           set -euo pipefail
           node tools/cloudflare-prod/scripts/cutover-prepare.mjs preflight
-          test "${CUTOVER_ACTIVE_SESSIONS:-}" = "0"
           echo "TURSO_PROD_D1_ROLLBACK_CLEAN=PASS"
+
+      - name: Confirm D1 rollback sessions stayed zero
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${CUTOVER_ACTIVE_SESSIONS:-}" = "0"
+          echo "TURSO_PROD_D1_ROLLBACK_SESSIONS_ZERO=PASS"
 
       - name: Store successful Turso cutover manifest
         working-directory: tools/cloudflare-lab
