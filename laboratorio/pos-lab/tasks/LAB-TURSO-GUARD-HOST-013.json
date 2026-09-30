@@ -1,0 +1,34 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-GUARD-HOST-013",
+  "environment": "LABORATORIO",
+  "base_ref": "6e5d5f86f5446bec2270fedbf528358ccc538c0e",
+  "objective": "Permitir que el guard de seguridad del POS-LAB acepte escrituras únicamente hacia el Worker Turso LAB aislado ya aprobado, manteniendo bloqueadas escrituras externas no autorizadas y sin tocar CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-GUARD-HOST-013.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-GUARD-HOST-013.json",
+    "laboratorio/pos-lab/lab-guard.js",
+    "tests/laboratorio-pos-html.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**",
+    ".github/workflows/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-GUARD-HOST-013.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

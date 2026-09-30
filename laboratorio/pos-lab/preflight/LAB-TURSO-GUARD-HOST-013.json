@@ -1,0 +1,70 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-GUARD-HOST-013",
+  "base_ref": "6e5d5f86f5446bec2270fedbf528358ccc538c0e",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "El navegador LAB ya apunta por defecto a nuevo-amanecer-sync-lab-turso.nuevo-amanecer-pos.workers.dev.",
+      "lab-guard.js solo autoriza POST/PUT/etc. hacia nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev.",
+      "Por esa diferencia, POST /auth/activate al Worker Turso es rechazado localmente con NA_LAB_EXTERNAL_WRITE_BLOCKED antes de llegar al Worker."
+    ],
+    "WRITES": [
+      "Añadir el hostname exacto del Worker Turso LAB aislado a la allowlist de escrituras del guard.",
+      "Mantener el Worker D1 LAB heredado permitido para rollback LAB controlado.",
+      "Agregar una regresión que exija explícitamente ambos hostnames LAB y conserve el bloqueo general de escrituras externas."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún modelo de negocio cambia; solo cambia la decisión de seguridad previa a fetch para hosts LAB explícitamente autorizados."
+    ],
+    "STORAGE_AFFECTED": [
+      "Sin cambios de esquema ni almacenamiento. El fix permite que la activación y guardado ya existentes alcancen el backend Turso LAB."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "CANON y producción no reciben escrituras.",
+      "Solo los hostnames LAB explícitamente allowlisted pueden recibir escrituras cross-origin.",
+      "Las rutas permitidas siguen limitadas a /auth/activate y /lab/workspace/.",
+      "No se exponen ni versionan secretos."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "La corrección desbloquea activación y persistencia remota para los módulos que comparten el workspace LAB: ventas, inventario, caja, clientes, créditos y configuración.",
+      "No modifica lógica funcional de esos módulos."
+    ],
+    "RISKS": [
+      "Ampliar demasiado la allowlist debilitaría el aislamiento; por eso se agrega solo el hostname exacto del Worker Turso LAB.",
+      "Si el Worker Turso responde correctamente pero no existe baseline, el siguiente estado esperado será workspace vacío, no este error de guard."
+    ],
+    "ROLLBACK": [
+      "Revertir el commit funcional restaura la allowlist anterior.",
+      "No hay cambios destructivos en datos, CANON ni producción."
+    ],
+    "TESTS": [
+      "node --test tests/laboratorio-pos-html.test.mjs",
+      "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-GUARD-HOST-013.json --receipt=laboratorio/pos-lab/preflight/LAB-TURSO-GUARD-HOST-013.json",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-GUARD-HOST-013.json",
+      "node laboratorio/check.mjs"
+    ]
+  }
+}

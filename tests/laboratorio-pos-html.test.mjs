@@ -22,6 +22,9 @@ test('POS-LAB existe y no convierte CANON en laboratorio', () => {
   assert.match(lab, /\.\.\/laboratorio\/pos-lab\/lab-overrides\.css/);
   assert.match(lab, /!window\.__NA_LAB__/);
   assert.match(guard, /NA_LAB_EXTERNAL_WRITE_BLOCKED/);
+  assert.match(guard, /nuevo-amanecer-sync-lab\.nuevo-amanecer-pos\.workers\.dev/);
+  assert.match(guard, /nuevo-amanecer-sync-lab-turso\.nuevo-amanecer-pos\.workers\.dev/);
+  assert.match(guard, /allowedLabWriteHosts\.has\(url\.hostname\)/);
   assert.match(guard, /url\.pathname\.startsWith\('\/lab\/workspace\/'\)/);
   assert.match(server, /127\.0\.0\.1/);
   assert.match(server, /8799/);
