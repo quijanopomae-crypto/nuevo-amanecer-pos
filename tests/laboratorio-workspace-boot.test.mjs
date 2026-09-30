@@ -5,6 +5,18 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync('laboratorio/pos-lab/js/lab-workspace.js', 'utf8');
 const contract = JSON.parse(readFileSync('laboratorio/pos-lab/tasks/LAB-WORKSPACE-BOOT-001.json', 'utf8'));
 
+test('LAB browser defaults to the isolated Turso Worker', () => {
+  assert.match(source, /var LEGACY_D1_ENDPOINT = 'https:\/\/nuevo-amanecer-sync-lab\.nuevo-amanecer-pos\.workers\.dev'/);
+  assert.match(source, /var DEFAULT_ENDPOINT = 'https:\/\/nuevo-amanecer-sync-lab-turso\.nuevo-amanecer-pos\.workers\.dev'/);
+});
+
+test('legacy D1 browser state cannot replay credentials or pending writes into Turso', () => {
+  assert.match(source, /if \(endpoint === LEGACY_D1_ENDPOINT\)/);
+  assert.match(source, /endpoint: DEFAULT_ENDPOINT,[\s\S]*readToken: '',[\s\S]*sessionToken: ''/);
+  assert.match(source, /localStorage\.removeItem\(PENDING_KEY\)/);
+  assert.match(source, /sessionStorage\.removeItem\(CONFLICT_NOTICE_KEY\)/);
+});
+
 function loadAllDataOverride() {
   const start = source.indexOf('loadAllData = async function () {');
   const end = source.indexOf('\n  setupPanel();', start);
