@@ -7,7 +7,7 @@
   var LOCK = 'na-canonical-financial-writer';
   var CREDENTIALS_KEY = 'na_cloud_sync_credentials';
   var METHODS = ['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto'];
-  var COMMANDS = ['sale.create', 'product.create', 'customer.create', 'customer.credit-policy.set', 'inventory.adjust', 'credit-account.create', 'payment.create', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
+  var COMMANDS = ['sale.create', 'product.create', 'customer.create', 'customer.credit-policy.set', 'inventory.adjust', 'credit-account.create', 'payment.create', 'payment.batch', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var READ_TIMEOUT_MS = 8000;
   var HOSTED_API_ORIGIN = null;
@@ -632,6 +632,25 @@
   }
   function validPayload(command, payload) {
     if (!validCommon(payload)) return false;
+    if (command === 'payment.batch') {
+      if (!Array.isArray(payload.payments) || payload.payments.length < 1 || payload.payments.length > 20) return false;
+      var batchOperations = new Set(), batchCredits = new Set(), firstMethod = null, firstSession = null, firstReference = null;
+      for (var batchPayment of payload.payments) {
+        if (!validPayload('payment.create', batchPayment) || batchPayment.operation_id === payload.operation_id ||
+            batchOperations.has(batchPayment.operation_id) || batchCredits.has(batchPayment.credit_id) ||
+            batchPayment.promotion_id !== payload.promotion_id || batchPayment.client_contract !== payload.client_contract ||
+            batchPayment.authority_epoch !== payload.authority_epoch || batchPayment.expected_control_revision !== payload.expected_control_revision) return false;
+        batchOperations.add(batchPayment.operation_id); batchCredits.add(batchPayment.credit_id);
+        if (firstMethod === null) {
+          firstMethod = batchPayment.payment_method;
+          firstSession = batchPayment.session_id === undefined ? null : batchPayment.session_id;
+          firstReference = batchPayment.reference === undefined ? null : batchPayment.reference;
+        } else if (batchPayment.payment_method !== firstMethod ||
+            (batchPayment.session_id === undefined ? null : batchPayment.session_id) !== firstSession ||
+            (batchPayment.reference === undefined ? null : batchPayment.reference) !== firstReference) return false;
+      }
+      return true;
+    }
     if (command === 'credit-account.create') {
       return validId(payload.customer_id) && validId(payload.account_id) && payload.account_id !== 'small' &&
         typeof payload.name === 'string' && payload.name.trim().length > 0 && payload.name.trim().length <= 60 &&
@@ -748,6 +767,26 @@
       result.session_id === (record.payload.session_id === undefined ? null : record.payload.session_id) && Number.isSafeInteger(result.cash_delta_cents);
     if (record.command === 'credit-account.create') return result.command === record.command && result.account_id === record.payload.account_id &&
       result.promotion_id === record.binding.promotion_id && result.authority_epoch === record.binding.authority_epoch;
+    if (record.command === 'payment.batch') {
+      if (result.command !== 'payment.batch' || result.promotion_id !== record.binding.promotion_id ||
+          result.authority_epoch !== record.binding.authority_epoch || !Array.isArray(result.receipts) ||
+          result.receipts.length !== record.payload.payments.length ||
+          !Array.isArray(record.batch_credit_provenance) ||
+          record.batch_credit_provenance.length !== record.payload.payments.length) return false;
+      for (var batchIndex = 0; batchIndex < record.payload.payments.length; batchIndex += 1) {
+        var expectedPayment = record.payload.payments[batchIndex], batchReceipt = result.receipts[batchIndex];
+        if (!batchReceipt || batchReceipt.operation_id !== expectedPayment.operation_id || batchReceipt.command !== 'payment.create' ||
+            batchReceipt.promotion_id !== record.binding.promotion_id || batchReceipt.authority_epoch !== record.binding.authority_epoch ||
+            batchReceipt.credit_id !== expectedPayment.credit_id || batchReceipt.credit_provenance !== record.batch_credit_provenance[batchIndex] ||
+            batchReceipt.event_id !== expectedPayment.operation_id || batchReceipt.credit_delta_cents !== -expectedPayment.amount_cents ||
+            batchReceipt.cash_delta_cents !== (expectedPayment.payment_method === 'efectivo' ? expectedPayment.amount_cents : 0) ||
+            batchReceipt.credit_revision !== expectedPayment.expected_credit_revision + 1 ||
+            !(batchReceipt.status === 'created' && batchReceipt.idempotent === false ||
+              batchReceipt.status === 'already_processed' && batchReceipt.idempotent === true) ||
+            (expectedPayment.session_id !== undefined && batchReceipt.session_id !== expectedPayment.session_id)) return false;
+      }
+      return true;
+    }
     if (result.command !== record.command) return false;
     if (result.promotion_id !== record.binding.promotion_id || result.authority_epoch !== record.binding.authority_epoch) return false;
     if (record.command === 'payment.create' && result.credit_id !== record.payload.credit_id) return false;
@@ -771,9 +810,9 @@
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
-    // A new payment already has a validated current replica. The Worker checks
-    // authority and credit revision atomically with payment.create. Retried
-    // pending commands still verify remote authority before replaying the intent.
+    // A new payment or payment batch already has a validated current replica.
+    // The Worker checks authority and credit revision atomically on write.
+    // Retried pending commands still verify remote authority before replaying the intent.
     if (!skipStatus) {
       var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
         credentials: 'omit', redirect: 'error', cache: 'no-store',
@@ -867,42 +906,54 @@
         };
       });
 
-      var receipts = [];
-      for (var index = 0; index < normalized.length; index += 1) {
-        var input = normalized[index];
+      // Build every child intent from the same validated replica before the first
+      // network write. Different credits have independent revisions.
+      var childPayloads = normalized.map(function (input) {
         var payload = makeFinancialPayload('payment.create', input);
-        var credit = data.credits.find(function (item) { return item.credit_id === payload.credit_id; });
+        if (!validPayload('payment.create', payload)) fail('INVALID_CANONICAL_PAYLOAD');
+        return payload;
+      });
+
+      var receipts = [];
+      var CHUNK = 20;
+      for (var offset = 0; offset < childPayloads.length; offset += CHUNK) {
+        var payments = childPayloads.slice(offset, offset + CHUNK);
+        var batchPayload = Object.assign(commonPayload(), { payments: payments });
+        var provenances = payments.map(function (payment) {
+          var credit = data.credits.find(function (item) { return item.credit_id === payment.credit_id; });
+          if (!credit || !['IMPORT', 'LIVE'].includes(credit.provenance)) fail('INVALID_CANONICAL_CREDIT');
+          return credit.provenance;
+        });
         var record = {
           state: 'PENDING',
           binding: copy(binding),
-          command: 'payment.create',
-          route: '/commands/payment.create',
-          payload: payload,
-          receipt_ids: { credit_provenance: credit && credit.provenance }
+          command: 'payment.batch',
+          route: '/commands/payment.batch',
+          payload: batchPayload,
+          receipt_ids: {},
+          batch_credit_provenance: provenances
         };
-        if (!credit || !validPayload('payment.create', record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
-
+        if (!validPayload('payment.batch', record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
         durableJournal(record);
-        var receipt = null;
+
+        var batchReceipt;
         try {
-          // Fast path: the initial canonical replica already supplies the
-          // revision for each DISTINCT credit. The Worker validates authority,
-          // credit revision and open cash session atomically on every POST.
-          receipt = await sendPending(record, true);
+          // One HTTP request transports up to 20 distinct payment.create intents.
+          // The Worker CAS-validates every credit and commits them in one D1 batch.
+          batchReceipt = await sendPending(record, true);
         } catch (error) {
           var retryRecord = journal();
-          if (retryRecord && retryRecord.state === 'PENDING' && retryRecord.command === 'payment.create' &&
-              !retryRecord.last_error) {
+          if (retryRecord && retryRecord.state === 'PENDING' && retryRecord.command === 'payment.batch' && !retryRecord.last_error) {
             try {
-              // ACK may have been lost. Replay the exact same operation_id once;
-              // never manufacture a replacement payment.
-              receipt = await sendPending(retryRecord, false);
+              // ACK may have been lost. Replay the exact batch and child
+              // operation_ids once after the mandatory remote authority check.
+              batchReceipt = await sendPending(retryRecord, false);
             } catch (retryError) {
               return {
                 ok: false,
                 pending_unresolved: true,
                 rejected: false,
-                failed_index: index,
+                failed_index: offset,
                 error: String(retryError && retryError.message || retryError || 'CANONICAL_FINANCIAL_PENDING'),
                 receipts: receipts.slice()
               };
@@ -912,14 +963,20 @@
               ok: false,
               pending_unresolved: false,
               rejected: true,
-              failed_index: index,
+              failed_index: offset,
               error: String(error && error.message || error || 'CANONICAL_FINANCIAL_REJECTED'),
               receipts: receipts.slice()
             };
           }
         }
 
-        receipts.push(copy(receipt));
+        if (!batchReceipt || !Array.isArray(batchReceipt.receipts) || batchReceipt.receipts.length !== payments.length) {
+          return {
+            ok: false, pending_unresolved: true, rejected: false, failed_index: offset,
+            error: 'INVALID_CANONICAL_BATCH_RECEIPT', receipts: receipts.slice()
+          };
+        }
+        receipts.push.apply(receipts, batchReceipt.receipts.map(copy));
       }
 
       return { ok: true, receipts: receipts.slice() };
