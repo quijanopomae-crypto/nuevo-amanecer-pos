@@ -272,3 +272,29 @@ snapshot POS V9. El snapshot se firma y se publica en
 El Worker no interpreta ni ejecuta el dump SQL remoto y no escribe en R2.
 
 > Compatibilidad: el runtime acepta temporalmente el binding legacy `nuevo_amanecer_lab` mediante `database-binding.js`, pero las configuraciones activas usan `DB`.
+
+
+## Turso LAB (experimental)
+
+Esta variante mantiene el mismo Worker y el mismo contrato de persistencia usado por D1,
+pero enruta las consultas a una base Turso/libSQL mediante SQL-over-HTTP.
+
+Reglas:
+- solo LAB; CANON y producción permanecen en D1 hasta una promoción explícita;
+- `TURSO_AUTH_TOKEN` nunca se versiona ni se entrega al navegador;
+- el navegador sigue hablando con el Worker, no directamente con Turso;
+- `DB_PROVIDER=d1` sigue siendo el comportamiento predeterminado;
+- `DB_PROVIDER=turso` requiere `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
+
+Configuración aislada:
+
+```bash
+npx wrangler dev --config wrangler.turso.jsonc
+npx wrangler secret put TURSO_DATABASE_URL --config wrangler.turso.jsonc
+npx wrangler secret put TURSO_AUTH_TOKEN --config wrangler.turso.jsonc
+```
+
+El adaptador implementa únicamente la superficie que usa el Worker:
+`prepare().bind().first()`, `all()`, `run()` y `batch()`.
+Los lotes usan una transacción explícita con rollback condicionado para conservar la
+semántica all-or-nothing antes de considerar una promoción a CANON.
