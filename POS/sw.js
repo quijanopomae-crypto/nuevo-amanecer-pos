@@ -141,6 +141,27 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'NA_BUILD_DIAGNOSTIC') return;
+
+  const payload = {
+    type: 'NA_BUILD_DIAGNOSTIC',
+    buildHash: '__BUILD_HASH__',
+    cacheName: CACHE_NAME,
+    scope: self.registration.scope
+  };
+
+  if (event.ports && event.ports[0]) {
+    event.ports[0].postMessage(payload);
+    return;
+  }
+
+  if (event.source && typeof event.source.postMessage === 'function') {
+    event.source.postMessage(payload);
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
