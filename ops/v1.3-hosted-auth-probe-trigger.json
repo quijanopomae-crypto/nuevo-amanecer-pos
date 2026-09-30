@@ -2,9 +2,9 @@
   "format": "nuevo-amanecer-v1.3-hosted-auth-probe-v1",
   "authorized": true,
   "authorized_by": "owner",
-  "target_head": "2d588190c7e7bbd2c5c71b1f82226e6a943020a6",
+  "target_head": "e616c6fa6301ba689a6fb6c5a367901e9240abb7",
   "requested_action": "probe-hosted-activation-session-canonical-read",
-  "requested_at_utc": "2026-09-30T15:36:00Z",
-  "note": "Re-run hosted activation/session/canonical probe after PR #277 and hosted deploy #51.",
-  "attempt": 4
+  "requested_at_utc": "2026-09-30T15:41:00Z",
+  "note": "Diagnose hosted auth/session 500 with schema column names and exact D1 session JOIN status; no token/hash/secret values are logged.",
+  "attempt": 5
 }
