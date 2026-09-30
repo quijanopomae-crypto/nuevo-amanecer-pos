@@ -47,5 +47,6 @@
     "Pago individual fuera del panel Cobro múltiple conserva payment.create.",
     "No hay migración D1 ni cambio de reglas comerciales."
   ],
-  "rollback": "Revertir cliente/Worker y desplegar versiones previas. No hay rollback de datos ni schema."
+  "rollback": "Revertir cliente/Worker y desplegar versiones previas. No hay rollback de datos ni schema.",
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-PAYMENT-LEAN-PATH-001.json"
 }
