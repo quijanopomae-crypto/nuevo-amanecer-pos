@@ -189,15 +189,33 @@ test('category view exposes select-all, automatic allocation and one final batch
   assert.match(css,/@media\(max-width:430px\)[\s\S]*\.na-v2-batch-method-row\{grid-template-columns:1fr\}/);
 });
 
-test('batch submit has an in-flight guard and preview cannot re-enable it while processing',()=>{
+test('batch submit has an in-flight guard and preserves durable Pagado projection until reconciliation',()=>{
   const submit=source.slice(source.indexOf('root.naCanonSubmitBatchPayment = async function'),source.indexOf('function labPurchaseRow'));
   const preview=source.slice(source.indexOf('function labBatchUpdatePreview'),source.indexOf('root.naCanonBatchPaymentChanged'));
   assert.match(source,/var labBatchSubmitInFlight = false;/);
+  assert.match(source,/var labBatchAwaitingReconcile = false;/);
   assert.match(submit,/if \(labBatchSubmitInFlight\) return false;/);
   assert.match(submit,/labBatchSubmitInFlight = true;/);
-  assert.match(submit,/finally \{\s*labBatchSubmitInFlight = false;\s*labBatchUpdatePreview\(\);\s*\}/);
+  assert.match(submit,/labBatchShowConfirmed\(result, state\)/);
+  assert.match(submit,/if \(!confirmedVisual\) labBatchUpdatePreview\(\)/,
+    'stale preview must not overwrite Pagado after receipt');
+  assert.doesNotMatch(submit,/labRenderRoute\('replace'\)/,
+    'must not immediately rerender stale canonical data after receipt');
   assert.match(preview,/submit\.disabled = labBatchSubmitInFlight \|\| !\(plan\.valid && referenceOk\)/);
   assert.match(preview,/labBatchSubmitInFlight\s*\? 'Procesando…'/);
+});
+
+test('durable batch receipt paints Pagado immediately and reconciliation later replaces the temporary projection',()=>{
+  const confirmed=source.slice(source.indexOf('function labBatchShowConfirmed'),source.indexOf('root.naCanonSubmitBatchPayment'));
+  assert.match(confirmed,/Pagado ✓/);
+  assert.match(confirmed,/✓ Pagado/);
+  assert.match(confirmed,/labBatchAwaitingReconcile = true/);
+  assert.match(confirmed,/currentSummary\.pending - completedCents \/ 100/);
+  assert.match(source,/if \(labBatchAwaitingReconcile && labClientScreenState/);
+  assert.match(source,/labBatchAwaitingReconcile = false;\s*labRenderRoute\('replace'\)/);
+  assert.match(css,/\.na-v2-batch-row-paid/);
+  assert.match(css,/\.na-v2-batch-pay\.na-v2-batch-confirmed/);
+  assert.match(css,/background:#16a34a/);
 });
 
 test('small-credit purchase detail exposes the existing payment flow when balance is pending',()=>{
