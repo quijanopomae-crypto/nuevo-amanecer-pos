@@ -25,3 +25,10 @@ test('manual remote workflows reject stale or non-active refs', () => {
     assert.match(workflow, /git rev-parse origin\/feature\/v1\.3-mobile-cloud/);
   }
 });
+
+test('Refresh LAB Data publishes the signed baseline to isolated Turso LAB', () => {
+  const workflow = read('.github/workflows/lab-data-refresh.yml');
+  assert.match(workflow, /LAB_WORKER_URL:\s*https:\/\/nuevo-amanecer-sync-lab-turso\.nuevo-amanecer-pos\.workers\.dev/);
+  assert.match(workflow, /Publish signed baseline to Turso LAB/);
+  assert.doesNotMatch(workflow, /LAB_WORKER_URL:\s*https:\/\/nuevo-amanecer-sync-lab\.nuevo-amanecer-pos\.workers\.dev/);
+});
