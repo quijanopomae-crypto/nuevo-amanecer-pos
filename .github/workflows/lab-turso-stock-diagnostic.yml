@@ -1,0 +1,118 @@
+name: LAB Turso Stock Diagnostic
+
+on:
+  push:
+    branches:
+      - lab/turso-stock-diagnostic-v1
+    paths:
+      - ".github/workflows/lab-turso-stock-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Read-only stock timeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TURSO_DATABASE_URL"
+          test -n "$TURSO_AUTH_TOKEN"
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+
+          const db = new TursoD1Adapter({
+            url: process.env.TURSO_DATABASE_URL,
+            authToken: process.env.TURSO_AUTH_TOKEN
+          });
+
+          const active = await db.prepare(
+            "SELECT workspace_id, active_revision, active_baseline_id FROM lab_workspace_control ORDER BY workspace_id"
+          ).all();
+
+          const timeline = await db.prepare(`
+            SELECT
+              r.workspace_id,
+              r.revision,
+              r.reason,
+              r.created_at,
+              json_extract(p.value, '$.id') AS product_id,
+              COALESCE(json_extract(p.value, '$.name'), json_extract(p.value, '$.nombre')) AS product_name,
+              json_extract(p.value, '$.stock') AS stock,
+              json_extract(p.value, '$.controlInventario') AS control_inventario,
+              (
+                SELECT COUNT(*)
+                FROM json_each(r.snapshot_json, '$.data.ventas') v
+                WHERE json_extract(v.value, '$.id') = 'V-001'
+              ) AS sale_v001_count,
+              (
+                SELECT COUNT(*)
+                FROM json_each(r.snapshot_json, '$.data.cajMovs') c
+                WHERE json_extract(c.value, '$.ventaId') = 'V-001'
+              ) AS cash_v001_count,
+              (
+                SELECT COUNT(*)
+                FROM json_each(r.snapshot_json, '$.data.inventoryMovements') m
+                WHERE json_extract(m.value, '$.referenceId') = 'V-001'
+              ) AS inventory_v001_count
+            FROM lab_workspace_revisions r
+            JOIN json_each(r.snapshot_json, '$.data.productos') p
+            WHERE UPPER(COALESCE(json_extract(p.value, '$.name'), json_extract(p.value, '$.nombre'), '')) = 'CUATES X 44 GR'
+            ORDER BY r.workspace_id, r.revision
+          `).all();
+
+          const sale = await db.prepare(`
+            SELECT
+              r.workspace_id,
+              r.revision,
+              json_extract(v.value, '$.id') AS sale_id,
+              json_extract(v.value, '$.total') AS total,
+              json_extract(v.value, '$.items[0].productoId') AS product_id,
+              json_extract(v.value, '$.items[0].stockAntes') AS stock_antes,
+              json_extract(v.value, '$.items[0].qty') AS qty,
+              json_extract(v.value, '$.items[0].unitsPerQty') AS units_per_qty
+            FROM lab_workspace_revisions r
+            JOIN json_each(r.snapshot_json, '$.data.ventas') v
+            WHERE json_extract(v.value, '$.id') = 'V-001'
+            ORDER BY r.workspace_id, r.revision
+          `).all();
+
+          const ledger = await db.prepare(`
+            SELECT
+              r.workspace_id,
+              r.revision,
+              json_extract(m.value, '$.productId') AS product_id,
+              json_extract(m.value, '$.before') AS before_stock,
+              json_extract(m.value, '$.delta') AS delta,
+              json_extract(m.value, '$.after') AS after_stock,
+              json_extract(m.value, '$.referenceId') AS reference_id
+            FROM lab_workspace_revisions r
+            JOIN json_each(r.snapshot_json, '$.data.inventoryMovements') m
+            WHERE json_extract(m.value, '$.referenceId') = 'V-001'
+            ORDER BY r.workspace_id, r.revision
+          `).all();
+
+          console.log('ACTIVE_WORKSPACE');
+          console.log(JSON.stringify(active.results, null, 2));
+          console.log('CUATES_TIMELINE');
+          console.log(JSON.stringify(timeline.results, null, 2));
+          console.log('SALE_V001');
+          console.log(JSON.stringify(sale.results, null, 2));
+          console.log('INVENTORY_LEDGER_V001');
+          console.log(JSON.stringify(ledger.results, null, 2));
+          NODE
