@@ -167,7 +167,8 @@ test('canonical API proxy routes invoke the Worker before static assets', () => 
 
 test('same-origin proxy reaches CANON through a Cloudflare service binding', () => {
   assert.match(router, /env\.CANON_BACKEND/);
-  assert.match(router, /service\.fetch\(proxied\)/);
+  assert.match(router, /service\.fetch\(request\)/);
+  assert.doesNotMatch(router, /new Request\(target\.toString/);
   assert.doesNotMatch(router, /await fetch\(proxied\)/);
 });
 
@@ -186,4 +187,14 @@ test('hosted browser talks to CANON through the same-origin Worker proxy', () =>
 
 test('launcher source does not render a literal newline escape after runtime config', () => {
   assert.doesNotMatch(launcher, /<\/script>\\n\s*<script/);
+});
+
+
+test('hosted proxy forwards the original browser request through the service binding', () => {
+  const start = router.indexOf('async function proxyCanonical');
+  const end = router.indexOf('function runtimeConfig', start);
+  const block = router.slice(start, end);
+  assert.match(block, /service\.fetch\(request\)/);
+  assert.doesNotMatch(block, /new Request\(/);
+  assert.doesNotMatch(block, /headers\.delete\('host'\)/);
 });
