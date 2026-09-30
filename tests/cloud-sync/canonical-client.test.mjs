@@ -167,18 +167,17 @@ test('adapter projects canonical expenses to Gastos and only session expenses to
 });
 
 
-test('payment batch fast path removes redundant waits while retries stay authority-checked',()=>{
+test('payment batch lean path uses one batch transport for one-to-twenty debts and keeps retries authority-checked',()=>{
   const start=source.indexOf('async function createPaymentBatch(inputs)');
   const end=source.indexOf('function createProduct(input)',start);
   assert.ok(start>=0&&end>start,'createPaymentBatch must exist before command wrappers');
   const block=source.slice(start,end);
-  assert.match(block,/inputs\.length === 1/);
-  assert.match(block,/await createPayment\(inputs\[0\]\)/,'one debt must reuse the payment.create fast path');
-  assert.match(block,/await retryPending\(\)/,'uncertain one-debt ACK must replay the same payment');
+  assert.doesNotMatch(block,/inputs\.length === 1/,'one debt must not detour through the heavier generic payment.create endpoint');
+  assert.doesNotMatch(block,/await createPayment\(/,'Cobro múltiple always uses the specialized payment.batch transport');
   assert.match(block,/return withWriterLock\(async function \(\)/);
   assert.match(block,/assertAction\('payment\.create'\)/);
   assert.match(block,/seen\.has\(creditId\)/);
-  assert.match(block,/makeFinancialPayload\('payment\.create', input\)/);
+  assert.match(block,/makeFinancialPayload\('payment\.create', input\)/,'each debt remains a payment.create child');
   assert.match(block,/var CHUNK = 20/);
   assert.match(block,/command: 'payment\.batch'/);
   assert.match(block,/route: '\/commands\/payment\.batch'/);
@@ -186,7 +185,7 @@ test('payment batch fast path removes redundant waits while retries stay authori
   assert.match(block,/durableJournal\(record\)/);
   assert.match(block,/sendPending\(record, true\)/,'new atomically validated batch must skip the redundant status GET');
   assert.match(block,/sendPending\(retryRecord, false\)/,'retry must still verify remote authority');
-  assert.doesNotMatch(block,/route: '\/commands\/payment\.create'/,'multi-payment transport must not POST each debt separately');
+  assert.doesNotMatch(block,/route: '\/commands\/payment\.create'/);
   assert.doesNotMatch(block,/\brefresh\s*\(/,'batch fast path must not perform full replica refreshes between payments');
   assert.match(source,/record\.command === 'payment\.batch'/);
   assert.match(source,/createPaymentBatch:\s*createPaymentBatch/);

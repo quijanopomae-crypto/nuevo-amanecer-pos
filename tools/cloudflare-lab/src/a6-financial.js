@@ -206,23 +206,69 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
   const creditIds = payments.map(payment => payment.credit_id);
   const method = payments[0].payment_method;
 
-  // First-principles latency rule: these reads are independent. Do not pay D1
-  // network latency four times in series before the atomic write. The write
-  // batch below still revalidates credits/cash with CAS, so concurrency here
-  // changes only waiting time, never financial authority.
-  const [hashes, authority, existing, creditsResult, session] = await Promise.all([
+  // Lean read phase: one D1 SELECT returns authority, replay rows, credit
+  // baselines and optional cash session as JSON. This replaces four binding
+  // calls without removing any field used by the existing validation/CAS path.
+  const operationStart = 3;
+  const creditStart = operationStart + operationIds.length;
+  const sessionIndex = creditStart + creditIds.length;
+  const packedSql = `
+    SELECT
+      (SELECT json_object(
+        'mode',c.mode,
+        'active_promotion_id',c.active_promotion_id,
+        'authority_epoch',c.authority_epoch,
+        'revision',c.revision,
+        'minimum_client_contract',c.minimum_client_contract,
+        'role',d.role,
+        'status',d.status,
+        'credential_hash',d.credential_hash
+      ) FROM canonical_control c
+        LEFT JOIN devices d ON d.device_id=?1
+        WHERE c.id=1) AS authority_json,
+      (SELECT COALESCE(json_group_array(json_object(
+        'operation_id',operation_id,
+        'command',command,
+        'request_hash',request_hash,
+        'result_json',result_json
+      )),'[]') FROM canonical_financial_operations
+        WHERE operation_id IN (${inClause(operationIds.length,operationStart)})) AS operations_json,
+      (SELECT COALESCE(json_group_array(json_object(
+        'credit_id',credit_id,
+        'provenance',provenance,
+        'revision',revision,
+        'current_balance_cents',current_balance_cents,
+        'opening_balance_cents',opening_balance_cents
+      )),'[]') FROM canonical_credit_balances
+        WHERE promotion_id=?2
+          AND credit_id IN (${inClause(creditIds.length,creditStart)})) AS credits_json,
+      ${method === 'efectivo'
+        ? `(SELECT json_object(
+            'session_id',session_id,
+            'status',status,
+            'revision',revision,
+            'expected_cents',expected_cents,
+            'closing_watermark',closing_watermark
+          ) FROM canonical_cash_state
+            WHERE promotion_id=?2 AND session_id=?${sessionIndex})`
+        : 'NULL'} AS session_json`;
+
+  const packedBindings = [auth.principalId,body.promotion_id,...operationIds,...creditIds];
+  if (method === 'efectivo') packedBindings.push(payments[0].session_id);
+
+  const [hashes, packed] = await Promise.all([
     Promise.all(payments.map(payment => sha256Hex(stableStringify({command:'payment.create',body:payment})))),
-    db.prepare(`SELECT c.*,d.role,d.status,d.credential_hash FROM canonical_control c
-      LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(auth.principalId).first(),
-    db.prepare(`SELECT operation_id,command,request_hash,result_json FROM canonical_financial_operations
-      WHERE operation_id IN (${inClause(operationIds.length)})`).bind(...operationIds).all(),
-    db.prepare(`SELECT * FROM canonical_credit_balances
-      WHERE promotion_id=?1 AND credit_id IN (${inClause(creditIds.length,2)})`).bind(body.promotion_id,...creditIds).all(),
-    method === 'efectivo'
-      ? db.prepare('SELECT * FROM canonical_cash_state WHERE promotion_id=?1 AND session_id=?2')
-          .bind(body.promotion_id,payments[0].session_id).first()
-      : Promise.resolve(null)
+    db.prepare(packedSql).bind(...packedBindings).first()
   ]);
+
+  function packedJson(value, fallback) {
+    if (value == null) return fallback;
+    try { return JSON.parse(value); } catch { return fallback; }
+  }
+  const authority = packedJson(packed?.authority_json,null);
+  const existingRows = packedJson(packed?.operations_json,[]);
+  const creditRows = packedJson(packed?.credits_json,[]);
+  const session = packedJson(packed?.session_json,null);
 
   if (!authority || authority.mode !== 'ACTIVE') return json({error:'canonical_not_active'},409);
   if (authority.active_promotion_id !== body.promotion_id || authority.authority_epoch !== body.authority_epoch ||
@@ -231,7 +277,6 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
     return json({error:'stale_authority'},409);
   }
 
-  const existingRows = existing?.results || [];
   if (existingRows.length) {
     const byId = new Map(existingRows.map(row => [row.operation_id,row]));
     if (existingRows.length !== payments.length) return json({error:'batch_partial_replay_conflict'},409);
@@ -249,7 +294,6 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
     },200);
   }
 
-  const creditRows = creditsResult?.results || [];
   if (creditRows.length !== payments.length) return json({error:'credit_not_found'},409);
   const creditById = new Map(creditRows.map(row => [row.credit_id,row]));
 
