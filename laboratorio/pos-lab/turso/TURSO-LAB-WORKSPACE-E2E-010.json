@@ -5,6 +5,7 @@
   "target_worker": "nuevo-amanecer-sync-lab-turso",
   "target_database": "TURSO_LAB",
   "data_policy": "SYNTHETIC_TEMPORARY",
-  "requested_at_utc": "2026-09-30T19:30:00Z",
-  "note": "Validate signed baseline import, workspace read/save/replay/conflict/reset and cleanup on Turso before pointing the LAB browser at Turso."
+  "requested_at_utc": "2026-09-30T19:35:00Z",
+  "note": "Retry after confirming LAB_IMPORT_HMAC_SECRET name is bound on isolated Worker and waiting for propagation.",
+  "attempt": 2
 }
