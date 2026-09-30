@@ -820,6 +820,228 @@
     '</div>';
   }
 
+  function labBatchMoneyCents(value) {
+    var amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    var cents = Math.round(amount * 100);
+    return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  }
+
+  function labBatchCreditDate(cr) {
+    var value = String(cr && (cr.fecha || cr.vence) || '').slice(0,10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '9999-12-31';
+  }
+
+  function labBatchAllocationPlan(credits, totalCents) {
+    credits = Array.isArray(credits) ? credits.slice() : [];
+    totalCents = Number(totalCents);
+    var ordered = credits.filter(function (cr) {
+      return cr && !labIsCanceled(cr) && labCreditPending(cr) > 0.001;
+    }).sort(function (a,b) {
+      var dateCompare = labBatchCreditDate(a).localeCompare(labBatchCreditDate(b));
+      return dateCompare || String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    var selectedCents = ordered.reduce(function (sum, cr) {
+      var cents = Math.max(0, Math.round(labCreditPending(cr) * 100));
+      return Number.isSafeInteger(sum + cents) ? sum + cents : Number.MAX_SAFE_INTEGER;
+    }, 0);
+    if (!Number.isSafeInteger(totalCents) || totalCents <= 0) {
+      return { allocations:[], requested_cents:0, selected_cents:selectedCents, unallocated_cents:0, valid:false };
+    }
+    var remaining = totalCents;
+    var allocations = [];
+    ordered.forEach(function (cr) {
+      if (remaining <= 0) return;
+      var pendingCents = Math.max(0, Math.round(labCreditPending(cr) * 100));
+      var amountCents = Math.min(remaining, pendingCents);
+      if (amountCents > 0) {
+        allocations.push({ credit_id:String(cr.id), amount_cents:amountCents });
+        remaining -= amountCents;
+      }
+    });
+    return {
+      allocations:allocations,
+      requested_cents:totalCents,
+      selected_cents:selectedCents,
+      unallocated_cents:Math.max(0, remaining),
+      valid:allocations.length > 0 && remaining === 0
+    };
+  }
+
+  function labBatchRow(cr, rowHtml) {
+    var id = labEsc(String(cr && cr.id || ''));
+    return '<div class="na-v2-batch-row" data-na-batch-credit-id="' + id + '">' +
+      '<label class="na-v2-batch-check-wrap" title="Seleccionar esta deuda">' +
+        '<input type="checkbox" class="na-v2-batch-check" value="' + id + '" onchange="naCanonBatchPaymentChanged()">' +
+        '<span class="na-v2-batch-check-ui" aria-hidden="true">✓</span>' +
+      '</label>' +
+      '<div class="na-v2-batch-row-body">' + rowHtml +
+        '<div class="na-v2-batch-allocation" data-na-batch-allocation="' + id + '" aria-live="polite"></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function labBatchPanelHtml(summary) {
+    if (!summary || !Array.isArray(summary.active) || !summary.active.length) return '';
+    return '<section class="na-v2-batch-pay" aria-label="Cobro múltiple">' +
+      '<div class="na-v2-batch-head"><div><span class="na-v2-eyebrow">Cobro múltiple</span><strong>Paga varias deudas en una sola acción</strong></div>' +
+        '<button type="button" class="na-v2-batch-selectall" id="naV2BatchToggleAllBtn" onclick="naCanonBatchToggleAll()">Seleccionar todo</button></div>' +
+      '<label class="na-v2-batch-amount"><span>Monto total que está abonando</span><input id="naV2BatchAmount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" oninput="naCanonBatchPaymentChanged()"></label>' +
+      '<div class="na-v2-batch-actions"><button type="button" class="na-v2-batch-auto" onclick="naCanonBatchAutoSelect()">Aplicar automáticamente</button></div>' +
+      '<div class="na-v2-batch-method-row"><label><span>Método de pago</span><select id="naV2BatchMethod" onchange="naCanonBatchMethodChanged()">' +
+        '<option value="efectivo">💵 Efectivo</option><option value="yape">📲 Yape / Plin</option><option value="transferencia">🏦 Transferencia</option>' +
+      '</select></label><label id="naV2BatchReferenceWrap" hidden><span>Número de operación</span><input id="naV2BatchReference" maxlength="80" autocomplete="off" placeholder="Ej: 00078257" oninput="naCanonBatchPaymentChanged()"></label></div>' +
+      '<div class="na-v2-batch-summary" id="naV2BatchSummary">Selecciona las deudas que deseas pagar.</div>' +
+      '<button type="button" class="na-v2-batch-submit" id="naV2BatchSubmit" onclick="naCanonSubmitBatchPayment()" disabled>Registrar pago</button>' +
+    '</section>';
+  }
+
+  function labBatchCurrentCredits() {
+    var client = labClientById(labClientScreenState.clientId);
+    if (!client || labClientScreenState.route !== 'category') return [];
+    return labCreditsForCategory(client.id, labClientScreenState.categoryId).filter(function (cr) {
+      return cr && !labIsCanceled(cr) && labCreditPending(cr) > 0.001;
+    });
+  }
+
+  function labBatchSelectedCredits() {
+    var screen = labScreen();
+    if (!screen || !screen.querySelectorAll) return [];
+    var ids = new Set(Array.from(screen.querySelectorAll('.na-v2-batch-check:checked')).map(function (input) {
+      return String(input.value || '');
+    }));
+    return labBatchCurrentCredits().filter(function (cr) { return ids.has(String(cr.id)); });
+  }
+
+  function labBatchUpdatePreview() {
+    var screen = labScreen();
+    if (!screen || !screen.querySelector) return null;
+    var selected = labBatchSelectedCredits();
+    var amountInput = screen.querySelector('#naV2BatchAmount');
+    var amountCents = labBatchMoneyCents(amountInput && amountInput.value);
+    var plan = labBatchAllocationPlan(selected, amountCents);
+    var summary = screen.querySelector('#naV2BatchSummary');
+    var submit = screen.querySelector('#naV2BatchSubmit');
+    var toggle = screen.querySelector('#naV2BatchToggleAllBtn');
+    var method = String(screen.querySelector('#naV2BatchMethod')?.value || 'efectivo');
+    var reference = String(screen.querySelector('#naV2BatchReference')?.value || '').trim();
+    var allChecks = Array.from(screen.querySelectorAll('.na-v2-batch-check'));
+
+    Array.from(screen.querySelectorAll('[data-na-batch-allocation]')).forEach(function (node) { node.textContent = ''; });
+    plan.allocations.forEach(function (allocation) {
+      var node = Array.from(screen.querySelectorAll('[data-na-batch-allocation]')).find(function (candidate) {
+        return String(candidate.getAttribute('data-na-batch-allocation')) === String(allocation.credit_id);
+      });
+      if (node) node.textContent = 'Se aplicará ' + labMoney(allocation.amount_cents / 100);
+    });
+
+    if (toggle) toggle.textContent = allChecks.length && allChecks.every(function (input) { return input.checked; }) ? 'Quitar selección' : 'Seleccionar todo';
+
+    var referenceOk = method === 'efectivo' || reference.length >= 4;
+    if (!selected.length) {
+      if (summary) summary.textContent = 'Selecciona las deudas que deseas pagar.';
+    } else if (!amountCents) {
+      if (summary) summary.textContent = selected.length + (selected.length === 1 ? ' deuda seleccionada · ' : ' deudas seleccionadas · ') +
+        labMoney(plan.selected_cents / 100) + ' pendiente.';
+    } else if (plan.unallocated_cents > 0) {
+      if (summary) summary.textContent = 'El monto supera en ' + labMoney(plan.unallocated_cents / 100) + ' el saldo de las deudas seleccionadas.';
+    } else if (!referenceOk) {
+      if (summary) summary.textContent = 'Ingresa el número de operación para continuar.';
+    } else {
+      var closesAll = amountCents === plan.selected_cents;
+      if (summary) summary.textContent = labMoney(amountCents / 100) + ' se distribuirá en ' + plan.allocations.length +
+        (plan.allocations.length === 1 ? ' deuda.' : ' deudas.') + (closesAll ? ' Las seleccionadas quedarán pagadas.' : '');
+    }
+
+    if (submit) {
+      submit.disabled = !(plan.valid && referenceOk);
+      submit.textContent = plan.valid ? 'Registrar pago ' + labMoney(amountCents / 100) : 'Registrar pago';
+    }
+    return { selected:selected, amount_cents:amountCents, plan:plan, method:method, reference:reference, valid:!!(plan.valid && referenceOk) };
+  }
+
+  root.naCanonBatchPaymentChanged = function () { return labBatchUpdatePreview(); };
+
+  root.naCanonBatchMethodChanged = function () {
+    var screen = labScreen();
+    if (!screen) return;
+    var method = String(screen.querySelector('#naV2BatchMethod')?.value || 'efectivo');
+    var wrap = screen.querySelector('#naV2BatchReferenceWrap');
+    if (wrap) wrap.hidden = method === 'efectivo';
+    labBatchUpdatePreview();
+  };
+
+  root.naCanonBatchToggleAll = function () {
+    var screen = labScreen();
+    if (!screen || !screen.querySelectorAll) return;
+    var checks = Array.from(screen.querySelectorAll('.na-v2-batch-check'));
+    var allSelected = checks.length && checks.every(function (input) { return input.checked; });
+    checks.forEach(function (input) { input.checked = !allSelected; });
+    labBatchUpdatePreview();
+  };
+
+  root.naCanonBatchAutoSelect = function () {
+    var screen = labScreen();
+    if (!screen || !screen.querySelectorAll) return;
+    var amountCents = labBatchMoneyCents(screen.querySelector('#naV2BatchAmount')?.value);
+    if (!amountCents) {
+      if (typeof toast === 'function') toast('Primero ingresa el monto total que está abonando','error');
+      return;
+    }
+    var credits = labBatchCurrentCredits().slice().sort(function (a,b) {
+      var dateCompare = labBatchCreditDate(a).localeCompare(labBatchCreditDate(b));
+      return dateCompare || String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    var needed = amountCents;
+    var selectedIds = new Set();
+    credits.forEach(function (cr) {
+      if (needed <= 0) return;
+      selectedIds.add(String(cr.id));
+      needed -= Math.round(labCreditPending(cr) * 100);
+    });
+    Array.from(screen.querySelectorAll('.na-v2-batch-check')).forEach(function (input) {
+      input.checked = selectedIds.has(String(input.value || ''));
+    });
+    labBatchUpdatePreview();
+  };
+
+  root.naCanonSubmitBatchPayment = async function () {
+    var state = labBatchUpdatePreview();
+    if (!state || !state.valid) {
+      if (typeof toast === 'function') toast('Revisa el monto y las deudas seleccionadas','error');
+      return false;
+    }
+    var bridge = root.NuevoAmanecerCanonicalCreditPaymentBridge;
+    if (!bridge || typeof bridge.confirmBatch !== 'function') {
+      if (typeof toast === 'function') toast('El cobro múltiple CANON no está disponible','error');
+      return false;
+    }
+    var screen = labScreen();
+    var button = screen && screen.querySelector('#naV2BatchSubmit');
+    var label = button && button.textContent || 'Registrar pago';
+    if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
+    try {
+      var result = await bridge.confirmBatch({
+        allocations:state.plan.allocations,
+        payment_method:state.method,
+        reference:state.reference
+      });
+      if (result && (result.ok || result.completed_count > 0)) labRenderRoute('replace');
+      else labBatchUpdatePreview();
+      return !!(result && result.ok);
+    } catch (error) {
+      console.warn('[Nuevo Amanecer] Cobro múltiple no completado.', error && error.message || error);
+      if (typeof toast === 'function') toast('No se pudo completar el cobro múltiple','error');
+      labBatchUpdatePreview();
+      return false;
+    } finally {
+      if (button && button.isConnected !== false) {
+        button.disabled = false;
+        button.textContent = label;
+      }
+    }
+  };
+
   function labPurchaseRow(cr) {
     return '<button type="button" class="na-v2-row na-v2-purchase-row" onclick="naCanonOpenSmallPurchase(\'' + labEsc(String(cr.id)) + '\')">' +
       '<span><strong>' + labEsc(cr.fecha || 'Fecha no registrada') + '</strong><small>' + labEsc(labProductSummary(cr)) + '</small></span>' +
@@ -841,7 +1063,10 @@
 
   function labCategoryHtml(client, category) {
     var summary = labCategorySummary(client, category), visual = labCategoryVisual(category);
-    var rows = category.mode === 'accumulated' ? summary.active.map(labPurchaseRow) : summary.active.map(labCreditRow);
+    var rows = summary.active.map(function (cr) {
+      var row = category.mode === 'accumulated' ? labPurchaseRow(cr) : labCreditRow(cr);
+      return labBatchRow(cr, row);
+    });
     var detail = category.mode === 'accumulated'
       ? summary.purchaseCount + (summary.purchaseCount === 1 ? ' compra' : ' compras')
       : summary.activeCount + (summary.activeCount === 1 ? ' crédito activo' : ' créditos activos');
@@ -850,7 +1075,8 @@
         '<div class="na-v2-category-title"><span class="na-v2-module-icon" aria-hidden="true">' + labEsc(visual.icon) + '</span><div><span class="na-v2-eyebrow">Cuenta</span><h2>' + labEsc(category.name) + '</h2><small>' + labEsc(detail) + '</small></div></div>' +
         '<div class="na-v2-category-balance"><span>Pendiente total</span><strong>' + labMoney(summary.pending) + '</strong></div>' +
       '</header>' +
-      '<section class="na-v2-list na-v2-card-list">' + (rows.length ? rows.join('') : '<div class="na-v2-empty">No hay créditos activos en esta cuenta.</div>') + '</section></div>';
+      labBatchPanelHtml(summary) +
+      '<section class="na-v2-list na-v2-card-list na-v2-batch-list">' + (rows.length ? rows.join('') : '<div class="na-v2-empty">No hay créditos activos en esta cuenta.</div>') + '</section></div>';
   }
 
   function labCleanInstallmentProductName(value) {
@@ -1461,6 +1687,7 @@
     classifyClient:labClassifyClient,
     summarizeClient:labClientFinancialSummary,
     productSummary:labProductSummary,
+    batchAllocationPlan:labBatchAllocationPlan,
     renderSaleDestination:labEnsureSaleDestinationUi,
     renderClientList:naRenderClientList,
     bindClientCards:labBindClientCards,
@@ -1508,7 +1735,9 @@
     naUppercaseClientCards();
     if (labClientScreenState.clientId) {
       var screen=labScreen();
-      if (screen && !screen.hidden) labRenderRoute();
+      var paymentBridge=root.NuevoAmanecerCanonicalCreditPaymentBridge;
+      var batchBusy=!!(paymentBridge && typeof paymentBridge.busy==='function' && paymentBridge.busy());
+      if (screen && !screen.hidden && !batchBusy) labRenderRoute();
     }
   }
 
