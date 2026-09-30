@@ -102,5 +102,24 @@ test('the anti-cover return rate is scoped to Clientes only',()=>{
 
 test('Motion runtime remains visual-only after the Clientes return fix',()=>{
   assert.doesNotMatch(source,/saveAllData|saveAppState|localStorage|sessionStorage|indexedDB|fetch\s*\(|createSale|createPayment/);
-  assert.match(source,/revealRate:0\.5/);
+  assert.match(source,/revealRate:0\.5/);\n  assert.match(source,/resetAtTopPx:2/);
+});
+
+
+test('Clientes fully resets its chrome when the document returns to the top before a new downward gesture',()=>{
+  const h=harness('clientes');
+  h.scrollTo(200);
+  assert.equal(h.controller.inspect().targetOffset,200);
+
+  h.scrollTo(100);
+  assert.equal(h.controller.inspect().targetOffset,150,
+    'the slower reveal is preserved while still away from the top');
+
+  h.scrollTo(0);
+  assert.equal(h.controller.inspect().targetOffset,0,
+    'reaching the top must fully restore the client chrome instead of leaving it half collapsed');
+
+  h.scrollTo(100);
+  assert.equal(h.controller.inspect().targetOffset,100,
+    'the next downward gesture starts from a clean zero state and cannot hide halfway');
 });
