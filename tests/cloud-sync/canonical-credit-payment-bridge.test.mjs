@@ -38,8 +38,18 @@ function harness(options={}){
   let releasePayment;
   let releasePostRefresh;
   let refreshCount=0;
+  let createCount=0;
+  let pending=options.pending ?? null;
   const paymentGate=options.blockPayment ? new Promise(resolve=>{releasePayment=resolve;}) : null;
   const postRefreshGate=options.blockPostRefresh ? new Promise(resolve=>{releasePostRefresh=resolve;}) : null;
+  function applyPayment(payload){
+    if(!options.applyPayments)return;
+    const row=snapshot.credits.find(item=>String(item.credit_id??item.id)===String(payload.credit_id));
+    if(!row)return;
+    const amount=payload.amount_cents/100;
+    row.pagado=Number(row.pagado||0)+amount;
+    row.saldo=Math.max(0,Number(row.saldo||0)-amount);
+  }
   const api={
     enabled(){return options.canonical !== false;},
     sourceState(){return options.currentSnapshot ? {validation:'current'} : {validation:'stale'};},
@@ -47,14 +57,37 @@ function harness(options={}){
     async refresh(){
       refreshCount+=1;
       calls.push(['refresh',refreshCount]);
+      if(options.refreshErrorAt===refreshCount)throw new Error('CANONICAL_REFRESH_FAILED');
       if(postRefreshGate && refreshCount===2) await postRefreshGate;
     },
     legacySnapshot(){calls.push(['snapshot']);return JSON.parse(JSON.stringify(snapshot));},
+    pendingSnapshot(){return pending?JSON.parse(JSON.stringify(pending)):null;},
+    async retryPending(){
+      calls.push(['retryPending']);
+      if(options.retryError)throw new Error(options.retryError);
+      const payload=pending?.payload;
+      if(payload)applyPayment(payload);
+      const receipt={status:'already_processed',operation_id:payload?.operation_id||'OP-REPLAY'};
+      pending=null;
+      return receipt;
+    },
     async createPayment(payload){
+      createCount+=1;
       calls.push(['createPayment',JSON.parse(JSON.stringify(payload))]);
       if(paymentGate) await paymentGate;
-      if(options.createError) throw new Error(options.createError);
-      return {status:'created',operation_id:'OP-1'};
+      if(options.createError || options.createErrorAt===createCount){
+        if(options.pendingOnCreateError){
+          pending={
+            command:'payment.create',
+            invalid:false,
+            payload:{...JSON.parse(JSON.stringify(payload)),operation_id:'OP-PENDING-'+createCount}
+          };
+          if(options.pendingOnCreateError==='rejected')pending.last_error='stale_credit';
+        }
+        throw new Error(options.createError||'CANONICAL_FINANCIAL_PENDING');
+      }
+      applyPayment(payload);
+      return {status:'created',operation_id:'OP-'+createCount};
     }
   };
   const context={
@@ -213,4 +246,123 @@ test('CANON shell loads and precaches credit payment bridge after canonical clie
   const globals=index.indexOf('js/compat/legacy-globals.js');
   assert.ok(client>=0 && bridge>client && globals>bridge);
   assert.match(sw,/\.\/js\/sync\/canonical-credit-payment-bridge\.js/);
+});
+
+
+test('batch cash payment applies selected allocations sequentially with a fresh canonical refresh between them',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    applyPayments:true,
+    snapshot:{
+      credits:[
+        {id:'CR-1',credit_id:'CR-1',monto:60,pagado:0,saldo:60,pagos:[]},
+        {id:'CR-2',credit_id:'CR-2',monto:45,pagado:0,saldo:45,pagos:[]}
+      ],
+      cashState:{abierta:true,sessionId:'CASH-1'}
+    }
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[
+      {credit_id:'CR-1',amount_cents:6000},
+      {credit_id:'CR-2',amount_cents:1000}
+    ],
+    payment_method:'efectivo'
+  });
+  assert.equal(result.ok,true);
+  assert.equal(result.completed_count,2);
+  assert.equal(result.completed_cents,7000);
+  const writes=h.calls.filter(x=>x[0]==='createPayment').map(x=>x[1]);
+  assert.deepEqual(writes,[
+    {credit_id:'CR-1',amount_cents:6000,payment_method:'efectivo',session_id:'CASH-1'},
+    {credit_id:'CR-2',amount_cents:1000,payment_method:'efectivo',session_id:'CASH-1'}
+  ]);
+  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2,'each confirmed allocation refreshes canonical state before continuing/finishing');
+  assert.equal(h.calls.some(x=>x[0]==='closeModal'),false,'batch flow is inline and must not close the single-payment modal');
+  assert.ok(h.calls.some(x=>x[0]==='toast'&&/Cobro múltiple CANON CONFIRMADO/.test(x[1])&&x[2]==='success'));
+});
+
+test('batch digital payment keeps one real external reference across all selected allocations',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    applyPayments:true,
+    snapshot:{
+      credits:[
+        {id:'CR-1',credit_id:'CR-1',monto:20,pagado:0,saldo:20,pagos:[]},
+        {id:'CR-2',credit_id:'CR-2',monto:20,pagado:0,saldo:20,pagos:[]}
+      ],
+      cashState:{abierta:true,sessionId:'CASH-1'}
+    }
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[
+      {credit_id:'CR-1',amount_cents:500},
+      {credit_id:'CR-2',amount_cents:700}
+    ],
+    payment_method:'yape',
+    reference:' YP-9001 '
+  });
+  assert.equal(result.ok,true);
+  const writes=h.calls.filter(x=>x[0]==='createPayment').map(x=>x[1]);
+  assert.equal(writes.length,2);
+  assert.ok(writes.every(x=>x.reference==='YP-9001'));
+  assert.ok(writes.every(x=>!('session_id' in x)));
+});
+
+test('batch stops after the first rejected later allocation and never recreates already confirmed payments',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    applyPayments:true,
+    createErrorAt:2,
+    pendingOnCreateError:'rejected',
+    snapshot:{
+      credits:[
+        {id:'CR-1',credit_id:'CR-1',monto:10,pagado:0,saldo:10,pagos:[]},
+        {id:'CR-2',credit_id:'CR-2',monto:10,pagado:0,saldo:10,pagos:[]},
+        {id:'CR-3',credit_id:'CR-3',monto:10,pagado:0,saldo:10,pagos:[]}
+      ],
+      cashState:{abierta:true,sessionId:'CASH-1'}
+    }
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[
+      {credit_id:'CR-1',amount_cents:1000},
+      {credit_id:'CR-2',amount_cents:1000},
+      {credit_id:'CR-3',amount_cents:1000}
+    ],
+    payment_method:'efectivo'
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.partial,true);
+  assert.equal(result.completed_count,1);
+  assert.equal(result.completed_cents,1000);
+  assert.equal(result.remaining_cents,2000);
+  assert.equal(h.calls.filter(x=>x[0]==='createPayment').length,2,'third credit must not be touched after rejection');
+  assert.ok(h.calls.some(x=>x[0]==='toast'&&/S\/ 10\.00 ya quedó CONFIRMADO/.test(x[1])&&/NO repitas/.test(x[1])));
+});
+
+test('batch resolves one lost ACK by replaying the same pending operation before continuing',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    applyPayments:true,
+    createErrorAt:1,
+    pendingOnCreateError:'uncertain',
+    snapshot:{
+      credits:[
+        {id:'CR-1',credit_id:'CR-1',monto:10,pagado:0,saldo:10,pagos:[]},
+        {id:'CR-2',credit_id:'CR-2',monto:10,pagado:0,saldo:10,pagos:[]}
+      ],
+      cashState:{abierta:true,sessionId:'CASH-1'}
+    }
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[
+      {credit_id:'CR-1',amount_cents:500},
+      {credit_id:'CR-2',amount_cents:500}
+    ],
+    payment_method:'efectivo'
+  });
+  assert.equal(result.ok,true);
+  assert.equal(h.calls.filter(x=>x[0]==='retryPending').length,1,'only one replay of the same operation is allowed');
+  assert.equal(h.calls.filter(x=>x[0]==='createPayment').length,2,'second createPayment belongs only to the second credit');
+  assert.equal(result.completed_count,2);
 });

@@ -1,0 +1,83 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-BATCH-CREDIT-PAYMENTS-001",
+  "base_ref": "759e3189f588ea0a7b72d7c8afe8a30415510af8",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Cobrar varias deudas de la misma cuenta desde una sola interacción, con selección múltiple, monto total y distribución automática, sin crear una segunda autoridad financiera.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "docs/V1.3_STATUS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/css/client-credit-accounts-v2.css",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "POS/js/sync/canonical-client.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+      "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs"
+    ],
+    "WRITES": [
+      "Selector múltiple y panel de cobro en la vista de categoría del cliente",
+      "Distribución UI oldest-first del monto entre las deudas seleccionadas",
+      "Orquestación secuencial de payment.create ya existente para cada asignación",
+      "Regresiones de UI, idempotencia y parada ante fallo parcial"
+    ],
+    "DOM_AFFECTED": [
+      "#pageClientes .na-v2-category-head",
+      "#pageClientes .na-v2-list",
+      ".na-v2-batch-pay",
+      ".na-v2-batch-check",
+      ".na-v2-batch-submit"
+    ],
+    "STATE_AFFECTED": [
+      "Selección y preview de asignaciones solo en memoria/DOM",
+      "Los saldos reales cambian únicamente por receipts CANON payment.create"
+    ],
+    "STORAGE_AFFECTED": [
+      "No se añade storage nuevo",
+      "Se reutiliza el journal PENDING/CONFIRMED del canonical-client por cada payment.create"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No second payment ledger",
+      "No local creditos[] mutation",
+      "No local cajMovs[] mutation",
+      "No D1 schema changes",
+      "Existing single-payment flow remains unchanged",
+      "Cash requires an open canonical cash session",
+      "Digital payments preserve operation-reference validation",
+      "Batch stops instead of duplicating a payment when outcome is uncertain"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes inicia el lote",
+      "canonical-credit-payment-bridge coordina",
+      "canonical-client conserva idempotencia y journal",
+      "Worker/D1 sigue recibiendo payment.create individual",
+      "Caja solo refleja los mismos payment.create confirmados"
+    ],
+    "RISKS": [
+      "Un lote multi-crédito no es una sola transacción D1; puede quedar parcialmente aplicado si falla una asignación posterior",
+      "Un ACK perdido debe reintentarse con el mismo operation_id antes de continuar",
+      "El refresh entre asignaciones es obligatorio para obtener la revisión actual del siguiente crédito",
+      "Una referencia digital representa el pago externo completo y se reutiliza deliberadamente dentro del mismo lote, pero se valida como no usada antes de iniciar"
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no existe migración ni cambio de schema."
+    ],
+    "TEST_PLAN": [
+      "Selección individual y Seleccionar todo",
+      "Distribución automática oldest-first y límite por saldo",
+      "Lote efectivo de dos créditos con refresh entre comandos",
+      "Lote digital con una referencia externa común al lote",
+      "Parada tras fallo parcial sin crear comandos adicionales",
+      "ACK perdido: un único retryPending de la misma operación",
+      "Regresión del flujo individual existente",
+      "CANON Critical CI"
+    ]
+  }
+}
