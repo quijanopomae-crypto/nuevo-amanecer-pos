@@ -1,0 +1,59 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-PAYMENT-SUBSECOND-BACKEND-001",
+  "base_ref": "1df827f6ba1824c675cbca08ea6e76b50bc2bdd9",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT","GitHub connector","OpenCode"],
+  "analysis": {
+    "READS": [
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tests/cloud-sync/canonical-payment-batch-backend.test.mjs",
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "laboratorio/pos-lab/skill-preflight.mjs"
+    ],
+    "WRITES": [
+      "Ejecutar en paralelo las consultas independientes de autoridad, replay, créditos y caja antes de construir la db.batch de escritura.",
+      "Mantener exactamente las mismas validaciones y respuestas HTTP."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún cambio de estado lógico; solo scheduling de lecturas D1 previas al commit."
+    ],
+    "STORAGE_AFFECTED": [
+      "Mismas tablas y sentencias existentes; sin migraciones ni nuevas claves."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Cada hijo sigue siendo payment.create.",
+      "stale_authority, stale_credit y stale_session conservan comportamiento.",
+      "El commit sigue siendo una sola db.batch atómica.",
+      "Replay idempotente conserva los mismos operation_id."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Créditos y Caja no cambian semántica.",
+      "Solo se reduce tiempo de espera del Worker antes de la transacción."
+    ],
+    "RISKS": [
+      "Las lecturas paralelas representan el mismo instante aproximado pero siguen protegidas por CAS dentro de la db.batch.",
+      "Una lectura puede completar antes que otra; ningún resultado se publica hasta validar todas."
+    ],
+    "ROLLBACK": [
+      "Revertir a awaits secuenciales; sin rollback de datos."
+    ],
+    "TESTS": [
+      "Tests funcionales existentes de atomicidad, stale child, replay y caja.",
+      "Regresión estática que exige Promise.all para prelecturas independientes.",
+      "CANON Critical CI y LAB Canon Mirror CI."
+    ]
+  },
+  "skills": {
+    "impact-analysis": {"path":".agents/skills/impact-analysis/SKILL.md","git_blob_sha":"f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path":".agents/skills/cross-module-impact/SKILL.md","git_blob_sha":"bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path":".agents/skills/lab-scope-guard/SKILL.md","git_blob_sha":"d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-feature-edit": {"path":".agents/skills/lab-feature-edit/SKILL.md","git_blob_sha":"33575c01e450315a50247395b17e23f2cd1a7526"},
+    "credits-integrity": {"path":".agents/skills/credits-integrity/SKILL.md","git_blob_sha":"91324e72831aded8c703e6dac009654212ff041f"},
+    "cash-integrity": {"path":".agents/skills/cash-integrity/SKILL.md","git_blob_sha":"5e061eab47a75b12aa068474831a1dd5b3ecda28"}
+  }
+}
