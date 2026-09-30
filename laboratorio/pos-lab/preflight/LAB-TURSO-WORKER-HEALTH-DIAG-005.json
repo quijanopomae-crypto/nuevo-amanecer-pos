@@ -1,0 +1,67 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-WORKER-HEALTH-DIAG-005",
+  "base_ref": "060886ad92f5b433c915c01b4416f4690e9cfdb3",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Endpoint público /health del Worker aislado nuevo-amanecer-sync-lab-turso",
+      "Turso directo mediante Repository Secrets para comparar disponibilidad"
+    ],
+    "WRITES": [
+      "Solo workflow/trigger diagnóstico; ninguna escritura remota"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún estado de producto; solo evidencia diagnóstica"
+    ],
+    "STORAGE_AFFECTED": [
+      "Sin escrituras en Turso, D1 ni CANON"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No imprimir secretos ni URLs secretas",
+      "No cambiar Worker, POS o base de datos",
+      "Comparar Worker /health con un SELECT 1 directo a Turso"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ninguno funcional; diagnóstico de infraestructura LAB"
+    ],
+    "RISKS": [
+      "Respuesta /health puede ser genérica y no identificar causa exacta",
+      "La red del runner puede diferir de la red del Worker"
+    ],
+    "ROLLBACK": [
+      "Cerrar o revertir el PR; no hay cambios de runtime ni datos"
+    ],
+    "TESTS": [
+      "Registrar status/body seguro de /health",
+      "Registrar status de HEAD/GET al Worker",
+      "Ejecutar SELECT 1 directo a Turso para control"
+    ]
+  }
+}

@@ -1,0 +1,107 @@
+name: Turso LAB Worker Health Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-HEALTH-DIAG-005.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: turso-lab-worker-health-diag
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      WORKER_URL: https://nuevo-amanecer-sync-lab-turso.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Diagnose public Worker health safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          (async () => {
+            const worker = String(process.env.WORKER_URL || '').replace(/\/+$/, '');
+            const rawUrl = String(process.env.TURSO_DATABASE_URL || '').trim();
+            const token = String(process.env.TURSO_AUTH_TOKEN || '').trim();
+
+            async function safeFetch(url, options) {
+              try {
+                const response = await fetch(url, options);
+                const text = await response.text();
+                let body = null;
+                try { body = JSON.parse(text); } catch {}
+                return {response, text, body};
+              } catch (error) {
+                return {error:String(error?.message || error)};
+              }
+            }
+
+            const root = await safeFetch(worker + '/', {redirect:'manual'});
+            if (root.error) console.log('WORKER_ROOT_FETCH_ERROR=' + root.error);
+            else console.log('WORKER_ROOT_HTTP=' + root.response.status);
+
+            const health = await safeFetch(worker + '/health', {
+              headers:{'cache-control':'no-cache'}
+            });
+            if (health.error) {
+              console.log('WORKER_HEALTH_FETCH_ERROR=' + health.error);
+            } else {
+              console.log('WORKER_HEALTH_HTTP=' + health.response.status);
+              const body = health.body;
+              if (body && typeof body === 'object') {
+                const safe = {};
+                for (const key of ['ok','error','environment','d1','service']) {
+                  if (body[key] !== undefined) safe[key] = body[key];
+                }
+                console.log('WORKER_HEALTH_BODY=' + JSON.stringify(safe));
+              } else {
+                console.log('WORKER_HEALTH_BODY_NON_JSON=' + String(health.text || '').slice(0,160).replace(/\s+/g,' '));
+              }
+            }
+
+            const endpoint = (rawUrl.startsWith('libsql://')
+              ? 'https://' + rawUrl.slice('libsql://'.length)
+              : rawUrl).replace(/\/+$/, '') + '/v3/pipeline';
+            const direct = await safeFetch(endpoint, {
+              method:'POST',
+              headers:{
+                authorization:'Bearer ' + token,
+                'content-type':'application/json'
+              },
+              body:JSON.stringify({
+                baton:null,
+                requests:[
+                  {type:'execute',stmt:{sql:'SELECT 1 AS ok',args:[],want_rows:true}},
+                  {type:'close'}
+                ]
+              })
+            });
+            if (direct.error) {
+              console.log('TURSO_DIRECT_FETCH_ERROR=' + direct.error);
+              process.exitCode = 1;
+              return;
+            }
+            console.log('TURSO_DIRECT_HTTP=' + direct.response.status);
+            const item = direct.body?.results?.[0];
+            const value = item?.response?.result?.rows?.[0]?.[0];
+            const directPass = direct.response.ok && item?.type === 'ok' &&
+              item?.response?.type === 'execute' &&
+              value?.type === 'integer' && value.value === '1';
+            console.log('TURSO_DIRECT_SQL=' + (directPass ? 'PASS' : 'FAIL'));
+
+            if (!directPass) process.exitCode = 1;
+          })().catch(error => {
+            console.error('DIAG_ERROR=' + String(error?.message || error));
+            process.exitCode = 1;
+          });
+          NODE
