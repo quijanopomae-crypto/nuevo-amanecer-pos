@@ -1,0 +1,29 @@
+name: Turso PROD Auth Diagnostic
+
+on:
+  push:
+    branches:
+      - diag/turso-prod-auth-v1
+    paths:
+      - "tools/cloudflare-prod/scripts/turso-auth-diagnostic.mjs"
+      - ".github/workflows/turso-prod-auth-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+      - name: Diagnose candidate auth batch
+        run: node tools/cloudflare-prod/scripts/turso-auth-diagnostic.mjs
