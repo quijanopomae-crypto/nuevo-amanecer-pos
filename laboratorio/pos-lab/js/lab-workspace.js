@@ -2,7 +2,8 @@
   'use strict';
   if (!window.__NA_LAB__) return;
 
-  var DEFAULT_ENDPOINT = 'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev';
+  var LEGACY_D1_ENDPOINT = 'https://nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev';
+  var DEFAULT_ENDPOINT = 'https://nuevo-amanecer-sync-lab-turso.nuevo-amanecer-pos.workers.dev';
   var LOCAL_KEY = 'na_lab_workspace_auth_v2';
   var LEGACY_LOCAL_KEY = 'na_lab_workspace_credentials_v1';
   var LEGACY_SESSION_KEY = 'na_lab_workspace_credentials_session_v1';
@@ -43,6 +44,26 @@
       localStorage.removeItem(LEGACY_LOCAL_KEY);
       sessionStorage.removeItem(LEGACY_SESSION_KEY);
     } catch {}
+
+    if (persistent) {
+      var endpoint = String(persistent.endpoint || '').replace(/\/+$/, '');
+      if (endpoint === LEGACY_D1_ENDPOINT) {
+        // Cambiar de backend invalida credenciales y operaciones pendientes:
+        // una sesión/revisión emitida por D1 no debe reutilizarse contra Turso.
+        var migrated = {
+          endpoint: DEFAULT_ENDPOINT,
+          readToken: '',
+          sessionToken: ''
+        };
+        try {
+          localStorage.setItem(LOCAL_KEY, JSON.stringify(migrated));
+          localStorage.removeItem(PENDING_KEY);
+          sessionStorage.removeItem(CONFLICT_NOTICE_KEY);
+        } catch {}
+        return migrated;
+      }
+    }
+
     return persistent || {
       endpoint: DEFAULT_ENDPOINT,
       readToken: '',
