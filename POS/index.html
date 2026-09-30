@@ -1014,9 +1014,11 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       }
 
       if (registration.waiting) markVersionPending();
-      registration.addEventListener('updatefound', function () {
-        if (registration.installing) markVersionPending();
-      });
+      if (typeof registration.addEventListener === 'function') {
+        registration.addEventListener('updatefound', function () {
+          if (registration.installing) markVersionPending();
+        });
+      }
 
       return registration.update().catch(function () {});
     }).catch(function (error) {
