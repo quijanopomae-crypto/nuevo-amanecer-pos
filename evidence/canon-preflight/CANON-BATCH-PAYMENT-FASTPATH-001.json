@@ -1,0 +1,84 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-BATCH-PAYMENT-FASTPATH-001",
+  "base_ref": "b3dced654a892a624debce32ebb155ec4a04657b",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura real muestra un cobro múltiple de S/ 40.00 distribuido en 4 deudas detenido visualmente en Procesando....",
+    "confirmBatch actualmente ejecuta createPayment y luego refreshCanonical dentro del loop por cada deuda.",
+    "refreshCanonical realiza un refresh completo del snapshot CANON, que a su vez consulta status, rutas core y rutas financieras; repetirlo N veces domina la latencia.",
+    "payment.create ya omite el GET /read/canonical/status para comandos nuevos y el Worker valida authority_epoch, expected_control_revision y expected_credit_revision atómicamente.",
+    "Las asignaciones del lote usan créditos distintos; sus revisiones iniciales permanecen válidas mientras se procesa otro crédito.",
+    "El journal CANON admite una operación PENDING/CONFIRMED por vez y Web Locks garantiza escritor único."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Mantener la seguridad actual pero convertir N refresh completos intermedios en cero, dejando un único refresh de reconciliación al final.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "docs/CANON_BATCH_CREDIT_PAYMENTS.md"
+    ],
+    "WRITES": [
+      "Añadir createPaymentBatch en canonical-client para procesar varias payment.create bajo un único writer lock.",
+      "Reutilizar makeFinancialPayload, validPayload, durableJournal y sendPending existentes; no crear un segundo protocolo financiero.",
+      "Reintentar una sola vez el mismo PENDING en ACK incierto dentro del lote.",
+      "Cambiar confirmBatch para usar el fast path y reconciliar CANON una sola vez en background.",
+      "Añadir pruebas de ausencia de refresh intermedio, bloqueo de escritor, fallo parcial y replay idempotente."
+    ],
+    "DOM_AFFECTED": [
+      "#naV2BatchSubmit solo cambia menos tiempo de estado Procesando..."
+    ],
+    "STATE_AFFECTED": [
+      "Journal CANON existente: secuencia PENDING/CONFIRMED por cada asignación",
+      "ready/replicaState quedan stale tras writes y se reconcilian una vez al terminar"
+    ],
+    "STORAGE_AFFECTED": [
+      "No nuevas claves; se reutiliza el journal CANON existente"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Cada pago confirmado conserva operation_id propio",
+      "No se confirma visualmente antes del receipt durable",
+      "No hay escrituras legacy",
+      "No hay mutación directa de saldos/caja en frontend",
+      "Worker sigue siendo autoridad para stale_credit y sesión de caja",
+      "No se permite otro writer durante el lote"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes dispara el lote",
+      "canonical-credit-payment-bridge valida selección y UX",
+      "canonical-client serializa y persiste cada payment.create",
+      "Worker/D1 no cambia",
+      "Caja recibe exactamente los mismos eventos PAYMENT que antes",
+      "Una actualización CANON posterior refresca Clientes y Caja"
+    ],
+    "ROOT_CAUSE": "El cuello de botella no es el POST payment.create sino el refresh completo ejecutado después de cada deuda. Un lote de 4 deudas puede disparar cuatro reconciliaciones completas además de cuatro POST, multiplicando las lecturas de red innecesariamente.",
+    "RISKS": [
+      "Continuar sin refresh con el mismo crédito sería inseguro por revisión stale; la UI/bridge ya prohíbe credit_id duplicados y el cliente fast path vuelve a validarlo.",
+      "Un cambio remoto de autoridad entre asignaciones debe ser rechazado por Worker; sendPending conserva esa validación backend.",
+      "ACK perdido no puede convertirse en un nuevo pago; se reenvía exactamente el mismo journal record una sola vez.",
+      "La UI no debe depender de replica fresca antes del final; se mantiene el receipt como única señal de confirmación."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; volverá el loop seguro pero lento con refresh por deuda."
+    ],
+    "TEST_PLAN": [
+      "4 pagos -> 4 POST payment.create, 0 refresh dentro del fast path, 1 reconciliación background desde bridge",
+      "writer lock único para todo el batch",
+      "ACK perdido -> replay misma operation_id y continuación",
+      "rechazo en item 2 -> item 1 confirmado, item 3 no enviado",
+      "crédito duplicado -> rechazo antes de escribir",
+      "regresión pago individual intacta",
+      "CANON Critical CI y E2E Smoke CI"
+    ]
+  }
+}
