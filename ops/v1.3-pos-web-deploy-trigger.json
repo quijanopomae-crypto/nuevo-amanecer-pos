@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy hosted POS same-origin CANON proxy to eliminate false connection failures on mobile browsers.",
-  "retry_attempt": 47,
-  "retry_reason": "PR #267 merged at 59c9b0caa611298af851c469a81507c9a8b72a80 after CANON Critical CI #333 PASS. Publish same-origin CANON routing and remote /health verification.",
-  "requested_at_utc": "2026-09-30T14:21:04Z",
-  "target_head": "59c9b0caa611298af851c469a81507c9a8b72a80"
+  "note": "Redeploy hosted POS same-origin CANON proxy with Worker-first API route patterns.",
+  "retry_attempt": 48,
+  "retry_reason": "PR #269 merged at ce9ae595172a3ec3b1ce8d6348a40e43bbc59366 after CANON Critical CI #340 PASS. Previous deploy #47 exposed api_proxy=404 because Static Assets bypassed the Worker on API routes.",
+  "requested_at_utc": "2026-09-30T14:26:22Z",
+  "target_head": "ce9ae595172a3ec3b1ce8d6348a40e43bbc59366"
 }
