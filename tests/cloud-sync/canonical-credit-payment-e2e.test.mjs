@@ -24,22 +24,23 @@ async function openCash(tab) {
   await tab.api.refresh();
 }
 
-test('one-debt cobro múltiple uses payment.create fast path with no status GET before durable receipt', async (t) => {
+test('one-debt cobro múltiple uses the specialized batch endpoint but persists one payment.create child', async (t) => {
   const f = await activeCanon(t);
   const tab = await device(f, { token:'device-a-token', deviceId:'device-a', scripts });
   const before = tab.fetchLog.length;
   const result = await tab.api.createPaymentBatch([
-    { credit_id:CREDIT, amount_cents:100, payment_method:'yape', reference:'ONE-DEBT-FAST-1' }
+    { credit_id:CREDIT, amount_cents:100, payment_method:'yape', reference:'ONE-DEBT-LEAN-1' }
   ]);
   assert.equal(result.ok,true);
   assert.equal(result.receipts.length,1);
-  assert.equal(result.single_fast_path,true);
+  assert.equal(result.receipts[0].command,'payment.create');
   assert.deepEqual(
     tab.fetchLog.slice(before).map(row => row.method + ' ' + new URL(row.url).pathname),
-    ['POST /commands/payment.create'],
-    'one selected debt must not pay status+batch overhead'
+    ['POST /commands/payment.batch'],
+    'one selected debt must use the same lean transport as larger multi-payments'
   );
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,1);
+  assert.equal(f.sql("SELECT command FROM canonical_financial_operations LIMIT 1").command,'payment.create');
   assert.equal(f.sql("SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?",CREDIT).b,600);
 });
 
