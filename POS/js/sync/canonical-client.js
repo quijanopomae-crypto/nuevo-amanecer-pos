@@ -886,35 +886,6 @@
   async function createPaymentBatch(inputs) {
     if (!Array.isArray(inputs) || !inputs.length || inputs.length > 60) fail('INVALID_CANONICAL_PAYMENT_BATCH');
 
-    // A one-debt "batch" has no batching work to do. Reuse the proven
-    // payment.create fast path: one POST, no redundant status GET on the first
-    // attempt, and an authority-checked replay only if the ACK is uncertain.
-    if (inputs.length === 1) {
-      try {
-        var singleReceipt = await createPayment(inputs[0]);
-        return { ok:true, receipts:[singleReceipt], single_fast_path:true };
-      } catch (singleError) {
-        var singlePending = journal();
-        if (singlePending && singlePending.state === 'PENDING' && singlePending.command === 'payment.create' && !singlePending.last_error) {
-          try {
-            var replayReceipt = await retryPending();
-            return { ok:true, receipts:[replayReceipt], single_fast_path:true, replayed:true };
-          } catch (singleRetryError) {
-            return {
-              ok:false, pending_unresolved:true, rejected:false, failed_index:0,
-              error:String(singleRetryError && singleRetryError.message || singleRetryError || 'CANONICAL_FINANCIAL_PENDING'),
-              receipts:[]
-            };
-          }
-        }
-        return {
-          ok:false, pending_unresolved:false, rejected:true, failed_index:0,
-          error:String(singleError && singleError.message || singleError || 'CANONICAL_FINANCIAL_REJECTED'),
-          receipts:[]
-        };
-      }
-    }
-
     return withWriterLock(async function () {
       var existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
