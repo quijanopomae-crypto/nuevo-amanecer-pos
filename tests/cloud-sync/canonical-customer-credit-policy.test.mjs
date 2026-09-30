@@ -56,6 +56,27 @@ async function policyTab(f,options={}){
   return device(f,opts);
 }
 
+test('line expansion confirms without waiting for full history on a validated view', async t => {
+  const f=await activeCanon(t,{migrations:MIGRATIONS});
+  const gate=deferred(); let block=false;
+  const tab=await policyTab(f,{async onFetch(url){ if(block && url.includes('/read/')) await gate.promise; return null; }});
+  const id=tab.api.snapshot().customers[0].customer_id;
+  const start=tab.fetchLog.length;
+  block=true;
+  let timer;
+  try {
+    const committed=tab.context.NuevoAmanecerCanonicalCustomerCreditPolicyBridge.saveManual({customer_id:id,
+      manual_limit_cents:5000000,reason:'Ampliación rápida autorizada',administrator_name:'Administrador'});
+    const outcome=await Promise.race([committed,new Promise(resolve=>{timer=setTimeout(()=>resolve('history-blocked'),1500);})]);
+    assert.equal(outcome,true);
+    assert.equal(tab.fetchLog[start].method,'POST');
+    assert.equal(tab.api.legacySnapshot().customers.find(c=>String(c.id)===String(id)).lineaCreditoManual,50000);
+    assert.equal(await tab.context.NuevoAmanecerCanonicalCustomerCreditPolicyBridge.saveManual({customer_id:id,
+      manual_limit_cents:6000000,reason:'Segunda ampliación autorizada',administrator_name:'Administrador'}),true);
+    assert.equal(tab.api.legacySnapshot().customers.find(c=>String(c.id)===String(id)).lineaCreditoManual,60000);
+  } finally { clearTimeout(timer); gate.resolve(); }
+});
+
 test('0018 defines immutable journal + CAS current policy tied to customer registry',()=>{
   for(const marker of [
     'canonical_customer_credit_policy_operations',
@@ -144,6 +165,9 @@ test('manual line can rise from S/ 500 to S/ 5000 and fall to S/ 3000; receipt u
 
   assert.equal(await setLine(500,'Aprobación inicial de línea'),true);
   assert.equal(tab.api.legacySnapshot().customers.find(c=>String(c.id)===String(id)).lineaCreditoManual,500);
+
+  // Finish the first background read before deliberately blocking the next.
+  await tab.api.refresh();
 
   holdNextReconciliation=true;
   const growing=setLine(5000,'Ampliación aprobada de línea');
