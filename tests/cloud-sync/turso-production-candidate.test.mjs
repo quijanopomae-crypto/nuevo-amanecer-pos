@@ -50,7 +50,7 @@ test('candidate seeder fails closed on non-empty target and verifies full table 
   assert.match(seeder, /CONTENT_PARITY=PASS/);
   assert.match(seeder, /SCHEMA_PARITY=PASS/);
   assert.match(seeder, /--verify-existing/);
-  assert.match(seeder, /format\(value, "\.15g"\)/);
+  assert.match(seeder, /format\(value, "\.17g"\)/);
 });
 
 test('candidate workflow keeps active production endpoints unchanged', () => {
@@ -71,4 +71,12 @@ test('checkout must precede one-shot trigger validation on push runs', () => {
 test('workflow can verify a populated candidate without reseeding', () => {
   assert.match(workflow, /verify_existing_candidate/);
   assert.match(workflow, /--verify-existing/);
+});
+
+
+test('candidate parity keeps strict digest and permits only sub-ULP float-to-float fallback', () => {
+  assert.match(seeder, /semantic_table_equal/);
+  assert.match(seeder, /isinstance\(local_value, float\) and isinstance\(remote_value, float\)/);
+  assert.match(seeder, /rel_tol=2e-16/);
+  assert.match(seeder, /abs_tol=0\.0/);
 });
