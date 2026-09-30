@@ -189,6 +189,17 @@ test('category view exposes select-all, automatic allocation and one final batch
   assert.match(css,/@media\(max-width:430px\)[\s\S]*\.na-v2-batch-method-row\{grid-template-columns:1fr\}/);
 });
 
+test('batch submit has an in-flight guard and preview cannot re-enable it while processing',()=>{
+  const submit=source.slice(source.indexOf('root.naCanonSubmitBatchPayment = async function'),source.indexOf('function labPurchaseRow'));
+  const preview=source.slice(source.indexOf('function labBatchUpdatePreview'),source.indexOf('root.naCanonBatchPaymentChanged'));
+  assert.match(source,/var labBatchSubmitInFlight = false;/);
+  assert.match(submit,/if \(labBatchSubmitInFlight\) return false;/);
+  assert.match(submit,/labBatchSubmitInFlight = true;/);
+  assert.match(submit,/finally \{\s*labBatchSubmitInFlight = false;\s*labBatchUpdatePreview\(\);\s*\}/);
+  assert.match(preview,/submit\.disabled = labBatchSubmitInFlight \|\| !\(plan\.valid && referenceOk\)/);
+  assert.match(preview,/labBatchSubmitInFlight\s*\? 'Procesando…'/);
+});
+
 test('small-credit purchase detail exposes the existing payment flow when balance is pending',()=>{
   const purchase=source.slice(source.indexOf('function labPurchaseHtml'),source.indexOf('function labPendingInstallmentsHtml'));
   assert.match(purchase,/labCreditPending\(cr\) > 0\.001/);
