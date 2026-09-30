@@ -1,0 +1,71 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-PAYMENT-BATCH-SINGLE-ROUNDTRIP-001",
+  "base_ref": "6cfa0e7a1a579b5703d91070826b8e232af6d872",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "Prueba física Android: 14 deudas seleccionadas, S/ 88.60, botón Procesando durante aproximadamente 30 segundos.",
+    "El fast path actual eliminó refresh completos entre deudas, pero createPaymentBatch conserva un for secuencial que ejecuta await sendPending(record,true) una vez por deuda.",
+    "Por tanto 14 deudas todavía generan 14 POST /commands/payment.create secuenciales antes de liberar la UI.",
+    "El Worker ya usa una transacción D1 db.batch por payment.create y el esquema financiero admite múltiples operaciones payment.create distintas sin cambios de schema.",
+    "canonical_credit_balances deriva revisión por COUNT de eventos; créditos seleccionados son distintos, por lo que las revisiones iniciales pueden validarse juntas.",
+    "canonical_assertions CHECK(ok=1) permite abortar una db.batch completa cuando una condición CAS no se cumple."
+  ],
+  "first_principles": {
+    "QUESTION_REQUIREMENT": "El requisito real es cobrar varias deudas en una sola acción; no existe requisito comercial de hacer un viaje HTTP por deuda.",
+    "DELETE": "Eliminar N-1 round-trips HTTP y N journals intermedios del navegador.",
+    "SIMPLIFY": "Un endpoint de transporte payment.batch empaqueta varios intents payment.create; el ledger sigue almacenando solo payment.create.",
+    "ACCELERATE": "Una sola petición, una sola autorización Worker y una sola db.batch atómica.",
+    "AUTOMATE": "La reconciliación completa sigue ejecutándose una sola vez en background tras el receipt."
+  },
+  "analysis": {
+    "ROOT_CAUSE": "El cuello de botella dominante restante es serialización de red: createPaymentBatch espera la respuesta de payment.create de cada deuda antes de enviar la siguiente. Con 14 deudas, la latencia del Worker/red se multiplica aproximadamente por 14.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "docs/CANON_BATCH_CREDIT_PAYMENTS.md",
+      "docs/CANON_CREDIT_PAYMENT_BRIDGE.md",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "tools/cloudflare-lab/src/worker.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "infra/database/migrations/0006_canonical_promotion.sql",
+      "infra/database/migrations/0008_canonical_commerce.sql",
+      "infra/database/migrations/0009_canonical_financial.sql",
+      "infra/database/migrations/0011_canonical_session_runtime.sql",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs"
+    ],
+    "WRITES": [
+      "Agregar endpoint HTTP /commands/payment.batch como transporte, sin nuevo command en el schema D1.",
+      "Cada hijo conserva payload payment.create completo, operation_id propio, request_hash propio y receipt propio.",
+      "Validar todos los hijos, autoridad, revisiones de créditos y caja antes/dentro de una sola db.batch.",
+      "Reescribir createPaymentBatch para un solo journal PENDING de lote y un solo sendPending.",
+      "Mantener retry del mismo lote ante ACK incierto.",
+      "Añadir deploy code-only del Worker de producción antes de publicar el frontend que consume el endpoint."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "El ledger D1 no incorpora payment.batch; solo payment.create.",
+      "No se cambia FIFO, Caja, saldo, evaluación de crédito ni reglas comerciales.",
+      "Cada child operation_id sigue siendo idempotente y auditable.",
+      "Un fallo CAS hace rollback del lote completo.",
+      "No se toca schema ni datos existentes."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR.",
+      "Desplegar Worker anterior antes de frontend anterior si fuera necesario.",
+      "No hay migración que revertir."
+    ],
+    "TEST_PLAN": [
+      "Batch de múltiples créditos -> exactamente 1 POST payment.batch y 0 payment.create desde navegador.",
+      "D1 -> N financial_operations payment.create y N PAYMENT events tras un solo batch.",
+      "Revisión stale en un hijo -> 409 y 0 nuevos eventos del lote.",
+      "ACK perdido -> reenvío del mismo batch y 0 duplicados.",
+      "Crédito duplicado en batch -> 400 antes de escribir.",
+      "Efectivo -> una sesión OPEN, efectos de caja acumulados correctos.",
+      "Pago individual -> comportamiento payment.create intacto.",
+      "CANON Critical CI + E2E Smoke + production Worker dry-run."
+    ]
+  }
+}
