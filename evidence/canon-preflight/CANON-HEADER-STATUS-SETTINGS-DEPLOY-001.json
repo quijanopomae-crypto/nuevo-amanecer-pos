@@ -1,0 +1,55 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-HEADER-STATUS-SETTINGS-DEPLOY-001",
+  "base_ref": "db55e933a436006f3fdb046a7963bfbca64b11b8",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "source_evidence": {
+    "pr": 266,
+    "merge_commit": "db55e933a436006f3fdb046a7963bfbca64b11b8",
+    "pr_ci": "CANON Critical CI #339 PASS",
+    "e2e_ci": "E2E Smoke CI #86 PASS"
+  },
+  "analysis": {
+    "OBJECTIVE": "Publicar el header CANON aprobado: estado visual por color y engranaje de Configuración.",
+    "READS": [
+      "PR #266",
+      "CANON Critical CI #339",
+      "E2E Smoke CI #86",
+      ".github/workflows/v1.3-pos-web-deploy.yml",
+      "ops/v1.3-pos-web-deploy-trigger.json"
+    ],
+    "WRITES": [
+      "Actualizar únicamente el trigger protegido de deploy."
+    ],
+    "DOM_AFFECTED": [
+      "Cabecera CANON y acceso al módulo Configuración."
+    ],
+    "STATE_AFFECTED": [
+      "Versión publicada del shell y estado visual de conexión/actualización."
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Sin backend/D1/R2.",
+      "Sin operaciones comerciales.",
+      "Sin cambios en datos de clientes, ventas, caja o inventario."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Navegación de Configuración reutiliza el camino móvil seguro existente."
+    ],
+    "RISKS": [
+      "El navegador puede mantener el Service Worker anterior hasta que detecte el nuevo build; el indicador amarillo comunica esa actualización pendiente."
+    ],
+    "ROLLBACK": [
+      "Redeploy del build anterior."
+    ],
+    "TEST_PLAN": [
+      "Verificación LAB→CANON del workflow.",
+      "Hosted POS safety tests.",
+      "Worker dry-run.",
+      "Deploy.",
+      "Verificación pública de launcher, /app, assets, /health y build hash."
+    ]
+  }
+}
