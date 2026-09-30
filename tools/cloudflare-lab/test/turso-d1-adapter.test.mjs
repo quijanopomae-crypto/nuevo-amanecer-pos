@@ -64,7 +64,7 @@ test('run maps affected_row_count to D1 meta.changes even when trigger writes di
   assert.equal(result.meta.last_row_id,7);
 });
 
-test('batch creates an all-or-nothing transaction with conditional rollback', async () => {
+test('batch is atomic and maps affected_row_count to changes while preserving rows_written', async () => {
   let payload;
   const db=new TursoD1Adapter({
     url:'libsql://lab-example.turso.io',
@@ -93,7 +93,8 @@ test('batch creates an all-or-nothing transaction with conditional rollback', as
   const out=await db.batch([a,b]);
   assert.equal(out.length,2);
   assert.equal(out[0].meta.changes,1);
-  assert.equal(out[1].meta.changes,2);
+  assert.equal(out[1].meta.changes,1);
+  assert.equal(out[1].meta.rows_written,2);
   const steps=payload.requests[0].batch.steps;
   assert.equal(steps[0].stmt.sql,'BEGIN IMMEDIATE');
   assert.deepEqual(steps[1].condition,{type:'ok',step:0});
