@@ -61,9 +61,7 @@ def canonical_value(value):
     if isinstance(value, float):
         if not math.isfinite(value):
             fail("non-finite float is not allowed")
-        # LibSQL/Turso crosses a JSON protocol boundary. Preserve strict parity for
-        # all non-REAL values while normalizing sub-ULP decimal noise in REALs.
-        return ["f", format(value, ".15g")]
+        return ["f", format(value, ".17g")]
     if isinstance(value, (bytes, bytearray, memoryview)):
         return ["b", base64.b64encode(bytes(value)).decode("ascii")]
     return ["t", str(value)]
@@ -238,6 +236,56 @@ def remote_rows(turso, table, columns):
     return rows
 
 
+def table_primary_key(conn, table):
+    rows = conn.execute("PRAGMA table_info(%s)" % quote_ident(table)).fetchall()
+    return [str(row[1]) for row in sorted((row for row in rows if int(row[5] or 0) > 0), key=lambda row: int(row[5]))]
+
+
+def ordered_local_rows(conn, table, columns, order_columns):
+    sql = "SELECT %s FROM %s ORDER BY %s" % (
+        ",".join(quote_ident(c) for c in columns),
+        quote_ident(table),
+        ",".join(quote_ident(c) for c in order_columns),
+    )
+    return [tuple(row) for row in conn.execute(sql).fetchall()]
+
+
+def ordered_remote_rows(turso, table, columns, order_columns):
+    sql = "SELECT %s FROM %s ORDER BY %s" % (
+        ",".join(quote_ident(c) for c in columns),
+        quote_ident(table),
+        ",".join(quote_ident(c) for c in order_columns),
+    )
+    _, rows, _ = turso.execute(sql)
+    return rows
+
+
+def equivalent_value(local_value, remote_value):
+    if type(local_value) is type(remote_value) and local_value == remote_value:
+        return True
+    if isinstance(local_value, float) and isinstance(remote_value, float):
+        if not math.isfinite(local_value) or not math.isfinite(remote_value):
+            return False
+        return math.isclose(local_value, remote_value, rel_tol=2e-16, abs_tol=0.0)
+    return False
+
+
+def semantic_table_equal(turso, conn, table, columns):
+    primary_key = table_primary_key(conn, table)
+    if not primary_key:
+        return False
+    local = ordered_local_rows(conn, table, columns, primary_key)
+    remote = ordered_remote_rows(turso, table, columns, primary_key)
+    if len(local) != len(remote):
+        return False
+    for local_row, remote_row in zip(local, remote):
+        if len(local_row) != len(remote_row):
+            return False
+        if not all(equivalent_value(a, b) for a, b in zip(local_row, remote_row)):
+            return False
+    return True
+
+
 def ensure_remote_empty(turso):
     _, rows, _ = turso.execute(
         """
@@ -312,6 +360,8 @@ def compare_all_tables(turso, conn, schema, local_digests):
         local_digest = local_digests[table]
         remote_digest = rows_digest(remote)
         if len(local) != len(remote) or local_digest != remote_digest:
+            if len(local) == len(remote) and semantic_table_equal(turso, conn, table, columns):
+                continue
             mismatches.append({
                 "table": table,
                 "local_count": len(local),
