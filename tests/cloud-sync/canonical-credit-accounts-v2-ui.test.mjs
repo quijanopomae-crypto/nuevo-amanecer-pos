@@ -123,6 +123,54 @@ test('classification reuses the existing evaluator with the approved semantic pr
   assert.equal(api.classifyClient(ctx.clientes[4]).tone,'slate');
 });
 
+test('batch payment allocation uses the selected debts oldest-first without mutating the ledger',()=>{
+  const ctx=context(),api=ctx.NA_CLIENT_CREDIT_ACCOUNTS_V2;
+  const credits=[
+    credit('4867','stable',185,0,{fecha:'2026-09-15'}),
+    credit('4868','stable',10,2,{fecha:'2026-09-15'}),
+    credit('4902','stable',10,0,{fecha:'2026-09-18'})
+  ];
+  const before=JSON.stringify(credits);
+  const partial=api.batchAllocationPlan(credits,19000);
+  assert.equal(partial.valid,true);
+  assert.equal(partial.selected_cents,20300);
+  assert.deepEqual(Array.from(partial.allocations,x=>[x.credit_id,x.amount_cents]),[
+    ['4867',18500],
+    ['4868',500]
+  ]);
+  assert.equal(partial.unallocated_cents,0);
+
+  const all=api.batchAllocationPlan(credits,20300);
+  assert.equal(all.valid,true);
+  assert.deepEqual(Array.from(all.allocations,x=>[x.credit_id,x.amount_cents]),[
+    ['4867',18500],
+    ['4868',800],
+    ['4902',1000]
+  ]);
+
+  const tooMuch=api.batchAllocationPlan(credits,20400);
+  assert.equal(tooMuch.valid,false);
+  assert.equal(tooMuch.unallocated_cents,100);
+  assert.equal(JSON.stringify(credits),before,'allocation preview must not mutate balances');
+});
+
+test('category view exposes select-all, automatic allocation and one final batch payment action',()=>{
+  const category=source.slice(source.indexOf('function labCategoryHtml'),source.indexOf('function labCleanInstallmentProductName'));
+  assert.match(source,/Cobro múltiple/);
+  assert.match(source,/Monto total que está abonando/);
+  assert.match(source,/Seleccionar todo/);
+  assert.match(source,/Aplicar automáticamente/);
+  assert.match(source,/naCanonBatchToggleAll/);
+  assert.match(source,/naCanonBatchAutoSelect/);
+  assert.match(source,/naCanonSubmitBatchPayment/);
+  assert.match(source,/confirmBatch\(/);
+  assert.match(category,/labBatchPanelHtml\(summary\)/);
+  assert.match(category,/labBatchRow\(cr, row\)/);
+  assert.match(css,/CANON BATCH CREDIT PAYMENTS 001/);
+  assert.match(css,/\.na-v2-batch-check:checked\+\.na-v2-batch-check-ui/);
+  assert.match(css,/@media\(max-width:430px\)[\s\S]*\.na-v2-batch-method-row\{grid-template-columns:1fr\}/);
+});
+
 test('small-credit purchase detail exposes the existing payment flow when balance is pending',()=>{
   const purchase=source.slice(source.indexOf('function labPurchaseHtml'),source.indexOf('function labPendingInstallmentsHtml'));
   assert.match(purchase,/labCreditPending\(cr\) > 0\.001/);
