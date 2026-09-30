@@ -1,0 +1,52 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-DIRECT-CUTOVER-004",
+  "base_ref": "133fcfd22af28b2a8fad465d9feff271abced6e2",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"},
+    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+  },
+  "analysis": {
+    "OBJECTIVE": "Promover Turso directamente al Worker CANON sin consumir D1, usando como base el candidato Turso ya validado.",
+    "READS": [
+      "Run 36782779872: Turso candidate PASS con 44 tablas, 2034 filas, integridad/schema/content parity PASS, auth/session/read PASS.",
+      "Run 36785938457: cutover D1-gated se detuvo antes de mutar producción por cuota diaria D1 agotada.",
+      "tools/cloudflare-prod/wrangler.turso-prod.jsonc: mismo Worker público, DB_PROVIDER=turso.",
+      "tools/cloudflare-lab/src/database-binding.js: Turso seleccionado por DB_PROVIDER=turso."
+    ],
+    "WRITES": [
+      "Workflow one-shot sin llamadas D1 que valida Turso, enlaza secrets al Worker activo, despliega Turso y prueba health/auth/canonical reads.",
+      "Trigger explícito que registra aceptación del propietario de descartar datos D1 de prueba.",
+      "Test estático que prohíbe cualquier comando D1/export en el workflow directo."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": ["El Worker CANON público pasa a leer/escribir Turso."],
+    "STORAGE_AFFECTED": [
+      "Turso producción: únicamente sesión sintética temporal para smoke y futuras operaciones reales después del task.",
+      "D1 producción: no se consulta ni modifica."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No venta, caja, inventario, créditos ni clientes son modificados por el workflow.",
+      "Authority Turso debe permanecer ACTIVE y first_live_operation_id NULL.",
+      "La base Turso LAB no se usa."
+    ],
+    "RISKS": [
+      "El estado D1 puede diferir del Turso ya validado; el propietario acepta perder esos datos de prueba.",
+      "D1 rollback puede seguir temporalmente afectado por la cuota diaria; por eso el smoke Turso previo y posterior es obligatorio."
+    ],
+    "ROLLBACK": ["Redeploy del config D1 anterior si el smoke post-deploy falla."],
+    "TEST_PLAN": [
+      "CANON Critical CI en PR.",
+      "Direct Turso pre-deploy: SELECT 1, control ACTIVE, first_live NULL, schema tables >= 44.",
+      "Wrangler dry-run Turso.",
+      "Deploy al Worker público.",
+      "Health, LAB boundary 404, activation/session, canonical status/products/customers.",
+      "Eliminar sesión sintética."
+    ]
+  }
+}
