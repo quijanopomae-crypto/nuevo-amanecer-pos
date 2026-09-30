@@ -872,7 +872,7 @@
     var id = labEsc(String(cr && cr.id || ''));
     return '<div class="na-v2-batch-row" data-na-batch-credit-id="' + id + '">' +
       '<label class="na-v2-batch-check-wrap" title="Seleccionar esta deuda">' +
-        '<input type="checkbox" class="na-v2-batch-check" value="' + id + '" onchange="naCanonBatchPaymentChanged()">' +
+        '<input type="checkbox" class="na-v2-batch-check" value="' + id + '" onchange="naCanonBatchSelectionChanged()">' +
         '<span class="na-v2-batch-check-ui" aria-hidden="true">✓</span>' +
       '</label>' +
       '<div class="na-v2-batch-row-body">' + rowHtml +
@@ -886,7 +886,7 @@
     return '<section class="na-v2-batch-pay" aria-label="Cobro múltiple">' +
       '<div class="na-v2-batch-head"><div><span class="na-v2-eyebrow">Cobro múltiple</span><strong>Paga varias deudas en una sola acción</strong></div>' +
         '<button type="button" class="na-v2-batch-selectall" id="naV2BatchToggleAllBtn" onclick="naCanonBatchToggleAll()">Seleccionar todo</button></div>' +
-      '<label class="na-v2-batch-amount"><span>Monto total que está abonando</span><input id="naV2BatchAmount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" oninput="naCanonBatchPaymentChanged()"></label>' +
+      '<label class="na-v2-batch-amount"><span>Monto total que está abonando</span><input id="naV2BatchAmount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" oninput="naCanonBatchAmountChanged()"></label>' +
       '<div class="na-v2-batch-actions"><button type="button" class="na-v2-batch-auto" onclick="naCanonBatchAutoSelect()">Aplicar automáticamente</button></div>' +
       '<div class="na-v2-batch-method-row"><label><span>Método de pago</span><select id="naV2BatchMethod" onchange="naCanonBatchMethodChanged()">' +
         '<option value="efectivo">💵 Efectivo</option><option value="yape">📲 Yape / Plin</option><option value="transferencia">🏦 Transferencia</option>' +
@@ -911,6 +911,39 @@
       return String(input.value || '');
     }));
     return labBatchCurrentCredits().filter(function (cr) { return ids.has(String(cr.id)); });
+  }
+
+  function labBatchSelectedTotalCents(selected) {
+    return (Array.isArray(selected) ? selected : []).reduce(function (sum, cr) {
+      var cents = Math.max(0, Math.round(labCreditPending(cr) * 100));
+      return Number.isSafeInteger(sum + cents) ? sum + cents : Number.MAX_SAFE_INTEGER;
+    }, 0);
+  }
+
+  function labBatchAmountInput() {
+    var screen = labScreen();
+    return screen && screen.querySelector ? screen.querySelector('#naV2BatchAmount') : null;
+  }
+
+  function labBatchSetAutoAmountFromSelection() {
+    var input = labBatchAmountInput();
+    if (!input) return 0;
+    var selected = labBatchSelectedCredits();
+    var totalCents = labBatchSelectedTotalCents(selected);
+    input.dataset.naBatchAmountMode = 'auto';
+    input.value = totalCents > 0 && totalCents !== Number.MAX_SAFE_INTEGER
+      ? (totalCents / 100).toFixed(2)
+      : '';
+    return totalCents;
+  }
+
+  function labBatchSyncAutoAmountIfNeeded() {
+    var input = labBatchAmountInput();
+    if (!input) return 0;
+    var mode = String(input.dataset.naBatchAmountMode || '');
+    var current = labBatchMoneyCents(input.value);
+    if (mode === 'auto' || !current) return labBatchSetAutoAmountFromSelection();
+    return current;
   }
 
   function labBatchUpdatePreview() {
@@ -962,6 +995,17 @@
 
   root.naCanonBatchPaymentChanged = function () { return labBatchUpdatePreview(); };
 
+  root.naCanonBatchAmountChanged = function () {
+    var input = labBatchAmountInput();
+    if (input) input.dataset.naBatchAmountMode = 'manual';
+    return labBatchUpdatePreview();
+  };
+
+  root.naCanonBatchSelectionChanged = function () {
+    labBatchSyncAutoAmountIfNeeded();
+    return labBatchUpdatePreview();
+  };
+
   root.naCanonBatchMethodChanged = function () {
     var screen = labScreen();
     if (!screen) return;
@@ -977,17 +1021,20 @@
     var checks = Array.from(screen.querySelectorAll('.na-v2-batch-check'));
     var allSelected = checks.length && checks.every(function (input) { return input.checked; });
     checks.forEach(function (input) { input.checked = !allSelected; });
+    labBatchSetAutoAmountFromSelection();
     labBatchUpdatePreview();
   };
 
   root.naCanonBatchAutoSelect = function () {
     var screen = labScreen();
     if (!screen || !screen.querySelectorAll) return;
-    var amountCents = labBatchMoneyCents(screen.querySelector('#naV2BatchAmount')?.value);
+    var amountInput = screen.querySelector('#naV2BatchAmount');
+    var amountCents = labBatchMoneyCents(amountInput && amountInput.value);
     if (!amountCents) {
       if (typeof toast === 'function') toast('Primero ingresa el monto total que está abonando','error');
       return;
     }
+    if (amountInput) amountInput.dataset.naBatchAmountMode = 'manual';
     var credits = labBatchCurrentCredits().slice().sort(function (a,b) {
       var dateCompare = labBatchCreditDate(a).localeCompare(labBatchCreditDate(b));
       return dateCompare || String(a.id || '').localeCompare(String(b.id || ''));
@@ -1688,6 +1735,7 @@
     summarizeClient:labClientFinancialSummary,
     productSummary:labProductSummary,
     batchAllocationPlan:labBatchAllocationPlan,
+    batchSelectedTotalCents:labBatchSelectedTotalCents,
     renderSaleDestination:labEnsureSaleDestinationUi,
     renderClientList:naRenderClientList,
     bindClientCards:labBindClientCards,
