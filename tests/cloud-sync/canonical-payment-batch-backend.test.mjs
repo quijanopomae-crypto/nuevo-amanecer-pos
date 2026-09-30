@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { activeCanon, device } from './canon-browser-harness.mjs';
 
 const LIVE_MIGRATIONS = [
@@ -163,4 +164,20 @@ test('payment.batch cash children share one open session and accumulate cash exa
   const after = f.sql("SELECT expected_cents,revision FROM canonical_cash_state WHERE session_id='batch-cash-session'");
   assert.equal(after.expected_cents,before.expected_cents+250);
   assert.equal(after.revision,before.revision+2);
+});
+
+
+test('payment.batch latency path parallelizes independent D1 pre-reads before the atomic write', () => {
+  const source = readFileSync('tools/cloudflare-lab/src/a6-financial.js','utf8');
+  const start = source.indexOf('export async function createCanonicalPaymentBatch');
+  assert.ok(start >= 0);
+  const block = source.slice(start);
+  assert.match(block,/const \[hashes, authority, existing, creditsResult, session\] = await Promise\.all\(\[/);
+  assert.match(block,/canonical_control/);
+  assert.match(block,/canonical_financial_operations/);
+  assert.match(block,/canonical_credit_balances/);
+  assert.match(block,/canonical_cash_state/);
+  const parallel = block.indexOf('const [hashes, authority, existing, creditsResult, session] = await Promise.all([');
+  const write = block.indexOf('await db.batch(statements)');
+  assert.ok(parallel >= 0 && write > parallel, 'parallel reads must precede the atomic write');
 });

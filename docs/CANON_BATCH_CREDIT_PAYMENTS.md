@@ -90,3 +90,15 @@ sin pagar N veces la latencia navegador → Worker → D1 → navegador.
 No se muestra éxito antes de recibir los receipts durables del Worker. La mejora
 proviene de **eliminar trabajo y viajes de red redundantes**, no de ocultar el
 indicador ni de simular un pago optimista.
+
+
+## Optimización de latencia fase 2
+
+Después de reducir el navegador a un solo POST batch, el Worker todavía ejecutaba
+varias lecturas D1 independientes de forma secuencial antes de la transacción:
+autoridad, replay, créditos y sesión de caja. Esas lecturas ahora arrancan juntas
+con `Promise.all`; las validaciones permanecen iguales y la `db.batch()` final
+continúa siendo la única decisión de escritura atómica.
+
+Esta optimización no cambia saldos, receipts, revisiones ni reglas de caja. Solo
+elimina espera serial dentro del Worker.
