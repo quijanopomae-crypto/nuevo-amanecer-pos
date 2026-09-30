@@ -73,6 +73,8 @@ jobs:
           NODE
           npx wrangler secret bulk /tmp/turso-workspace-secrets.json --config wrangler.turso.jsonc
           rm -f /tmp/turso-workspace-secrets.json
+          npx wrangler secret list --config wrangler.turso.jsonc | grep -F '"name": "LAB_IMPORT_HMAC_SECRET"'
+          sleep 5
 
       - name: Verify LAB workspace contract on Turso
         shell: bash

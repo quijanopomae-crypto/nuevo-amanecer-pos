@@ -1,0 +1,66 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-WORKSPACE-E2E-010-R1",
+  "base_ref": "39f5152326528c9e5da27f5bdecb2f9d44adad6b",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "E2E #1: health/session/empty PASS; import devolvió 503 lab_import_hmac_not_configured",
+      "Wrangler log: LAB_IMPORT_HMAC_SECRET fue creado correctamente menos de 2 s antes del probe"
+    ],
+    "WRITES": [
+      "Solo espera de propagación + verificación del nombre del secret y trigger de reintento"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún cambio funcional del Worker o POS"
+    ],
+    "STORAGE_AFFECTED": [
+      "El E2E vuelve a usar y limpiar workspace/sesión sintéticos"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No imprimir valor del HMAC secret",
+      "No cambiar código de dominio",
+      "No conectar todavía el navegador LAB a Turso"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ninguno funcional"
+    ],
+    "RISKS": [
+      "Si no es propagación, el reintento volverá a fallar y se investigará el binding exacto"
+    ],
+    "ROLLBACK": [
+      "Cerrar/revertir el PR; no quedan datos sintéticos por cleanup"
+    ],
+    "TESTS": [
+      "wrangler secret list contiene solo el nombre LAB_IMPORT_HMAC_SECRET",
+      "espera breve de propagación",
+      "mismo E2E workspace completo"
+    ]
+  }
+}

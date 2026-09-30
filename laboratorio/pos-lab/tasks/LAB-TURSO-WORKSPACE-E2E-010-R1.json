@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-WORKSPACE-E2E-010-R1",
+  "environment": "LABORATORIO",
+  "base_ref": "39f5152326528c9e5da27f5bdecb2f9d44adad6b",
+  "objective": "Reintentar el E2E workspace Turso esperando la propagación del nuevo secret LAB_IMPORT_HMAC_SECRET y verificando solo su nombre antes del probe.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-WORKSPACE-E2E-010-R1.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-WORKSPACE-E2E-010-R1.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKSPACE-E2E-010.json",
+    ".github/workflows/turso-lab-workspace-e2e.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-WORKSPACE-E2E-010-R1.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
