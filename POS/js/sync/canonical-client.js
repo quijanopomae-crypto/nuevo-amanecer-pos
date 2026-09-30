@@ -843,6 +843,89 @@
       return sendPending(record, command === 'payment.create');
     });
   }
+  async function createPaymentBatch(inputs) {
+    if (!Array.isArray(inputs) || !inputs.length || inputs.length > 60) fail('INVALID_CANONICAL_PAYMENT_BATCH');
+
+    return withWriterLock(async function () {
+      var existing = journal();
+      if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
+      assertAction('payment.create');
+      if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
+
+      var seen = new Set();
+      var normalized = inputs.map(function (input) {
+        input = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+        var creditId = String(input.credit_id || '');
+        if (!validId(creditId) || seen.has(creditId)) fail('INVALID_CANONICAL_PAYMENT_BATCH');
+        seen.add(creditId);
+        return {
+          credit_id: creditId,
+          amount_cents: input.amount_cents,
+          payment_method: input.payment_method,
+          session_id: input.session_id,
+          reference: input.reference
+        };
+      });
+
+      var receipts = [];
+      for (var index = 0; index < normalized.length; index += 1) {
+        var input = normalized[index];
+        var payload = makeFinancialPayload('payment.create', input);
+        var credit = data.credits.find(function (item) { return item.credit_id === payload.credit_id; });
+        var record = {
+          state: 'PENDING',
+          binding: copy(binding),
+          command: 'payment.create',
+          route: '/commands/payment.create',
+          payload: payload,
+          receipt_ids: { credit_provenance: credit && credit.provenance }
+        };
+        if (!credit || !validPayload('payment.create', record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
+
+        durableJournal(record);
+        var receipt = null;
+        try {
+          // Fast path: the initial canonical replica already supplies the
+          // revision for each DISTINCT credit. The Worker validates authority,
+          // credit revision and open cash session atomically on every POST.
+          receipt = await sendPending(record, true);
+        } catch (error) {
+          var retryRecord = journal();
+          if (retryRecord && retryRecord.state === 'PENDING' && retryRecord.command === 'payment.create' &&
+              !retryRecord.last_error) {
+            try {
+              // ACK may have been lost. Replay the exact same operation_id once;
+              // never manufacture a replacement payment.
+              receipt = await sendPending(retryRecord, false);
+            } catch (retryError) {
+              return {
+                ok: false,
+                pending_unresolved: true,
+                rejected: false,
+                failed_index: index,
+                error: String(retryError && retryError.message || retryError || 'CANONICAL_FINANCIAL_PENDING'),
+                receipts: receipts.slice()
+              };
+            }
+          } else {
+            return {
+              ok: false,
+              pending_unresolved: false,
+              rejected: true,
+              failed_index: index,
+              error: String(error && error.message || error || 'CANONICAL_FINANCIAL_REJECTED'),
+              receipts: receipts.slice()
+            };
+          }
+        }
+
+        receipts.push(copy(receipt));
+      }
+
+      return { ok: true, receipts: receipts.slice() };
+    });
+  }
+
   function createProduct(input) { return createCommand('product.create', input); }
   function createCustomer(input) { return createCommand('customer.create', input); }
   function setCustomerCreditPolicy(input) { return createCommand('customer.credit-policy.set', input); }
@@ -1068,6 +1151,6 @@
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
-    createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
+    createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);
