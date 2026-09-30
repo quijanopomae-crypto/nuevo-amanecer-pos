@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-DIRECT-PROPAGATION-005",
+  "environment": "CANON",
+  "base_ref": "eb6099f81d87920a83b05f38fa6a0aac1101577c",
+  "objective": "Corregir el smoke post-deploy del cutover directo a Turso para tolerar la propagación de versiones del Worker y completar la migración CANON a Turso sin depender de D1.",
+  "owner_authorization": "El propietario autorizó migrar directamente a Turso aceptando perder datos de prueba y pidió continuar.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-DIRECT-PROPAGATION-005.json",
+    "evidence/canon-preflight/CANON-TURSO-DIRECT-PROPAGATION-005.json",
+    ".github/workflows/v1.3-turso-prod-direct-cutover.yml",
+    "ops/v1.3-turso-prod-direct-trigger.json",
+    "tests/cloud-sync/turso-production-direct-cutover.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-prod/wrangler.turso-prod.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "infra/database/migrations/**",
+    "ops/v1.3-first-live-sale-trigger.json"
+  ],
+  "invariants": [
+    "No ejecutar venta real ni comandos de negocio.",
+    "No leer, escribir ni borrar D1 durante el nuevo intento.",
+    "Turso producción debe pasar integridad y candidate reprobe antes del deploy.",
+    "Esperar y reintentar auth/session/read durante propagación del Worker antes de considerar fallo.",
+    "Limpiar cualquier sesión sintética Turso activa/orfana del intento previo.",
+    "No exponer secretos ni tokens.",
+    "Si el Worker Turso sigue sin funcionar después de la ventana de propagación, restaurar config D1."
+  ],
+  "rollback": "Redeploy del config D1 anterior; D1 sigue intacto."
+}
