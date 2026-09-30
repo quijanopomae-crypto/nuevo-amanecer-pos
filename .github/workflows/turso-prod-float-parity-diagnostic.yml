@@ -1,0 +1,92 @@
+name: Turso PROD Float Parity Diagnostic
+
+on:
+  push:
+    branches:
+      - diag/turso-prod-parity-v1
+    paths:
+      - ".github/workflows/turso-prod-float-parity-diagnostic.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_DATABASE_ID: cf2c83d3-f187-472e-967b-0ad24be969eb
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Export D1 and compare REAL representation only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/cloudflare-prod/scripts/cutover-prepare.mjs export
+          rm -f /tmp/turso-float.db
+          sqlite3 /tmp/turso-float.db < /tmp/v1.3-pre-cutover.sql
+          python3 - <<'PY'
+          import json, math, os, sqlite3, urllib.request
+
+          raw=os.environ["TURSO_PROD_DATABASE_URL"].strip()
+          if raw.startswith("libsql://"): raw="https://"+raw[len("libsql://"):]
+          base=raw.rstrip("/")
+          token=os.environ["TURSO_PROD_AUTH_TOKEN"].strip()
+
+          def dec(v):
+              if not v or v.get("type")=="null": return None
+              if v.get("type")=="float": return float(v["value"])
+              if v.get("type")=="integer": return int(v["value"])
+              return v.get("value")
+
+          def remote(sql):
+              body=json.dumps({"baton":None,"requests":[
+                  {"type":"execute","stmt":{"sql":sql,"args":[],"want_rows":True}},
+                  {"type":"close"}
+              ]}).encode()
+              req=urllib.request.Request(base+"/v3/pipeline",data=body,method="POST",headers={
+                  "authorization":"Bearer "+token,
+                  "content-type":"application/json"
+              })
+              with urllib.request.urlopen(req,timeout=60) as resp:
+                  out=json.loads(resp.read().decode())
+              rows=out["results"][0]["response"]["result"].get("rows",[])
+              return [tuple(dec(x) for x in row) for row in rows]
+
+          db=sqlite3.connect("file:/tmp/turso-float.db?mode=ro",uri=True)
+          cases=[
+              ("credits","promotion_id,credit_id,source_progress_ratio","promotion_id,credit_id"),
+              ("credit_payments","promotion_id,payment_id,source_progress_ratio","promotion_id,payment_id")
+          ]
+          for table,cols,order in cases:
+              sql=f"SELECT {cols} FROM {table} ORDER BY {order}"
+              local=db.execute(sql).fetchall()
+              rem=remote(sql)
+              stats={"table":table,"rows":len(local),"exact_mismatch":0,"isclose_1e15":0,"fmt17":0,"fmt16":0,"fmt15":0,"fmt14":0,"max_abs":0.0,"max_rel":0.0}
+              for a,b in zip(local,rem):
+                  x=a[2]; y=b[2]
+                  if x is None and y is None: continue
+                  if x==y and type(x) is type(y): continue
+                  stats["exact_mismatch"]+=1
+                  if isinstance(x,(int,float)) and isinstance(y,(int,float)):
+                      xf=float(x); yf=float(y); d=abs(xf-yf); scale=max(abs(xf),abs(yf),1e-300)
+                      stats["max_abs"]=max(stats["max_abs"],d)
+                      stats["max_rel"]=max(stats["max_rel"],d/scale)
+                      stats["isclose_1e15"]+=int(math.isclose(xf,yf,rel_tol=1e-15,abs_tol=0.0))
+                      stats["fmt17"]+=int(format(xf,".17g")==format(yf,".17g"))
+                      stats["fmt16"]+=int(format(xf,".16g")==format(yf,".16g"))
+                      stats["fmt15"]+=int(format(xf,".15g")==format(yf,".15g"))
+                      stats["fmt14"]+=int(format(xf,".14g")==format(yf,".14g"))
+              print(json.dumps(stats,sort_keys=True))
+          PY
