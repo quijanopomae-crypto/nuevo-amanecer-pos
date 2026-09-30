@@ -1,0 +1,35 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-DIAG-CLEANUP-009",
+  "environment": "LABORATORIO",
+  "base_ref": "adea23442e3ae7c8c42a6ac2895e5f81daa91f7a",
+  "objective": "Retirar el diagnóstico temporal de health Turso después del E2E PASS y confirmar que el Worker aislado sigue pasando el E2E sin exponer detalle interno.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-DIAG-CLEANUP-009.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-DIAG-CLEANUP-009.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json",
+    "tools/cloudflare-lab/src/worker.js",
+    "tools/cloudflare-lab/wrangler.turso.jsonc",
+    "tools/cloudflare-lab/test/turso-health-diagnostic.test.mjs",
+    ".github/workflows/lab-cloud-ci.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-DIAG-CLEANUP-009.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
