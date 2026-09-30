@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-PROD-CUTOVER-003",
+  "environment": "CANON",
+  "base_ref": "05dc3833fd2f3beaa5c1e0a2d2b773d5a43b245f",
+  "objective": "Cambiar de forma controlada el Worker CANON activo desde D1 hacia la base Turso de producción ya validada, con backup fresco, paridad completa inmediatamente antes del deploy, cero tráfico previo, smoke test post-deploy y rollback automático a D1 ante cualquier fallo.",
+  "owner_authorization": "El propietario respondió explícitamente 'Aslo' después de validar el candidato Turso de producción.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-PROD-CUTOVER-003.json",
+    "evidence/canon-preflight/CANON-TURSO-PROD-CUTOVER-003.json",
+    "tools/cloudflare-prod/wrangler.turso-prod.jsonc",
+    ".github/workflows/v1.3-turso-prod-cutover.yml",
+    "ops/v1.3-turso-prod-cutover-trigger.json",
+    "tests/cloud-sync/turso-production-cutover.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "infra/database/migrations/**",
+    "ops/v1.3-first-live-sale-trigger.json"
+  ],
+  "invariants": [
+    "No realizar primera venta real en este task.",
+    "La URL pública de CANON no cambia.",
+    "D1 producción no recibe escrituras de negocio ni migraciones durante este task y queda como rollback.",
+    "La base Turso de producción debe coincidir exactamente con un export fresco de D1 antes del deploy.",
+    "El cutover aborta si existe tráfico operativo o sesión activa en D1 antes del cambio.",
+    "Si falla cualquier paso posterior al deploy Turso, se redeploya automáticamente el config D1 anterior.",
+    "No exponer secretos, tokens ni URL privada de Turso en logs.",
+    "V1.2 y D1 permanecen como rollback hasta cerrar primera venta real y validación post-venta."
+  ],
+  "rollback": "Redeploy automático de tools/cloudflare-prod/wrangler.jsonc (D1) si falla el smoke post-deploy. Revertir el PR elimina scaffolding sin tocar datos."
+}

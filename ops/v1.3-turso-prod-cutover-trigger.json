@@ -1,0 +1,11 @@
+{
+  "schema": "nuevo-amanecer.turso-production-cutover-trigger/v1",
+  "action": "CUTOVER_CANON_D1_TO_TURSO",
+  "owner_authorized": true,
+  "one_shot": true,
+  "candidate_run_id": 36782779872,
+  "candidate_commit": "05dc3833fd2f3beaa5c1e0a2d2b773d5a43b245f",
+  "requested_at": "2026-09-30T17:10:00-05:00",
+  "no_live_sale": true,
+  "scope": "Switch only the active production Worker database provider from D1 to the already validated isolated Turso production database. Preserve D1 and V1.2 as rollback. Do not execute any real sale."
+}
