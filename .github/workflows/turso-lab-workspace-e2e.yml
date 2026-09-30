@@ -1,0 +1,399 @@
+name: Turso LAB Workspace E2E
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "laboratorio/pos-lab/turso/TURSO-LAB-WORKSPACE-E2E-010.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: turso-lab-workspace-e2e
+  cancel-in-progress: false
+
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      LAB_IMPORT_HMAC_SECRET: ${{ secrets.LAB_IMPORT_HMAC_SECRET }}
+      WORKER_URL: https://nuevo-amanecer-sync-lab-turso.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout exact repository state
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Require isolated LAB secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$TURSO_DATABASE_URL"
+          test -n "$TURSO_AUTH_TOKEN"
+          test -n "$POS_ACTIVATION_SECRET"
+          test -n "$LAB_IMPORT_HMAC_SECRET"
+
+      - name: Install Worker dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Deploy isolated Turso LAB Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config wrangler.turso.jsonc
+
+      - name: Configure isolated Worker secrets
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          fs.writeFileSync('/tmp/turso-workspace-secrets.json', JSON.stringify({
+            TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL,
+            TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN,
+            POS_ACTIVATION_SECRET: process.env.POS_ACTIVATION_SECRET,
+            LAB_IMPORT_HMAC_SECRET: process.env.LAB_IMPORT_HMAC_SECRET
+          }));
+          NODE
+          npx wrangler secret bulk /tmp/turso-workspace-secrets.json --config wrangler.turso.jsonc
+          rm -f /tmp/turso-workspace-secrets.json
+
+      - name: Verify LAB workspace contract on Turso
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { createHash, createHmac, randomUUID } = require('node:crypto');
+
+          (async () => {
+            const worker = String(process.env.WORKER_URL || '').replace(/\/+$/, '');
+            const activation = String(process.env.POS_ACTIVATION_SECRET || '');
+            const importSecret = String(process.env.LAB_IMPORT_HMAC_SECRET || '');
+            const rawTurso = String(process.env.TURSO_DATABASE_URL || '');
+            const tursoToken = String(process.env.TURSO_AUTH_TOKEN || '');
+            const tursoBase = (rawTurso.startsWith('libsql://')
+              ? 'https://' + rawTurso.slice('libsql://'.length)
+              : rawTurso).replace(/\/+$/, '');
+            const tursoPipeline = tursoBase + '/v3/pipeline';
+
+            const sourceRef = 'r2://nuevo-amanecer-prod-v2-backups/turso-workspace-e2e-synthetic.json';
+            const sourceHash = createHash('sha256').update('turso-workspace-e2e-source-v1').digest('hex');
+            const productId = 'turso-e2e-product';
+            const customerId = 'turso-e2e-customer';
+            const operationId = 'turso-workspace-save-' + randomUUID();
+            const staleOperationId = 'turso-workspace-stale-' + randomUUID();
+
+            const baseline = {
+              version: 9,
+              updatedAt: '2026-09-30T00:00:00.000Z',
+              data: {
+                productos: [{ id: productId, nombre: 'Producto Turso E2E', precio: 10, stock: 5 }],
+                ventas: [],
+                clientes: [{ id: customerId, nombre: 'Cliente Turso E2E' }],
+                creditos: [],
+                gastos: [],
+                cajMovs: [],
+                cashClosures: [],
+                inventoryMovements: []
+              },
+              cart: [],
+              draft: null,
+              ui: { currentPage: 'pageMenu' },
+              locks: { master: false, readOnly: false, modules: {} }
+            };
+
+            function text(value) {
+              return {type:'text',value:String(value)};
+            }
+
+            async function directPipeline(requests) {
+              const response = await fetch(tursoPipeline, {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + tursoToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify({baton:null,requests})
+              });
+              const body = await response.json().catch(() => null);
+              if (!response.ok || !body) throw new Error('turso_direct_http_' + response.status);
+              return body;
+            }
+
+            async function scalar(sql, args = []) {
+              const body = await directPipeline([
+                {type:'execute',stmt:{sql,args,want_rows:true}},
+                {type:'close'}
+              ]);
+              const item = body?.results?.[0];
+              if (!item || item.type !== 'ok' || item.response?.type !== 'execute') {
+                throw new Error('direct_scalar_protocol_error');
+              }
+              const value = item.response.result?.rows?.[0]?.[0];
+              if (!value) throw new Error('direct_scalar_missing_value');
+              if (value.type === 'integer') return Number(value.value);
+              if (value.type === 'text') return value.value;
+              throw new Error('direct_scalar_unsupported_type');
+            }
+
+            async function cleanup(sessionId) {
+              const principalId = sessionId ? 'session:' + sessionId : '__none__';
+              const steps = [
+                {stmt:{sql:'BEGIN IMMEDIATE',args:[],want_rows:false}},
+                {
+                  condition:{type:'ok',step:0},
+                  stmt:{sql:"DELETE FROM lab_workspace_control WHERE workspace_id='primary'",args:[],want_rows:false}
+                },
+                {
+                  condition:{type:'ok',step:1},
+                  stmt:{sql:"DELETE FROM lab_workspace_revisions WHERE workspace_id='primary'",args:[],want_rows:false}
+                },
+                {
+                  condition:{type:'ok',step:2},
+                  stmt:{sql:"DELETE FROM lab_workspace_baselines WHERE source_ref=?1",args:[text(sourceRef)],want_rows:false}
+                }
+              ];
+              if (sessionId) {
+                steps.push({
+                  condition:{type:'ok',step:3},
+                  stmt:{sql:'DELETE FROM auth_sessions WHERE session_id=?1',args:[text(sessionId)],want_rows:false}
+                });
+                steps.push({
+                  condition:{type:'ok',step:4},
+                  stmt:{sql:'DELETE FROM devices WHERE device_id=?1',args:[text(principalId)],want_rows:false}
+                });
+              }
+              const commitStep = steps.length;
+              steps.push({
+                condition:{type:'ok',step:commitStep - 1},
+                stmt:{sql:'COMMIT',args:[],want_rows:false}
+              });
+              steps.push({
+                condition:{type:'not',cond:{type:'ok',step:commitStep}},
+                stmt:{sql:'ROLLBACK',args:[],want_rows:false}
+              });
+              const out = await directPipeline([{type:'batch',batch:{steps}},{type:'close'}]);
+              const item = out?.results?.[0];
+              if (!item || item.type !== 'ok' || item.response?.type !== 'batch') {
+                throw new Error('workspace_cleanup_batch_failed');
+              }
+            }
+
+            let sessionToken = '';
+            let sessionId = '';
+
+            try {
+              // Start from a clean synthetic workspace only. No commercial data exists in this Turso LAB yet.
+              await cleanup('');
+
+              const health = await fetch(worker + '/health', {headers:{'cache-control':'no-cache'}});
+              const healthBody = await health.json().catch(() => null);
+              if (!health.ok || healthBody?.ok !== true || healthBody?.environment !== 'lab') {
+                throw new Error('workspace_health_failed_' + health.status);
+              }
+              console.log('TURSO_WORKSPACE_HEALTH=PASS');
+
+              const activated = await fetch(worker + '/auth/activate', {
+                method:'POST',
+                headers:{'x-activation-secret':activation}
+              });
+              const activationBody = await activated.json().catch(() => null);
+              if (!activated.ok || activationBody?.status !== 'activated' ||
+                  typeof activationBody?.session_token !== 'string' || !activationBody.session_token) {
+                throw new Error('workspace_activation_failed_' + activated.status);
+              }
+              sessionToken = activationBody.session_token;
+
+              const session = await fetch(worker + '/auth/session', {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const sessionBody = await session.json().catch(() => null);
+              if (!session.ok || sessionBody?.status !== 'ok' || typeof sessionBody?.session_id !== 'string') {
+                throw new Error('workspace_session_failed_' + session.status);
+              }
+              sessionId = sessionBody.session_id;
+              console.log('TURSO_WORKSPACE_SESSION=PASS');
+
+              const empty = await fetch(worker + '/lab/workspace', {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const emptyBody = await empty.json().catch(() => null);
+              if (empty.status !== 404 || emptyBody?.error !== 'lab_workspace_empty') {
+                throw new Error('workspace_expected_empty_failed_' + empty.status);
+              }
+              console.log('TURSO_WORKSPACE_EMPTY=PASS');
+
+              const receivedHash = createHash('sha256').update(JSON.stringify(baseline)).digest('hex');
+              const signature = createHmac('sha256', importSecret)
+                .update([sourceRef, sourceHash, receivedHash].join('\n'))
+                .digest('hex');
+
+              const imported = await fetch(worker + '/lab/workspace/import-baseline', {
+                method:'POST',
+                headers:{
+                  'content-type':'application/json',
+                  'x-lab-import-signature':signature
+                },
+                body:JSON.stringify({
+                  source_ref:sourceRef,
+                  source_hash:sourceHash,
+                  manifest_ref:'synthetic://turso-workspace-e2e',
+                  manifest_hash:createHash('sha256').update('manifest').digest('hex'),
+                  snapshot:baseline
+                })
+              });
+              const importedBody = await imported.json().catch(() => null);
+              if (!imported.ok || importedBody?.status !== 'refreshed' || importedBody?.revision !== 1) {
+                throw new Error('workspace_import_failed_' + imported.status + '_' + String(importedBody?.error || importedBody?.status || 'unknown'));
+              }
+              console.log('TURSO_WORKSPACE_IMPORT=PASS');
+
+              const read1 = await fetch(worker + '/lab/workspace', {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const read1Body = await read1.json().catch(() => null);
+              if (!read1.ok || read1Body?.revision !== 1 ||
+                  read1Body?.snapshot?.data?.productos?.[0]?.id !== productId ||
+                  read1Body?.snapshot?.data?.clientes?.[0]?.id !== customerId) {
+                throw new Error('workspace_read_baseline_failed_' + read1.status);
+              }
+              console.log('TURSO_WORKSPACE_READ_BASELINE=PASS');
+
+              const changed = structuredClone(read1Body.snapshot);
+              changed.data.productos.push({
+                id:'turso-e2e-product-2',
+                nombre:'Producto Turso E2E 2',
+                precio:15,
+                stock:2
+              });
+
+              const saved = await fetch(worker + '/lab/workspace/save', {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + sessionToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify({
+                  expected_revision:1,
+                  operation_id:operationId,
+                  snapshot:changed
+                })
+              });
+              const savedBody = await saved.json().catch(() => null);
+              if (!saved.ok || savedBody?.status !== 'saved' || savedBody?.revision !== 2) {
+                throw new Error('workspace_save_failed_' + saved.status + '_' + String(savedBody?.error || savedBody?.status || 'unknown'));
+              }
+              console.log('TURSO_WORKSPACE_SAVE=PASS');
+
+              const replay = await fetch(worker + '/lab/workspace/save', {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + sessionToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify({
+                  expected_revision:1,
+                  operation_id:operationId,
+                  snapshot:changed
+                })
+              });
+              const replayBody = await replay.json().catch(() => null);
+              if (!replay.ok || replayBody?.status !== 'already_saved' || replayBody?.revision !== 2) {
+                throw new Error('workspace_replay_failed_' + replay.status);
+              }
+              console.log('TURSO_WORKSPACE_IDEMPOTENCY=PASS');
+
+              const stale = await fetch(worker + '/lab/workspace/save', {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + sessionToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify({
+                  expected_revision:1,
+                  operation_id:staleOperationId,
+                  snapshot:changed
+                })
+              });
+              const staleBody = await stale.json().catch(() => null);
+              if (stale.status !== 409 || staleBody?.error !== 'revision_conflict' || staleBody?.current_revision !== 2) {
+                throw new Error('workspace_conflict_failed_' + stale.status);
+              }
+              console.log('TURSO_WORKSPACE_CONFLICT=PASS');
+
+              const status = await fetch(worker + '/lab/workspace/status', {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const statusBody = await status.json().catch(() => null);
+              if (!status.ok || statusBody?.revision !== 2 || statusBody?.workspace_id !== 'primary') {
+                throw new Error('workspace_status_failed_' + status.status);
+              }
+              console.log('TURSO_WORKSPACE_STATUS=PASS');
+
+              const reset = await fetch(worker + '/lab/workspace/reset', {
+                method:'POST',
+                headers:{
+                  authorization:'Bearer ' + sessionToken,
+                  'content-type':'application/json'
+                },
+                body:JSON.stringify({expected_revision:2})
+              });
+              const resetBody = await reset.json().catch(() => null);
+              if (!reset.ok || resetBody?.status !== 'reset' || resetBody?.revision !== 3) {
+                throw new Error('workspace_reset_failed_' + reset.status + '_' + String(resetBody?.error || resetBody?.status || 'unknown'));
+              }
+              console.log('TURSO_WORKSPACE_RESET=PASS');
+
+              const read3 = await fetch(worker + '/lab/workspace', {
+                headers:{authorization:'Bearer ' + sessionToken}
+              });
+              const read3Body = await read3.json().catch(() => null);
+              if (!read3.ok || read3Body?.revision !== 3 ||
+                  read3Body?.snapshot?.data?.productos?.length !== 1 ||
+                  read3Body?.snapshot?.data?.productos?.[0]?.id !== productId) {
+                throw new Error('workspace_reset_read_failed_' + read3.status);
+              }
+              console.log('TURSO_WORKSPACE_RESET_READ=PASS');
+
+              const revisionCount = await scalar(
+                "SELECT COUNT(*) FROM lab_workspace_revisions WHERE workspace_id='primary'"
+              );
+              if (revisionCount !== 3) throw new Error('workspace_revision_count_' + revisionCount);
+              console.log('TURSO_WORKSPACE_REVISION_COUNT=PASS');
+            } finally {
+              await cleanup(sessionId);
+
+              const leftovers = await scalar(
+                "SELECT (SELECT COUNT(*) FROM lab_workspace_control WHERE workspace_id='primary') + " +
+                "(SELECT COUNT(*) FROM lab_workspace_revisions WHERE workspace_id='primary') + " +
+                "(SELECT COUNT(*) FROM lab_workspace_baselines WHERE source_ref=?1) + " +
+                "(SELECT COUNT(*) FROM auth_sessions WHERE session_id=?2) + " +
+                "(SELECT COUNT(*) FROM devices WHERE device_id=?3)",
+                [text(sourceRef), text(sessionId || '__none__'), text(sessionId ? 'session:' + sessionId : '__none__')]
+              );
+              if (leftovers !== 0) throw new Error('workspace_cleanup_leftovers_' + leftovers);
+              console.log('TURSO_WORKSPACE_CLEANUP=PASS');
+            }
+
+            console.log('TURSO_WORKSPACE_E2E=PASS');
+          })().catch(error => {
+            console.error(String(error?.message || error));
+            process.exitCode = 1;
+          });
+          NODE
