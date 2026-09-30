@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-WORKER-E2E-004",
+  "environment": "LABORATORIO",
+  "base_ref": "75786401c205b33b7431b3a34dbb28fb55c26f6e",
+  "objective": "Desplegar un Worker LAB separado conectado a Turso y validar health, activación y sesión de extremo a extremo con datos sintéticos temporales, sin tocar CANON ni producción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-WORKER-E2E-004.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-WORKER-E2E-004.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json",
+    ".github/workflows/turso-lab-worker-e2e.yml"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-WORKER-E2E-004.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
