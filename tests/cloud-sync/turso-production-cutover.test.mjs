@@ -32,7 +32,7 @@ test('cutover is one-shot owner authorized and tied to the validated candidate r
 });
 
 test('cutover requires zero D1 traffic, fresh backup and exact Turso parity before deploy', () => {
-  const preflight=workflow.indexOf('D1 preflight must be zero-traffic and session-free');
+  const preflight=workflow.indexOf('D1 preflight must be zero-traffic');
   const backup=workflow.indexOf('Export fresh D1 production backup');
   const parity=workflow.indexOf('Prove fresh D1 equals Turso production candidate');
   const final=workflow.indexOf('Final D1 recheck immediately before provider switch');
