@@ -1,0 +1,70 @@
+name: Turso PROD Auth Runtime Probe
+
+on:
+  push:
+    branches:
+      - diag/turso-prod-auth-v1
+    paths:
+      - "tools/cloudflare-prod/turso-auth-probe-worker.js"
+      - "tools/cloudflare-prod/wrangler.turso-auth-probe.jsonc"
+      - ".github/workflows/turso-prod-auth-runtime-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+      PROBE_URL: https://nuevo-amanecer-pos-prod-turso-auth-probe.nuevo-amanecer-pos.workers.dev
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Install Wrangler
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Deploy isolated auth probe
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-auth-probe.jsonc
+          node <<'NODE'
+          const fs = require('node:fs');
+          fs.writeFileSync('/tmp/turso-auth-probe-secrets.json', JSON.stringify({
+            TURSO_DATABASE_URL: process.env.TURSO_PROD_DATABASE_URL,
+            TURSO_AUTH_TOKEN: process.env.TURSO_PROD_AUTH_TOKEN
+          }));
+          NODE
+          npx wrangler secret bulk /tmp/turso-auth-probe-secrets.json --config ../cloudflare-prod/wrangler.turso-auth-probe.jsonc
+          rm -f /tmp/turso-auth-probe-secrets.json
+          sleep 3
+
+      - name: Execute activation-equivalent batch in Worker runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          BODY="$(curl --silent --show-error --write-out '\n%{http_code}' "$PROBE_URL/probe")"
+          HTTP="$(printf '%s' "$BODY" | tail -n1)"
+          JSON="$(printf '%s' "$BODY" | sed '$d')"
+          echo "AUTH_RUNTIME_PROBE_HTTP=$HTTP"
+          printf '%s' "$JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);console.log("AUTH_RUNTIME_PROBE_STATUS="+String(x.status||""));if(x.code)console.log("AUTH_RUNTIME_PROBE_CODE="+String(x.code));if(x.message)console.log("AUTH_RUNTIME_PROBE_MESSAGE="+String(x.message).slice(0,700));if(x.batch)console.log("AUTH_RUNTIME_PROBE_BATCH="+String(x.batch));})'
+          test "$HTTP" = "200"
+
+      - name: Delete isolated auth probe Worker
+        if: always()
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: npx wrangler delete --name nuevo-amanecer-pos-prod-turso-auth-probe --force || true
