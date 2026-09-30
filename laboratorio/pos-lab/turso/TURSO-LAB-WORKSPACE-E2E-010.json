@@ -5,7 +5,7 @@
   "target_worker": "nuevo-amanecer-sync-lab-turso",
   "target_database": "TURSO_LAB",
   "data_policy": "SYNTHETIC_TEMPORARY",
-  "requested_at_utc": "2026-09-30T19:35:00Z",
-  "note": "Retry after confirming LAB_IMPORT_HMAC_SECRET name is bound on isolated Worker and waiting for propagation.",
-  "attempt": 2
+  "requested_at_utc": "2026-09-30T19:40:00Z",
+  "note": "Revalidate workspace E2E after mapping batch meta.changes to affected_row_count; prior save inserted but was misclassified as already_saved.",
+  "attempt": 3
 }

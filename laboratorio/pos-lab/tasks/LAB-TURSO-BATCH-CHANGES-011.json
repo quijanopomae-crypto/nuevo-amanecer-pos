@@ -1,0 +1,34 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-TURSO-BATCH-CHANGES-011",
+  "environment": "LABORATORIO",
+  "base_ref": "a1af628355275cb64e29c04d5892e587f395b46a",
+  "objective": "Corregir meta.changes del adaptador Turso para batch(): usar affected_row_count por sentencia en lugar de rows_written de libSQL, y revalidar Worker + workspace E2E.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-TURSO-BATCH-CHANGES-011.json",
+    "laboratorio/pos-lab/preflight/LAB-TURSO-BATCH-CHANGES-011.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKER-E2E-004.json",
+    "laboratorio/pos-lab/turso/TURSO-LAB-WORKSPACE-E2E-010.json",
+    "tools/cloudflare-lab/src/turso-d1-adapter.js",
+    "tools/cloudflare-lab/test/turso-d1-adapter.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "ops/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-TURSO-BATCH-CHANGES-011.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}

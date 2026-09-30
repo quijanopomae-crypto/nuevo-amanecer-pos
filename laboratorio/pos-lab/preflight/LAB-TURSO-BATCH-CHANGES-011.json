@@ -1,0 +1,71 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-BATCH-CHANGES-011",
+  "base_ref": "a1af628355275cb64e29c04d5892e587f395b46a",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Workspace E2E #2: import/read PASS, primer save insertó la revisión pero devolvió already_saved",
+      "Adaptador Turso batch() proyecta meta.changes desde rows_written",
+      "Workspace exige changes===1 por INSERT/UPDATE directos"
+    ],
+    "WRITES": [
+      "Batch meta.changes pasa a affected_row_count por sentencia",
+      "Tests de regresión y triggers de ambos E2E"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Solo metadatos D1-compatibles retornados por el adaptador Turso; SQL/transacciones no cambian"
+    ],
+    "STORAGE_AFFECTED": [
+      "E2E Worker y workspace usan datos sintéticos temporales con cleanup"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Una sentencia INSERT/UPDATE que afecta 1 fila debe reportar changes=1 aunque rows_written incluya índices/efectos internos",
+      "batch sigue siendo atómico",
+      "Idempotencia y constraints no cambian",
+      "CANON/producción no se tocan"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Todas las rutas Turso que inspeccionan meta.changes reciben conteo directo por sentencia; requiere revalidar Worker, workspace y luego comandos canónicos antes de promoción"
+    ],
+    "RISKS": [
+      "Código canónico que se apoye en conteos de trigger de D1 podría necesitar una compatibilidad específica; por eso no se promueve a CANON todavía",
+      "El workspace puede revelar otra diferencia D1/libSQL después del save"
+    ],
+    "ROLLBACK": [
+      "Revertir el mapping y mantener Turso aislado sin tráfico del navegador"
+    ],
+    "TESTS": [
+      "batch con affected_row_count=1 y rows_written>1 debe reportar changes=1",
+      "suite del adaptador",
+      "Worker E2E completo",
+      "Workspace E2E completo"
+    ]
+  }
+}
