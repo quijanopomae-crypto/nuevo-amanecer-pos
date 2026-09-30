@@ -62,7 +62,7 @@
 
     try {
       if (motion.page && typeof motion.page.enter === 'function') {
-        motion.page.enter(page, 'lab-enter-fade');
+        motion.page.enter(page, 'na-enter-fade');
       }
     } catch (_) {}
 
@@ -79,7 +79,8 @@
   }
 
   function scheduleMotion(page) {
-    if (Number(root.innerWidth || 0) <= 700 || root.NA_MOBILE_SAFE_NAV_ACTIVE === true) return;
+    // Safe navigation paints first on mobile as well; only then run visual work.
+    // NA_MOBILE_SAFE_NAV_ACTIVE changes navigation, not the visual contract.
     var preset = presetByPage[page.id] || null;
     var token = nextToken(page);
     afterPaint(function () {

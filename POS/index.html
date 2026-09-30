@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 21944)
+Total output lines: 1022
+
 <!DOCTYPE html>
 <!-- Fuente limpia reconstruida: estructura estática estable + lógica Codex, sin DOM guardado por navegador. -->
 <html lang="es">
@@ -48,6 +51,7 @@
     <link rel="stylesheet" href="css/experience-v2/animations/pos.css">
     <link rel="stylesheet" href="css/experience-v2/animations/modals.css">
     <link rel="stylesheet" href="css/experience-v2/animations/notifications.css">
+    <link rel="stylesheet" href="css/motion/polish.css">
     <style>
       .ocr-purchase-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.ocr-purchase-status{padding:8px 13px;font-size:12px;font-weight:800;color:var(--slate)}.ocr-purchase-status[data-state="error"]{color:var(--red)}.ocr-purchase-status[data-state="success"]{color:var(--green)}.ocr-purchase-raw{white-space:pre-wrap;max-height:120px;overflow:auto;background:#f8fafc;border:1px solid var(--border);border-radius:9px;padding:9px;font-size:11px}.ocr-review-row{border:1px solid var(--border);border-radius:11px;padding:11px;margin-top:10px;background:var(--white)}.ocr-review-name{font-size:14px;margin:0 0 4px}.ocr-review-raw,.ocr-review-status{font-size:11px;font-weight:700;color:var(--slate);margin-bottom:5px}.ocr-review-field{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:8px;margin-top:7px;font-size:12px;font-weight:800}.ocr-review-field input,.ocr-review-field select{min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px}.ocr-review-reasons,.ocr-review-candidates,.ocr-review-validation{font-size:11px;margin:7px 0;padding-left:20px}.ocr-review-validation{color:var(--red)}.ocr-review-confirm,.ocr-review-discard{border:0;border-radius:8px;padding:8px 12px;margin:5px 6px 0 0;font-weight:800;cursor:pointer}.ocr-review-confirm{background:var(--teal);color:white}.ocr-review-discard{background:#fee2e2;color:var(--red)}
     </style>
@@ -524,88 +528,7 @@
 <div class="modal-overlay" id="mVentaLibre"><div class="modal"><div class="mhead amber"><div><div class="mhead-title">➕ Venta libre / VARIOS</div><div style="font-size:10px;font-weight:700;opacity:.85;margin-top:2px">Artículo no registrado en el inventario</div></div><button class="btn-close-m" onclick="cerrarModal('mVentaLibre')">✕</button></div><div class="mbody">
     <div class="free-sale-note">Esta línea se guardará dentro de la venta con fecha, hora y cajero, pero no modificará el inventario. Úsala para un artículo ocasional que todavía no está registrado.</div>
     <div class="fg"><div class="fl">Nombre del artículo <span class="req">*</span></div><input class="fi" id="vlNombre" maxlength="120" value="VARIOS" placeholder="VARIOS"></div>
-    <div class="frow"><div class="fg"><div class="fl">Precio unitario (S/) <span class="req">*</span></div><input class="fi" id="vlPrecio" type="number" min="0.01" step="0.10" inputmode="decimal" placeholder="0.00" oninput="actualizarResumenVentaLibre()"></div><div class="fg"><div class="fl">Cantidad <span class="req">*</span></div><input class="fi" id="vlCantidad" type="number" min="1" max="9999" step="1" inputmode="numeric" value="1" oninput="actualizarResumenVentaLibre()"></div></div>
-    <div class="fg"><div class="fl">Código o referencia (opcional)</div><input class="fi" id="vlCodigo" maxlength="160" placeholder="Código leído o referencia interna"></div>
-    <div class="free-sale-summary"><div><span>Tipo</span><strong>Venta libre</strong></div><div><span>Subtotal</span><strong id="vlSubtotal">S/ 0.00</strong></div></div>
-    <div class="mbtns"><button class="mbtn mbtn-cancel" onclick="cerrarModal('mVentaLibre')">Cancelar</button><button class="mbtn mbtn-ok amber" id="vlConfirmar" onclick="confirmarVentaLibre()">➕ Agregar al carrito</button></div>
-</div></div></div>
-
-<div class="modal-overlay" id="mProd"><div class="modal"><div class="mhead teal"><div class="mhead-title" id="mProdTitle">➕ Nuevo producto</div><button class="btn-close-m" onclick="cerrarModal('mProd')">✕</button></div><div class="mbody">
-    <div class="prod-unified">
-        <input type="checkbox" id="pManualCode" hidden checked>
-
-        <div class="fg">
-            <div class="fl">Nombre <span class="req">*</span></div>
-            <input class="fi" id="pNombre" placeholder="Ej: cuates x 44 gr" oninput="_naF12ProductNameChanged()">
-        </div>
-
-        <div class="prod-unified-grid2" id="pCodeFields">
-            <div class="fg"><div class="fl">SKU</div><input class="fi" id="pSku" placeholder="Código interno"></div>
-            <div class="fg"><div class="fl">Código de barras</div><input class="fi" id="pBarcode" inputmode="numeric" placeholder="Escanear o escribir"></div>
-        </div>
-
-        <div class="prod-unified-grid2">
-            <div class="fg">
-                <div class="fl">Categoría</div>
-                <div class="prod-category-line"><select class="fs" id="pCat"></select><button type="button" class="prod-new-cat-btn" onclick="toggleNewCategoryField()">+ Nueva</button></div>
-            </div>
-            <div class="fg">
-                <div class="fl">Icono o emoji</div>
-                <div class="product-icon-input-row"><input class="fi" id="pIcon" placeholder="📦" maxlength="12" oninput="_naF12ManualIconChanged()"><button type="button" class="product-icon-mini-btn" onclick="abrirSelectorEmoji()">😀 Elegir</button></div>
-                <div class="product-icon-actions"><button type="button" class="product-icon-action active" id="pIconAutoBtn" onclick="_naF12EnableAutoEmoji()">✨ Automático</button><button type="button" class="product-icon-action" onclick="abrirCreadorIcono()">🎨 Crear icono</button><span class="product-icon-mode" id="pIconMode">Automático</span></div>
-            </div>
-        </div>
-
-        <div id="newCatWrap" style="display:none"><div class="cat-create-box"><input class="fi" id="pCatNueva" placeholder="Ej: Snacks premium" maxlength="40"><button type="button" class="cat-mini-btn fill" onclick="agregarCategoriaProducto()">Agregar</button></div></div>
-
-        <div class="fg">
-            <div class="fl">Imagen del producto</div>
-            <div class="prod-image-line"><button type="button" class="prod-image-btn" onclick="document.getElementById('pImagen').click()">📷 Subir imagen</button><button type="button" class="prod-image-remove" id="pRemoveImageBtn" onclick="_naF12RemoveProductImage()" hidden>🗑️ Quitar</button><div id="imgPreview" class="prod-image-preview">📦</div></div>
-            <input type="file" id="pImagen" accept="image/*" capture="environment" onchange="previewImagen()" style="display:none">
-        </div>
-
-        <div class="prod-unified-grid2">
-            <div class="fg"><div class="fl">Costo (S/) <span class="req">*</span></div><input class="fi" id="pCosto" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0" oninput="calcMargen()"></div>
-            <div class="fg"><div class="fl">Precio venta (S/) <span class="req">*</span></div><input class="fi" id="pPrecio" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0" oninput="calcMargen()"></div>
-        </div>
-
-        <div class="prod-margin"><strong>📈 Margen de ganancia</strong><span id="mgVal">—</span></div>
-
-        <div id="pInventoryFields">
-            <div class="prod-unified-grid2">
-                <div class="fg"><div class="fl">Stock inicial <span class="req">*</span></div><input class="fi" id="pStock" type="number" inputmode="numeric" placeholder="0" min="0"></div>
-                <div class="fg"><div class="fl">Stock mínimo</div><input class="fi" id="pStockMin" type="number" inputmode="numeric" placeholder="5" min="0"></div>
-            </div>
-        </div>
-
-        <div class="prod-unified-grid2">
-            <div class="fg"><div class="fl">Precio por caja (S/)</div><input class="fi" id="pPrecioCaja" type="number" inputmode="decimal" placeholder="0.00" step="0.01" min="0"></div>
-            <div class="fg"><div class="fl">Unidades por caja (precio mayorista)</div><input class="fi" id="pUnidCaja" type="number" inputmode="numeric" placeholder="24" min="1"></div>
-        </div>
-
-        <!-- NUEVO FASE 9: presentación de compra para calcular reposición inteligente. -->
-        <div class="prod-unified-grid2">
-            <div class="fg"><div class="fl">Unidad de compra</div><select class="fs" id="pUnidadCompra"><option value="unidad">Unidad</option><option value="caja">Caja</option><option value="paquete">Paquete</option><option value="sixpack">Sixpack</option><option value="fardo">Fardo</option><option value="docena">Docena</option><option value="bolsa">Bolsa</option><option value="otro">Otro</option></select></div>
-            <div class="fg"><div class="fl">Unidades por presentación</div><input class="fi" id="pFactorCompra" type="number" inputmode="decimal" placeholder="1" min="0.001" step="0.001"><div class="field-help">Ejemplo: 1 caja = 24 unidades de venta.</div></div>
-        </div>
-
-        <div class="fg"><div class="fl">Fecha vencimiento</div><input class="fi" id="pVenc" type="date"></div>
-
-        <details class="prod-advanced">
-            <summary>Opciones avanzadas</summary>
-            <div class="prod-advanced-body">
-                <div class="prod-advanced-row">
-                    <div class="fg"><div class="fl">Marca</div><input class="fi" id="pMarca" placeholder="Sin marca"></div>
-                    <div class="fg"><div class="fl">Unidad de venta</div><select class="fs" id="pUnidad"><option value="unidad">Unidad</option><option value="paquete">Paquete</option><option value="caja">Caja</option><option value="botella">Botella</option><option value="lata">Lata</option><option value="bolsa">Bolsa</option><option value="kilogramo">Kilogramo</option><option value="gramo">Gramo</option><option value="litro">Litro</option><option value="mililitro">Mililitro</option><option value="docena">Docena</option><option value="rollo">Rollo</option><option value="servicio">Servicio</option><option value="otro">Otro</option></select></div>
-                </div>
-                <div class="alt-code-box">
-                    <div class="alt-code-head">
-                        <div><div class="alt-code-title">Códigos de barras alternativos</div><div class="alt-code-help">Registra hasta 10 códigos de barras. Pulsa “Añadir otro código” para crear una fila nueva.</div></div>
-                        <span class="alt-code-count" id="pAltCodeCount">0/10</span>
-                    </div>
-                    <div class="alt-code-list" id="pAltCodesList"></div>
-                    <button type="button" class="alt-code-add" id="pAddAltCodeBtn" onclick="addAltBarcodeField()">＋ Añadir otro código de barras</button>
-                </div>
+    <div class="frow"><div class="fg"><div class="fl">Precio unitario (S/) <span class="req">*</span></div><input class="fi" id="vlPrecio" type="number" min="0.01" step="0.10" inputmode="decimal" placeholder="0.00" oninput="actualizarResumenVentaLibre()"></div><div class="fg"><div …1944 tokens truncated… </div>
                 <div class="fg"><div class="fl">Descripción</div><textarea class="fi" id="pDescripcion" style="height:74px;resize:vertical" placeholder="Notas o presentación del producto"></textarea></div>
                 <div class="fg"><div class="fl">Estado del producto</div><select class="fs" id="pActivo"><option value="true">ACTIVO — visible normalmente</option><option value="false">DESCONTINUADO — visible solo al buscar</option></select><div class="field-help">Reactivar conserva el producto y reinicia de forma segura su periodo de visibilidad.</div></div>
                 <div class="prod-advanced-row">
@@ -879,7 +802,8 @@
 
 <div class="toast" id="gToast"></div>
 
-<script src="/runtime-config.js"></script>\n<script src="js/core/utils.js"></script>
+<script src="/runtime-config.js"></script>
+<script src="js/core/utils.js"></script>
 <script src="js/sync/outbox.js"></script>
 <script src="js/sync/hosted-canonical-guard.js"></script>
 <script src="js/adapters/canonical-ui-adapter.js"></script>

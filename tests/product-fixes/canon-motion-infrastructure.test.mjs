@@ -84,7 +84,7 @@ test('CANON motion map documents fail-soft visual-only authority',()=>{
   assert.match(motionMap,/storage_authority: false/);
   assert.match(motionMap,/network_authority: false/);
   assert.match(motionMap,/POS_runtime_must_not_depend_on_laboratorio/);
-  assert.match(repoMap,/motion:\n[\s\S]*architecture_map: docs\/MOTION_MAP\.yaml/);
+  assert.match(repoMap,/motion:\r?\n[\s\S]*architecture_map: docs\/MOTION_MAP\.yaml/);
 });
 
 test('generic controllers remain opt-in where global behavior could change UX',()=>{
