@@ -2,9 +2,9 @@
   "format": "nuevo-amanecer-v1.3-hosted-auth-probe-v1",
   "authorized": true,
   "authorized_by": "owner",
-  "target_head": "5cec31bc5eb5ea3c5167888d5889197918a95bce",
+  "target_head": "2d588190c7e7bbd2c5c71b1f82226e6a943020a6",
   "requested_action": "probe-hosted-activation-session-canonical-read",
-  "requested_at_utc": "2026-09-30T15:27:00Z",
-  "note": "Second hosted auth probe logs only HTTP status and non-secret error metadata for each stage, then cleans temporary session by token hash.",
-  "attempt": 2
+  "requested_at_utc": "2026-09-30T15:36:00Z",
+  "note": "Re-run hosted activation/session/canonical probe after PR #277 and hosted deploy #51.",
+  "attempt": 4
 }
