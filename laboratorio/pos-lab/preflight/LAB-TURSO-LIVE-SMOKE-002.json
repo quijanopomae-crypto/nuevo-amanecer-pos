@@ -1,0 +1,68 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-LIVE-SMOKE-002",
+  "base_ref": "b160bf72d70c8f385e43468eacbbb4db66b1f3b4",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "Repository Secrets TURSO_DATABASE_URL y TURSO_AUTH_TOKEN solo como variables en GitHub Actions",
+      "Turso sqlite_schema mediante SELECT de solo lectura"
+    ],
+    "WRITES": [
+      "Solo workflow y trigger de diagnóstico LAB en Git; no se escribe en Turso durante este gate"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún estado de producto; únicamente resultado PASS/FAIL del smoke test Turso"
+    ],
+    "STORAGE_AFFECTED": [
+      "Sin escrituras remotas; la base Turso solo recibe SELECT 1 y conteo de tablas"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No exponer valores de secretos en logs",
+      "No escribir CANON, D1 producción ni Turso durante el smoke inicial",
+      "La prueba debe fallar cerrada ante URL/token ausentes o respuesta SQL no válida"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ninguno funcional todavía; este gate solo autoriza el siguiente paso de compatibilidad del esquema"
+    ],
+    "RISKS": [
+      "Token inválido o URL incorrecta",
+      "Problemas de conectividad/API Turso",
+      "Exposición accidental de secretos; mitigado evitando imprimir variables"
+    ],
+    "ROLLBACK": [
+      "Cerrar/revertir el PR del smoke; no hay cambios de datos ni despliegues"
+    ],
+    "TESTS": [
+      "SELECT 1 por API libSQL/Turso",
+      "SELECT COUNT(*) sobre sqlite_schema",
+      "GitHub Actions debe imprimir únicamente PASS y métricas no sensibles"
+    ]
+  }
+}
