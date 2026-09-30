@@ -58,10 +58,10 @@
     <div class="g-logo"><div class="g-logo-icon">🌅</div><div><div class="g-logo-text" id="topBusinessName">Nuevo Amanecer</div><div class="g-logo-sub" id="topBusinessSub">Puerto Súngaro · Multiservicios</div></div></div>
     <div class="g-spacer"></div>
     <div style="display:flex;align-items:center;gap:9px">
-        <div class="g-status" id="localStatus"><div class="g-dot"></div><span>Modo local</span></div>
+        <div class="g-status" id="localStatus" data-state="disconnected" role="status" aria-live="polite" aria-label="Desconectado" title="Desconectado"><div class="g-dot"></div><span class="g-status-label">Desconectado</span></div>
         <div class="g-sync" id="saveStatus">💾 Guardado local</div>
         <button id="btnDarkMode" onclick="toggleDark()" title="Modo día/noche" style="background:#f1f5f9;border:none;width:34px;height:34px;border-radius:50%;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">🌙</button>
-        <div class="g-avatar" id="topAvatar">F</div>
+        <button class="g-settings-btn" id="topSettingsBtn" type="button" onclick="window.NA_MENU_NAVIGATION ? window.NA_MENU_NAVIGATION.navigate('pageConfig') : goPage('pageConfig')" title="Configuración" aria-label="Abrir configuración">⚙️</button>
         <button class="back-btn" id="backBtn" onclick="goMenu()">← Menú</button>
     </div>
 </div>
@@ -93,7 +93,6 @@
             <div class="module-card" style="--accent:#a855f7;--icon-bg:#f5f0ff" onclick="goPage('pageClientes')"><div class="module-icon">👥</div><div class="module-label">Clientes</div><div class="module-desc">Créditos, seguimiento y cuentas por cobrar.</div><div class="module-arrow">Entrar →</div></div>
             <div class="module-card" style="--accent:#f59e0b;--icon-bg:#fffbeb" onclick="goPage('pageCaja')"><div class="module-icon">💰</div><div class="module-label">Caja</div><div class="module-desc">Apertura, cierre diario y control de efectivo.</div><div class="module-arrow">Entrar →</div></div>
             <div class="module-card" style="--accent:#ef4444;--icon-bg:#fef2f2" onclick="goPage('pageGastos')"><div class="module-icon">🧾</div><div class="module-label">Gastos</div><div class="module-desc">Egresos, compras y salidas de dinero.</div><div class="module-arrow">Entrar →</div></div>
-            <div class="module-card" style="--accent:#64748b;--icon-bg:#f8fafc" onclick="goPage('pageConfig')"><div class="module-icon">⚙️</div><div class="module-label">Configuración</div><div class="module-desc">Personaliza productos, ticket y el sistema.</div><div class="module-arrow">Entrar →</div></div>
         </div>
     </div>
 </div>
