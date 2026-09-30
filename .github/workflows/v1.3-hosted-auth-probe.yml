@@ -65,8 +65,15 @@ jobs:
               body:JSON.stringify({sql,params})
             });
             const x=await r.json().catch(()=>null);
-            if(!r.ok || x?.success!==true) throw new Error('cleanup_query_failed_'+r.status);
+            if(!r.ok || x?.success!==true) {
+              const detail=(x?.errors||[]).map(e=>String(e?.message||'')).filter(Boolean).join(';') || 'unknown';
+              throw new Error('d1_query_failed_'+r.status+'_'+detail);
+            }
             const result=Array.isArray(x.result)?x.result[0]:x.result;
+            if(!result || result.success===false) {
+              const detail=(result?.error || 'result_failure');
+              throw new Error('d1_result_failed_'+detail);
+            }
             return result?.results||[];
           }
 
@@ -108,7 +115,27 @@ jobs:
                 const s=await fetch(base+'/auth/session',{headers:{authorization:'Bearer '+sessionToken}});
                 const sb=await s.json().catch(()=>({}));
                 console.log('stage=session http='+s.status+' body='+JSON.stringify(safeBody(sb)));
-                if(!s.ok) process.exitCode=12;
+                if(!s.ok) {
+                  try {
+                    const cols1=await cfQuery("PRAGMA table_info('auth_sessions')");
+                    const cols2=await cfQuery("PRAGMA table_info('devices')");
+                    console.log('diag=auth_sessions_columns '+cols1.map(x=>x.name).join(','));
+                    console.log('diag=devices_columns '+cols2.map(x=>x.name).join(','));
+                    const exact=await cfQuery(
+                      "SELECT s.session_id,s.status AS session_status,d.device_id,d.role,d.status AS principal_status,d.credential_hash FROM auth_sessions s JOIN devices d ON d.device_id='session:' || s.session_id WHERE s.token_hash=?1",
+                      [tokenHash]
+                    );
+                    console.log('diag=exact_session_join rows='+exact.length);
+                    const sessionOnly=await cfQuery(
+                      "SELECT session_id,status FROM auth_sessions WHERE token_hash=?1",
+                      [tokenHash]
+                    );
+                    console.log('diag=session_only rows='+sessionOnly.length);
+                  } catch(e) {
+                    console.log('diag=d1_error '+String(e.message||e));
+                  }
+                  process.exitCode=12;
+                }
                 else {
                   const c=await fetch(base+'/read/canonical/status',{headers:{authorization:'Bearer '+sessionToken}});
                   const cb=await c.json().catch(()=>({}));
