@@ -102,7 +102,8 @@ test('the anti-cover return rate is scoped to Clientes only',()=>{
 
 test('Motion runtime remains visual-only after the Clientes return fix',()=>{
   assert.doesNotMatch(source,/saveAllData|saveAppState|localStorage|sessionStorage|indexedDB|fetch\s*\(|createSale|createPayment/);
-  assert.match(source,/revealRate:0\.5/);\n  assert.match(source,/resetAtTopPx:2/);
+  assert.match(source,/revealRate:0\.5/);
+  assert.match(source,/resetAtTopPx:2/);
 });
 
 
