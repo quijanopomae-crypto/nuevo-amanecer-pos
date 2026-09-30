@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publish CANON batch-selection UI fix: auto-fill selected total, preserve manual amount, and hide digital operation field for cash.",
-  "retry_attempt": 37,
-  "retry_reason": "PR #233 merged at 50cc5547ad010f0fb17546cf9a1d900679dddcd6 after CANON Critical CI and E2E Smoke CI passed; deploy current hosted POS shell.",
-  "requested_at_utc": "2026-09-30T03:16:00Z",
-  "target_head": "50cc5547ad010f0fb17546cf9a1d900679dddcd6"
+  "note": "Publish CANON batch payment fast path: keep payment.create idempotency while removing full canonical refresh between selected debts.",
+  "retry_attempt": 38,
+  "retry_reason": "PR #235 merged at e0ac2a835ceb32b30e58ed4f82efbf2b83b24f83 after CANON Critical CI and E2E Smoke CI passed; deploy current hosted POS shell.",
+  "requested_at_utc": "2026-09-30T03:42:00Z",
+  "target_head": "e0ac2a835ceb32b30e58ed4f82efbf2b83b24f83"
 }
