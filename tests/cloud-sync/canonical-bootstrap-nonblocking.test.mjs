@@ -39,7 +39,7 @@ test('canonical read requests are bounded without changing command write transpo
 
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
   assert.match(canonical,/\(!ready && !confirmedPaymentView\) \|\| changed \|\| !data \|\| data\.read_only !== false \|\| data\.mode !== 'ACTIVE'/);
-  assert.match(canonical,/confirmedPaymentView = action === 'payment.create' && replicaState.validation === 'receipt-patched'/);
+  assert.match(canonical,/confirmedPaymentView = \['payment.create','customer.credit-policy.set'\]\.includes\(action\) && replicaState.validation === 'receipt-patched'/);
   assert.match(canonical,/fail\('CANONICAL_COMMERCE_CLOSED'\)/);
 });
 

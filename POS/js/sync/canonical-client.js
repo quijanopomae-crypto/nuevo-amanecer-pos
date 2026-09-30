@@ -303,7 +303,7 @@
   }
   function assertAction(action) {
     if (!COMMANDS.includes(action)) fail('UNSUPPORTED_CANONICAL_ACTION');
-    var confirmedPaymentView = action === 'payment.create' && replicaState.validation === 'receipt-patched';
+    var confirmedPaymentView = ['payment.create','customer.credit-policy.set'].includes(action) && replicaState.validation === 'receipt-patched';
     if ((!ready && !confirmedPaymentView) || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.minimum_client_contract !== CONTRACT || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     assertBinding(binding);
     return true;
@@ -951,7 +951,7 @@
       }
       if (!validPayload(command, record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
       durableJournal(record);
-      return sendPending(record, command === 'payment.create' || command === 'sale.create');
+      return sendPending(record, ['payment.create','sale.create','customer.credit-policy.set'].includes(command));
     });
   }
   function createProduct(input) { return createCommand('product.create', input); }

@@ -109,7 +109,10 @@
       }
 
       var snapshot;
-      try{snapshot=await refreshCanonical();}
+      try{
+        try{client.assertAction('customer.credit-policy.set');snapshot=client.legacySnapshot();}
+        catch(_){snapshot=await refreshCanonical();}
+      }
       catch(error){notify('No se guardó la línea: CANON no disponible ('+clean(error&&error.message)+')','error');return false;}
 
       var customer=customerFrom(snapshot,input.customer_id);
