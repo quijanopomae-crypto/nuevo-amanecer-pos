@@ -1,0 +1,9 @@
+{
+  "format": "nuevo-amanecer-v1.3-hosted-auth-probe-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "target_head": "0a6d71dc9e55ea5763fee4b47918f587f6507d46",
+  "requested_action": "probe-hosted-activation-session-canonical-read",
+  "requested_at_utc": "2026-09-30T15:22:00Z",
+  "note": "One-time production-safe probe through the hosted POS origin. The existing probe creates a temporary session and deletes its auth/session principal in finally."
+}
