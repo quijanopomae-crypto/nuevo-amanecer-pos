@@ -57,7 +57,7 @@
     }, { once: true });
   }
 
-  var allowedLabWriteHosts = new Set([
+  var blockedHosts = new Set([
     'nuevo-amanecer-sync-lab.nuevo-amanecer-pos.workers.dev',
     'nuevo-amanecer-sync-lab-turso.nuevo-amanecer-pos.workers.dev'
   ]);
@@ -83,8 +83,8 @@
       var url = urlOf(input);
       var method = methodOf(input, init);
       if (url && method !== 'GET' && method !== 'HEAD') {
-        var allowedLabWorkspaceWrite = allowedLabWriteHosts.has(url.hostname) && url.pathname.startsWith('/lab/workspace/');
-        var allowedActivationWrite = allowedLabWriteHosts.has(url.hostname) && url.pathname === '/auth/activate' && method === 'POST';
+        var allowedLabWorkspaceWrite = blockedHosts.has(url.hostname) && url.pathname.startsWith('/lab/workspace/');
+        var allowedActivationWrite = blockedHosts.has(url.hostname) && url.pathname === '/auth/activate' && method === 'POST';
         var crossOriginWrite = url.origin !== location.origin;
         if (crossOriginWrite && !allowedLabWorkspaceWrite && !allowedActivationWrite) {
           console.warn('[NA-LAB] Escritura externa fuera de workspace bloqueada:', method, url.href);

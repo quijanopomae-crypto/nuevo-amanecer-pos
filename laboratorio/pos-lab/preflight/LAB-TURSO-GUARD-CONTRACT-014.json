@@ -1,0 +1,69 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-GUARD-CONTRACT-014",
+  "base_ref": "4931552726207cc2e99807d8d3b0c57ac5767f32",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "El deploy POS LAB #181 falló en Validate generated LAB con 149/150 tests PASS.",
+      "La única regresión está en tests/laboratorio-policy-contract.test.mjs línea 40, que mantiene un contrato estático sobre el identificador blockedHosts.has(url.hostname).",
+      "La funcionalidad Turso añadida en el PR #296 es válida; el fallo proviene del renombre del identificador de la allowlist, no del hostname Turso ni de la lógica de seguridad."
+    ],
+    "WRITES": [
+      "Restaurar el nombre de la colección a blockedHosts conservando ambos hostnames LAB autorizados.",
+      "Alinear la regresión nueva de laboratorio-pos-html con el contrato estático existente."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún estado de negocio cambia; solo se conserva la misma decisión de seguridad usando el identificador esperado por el contrato."
+    ],
+    "STORAGE_AFFECTED": [
+      "Sin cambios de almacenamiento, credenciales o datos."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "El Worker Turso LAB sigue autorizado.",
+      "El Worker D1 LAB heredado sigue autorizado solo para rollback LAB.",
+      "Hosts de producción continúan bloqueados.",
+      "Las rutas permitidas continúan limitadas a /auth/activate y /lab/workspace/.",
+      "CANON y producción no se modifican."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "La activación y persistencia Turso quedan disponibles para todo el workspace LAB.",
+      "No cambia la lógica de ventas, inventario, caja, clientes ni créditos."
+    ],
+    "RISKS": [
+      "Cambiar el contrato de política existente sería un alcance mayor e innecesario; se evita restaurando el identificador original.",
+      "No debe retirarse el hostname Turso durante la corrección."
+    ],
+    "ROLLBACK": [
+      "Revertir el commit funcional devuelve exactamente el estado del PR #296."
+    ],
+    "TESTS": [
+      "node --test tests/laboratorio-*.test.mjs",
+      "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-GUARD-CONTRACT-014.json --receipt=laboratorio/pos-lab/preflight/LAB-TURSO-GUARD-CONTRACT-014.json",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-GUARD-CONTRACT-014.json",
+      "node laboratorio/pos-lab/build-lab.mjs --check"
+    ]
+  }
+}
