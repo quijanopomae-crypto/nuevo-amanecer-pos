@@ -1,0 +1,12 @@
+{
+  "schema": "nuevo-amanecer.turso-direct-cutover-trigger/v1",
+  "action": "DIRECT_CUTOVER_CANON_TO_TURSO",
+  "owner_authorized": true,
+  "accept_d1_test_data_loss": true,
+  "one_shot": true,
+  "candidate_run_id": 36782779872,
+  "candidate_commit": "05dc3833fd2f3beaa5c1e0a2d2b773d5a43b245f",
+  "requested_at": "2026-09-30T17:40:00-05:00",
+  "no_live_sale": true,
+  "scope": "Directly switch the active CANON Worker to the validated Turso production database without D1 reads or backup because the owner accepts loss of current D1 test data."
+}
