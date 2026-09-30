@@ -1,0 +1,95 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-PAYMENT-LEAN-PATH-003",
+  "base_ref": "efc209b0e3829ed8e6e80aa94414ceadba849f92",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "POS/js/sync/canonical-client.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tools/cloudflare-lab/src/worker.js",
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+      "tests/cloud-sync/canonical-payment-batch-backend.test.mjs",
+      "tests/cloud-sync/worker-fixture.mjs",
+      "laboratorio/pos-lab/skill-preflight.mjs"
+    ],
+    "WRITES": [
+      "Eliminar el desvío de una deuda hacia el endpoint genérico payment.create dentro de createPaymentBatch.",
+      "Usar /commands/payment.batch para 1..20 deudas del panel Cobro múltiple.",
+      "Empaquetar autoridad, replay, créditos y sesión de caja en una sola consulta SELECT D1 con JSON.",
+      "Mantener la db.batch() de escritura actual como frontera durable."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ningún cambio de estado comercial; solo transporte y scheduling de consultas."
+    ],
+    "STORAGE_AFFECTED": [
+      "Mismas tablas y mismos registros payment.create; sin schema nuevo."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Receipt durable antes de Pagado.",
+      "Un payment.create hijo por deuda.",
+      "No duplicados ante retry o ACK perdido.",
+      "Saldo y caja protegidos por CAS en la db.batch de escritura.",
+      "Referencia digital e historial preservados.",
+      "Pago individual fuera del panel Cobro múltiple conserva payment.create."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes/Créditos mantiene confirmBatch.",
+      "Caja recibe los mismos eventos PAYMENT.",
+      "Historial conserva operation_id y receipts hijos.",
+      "Pago individual conserva el endpoint genérico actual."
+    ],
+    "RISKS": [
+      "El SELECT empaquetado debe reproducir exactamente los campos usados por las validaciones existentes.",
+      "JSON1 de SQLite/D1 ya es una dependencia existente del repositorio.",
+      "La red móvil externa puede seguir aportando latencia aunque eliminemos llamadas controlables."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR y desplegar Worker/Hosted POS previos; no hay rollback de datos ni schema."
+    ],
+    "TESTS": [
+      "1 deuda en Cobro múltiple: exactamente POST /commands/payment.batch y cero POST /commands/payment.create.",
+      "1..20 deudas: un POST batch por chunk.",
+      "Worker: una sola consulta D1 .first() para prelecturas y una db.batch() de escritura.",
+      "Replay, stale credit, stale session y atomicidad siguen pasando.",
+      "CANON Critical CI, LAB Canon Mirror CI y E2E Smoke."
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    }
+  }
+}
