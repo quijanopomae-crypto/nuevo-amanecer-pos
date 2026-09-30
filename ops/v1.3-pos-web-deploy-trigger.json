@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON Clientes mobile refresh Motion owner fix: keep NA_MOTION.scroll as the single visual owner after reload.",
-  "retry_attempt": 41,
-  "retry_reason": "PR #247 merged at 2b05865153559bb53e368666fd3ae455b5b72f86 after CANON Critical CI #307 PASS and E2E Smoke CI #65 PASS. Publish the visual-only Clientes refresh stability fix.",
-  "requested_at_utc": "2026-09-30T12:50:20Z",
-  "target_head": "2b05865153559bb53e368666fd3ae455b5b72f86"
+  "note": "Deploy CANON payment latency phase 2: one-debt payment.create fast path, no redundant status read for new atomic batches, immediate post-receipt Pagado state.",
+  "retry_attempt": 42,
+  "retry_reason": "PR #251 merged at 76fba7cbe56b2494bcc726fa246b4bdb6958b706 after CANON Critical CI #311 PASS, E2E Smoke CI #66 PASS and OpenCode Role Map CI #54 PASS. Backend latency optimization from PR #249 is already deployed.",
+  "requested_at_utc": "2026-09-30T13:12:00Z",
+  "target_head": "76fba7cbe56b2494bcc726fa246b4bdb6958b706"
 }
