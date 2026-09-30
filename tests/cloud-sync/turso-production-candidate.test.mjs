@@ -17,10 +17,14 @@ test('Turso production candidate is a separate Worker and does not replace activ
   assert.equal(Array.isArray(candidate.d1_databases), false);
 });
 
-test('candidate workflow is manual only and requires explicit confirmation', () => {
+test('candidate workflow is explicitly gated for manual or one-shot authorized trigger', () => {
   assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /\n\s*push:/);
+  assert.match(workflow, /push:/);
+  assert.match(workflow, /branches:[\s\S]*feature\/v1\.3-mobile-cloud/);
+  assert.match(workflow, /paths:[\s\S]*ops\/v1\.3-turso-prod-candidate-trigger\.json/);
   assert.match(workflow, /PREPARE_TURSO_PRODUCTION_CANDIDATE/);
+  assert.match(workflow, /trigger\.owner_authorized !== true/);
+  assert.match(workflow, /trigger\.one_shot !== true/);
   assert.match(workflow, /TURSO_PROD_DATABASE_URL: \$\{\{ secrets\.TURSO_PROD_DATABASE_URL \}\}/);
   assert.match(workflow, /TURSO_PROD_AUTH_TOKEN: \$\{\{ secrets\.TURSO_PROD_AUTH_TOKEN \}\}/);
   assert.match(workflow, /test "\$TURSO_PROD_DATABASE_URL" != "\$TURSO_LAB_DATABASE_URL"/);
