@@ -180,6 +180,12 @@ export default {
     } catch (error) {
       if (isLabWorkspace) return jsonLab({ error: 'internal_error' }, 500);
       if (String(error?.message).includes('authority_frozen')) return cors(json({ error: 'authority_frozen' }, 409), isRead);
+      if (String(env?.CANDIDATE_DIAGNOSTIC || '') === 'enabled') {
+        return cors(json({
+          error: 'internal_error',
+          diagnostic: String(error?.message || error || 'unknown').slice(0, 500)
+        }, 500), isRead);
+      }
       return cors(json({ error: 'internal_error' }, 500), isRead);
     }
   },
