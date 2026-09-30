@@ -118,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
           EXTRA=""
-          if [ "${{ github.event_name }}" = "push" ] && grep -Fq '"verify_existing_candidate": true' ops/v1.3-turso-prod-candidate-trigger.json; then
+          if [ -f ops/v1.3-turso-prod-candidate-trigger.json ] && grep -Fq '"verify_existing_candidate": true' ops/v1.3-turso-prod-candidate-trigger.json; then
             EXTRA="--verify-existing"
           fi
           python3 tools/cloudflare-prod/scripts/turso-seed-from-sqlite.py \
@@ -150,6 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE'
+          import { createHash, randomUUID } from 'node:crypto';
           import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
 
           const worker = process.env.CANDIDATE_WORKER_URL.replace(/\/+$/, '');
@@ -177,9 +178,50 @@ jobs:
             throw new Error('candidate health failed: ' + JSON.stringify(last));
           }
 
+          function safeError(error) {
+            const raw = String(error?.message || error || 'unknown');
+            return raw.replace(/https?:\/\/\S+/g, '[url]').replace(/[A-Za-z0-9_-]{48,}/g, '[redacted]').slice(0, 360);
+          }
+
+          async function cleanupSynthetic(sessionId) {
+            const principal = 'session:' + sessionId;
+            await db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId).run();
+            await db.prepare('DELETE FROM devices WHERE device_id=?1').bind(principal).run();
+          }
+
+          async function diagnoseAuthBatch() {
+            const sessionId = 'diag-' + randomUUID();
+            const principal = 'session:' + sessionId;
+            const tokenHash = createHash('sha256').update('candidate-auth-diag:' + randomUUID()).digest('hex');
+            try {
+              await db.batch([
+                db.prepare(
+                  `INSERT INTO devices (device_id, role, status, credential_hash, last_seen_at)
+                   VALUES (?1, 'writer', 'active', ?2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                   ON CONFLICT(device_id) DO UPDATE SET role='writer', status='active',
+                     credential_hash=excluded.credential_hash, last_seen_at=excluded.last_seen_at`
+                ).bind(principal, tokenHash),
+                db.prepare(
+                  `INSERT INTO auth_sessions (session_id, token_hash, status, last_seen_at)
+                   VALUES (?1, ?2, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
+                ).bind(sessionId, tokenHash),
+              ]);
+              console.log('TURSO_PROD_CANDIDATE_AUTH_BATCH_DIAG=PASS');
+            } catch (error) {
+              console.log('TURSO_PROD_CANDIDATE_AUTH_BATCH_DIAG=FAIL message=' + safeError(error));
+              throw error;
+            } finally {
+              try { await cleanupSynthetic(sessionId); } catch (cleanupError) {
+                console.log('TURSO_PROD_CANDIDATE_AUTH_BATCH_CLEANUP=FAIL message=' + safeError(cleanupError));
+              }
+            }
+          }
+
           try {
             await waitHealth();
             console.log('TURSO_PROD_CANDIDATE_HEALTH=PASS');
+
+            await diagnoseAuthBatch();
 
             const labRoute = await fetch(worker + '/lab/workspace/status');
             if (labRoute.status !== 404) throw new Error('candidate exposes LAB workspace route');

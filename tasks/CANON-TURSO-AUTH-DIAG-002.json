@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-AUTH-DIAG-002",
+  "environment": "CANON",
+  "base_ref": "052a1b88521fdf6b89d5cc264b3d9aa1a930346f",
+  "objective": "Diagnosticar y corregir de forma aislada el fallo HTTP 500 de /auth/activate en el Worker Turso de producción candidato, sin tocar el Worker CANON activo, el frontend productivo ni D1 producción.",
+  "owner_authorization": "El propietario autorizó continuar con el candidato Turso y proporcionó el Run ID 36781905504 para revisión y continuación.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-AUTH-DIAG-002.json",
+    "evidence/canon-preflight/CANON-TURSO-AUTH-DIAG-002.json",
+    ".github/workflows/v1.3-turso-prod-candidate.yml",
+    "ops/v1.3-turso-prod-candidate-trigger.json",
+    "tests/cloud-sync/turso-production-candidate.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-prod/wrangler.jsonc",
+    "tools/cloudflare-pos-web/**",
+    "infra/database/migrations/**"
+  ],
+  "invariants": [
+    "No cutover ni tráfico productivo hacia Turso.",
+    "D1 producción permanece solo lectura.",
+    "El diagnóstico solo puede crear y limpiar sesiones sintéticas en la base Turso candidata.",
+    "No exponer secretos ni tokens.",
+    "El workflow manual debe poder verificar una base candidata ya poblada sin intentar reseed.",
+    "El Worker activo nuevo-amanecer-pos-prod no se redeploya."
+  ],
+  "rollback": "Revertir el PR. Las filas sintéticas del diagnóstico se limpian siempre; CANON activo y D1 no cambian."
+}

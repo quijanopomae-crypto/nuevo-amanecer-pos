@@ -1,0 +1,48 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-AUTH-DIAG-002",
+  "base_ref": "052a1b88521fdf6b89d5cc264b3d9aa1a930346f",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"},
+    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+  },
+  "analysis": {
+    "READS": [
+      "Run 36781905504: manual candidate run failed because Turso candidate was already populated (263 schema objects).",
+      "Run 36781878526: strict parity PASS with 44 tables and 2034 rows; candidate Worker deploy PASS; /auth/activate returned HTTP 500.",
+      "Current candidate workflow only enables --verify-existing on push, causing manual rerun to stop before the real blocker."
+    ],
+    "WRITES": [
+      "Allow verify-existing mode for a manual run when the one-shot trigger marks the candidate as already populated.",
+      "Add a direct Turso session-batch diagnostic before HTTP activation, using random synthetic IDs and unconditional cleanup.",
+      "Log only sanitized SQL error metadata/message; never print tokens, URLs or activation secret.",
+      "Bump the one-shot trigger to rerun candidate verification after merge."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": ["Only temporary synthetic auth rows in Turso candidate during the diagnostic."],
+    "STORAGE_AFFECTED": ["Turso candidate only; synthetic auth rows are removed in finally."],
+    "DOMAIN_INVARIANTS": [
+      "No sales, inventory, cash, credit or customer data may be changed.",
+      "No production routing/cutover.",
+      "No D1 writes.",
+      "No secrets in logs."
+    ],
+    "CROSS_MODULE_IMPACT": ["Authentication only; commerce and financial routes remain untouched."],
+    "RISKS": [
+      "Synthetic auth insert could remain if cleanup is skipped; mitigation: cleanup executes in finally and targets exact random IDs.",
+      "Manual workflow could accidentally reseed populated candidate; mitigation: verify-existing is selected from the authorized trigger state."
+    ],
+    "ROLLBACK": ["Revert the workflow/test/trigger commit."],
+    "TEST_PLAN": [
+      "CANON Critical CI",
+      "candidate workflow push run",
+      "confirm parity remains PASS before auth probe",
+      "inspect sanitized direct batch diagnostic and HTTP activation result"
+    ]
+  }
+}

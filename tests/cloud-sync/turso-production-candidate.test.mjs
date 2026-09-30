@@ -80,3 +80,19 @@ test('candidate parity keeps strict digest and permits only sub-ULP float-to-flo
   assert.match(seeder, /rel_tol=2e-16/);
   assert.match(seeder, /abs_tol=0\.0/);
 });
+
+test('manual rerun can verify the already-populated candidate without reseeding', () => {
+  assert.match(workflow, /-f ops\/v1\.3-turso-prod-candidate-trigger\.json/);
+  assert.match(workflow, /verify_existing_candidate/);
+  assert.match(workflow, /EXTRA="--verify-existing"/);
+});
+
+test('candidate auth probe diagnoses the exact Turso batch before HTTP activation', () => {
+  const diag = workflow.indexOf('diagnoseAuthBatch');
+  const activate = workflow.indexOf("fetch(worker + '/auth/activate'");
+  assert.ok(diag >= 0 && activate > diag);
+  assert.match(workflow, /TURSO_PROD_CANDIDATE_AUTH_BATCH_DIAG=PASS/);
+  assert.match(workflow, /DELETE FROM auth_sessions WHERE session_id=\?1/);
+  assert.match(workflow, /DELETE FROM devices WHERE device_id=\?1/);
+  assert.match(workflow, /safeError\(error\)/);
+});
