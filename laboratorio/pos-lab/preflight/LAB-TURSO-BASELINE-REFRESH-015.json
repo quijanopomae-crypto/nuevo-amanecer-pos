@@ -1,0 +1,74 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-TURSO-BASELINE-REFRESH-015",
+  "base_ref": "2d1ce99ed12839415da5b6e36f91ea6e9989dc68",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "El workflow Refresh LAB Data descarga el último backup SQL CANON desde R2 con token de solo lectura, lo convierte a snapshot POS y lo firma con LAB_IMPORT_HMAC_SECRET.",
+      "publish-lab-snapshot.mjs admite LAB_WORKER_URL por variable de entorno y actualmente cae por defecto al Worker D1 LAB heredado.",
+      "El Worker Turso aislado ya validó /lab/workspace/import-baseline en el Workspace E2E.",
+      "El POS-LAB del navegador ya apunta al Worker Turso aislado y reporta que aún no existe baseline."
+    ],
+    "WRITES": [
+      "Configurar LAB_WORKER_URL del workflow Refresh LAB Data al hostname exacto del Worker Turso LAB aislado.",
+      "Actualizar el trigger autorizado para describir CANON backup -> Turso LAB y provocar una ejecución del workflow tras el merge.",
+      "Añadir una regresión estática que garantice que Refresh LAB Data publica hacia el Worker Turso."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "El workspace remoto primario de Turso LAB recibirá el baseline generado desde el backup CANON autorizado.",
+      "No se altera estado CANON ni producción."
+    ],
+    "STORAGE_AFFECTED": [
+      "Lectura del backup CANON en R2 permanece read-only.",
+      "Escritura permitida únicamente al workspace de Turso LAB aislado a través de /lab/workspace/import-baseline."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "La dirección de datos sigue siendo CANON -> LAB solamente.",
+      "Productos y clientes deben ser no vacíos antes de publicar el baseline.",
+      "No se exponen secretos ni se escriben credenciales en Git.",
+      "CANON, producción y POS/** permanecen intactos."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "El baseline Turso alimentará los datos compartidos que consumen inventario, clientes, ventas, caja, créditos y configuración en POS-LAB.",
+      "No cambia la lógica funcional de esos módulos; solo el destino del snapshot remoto."
+    ],
+    "RISKS": [
+      "Si el backup CANON más reciente o sus secretos de lectura no están disponibles, el workflow fallará antes de publicar.",
+      "Si el snapshot sale vacío en productos o clientes, el gate existente abortará la importación.",
+      "Si la firma HMAC no coincide con el Worker Turso, la importación será rechazada sin modificar CANON."
+    ],
+    "ROLLBACK": [
+      "Revertir el cambio de LAB_WORKER_URL devuelve el refresh al Worker D1 LAB heredado.",
+      "La importación a Turso es LAB-only y no requiere rollback de producción."
+    ],
+    "TESTS": [
+      "node --test tests/laboratorio-remote-preflight-order.test.mjs",
+      "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-BASELINE-REFRESH-015.json --receipt=laboratorio/pos-lab/preflight/LAB-TURSO-BASELINE-REFRESH-015.json",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-TURSO-BASELINE-REFRESH-015.json",
+      "Ejecución real de Refresh LAB Data tras el merge y verificación de conclusión success."
+    ]
+  }
+}
