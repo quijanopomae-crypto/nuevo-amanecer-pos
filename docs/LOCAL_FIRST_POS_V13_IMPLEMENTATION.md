@@ -2,6 +2,22 @@
 
 Base fetched from GitHub: `feature/v1.3-mobile-cloud` at `f865ae53a3330ed9cbf71fe9141f64a3fc0ac165`. Isolated implementation branch: `feat/v1.3-local-first-replication`. Owner specification and task/preflight precede POS edits. This change is for review: no merge, deploy, remote migration, production restore or commercial sale is authorized by the attached implementation specification.
 
+## Current correction: Android startup P1 — 2026-10-01
+
+Starting HEAD `4c8a8057ec94a9afa0a95761bc34bf960ab6efb9`. Root cause reproduced in a new real-page regression: with no V10, `startPOS()` fell back to cloud refresh and accepted a cloud cash-open command. Older browser tests manually enabled local-first before loading the page, so they did not catch this. Startup also cleared operational arrays before local restore and remote-revalidated a sessionStorage-only grant proof before publishing V10.
+
+Normal configured CANON startup now requires the shipped local engine. It restores valid V10 before first operational render; without V10 it asks for the existing owner activation UI and rejects every commercial command/prepare/refresh instead of silently using cloud-first. Legacy cloud paths remain available to existing isolated protocol tests and shells that do not ship the local engine; the normal POS does not start the legacy sale outbox.
+
+The existing session proof (grant ID plus SHA-256 of the existing session token) accompanies the existing session credential record, outside commercial snapshots/backups. It is not a device credential or hardware identity. Changing the token invalidates the proof; released/changed grants stay read-only. A valid same-session proof permits a new tab or offline reload without network/another owner key. If an older baseline lacks that proof, boot publishes its data read-only before asynchronous session revalidation; no remote validation blocks display or silently grants commerce. Cooperative writer release/handover remains unchanged.
+
+Config uses the existing projection digest to distinguish commercial changes from sync metadata; metadata/ACK updates preserve its DOM and unsaved fields. No animation, commercial reducer, Worker, migration, LAB product or CI workflow was changed. The old bootstrap test's unconditional-empty expectation was replaced with the new requirement: restore before first render, clear only without a valid local baseline, require UI activation and do not remotely bootstrap the shipped local branch. Other assertions remain intact.
+
+The critical regression starts the shipped page from an existing synthetic authenticated session, with no V10, injected runtime, preparatory API refresh or programmatic enable call. Owner activation uses actual UI buttons. A real 60-second mock response delay proves local cash, consecutive sales, expense and two different customers' payments finish before ACK; zero foreground requests. It additionally covers offline cash→two sales→payment→expense→close, F5 preserving every pending operation, and background reconciliation of six sales/stock with the real Worker through synthetic Turso SQLite. A separate test asserts Config child mutations = 0 and preserves an unsaved input. Measurements and final CI are recorded in the PR metadata after verification; these are browser synthetic results, not physical Android acceptance.
+
+The broader historical test sweep was attempted and then isolated after discovering old extraction/release tests rewrite tracked POS/evidence files. Generated changes were restored without touching this patch; its affected suites were repeated on the clean product. Those checkpoint-only tests compare byte equality against old extraction heads and conflict with authorized functional changes. Their actual failures are retained in the test report, not counted as successful current release gates.
+
+The earlier results below are historical; Android physical validation remains pending. NO MERGE / NO DEPLOY / NO REMOTE DATABASE / NO REAL SALE.
+
 ## Root causes and resulting behavior
 
 The legacy canonical client required online readiness, a single localStorage pending journal blocked unrelated commands, and sale capture waited for remote synchronization after durable intent capture. Cash bridges inherited the same refresh/command/refresh path. The cashier therefore depended on network latency even with IndexedDB available.

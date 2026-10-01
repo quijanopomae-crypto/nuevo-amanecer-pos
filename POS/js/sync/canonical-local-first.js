@@ -41,16 +41,26 @@
   async function authorize(state,refreshProof){
     var sessionHash=await store().hash(hooks().session().token),proof;
     try{proof=JSON.parse(root.sessionStorage.getItem(PROOF)||'null');}catch(_){}
-    if(proof && proof.grant_id===state.grant.grant_id && proof.session_hash===sessionHash)return;
+    if(!proof && hooks().writerProof)proof=hooks().writerProof();
+    if(proof && proof.grant_id===state.grant.grant_id && proof.session_hash===sessionHash){if(hooks().writerProof)hooks().writerProof(proof);return;}
     if(!refreshProof || root.navigator.onLine===false)fail('LOCAL_WRITER_SESSION_REVALIDATION_REQUIRED');
     var grant=await request('/auth/local-writer');
     if(!grant.response.ok || grant.body.writer!==true || grant.body.writer_id!==state.grant.writer_id || grant.body.grant_id!==state.grant.grant_id)fail('LOCAL_WRITER_SESSION_CHANGED');
     var raw=JSON.stringify({grant_id:state.grant.grant_id,session_hash:sessionHash});
     root.sessionStorage.setItem(PROOF,raw);if(root.sessionStorage.getItem(PROOF)!==raw)fail('LOCAL_WRITER_PROOF_NOT_DURABLE');
+    if(hooks().writerProof)hooks().writerProof(JSON.parse(raw));
   }
   async function boot(){
     var state=await store().read();if(!state || state.migration.complete!==true)return false;
-    await authorize(state,true);active=true;hooks().publish(state);schedule();return true;
+    // Publish durable commercial data before any remote session validation.
+    active=true;
+    try{await authorize(state,false);hooks().publish(state);schedule();}
+    catch(error){
+      if(String(error.message)!=='LOCAL_WRITER_SESSION_REVALIDATION_REQUIRED'){active=false;throw error;}
+      var view=JSON.parse(JSON.stringify(state));view.projection.write_authorized=false;hooks().publish(view);
+      authorize(state,true).then(async function(){hooks().publish(await store().read());schedule();}).catch(function(){});
+    }
+    return true;
   }
   async function enable(secret){
     return root.navigator.locks.request('na-canonical-sale-outbox',{mode:'exclusive'},function(){return root.navigator.locks.request('na-canonical-financial-writer',{mode:'exclusive'},function(){return enableLocked(secret);});});
@@ -58,6 +68,7 @@
   async function enableLocked(secret){
     var existing=await store().read();
     if(existing && !existing.writer_released && existing.cloud.state!=='AUTHORITY_CHANGED'){
+      await authorize(existing,true);
       if(await boot())return root.NuevoAmanecerCanonical.snapshot();
     }
     if(existing && (existing.events.length || existing.migration.evidence.some(function(e){return e.state==='NEEDS_REVIEW';})))fail('LOCAL_WRITER_PENDING_OPERATIONS');

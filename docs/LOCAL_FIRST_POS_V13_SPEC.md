@@ -2,6 +2,16 @@
 
 Fuente: PDF y prompt del propietario. Implementación autorizada; merge/deploy no autorizados.
 
+## Corrección autorizada del arranque real — reporte Android, 2026-10-01
+
+El propietario reprodujo un P1 en Android: ventas/abonos esperaban cloud y bloqueaban la operación siguiente pese a cargar los scripts local-first. El arranque CANON configurado debe activar V10 antes de pintar sus datos y no caer silenciosamente a comandos cloud-first. Sin baseline, exige **Activar este equipo para ventas**, con autorización del propietario mediante la UI existente una sola vez. Con baseline válida de la misma sesión, restaura offline y valida la nube en segundo plano.
+
+La misma sesión autorizada debe sobrevivir pestaña nueva/F5 sin clave por operación; no autoriza credenciales de hardware, fingerprint, takeover, nuevo mecanismo de seguridad ni multiwriter. Se conserva A libera tras sincronizar → B activa. Los commits locales siguen siendo atómicos y no esperan status, ACK o refresh remoto. No borrar arrays comerciales durante arranque si V10 es válida; la metadata de sincronización no debe reconstruir Config ni perder ediciones. Animaciones intactas.
+
+Regresión crítica: cargar `POS/index.html` real desde una sesión CANON sintética configurada, sin V10, runtime inyectado, refresh preparatorio ni `evaluate(enableLocalFirst)`. Activar mediante botones, retener una respuesta Worker 60 segundos y comprobar caja, dos ventas, venta→gasto→venta y abonos de clientes distintos antes del ACK. Assert explícito: solicitudes de red durante commits comerciales = 0. Verificar operación offline completa, F5, pestaña nueva, reconexión e igualdad con las proyecciones del Worker. Ejecutar las suites existentes y documentar cualquier gate histórico no aplicable; no fabricar éxitos ni debilitar pruebas.
+
+Alcance: boot/client/puente de venta CANON, render inicial y regresiones/documentación. No cambios LAB, Worker, migraciones, contratos, reglas comerciales, arquitectura o workflows. PR #323 sigue DRAFT; no merge, deploy, producción, D1/Turso remoto ni venta real.
+
 ```text
  NUEVO AMANECER POS V1.3 - ESPECIFICACIÓN PARA CODEX
 

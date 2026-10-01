@@ -41,7 +41,7 @@ test('V10 local commit persists projection, ledger and checkpoint before returni
   })).toEqual({cash:100,equal:true});
 });
 
-async function posHarness(page:Page,cleanup:Array<()=>void>,options:{lostAck?:boolean}={}) {
+async function posHarness(page:Page,cleanup:Array<()=>void>,options:{lostAck?:boolean,shipped?:boolean}={}) {
   // Explicitly reset network emulation before the online synthetic bootstrap.
   await page.context().setOffline(false);
   const child=fork(root+'/tests/cloud-sync/canonical-local-first-browser-fixture.mjs',[],{execArgv:[]});
@@ -61,6 +61,18 @@ async function posHarness(page:Page,cleanup:Array<()=>void>,options:{lostAck?:bo
   await page.route('**/read/canonical/**',async route=>{const u=new URL(route.request().url());calls.push({path:u.pathname,method:'GET',body:null});const response=await f.fetch('http://localhost'+u.pathname+u.search,{headers:route.request().headers()});await route.fulfill({status:response.status,contentType:'application/json',body:await response.text()});});
   await page.route('**/auth/local-writer',async route=>{const request=route.request(),u=new URL(request.url());const response=await f.fetch('http://localhost'+u.pathname,{method:request.method(),headers:request.headers(),body:request.method()==='POST'?request.postData():undefined});await route.fulfill({status:response.status,contentType:'application/json',body:await response.text()});});
   await page.route('**/commands/**',async route=>{const request=route.request(),u=new URL(request.url());calls.push({path:u.pathname,method:'POST',body:JSON.parse(request.postData()||'{}')});const response=await f.fetch('http://localhost'+u.pathname,{method:'POST',headers:request.headers(),body:request.postData()});if(loseAck && u.pathname==='/commands/sale.create' && response.status===201){loseAck=false;await route.abort();return;}await route.fulfill({status:response.status,contentType:'application/json',body:await response.text()});});
+  if(options.shipped){
+    // Existing authenticated CANON session only: no V10, injected runtime,
+    // remote refresh, or programmatic local-first activation.
+    await page.addInitScript(control=>{
+      localStorage.setItem('na_canonical_binding',JSON.stringify({endpoint:location.origin,promotion_id:control.active_promotion_id,authority_epoch:control.authority_epoch,revision:control.revision}));
+      if(!localStorage.getItem('na_cloud_sync_credentials'))localStorage.setItem('na_cloud_sync_credentials',JSON.stringify({endpoint:location.origin,token:'writer-token'}));
+    },control);
+    await page.goto('/index.html');
+    await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().validation==='activation-required');
+    await page.waitForSelector('#naLocalWork');
+    return {f,calls};
+  }
   await harness(page);
   for(const name of ['adapters/canonical-ui-adapter','sync/canonical-client','sync/canonical-sale-intent','sync/canonical-local-first']) {
     const path=root+'/POS/js/'+name+'.js';if(existsSync(path))await page.addScriptTag({content:readFileSync(path,'utf8')});
@@ -72,6 +84,105 @@ async function posHarness(page:Page,cleanup:Array<()=>void>,options:{lostAck?:bo
   },control);
   return {f,calls};
 }
+
+test('shipped startup requires UI activation and restores V10 offline in a new tab without foreground cloud',async({page,context})=>{
+ const cleanup:Array<()=>void>=[];try{
+  const {calls}=await posHarness(page,cleanup,{shipped:true});
+  await expect(page.locator('#naLocalWork')).toBeVisible();
+  const closed=await page.evaluate(async()=>{let error='';try{await (window as any).NuevoAmanecerCanonical.openCash({session_id:'must-not-cloud',opening_cents:0});}catch(e){error=(e as Error).message;}return error;});
+  expect(closed).toBe('LOCAL_BASELINE_REQUIRED');
+  expect(calls).toHaveLength(0);
+  const otherCommands=await page.evaluate(async()=>{const api=(window as any).NuevoAmanecerCanonical,errors=[];for(const name of ['createSale','createPayment','createPaymentBatch','closeCash','createExpense','adjustInventory','createCustomer','setCustomerCreditPolicy','createCreditAccount','createProduct']){try{await api[name](name==='createPaymentBatch'?[{}]:{});errors.push('unexpected commit');}catch(e){errors.push((e as Error).message);}}return errors;});
+  expect(otherCommands).toEqual(Array(10).fill('LOCAL_BASELINE_REQUIRED'));expect(calls).toHaveLength(0);
+  await page.locator('#naLocalWork').click();await page.getByLabel('Autorización del propietario').fill('synthetic-owner-secret');
+  await page.locator('dialog').getByRole('button',{name:'Activar este equipo para ventas',exact:true}).click();
+  await expect(page.locator('dialog [role="status"]')).toHaveText('Este equipo está activo para ventas.');
+  await page.locator('dialog').getByRole('button',{name:'Cancelar',exact:true}).click();
+  await context.setOffline(true);
+  await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.openCash({session_id:'offline-startup',opening_cents:100});});
+  // A new tab has no sessionStorage proof, but retains the same authorized session.
+  const next=await context.newPage();await next.goto('/index.html');
+  await next.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');
+  const count=calls.length;
+  await next.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.createExpense({expense_id:'new-tab-expense',amount_cents:100,payment_method:'efectivo',session_id:'offline-startup',concept:'Synthetic expense',category:'Other',expense_date:'2026-10-01'});});
+  expect(calls.length).toBe(count);
+  expect(await next.evaluate(()=>(window as any).NuevoAmanecerCanonical.snapshot().expenses.length)).toBe(1);
+  await next.close();
+ }finally{await context.setOffline(false);cleanup.forEach(fn=>fn());}
+});
+
+test('local sync metadata preserves the visible Config DOM and unsaved input',async({page})=>{
+ const cleanup:Array<()=>void>=[];try{
+  await posHarness(page,cleanup,{shipped:true});await page.locator('#naLocalWork').click();
+  await page.getByLabel('Autorización del propietario').fill('synthetic-owner-secret');
+  await page.locator('dialog').getByRole('button',{name:'Activar este equipo para ventas',exact:true}).click();
+  await expect(page.locator('dialog [role="status"]')).toHaveText('Este equipo está activo para ventas.');
+  await page.locator('dialog').getByRole('button',{name:'Cancelar',exact:true}).click();
+  await page.evaluate(()=>(window as any).goPage('pageConfig'));await expect(page.locator('#cfgContent')).toBeVisible();
+  const result=await page.evaluate(async()=>{const w=window as any,content=document.getElementById('cfgContent')!,input=content.querySelector('input')!;input.value='Unsaved synthetic edit';let mutations=0;const observer=new MutationObserver(records=>{mutations+=records.filter(r=>r.type==='childList').length;});observer.observe(content,{childList:true,subtree:true});await w.NuevoAmanecerCanonicalLocalStore.update('synthetic-sync-metadata',(s:any)=>{s.cloud.last_error='Synthetic temporary timeout';});await w.NuevoAmanecerCanonical.refresh();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));observer.disconnect();return {mutations,sameInput:input.isConnected,value:input.value};});
+  expect(result).toEqual({mutations:0,sameInput:true,value:'Unsaved synthetic edit'});
+ }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('real POS UI activation → cash, consecutive sales and two customers payments before a 60s cloud ACK → offline F5 → background reconciliation',async({page,context})=>{
+ test.setTimeout(100000);
+ const cleanup:Array<()=>void>=[],delays:Array<()=>void>=[];try{
+  await page.setViewportSize({width:393,height:851});
+  const {f,calls}=await posHarness(page,cleanup,{shipped:true});
+  await page.locator('#naLocalWork').click();
+  await page.getByLabel('Autorización del propietario').fill('synthetic-owner-secret');
+  await page.locator('dialog').getByRole('button',{name:'Activar este equipo para ventas',exact:true}).click();
+  await expect(page.locator('dialog [role="status"]')).toHaveText('Este equipo está activo para ventas.');
+  await page.locator('dialog').getByRole('button',{name:'Cancelar',exact:true}).click();
+  expect(await page.evaluate(()=>(window as any).NuevoAmanecerCanonicalLocalFirst.active())).toBe(true);
+  let slowUntil=0,waiting=false;
+  await page.route('**/commands/**',async route=>{
+   const req=route.request(),u=new URL(req.url());calls.push({path:u.pathname,method:'POST',body:JSON.parse(req.postData()||'{}')});
+   if(!slowUntil)slowUntil=Date.now()+60000;
+   waiting=true;
+   await new Promise<void>(resolve=>{const timer=setTimeout(resolve,Math.max(0,slowUntil-Date.now()));delays.push(()=>{clearTimeout(timer);resolve();});});
+   try{const response=await f.fetch('http://localhost'+u.pathname,{method:'POST',headers:req.headers(),body:req.postData()});await route.fulfill({status:response.status,body:await response.text(),contentType:'application/json'});}catch(_){}
+  });
+  const metrics:Record<string,number>={},foreground:Array<number>=[];
+  async function visible(name:string,action:()=>Promise<void>){const count=calls.length,t=Date.now();await action();metrics[name]=Date.now()-t;foreground.push(calls.length-count);expect(metrics[name]).toBeLessThan(2000);}
+  await page.locator('.module-card[onclick*="pageCaja"]').click();
+  await page.locator('#cajContent .btn-abrir-cj').click();await page.locator('#cajFondo').fill('10');
+  await visible('cashOpenMs',async()=>{await page.locator('#mApertura .mbtn-ok').click();await expect(page.locator('#mApertura')).not.toHaveClass(/open/);});
+  await expect.poll(()=>waiting,{timeout:5000}).toBe(true);
+  async function sale(name:string){
+   await page.evaluate(()=>(window as any).goPage('pagePOS'));
+   await page.locator('[data-product-id="00001"]').click();await page.locator('#btnPagar').click();
+   await visible(name,async()=>{await page.locator('#mBtnConf').click();await expect(page.locator('#mCobro')).not.toHaveClass(/open/);await expect(page.locator('#mBtnConf')).toBeEnabled();});
+  }
+  await sale('firstSaleMs');await sale('secondSaleMs');
+  expect((await f.sql('SELECT COUNT(*) n FROM sales')).n).toBe(0);
+  await page.evaluate(()=>(window as any).abrirModalGasto());await page.locator('#gasDesc').fill('Synthetic visible expense');await page.locator('#gasMonto').fill('1');
+  await visible('expenseMs',async()=>{await page.locator('#mGasto .mbtn-ok').click();await expect(page.locator('#mGasto')).not.toHaveClass(/open/);});
+  await sale('saleAfterExpenseMs');
+  // A distinct synthetic customer and credit, also committed while the first ACK is held.
+  const secondCredit=await page.evaluate(async()=>{const w=window as any,api=w.NuevoAmanecerCanonical,c=await api.createCustomer({name:'Synthetic second customer',document:'87654321'});await api.setCustomerCreditPolicy({customer_id:c.customer_id,mode:'MANUAL',manual_limit_cents:10000,reason:'Synthetic policy',administrator_id:'owner',administrator_name:'Owner'});const r=await api.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-004',customer_id:c.customer_id,payment_method:'credito',credit_due:'2026-12-01',items:[{product_id:'00001',quantity:1,precio:2}]}));return api.snapshot().credits.find((credit:any)=>credit.customer_id===c.customer_id).credit_id;});
+  for(const [index,id] of ['CR:001',secondCredit].entries()){
+   await page.evaluate(()=>(window as any).goPage('pageClientes'));
+   await page.evaluate(id=>(window as any).abrirPago(id),id);await expect(page.locator('#mPagoCred')).toHaveClass(/open/);await page.locator('#pagoMonto').fill('1');
+   await visible('payment'+index+'Ms',async()=>{await page.locator('#pagoConfirmBtn').click({timeout:3000});await expect(page.locator('#mPagoCred')).not.toHaveClass(/open/);await expect(page.locator('#pagoConfirmBtn')).toBeEnabled();});
+  }
+  expect(await page.evaluate(()=>(window as any).NuevoAmanecerCanonical.snapshot().payments.filter((p:any)=>p.operation_id).length)).toBe(2);
+  expect(foreground).toEqual(Array(foreground.length).fill(0));
+  await context.setOffline(true);const offlineCount=calls.length;
+  const offline=await page.evaluate(async()=>{const w=window as any,api=w.NuevoAmanecerCanonical;const session=api.snapshot().cashSessions.find((s:any)=>s.status==='OPEN');await api.closeCash({session_id:session.session_id,counted_cents:1700});await api.openCash({session_id:'android-offline-cash',opening_cents:0});for(const sale_id of ['V-005','V-006'])await api.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id,payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]}));await api.createPayment({credit_id:'CR:001',amount_cents:100,payment_method:'efectivo',session_id:'android-offline-cash'});await api.createExpense({expense_id:'android-offline-expense',amount_cents:100,payment_method:'efectivo',session_id:'android-offline-cash',concept:'Synthetic offline expense',category:'Other',expense_date:'2026-10-01'});await api.closeCash({session_id:'android-offline-cash',counted_cents:400});return {sales:api.snapshot().sales.length,events:(await w.NuevoAmanecerCanonicalLocalStore.read()).events.length};});
+  expect(calls.length).toBe(offlineCount);expect(offline.sales).toBe(6);
+  const reload=Date.now();await page.reload();await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');metrics.offlineStartupMs=Date.now()-reload;expect(metrics.offlineStartupMs).toBeLessThan(2000);
+  expect(await page.evaluate(()=>(window as any).NuevoAmanecerCanonical.snapshot().sales.length)).toBe(6);
+  expect(await page.evaluate(async()=>(await (window as any).NuevoAmanecerCanonicalLocalStore.read()).events.length)).toBe(offline.events);
+  // Keep the real 60-second response delay; no timeout or retry policy is shortened.
+  while(Date.now()<slowUntil+100)await page.waitForTimeout(Math.min(1000,slowUntil+100-Date.now()));
+  await context.setOffline(false);await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.syncLocal();});
+  await expect.poll(()=>page.evaluate(async()=>(await (window as any).NuevoAmanecerCanonicalLocalStore.read()).events.length),{timeout:15000}).toBe(0);
+  expect((await f.sql('SELECT COUNT(*) n FROM sales')).n).toBe(6);
+  expect((await f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'")).n).toBe(167);
+  console.log('REAL_POS_ANDROID_FLOW_METRICS',JSON.stringify({...metrics,cloudLatencyMs:60000,foregroundNetworkOnCommit:foreground.reduce((a,b)=>a+b,0)}));
+ }finally{delays.forEach(fn=>fn());await context.setOffline(false);cleanup.forEach(fn=>fn());}
+});
 
 test('offline POS cash→two sales→payment→expense→close commits locally, survives reload and syncs in FIFO through Turso adapter',async({page,context})=>{
   const cleanup:Array<()=>void>=[];try{

@@ -21,7 +21,7 @@
       }
     }
   } catch (_) {}
-  var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
+  var binding = null, data = null, ready = false, loading = null, changed = false, localRequired = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function fail(code) { throw new Error(code); }
@@ -205,7 +205,7 @@
     });
   }
   function localFirst() { var engine=root.NuevoAmanecerCanonicalLocalFirst; return engine && engine.active() ? engine : null; }
-  async function refresh() { if(localFirst())return localFirst().refresh(); return readRemote(); }
+  async function refresh() { if(localFirst())return localFirst().refresh(); if(localRequired)fail('LOCAL_BASELINE_REQUIRED'); return readRemote(); }
   async function readRemote(options) {
     if (loading) return loading;
     if (!data) ready = false;
@@ -306,6 +306,7 @@
   }
   function assertAction(action) {
     if (!COMMANDS.includes(action)) fail('UNSUPPORTED_CANONICAL_ACTION');
+    if(localRequired && !localFirst())fail('LOCAL_BASELINE_REQUIRED');
     if (!ready || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.write_authorized===false || data.minimum_client_contract !== CONTRACT || !localFirst() && root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     assertBinding(binding);
     return true;
@@ -911,6 +912,7 @@
     return copy(confirmed.receipt);
   }
   async function prepareCommand(command) {
+    if(localRequired && !localFirst())fail('LOCAL_BASELINE_REQUIRED');
     if(localFirst()){assertAction(command);return legacySnapshot();}
     // Reuse a remotely validated snapshot. Backend authority/revision/CAS checks
     // and retry status verification remain mandatory; a full scan adds no guard.
@@ -1277,8 +1279,12 @@
     container.append(result, retry, reload); update();
   }
   async function startPOS() {
-    if(root.NuevoAmanecerCanonicalLocalFirst && await root.NuevoAmanecerCanonicalLocalFirst.boot())return snapshot();
     if (!enabled()) return null;
+    if(root.NuevoAmanecerCanonicalLocalFirst){
+      localRequired=true;
+      if(await root.NuevoAmanecerCanonicalLocalFirst.boot())return snapshot();
+      ready=false;replicaState={source:'none',validation:'activation-required'};notifyReplicaUpdate();return null;
+    }
     var cached = await localReplica();
     if (cached) {
       publishReplica(cached, 'cache');
@@ -1330,11 +1336,17 @@
     assertBinding(binding);
     if(state.grant.promotion_id!==binding.promotion_id || state.grant.authority_epoch!==binding.authority_epoch || state.projection.revision!==binding.revision)fail('LOCAL_WRITER_AUTHORITY_CHANGED');
     data=copy(state.projection);if(state.writer_released || state.cloud.state==='AUTHORITY_CHANGED')data.write_authorized=false;var pending=new Set(state.events.map(function(e){return e.operation_id;}));data.sales.forEach(function(s){s.pending_sync=pending.has(s.operation_id);});ready=true;
-    replicaState={source:'local',validation:'local',sync_state:state.cloud.state,pending:state.events.length,review_pending:state.migration.evidence.filter(function(e){return e.state==='NEEDS_REVIEW';}).length};notifyReplicaUpdate();return snapshot();
+    replicaState={source:'local',validation:'local',view_revision:state.projection_digest,sync_state:state.cloud.state,pending:state.events.length,review_pending:state.migration.evidence.filter(function(e){return e.state==='NEEDS_REVIEW';}).length};notifyReplicaUpdate();return snapshot();
   }
   root.NuevoAmanecerCanonicalLocalHooks=Object.freeze({build:buildLocal,publish:publishLocal,readRemote:readRemote,
     binding:function(){assertBinding(binding);return copy(binding);},
     session:function(){assertBinding(binding);var session=sessionCredentials(binding);if(!session)fail('SESSION_NOT_AVAILABLE');return session;},
+    writerProof:function(proof){
+      assertBinding(binding);var credentials=stored(CREDENTIALS_KEY);
+      if(!sessionCredentials(binding))fail('SESSION_NOT_AVAILABLE');
+      if(proof){credentials.local_writer_proof=proof;var raw=JSON.stringify(credentials);root.localStorage.setItem(CREDENTIALS_KEY,raw);if(root.localStorage.getItem(CREDENTIALS_KEY)!==raw)fail('LOCAL_WRITER_PROOF_NOT_DURABLE');}
+      return copy(credentials.local_writer_proof||null);
+    },
     verify:verify,validReceipt:validReceipt});
   root.NuevoAmanecerCanonical = Object.freeze({enableLocalFirst:function(secret){return root.NuevoAmanecerCanonicalLocalFirst.enable(secret);},syncLocal:function(){return root.NuevoAmanecerCanonicalLocalFirst.sync();}, CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,

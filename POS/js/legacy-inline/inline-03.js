@@ -728,6 +728,7 @@ cliRender=function(){
   try{window.dispatchEvent(new CustomEvent('na:clients-rendered'));}catch(_){}
 };
 window.addEventListener('offline',()=>{_naCanonicalTransportConnected=false;if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),badge=document.getElementById('cliAuthorityBadge');_naSetHeaderConnectionState('disconnected','Desconectado');if(state.source==='cache'||state.source==='local'){if(badge){badge.hidden=false;badge.textContent=state.source==='local'?'Guardado local · sin conexión':'Cache canónico · sin conexión';}}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());}}});
+let _naCanonicalViewRevision=null;
 window.addEventListener('na:canonical-updated',()=>{
   if(typeof NuevoAmanecerCanonical==='undefined'||!NuevoAmanecerCanonical.enabled())return;
   const state=NuevoAmanecerCanonical.sourceState(),saveStatus=document.getElementById('saveStatus'),badge=document.getElementById('cliAuthorityBadge');
@@ -737,14 +738,17 @@ window.addEventListener('na:canonical-updated',()=>{
     _naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
     _naSetHeaderConnectionState('disconnected',state.validation==='offline'?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
-    if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+    if(saveStatus)saveStatus.textContent=state.validation==='activation-required'?'Activar este equipo para ventas':'Autoridad canónica no validada';
     if(badge){badge.hidden=false;badge.textContent='Canónico no disponible';}
     return;
   }
   try{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     _naApplyCanonicalLegacyView(canonical);_naCanonicalLoadError=null;
-    renderCategorySelects();_naSchedulePageRender(_naActivePageId());
+    const viewChanged=state.source!=='local'||_naCanonicalViewRevision!==state.view_revision;
+    if(viewChanged)renderCategorySelects();
+    if(viewChanged||_naActivePageId()!=='pageConfig')_naSchedulePageRender(_naActivePageId());
+    _naCanonicalViewRevision=state.source==='local'?state.view_revision:null;
     const connectionReady=state.validation==='current'||(_naCanonicalTransportConnected&&state.validation==='validating');
     _naSetHeaderConnectionState(connectionReady?'connected':'disconnected',connectionReady?'Conectado':'Desconectado');
     if(saveStatus)saveStatus.textContent=state.source==='local'?(state.review_pending?('Guardado local · '+state.review_pending+' pendientes por revisar'):state.sync_state==='UP_TO_DATE'?'Guardado local · nube al día':state.sync_state==='CLOUD_RECOVERY_REQUIRED'?'Guardado local · recuperación pendiente':'Guardado local · '+state.pending+' pendientes de sincronización'):'Persistencia canónica protegida';
@@ -762,14 +766,17 @@ document.addEventListener('DOMContentLoaded',async()=>{
   document.getElementById('fechaHoy').textContent=new Date().toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});document.getElementById('backBtn').style.display='none';
   await loadAllData();
   const canonicalEnabled=typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled();
-  if(canonicalEnabled){productos=[];clientes=[];creditos=[];}
-  if(canonicalEnabled){_naClearCanonicalOperationalView();}
+  let localStartup=false;
+  if(canonicalEnabled&&typeof NuevoAmanecerCanonicalLocalFirst!=='undefined'){
+    try{await NuevoAmanecerCanonical.startPOS();localStartup=NuevoAmanecerCanonical.sourceState().source==='local';}catch(error){_naCanonicalLoadError=error;}
+  }
+  if(canonicalEnabled&&!localStartup)_naClearCanonicalLegacyView();
   loadAppState();loadMasterConfig();_naInitSecurity();_naNormalizeData();renderCategorySelects();_naApplyConfigUI();_naInitFreeSaleShortcut();_naInitBarcodeScanner();creditos.forEach(_naSyncCreditStatus);posUpdateCart(canonicalEnabled?false:true);_naSchedulePageRender(_naActivePageId());
-  const cliBadge=document.getElementById('cliAuthorityBadge');if(canonicalEnabled&&cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico · conectando';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:800';}
-  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled){_naSetHeaderConnectionState('disconnected','Conectando a CANON…');if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
+  const cliBadge=document.getElementById('cliAuthorityBadge');if(canonicalEnabled&&!localStartup&&cliBadge){cliBadge.hidden=false;cliBadge.textContent='Activar este equipo para ventas';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:800';}
+  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled&&!localStartup){_naSetHeaderConnectionState('disconnected','Desconectado');if(saveStatus)saveStatus.textContent='Activar este equipo para ventas';}
   document.querySelectorAll('.module-card').forEach(card=>{card.setAttribute('role','button');card.setAttribute('tabindex','0');card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}});});
   if(!canonicalEnabled)await saveAllData();
-  if(canonicalEnabled){
+  if(canonicalEnabled&&typeof NuevoAmanecerCanonicalLocalFirst==='undefined'){
     if(typeof NuevoAmanecerCanonicalSaleOutbox!=='undefined')NuevoAmanecerCanonicalSaleOutbox.start();
     NuevoAmanecerCanonical.startPOS().catch(error=>{
       _naCanonicalTransportConnected=false;

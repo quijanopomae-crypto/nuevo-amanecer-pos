@@ -242,6 +242,7 @@
     try {
       var intentApi = root.NuevoAmanecerCanonicalSaleIntent;
       var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+      if(root.NuevoAmanecerCanonicalLocalFirst && !root.NuevoAmanecerCanonicalLocalFirst.active())throw new Error('LOCAL_BASELINE_REQUIRED');
       if (!intentApi || typeof intentApi.build !== 'function' || !outbox || typeof outbox.enqueue !== 'function') throw new Error('CANONICAL_SALE_CAPTURE_UNAVAILABLE');
       var intent = intentApi.build(input);
       if(root.NuevoAmanecerCanonicalLocalFirst && root.NuevoAmanecerCanonicalLocalFirst.active()){
