@@ -2,15 +2,15 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "El owner autorizó continuar la reconciliación de deuda CasaMarket en CANON. Restaurar primero el Worker productivo al proveedor Turso, autoridad activa desde el cutover exitoso, después de que el workflow de reconciliación desplegara la configuración D1.",
+  "authorization_context": "El owner autorizó continuar la reconciliación de deuda CasaMarket en CANON. El retry 36933793314 volvió a desplegar por error la configuración D1; restaurar inmediatamente el Worker productivo al proveedor Turso antes de cualquier nueva escritura.",
   "target_commit": "76169dd969d351ce6ed8559ce6a8588af32fcddc",
   "rollback_ref": "6347dfab2767e33695be4b6f80dd3db50ec09a1c",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 5,
-  "previous_run_id": 36931172343,
-  "previous_run_outcome": "DEBT_RECONCILE_STOPPED_BEFORE_DEBT_WRITES_D1_CONFIG_DEPLOYED",
-  "optimization": "RESTORE_TURSO_PROVIDER_BEFORE_DEBT_RECONCILIATION"
+  "attempt": 6,
+  "previous_run_id": 36933793314,
+  "previous_run_outcome": "DEBT_RECONCILE_STOPPED_BEFORE_DEBT_WRITES_D1_CONFIG_REDEPLOYED",
+  "optimization": "RESTORE_TURSO_PROVIDER_AFTER_DEBT_RETRY_4"
 }
