@@ -803,6 +803,32 @@
       return work();
     });
   }
+  function publishConfirmedPaymentReceipt(record, result) {
+    if (!record || !result || typeof root.dispatchEvent !== 'function' || typeof root.CustomEvent !== 'function') return;
+    function emit(payload, receipt) {
+      if (!payload || !receipt || payload.operation_id !== receipt.operation_id || payload.credit_id !== receipt.credit_id) return;
+      try {
+        root.dispatchEvent(new root.CustomEvent('na:canonical-payment-receipt', {
+          detail: {
+            version: 1,
+            command: 'payment.create',
+            payload: copy(payload),
+            receipt: copy(receipt)
+          }
+        }));
+      } catch (_) {}
+    }
+    if (record.command === 'payment.create') {
+      emit(record.payload, result);
+      return;
+    }
+    if (record.command === 'payment.batch' && Array.isArray(record.payload && record.payload.payments) && Array.isArray(result.receipts)) {
+      for (var i = 0; i < record.payload.payments.length && i < result.receipts.length; i += 1) {
+        emit(record.payload.payments[i], result.receipts[i]);
+      }
+    }
+  }
+
   async function sendPending(record, skipStatus) {
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
@@ -853,6 +879,10 @@
     // One atomic storage replacement both saves the receipt and clears PENDING.
     var confirmed = Object.assign({}, record, { state: 'CONFIRMED', receipt: copy(result) });
     durableJournal(confirmed);
+    // The receipt is now durable. Publish only the exact affected payment so the
+    // UI can update immediately while the full canonical reconciliation stays
+    // off the user-visible critical path.
+    publishConfirmedPaymentReceipt(record, result);
     ready = false;
     return copy(confirmed.receipt);
   }
