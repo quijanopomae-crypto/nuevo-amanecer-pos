@@ -347,3 +347,24 @@ test('normal credit-policy write reuses the already-current CANON snapshot inste
   assert.match(bridge,/function reconcileCanonicalInBackground\(customerId\)/);
   assert.doesNotMatch(bridge,/async function afterCommit/);
 });
+
+
+test('new credit-policy command sends POST first with no redundant canonical status GET',async t=>{
+  const f=await activeCanon(t,{migrations:MIGRATIONS});
+  const tab=await policyTab(f);
+  const id=tab.api.snapshot().customers[0].customer_id;
+  const start=tab.fetchLog.length;
+
+  const receipt=await tab.api.setCustomerCreditPolicy({
+    customer_id:id,
+    mode:'MANUAL',
+    manual_limit_cents:5000,
+    reason:'Ajuste directo del propietario',
+    administrator_id:null,
+    administrator_name:'Propietario'
+  });
+
+  assert.equal(receipt.status,'created');
+  const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname}));
+  assert.deepEqual(calls,[{method:'POST',path:'/commands/customer.credit-policy.set'}]);
+});
