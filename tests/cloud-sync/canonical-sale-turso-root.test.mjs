@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {activeCanon, device} from './canon-browser-harness.mjs';
 import {tursoSqlite} from './turso-sqlite-protocol.mjs';
 const source = name => readFileSync('POS/js/' + name, 'utf8');
-const saleScripts = ['canonical-sale-intent','canonical-sale-outbox','canonical-sale-projection','canonical-sale-integration'];
+const saleScripts = ['canonical-sale-intent','canonical-sale-outbox','canonical-sale-projection','canonical-sale-integration','canonical-sale-view'];
 
 async function fixture(t, options={}) {
   const f=await activeCanon(t,{migrations:['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql']});
@@ -57,6 +57,9 @@ test('adapter → real global let cart → durable intent → Turso adapter → 
   assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
   assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  assert.equal(vm.runInContext('ventas[0].id',tab.context),'V-001','receipt-backed sale must be visible before full refresh');
+  assert.equal(vm.runInContext('ventas[0].canonicalReceiptProjection',tab.context),true);
+  await tab.api.refresh();
   assert.equal(tab.api.legacySnapshot().sales[0].id,'V-001');
   const replay=await f.fetch(post.url,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer sales-session'},body:post.body});
   assert.equal(replay.status,200);
@@ -67,6 +70,31 @@ test('adapter → real global let cart → durable intent → Turso adapter → 
   const reload=await device(f,{token:'sales-session',localStorage:tab.localStorage});
   assert.equal(reload.api.legacySnapshot().sales[0].operation_id,payload.operation_id);
   assert.ok(turso.calls.some(call=>call.requests[0].type==='batch'));
+});
+
+test('online sale critical path is one POST to receipt; history is visible before reconciliation GETs finish',async t=>{
+  const {f,tab,add}=await fixture(t);
+  const receipts=[];
+  tab.context.addEventListener('na:canonical-sale-receipt',event=>{
+    const journal=JSON.parse(tab.localStorage.getItem('na_canonical_sale_journal'));
+    receipts.push({detail:event.detail,state:journal&&journal.state});
+  });
+  add();
+  const start=tab.fetchLog.length;
+  await vm.runInContext('confirmarVenta()',tab.context);
+  const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname}));
+  const postIndex=calls.findIndex(row=>row.method==='POST'&&row.path==='/commands/sale.create');
+  assert.equal(postIndex,0,'a current online sale must not do status/full-refresh GETs before its POST');
+  assert.equal(receipts.length,1);
+  assert.equal(receipts[0].state,'CONFIRMED','sale receipt event is emitted only after durable journal confirmation');
+  assert.equal(receipts[0].detail.payload.operation_id,receipts[0].detail.receipt.operation_id);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+  assert.equal(vm.runInContext('ventas.length',tab.context),1);
+  assert.equal(vm.runInContext('ventas[0].id',tab.context),'V-001');
+  assert.equal(vm.runInContext('ventas[0].estado',tab.context),'completada');
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  assert.ok(calls.slice(1).every(row=>row.method==='GET'||row.method==='POST'),'any reconciliation work must occur only after the receipt POST');
 });
 
 test('pending V-001 reserves sale id; identical next cart is a new V-002 with its own UUID',async t=>{
