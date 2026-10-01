@@ -14,11 +14,11 @@ function firstBatchRow(result) {
 async function commerceCapabilities(db) {
   let cached = commerceCapabilityCache.get(db);
   if (cached) return cached;
-  const pending = db.prepare(\`SELECT
+  const pending = db.prepare(`SELECT
       SUM(CASE WHEN type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects') THEN 1 ELSE 0 END) AS live_product_tables,
       SUM(CASE WHEN type='table' AND name='canonical_generic_sale_lines' THEN 1 ELSE 0 END) AS generic_sale_tables,
       SUM(CASE WHEN type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers') THEN 1 ELSE 0 END) AS live_customer_tables
-    FROM sqlite_master\`).first().then(row => Object.freeze({
+    FROM sqlite_master`).first().then(row => Object.freeze({
       liveProducts:Number(row?.live_product_tables)===3,
       genericSales:Number(row?.generic_sale_tables)===1,
       liveCustomers:Number(row?.live_customer_tables)===3,
@@ -191,8 +191,8 @@ export async function createCanonicalSale(request, env, auth, json) {
     return null;
   }
   async function authorityError() {
-    const control = await db.prepare(\`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
-      FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1\`).bind(principalId).first();
+    const control = await db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
+      FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId).first();
     return authorityErrorFor(control);
   }
 
@@ -203,8 +203,8 @@ export async function createCanonicalSale(request, env, auth, json) {
   const reads=[];
   const readIndex={products:[]};
   const addRead=statement=>{ const index=reads.length; reads.push(statement); return index; };
-  readIndex.control=addRead(db.prepare(\`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
-    FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1\`).bind(principalId));
+  readIndex.control=addRead(db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
+    FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId));
   readIndex.existing=addRead(db.prepare('SELECT sale_id,payload_hash FROM sales WHERE operation_id=?1').bind(body.operation_id));
   readIndex.financialOperation=addRead(db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id));
   readIndex.productOperation=capabilities.liveProducts
@@ -214,37 +214,37 @@ export async function createCanonicalSale(request, env, auth, json) {
   for (const item of body.items) {
     if (item.generic_line !== undefined) {
       const collisionSql=capabilities.liveProducts
-        ? \`SELECT product_id FROM (
+        ? `SELECT product_id FROM (
             SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2
             UNION ALL
             SELECT product_id FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
-          ) LIMIT 1\`
+          ) LIMIT 1`
         : 'SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2 LIMIT 1';
       readIndex.products.push(addRead(db.prepare(collisionSql).bind(body.promotion_id,item.product_id)));
       continue;
     }
     const productSql=capabilities.liveProducts
-      ? \`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,provenance FROM (
+      ? `SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,provenance FROM (
           SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance,0 AS source_rank
             FROM products WHERE promotion_id=?1 AND product_id=?2
           UNION ALL
           SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance,1 AS source_rank
             FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
-        ) ORDER BY source_rank LIMIT 1\`
-      : \`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
-          FROM products WHERE promotion_id=?1 AND product_id=?2\`;
+        ) ORDER BY source_rank LIMIT 1`
+      : `SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
+          FROM products WHERE promotion_id=?1 AND product_id=?2`;
     readIndex.products.push(addRead(db.prepare(productSql).bind(body.promotion_id,item.product_id)));
   }
 
   readIndex.customer=-1;
   if (body.customer_id) {
     const customerSql=capabilities.liveCustomers
-      ? \`SELECT customer_id FROM (
+      ? `SELECT customer_id FROM (
           SELECT customer_id,0 AS source_rank FROM customers WHERE promotion_id=?1 AND customer_id=?2
           UNION ALL
           SELECT customer_id,1 AS source_rank FROM canonical_customer_registry
             WHERE promotion_id=?1 AND customer_id=?2 AND provenance='LIVE'
-        ) ORDER BY source_rank LIMIT 1\`
+        ) ORDER BY source_rank LIMIT 1`
       : 'SELECT customer_id FROM customers WHERE promotion_id=?1 AND customer_id=?2 LIMIT 1';
     readIndex.customer=addRead(db.prepare(customerSql).bind(body.promotion_id,body.customer_id));
   }
