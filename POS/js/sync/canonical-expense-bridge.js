@@ -23,8 +23,10 @@
     var cents = Math.round(amount * 100);
     return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
   }
-  function toast(message, tone) {
-    if (typeof root.toast === 'function') root.toast(message, tone || 'error');
+  function notify(message, tone) {
+    var fn; try { if (typeof toast === 'function') fn = toast; } catch (_) {}
+    if (!fn) fn = root.toast;
+    if (typeof fn === 'function') fn(message, tone || 'error');
   }
   function authorized() {
     if (typeof root._naF10AuthorizePermission === 'function') {
@@ -49,7 +51,9 @@
     root.document.getElementById('mGasto')?.classList.add('open');
   }
   function closeModal() {
-    if (typeof root.cerrarModal === 'function') root.cerrarModal('mGasto');
+    var fn; try { if (typeof cerrarModal === 'function') fn = cerrarModal; } catch (_) {}
+    if (!fn) fn = root.cerrarModal;
+    if (typeof fn === 'function') fn('mGasto');
     else root.document.getElementById('mGasto')?.classList.remove('open');
   }
   function renderExpenseViews() {
@@ -90,7 +94,7 @@
     var category = clean(root.document.getElementById('gasCat')?.value);
     var note = clean(root.document.getElementById('gasNota')?.value);
     if (!description || !amountCents) {
-      toast('Verifica concepto y monto', 'error');
+      notify('Verifica concepto y monto', 'error');
       return false;
     }
 
@@ -100,7 +104,8 @@
     if (button) { button.disabled = true; button.textContent = 'Procesando…'; }
 
     try {
-      var snapshot = await refreshCanonical();
+      var client = api();
+      var snapshot = typeof client.prepareCommand === 'function' ? await client.prepareCommand('expense.create') : await refreshCanonical();
       var input = {
         amount_cents: amountCents,
         concept: description,
@@ -113,15 +118,17 @@
       if (cash && cash.abierta && cash.sessionId && date === today()) input.session_id = cash.sessionId;
 
       var receipt = await api().createExpense(input);
-      await refreshCanonical();
+      Promise.resolve().then(refreshCanonical).then(renderExpenseViews).catch(function (error) {
+        if (root.console) root.console.warn('[Gasto CANON] Confirmado; actualización pendiente', error.message);
+      });
       closeModal();
       renderExpenseViews();
-      toast(receipt && receipt.session_id
+      notify(receipt && receipt.session_id
         ? 'Gasto CANON registrado en la caja'
         : 'Gasto CANON guardado fuera de la caja', 'success');
       return true;
     } catch (error) {
-      toast('No se pudo guardar el gasto CANON: ' + clean(error && error.message), 'error');
+      notify('No se pudo guardar el gasto CANON: ' + clean(error && error.message), 'error');
       return false;
     } finally {
       busy = false;

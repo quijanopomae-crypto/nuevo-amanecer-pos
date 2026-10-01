@@ -762,6 +762,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   document.querySelectorAll('.module-card').forEach(card=>{card.setAttribute('role','button');card.setAttribute('tabindex','0');card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}});});
   if(!canonicalEnabled)await saveAllData();
   if(canonicalEnabled){
+    if(typeof NuevoAmanecerCanonicalSaleOutbox!=='undefined')NuevoAmanecerCanonicalSaleOutbox.start();
     NuevoAmanecerCanonical.startPOS().catch(error=>{
       _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
       renderCategorySelects();_naSchedulePageRender(_naActivePageId());

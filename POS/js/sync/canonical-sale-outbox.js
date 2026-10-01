@@ -30,7 +30,8 @@
     if (raw === null) return { version: VERSION, intents: [] };
     var data;
     try { data = JSON.parse(raw); } catch (_) { fail('OUTBOX_CORRUPT'); }
-    if (!data || data.version !== VERSION || !Array.isArray(data.intents)) fail('OUTBOX_CORRUPT');
+    if (!data || data.version !== VERSION || !Array.isArray(data.intents) ||
+        data.last_sale_number !== undefined && (!Number.isSafeInteger(data.last_sale_number) || data.last_sale_number < 0)) fail('OUTBOX_CORRUPT');
     var seen = new Set();
     try {
       data.intents.forEach(function (item) {
@@ -64,6 +65,8 @@
   function removeHead(expected) {
     var current = parseStored();
     if (!current.intents.length || current.intents[0].operation_id !== expected.operation_id) fail('OUTBOX_HEAD_CHANGED');
+    var number = /^V-(\d+)$/.exec(expected.sale_id);
+    if (number) current.last_sale_number = Math.max(current.last_sale_number || 0, Number(number[1]));
     current.intents.shift();
     write(current);
   }
@@ -78,6 +81,8 @@
       var current = parseStored();
       if (!current.intents.length) return result(processed ? 'DRAINED' : 'EMPTY', processed, 0);
       var head = current.intents[0];
+      if (current.intents.some(function (item, index) { return index > 0 && item.sale_id === head.sale_id; }))
+        return result('BLOCKED_DUPLICATE_SALE_ID', processed, current.intents.length, 'DUPLICATE_SALE_ID');
       var canonical = root.NuevoAmanecerCanonical;
       if (!canonical || typeof canonical.receiptSnapshot !== 'function' || typeof canonical.pendingSnapshot !== 'function' || typeof canonical.refresh !== 'function' || typeof canonical.createSale !== 'function' || typeof canonical.retryPending !== 'function') fail('CANONICAL_API_UNAVAILABLE');
       var receipt = canonical.receiptSnapshot();
@@ -106,18 +111,116 @@
       removeHead(head); processed += 1;
     }
   }
+  var syncing = null;
+  var started = false;
+  var retryTimer = null;
+  var retryCount = 0;
+  var resumeOutbox = null;
   async function sync() {
-    try { return await withLock(syncLocked); }
-    catch (error) { if (error && error.code === 'BUSY') return result('WAITING', 0, snapshot().intents.length, 'BUSY'); throw error; }
+    if (syncing) return result('WAITING', 0, snapshot().intents.length, 'BUSY');
+    syncing = (async function () {
+      try {
+        var outcome = await withLock(syncLocked);
+        // Receipt is already durable and the confirmed intent has been removed.
+        // Refresh once after draining; failure cannot undo a confirmed sale.
+        if (outcome.processed > 0) {
+          try { await root.NuevoAmanecerCanonical.refresh(); }
+          catch (error) { if (root.console) root.console.warn('[Venta CANON] Confirmada; actualización pendiente', error.code || error.message); }
+        }
+        if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
+        if (started && outcome.status === 'WAITING' && outcome.reason !== 'BUSY' && root.navigator.onLine !== false && retryCount < 3) {
+          var pending = root.NuevoAmanecerCanonical.pendingSnapshot();
+          if (!pending || !pending.last_error) {
+            retryCount += 1;
+            if (retryTimer === null) retryTimer = root.setTimeout(function () { retryTimer = null; return resumeOutbox(); }, 1000 * Math.pow(2, retryCount - 1));
+          }
+        } else if (outcome.status === 'DRAINED' || outcome.status === 'EMPTY') retryCount = 0;
+        return outcome;
+      }
+      catch (error) { if (error && error.code === 'BUSY') return result('WAITING', 0, snapshot().intents.length, 'BUSY'); throw error; }
+    })();
+    try { return await syncing; } finally { syncing = null; }
+  }
+  function start() {
+    if (started) return;
+    started = true;
+    function resume() {
+      if (syncing || root.navigator.onLine === false) return;
+      try { if (!snapshot().intents.length) return; } catch (_) { return; }
+      return sync().catch(function (error) { if (root.console) root.console.error('[Venta CANON]', error.code || error.message); });
+    }
+    resumeOutbox = resume;
+    if (typeof root.addEventListener === 'function') {
+      root.addEventListener('online', function () { retryCount = 0; return resume(); });
+      root.addEventListener('na:canonical-updated', resume);
+    }
+    return resume();
   }
   async function enqueue(input) {
     return withLock(function () {
       var intent = validateIntent(input), current = parseStored();
       if (current.intents.some(function (item) { return item.operation_id === intent.operation_id; })) fail('DUPLICATE_OPERATION_ID');
+      // Recheck the reservation under the same cross-tab lock as durability.
+      var canonical = root.NuevoAmanecerCanonical;
+      var confirmed = canonical && typeof canonical.snapshot === 'function' ? canonical.snapshot().sales || [] : [];
+      var receipt = canonical && typeof canonical.receiptSnapshot === 'function' ? canonical.receiptSnapshot() : null;
+      var reserved = confirmed.concat(current.intents, receipt ? [receipt] : []);
+      var match = /^V-(\d+)$/.exec(intent.sale_id);
+      var max = reserved.reduce(function (value, sale) {
+        var number = /^V-(\d+)$/.exec(String(sale.sale_id || sale.id || ''));
+        return Math.max(value, number ? Number(number[1]) : 0);
+      }, current.last_sale_number || 0);
+      if (match) {
+        var proposed = Number(match[1]);
+        if (!Number.isSafeInteger(proposed) || !Number.isSafeInteger(max + 1)) fail('SALE_NUMBER_UNSAFE');
+        var next = Math.max(proposed, max + 1);
+        intent.sale_id = 'V-' + String(next).padStart(3, '0');
+        // Retain the reservation even after the queue drains, a refresh fails,
+        // or another financial command replaces the single receipt journal.
+        current.last_sale_number = next;
+      } else if (reserved.some(function (sale) { return (sale.sale_id || sale.id) === intent.sale_id; })) fail('DUPLICATE_SALE_ID');
       current.intents.push(intent);
       write(current);
       return clone(intent);
     });
   }
-  root.NuevoAmanecerCanonicalSaleOutbox = Object.freeze({ VERSION: VERSION, KEY: KEY, enqueue: enqueue, snapshot: snapshot, sync: sync });
+  async function rejectInvalidTestIntent(operationId) {
+    return withLock(async function () {
+      var canonical = root.NuevoAmanecerCanonical;
+      if (!canonical || typeof canonical.sourceState !== 'function' || typeof canonical.refresh !== 'function') fail('CANONICAL_API_UNAVAILABLE');
+      await canonical.refresh();
+      if (canonical.sourceState().validation !== 'current' || canonical.pendingSnapshot()) fail('TEST_INTENT_NOT_PROVEN_INVALID');
+      var current = parseStored();
+      var intent = current.intents.find(function (item) { return item.operation_id === operationId; });
+      var base = canonical.snapshot();
+      var receipt = canonical.receiptSnapshot();
+      // Narrow owner-authorized test repair; never use the display conflict as
+      // proof. Unknown ACK/journal, confirmed operations and other amounts fail.
+      if (!intent || intent.sale_id !== 'V-001' || [200,300].indexOf(intent.total_cents) === -1 ||
+          intent.payment_method !== 'efectivo' || matching(receipt, intent) ||
+          (base.sales || []).some(function (sale) { return sale.operation_id === intent.operation_id; })) fail('TEST_INTENT_NOT_PROVEN_INVALID');
+      var missing = intent.items.some(function (item) {
+        return !item.generic_line && !base.products.some(function (product) { return product.product_id === item.product_id; });
+      });
+      var key = KEY + '_rejected_tests';
+      var archive = JSON.parse(root.localStorage.getItem(key) || '[]');
+      if (!Array.isArray(archive)) fail('TEST_ARCHIVE_INVALID');
+      var duplicate = current.intents.some(function (item) { return item.operation_id !== intent.operation_id && item.sale_id === intent.sale_id; }) ||
+        (base.sales || []).some(function (sale) { return sale.sale_id === intent.sale_id; }) ||
+        archive.some(function (entry) { return entry.reason === 'DUPLICATE_SALE_ID' && entry.intent && entry.intent.sale_id === intent.sale_id && entry.intent.operation_id !== operationId; });
+      if (!missing && !duplicate) fail('TEST_INTENT_NOT_PROVEN_INVALID');
+      if (!archive.some(function (entry) { return entry.intent && entry.intent.operation_id === operationId; })) {
+        archive.push({ intent: clone(intent), reason: missing ? 'PRODUCT_NOT_FOUND' : 'DUPLICATE_SALE_ID', rejected_at: new Date().toISOString() });
+      }
+      var raw = JSON.stringify(archive);
+      root.localStorage.setItem(key, raw);
+      if (root.localStorage.getItem(key) !== raw) fail('TEST_ARCHIVE_NOT_DURABLE');
+      current.last_sale_number = Math.max(current.last_sale_number || 0, 1);
+      current.intents = current.intents.filter(function (item) { return item.operation_id !== operationId; });
+      write(current);
+      if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
+      return { status: 'REJECTED_TEST_INTENT', operation_id: operationId };
+    });
+  }
+  root.NuevoAmanecerCanonicalSaleOutbox = Object.freeze({ VERSION: VERSION, KEY: KEY, enqueue: enqueue, snapshot: snapshot, sync: sync, start: start, rejectInvalidTestIntent: rejectInvalidTestIntent });
 })(globalThis);

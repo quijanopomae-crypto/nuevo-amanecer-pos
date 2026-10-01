@@ -553,8 +553,27 @@
     };
   }
 
+  // Explicit boundary to the classic-script lexical runtime. Never mirror these
+  // let/const bindings onto window: readers and writers must share one state.
+  var runtime = Object.freeze({
+    products: function () { try { if (typeof productos !== 'undefined') return productos; } catch (_) {} return root.productos || []; },
+    sales: function () { try { if (typeof ventas !== 'undefined') return ventas; } catch (_) {} return root.ventas || []; },
+    customers: function () { try { if (typeof clientes !== 'undefined') return clientes; } catch (_) {} return root.clientes || []; },
+    cart: function () { try { if (typeof cart !== 'undefined') return cart; } catch (_) {} return root.cart || []; },
+    paymentMethod: function () { try { if (typeof posPayM !== 'undefined') return posPayM; } catch (_) {} return root.posPayM; },
+    processing: function () { try { if (typeof posProc !== 'undefined') return !!posProc; } catch (_) {} return !!root.posProc; },
+    setProcessing: function (value) { if (typeof posProc !== 'undefined') posProc = value; else root.posProc = value; },
+    clearCart: function () { if (typeof cart !== 'undefined') cart = []; else root.cart = []; },
+    movementType: function () { try { if (typeof cajMovTipo !== 'undefined') return cajMovTipo; } catch (_) {} return root.cajMovTipo; },
+    setMovementType: function (value) { if (typeof cajMovTipo !== 'undefined') cajMovTipo = value; else root.cajMovTipo = value; },
+    setProducts: function (value) { if (typeof productos !== 'undefined') productos = value; else root.productos = value; },
+    notify: function (message, tone) { var fn; try { if (typeof toast === 'function') fn = toast; } catch (_) {} if (!fn) fn = root.toast; if (typeof fn === 'function') fn(message, tone); },
+    closeModal: function (id) { var fn; try { if (typeof cerrarModal === 'function') fn = cerrarModal; } catch (_) {} if (!fn) fn = root.cerrarModal; if (typeof fn === 'function') fn(id); }
+  });
+
   root.NuevoAmanecerCanonicalUIAdapter = Object.freeze({
     VERSION: VERSION,
+    runtime: runtime,
     product: uiProduct,
     customer: uiCustomer,
     credit: uiCredit,

@@ -4,15 +4,21 @@
   var originalConfirm = root.confirmarVenta;
   var projection = null;
   var busy = false;
-  var durableCartFingerprint = null;
   var VERSION = 1;
 
   function copy(value) { return value == null ? null : JSON.parse(JSON.stringify(value)); }
   function enabled() {
     return !!(root.NuevoAmanecerCanonical && typeof root.NuevoAmanecerCanonical.enabled === 'function' && root.NuevoAmanecerCanonical.enabled());
   }
+  function runtime() { return root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime; }
+  function notify(message, tone) {
+    if (runtime()) return runtime().notify(message, tone);
+    var fn; try { if (typeof toast === 'function') fn = toast; } catch (_) {}
+    if (!fn) fn = root.toast;
+    if (typeof fn === 'function') fn(message, tone);
+  }
   function failClosed(message, error) {
-    if (typeof root.toast === 'function') root.toast(message, 'error');
+    notify(message, 'error');
     if (error && root.console && typeof root.console.error === 'function') root.console.error('[Venta canónica]', error.code || error.message || 'Error');
   }
 
@@ -22,40 +28,48 @@
   // Read/write the lexical binding first and keep root.* only as a compatibility
   // fallback for isolated tests or alternate hosts.
   function liveCart() {
+    if (runtime()) return runtime().cart();
     try { if (typeof cart !== 'undefined' && Array.isArray(cart)) return cart; } catch (_) {}
     return Array.isArray(root.cart) ? root.cart : [];
   }
   function liveProducts() {
+    if (runtime()) return runtime().products();
     try { if (typeof productos !== 'undefined' && Array.isArray(productos)) return productos; } catch (_) {}
     return Array.isArray(root.productos) ? root.productos : [];
   }
   function liveSales() {
+    if (runtime()) return runtime().sales();
     try { if (typeof ventas !== 'undefined' && Array.isArray(ventas)) return ventas; } catch (_) {}
     return Array.isArray(root.ventas) ? root.ventas : [];
   }
   function liveCustomers() {
+    if (runtime()) return runtime().customers();
     try { if (typeof clientes !== 'undefined' && Array.isArray(clientes)) return clientes; } catch (_) {}
     return Array.isArray(root.clientes) ? root.clientes : [];
   }
   function livePaymentMethod() {
+    if (runtime()) return runtime().paymentMethod();
     try { if (typeof posPayM !== 'undefined') return posPayM; } catch (_) {}
     return root.posPayM;
   }
   function liveProcessing() {
+    if (runtime()) return runtime().processing();
     try { if (typeof posProc !== 'undefined') return !!posProc; } catch (_) {}
     return !!root.posProc;
   }
   function setLiveProcessing(value) {
+    if (runtime()) return runtime().setProcessing(value);
     try {
       if (typeof posProc !== 'undefined') posProc = value;
       else root.posProc = value;
     } catch (_) { root.posProc = value; }
   }
   function clearLiveCart() {
+    if (runtime()) return runtime().clearCart();
     try {
       if (typeof cart !== 'undefined') { cart = []; return; }
     } catch (_) {}
-    clearLiveCart();
+    root.cart = [];
   }
   function browserLockReason() {
     try {
@@ -80,11 +94,17 @@
     return '';
   }
   function nextSaleId() {
-    var ids = liveSales().map(function (sale) {
-      return parseInt(String(sale.id).replace('V-', ''), 10) || 0;
+    var canonical = root.NuevoAmanecerCanonical;
+    var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+    var confirmed = canonical && typeof canonical.snapshot === 'function' ? canonical.snapshot().sales || [] : [];
+    var pending = outbox && typeof outbox.snapshot === 'function' ? outbox.snapshot().intents : [];
+    var ids = liveSales().concat(confirmed, pending).map(function (sale) {
+      var match = /^V-(\d+)$/.exec(String(sale.sale_id || sale.id || ''));
+      return match ? Number(match[1]) : 0;
     });
     return 'V-' + String(Math.max.apply(Math, [0].concat(ids)) + 1).padStart(3, '0');
   }
+
   function cents(value) { return Math.round(Number(value) * 100); }
   function setBusy(value) {
     busy = value;
@@ -93,15 +113,20 @@
     if (button) button.disabled = value;
   }
   function updateAfterCommit(saleId) {
-    root.cart = [];
+    clearLiveCart();
     if (typeof root.posUpdateCart === 'function') root.posUpdateCart(false);
     if (typeof root.posRender === 'function') root.posRender();
-    if (typeof root.cerrarModal === 'function') root.cerrarModal('mCobro');
+    if (runtime()) { runtime().closeModal('mCobro'); runtime().closeModal('mCobroRapido'); }
+    else {
+      var close; try { if (typeof cerrarModal === 'function') close = cerrarModal; } catch (_) {}
+      if (!close) close = root.cerrarModal;
+      if (typeof close === 'function') close('mCobro');
+    }
     var drawer = root.document && root.document.getElementById('cartDrawer');
     var backdrop = root.document && root.document.getElementById('cartBackdrop');
     drawer && drawer.classList && drawer.classList.remove('open');
     backdrop && backdrop.classList && backdrop.classList.remove('open');
-    if (typeof root.toast === 'function') root.toast('Venta ' + saleId + ' guardada localmente · pendiente de sincronización', 'success');
+    notify('Venta ' + saleId + ' guardada, pendiente de sincronización', 'info');
   }
   function projectCurrentOutbox() {
     var canonical = root.NuevoAmanecerCanonical;
@@ -128,12 +153,6 @@
     }
     var cart = liveCart();
     if (!cart.length) { failClosed('El carrito está vacío.', null); return; }
-    var cartFingerprint = JSON.stringify(cart.map(function (item) {
-      return [item.id, item.qty, item.precio, item.ventaLibre ? item.name : null, item.ventaLibre ? item.codigoIngresado : null, item.canonicalGenericId || null];
-    }));
-    if (durableCartFingerprint === cartFingerprint) {
-      failClosed('Esta venta ya quedó guardada localmente y está pendiente de sincronización.', null); return;
-    }
     if (typeof root._naSessionOpen === 'function' && !root._naSessionOpen()) { failClosed('La caja no está abierta', null); return; }
     var productsById = new Map();
     liveProducts().forEach(function (product) {
@@ -217,22 +236,32 @@
       if (creditV2 && Array.isArray(creditV2.installment_dates) && creditV2.installment_dates.length) input.installment_dates = copy(creditV2.installment_dates);
     }
     var durable = false;
+    var ownsBusy = true;
     setBusy(true);
     try {
       var intentApi = root.NuevoAmanecerCanonicalSaleIntent;
       var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
       if (!intentApi || typeof intentApi.build !== 'function' || !outbox || typeof outbox.enqueue !== 'function') throw new Error('CANONICAL_SALE_CAPTURE_UNAVAILABLE');
       var intent = intentApi.build(input);
-      await outbox.enqueue(intent);
+      intent = await outbox.enqueue(intent);
+      saleId = intent.sale_id;
       durable = true;
-      durableCartFingerprint = cartFingerprint;
       updateAfterCommit(saleId);
       try { projectCurrentOutbox(); }
       catch (projectionError) { failClosed('Venta ' + saleId + ' guardada localmente · pendiente de sincronización. No se pudo actualizar la proyección.', projectionError); }
+      setBusy(false);
+      ownsBusy = false;
+      if (typeof outbox.sync === 'function') await outbox.sync();
+      var receipt = root.NuevoAmanecerCanonical.receiptSnapshot && root.NuevoAmanecerCanonical.receiptSnapshot();
+      if (receipt && receipt.operation_id === intent.operation_id && receipt.sale_id === saleId) {
+        notify('Venta ' + saleId + ' confirmada en CANON', 'success');
+        return { status: 'CONFIRMED', operation_id: intent.operation_id, sale_id: saleId };
+      }
+      return { status: 'PENDING_SYNC', operation_id: intent.operation_id, sale_id: saleId };
     } catch (error) {
       if (durable) failClosed('Venta ' + saleId + ' guardada localmente · pendiente de sincronización.', error);
       else failClosed('No se guardó la venta. Tus productos siguen en el carrito.', error);
-    } finally { setBusy(false); }
+    } finally { if (ownsBusy) setBusy(false); }
   }
   function wrappedConfirm() {
     if (!enabled()) return typeof originalConfirm === 'function' ? originalConfirm.apply(this, arguments) : undefined;

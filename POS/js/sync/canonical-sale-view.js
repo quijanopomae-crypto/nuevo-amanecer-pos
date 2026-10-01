@@ -101,7 +101,10 @@
         }
       });
       last = copy(projected);
-      root.productos = visualProducts;
+      var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+      if (runtime) runtime.setProducts(visualProducts);
+      else if (typeof productos !== 'undefined') productos = visualProducts;
+      else root.productos = visualProducts;
       if (typeof root.posRender === 'function') root.posRender();
       if (typeof root.invRender === 'function') root.invRender();
       pendingSales(last);

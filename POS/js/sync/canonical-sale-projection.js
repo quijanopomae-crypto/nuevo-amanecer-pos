@@ -42,6 +42,9 @@
           PAYMENT_METHODS.indexOf(intent.payment_method) === -1 ||
           !Number.isSafeInteger(intent.total_cents) || intent.total_cents < 0 || !isRecord(intent.payment)) fail('OUTBOX_SNAPSHOT_INVALID');
 
+      // A committed operation may remain in the outbox after ACK/storage failure.
+      // Never reserve its stock or display it as pending a second time.
+      if (base.sales.some(function (sale) { return sale && sale.operation_id === intent.operation_id; })) return;
       var sale = {
         id: intent.sale_id,
         operation_id: intent.operation_id,
@@ -69,12 +72,14 @@
               typeof item.generic_line.code !== 'string' || item.generic_line.code.length > 160) fail('OUTBOX_SNAPSHOT_INVALID');
           return;
         }
-        var product = result.products.find(function (candidate) { return isRecord(candidate) && sameId(candidate.id, item.product_id); });
+        var product = result.products.find(function (candidate) { return isRecord(candidate) && sameId(candidate.product_id !== undefined ? candidate.product_id : candidate.id, item.product_id); });
         if (!product) {
           if (!sale.conflict) { sale.conflict = true; sale.reason = 'PRODUCT_NOT_FOUND'; }
           return;
         }
-        var current = product.projected_stock !== undefined ? product.projected_stock : product.stock;
+        if (product.tracks_inventory === 0 || product.tracks_inventory === false || product.controlInventario === false) return;
+        var current = product.projected_stock !== undefined ? product.projected_stock :
+          (product.current_stock_quantity !== undefined ? product.current_stock_quantity : product.stock);
         if (typeof current !== 'number' || !Number.isFinite(current)) current = 0;
         var next = current - item.quantity;
         if (!Number.isFinite(next)) fail('PROJECTED_STOCK_INVALID');
@@ -88,7 +93,7 @@
 
       if (intent.payment_method === 'credito') {
         var customerExists = result.customers.some(function (customer) {
-          return isRecord(customer) && sameId(customer.id, intent.customer_id);
+          return isRecord(customer) && sameId(customer.customer_id !== undefined ? customer.customer_id : customer.id, intent.customer_id);
         });
         if (!customerExists) {
           if (!sale.conflict) { sale.conflict = true; sale.reason = 'CUSTOMER_NOT_FOUND'; }
