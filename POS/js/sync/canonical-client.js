@@ -535,12 +535,12 @@
         !uint(inputPayment.cash_cents) || !uint(inputPayment.digital_cents) || !uint(inputPayment.credit_cents)) fail('INVALID_CANONICAL_PAYMENT');
     var paymentTotal = inputPayment.cash_cents + inputPayment.digital_cents + inputPayment.credit_cents;
     if (!Number.isSafeInteger(paymentTotal) || paymentTotal !== total) fail('INVALID_CANONICAL_PAYMENT');
-    if (inputPayment.digital_method !== undefined && !['yape', 'plin', 'transferencia'].includes(inputPayment.digital_method)) fail('INVALID_CANONICAL_PAYMENT');
+    if (inputPayment.digital_method != null && !['yape', 'plin', 'transferencia'].includes(inputPayment.digital_method)) fail('INVALID_CANONICAL_PAYMENT');
     if (inputPayment.reference !== undefined && (typeof inputPayment.reference !== 'string' || inputPayment.reference.length > 160 || /[\x00-\x1f\x7f]/.test(inputPayment.reference))) fail('INVALID_CANONICAL_PAYMENT');
     var payload = Object.assign(commonPayload(), { operation_id: intent.operation_id, sale_id: intent.sale_id, created_at: intent.created_at,
       payment_method: intent.payment_method, total_cents: intent.total_cents,
       payment: { cash_cents: inputPayment.cash_cents, digital_cents: inputPayment.digital_cents, credit_cents: inputPayment.credit_cents }, items: items });
-    if (inputPayment.digital_method !== undefined) payload.payment.digital_method = inputPayment.digital_method;
+    if (inputPayment.digital_method != null) payload.payment.digital_method = inputPayment.digital_method;
     if (inputPayment.reference !== undefined) payload.payment.reference = inputPayment.reference;
     if (intent.customer_id !== undefined) {
       if (!validId(intent.customer_id) || !data.customers.some(function (item) { return item.customer_id === intent.customer_id; })) fail('INVALID_CANONICAL_CUSTOMER');
@@ -856,8 +856,16 @@
     ready = false;
     return copy(confirmed.receipt);
   }
+  async function prepareCommand(command) {
+    // Reuse a remotely validated snapshot. Backend authority/revision/CAS checks
+    // and retry status verification remain mandatory; a full scan adds no guard.
+    try { if (replicaState.validation === 'current') { assertAction(command); return legacySnapshot(); } } catch (_) {}
+    await refresh();
+    assertAction(command);
+    return legacySnapshot();
+  }
   async function createSale(sale) {
-    if (sale && typeof sale === 'object' && sale.version === 1) await refresh();
+    if (sale && typeof sale === 'object' && sale.version === 1) await prepareCommand('sale.create');
     return createCommand('sale.create', sale);
   }
   async function createCommand(command, input) {
@@ -1210,7 +1218,7 @@
   }
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
   root.addEventListener('offline', function () { ready = false; });
-  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, snapshot: snapshot,
+  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
     createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });

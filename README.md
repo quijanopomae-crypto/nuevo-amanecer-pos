@@ -80,3 +80,12 @@ Los documentos `V1.3_A2...` a `V1.3_A6...`, los informes de remediación, snapsh
 Antes de actuar sobre ellos, consulta [docs/V1.3_STATUS.md](docs/V1.3_STATUS.md) y el HEAD real de GitHub.
 
 La migración/reconciliación A5 continúa documentada en [docs/V1.3_A5_MIGRATION_RECONCILIATION.md](docs/V1.3_A5_MIGRATION_RECONCILIATION.md). Sus fuentes privadas se colocan en `tools/cloudflare-lab/private/a5-inputs/`, ignoradas por Git. A5 no despliega ni promueve datos comerciales por sí sola.
+
+## Regresión de ventas CANON/Turso
+
+```sh
+node --test tests/cloud-sync/canonical-sale-turso-root.test.mjs
+```
+
+Contrato, causas reproducidas y recuperación selectiva del outbox de prueba:
+[docs/CANON_TURSO_SALE_ROOT.md](docs/CANON_TURSO_SALE_ROOT.md).

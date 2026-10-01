@@ -1,0 +1,245 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+import {activeCanon, device} from './canon-browser-harness.mjs';
+import {tursoSqlite} from './turso-sqlite-protocol.mjs';
+const source = name => readFileSync('POS/js/' + name, 'utf8');
+const saleScripts = ['canonical-sale-intent','canonical-sale-outbox','canonical-sale-projection','canonical-sale-integration'];
+
+async function fixture(t, options={}) {
+  const f=await activeCanon(t,{migrations:['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql']});
+  const turso=tursoSqlite(f.database);
+  f.env.DB=turso.adapter;
+  f.env.nuevo_amanecer_lab={prepare(){throw Error('D1 must not be used');}};
+  const tab=await device(f,{token:'sales-session',deviceId:'sales-device',...options,
+    scripts:[['lexical-runtime',`let cart=[],productos=[],ventas=[],clientes=[],creditos=[],cajEstado={},cajMovs=[],posProc=false,posPayM='efectivo';`],
+      ...saleScripts.map(name=>[name,source('sync/'+name+'.js')])],
+    globals:{isModuleLocked:()=>false,_naSessionOpen:()=>true,_naPaymentState:()=>({valid:true}),
+      _naTracksStock:()=>true,_naUnitsSold:i=>i.qty,_naUnitsPerQty:()=>1,posUpdateCart(){},posRender(){},...options.globals}
+  });
+  await tab.api.adjustInventory({product_id:'00001',movement_type:'ENTRADA',quantity:173,reason:'Synthetic test stock'});
+  await tab.api.refresh();
+  await tab.api.openCash({session_id:'cash-sale-root',opening_cents:0});
+  await tab.api.refresh();
+  const legacy=tab.api.legacySnapshot();
+  tab.context.__legacy=legacy;
+  vm.runInContext('productos=__legacy.products;ventas=__legacy.sales;clientes=__legacy.customers;',tab.context);
+  // The real cart producer spreads the uiProduct, preserving its exact id.
+  const add=()=>vm.runInContext("cart=[{...productos.find(p=>p.id==='00001'),qty:1,precio:2}];",tab.context);
+  return {f,tab,turso,add};
+}
+
+test('raw CANON product_id projects without PRODUCT_NOT_FOUND and respects stockless products',async t=>{
+  const {tab}=await fixture(t);
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  const base=tab.api.snapshot();
+  const view=tab.context.NuevoAmanecerCanonicalSaleProjection.project(base,{version:1,intents:[intent]});
+  assert.equal(view.sales[0].conflict,false);
+  assert.equal(view.products.find(p=>p.product_id==='00001').projected_stock,172);
+  const stockless={...base,products:[{product_id:'00001',tracks_inventory:0,current_stock_quantity:0}]};
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleProjection.project(stockless,{version:1,intents:[intent]}).sales[0].conflict,false);
+});
+
+test('adapter → real global let cart → durable intent → Turso adapter → receipt → history, stock and cash exactly once',async t=>{
+  const {f,tab,turso,add}=await fixture(t);add();
+  assert.equal(tab.context.cart,undefined);
+  await vm.runInContext('confirmarVenta()',tab.context);
+  assert.equal(vm.runInContext('cart.length',tab.context),0,'clear lexical cart only after durability');
+  assert.equal(vm.runInContext('posProc',tab.context),false);
+  assert.equal(tab.context.cart,undefined);
+  assert.ok(tab.context.__closed.includes('mCobro'),'close lexical modal');
+  assert.ok(tab.toasts.some(([m])=>/confirmada/i.test(m)),'confirmed toast');
+  const post=tab.fetchLog.find(row=>new URL(row.url).pathname==='/commands/sale.create');
+  assert.ok(post,'the sale must be sent');
+  const payload=JSON.parse(post.body);
+  assert.equal(payload.items[0].product_id,'00001');
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  assert.equal(tab.api.legacySnapshot().sales[0].id,'V-001');
+  const replay=await f.fetch(post.url,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer sales-session'},body:post.body});
+  assert.equal(replay.status,200);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+  const second=await device(f,{token:'second-session',deviceId:'second-device'});
+  assert.equal(second.api.legacySnapshot().sales[0].id,'V-001');
+  const reload=await device(f,{token:'sales-session',localStorage:tab.localStorage});
+  assert.equal(reload.api.legacySnapshot().sales[0].operation_id,payload.operation_id);
+  assert.ok(turso.calls.some(call=>call.requests[0].type==='batch'));
+});
+
+test('pending V-001 reserves sale id; identical next cart is a new V-002 with its own UUID',async t=>{
+  const {tab,add}=await fixture(t);
+  tab.context.navigator.onLine=false; add();
+  await vm.runInContext('confirmarVenta()',tab.context);
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents[0].sale_id,'V-001');
+  add();await vm.runInContext('confirmarVenta()',tab.context);
+  const pending=tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents;
+  assert.equal(pending.length,2);
+  assert.equal(pending[1].sale_id,'V-002');
+  assert.notEqual(pending[0].operation_id,pending[1].operation_id);
+  assert.ok(tab.toasts.some(([m])=>/pendiente de sincronización/i.test(m)));
+  assert.equal(tab.toasts.some(([m])=>/venta realizada|confirmada/i.test(m)),false);
+});
+
+test('lost ACK retains durable intent; exact retry confirms and never repeats stock/cash',async t=>{
+  let lose=true;
+  const {f,tab,add}=await fixture(t,{onFetch:async(url,options,next)=>{
+    if(new URL(url).pathname==='/commands/sale.create'&&lose){lose=false;await next();throw Error('lost ACK');}
+  }});add();
+  await vm.runInContext('confirmarVenta()',tab.context);
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,1);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
+  assert.equal((await tab.context.NuevoAmanecerCanonicalSaleOutbox.sync()).status,'DRAINED');
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+  await tab.api.refresh();
+  assert.equal(tab.api.legacySnapshot().sales.length,1);
+});
+
+test('cash bridge uses current replica without pre-command full refresh; returns on receipt',async t=>{
+  const {tab}=await fixture(t);
+  await tab.api.closeCash({counted_cents:0});await tab.api.refresh();
+  tab.context._naFindCashier=()=>({id:'cashier',nombre:'Caja'});
+  tab.el('cajFondo').value='10';
+  vm.runInContext(source('sync/canonical-cash-bridge.js'),tab.context);
+  const start=tab.fetchLog.length;
+  assert.equal(await tab.context.abrirCaja(),true);
+  const calls=tab.fetchLog.slice(start),postIndex=calls.findIndex(row=>new URL(row.url).pathname==='/commands/cash.open');
+  assert.ok(postIndex>=0);
+  assert.deepEqual(calls.slice(0,postIndex).map(r=>new URL(r.url).pathname),['/read/canonical/status']);
+  await tab.api.refresh();
+});
+
+test('enqueue reserves sale id inside shared lock even for two captures from the same stale snapshot',async t=>{
+  const {tab}=await fixture(t);
+  const make=()=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  const first=await tab.context.NuevoAmanecerCanonicalSaleOutbox.enqueue(make());
+  const second=await tab.context.NuevoAmanecerCanonicalSaleOutbox.enqueue(make());
+  assert.equal(first.sale_id,'V-001');assert.equal(second.sale_id,'V-002');
+});
+
+test('confirmed operation left in outbox by storage/ACK failure does not project stock twice',async t=>{
+  const {tab}=await fixture(t);
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  await tab.api.createSale(intent);await tab.api.refresh();
+  const view=tab.context.NuevoAmanecerCanonicalSaleProjection.project(tab.api.snapshot(),{version:1,intents:[intent]});
+  assert.equal(view.sales.length,1);
+  assert.equal(view.products.find(p=>p.product_id==='00001').projected_stock,undefined);
+});
+
+test('targeted test-intent rejection archives only demonstrably invalid selected V-001; preserves unrelated storage',async t=>{
+  const {tab}=await fixture(t);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const make=(amount,product)=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:product,quantity:1,precio:amount}]});
+  const invalid=make(2,'missing-product');await queue.enqueue(invalid);
+  tab.localStorage.setItem('unrelated','must-survive');
+  assert.equal(typeof queue.rejectInvalidTestIntent,'function');
+  await queue.rejectInvalidTestIntent(invalid.operation_id);
+  assert.equal(queue.snapshot().intents.length,0);
+  assert.equal(tab.localStorage.getItem('unrelated'),'must-survive');
+  const valid=make(3,'00001');await queue.enqueue(valid);
+  await assert.rejects(queue.rejectInvalidTestIntent(valid.operation_id),/TEST_INTENT_NOT_PROVEN_INVALID/);
+  assert.equal(queue.snapshot().intents.length,1);
+});
+
+test('cash UI releases on receipt even when the post-confirmation refresh is blocked',async t=>{
+  const {tab}=await fixture(t);
+  await tab.api.closeCash({counted_cents:0});await tab.api.refresh();
+  const real=tab.api;let release;const gate=new Promise(resolve=>{release=resolve;});
+  tab.context.NuevoAmanecerCanonical={...real,refresh:async()=>{await gate;return real.refresh();}};
+  tab.context._naFindCashier=()=>({id:'cashier',nombre:'Caja'});
+  tab.el('cajFondo').value='0';
+  vm.runInContext(source('sync/canonical-cash-bridge.js'),tab.context);
+  assert.equal(await tab.context.abrirCaja(),true);
+  assert.ok(tab.context.__closed.includes('mApertura'));
+  assert.ok(tab.toasts.some(([m])=>/Caja CANON abierta/.test(m)));
+  release();await real.refresh();
+});
+
+test('cash close, ingreso, egreso and expense use lexical movement state and no redundant pre-command scans',async t=>{
+  const {tab}=await fixture(t);
+  vm.runInContext("let cajMovTipo='egr';",tab.context);
+  vm.runInContext(source('sync/canonical-cash-bridge.js'),tab.context);
+  async function check(command, action) {
+    await tab.api.refresh();
+    const start=tab.fetchLog.length;
+    assert.equal(await action(),true);
+    const calls=tab.fetchLog.slice(start),post=calls.findIndex(r=>new URL(r.url).pathname==='/commands/'+command);
+    assert.ok(post>=0,command);
+    assert.deepEqual(calls.slice(0,post).map(r=>new URL(r.url).pathname),['/read/canonical/status'],command+' must not scan collections before POST');
+    await tab.api.refresh();
+  }
+  await tab.api.createAdjustment({amount_cents:1000,reason:'Synthetic fund'});
+  tab.el('cajMovMonto').value='1';tab.el('cajMovDesc').value='Synthetic egress';tab.el('cajMovCat').value='Otro';
+  await check('adjustment.create',()=>tab.context.guardarMovCaja());
+  assert.equal(tab.api.snapshot().financialEvents.filter(event=>event.cash_delta_cents===-100).length,1);
+  vm.runInContext("cajMovTipo='ing'",tab.context);
+  await check('adjustment.create',()=>tab.context.guardarMovCaja());
+  vm.runInContext(source('sync/canonical-expense-bridge.js'),tab.context);
+  tab.context.obtenerHoy=()=>new Date().toLocaleDateString('en-CA');
+  tab.el('gasDesc').value='Synthetic expense';tab.el('gasMonto').value='1';tab.el('gasCat').value='Otro';tab.el('gasMetodo').value='efectivo';tab.el('gasFecha').value=tab.context.obtenerHoy();
+  await check('expense.create',()=>tab.context.guardarGasto());
+  assert.ok(tab.context.__closed.includes('mGasto'));
+  tab.el('cajContado').value='9';
+  await check('cash.close',()=>tab.context.cerrarCaja());
+});
+
+test('confirmed ID stays durably reserved after post-ACK refresh fails',async t=>{
+  let block=false;
+  const {tab,add}=await fixture(t,{onFetch:async(url)=>{
+    if(block&&new URL(url).pathname.startsWith('/read/canonical/'))throw Error('temporary read failure');
+  }});
+  // Commit while the last visible snapshot still has zero sales.
+  const make=()=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  const intent=await tab.context.NuevoAmanecerCanonicalSaleOutbox.enqueue(make());
+  await tab.api.createSale(intent);block=true;
+  await tab.context.NuevoAmanecerCanonicalSaleOutbox.sync();
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  const next=await tab.context.NuevoAmanecerCanonicalSaleOutbox.enqueue(make());
+  assert.equal(next.sale_id,'V-002');
+});
+
+test('started outbox automatically replays a lost ACK without another sale, reload or manual sync',async t=>{
+  let lose=true;
+  const {tab}=await fixture(t,{onFetch:async(url,options,next)=>{
+    if(new URL(url).pathname==='/commands/sale.create'&&lose){lose=false;await next();throw Error('lost ACK');}
+  }});
+  const timers=[];
+  const realSet=tab.context.setTimeout,realClear=tab.context.clearTimeout;
+  tab.context.setTimeout=(fn,ms)=>ms<8000?(timers.push(fn),timers.length):realSet(fn,ms);
+  tab.context.clearTimeout=id=>{if(typeof id!=='number')realClear(id);};
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  await tab.context.NuevoAmanecerCanonicalSaleOutbox.enqueue(intent);
+  await tab.context.NuevoAmanecerCanonicalSaleOutbox.start();
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,1);
+  assert.equal(timers.length,1,'schedule a bounded retry');
+  await timers.shift()();
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+});
+
+test('upgrade: draining an old v1 envelope preserves its sale-number reservation',async t=>{
+  const {tab}=await fixture(t);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  tab.localStorage.setItem(queue.KEY,JSON.stringify({version:1,intents:[intent]}));
+  assert.equal((await queue.sync()).status,'DRAINED');
+  assert.equal(queue.snapshot().last_sale_number,1);
+});
+
+test('legacy duplicate test intents are blocked before POST and can be selectively archived as a pair',async t=>{
+  const {tab}=await fixture(t);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const make=amount=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:amount}]});
+  const first=make(2),second=make(3);
+  tab.localStorage.setItem(queue.KEY,JSON.stringify({version:1,intents:[first,second]}));
+  const before=tab.fetchLog.length;
+  assert.equal((await queue.sync()).status,'BLOCKED_DUPLICATE_SALE_ID');
+  assert.equal(tab.fetchLog.slice(before).some(row=>row.method==='POST'),false);
+  await queue.rejectInvalidTestIntent(first.operation_id);
+  await queue.rejectInvalidTestIntent(second.operation_id);
+  assert.equal(queue.snapshot().intents.length,0);
+  assert.equal(JSON.parse(tab.localStorage.getItem(queue.KEY+'_rejected_tests')).length,2);
+});
