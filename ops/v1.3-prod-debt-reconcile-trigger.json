@@ -2,11 +2,25 @@
   "format": "nuevo-amanecer-v1.3-prod-debt-reconcile-v1",
   "authorized": true,
   "authorized_by": "owner",
-  "requested_action": "prepare-secure-casamarket-debt-reconciliation",
-  "mode": "prepare-key",
+  "requested_action": "inspect-secure-casamarket-debt-reconciliation",
+  "mode": "inspect",
   "target_count": 29,
   "target_total_cents": 2368495,
   "source": "owner-provided screenshots; target payload will be encrypted before repository storage",
-  "requested_at_utc": "2026-10-01T21:26:00Z",
-  "retry_attempt": 2
+  "requested_at_utc": "2026-10-01T21:30:00Z",
+  "retry_attempt": 3,
+  "key_material": {
+    "public_spki_b64": "MCowBQYDK2VuAyEAReE/IYHC9CyDhoXBxGsjmOZy+5EAdGlW5dLLzK5iHws=",
+    "sealed_private": {
+      "iv_b64": "QUyHJqgCvQSDCx45",
+      "tag_b64": "5WRU9nndZpMDRriCVT0fwg==",
+      "ciphertext_b64": "z9WBA0ZMAM4CATH+Op0rr0KOi2491UK8NiIPlM/JW0FTKkxIWN9zWnHO9+j6VEtf"
+    }
+  },
+  "payload": {
+    "ephemeral_spki_b64": "MCowBQYDK2VuAyEAhEwGxyu/hz0YseihRZaCfJVbwo022dHLNUZFpb9yiDU=",
+    "iv_b64": "v5z3ruR8Icm4ifil",
+    "tag_b64": "QK2Esgdaeh5MSDGv0Vtugw==",
+    "ciphertext_b64": "W03qg3wufh5dLu2p6tqmoH/cllyGFvaK4FDzEbVTtAVrGpsK1tmj/DlIy/W9ct1HLpkbwLfgdLhGmTZMVdA0HLS6opgfenEX0YQ/pDGPuG0Bs/E5TvtRCd6ITad9Jn0Zaa34rIqorFhAeYPMIdMH6RWCpR0zRsZmEvg4fPGEci4jcfRbepvf4Col6TK/t4zvp9W0LoJ3vgWjgOAuaPSEnRmS9y0hP1Qxopj5IDtnaJRisSFv2ZELi652YgyIspC4fuSGKEr0Fdv98LJ4tDZ86P8/GaithpkQPlNvp/I+vouYkTZ+Ke+J15cttKOq41YeE9J5yB0KE5lYOOaLAccQiE/YRbipL9HfjxxDjDq1jSZlTSoVL2albNyhYjBOeLpnX4mbDIWyewq3DQbIqwDGhbu3lzOdV/p9z5Ww2kzDxY/03+Cpp1fwnIiO1+xGl4btE75X/5Pb7MVXsRHnCIr9GCp+zaXffThEUqI/BlyL7Gh1ErWbe+vEszoj+RZF4TmvC+tdiO5PJ7oHMnsW3T3Zbx6pukBI4cMlBT056mx+KTUXW8RCd86JBrol2Quiduh0G/XBvjXUlAOUDCfpoVbD3vYb6bSUk/2Bt+ZSjmBY58s6cPp8MRD4fhbrCrnBvUenjgBqWHOtda4zhk866XTTeyONmBRJhaRMJ5JcWZKQHGW0OMQdt3DpzFAO2angSXoAu3odLImcRi+MtaTLC32Ji0qjuHYoauHHvX+G1CRdGIT/dGN2wDBA8gunA7W5T6EY39ogJHTg9YizdJx/thDn3qCK/BpxKEuL/6ANyrUGnviHk6tMr7YtPUUiV+KsJ8jWJqJUX7Tu0hljpkQZis2RAMX29X1eOZ5xBxFJqlXnM46xPyIBaAVymTgRWGFMwVNpEx5gBv/Y9mlfrYeX4zj6/Gql0w+BjlpwRq0XiU9RqUweQP7cJZmmxaIQ6APpZLQF61KAz2qhtLVl83QkR5clXKwyTX5lxcK82goQj1cNJrFhDND0+v7fHbAfjZkPxI+LByKtytVCeCe3cfTOxcIhlaYxGvElukyDaqU1cqt44fIRVmEhdfDmC8H+T++ah1IrLKMfVnhTi2ZsDu8yccO0LaOg0cMs/l2W9fsjOy7NtoqaXlwMjroKDgG/cGFylIbIXRAP4NiF1TewSCbv1+aIUXaMUnS6ZJRjBvf7B5qsLP5fkRl/28D56xjMJK+ePN+UmopBVfb9iCgAQei0gNFx1DtQfonmZypeyy7NviznemmwNO1sMJ4rIFdxhMp6o/NxQJ0sVOklycIOkwlYk+CUnFzKCFIqaAfGjrzRv1aeyDA93H4oB0nwxaXKvZ2TkWWx0eSARkYSsfGY6nazDnShJcjtp0ZmcNVRrzubKQCPVlgQcuNRpW7t39IsbZW/tevN8yFBX9PyNN8PRxisV3YpskNpioj5xAFIiN0ctraqfHCHgWAalPNq8ecuWos1ssf/OcclKv+mgnrL6SVJIHHMhfwJ5IjY+b99DncDeoaCsf96fEMuuiftPjqCJmOCgaU0srPcDL4zVt5ThJY6LzWuZWncjKcdpp47ZaKAUUmFvpG9Q/DyHhwdQNpaEfze3NNYEVMFx5oaxzV0HhlbMmdDNuEfCjMcY75ppov+T36ciGeQiP81tYMMlHK76jfAyuuWxAUcjx++cTaOMY6CAoafuRASmxyu1WePgGHTlm/lY80V9vhTjzGt/o15OLoF1cYj2d/7jFS/FAhYXOphHVodT72jNxHhbP8zl7e288zN8phMpyM98On/j05u7dhRhYT+XkySduqCtcg6"
+  }
 }
