@@ -47,7 +47,7 @@
     ],
     "WRITES": [
       "Cambiar semántica visual: status verificado durante carga no es verde final.",
-      "Promover cache local a current solo si coincide exactamente con autoridad/revisiones/digest del status remoto.",
+      "Conservar la cache local para lectura solo si coincide exactamente con autoridad/revisiones/digest del status remoto; no promoverla a current ni habilitar escrituras.",
       "No reemplazar esa cache verificada por el bootstrap operacional vacío.",
       "Mostrar 'Cargando caja CANON…' cuando no hay snapshot operativo aún.",
       "Proyectar movimiento de venta confirmado en Caja por receipt, solo como overlay visual idempotente."
