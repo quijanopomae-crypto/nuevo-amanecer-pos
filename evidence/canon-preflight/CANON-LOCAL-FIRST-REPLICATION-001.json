@@ -86,7 +86,8 @@
       "docs/LOCAL_FIRST*.md",
       "docs/superpowers/plans/2026-10-01-local-first.md",
       "tasks/CANON-LOCAL-FIRST-REPLICATION-001.json",
-      "evidence/canon-preflight/CANON-LOCAL-FIRST-REPLICATION-001.json"
+      "evidence/canon-preflight/CANON-LOCAL-FIRST-REPLICATION-001.json",
+      "tests/e2e/local-first.spec.ts"
     ],
     "DOM_AFFECTED": [
       "commercial modals",
