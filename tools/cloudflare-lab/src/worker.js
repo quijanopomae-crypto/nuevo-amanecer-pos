@@ -4,7 +4,7 @@ import { getDatabase } from './database-binding.js';
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
 import { A5_A4_QUARANTINE_TRANSFORM_VERSION, A5_TRANSFORM_VERSION, buildManifest, stableStringify as stableImportStringify } from './a5-import-core.js';
 import { handleA6, isA6Path, canonicalRuntimeDenied } from './a6-canonical.js';
-import { createCanonicalSale, createCanonicalCreditAccount, CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
+import { createCanonicalSale, createCanonicalCreditAccount, canUseCanonicalSaleFastPath, CANONICAL_CLIENT_CONTRACT } from './a6-commerce.js';
 import { createCanonicalFinancial, createCanonicalPaymentBatch, FINANCIAL_COMMANDS } from './a6-financial.js';
 import { createCanonicalExpense, EXPENSE_COMMAND } from './a6-expenses.js';
 import { createCanonicalProduct, PRODUCT_COMMANDS } from './a6-products.js';
@@ -80,10 +80,16 @@ export default {
       }
       if (url.pathname === SALE_CREATE_PATH) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
-        if (await isCanonicalSaleRequest(request)) {
+        const canonicalBody = await canonicalSaleRequestBody(request);
+        if (canonicalBody) {
           const denied = canonicalRuntimeDenied(url, env, json);
           if (denied) return denied;
-          const auth = await authorizeSession(request, env);
+          // Production Turso simple sales validate the bearer session inside the
+          // same atomic DB batch as authority, stock and cash. This removes the
+          // standalone auth round trip without trusting the browser.
+          const auth = canUseCanonicalSaleFastPath(canonicalBody, env)
+            ? await deferredSaleAuth(request, env)
+            : await authorizeSession(request, env);
           if (auth instanceof Response) return auth;
           return await createCanonicalSale(request, env, auth, json);
         }
@@ -185,13 +191,15 @@ export default {
   },
 };
 
-async function isCanonicalSaleRequest(request) {
+async function canonicalSaleRequestBody(request) {
   try {
     const body = await request.clone().json();
-    return !!(body && typeof body === 'object' && !Array.isArray(body) &&
-      body.client_contract === CANONICAL_CLIENT_CONTRACT && typeof body.promotion_id === 'string');
+    return body && typeof body === 'object' && !Array.isArray(body) &&
+      body.client_contract === CANONICAL_CLIENT_CONTRACT && typeof body.promotion_id === 'string'
+      ? body
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -238,10 +246,21 @@ async function activateSession(request, env) {
   return json({ status: 'activated', session_token: token });
 }
 
-async function authorizeSession(request, env) {
+function sessionCredential(request) {
   const authorization = String(request.headers.get('authorization') || '');
   const bearer = authorization.match(/^Bearer\s+([^\s]+)$/i);
-  const provided = bearer?.[1] || String(request.headers.get('x-session-token') || '');
+  return bearer?.[1] || String(request.headers.get('x-session-token') || '');
+}
+
+async function deferredSaleAuth(request, env) {
+  const provided = sessionCredential(request);
+  if (!provided || provided.length > 1024) return json({ error: 'unauthorized' }, 401);
+  if (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
+  return { sessionId: null, principalId: null, credentialHash: await sha256Hex(provided), deferredSaleAuth: true };
+}
+
+async function authorizeSession(request, env) {
+  const provided = sessionCredential(request);
   if (!provided || provided.length > 1024) return json({ error: 'unauthorized' }, 401);
   if (env.READ_TOKEN && constantTimeEqual(provided, env.READ_TOKEN)) return json({ error: 'unauthorized' }, 401);
   const tokenHash = await sha256Hex(provided);
