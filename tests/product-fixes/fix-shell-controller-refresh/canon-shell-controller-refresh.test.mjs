@@ -26,6 +26,9 @@ async function harness(controller) {
       assert.equal(options.scope, './');
       assert.equal(options.updateViaCache, 'none');
       return Promise.resolve({
+        waiting: null,
+        installing: null,
+        addEventListener() {},
         update() {
           updates += 1;
           return Promise.resolve();
@@ -34,11 +37,35 @@ async function harness(controller) {
     }
   };
 
+  const prompt = { hidden: true, dataset: {} };
+  const status = { textContent: '' };
+  const action = {
+    textContent: 'Actualizar ahora',
+    disabled: false,
+    addEventListener() {}
+  };
+  const document = {
+    visibilityState: 'visible',
+    getElementById(id) {
+      if (id === 'pwaUpdatePrompt') return prompt;
+      if (id === 'pwaUpdateStatus') return status;
+      if (id === 'pwaUpdateAction') return action;
+      return null;
+    },
+    addEventListener() {}
+  };
+
   const window = {
     isSecureContext: true,
     addEventListener(type, callback) {
       if (type === 'load') onLoad = callback;
     },
+    dispatchEvent() {},
+    setTimeout(callback) {
+      callback();
+      return 1;
+    },
+    clearTimeout() {},
     location: {
       reload() {
         reloads += 1;
@@ -48,8 +75,11 @@ async function harness(controller) {
 
   vm.runInNewContext(source, {
     window,
+    document,
+    CustomEvent: class CustomEvent {},
     navigator: { serviceWorker },
-    console
+    console,
+    Promise
   });
 
   assert.equal(typeof onLoad, 'function', 'bootstrap must register load listener');
