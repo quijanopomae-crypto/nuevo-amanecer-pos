@@ -139,7 +139,7 @@
       } else {
         target = row(s.financialEvents, 'operation_id', p.compensates_operation_id);
         if (!['PAYMENT','ADJUSTMENT'].includes(target.event_type) || s.financialEvents.some(function (r) { return r.compensates_operation_id === p.compensates_operation_id; })) fail('ALREADY_LOCAL_COMPENSATED');
-        creditDelta = -target.credit_delta_cents; cashDelta = -target.cash_delta_cents; method = target.payment_method;
+        creditDelta = -target.credit_delta_cents; cashDelta = -target.cash_delta_cents; method = null;
         if (target.credit_id) { credit = row(s.credits, 'credit_id', target.credit_id); revision(credit.revision, p.expected_credit_revision); }
         receipt.compensates_operation_id = p.compensates_operation_id;
       }
@@ -153,7 +153,7 @@
       var eventType = command === 'payment.create' ? 'PAYMENT' : command === 'adjustment.create' ? 'ADJUSTMENT' : 'COMPENSATION';
       var financial = { event_id:p.operation_id, operation_id:p.operation_id, promotion_id:p.promotion_id, event_type:eventType, credit_id:credit ? credit.credit_id : null, credit_provenance:credit ? credit.provenance : null, credit_delta_cents:creditDelta, cash_delta_cents:cashDelta, session_id:p.session_id || null, payment_method:method, reference:p.reference || null, reason:p.reason || null, compensates_operation_id:p.compensates_operation_id || null, created_at:p.created_at };
       s.financialEvents.push(financial);
-      if (credit) s.payments.push(Object.assign(copy(financial), { payment_id:p.operation_id, amount_cents:Math.abs(creditDelta), payment_date:p.created_at.slice(0,10), payment_timestamp:p.created_at, payment_date_known:1, method:method, source_operation_reference:p.reference || null, provenance:'LIVE' }));
+      if (credit) s.payments.push(Object.assign(copy(financial), { payment_id:p.operation_id, amount_cents:-creditDelta, payment_date:p.created_at.slice(0,10), payment_timestamp:p.created_at, payment_date_known:1, method:method, source_operation_reference:p.reference || null, provenance:'LIVE' }));
       Object.assign(receipt, { event_id:p.operation_id, cash_delta_cents:cashDelta, credit_delta_cents:creditDelta });
     } else if (command === 'expense.create') {
       if (!id(p.expense_id) || !uint(p.amount_cents) || !p.amount_cents || !p.concept || !p.category || !['efectivo','yape','plin','transferencia'].includes(p.payment_method) || s.expenses.some(function (r) { return r.expense_id === p.expense_id; })) fail('INVALID_LOCAL_EXPENSE');
@@ -171,7 +171,7 @@
       s.inventoryMovements.push(movement); Object.assign(receipt, movement);
     } else if (command === 'customer.create') {
       if (!id(p.customer_id) || !p.name || s.customers.some(function (r) { return r.customer_id === p.customer_id || p.document && r.document === p.document; })) fail('DUPLICATE_LOCAL_CUSTOMER');
-      s.customers.push(Object.assign(copy(p), { total_purchases_cents:0, credit_policy_revision:0, provenance:'LIVE' })); receipt.customer_id = p.customer_id;
+      s.customers.push(Object.assign(copy(p), { color:String(p.color),total_purchases_cents:0, credit_policy_revision:0, provenance:'LIVE' })); receipt.customer_id = p.customer_id;
     } else if (command === 'product.create') {
       if (!id(p.product_id) || !p.name || !uint(p.price_cents) || !p.price_cents || !uint(p.cost_cents) || !Number.isFinite(p.initial_stock_quantity) || p.initial_stock_quantity < 0 || s.products.some(function (r) { return r.product_id === p.product_id; })) fail('INVALID_LOCAL_PRODUCT');
       var codes = [p.sku,p.barcode].concat(p.alternate_codes || []).filter(Boolean).map(function (v) { return String(v).toLowerCase(); });

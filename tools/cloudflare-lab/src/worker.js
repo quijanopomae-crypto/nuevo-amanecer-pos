@@ -72,7 +72,7 @@ export default {
       }
       if (url.pathname === '/auth/session') {
         if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' });
-        const auth = await authorizeSession(request, env);
+        const auth = await authorizeSession(request, env, true);
         if (auth instanceof Response) return auth;
         return json({ status: 'ok', session_id: auth.sessionId });
       }

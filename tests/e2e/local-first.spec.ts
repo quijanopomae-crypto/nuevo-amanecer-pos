@@ -147,16 +147,37 @@ test('credit account and offline payment batch sync without a false cloud-loss w
   }finally{cleanup.forEach(fn=>fn());}
 });
 
-test('activation preserves legacy durable intents and refuses to ignore them',async({page})=>{
+test('activation preserves unknown legacy intents as NEEDS_REVIEW and blocks only their resources',async({page})=>{
   const cleanup:Array<()=>void>=[];try{
     await posHarness(page,cleanup);
     const result=await page.evaluate(async()=>{
-      const w=window as any;
-      w.NuevoAmanecerCanonicalSaleOutbox={snapshot:()=>({intents:[{operation_id:'original-operation',sale_id:'V-001'}]})};
-      try{await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');return 'unexpected activation';}catch(error){return String((error as Error).message);}
+      const w=window as any,original={operation_id:'original-operation',sale_id:'V-001',items:[{product_id:'00001',quantity:1}]};
+      w.NuevoAmanecerCanonicalSaleOutbox={snapshot:()=>({intents:[original]})};
+      await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');
+      const state=await w.NuevoAmanecerCanonicalLocalStore.read();
+      let blocked='';try{await w.NuevoAmanecerCanonical.adjustInventory({product_id:'00001',movement_type:'ENTRADA',quantity:1,reason:'Synthetic inventory'});}catch(e){blocked=(e as Error).message;}
+      await w.NuevoAmanecerCanonical.createCustomer({name:'Unrelated synthetic customer',document:'12345678'});
+      return {evidence:state.migration.evidence[0],complete:state.migration.complete,original:w.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents[0],blocked,customers:w.NuevoAmanecerCanonical.snapshot().customers.length};
     });
-    expect(result).toBe('LEGACY_PENDING_REQUIRES_REVIEW');
-    expect(await page.evaluate(async()=>(window as any).NuevoAmanecerCanonicalLocalStore.read())).toBeNull();
+    expect(result.evidence).toMatchObject({operation_id:'original-operation',state:'NEEDS_REVIEW',source:'legacy-sale-outbox'});
+    expect(result.original.operation_id).toBe('original-operation');expect(result.blocked).toBe('LOCAL_RESOURCE_REQUIRES_REVIEW');expect(result.complete).toBe(true);expect(result.customers).toBe(2);
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('migration reconciles a legacy sale with lost ACK by its original UUID and payload',async({page})=>{
+  const cleanup:Array<()=>void>=[];try{
+    const {f,calls}=await posHarness(page,cleanup,{lostAck:true});
+    const result=await page.evaluate(async()=>{
+      const w=window as any,api=w.NuevoAmanecerCanonical;
+      await api.openCash({session_id:'legacy-cash',opening_cents:0});
+      const intent=w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+      try{await api.createSale(intent);}catch(_){}
+      w.NuevoAmanecerCanonicalSaleOutbox={snapshot:()=>({intents:[intent]})};
+      await api.enableLocalFirst('synthetic-owner-secret');
+      const state=await w.NuevoAmanecerCanonicalLocalStore.read();return {operation:intent.operation_id,evidence:state.migration.evidence,pending:state.events.length,sales:state.projection.sales.length};
+    });
+    expect(result.pending).toBe(0);expect(result.sales).toBe(1);expect(result.evidence.every((e:any)=>e.operation_id===result.operation && e.state==='CONFIRMED')).toBe(true);
+    const posts=calls.filter(c=>c.path==='/commands/sale.create');expect(posts).toHaveLength(2);expect(posts[0].body).toEqual(posts[1].body);expect((await f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'")).n).toBe(172);
   }finally{cleanup.forEach(fn=>fn());}
 });
 
@@ -250,6 +271,105 @@ test('cloud loss after an empty outbox is detected without overwriting or blocki
   }finally{cleanup.forEach(fn=>fn());}
 });
 
+test('cloud-to-local recovery needs owner confirmation and a matching exported backup; cancel keeps every local operation',async({page,context})=>{
+  const cleanup:Array<()=>void>=[];try{
+    await posHarness(page,cleanup);
+    const path=root+'/POS/js/sync/canonical-local-recovery.js';if(existsSync(path))await page.addScriptTag({content:readFileSync(path,'utf8')});
+    expect(await page.evaluate(()=>typeof (window as any).NuevoAmanecerCanonicalLocalRecovery)).toBe('object');
+    await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');});
+    await context.setOffline(true);
+    const backup=await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.openCash({session_id:'recovery-cash',opening_cents:0});await w.NuevoAmanecerCanonical.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]}));return w.NuevoAmanecerCanonicalLocalStore.exportBackup();});
+    const cancelled=await page.evaluate(async backup=>{const w=window as any,before=JSON.stringify(await w.NuevoAmanecerCanonicalLocalStore.read());let error='';try{await w.NuevoAmanecerCanonicalLocalRecovery.restoreCloud({confirmed:false,backup:backup});}catch(e){error=(e as Error).message;}return {error,unchanged:before===JSON.stringify(await w.NuevoAmanecerCanonicalLocalStore.read())};},backup);
+    expect(cancelled).toEqual({error:'OWNER_CONFIRMATION_REQUIRED',unchanged:true});
+    await context.setOffline(false);
+    await page.evaluate(async backup=>{await (window as any).NuevoAmanecerCanonicalLocalRecovery.restoreCloud({confirmed:true,ownerSecret:'synthetic-owner-secret',backup:backup});},backup);
+    const restored=await page.evaluate(async()=>{const w=window as any,state=await w.NuevoAmanecerCanonicalLocalStore.read();return {sales:state.projection.sales.length,stock:state.projection.products.find((p:any)=>p.product_id==='00001').current_stock_quantity,pending:state.events.length,previous:state.recovery.previous.sequence,backup:state.recovery.backup_digest};});
+    expect(restored).toEqual({sales:0,stock:173,pending:0,previous:2,backup:backup.digest});
+    expect(backup.backup.state.events).toHaveLength(2);
+    const oldRetry=await page.evaluate(async backup=>{const w=window as any,event=backup.backup.state.events[0];try{await w.NuevoAmanecerCanonicalLocalStore.commit(()=>({command:event.command,payload:event.payload}));return 'incorrect-success';}catch(e){return (e as Error).message;}},backup);
+    expect(oldRetry).toBe('LOCAL_OPERATION_REPLACED_BY_RECOVERY');
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('a corrupt local projection is preserved as recovery evidence before owner-authorized cloud restoration',async({page})=>{
+  const cleanup:Array<()=>void>=[];try{
+    await posHarness(page,cleanup);await page.addScriptTag({content:readFileSync(root+'/POS/js/sync/canonical-local-recovery.js','utf8')});
+    expect(await page.evaluate(()=>typeof (window as any).NuevoAmanecerCanonicalLocalStore.exportRecoveryEvidence)).toBe('function');
+    const result=await page.evaluate(async()=>{
+      const w=window as any,s=w.NuevoAmanecerCanonicalLocalStore;
+      await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonicalLocalFirst.pause();
+      await w._naRunCriticalOperation({operationId:crypto.randomUUID(),type:'SYNTHETIC_CORRUPTION',expectedRevision:(await w._naV10ReadCanonical()).revision,payload:{},mutate:(draft:any)=>{draft.data.canonicalLocalFirst.projection.products.find((p:any)=>p.product_id==='00001').current_stock_quantity=999;return draft.data;}});
+      let failed='';try{await s.read();}catch(e){failed=(e as Error).message;}
+      const evidence=await s.exportRecoveryEvidence();
+      await w.NuevoAmanecerCanonicalLocalRecovery.restoreCloud({confirmed:true,ownerSecret:'synthetic-owner-secret',backup:evidence});
+      const restored=await s.read();return {failed,exported:evidence.backup.state.projection.products.find((p:any)=>p.product_id==='00001').current_stock_quantity,stock:restored.projection.products.find((p:any)=>p.product_id==='00001').current_stock_quantity,backup:restored.recovery.backup_digest,evidence:evidence.digest};
+    });
+    expect(result).toMatchObject({failed:'LOCAL_DIGEST_MISMATCH',exported:999,stock:173});expect(result.backup).toBe(result.evidence);
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('the shipped POS loads its local snapshot on F5 while cloud reads fail',async({page})=>{
+  const cleanup:Array<()=>void>=[];try{
+    await posHarness(page,cleanup);
+    await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonical.openCash({session_id:'shipped-cash',opening_cents:0});await w.NuevoAmanecerCanonical.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]}));await w.NuevoAmanecerCanonicalLocalFirst.pause();});
+    await page.route('**/read/canonical/**',route=>route.abort());
+    await page.goto('/index.html');
+    await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');
+    expect(await page.evaluate(()=>new Function("return {stock:productos.find(p=>p.id==='00001').stock,sales:ventas.length,local:typeof window.cart==='undefined'};")())).toEqual({stock:172,sales:1,local:true});
+    await expect(page.locator('#naLocalWork')).toBeVisible();
+    await page.reload();
+    await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');
+    expect(await page.evaluate(()=>(window as any).NuevoAmanecerCanonical.snapshot().sales.length)).toBe(1);
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('real POS product card → Confirmar venta and Pago rápido use the same durable offline path',async({page,context})=>{
+  const cleanup:Array<()=>void>=[];try{
+    const {f,calls}=await posHarness(page,cleanup);
+    await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonical.openCash({session_id:'buttons-cash',opening_cents:0});await w.NuevoAmanecerCanonicalLocalFirst.pause();});
+    await page.goto('/index.html');await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');
+    await page.locator('.module-card').first().click();await expect(page.locator('#pagePOS')).toBeVisible();
+    await context.setOffline(true);const count=calls.filter(c=>c.method==='POST').length;
+    await page.locator('[data-product-id="00001"]').click();
+    await page.locator('#btnPagar').click();await expect(page.locator('#mCobro')).toHaveClass(/open/);
+    await page.locator('#mBtnConf').click();await expect(page.locator('#mCobro')).not.toHaveClass(/open/);await expect(page.locator('#mBtnConf')).toBeEnabled();
+    await page.locator('[data-product-id="00001"]').click();await page.locator('#btnRapido').click();await expect(page.locator('#mCobroRapido')).toHaveClass(/open/);
+    await page.locator('#mQuickCash').click();await expect(page.locator('#mCobroRapido')).not.toHaveClass(/open/);
+    const local=await page.evaluate(()=>new Function("return {cart:cart.length,stock:productos.find(p=>p.id==='00001').stock,ids:ventas.map(v=>v.id),processing:posProc};")());
+    expect(local).toEqual({cart:0,stock:171,ids:['V-001','V-002'],processing:false});expect(calls.filter(c=>c.method==='POST').length).toBe(count);
+    await context.setOffline(false);expect(await page.evaluate(async()=>(window as any).NuevoAmanecerCanonical.syncLocal())).toEqual({state:'UP_TO_DATE'});
+    expect((await f.sql('SELECT COUNT(*) n FROM sales')).n).toBe(2);expect((await f.sql('SELECT COUNT(*) n FROM cash_movements')).n).toBe(2);expect((await f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'")).n).toBe(171);
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('offline customer, product, policy, inventory, account, credit sale and compensation agree with Turso projections',async({page,context})=>{
+  const cleanup:Array<()=>void>=[];try{
+    const {calls}=await posHarness(page,cleanup);
+    await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');});
+    await context.setOffline(true);const count=calls.length;
+    const local=await page.evaluate(async()=>{
+      const w=window as any,api=w.NuevoAmanecerCanonical;
+      const customer=await api.createCustomer({name:'Synthetic full-flow customer',document:'87654321'});
+      await api.createProduct({product_id:'LIVE-FLOW',name:'Synthetic full-flow product',sku:'LIVE-FLOW-SKU',barcode:'775003333333',alternate_codes:[],category:'abarrotes',brand:'Test',description:null,icon:'box',image:null,unit:'unidad',purchase_unit:'unidad',purchase_factor:1,cost_cents:100,price_cents:200,box_price_cents:null,units_per_box:null,initial_stock_quantity:5,stock_min_quantity:1,expiry_date:null,includes_igv:true,tax_type:'gravado',complementary_tax:'',tracks_inventory:true});
+      await api.setCustomerCreditPolicy({customer_id:customer.customer_id,mode:'MANUAL',manual_limit_cents:10000,reason:'Synthetic owner approved policy',administrator_id:'owner',administrator_name:'Owner'});
+      await api.adjustInventory({product_id:'LIVE-FLOW',movement_type:'ENTRADA',quantity:2,reason:'Synthetic supply'});
+      await api.createCreditAccount({customer_id:customer.customer_id,account_id:'large',name:'Large',mode:'separate'});
+      await api.openCash({session_id:'flow-cash',opening_cents:0});
+      const sale=await api.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'credito',customer_id:customer.customer_id,credit_due:'2026-12-01',credit_account:{account_id:'large',name:'Large',mode:'separate'},items:[{product_id:'LIVE-FLOW',quantity:1,precio:2}]}));
+      const payment=await api.createPayment({credit_id:sale.operation_id+':credit',amount_cents:100,payment_method:'efectivo',session_id:'flow-cash'});
+      await api.createCompensation({compensates_operation_id:payment.operation_id,session_id:'flow-cash',reason:'Synthetic owner-approved reversal'});
+      await api.closeCash({session_id:'flow-cash',counted_cents:0});
+      return {customer:customer.customer_id,credit:sale.operation_id+':credit',stock:api.snapshot().products.find((p:any)=>p.product_id==='LIVE-FLOW').current_stock_quantity,payments:api.snapshot().payments.filter((p:any)=>p.credit_id===sale.operation_id+':credit').map((p:any)=>p.amount_cents)};
+    });
+    expect(calls.length).toBe(count);expect(local.stock).toBe(6);expect(local.payments).toEqual([100,-100]);
+    await context.setOffline(false);
+    const sync=await page.evaluate(async()=>(window as any).NuevoAmanecerCanonical.syncLocal());
+    expect(sync).toEqual({state:'UP_TO_DATE'});
+    const remote=await page.evaluate(async ids=>{const snapshot=await (window as any).NuevoAmanecerCanonicalLocalHooks.readRemote();return {stock:snapshot.products.find((p:any)=>p.product_id==='LIVE-FLOW').current_stock_quantity,balance:snapshot.credits.find((c:any)=>c.credit_id===ids.credit).current_balance_cents,policy:snapshot.customers.find((c:any)=>c.customer_id===ids.customer).credit_policy_revision,payments:snapshot.payments.filter((p:any)=>p.credit_id===ids.credit).map((p:any)=>p.amount_cents),cash:snapshot.cashSessions.find((c:any)=>c.session_id==='flow-cash')};},local);
+    expect(remote).toMatchObject({stock:6,balance:200,policy:1,cash:{status:'CLOSED',expected_cents:0,counted_cents:0,revision:3}});expect(remote.payments.sort((a:number,b:number)=>a-b)).toEqual([-100,100]);
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
 test('local transaction failure never publishes a successful operation',async({page})=>{
   await harness(page);
   expect(await page.evaluate(()=>typeof (window as any).NuevoAmanecerCanonicalLocalStore)).toBe('object');
@@ -277,4 +397,25 @@ test('verified ACK compacts the small FIFO into a checkpoint; retry cannot dupli
     return {outbox:state.events.length,sequence:state.sequence,checkpoint:state.baseline.sequence,cash:state.projection.cashSessions.length,idempotent:retry.idempotent,equal:JSON.stringify(state.projection)===JSON.stringify(await s.reconstruct())};
   });
   expect(result).toEqual({outbox:0,sequence:1,checkpoint:1,cash:1,idempotent:true,equal:true});
+});
+
+
+test('empty FIFO authority change closes local commits instead of silently ignoring status',async({page})=>{
+  const cleanup:Array<()=>void>=[];try{
+    const {f}=await posHarness(page,cleanup);await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');});
+    await page.route('**/read/canonical/status',async route=>{const response=await f.fetch('http://localhost/read/canonical/status',{headers:route.request().headers()});const body=await response.json();body.authority_epoch+=1;await route.fulfill({json:body});});
+    const result=await page.evaluate(async()=>{const w=window as any;try{await w.NuevoAmanecerCanonical.syncLocal();}catch(_){}let error='';try{await w.NuevoAmanecerCanonical.openCash({session_id:'stale-cash',opening_cents:0});}catch(e){error=(e as Error).message;}return {state:(await w.NuevoAmanecerCanonicalLocalStore.read()).cloud.state,error};});
+    expect(result.state).toBe('AUTHORITY_CHANGED');expect(result.error).toBeTruthy();
+  }finally{cleanup.forEach(fn=>fn());}
+});
+
+
+test('a local commit during a slow empty-FIFO cloud scan is automatically sent after the scan',async({page})=>{
+ const cleanup:Array<()=>void>=[];try{
+  await posHarness(page,cleanup);await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonicalLocalFirst.pause();const original=w.NuevoAmanecerCanonicalLocalHooks;let release:any;const gate=new Promise(resolve=>release=resolve);w.__releaseScan=release;w.NuevoAmanecerCanonicalLocalHooks={...original,readRemote:async(...args:any[])=>{w.__scanStarted=true;await gate;return original.readRemote(...args);}};w.NuevoAmanecerCanonicalLocalFirst.resume();w.__scan=w.NuevoAmanecerCanonical.syncLocal();});
+  await expect.poll(()=>page.evaluate(()=>(window as any).__scanStarted)).toBe(true);
+  await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.openCash({session_id:'during-scan',opening_cents:0});});
+  await page.waitForTimeout(1300);await page.evaluate(async()=>{const w=window as any;w.__releaseScan();await w.__scan;});
+  await expect.poll(()=>page.evaluate(async()=>(await (window as any).NuevoAmanecerCanonicalLocalStore.read()).events.length),{timeout:10000}).toBe(0);
+ }finally{cleanup.forEach(fn=>fn());}
 });

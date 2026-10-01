@@ -84,6 +84,7 @@
     if(!prior || prior.status!=='COMMITTED' || prior.type!=='CANONICAL_LOCAL_COMMAND')return null;
     var checkpoint=await _naV10GetCheckpoint(prior.checkpointKey);
     if(!checkpoint || checkpoint.operationId!==prior.operationId || checkpoint.commitId!==prior.commitId || checkpoint.revision!==prior.committedRevision || !checkpoint.snapshot || checkpoint.snapshot.lastOperationId!==prior.operationId || checkpoint.snapshot.commitId!==prior.commitId)fail('LOCAL_COMMIT_EVIDENCE_MISSING');
+    if(state.recovery && checkpoint.revision<=state.recovery.previous.revision)fail('LOCAL_OPERATION_REPLACED_BY_RECOVERY');
     var archived=checkpoint.snapshot.data && checkpoint.snapshot.data[FIELD];await validate(archived);
     var event=archived.events.find(function(e){return e.operation_id===operationId;});
     if(!event || await hash(prior.payload)!==event.payload_hash)fail('LOCAL_COMMIT_EVIDENCE_MISSING');return event;
@@ -105,7 +106,8 @@
           if (await hash(prior.payload)!==payloadHash) fail('LOCAL_OPERATION_ID_CONFLICT');
           var checkpoint=await _naV10GetCheckpoint(prior.checkpointKey);
           if (!checkpoint || checkpoint.operationId!==prior.operationId || checkpoint.commitId!==prior.commitId || checkpoint.revision!==prior.committedRevision || !checkpoint.snapshot || checkpoint.snapshot.lastOperationId!==prior.operationId || checkpoint.snapshot.commitId!==prior.commitId) fail('LOCAL_COMMIT_EVIDENCE_MISSING');
-          var archived=checkpoint.snapshot.data && checkpoint.snapshot.data[FIELD];
+          if(state.recovery && checkpoint.revision<=state.recovery.previous.revision)fail('LOCAL_OPERATION_REPLACED_BY_RECOVERY');
+    var archived=checkpoint.snapshot.data && checkpoint.snapshot.data[FIELD];
           await validate(archived);
           var committed=archived.events.find(function(e){return e.operation_id===requested.payload.operation_id;});
           if (!committed || committed.payload_hash!==payloadHash) fail('LOCAL_COMMIT_EVIDENCE_MISSING');
@@ -117,7 +119,7 @@
       if (!reducer || !reducer.apply) fail('LOCAL_REDUCER_UNAVAILABLE');
       var applied=reducer.apply(state.projection,identity),resources=applied.resources;
       var conflicted=state.events.find(function(e){return ['REJECTED','CONFLICT','NEEDS_REVIEW'].includes(e.state) && e.resources.some(function(r){return resources.includes(r);});});
-      if (conflicted) fail('LOCAL_RESOURCE_REQUIRES_REVIEW');
+      if (conflicted || state.migration.evidence.some(function(e){return e.state==='NEEDS_REVIEW' && (e.resources||[]).some(function(r){return resources.includes(r);});})) fail('LOCAL_RESOURCE_REQUIRES_REVIEW');
       var next=copy(state),sequence=state.sequence+1;
       if (!Number.isSafeInteger(sequence)) fail('LOCAL_SEQUENCE_OVERFLOW');
       var event={operation_id:requested.payload.operation_id,command:requested.command,payload:copy(requested.payload),payload_hash:payloadHash,input_hash:requestIdentity ? requestIdentity.input_hash : null,sequence:sequence,state:'LOCAL_COMMITTED',created_at:requested.payload.created_at,attempts:0,last_error:null,resources:resources,baseline_id:state.baseline.id,baseline_digest:state.baseline.digest,local_receipt:copy(applied.receipt),envelope:requested.envelope ? copy(requested.envelope) : null,envelope_hash:requested.envelope ? await hash(requested.envelope.parts) : null,receipt_hashes:[],receipt:null};
@@ -152,6 +154,26 @@
       return writeSnapshot(current,next,'CANONICAL_REPLICA_ACK',root.crypto.randomUUID(),{operation_id:operationId,receipt:copy(receipt)});
     });
   }
+  async function restoreCloud(snapshot,grant,permit){
+    if(!permit || permit.confirmed!==true)fail('OWNER_CONFIRMATION_REQUIRED');
+    var exported=permit.backup;
+    if(!exported || !exported.backup || !['nuevo-amanecer.local-first-backup/v1','nuevo-amanecer.local-first-recovery-evidence/v1'].includes(exported.backup.schema) || await hash(exported.backup)!==exported.digest)fail('VERIFIED_LOCAL_BACKUP_REQUIRED');
+    if(!snapshot || snapshot.authority!=='canonical' || snapshot.mode!=='ACTIVE' || snapshot.read_only!==false || snapshot.minimum_client_contract!=='a6-gate-c-v1' || !grant || grant.writer!==true || grant.promotion_id!==snapshot.promotion_id || grant.authority_epoch!==snapshot.authority_epoch || !safe(snapshot) || !['products','customers','credits','payments','creditAccounts','sales','saleItems','cashSessions','cashMovements','financialEvents','inventoryMovements','expenses'].every(function(k){return Array.isArray(snapshot[k]);}))fail('INVALID_LOCAL_BASELINE');
+    return lock(async function(){
+      var current=await rawSnapshot(),state=current && current.data && current.data[FIELD];if(!state)fail('LOCAL_BASELINE_REQUIRED');
+      var corrupt=exported.backup.schema==='nuevo-amanecer.local-first-recovery-evidence/v1';
+      if(corrupt){if(await hash(exported.backup.state)!==await hash(state))fail('LOCAL_BACKUP_STALE');}else await validate(state);
+      if(!corrupt && (exported.backup.state.sequence!==state.sequence || exported.backup.state.projection_digest!==state.projection_digest))fail('LOCAL_BACKUP_STALE');
+      if(!corrupt && (grant.writer_id!==state.grant.writer_id || grant.promotion_id!==state.grant.promotion_id || grant.authority_epoch!==state.grant.authority_epoch))fail('LOCAL_WRITER_AUTHORITY_CHANGED');
+      var seq=Number.isSafeInteger(state.sequence)&&state.sequence>=0?state.sequence:0;
+      var next=corrupt?{version:1,sequence:seq,events:[],migration:{complete:true,evidence:[]}}:copy(state),digest=await hash(snapshot);
+      next.baseline={id:root.crypto.randomUUID(),sequence:seq,snapshot:copy(snapshot),digest:digest,created_at:new Date().toISOString()};
+      next.projection=copy(snapshot);next.events=[];next.grant=copy(grant);
+      next.cloud={known_financial_revision:snapshot.financial_revision||0,acked_sequence:seq,last_ack:null,state:'UP_TO_DATE'};
+      next.recovery={direction:'cloud-to-local',at:new Date().toISOString(),backup_digest:exported.digest,previous:{sequence:seq,projection_digest:state.projection_digest||null,baseline_id:state.baseline && state.baseline.id || null,operation_id:current.lastOperationId,commit_id:current.commitId,revision:current.revision}};
+      return writeSnapshot(current,next,'CANONICAL_OWNER_RESTORE',root.crypto.randomUUID(),{backup_digest:exported.digest,new_baseline_digest:digest});
+    });
+  }
   async function reconstruct() {
     var state=await read();if(!state)return null;
     var projection=copy(state.baseline.snapshot);
@@ -164,5 +186,10 @@
     var backup={schema:'nuevo-amanecer.local-first-backup/v1',created_at:new Date().toISOString(),sequence:state.sequence,state:state};
     return {backup:backup,digest:await hash(backup)};
   }
-  root.NuevoAmanecerCanonicalLocalStore=Object.freeze({initialize:initialize,read:read,commit:commit,update:update,ack:ack,reconstruct:reconstruct,exportBackup:exportBackup,hash:hash,validate:validate});
+  async function exportRecoveryEvidence(){
+    var snapshot=await rawSnapshot(),state=snapshot && snapshot.data && snapshot.data[FIELD];if(!state)fail('LOCAL_BASELINE_REQUIRED');
+    var backup={schema:'nuevo-amanecer.local-first-recovery-evidence/v1',created_at:new Date().toISOString(),state:copy(state)};
+    return {backup:backup,digest:await hash(backup)};
+  }
+  root.NuevoAmanecerCanonicalLocalStore=Object.freeze({initialize:initialize,restoreCloud:restoreCloud,read:read,commit:commit,update:update,ack:ack,reconstruct:reconstruct,exportBackup:exportBackup,exportRecoveryEvidence:exportRecoveryEvidence,hash:hash,validate:validate});
 })(globalThis);

@@ -149,7 +149,7 @@
   }
   function replicaOf(value) { return { schema_version: 1, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
     revision: value.revision, financial_revision: value.financial_revision == null ? null : value.financial_revision,
-    canonical_digest: value.canonical_digest || null,
+    canonical_digest: value.canonical_digest || null, write_authorized:value.write_authorized,
     digests: copy(value.digests || {}),
     products: copy(value.products), customers: copy(value.customers), credits: copy(value.credits), credit_payments: copy(value.payments), credit_accounts: copy(value.creditAccounts || []),
     sales: copy(value.sales || []), sale_items: copy(value.saleItems || []), inventory_movements: copy(value.inventoryMovements || []), cash_movements: copy(value.cashMovements || []),
@@ -169,7 +169,7 @@
     if(localFirst())return;
     var provisional = source === 'cache' || source === 'bootstrap';
     data = { authority: 'canonical', promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch, revision: replica.revision,
-      financial_revision: replica.financial_revision, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
+      financial_revision: replica.financial_revision,write_authorized:replica.write_authorized, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
       payments: copy(replica.credit_payments), creditAccounts: copy(replica.credit_accounts || []), sales: copy(replica.sales || []), saleItems: copy(replica.sale_items || []),
       inventoryMovements: copy(replica.inventory_movements || []), cashMovements: copy(replica.cash_movements || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []), expenses: copy(replica.expenses || []),
       mode: provisional ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
@@ -206,7 +206,7 @@
   }
   function localFirst() { var engine=root.NuevoAmanecerCanonicalLocalFirst; return engine && engine.active() ? engine : null; }
   async function refresh() { if(localFirst())return localFirst().refresh(); return readRemote(); }
-  async function readRemote() {
+  async function readRemote(options) {
     if (loading) return loading;
     if (!data) ready = false;
     loading = (async function () {
@@ -260,9 +260,9 @@
       applyEntries(await Promise.all(coreEntries.map(readEntry)));
       next.sales = []; next.saleItems = []; next.inventoryMovements = []; next.cashMovements = []; next.cashSessions = []; next.financialEvents = []; next.expenses = [];
       next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
-      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
+      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;next.write_authorized=statusMeta.write_authorized;
       if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
+      var cache = options && options.ignoreCache ? null : await localReplica(), bootstrapReplica = replicaOf(next);
       if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, bootstrapReplica)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
@@ -306,7 +306,7 @@
   }
   function assertAction(action) {
     if (!COMMANDS.includes(action)) fail('UNSUPPORTED_CANONICAL_ACTION');
-    if (!ready || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.minimum_client_contract !== CONTRACT || !localFirst() && root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
+    if (!ready || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.write_authorized===false || data.minimum_client_contract !== CONTRACT || !localFirst() && root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     assertBinding(binding);
     return true;
   }
@@ -1330,7 +1330,7 @@
     assertBinding(binding);
     if(state.grant.promotion_id!==binding.promotion_id || state.grant.authority_epoch!==binding.authority_epoch || state.projection.revision!==binding.revision)fail('LOCAL_WRITER_AUTHORITY_CHANGED');
     data=copy(state.projection);var pending=new Set(state.events.map(function(e){return e.operation_id;}));data.sales.forEach(function(s){s.pending_sync=pending.has(s.operation_id);});ready=true;
-    replicaState={source:'local',validation:'local',sync_state:state.cloud.state,pending:state.events.length};notifyReplicaUpdate();return snapshot();
+    replicaState={source:'local',validation:'local',sync_state:state.cloud.state,pending:state.events.length,review_pending:state.migration.evidence.filter(function(e){return e.state==='NEEDS_REVIEW';}).length};notifyReplicaUpdate();return snapshot();
   }
   root.NuevoAmanecerCanonicalLocalHooks=Object.freeze({build:buildLocal,publish:publishLocal,readRemote:readRemote,
     binding:function(){assertBinding(binding);return copy(binding);},

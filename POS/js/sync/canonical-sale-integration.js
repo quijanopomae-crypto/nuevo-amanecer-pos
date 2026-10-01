@@ -142,6 +142,7 @@
   async function capture() {
     if (!enabled()) return;
     if (busy || liveProcessing()) return;
+    if(root.NuevoAmanecerCanonical.snapshot().write_authorized===false){failClosed('Este dispositivo es de lectura. Registra la venta en el dispositivo autorizado.',null);return;}
     try {
       if (typeof root.isModuleLocked !== 'function' || root.isModuleLocked('ventas', { canonicalSaleCapture: true })) {
         var lockReason = browserLockReason();

@@ -13,9 +13,10 @@ test('owner explicitly grants exactly one browser session; other sessions read b
  const {f,first,second}=await fixture(t);
  const denied=await f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer writer-token','content-type':'application/json'},body:'{}'});assert.equal(denied.status,401);
  const response=await f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer writer-token','x-activation-secret':'synthetic-owner-secret','content-type':'application/json'},body:'{}'});assert.equal(response.status,201);const grant=await response.json();assert.equal(grant.writer_id,'session:first');assert.equal(grant.promotion_id,f.control().active_promotion_id);
- await second.api.refresh();assert.equal(second.api.snapshot().products.length,first.api.snapshot().products.length);
+ await second.api.refresh();assert.equal(second.api.snapshot().products.length,first.api.snapshot().products.length);assert.equal(second.api.snapshot().write_authorized,false);
  await assert.rejects(second.api.openCash({session_id:'not-writer',opening_cents:0}));assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_cash_sessions').n,0);
  await first.api.openCash({session_id:'writer-cash',opening_cents:0});assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_cash_sessions').n,1);
+ const session=await f.fetch('http://localhost/auth/session',{headers:{authorization:'Bearer reader-token'}});assert.equal(session.status,200);
  const state=await f.fetch('http://localhost/auth/local-writer',{headers:{authorization:'Bearer reader-token'}});assert.equal(state.status,200);assert.equal((await state.json()).writer,false);
 });
 test('grant refuses implicit promotion and preserves the current writer',async t=>{
