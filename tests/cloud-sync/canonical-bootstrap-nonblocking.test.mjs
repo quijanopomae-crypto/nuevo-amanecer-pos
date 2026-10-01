@@ -37,6 +37,17 @@ test('canonical read requests are bounded without changing command write transpo
   assert.match(sendPending,/root\.fetch\(expected\.endpoint \+ record\.route/);
 });
 
+test('header confirms verified CANON connection before collection bootstrap finishes',()=>{
+  const statusVerified=canonical.indexOf('notifyConnectionVerified();');
+  const coreBootstrap=canonical.indexOf('Promise.all(coreEntries.map(readEntry))');
+  assert.ok(statusVerified>=0,'verified status must signal connectivity');
+  assert.ok(coreBootstrap>statusVerified,'connectivity must be visible before core collections finish');
+  assert.match(canonical,/new root\.CustomEvent\('na:canonical-connected'\)/);
+  assert.match(inline03,/addEventListener\('na:canonical-connected'/);
+  assert.match(inline03,/_naCanonicalTransportConnected=true/);
+  assert.match(inline03,/state\.validation==='current'\|\|\(_naCanonicalTransportConnected&&state\.validation==='validating'\)/);
+});
+
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
   assert.match(canonical,/!ready \|\| changed \|\| !data \|\| data\.read_only !== false \|\| data\.mode !== 'ACTIVE'/);
   assert.match(canonical,/fail\('CANONICAL_COMMERCE_CLOSED'\)/);
@@ -58,6 +69,6 @@ test('CANON core bootstrap is parallel and visible before financial completion',
 test('mobile status shows runtime CANON state instead of a hardcoded Local label',()=>{
   assert.doesNotMatch(layout,/content:'Local'/);
   assert.match(layout,/\.g-status span\{font-size:10px/);
-  assert.match(inline03,/CANON · validando/);
-  assert.match(inline03,/CANON validado/);
+  assert.match(inline03,/na:canonical-connected/);
+  assert.match(inline03,/connectionReady/);
 });

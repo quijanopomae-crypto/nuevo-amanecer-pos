@@ -701,6 +701,11 @@ window.addEventListener('na:version-update-pending',()=>{
   _naVersionUpdatePending=true;
   _naSetHeaderConnectionState(navigator.onLine===false?'disconnected':'connected',navigator.onLine===false?'Desconectado':'Nueva versión pendiente');
 });
+let _naCanonicalTransportConnected=false;
+window.addEventListener('na:canonical-connected',()=>{
+  _naCanonicalTransportConnected=true;
+  _naSetHeaderConnectionState('connected','Conectado');
+});
 let _naCanonicalLoadError=null;
 function _naEmptyCanonicalCashState(){return{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',cerrada:false,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null,canonical:true};}
 function _naClearCanonicalOperationalView(){ventas=[];gastos=[];cajMovs=[];inventoryMovements=[];cajEstado=_naEmptyCanonicalCashState();}
@@ -722,11 +727,12 @@ cliRender=function(){
   if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&!_naCanonicalLoadError){const today=obtenerHoy();cobradoHoy=creditos.reduce((sum,cr)=>sum+(Array.isArray(cr.pagos)?cr.pagos.filter(pay=>pay.canonicalDateKnown&&pay.fecha===today&&pay.status!=='REVERTED').reduce((paid,pay)=>paid+Number(pay.monto||0),0):0),0);const paidToday=document.getElementById('cliS3');if(paidToday)paidToday.textContent=`S/${cobradoHoy.toFixed(0)}`;}
   try{window.dispatchEvent(new CustomEvent('na:clients-rendered'));}catch(_){}
 };
-window.addEventListener('offline',()=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),badge=document.getElementById('cliAuthorityBadge');_naSetHeaderConnectionState('disconnected','Desconectado');if(state.source==='cache'){if(badge){badge.hidden=false;badge.textContent='Cache canónico · sin conexión';}}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());}}});
+window.addEventListener('offline',()=>{_naCanonicalTransportConnected=false;if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),badge=document.getElementById('cliAuthorityBadge');_naSetHeaderConnectionState('disconnected','Desconectado');if(state.source==='cache'){if(badge){badge.hidden=false;badge.textContent='Cache canónico · sin conexión';}}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());}}});
 window.addEventListener('na:canonical-updated',()=>{
   if(typeof NuevoAmanecerCanonical==='undefined'||!NuevoAmanecerCanonical.enabled())return;
   const state=NuevoAmanecerCanonical.sourceState(),saveStatus=document.getElementById('saveStatus'),badge=document.getElementById('cliAuthorityBadge');
   if(state.source==='none'){
+    _naCanonicalTransportConnected=false;
     _naCanonicalLoadError=new Error(state.validation==='offline'?'AUTHORITY_UNAVAILABLE':'CANONICAL_LOAD_FAILED');
     _naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
@@ -739,17 +745,19 @@ window.addEventListener('na:canonical-updated',()=>{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     _naApplyCanonicalLegacyView(canonical);_naCanonicalLoadError=null;
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    _naSetHeaderConnectionState(state.validation==='current'?'connected':'disconnected',state.validation==='current'?'CANON validado':state.validation==='validating'?'CANON · validando':'CANON · reintentar');
+    const connectionReady=state.validation==='current'||(_naCanonicalTransportConnected&&state.validation==='validating');
+    _naSetHeaderConnectionState(connectionReady?'connected':'disconnected',connectionReady?'Conectado':'Desconectado');
     if(saveStatus)saveStatus.textContent='Persistencia canónica protegida';
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(canonical.customers.length)+' clientes';}
   }catch(error){
+    _naCanonicalTransportConnected=false;
     _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
     _naSetHeaderConnectionState('disconnected','Canónico no disponible · reintenta');
     if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
   }
 });
-window.addEventListener('storage',event=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&(!event.key||event.key==='na_canonical_binding'||event.key==='na_cloud_sync_credentials')){_naCanonicalLoadError=new Error('STALE_AUTHORITY_BINDING');_naSchedulePageRender(_naActivePageId());_naSetHeaderConnectionState('disconnected','Desconectado');}});
+window.addEventListener('storage',event=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&(!event.key||event.key==='na_canonical_binding'||event.key==='na_cloud_sync_credentials')){_naCanonicalTransportConnected=false;_naCanonicalLoadError=new Error('STALE_AUTHORITY_BINDING');_naSchedulePageRender(_naActivePageId());_naSetHeaderConnectionState('disconnected','Desconectado');}});
 document.addEventListener('DOMContentLoaded',async()=>{
   document.getElementById('fechaHoy').textContent=new Date().toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});document.getElementById('backBtn').style.display='none';
   await loadAllData();
@@ -764,6 +772,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   if(canonicalEnabled){
     if(typeof NuevoAmanecerCanonicalSaleOutbox!=='undefined')NuevoAmanecerCanonicalSaleOutbox.start();
     NuevoAmanecerCanonical.startPOS().catch(error=>{
+      _naCanonicalTransportConnected=false;
       _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
       renderCategorySelects();_naSchedulePageRender(_naActivePageId());
       _naSetHeaderConnectionState('disconnected',navigator.onLine===false?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');

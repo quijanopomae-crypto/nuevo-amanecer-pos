@@ -1,0 +1,68 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-INSTANT-CONNECTION-001",
+  "base_ref": "fbbdea2a31a38bfc358c7d3d24894a4b6ac87ebb",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Separar conectividad de transporte/sesión de la validación completa de la réplica para que el header confirme conexión tras el status autoritativo, sin relajar los gates de escritura.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "README.md",
+      "docs/V1.3_STATUS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      "POS/index.html",
+      "POS/css/base.css",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "POS/js/sync/canonical-sale-integration.js",
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs",
+      "tests/product-fixes/canon-mobile-menu-navigation.test.mjs"
+    ],
+    "WRITES": [
+      "Emitir una señal de conexión después de verificar /read/canonical/status.",
+      "Usar esa señal solo para el indicador visual del header.",
+      "Mantener la carga completa y el estado ready/current sin cambios.",
+      "Añadir regresión que impida volver a esperar todas las colecciones para mostrar conectado."
+    ],
+    "DOM_AFFECTED": [
+      "#localStatus"
+    ],
+    "STATE_AFFECTED": [
+      "Estado visual de conectividad del header; no cambia ready ni validation de CANON."
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "assertAction continúa exigiendo ready, ACTIVE, read_only=false y binding vigente.",
+      "No se elimina ni modifica el outbox durable.",
+      "No se cambia la semántica de venta, pago, stock, caja, créditos ni gastos.",
+      "El status verde no habilita por sí mismo ninguna escritura."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Header global: mejora la latencia percibida de conexión.",
+      "Bootstrap CANON: la réplica completa sigue cargando y notificando como antes.",
+      "Comercio online: mantiene el camino directo post-receipt ya vigente; la cola queda solo como recuperación."
+    ],
+    "RISKS": [
+      "Confundir status remoto con réplica lista: mitigado manteniendo separados el evento visual y ready/validation.",
+      "Falso verde tras pérdida de red: mitigado por el listener offline existente que vuelve a desconectado.",
+      "Regresión de bootstrap: mitigada por la prueba focal y CANON Critical CI."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR; no hay migraciones ni mutaciones remotas."
+    ],
+    "TEST_PLAN": [
+      "canonical-bootstrap-nonblocking.test.mjs",
+      "canon-mobile-menu-navigation.test.mjs",
+      "CANON Critical CI",
+      "revisión de diff"
+    ]
+  }
+}
