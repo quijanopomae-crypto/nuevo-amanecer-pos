@@ -1,0 +1,11 @@
+{
+  "format": "nuevo-amanecer-v1.3-prod-debt-reconcile-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "prepare-secure-casamarket-debt-reconciliation",
+  "mode": "prepare-key",
+  "target_count": 29,
+  "target_total_cents": 2368495,
+  "source": "owner-provided screenshots; target payload will be encrypted before repository storage",
+  "requested_at_utc": "2026-10-01T20:58:00Z"
+}
