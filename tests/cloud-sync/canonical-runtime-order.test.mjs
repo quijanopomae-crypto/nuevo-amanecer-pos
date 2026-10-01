@@ -23,17 +23,23 @@ test('transport verification is not the READY/green signal',()=>{
   assert.match(inline03,/connectionReady\?'connected':connectionSyncing\?'update':'disconnected'/);
 });
 
-test('new sale cannot enter outbox until CANON is current ACTIVE and no previous critical operation remains',()=>{
+test('new sale enters the durable local outbox without waiting for CANON freshness or previous remote work',()=>{
   assert.match(integration,/function canonicalSaleGate\(\)/);
-  assert.match(integration,/state\.validation !== 'current'/);
-  assert.match(integration,/snapshot\.mode !== 'ACTIVE'/);
-  assert.match(integration,/snapshot\.read_only !== false/);
-  assert.match(integration,/canonical\.pendingSnapshot\(\)/);
-  assert.match(integration,/outbox\.snapshot\(\)\.intents\.length/);
+  assert.match(integration,/canonical\.snapshot\(\)/);
+  assert.match(integration,/outbox\.snapshot\(\)/);
+  assert.doesNotMatch(integration,/state\.validation !== 'current'/);
+  assert.doesNotMatch(integration,/snapshot\.mode !== 'ACTIVE'/);
+  assert.doesNotMatch(integration,/snapshot\.read_only !== false/);
+  assert.doesNotMatch(integration,/canonical\.pendingSnapshot\(\)/);
+  assert.doesNotMatch(integration,/outbox\.snapshot\(\)\.intents\.length/);
+  assert.doesNotMatch(integration,/await\s+outbox\.sync\s*\(/);
   const capture=integration.slice(integration.indexOf('async function capture()'),integration.indexOf('function wrappedConfirm()'));
   const gate=capture.indexOf('canonicalSaleGate()');
   const enqueue=capture.indexOf('outbox.enqueue(intent)');
-  assert.ok(gate>=0 && enqueue>gate,'readiness gate must run before durable enqueue');
+  const project=capture.indexOf('projectCurrentOutbox()');
+  const background=capture.indexOf('syncOutboxInBackground(outbox)');
+  assert.ok(gate>=0 && enqueue>gate,'local storage gate must run before durable enqueue');
+  assert.ok(project>enqueue && background>project,'local projection must finish before background sync is scheduled');
 });
 
 test('startup outbox waits for current replica instead of racing bootstrap',()=>{
