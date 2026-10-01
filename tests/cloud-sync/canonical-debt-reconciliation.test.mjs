@@ -41,6 +41,9 @@ test('production writer uses encrypted source and protects commercial ledgers',(
   assert.match(apply,/canonical_reconciliation_credits/);
   assert.match(apply,/canonical_credit_baseline_adjustments/);
   assert.match(apply,/protected commercial ledgers changed during reconciliation/);
+  assert.match(apply,/UPDATE auth_sessions SET status='revoked'/);
+  assert.match(apply,/UPDATE devices SET status='revoked'/);
+  assert.doesNotMatch(apply,/DELETE FROM devices WHERE device_id/);
   for(const table of ['credit_payments','canonical_financial_events','cash_movements','canonical_expenses','sales','sale_items']){
     assert.ok(apply.includes(table),'missing protected ledger '+table);
   }
