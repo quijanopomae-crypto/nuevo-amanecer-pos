@@ -465,7 +465,9 @@ async function canonicalRead(url,db,json){
       counts.customers+=counts.live_customers;
       counts.imported_credits=counts.credits;
       counts.live_credits=Number((await db.prepare('SELECT COUNT(*) AS count FROM live_credits WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count);
-      counts.credits+=counts.live_credits;
+      const reconciliationReady=await debtReconciliationSchemaAvailable(db);
+      counts.reconciliation_credits=reconciliationReady?Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_reconciliation_credits WHERE promotion_id=?1').bind(before.active_promotion_id).first()).count):0;
+      counts.credits+=counts.live_credits+counts.reconciliation_credits;
       counts.credit_payments+=Number((await db.prepare('SELECT COUNT(*) AS count FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL').bind(before.active_promotion_id).first()).count);
       for(const [name,sql] of Object.entries({sales:'canonical_sale_context x',sale_items:'canonical_sale_context x JOIN sale_items r ON r.sale_id=x.sale_id',cash_movements:'canonical_sale_context x JOIN cash_movements r ON r.sale_id=x.sale_id'}))
         counts[name]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${sql} WHERE x.promotion_id=?1`).bind(before.active_promotion_id).first()).count);
@@ -527,12 +529,41 @@ async function canonicalRead(url,db,json){
           ORDER BY customer_id,account_id LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all()
       : {results:[]};
   } else if(sqlName==='credits'&&before.mode==='ACTIVE'){
-    const liveFields={credit_id:'l.credit_id',customer_id:'l.customer_id',sale_id:'l.sale_id',issued_value:'l.created_at',due_value:'l.due_date',original_amount_cents:'l.original_amount_cents',import_paid_cents:'0',opening_balance_cents:'l.original_amount_cents',current_balance_cents:'b.current_balance_cents',source_status:'NULL'};
+    const reconciliationReady=await debtReconciliationSchemaAvailable(db);
+    const importFields=TABLES.credits.map(column=>{
+      if(column==='current_balance_cents')return'b.current_balance_cents';
+      if(column==='opening_balance_cents')return reconciliationReady?'b.opening_balance_cents':'c.opening_balance_cents';
+      if(column==='original_amount_cents')return reconciliationReady?'c.original_amount_cents+b.baseline_delta_cents':'c.original_amount_cents';
+      return `c.${column}`;
+    });
+    const liveFields={
+      credit_id:'l.credit_id',customer_id:'l.customer_id',sale_id:'l.sale_id',issued_value:'l.created_at',due_value:'l.due_date',
+      original_amount_cents:reconciliationReady?'l.original_amount_cents+b.baseline_delta_cents':'l.original_amount_cents',
+      import_paid_cents:'0',
+      opening_balance_cents:reconciliationReady?'b.opening_balance_cents':'l.original_amount_cents',
+      current_balance_cents:'b.current_balance_cents',source_status:'NULL'
+    };
+    const reconciliationFields={
+      credit_id:'r.credit_id',customer_id:'r.customer_id',sale_id:'NULL',store:"'RECONCILIACION'",document_number:'NULL',
+      reference:'r.reconciliation_id',concept:"'Saldo conciliado CasaMarket'",seller:'NULL',issued_value:'r.created_at',due_value:'NULL',
+      term_days:'NULL',original_amount_cents:'r.original_amount_cents',import_paid_cents:'0',
+      opening_balance_cents:'b.opening_balance_cents',current_balance_cents:'b.current_balance_cents',
+      source_progress_ratio:'0',source_payment_count:'0',source_days_until_due:'NULL',source_status:"'vigente'",
+      source_customer_image_balance_cents:'NULL',source_customer_document_balance_cents:'NULL',source_customer_difference_cents:'NULL'
+    };
     const installmentJson=(alias,provenance)=>`(SELECT COALESCE(json_group_array(json_object('number',ci.installment_number,'due_date',ci.due_date,'amount_cents',ci.amount_cents)),'[]')
       FROM canonical_credit_installments ci WHERE ci.promotion_id=${alias}.promotion_id AND ci.credit_id=${alias}.credit_id AND ci.credit_provenance='${provenance}'
       ORDER BY ci.installment_number)`;
+    const reconciliationUnion=reconciliationReady?`
+      UNION ALL
+      SELECT 'R:' || r.credit_id AS read_key,${TABLES.credits.map(column=>reconciliationFields[column]??'NULL').join(',')},
+        'IMPORT' AS provenance,NULL AS operation_id,'RECONCILED' AS status,b.revision AS revision,r.created_at AS created_at,NULL AS due_date,
+        NULL AS account_id,NULL AS account_name,NULL AS account_mode,'[]' AS installments_json
+      FROM canonical_reconciliation_credits r
+      JOIN canonical_credit_balances b ON b.promotion_id=r.promotion_id AND b.credit_id=r.credit_id AND b.provenance='IMPORT'
+      WHERE r.promotion_id=?1`:'';
     rows=await db.prepare(`SELECT * FROM (
-      SELECT 'I:' || c.credit_id AS read_key,${TABLES.credits.map(column=>column==='current_balance_cents'?'b.current_balance_cents':`c.${column}`).join(',')},
+      SELECT 'I:' || c.credit_id AS read_key,${importFields.join(',')},
         'IMPORT' AS provenance,NULL AS operation_id,NULL AS status,b.revision AS revision,NULL AS created_at,NULL AS due_date,
         m.account_id,m.account_name,m.account_mode,${installmentJson('c','IMPORT')} AS installments_json
       FROM credits c JOIN canonical_credit_balances b ON b.promotion_id=c.promotion_id AND b.credit_id=c.credit_id AND b.provenance='IMPORT'
@@ -545,6 +576,7 @@ async function canonicalRead(url,db,json){
       FROM live_credits l JOIN canonical_credit_balances b ON b.promotion_id=l.promotion_id AND b.credit_id=l.credit_id AND b.provenance='LIVE'
       LEFT JOIN canonical_credit_metadata m ON m.promotion_id=l.promotion_id AND m.credit_id=l.credit_id AND m.credit_provenance='LIVE'
       WHERE l.promotion_id=?1
+      ${reconciliationUnion}
     ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   } else if(sqlName==='credit_payments'&&before.mode==='ACTIVE'){
     const fields={payment_id:'event_id',credit_id:'credit_id',amount_cents:'-credit_delta_cents',payment_date:'substr(created_at,1,10)',payment_timestamp:'created_at',payment_date_known:'1',date_precision:"'TIMESTAMP'",method:'payment_method',source_origin:"'LIVE'",source_operation_reference:'reference'};
@@ -710,13 +742,25 @@ async function customerCreditPolicyLedgerCount(db,promotionId){
   const row=await db.prepare('SELECT COUNT(*) AS count FROM canonical_customer_credit_policy_operations WHERE promotion_id=?1').bind(promotionId).first();
   return Number(row?.count)||0;
 }
+async function debtReconciliationSchemaAvailable(db){
+  const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
+    WHERE type='table' AND name IN ('canonical_reconciliation_credits','canonical_credit_baseline_adjustments')`).first();
+  return Number(row?.count)===2;
+}
+async function debtReconciliationLedgerCount(db,promotionId){
+  if(!promotionId||!await debtReconciliationSchemaAvailable(db))return 0;
+  const row=await db.prepare(`SELECT
+    (SELECT COUNT(*) FROM canonical_reconciliation_credits WHERE promotion_id=?1)+
+    (SELECT COUNT(*) FROM canonical_credit_baseline_adjustments WHERE promotion_id=?1) AS count`).bind(promotionId).first();
+  return Number(row?.count)||0;
+}
 async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
     c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
     (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
     (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
     ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
-  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id)+await customerCreditPolicyLedgerCount(db,row.active_promotion_id);
+  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id)+await customerCreditPolicyLedgerCount(db,row.active_promotion_id)+await debtReconciliationLedgerCount(db,row.active_promotion_id);
   return row;
 }
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}

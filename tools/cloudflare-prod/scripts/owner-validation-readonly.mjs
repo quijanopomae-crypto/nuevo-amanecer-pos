@@ -41,7 +41,19 @@ async function query(label, sql, params) {
   return Array.isArray(first.results) ? first.results : [];
 }
 
+async function reconciliationCreditCount() {
+  const schema = (await query('reconciliation schema',
+    "SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='canonical_reconciliation_credits'"
+  ))[0];
+  if (Number(schema?.count) !== 1) return 0;
+  const row = (await query('reconciliation credit count',
+    'SELECT COUNT(*) AS count FROM canonical_reconciliation_credits'
+  ))[0];
+  return Number(row?.count) || 0;
+}
+
 async function businessSnapshot() {
+  const reconciliationCredits = await reconciliationCreditCount();
   const row = (await query('business snapshot',
     'SELECT ' +
     '(SELECT COUNT(*) FROM products) products,' +
@@ -60,7 +72,9 @@ async function businessSnapshot() {
     '(SELECT COUNT(*) FROM canonical_financial_operations) financial_operations'
   ))[0];
   if (!row) throw new Error('business snapshot missing');
-  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
+  const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
+  normalized.reconciliation_credits = reconciliationCredits;
+  return normalized;
 }
 
 async function fetchJson(url, options = {}) {
@@ -201,7 +215,7 @@ try {
 
   if (products.length !== before.products) throw new Error('product read count differs from D1');
   if (customers.length !== before.customers) throw new Error('customer read count differs from D1');
-  if (credits.length !== before.import_credits + before.live_credits) throw new Error('credit read count differs from D1');
+  if (credits.length !== before.import_credits + before.live_credits + before.reconciliation_credits) throw new Error('credit read count differs from D1');
   if (creditAccounts.length !== before.credit_accounts) throw new Error('credit account read count differs from D1');
 
   result = {
