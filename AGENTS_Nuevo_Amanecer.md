@@ -230,11 +230,12 @@ Para V1.2/recovery, usa los documentos `docs/V1.2_*.md` existentes solo cuando e
 Si descubres comandos reales para ejecutar o probar, documéntalos en `README.md`. No inventes comandos ni documentos.
 
 
-## Invariante: skipStatus en pagos nuevos
+## Invariante: skipStatus en comandos nuevos validados
 
-- `sendPending(record, skipStatus)` puede omitir el GET `/read/canonical/status` únicamente en el **primer envío** de un `payment.create` nuevo o un `payment.batch` nuevo construido desde una réplica CANON validada como `current`.
-- En `payment.create` la omisión es segura porque el Worker valida `authority_epoch`, `expected_control_revision` y `expected_credit_revision` atómicamente al escribir el evento PAYMENT en D1.
+- `sendPending(record, skipStatus)` puede omitir el GET `/read/canonical/status` únicamente en el **primer envío** de un `payment.create`, `payment.batch` o `customer.credit-policy.set` nuevo construido desde una réplica CANON validada como `current`.
+- En `payment.create` la omisión es segura porque el Worker valida `authority_epoch`, `expected_control_revision` y `expected_credit_revision` atómicamente al escribir el evento PAYMENT.
 - En `payment.batch` la omisión es segura porque el Worker revalida autoridad y hace CAS de **todas** las revisiones/saldos de crédito y, para efectivo, de la sesión de caja dentro de la misma `db.batch()` atómica.
+- En `customer.credit-policy.set` la omisión es segura porque la migración 0018 revalida writer/autoridad/cliente/namespace en triggers del INSERT y la política usa CAS por `expected_policy_revision` dentro del mismo batch atómico.
 - Los reintentos de comandos pendientes SIEMPRE deben verificar el status remoto antes de reenviar la intención.
-- Si alguna vez se relaja cualquiera de esas validaciones en el Worker, hay que eliminar `skipStatus` del camino afectado.
-- Cobertura: `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs` y `tests/cloud-sync/canonical-payment-batch-backend.test.mjs`.
+- Si alguna vez se relaja cualquiera de esas validaciones en el Worker o en los triggers 0018, hay que eliminar `skipStatus` del camino afectado.
+- Cobertura: `tests/cloud-sync/canonical-credit-payment-e2e.test.mjs`, `tests/cloud-sync/canonical-payment-batch-backend.test.mjs`, `tests/cloud-sync/canonical-customer-credit-policy.test.mjs` y `tests/cloud-sync/canonical-customer-credit-policy-turso.test.mjs`.

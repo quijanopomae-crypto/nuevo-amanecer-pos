@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-POLICY-RECEIPT-PROJECTION-004",
+  "environment": "CANON",
+  "base_ref": "5c18e96f4f2933f0a95f75704c43f9329d69fcdb",
+  "objective": "Evitar que un cambio de línea confirmado invalide y vuelva a recorrer toda la réplica CANON: aplicar el receipt exacto solo al cliente afectado y mantener la réplica local current.",
+  "owner_authorization": "El propietario pidió simplificar la información que recorre el ajuste de línea y mantener la respuesta en torno a un segundo o menos.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-POLICY-RECEIPT-PROJECTION-004.json",
+    "evidence/canon-preflight/CANON-CREDIT-POLICY-RECEIPT-PROJECTION-004.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-customer-credit-policy-bridge.js",
+    "tests/cloud-sync/canonical-customer-credit-policy.test.mjs",
+    "tests/cloud-sync/canonical-customer-credit-policy-turso.test.mjs"
+  ],
+  "invariants": [
+    "Solo proyectar después de validar y guardar durablemente el receipt.",
+    "Actualizar únicamente el cliente cuyo customer_id coincide con payload y receipt.",
+    "La revisión local debe avanzar exactamente a policy_revision del receipt.",
+    "No recorrer productos, créditos, pagos, ventas, caja o inventario después de un cambio de línea exitoso.",
+    "Si la proyección focal no puede verificarse, invalidar ready y conservar el refresh/fail-closed posterior.",
+    "Un stale_policy remoto sigue forzando reconciliación y no sobreescribe el servidor."
+  ],
+  "acceptance": [
+    "Tras un receipt exitoso, legacySnapshot refleja inmediatamente límite/revisión sin GET posterior.",
+    "Dos cambios consecutivos del mismo cliente pueden enviarse como POST directos usando revisión 1 y luego 2.",
+    "El bridge no dispara refreshCanonical completo en afterCommit cuando el cliente CANON ya fue proyectado.",
+    "F5/segundo dispositivo siguen recuperando la política desde CANON.",
+    "Todas las regresiones de política pasan."
+  ],
+  "deploy_authorized": false,
+  "rollback": "Revertir este parche; servidor y schema no cambian."
+}

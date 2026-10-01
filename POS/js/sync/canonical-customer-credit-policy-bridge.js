@@ -85,6 +85,21 @@
       renderViews(customerId);
     }).catch(function(){});
   }
+  function canonicalReceiptAlreadyProjected(customerId,receipt){
+    var client=api();
+    if(!client||!receipt||typeof client.legacySnapshot!=='function')return false;
+    try{
+      if(typeof client.sourceState==='function'){
+        var state=client.sourceState();
+        if(!state||state.validation!=='current')return false;
+      }
+      var customer=customerFrom(client.legacySnapshot(),customerId);
+      return !!customer&&Number(customer.lineaCreditoPolicyRevision)===Number(receipt.policy_revision)&&
+        (receipt.mode==='MANUAL'
+          ? customer.lineaCreditoManualActiva===true&&Math.round(Number(customer.lineaCreditoManual||0)*100)===Number(receipt.manual_limit_cents)
+          : customer.lineaCreditoManualActiva!==true);
+    }catch(_){return false;}
+  }
   function customerFrom(snapshot,id){
     return (snapshot&&Array.isArray(snapshot.customers)?snapshot.customers:[]).find(function(c){
       return c&&String(c.id!==undefined?c.id:c.customer_id)===String(id);
@@ -130,7 +145,9 @@
       : receipt&&receipt.mode==='MANUAL'
         ? 'Línea manual guardada en CANON'
         : 'Se restauró la línea automática en CANON','success');
-    reconcileCanonicalInBackground(customerId);
+    if(!canonicalReceiptAlreadyProjected(customerId,receipt)){
+      reconcileCanonicalInBackground(customerId);
+    }
     return true;
   }
   async function commit(input){

@@ -291,59 +291,65 @@ test('owner credit-line UI removes credit PIN/reason ceremony but keeps automati
   assert.doesNotMatch(inline04,/Motivo: \$\{_naEsc\(e\.client\.lineaCreditoManualMotivo/);
 });
 
-test('confirmed policy renders immediately while full CANON reconciliation continues in background',async t=>{
+test('confirmed policy renders immediately without traversing the full CANON replica',async t=>{
   const f=await activeCanon(t,{migrations:MIGRATIONS});
-  let policyWritten=false;
-  let releaseRefresh;
-  const refreshGate=new Promise(resolve=>{releaseRefresh=resolve;});
-
-  const tab=await policyTab(f,{
-    async onFetch(url,options,forward){
-      if(url.endsWith('/commands/customer.credit-policy.set')){
-        const response=await forward();
-        policyWritten=true;
-        return response;
-      }
-      if(policyWritten&&url.endsWith('/read/canonical/status')){
-        await refreshGate;
-        return forward();
-      }
-      return null;
-    }
-  });
-
+  const tab=await policyTab(f);
   const id=tab.api.snapshot().customers[0].customer_id;
   tab.context.clientes=tab.api.legacySnapshot().customers;
   const policyBridge=tab.context.NuevoAmanecerCanonicalCustomerCreditPolicyBridge;
-  const save=policyBridge.saveManual({
+  const start=tab.fetchLog.length;
+
+  assert.equal(await policyBridge.saveManual({
     customer_id:id,
     manual_limit_cents:280000,
     reason:'Ajuste manual del propietario',
     administrator_id:null,
     administrator_name:'Propietario'
-  });
+  }),true);
 
-  const result=await Promise.race([
-    save,
-    new Promise(resolve=>setTimeout(()=>resolve('BLOCKED_BY_FULL_REFRESH'),1500))
-  ]);
-  releaseRefresh();
+  const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname}));
+  assert.deepEqual(calls,[{method:'POST',path:'/commands/customer.credit-policy.set'}],
+    'confirmed policy must not trigger status or full-replica GETs');
 
-  assert.equal(result,true,'save must not wait for the full post-commit refresh');
   const local=tab.context.clientes.find(c=>String(c.id)===String(id));
   assert.equal(local.lineaCreditoManualActiva,true);
   assert.equal(local.lineaCreditoManual,2800);
   assert.equal(local.lineaCreditoPolicyRevision,1);
+
+  const canonical=tab.api.legacySnapshot().customers.find(c=>String(c.id)===String(id));
+  assert.equal(canonical.lineaCreditoManualActiva,true);
+  assert.equal(canonical.lineaCreditoManual,2800);
+  assert.equal(canonical.lineaCreditoPolicyRevision,1);
+  assert.equal(tab.api.sourceState().validation,'current');
   assert.equal(f.sql('SELECT manual_limit_cents FROM canonical_customer_credit_policies WHERE customer_id=?',id).manual_limit_cents,280000);
-
-  await new Promise(resolve=>setTimeout(resolve,0));
 });
-
 test('normal credit-policy write reuses the already-current CANON snapshot instead of preloading the full replica',()=>{
   assert.match(bridge,/function currentCanonicalSnapshot\(\)/);
   assert.match(bridge,/assertAction\('customer\.credit-policy\.set'\)/);
   const commit=bridge.slice(bridge.indexOf('async function commit'),bridge.indexOf('// Called by guardarLineaCreditoManual'));
   assert.match(commit,/resolvedForeign\?await refreshCanonical\(\):currentCanonicalSnapshot\(\)/);
   assert.match(bridge,/function reconcileCanonicalInBackground\(customerId\)/);
+  assert.match(bridge,/canonicalReceiptAlreadyProjected\(customerId,receipt\)/);
   assert.doesNotMatch(bridge,/async function afterCommit/);
+});
+
+
+test('new credit-policy command sends POST first with no redundant canonical status GET',async t=>{
+  const f=await activeCanon(t,{migrations:MIGRATIONS});
+  const tab=await policyTab(f);
+  const id=tab.api.snapshot().customers[0].customer_id;
+  const start=tab.fetchLog.length;
+
+  const receipt=await tab.api.setCustomerCreditPolicy({
+    customer_id:id,
+    mode:'MANUAL',
+    manual_limit_cents:5000,
+    reason:'Ajuste directo del propietario',
+    administrator_id:null,
+    administrator_name:'Propietario'
+  });
+
+  assert.equal(receipt.status,'created');
+  const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname}));
+  assert.deepEqual(calls,[{method:'POST',path:'/commands/customer.credit-policy.set'}]);
 });

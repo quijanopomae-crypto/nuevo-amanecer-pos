@@ -859,6 +859,39 @@
     } catch (_) {}
   }
 
+  function projectConfirmedCustomerCreditPolicy(record, result) {
+    if (!record || record.command !== 'customer.credit-policy.set' || !record.payload || !result ||
+        !data || !Array.isArray(data.customers)) return false;
+    if (record.payload.operation_id !== result.operation_id ||
+        record.payload.customer_id !== result.customer_id ||
+        result.policy_revision !== record.payload.expected_policy_revision + 1) return false;
+    var customer = data.customers.find(function (item) {
+      return item && String(item.customer_id) === String(record.payload.customer_id);
+    });
+    if (!customer) return false;
+
+    customer.credit_policy_mode = result.mode;
+    customer.credit_policy_manual_limit_cents = result.mode === 'MANUAL' ? result.manual_limit_cents : null;
+    customer.credit_policy_reason = record.payload.reason;
+    customer.credit_policy_administrator_id = record.payload.administrator_id == null ? null : record.payload.administrator_id;
+    customer.credit_policy_administrator_name = record.payload.administrator_name;
+    customer.credit_policy_updated_at = record.payload.created_at;
+    customer.credit_policy_revision = result.policy_revision;
+
+    ready = true;
+    replicaState.validation = 'current';
+    if (replicaState.cache) {
+      replicaState.cache = Object.assign({}, replicaState.cache, { cached_at: new Date().toISOString() });
+    }
+    if (typeof root._naWriteCanonicalReplica === 'function') {
+      try {
+        var projectedReplica = replicaOf(data);
+        Promise.resolve(root._naWriteCanonicalReplica(projectedReplica)).catch(function () {});
+      } catch (_) {}
+    }
+    return true;
+  }
+
   async function sendPending(record, skipStatus) {
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
@@ -866,10 +899,11 @@
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
-    // A new payment.create or payment.batch already has a validated current
-    // replica. The Worker checks authority and credit revision atomically on
-    // write, so the first send may skip a redundant status GET. Retried pending
-    // commands still verify remote authority before replaying the intent.
+    // A new payment.create, payment.batch or customer.credit-policy.set can
+    // already come from a validated current replica. Their Worker handlers
+    // recheck authority and domain CAS atomically on write, so the first send
+    // may skip a redundant status GET. Retried pending commands still verify
+    // remote authority before replaying the exact durable intent.
     if (!skipStatus) {
       var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
         credentials: 'omit', redirect: 'error', cache: 'no-store',
@@ -914,7 +948,8 @@
     // off the user-visible critical path.
     publishConfirmedPaymentReceipt(record, result);
     publishConfirmedSaleReceipt(record, result);
-    ready = false;
+    var policyProjected = projectConfirmedCustomerCreditPolicy(record, result);
+    if (!policyProjected) ready = false;
     return copy(confirmed.receipt);
   }
   async function prepareCommand(command) {
@@ -1063,7 +1098,7 @@
 
   function createProduct(input) { return createCommand('product.create', input); }
   function createCustomer(input) { return createCommand('customer.create', input); }
-  function setCustomerCreditPolicy(input) { return createCommand('customer.credit-policy.set', input); }
+  function setCustomerCreditPolicy(input) { return createCommand('customer.credit-policy.set', input, true); }
   function adjustInventory(input) { return createCommand('inventory.adjust', input); }
   function createCreditAccount(input) { return createCommand('credit-account.create', input); }
   function createPayment(input) { return createCommand('payment.create', input); }

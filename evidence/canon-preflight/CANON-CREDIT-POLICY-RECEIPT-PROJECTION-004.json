@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-POLICY-RECEIPT-PROJECTION-004",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "5c18e96f4f2933f0a95f75704c43f9329d69fcdb",
+  "analysis": {
+    "READS": [
+      "receipt de customer.credit-policy.set",
+      "payload durable del journal",
+      "fila raw data.customers del canonical-client",
+      "bridge post-commit"
+    ],
+    "WRITES": [
+      "solo campos credit_policy_* del customer_id confirmado en la réplica en memoria",
+      "vista Clientes/evaluación derivada de esa fila"
+    ],
+    "DOM_AFFECTED": [
+      "ficha financiera",
+      "evaluación de crédito"
+    ],
+    "STATE_AFFECTED": [
+      "data.customers[customer_id].credit_policy_*",
+      "ready",
+      "replicaState.validation"
+    ],
+    "STORAGE_AFFECTED": [
+      "sin escrituras nuevas de servidor; cache local puede persistirse en segundo plano"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "receipt durable primero",
+      "customer_id y operation_id deben coincidir",
+      "policy_revision exacta",
+      "CAS/idempotencia continúan en servidor"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes y Créditos leen la línea proyectada",
+      "no toca ventas, caja, inventario, saldos ni pagos"
+    ],
+    "RISKS": [
+      "una proyección incorrecta dejaría revisión local falsa; se valida receipt/payload antes de mantener ready",
+      "refresh global concurrente podría reintroducir estado viejo; se elimina del post-commit exitoso de política"
+    ],
+    "TESTS": [
+      "dos cambios consecutivos sin GET intermedio",
+      "snapshot raw/legacy refleja receipt",
+      "ACK perdido y stale_policy",
+      "CANON Critical y E2E"
+    ]
+  }
+}
