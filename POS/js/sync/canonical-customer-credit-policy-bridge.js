@@ -51,6 +51,29 @@
     }
     return 'No se guardó la política de crédito CANON'+(code?': '+code:'');
   }
+  async function resolveForeignPending(client,pending){
+    if(!pending||pending.command==='customer.credit-policy.set')return pending;
+    if(pending.invalid){
+      notify('No se cambió la línea: el estado pendiente local no es válido.','error');
+      return pending;
+    }
+    if(pending.last_error){
+      notify('No se cambió la línea: la operación anterior '+clean(pending.command)+' fue rechazada ('+clean(pending.last_error)+').','error');
+      return pending;
+    }
+    if(!client||typeof client.retryPending!=='function'){
+      notify('No se cambió la línea: no se pudo recuperar automáticamente la operación anterior '+clean(pending.command)+'.','error');
+      return pending;
+    }
+    try{
+      await client.retryPending();
+    }catch(error){
+      var after=pendingRecord(),reason=after&&after.last_error?clean(after.last_error):clean(error&&error.message);
+      notify('No se cambió la línea: la operación anterior '+clean(pending.command)+' sigue sin confirmarse'+(reason?' ('+reason+')':'')+'.','error');
+      return after||pending;
+    }
+    return pendingRecord();
+  }
   async function afterCommit(receipt,replayed,customerId){
     closeModal();
     var operation=clean(receipt&&receipt.operation_id);
@@ -73,12 +96,14 @@
     input=input&&typeof input==='object'?Object.assign({},input):{};
     var client=api(),pending=pendingRecord();
 
-    if(pending){
-      if(pending.command!=='customer.credit-policy.set'||pending.invalid){
-        notify('Hay otra operación CANON pendiente ('+clean(pending.command)+'). Resuélvela antes de cambiar la línea.','error');
-        return false;
+    busy=true;
+    try{
+      if(pending&&pending.command!=='customer.credit-policy.set'){
+        pending=await resolveForeignPending(client,pending);
+        if(pending)return false;
       }
-      if(pending.last_error&&typeof client.discardRejectedCustomerCreditPolicy==='function'){
+
+      if(pending&&pending.last_error&&typeof client.discardRejectedCustomerCreditPolicy==='function'){
         try{
           if(await client.discardRejectedCustomerCreditPolicy()){
             try{await refreshCanonical();}catch(_){}
@@ -87,10 +112,7 @@
           }
         }catch(_){}
       }
-    }
 
-    busy=true;
-    try{
       if(pending){
         var replay;
         try{replay=await client.retryPending();}catch(error){notify(pendingMessage(error),'error');return false;}
