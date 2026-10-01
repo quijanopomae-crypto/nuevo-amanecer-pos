@@ -192,6 +192,53 @@ test('lost ACK retries the same policy operation and never advances revision twi
   assert.equal(tab.api.receiptSnapshot().status,'already_processed');
 });
 
+
+test('credit policy auto-resolves a recoverable foreign sale pending instead of blocking the user',async t=>{
+  const f=await activeCanon(t,{migrations:MIGRATIONS});
+  let dropSaleAck=true;
+  const tab=await policyTab(f,{
+    async onFetch(url,options,forward){
+      if(url.endsWith('/commands/sale.create')&&dropSaleAck){
+        dropSaleAck=false;
+        await forward();
+        throw new TypeError('sale ACK lost after Turso commit');
+      }
+      return null;
+    }
+  });
+
+  const product=tab.api.snapshot().products[0];
+  const customer=tab.api.snapshot().customers[0];
+  assert.ok(product?.product_id);
+  assert.ok(customer?.customer_id);
+
+  await assert.rejects(
+    tab.api.createSale({
+      items:[{product_id:product.product_id,quantity:1}],
+      payment_method:'yape',
+      reference:'AUTO-RESOLVE-SALE-PENDING'
+    }),
+    /CANONICAL_FINANCIAL_PENDING/
+  );
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1,'Turso already committed the sale once');
+  assert.equal(tab.api.pendingSnapshot().command,'sale.create');
+
+  const policyBridge=tab.context.NuevoAmanecerCanonicalCustomerCreditPolicyBridge;
+  assert.equal(await policyBridge.saveManual({
+    customer_id:customer.customer_id,
+    manual_limit_cents:5000,
+    reason:'Ajuste administrativo después de recuperar venta pendiente',
+    administrator_id:'admin-a',
+    administrator_name:'Admin A'
+  }),true);
+
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1,'auto-replay must not duplicate the sale');
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_customer_credit_policy_operations').n,1);
+  assert.equal(f.sql('SELECT manual_limit_cents FROM canonical_customer_credit_policies WHERE customer_id=?',customer.customer_id).manual_limit_cents,5000);
+  assert.equal(tab.api.pendingSnapshot(),null);
+  assert.equal(tab.api.receiptSnapshot().command,'customer.credit-policy.set');
+});
+
 test('pre-0018 customer reads remain compatible and policy command fails closed',async t=>{
   const f=await activeCanon(t,{migrations:[
     '0014_canonical_live_products.sql',
