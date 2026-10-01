@@ -121,6 +121,46 @@ test('three consecutive online sales use receipts and stock overlay without full
   assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(ventas.map(v=>v.id))',tab.context)),['V-001','V-002','V-003']);
 });
 
+test('second sale reaches durable receipt while an older full refresh is still blocked', { timeout: 3000 }, async t=>{
+  let blockReads=false, releaseRead, signalBlocked;
+  const readGate=new Promise(resolve=>{releaseRead=resolve;});
+  const blocked=new Promise(resolve=>{signalBlocked=resolve;});
+  t.after(()=>{ if(releaseRead) releaseRead(); });
+  const {f,tab,add}=await fixture(t,{onFetch:async(url,options,next)=>{
+    const path=new URL(url).pathname;
+    if(blockReads&&path.startsWith('/read/canonical/')){
+      signalBlocked();
+      await readGate;
+    }
+    return next();
+  }});
+  add();
+  assert.equal((await vm.runInContext('confirmarVenta()',tab.context)).status,'CONFIRMED');
+
+  blockReads=true;
+  const oldRefresh=tab.api.refresh().catch(error=>error);
+  await blocked;
+
+  let resolveSecondReceipt;
+  const secondReceipt=new Promise(resolve=>{resolveSecondReceipt=resolve;});
+  tab.context.addEventListener('na:canonical-sale-receipt',event=>{
+    if(event.detail&&event.detail.payload&&event.detail.payload.sale_id==='V-002') resolveSecondReceipt(event.detail);
+  });
+  add();
+  const secondSale=vm.runInContext('confirmarVenta()',tab.context);
+  const receipt=await secondReceipt;
+  assert.equal(receipt.receipt.sale_id,'V-002','second receipt must arrive before the blocked refresh is released');
+  assert.equal((await secondSale).status,'CONFIRMED');
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,2);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,2);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,171);
+  assert.equal(vm.runInContext('ventas[0].id',tab.context),'V-002');
+
+  releaseRead();
+  const refreshOutcome=await oldRefresh;
+  assert.match(String(refreshOutcome&&refreshOutcome.message||refreshOutcome),/CANONICAL_REFRESH_SUPERSEDED/,'older refresh must not overwrite newer receipt effects');
+});
+
 test('pending V-001 reserves sale id; identical next cart is a new V-002 with its own UUID',async t=>{
   const {tab,add}=await fixture(t);
   tab.context.navigator.onLine=false; add();
