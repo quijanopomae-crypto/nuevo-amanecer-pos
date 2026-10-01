@@ -194,8 +194,12 @@ async function activateWriter() {
 }
 async function cleanupWriter(sessionId) {
   if(!sessionId)return;
-  await cfRaw('DELETE FROM auth_sessions WHERE session_id=?1',[sessionId]);
-  await cfRaw('DELETE FROM devices WHERE device_id=?1',['session:'+sessionId]);
+  await cfRaw("UPDATE auth_sessions SET status='revoked' WHERE session_id=?1",[sessionId]);
+  await cfRaw("UPDATE devices SET status='revoked' WHERE device_id=?1",['session:'+sessionId]);
+}
+async function cleanupReconciliationWriters() {
+  await cfRaw("UPDATE auth_sessions SET status='revoked' WHERE 'session:'||session_id IN (SELECT principal_id FROM canonical_customer_operations WHERE operation_id LIKE 'debt-reconcile-customer-%')");
+  await cfRaw("UPDATE devices SET status='revoked' WHERE device_id IN (SELECT principal_id FROM canonical_customer_operations WHERE operation_id LIKE 'debt-reconcile-customer-%')");
 }
 async function customerCreateDiagnostics(match,writer) {
   const tables=['canonical_customer_operations','canonical_customer_registry','canonical_live_customers','canonical_expense_operations','canonical_product_operations','canonical_inventory_operations','canonical_credit_accounts','canonical_credit_metadata'];
@@ -365,6 +369,7 @@ async function main() {
     }));
   } finally {
     if(writer?.sessionId)await cleanupWriter(writer.sessionId);
+    await cleanupReconciliationWriters();
   }
 }
 main().catch(error=>{console.error('DEBT_RECONCILE_APPLY_FAIL='+String(error?.message||error));process.exit(1);});
