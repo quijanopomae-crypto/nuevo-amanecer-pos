@@ -161,6 +161,15 @@
     if (cache.revision !== remote.revision) return cache.revision > remote.revision;
     return (cache.financial_revision || 0) > (remote.financial_revision || 0);
   }
+  function cacheMatchesStatus(cache, meta, expected, digest) {
+    if (!cache || !meta || cache.promotion_id !== expected.promotion_id ||
+        cache.authority_epoch !== expected.authority_epoch || cache.revision !== expected.revision ||
+        cache.mode !== meta.mode || cache.read_only !== meta.read_only ||
+        cache.minimum_client_contract !== meta.minimum_client_contract) return false;
+    if ((cache.financial_revision || 0) !== (meta.mode === 'ACTIVE' ? (meta.financial_revision || 0) : 0)) return false;
+    if (digest && cache.canonical_digest !== digest) return false;
+    return true;
+  }
   async function localReplica() {
     if (typeof root._naReadCanonicalReplica !== 'function') return null;
     try { var value = await root._naReadCanonicalReplica(); return validReplica(value) ? value : null; } catch (_) { return null; }
@@ -224,6 +233,8 @@
       var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision, digests: {} };
       if (binding && !changed) assertBinding(expected);
       notifyConnectionVerified();
+      var cache = await localReplica(), cacheMatchesRemote = cacheMatchesStatus(cache, statusMeta, expected, statusDigest);
+      if (cacheMatchesRemote) { publishReplica(cache, 'cache'); notifyReplicaUpdate(); }
       var expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : null]);
       async function readEntry(entry) {
         var route = entry[0], name = entry[1], cursor = null, seen = new Set(), items = [], digest = null;
@@ -259,12 +270,12 @@
       next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
       if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
+      var bootstrapReplica = replicaOf(next);
       if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
-      if (cache && cacheIsNewer(cache, bootstrapReplica)) {
+      if (!cacheMatchesRemote && cache && cacheIsNewer(cache, bootstrapReplica)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
       }
-      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
+      if (!cacheMatchesRemote) { publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate(); }
 
       if (statusMeta.mode === 'ACTIVE') {
         applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
