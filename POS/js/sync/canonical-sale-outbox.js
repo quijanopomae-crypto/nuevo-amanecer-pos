@@ -70,6 +70,19 @@
     current.intents.shift();
     write(current);
   }
+  function renumberQueuedSales(remoteMax) {
+    var current = parseStored();
+    var next = Math.max(Number(remoteMax) || 0, current.last_sale_number || 0);
+    current.intents.forEach(function (intent) {
+      if (!/^V-\d+$/.test(String(intent.sale_id || ''))) return;
+      next += 1;
+      if (!Number.isSafeInteger(next)) fail('SALE_NUMBER_UNSAFE');
+      intent.sale_id = 'V-' + String(next).padStart(3, '0');
+    });
+    current.last_sale_number = next;
+    write(current);
+    return clone(current);
+  }
   function result(status, processed, remaining, reason) {
     var out = { status: status, processed: processed, remaining: remaining };
     if (reason) out.reason = reason;
@@ -91,7 +104,22 @@
       if (pending) {
         var payload = pending.payload;
         if (pending.command !== 'sale.create' || !payload || payload.operation_id !== head.operation_id || payload.sale_id !== head.sale_id) return result('BLOCKED_FOREIGN_PENDING', processed, current.intents.length, 'FOREIGN_PENDING');
-        if (pending.last_error) return result('BLOCKED_PENDING_REJECTED', processed, current.intents.length, String(pending.last_error));
+        if (pending.last_error) {
+          if (pending.last_error === 'canonical_sale_conflict' && typeof canonical.repairRejectedSaleConflict === 'function') {
+            var repaired;
+            try { repaired = await canonical.repairRejectedSaleConflict(head.operation_id, head.sale_id); }
+            catch (repairError) { return result('WAITING', processed, parseStored().intents.length, String(repairError && (repairError.code || repairError.message) || 'CONFLICT_REPAIR_FAILED')); }
+            if (repaired && repaired.status === 'CONFIRMED_REMOTE') {
+              if (!matching(canonical.receiptSnapshot(), head)) return result('WAITING', processed, parseStored().intents.length, 'REPAIRED_RECEIPT_NOT_CONFIRMED');
+              removeHead(head); processed += 1; continue;
+            }
+            if (repaired && repaired.status === 'SALE_ID_COLLISION') {
+              renumberQueuedSales(repaired.max_sale_number);
+              continue;
+            }
+          }
+          return result('BLOCKED_PENDING_REJECTED', processed, current.intents.length, String(pending.last_error));
+        }
         try { await canonical.retryPending(); } catch (error) { return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'RETRY_FAILED')); }
         if (!matching(canonical.receiptSnapshot(), head)) return result('WAITING', processed, parseStored().intents.length, 'RECEIPT_NOT_CONFIRMED');
         removeHead(head); processed += 1; continue;
@@ -115,6 +143,7 @@
   var started = false;
   var retryTimer = null;
   var retryCount = 0;
+  var reconcileTimer = null;
   var resumeOutbox = null;
   var resuming = false;
   function scheduleResume() {
@@ -122,18 +151,25 @@
     retryCount += 1;
     retryTimer = root.setTimeout(function () { retryTimer = null; return resumeOutbox(); }, 1000 * Math.pow(2, retryCount - 1));
   }
+  function scheduleReconciliation() {
+    if (typeof root.setTimeout !== 'function') return;
+    if (reconcileTimer !== null && typeof root.clearTimeout === 'function') root.clearTimeout(reconcileTimer);
+    reconcileTimer = root.setTimeout(function () {
+      reconcileTimer = null;
+      if (syncing || resuming || root.navigator.onLine === false) { scheduleReconciliation(); return; }
+      Promise.resolve(root.NuevoAmanecerCanonical.refresh())
+        .catch(function (error) { if (root.console) root.console.warn('[Venta CANON] Reconciliación diferida pendiente', error.code || error.message); });
+    }, 10000);
+  }
   async function sync() {
     if (syncing) return result('WAITING', 0, snapshot().intents.length, 'BUSY');
     syncing = (async function () {
       try {
         var outcome = await withLock(syncLocked);
         // Receipt is already durable and the confirmed intent has been removed.
-        // Return the commercial path immediately; reconciliation starts now but
-        // is never allowed to hold the sale UI after the durable receipt.
-        if (outcome.processed > 0) {
-          Promise.resolve().then(function () { return root.NuevoAmanecerCanonical.refresh(); })
-            .catch(function (error) { if (root.console) root.console.warn('[Venta CANON] Confirmada; reconciliación pendiente', error.code || error.message); });
-        }
+        // Reconcile after the selling burst instead of competing with the next
+        // tap/POST on mobile data. Every new enqueue resets this quiet window.
+        if (outcome.processed > 0) scheduleReconciliation();
         if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
         if (started && outcome.status === 'WAITING' && outcome.reason !== 'BUSY' && root.navigator.onLine !== false && retryCount < 3) {
           var pending = root.NuevoAmanecerCanonical.pendingSnapshot();
@@ -170,6 +206,10 @@
     return resume();
   }
   async function enqueue(input) {
+    if (reconcileTimer !== null && typeof root.clearTimeout === 'function') {
+      root.clearTimeout(reconcileTimer);
+      reconcileTimer = null;
+    }
     return withLock(function () {
       var intent = validateIntent(input), current = parseStored();
       if (current.intents.some(function (item) { return item.operation_id === intent.operation_id; })) fail('DUPLICATE_OPERATION_ID');
