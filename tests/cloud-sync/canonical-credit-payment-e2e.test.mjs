@@ -113,6 +113,46 @@ test('payment latency: one POST before receipt; full HTTP reconciliation and ren
   }));
 });
 
+test('durable receipt event is emitted before full reconciliation and never before confirmed journal storage', async (t) => {
+  const f = await activeCanon(t);
+  const gate = deferred();
+  let posted = false;
+  const tab = await device(f, {
+    token:'device-a-token', deviceId:'device-a', scripts,
+    async onFetch(url, options, forward) {
+      if (url.endsWith('/commands/payment.create')) {
+        posted = true;
+        return forward();
+      }
+      if (posted && url.endsWith('/read/canonical/status')) await gate.promise;
+      return null;
+    }
+  });
+
+  const events = [];
+  tab.context.addEventListener('na:canonical-payment-receipt', (event) => {
+    const journal = JSON.parse(tab.localStorage.getItem('na_canonical_sale_journal'));
+    events.push({ detail:event.detail, journalState:journal && journal.state, journalOperation:journal && journal.payload && journal.payload.operation_id });
+  });
+
+  fill(tab,{amount:'1',method:'yape',reference:'INSTANT-RECEIPT-1'});
+  assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(),true);
+  assert.equal(events.length,1,'receipt event must not wait for background reconciliation');
+  assert.equal(events[0].journalState,'CONFIRMED','event is allowed only after durable confirmed journal');
+  assert.equal(events[0].detail.command,'payment.create');
+  assert.equal(events[0].detail.payload.operation_id,events[0].detail.receipt.operation_id);
+  assert.equal(events[0].journalOperation,events[0].detail.payload.operation_id);
+  assert.equal(events[0].detail.payload.credit_id,CREDIT);
+  assert.equal(events[0].detail.payload.amount_cents,100);
+  assert.equal(events[0].detail.receipt.current_balance_cents,600);
+  assert.equal(f.sql('SELECT current_balance_cents b FROM canonical_credit_balances WHERE credit_id=?',CREDIT).b,600);
+  assert.equal(creditOf(tab).saldo,7,'full replica is intentionally still stale while the background GET is blocked');
+
+  gate.resolve();
+  await tab.api.refresh();
+  assert.equal(creditOf(tab).saldo,6);
+});
+
 test('Registrar pago (efectivo) persists through payment.create, survives F5 and is seen by a second device', async (t) => {
   const f = await activeCanon(t);
   const tab = await device(f, { token: 'device-a-token', deviceId: 'device-a', scripts });
@@ -238,8 +278,11 @@ test('server rejection is a definitive failure and does not create a second comm
       return null;
     },
   });
+  const receiptEvents=[];
+  tab.context.addEventListener('na:canonical-payment-receipt',event=>receiptEvents.push(event.detail));
   fill(tab, { amount: '1', method: 'yape', reference: 'REJ-0001' });
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), false);
+  assert.equal(receiptEvents.length,0,'rejected command must never project a confirmed payment');
   assert.ok(tab.toasts.some(([m]) => /rechazó el pago \(stale_credit\)/.test(m)));
   const before = tab.fetchLog.filter((x) => x.url.endsWith('/commands/payment.create')).length;
   assert.equal(await tab.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirm(), false);
