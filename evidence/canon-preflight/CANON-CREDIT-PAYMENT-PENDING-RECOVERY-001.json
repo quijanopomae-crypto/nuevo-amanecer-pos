@@ -1,0 +1,65 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CREDIT-PAYMENT-PENDING-RECOVERY-001",
+  "base_ref": "8091bba31caa4814515d332eba08ab2b103d2c2d",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura Android muestra el cobro múltiple detenido por el toast 'Hay una operación CANON pendiente. Resuélvela antes de iniciar un cobro múltiple.'.",
+    "canonical-credit-payment-bridge.confirmBatch bloquea ante cualquier pendingSnapshot sin distinguir si es un pago rechazado de forma definitiva o un ACK incierto recuperable.",
+    "canonical-client ya conserva operation_id durable y retryPending reenvía exactamente la misma intención después de verificar autoridad remota.",
+    "canonical-client no expone una forma segura de descartar un payment.create/payment.batch ya rechazado con HTTP definitivo, por lo que ese journal puede bloquear cobros posteriores indefinidamente."
+  ],
+  "analysis": {
+    "ROOT_CAUSE": "El frontend trata todos los journals PENDING como el mismo caso. Un rechazo definitivo y una intención con ACK incierto requieren acciones distintas; al no distinguirlas, un registro local viejo se convierte en un bloqueo operativo permanente.",
+    "READS": [
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "POS/js/sync/canonical-client.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "AGENTS_Nuevo_Amanecer.md"
+    ],
+    "WRITES": [
+      "Añadir un método mínimo en canonical-client para descartar solo pagos/batches definitivamente rechazados y verificados como seguros.",
+      "En el bridge, reemplazar el bloqueo genérico por recuperación automática: descartar rechazo definitivo o reintentar la misma intención incierta.",
+      "Si el retry confirma un pago anterior, refrescar saldos y detener el nuevo cobro en ese gesto para impedir duplicación accidental.",
+      "Mantener bloqueo explícito para pendientes de otros comandos."
+    ],
+    "DOM_AFFECTED": [
+      "Toast del cobro de crédito; sin cambios estructurales de DOM."
+    ],
+    "STATE_AFFECTED": [
+      "Journal CANON PENDING/CONFIRMED y réplica financiera después de recuperación."
+    ],
+    "STORAGE_AFFECTED": [
+      "localStorage del journal CANON; solo se elimina un PENDING de pago con rechazo HTTP definitivo permitido."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Idempotencia por operation_id.",
+      "Sin doble cobro.",
+      "Saldo y caja solo cambian por receipt durable del Worker.",
+      "Reintentos inciertos verifican status remoto."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Créditos: desbloquea cobros sin alterar cálculo de saldos.",
+      "Caja: un pago efectivo confirmado conserva exactamente una mutación de caja.",
+      "Ventas/inventario: sin cambios."
+    ],
+    "RISKS": [
+      "Descartar un rechazo demasiado amplio podría ocultar un estado incierto; por eso solo se permiten HTTP 400/404/409 y errores de pago conocidos.",
+      "Reintentar un pending confirmado podría cambiar el saldo; por eso el nuevo cobro no continúa en el mismo gesto."
+    ],
+    "ROLLBACK": [
+      "Revertir frontend y redeploy. El journal y los receipts siguen siendo compatibles."
+    ],
+    "TEST_PLAN": [
+      "Pending payment.create rechazado con stale_credit se descarta y el nuevo batch continúa.",
+      "Pending payment.batch rechazado definitivo se descarta y el nuevo batch continúa.",
+      "Pending sin last_error se reintenta con el mismo operation_id, refresca y NO crea el nuevo batch en el mismo click.",
+      "Pending de otro comando sigue bloqueando.",
+      "CANON Critical CI + E2E Smoke."
+    ]
+  }
+}
