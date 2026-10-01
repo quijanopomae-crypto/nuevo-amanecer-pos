@@ -26,6 +26,51 @@ test('operational arrays survive replica cache round-trips without becoming requ
   for(const marker of ['sales: copy(replica.sales || [])','saleItems: copy(replica.sale_items || [])','inventoryMovements: copy(replica.inventory_movements || [])','cashMovements: copy(replica.cash_movements || [])']) assert.ok(source.includes(marker),marker);
 });
 
+test('sale fast path reads only status + products + customers and never waits for operational history',()=>{
+  const start=source.indexOf('async function refreshSaleAuthority()');
+  const end=source.indexOf('function assertSaleAction()',start);
+  assert.ok(start>=0&&end>start);
+  const block=source.slice(start,end);
+  assert.match(block,/\/read\/canonical\/status/);
+  assert.match(block,/readRows\('products'\)/);
+  assert.match(block,/readRows\('customers'\)/);
+  assert.doesNotMatch(block,/readRows\('sales'\)|readRows\('sale-items'\)|readRows\('cash-movements'\)|readRows\('inventory-movements'\)/);
+  const saleStart=source.indexOf('async function createSale(sale)');
+  const saleEnd=source.indexOf('async function createCommand',saleStart);
+  assert.match(source.slice(saleStart,saleEnd),/prepareSaleCommand\(\)/);
+});
+
+test('confirmed sale advances only the sale stock overlay and keeps other commands refresh-gated',()=>{
+  assert.match(source,/var saleProductEffects = new Map\(\)/);
+  assert.match(source,/function effectiveSaleProduct\(productId\)/);
+  assert.match(source,/saleProductEffects\.set\(effect\.product_id,effect\)/);
+  assert.match(source,/saleMutationGeneration \+= 1/);
+  assert.match(source,/if \(command === 'sale\.create' && skipStatus === true\) assertSaleAction\(\)/);
+  assert.match(source,/else assertAction\(command\)/);
+  assert.match(source,/var product = effectiveSaleProduct\(requested\.product_id\)/);
+});
+
+test('full refresh is fenced against a newer durable sale receipt',()=>{
+  assert.match(source,/var saleGenerationAtStart = saleMutationGeneration/);
+  assert.match(source,/CANONICAL_REFRESH_SUPERSEDED/);
+  assert.match(source,/assertRefreshNotSuperseded\(\);\s*publishReplica\(incoming, 'remote'\)/);
+});
+
+test('sale conflict repair requires remote proof before journal removal',()=>{
+  const start=source.indexOf('async function repairRejectedSaleConflict');
+  const end=source.indexOf('async function retryPending',start);
+  assert.ok(start>=0&&end>start);
+  const block=source.slice(start,end);
+  assert.match(block,/last_error !== 'canonical_sale_conflict'/);
+  assert.match(block,/\/read\/canonical\/sales\?limit=100/);
+  assert.match(block,/sameOperation/);
+  assert.match(block,/conflictingSale/);
+  const remove=block.indexOf('root.localStorage.removeItem(JOURNAL)');
+  const proof=block.indexOf("if (!conflictingSale) return { status:'NOT_PROVEN'");
+  assert.ok(remove>proof,'journal removal must occur only after collision proof');
+  assert.match(block,/await refreshSaleAuthority\(\)/);
+});
+
 test('operational history remains a read concern and adds no new commands',()=>{
   const commands=source.match(/var COMMANDS = \[([^\]]+)\]/)?.[1]||'';
   assert.doesNotMatch(commands,/sales\.read|cash\.read|inventory\.read/);
