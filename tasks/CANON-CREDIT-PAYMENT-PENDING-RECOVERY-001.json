@@ -12,6 +12,7 @@
     "POS/js/sync/canonical-credit-payment-bridge.js",
     "tests/cloud-sync/canonical-client.test.mjs",
     "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
     "ops/v1.3-pos-web-deploy-trigger.json"
   ],
   "forbidden_files": [
@@ -32,7 +33,7 @@
   "invariants": [
     "Nunca borrar un PENDING cuyo resultado remoto sea incierto.",
     "Un PENDING de payment.create/payment.batch sin rechazo definitivo solo puede resolverse reintentando exactamente el mismo operation_id.",
-    "Un rechazo HTTP definitivo 400/404/409 no registró un nuevo pago y puede liberar el journal únicamente para errores de pago permitidos.",
+    "Un rechazo HTTP definitivo 400/409 no registró un nuevo pago y puede liberar el journal únicamente para errores de pago permitidos.",
     "Después de confirmar un pendiente incierto, no se crea un segundo cobro en el mismo gesto; se actualizan saldos y se exige una nueva confirmación explícita.",
     "Otros comandos CANON pendientes continúan bloqueando cobros para evitar cruces de escritores.",
     "D1/Worker siguen siendo autoridad. Sin cambios de schema, caja, FIFO, créditos ni persistencia legacy."
