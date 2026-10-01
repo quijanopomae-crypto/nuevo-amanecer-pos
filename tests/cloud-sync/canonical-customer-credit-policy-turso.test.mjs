@@ -49,6 +49,29 @@ test('Turso credit-policy happy path is one browser POST and two Worker-to-Turso
   assert.equal(row.mode,'MANUAL');
   assert.equal(row.manual_limit_cents,5000);
   assert.equal(row.revision,1);
+  assert.equal(tab.api.sourceState().validation,'current');
+  assert.equal(tab.api.legacySnapshot().customers.find(c=>String(c.id)===String(id)).lineaCreditoManual,50);
+
+  const secondBrowserStart=tab.fetchLog.length;
+  const secondTursoStart=turso.calls.length;
+  const second=await tab.api.setCustomerCreditPolicy({
+    customer_id:id,
+    mode:'MANUAL',
+    manual_limit_cents:7000,
+    reason:'Segundo ajuste directo del propietario',
+    administrator_id:null,
+    administrator_name:'Propietario'
+  });
+  assert.equal(second.policy_revision,2);
+  assert.deepEqual(tab.fetchLog.slice(secondBrowserStart).map(row=>({
+    method:row.method,path:new URL(row.url).pathname
+  })),[{method:'POST',path:'/commands/customer.credit-policy.set'}],
+    'second write must not require a full refresh to learn revision 1');
+  assert.deepEqual(turso.calls.slice(secondTursoStart).map(call=>call.requests?.[0]?.type),['execute','batch']);
+  const row2=f.sql('SELECT manual_limit_cents,revision FROM canonical_customer_credit_policies WHERE customer_id=?',id);
+  assert.equal(row2.manual_limit_cents,7000);
+  assert.equal(row2.revision,2);
+  assert.equal(tab.api.legacySnapshot().customers.find(c=>String(c.id)===String(id)).lineaCreditoManual,70);
 });
 
 test('Turso credit-policy stale revision remains fail-closed after the fast path',async t=>{
