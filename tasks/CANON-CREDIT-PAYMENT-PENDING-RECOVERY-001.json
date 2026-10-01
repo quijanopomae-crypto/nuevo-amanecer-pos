@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-PAYMENT-PENDING-RECOVERY-001",
+  "environment": "CANON",
+  "base_ref": "8091bba31caa4814515d332eba08ab2b103d2c2d",
+  "objective": "Eliminar el bloqueo genérico por una operación CANON pendiente al registrar cobros de crédito. Resolver automáticamente pendientes de pago seguros: descartar rechazos definitivos sin efecto y reintentar una intención incierta con el mismo operation_id, manteniendo idempotencia y evitando cobros duplicados.",
+  "owner_authorization": "El owner reportó en Android el mensaje 'Hay una operación CANON pendiente' al intentar cobrar un crédito y pidió simplificar el flujo para hacerlo más rápido y fluido.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-PAYMENT-PENDING-RECOVERY-001.json",
+    "evidence/canon-preflight/CANON-CREDIT-PAYMENT-PENDING-RECOVERY-001.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-credit-payment-bridge.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
+    "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/migrations/**",
+    "POS/js/modules/**",
+    "POS/css/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "cash-integrity"
+  ],
+  "invariants": [
+    "Nunca borrar un PENDING cuyo resultado remoto sea incierto.",
+    "Un PENDING de payment.create/payment.batch sin rechazo definitivo solo puede resolverse reintentando exactamente el mismo operation_id.",
+    "Un rechazo HTTP definitivo 400/409 no registró un nuevo pago y puede liberar el journal únicamente para errores de pago permitidos.",
+    "Después de confirmar un pendiente incierto, no se crea un segundo cobro en el mismo gesto; se actualizan saldos y se exige una nueva confirmación explícita.",
+    "Otros comandos CANON pendientes continúan bloqueando cobros para evitar cruces de escritores.",
+    "D1/Worker siguen siendo autoridad. Sin cambios de schema, caja, FIFO, créditos ni persistencia legacy."
+  ],
+  "rollback": "Revertir el PR y desplegar el Hosted POS anterior. No requiere rollback de datos."
+}

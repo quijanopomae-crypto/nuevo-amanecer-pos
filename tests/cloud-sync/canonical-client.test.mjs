@@ -167,6 +167,18 @@ test('adapter projects canonical expenses to Gastos and only session expenses to
 });
 
 
+test('rejected payment journal cleanup is narrow and never clears uncertain transport failures',()=>{
+  const start=source.indexOf('async function discardRejectedPayment()');
+  const end=source.indexOf('async function discardRejectedProduct()',start);
+  assert.ok(start>=0&&end>start,'discardRejectedPayment must exist before product cleanup');
+  const block=source.slice(start,end);
+  assert.match(block,/\['payment\.create','payment\.batch'\]\.includes\(record\.command\)/);
+  assert.match(block,/\!\[400,409\]\.includes\(record\.last_status\) \|\| !record\.last_error/);
+  assert.match(block,/localStorage\.removeItem\(JOURNAL\)/);
+  assert.doesNotMatch(block,/500|503|CANONICAL_FINANCIAL_PENDING/,'uncertain/server failures must never be auto-discarded');
+  assert.match(source,/discardRejectedPayment:\s*discardRejectedPayment/);
+});
+
 test('payment batch lean path uses one batch transport for one-to-twenty debts and keeps retries authority-checked',()=>{
   const start=source.indexOf('async function createPaymentBatch(inputs)');
   const end=source.indexOf('function createProduct(input)',start);

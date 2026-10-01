@@ -66,10 +66,16 @@ function harness(options={}){
       calls.push(['retryPending']);
       if(options.retryError)throw new Error(options.retryError);
       const payload=pending?.payload;
-      if(payload)applyPayment(payload);
+      if(payload?.amount_cents)applyPayment(payload);
       const receipt={status:'already_processed',operation_id:payload?.operation_id||'OP-REPLAY'};
       pending=null;
       return receipt;
+    },
+    async discardRejectedPayment(){
+      calls.push(['discardRejectedPayment']);
+      if(!pending || !['payment.create','payment.batch'].includes(pending.command) || !pending.last_error || ![400,409].includes(pending.last_status))return false;
+      pending=null;
+      return true;
     },
     async createPaymentBatch(inputs){
       calls.push(['createPaymentBatch',JSON.parse(JSON.stringify(inputs))]);
@@ -103,7 +109,7 @@ function harness(options={}){
             invalid:false,
             payload:{...JSON.parse(JSON.stringify(payload)),operation_id:'OP-PENDING-'+createCount}
           };
-          if(options.pendingOnCreateError==='rejected')pending.last_error='stale_credit';
+          if(options.pendingOnCreateError==='rejected'){pending.last_error='stale_credit';pending.last_status=409;}
         }
         throw new Error(options.createError||'CANONICAL_FINANCIAL_PENDING');
       }
@@ -305,6 +311,77 @@ test('batch cash payment uses one client batch call and only one background cano
   assert.equal(result.reconciling,true);
   assert.equal(h.calls.some(x=>x[0]==='closeModal'),false,'batch flow is inline and must not close the single-payment modal');
   assert.ok(h.calls.some(x=>x[0]==='toast'&&/Cobro múltiple CANON CONFIRMADO/.test(x[1])&&x[2]==='success'));
+});
+
+test('batch automatically clears a definitively rejected prior payment and continues with fresh data',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    pending:{
+      command:'payment.create',
+      invalid:false,
+      last_error:'stale_credit',
+      last_status:409,
+      payload:{operation_id:'OLD-REJECTED',credit_id:'CR-OLD',amount_cents:300,payment_method:'efectivo'}
+    },
+    snapshot:{
+      credits:[{id:'CR-1',credit_id:'CR-1',monto:11,pagado:0,saldo:11,pagos:[]}],
+      cashState:{abierta:true,sessionId:'CASH-1'}
+    }
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[{credit_id:'CR-1',amount_cents:1100}],
+    payment_method:'efectivo'
+  });
+  assert.equal(result.ok,true);
+  assert.equal(h.calls.filter(x=>x[0]==='discardRejectedPayment').length,1);
+  assert.equal(h.calls.filter(x=>x[0]==='retryPending').length,0);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2,'rejected stale payment forces a fresh snapshot and then background reconciliation');
+  assert.equal(h.calls.filter(x=>x[0]==='createPaymentBatch').length,1);
+  assert.equal(h.calls.some(x=>x[0]==='toast'&&/operación CANON pendiente/.test(x[1])),false);
+});
+
+test('batch replays an uncertain prior payment once, refreshes balances and does not create a second payment in the same click',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    applyPayments:true,
+    pending:{
+      command:'payment.create',
+      invalid:false,
+      payload:{operation_id:'OLD-UNCERTAIN',credit_id:'CR-1',amount_cents:500,payment_method:'efectivo'}
+    },
+    snapshot:{
+      credits:[{id:'CR-1',credit_id:'CR-1',monto:11,pagado:0,saldo:11,pagos:[]}],
+      cashState:{abierta:true,sessionId:'CASH-1'}
+    }
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[{credit_id:'CR-1',amount_cents:1100}],
+    payment_method:'efectivo'
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.recovered,true);
+  assert.equal(result.code,'PRIOR_CANONICAL_PAYMENT_CONFIRMED');
+  assert.equal(h.calls.filter(x=>x[0]==='retryPending').length,1);
+  assert.equal(h.calls.filter(x=>x[0]==='refresh').length,1);
+  assert.equal(h.calls.filter(x=>x[0]==='createPaymentBatch').length,0,'same click must never create a second financial intent after replay');
+  assert.ok(h.calls.some(x=>x[0]==='toast'&&/Saldos actualizados/.test(x[1])&&x[2]==='success'));
+});
+
+test('batch still blocks an unrelated CANON pending command instead of deleting it',async()=>{
+  const h=harness({
+    currentSnapshot:true,
+    pending:{command:'sale.create',invalid:false,payload:{operation_id:'SALE-PENDING'}}
+  });
+  const result=await h.context.NuevoAmanecerCanonicalCreditPaymentBridge.confirmBatch({
+    allocations:[{credit_id:'CR-1',amount_cents:500}],
+    payment_method:'efectivo'
+  });
+  assert.equal(result.ok,false);
+  assert.equal(result.code,'CANONICAL_OTHER_PENDING');
+  assert.equal(h.calls.filter(x=>x[0]==='discardRejectedPayment').length,0);
+  assert.equal(h.calls.filter(x=>x[0]==='retryPending').length,0);
+  assert.equal(h.calls.filter(x=>x[0]==='createPaymentBatch').length,0);
 });
 
 test('batch digital payment keeps one real external reference across all selected allocations',async()=>{
