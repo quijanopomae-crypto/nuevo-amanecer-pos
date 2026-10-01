@@ -5,6 +5,30 @@ const METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito',
 export const CANONICAL_CLIENT_CONTRACT = 'a6-gate-c-v1';
 
 
+const commerceCapabilityCache = new WeakMap();
+
+function firstBatchRow(result) {
+  return result && Array.isArray(result.results) ? (result.results[0] ?? null) : null;
+}
+
+async function commerceCapabilities(db) {
+  let cached = commerceCapabilityCache.get(db);
+  if (cached) return cached;
+  const pending = db.prepare(`SELECT
+      SUM(CASE WHEN type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects') THEN 1 ELSE 0 END) AS live_product_tables,
+      SUM(CASE WHEN type='table' AND name='canonical_generic_sale_lines' THEN 1 ELSE 0 END) AS generic_sale_tables,
+      SUM(CASE WHEN type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers') THEN 1 ELSE 0 END) AS live_customer_tables
+    FROM sqlite_master`).first().then(row => Object.freeze({
+      liveProducts:Number(row?.live_product_tables)===3,
+      genericSales:Number(row?.generic_sale_tables)===1,
+      liveCustomers:Number(row?.live_customer_tables)===3,
+    }));
+  commerceCapabilityCache.set(db,pending);
+  try { return await pending; }
+  catch (error) { commerceCapabilityCache.delete(db); throw error; }
+}
+
+
 async function customerSchemaAvailable(db) {
   const row=await db.prepare(`SELECT COUNT(*) AS count FROM sqlite_master
     WHERE type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers')`).first();
@@ -155,10 +179,10 @@ export async function createCanonicalSale(request, env, auth, json) {
   const principalId = auth.principalId;
   const db = getDatabase(env);
   // Authorization and the authority contract apply even to a durable replay.
-  // Recheck again after replay lookup (including recovery from a lost ACK).
-  async function authorityError() {
-    const control = await db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
-      FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId).first();
+  // On Turso, every standalone .first() is a separate HTTPS pipeline. Keep the
+  // same guards, but read independent validation state in one batch so the
+  // durable receipt is not delayed by a chain of remote round trips.
+  function authorityErrorFor(control) {
     if (!control || control.mode !== 'ACTIVE') return 'canonical_not_active';
     if (control.active_promotion_id !== body.promotion_id || Number(control.authority_epoch) !== body.authority_epoch ||
         Number(control.revision) !== body.expected_control_revision || control.minimum_client_contract !== body.client_contract ||
@@ -166,49 +190,111 @@ export async function createCanonicalSale(request, env, auth, json) {
         control.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
-  const denied = await authorityError();
-  if (denied) return json({ error:denied },409);
-  const payloadHash = await sha256Hex(stableStringify(body));
-  const existing = await db.prepare('SELECT sale_id,payload_hash FROM sales WHERE operation_id=?1').bind(body.operation_id).first();
-  if (existing) {
-    const stale = await authorityError();
-    if (stale) return json({ error:stale },409);
-    return existing.payload_hash === payloadHash
-      ? json({ status:'already_processed',operation_id:body.operation_id,sale_id:existing.sale_id,idempotent:true })
-      : json({ error:'operation_id_conflict',operation_id:body.operation_id },409);
+  async function authorityError() {
+    const control = await db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
+      FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId).first();
+    return authorityErrorFor(control);
   }
-  if (await db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
-  const liveProductsReady=Number((await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('canonical_product_operations','canonical_live_products','canonical_live_inventory_effects')").first())?.count)===3;
-  if (liveProductsReady && await db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id).first()) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+
+  const capabilities = await commerceCapabilities(db);
   const genericRequested=body.items.some(item=>item.generic_line!==undefined);
-  const genericSchemaReady=!genericRequested || Number((await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='canonical_generic_sale_lines'").first())?.count)===1;
-  if (!genericSchemaReady) return json({error:'generic_sale_schema_not_ready'},503);
-  const products = [];
+  if (genericRequested && !capabilities.genericSales) return json({error:'generic_sale_schema_not_ready'},503);
+
+  const reads=[];
+  const readIndex={products:[]};
+  const addRead=statement=>{ const index=reads.length; reads.push(statement); return index; };
+  readIndex.control=addRead(db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
+    FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId));
+  readIndex.existing=addRead(db.prepare('SELECT sale_id,payload_hash FROM sales WHERE operation_id=?1').bind(body.operation_id));
+  readIndex.financialOperation=addRead(db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id));
+  readIndex.productOperation=capabilities.liveProducts
+    ? addRead(db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id))
+    : -1;
+
   for (const item of body.items) {
     if (item.generic_line !== undefined) {
-      const collision=await db.prepare(`SELECT product_id FROM (
-        SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2
-        UNION ALL SELECT product_id FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
-      ) LIMIT 1`).bind(body.promotion_id,item.product_id).first();
-      if (collision) return json({error:'generic_product_id_conflict',product_id:item.product_id},409);
+      const collisionSql=capabilities.liveProducts
+        ? `SELECT product_id FROM (
+            SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2
+            UNION ALL
+            SELECT product_id FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
+          ) LIMIT 1`
+        : 'SELECT product_id FROM products WHERE promotion_id=?1 AND product_id=?2 LIMIT 1';
+      readIndex.products.push(addRead(db.prepare(collisionSql).bind(body.promotion_id,item.product_id)));
+      continue;
+    }
+    const productSql=capabilities.liveProducts
+      ? `SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,provenance FROM (
+          SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance,0 AS source_rank
+            FROM products WHERE promotion_id=?1 AND product_id=?2
+          UNION ALL
+          SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance,1 AS source_rank
+            FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
+        ) ORDER BY source_rank LIMIT 1`
+      : `SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
+          FROM products WHERE promotion_id=?1 AND product_id=?2`;
+    readIndex.products.push(addRead(db.prepare(productSql).bind(body.promotion_id,item.product_id)));
+  }
+
+  readIndex.customer=-1;
+  if (body.customer_id) {
+    const customerSql=capabilities.liveCustomers
+      ? `SELECT customer_id FROM (
+          SELECT customer_id,0 AS source_rank FROM customers WHERE promotion_id=?1 AND customer_id=?2
+          UNION ALL
+          SELECT customer_id,1 AS source_rank FROM canonical_customer_registry
+            WHERE promotion_id=?1 AND customer_id=?2 AND provenance='LIVE'
+        ) ORDER BY source_rank LIMIT 1`
+      : 'SELECT customer_id FROM customers WHERE promotion_id=?1 AND customer_id=?2 LIMIT 1';
+    readIndex.customer=addRead(db.prepare(customerSql).bind(body.promotion_id,body.customer_id));
+  }
+
+  readIndex.account=-1;
+  if (body.payment_method === 'credito' && body.credit_account && body.credit_account.account_id !== 'small') {
+    readIndex.account=addRead(db.prepare('SELECT account_id,name,mode FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id=?2 AND (account_id=?3 OR lower(name)=lower(?4))')
+      .bind(body.promotion_id,body.customer_id,body.credit_account.account_id,body.credit_account.name));
+  }
+
+  const payloadHashPromise=sha256Hex(stableStringify(body));
+  const validation=await db.batch(reads);
+  const payloadHash=await payloadHashPromise;
+  const denied=authorityErrorFor(firstBatchRow(validation[readIndex.control]));
+  if (denied) return json({error:denied},409);
+
+  const existing=firstBatchRow(validation[readIndex.existing]);
+  if (existing) {
+    // Preserve the replay rule: an old durable operation is returned only while
+    // this session still owns current write authority.
+    const stale=await authorityError();
+    if (stale) return json({error:stale},409);
+    return existing.payload_hash===payloadHash
+      ? json({status:'already_processed',operation_id:body.operation_id,sale_id:existing.sale_id,idempotent:true})
+      : json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  }
+  if (firstBatchRow(validation[readIndex.financialOperation])) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  if (readIndex.productOperation>=0 && firstBatchRow(validation[readIndex.productOperation])) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+
+  const products=[];
+  for (let index=0; index<body.items.length; index++) {
+    const item=body.items[index], row=firstBatchRow(validation[readIndex.products[index]]);
+    if (item.generic_line !== undefined) {
+      if (row) return json({error:'generic_product_id_conflict',product_id:item.product_id},409);
       products.push({product_id:item.product_id,current_stock_quantity:0,stock_revision:0,tracks_inventory:0,provenance:'GENERIC'});
       continue;
     }
-    let product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
-      FROM products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
-    if (!product && liveProductsReady) product=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance
-      FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2`).bind(body.promotion_id,item.product_id).first();
+    const product=row;
     if (!product || ![0,1].includes(product.tracks_inventory) || Number(product.stock_revision) !== item.expected_stock_revision ||
-        (product.tracks_inventory === 1 && (product.current_stock_quantity === null || Number(product.current_stock_quantity) < item.quantity))) return json({ error:'stale_stock',product_id:item.product_id },409);
+        (product.tracks_inventory === 1 && (product.current_stock_quantity === null || Number(product.current_stock_quantity) < item.quantity))) {
+      return json({error:'stale_stock',product_id:item.product_id},409);
+    }
     products.push(product);
   }
-  if (body.customer_id && !await canonicalCustomerExists(db,body.promotion_id,body.customer_id)) {
-    return json({ error:'customer_not_found' },409);
-  }
+
+  if (body.customer_id && !firstBatchRow(validation[readIndex.customer])) return json({error:'customer_not_found'},409);
+
   let accountExists=false;
-  if (body.payment_method === 'credito' && body.credit_account && body.credit_account.account_id !== 'small') {
-    const account=await db.prepare('SELECT account_id,name,mode FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id=?2 AND (account_id=?3 OR lower(name)=lower(?4))')
-      .bind(body.promotion_id,body.customer_id,body.credit_account.account_id,body.credit_account.name).first();
+  if (readIndex.account>=0) {
+    const account=firstBatchRow(validation[readIndex.account]);
     if(account){
       if(account.account_id!==body.credit_account.account_id || account.name!==body.credit_account.name || account.mode!==body.credit_account.mode)
         return json({error:'credit_account_conflict',account_id:account.account_id},409);
