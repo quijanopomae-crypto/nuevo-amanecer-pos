@@ -66,3 +66,11 @@ test('production reconciliation can target the authoritative Turso backend witho
   assert.doesNotMatch(tursoWorkflow,/wrangler d1 execute/);
   assert.doesNotMatch(tursoWorkflow,/\/d1\/database\//);
 });
+
+
+test('reconciliation session cleanup preserves durable customer-operation foreign keys',()=>{
+  assert.match(apply,/UPDATE auth_sessions SET status='revoked'/);
+  assert.match(apply,/UPDATE devices SET status='revoked'/);
+  assert.doesNotMatch(apply,/DELETE FROM devices WHERE device_id=\?1/);
+  assert.match(apply,/cleanupReconciliationWriters/);
+});
