@@ -50,6 +50,22 @@ The cloud override uses installed system Chromium; repository CI installs its pi
 
 ## Controlled promotion and rollback
 
+## Technical closure — 2026-10-01 (America/Lima)
+
+Reviewed base `f865ae53a3330ed9cbf71fe9141f64a3fc0ac165`, initial head `f78471312b4119c97eb5470cd579cb527c111c99`, and corrective code head `6f9f08b805ee2d72e2ee99d3ca1a557cd7602b36`. The original five commits remain intact; the sixth fixes a demonstrated P1. No unresolved P0/P1 was found in the reviewed diff. `/auth/local-writer` previously revalidated a granted principal after its role became read-only; background status also ignored explicit `write_authorized:false`. The route now checks role, and both empty/pending FIFO paths durably record AUTHORITY_CHANGED before further local commits. One server regression and two real-browser regressions reproduced failure before the fix and pass afterward.
+
+READS: binding/session, canonical status/projections and existing V10 checkpoints. WRITES: one atomic V10 projection/FIFO/checkpoint commit and unchanged background command envelopes. DOM: existing sale/payment/cash bridges publish after durability. STATE/STORAGE: existing IndexedDB only; immutable UUID/payload, one writer, serialized tabs, exact product IDs, integer money and ACK without repeated stock/cash effects remain invariant. No owner secret is persisted in grants, commercial snapshots or exported evidence.
+
+0019 audit: additive CREATE TABLE and eight CREATE TRIGGER statements only; no existing rows changed, no destructive SQL, dormant without a grant. Grant id=1 is bound to current promotion/epoch. Owner activation authentication is server-side; frontend PIN cannot grant backend writer authority. Reader GETs remain allowed, writes denied. Existing behavior without a grant remains covered. Rollback requires backup and resolving the FIFO before reverting; never delete IndexedDB/localStorage or drop schema to hide pending data. Synthetic fixtures only: no real D1/Turso migration, sale or restore.
+
+PR #322 permanece separado y no fue integrado porque modifica rutas reemplazadas por la arquitectura local-first. Its sale-readiness/overlay and legacy outbox renumbering optimizations overlap the replaced foreground cloud-dependent path. No merge, cherry-pick, close or modification of #322 occurred.
+
+Final local verification: cloud 572/572, business+backup 121/121, interface/motion 30/30, browser 28/28 (24 local-first + 4 smoke), visual promotion 23 assets PASS, production-config Wrangler dry-run PASS, git diff --check PASS. Six offline commits took 172 ms with zero foreground network requests; this is a desktop synthetic measurement, not an Android guarantee. Windows uses pinned Playwright 1.47.2 with system Chrome and an equivalent temporary config (same test directory, two workers, 20000 ms timeout); the Linux `/workspace/.cache` path is unavailable. LF checkout avoids CRLF-sensitive static regex artifacts. The browser fixture explicitly resets network emulation before bootstrap, preventing offline state leakage between tests.
+
+An additional expanded static sweep found three existing expectations concerning header connection chrome and canonical expense projection. They are outside the required passing 30-test interface/motion set; automatic CI results will be recorded below, without weakening tests. Physical Android, real quota/retention, local→cloud recovery drill, writer handover and owner migration/promotion approval remain pending.
+
+Draft PR and GitHub CI: pending creation/run inspection. Este PR no autoriza merge ni deploy. NO DEPLOY / NO PRODUCTION WRITES / NO REAL SALES.
+
 Before promotion: PR gates, review of migration 0019, owner-approved Turso migration contract, physical writer/offline/reload/quota exercise, export and recovery drill, and explicit approval of merge/deploy. Use only the versioned release/Hosted POS workflows; preserve production D1. A second reader must read the synchronized sale. Stop before a real commercial sale until owner authorization.
 
 Before reverting a build that has local pending work, export its backup and drain/resolve the FIFO. An old cloud-dependent build must not silently ignore unreplicated local state. Do not delete the V10 database or clear localStorage as rollback. Current public build remains unchanged. Verdict at implementation review: NOT_READY for a controlled real sale until these promotion blockers are closed.
