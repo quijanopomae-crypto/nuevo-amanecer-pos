@@ -1,0 +1,75 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CREDIT-POLICY-AUTO-RESOLVE-PENDING-SALE-001",
+  "base_ref": "5d2c880e7cd9df48cc755603b4bbca17b78c8a46",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "analysis": {
+    "OBJECTIVE": "Quitar el paso manual que obliga al usuario a resolver una venta PENDING antes de guardar una línea de crédito, sin eliminar la protección del journal.",
+    "ROOT_CAUSE": [
+      "canonical-customer-credit-policy-bridge.js inspecciona pendingSnapshot() y bloquea inmediatamente cualquier command distinto de customer.credit-policy.set.",
+      "Para sale.create ese bloqueo duplica una decisión que el canonical-client ya sabe resolver de forma idempotente mediante retryPending().",
+      "El resultado es una barrera de UI: una venta con ACK perdido o pendiente recuperable impide una operación no relacionada aunque la recuperación automática sea segura."
+    ],
+    "FIRST_PRINCIPLES": [
+      "Requisito real: no perder ni duplicar la operación anterior.",
+      "No es requisito que el usuario tenga que resolverla manualmente.",
+      "La misma operation_id ya es durable y retryPending() ya verifica autoridad e idempotencia.",
+      "Por tanto se elimina el paso humano, no la protección financiera."
+    ],
+    "READS": [
+      "captura del owner con Ajuste manual de línea y toast sale.create PENDING",
+      "AGENTS_Nuevo_Amanecer.md",
+      "POS/js/sync/canonical-customer-credit-policy-bridge.js",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "tests/cloud-sync/canonical-customer-credit-policy.test.mjs",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+      "docs/CANON_TURSO_SALE_ROOT.md"
+    ],
+    "WRITES": [
+      "Antes de bloquear por una sale.create ajena, reintentar automáticamente esa misma operación con client.retryPending().",
+      "Releer pendingSnapshot() después del retry.",
+      "Si quedó resuelta, continuar el guardado de línea normalmente.",
+      "Si sigue PENDING, mostrar el error real y no crear customer.credit-policy.set.",
+      "Añadir regresión de ACK perdido de venta seguido de guardado de línea."
+    ],
+    "DOM_AFFECTED": [
+      "Solo el toast del modal Ajuste manual de línea; sin cambios estructurales."
+    ],
+    "STATE_AFFECTED": [
+      "Journal CANON existente: PENDING sale.create puede pasar a CONFIRMED por retry idempotente antes de crear la política."
+    ],
+    "STORAGE_AFFECTED": [
+      "Sin claves nuevas; mismo na_canonical_sale_journal y mismo backend Turso."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "sale.create conserva operation_id, sale_id e idempotencia.",
+      "stock/caja/venta se aplican como máximo una vez.",
+      "customer.credit-policy.set conserva CAS expected_policy_revision.",
+      "No se confirma nada en UI sin receipt durable."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas: solo recuperación automática de un pending existente.",
+      "Crédito: desaparece el paso manual cuando el pending es recuperable.",
+      "Inventario/Caja: sin nueva mutación; el retry usa la misma venta idempotente.",
+      "Turso: sin schema ni cambio de Worker."
+    ],
+    "RISKS": [
+      "Un pending realmente rechazado no debe descartarse: se mantiene bloqueado.",
+      "El retry añade una petición solo cuando existe un pending previo, nunca en el flujo limpio.",
+      "Si la red sigue caída, el cambio de línea no se intenta."
+    ],
+    "ROLLBACK": [
+      "Revertir PR y Hosted POS; sin rollback de datos."
+    ],
+    "TEST_PLAN": [
+      "Reproducir sale.create commit con ACK perdido y journal PENDING.",
+      "Guardar línea manual desde el bridge: debe auto-replay de la misma venta y luego crear una sola política.",
+      "Verificar una sola venta en backend, una sola política y pendingSnapshot()==null.",
+      "Mantener test de lost ACK propio de customer.credit-policy.set.",
+      "CANON Critical CI + E2E Smoke + deploy Hosted POS."
+    ]
+  }
+}
