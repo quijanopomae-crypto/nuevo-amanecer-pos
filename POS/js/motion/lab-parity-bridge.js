@@ -79,8 +79,9 @@
   }
 
   function scheduleMotion(page) {
-    // Safe navigation paints first on mobile as well; only then run visual work.
-    // NA_MOBILE_SAFE_NAV_ACTIVE changes navigation, not the visual contract.
+    // Mobile safe navigation must stay paint-first and free of page-entry Motion.
+    // Clientes restores only its scroll-linked chrome from menu-navigation.js.
+    if (Number(root.innerWidth || 0) <= 700 || root.NA_MOBILE_SAFE_NAV_ACTIVE === true) return;
     var preset = presetByPage[page.id] || null;
     var token = nextToken(page);
     afterPaint(function () {
