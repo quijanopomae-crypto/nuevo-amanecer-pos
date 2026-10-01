@@ -26,6 +26,18 @@ test('operational arrays survive replica cache round-trips without becoming requ
   for(const marker of ['sales: copy(replica.sales || [])','saleItems: copy(replica.sale_items || [])','inventoryMovements: copy(replica.inventory_movements || [])','cashMovements: copy(replica.cash_movements || [])']) assert.ok(source.includes(marker),marker);
 });
 
+test('staged refresh preserves same-authority operational history instead of publishing an empty sales window',()=>{
+  assert.match(source,/function operationalBootstrapSeed\(current, expected\)/);
+  assert.match(source,/current\.promotion_id !== expected\.promotion_id/);
+  assert.match(source,/current\.authority_epoch !== expected\.authority_epoch/);
+  assert.match(source,/current\.revision !== expected\.revision/);
+  assert.match(source,/sales: copy\(current\.sales \|\| \[\]\)/);
+  assert.match(source,/next\.sales = operationalSeed\.sales/);
+  assert.match(source,/next\.cashMovements = operationalSeed\.cashMovements/);
+  assert.doesNotMatch(source,/next\.sales = \[\]; next\.saleItems = \[\]; next\.inventoryMovements = \[\];/);
+  assert.match(source,/next\.read_only = true; next\.mode = 'CANONICAL_READ_ONLY'/,'bootstrap must remain fail-closed while old operational history is displayed');
+});
+
 test('operational history remains a read concern and adds no new commands',()=>{
   const commands=source.match(/var COMMANDS = \[([^\]]+)\]/)?.[1]||'';
   assert.doesNotMatch(commands,/sales\.read|cash\.read|inventory\.read/);
