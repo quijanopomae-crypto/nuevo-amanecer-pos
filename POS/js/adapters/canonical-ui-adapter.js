@@ -567,6 +567,8 @@
     movementType: function () { try { if (typeof cajMovTipo !== 'undefined') return cajMovTipo; } catch (_) {} return root.cajMovTipo; },
     setMovementType: function (value) { if (typeof cajMovTipo !== 'undefined') cajMovTipo = value; else root.cajMovTipo = value; },
     setProducts: function (value) { if (typeof productos !== 'undefined') productos = value; else root.productos = value; },
+    setSales: function (value) { if (typeof ventas !== 'undefined') ventas = value; else root.ventas = value; },
+    renderSales: function () { var fn; try { if (typeof ventasRender === 'function') fn = ventasRender; } catch (_) {} if (!fn) fn = root.ventasRender; if (typeof fn === 'function') return fn(); },
     notify: function (message, tone) { var fn; try { if (typeof toast === 'function') fn = toast; } catch (_) {} if (!fn) fn = root.toast; if (typeof fn === 'function') fn(message, tone); },
     closeModal: function (id) { var fn; try { if (typeof cerrarModal === 'function') fn = cerrarModal; } catch (_) {} if (!fn) fn = root.cerrarModal; if (typeof fn === 'function') fn(id); }
   });
