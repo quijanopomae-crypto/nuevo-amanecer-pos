@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-DEPLOY-010",
+  "environment": "CANON",
+  "base_ref": "e9f3d59b9a86adb817b7621f50c1c6a59f5dd189",
+  "objective": "Autorizar una sola ejecución del workflow Turso-only para desplegar en CANON el fix de latencia de sale.create ya validado y mergeado.",
+  "owner_authorization": "El propietario pidió explícitamente: 'Es en canon quiero que lo arregles'.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-SALE-LATENCY-DEPLOY-010.json",
+    "evidence/canon-preflight/CANON-TURSO-SALE-LATENCY-DEPLOY-010.json",
+    "ops/v1.3-turso-prod-worker-hotfix-trigger.json"
+  ],
+  "invariants": [
+    "Target de código exacto: 8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06.",
+    "Rollback de código exacto: f865ae53a3330ed9cbf71fe9141f64a3fc0ac165.",
+    "Persistencia permanece Turso.",
+    "Sin migraciones ni venta real durante el despliegue."
+  ],
+  "rollback": "El workflow despliega f865ae53a3330ed9cbf71fe9141f64a3fc0ac165 con wrangler.turso-prod.jsonc si falla la verificación post-deploy."
+}

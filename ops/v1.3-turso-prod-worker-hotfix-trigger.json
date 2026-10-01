@@ -1,0 +1,12 @@
+{
+  "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
+  "owner_authorized": true,
+  "requested_by": "owner",
+  "authorization_context": "El owner pidió arreglar en CANON la demora de validación de ventas.",
+  "target_commit": "8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06",
+  "rollback_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "turso_only": true,
+  "no_schema_changes": true,
+  "no_live_sale": true,
+  "one_shot": true
+}
