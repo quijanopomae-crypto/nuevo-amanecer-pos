@@ -112,7 +112,7 @@
     var button = root.document && root.document.getElementById('mBtnConf');
     if (button) button.disabled = value;
   }
-  function updateAfterCommit(saleId) {
+  function updateAfterCommit(saleId, confirmed) {
     clearLiveCart();
     if (typeof root.posUpdateCart === 'function') root.posUpdateCart(false);
     if (typeof root.posRender === 'function') root.posRender();
@@ -126,7 +126,7 @@
     var backdrop = root.document && root.document.getElementById('cartBackdrop');
     drawer && drawer.classList && drawer.classList.remove('open');
     backdrop && backdrop.classList && backdrop.classList.remove('open');
-    notify('Venta ' + saleId + ' guardada, pendiente de sincronización', 'info');
+    notify(confirmed ? ('Venta ' + saleId + ' confirmada') : ('Venta ' + saleId + ' guardada localmente · pendiente de sincronización'), confirmed ? 'success' : 'info');
   }
   function projectCurrentOutbox() {
     var canonical = root.NuevoAmanecerCanonical;
@@ -246,21 +246,33 @@
       intent = await outbox.enqueue(intent);
       saleId = intent.sale_id;
       durable = true;
-      updateAfterCommit(saleId);
+
+      // Online happy path: do not paint "pendiente" first. The outbox remains
+      // durable for crash/ACK recovery, but the visible sale waits only for the
+      // single authoritative receipt.
+      var outcome = typeof outbox.sync === 'function' ? await outbox.sync() : null;
+      var receipt = root.NuevoAmanecerCanonical.receiptSnapshot && root.NuevoAmanecerCanonical.receiptSnapshot();
+      if (receipt && receipt.operation_id === intent.operation_id && receipt.sale_id === saleId) {
+        updateAfterCommit(saleId, true);
+        setBusy(false);
+        ownsBusy = false;
+        return { status: 'CONFIRMED', operation_id: intent.operation_id, sale_id: saleId };
+      }
+
+      // Only genuine offline/unknown-ACK cases fall back to the durable pending
+      // projection. A normal online sale never flashes this state.
+      updateAfterCommit(saleId, false);
       try { projectCurrentOutbox(); }
       catch (projectionError) { failClosed('Venta ' + saleId + ' guardada localmente · pendiente de sincronización. No se pudo actualizar la proyección.', projectionError); }
       setBusy(false);
       ownsBusy = false;
-      if (typeof outbox.sync === 'function') await outbox.sync();
-      var receipt = root.NuevoAmanecerCanonical.receiptSnapshot && root.NuevoAmanecerCanonical.receiptSnapshot();
-      if (receipt && receipt.operation_id === intent.operation_id && receipt.sale_id === saleId) {
-        notify('Venta ' + saleId + ' confirmada en CANON', 'success');
-        return { status: 'CONFIRMED', operation_id: intent.operation_id, sale_id: saleId };
-      }
-      return { status: 'PENDING_SYNC', operation_id: intent.operation_id, sale_id: saleId };
+      return { status: 'PENDING_SYNC', operation_id: intent.operation_id, sale_id: saleId, sync_status: outcome && outcome.status };
     } catch (error) {
-      if (durable) failClosed('Venta ' + saleId + ' guardada localmente · pendiente de sincronización.', error);
-      else failClosed('No se guardó la venta. Tus productos siguen en el carrito.', error);
+      if (durable) {
+        updateAfterCommit(saleId, false);
+        try { projectCurrentOutbox(); } catch (_) {}
+        failClosed('Venta ' + saleId + ' guardada localmente · pendiente de sincronización.', error);
+      } else failClosed('No se guardó la venta. Tus productos siguen en el carrito.', error);
     } finally { if (ownsBusy) setBusy(false); }
   }
   function wrappedConfirm() {
