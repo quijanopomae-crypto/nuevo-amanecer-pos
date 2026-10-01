@@ -43,6 +43,7 @@ La actualización normal debe ser más rápida: los binarios pesados e inmutable
 - `POS/css/components.css`
 - `POS/sw.js`
 - `tests/product-fixes/fix-pwa-update-action/canon-pwa-update-action.test.mjs`
+- `tests/product-fixes/fix-shell-controller-refresh/canon-shell-controller-refresh.test.mjs`
 - `tests/cloud-sync/v1.3-pos-web-deploy.test.mjs`
 
 ## Archivos prohibidos
