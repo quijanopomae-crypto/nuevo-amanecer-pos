@@ -14,7 +14,6 @@
   function canonicalSaleGate() {
     var canonical = root.NuevoAmanecerCanonical;
     if (!canonical || typeof canonical.sourceState !== 'function' || typeof canonical.snapshot !== 'function') return { ready:false, reason:'CANON no está listo' };
-    if (root.navigator && root.navigator.onLine === false) return { ready:false, reason:'Sin conexión · no se puede confirmar la venta' };
     var state = canonical.sourceState(), snapshot = canonical.snapshot();
     if (!state || state.validation !== 'current' || !snapshot || snapshot.mode !== 'ACTIVE' || snapshot.read_only !== false)
       return { ready:false, reason:'CANON está sincronizando · espera el indicador verde' };
