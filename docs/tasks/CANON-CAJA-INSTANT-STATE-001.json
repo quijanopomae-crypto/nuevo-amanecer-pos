@@ -14,7 +14,7 @@
   "expected_behavior": [
     "Verde significa validation='current' con snapshot operacional válido.",
     "Durante carga sin snapshot operativo se muestra estado de carga, no 'Caja sin abrir'.",
-    "Una réplica local con promotion/epoch/revision/financial_revision/digest coincidentes con /status se reutiliza inmediatamente como current mientras continúa la reconciliación.",
+    "Una réplica local con promotion/epoch/revision/financial_revision/digest coincidentes con /status se conserva inmediatamente para lectura mientras continúa la reconciliación; permanece validating/read-only hasta completar el refresh remoto.",
     "Un receipt sale.create confirmado proyecta un movimiento de Caja efímero por operation_id y se elimina al llegar la réplica autoritativa."
   ],
   "allowed_files": [
