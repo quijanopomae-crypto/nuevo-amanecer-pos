@@ -14,3 +14,6 @@ Single code writer; owner approved execution. No deploy, merge, production write
 
 Review focus: quota/crash; stale cash revisions; same-ID changed payload; unknown pre-migration ACK; offline writer promotion.
 Each stage requires a failing behavioral regression followed by focal PASS and a reversible commit.
+
+## Owner simplification ruling (2026-10-01)
+Use V10 current snapshot and a compact FIFO outbox. No DAG, generic event sourcing, batch replication protocol or second financial ledger. ACK checkpoints compact/remove queued payloads. Existing commands carry exact immutable retries. Preserve V10's existing checkpoints for diagnostics, not as a required business replay system. Recovery requires explicit owner confirmation; no automatic remote write.
