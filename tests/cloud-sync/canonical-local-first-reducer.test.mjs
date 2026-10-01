@@ -52,3 +52,7 @@ test('compensation restores exact credit/cash and cannot compensate twice',()=>{
  let s=open();const p=payload({credit_id:'cr1',expected_credit_revision:0,amount_cents:100,payment_method:'efectivo',session_id:'cash'});s=apply(s,'payment.create',p);
  const c=payload({compensates_operation_id:p.operation_id,session_id:'cash',expected_session_revision:1,expected_credit_revision:1,reason:'Synthetic reversal'});s=apply(s,'compensation.create',c);assert.equal(s.credits[0].current_balance_cents,1000);assert.equal(s.cashSessions[0].expected_cents,0);assert.throws(()=>apply(s,'compensation.create',payload({...c,operation_id:randomUUID()})),/COMPENSATED/);
 });
+
+test('credit account does not advance the backend financial counter',()=>{const s=base();const next=apply(s,'credit-account.create',payload({customer_id:'c1',account_id:'large',name:'Large',mode:'separate'}));assert.equal(next.financial_revision,s.financial_revision);});
+
+test('sale preserves imported purchase basis exactly like canonical reads',()=>{const s=open();const p=sale();p.customer_id='c1';assert.equal(apply(s,'sale.create',p).customers[0].total_purchases_cents,s.customers[0].total_purchases_cents);});

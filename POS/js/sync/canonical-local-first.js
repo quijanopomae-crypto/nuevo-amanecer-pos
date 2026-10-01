@@ -1,0 +1,117 @@
+(function(root){
+  'use strict';
+  // One V10 snapshot, one small FIFO, unchanged canonical command envelopes.
+  var active=false,running=null,timer=null,retry=1000;
+  function store(){return root.NuevoAmanecerCanonicalLocalStore;}
+  function hooks(){return root.NuevoAmanecerCanonicalLocalHooks;}
+  function fail(code){throw new Error(code);}
+  function headers(){return {authorization:'Bearer '+hooks().session().token};}
+  async function request(path,options){
+    var controller=new root.AbortController(),timeout=root.setTimeout(function(){controller.abort();},15000);
+    try{var response=await root.fetch(hooks().binding().endpoint+path,Object.assign({credentials:'omit',redirect:'error',cache:'no-store',headers:headers(),signal:controller.signal},options||{}));
+      var body=await response.json();return {response:response,body:body};
+    }finally{root.clearTimeout(timeout);}
+  }
+  function businessProof(s){
+    var fields={products:['product_id','current_stock_quantity','stock_revision'],credits:['credit_id','provenance','current_balance_cents','revision'],sales:['sale_id','operation_id','customer_id','total_cents','payment_method'],saleItems:['sale_id','line_number','product_id','quantity','unit_price_cents','line_total_cents'],cashSessions:['session_id','open_operation_id','close_operation_id','opening_cents','expected_cents','status','revision','counted_cents','difference_cents'],creditAccounts:['customer_id','account_id','name','mode'],expenses:['expense_id','operation_id','amount_cents','payment_method','cash_delta_cents'],financialEvents:['operation_id','credit_id','credit_delta_cents','cash_delta_cents','compensates_operation_id']};
+    var proof={};Object.keys(fields).forEach(function(table){proof[table]=(s[table]||[]).map(function(row){return fields[table].map(function(key){return row[key]==null?null:row[key];});}).sort(function(a,b){return JSON.stringify(a).localeCompare(JSON.stringify(b));});});return proof;
+  }
+  async function checkCloud(state){
+    if(['CLOUD_RECOVERY_REQUIRED','AUTHORITY_CHANGED','CONFLICT'].includes(state.cloud.state))return {state:state.cloud.state};
+    var status=await request('/read/canonical/status');if(!status.response.ok)fail('CANONICAL_READ_'+status.response.status);
+    hooks().verify(status.body,hooks().binding());
+    if(!Number.isSafeInteger(status.body.financial_revision)||status.body.financial_revision<0)fail('INVALID_CANONICAL_STATUS');
+    var condition=status.body.financial_revision<state.cloud.known_financial_revision?'CLOUD_RECOVERY_REQUIRED':status.body.financial_revision>state.cloud.known_financial_revision?'CONFLICT':null;
+    if(!condition){
+      var remote=await hooks().readRemote(),current=await store().read();
+      if(current.sequence!==state.sequence||current.events.length)return {state:current.cloud.state};
+      if(await store().hash(businessProof(remote))!==await store().hash(businessProof(state.baseline.snapshot)))condition='CLOUD_RECOVERY_REQUIRED';
+    }
+    if(condition){state=await store().update('cloud-proof',function(s){s.cloud.state=condition;});hooks().publish(state);}
+    return {state:state.cloud.state};
+  }
+  var PROOF='na_canonical_local_writer_session';
+  async function authorize(state,refreshProof){
+    var fingerprint=await store().hash(hooks().session().token),proof;
+    try{proof=JSON.parse(root.localStorage.getItem(PROOF)||'null');}catch(_){}
+    if(proof && proof.grant_id===state.grant.grant_id && proof.fingerprint===fingerprint)return;
+    if(!refreshProof || root.navigator.onLine===false)fail('LOCAL_WRITER_SESSION_REVALIDATION_REQUIRED');
+    var grant=await request('/auth/local-writer');
+    if(!grant.response.ok || grant.body.writer!==true || grant.body.writer_id!==state.grant.writer_id || grant.body.grant_id!==state.grant.grant_id)fail('LOCAL_WRITER_SESSION_CHANGED');
+    var raw=JSON.stringify({grant_id:state.grant.grant_id,fingerprint:fingerprint});
+    root.localStorage.setItem(PROOF,raw);if(root.localStorage.getItem(PROOF)!==raw)fail('LOCAL_WRITER_PROOF_NOT_DURABLE');
+  }
+  async function boot(){
+    var state=await store().read();if(!state)return false;
+    await authorize(state,true);active=true;hooks().publish(state);schedule();return true;
+  }
+  async function enable(secret){
+    if(await boot())return root.NuevoAmanecerCanonical.snapshot();
+    // Until a migration is positively classified, retain the old UUID/payload.
+    if(root.NuevoAmanecerCanonical.pendingSnapshot())fail('LEGACY_PENDING_REQUIRES_REVIEW');
+    var legacy=root.NuevoAmanecerCanonicalSaleOutbox;
+    if(legacy && legacy.snapshot && legacy.snapshot().intents.length)fail('LEGACY_PENDING_REQUIRES_REVIEW');
+    var snapshot=await hooks().readRemote();
+    var grant=await request('/auth/local-writer',{method:'POST',headers:Object.assign(headers(),{'content-type':'application/json','x-activation-secret':String(secret||'')}),body:'{}'});
+    if(!grant.response.ok || grant.body.writer!==true)fail(grant.body.error||'LOCAL_WRITER_NOT_GRANTED');
+    var state=await store().initialize(snapshot,grant.body);await authorize(state,true);active=true;hooks().publish(state);return snapshot;
+  }
+  async function commit(command,input){
+    await authorize(await store().read(),false);
+    var identity=command==='sale.create' && input && input.version===1 ? {operation_id:input.operation_id,input_hash:await store().hash(input)} : null;
+    var result=await store().commit(function(projection){return hooks().build(command,input,projection);},identity);
+    hooks().publish(result.state);schedule();return result.receipt;
+  }
+  async function refresh(){var state=await store().read();hooks().publish(state);schedule();return root.NuevoAmanecerCanonical.snapshot();}
+  function schedule(){
+    if(!active || timer || root.navigator.onLine===false)return;
+    timer=root.setTimeout(function(){timer=null;sync().catch(function(){});},retry);
+  }
+  async function sync(){
+    if(!active || root.navigator.onLine===false)return {state:'OFFLINE'};
+    if(running)return running;
+    running=root.navigator.locks.request('na-canonical-local-sync',{mode:'exclusive'},async function(){
+      var state=await store().read();
+      if(!state.events.length)return checkCloud(state);
+      while(state.events.length){
+        var head=state.events[0];
+        if(['REJECTED','CONFLICT','NEEDS_REVIEW'].includes(head.state) || ['CLOUD_RECOVERY_REQUIRED','AUTHORITY_CHANGED'].includes(state.cloud.state))return {state:state.cloud.state};
+        // Status is mandatory before replay; it never enters the local commit.
+        try {
+          var status=await request('/read/canonical/status');
+          if(!status.response.ok)fail('CANONICAL_READ_'+status.response.status);
+          hooks().verify(status.body,hooks().binding());
+          if(!Number.isSafeInteger(status.body.financial_revision) || status.body.financial_revision<0)fail('INVALID_CANONICAL_STATUS');
+          if(status.body.mode!=='ACTIVE')fail('CANONICAL_COMMERCE_CLOSED');
+          if(status.body.financial_revision<state.cloud.known_financial_revision){
+            state=await store().update('cloud-loss',function(s){s.cloud.state='CLOUD_RECOVERY_REQUIRED';});hooks().publish(state);return {state:'CLOUD_RECOVERY_REQUIRED'};
+          }
+          var binding=hooks().binding();
+          state=await store().update('send',function(s){var e=s.events[0];if(!e.envelope)fail('LOCAL_ENVELOPE_MISSING');e.attempts+=1;e.state='SYNCING';});
+          head=state.events[0];
+          for(var index=head.envelope.receipts.length;index<head.envelope.parts.length;index++){
+            var part=head.envelope.parts[index];
+            var sent=await request(part.route,{method:'POST',headers:Object.assign(headers(),{'content-type':'application/json'}),body:JSON.stringify(part.payload)});
+            if(!sent.response.ok){
+              var blocked=sent.response.status>=400 && sent.response.status<500;
+              state=await store().update('send-error',function(s){var e=s.events[0];e.last_error=sent.body.error||'HTTP_'+sent.response.status;e.state=blocked?'CONFLICT':'LOCAL_COMMITTED';s.cloud.state=blocked?'CONFLICT':'LOCAL_COMMITTED';});hooks().publish(state);
+              if(!blocked){retry=Math.min(retry*2,60000);schedule();}return {state:state.cloud.state};
+            }
+            if(!hooks().validReceipt(part,sent.body))fail('INVALID_CANONICAL_RECEIPT');
+            var receiptHash=await store().hash(sent.body);
+            state=await store().update('part-ack',function(s){s.events[0].envelope.receipts.push(sent.body);s.events[0].receipt_hashes.push(receiptHash);});
+          }
+          var receipt=head.command==='payment.batch'?{operation_id:head.operation_id,status:'created',command:head.command,receipts:state.events[0].envelope.receipts.reduce(function(all,r){return all.concat(r.receipts);},[])}:state.events[0].envelope.receipts[0];
+          state=await store().ack(head.operation_id,receipt);hooks().publish(state);retry=1000;
+        }catch(error){
+          if(String(error.message)==='STALE_AUTHORITY_BINDING'){state=await store().update('authority-changed',function(s){s.cloud.state='AUTHORITY_CHANGED';});hooks().publish(state);return {state:'AUTHORITY_CHANGED'};}
+          state=await store().update('send-uncertain',function(s){s.events[0].last_error=String(error.message||error);s.events[0].state='LOCAL_COMMITTED';s.cloud.state='LOCAL_COMMITTED';});hooks().publish(state);retry=Math.min(retry*2,60000);schedule();return {state:'LOCAL_COMMITTED'};
+        }
+      }
+      return checkCloud(state);
+    });
+    try{return await running;}finally{running=null;}
+  }
+  root.addEventListener('online',schedule);
+  root.NuevoAmanecerCanonicalLocalFirst=Object.freeze({active:function(){return active;},boot:boot,enable:enable,commit:commit,refresh:refresh,sync:sync});
+})(globalThis);

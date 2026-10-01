@@ -72,7 +72,7 @@
         typeof client.assertAction !== 'function') return null;
     try {
       var state = client.sourceState();
-      if (!state || state.validation !== 'current') return null;
+      if (!state || state.validation !== 'current' && state.validation !== 'local') return null;
       client.assertAction('payment.create');
       return client.legacySnapshot();
     } catch (_) {

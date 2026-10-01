@@ -103,12 +103,13 @@
         s.credits.push({ credit_id:creditId, customer_id:p.customer_id, sale_id:p.sale_id, operation_id:p.operation_id, promotion_id:p.promotion_id, provenance:'LIVE', original_amount_cents:total, opening_balance_cents:total, current_balance_cents:total, revision:0, due_date:p.credit_due, status:'LIVE', created_at:p.created_at, account_id:account.account_id, account_name:account.name, account_mode:account.mode, installments:copy(p.installments || []) });
         touched.push('credit:' + creditId);
       } else if (p.payment.credit_cents !== 0) fail('INVALID_LOCAL_PAYMENT');
-      if (customer) customer.total_purchases_cents = safe((customer.total_purchases_cents || 0) + total);
+      // Imported purchase basis stays immutable, matching canonical reads.
+      // Current sales remain available separately for commercial summaries.
       s.sales.push({ sale_id:p.sale_id, operation_id:p.operation_id, promotion_id:p.promotion_id, authority_epoch:p.authority_epoch, customer_id:p.customer_id || null, payment_method:p.payment_method, total_cents:total, payment_reference:p.payment.reference || null, created_at:p.created_at, local_committed:true });
       s.cashMovements.push({ movement_id:p.operation_id+':cash', operation_id:p.operation_id, sale_id:p.sale_id, promotion_id:p.promotion_id, session_id:c ? c.session_id : null, payment_method:p.payment_method, amount_cents:total, cash_cents:p.payment.cash_cents, digital_cents:p.payment.digital_cents, credit_cents:p.payment.credit_cents, digital_method:p.payment.digital_method || null, reference:p.payment.reference || null, created_at:p.created_at });
       receipt.sale_id = p.sale_id;
     } else if (command === 'payment.batch') {
-      if (!Array.isArray(p.payments) || p.payments.length < 1 || p.payments.length > 20) fail('INVALID_LOCAL_PAYMENT_BATCH');
+      if (!Array.isArray(p.payments) || p.payments.length < 1 || p.payments.length > 60) fail('INVALID_LOCAL_PAYMENT_BATCH');
       var credits = new Set(), first = p.payments[0], receipts = [];
       p.payments.forEach(function (child) {
         if (credits.has(child.credit_id) || child.payment_method !== first.payment_method || child.session_id !== first.session_id || child.reference !== first.reference) fail('INVALID_LOCAL_PAYMENT_BATCH');
@@ -186,7 +187,7 @@
       Object.assign(customer, { credit_policy_mode:p.mode, credit_policy_manual_limit_cents:p.manual_limit_cents, credit_policy_revision:p.expected_policy_revision+1, credit_policy_reason:p.reason, credit_policy_administrator_name:p.administrator_name, credit_policy_updated_at:p.created_at });
       Object.assign(receipt, { customer_id:p.customer_id, mode:p.mode, manual_limit_cents:p.manual_limit_cents, policy_revision:customer.credit_policy_revision });
     } else fail('UNSUPPORTED_LOCAL_COMMAND');
-    s.financial_revision = safe((s.financial_revision || 0) + (command === 'payment.batch' ? p.payments.length : 1));
+    s.financial_revision = safe((s.financial_revision || 0) + (command === 'payment.batch' ? p.payments.length : command === 'credit-account.create' ? 0 : 1));
     return { projection:s, receipt:receipt, resources:Array.from(new Set(touched)) };
   }
   root.NuevoAmanecerCanonicalLocalReducer = Object.freeze({ apply:apply, resources:resources });

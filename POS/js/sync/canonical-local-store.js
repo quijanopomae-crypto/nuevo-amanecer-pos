@@ -42,7 +42,7 @@
   async function validate(state) {
     validateShape(state);
     if (await hash(state.baseline.snapshot)!==state.baseline.digest || await hash(state.projection)!==state.projection_digest) fail('LOCAL_DIGEST_MISMATCH');
-    for (var e of state.events) if (await hash({command:e.command,payload:e.payload})!==e.payload_hash) fail('LOCAL_PAYLOAD_CONFLICT');
+    for (var e of state.events) {if (await hash({command:e.command,payload:e.payload})!==e.payload_hash) fail('LOCAL_PAYLOAD_CONFLICT');if(e.envelope && await hash(e.envelope.parts)!==e.envelope_hash)fail('LOCAL_ENVELOPE_CONFLICT');if(e.envelope){if(!Array.isArray(e.envelope.receipts)||!Array.isArray(e.receipt_hashes)||e.envelope.receipts.length!==e.receipt_hashes.length||e.envelope.receipts.length>e.envelope.parts.length)fail('LOCAL_RECEIPT_CONFLICT');for(var j=0;j<e.envelope.receipts.length;j++){if(await hash(e.envelope.receipts[j])!==e.receipt_hashes[j])fail('LOCAL_RECEIPT_CONFLICT');var validator=root.NuevoAmanecerCanonicalLocalHooks;if(!validator||!validator.validReceipt(e.envelope.parts[j],e.envelope.receipts[j]))fail('LOCAL_RECEIPT_CONFLICT');}}}
     return state;
   }
   async function read() {
@@ -78,12 +78,23 @@
       return copy(state);
     });
   }
-  async function commit(build) {
+  async function committedEvent(state,operationId){
+    var current=state.events.find(function(e){return e.operation_id===operationId;});if(current)return current;
+    var prior=await _naV10GetOperation(operationId);
+    if(!prior || prior.status!=='COMMITTED' || prior.type!=='CANONICAL_LOCAL_COMMAND')return null;
+    var checkpoint=await _naV10GetCheckpoint(prior.checkpointKey);
+    if(!checkpoint || checkpoint.operationId!==prior.operationId || checkpoint.commitId!==prior.commitId || checkpoint.revision!==prior.committedRevision || !checkpoint.snapshot || checkpoint.snapshot.lastOperationId!==prior.operationId || checkpoint.snapshot.commitId!==prior.commitId)fail('LOCAL_COMMIT_EVIDENCE_MISSING');
+    var archived=checkpoint.snapshot.data && checkpoint.snapshot.data[FIELD];await validate(archived);
+    var event=archived.events.find(function(e){return e.operation_id===operationId;});
+    if(!event || await hash(prior.payload)!==event.payload_hash)fail('LOCAL_COMMIT_EVIDENCE_MISSING');return event;
+  }
+  async function commit(build,requestIdentity) {
     return lock(async function(){
       var current=await rawSnapshot(),state=current && current.data && current.data[FIELD];
       if (!state) fail('LOCAL_BASELINE_REQUIRED');
       await validate(state);
       if (state.cloud.state==='AUTHORITY_CHANGED') fail('LOCAL_WRITER_AUTHORITY_CHANGED');
+      if(requestIdentity){var known=await committedEvent(state,requestIdentity.operation_id);if(known){if(known.input_hash!==requestIdentity.input_hash)fail('LOCAL_OPERATION_ID_CONFLICT');return {state:copy(state),receipt:copy(known.local_receipt),event:copy(known),idempotent:true};}}
       var requested=typeof build==='function' ? build(copy(state.projection),copy(state)) : build;
       if (!requested || typeof requested.then==='function' || !requested.command || !requested.payload) fail('INVALID_LOCAL_COMMAND');
       var identity={command:requested.command,payload:copy(requested.payload)},payloadHash=await hash(identity);
@@ -109,7 +120,7 @@
       if (conflicted) fail('LOCAL_RESOURCE_REQUIRES_REVIEW');
       var next=copy(state),sequence=state.sequence+1;
       if (!Number.isSafeInteger(sequence)) fail('LOCAL_SEQUENCE_OVERFLOW');
-      var event={operation_id:requested.payload.operation_id,command:requested.command,payload:copy(requested.payload),payload_hash:payloadHash,sequence:sequence,state:'LOCAL_COMMITTED',created_at:requested.payload.created_at,attempts:0,last_error:null,resources:resources,baseline_id:state.baseline.id,baseline_digest:state.baseline.digest,local_receipt:copy(applied.receipt),envelope:null,receipt:null};
+      var event={operation_id:requested.payload.operation_id,command:requested.command,payload:copy(requested.payload),payload_hash:payloadHash,input_hash:requestIdentity ? requestIdentity.input_hash : null,sequence:sequence,state:'LOCAL_COMMITTED',created_at:requested.payload.created_at,attempts:0,last_error:null,resources:resources,baseline_id:state.baseline.id,baseline_digest:state.baseline.digest,local_receipt:copy(applied.receipt),envelope:requested.envelope ? copy(requested.envelope) : null,envelope_hash:requested.envelope ? await hash(requested.envelope.parts) : null,receipt_hashes:[],receipt:null};
       next.events.push(event);next.sequence=sequence;next.projection=applied.projection;next.cloud.state=next.cloud.state==='CLOUD_RECOVERY_REQUIRED'?'CLOUD_RECOVERY_REQUIRED':'LOCAL_COMMITTED';
       var saved=await writeSnapshot(current,next,'CANONICAL_LOCAL_COMMAND',event.operation_id,identity);
       return {state:saved,receipt:copy(event.local_receipt),event:copy(event),idempotent:false};

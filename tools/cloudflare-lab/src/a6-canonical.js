@@ -36,7 +36,7 @@ export function canonicalRuntimeDenied(url, env, json) {
 
 async function authorizeCanonicalRead(request, env, helpers) {
   if (request.headers.get('authorization') || request.headers.get('x-session-token')) {
-    const auth = await helpers.authorizeSession(request, env);
+    const auth = await helpers.authorizeSession(request, env, true);
     return auth instanceof Response ? auth : null;
   }
   return helpers.authorizeRead(request, env);
