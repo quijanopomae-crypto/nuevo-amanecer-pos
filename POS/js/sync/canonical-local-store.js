@@ -78,6 +78,20 @@
       return copy(state);
     });
   }
+  async function activateSession(snapshot,grant){
+    return lock(async function(){
+      var current=await rawSnapshot(),state=current && current.data && current.data[FIELD];await validate(state);
+      if(state.events.length || state.migration.evidence.some(function(e){return e.state==='NEEDS_REVIEW';}))fail('LOCAL_WRITER_PENDING_OPERATIONS');
+      if(!state.writer_released && state.cloud.state!=='AUTHORITY_CHANGED')fail('LOCAL_WRITER_SESSION_ACTIVE');
+      if(!snapshot || snapshot.mode!=='ACTIVE' || snapshot.write_authorized===false || !grant || grant.writer!==true || grant.promotion_id!==snapshot.promotion_id || grant.authority_epoch!==snapshot.authority_epoch)fail('INVALID_LOCAL_BASELINE');
+      if((snapshot.financial_revision||0)<state.cloud.known_financial_revision)fail('CLOUD_RECOVERY_REQUIRED');
+      var next=copy(state),digest=await hash(snapshot);
+      next.baseline={id:root.crypto.randomUUID(),sequence:state.sequence,snapshot:copy(snapshot),digest:digest,created_at:new Date().toISOString()};
+      next.projection=copy(snapshot);next.grant=copy(grant);next.writer_released=false;
+      next.cloud={known_financial_revision:snapshot.financial_revision||0,acked_sequence:state.sequence,last_ack:null,state:'UP_TO_DATE'};
+      return writeSnapshot(current,next,'CANONICAL_WRITER_SESSION',root.crypto.randomUUID(),{grant_id:grant.grant_id,baseline_digest:digest});
+    });
+  }
   async function committedEvent(state,operationId){
     var current=state.events.find(function(e){return e.operation_id===operationId;});if(current)return current;
     var prior=await _naV10GetOperation(operationId);
@@ -191,5 +205,5 @@
     var backup={schema:'nuevo-amanecer.local-first-recovery-evidence/v1',created_at:new Date().toISOString(),state:copy(state)};
     return {backup:backup,digest:await hash(backup)};
   }
-  root.NuevoAmanecerCanonicalLocalStore=Object.freeze({initialize:initialize,restoreCloud:restoreCloud,read:read,commit:commit,update:update,ack:ack,reconstruct:reconstruct,exportBackup:exportBackup,exportRecoveryEvidence:exportRecoveryEvidence,hash:hash,validate:validate});
+  root.NuevoAmanecerCanonicalLocalStore=Object.freeze({initialize:initialize,activateSession:activateSession,restoreCloud:restoreCloud,read:read,commit:commit,update:update,ack:ack,reconstruct:reconstruct,exportBackup:exportBackup,exportRecoveryEvidence:exportRecoveryEvidence,hash:hash,validate:validate});
 })(globalThis);

@@ -39,14 +39,14 @@
   }
   var PROOF='na_canonical_local_writer_session';
   async function authorize(state,refreshProof){
-    var fingerprint=await store().hash(hooks().session().token),proof;
-    try{proof=JSON.parse(root.localStorage.getItem(PROOF)||'null');}catch(_){}
-    if(proof && proof.grant_id===state.grant.grant_id && proof.fingerprint===fingerprint)return;
+    var sessionHash=await store().hash(hooks().session().token),proof;
+    try{proof=JSON.parse(root.sessionStorage.getItem(PROOF)||'null');}catch(_){}
+    if(proof && proof.grant_id===state.grant.grant_id && proof.session_hash===sessionHash)return;
     if(!refreshProof || root.navigator.onLine===false)fail('LOCAL_WRITER_SESSION_REVALIDATION_REQUIRED');
     var grant=await request('/auth/local-writer');
     if(!grant.response.ok || grant.body.writer!==true || grant.body.writer_id!==state.grant.writer_id || grant.body.grant_id!==state.grant.grant_id)fail('LOCAL_WRITER_SESSION_CHANGED');
-    var raw=JSON.stringify({grant_id:state.grant.grant_id,fingerprint:fingerprint});
-    root.localStorage.setItem(PROOF,raw);if(root.localStorage.getItem(PROOF)!==raw)fail('LOCAL_WRITER_PROOF_NOT_DURABLE');
+    var raw=JSON.stringify({grant_id:state.grant.grant_id,session_hash:sessionHash});
+    root.sessionStorage.setItem(PROOF,raw);if(root.sessionStorage.getItem(PROOF)!==raw)fail('LOCAL_WRITER_PROOF_NOT_DURABLE');
   }
   async function boot(){
     var state=await store().read();if(!state || state.migration.complete!==true)return false;
@@ -56,14 +56,19 @@
     return root.navigator.locks.request('na-canonical-sale-outbox',{mode:'exclusive'},function(){return root.navigator.locks.request('na-canonical-financial-writer',{mode:'exclusive'},function(){return enableLocked(secret);});});
   }
   async function enableLocked(secret){
-    if(await boot())return root.NuevoAmanecerCanonical.snapshot();
+    var existing=await store().read();
+    if(existing && !existing.writer_released && existing.cloud.state!=='AUTHORITY_CHANGED'){
+      if(await boot())return root.NuevoAmanecerCanonical.snapshot();
+    }
+    if(existing && (existing.events.length || existing.migration.evidence.some(function(e){return e.state==='NEEDS_REVIEW';})))fail('LOCAL_WRITER_PENDING_OPERATIONS');
     var previous=root.NuevoAmanecerCanonical.pendingSnapshot();
     var legacy=root.NuevoAmanecerCanonicalSaleOutbox;
     var intents=legacy && legacy.snapshot ? legacy.snapshot().intents : [];
-    var snapshot=await hooks().readRemote();
     var grant=await request('/auth/local-writer',{method:'POST',headers:Object.assign(headers(),{'content-type':'application/json','x-activation-secret':String(secret||'')}),body:'{}'});
     if(!grant.response.ok || grant.body.writer!==true)fail(grant.body.error||'LOCAL_WRITER_NOT_GRANTED');
-    var state=await store().initialize(snapshot,grant.body);await authorize(state,true);
+    var snapshot=await hooks().readRemote({ignoreCache:true});
+    var state=existing ? await store().activateSession(snapshot,grant.body) : await store().initialize(snapshot,grant.body);await authorize(state,true);
+    if(existing){active=true;paused=false;hooks().publish(state);schedule();return root.NuevoAmanecerCanonical.snapshot();}
     active=true;migrating=true;
     try{
       var evidence=[],journalState=null;
@@ -104,6 +109,25 @@
     var identity=command==='sale.create' && input && input.version===1 ? {operation_id:input.operation_id,input_hash:await store().hash(input)} : null;
     var result=await store().commit(function(projection){return hooks().build(command,input,projection);},identity);
     hooks().publish(result.state);schedule();return result.receipt;
+  }
+  async function finishSession(){
+    var state=await store().read();if(!state)fail('LOCAL_BASELINE_REQUIRED');
+    if(root.navigator.onLine===false){if(state.events.length)fail('LOCAL_WRITER_PENDING_OPERATIONS');fail('LOCAL_WRITER_RELEASE_REQUIRES_NETWORK');}
+    var wasPaused=paused;paused=false;
+    try{
+      if(!state.writer_released)await sync();
+      paused=true;if(timer){root.clearTimeout(timer);timer=null;}if(running)await running;
+      state=await store().update('writer-release',function(s){
+        if(s.events.length || s.migration.evidence.some(function(e){return e.state==='NEEDS_REVIEW';}))fail('LOCAL_WRITER_PENDING_OPERATIONS');
+        if(!s.writer_released && s.cloud.state!=='UP_TO_DATE')fail('LOCAL_WRITER_PENDING_OPERATIONS');
+        s.writer_released=true;s.cloud.state='AUTHORITY_CHANGED';
+      });
+      // Freeze durably before releasing remotely, including a lost release ACK.
+      hooks().publish(state);
+      var released=await request('/auth/local-writer',{method:'POST',headers:Object.assign(headers(),{'content-type':'application/json'}),body:JSON.stringify({release:true,grant_id:state.grant.grant_id})});
+      if(!released.response.ok || released.body.released!==true)fail(released.body.error||'LOCAL_WRITER_RELEASE_UNCONFIRMED');
+      return {released:true};
+    }catch(error){paused=wasPaused;schedule();throw error;}
   }
   async function refresh(){var state=await store().read();hooks().publish(state);schedule();return root.NuevoAmanecerCanonical.snapshot();}
   function schedule(){
@@ -160,5 +184,5 @@
   }
   root.addEventListener('online',schedule);
   root.addEventListener('na:v10-commit',function(){if(active && !migrating)refresh().catch(function(){});});
-  root.NuevoAmanecerCanonicalLocalFirst=Object.freeze({pause:async function(){paused=true;if(timer){root.clearTimeout(timer);timer=null;}if(running)await running;},resume:function(){paused=false;schedule();},migrating:function(){return migrating;},active:function(){return active;},boot:boot,enable:enable,commit:commit,refresh:refresh,sync:sync});
+  root.NuevoAmanecerCanonicalLocalFirst=Object.freeze({finishSession:finishSession,pause:async function(){paused=true;if(timer){root.clearTimeout(timer);timer=null;}if(running)await running;},resume:function(){paused=false;schedule();},migrating:function(){return migrating;},active:function(){return active;},boot:boot,enable:enable,commit:commit,refresh:refresh,sync:sync});
 })(globalThis);

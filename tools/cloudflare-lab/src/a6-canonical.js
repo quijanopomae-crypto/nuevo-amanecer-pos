@@ -481,7 +481,7 @@ async function canonicalRead(url,db,json,auth){
       counts.expenses=await expenseLedgerCount(db,before.active_promotion_id);
     }
     const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
-    if(!sameControl(before,after))return json({error:'authority_changed'},409);const writer=auth?await localWriter(db):null;return json({...readMeta(before),counts,...(auth?{write_authorized:auth.role==='writer' && (!writer || writer.principal_id===auth.principalId)}:{})});
+    if(!sameControl(before,after))return json({error:'authority_changed'},409);const writer=auth?await localWriter(db):null;return json({...readMeta(before),counts,...(auth?{write_authorized:auth.role==='writer' && (!writer || !writer.released_at && writer.principal_id===auth.principalId)}:{})});
   }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
   const sqlName=type.replaceAll('-','_');let rows;

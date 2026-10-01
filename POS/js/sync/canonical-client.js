@@ -1329,7 +1329,7 @@
   function publishLocal(state) {
     assertBinding(binding);
     if(state.grant.promotion_id!==binding.promotion_id || state.grant.authority_epoch!==binding.authority_epoch || state.projection.revision!==binding.revision)fail('LOCAL_WRITER_AUTHORITY_CHANGED');
-    data=copy(state.projection);var pending=new Set(state.events.map(function(e){return e.operation_id;}));data.sales.forEach(function(s){s.pending_sync=pending.has(s.operation_id);});ready=true;
+    data=copy(state.projection);if(state.writer_released || state.cloud.state==='AUTHORITY_CHANGED')data.write_authorized=false;var pending=new Set(state.events.map(function(e){return e.operation_id;}));data.sales.forEach(function(s){s.pending_sync=pending.has(s.operation_id);});ready=true;
     replicaState={source:'local',validation:'local',sync_state:state.cloud.state,pending:state.events.length,review_pending:state.migration.evidence.filter(function(e){return e.state==='NEEDS_REVIEW';}).length};notifyReplicaUpdate();return snapshot();
   }
   root.NuevoAmanecerCanonicalLocalHooks=Object.freeze({build:buildLocal,publish:publishLocal,readRemote:readRemote,

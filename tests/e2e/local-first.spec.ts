@@ -422,6 +422,63 @@ for (const queued of [false,true]) test(`reader downgrade closes local commits w
  }finally{cleanup.forEach(fn=>fn());}
 });
 
+test('handover preserves offline pending operations, then releases A and lets session B sell without another key',async({page,context})=>{
+ const cleanup:Array<()=>void>=[];try{
+  const {f}=await posHarness(page,cleanup);
+  await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonicalLocalFirst.pause();await w.NuevoAmanecerCanonical.openCash({session_id:'handover-cash',opening_cents:0});});
+  await context.setOffline(true);
+  const pending=await page.evaluate(async()=>{const w=window as any,s=w.NuevoAmanecerCanonicalLocalStore,before=JSON.stringify(await s.read());let error='';try{await w.NuevoAmanecerCanonicalLocalFirst.finishSession();}catch(e){error=(e as Error).message;}return {error,unchanged:before===JSON.stringify(await s.read())};});
+  expect(pending).toEqual({error:'LOCAL_WRITER_PENDING_OPERATIONS',unchanged:true});
+  const denied=await f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer second-token','x-activation-secret':'synthetic-owner-secret','content-type':'application/json'},body:'{}'});expect(denied.status).toBe(409);
+  await context.setOffline(false);
+  const released=await page.evaluate(async()=>{const w=window as any;w.NuevoAmanecerCanonicalLocalFirst.resume();await w.NuevoAmanecerCanonicalLocalFirst.finishSession();let error='';try{await w.NuevoAmanecerCanonical.openCash({session_id:'old-A',opening_cents:0});}catch(e){error=(e as Error).message;}return {error,pending:(await w.NuevoAmanecerCanonicalLocalStore.read()).events.length};});
+  expect(released.pending).toBe(0);expect(released.error).toBeTruthy();
+  const b=await page.evaluate(async()=>{const w=window as any,api=w.NuevoAmanecerCanonical,old=await w.NuevoAmanecerCanonicalLocalStore.read(),binding=w.NuevoAmanecerCanonicalLocalHooks.binding();await api.configure({...binding,token:'second-token'});await api.enableLocalFirst('synthetic-owner-secret');const receipt=await api.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]}));await api.syncLocal();const state=await w.NuevoAmanecerCanonicalLocalStore.read();return {receipt:receipt.status,writer:state.grant.writer_id,rotated:old.grant.grant_id!==state.grant.grant_id,stock:state.projection.products.find((p:any)=>p.product_id==='00001').current_stock_quantity,backup:await w.NuevoAmanecerCanonicalLocalStore.exportBackup()};});
+  expect(b).toMatchObject({receipt:'local_committed',writer:'session:second',rotated:true,stock:172});expect(JSON.stringify(b.backup)).not.toContain('synthetic-owner-secret');expect((await f.sql('SELECT COUNT(*) n FROM sales')).n).toBe(1);
+  const a=await f.fetch('http://localhost/read/canonical/status',{headers:{authorization:'Bearer writer-token'}});expect((await a.json()).write_authorized).toBe(false);
+  const returned=await page.evaluate(async()=>{const w=window as any,api=w.NuevoAmanecerCanonical;await w.NuevoAmanecerCanonicalLocalFirst.finishSession();await api.configure({...w.NuevoAmanecerCanonicalLocalHooks.binding(),token:'writer-token'});await api.enableLocalFirst('synthetic-owner-secret');await api.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-002',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]}));await api.syncLocal();return (await w.NuevoAmanecerCanonicalLocalStore.read()).grant.writer_id;});
+  expect(returned).toBe('session:first');expect((await f.sql('SELECT COUNT(*) n FROM sales')).n).toBe(2);
+ }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('release ACK loss keeps A durably read-only and retry needs no owner key',async({page})=>{
+ const cleanup:Array<()=>void>=[];try{
+  const {f}=await posHarness(page,cleanup);await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');});
+  let lost=true;
+  await page.route('**/auth/local-writer',async route=>{const req=route.request(),response=await f.fetch('http://localhost/auth/local-writer',{method:req.method(),headers:req.headers(),body:req.method()==='POST'?req.postData():undefined});if(lost && req.postData()?.includes('"release":true')){lost=false;await route.abort();}else await route.fulfill({status:response.status,body:await response.text(),contentType:'application/json'});});
+  const result=await page.evaluate(async()=>{const w=window as any;let releaseError='';try{await w.NuevoAmanecerCanonicalLocalFirst.finishSession();}catch(e){releaseError=(e as Error).message;}const before=await w.NuevoAmanecerCanonicalLocalStore.read();let commitError='';try{await w.NuevoAmanecerCanonical.openCash({session_id:'after-lost-release',opening_cents:0});}catch(e){commitError=(e as Error).message;}await w.NuevoAmanecerCanonicalLocalFirst.finishSession();return {releaseError,commitError,released:before.writer_released,pending:before.events.length};});
+  expect(result.released).toBe(true);expect(result.pending).toBe(0);expect(result.releaseError).toBeTruthy();expect(result.commitError).toBeTruthy();
+ }finally{cleanup.forEach(fn=>fn());}
+});
+
+test('session B on a separate browser activates after A releases and sells from its own IndexedDB',async({page,browser})=>{
+ const cleanup:Array<()=>void>=[],second=await browser.newContext({baseURL:test.info().project.use.baseURL});try{
+  const {f}=await posHarness(page,cleanup);
+  const binding=await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonical.openCash({session_id:'separate-cash',opening_cents:0});await w.NuevoAmanecerCanonicalLocalFirst.finishSession();return w.NuevoAmanecerCanonicalLocalHooks.binding();});
+  const b=await second.newPage();await second.setOffline(false);
+  await b.route('**/read/canonical/**',async route=>{const req=route.request(),u=new URL(req.url()),response=await f.fetch('http://localhost'+u.pathname+u.search,{headers:req.headers()});await route.fulfill({status:response.status,body:await response.text(),contentType:'application/json'});});
+  for(const path of ['auth/local-writer','commands/**'])await b.route('**/'+path,async route=>{const req=route.request(),u=new URL(req.url()),response=await f.fetch('http://localhost'+u.pathname,{method:req.method(),headers:req.headers(),body:req.method()==='POST'?req.postData():undefined});await route.fulfill({status:response.status,body:await response.text(),contentType:'application/json'});});
+  await harness(b);for(const name of ['adapters/canonical-ui-adapter','sync/canonical-client','sync/canonical-sale-intent','sync/canonical-local-first'])await b.addScriptTag({content:readFileSync(root+'/POS/js/'+name+'.js','utf8')});
+  const result=await b.evaluate(async binding=>{const w=window as any,api=w.NuevoAmanecerCanonical;await api.configure({...binding,token:'second-token'});await api.enableLocalFirst('synthetic-owner-secret');const r=await api.createSale(w.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]}));await api.syncLocal();return {status:r.status,writer:(await w.NuevoAmanecerCanonicalLocalStore.read()).grant.writer_id};},binding);
+  expect(result).toEqual({status:'local_committed',writer:'session:second'});expect((await f.sql('SELECT COUNT(*) n FROM sales')).n).toBe(1);
+  expect(await page.evaluate(async()=>(await (window as any).NuevoAmanecerCanonicalLocalStore.read()).writer_released)).toBe(true);
+ }finally{await second.close();cleanup.forEach(fn=>fn());}
+});
+
+test('real POS finishes and reactivates its sales session using simple buttons without clearing storage',async({page})=>{
+ const cleanup:Array<()=>void>=[];try{
+  await posHarness(page,cleanup);await page.evaluate(async()=>{await (window as any).NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');});
+  await page.goto('/index.html');await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');
+  await page.locator('#naLocalWork').click();await page.getByRole('button',{name:'Terminar sesión de ventas',exact:true}).click();
+  await expect(page.locator('dialog')).toHaveCount(0);await expect(page.locator('#naLocalWork')).toHaveText('Activar este equipo para ventas');
+  await page.reload();await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().source==='local');
+  expect(await page.evaluate(()=>(window as any).NuevoAmanecerCanonical.snapshot().write_authorized)).toBe(false);
+  await page.locator('#naLocalWork').click();await page.getByLabel('Autorización del propietario').fill('synthetic-owner-secret');await page.locator('dialog').getByRole('button',{name:'Activar este equipo para ventas',exact:true}).click();
+  await expect(page.locator('dialog [role="status"]')).toHaveText('Este equipo está activo para ventas.');
+  expect(await page.evaluate(async()=>(await (window as any).NuevoAmanecerCanonicalLocalStore.read()).writer_released)).toBe(false);
+ }finally{cleanup.forEach(fn=>fn());}
+});
+
 test('a local commit during a slow empty-FIFO cloud scan is automatically sent after the scan',async({page})=>{
  const cleanup:Array<()=>void>=[];try{
   await posHarness(page,cleanup);await page.evaluate(async()=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');await w.NuevoAmanecerCanonicalLocalFirst.pause();const original=w.NuevoAmanecerCanonicalLocalHooks;let release:any;const gate=new Promise(resolve=>release=resolve);w.__releaseScan=release;w.NuevoAmanecerCanonicalLocalHooks={...original,readRemote:async(...args:any[])=>{w.__scanStarted=true;await gate;return original.readRemote(...args);}};w.NuevoAmanecerCanonicalLocalFirst.resume();w.__scan=w.NuevoAmanecerCanonical.syncLocal();});

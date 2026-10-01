@@ -8,6 +8,7 @@ const turso=tursoSqlite(f.database); f.env.DB=turso.adapter;
 f.env.nuevo_amanecer_lab={prepare(){throw Error('D1 forbidden');}};
 const writer=await device(f,{token:'writer-token',deviceId:'first'});
 await writer.api.adjustInventory({product_id:'00001',movement_type:'ENTRADA',quantity:173,reason:'Synthetic stock'});
+await device(f,{token:'second-token',deviceId:'second'});
 process.on('message',async message=>{
   try {
     let value;

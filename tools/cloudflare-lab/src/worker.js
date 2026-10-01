@@ -263,7 +263,7 @@ async function authorizeSession(request, env, allowReadOnly = false) {
   if (session.session_status !== 'active' || session.principal_status !== 'active') return json({ error: 'session_revoked' }, 403);
   if (session.role !== 'writer' && !(allowReadOnly && session.role === 'read_only')) return json({ error: 'read_only_session' }, 403);
   const writer = await localWriter(db);
-  if (!allowReadOnly && writer && writer.principal_id !== session.device_id) return json({ error: 'read_only_session' }, 403);
+  if (!allowReadOnly && writer && (writer.released_at || writer.principal_id !== session.device_id)) return json({ error: 'read_only_session' }, 403);
   // Authorization is intentionally read-only. It must not create a write race
   // or interfere with the atomic business/canonical batch that follows.
   return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, role:session.role };

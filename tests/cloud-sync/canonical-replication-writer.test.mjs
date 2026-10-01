@@ -39,3 +39,31 @@ test('a granted principal downgraded to reader cannot revalidate local writer au
  assert.equal(response.status,200);
  assert.equal((await response.json()).writer,false);
 });
+
+test('owner can transfer a released writer session A to B without a device lock',async t=>{
+ const {f,first,second}=await fixture(t);
+ const post=(token,body={},secret='synthetic-owner-secret')=>f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json','x-activation-secret':secret},body:JSON.stringify(body)});
+ const a=await (await post('writer-token')).json();
+ assert.equal((await post('reader-token')).status,409);
+ const release=await post('writer-token',{release:true,grant_id:a.grant_id},'');
+ assert.equal(release.status,200);
+ const blocked=await f.fetch('http://localhost/read/canonical/status',{headers:{authorization:'Bearer writer-token'}});
+ assert.equal((await blocked.json()).write_authorized,false);
+ const bResponse=await post('reader-token');assert.equal(bResponse.status,201);
+ const b=await bResponse.json();assert.equal(b.writer_id,'session:second');assert.notEqual(b.grant_id,a.grant_id);
+ await first.api.refresh();assert.equal(first.api.snapshot().write_authorized,false);
+ await assert.rejects(first.api.openCash({session_id:'stale-A',opening_cents:0}));
+ await second.api.refresh();await second.api.openCash({session_id:'B-cash',opening_cents:0});
+ assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_cash_sessions').n,1);
+ assert.equal((await post('writer-token',{release:true,grant_id:a.grant_id},'')).status,409);
+ assert.equal(f.sql('SELECT principal_id FROM canonical_local_writer').principal_id,'session:second');
+});
+
+test('simultaneous activations after release still grant exactly one writer',async t=>{
+ const {f}=await fixture(t);
+ const post=(token,body={})=>f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json','x-activation-secret':'synthetic-owner-secret'},body:JSON.stringify(body)});
+ const a=await (await post('writer-token')).json();await post('writer-token',{release:true,grant_id:a.grant_id});
+ const responses=await Promise.all([post('writer-token'),post('reader-token')]);
+ assert.deepEqual(responses.map(r=>r.status).sort(),[201,409]);
+ assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_local_writer').n,1);
+});

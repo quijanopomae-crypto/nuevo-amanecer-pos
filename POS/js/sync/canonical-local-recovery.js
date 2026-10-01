@@ -19,13 +19,14 @@
   function mount(){
     var api=root.NuevoAmanecerCanonical,anchor=root.document.getElementById('saveStatus');
     if(!api || !api.enabled() || !anchor || root.document.getElementById('naLocalWork'))return;
-    var button=root.document.createElement('button');button.id='naLocalWork';button.type='button';button.textContent='Trabajo local';anchor.parentNode.appendChild(button);
+    var button=root.document.createElement('button');button.id='naLocalWork';button.type='button';button.textContent='Activar este equipo para ventas';anchor.parentNode.appendChild(button);
     button.addEventListener('click',async function(){
       var engine=root.NuevoAmanecerCanonicalLocalFirst,local=engine.active(),state=null,corrupt=false;
       try{state=await root.NuevoAmanecerCanonicalLocalStore.read();if(state)local=true;}catch(error){local=true;corrupt=true;}
+      var restoring=local && !(state && (state.writer_released || state.cloud.state==='AUTHORITY_CHANGED'));
       var dialog=root.document.createElement('dialog'),busy=false,backup=null;
       function node(tag,text){var e=root.document.createElement(tag);e.textContent=text||'';dialog.appendChild(e);return e;}
-      node('h2',local?'Datos de este dispositivo':'Activar trabajo local');
+      node('h2',restoring?'Datos de esta sesión':'Activar este equipo para ventas');
       node('p',local?'Tus operaciones siguen guardadas en este dispositivo. La nube se sincroniza en segundo plano.':'Este dispositivo guardará las operaciones sin conexión y las sincronizará en segundo plano. Se requiere autorización del propietario.');
       if(corrupt)node('p','No se pudo validar la copia local. Conserva un archivo de evidencia antes de restaurar desde la nube.');
       if(local){
@@ -41,26 +42,32 @@
       }
       var label=node('label','Autorización del propietario'),secret=root.document.createElement('input');secret.type='password';secret.autocomplete='off';secret.setAttribute('aria-label','Autorización del propietario');label.appendChild(secret);
       var consent=null;
-      if(local){var warning=node('label','Ya guardé el respaldo y autorizo reemplazar los datos de este dispositivo con la copia validada de la nube. ');consent=root.document.createElement('input');consent.type='checkbox';warning.prepend(consent);}
+      if(restoring){var warning=node('label','Ya guardé el respaldo y autorizo reemplazar los datos de este dispositivo con la copia validada de la nube. ');consent=root.document.createElement('input');consent.type='checkbox';warning.prepend(consent);}
       var cloudBehind=state && state.cloud.state==='CLOUD_RECOVERY_REQUIRED';
       if(cloudBehind)node('p','La nube contiene una copia anterior. Conserva el respaldo local y solicita la recuperación de Turso mediante el procedimiento oficial; restaurar este dispositivo desde esa copia está bloqueado.');
-      var submit=node('button',local?'Restaurar este dispositivo desde la nube':'Activar'),cancel=node('button',local?'Seguir trabajando':'Cancelar'),status=node('p');submit.disabled=!!cloudBehind;submit.type='button';cancel.type='button';status.setAttribute('role','status');
+      var submit=node('button',restoring?'Restaurar este dispositivo desde la nube':'Activar este equipo para ventas'),cancel=node('button',local?'Seguir trabajando':'Cancelar'),status=node('p');submit.disabled=!!cloudBehind;submit.type='button';cancel.type='button';status.setAttribute('role','status');
+      function message(error){var code=String(error.message||error);return code==='LOCAL_WRITER_PENDING_OPERATIONS'?'Hay operaciones pendientes. Sincronízalas antes de cambiar.':code==='writer_handover_required'?'Termina la sesión de ventas en el otro equipo antes de cambiar.':code==='LOCAL_WRITER_RELEASE_REQUIRES_NETWORK'?'Conecta este equipo para terminar la sesión de ventas.':'No se completó la operación: '+code;}
+      if(state && !state.writer_released && !corrupt){
+        var finish=node('button','Terminar sesión de ventas');finish.type='button';
+        finish.addEventListener('click',async function(){if(busy)return;busy=true;finish.disabled=true;submit.disabled=true;cancel.disabled=true;status.textContent='Sincronizando pendientes…';try{await engine.finishSession();secret.value='';closeAfterRelease();}catch(error){status.textContent=message(error);}finally{busy=false;finish.disabled=false;submit.disabled=!!cloudBehind;cancel.disabled=false;}});
+        function closeAfterRelease(){button.textContent='Activar este equipo para ventas';dialog.close();dialog.remove();}
+      }
       function close(){if(busy)return;dialog.close();dialog.remove();}
       cancel.addEventListener('click',close);dialog.addEventListener('cancel',function(event){if(busy)event.preventDefault();else dialog.remove();});
       submit.addEventListener('click',async function(){
         if(busy || cloudBehind)return;
-        if(local && (!backup || !consent.checked)){status.textContent='Guarda el respaldo y confirma el reemplazo antes de restaurar.';return;}
-        var ownerSecret=secret.value;secret.value='';busy=true;submit.disabled=true;cancel.disabled=true;status.textContent=local?'Validando y restaurando…':'Preparando trabajo local…';
+        if(restoring && (!backup || !consent.checked)){status.textContent='Guarda el respaldo y confirma el reemplazo antes de restaurar.';return;}
+        var ownerSecret=secret.value;secret.value='';busy=true;submit.disabled=true;cancel.disabled=true;status.textContent=restoring?'Validando y restaurando…':'Activando esta sesión…';
         try{
-          if(local)await restoreCloud({confirmed:true,ownerSecret:ownerSecret,backup:backup});else await api.enableLocalFirst(ownerSecret);
-          status.textContent=local?'Dispositivo restaurado desde la copia validada de la nube.':'Trabajo local activado. Las operaciones se guardan antes de sincronizar.';
+          if(restoring)await restoreCloud({confirmed:true,ownerSecret:ownerSecret,backup:backup});else await api.enableLocalFirst(ownerSecret);
+          status.textContent=restoring?'Dispositivo restaurado desde la copia validada de la nube.':'Este equipo está activo para ventas.';
           button.textContent='Datos locales';
-        }catch(error){status.textContent='No se completó la operación: '+String(error.message||error);}
+        }catch(error){status.textContent=message(error);}
         finally{ownerSecret='';busy=false;submit.disabled=false;cancel.disabled=false;}
       });
       root.document.body.appendChild(dialog);dialog.showModal();
     });
-    root.addEventListener('na:canonical-updated',function(){var state=api.sourceState();button.textContent=state.source==='local'?(state.review_pending?'Revisar pendientes':state.sync_state==='CLOUD_RECOVERY_REQUIRED'?'Revisar respaldo':'Datos locales'):'Trabajo local';});
+    root.addEventListener('na:canonical-updated',function(){var state=api.sourceState();button.textContent=state.sync_state==='AUTHORITY_CHANGED' || state.source!=='local'?'Activar este equipo para ventas':state.review_pending?'Revisar pendientes':state.sync_state==='CLOUD_RECOVERY_REQUIRED'?'Revisar respaldo':'Datos locales';});
   }
   if(root.document && typeof root.document.addEventListener==='function')root.document.addEventListener('DOMContentLoaded',mount);
 })(globalThis);
