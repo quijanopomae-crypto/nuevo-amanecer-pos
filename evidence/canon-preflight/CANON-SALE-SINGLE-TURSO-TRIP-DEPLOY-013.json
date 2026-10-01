@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SALE-SINGLE-TURSO-TRIP-DEPLOY-013",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "6347dfab2767e33695be4b6f80dd3db50ec09a1c",
+  "evidence": [
+    "PR #339 merge 6347dfab2767e33695be4b6f80dd3db50ec09a1c.",
+    "CANON Critical CI PASS.",
+    "LAB Canon Mirror CI PASS.",
+    "Prueba focal: venta simple en producción simulada cruza Worker→Turso exactamente una vez.",
+    "Pruebas de replay, sesión revocada y stock_revision obsoleto PASS."
+  ],
+  "rollback": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d con la misma configuración Turso."
+}
