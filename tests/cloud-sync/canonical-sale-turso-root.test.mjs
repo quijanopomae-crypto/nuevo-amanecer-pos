@@ -97,6 +97,41 @@ test('online sale critical path is one POST to receipt; history is visible befor
   assert.ok(calls.slice(1).every(row=>row.method==='GET'||row.method==='POST'),'any reconciliation work must occur only after the receipt POST');
 });
 
+test('post-sale staged refresh keeps previous history visible until the new complete snapshot arrives',async t=>{
+  let holdSales=false, releaseSales;
+  const salesGate=new Promise(resolve=>{releaseSales=resolve;});
+  const {tab,add}=await fixture(t,{onFetch:async(url,options,next)=>{
+    if(holdSales&&new URL(url).pathname==='/read/canonical/sales'){
+      await salesGate;
+      return next();
+    }
+  }});
+
+  const first=tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
+  await tab.api.createSale(first);
+  await tab.api.refresh();
+  assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001']);
+
+  let bootstrapResolve;
+  const bootstrapSeen=new Promise(resolve=>{bootstrapResolve=resolve;});
+  tab.context.addEventListener('na:canonical-updated',()=>{
+    if(tab.api.sourceState().validation==='validating') bootstrapResolve();
+  });
+  holdSales=true;
+  add();
+  await vm.runInContext('confirmarVenta()',tab.context);
+  await bootstrapSeen;
+
+  assert.equal(tab.api.sourceState().validation,'validating');
+  assert.deepEqual(Array.from(tab.api.legacySnapshot().sales.map(v=>v.id)),['V-001'],'bootstrap must retain the last complete same-authority history');
+  assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002'],'receipt must append instantly without hiding prior history');
+
+  releaseSales();
+  await tab.api.refresh();
+  assert.equal(tab.api.sourceState().validation,'current');
+  assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002']);
+});
+
 test('Turso sale validation uses four protocol trips cold and three warm including auth and atomic commit',async t=>{
   const {f,tab,turso}=await fixture(t);
   const make=saleId=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({
