@@ -267,7 +267,7 @@ test('durable batch receipt paints Pagado immediately and reconciliation later r
   assert.match(confirmed,/✓ Pagado/);
   assert.match(confirmed,/labBatchAwaitingReconcile = true/);
   assert.match(confirmed,/currentSummary\.pending - completedCents \/ 100/);
-  assert.match(source,/if \(labBatchAwaitingReconcile && labClientScreenState/);
+  assert.match(source,/labBatchAwaitingReconcile \|\| labPaymentReceiptOverlays\.size/);
   assert.match(source,/labBatchAwaitingReconcile = false;\s*labRenderRoute\('replace'\)/);
   assert.match(css,/\.na-v2-batch-row-paid/);
   assert.match(css,/\.na-v2-batch-pay\.na-v2-batch-confirmed/);
