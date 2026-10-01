@@ -1,0 +1,37 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-TURSO-SALE-LATENCY-008",
+  "environment": "LABORATORIO",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "objective": "Reducir la latencia server-side de sale.create compartido por CANON/Turso agrupando lecturas remotas independientes antes del commit, sin cambiar esquema, receipts, autoridad, stock, caja, créditos ni reglas comerciales.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-TURSO-SALE-LATENCY-008.json",
+    "laboratorio/pos-lab/preflight/CANON-TURSO-SALE-LATENCY-008.json",
+    "tasks/CANON-TURSO-SALE-LATENCY-008.json",
+    "evidence/canon-preflight/CANON-TURSO-SALE-LATENCY-008.json",
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "infra/database/migrations/**",
+    "tools/cloudflare-prod/**",
+    "ops/**",
+    ".github/workflows/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "inventory-integrity",
+    "cash-integrity",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-TURSO-SALE-LATENCY-008.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
