@@ -104,7 +104,25 @@ cajRender=function(){
   if(cajEstado.abierta&&!cajEstado.cerrada&&cajEstado.fechaApertura&&cajEstado.fechaApertura!==obtenerHoy())toast('⚠️ Caja de otro día, ciérrala primero','error');
   const container=document.getElementById('cajContent');
   if(!container)return;
-  const movements=_naCajaMovsSesion(),allMovements=cajMovs;
+  const canonicalEnabled=!!(globalThis.NuevoAmanecerCanonical&&typeof NuevoAmanecerCanonical.enabled==='function'&&NuevoAmanecerCanonical.enabled());
+  let canonicalState=null;
+  if(canonicalEnabled&&typeof NuevoAmanecerCanonical.sourceState==='function'){try{canonicalState=NuevoAmanecerCanonical.sourceState();}catch(_){}}
+  if(canonicalState&&canonicalState.validation==='validating'&&!cajEstado.abierta&&!cajEstado.cerrada&&!cajEstado.sessionId){
+    container.replaceChildren();
+    const outer=_naSecAppend(container,'div');
+    outer.style.padding='13px';
+    const banner=_naSecAppend(outer,'div','banner-cerrada-cj'),copy=_naSecAppend(banner,'div');
+    _naSecAppend(copy,'div','bn-title','⏳ Cargando caja CANON…');
+    _naSecAppend(copy,'div','','Validando apertura y movimientos').style.cssText='font-size:12px;opacity:.7;margin-top:3px';
+    return;
+  }
+  let movements=_naCajaMovsSesion();
+  const allMovements=cajMovs;
+  if(canonicalEnabled&&cajEstado.sessionId&&globalThis.NuevoAmanecerCanonicalSaleView&&typeof NuevoAmanecerCanonicalSaleView.cashOverlays==='function'){
+    const seen=new Set(movements.map(movement=>String(movement&&((movement.operationId??movement.operation_id)??movement.id)||'')));
+    const overlays=NuevoAmanecerCanonicalSaleView.cashOverlays(cajEstado.sessionId).filter(movement=>!seen.has(String(movement&&((movement.operationId??movement.operation_id)??movement.id)||'')));
+    movements=movements.concat(overlays);
+  }
   let totals;
   cajMovs=movements;
   try{totals=cajTotales();}finally{cajMovs=allMovements;}
