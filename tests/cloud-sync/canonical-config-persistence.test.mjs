@@ -44,8 +44,13 @@ test('CANON no longer treats configuration as a commercial legacy module', () =>
   assert.equal(context.isModuleLocked('configuracion'), false);
   assert.equal(context.isModuleLocked('productos'), true);
   assert.equal(context.isModuleLocked('clientes'), true);
+  assert.equal(context.isModuleLocked('clientes', { canonicalCustomerUi: true }), false);
   assert.equal(context.isModuleLocked('ventas'), true);
   assert.equal(context.isModuleLocked('ventas', { canonicalSaleCapture: true }), false);
+
+  values.set('na_lock_clientes', 'true');
+  assert.equal(context.isModuleLocked('clientes', { canonicalCustomerUi: true }), true, 'explicit client lock must still win');
+  values.set('na_lock_clientes', 'false');
 
   values.set('na_lock_configuracion', 'true');
   assert.equal(context.isModuleLocked('configuracion'), true, 'explicit configuration lock must still win');
