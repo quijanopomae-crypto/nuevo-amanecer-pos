@@ -14,7 +14,7 @@ Autorización: solicitud del propietario; contrato `docs/tasks/CANON-TURSO-SALE-
 
 ## Recuperación selectiva de los dos intents de prueba
 
-Los envelopes antiguos con un sale_id repetido quedan BLOCKED_DUPLICATE_SALE_ID antes de POST. No se borran automáticamente ni se reinterpretan por nombre.
+Los envelopes antiguos con un sale_id repetido quedan BLOCKED_DUPLICATE_SALE_ID antes de POST. Al arrancar, únicamente el par identificado por el propietario (exactamente dos V-001 de efectivo por 200 y 300 centavos) se archiva automáticamente si una lectura autenticada current demuestra que ninguna operación está confirmada y no hay journal PENDING/ACK desconocido. Se archivan ambas entradas con readback antes de quitar sus operation_ids del outbox; otras cantidades, IDs, operaciones confirmadas o incertidumbre no se reparan automáticamente. No se reinterpretan productos por nombre. Si falla la lectura autenticada, la reparación conserva ambas entradas y usa la misma política de tres reintentos diferidos; nunca envía ninguna de esas ventas para probar la reparación.
 
 En el navegador que conserva esos datos, inspeccionar `NuevoAmanecerCanonicalSaleOutbox.snapshot().intents` y llamar, para cada operation_id seleccionado por el propietario:
 
@@ -22,7 +22,7 @@ En el navegador que conserva esos datos, inspeccionar `NuevoAmanecerCanonicalSal
 await NuevoAmanecerCanonicalSaleOutbox.rejectInvalidTestIntent(operationId)
 ```
 
-La función solo admite V-001 de efectivo por 200/300 centavos y exige réplica remota current, ausencia de journal PENDING, ausencia de venta/receipt confirmado de esa operación y evidencia de producto ausente o sale_id duplicado. Conserva copia readback-verificada en `na_canonical_sale_outbox_v1_rejected_tests` antes de quitar exclusivamente la entrada seleccionada. La evidencia archivada del par permite rechazar la segunda entrada después de la primera. Otras entradas, datos confirmados y storage ajeno quedan intactos. No se accedió al localStorage privado del navegador del propietario desde esta tarea.
+La función solo admite V-001 de efectivo por 200/300 centavos y exige réplica remota current, ausencia de journal PENDING, ausencia de venta/receipt confirmado de esa operación y evidencia de producto ausente o sale_id duplicado. Conserva copia readback-verificada en `na_canonical_sale_outbox_v1_rejected_tests` antes de quitar exclusivamente la entrada seleccionada. La evidencia archivada del par permite rechazar la segunda entrada después de la primera. Otras entradas, datos confirmados y storage ajeno quedan intactos. No se accedió al localStorage privado del navegador del propietario desde esta tarea. La reparación estrecha se ejecutará en ese dispositivo al cargar el build nuevo; su ejecución efectiva debe comprobarse antes de la primera venta real.
 
 ## Regresiones y validación
 

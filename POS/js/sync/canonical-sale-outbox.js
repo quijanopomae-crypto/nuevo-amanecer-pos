@@ -116,6 +116,12 @@
   var retryTimer = null;
   var retryCount = 0;
   var resumeOutbox = null;
+  var resuming = false;
+  function scheduleResume() {
+    if (!started || retryTimer !== null || root.navigator.onLine === false || retryCount >= 3 || typeof root.setTimeout !== 'function') return;
+    retryCount += 1;
+    retryTimer = root.setTimeout(function () { retryTimer = null; return resumeOutbox(); }, 1000 * Math.pow(2, retryCount - 1));
+  }
   async function sync() {
     if (syncing) return result('WAITING', 0, snapshot().intents.length, 'BUSY');
     syncing = (async function () {
@@ -144,10 +150,16 @@
   function start() {
     if (started) return;
     started = true;
-    function resume() {
-      if (syncing || root.navigator.onLine === false) return;
+    async function resume() {
+      if (resuming || syncing || root.navigator.onLine === false) return;
       try { if (!snapshot().intents.length) return; } catch (_) { return; }
-      return sync().catch(function (error) { if (root.console) root.console.error('[Venta CANON]', error.code || error.message); });
+      resuming = true;
+      try { await repairKnownTestPair(); return await sync(); }
+      catch (error) {
+        scheduleResume();
+        if (root.console) root.console.error('[Venta CANON]', error.code || error.message);
+      }
+      finally { resuming = false; }
     }
     resumeOutbox = resume;
     if (typeof root.addEventListener === 'function') {
@@ -184,6 +196,47 @@
       return clone(intent);
     });
   }
+  function knownTestPair(current) {
+    var pair = current.intents.filter(function (intent) { return intent.sale_id === 'V-001'; });
+    return pair.length === 2 && pair.every(function (intent) { return intent.payment_method === 'efectivo'; }) &&
+      pair.map(function (intent) { return intent.total_cents; }).sort(function (a, b) { return a - b; }).join(',') === '200,300'
+      ? pair : null;
+  }
+  function archiveTests(current, intents, reason) {
+    var key = KEY + '_rejected_tests';
+    var archive = JSON.parse(root.localStorage.getItem(key) || '[]');
+    if (!Array.isArray(archive)) fail('TEST_ARCHIVE_INVALID');
+    intents.forEach(function (intent) {
+      if (!archive.some(function (entry) { return entry.intent && entry.intent.operation_id === intent.operation_id; }))
+        archive.push({ intent: clone(intent), reason: reason, rejected_at: new Date().toISOString() });
+    });
+    var raw = JSON.stringify(archive);
+    root.localStorage.setItem(key, raw);
+    if (root.localStorage.getItem(key) !== raw) fail('TEST_ARCHIVE_NOT_DURABLE');
+    var selected = new Set(intents.map(function (intent) { return intent.operation_id; }));
+    current.last_sale_number = Math.max(current.last_sale_number || 0, 1);
+    current.intents = current.intents.filter(function (intent) { return !selected.has(intent.operation_id); });
+    write(current);
+  }
+  async function repairKnownTestPair() {
+    if (!knownTestPair(parseStored())) return;
+    return withLock(async function () {
+      var canonical = root.NuevoAmanecerCanonical;
+      if (!canonical || typeof canonical.sourceState !== 'function' || typeof canonical.refresh !== 'function') return;
+      await canonical.refresh();
+      var current = parseStored(), pair = knownTestPair(current);
+      if (!pair || canonical.sourceState().validation !== 'current' || canonical.pendingSnapshot()) return;
+      var base = canonical.snapshot(), receipt = canonical.receiptSnapshot();
+      if (pair.some(function (intent) {
+        return matching(receipt, intent) || (base.sales || []).some(function (sale) { return sale.operation_id === intent.operation_id; });
+      })) return;
+      // The owner identified exactly this duplicate test pair and authorized its
+      // loss. Archive both only with current authenticated proof of no commit.
+      archiveTests(current, pair, 'DUPLICATE_SALE_ID');
+      var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+      if (runtime) runtime.notify('Dos ventas de prueba inválidas se retiraron de las pendientes.', 'info');
+    });
+  }
   async function rejectInvalidTestIntent(operationId) {
     return withLock(async function () {
       var canonical = root.NuevoAmanecerCanonical;
@@ -209,15 +262,7 @@
         (base.sales || []).some(function (sale) { return sale.sale_id === intent.sale_id; }) ||
         archive.some(function (entry) { return entry.reason === 'DUPLICATE_SALE_ID' && entry.intent && entry.intent.sale_id === intent.sale_id && entry.intent.operation_id !== operationId; });
       if (!missing && !duplicate) fail('TEST_INTENT_NOT_PROVEN_INVALID');
-      if (!archive.some(function (entry) { return entry.intent && entry.intent.operation_id === operationId; })) {
-        archive.push({ intent: clone(intent), reason: missing ? 'PRODUCT_NOT_FOUND' : 'DUPLICATE_SALE_ID', rejected_at: new Date().toISOString() });
-      }
-      var raw = JSON.stringify(archive);
-      root.localStorage.setItem(key, raw);
-      if (root.localStorage.getItem(key) !== raw) fail('TEST_ARCHIVE_NOT_DURABLE');
-      current.last_sale_number = Math.max(current.last_sale_number || 0, 1);
-      current.intents = current.intents.filter(function (item) { return item.operation_id !== operationId; });
-      write(current);
+      archiveTests(current, [intent], missing ? 'PRODUCT_NOT_FOUND' : 'DUPLICATE_SALE_ID');
       if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
       return { status: 'REJECTED_TEST_INTENT', operation_id: operationId };
     });
