@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-LINE-OWNER-FAST-001",
+  "environment": "CANON",
+  "base_ref": "feature/v1.3-mobile-cloud",
+  "objective": "Simplificar y acelerar el ajuste manual de línea de crédito en CANON para uso directo del propietario: eliminar el PIN y el motivo administrativo de la interacción, conservar la auditoría backend con motivo automático, y reflejar una política confirmada de inmediato sin bloquear la interfaz esperando un refresh CANON completo.",
+  "owner_authorization": "El propietario indicó el 2026-10-01 que el POS es para su uso personal, pidió quitar el PIN y Motivo administrativo del ajuste de línea, aplicar el cambio directamente y corregir la demora aproximada de 2 minutos antes de visualizar la nueva línea.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-LINE-OWNER-FAST-001.json",
+    "POS/index.html",
+    "POS/js/legacy-inline/inline-04.js",
+    "POS/js/sync/canonical-customer-credit-policy-bridge.js",
+    "tests/cloud-sync/canonical-customer-credit-policy.test.mjs"
+  ],
+  "forbidden_files": [
+    "infra/database/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/**",
+    "POS/js/sync/canonical-client.js",
+    "ops/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "reads": [
+    "cliente CANON actualmente cargado",
+    "revisión actual de política de crédito",
+    "deuda y evaluación vigente",
+    "receipt confirmado de customer.credit-policy.set"
+  ],
+  "writes": [
+    "política de crédito CANON mediante customer.credit-policy.set",
+    "proyección local de la política ya confirmada para refresco visual inmediato"
+  ],
+  "invariants": [
+    "El PIN global del sistema no se elimina; solo se retira el PIN específico exigido al ajustar la línea de crédito.",
+    "El usuario no debe escribir un motivo administrativo para ajustar o restaurar una línea.",
+    "El backend conserva reason y administrator_name válidos mediante valores automáticos; no se elimina auditoría ni se cambia el schema.",
+    "No se actualiza visualmente una línea antes de recibir confirmación válida del comando CANON.",
+    "CAS expected_policy_revision, idempotencia, journal PENDING y recuperación de operaciones pendientes permanecen activos.",
+    "CANON continúa siendo autoridad de persistencia; nunca se usa saveAllData como fallback en CANON.",
+    "Deuda, pagos, saldos y reglas de disponibilidad no se modifican.",
+    "El refresh completo posterior al receipt se ejecuta como reconciliación en segundo plano y no bloquea la respuesta visible al usuario."
+  ],
+  "acceptance_criteria": [
+    "Abrir Ajustar línea de crédito no solicita PIN.",
+    "El modal no muestra ni exige Motivo administrativo.",
+    "Guardar una línea manual no abre una segunda confirmación por superar ganancia real; conserva una advertencia informativa.",
+    "El comando CANON sigue enviando un reason válido generado automáticamente.",
+    "Tras receipt confirmado, la línea y disponible se reflejan inmediatamente en la ficha/evaluación sin esperar el refresh CANON completo.",
+    "La reconciliación remota posterior no crea una segunda operación.",
+    "Las pruebas de política de crédito, CAS, ACK perdido y pending sale siguen pasando."
+  ],
+  "rollback": "Revertir el PR; no existen cambios de schema, migración ni datos por el parche de interfaz/bridge.",
+  "deploy_authorized": false
+}
