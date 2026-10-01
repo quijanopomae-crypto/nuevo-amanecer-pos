@@ -1,7 +1,7 @@
 {
   "schema": "nuevo-amanecer.canon-preflight/v1",
   "task_id": "CANON-RUNTIME-ORDER-008",
-  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "base_ref": "9aad78d09a5d64a3fc75176d73644e5d8aa080a1",
   "phase": "BEFORE_WRITE",
   "status": "CANON_PREFLIGHT_PASS",
   "owner_authorized": true,
