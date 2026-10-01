@@ -1,0 +1,56 @@
+{
+  "schema": "nuevo-amanecer.canon-task/v1",
+  "task_id": "CANON-CAJA-INSTANT-STATE-001",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "zone": "CANON",
+  "owner_authorized": true,
+  "objective": "Cuando CANON muestre estado verde, Caja debe tener un snapshot operacional autoritativo/validado; no debe mostrar 'Caja sin abrir' por un bootstrap vacío. Las ventas confirmadas deben aparecer en Caja inmediatamente por receipt, sin esperar el refresh completo.",
+  "current_behavior": [
+    "El evento na:canonical-connected se emite tras validar /status, antes de cargar cash-sessions/cash-movements.",
+    "La UI pone el indicador verde durante validation='validating'.",
+    "El bootstrap vacía cashSessions/cashMovements/sales y Caja interpreta ese placeholder como 'Caja sin abrir'.",
+    "Un sale receipt actualiza Ventas inmediatamente, pero Caja espera la reconciliación remota para ver el movimiento."
+  ],
+  "expected_behavior": [
+    "Verde significa validation='current' con snapshot operacional válido.",
+    "Durante carga sin snapshot operativo se muestra estado de carga, no 'Caja sin abrir'.",
+    "Una réplica local con promotion/epoch/revision/financial_revision/digest coincidentes con /status se reutiliza inmediatamente como current mientras continúa la reconciliación.",
+    "Un receipt sale.create confirmado proyecta un movimiento de Caja efímero por operation_id y se elimina al llegar la réplica autoritativa."
+  ],
+  "allowed_files": [
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-view.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "POS/js/legacy-inline/inline-11.js",
+    "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs",
+    "tests/cloud-sync/canonical-sale-view.test.mjs",
+    "docs/tasks/CANON-CAJA-INSTANT-STATE-001.json",
+    "evidence/canon-preflight/CANON-CAJA-INSTANT-STATE-001.json"
+  ],
+  "forbidden": [
+    "laboratorio/**",
+    "infra/database/migrations/**",
+    "tools/cloudflare-lab/**",
+    "datos comerciales reales",
+    "secrets",
+    "deploy directo",
+    "cambios de reglas de negocio",
+    "mutaciones financieras optimistas"
+  ],
+  "invariants": [
+    "La autoridad de caja sigue siendo CANON/Turso.",
+    "Venta, stock y caja se escriben exactamente una vez en backend.",
+    "El overlay visual solo existe después de receipt durable confirmado.",
+    "operation_id deduplica overlays y la réplica autoritativa los reemplaza.",
+    "No se habilitan escrituras por cache no verificada."
+  ],
+  "tests": [
+    "Estado verde solo con validation current; status verificado en carga usa estado intermedio.",
+    "Cache exacta verificada no se sustituye por bootstrap financiero vacío.",
+    "Cold start sin cache no representa falso 'Caja sin abrir' mientras valida.",
+    "Receipt de venta genera movimiento Caja inmediato e idempotente y desaparece al reconciliar.",
+    "Regresiones de canonical sale view y bootstrap."
+  ],
+  "risk": "CRITICAL",
+  "rollback": "Revertir el PR/commit de este hotfix y redeploy Hosted POS mediante workflow oficial. No requiere rollback de datos porque no cambia escrituras ni esquema."
+}
