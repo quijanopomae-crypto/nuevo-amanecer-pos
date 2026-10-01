@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-POLICY-AUTO-RESOLVE-PENDING-SALE-001",
+  "environment": "CANON",
+  "base_ref": "5d2c880e7cd9df48cc755603b4bbca17b78c8a46",
+  "objective": "Eliminar el bloqueo manual de Ajuste de línea de crédito cuando existe una sale.create PENDING recuperable: el bridge debe reintentar automáticamente la misma operación idempotente y continuar con customer.credit-policy.set solo después de confirmarla, sin borrar datos ni saltarse validaciones.",
+  "owner_authorization": "El propietario mostró el error 'Hay otra operación CANON pendiente (sale.create). Resuélvela antes de cambiar la línea' usando Turso y pidió simplificar el flujo sin perder información.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-POLICY-AUTO-RESOLVE-PENDING-SALE-001.json",
+    "evidence/canon-preflight/CANON-CREDIT-POLICY-AUTO-RESOLVE-PENDING-SALE-001.json",
+    "POS/js/sync/canonical-customer-credit-policy-bridge.js",
+    "tests/cloud-sync/canonical-customer-credit-policy.test.mjs",
+    "docs/CANON_TURSO_SALE_ROOT.md",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-outbox.js"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "inventory-integrity",
+    "cash-integrity",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "Nunca se borra ni sobrescribe una sale.create PENDING para permitir el cambio de línea.",
+    "Si existe una sale.create PENDING sin rechazo definitivo, se reintenta exactamente el mismo operation_id mediante retryPending().",
+    "customer.credit-policy.set solo se crea después de que el journal anterior deje de estar PENDING.",
+    "Un ACK perdido que ya fue commit en Turso se recupera por idempotencia y no duplica venta, stock ni caja.",
+    "Si la operación previa sigue incierta o fue rechazada, el cambio de línea permanece bloqueado y se muestra el motivo real.",
+    "El manejo existente de un customer.credit-policy.set PENDING propio se conserva sin cambios.",
+    "No hay cambio de schema, Worker, Turso, reglas comerciales ni persistencia legacy."
+  ],
+  "rollback": "Revertir el PR y desplegar el Hosted POS anterior; no hay cambios de schema ni datos."
+}
