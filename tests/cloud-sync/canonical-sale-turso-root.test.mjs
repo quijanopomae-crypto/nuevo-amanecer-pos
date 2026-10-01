@@ -154,7 +154,7 @@ test('second sale reaches durable receipt while an older full refresh is still b
   assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,2);
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,2);
   assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,171);
-  assert.equal(vm.runInContext('ventas[0].id',tab.context),'V-002');
+  assert.equal(vm.runInContext("ventas.some(v=>v.id==='V-002'&&v.estado==='completada')",tab.context),true);
 
   releaseRead();
   const refreshOutcome=await oldRefresh;
