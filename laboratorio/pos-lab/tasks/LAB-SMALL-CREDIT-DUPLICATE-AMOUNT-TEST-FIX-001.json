@@ -1,0 +1,38 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-SMALL-CREDIT-DUPLICATE-AMOUNT-TEST-FIX-001",
+  "environment": "LABORATORIO",
+  "base_ref": "25ca79216d4d173f2474ecfddc4e52f3e1d5092c",
+  "objective": "Corregir exclusivamente la aserción frágil del test 27 que valida la eliminación de montos duplicados. No modificar runtime, CSS, lógica financiera, storage ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-SMALL-CREDIT-DUPLICATE-AMOUNT-TEST-FIX-001.json",
+    "laboratorio/pos-lab/preflight/LAB-SMALL-CREDIT-DUPLICATE-AMOUNT-TEST-FIX-001.json",
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/sections/**",
+    "laboratorio/pos-lab/js/**",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-SMALL-CREDIT-DUPLICATE-AMOUNT-TEST-FIX-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
