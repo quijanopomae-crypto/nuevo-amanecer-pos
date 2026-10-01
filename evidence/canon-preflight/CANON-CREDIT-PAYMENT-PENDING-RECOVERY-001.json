@@ -19,7 +19,8 @@
       "tools/cloudflare-lab/src/a6-financial.js",
       "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
       "tests/cloud-sync/canonical-client.test.mjs",
-      "AGENTS_Nuevo_Amanecer.md"
+      "AGENTS_Nuevo_Amanecer.md",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs"
     ],
     "WRITES": [
       "Añadir un método mínimo en canonical-client para descartar solo pagos/batches definitivamente rechazados y verificados como seguros.",
@@ -59,7 +60,8 @@
       "Pending payment.batch rechazado definitivo se descarta y el nuevo batch continúa.",
       "Pending sin last_error se reintenta con el mismo operation_id, refresca y NO crea el nuevo batch en el mismo click.",
       "Pending de otro comando sigue bloqueando.",
-      "CANON Critical CI + E2E Smoke."
+      "CANON Critical CI + E2E Smoke.",
+      "E2E: tras rechazo 409, un nuevo toque crea una NUEVA intención (operation_id distinto) y no reutiliza ni duplica el rechazo anterior."
     ]
   }
 }
