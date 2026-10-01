@@ -136,7 +136,7 @@ async function inspect(rows) {
 
   const docs = rows.map(x => x.document);
   const placeholders = docs.map(() => '?').join(',');
-  const sql = \`
+  const sql = `
     WITH identity AS (
       SELECT customer_id,trim(document) AS document,'IMPORT' AS customer_provenance
       FROM customers WHERE promotion_id=?1
@@ -172,8 +172,8 @@ async function inspect(rows) {
       COALESCE(a.current_cents,0) AS current_cents
     FROM identity i
     LEFT JOIN agg a ON a.customer_id=i.customer_id
-    WHERE i.document IN (\${placeholders})
-    ORDER BY i.document,i.customer_id\`;
+    WHERE i.document IN (${placeholders})
+    ORDER BY i.document,i.customer_id`;
 
   const found = await cfQuery(sql,[control.active_promotion_id,...docs]);
   const byDoc = new Map();
