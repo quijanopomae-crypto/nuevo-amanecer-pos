@@ -2,7 +2,7 @@
   "schema_version": 1,
   "task_id": "CANON-RUNTIME-ORDER-008",
   "environment": "CANON",
-  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "base_ref": "9aad78d09a5d64a3fc75176d73644e5d8aa080a1",
   "objective": "Imponer un orden mínimo y determinista al arranque/venta CANON: mientras la réplica se valida el estado es SINCRONIZANDO y no se aceptan ventas nuevas; el verde y la venta se habilitan solo con réplica current+ACTIVE; el outbox pendiente espera ese mismo gate antes de reanudarse.",
   "owner_authorization": "El owner identificó competencia entre carga, outbox y venta, pidió simplificar a CARGANDO/LISTO/VENDIENDO/PENDIENTE y autorizó implementarlo.",
   "allowed_files": [
