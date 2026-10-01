@@ -121,6 +121,264 @@ export function validateCanonicalSale(body) {
   return { value };
 }
 
+
+export function canUseCanonicalSaleFastPath(body, env) {
+  const turso = String(env?.DB_PROVIDER || '').trim().toLowerCase() === 'turso' || typeof env?.DB?._pipeline === 'function';
+  if (!turso || String(env?.RUNTIME_ENVIRONMENT || '').trim().toLowerCase() !== 'production') return false;
+  const checked = validateCanonicalSale(body);
+  if (checked.error) return false;
+  const value = checked.value;
+  return value.payment_method !== 'credito' &&
+    value.items.every(item => item.generic_line === undefined);
+}
+
+function fastProductSql() {
+  return `SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,provenance FROM (
+    SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance,0 AS source_rank
+      FROM products WHERE promotion_id=?1 AND product_id=?2
+    UNION ALL
+    SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'LIVE' AS provenance,1 AS source_rank
+      FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
+  ) ORDER BY source_rank LIMIT 1`;
+}
+
+async function diagnoseFastSaleFailure(db, body, auth, payloadHash, json) {
+  const reads = [
+    db.prepare(`SELECT c.*,s.session_id,s.status AS session_status,d.device_id,d.role AS device_role,
+      d.status AS device_status,d.credential_hash
+      FROM canonical_control c
+      LEFT JOIN auth_sessions s ON s.token_hash=?1
+      LEFT JOIN devices d ON d.device_id='session:'||s.session_id
+      WHERE c.id=1`).bind(auth.credentialHash),
+    db.prepare('SELECT sale_id,payload_hash FROM sales WHERE operation_id=?1').bind(body.operation_id),
+    db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id),
+    db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id),
+  ];
+  const productIndexes = body.items.map(item => {
+    const index = reads.length;
+    reads.push(db.prepare(fastProductSql()).bind(body.promotion_id,item.product_id));
+    return index;
+  });
+  let customerIndex = -1;
+  if (body.customer_id) {
+    customerIndex = reads.length;
+    reads.push(db.prepare(`SELECT customer_id FROM (
+      SELECT customer_id,0 AS source_rank FROM customers WHERE promotion_id=?1 AND customer_id=?2
+      UNION ALL
+      SELECT customer_id,1 AS source_rank FROM canonical_customer_registry
+        WHERE promotion_id=?1 AND customer_id=?2 AND provenance='LIVE'
+    ) ORDER BY source_rank LIMIT 1`).bind(body.promotion_id,body.customer_id));
+  }
+
+  const rows = (await db.batch(reads)).map(firstBatchRow);
+  const control = rows[0];
+  if (!control?.session_id || !control?.device_id || control.credential_hash !== auth.credentialHash) {
+    return json({error:'unauthorized'},401);
+  }
+  if (control.session_status !== 'active' || control.device_status !== 'active') {
+    return json({error:'session_revoked'},403);
+  }
+  if (control.device_role !== 'writer') return json({error:'read_only_session'},403);
+  if (control.mode !== 'ACTIVE') return json({error:'canonical_not_active'},409);
+  if (control.active_promotion_id !== body.promotion_id || Number(control.authority_epoch) !== body.authority_epoch ||
+      Number(control.revision) !== body.expected_control_revision || control.minimum_client_contract !== body.client_contract) {
+    return json({error:'stale_authority'},409);
+  }
+
+  const existing = rows[1];
+  if (existing) {
+    return existing.payload_hash === payloadHash
+      ? json({status:'already_processed',operation_id:body.operation_id,sale_id:existing.sale_id,idempotent:true})
+      : json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  }
+  if (rows[2] || rows[3]) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+
+  for (let index=0; index<body.items.length; index++) {
+    const item=body.items[index], product=rows[productIndexes[index]];
+    if (!product || ![0,1].includes(product.tracks_inventory) ||
+        Number(product.stock_revision) !== item.expected_stock_revision ||
+        (product.tracks_inventory===1 && (product.current_stock_quantity===null || Number(product.current_stock_quantity)<item.quantity))) {
+      return json({error:'stale_stock',product_id:item.product_id},409);
+    }
+  }
+  if (customerIndex>=0 && !rows[customerIndex]) return json({error:'customer_not_found'},409);
+  return json({error:'canonical_sale_conflict',operation_id:body.operation_id},409);
+}
+
+async function createCanonicalSaleFast(body, env, auth, json) {
+  const db = getDatabase(env);
+  const payloadHash = await sha256Hex(stableStringify(body));
+  const token = crypto.randomUUID();
+  const atomic = [];
+  const assertion = statement => atomic.push(statement);
+  const checked = (statement,label) => {
+    atomic.push(statement);
+    atomic.push(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok)
+      VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)`).bind(`${token}:changed:${label}`));
+  };
+
+  // One guard does four jobs: session auth, writer role, canonical authority and
+  // cross-ledger operation freshness. No pre-read leaves the Worker.
+  checked(db.prepare(`INSERT INTO canonical_write_guards
+    (operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash)
+    SELECT ?1,?2,?3,?4,?5,?6,d.device_id,?7
+    FROM canonical_control c
+    JOIN auth_sessions s ON s.token_hash=?7
+    JOIN devices d ON d.device_id='session:'||s.session_id
+    WHERE c.id=1 AND c.mode='ACTIVE' AND c.active_promotion_id=?3
+      AND c.authority_epoch=?4 AND c.revision=?5 AND c.minimum_client_contract=?6
+      AND s.status='active' AND d.role='writer' AND d.status='active' AND d.credential_hash=?7
+      AND NOT EXISTS(SELECT 1 FROM sales WHERE operation_id=?1)
+      AND NOT EXISTS(SELECT 1 FROM canonical_financial_operations WHERE operation_id=?1)
+      AND NOT EXISTS(SELECT 1 FROM canonical_product_operations WHERE operation_id=?1)
+    LIMIT 1`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,
+      body.expected_control_revision,body.client_contract,auth.credentialHash),'guard');
+
+  checked(db.prepare(`INSERT INTO sales
+    (sale_id,operation_id,payload_hash,commit_token,device_id,payment_method,total_cents,payment_reference,created_at)
+    SELECT ?1,?2,?3,?4,g.principal_id,?5,?6,?7,?8
+    FROM canonical_write_guards g WHERE g.operation_id=?2 AND g.commit_token=?4`)
+    .bind(body.sale_id,body.operation_id,payloadHash,token,body.payment_method,
+      body.total_cents,body.payment.reference,body.created_at),'sale');
+
+  checked(db.prepare(`INSERT INTO canonical_sale_context
+    (sale_id,operation_id,promotion_id,authority_epoch,control_revision,customer_id,client_contract,created_at)
+    SELECT ?1,?2,?3,?4,?5,?6,?7,?8
+    WHERE EXISTS(SELECT 1 FROM sales WHERE operation_id=?2 AND commit_token=?9)`)
+    .bind(body.sale_id,body.operation_id,body.promotion_id,body.authority_epoch,
+      body.expected_control_revision,body.customer_id||null,body.client_contract,body.created_at,token),'context');
+
+  if (body.session_id) {
+    assertion(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok)
+      SELECT ?1,CASE WHEN EXISTS(
+        SELECT 1 FROM canonical_cash_state
+        WHERE promotion_id=?2 AND session_id=?3 AND status='OPEN'
+      ) THEN 1 ELSE 0 END`).bind(`${token}:cash-session`,body.promotion_id,body.session_id));
+  }
+
+  if (body.customer_id) {
+    assertion(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok)
+      SELECT ?1,CASE WHEN
+        EXISTS(SELECT 1 FROM customers WHERE promotion_id=?2 AND customer_id=?3)
+        OR EXISTS(SELECT 1 FROM canonical_customer_registry
+          WHERE promotion_id=?2 AND customer_id=?3 AND provenance='LIVE')
+      THEN 1 ELSE 0 END`).bind(`${token}:customer`,body.promotion_id,body.customer_id));
+  }
+
+  for (let index=0; index<body.items.length; index++) {
+    const item=body.items[index], line=index+1, movementId=`${body.operation_id}:inventory:${line}`;
+
+    assertion(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok)
+      SELECT ?1,CASE WHEN
+        EXISTS(SELECT 1 FROM products
+          WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4
+            AND tracks_inventory IN (0,1)
+            AND (tracks_inventory=0 OR current_stock_quantity>=?5))
+        OR (
+          NOT EXISTS(SELECT 1 FROM products WHERE promotion_id=?2 AND product_id=?3)
+          AND EXISTS(SELECT 1 FROM canonical_live_products
+            WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4
+              AND tracks_inventory IN (0,1)
+              AND (tracks_inventory=0 OR current_stock_quantity>=?5))
+        )
+      THEN 1 ELSE 0 END`).bind(`${token}:stock-before:${line}`,body.promotion_id,
+        item.product_id,item.expected_stock_revision,item.quantity));
+
+    checked(db.prepare(`INSERT INTO sale_items
+      (sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8
+      WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?3)`)
+      .bind(body.sale_id,line,body.operation_id,item.product_id,item.quantity,
+        item.unit_price_cents,item.line_total_cents,body.created_at),`item:${line}`);
+
+    // IMPORT wins if both catalogs ever contain the same id.
+    atomic.push(db.prepare(`UPDATE products
+      SET current_stock_quantity=current_stock_quantity-?1,stock_revision=stock_revision+1
+      WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4
+        AND tracks_inventory=1 AND current_stock_quantity>=?1`)
+      .bind(item.quantity,body.promotion_id,item.product_id,item.expected_stock_revision));
+    atomic.push(db.prepare(`INSERT INTO inventory_movements
+      (movement_id,operation_id,sale_id,line_number,product_id,quantity,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE changes()=1`)
+      .bind(movementId,body.operation_id,body.sale_id,line,item.product_id,-item.quantity,body.created_at));
+    atomic.push(db.prepare(`INSERT INTO canonical_inventory_effects
+      (movement_id,operation_id,promotion_id,product_id,stock_revision_before,stock_revision_after,quantity)
+      SELECT ?1,?2,?3,?4,?5,?6,?7
+      WHERE EXISTS(SELECT 1 FROM inventory_movements WHERE movement_id=?1)
+        AND EXISTS(SELECT 1 FROM products WHERE promotion_id=?3 AND product_id=?4)`)
+      .bind(movementId,body.operation_id,body.promotion_id,item.product_id,
+        item.expected_stock_revision,item.expected_stock_revision+1,-item.quantity));
+
+    atomic.push(db.prepare(`UPDATE canonical_live_products
+      SET current_stock_quantity=current_stock_quantity-?1,stock_revision=stock_revision+1
+      WHERE promotion_id=?2 AND product_id=?3 AND stock_revision=?4
+        AND tracks_inventory=1 AND current_stock_quantity>=?1
+        AND NOT EXISTS(SELECT 1 FROM products WHERE promotion_id=?2 AND product_id=?3)`)
+      .bind(item.quantity,body.promotion_id,item.product_id,item.expected_stock_revision));
+    atomic.push(db.prepare(`INSERT INTO inventory_movements
+      (movement_id,operation_id,sale_id,line_number,product_id,quantity,created_at)
+      SELECT ?1,?2,?3,?4,?5,?6,?7 WHERE changes()=1`)
+      .bind(movementId,body.operation_id,body.sale_id,line,item.product_id,-item.quantity,body.created_at));
+    atomic.push(db.prepare(`INSERT INTO canonical_live_inventory_effects
+      (movement_id,operation_id,promotion_id,product_id,stock_revision_before,stock_revision_after,quantity)
+      SELECT ?1,?2,?3,?4,?5,?6,?7
+      WHERE EXISTS(SELECT 1 FROM inventory_movements WHERE movement_id=?1)
+        AND NOT EXISTS(SELECT 1 FROM products WHERE promotion_id=?3 AND product_id=?4)
+        AND EXISTS(SELECT 1 FROM canonical_live_products WHERE promotion_id=?3 AND product_id=?4)`)
+      .bind(movementId,body.operation_id,body.promotion_id,item.product_id,
+        item.expected_stock_revision,item.expected_stock_revision+1,-item.quantity));
+
+    assertion(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok)
+      SELECT ?1,CASE WHEN
+        EXISTS(SELECT 1 FROM products p
+          WHERE p.promotion_id=?2 AND p.product_id=?3 AND (
+            (p.tracks_inventory=0 AND p.stock_revision=?4)
+            OR (p.tracks_inventory=1 AND p.stock_revision=?4+1
+              AND EXISTS(SELECT 1 FROM inventory_movements m WHERE m.movement_id=?5)
+              AND EXISTS(SELECT 1 FROM canonical_inventory_effects e WHERE e.movement_id=?5))
+          ))
+        OR (
+          NOT EXISTS(SELECT 1 FROM products WHERE promotion_id=?2 AND product_id=?3)
+          AND EXISTS(SELECT 1 FROM canonical_live_products p
+            WHERE p.promotion_id=?2 AND p.product_id=?3 AND (
+              (p.tracks_inventory=0 AND p.stock_revision=?4)
+              OR (p.tracks_inventory=1 AND p.stock_revision=?4+1
+                AND EXISTS(SELECT 1 FROM inventory_movements m WHERE m.movement_id=?5)
+                AND EXISTS(SELECT 1 FROM canonical_live_inventory_effects e WHERE e.movement_id=?5))
+            ))
+        )
+      THEN 1 ELSE 0 END`).bind(`${token}:stock-after:${line}`,body.promotion_id,
+        item.product_id,item.expected_stock_revision,movementId));
+  }
+
+  checked(db.prepare(`INSERT INTO cash_movements
+    (movement_id,operation_id,sale_id,payment_method,amount_cents,cash_cents,digital_cents,credit_cents,digital_method,reference,created_at)
+    SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11
+    WHERE EXISTS(SELECT 1 FROM canonical_write_guards WHERE operation_id=?2)`)
+    .bind(`${body.operation_id}:cash`,body.operation_id,body.sale_id,body.payment_method,
+      body.total_cents,body.payment.cash_cents,body.payment.digital_cents,body.payment.credit_cents,
+      body.payment.digital_method,body.payment.reference,body.created_at),'cash');
+
+  checked(db.prepare(`UPDATE canonical_control
+    SET first_live_operation_id=COALESCE(first_live_operation_id,?1)
+    WHERE id=1 AND mode='ACTIVE' AND active_promotion_id=?2 AND authority_epoch=?3 AND revision=?4
+      AND EXISTS(SELECT 1 FROM sales WHERE operation_id=?1 AND commit_token=?5)`)
+    .bind(body.operation_id,body.promotion_id,body.authority_epoch,body.expected_control_revision,token),'control');
+
+  checked(db.prepare('DELETE FROM canonical_write_guards WHERE operation_id=?1 AND commit_token=?2')
+    .bind(body.operation_id,token),'guard-cleanup');
+
+  atomic.push(db.prepare('DELETE FROM canonical_assertions WHERE assertion_id LIKE ?1').bind(`${token}:%`));
+
+  try {
+    await db.batch(atomic);
+  } catch {
+    return diagnoseFastSaleFailure(db,body,auth,payloadHash,json);
+  }
+  return json({status:'created',operation_id:body.operation_id,sale_id:body.sale_id,
+    promotion_id:body.promotion_id,authority_epoch:body.authority_epoch,idempotent:false},201);
+}
+
 export async function createCanonicalCreditAccount(request, env, auth, json) {
   let body; try { body = await request.json(); } catch { return json({ error:'invalid_json' },400); }
   if (!isObject(body) || !validId(body.operation_id) || !validId(body.promotion_id) || body.client_contract !== CANONICAL_CLIENT_CONTRACT ||
@@ -176,6 +434,10 @@ export async function createCanonicalSale(request, env, auth, json) {
   const checked = validateCanonicalSale(body);
   if (checked.error) return json({ error: checked.error }, 400);
   body = checked.value;
+  if (auth?.deferredSaleAuth && canUseCanonicalSaleFastPath(body,env)) {
+    return createCanonicalSaleFast(body,env,auth,json);
+  }
+  if (auth?.deferredSaleAuth) return json({error:'unauthorized'},401);
   const principalId = auth.principalId;
   const db = getDatabase(env);
   // Authorization and the authority contract apply even to a durable replay.

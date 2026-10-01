@@ -132,6 +132,75 @@ test('post-sale staged refresh keeps previous history visible until the new comp
   assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002']);
 });
 
+test('production simple sale commits auth, authority, stock and cash in one Turso pipeline',async t=>{
+  const {f,tab,turso}=await fixture(t);
+  f.env.RUNTIME_ENVIRONMENT='production';
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({
+    sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]
+  });
+
+  const start=turso.calls.length;
+  const receipt=await tab.api.createSale(intent);
+  const calls=turso.calls.slice(start);
+  assert.equal(receipt.status,'created');
+  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['batch'],
+    'simple production sale must cross Worker→Turso only once');
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_write_guards').n,0);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_assertions').n,0);
+});
+
+test('production one-trip sale replay returns the same durable receipt without double stock or cash',async t=>{
+  const {f,tab}=await fixture(t);
+  f.env.RUNTIME_ENVIRONMENT='production';
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({
+    sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]
+  });
+  await tab.api.createSale(intent);
+  const post=tab.fetchLog.find(row=>new URL(row.url).pathname==='/commands/sale.create');
+  assert.ok(post);
+  const replay=await f.fetch(post.url,{
+    method:'POST',
+    headers:{'content-type':'application/json',authorization:'Bearer sales-session'},
+    body:post.body
+  });
+  assert.equal(replay.status,200);
+  const body=await replay.json();
+  assert.equal(body.status,'already_processed');
+  assert.equal(body.sale_id,'V-001');
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+});
+
+test('production one-trip sale rejects a revoked browser session before any business mutation',async t=>{
+  const {f,tab}=await fixture(t);
+  f.env.RUNTIME_ENVIRONMENT='production';
+  f.exec("UPDATE auth_sessions SET status='revoked' WHERE session_id='sales-device'");
+  const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({
+    sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]
+  });
+  await assert.rejects(()=>tab.api.createSale(intent),/CANONICAL_FINANCIAL_REJECTED_403/);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,0);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,0);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,173);
+});
+
+test('production one-trip sale preserves stock CAS when another tab holds a stale revision',async t=>{
+  const {f,tab}=await fixture(t);
+  f.env.RUNTIME_ENVIRONMENT='production';
+  const stale=await device(f,{token:'stale-session',deviceId:'stale-device'});
+  const make=saleId=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({
+    sale_id:saleId,payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]
+  });
+
+  await tab.api.createSale(make('V-001'));
+  await assert.rejects(()=>stale.api.createSale(make('V-002')),/CANONICAL_FINANCIAL_REJECTED_409/);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+});
+
 test('Turso sale validation uses four protocol trips cold and three warm including auth and atomic commit',async t=>{
   const {f,tab,turso}=await fixture(t);
   const make=saleId=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({
