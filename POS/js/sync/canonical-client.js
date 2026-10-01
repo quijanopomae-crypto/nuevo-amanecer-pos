@@ -177,6 +177,7 @@
       revision: replica.revision, financial_revision: replica.financial_revision }, validation: provisional ? 'validating' : 'current' };
   }
   function notifyReplicaUpdate() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-updated', { detail: sourceState() })); } catch (_) {} }
+  function notifyConnectionVerified() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-connected')); } catch (_) {} }
   function readFetch(url, options) {
     return new Promise(function (resolve, reject) {
       var settled = false;
@@ -222,6 +223,7 @@
       if (statusMeta && statusMeta.mode === 'ACTIVE' && !uint(statusMeta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
       var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision, digests: {} };
       if (binding && !changed) assertBinding(expected);
+      notifyConnectionVerified();
       var expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : null]);
       async function readEntry(entry) {
         var route = entry[0], name = entry[1], cursor = null, seen = new Set(), items = [], digest = null;
