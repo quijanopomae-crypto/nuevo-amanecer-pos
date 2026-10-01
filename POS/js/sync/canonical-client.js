@@ -223,8 +223,20 @@
       if (statusMeta && statusMeta.mode === 'ACTIVE' && !uint(statusMeta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
       var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision, digests: {} };
       if (binding && !changed) assertBinding(expected);
-      notifyConnectionVerified();
       var expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : null]);
+      var cache = await localReplica();
+      var cacheMatchesStatus = !!(cache &&
+        cache.promotion_id === expected.promotion_id &&
+        cache.authority_epoch === expected.authority_epoch &&
+        cache.revision === expected.revision &&
+        (cache.financial_revision || 0) === (statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : 0) &&
+        (!statusDigest || cache.canonical_digest === statusDigest));
+      if (cacheMatchesStatus) {
+        publishReplica(cache, 'cache');
+        replicaState.validation = 'current';
+        notifyReplicaUpdate();
+        notifyConnectionVerified();
+      }
       async function readEntry(entry) {
         var route = entry[0], name = entry[1], cursor = null, seen = new Set(), items = [], digest = null;
         do {
@@ -259,12 +271,12 @@
       next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
       if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
+      var bootstrapReplica = replicaOf(next);
       if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, bootstrapReplica)) {
-        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
+        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); notifyConnectionVerified(); return snapshot();
       }
-      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
+      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate(); notifyConnectionVerified();
 
       if (statusMeta.mode === 'ACTIVE') {
         applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
