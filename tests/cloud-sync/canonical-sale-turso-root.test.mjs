@@ -97,6 +97,70 @@ test('online sale critical path is one POST to receipt; history is visible befor
   assert.ok(calls.slice(1).every(row=>row.method==='GET'||row.method==='POST'),'any reconciliation work must occur only after the receipt POST');
 });
 
+test('three consecutive online sales use receipts and stock overlay without full refresh between POSTs',async t=>{
+  const {f,tab,add}=await fixture(t);
+  const start=tab.fetchLog.length;
+  for(let i=0;i<3;i+=1){
+    add();
+    const result=await vm.runInContext('confirmarVenta()',tab.context);
+    assert.equal(result.status,'CONFIRMED');
+  }
+  const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname,body:row.body}));
+  const posts=calls.filter(row=>row.method==='POST'&&row.path==='/commands/sale.create');
+  assert.equal(posts.length,3);
+  assert.equal(calls.filter(row=>row.method==='GET'&&row.path.startsWith('/read/canonical/')).length,0,'no canonical scan may sit between consecutive sale POSTs');
+  const payloads=posts.map(row=>JSON.parse(row.body));
+  assert.deepEqual(payloads.map(row=>row.sale_id),['V-001','V-002','V-003']);
+  assert.equal(payloads[1].items[0].expected_stock_revision,payloads[0].items[0].expected_stock_revision+1);
+  assert.equal(payloads[2].items[0].expected_stock_revision,payloads[1].items[0].expected_stock_revision+1);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,170);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,3);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,3);
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  assert.equal(vm.runInContext('ventas.length',tab.context),3);
+  assert.deepEqual(JSON.parse(vm.runInContext('JSON.stringify(ventas.map(v=>v.id))',tab.context)),['V-001','V-002','V-003']);
+});
+
+test('second sale reaches durable receipt while an older full refresh is still blocked', { timeout: 3000 }, async t=>{
+  let blockReads=false, releaseRead, signalBlocked;
+  const readGate=new Promise(resolve=>{releaseRead=resolve;});
+  const blocked=new Promise(resolve=>{signalBlocked=resolve;});
+  t.after(()=>{ if(releaseRead) releaseRead(); });
+  const {f,tab,add}=await fixture(t,{onFetch:async(url,options,next)=>{
+    const path=new URL(url).pathname;
+    if(blockReads&&path.startsWith('/read/canonical/')){
+      signalBlocked();
+      await readGate;
+    }
+    return next();
+  }});
+  add();
+  assert.equal((await vm.runInContext('confirmarVenta()',tab.context)).status,'CONFIRMED');
+
+  blockReads=true;
+  const oldRefresh=tab.api.refresh().catch(error=>error);
+  await blocked;
+
+  let resolveSecondReceipt;
+  const secondReceipt=new Promise(resolve=>{resolveSecondReceipt=resolve;});
+  tab.context.addEventListener('na:canonical-sale-receipt',event=>{
+    if(event.detail&&event.detail.payload&&event.detail.payload.sale_id==='V-002') resolveSecondReceipt(event.detail);
+  });
+  add();
+  const secondSale=vm.runInContext('confirmarVenta()',tab.context);
+  const receipt=await secondReceipt;
+  assert.equal(receipt.receipt.sale_id,'V-002','second receipt must arrive before the blocked refresh is released');
+  assert.equal((await secondSale).status,'CONFIRMED');
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,2);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,2);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,171);
+  assert.equal(vm.runInContext("ventas.some(v=>v.id==='V-002'&&v.estado==='completada')",tab.context),true);
+
+  releaseRead();
+  const refreshOutcome=await oldRefresh;
+  assert.match(String(refreshOutcome&&refreshOutcome.message||refreshOutcome),/CANONICAL_REFRESH_SUPERSEDED/,'older refresh must not overwrite newer receipt effects');
+});
+
 test('pending V-001 reserves sale id; identical next cart is a new V-002 with its own UUID',async t=>{
   const {tab,add}=await fixture(t);
   tab.context.navigator.onLine=false; add();

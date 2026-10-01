@@ -1,0 +1,44 @@
+{
+  "schema": "nuevo-amanecer.canon-task/v1",
+  "task_id": "CANON-SALE-ZERO-WAIT-V3-001",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "zone": "CANON",
+  "owner_authorized": true,
+  "objective": "Eliminar la espera de ~1 minuto observada en ventas CANON y drenar de forma segura ventas pendientes reales sin depender de un refresh canónico completo entre ventas. Preservar explícitamente las recuperaciones #316-#320 ya fusionadas.",
+  "candidate_status": "CANDIDATO_A_CANON",
+  "allowed_files": [
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-sale-outbox.test.mjs",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "docs/CANON_TURSO_SALE_ROOT.md",
+    "docs/tasks/CANON-SALE-ZERO-WAIT-V2-001.json",
+    "evidence/canon-preflight/CANON-SALE-ZERO-WAIT-V2-001.json"
+  ],
+  "forbidden": [
+    "laboratorio/**",
+    "infra/database/migrations/**",
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-prod/**",
+    "datos comerciales reales",
+    "schema Turso",
+    "D1 remoto",
+    "venta comercial real automática",
+    "deploy automático en este PR"
+  ],
+  "risk": "CRITICAL",
+  "invariants": [
+    "El Worker/Turso sigue siendo la única autoridad que confirma la venta.",
+    "No se muestra COMPLETADA antes del receipt durable.",
+    "operation_id y payload de retry se preservan.",
+    "Stock se descuenta una sola vez y stock_revision avanza exactamente una vez por venta confirmada.",
+    "Una réplica cacheada solo habilita fast-path de venta si proviene de un snapshot ACTIVE compatible con el binding; el Worker revalida autoridad y stock atómicamente.",
+    "Otros comandos financieros continúan usando ready/refresh normal; el fast-path no los habilita.",
+    "Un refresh concurrente iniciado antes de un receipt no puede sobrescribir efectos locales confirmados más nuevos.",
+    "Colisiones antiguas de sale_id solo se reparan con prueba remota de rechazo y ausencia de commit por operation_id.",
+    "No se eliminan ventas pendientes reales.",
+    "Preservar comportamiento de recuperación de operaciones pendientes incorporado en #317-#320."
+  ],
+  "rollback": "Revertir el PR; no hay migraciones ni cambios de backend/datos. El Hosted POS previo sigue siendo válido."
+}
