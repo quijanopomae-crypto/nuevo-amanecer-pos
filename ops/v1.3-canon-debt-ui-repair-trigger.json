@@ -1,0 +1,11 @@
+{
+  "format": "nuevo-amanecer-v1.3-canon-debt-ui-repair-v1",
+  "authorized": true,
+  "authorized_by": "owner",
+  "requested_action": "verify-authoritative-debt-readmodel-and-refresh-hosted-canon-shell",
+  "expected_total_cents": 2368495,
+  "expected_positive_customers": 29,
+  "source": "owner-confirmed CasaMarket screenshots reconciled in CANON",
+  "reason": "CANON UI shows S/0 although Turso reconciliation finished PASS; verify the production credit read model first, then refresh the hosted shell without rewriting debt.",
+  "requested_at_utc": "2026-10-01T23:05:00Z"
+}
