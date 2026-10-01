@@ -1,0 +1,141 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-LOCAL-FIRST-REPLICATION-001",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "sha256": "51f14d0c3b4d8ce016e7fb4f97ab4e40aa663d05ce37044050ab7c845aede535"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "sha256": "82567a5fcb0983e8483e82151ed6efb7128e12899119643f58b57abc3260d3d2"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "sha256": "02da27c92cb12f5472618d49e427929d717b48c0f26a281074c6d3a08da36b45"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "sha256": "ba45d159ccf5cf4eda107df998409af07a657240a35730a89de17d6ebea16ade"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "sha256": "e12717f1dabae860bfe22c6df90595c374498357cbd9270ac1d335b0b7a87dc2"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "sha256": "daa542ec20631f75896c7fb88df16769a95ab5529a0a9c3599eba816cbf848c4"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "README.md",
+      "docs/V1.3_A4_OFFLINE_OUTBOX.md",
+      "V10 inline-17",
+      "canonical client/bridges",
+      "Worker command/recovery contracts",
+      "related bootstrap/sale/payment/cash tasks",
+      "PDF complete"
+    ],
+    "WRITES": [
+      "POS/index.html",
+      "POS/sw.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "POS/js/legacy-inline/inline-02.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "POS/js/legacy-inline/inline-17.js",
+      "README.md",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-local-store.js",
+      "POS/js/sync/canonical-local-reducer.js",
+      "POS/js/sync/canonical-local-first.js",
+      "POS/js/sync/canonical-local-recovery.js",
+      "POS/js/sync/canonical-sale-integration.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "POS/js/sync/canonical-cash-bridge.js",
+      "POS/js/sync/canonical-expense-bridge.js",
+      "POS/js/sync/canonical-product-bridge.js",
+      "POS/js/sync/canonical-customer-bridge.js",
+      "POS/js/sync/canonical-customer-credit-policy-bridge.js",
+      "POS/js/sync/canonical-inventory-bridge.js",
+      "tools/cloudflare-lab/src/worker.js",
+      "tools/cloudflare-lab/src/a6-canonical.js",
+      "tools/cloudflare-lab/src/a6-replication.js",
+      "tools/cloudflare-lab/src/a6-recovery.js",
+      "tools/cloudflare-lab/src/a6-commerce.js",
+      "tools/cloudflare-lab/src/a6-financial.js",
+      "tools/cloudflare-lab/src/a6-expenses.js",
+      "tools/cloudflare-lab/src/a6-products.js",
+      "tools/cloudflare-lab/src/a6-customers.js",
+      "tools/cloudflare-lab/src/a6-inventory.js",
+      "tools/cloudflare-lab/src/a6-customer-credit-policy.js",
+      "infra/database/migrations/0019_canonical_local_first.sql",
+      "tests/cloud-sync/canonical-local-first*.mjs",
+      "tests/cloud-sync/canonical-replication*.mjs",
+      "tests/cloud-sync/canonical-recovery*.mjs",
+      "tests/cloud-sync/canon-browser-harness.mjs",
+      "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs",
+      "docs/LOCAL_FIRST*.md",
+      "docs/superpowers/plans/2026-10-01-local-first.md",
+      "tasks/CANON-LOCAL-FIRST-REPLICATION-001.json",
+      "evidence/canon-preflight/CANON-LOCAL-FIRST-REPLICATION-001.json"
+    ],
+    "DOM_AFFECTED": [
+      "commercial modals",
+      "history/KPIs",
+      "replica indicator",
+      "owner recovery modal"
+    ],
+    "STATE_AFFECTED": [
+      "local operational projection",
+      "writer authority",
+      "per-resource revisions",
+      "replication cursor"
+    ],
+    "STORAGE_AFFECTED": [
+      "reuse NuevoAmanecerPOS V10 state/operations/checkpoints",
+      "preserve V9/canonical cache/old intents",
+      "additive Turso replica metadata only; no remote execution"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "atomic sale-stock-cash-credit",
+      "stable operation UUID and immutable exact retry",
+      "cents and physical units",
+      "causal cash open-movements-close",
+      "single writer per promotion/epoch",
+      "no local success before durable transaction",
+      "no auto cloud restore",
+      "no secrets in commercial backup"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "sale\u2194inventory\u2194cash\u2194credit",
+      "payments\u2194cash\u2194references",
+      "bootstrap\u2194storage\u2194adapter\u2194legacy lexical bindings",
+      "ACK\u2194recovery\u2194writer"
+    ],
+    "ROOT_CAUSE": [
+      "offline assertAction closure",
+      "one global pending journal",
+      "remote receipt/refresh in UI path",
+      "remote stale cash session",
+      "V10 dormant/version1 legacy opener",
+      "ACTIVE recovery and single writer contracts missing"
+    ],
+    "TEST_PLAN": [
+      "red-green IndexedDB real tests",
+      "Turso adapter synthetic transactions",
+      "full relevant regressions",
+      "requests/order and held-network metrics",
+      "security/recovery tests"
+    ],
+    "ROLLBACK": "Revert code only after pending ledger is reconciled/exported; retain baseline, ledger, checkpoints. Never clear storage or migrate back to D1."
+  }
+}
