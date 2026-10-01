@@ -80,6 +80,15 @@
     }
   }
 
+  function persistVisiblePage(target) {
+    if (!target || !target.classList || !target.classList.contains('active')) return;
+    if (typeof root.saveAppState !== 'function') return;
+    try {
+      var pending = root.saveAppState();
+      if (pending && typeof pending.catch === 'function') pending.catch(function () {});
+    } catch (_) {}
+  }
+
   function scheduleClientScrollMotion(pageId, target) {
     if (pageId !== 'pageClientes') return;
 
@@ -141,6 +150,9 @@
         document.body.classList.add('module-mobile-scroll');
       }
 
+      // Persist only after the destination has painted so storage work never
+      // competes with the visual page switch on mobile.
+      persistVisiblePage(target);
       scheduleRenderer(pageId);
       scheduleClientScrollMotion(pageId, target);
     });
