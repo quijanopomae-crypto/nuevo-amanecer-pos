@@ -243,3 +243,68 @@ test('legacy duplicate test intents are blocked before POST and can be selective
   assert.equal(queue.snapshot().intents.length,0);
   assert.equal(JSON.parse(tab.localStorage.getItem(queue.KEY+'_rejected_tests')).length,2);
 });
+
+test('startup archives only the owner-identified duplicate V-001 test pair without sending a sale',async t=>{
+  const {tab,f}=await fixture(t);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const make=amount=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:amount}]});
+  const first=make(2),second=make(3);
+  tab.localStorage.setItem(queue.KEY,JSON.stringify({version:1,intents:[first,second]}));
+  tab.localStorage.setItem('unrelated','preserved');
+  const before=tab.fetchLog.length;
+  await queue.start();
+  assert.equal(queue.snapshot().intents.length,0);
+  assert.equal(queue.snapshot().last_sale_number,1);
+  assert.equal(tab.fetchLog.slice(before).some(row=>row.method==='POST'),false);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,0);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,0);
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,173);
+  assert.equal(tab.localStorage.getItem('unrelated'),'preserved');
+  assert.equal(JSON.parse(tab.localStorage.getItem(queue.KEY+'_rejected_tests')).length,2);
+});
+
+test('startup never archives a different duplicate amount pair or an unknown ACK',async t=>{
+  const {tab}=await fixture(t);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const make=amount=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:amount}]});
+  tab.localStorage.setItem(queue.KEY,JSON.stringify({version:1,intents:[make(2),make(4)]}));
+  await queue.start();
+  assert.equal(queue.snapshot().intents.length,2);
+  assert.equal(tab.localStorage.getItem(queue.KEY+'_rejected_tests'),null);
+});
+
+test('startup preserves the exact test pair when a committed sale has an unknown ACK',async t=>{
+  let lose=true;
+  const {tab,f}=await fixture(t,{onFetch:async(url,options,next)=>{
+    if(new URL(url).pathname==='/commands/sale.create'&&lose){lose=false;await next();throw Error('lost ACK');}
+  }});
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const make=amount=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:amount}]});
+  const first=make(2),second=make(3);
+  tab.localStorage.setItem(queue.KEY,JSON.stringify({version:1,intents:[first,second]}));
+  await assert.rejects(tab.api.createSale(first),/CANONICAL_FINANCIAL_PENDING/);
+  const before=JSON.stringify(queue.snapshot().intents);
+  await queue.start();
+  assert.equal(JSON.stringify(queue.snapshot().intents),before);
+  assert.equal(tab.localStorage.getItem(queue.KEY+'_rejected_tests'),null);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
+});
+
+test('startup repair retries a transient authenticated read failure without sending either test intent',async t=>{
+  let failNext=false;
+  const {tab,f}=await fixture(t,{onFetch:async url=>{
+    if(failNext&&new URL(url).pathname==='/read/canonical/status'){failNext=false;throw Error('transient read');}
+  }});
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  const make=amount=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:amount}]});
+  tab.localStorage.setItem(queue.KEY,JSON.stringify({version:1,intents:[make(2),make(3)]}));
+  const timers=[],realSet=tab.context.setTimeout,realClear=tab.context.clearTimeout;
+  tab.context.setTimeout=(fn,ms)=>ms<8000?(timers.push(fn),timers.length):realSet(fn,ms);
+  tab.context.clearTimeout=id=>{if(typeof id!=='number')realClear(id);};
+  failNext=true;await queue.start();
+  assert.equal(queue.snapshot().intents.length,2);
+  assert.equal(timers.length,1);
+  await timers.shift()();
+  assert.equal(queue.snapshot().intents.length,0);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,0);
+});
