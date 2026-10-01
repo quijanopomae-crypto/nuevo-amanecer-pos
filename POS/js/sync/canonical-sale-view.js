@@ -108,6 +108,31 @@
       items:items, canonical:true, canonicalReadOnly:true, canonicalReceiptProjection:true, source:'CANONICAL_RECEIPT'
     };
   }
+  function confirmedCashMovement(entry, sessionId) {
+    var payload = entry && entry.payload, payment = payload && payload.payment;
+    if (!payload || !payment) return null;
+    var cash = Number(payment.cash_cents), digital = Number(payment.digital_cents), credit = Number(payment.credit_cents);
+    if (![cash,digital,credit].every(Number.isSafeInteger) || cash < 0 || digital < 0 || credit < 0 ||
+        cash + digital + credit !== payload.total_cents) return null;
+    var when = localParts(payload.created_at), reference = String(payment.reference || '');
+    return {
+      id:String(payload.operation_id)+':cash', operationId:payload.operation_id, tipo:'ing',
+      monto:Number(payload.total_cents)/100, efectivo:cash/100, digital:digital/100, credito:credit/100,
+      desc:'Venta '+String(payload.sale_id), cat:'Venta', metodo:payload.payment_method,
+      referencia:reference, numeroOperacion:reference, hora:when.time, hora24:when.time,
+      timestamp:when.timestamp, fecha:when.date, sessionId:sessionId || null, ventaId:payload.sale_id,
+      digitalMethod:String(payment.digital_method || ''), canonical:true, canonicalReceiptProjection:true
+    };
+  }
+  function cashOverlays(sessionId) {
+    var moves = [];
+    confirmedReceipts.forEach(function (entry) {
+      var movement = confirmedCashMovement(entry, sessionId);
+      if (movement) moves.push(movement);
+    });
+    moves.sort(function (a,b) { return String(a.timestamp || '').localeCompare(String(b.timestamp || '')); });
+    return copy(moves);
+  }
   function applyConfirmedProductProjection(projected, pendingOperations) {
     if (!projected || !Array.isArray(projected.products)) return;
     confirmedReceipts.forEach(function (entry, operationId) {
@@ -141,6 +166,10 @@
     var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
     if (runtime && typeof runtime.renderSales === 'function') return runtime.renderSales();
     if (typeof root.ventasRender === 'function') return root.ventasRender();
+  }
+  function renderCashNow() {
+    try { if (typeof cajRender === 'function') return cajRender(); } catch (_) {}
+    if (typeof root.cajRender === 'function') return root.cajRender();
   }
 
   function pendingSales(view) {
@@ -234,7 +263,7 @@
   }
   function lastView() { return copy(last); }
 
-  var api = Object.freeze({ VERSION: VERSION, rebuild: rebuild, lastView: lastView });
+  var api = Object.freeze({ VERSION: VERSION, rebuild: rebuild, lastView: lastView, cashOverlays: cashOverlays });
   root.NuevoAmanecerCanonicalSaleView = api;
 
   if (typeof root.addEventListener === 'function') {
@@ -242,6 +271,7 @@
       if (!acceptConfirmedReceipt(event && event.detail)) return;
       rebuild();
       renderSalesNow();
+      renderCashNow();
     });
     root.addEventListener('na:canonical-sale-projection', rebuild);
     root.addEventListener('na:canonical-updated', rebuild);

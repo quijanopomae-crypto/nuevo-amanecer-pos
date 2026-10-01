@@ -9,10 +9,10 @@ function harness({ intents = [], enabled = true, storageKey = 'na_canonical_sale
   const nodes = new Map();
   const listeners = new Map();
   const originalProduct = { id: 'p1', name: 'Arroz <premium>', stock: 10 };
-  const remoteSnapshot = { products: [{ id: 'p1', stock: 10 }], customers: [{ id: 'c1' }], credits: [] };
+  const remoteSnapshot = { products: [{ id: 'p1', stock: 10 }], customers: [{ id: 'c1' }], credits: [], sales: [] };
   const globals = {
     productos: [{ id: 'old', stock: 99 }], ventas: [], creditos: [], clientes: [], cajMovs: [], inventoryMovements: [],
-    calls: { pos: 0, inv: 0, ventas: 0, cli: 0, sync: 0, fetch: 0, save: 0, storageWrite: 0 },
+    calls: { pos: 0, inv: 0, ventas: 0, caja: 0, cli: 0, sync: 0, fetch: 0, save: 0, storageWrite: 0 },
     console: { error() { } },
     localStorage: { setItem() { globals.calls.storageWrite++; throw Error('storage write forbidden'); } },
     document: {
@@ -40,7 +40,7 @@ function harness({ intents = [], enabled = true, storageKey = 'na_canonical_sale
       return { products, sales, credits };
     } },
     posRender() { this.calls.pos++; }, invRender() { this.calls.inv++; },
-    ventasRender() { this.calls.ventas++; }, cliRender() { this.calls.cli++; },
+    ventasRender() { this.calls.ventas++; }, cajRender() { this.calls.caja++; }, cliRender() { this.calls.cli++; },
     fetch() { this.calls.fetch++; throw Error('fetch forbidden'); }, saveAllData() { this.calls.save++; throw Error('save forbidden'); }
   };
   function node(tag) {
@@ -116,8 +116,19 @@ test('durable sale receipt becomes a normal completed sale immediately and hides
   assert.equal(h.globals.ventas[0].estado,'completada');
   assert.equal(h.globals.ventas[0].canonicalReceiptProjection,true);
   assert.equal(h.globals.calls.ventas,1,'main Ventas renderer must run on the receipt path');
+  assert.equal(h.globals.calls.caja,1,'Caja renderer must run on the same confirmed receipt');
+  const cash=h.globals.NuevoAmanecerCanonicalSaleView.cashOverlays('cash-session-1');
+  assert.equal(cash.length,1);
+  assert.equal(cash[0].operationId,pending.operation_id);
+  assert.equal(cash[0].sessionId,'cash-session-1');
+  assert.equal(cash[0].monto,5);
+  assert.equal(cash[0].efectivo,5);
+  assert.equal(cash[0].desc,'Venta V-004');
   assert.equal(h.nodes.get('ventasContent').children.length,0,'same sale must not flash as pending after receipt');
   assert.equal(h.globals.productos[0].stock,9,'receipt and still-present outbox must not double-decrement stock');
+  h.remoteSnapshot.sales=[{operation_id:pending.operation_id}];
+  h.run();
+  assert.equal(h.globals.NuevoAmanecerCanonicalSaleView.cashOverlays('cash-session-1').length,0,'authoritative reconciliation must remove the receipt overlay');
 });
 
 test('cumulative rebuild is idempotent and clearing outbox restores remote stock', () => {
@@ -162,7 +173,7 @@ test('DOMContentLoaded rebuilds only when canonical is enabled with a valid base
 
 test('rebuild never invokes sync, network or financial persistence side effects', () => {
   const h = harness({ intents: [intent('S-1')] }); h.run(); h.run();
-  assert.deepEqual(h.globals.calls, { pos: 2, inv: 2, ventas: 0, cli: 0, sync: 0, fetch: 0, save: 0, storageWrite: 0 });
+  assert.deepEqual(h.globals.calls, { pos: 2, inv: 2, ventas: 0, caja: 0, cli: 0, sync: 0, fetch: 0, save: 0, storageWrite: 0 });
 });
 
 test('index script order keeps canonical view after dependencies and inline-18', () => {

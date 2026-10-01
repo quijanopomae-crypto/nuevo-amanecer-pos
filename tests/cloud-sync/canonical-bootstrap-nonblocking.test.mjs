@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const canonical=readFileSync(new URL('../../POS/js/sync/canonical-client.js',import.meta.url),'utf8');
 const inline03=readFileSync(new URL('../../POS/js/legacy-inline/inline-03.js',import.meta.url),'utf8');
+const inline11=readFileSync(new URL('../../POS/js/legacy-inline/inline-11.js',import.meta.url),'utf8');
 const layout=readFileSync(new URL('../../POS/css/layout.css',import.meta.url),'utf8');
 
 test('CANON cold start mounts UI without awaiting the remote bootstrap',()=>{
@@ -37,15 +38,18 @@ test('canonical read requests are bounded without changing command write transpo
   assert.match(sendPending,/root\.fetch\(expected\.endpoint \+ record\.route/);
 });
 
-test('header confirms verified CANON connection before collection bootstrap finishes',()=>{
+test('verified transport is visible before bootstrap but green waits for a current snapshot',()=>{
   const statusVerified=canonical.indexOf('notifyConnectionVerified();');
   const coreBootstrap=canonical.indexOf('Promise.all(coreEntries.map(readEntry))');
-  assert.ok(statusVerified>=0,'verified status must signal connectivity');
-  assert.ok(coreBootstrap>statusVerified,'connectivity must be visible before core collections finish');
+  assert.ok(statusVerified>=0,'verified status must signal transport connectivity');
+  assert.ok(coreBootstrap>statusVerified,'transport state must be visible before core collections finish');
   assert.match(canonical,/new root\.CustomEvent\('na:canonical-connected'\)/);
   assert.match(inline03,/addEventListener\('na:canonical-connected'/);
   assert.match(inline03,/_naCanonicalTransportConnected=true/);
-  assert.match(inline03,/state\.validation==='current'\|\|\(_naCanonicalTransportConnected&&state\.validation==='validating'\)/);
+  assert.match(inline03,/_naSetHeaderConnectionState\('update','CANON verificado · cargando datos'\)/);
+  assert.match(inline03,/const connectionReady=state\.validation==='current'/);
+  assert.match(inline03,/const connectionLoading=_naCanonicalTransportConnected&&state\.validation==='validating'/);
+  assert.doesNotMatch(inline03,/state\.validation==='current'\|\|\(_naCanonicalTransportConnected/);
 });
 
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
@@ -57,13 +61,27 @@ test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
 test('CANON core bootstrap is parallel and visible before financial completion',()=>{
   assert.match(canonical,/source === 'cache' \|\| source === 'bootstrap'/);
   assert.match(canonical,/Promise\.all\(coreEntries\.map\(readEntry\)\)/);
-  assert.match(canonical,/publishReplica\(bootstrapReplica, 'bootstrap'\); notifyReplicaUpdate\(\)/);
+  assert.match(canonical,/function cacheMatchesStatus\(cache, meta, expected, digest\)/);
+  assert.match(canonical,/cacheMatchesRemote = cacheMatchesStatus\(cache, statusMeta, expected, statusDigest\)/);
+  assert.match(canonical,/if \(cacheMatchesRemote\) \{ publishReplica\(cache, 'cache'\); notifyReplicaUpdate\(\); \}/);
+  assert.match(canonical,/if \(!cacheMatchesRemote\) \{ publishReplica\(bootstrapReplica, 'bootstrap'\); notifyReplicaUpdate\(\); \}/);
   assert.match(canonical,/mode: provisional \? 'CANONICAL_READ_ONLY'/);
   assert.match(canonical,/read_only: provisional \|\| replica\.read_only !== false/);
   assert.match(canonical,/Promise\.all\(\[\['cash-sessions', 'cashSessions'\], \['financial-events', 'financialEvents'\]\]\.map\(readEntry\)\)/);
+  const cacheCheckPos=canonical.indexOf('cacheMatchesRemote = cacheMatchesStatus');
   const bootstrapPos=canonical.indexOf("publishReplica(bootstrapReplica, 'bootstrap')");
   const financialPos=canonical.indexOf("['cash-sessions', 'cashSessions']");
-  assert.ok(bootstrapPos>=0 && financialPos>bootstrapPos,'bootstrap must publish before financial routes finish');
+  assert.ok(cacheCheckPos>=0 && bootstrapPos>cacheCheckPos,'matching cache must be decided before empty bootstrap publication');
+  assert.ok(bootstrapPos>=0 && financialPos>bootstrapPos,'bootstrap must publish before financial routes finish when no matching cache exists');
+});
+
+test('Caja never translates an in-flight empty CANON bootstrap into a false unopened state',()=>{
+  assert.match(inline11,/canonicalState\.validation==='validating'/);
+  assert.match(inline11,/⏳ Cargando caja CANON…/);
+  assert.match(inline11,/Validando apertura y movimientos/);
+  const loadingPos=inline11.indexOf("canonicalState.validation==='validating'");
+  const unopenedPos=inline11.indexOf("'🔒 Caja sin abrir'");
+  assert.ok(loadingPos>=0 && unopenedPos>loadingPos,'loading guard must run before the unopened-state banner');
 });
 
 test('mobile status shows runtime CANON state instead of a hardcoded Local label',()=>{
