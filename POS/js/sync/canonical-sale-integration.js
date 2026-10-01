@@ -167,7 +167,7 @@
   function syncOutboxInBackground(outbox) {
     if (!outbox || typeof outbox.sync !== 'function') return;
     var run = function () {
-      Promise.resolve(outbox.sync()).catch(function (error) {
+      Promise.resolve().then(function () { return outbox.sync(); }).catch(function (error) {
         if (root.console && typeof root.console.warn === 'function')
           root.console.warn('[Venta CANON] Venta local conservada; sincronización pendiente', error && (error.code || error.message) || 'SYNC_FAILED');
       });
