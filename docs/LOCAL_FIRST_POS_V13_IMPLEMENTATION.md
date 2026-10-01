@@ -48,8 +48,6 @@ npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
 
 The cloud override uses installed system Chromium; repository CI installs its pinned Playwright browser. Synthetic Worker fixtures run in a separate native Node process to avoid Playwright 1.47 transforming .mjs imports. Setup/install and startup instructions were saved to the cloud environment draft; no secrets or network-policy changes were introduced.
 
-## Controlled promotion and rollback
-
 ## Technical closure — 2026-10-01 (America/Lima)
 
 Reviewed base `f865ae53a3330ed9cbf71fe9141f64a3fc0ac165`, initial head `f78471312b4119c97eb5470cd579cb527c111c99`, and corrective code head `6f9f08b805ee2d72e2ee99d3ca1a557cd7602b36`. The original five commits remain intact; the sixth fixes a demonstrated P1. No unresolved P0/P1 was found in the reviewed diff. `/auth/local-writer` previously revalidated a granted principal after its role became read-only; background status also ignored explicit `write_authorized:false`. The route now checks role, and both empty/pending FIFO paths durably record AUTHORITY_CHANGED before further local commits. One server regression and two real-browser regressions reproduced failure before the fix and pass afterward.
@@ -64,7 +62,21 @@ Final local verification: cloud 572/572, business+backup 121/121, interface/moti
 
 An additional expanded static sweep found three existing expectations concerning header connection chrome and canonical expense projection. They are outside the required passing 30-test interface/motion set; automatic CI results will be recorded below, without weakening tests. Physical Android, real quota/retention, local→cloud recovery drill, writer handover and owner migration/promotion approval remain pending.
 
-Draft PR and GitHub CI: pending creation/run inspection. Este PR no autoriza merge ni deploy. NO DEPLOY / NO PRODUCTION WRITES / NO REAL SALES.
+Draft PR: [#323](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/pull/323), head `feat/v1.3-local-first-replication`, base `feature/v1.3-mobile-cloud`. Final HEAD is the published head of that PR (`git rev-parse origin/feat/v1.3-local-first-replication` after fetch); the exact final reporting-commit SHA is recorded in PR metadata/body, since a document cannot contain its own commit hash. CI-validated code/report head: `f1e2ec5e20054353470c47ddfc1d196b07a8a82f`. New commits: `6f9f08b` runtime fix, `f1e2ec5` local evidence, followed by this CI closure report; five original commits unchanged. Final workspace clean and branch published without force-push.
+
+| Workflow | Run ID | Status | Conclusion |
+| --- | --- | --- | --- |
+| CANON Critical CI | [36874951401](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/36874951401) | completed | success |
+| E2E Smoke CI | [36874951396](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/36874951396) | completed | success |
+| LAB Canon Mirror CI | [36874951479](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/36874951479) | completed | failure |
+
+LAB failure logs inspected (job `110411872118`): SKILL_PREFLIGHT_FAIL requires a new/changed LAB schema_version>=3 task and LAB SKILL_PREFLIGHT receipt. `laboratorio/pos-lab/skill-preflight.mjs` classifies every `tools/cloudflare-lab/` change as LAB and accepts only LAB task/receipt paths; it cannot recognize the existing authorized CANON preflight. A retroactive LAB receipt would also fail required temporal ordering. This is a governance/scope mismatch, not an external infrastructure failure. No fabricated receipt, gate bypass, LAB edit or infinite rerun was made. The report-only closure commit may trigger fresh automatic runs; those final-head run IDs/conclusions are recorded in PR metadata. No code changed after the passing code-head suites.
+
+P0 unresolved 0; P1 unresolved 0 (one corrected); runtime P2 unresolved 0; closure P2: one CI governance blocker; P3: three pre-existing static assertions reproduced on the archived base `f865ae5` (header chrome and canonical expense projection; 10/13 pass in the two affected files). No baseline assertions were removed/weakened. Verdict: NOT_READY_CI — cannot claim READY_FOR_ANDROID_AND_PROMOTION_REVIEW while LAB CI fails. Android, quota/retention, local→cloud recovery drill, writer handover and 0019 owner approval remain pending.
+
+Este PR no autoriza merge ni deploy. NO DEPLOY / NO PRODUCTION WRITES / NO REAL SALES.
+
+## Controlled promotion and rollback
 
 Before promotion: PR gates, review of migration 0019, owner-approved Turso migration contract, physical writer/offline/reload/quota exercise, export and recovery drill, and explicit approval of merge/deploy. Use only the versioned release/Hosted POS workflows; preserve production D1. A second reader must read the synchronized sale. Stop before a real commercial sale until owner authorization.
 
