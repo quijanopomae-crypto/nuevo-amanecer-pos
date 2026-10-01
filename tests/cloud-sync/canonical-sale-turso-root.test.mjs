@@ -97,6 +97,30 @@ test('online sale critical path is one POST to receipt; history is visible befor
   assert.ok(calls.slice(1).every(row=>row.method==='GET'||row.method==='POST'),'any reconciliation work must occur only after the receipt POST');
 });
 
+test('Turso sale validation uses four protocol trips cold and three warm including auth and atomic commit',async t=>{
+  const {f,tab,turso}=await fixture(t);
+  const make=saleId=>tab.context.NuevoAmanecerCanonicalSaleIntent.build({
+    sale_id:saleId,payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]
+  });
+
+  let start=turso.calls.length;
+  await tab.api.createSale(make('V-001'));
+  let calls=turso.calls.slice(start);
+  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['execute','execute','batch','batch'],
+    'cold Turso sale must be auth + schema capability read + batched validation + atomic commit');
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
+
+  await tab.api.refresh();
+  start=turso.calls.length;
+  await tab.api.createSale(make('V-002'));
+  calls=turso.calls.slice(start);
+  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['execute','batch','batch'],
+    'warm Turso sale must be auth + batched validation + atomic commit');
+  assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,171);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,2);
+});
+
 test('pending V-001 reserves sale id; identical next cart is a new V-002 with its own UUID',async t=>{
   const {tab,add}=await fixture(t);
   tab.context.navigator.onLine=false; add();
