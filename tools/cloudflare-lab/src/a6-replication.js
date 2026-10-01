@@ -13,7 +13,7 @@ export async function localWriter(db) {
 function equal(a,b) { if(a.length!==b.length)return false;let n=0;for(let i=0;i<a.length;i++)n|=a.charCodeAt(i)^b.charCodeAt(i);return n===0; }
 export async function localWriterRoute(request,env,auth,json) {
   const db=getDatabase(env),current=await localWriter(db);
-  if(request.method==='GET')return json(current ? {writer:current.principal_id===auth.principalId,writer_id:current.principal_id,grant_id:current.grant_id,promotion_id:current.promotion_id,authority_epoch:Number(current.authority_epoch)} : {writer:false,enabled:false});
+  if(request.method==='GET')return json(current ? {writer:auth.role==='writer' && current.principal_id===auth.principalId,writer_id:current.principal_id,grant_id:current.grant_id,promotion_id:current.promotion_id,authority_epoch:Number(current.authority_epoch)} : {writer:false,enabled:false});
   if(request.method==='POST' && auth.role!=='writer')return json({error:'read_only_session'},403);
   if(request.method!=='POST')return json({error:'method_not_allowed'},405);
   // Reuse the owner activation credential. Never persist it in a grant/backup.

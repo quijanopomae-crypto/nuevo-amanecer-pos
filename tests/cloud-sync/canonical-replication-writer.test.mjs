@@ -29,3 +29,13 @@ test('owner credential cannot promote a read-only role into an unusable writer',
  const response=await f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer reader-token','x-activation-secret':'synthetic-owner-secret','content-type':'application/json'},body:'{}'});
  assert.equal(response.status,403);assert.equal((await response.json()).error,'read_only_session');assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_local_writer').n,0);
 });
+
+test('a granted principal downgraded to reader cannot revalidate local writer authority',async t=>{
+ const {f}=await fixture(t);
+ const grant=await f.fetch('http://localhost/auth/local-writer',{method:'POST',headers:{authorization:'Bearer writer-token','x-activation-secret':'synthetic-owner-secret','content-type':'application/json'},body:'{}'});
+ assert.equal(grant.status,201);
+ f.exec("UPDATE devices SET role='read_only' WHERE device_id='session:first'");
+ const response=await f.fetch('http://localhost/auth/local-writer',{headers:{authorization:'Bearer writer-token'}});
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).writer,false);
+});

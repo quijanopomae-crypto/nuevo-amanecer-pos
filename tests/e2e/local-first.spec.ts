@@ -42,6 +42,8 @@ test('V10 local commit persists projection, ledger and checkpoint before returni
 });
 
 async function posHarness(page:Page,cleanup:Array<()=>void>,options:{lostAck?:boolean}={}) {
+  // Explicitly reset network emulation before the online synthetic bootstrap.
+  await page.context().setOffline(false);
   const child=fork(root+'/tests/cloud-sync/canonical-local-first-browser-fixture.mjs',[],{execArgv:[]});
   cleanup.push(()=>child.kill());
   let next=0; const pending=new Map<number,{resolve:(value:any)=>void,reject:(error:Error)=>void}>();
@@ -409,6 +411,16 @@ test('empty FIFO authority change closes local commits instead of silently ignor
   }finally{cleanup.forEach(fn=>fn());}
 });
 
+
+for (const queued of [false,true]) test(`reader downgrade closes local commits with ${queued?'pending':'empty'} FIFO`,async({page})=>{
+ const cleanup:Array<()=>void>=[];try{
+  const {f}=await posHarness(page,cleanup);
+  await page.evaluate(async queued=>{const w=window as any;await w.NuevoAmanecerCanonical.enableLocalFirst('synthetic-owner-secret');if(queued)await w.NuevoAmanecerCanonical.openCash({session_id:'pending-cash',opening_cents:0});},queued);
+  await page.route('**/read/canonical/status',async route=>{const response=await f.fetch('http://localhost/read/canonical/status',{headers:route.request().headers()});const body=await response.json();body.write_authorized=false;await route.fulfill({json:body});});
+  const result=await page.evaluate(async()=>{const w=window as any;try{await w.NuevoAmanecerCanonical.syncLocal();}catch(_){}let error='';try{await w.NuevoAmanecerCanonical.openCash({session_id:'reader-cash',opening_cents:0});}catch(e){error=(e as Error).message;}return {state:(await w.NuevoAmanecerCanonicalLocalStore.read()).cloud.state,error};});
+  expect(result.state).toBe('AUTHORITY_CHANGED');expect(result.error).toBeTruthy();
+ }finally{cleanup.forEach(fn=>fn());}
+});
 
 test('a local commit during a slow empty-FIFO cloud scan is automatically sent after the scan',async({page})=>{
  const cleanup:Array<()=>void>=[];try{

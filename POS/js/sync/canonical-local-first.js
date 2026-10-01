@@ -26,6 +26,7 @@
     if(['CLOUD_RECOVERY_REQUIRED','AUTHORITY_CHANGED','CONFLICT'].includes(state.cloud.state))return {state:state.cloud.state};
     var status=await request('/read/canonical/status');if(!status.response.ok)fail('CANONICAL_READ_'+status.response.status);
     hooks().verify(status.body,hooks().binding());
+    if(status.body.write_authorized===false)fail('STALE_AUTHORITY_BINDING');
     if(!Number.isSafeInteger(status.body.financial_revision)||status.body.financial_revision<0)fail('INVALID_CANONICAL_STATUS');
     var condition=status.body.financial_revision<state.cloud.known_financial_revision?'CLOUD_RECOVERY_REQUIRED':status.body.financial_revision>state.cloud.known_financial_revision?'CONFLICT':null;
     if(!condition){
@@ -125,6 +126,7 @@
           var status=await request('/read/canonical/status');
           if(!status.response.ok)fail('CANONICAL_READ_'+status.response.status);
           hooks().verify(status.body,hooks().binding());
+          if(status.body.write_authorized===false)fail('STALE_AUTHORITY_BINDING');
           if(!Number.isSafeInteger(status.body.financial_revision) || status.body.financial_revision<0)fail('INVALID_CANONICAL_STATUS');
           if(status.body.mode!=='ACTIVE')fail('CANONICAL_COMMERCE_CLOSED');
           if(status.body.financial_revision<state.cloud.known_financial_revision){
