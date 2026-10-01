@@ -29,6 +29,7 @@
   var saleWriteReady = false;
   var saleMutationGeneration = 0;
   var saleAppliedOperations = new Set();
+  var saleProductEffects = new Map();
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function fail(code) { throw new Error(code); }
@@ -106,6 +107,8 @@
     return withWriterLock(function () {
     ready = false;
     saleWriteReady = false;
+    saleProductEffects.clear();
+    saleAppliedOperations.clear();
     var existing = journal();
     var candidate = {
       endpoint: String(options && options.endpoint || '').replace(/\/+$/, ''),
@@ -182,7 +185,11 @@
       mode: provisional ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
       read_only: provisional || replica.read_only !== false, minimum_client_contract: provisional ? 'a6-gate-p-v1' : (replica.minimum_client_contract || 'a6-gate-p-v1') };
     ready = true;
-    if (source === 'cache' || source === 'remote') saleWriteReady = replicaSupportsSale(replica);
+    if (source === 'cache' || source === 'remote') {
+      saleWriteReady = replicaSupportsSale(replica);
+      saleProductEffects.clear();
+      saleAppliedOperations.clear();
+    }
     replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
       revision: replica.revision, financial_revision: replica.financial_revision }, validation: provisional ? 'validating' : 'current' };
   }
@@ -367,6 +374,8 @@
     data.promotion_id = expected.promotion_id; data.authority_epoch = expected.authority_epoch; data.revision = expected.revision;
     data.financial_revision = statusMeta.financial_revision; data.products = parts[0]; data.customers = parts[1];
     data.mode = 'ACTIVE'; data.read_only = false; data.minimum_client_contract = CONTRACT;
+    saleProductEffects.clear();
+    saleAppliedOperations.clear();
     saleWriteReady = true;
     return { promotion_id:expected.promotion_id, authority_epoch:expected.authority_epoch, revision:expected.revision, financial_revision:statusMeta.financial_revision };
   }
@@ -383,6 +392,14 @@
     assertSaleAction();
     return true;
   }
+  function effectiveSaleProduct(productId) {
+    var product = data && Array.isArray(data.products) ? data.products.find(function (candidate) {
+      return candidate && String(candidate.product_id) === String(productId);
+    }) : null;
+    if (!product) return null;
+    var effect = saleProductEffects.get(String(productId));
+    return effect ? Object.assign({},product,effect) : product;
+  }
   function applyConfirmedSaleEffect(record, result) {
     if (!record || record.command !== 'sale.create' || !record.payload || !result ||
         record.payload.operation_id !== result.operation_id || record.payload.sale_id !== result.sale_id) return false;
@@ -393,18 +410,19 @@
     for (var i = 0; i < record.payload.items.length; i += 1) {
       var item = record.payload.items[i];
       if (item.generic_line !== undefined) continue;
-      var product = data.products.find(function (candidate) { return candidate && String(candidate.product_id) === String(item.product_id); });
+      var product = effectiveSaleProduct(item.product_id);
       if (!product || !uint(product.stock_revision) || !uint(item.expected_stock_revision) ||
           Number(product.stock_revision) !== Number(item.expected_stock_revision)) { saleWriteReady = false; return false; }
       if (product.tracks_inventory === 0 || product.tracks_inventory === false) continue;
       if (typeof product.current_stock_quantity !== 'number' || !Number.isFinite(product.current_stock_quantity) ||
           product.current_stock_quantity < item.quantity) { saleWriteReady = false; return false; }
-      updates.push({ product:product, quantity:item.quantity });
+      updates.push({
+        product_id:String(item.product_id),
+        current_stock_quantity:product.current_stock_quantity - item.quantity,
+        stock_revision:product.stock_revision + 1
+      });
     }
-    updates.forEach(function (entry) {
-      entry.product.current_stock_quantity -= entry.quantity;
-      entry.product.stock_revision += 1;
-    });
+    updates.forEach(function (effect) { saleProductEffects.set(effect.product_id,effect); });
     saleAppliedOperations.add(operationId);
     saleMutationGeneration += 1;
     saleWriteReady = true;
@@ -640,7 +658,7 @@
             typeof generic.name !== 'string' || !generic.name.trim() || generic.name.length > 240 || /[\x00-\x1f\x7f]/.test(generic.name) ||
             typeof generic.code !== 'string' || generic.code.length > 160 || /[\x00-\x1f\x7f]/.test(generic.code)) fail('INVALID_CANONICAL_GENERIC_LINE');
       } else {
-        var product = data.products.find(function (item) { return item.product_id === requested.product_id; });
+        var product = effectiveSaleProduct(requested.product_id);
         if (!product || !uint(product.stock_revision)) fail('INVALID_CANONICAL_PRODUCT');
         expectedRevision = product.stock_revision;
       }
@@ -1456,7 +1474,7 @@
     if (!adapter || typeof adapter.snapshot !== 'function') fail('CANONICAL_UI_ADAPTER_UNAVAILABLE');
     return adapter.snapshot(data);
   }
-  root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleWriteReady = false; } });
+  root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleWriteReady = false; saleProductEffects.clear(); saleAppliedOperations.clear(); } });
   root.addEventListener('offline', function () { ready = false; saleWriteReady = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, repairRejectedSaleConflict: repairRejectedSaleConflict, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
