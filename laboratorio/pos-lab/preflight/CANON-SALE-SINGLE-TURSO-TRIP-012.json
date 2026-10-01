@@ -1,0 +1,100 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-SALE-SINGLE-TURSO-TRIP-012",
+  "base_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md y reglas vigentes del runtime CANON/LAB.",
+      "laboratorio/pos-lab/UI_MAP.yaml y skill-preflight.mjs.",
+      "tools/cloudflare-lab/src/worker.js: autenticación de sesión y ruta /commands/sale.create.",
+      "tools/cloudflare-lab/src/a6-commerce.js: validación, autoridad, stock, caja e idempotencia de sale.create.",
+      "tools/cloudflare-lab/src/turso-d1-adapter.js: cada first() usa un pipeline remoto y db.batch() usa un único pipeline.",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs: cobertura real SQLite+protocolo Turso."
+    ],
+    "WRITES": [
+      "Añadir autenticación diferida exclusivamente para el happy path de sale.create simple en producción Turso; el token se hashea localmente y se valida dentro del batch atómico.",
+      "Añadir commit rápido de venta no-crédito y sin línea genérica que valida sesión, autoridad, conflictos, producto/stock, cliente opcional y caja dentro de un único db.batch.",
+      "Mantener la ruta actual como fallback para crédito, líneas genéricas y demás casos.",
+      "Añadir pruebas de un solo pipeline Turso, stock obsoleto, sesión revocada e idempotencia."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "No cambia el estado de UI ni el formato del receipt.",
+      "La venta simple pasa de auth + prelectura + commit remotos a un único commit/validación remoto en el happy path."
+    ],
+    "STORAGE_AFFECTED": [
+      "Mismas tablas y mismas filas que sale.create actual.",
+      "No hay migraciones ni nuevas tablas.",
+      "canonical_assertions y canonical_write_guards siguen siendo temporales y deben quedar limpios después de commit o rollback."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "No confirmar al navegador antes de que Turso haya hecho COMMIT.",
+      "La sesión writer debe existir, estar activa y su token_hash debe coincidir dentro de la misma transacción.",
+      "canonical_control debe seguir ACTIVE con promotion, authority_epoch, revision y client_contract exactos.",
+      "operation_id sigue siendo idempotente y no puede colisionar con operaciones financieras/producto.",
+      "stock_revision es CAS; stock rastreado nunca puede quedar negativo ni descontarse dos veces.",
+      "Caja recibe exactamente un cash_movement por venta.",
+      "Ventas a crédito y líneas genéricas permanecen en la ruta existente sin modificación funcional."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas -> inventario: el descuento y movement/effect permanecen en la transacción de la venta.",
+      "Ventas -> caja: cash_movements permanece en la misma transacción.",
+      "Autenticación -> ventas: se elimina una lectura previa solo en el fast path y se mueve la validación al batch durable.",
+      "Créditos: explícitamente fuera del fast path; continúan usando la lógica vigente."
+    ],
+    "RISKS": [
+      "CRITICAL: omitir una guardia de sesión/autoridad permitiría una escritura no autorizada; el batch debe resolver la sesión desde token_hash y exigir status=active.",
+      "CRITICAL: una ruta rápida de stock no puede escoger LIVE cuando existe IMPORT del mismo product_id; se conserva prioridad IMPORT.",
+      "HIGH: una operación repetida debe recuperar ACK sin repetir stock ni caja.",
+      "HIGH: cualquier fallo de assertion debe hacer rollback completo antes del diagnóstico de error."
+    ],
+    "ROLLBACK": [
+      "Revertir los cambios de worker.js y a6-commerce.js; no existe rollback de datos porque no hay migración.",
+      "La ruta previa de tres/cuatro viajes permanece disponible como fallback durante la implementación y puede restaurarse íntegramente."
+    ],
+    "TESTS": [
+      "node --test tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+      "node --test tests/cloud-sync/canonical-session-backend.test.mjs tests/cloud-sync/canonical-session-integration.test.mjs",
+      "node --test tests/cloud-sync/*.test.mjs",
+      "CANON Critical CI y LAB Canon Mirror CI"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  }
+}
