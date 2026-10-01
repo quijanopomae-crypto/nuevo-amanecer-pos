@@ -1,6 +1,7 @@
 const CACHE_PREFIX = 'nuevo-amanecer-pos-shell-';
 const CACHE_NAME = `${CACHE_PREFIX}__BUILD_HASH__`;
 const VENDOR_CACHE_NAME = 'nuevo-amanecer-pos-vendor-tesseract-6.0.1';
+const MANUAL_UPDATE_MARKER_CACHE = 'nuevo-amanecer-pos-manual-update-v1';
 const PRECACHE_URLS = [
   './index.html',
   './manifest.webmanifest',
@@ -131,6 +132,8 @@ self.addEventListener('install', (event) => {
       .then((cache) => cache.addAll(
         [...PRECACHE_URLS_ABSOLUTE].map((url) => new Request(url, { cache: 'reload' }))
       ))
+      .then(() => caches.has(MANUAL_UPDATE_MARKER_CACHE))
+      .then((manualModeEnabled) => manualModeEnabled ? undefined : self.skipWaiting())
   );
 });
 
@@ -149,6 +152,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (!event.data) return;
+
+  if (event.data.type === 'NA_ENABLE_MANUAL_UPDATES') {
+    event.waitUntil(caches.open(MANUAL_UPDATE_MARKER_CACHE).then(() => undefined));
+    return;
+  }
 
   if (event.data.type === 'NA_ACTIVATE_UPDATE') {
     event.waitUntil(Promise.resolve(self.skipWaiting()));
