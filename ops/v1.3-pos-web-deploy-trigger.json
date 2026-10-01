@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON credit-policy recovery: a recoverable foreign sale.create PENDING is replayed automatically with the same operation_id before saving the manual credit line; no user-side manual unblock.",
-  "retry_attempt": 56,
-  "retry_reason": "PR #319 merged at 4384966424eeabead047f306745de1935698cf23 after CANON Critical CI #402 PASS and E2E Smoke CI #100 PASS. Publish the simplified pending-sale recovery requested by the owner.",
-  "requested_at_utc": "2026-10-01T03:05:00Z",
-  "target_head": "4384966424eeabead047f306745de1935698cf23"
+  "note": "Deploy CANON runtime-order fix: green only after current+ACTIVE readiness, no new sale during bootstrap, one unresolved sale at a time, and outbox resumes only after canonical readiness. Backend/Turso/schema unchanged.",
+  "retry_attempt": 57,
+  "retry_reason": "PR #331 merged at 11449adf097d10fe598596bf19656a750355752c after CANON Critical CI run 36895662445 PASS and E2E Smoke CI run 36895662443 PASS. Publish the owner-approved simplified runtime order.",
+  "requested_at_utc": "2026-10-01T16:58:18Z",
+  "target_head": "11449adf097d10fe598596bf19656a750355752c"
 }
