@@ -94,7 +94,12 @@ jobs:
                 EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policies') AS policies,
                 EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_policy_collision') AS customer_policy_collision_trigger,
                 EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_namespace_insert') AS customer_namespace_trigger,
-                EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_authorized_insert') AS customer_authorized_trigger;
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_authorized_insert') AS customer_authorized_trigger,
+                COALESCE((SELECT instr(COALESCE(sql,''),'writer_device_id') > 0 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_authorized_insert'),0) AS customer_authorized_uses_writer_device_id,
+                COALESCE((SELECT instr(COALESCE(sql,''),'d.device_id=NEW.principal_id') > 0 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_authorized_insert'),0) AS customer_authorized_uses_principal_id,
+                COALESCE((SELECT length(COALESCE(sql,'')) FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_authorized_insert'),0) AS customer_authorized_sql_length,
+                COALESCE((SELECT length(COALESCE(sql,'')) FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_namespace_insert'),0) AS customer_namespace_sql_length,
+                COALESCE((SELECT length(COALESCE(sql,'')) FROM sqlite_master WHERE type='trigger' AND name='canonical_live_customers_authorized_insert'),0) AS live_customer_authorized_sql_length;
             `))[0];
 
             const traffic = (await query('traffic', `
