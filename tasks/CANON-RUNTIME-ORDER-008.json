@@ -12,7 +12,9 @@
     "POS/js/sync/canonical-sale-integration.js",
     "POS/js/sync/canonical-sale-outbox.js",
     "tests/cloud-sync/canonical-runtime-order.test.mjs",
-    "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs"
+    "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs",
+    "tests/cloud-sync/canonical-sale-integration.test.mjs",
+    "tests/cloud-sync/canonical-sale-outbox.test.mjs"
   ],
   "forbidden_files": [
     "tools/cloudflare-lab/src/**",
