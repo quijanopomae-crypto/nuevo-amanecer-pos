@@ -51,12 +51,20 @@ test('desktop still gets deferred parity Motion',()=>{
   assert.deepEqual(h.presets,['clientes','clientes:sync']);
 });
 
-test('mobile safe navigation gets the same deferred entry and lazy scroll preset',()=>{
+test('mobile safe navigation skips parity entry and scroll Motion to avoid flicker',()=>{
   const h=harness(390,'pageClientes',true);
   h.flush(); h.flush(); h.flush();
-  assert.deepEqual(h.enters,[['pageClientes','na-enter-fade']]);
-  assert.deepEqual(h.presets,['clientes','clientes:sync']);
-  assert.equal(h.events.length,1);
+  assert.deepEqual(h.enters,[]);
+  assert.deepEqual(h.presets,[]);
+  assert.deepEqual(h.events,[]);
+});
+
+test('mobile width also keeps parity page-entry Motion disabled without relying on the safe flag',()=>{
+  const h=harness(390,'pageInventario',false);
+  h.flush(); h.flush(); h.flush();
+  assert.deepEqual(h.enters,[]);
+  assert.deepEqual(h.presets,[]);
+  assert.deepEqual(h.events,[]);
 });
 
 test('bridge stays visual-only',()=>{
