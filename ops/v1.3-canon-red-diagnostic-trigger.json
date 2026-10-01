@@ -2,7 +2,8 @@
   "format": "nuevo-amanecer-v1.3-canon-red-diagnostic-v1",
   "owner_authorized": true,
   "read_only_business_data": true,
-  "purpose": "Diagnosticar por qué el indicador CANON permanece rojo en el navegador móvil sin borrar ni modificar datos comerciales.",
-  "requested_at_utc": "2026-10-01T19:48:00Z",
-  "target_head": "36ee47a7b040947b3c8eed82dd2744a8eb0d1151"
+  "purpose": "Reproducir el bootstrap CANON completo paginando todas las colecciones para aislar el indicador rojo persistente.",
+  "requested_at_utc": "2026-10-01T19:54:00Z",
+  "target_head": "005707f061e19ed6ae45f711e4bd668cd389d375",
+  "retry_attempt": 2
 }
