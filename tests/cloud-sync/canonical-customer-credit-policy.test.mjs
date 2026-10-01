@@ -287,6 +287,8 @@ test('owner credit-line UI removes credit PIN/reason ceremony but keeps automati
   assert.match(automatic,/reason='Restauración automática del propietario'/);
   assert.match(index,/Aplicar línea/);
   assert.match(inline04,/Se aplicará como línea manual/);
+  assert.match(inline04,/Línea manual activa/);
+  assert.doesNotMatch(inline04,/Motivo: \$\{_naEsc\(e\.client\.lineaCreditoManualMotivo/);
 });
 
 test('confirmed policy renders immediately while full CANON reconciliation continues in background',async t=>{
@@ -325,6 +327,7 @@ test('confirmed policy renders immediately while full CANON reconciliation conti
     save,
     new Promise(resolve=>setTimeout(()=>resolve('BLOCKED_BY_FULL_REFRESH'),1500))
   ]);
+  releaseRefresh();
 
   assert.equal(result,true,'save must not wait for the full post-commit refresh');
   const local=tab.context.clientes.find(c=>String(c.id)===String(id));
@@ -333,12 +336,12 @@ test('confirmed policy renders immediately while full CANON reconciliation conti
   assert.equal(local.lineaCreditoPolicyRevision,1);
   assert.equal(f.sql('SELECT manual_limit_cents FROM canonical_customer_credit_policies WHERE customer_id=?',id).manual_limit_cents,280000);
 
-  releaseRefresh();
   await new Promise(resolve=>setTimeout(resolve,0));
 });
 
 test('normal credit-policy write reuses the already-current CANON snapshot instead of preloading the full replica',()=>{
   assert.match(bridge,/function currentCanonicalSnapshot\(\)/);
+  assert.match(bridge,/assertAction\('customer\.credit-policy\.set'\)/);
   const commit=bridge.slice(bridge.indexOf('async function commit'),bridge.indexOf('// Called by guardarLineaCreditoManual'));
   assert.match(commit,/resolvedForeign\?await refreshCanonical\(\):currentCanonicalSnapshot\(\)/);
   assert.match(bridge,/function reconcileCanonicalInBackground\(customerId\)/);
