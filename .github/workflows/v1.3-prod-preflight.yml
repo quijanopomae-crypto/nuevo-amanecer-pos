@@ -1,4 +1,5 @@
 name: V1.3 Production Read-Only Preflight
+# 2026-10-01: owner-authorized read-only rerun for debt reconciliation schema diagnosis
 
 on:
   push:
