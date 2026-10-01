@@ -8,8 +8,8 @@
   "local_server_required": false,
   "activation_secret_embedded": false,
   "note": "Deploy hosted proxy forwarding the original browser Request through CANON_BACKEND service binding.",
-  "retry_attempt": 52,
-  "retry_reason": "Publish CANON sale lexical-state repair: hosted browser state uses top-level let bindings, not window/globalThis properties; restores Confirmar venta and Pago rápido without changing business rules.",
-  "requested_at_utc": "2026-09-30T23:05:00Z",
-  "target_head": "fix/canon-sale-global-lexical-state-v1"
+  "retry_attempt": 53,
+  "retry_reason": "Publish instant post-receipt credit payment projection: after durable Turso receipt, update saldo/history immediately while full CANON reconciliation remains background.",
+  "requested_at_utc": "2026-10-01T02:18:00Z",
+  "target_head": "perf/canon-payment-instant-receipt-v1"
 }
