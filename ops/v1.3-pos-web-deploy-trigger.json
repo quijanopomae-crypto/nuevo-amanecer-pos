@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON del updater PWA real: aviso Nueva versión disponible, botón Actualizar ahora, activación real del Service Worker, recarga única y caché OCR lazy para acelerar futuras actualizaciones.",
-  "retry_attempt": 60,
-  "retry_reason": "Owner confirmó que el aviso no aparece en producción. PR #341 está merged en 0de489eb002540140f932aca10c43850d5da9d22 y CANON Critical CI + E2E Smoke PASS. Publicar ahora el updater PWA CANON.",
-  "requested_at_utc": "2026-10-01T18:40:00Z",
-  "target_head": "0de489eb002540140f932aca10c43850d5da9d22"
+  "note": "Deploy CANON del fix de navegación móvil sin parpadeo: sin page-entry Motion en móvil y con persistencia de la página visible después del primer paint.",
+  "retry_attempt": 61,
+  "retry_reason": "PR #344 merged at d325906cf0dbfa53f173f002deecacfe2385dc6f with CANON Critical CI #452 and E2E Smoke CI #135 PASS. Publicar corrección solicitada por el owner solo en CANON.",
+  "requested_at_utc": "2026-10-01T19:12:00Z",
+  "target_head": "d325906cf0dbfa53f173f002deecacfe2385dc6f"
 }
