@@ -118,15 +118,32 @@ jobs:
 
             let failed=0;
             for(const route of routes){
-              const result=await request('/read/canonical/'+route+'?limit=100',{headers});
-              const meta=safeMeta(result.body);
-              const stable=result.r.ok &&
-                meta.authority===expected.authority &&
-                meta.mode===expected.mode &&
-                meta.revision===expected.revision &&
-                meta.financial_revision===expected.financial_revision;
-              console.log('stage=route route='+route+' http='+result.r.status+' stable='+stable+' meta='+JSON.stringify(meta));
-              if(!stable) failed+=1;
+              let cursor='';
+              let pages=0;
+              let items=0;
+              const seen=new Set();
+              do {
+                const suffix='?limit=100'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+                const result=await request('/read/canonical/'+route+suffix,{headers});
+                const meta=safeMeta(result.body);
+                const stable=result.r.ok &&
+                  meta.authority===expected.authority &&
+                  meta.mode===expected.mode &&
+                  meta.revision===expected.revision &&
+                  meta.financial_revision===expected.financial_revision &&
+                  Array.isArray(result.body?.items);
+                pages+=1;
+                items+=Array.isArray(result.body?.items)?result.body.items.length:0;
+                console.log('stage=route-page route='+route+' page='+pages+' http='+result.r.status+' stable='+stable+' meta='+JSON.stringify(meta));
+                if(!stable){ failed+=1; break; }
+                cursor=result.body?.next_cursor||'';
+                if(cursor){
+                  if(seen.has(cursor)){ failed+=1; console.log('stage=route-cursor route='+route+' repeated=true'); break; }
+                  seen.add(cursor);
+                }
+              } while(cursor);
+              console.log('stage=route-complete route='+route+' pages='+pages+' items='+items+' failed='+(failed>0));
+              if(failed) break;
             }
             if(failed) throw new Error('ROUTE_FAILURES_'+failed);
             console.log('CANON_RED_DIAGNOSTIC=PASS');
