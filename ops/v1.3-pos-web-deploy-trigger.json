@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON runtime-order fix: green only after current+ACTIVE readiness, no new sale during bootstrap, one unresolved sale at a time, and outbox resumes only after canonical readiness. Backend/Turso/schema unchanged.",
-  "retry_attempt": 57,
-  "retry_reason": "PR #331 merged at 11449adf097d10fe598596bf19656a750355752c after CANON Critical CI run 36895662445 PASS and E2E Smoke CI run 36895662443 PASS. Publish the owner-approved simplified runtime order.",
-  "requested_at_utc": "2026-10-01T16:58:18Z",
-  "target_head": "11449adf097d10fe598596bf19656a750355752c"
+  "note": "Deploy CANON history no-flicker fix: preserve the last same-authority operational snapshot during staged reconciliation so existing sales/KPIs remain visible while the confirmed receipt is appended immediately. Backend/Turso/schema unchanged.",
+  "retry_attempt": 58,
+  "retry_reason": "PR #333 merged at 98d56d8c634b33e1b27d104f9040fff1f00369f4 after CANON Critical CI run 36897499939 PASS and E2E Smoke CI run 36897499756 PASS. Publish owner-reproduced post-sale history continuity fix.",
+  "requested_at_utc": "2026-10-01T17:18:00Z",
+  "target_head": "98d56d8c634b33e1b27d104f9040fff1f00369f4"
 }
