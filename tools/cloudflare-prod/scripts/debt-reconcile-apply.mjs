@@ -178,6 +178,25 @@ async function cleanupWriter(sessionId) {
   await cfRaw('DELETE FROM auth_sessions WHERE session_id=?1',[sessionId]);
   await cfRaw('DELETE FROM devices WHERE device_id=?1',['session:'+sessionId]);
 }
+async function customerCreateDiagnostics(match,writer) {
+  const tables=['canonical_customer_operations','canonical_customer_registry','canonical_live_customers','canonical_expense_operations','canonical_product_operations','canonical_inventory_operations','canonical_credit_accounts','canonical_credit_metadata'];
+  const tableRows=await cfQuery("SELECT name FROM sqlite_master WHERE type='table' AND name IN ("+tables.map((_,i)=>'?'+(i+1)).join(',')+")",tables);
+  const present=new Set(tableRows.map(row=>String(row.name)));
+  const operationId=stableId('debt-reconcile-customer-',SOURCE_LABEL+':'+match.index);
+  const customerId=stableId('recon-customer-',SOURCE_LABEL+':'+match.index);
+  const [operationCollision,customerCollision,documentCollision]=await Promise.all([
+    cfQuery("SELECT COUNT(*) AS n FROM (SELECT operation_id FROM sales WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_expense_operations WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_inventory_operations WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_credit_accounts WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_credit_metadata WHERE operation_id=?1 UNION ALL SELECT operation_id FROM canonical_customer_operations WHERE operation_id=?1)",[operationId]),
+    cfQuery("SELECT COUNT(*) AS n FROM canonical_customer_registry WHERE promotion_id=?1 AND customer_id=?2",[writer.status.promotion_id,customerId]),
+    cfQuery("SELECT (SELECT COUNT(*) FROM customers WHERE promotion_id=?1 AND lower(trim(COALESCE(document,'')))=lower(trim(?2)))+(SELECT COUNT(*) FROM canonical_live_customers WHERE promotion_id=?1 AND lower(trim(COALESCE(document,'')))=lower(trim(?2))) AS n",[writer.status.promotion_id,match.target.document])
+  ]);
+  return {
+    missing_tables:tables.filter(name=>!present.has(name)),
+    operation_collision:Number(operationCollision[0]?.n||0),
+    customer_id_collision:Number(customerCollision[0]?.n||0),
+    document_collision:Number(documentCollision[0]?.n||0)
+  };
+}
+
 async function createMissingCustomers(matches,writer,trigger) {
   const createdAt=trigger.source_effective_at_utc;
   if(typeof createdAt!=='string'||! /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt))throw new Error('invalid reconciliation timestamp');
@@ -202,7 +221,8 @@ async function createMissingCustomers(matches,writer,trigger) {
     });
     const receipt=await response.json().catch(()=>null);
     if(!response.ok||!receipt||!['created','already_processed'].includes(String(receipt.status||''))){
-      throw new Error('customer creation failed at index '+match.index+' status='+response.status+' code='+String(receipt?.error||'unknown'));
+      const diagnostic=await customerCreateDiagnostics(match,writer).catch(()=>({diagnostic_failed:true}));
+      throw new Error('customer creation failed at index '+match.index+' status='+response.status+' code='+String(receipt?.error||'unknown')+' diag='+JSON.stringify(diagnostic));
     }
   }
 }
