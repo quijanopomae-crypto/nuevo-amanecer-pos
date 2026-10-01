@@ -1,0 +1,101 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-PAYMENT-INSTANT-RECEIPT-002",
+  "base_ref": "1b10b6fbf88deaa6c40cbe71994b45be1809b94e",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "candidate": {
+    "status": "CANDIDATO_A_CANON",
+    "basis": "Patrón post-receipt de CANON-PAYMENT-ONE-SECOND-UI-001 / PR #251 ya aprobado y probado: Pagado solo después del receipt durable, reconciliación completa en background."
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
+  },
+  "analysis": {
+    "ROOT_CAUSE": "El POST de payment.create ya retorna un receipt durable y el modal/toast se liberan inmediatamente, pero el saldo, historial y ficha del cliente esperan a canonical.refresh(), que realiza status + múltiples colecciones (la regresión E2E actual observa 13 GET después del receipt). La latencia percibida es de visualización/reconciliación, no de commit.",
+    "FIRST_PRINCIPLES": [
+      "Hecho indispensable: esperar exactamente un receipt durable del Worker/Turso antes de declarar éxito.",
+      "Trabajo no indispensable en camino crítico: releer todo productos/clientes/créditos/pagos/caja/ventas antes de pintar el único pago recién confirmado.",
+      "Solución mínima: usar payload+receipt durable ya disponible para una proyección UI temporal idempotente y hacer la reconciliación total después."
+    ],
+    "READS": [
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-credit-payment-bridge.js",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "tools/cloudflare-lab/src/a6-financial.js READ-ONLY",
+      "tools/cloudflare-lab/src/a6-canonical.js READ-ONLY",
+      "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
+      "tasks/CANON-PAYMENT-ONE-SECOND-UI-001.json",
+      "evidence/canon-preflight/CANON-PAYMENT-ONE-SECOND-UI-001.json"
+    ],
+    "WRITES": [
+      "Después de durableJournal(CONFIRMED), canonical-client emite na:canonical-payment-receipt con el payload exacto y receipt durable; para payment.batch emite un evento por receipt hijo.",
+      "Clientes V2 mantiene overlays efímeros por operation_id, aplica saldo/pago a clones visuales y re-renderiza la ficha inmediatamente.",
+      "Al llegar na:canonical-updated, retirar overlays ya presentes en datos autoritativos y conservar solo los todavía no reconciliados."
+    ],
+    "DOM_AFFECTED": [
+      "Ficha financiera de cliente",
+      "saldo pendiente de crédito",
+      "historial/lista de pagos",
+      "estado Pagado/Abono confirmado"
+    ],
+    "STATE_AFFECTED": [
+      "Mapa efímero en memoria de receipts de pago confirmados",
+      "Sin mutación de creditos[] autoritativo/legacy"
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno nuevo; el journal CANON existente sigue siendo la evidencia durable."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Saldo visual deriva de receipt.current_balance_cents autoritativo.",
+      "Pago visual deriva del payload exacto y operation_id durable.",
+      "No doble pago visual por replay.",
+      "No éxito optimista.",
+      "Caja/credit revision/backend permanecen sin cambios."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Créditos: actualización visual inmediata post-commit.",
+      "Caja: sin lógica nueva; receipt sigue registrando caja en backend.",
+      "Persistencia: sin cambio.",
+      "Red: refresh completo permanece background."
+    ],
+    "RISKS": [
+      "Overlay duplicado tras reconciliación; mitigado por operation_id y purga al detectar el pago autoritativo.",
+      "Rerender durante modal; mitigado porque el evento se emite después del receipt y la ruta se vuelve a pintar sin escribir negocio.",
+      "ACK perdido: no hay overlay hasta que retry obtiene receipt durable."
+    ],
+    "ROLLBACK": [
+      "Revert del PR y redeploy Hosted POS previo."
+    ],
+    "TEST_PLAN": [
+      "Pago individual: durableJournal(CONFIRMED) ocurre antes de na:canonical-payment-receipt.",
+      "Receipt -> saldo/historial visible antes de resolver refresh background.",
+      "ACK perdido/rechazo: cero evento de éxito antes del receipt.",
+      "Replay: un operation_id produce un único pago visual.",
+      "Reconciliación: el pago remoto reemplaza overlay sin duplicarlo.",
+      "Batch: cada child receipt proyecta exactamente una vez.",
+      "CANON Critical CI + E2E Smoke + Hosted POS deploy oficial."
+    ]
+  }
+}

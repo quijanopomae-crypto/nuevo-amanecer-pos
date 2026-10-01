@@ -12,6 +12,7 @@ const canonicalClient=readFileSync(new URL('../../POS/js/sync/canonical-client.j
 
 function context() {
   const dueMap=new Map([['2026-09-20',-6],['2026-09-26',0],['2026-10-01',5],['2026-11-01',36]]);
+  const listeners=new Map();
   const document={
     body:{appendChild(){}},
     getElementById(){return null;},
@@ -43,7 +44,9 @@ function context() {
     },
     _naEsc(value){return String(value);},
     fmt(value){return 'S/ '+Number(value).toFixed(2);},
-    addEventListener(){},
+    addEventListener(name,fn){const rows=listeners.get(name)||[];rows.push(fn);listeners.set(name,rows);},
+    dispatchEvent(event){(listeners.get(event.type)||[]).forEach(fn=>fn(event));return true;},
+    CustomEvent:class CustomEvent{constructor(type,init){this.type=type;this.detail=init&&init.detail;}},
     matchMedia(){return{matches:false};}
   };
   ctx.window=ctx; ctx.globalThis=ctx;
@@ -61,6 +64,59 @@ test('legacy credits default to Créditos pequeños and amount never chooses cat
   assert.equal(api.accountMeta(credit('1','stable',500,0)).categoryId,'small');
   assert.equal(api.accountMeta(credit('2','stable',5,0)).categoryId,'small');
   assert.equal(api.accountMeta(credit('3','stable',5000,0)).categoryName,'Créditos pequeños');
+});
+
+
+test('durable payment receipt updates saldo and payment history immediately without mutating creditos',()=>{
+  const ctx=context(),api=ctx.NA_CLIENT_CREDIT_ACCOUNTS_V2;
+  ctx.clientes=[{id:'stable',nombre:'Cliente'}];
+  ctx.creditos=[credit('CR:001','stable',7,0)];
+  const before=JSON.stringify(ctx.creditos);
+  const detail={
+    version:1,
+    command:'payment.create',
+    payload:{
+      operation_id:'PAY-INSTANT-1',
+      credit_id:'CR:001',
+      amount_cents:250,
+      payment_method:'yape',
+      reference:'YAPE-FAST-1',
+      created_at:'2026-10-01T01:02:03.000Z'
+    },
+    receipt:{
+      status:'created',
+      operation_id:'PAY-INSTANT-1',
+      credit_id:'CR:001',
+      current_balance_cents:450,
+      credit_revision:2
+    }
+  };
+  ctx.dispatchEvent({type:'na:canonical-payment-receipt',detail});
+  let projected=api.creditsForCategory('stable','small')[0];
+  assert.equal(projected.saldo,4.5);
+  assert.equal(projected.pagado,2.5);
+  assert.equal(projected.pagos.length,1);
+  assert.equal(projected.pagos[0].pagoId,'PAY-INSTANT-1');
+  assert.equal(projected.pagos[0].monto,2.5);
+  assert.equal(projected.pagos[0].metodo,'yape');
+  assert.equal(projected.pagos[0].numeroOperacion,'YAPE-FAST-1');
+  assert.equal(projected.pagos[0].timestamp,'2026-10-01T01:02:03.000Z');
+  assert.equal(JSON.stringify(ctx.creditos),before,'post-receipt projection must not mutate authoritative legacy arrays');
+
+  ctx.dispatchEvent({type:'na:canonical-payment-receipt',detail});
+  projected=api.creditsForCategory('stable','small')[0];
+  assert.equal(projected.pagos.filter(p=>p.pagoId==='PAY-INSTANT-1').length,1,'receipt replay must stay visually idempotent');
+
+  ctx.creditos=[credit('CR:001','stable',7,2.5,{saldo:4.5,pagos:[{
+    id:'PAY-INSTANT-1',pagoId:'PAY-INSTANT-1',monto:2.5,montoPagado:2.5,
+    fecha:'2026-10-01',timestamp:'2026-10-01T01:02:03.000Z',canonicalDateKnown:true,
+    metodo:'yape',numeroOperacion:'YAPE-FAST-1'
+  }]})];
+  ctx.dispatchEvent({type:'na:canonical-updated',detail:{validation:'current'}});
+  projected=api.creditsForCategory('stable','small')[0];
+  assert.equal(projected.saldo,4.5);
+  assert.equal(projected.pagos.filter(p=>p.pagoId==='PAY-INSTANT-1').length,1);
+  assert.equal(projected.pagos[0].canonicalReceiptProjection,undefined,'authoritative reconciliation replaces the temporary overlay');
 });
 
 test('manual categories are reusable; accumulated groups visually and separate remains individual',()=>{
@@ -211,7 +267,7 @@ test('durable batch receipt paints Pagado immediately and reconciliation later r
   assert.match(confirmed,/✓ Pagado/);
   assert.match(confirmed,/labBatchAwaitingReconcile = true/);
   assert.match(confirmed,/currentSummary\.pending - completedCents \/ 100/);
-  assert.match(source,/if \(labBatchAwaitingReconcile && labClientScreenState/);
+  assert.match(source,/labBatchAwaitingReconcile \|\| labPaymentReceiptOverlays\.size/);
   assert.match(source,/labBatchAwaitingReconcile = false;\s*labRenderRoute\('replace'\)/);
   assert.match(css,/\.na-v2-batch-row-paid/);
   assert.match(css,/\.na-v2-batch-pay\.na-v2-batch-confirmed/);
