@@ -194,8 +194,8 @@ async function activateWriter() {
 }
 async function cleanupWriter(sessionId) {
   if(!sessionId)return;
-  await cfRaw('DELETE FROM auth_sessions WHERE session_id=?1',[sessionId]);
-  await cfRaw('DELETE FROM devices WHERE device_id=?1',['session:'+sessionId]);
+  await cfRaw("UPDATE auth_sessions SET status='revoked' WHERE session_id=?1 AND status='active'",[sessionId]);
+  await cfRaw("UPDATE devices SET status='revoked' WHERE device_id=?1 AND status='active'",['session:'+sessionId]);
 }
 async function customerCreateDiagnostics(match,writer) {
   const tables=['canonical_customer_operations','canonical_customer_registry','canonical_live_customers','canonical_expense_operations','canonical_product_operations','canonical_inventory_operations','canonical_credit_accounts','canonical_credit_metadata'];
