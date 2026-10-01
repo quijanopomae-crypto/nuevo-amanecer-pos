@@ -1,0 +1,108 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SALE-INSTANT-RECEIPT-007",
+  "base_ref": "5b82750d289d321d9cee2c6cd9f2a9c9458a1c25",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "candidate": {
+    "status": "CANDIDATO_A_CANON",
+    "basis": "Patrón post-receipt probado en PR #314 y flujo sale.create→Turso→receipt ya cubierto por canonical-sale-turso-root; se promoverá solo el cambio mínimo de latencia/UI sin tocar backend ni reglas."
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
+  },
+  "analysis": {
+    "ROOT_CAUSE": [
+      "La captura CANON guarda primero el intent en outbox y llama updateAfterCommit/projectCurrentOutbox ANTES del commit remoto, por eso la UI enseña V-004 como 'Pendiente de sincronización'.",
+      "syncLocked() hace canonical.refresh() completo antes de createSale aunque la réplica ya estaba validada.",
+      "sendPending() hace además GET /read/canonical/status antes del POST de sale.create.",
+      "Tras obtener receipt, outbox.sync() vuelve a esperar canonical.refresh() completo antes de retornar.",
+      "Resultado: el POST real queda rodeado por lecturas redundantes y la venta normal no entra al renderer principal/KPIs hasta la reconciliación."
+    ],
+    "FIRST_PRINCIPLES": [
+      "Trabajo imprescindible: validación local, intent durable, un POST sale.create, receipt durable.",
+      "Trabajo no imprescindible en el camino crítico: releer todas las colecciones antes y después del POST.",
+      "La información necesaria para pintar la venta ya existe en intent+receipt; usarla únicamente después del receipt."
+    ],
+    "READS": [
+      "captura proporcionada por el owner: V-004 S/5.00 aparece en 'Ventas pendientes' mientras KPIs siguen en S/4.00",
+      "POS/js/sync/canonical-sale-integration.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "POS/js/sync/canonical-sale-projection.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "POS/js/legacy-inline/inline-10.js READ-ONLY",
+      "tools/cloudflare-lab/src/a6-commerce.js READ-ONLY",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+    ],
+    "WRITES": [
+      "No pintar estado pendiente en la ruta online normal antes de intentar sync.",
+      "Eliminar refresh completo redundante de outbox antes de createSale; createSale decide si necesita refrescar.",
+      "Permitir que una sale.create nueva omita status GET cuando la réplica acaba de validarse; retryPending mantiene status remoto.",
+      "Emitir na:canonical-sale-receipt inmediatamente después de durableJournal(CONFIRMED).",
+      "Proyectar el receipt confirmado como venta normal en runtime sales y ejecutar ventasRender/updateDashboard inmediatamente.",
+      "No esperar refresh completo post-receipt en outbox.sync."
+    ],
+    "DOM_AFFECTED": [
+      "Ventas e Historial",
+      "KPIs Ventas/Ganancia",
+      "panel Ventas pendientes solo para fallo real"
+    ],
+    "STATE_AFFECTED": [
+      "overlay efímero de ventas confirmadas por operation_id",
+      "ventas[] visual mediante adapter runtime.setSales"
+    ],
+    "STORAGE_AFFECTED": [
+      "sin storage nuevo; outbox y journal existentes conservan durabilidad"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "operation_id y sale_id sin duplicación",
+      "stock y caja se mutan una sola vez en backend",
+      "no venta COMPLETADA antes del receipt",
+      "ACK perdido conserva outbox/pending",
+      "la réplica autoritativa reemplaza el overlay"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas: latencia y representación visual",
+      "Inventario: solo proyección visual ya existente; backend igual",
+      "Caja: backend igual, sin mutación local nueva",
+      "Crédito: backend igual; una venta a crédito sigue creando su live_credit atómicamente"
+    ],
+    "RISK": "CRITICAL por cruce ventas/stock/caja, mitigado al no cambiar Worker/schema ni mutaciones reales y exigir pruebas Turso E2E.",
+    "LAB_GATE": "La prueba canonical-sale-turso-root usa Turso protocol adapter + worker real sintético; debe demostrar POST único antes del receipt, persistencia exacta y cero duplicación.",
+    "ROLLBACK": [
+      "revert PR",
+      "redeploy Hosted POS previo"
+    ],
+    "TEST_PLAN": [
+      "Online/current: no GET antes de POST /commands/sale.create.",
+      "Receipt durable: evento sale receipt ocurre con journal CONFIRMED antes de cualquier refresh completo.",
+      "UI: la venta entra como COMPLETADA en ventas principal y KPI inmediatamente; no aparece panel pendiente.",
+      "Post-receipt: outbox.sync retorna sin esperar GET de 12 colecciones.",
+      "ACK perdido/offline: outbox permanece y pendiente sigue visible; no falso confirmado.",
+      "Replay: stock/caja/venta exactamente una vez.",
+      "CANON Critical CI + E2E Smoke + deploy Hosted POS."
+    ]
+  }
+}
