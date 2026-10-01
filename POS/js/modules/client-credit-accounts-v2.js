@@ -24,6 +24,9 @@
   var naClientMotionBound = false;
   var labBatchSubmitInFlight = false;
   var labBatchAwaitingReconcile = false;
+  // Ephemeral, post-commit UI projection. Entries exist only after a durable
+  // CANON receipt and are removed once the authoritative replica contains them.
+  var labPaymentReceiptOverlays = new Map();
   var NA_CLIENT_INTERACTIVE_SELECTOR = 'button,input,textarea,select,option,a,label,[contenteditable="true"],[role="button"]';
 
   function labEsc(value) {
@@ -73,13 +76,119 @@
     return Math.ceil((due - today) / 86400000);
   }
 
-  function labClientCredits(clientId) {
-    if (typeof _naClientCreditsFast === 'function') {
-      try { return _naClientCreditsFast(clientId); } catch (_) {}
-    }
-    return (Array.isArray(creditos) ? creditos : []).filter(function (cr) {
-      return String(cr && (cr.cliId ?? cr.clienteId)) === String(clientId) && !cr.anulado && labCreditStatus(cr) !== 'anulado';
+  function labPaymentIdentity(pay) {
+    return String(pay && (pay.operation_id || pay.operationId || pay.pagoId || pay.id) || '');
+  }
+
+  function labReceiptVisualPayment(entry, credit) {
+    var payload = entry.payload, receipt = entry.receipt;
+    var timestamp = String(payload.created_at || '');
+    var reference = String(payload.reference || '');
+    var operationId = String(receipt.operation_id || payload.operation_id || '');
+    return {
+      id: operationId,
+      pagoId: operationId,
+      operation_id: operationId,
+      creditoId: String(receipt.credit_id || payload.credit_id || ''),
+      clienteId: credit && (credit.cliId ?? credit.clienteId),
+      monto: Number(payload.amount_cents) / 100,
+      montoPagado: Number(payload.amount_cents) / 100,
+      fecha: /^\d{4}-\d{2}-\d{2}T/.test(timestamp) ? timestamp.slice(0, 10) : '',
+      timestamp: timestamp || null,
+      canonicalDateKnown: !!timestamp,
+      datePrecision: timestamp ? 'TIMESTAMP' : 'UNKNOWN',
+      metodo: String(payload.payment_method || 'efectivo'),
+      operacion: reference,
+      numeroOperacion: reference,
+      referencia: reference,
+      cajero: '',
+      cajeroNombre: '',
+      canonical: true,
+      canonicalReceiptProjection: true
+    };
+  }
+
+  function labApplyPaymentReceiptOverlays(rows) {
+    if (!labPaymentReceiptOverlays.size) return rows;
+    return rows.map(function (cr) {
+      var creditId = String(cr && (cr.credit_id ?? cr.id) || '');
+      var overlays = Array.from(labPaymentReceiptOverlays.values()).filter(function (entry) {
+        return String(entry.receipt.credit_id || entry.payload.credit_id || '') === creditId;
+      });
+      if (!overlays.length) return cr;
+
+      var copy = Object.assign({}, cr);
+      copy.pagos = (Array.isArray(cr.pagos) ? cr.pagos : []).slice();
+      var existing = new Set(copy.pagos.map(labPaymentIdentity).filter(Boolean));
+      overlays.sort(function (a, b) {
+        return String(a.payload.created_at || '').localeCompare(String(b.payload.created_at || ''));
+      }).forEach(function (entry) {
+        var operationId = String(entry.receipt.operation_id || entry.payload.operation_id || '');
+        if (operationId && !existing.has(operationId)) {
+          copy.pagos.push(labReceiptVisualPayment(entry, copy));
+          existing.add(operationId);
+        }
+        var balance = Number(entry.receipt.current_balance_cents);
+        if (Number.isSafeInteger(balance) && balance >= 0) {
+          copy.saldo = balance / 100;
+          copy.pagado = Math.max(0, Number(((Number(copy.monto) || 0) - copy.saldo).toFixed(2)));
+          if (balance === 0) {
+            copy.status = 'cancelado';
+            copy.estado = 'cancelado';
+          }
+        }
+      });
+      return copy;
     });
+  }
+
+  function labClientCredits(clientId) {
+    var rows = null;
+    if (typeof _naClientCreditsFast === 'function') {
+      try { rows = _naClientCreditsFast(clientId); } catch (_) {}
+    }
+    if (!Array.isArray(rows)) {
+      rows = (Array.isArray(creditos) ? creditos : []).filter(function (cr) {
+        return String(cr && (cr.cliId ?? cr.clienteId)) === String(clientId) && !cr.anulado && labCreditStatus(cr) !== 'anulado';
+      });
+    }
+    return labApplyPaymentReceiptOverlays(rows);
+  }
+
+  function labReconcilePaymentReceiptOverlays() {
+    if (!labPaymentReceiptOverlays.size) return false;
+    var rows = Array.isArray(creditos) ? creditos : [];
+    var changed = false;
+    labPaymentReceiptOverlays.forEach(function (entry, operationId) {
+      var creditId = String(entry.receipt.credit_id || entry.payload.credit_id || '');
+      var credit = rows.find(function (row) {
+        return String(row && (row.credit_id ?? row.id) || '') === creditId;
+      });
+      var committed = credit && (Array.isArray(credit.pagos) ? credit.pagos : []).some(function (pay) {
+        return labPaymentIdentity(pay) === operationId;
+      });
+      if (committed) {
+        labPaymentReceiptOverlays.delete(operationId);
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function labAcceptPaymentReceipt(detail) {
+    var payload = detail && detail.payload, receipt = detail && detail.receipt;
+    if (!detail || detail.version !== 1 || detail.command !== 'payment.create' || !payload || !receipt) return false;
+    var operationId = String(payload.operation_id || '');
+    if (!operationId || operationId !== String(receipt.operation_id || '') ||
+        String(payload.credit_id || '') !== String(receipt.credit_id || '') ||
+        !Number.isSafeInteger(Number(payload.amount_cents)) || Number(payload.amount_cents) <= 0 ||
+        !Number.isSafeInteger(Number(receipt.current_balance_cents)) || Number(receipt.current_balance_cents) < 0 ||
+        !['created','already_processed'].includes(String(receipt.status || ''))) return false;
+    labPaymentReceiptOverlays.set(operationId, {
+      payload: JSON.parse(JSON.stringify(payload)),
+      receipt: JSON.parse(JSON.stringify(receipt))
+    });
+    return true;
   }
 
   function labNormalizeCategory(raw, fallbackIndex) {
@@ -1480,6 +1589,10 @@
   }
 
   function naClientDebt(client) {
+    if (labPaymentReceiptOverlays.size) {
+      var projected = labClientFinancialSummary(client);
+      return Math.max(0, Number(projected.debt) || 0);
+    }
     if (typeof _naClientDebtFast === 'function') {
       try { return Math.max(0, Number(_naClientDebtFast(client)) || 0); } catch (_) {}
     }
@@ -1976,9 +2089,18 @@
     naEnhanceClientCards(); naSyncClientLoadingUi();
   }
 
+  root.addEventListener('na:canonical-payment-receipt',function(event){
+    if (!labAcceptPaymentReceipt(event && event.detail)) return;
+    // The Worker receipt is already durable at this point. Paint the affected
+    // client immediately; the expensive full reconciliation remains background.
+    if (labClientScreenState && labClientScreenState.clientId) labRenderRoute('replace');
+    naEnhanceClientCards();
+  });
+
   root.addEventListener('na:canonical-updated',function(){setTimeout(function(){
+    labReconcilePaymentReceiptOverlays();
     naBindRuntime(); naEnhanceClientCards(); naSyncClientLoadingUi();
-    if (labBatchAwaitingReconcile && labClientScreenState && labClientScreenState.clientId) {
+    if ((labBatchAwaitingReconcile || labPaymentReceiptOverlays.size) && labClientScreenState && labClientScreenState.clientId) {
       labBatchAwaitingReconcile = false;
       labRenderRoute('replace');
     }
