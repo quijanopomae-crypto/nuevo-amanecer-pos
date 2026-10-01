@@ -69,7 +69,7 @@ async function posHarness(page:Page,cleanup:Array<()=>void>,options:{lostAck?:bo
       if(!localStorage.getItem('na_cloud_sync_credentials'))localStorage.setItem('na_cloud_sync_credentials',JSON.stringify({endpoint:location.origin,token:'writer-token'}));
     },control);
     await page.goto('/index.html');
-    await page.waitForFunction(()=>(window as any).NuevoAmanecerCanonical?.sourceState().validation==='activation-required');
+    await page.waitForFunction(() => typeof (window as any).NuevoAmanecerCanonical?.startPOS === 'function');
     await page.waitForSelector('#naLocalWork');
     return {f,calls};
   }
