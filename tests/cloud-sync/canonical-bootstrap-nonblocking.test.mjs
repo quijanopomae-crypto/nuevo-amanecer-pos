@@ -69,6 +69,6 @@ test('CANON core bootstrap is parallel and visible before financial completion',
 test('mobile status shows runtime CANON state instead of a hardcoded Local label',()=>{
   assert.doesNotMatch(layout,/content:'Local'/);
   assert.match(layout,/\.g-status span\{font-size:10px/);
-  assert.match(inline03,/CANON · validando/);
-  assert.match(inline03,/CANON validado/);
+  assert.match(inline03,/na:canonical-connected/);
+  assert.match(inline03,/connectionReady/);
 });
