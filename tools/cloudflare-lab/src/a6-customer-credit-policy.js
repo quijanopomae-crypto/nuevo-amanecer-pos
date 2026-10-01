@@ -79,36 +79,38 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
     authority_epoch:b.authority_epoch,idempotent:false
   };
   const token='credit-policy:'+crypto.randomUUID();
-  const statements=[
-    db.prepare(`INSERT INTO canonical_customer_credit_policy_operations
-      (operation_id,command,request_hash,result_json,promotion_id,customer_id,mode,manual_limit_cents,reason,administrator_id,administrator_name,
-       expected_policy_revision,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
-      VALUES(?1,'customer.credit-policy.set',?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)`)
-      .bind(b.operation_id,requestHash,stableStringify(result),b.promotion_id,b.customer_id,b.mode,b.manual_limit_cents,b.reason,
-        b.administrator_id,b.administrator_name,b.expected_policy_revision,b.authority_epoch,b.expected_control_revision,b.client_contract,
-        auth.principalId,auth.credentialHash,b.created_at),
-    db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':operation')
-  ];
-  if(b.expected_policy_revision===0){
-    statements.push(
-      db.prepare(`INSERT INTO canonical_customer_credit_policies
-        (promotion_id,customer_id,mode,manual_limit_cents,reason,administrator_id,administrator_name,updated_at,revision,operation_id)
-        VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1,?9)`)
-        .bind(b.promotion_id,b.customer_id,b.mode,b.manual_limit_cents,b.reason,b.administrator_id,b.administrator_name,b.created_at,b.operation_id)
-    );
-  }else{
-    statements.push(
-      db.prepare(`UPDATE canonical_customer_credit_policies
-        SET mode=?1,manual_limit_cents=?2,reason=?3,administrator_id=?4,administrator_name=?5,updated_at=?6,revision=revision+1,operation_id=?7
-        WHERE promotion_id=?8 AND customer_id=?9 AND revision=?10`)
-        .bind(b.mode,b.manual_limit_cents,b.reason,b.administrator_id,b.administrator_name,b.created_at,b.operation_id,b.promotion_id,b.customer_id,b.expected_policy_revision)
-    );
-  }
-  statements.push(
-    db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':policy'),
-    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(token+':operation',token+':policy')
-  );
   try{
+    // Build and execute the mutation inside the same guarded block so an
+    // installation that predates migration 0018 still fails closed as 503.
+    const statements=[
+      db.prepare(`INSERT INTO canonical_customer_credit_policy_operations
+        (operation_id,command,request_hash,result_json,promotion_id,customer_id,mode,manual_limit_cents,reason,administrator_id,administrator_name,
+         expected_policy_revision,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
+        VALUES(?1,'customer.credit-policy.set',?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)`)
+        .bind(b.operation_id,requestHash,stableStringify(result),b.promotion_id,b.customer_id,b.mode,b.manual_limit_cents,b.reason,
+          b.administrator_id,b.administrator_name,b.expected_policy_revision,b.authority_epoch,b.expected_control_revision,b.client_contract,
+          auth.principalId,auth.credentialHash,b.created_at),
+      db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':operation')
+    ];
+    if(b.expected_policy_revision===0){
+      statements.push(
+        db.prepare(`INSERT INTO canonical_customer_credit_policies
+          (promotion_id,customer_id,mode,manual_limit_cents,reason,administrator_id,administrator_name,updated_at,revision,operation_id)
+          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1,?9)`)
+          .bind(b.promotion_id,b.customer_id,b.mode,b.manual_limit_cents,b.reason,b.administrator_id,b.administrator_name,b.created_at,b.operation_id)
+      );
+    }else{
+      statements.push(
+        db.prepare(`UPDATE canonical_customer_credit_policies
+          SET mode=?1,manual_limit_cents=?2,reason=?3,administrator_id=?4,administrator_name=?5,updated_at=?6,revision=revision+1,operation_id=?7
+          WHERE promotion_id=?8 AND customer_id=?9 AND revision=?10`)
+          .bind(b.mode,b.manual_limit_cents,b.reason,b.administrator_id,b.administrator_name,b.created_at,b.operation_id,b.promotion_id,b.customer_id,b.expected_policy_revision)
+      );
+    }
+    statements.push(
+      db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':policy'),
+      db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(token+':operation',token+':policy')
+    );
     // Happy path: one atomic database batch. Migration 0018 already revalidates
     // writer authority, customer identity, operation namespace and policy CAS
     // inside this transaction, so separate remote SELECTs only add Turso latency.
