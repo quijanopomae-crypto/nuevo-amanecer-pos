@@ -1,0 +1,163 @@
+name: V1.3 Turso Production Debt Reconciliation Apply
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-turso-prod-debt-reconcile-trigger.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-change
+  cancel-in-progress: false
+
+jobs:
+  reconcile-turso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+      DEBT_RECONCILE_PROVIDER: turso
+      DEBT_RECONCILE_TRIGGER_PATH: ops/v1.3-turso-prod-debt-reconcile-trigger.json
+
+    steps:
+      - name: Require owner authorization and Turso credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+          test -n "$POS_ACTIVATION_SECRET"
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test -n "$TURSO_PROD_AUTH_TOKEN"
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require exact branch and trigger invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const t=JSON.parse(fs.readFileSync('ops/v1.3-turso-prod-debt-reconcile-trigger.json','utf8'));
+          if(t.authorized!==true||t.authorized_by!=='owner'||t.mode!=='apply') throw new Error('owner authorization missing');
+          if(t.provider!=='turso') throw new Error('provider must be turso');
+          if(t.target_count!==29||t.target_total_cents!==2368495) throw new Error('target invariant mismatch');
+          if(!t.key_material||!t.payload) throw new Error('encrypted payload missing');
+          NODE
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate Turso reconciliation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/cloudflare-prod/scripts/debt-reconcile-apply.mjs
+          node --check tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs
+          node --test tests/cloud-sync/canonical-debt-reconciliation.test.mjs
+          node --test tools/cloudflare-lab/test/turso-d1-adapter.test.mjs
+          cd tools/cloudflare-lab
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+
+      - name: Create logical Turso backup before writes
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs backup
+
+      - name: Store and verify backup in private remote R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-debt-reconcile-turso/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --remote --file=/tmp/turso-debt-reconcile-backup.json
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --remote --file=/tmp/turso-debt-reconcile-backup-check.json
+          test "$(sha256sum /tmp/turso-debt-reconcile-backup.json | awk '{print $1}')" = "$(sha256sum /tmp/turso-debt-reconcile-backup-check.json | awk '{print $1}')"
+          echo "TURSO_DEBT_RECONCILE_BACKUP_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Apply migration 0019 to Turso authority if needed
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs migrate
+
+      - name: Verify Turso reconciliation schema
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs verify
+
+      - name: Deploy authoritative Turso Worker read model
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+
+      - name: Probe public production Worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            BODY="$(curl -sS --max-time 15 "$PROD_WORKER_URL/health" || true)"
+            if printf '%s' "$BODY" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const x=JSON.parse(s);process.exit(x.ok===true&&x.service==="nuevo-amanecer-pos-prod"&&x.environment==="production"?0:1)}catch{process.exit(1)}})'; then
+              echo "TURSO_PRODUCTION_WORKER_HEALTH=PASS"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Apply encrypted 29-customer debt reconciliation to Turso
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/debt-reconcile-apply.mjs
+
+      - name: Verify exact Turso debt and integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs verify
+          node --input-type=module <<'NODE'
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+          const db=new TursoD1Adapter({url:process.env.TURSO_PROD_DATABASE_URL,authToken:process.env.TURSO_PROD_AUTH_TOKEN});
+          const control=await db.prepare('SELECT active_promotion_id,mode FROM canonical_control WHERE id=1').first();
+          if(control?.mode!=='ACTIVE'||!control?.active_promotion_id) throw new Error('Turso CANON inactive');
+          const row=await db.prepare('SELECT COALESCE(SUM(current_balance_cents),0) AS total FROM canonical_credit_balances WHERE promotion_id=?1').bind(control.active_promotion_id).first();
+          if(Number(row?.total)!==2368495) throw new Error('final debt total mismatch');
+          const quick=await db.prepare('PRAGMA quick_check').all();
+          if(String(Object.values(quick.results?.[0]||{})[0]||'').toLowerCase()!=='ok') throw new Error('quick_check failed');
+          const fk=await db.prepare('PRAGMA foreign_key_check').all();
+          if((fk.results||[]).length) throw new Error('foreign_key_check failed');
+          console.log('TURSO_DEBT_RECONCILE_FINAL=PASS total_cents=2368495');
+          NODE
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "## CANON Turso debt reconciliation"
+            echo "- Status: APPLIED_AND_VERIFIED"
+            echo "- Authority: Turso"
+            echo "- Target customers: 29"
+            echo "- Target debt: S/ 23,684.95"
+            echo "- Backup: $TURSO_DEBT_RECONCILE_BACKUP_KEY"
+            echo "- Payment/cash/sales ledgers: preserved"
+            echo "- Integrity: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"

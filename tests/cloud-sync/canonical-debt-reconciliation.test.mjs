@@ -6,6 +6,8 @@ const migration=readFileSync('infra/database/migrations/0019_canonical_debt_reco
 const canonical=readFileSync('tools/cloudflare-lab/src/a6-canonical.js','utf8');
 const apply=readFileSync('tools/cloudflare-prod/scripts/debt-reconcile-apply.mjs','utf8');
 const ownerValidation=readFileSync('tools/cloudflare-prod/scripts/owner-validation-readonly.mjs','utf8');
+const tursoMaintenance=readFileSync('tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs','utf8');
+const tursoWorkflow=readFileSync('.github/workflows/v1.3-turso-prod-debt-reconcile.yml','utf8');
 
 test('0019 keeps reconciliation additive and immutable',()=>{
   assert.match(migration,/CREATE TABLE IF NOT EXISTS canonical_reconciliation_credits/);
@@ -50,4 +52,17 @@ test('production writer uses encrypted source and protects commercial ledgers',(
 test('readonly owner validation accepts reconciliation credits in authoritative read count',()=>{
   assert.match(ownerValidation,/reconciliationCreditCount/);
   assert.match(ownerValidation,/before\.import_credits \+ before\.live_credits \+ before\.reconciliation_credits/);
+});
+
+
+test('production reconciliation can target the authoritative Turso backend without D1 writes',()=>{
+  assert.match(apply,/DEBT_RECONCILE_PROVIDER/);
+  assert.match(apply,/TursoD1Adapter/);
+  assert.match(tursoMaintenance,/TURSO_PROD_DATABASE_URL/);
+  assert.match(tursoMaintenance,/0019_canonical_debt_reconciliation\.sql/);
+  assert.match(tursoWorkflow,/DEBT_RECONCILE_PROVIDER: turso/);
+  assert.match(tursoWorkflow,/wrangler\.turso-prod\.jsonc/);
+  assert.match(tursoWorkflow,/TURSO_DEBT_RECONCILE_FINAL=PASS/);
+  assert.doesNotMatch(tursoWorkflow,/wrangler d1 execute/);
+  assert.doesNotMatch(tursoWorkflow,/\/d1\/database\//);
 });

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { TursoD1Adapter } from '../../cloudflare-lab/src/turso-d1-adapter.js';
 import {
   createDecipheriv,
   createHash,
@@ -9,9 +10,13 @@ import {
 } from 'node:crypto';
 
 const TRIGGER_PATH = process.env.DEBT_RECONCILE_TRIGGER_PATH || 'ops/v1.3-prod-debt-reconcile-apply-trigger.json';
+const PROVIDER = String(process.env.DEBT_RECONCILE_PROVIDER || 'd1').trim().toLowerCase();
 const ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID || '';
 const TOKEN = process.env.CLOUDFLARE_API_TOKEN || '';
 const PROD_DB = process.env.PROD_DATABASE_ID || 'cf2c83d3-f187-472e-967b-0ad24be969eb';
+const TURSO_URL = process.env.TURSO_PROD_DATABASE_URL || '';
+const TURSO_TOKEN = process.env.TURSO_PROD_AUTH_TOKEN || '';
+let tursoDb = null;
 const PROD_WORKER = process.env.PROD_WORKER_URL || 'https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev';
 const POS_SECRET = process.env.POS_ACTIVATION_SECRET || '';
 const EXPECTED_COUNT = 29;
@@ -74,12 +79,26 @@ function normalizeName(value) {
   return String(value||'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
 }
 function requireEnv() {
-  if(!/^[a-f0-9]{32}$/.test(ACCOUNT))throw new Error('invalid CLOUDFLARE_ACCOUNT_ID');
-  if(!TOKEN)throw new Error('missing CLOUDFLARE_API_TOKEN');
+  if(!['d1','turso'].includes(PROVIDER))throw new Error('invalid debt reconciliation provider');
+  if(PROVIDER==='d1'){
+    if(!/^[a-f0-9]{32}$/.test(ACCOUNT))throw new Error('invalid CLOUDFLARE_ACCOUNT_ID');
+    if(!TOKEN)throw new Error('missing CLOUDFLARE_API_TOKEN');
+  }else{
+    if(!TURSO_URL)throw new Error('missing TURSO_PROD_DATABASE_URL');
+    if(!TURSO_TOKEN)throw new Error('missing TURSO_PROD_AUTH_TOKEN');
+  }
   if(!POS_SECRET||POS_SECRET.length<12)throw new Error('missing POS_ACTIVATION_SECRET');
+}
+function tursoDatabase(){
+  if(!tursoDb)tursoDb=new TursoD1Adapter({url:TURSO_URL,authToken:TURSO_TOKEN});
+  return tursoDb;
 }
 async function cfRaw(sql,params=[]) {
   requireEnv();
+  if(PROVIDER==='turso'){
+    const statement=tursoDatabase().prepare(sql);
+    return params.length?statement.bind(...params).all():statement.all();
+  }
   const response=await fetch('https://api.cloudflare.com/client/v4/accounts/'+ACCOUNT+'/d1/database/'+PROD_DB+'/query',{
     method:'POST',
     headers:{authorization:'Bearer '+TOKEN,'content-type':'application/json'},
@@ -316,7 +335,7 @@ async function main() {
     writer=await activateWriter();
     if(writer.status.promotion_id!==c.active_promotion_id||
        Number(writer.status.authority_epoch)!==Number(c.authority_epoch)||
-       Number(writer.status.revision)!==Number(c.revision))throw new Error('Worker authority differs from D1');
+       Number(writer.status.revision)!==Number(c.revision))throw new Error('Worker authority differs from reconciliation provider');
     await createMissingCustomers(matches,writer,trigger);
 
     identities=await identityRows(c.active_promotion_id);
