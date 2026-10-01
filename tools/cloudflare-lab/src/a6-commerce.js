@@ -256,12 +256,23 @@ export async function createCanonicalSale(request, env, auth, json) {
   }
 
   const payloadHashPromise=sha256Hex(stableStringify(body));
-  const validation=await db.batch(reads);
+  let validation;
+  if (String(env?.DB_PROVIDER || '').trim().toLowerCase() === 'turso') {
+    const batched=await db.batch(reads);
+    validation=batched.map(firstBatchRow);
+  } else {
+    // Preserve the existing D1/local binding contract. The production latency
+    // optimization is Turso-specific because its adapter turns db.batch into a
+    // single remote HTTP pipeline; legacy/local test bindings may implement
+    // batch as mutation-only.
+    validation=[];
+    for (const statement of reads) validation.push(await statement.first());
+  }
   const payloadHash=await payloadHashPromise;
-  const denied=authorityErrorFor(firstBatchRow(validation[readIndex.control]));
+  const denied=authorityErrorFor(validation[readIndex.control]);
   if (denied) return json({error:denied},409);
 
-  const existing=firstBatchRow(validation[readIndex.existing]);
+  const existing=validation[readIndex.existing];
   if (existing) {
     // Preserve the replay rule: an old durable operation is returned only while
     // this session still owns current write authority.
@@ -271,12 +282,12 @@ export async function createCanonicalSale(request, env, auth, json) {
       ? json({status:'already_processed',operation_id:body.operation_id,sale_id:existing.sale_id,idempotent:true})
       : json({error:'operation_id_conflict',operation_id:body.operation_id},409);
   }
-  if (firstBatchRow(validation[readIndex.financialOperation])) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
-  if (readIndex.productOperation>=0 && firstBatchRow(validation[readIndex.productOperation])) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  if (validation[readIndex.financialOperation]) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  if (readIndex.productOperation>=0 && validation[readIndex.productOperation]) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
 
   const products=[];
   for (let index=0; index<body.items.length; index++) {
-    const item=body.items[index], row=firstBatchRow(validation[readIndex.products[index]]);
+    const item=body.items[index], row=validation[readIndex.products[index]];
     if (item.generic_line !== undefined) {
       if (row) return json({error:'generic_product_id_conflict',product_id:item.product_id},409);
       products.push({product_id:item.product_id,current_stock_quantity:0,stock_revision:0,tracks_inventory:0,provenance:'GENERIC'});
@@ -290,11 +301,11 @@ export async function createCanonicalSale(request, env, auth, json) {
     products.push(product);
   }
 
-  if (body.customer_id && !firstBatchRow(validation[readIndex.customer])) return json({error:'customer_not_found'},409);
+  if (body.customer_id && !validation[readIndex.customer]) return json({error:'customer_not_found'},409);
 
   let accountExists=false;
   if (readIndex.account>=0) {
-    const account=firstBatchRow(validation[readIndex.account]);
+    const account=validation[readIndex.account];
     if(account){
       if(account.account_id!==body.credit_account.account_id || account.name!==body.credit_account.name || account.mode!==body.credit_account.mode)
         return json({error:'credit_account_conflict',account_id:account.account_id},409);
