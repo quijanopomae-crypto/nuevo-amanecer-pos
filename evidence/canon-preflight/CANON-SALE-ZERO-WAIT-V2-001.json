@@ -1,0 +1,114 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-SALE-ZERO-WAIT-V2-001",
+  "base_ref": "fbbdea2a31a38bfc358c7d3d24894a4b6ac87ebb",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "candidate": {
+    "status": "CANDIDATO_A_CANON",
+    "observed_evidence": "Captura del propietario 2026-09-30 ~21:49 muestra KPIs aún en S/4.00 y tres intents V-003/V-004/V-005 en 'Ventas pendientes' con timestamps 02:48-02:49Z.",
+    "previous_candidate": "PR #315 mejoró la proyección post-receipt pero no eliminó el gate de full refresh cuando la réplica está provisional/ready=false."
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    },
+    "release-readiness": {
+      "path": ".agents/skills/release-readiness/SKILL.md",
+      "git_blob_sha": "7f896404e8ed52fad87b4a2466a92f83147c3f36"
+    }
+  },
+  "analysis": {
+    "ROOT_CAUSE": [
+      "startPOS publica el cache inmediatamente como provisional y arranca refresh completo en background; mientras ese refresh sigue cargando sales/sale-items/inventory/cash, una venta nueva queda en outbox porque createSale espera refresh() antes de poder escribir.",
+      "sendPending marca ready=false después de cada receipt. Por eso una segunda venta o el siguiente intent del FIFO vuelve a necesitar un refresh completo aunque la venta anterior ya fue confirmada.",
+      "outbox arrancaba reconciliación completa inmediatamente después de drenar; en móvil 4G compite por ancho de banda con la siguiente venta.",
+      "PR #315 resolvió visualización inmediata cuando el receipt ya existe, pero no el gate previo al receipt cuando la réplica está provisional o invalidada.",
+      "La captura también evidencia una cola V-003/V-004/V-005; una cola antigua puede incluir un sale_id que ya exista. El repair debe conservar operaciones reales y renumerar solo con prueba inequívoca de colisión rechazada."
+    ],
+    "READS": [
+      "captura del propietario",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "POS/js/sync/canonical-sale-integration.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "tools/cloudflare-lab/src/a6-commerce.js READ-ONLY",
+      "tests/cloud-sync/canonical-client.test.mjs",
+      "tests/cloud-sync/canonical-sale-outbox.test.mjs",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+      "docs/CANON_TURSO_SALE_ROOT.md"
+    ],
+    "WRITES": [
+      "Agregar readiness específico de sale.create separado del ready global.",
+      "Permitir una venta desde cache ACTIVE previamente validado sin esperar el escaneo completo; el POST sigue protegido por CAS del Worker.",
+      "Aplicar en memoria solo los efectos de stock deterministas del receipt confirmado para que ventas consecutivas usen stock_revision correcto.",
+      "Agregar generation fence para impedir que un refresh viejo sobrescriba efectos de receipts más nuevos.",
+      "Diferir reconciliación completa post-venta fuera de la ráfaga comercial.",
+      "Reparar sale_id rechazado solo cuando un scan remoto de ventas demuestra colisión y ausencia de operation_id."
+    ],
+    "DOM_AFFECTED": [
+      "ningún DOM nuevo; Ventas/Historial consume el receipt overlay existente de PR #315"
+    ],
+    "STATE_AFFECTED": [
+      "data.products raw CANON en memoria",
+      "saleWriteReady",
+      "saleMutationGeneration",
+      "outbox FIFO y last_sale_number"
+    ],
+    "STORAGE_AFFECTED": [
+      "na_canonical_sale_outbox_v1",
+      "na_canonical_sale_journal existentes; no nuevas keys"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "stock/caja/credit mutation remota exactamente una vez",
+      "no pérdida de intents",
+      "no confirmación optimista",
+      "retries con mismo operation_id",
+      "no full refresh en happy path de ventas consecutivas"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas: reduce critical path a enqueue durable + POST + receipt.",
+      "Inventario: actualiza en memoria cantidad/revisión solo después del receipt; servidor sigue autoridad.",
+      "Caja: no se altera estado local; otros comandos siguen refresh-gated.",
+      "Créditos: venta a crédito puede visualizarse por receipt pero pagos siguen requiriendo su propia reconciliación."
+    ],
+    "RISK": "CRITICAL por ventas+stock+caja; sin backend/schema y con E2E Turso sintético obligatorio.",
+    "TEST_PLAN": [
+      "Cache ACTIVE + refresh completo bloqueado: confirmarVenta debe completar por POST/receipt sin esperar.",
+      "Dos/tres ventas consecutivas del mismo producto: stock 173→172→171→170 y una fila/cash por venta.",
+      "Segundo POST no debe tener GET full-refresh antes.",
+      "ACK perdido: retry exacto y stock una vez.",
+      "Refresh iniciado antes de receipt no puede publicar snapshot viejo después del receipt.",
+      "Colisión sale_id rechazada: scan remoto prueba colisión, journal rechazado se descarta, FIFO se renumera en orden y ninguna operación se pierde.",
+      "CANON Critical CI y E2E Smoke PASS.",
+      "Gate Codex externo requerido antes de merge/deploy."
+    ],
+    "ROLLBACK": [
+      "revert PR",
+      "no datos/schema que revertir"
+    ]
+  }
+}
