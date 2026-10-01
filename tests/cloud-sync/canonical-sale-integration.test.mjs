@@ -120,7 +120,7 @@ test('VARIOS enters canonical outbox while unsupported modes and storage failure
   assert.equal(h.calls.project,0);
   assert.equal(h.calls.save,0);
 });
-test('projection failure preserves durable intent and an identical new cart captures a distinct sale',async()=>{const h=harness({projectionError:true});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.ok(h.stored);assert.equal(h.context.cart.length,0);assert.match(h.calls.toast.at(-1)[0],/guardada localmente/);h.context.cart=[{id:7,qty:2,precio:4.25,unitsPerQty:1}];await h.context.confirmarVenta();assert.equal(h.calls.enqueue,2);assert.equal(h.stored.sale_id,'V-002');});
+test('projection failure preserves durable intent and blocks a second sale until the pending one resolves',async()=>{const h=harness({projectionError:true});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.ok(h.stored);assert.equal(h.context.cart.length,0);assert.match(h.calls.toast.at(-1)[0],/guardada localmente/);h.context.cart=[{id:7,qty:2,precio:4.25,unitsPerQty:1}];await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.equal(h.stored.sale_id,'V-001');assert.equal(h.context.cart.length,1);assert.match(h.calls.toast.at(-1)[0],/venta pendiente de sincronización/i);});
 test('capture lock option skips only canonical blanket lock and still evaluates all POS locks',()=>{const lockLine=inline03.split('\n').find(line=>line.startsWith('isModuleLocked=function(moduleName,options)'));assert.ok(lockLine);const context=vm.createContext({NuevoAmanecerCanonical:{enabled:()=>true},securityIsLocked:()=>false,storage:{getItem:key=>key==='master'?'false':'false'},LOCK_KEYS:{master:'master',readOnly:'readonly',modules:{ventas:'ventas',productos:'productos'}}});vm.runInContext(lockLine,context);assert.equal(context.isModuleLocked('ventas'),true);assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),false);assert.equal(context.isModuleLocked('productos',{canonicalSaleCapture:true}),true);context.securityIsLocked=()=>true;assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.securityIsLocked=()=>false;context.storage.getItem=key=>key==='master'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.storage.getItem=key=>key==='readonly'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.storage.getItem=key=>key==='ventas'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);});
 test('parsed script order places canonical dependencies before integration between inline 03 and 07',()=>{const scripts=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(match=>match[1]);const pos=needle=>scripts.findIndex(src=>src.endsWith(needle));assert.ok(pos('js/legacy-inline/inline-03.js')<pos('js/sync/canonical-sale-integration.js'));assert.ok(pos('js/sync/canonical-sale-integration.js')<pos('js/legacy-inline/inline-07.js'));for(const dep of ['canonical-sale-intent.js','canonical-sale-outbox.js','canonical-sale-projection.js'])assert.ok(pos(dep)<pos('js/sync/canonical-sale-integration.js'));});
 test('canonical non-credit sale keeps the selected optional POS customer', async()=>{const h=harness();h.els.get('mVentaCliente').value='cust-9';await h.context.confirmarVenta();assert.equal(h.calls.input.customer_id,'cust-9');});
@@ -271,7 +271,9 @@ test('real browser global let state is used even when window properties do not e
     },
     NuevoAmanecerCanonical:{
       enabled:()=>true,
-      snapshot:()=>({products:[{id:'7'}],customers:[],credits:[]})
+      sourceState:()=>({validation:'current'}),
+      snapshot:()=>({products:[{id:'7'}],customers:[],credits:[],sales:[],mode:'ACTIVE',read_only:false}),
+      pendingSnapshot:()=>null
     },
     NuevoAmanecerCanonicalSaleIntent:{
       build(input){
