@@ -47,3 +47,20 @@ Rollback: revert del PR y redeploy Hosted POS mediante el mismo workflow; conser
 ## Límites operativos
 
 El consecutivo es durable y único dentro del almacenamiento compartido del navegador y considera la réplica confirmada. Dispositivos desconectados con réplicas obsoletas pueden competir por el mismo consecutivo global: la restricción única del backend rechaza la colisión, no duplica ventas. Garantizar secuencias globales offline entre dispositivos requeriría un contrato de asignación de IDs distinto y aprobación de ese cambio; esta reparación no inventa IDs ni modifica schema.
+
+
+## Recuperación automática antes de cambiar la línea de crédito
+
+El journal CANON continúa siendo la protección contra duplicados, pero una
+`sale.create` recuperable ya no obliga al operador a salir del modal y resolverla
+manualmente antes de guardar una política de crédito.
+
+Cuando **Ajuste manual de línea** detecta una operación ajena PENDING sin rechazo
+definitivo, ejecuta `retryPending()` con el mismo `operation_id`. Si Turso ya
+había confirmado la venta y solo se perdió el ACK, el replay idempotente devuelve
+el receipt sin duplicar venta, stock ni caja. Solo después de que el journal deja
+de estar PENDING se crea `customer.credit-policy.set`.
+
+Si la operación anterior tiene un rechazo definitivo o continúa incierta, la
+línea no se modifica y se muestra el motivo real. No se borra el journal ni se
+omite ninguna validación para desbloquear la interfaz.
