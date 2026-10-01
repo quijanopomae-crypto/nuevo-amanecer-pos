@@ -185,7 +185,7 @@ async function createMissingCustomers(matches,writer,trigger) {
     if(match.customer)continue;
     const body={
       operation_id:stableId('debt-reconcile-customer-',SOURCE_LABEL+':'+match.index),
-      customer_id:match.target.document,
+      customer_id:stableId('recon-customer-',SOURCE_LABEL+':'+match.index),
       promotion_id:writer.status.promotion_id,
       authority_epoch:Number(writer.status.authority_epoch),
       expected_control_revision:Number(writer.status.revision),
