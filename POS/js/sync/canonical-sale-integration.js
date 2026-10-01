@@ -13,18 +13,19 @@
   function runtime() { return root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime; }
   function canonicalSaleGate() {
     var canonical = root.NuevoAmanecerCanonical;
-    if (!canonical || typeof canonical.sourceState !== 'function' || typeof canonical.snapshot !== 'function') return { ready:false, reason:'CANON no está listo' };
-    var state = canonical.sourceState(), snapshot = canonical.snapshot();
-    if (!state || state.validation !== 'current' || !snapshot || snapshot.mode !== 'ACTIVE' || snapshot.read_only !== false)
-      return { ready:false, reason:'CANON está sincronizando · espera el indicador verde' };
-    if (typeof canonical.pendingSnapshot === 'function' && canonical.pendingSnapshot())
-      return { ready:false, reason:'Hay una operación pendiente · espera su confirmación' };
     var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+    if (!canonical || typeof canonical.snapshot !== 'function')
+      return { ready:false, reason:'La base local de CANON no está disponible' };
+    if (!outbox || typeof outbox.snapshot !== 'function' || typeof outbox.enqueue !== 'function')
+      return { ready:false, reason:'La cola local de ventas no está disponible' };
     try {
-      if (outbox && typeof outbox.snapshot === 'function' && outbox.snapshot().intents.length)
-        return { ready:false, reason:'Hay una venta pendiente de sincronización · espera su confirmación' };
+      // A4 local-first contract: capture depends on durable local state, never on
+      // cloud freshness. Remote ACTIVE/read_only/auth state is evaluated later by
+      // the background sender; it must not block the cashier from recording a sale.
+      canonical.snapshot();
+      outbox.snapshot();
     } catch (_) {
-      return { ready:false, reason:'No se pudo validar la cola de ventas · reintenta' };
+      return { ready:false, reason:'No se pudo validar el almacenamiento local de ventas · reintenta' };
     }
     return { ready:true };
   }
@@ -122,6 +123,13 @@
     return 'V-' + String(Math.max.apply(Math, [0].concat(ids)) + 1).padStart(3, '0');
   }
 
+  function pendingReferenceExists(reference) {
+    var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+    if (!outbox || typeof outbox.snapshot !== 'function') return false;
+    return outbox.snapshot().intents.some(function (intent) {
+      return intent && intent.payment && intent.payment.reference === reference;
+    });
+  }
   function cents(value) { return Math.round(Number(value) * 100); }
   function setBusy(value) {
     busy = value;
@@ -143,7 +151,7 @@
     var backdrop = root.document && root.document.getElementById('cartBackdrop');
     drawer && drawer.classList && drawer.classList.remove('open');
     backdrop && backdrop.classList && backdrop.classList.remove('open');
-    notify(confirmed ? ('Venta ' + saleId + ' confirmada') : ('Venta ' + saleId + ' guardada localmente · pendiente de sincronización'), confirmed ? 'success' : 'info');
+    notify(confirmed ? ('Venta ' + saleId + ' confirmada') : ('Venta ' + saleId + ' registrada'), 'success');
   }
   function projectCurrentOutbox() {
     var canonical = root.NuevoAmanecerCanonical;
@@ -155,6 +163,17 @@
     projection = copy(projector.project(base, outbox.snapshot()));
     if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection', { detail: copy(projection) }));
     return copy(projection);
+  }
+  function syncOutboxInBackground(outbox) {
+    if (!outbox || typeof outbox.sync !== 'function') return;
+    var run = function () {
+      Promise.resolve().then(function () { return outbox.sync(); }).catch(function (error) {
+        if (root.console && typeof root.console.warn === 'function')
+          root.console.warn('[Venta CANON] Venta local conservada; sincronización pendiente', error && (error.code || error.message) || 'SYNC_FAILED');
+      });
+    };
+    if (typeof root.setTimeout === 'function') root.setTimeout(run, 0);
+    else Promise.resolve().then(run);
   }
   async function capture() {
     if (!enabled()) return;
@@ -209,8 +228,12 @@
       var referenceInput = root.document && root.document.getElementById('mDigitalRef');
       reference = typeof root._naClean === 'function' ? root._naClean(referenceInput && referenceInput.value) : String(referenceInput && referenceInput.value || '').trim();
     }
-    if (reference && liveSales().some(function (sale) { return !sale.anulada && sale.paymentRef === reference; })) {
-      failClosed('Ese número de operación ya fue registrado.', null); return;
+    try {
+      if (reference && (liveSales().some(function (sale) { return !sale.anulada && sale.paymentRef === reference; }) || pendingReferenceExists(reference))) {
+        failClosed('Ese número de operación ya fue registrado.', null); return;
+      }
+    } catch (referenceError) {
+      failClosed('No se pudo validar la referencia contra las ventas locales.', referenceError); return;
     }
     var customer = null, due = null;
     var customerInputId = method === 'credito' ? 'mCreditoCliente' : 'mVentaCliente';
@@ -266,26 +289,17 @@
       saleId = intent.sale_id;
       durable = true;
 
-      // Online happy path: do not paint "pendiente" first. The outbox remains
-      // durable for crash/ACK recovery, but the visible sale waits only for the
-      // single authoritative receipt.
-      var outcome = typeof outbox.sync === 'function' ? await outbox.sync() : null;
-      var receipt = root.NuevoAmanecerCanonical.receiptSnapshot && root.NuevoAmanecerCanonical.receiptSnapshot();
-      if (receipt && receipt.operation_id === intent.operation_id && receipt.sale_id === saleId) {
-        updateAfterCommit(saleId, true);
-        setBusy(false);
-        ownsBusy = false;
-        return { status: 'CONFIRMED', operation_id: intent.operation_id, sale_id: saleId };
-      }
-
-      // Only genuine offline/unknown-ACK cases fall back to the durable pending
-      // projection. A normal online sale never flashes this state.
+      // The commercial action ends at the durable local commit. Update the
+      // projected stock/sales immediately, release the cashier UI, and let the
+      // cloud drain happen independently. This preserves A4 even while CANON is
+      // validating, offline, slow, or carrying an earlier pending operation.
       updateAfterCommit(saleId, false);
       try { projectCurrentOutbox(); }
-      catch (projectionError) { failClosed('Venta ' + saleId + ' guardada localmente · pendiente de sincronización. No se pudo actualizar la proyección.', projectionError); }
+      catch (projectionError) { failClosed('Venta ' + saleId + ' guardada localmente. No se pudo actualizar la proyección.', projectionError); }
       setBusy(false);
       ownsBusy = false;
-      return { status: 'PENDING_SYNC', operation_id: intent.operation_id, sale_id: saleId, sync_status: outcome && outcome.status };
+      syncOutboxInBackground(outbox);
+      return { status: 'PENDING_SYNC', operation_id: intent.operation_id, sale_id: saleId };
     } catch (error) {
       if (durable) {
         updateAfterCommit(saleId, false);
