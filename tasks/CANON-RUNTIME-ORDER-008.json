@@ -14,7 +14,8 @@
     "tests/cloud-sync/canonical-runtime-order.test.mjs",
     "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs",
     "tests/cloud-sync/canonical-sale-integration.test.mjs",
-    "tests/cloud-sync/canonical-sale-outbox.test.mjs"
+    "tests/cloud-sync/canonical-sale-outbox.test.mjs",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
   ],
   "forbidden_files": [
     "tools/cloudflare-lab/src/**",
