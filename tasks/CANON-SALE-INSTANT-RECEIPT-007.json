@@ -14,6 +14,7 @@
     "POS/js/sync/canonical-sale-integration.js",
     "POS/js/sync/canonical-sale-view.js",
     "POS/js/adapters/canonical-ui-adapter.js",
+    "tests/cloud-sync/canonical-sale-outbox.test.mjs",
     "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
     "tests/cloud-sync/canonical-sale-view.test.mjs",
     "tests/cloud-sync/canonical-sale-integration.test.mjs",
