@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy hosted proxy forwarding the original browser Request through CANON_BACKEND service binding.",
-  "retry_attempt": 54,
-  "retry_reason": "Publish instant CANON sale receipt path: online sale goes straight to durable sale.create receipt, appears immediately in normal Ventas/KPIs, and shows pending only on real sync/ACK failure.",
-  "requested_at_utc": "2026-10-01T02:42:00Z",
-  "target_head": "perf/canon-sale-instant-receipt-v1"
+  "note": "Deploy CANON credit-payment pending recovery: definitive rejected payment journals are released automatically; uncertain ACKs replay the same operation_id and never create a second payment in the same tap.",
+  "retry_attempt": 55,
+  "retry_reason": "PR #317 merged at ad931b7fcfa8ee606a7e7ca51f0ae58703303c7a after CANON Critical CI and E2E Smoke CI passed. Publish the owner-requested simplified credit payment recovery.",
+  "requested_at_utc": "2026-10-01T03:00:00Z",
+  "target_head": "ad931b7fcfa8ee606a7e7ca51f0ae58703303c7a"
 }
