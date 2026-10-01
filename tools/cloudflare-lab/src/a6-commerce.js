@@ -257,7 +257,7 @@ export async function createCanonicalSale(request, env, auth, json) {
 
   const payloadHashPromise=sha256Hex(stableStringify(body));
   let validation;
-  if (String(env?.DB_PROVIDER || '').trim().toLowerCase() === 'turso') {
+  if (String(env?.DB_PROVIDER || '').trim().toLowerCase() === 'turso' || typeof db?._pipeline === 'function') {
     const batched=await db.batch(reads);
     validation=batched.map(firstBatchRow);
   } else {
