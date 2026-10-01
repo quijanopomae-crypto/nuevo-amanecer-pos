@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-INSTANT-CONNECTION-001",
+  "environment": "CANON",
+  "base_ref": "fbbdea2a31a38bfc358c7d3d24894a4b6ac87ebb",
+  "objective": "Hacer que el indicador de conexión CANON confirme la sesión en cuanto responda el status autoritativo, sin esperar la descarga completa de colecciones, manteniendo la sincronización de datos en segundo plano y sin introducir una cola en el camino online normal.",
+  "owner_authorization": "El propietario mostró el POS móvil con el indicador rojo y pidió que se conecte al instante y sin cola.",
+  "allowed_files": [
+    "tasks/CANON-INSTANT-CONNECTION-001.json",
+    "evidence/canon-preflight/CANON-INSTANT-CONNECTION-001.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "tests/cloud-sync/canonical-bootstrap-nonblocking.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "D1/**",
+    "R2/**",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/sync/canonical-credit-payment-bridge.js",
+    "POS/css/**"
+  ],
+  "invariants": [
+    "El color verde solo aparece después de una respuesta /read/canonical/status autenticada y verificada.",
+    "La descarga y reconciliación completa de la réplica CANON continúa en segundo plano.",
+    "Ventas, pagos, caja e inventario siguen fail-closed hasta que la réplica ACTIVE completa esté validada.",
+    "No se elimina el outbox durable de recuperación; en conexión normal no debe formar parte del camino visible de éxito.",
+    "Offline, sesión inválida o autoridad inválida mantienen el indicador en desconectado.",
+    "No se modifican datos, schema, Worker, Turso/D1, reglas financieras ni secretos."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos, schema, backend ni secretos."
+}
