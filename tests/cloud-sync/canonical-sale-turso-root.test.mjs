@@ -30,6 +30,13 @@ async function fixture(t, options={}) {
   return {f,tab,turso,add};
 }
 
+function deferBackgroundSaleSync(tab){
+  const deferred=[];
+  const realSet=tab.context.setTimeout;
+  tab.context.setTimeout=(fn,ms)=>ms===0?(deferred.push(fn),deferred.length):realSet(fn,ms);
+  return deferred;
+}
+
 test('raw CANON product_id projects without PRODUCT_NOT_FOUND and respects stockless products',async t=>{
   const {tab}=await fixture(t);
   const intent=tab.context.NuevoAmanecerCanonicalSaleIntent.build({sale_id:'V-001',payment_method:'efectivo',items:[{product_id:'00001',quantity:1,precio:2}]});
@@ -41,17 +48,24 @@ test('raw CANON product_id projects without PRODUCT_NOT_FOUND and respects stock
   assert.equal(tab.context.NuevoAmanecerCanonicalSaleProjection.project(stockless,{version:1,intents:[intent]}).sales[0].conflict,false);
 });
 
-test('adapter → real global let cart → durable intent → Turso adapter → receipt → history, stock and cash exactly once',async t=>{
-  const {f,tab,turso,add}=await fixture(t);add();
+test('adapter → local durable commit → Turso sync → receipt → history, stock and cash exactly once',async t=>{
+  const {f,tab,turso,add}=await fixture(t);
+  deferBackgroundSaleSync(tab);
+  add();
   assert.equal(tab.context.cart,undefined);
-  await vm.runInContext('confirmarVenta()',tab.context);
-  assert.equal(vm.runInContext('cart.length',tab.context),0,'clear lexical cart only after durability');
+  const before=tab.fetchLog.length;
+  const local=await vm.runInContext('confirmarVenta()',tab.context);
+  assert.equal(local.status,'PENDING_SYNC');
+  assert.equal(vm.runInContext('cart.length',tab.context),0,'clear lexical cart only after local durability');
   assert.equal(vm.runInContext('posProc',tab.context),false);
   assert.equal(tab.context.cart,undefined);
   assert.ok(tab.context.__closed.includes('mCobro'),'close lexical modal');
-  assert.ok(tab.toasts.some(([m])=>/confirmada/i.test(m)),'confirmed toast');
+  assert.ok(tab.toasts.some(([m])=>/registrada/i.test(m)),'local committed toast');
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,1);
+  assert.equal(tab.fetchLog.slice(before).some(row=>new URL(row.url).pathname==='/commands/sale.create'),false,'local commit must not wait for network');
+  assert.equal((await tab.context.NuevoAmanecerCanonicalSaleOutbox.sync()).status,'DRAINED');
   const post=tab.fetchLog.find(row=>new URL(row.url).pathname==='/commands/sale.create');
-  assert.ok(post,'the sale must be sent');
+  assert.ok(post,'the queued sale must be sent');
   const payload=JSON.parse(post.body);
   assert.equal(payload.items[0].product_id,'00001');
   assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
@@ -72,8 +86,9 @@ test('adapter → real global let cart → durable intent → Turso adapter → 
   assert.ok(turso.calls.some(call=>call.requests[0].type==='batch'));
 });
 
-test('online sale critical path is one POST to receipt; history is visible before reconciliation GETs finish',async t=>{
+test('online sale critical path commits locally first, then one POST reaches receipt before reconciliation GETs',async t=>{
   const {f,tab,add}=await fixture(t);
+  deferBackgroundSaleSync(tab);
   const receipts=[];
   tab.context.addEventListener('na:canonical-sale-receipt',event=>{
     const journal=JSON.parse(tab.localStorage.getItem('na_canonical_sale_journal'));
@@ -81,10 +96,14 @@ test('online sale critical path is one POST to receipt; history is visible befor
   });
   add();
   const start=tab.fetchLog.length;
-  await vm.runInContext('confirmarVenta()',tab.context);
+  const local=await vm.runInContext('confirmarVenta()',tab.context);
+  assert.equal(local.status,'PENDING_SYNC');
+  assert.equal(tab.fetchLog.length,start,'cashier completion must perform zero network calls');
+  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,1);
+  assert.equal((await tab.context.NuevoAmanecerCanonicalSaleOutbox.sync()).status,'DRAINED');
   const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname}));
   const postIndex=calls.findIndex(row=>row.method==='POST'&&row.path==='/commands/sale.create');
-  assert.equal(postIndex,0,'a current online sale must not do status/full-refresh GETs before its POST');
+  assert.equal(postIndex,0,'background drain must POST before any reconciliation GET');
   assert.equal(receipts.length,1);
   assert.equal(receipts[0].state,'CONFIRMED','sale receipt event is emitted only after durable journal confirmation');
   assert.equal(receipts[0].detail.payload.operation_id,receipts[0].detail.receipt.operation_id);
@@ -225,8 +244,9 @@ test('Turso sale validation uses four protocol trips cold and three warm includi
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,2);
 });
 
-test('pending V-001 blocks a second sale until it resolves, then the next cart becomes V-002',async t=>{
+test('pending V-001 does not block V-002; both stay durable offline and drain in FIFO order',async t=>{
   const {tab,add}=await fixture(t);
+  deferBackgroundSaleSync(tab);
   const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
   tab.context.navigator.onLine=false; add();
   await vm.runInContext('confirmarVenta()',tab.context);
@@ -236,27 +256,31 @@ test('pending V-001 blocks a second sale until it resolves, then the next cart b
 
   add();await vm.runInContext('confirmarVenta()',tab.context);
   pending=queue.snapshot().intents;
-  assert.equal(pending.length,1,'a second sale cannot race an unresolved first sale');
-  assert.equal(vm.runInContext('cart.length',tab.context),1,'second cart stays intact while the first sale is pending');
-  assert.ok(tab.toasts.some(([m])=>/sincronizando|pendiente/i.test(m)),'second sale must explain that CANON is not ready for another commit');
+  assert.deepEqual(Array.from(pending.map(intent=>intent.sale_id)),['V-001','V-002']);
+  assert.equal(vm.runInContext('cart.length',tab.context),0,'second cart is durably committed locally too');
 
   tab.context.navigator.onLine=true;
   assert.equal((await queue.sync()).status,'DRAINED');
-  add();await vm.runInContext('confirmarVenta()',tab.context);
   assert.equal(queue.snapshot().intents.length,0);
-  assert.equal(vm.runInContext('ventas.some(v=>v.id==="V-002")',tab.context),true);
+  assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002']);
 });
 
 test('lost ACK retains durable intent; exact retry confirms and never repeats stock/cash',async t=>{
   let lose=true;
   const {f,tab,add}=await fixture(t,{onFetch:async(url,options,next)=>{
     if(new URL(url).pathname==='/commands/sale.create'&&lose){lose=false;await next();throw Error('lost ACK');}
-  }});add();
+  }});
+  deferBackgroundSaleSync(tab);
+  add();
   await vm.runInContext('confirmarVenta()',tab.context);
-  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,1);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
+  assert.equal(queue.snapshot().intents.length,1);
+  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,0,'local commit precedes network');
+  assert.equal((await queue.sync()).status,'WAITING');
+  assert.equal(queue.snapshot().intents.length,1);
   assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
-  assert.equal((await tab.context.NuevoAmanecerCanonicalSaleOutbox.sync()).status,'DRAINED');
-  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents.length,0);
+  assert.equal((await queue.sync()).status,'DRAINED');
+  assert.equal(queue.snapshot().intents.length,0);
   assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
   await tab.api.refresh();
