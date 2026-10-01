@@ -7,6 +7,6 @@
   "target_count": 29,
   "target_total_cents": 2368495,
   "source": "owner-provided screenshots; target payload will be encrypted before repository storage",
-  "requested_at_utc": "2026-10-01T21:24:00Z",
-  "retry_attempt": 1
+  "requested_at_utc": "2026-10-01T21:26:00Z",
+  "retry_attempt": 2
 }
