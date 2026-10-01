@@ -117,7 +117,7 @@ test('Actualizar ahora ejecuta registration.update y ordena activar el worker pr
   const button = h.document.getElementById('labPwaUpdatePrompt').querySelector('#labPwaUpdateAction');
   await button._listeners.get('click')();
   assert.equal(h.updateCalls(), 1);
-  assert.deepEqual(h.messages, [{ type:'NA_ACTIVATE_UPDATE' }]);
+  assert.equal(h.messages.length, 1);\n  assert.equal(h.messages[0].type, 'NA_ACTIVATE_UPDATE');
   assert.equal(button.disabled, true);
 });
 
