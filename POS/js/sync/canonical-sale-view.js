@@ -144,10 +144,10 @@
   }
 
   function pendingSales(view) {
-    var confirmedOps = confirmedOperationIds();
+    var confirmedOps = confirmedOperationIds(), confirmedSales = confirmedSaleIds();
     var sales = (view.sales || []).filter(function (sale) {
       return sale && (sale.status === 'PENDING_SYNC' || sale.source === 'CANONICAL_OUTBOX') &&
-        !confirmedOps.has(String(sale.operation_id || ''));
+        !confirmedOps.has(String(sale.operation_id || '')) && !confirmedSales.has(String(sale.sale_id || sale.id || ''));
     });
     if (!sales.length) { clearPanel('naCanonicalPendingSales'); return; }
     var panel = section('ventasContent', 'naCanonicalPendingSales', 'Ventas pendientes');
