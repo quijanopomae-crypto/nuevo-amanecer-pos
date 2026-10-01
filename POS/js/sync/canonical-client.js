@@ -22,6 +22,12 @@
     }
   } catch (_) {}
   var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
+  // sale.create has a deliberately narrower freshness contract than the full
+  // operational UI replica. Other financial commands remain gated by `ready`.
+  var saleWriteReady = false;
+  var saleMutationGeneration = 0;
+  var saleAppliedOperations = new Set();
+  var saleProductEffects = new Map();
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function fail(code) { throw new Error(code); }
@@ -98,6 +104,9 @@
   async function configure(options) {
     return withWriterLock(function () {
     ready = false;
+    saleWriteReady = false;
+    saleProductEffects.clear();
+    saleAppliedOperations.clear();
     var existing = journal();
     var candidate = {
       endpoint: String(options && options.endpoint || '').replace(/\/+$/, ''),
@@ -173,8 +182,19 @@
       inventoryMovements: copy(replica.inventory_movements || []), cashMovements: copy(replica.cash_movements || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []), expenses: copy(replica.expenses || []),
       mode: provisional ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
       read_only: provisional || replica.read_only !== false, minimum_client_contract: provisional ? 'a6-gate-p-v1' : (replica.minimum_client_contract || 'a6-gate-p-v1') };
-    ready = true; replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
+    ready = true;
+    if (source === 'cache' || source === 'remote') {
+      saleWriteReady = replicaSupportsSale(replica);
+      saleProductEffects.clear();
+      saleAppliedOperations.clear();
+    }
+    replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
       revision: replica.revision, financial_revision: replica.financial_revision }, validation: provisional ? 'validating' : 'current' };
+  }
+  function replicaSupportsSale(replica) {
+    return !!(binding && !changed && replica && replica.mode === 'ACTIVE' && replica.read_only === false &&
+      replica.promotion_id === binding.promotion_id && replica.authority_epoch === binding.authority_epoch &&
+      replica.revision === binding.revision && Array.isArray(replica.products) && Array.isArray(replica.customers));
   }
   function notifyReplicaUpdate() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-updated', { detail: sourceState() })); } catch (_) {} }
   function notifyConnectionVerified() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-connected')); } catch (_) {} }
@@ -206,6 +226,10 @@
   async function refresh() {
     if (loading) return loading;
     if (!data) ready = false;
+    var saleGenerationAtStart = saleMutationGeneration;
+    function assertRefreshNotSuperseded() {
+      if (saleGenerationAtStart !== saleMutationGeneration) fail('CANONICAL_REFRESH_SUPERSEDED');
+    }
     loading = (async function () {
       if (root.navigator.onLine === false) fail('AUTHORITY_UNAVAILABLE');
       var expected = binding && !changed ? copy(binding) : null, statusMeta = null;
@@ -260,11 +284,18 @@
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
       if (statusDigest) next.canonical_digest = statusDigest;
       var cache = await localReplica(), bootstrapReplica = replicaOf(next);
+      assertRefreshNotSuperseded();
       if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, bootstrapReplica)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
       }
-      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
+      publishReplica(bootstrapReplica, 'bootstrap');
+      // Once status + core products/customers are coherent, sale.create can be
+      // accepted without waiting for sales/items/inventory/cash history.
+      if (statusMeta.mode === 'ACTIVE' && expected && !changed &&
+          statusMeta.promotion_id === expected.promotion_id && statusMeta.authority_epoch === expected.authority_epoch &&
+          statusMeta.revision === expected.revision) saleWriteReady = true;
+      notifyReplicaUpdate();
 
       if (statusMeta.mode === 'ACTIVE') {
         applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
@@ -274,6 +305,7 @@
       if (binding && !changed) assertBinding(expected);
       next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
+      assertRefreshNotSuperseded();
       var incoming = replicaOf(next);
       if (!validReplica(incoming)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, incoming)) {
@@ -283,11 +315,115 @@
         cache.revision === incoming.revision && (cache.financial_revision || 0) === (incoming.financial_revision || 0) && (cache.canonical_digest || null) === (incoming.canonical_digest || null) &&
         JSON.stringify([cache.products,cache.customers,cache.credits,cache.credit_payments,cache.credit_accounts||[],cache.sales||[],cache.sale_items||[],cache.inventory_movements||[],cache.cash_movements||[],cache.cash_sessions||[],cache.financial_events||[],cache.expenses||[],cache.digests||{}]) ===
         JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.credit_accounts||[],incoming.sales||[],incoming.sale_items||[],incoming.inventory_movements||[],incoming.cash_movements||[],incoming.cash_sessions||[],incoming.financial_events||[],incoming.expenses||[],incoming.digests||{}]);
+      assertRefreshNotSuperseded();
       publishReplica(incoming, 'remote');
-      if (!same && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
+      if (!same && typeof root._naWriteCanonicalReplica === 'function') {
+        assertRefreshNotSuperseded();
+        await root._naWriteCanonicalReplica(incoming);
+        assertRefreshNotSuperseded();
+      }
       replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
     try { return await loading; } catch (error) { ready = false; replicaState.validation = root.navigator.onLine === false ? 'offline' : (data ? 'stale' : 'unavailable'); notifyReplicaUpdate(); throw error; } finally { loading = null; }
+  }
+  async function refreshSaleAuthority() {
+    if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
+    var expected = copy(binding), session = sessionCredentials(expected);
+    if (!session) fail('SESSION_NOT_AVAILABLE');
+    var generationAtStart = saleMutationGeneration;
+    var headers = { authorization: 'Bearer ' + session.token };
+    var statusResponse = await readFetch(expected.endpoint + '/read/canonical/status', {
+      credentials: 'omit', redirect: 'error', cache: 'no-store', headers: headers
+    });
+    if (!statusResponse.ok) fail('CANONICAL_READ_' + statusResponse.status);
+    var statusMeta = await statusResponse.json();
+    verify(statusMeta, expected);
+    notifyConnectionVerified();
+    if (statusMeta.mode !== 'ACTIVE' || !uint(statusMeta.financial_revision)) fail('CANONICAL_COMMERCE_CLOSED');
+    var statusDigest = statusMeta.canonical_digest || statusMeta.revision_digest || statusMeta.digest || null;
+    var expectedPageMeta = JSON.stringify([statusMeta.mode,statusMeta.read_only,statusMeta.minimum_client_contract,statusMeta.financial_revision]);
+    async function readRows(route) {
+      var cursor = null, seen = new Set(), rows = [];
+      do {
+        assertBinding(expected);
+        var response = await readFetch(expected.endpoint + '/read/canonical/' + route + '?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), {
+          credentials: 'omit', redirect: 'error', cache: 'no-store', headers: headers
+        });
+        if (!response.ok) fail('CANONICAL_READ_' + response.status);
+        var meta = await response.json();
+        verify(meta, expected);
+        if (JSON.stringify([meta.mode,meta.read_only,meta.minimum_client_contract,meta.financial_revision]) !== expectedPageMeta) fail('STALE_AUTHORITY_BINDING');
+        var digest = meta.canonical_digest || meta.revision_digest || meta.digest || null;
+        if (statusDigest && digest && digest !== statusDigest) fail('STALE_AUTHORITY_BINDING');
+        if (!Array.isArray(meta.items)) fail('INVALID_CANONICAL_PAGE');
+        rows.push.apply(rows, meta.items);
+        cursor = meta.next_cursor;
+        if (cursor && seen.has(cursor)) fail('REPEATED_CANONICAL_CURSOR');
+        seen.add(cursor);
+      } while (cursor);
+      return rows;
+    }
+    var parts = await Promise.all([readRows('products'),readRows('customers')]);
+    if (generationAtStart !== saleMutationGeneration) fail('CANONICAL_SALE_AUTHORITY_SUPERSEDED');
+    assertBinding(expected);
+    if (!data || data.authority !== 'canonical') {
+      data = { authority:'canonical',promotion_id:expected.promotion_id,authority_epoch:expected.authority_epoch,revision:expected.revision,
+        financial_revision:statusMeta.financial_revision,products:[],customers:[],credits:[],payments:[],creditAccounts:[],sales:[],saleItems:[],
+        inventoryMovements:[],cashMovements:[],cashSessions:[],financialEvents:[],expenses:[],
+        mode:'ACTIVE',read_only:false,minimum_client_contract:CONTRACT };
+    }
+    data.promotion_id = expected.promotion_id; data.authority_epoch = expected.authority_epoch; data.revision = expected.revision;
+    data.financial_revision = statusMeta.financial_revision; data.products = parts[0]; data.customers = parts[1];
+    data.mode = 'ACTIVE'; data.read_only = false; data.minimum_client_contract = CONTRACT;
+    saleProductEffects.clear();
+    saleAppliedOperations.clear();
+    saleWriteReady = true;
+    return { promotion_id:expected.promotion_id, authority_epoch:expected.authority_epoch, revision:expected.revision, financial_revision:statusMeta.financial_revision };
+  }
+  function assertSaleAction() {
+    if (!saleWriteReady || !binding || changed || root.navigator.onLine === false || !data || data.authority !== 'canonical' ||
+        data.promotion_id !== binding.promotion_id || data.authority_epoch !== binding.authority_epoch || data.revision !== binding.revision ||
+        !Array.isArray(data.products) || !Array.isArray(data.customers) || !sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
+    assertBinding(binding);
+    return true;
+  }
+  async function prepareSaleCommand() {
+    try { assertSaleAction(); return true; } catch (_) {}
+    await refreshSaleAuthority();
+    assertSaleAction();
+    return true;
+  }
+  function effectiveSaleProduct(productId) {
+    var product = data && Array.isArray(data.products) ? data.products.find(function (candidate) {
+      return candidate && String(candidate.product_id) === String(productId);
+    }) : null;
+    if (!product) return null;
+    var effect = saleProductEffects.get(String(productId));
+    return effect ? Object.assign({},product,effect) : product;
+  }
+  function applyConfirmedSaleEffect(record, result) {
+    if (!record || record.command !== 'sale.create' || !record.payload || !result ||
+        record.payload.operation_id !== result.operation_id || record.payload.sale_id !== result.sale_id) return false;
+    var operationId = String(record.payload.operation_id);
+    if (saleAppliedOperations.has(operationId)) return true;
+    if (!data || !Array.isArray(data.products) || !Array.isArray(record.payload.items)) { saleWriteReady = false; return false; }
+    var updates = [];
+    for (var i = 0; i < record.payload.items.length; i += 1) {
+      var item = record.payload.items[i];
+      if (item.generic_line !== undefined) continue;
+      var product = effectiveSaleProduct(item.product_id);
+      if (!product || !uint(product.stock_revision) || !uint(item.expected_stock_revision) ||
+          Number(product.stock_revision) !== Number(item.expected_stock_revision)) { saleWriteReady = false; return false; }
+      if (product.tracks_inventory === 0 || product.tracks_inventory === false) continue;
+      if (typeof product.current_stock_quantity !== 'number' || !Number.isFinite(product.current_stock_quantity) ||
+          product.current_stock_quantity < item.quantity) { saleWriteReady = false; return false; }
+      updates.push({ product_id:String(item.product_id), current_stock_quantity:product.current_stock_quantity - item.quantity, stock_revision:product.stock_revision + 1 });
+    }
+    updates.forEach(function (effect) { saleProductEffects.set(effect.product_id,effect); });
+    saleAppliedOperations.add(operationId);
+    saleMutationGeneration += 1;
+    saleWriteReady = true;
+    return true;
   }
   function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], sales: [], saleItems: [], inventoryMovements: [], cashMovements: [], cashSessions: [], financialEvents: [], expenses: [] }); }
   function sourceState() { return copy(replicaState); }
@@ -519,7 +655,7 @@
             typeof generic.name !== 'string' || !generic.name.trim() || generic.name.length > 240 || /[\x00-\x1f\x7f]/.test(generic.name) ||
             typeof generic.code !== 'string' || generic.code.length > 160 || /[\x00-\x1f\x7f]/.test(generic.code)) fail('INVALID_CANONICAL_GENERIC_LINE');
       } else {
-        var product = data.products.find(function (item) { return item.product_id === requested.product_id; });
+        var product = effectiveSaleProduct(requested.product_id);
         if (!product || !uint(product.stock_revision)) fail('INVALID_CANONICAL_PRODUCT');
         expectedRevision = product.stock_revision;
       }
@@ -901,8 +1037,11 @@
     // UI can update immediately while the full canonical reconciliation stays
     // off the user-visible critical path.
     publishConfirmedPaymentReceipt(record, result);
+    var saleEffectReady = record.command === 'sale.create' ? applyConfirmedSaleEffect(record, result) : false;
     publishConfirmedSaleReceipt(record, result);
     ready = false;
+    if (record.command === 'sale.create') saleWriteReady = saleEffectReady;
+    else saleWriteReady = false;
     return copy(confirmed.receipt);
   }
   async function prepareCommand(command) {
@@ -915,14 +1054,16 @@
   }
   async function createSale(sale) {
     var durableIntent = !!(sale && typeof sale === 'object' && sale.version === 1);
-    if (durableIntent) await prepareCommand('sale.create');
+    if (durableIntent) await prepareSaleCommand();
+    else await prepareCommand('sale.create');
     return createCommand('sale.create', sale, durableIntent);
   }
   async function createCommand(command, input, skipStatus) {
     return withWriterLock(async function () {
       var existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
-      assertAction(command);
+      if (command === 'sale.create' && skipStatus === true) assertSaleAction();
+      else assertAction(command);
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
       var record = { state: 'PENDING', binding: copy(binding), command: command, route: '/commands/' + command,
         payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'product.create' ? makeProductPayload(input) : command === 'customer.create' ? makeCustomerPayload(input) : command === 'customer.credit-policy.set' ? makeCustomerCreditPolicyPayload(input) : command === 'inventory.adjust' ? makeInventoryPayload(input) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
@@ -1060,6 +1201,64 @@
   function createAdjustment(input) { return createCommand('adjustment.create', input); }
   function createExpense(input) { return createCommand('expense.create', input); }
   function createCompensation(input) { return createCommand('compensation.create', input); }
+  async function repairRejectedSaleConflict(operationId, saleId) {
+    return withWriterLock(async function () {
+      var record = journal();
+      if (!record || record.state !== 'PENDING' || record.command !== 'sale.create' ||
+          record.last_status !== 409 || record.last_error !== 'canonical_sale_conflict' ||
+          !record.payload || record.payload.operation_id !== operationId || record.payload.sale_id !== saleId) {
+        return { status:'NOT_PROVEN' };
+      }
+      var expected = record.binding, session = sessionCredentials(expected);
+      if (!session) fail('SESSION_NOT_AVAILABLE');
+      assertBinding(expected);
+      var raw = JSON.stringify(record), headers = { authorization:'Bearer ' + session.token };
+      var statusResponse = await readFetch(expected.endpoint + '/read/canonical/status', {
+        credentials:'omit',redirect:'error',cache:'no-store',headers:headers
+      });
+      if (!statusResponse.ok) fail('CANONICAL_READ_' + statusResponse.status);
+      var statusMeta = await statusResponse.json();
+      verify(statusMeta,expected);
+      notifyConnectionVerified();
+      if (statusMeta.mode !== 'ACTIVE') fail('CANONICAL_COMMERCE_CLOSED');
+      var financialRevision = statusMeta.financial_revision, cursor = null, seen = new Set(), sameOperation = null, conflictingSale = null, maxSaleNumber = 0;
+      do {
+        var response = await readFetch(expected.endpoint + '/read/canonical/sales?limit=100' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), {
+          credentials:'omit',redirect:'error',cache:'no-store',headers:headers
+        });
+        if (!response.ok) fail('CANONICAL_READ_' + response.status);
+        var page = await response.json();
+        verify(page,expected);
+        if (page.mode !== 'ACTIVE' || page.financial_revision !== financialRevision || !Array.isArray(page.items)) fail('STALE_AUTHORITY_BINDING');
+        page.items.forEach(function (sale) {
+          if (!sale) return;
+          if (String(sale.operation_id || '') === String(operationId)) sameOperation = sale;
+          if (String(sale.sale_id || '') === String(saleId) && String(sale.operation_id || '') !== String(operationId)) conflictingSale = sale;
+          var match = /^V-(\d+)$/.exec(String(sale.sale_id || ''));
+          if (match) maxSaleNumber = Math.max(maxSaleNumber, Number(match[1]));
+        });
+        cursor = page.next_cursor;
+        if (cursor && seen.has(cursor)) fail('REPEATED_CANONICAL_CURSOR');
+        seen.add(cursor);
+      } while (cursor);
+      if (root.localStorage.getItem(JOURNAL) !== raw) fail('CANONICAL_PENDING_CHANGED');
+      if (sameOperation) {
+        var receipt = { status:'already_processed',operation_id:operationId,sale_id:saleId,idempotent:true };
+        var confirmed = Object.assign({},record,{state:'CONFIRMED',receipt:receipt});
+        durableJournal(confirmed);
+        var effectReady = applyConfirmedSaleEffect(record,receipt);
+        publishConfirmedSaleReceipt(record,receipt);
+        ready = false; saleWriteReady = effectReady;
+        return { status:'CONFIRMED_REMOTE', operation_id:operationId, sale_id:saleId, max_sale_number:maxSaleNumber };
+      }
+      if (!conflictingSale) return { status:'NOT_PROVEN', max_sale_number:maxSaleNumber };
+      root.localStorage.removeItem(JOURNAL);
+      if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+      saleWriteReady = false; ready = false;
+      await refreshSaleAuthority();
+      return { status:'SALE_ID_COLLISION', operation_id:operationId, sale_id:saleId, max_sale_number:maxSaleNumber };
+    });
+  }
   async function retryPending() {
     return withWriterLock(async function () {
       var record = journal();
@@ -1285,10 +1484,10 @@
     if (!adapter || typeof adapter.snapshot !== 'function') fail('CANONICAL_UI_ADAPTER_UNAVAILABLE');
     return adapter.snapshot(data);
   }
-  root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
-  root.addEventListener('offline', function () { ready = false; });
+  root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleWriteReady = false; saleProductEffects.clear(); saleAppliedOperations.clear(); } });
+  root.addEventListener('offline', function () { ready = false; saleWriteReady = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, repairRejectedSaleConflict: repairRejectedSaleConflict, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
     createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);
