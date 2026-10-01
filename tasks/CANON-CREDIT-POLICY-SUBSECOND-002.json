@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-POLICY-SUBSECOND-002",
+  "environment": "CANON",
+  "base_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
+  "objective": "Reducir el tiempo visible de Aplicar línea de crédito hacia ~1 segundo eliminando viajes redundantes sin confirmar visualmente antes del receipt durable ni debilitar autoridad, CAS, idempotencia o recuperación de ACK.",
+  "owner_authorization": "El propietario reportó el 2026-10-01 que el ajuste todavía demora aproximadamente 3 segundos y pidió que tarde 1 segundo o menos y que se simplifique la información recorrida.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-POLICY-SUBSECOND-002.json",
+    "evidence/canon-preflight/CANON-CREDIT-POLICY-SUBSECOND-002.json",
+    "POS/js/sync/canonical-client.js",
+    "tools/cloudflare-lab/src/a6-customer-credit-policy.js",
+    "tests/cloud-sync/canonical-customer-credit-policy.test.mjs",
+    "tests/cloud-sync/canonical-customer-credit-policy-turso.test.mjs",
+    "AGENTS_Nuevo_Amanecer.md"
+  ],
+  "forbidden_files": [
+    "infra/database/**",
+    "POS/index.html",
+    "POS/js/legacy-inline/**",
+    "laboratorio/**",
+    "tools/cloudflare-prod/**",
+    "ops/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "must_preserve": [
+    "La UI solo refleja la nueva línea después de un receipt CANON válido y durable.",
+    "Los reintentos de un PENDING verifican autoridad remota antes de reenviar el mismo operation_id.",
+    "La migración 0018 sigue imponiendo autoridad, namespace global, inmutabilidad, customer FK y guardas MANUAL/AUTOMATIC.",
+    "expected_policy_revision mantiene CAS y evita lost updates.",
+    "Pre-0018 continúa fallando cerrado con customer_credit_policy_schema_not_ready.",
+    "No se cambian deuda, pagos, evaluación, límites, datos ni schema."
+  ],
+  "plan": [
+    "Omitir el GET /read/canonical/status únicamente en el primer customer.credit-policy.set construido desde réplica current.",
+    "Mantener status remoto obligatorio en retryPending.",
+    "Eliminar lecturas backend redundantes del happy path y dejar que el batch atómico + triggers 0018 validen autoridad, cliente, namespace y revisión.",
+    "Clasificar errores/replay solo en el catch, fuera del happy path.",
+    "Añadir prueba Turso que cuente viajes de protocolo y prueba de primer POST sin GET previo."
+  ],
+  "acceptance": [
+    "El primer request visible del cambio de línea es POST /commands/customer.credit-policy.set.",
+    "El happy path Turso usa como máximo 2 viajes Worker→Turso: autenticación + batch atómico de política.",
+    "No existe SELECT de validación previo al batch de escritura en el happy path.",
+    "ACK perdido reintenta el mismo operation_id y no duplica revisión.",
+    "stale_policy, stale_authority, customer_not_found y operation_id_conflict siguen siendo fail-closed.",
+    "CANON Critical CI y E2E Smoke CI pasan."
+  ],
+  "deploy_authorized": false,
+  "rollback": "Revertir el PR. No hay migración ni mutación de datos por el despliegue del código en sí."
+}
