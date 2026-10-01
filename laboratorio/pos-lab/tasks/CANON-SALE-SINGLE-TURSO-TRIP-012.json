@@ -1,0 +1,37 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-SALE-SINGLE-TURSO-TRIP-012",
+  "environment": "LABORATORIO",
+  "base_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
+  "objective": "Probar y validar en el runtime compartido una vía rápida para ventas CANON simples que reduzca el happy path de Turso a un único pipeline remoto, manteniendo autenticación, autoridad, idempotencia, stock, caja y persistencia durable dentro de la misma transacción.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-SALE-SINGLE-TURSO-TRIP-012.json",
+    "laboratorio/pos-lab/preflight/CANON-SALE-SINGLE-TURSO-TRIP-012.json",
+    "tools/cloudflare-lab/src/worker.js",
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "infra/database/migrations/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-pos-web/**",
+    "ops/**",
+    ".github/workflows/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "inventory-integrity",
+    "cash-integrity",
+    "credits-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-SALE-SINGLE-TURSO-TRIP-012.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
