@@ -37,15 +37,20 @@ test('canonical read requests are bounded without changing command write transpo
   assert.match(sendPending,/root\.fetch\(expected\.endpoint \+ record\.route/);
 });
 
-test('header confirms verified CANON connection before collection bootstrap finishes',()=>{
-  const statusVerified=canonical.indexOf('notifyConnectionVerified();');
+test('header only turns green with a usable CANON snapshot and reuses a verified cache immediately',()=>{
+  const statusVerify=canonical.indexOf('verify(statusMeta, expected);');
+  const cacheRead=canonical.indexOf('var cache = await localReplica();');
   const coreBootstrap=canonical.indexOf('Promise.all(coreEntries.map(readEntry))');
-  assert.ok(statusVerified>=0,'verified status must signal connectivity');
-  assert.ok(coreBootstrap>statusVerified,'connectivity must be visible before core collections finish');
+  const cachePublish=canonical.indexOf("publishReplica(cache, 'cache');",cacheRead);
+  const firstConnected=canonical.indexOf('notifyConnectionVerified();');
+  assert.ok(statusVerify>=0 && cacheRead>statusVerify,'cache must be checked after status verification');
+  assert.ok(cachePublish>cacheRead && firstConnected>cachePublish,'green status must follow a published usable snapshot');
+  assert.ok(coreBootstrap>firstConnected,'a status-verified current cache can hydrate the UI before remote collections finish');
+  assert.match(canonical,/cacheMatchesStatus/);
+  assert.match(canonical,/cache\.canonical_digest === statusDigest/);
+  assert.match(canonical,/publishReplica\(bootstrapReplica, 'bootstrap'\); notifyReplicaUpdate\(\); notifyConnectionVerified\(\)/);
   assert.match(canonical,/new root\.CustomEvent\('na:canonical-connected'\)/);
   assert.match(inline03,/addEventListener\('na:canonical-connected'/);
-  assert.match(inline03,/_naCanonicalTransportConnected=true/);
-  assert.match(inline03,/state\.validation==='current'\|\|\(_naCanonicalTransportConnected&&state\.validation==='validating'\)/);
 });
 
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
