@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-008",
+  "environment": "CANON",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "objective": "Reducir la latencia real de validación de una venta CANON sobre Turso sin adelantar la confirmación visual antes del receipt durable ni debilitar autoridad, idempotencia, stock, caja o recuperación de ACK.",
+  "owner_authorization": "El propietario indicó explícitamente que las ventas en CANON demoran en validarse y pidió arreglarlo para que la confirmación sea al instante.",
+  "allowed_files": [
+    "tools/cloudflare-lab/src/a6-commerce.js",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "tasks/CANON-TURSO-SALE-LATENCY-008.json",
+    "evidence/canon-preflight/CANON-TURSO-SALE-LATENCY-008.json"
+  ],
+  "must_preserve": [
+    "No declarar una venta completada antes de un receipt durable del Worker/Turso.",
+    "Mantener authorizeSession y la validación de autoridad del writer.",
+    "Mantener idempotencia por operation_id y payload_hash, incluida recuperación de ACK perdido.",
+    "Mantener validación de stock por stock_revision y mutación atómica de stock/caja/crédito.",
+    "Mantener compatibilidad con productos IMPORT, LIVE y líneas GENERIC.",
+    "No cambiar esquema, migraciones, credenciales, datos ni contratos HTTP."
+  ],
+  "out_of_scope": [
+    "Cambios visuales del POS.",
+    "Refactorizaciones generales.",
+    "Cambios de base de datos o migraciones.",
+    "Deploy de producción dentro de esta rama de implementación."
+  ],
+  "mandatory_tests": [
+    "node --test tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "node --test tests/cloud-sync/canonical-session-backend.test.mjs tests/cloud-sync/canonical-session-integration.test.mjs",
+    "node --test tests/cloud-sync/turso-production-cutover.test.mjs tests/cloud-sync/turso-production-direct-cutover.test.mjs"
+  ],
+  "acceptance": [
+    "El happy path de sale.create en Turso consolida lecturas previas independientes en un batch de lectura.",
+    "La primera venta con capacidades de esquema no cacheadas usa como máximo 4 viajes Turso del Worker incluyendo autenticación, descubrimiento de capacidades, validación y commit atómico.",
+    "Con capacidades ya cacheadas, sale.create usa como máximo 3 viajes Turso del Worker incluyendo autenticación, validación y commit atómico.",
+    "Las pruebas de venta, ACK perdido, stock y caja siguen pasando.",
+    "El cambio no toca frontend ni despliega producción todavía."
+  ],
+  "stop_conditions": [
+    "Detener si el batch de lecturas cambia semántica de autoridad o idempotencia.",
+    "Detener si D1/Turso no devuelven resultados equivalentes para SELECT dentro de db.batch.",
+    "Detener si una prueba de stock, caja, replay o sesión falla por causa del cambio."
+  ],
+  "rollback": "Revertir el commit de esta tarea; no hay migración ni cambio de datos."
+}
