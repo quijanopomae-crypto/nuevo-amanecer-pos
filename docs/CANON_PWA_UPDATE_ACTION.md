@@ -32,9 +32,10 @@ La actualización normal debe ser más rápida: los binarios pesados e inmutable
    - el worker ejecuta `skipWaiting()`;
    - `controllerchange` provoca una sola recarga.
 3. Si falla, el aviso muestra `Reintentar`.
-4. La instalación de una nueva build no espera la descarga de los binarios pesados de OCR.
-5. Los recursos OCR siguen disponibles mediante caché lazy independiente y estable.
-6. No se modifican ventas, inventario, caja, créditos, persistencia, OUTBOX ni APIs CANON.
+4. La primera transición desde el shell legacy se autoactiva una sola vez para evitar dejar usuarios antiguos atrapados sin botón; al cargar el nuevo shell se habilita el modo manual persistente para actualizaciones siguientes.
+5. La instalación de una nueva build no espera la descarga de los binarios pesados de OCR.
+6. Los recursos OCR siguen disponibles mediante caché lazy independiente y estable.
+7. No se modifican ventas, inventario, caja, créditos, persistencia, OUTBOX ni APIs CANON.
 
 ## Archivos permitidos
 - `docs/CANON_PWA_UPDATE_ACTION.md`
@@ -42,6 +43,7 @@ La actualización normal debe ser más rápida: los binarios pesados e inmutable
 - `POS/css/components.css`
 - `POS/sw.js`
 - `tests/product-fixes/fix-pwa-update-action/canon-pwa-update-action.test.mjs`
+- `tests/cloud-sync/v1.3-pos-web-deploy.test.mjs`
 
 ## Archivos prohibidos
 - `laboratorio/**`
