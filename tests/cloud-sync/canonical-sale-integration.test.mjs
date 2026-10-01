@@ -84,7 +84,7 @@ test('canonical sale commits locally without waiting for cloud readiness',async(
     assert.equal(h.calls.timers.length,1);
   }
 });
-test('canonical cash captures effective cart economics and projects after one durable enqueue',async()=>{const h=harness();await h.context.confirmarVenta();assert.equal(h.calls.legacy,0);assert.equal(h.calls.enqueue,1);assert.equal(h.calls.project,1);assert.equal(h.calls.save,0);assert.equal(h.calls.sync,0);assert.equal(h.calls.timers.length,1);assert.equal(h.calls.fetch,0);assert.equal(h.calls.input.items[0].product_id,'7');assert.equal(h.calls.input.items[0].quantity,2);assert.equal(h.calls.input.items[0].precio,4.25);assert.equal(h.stored.items[0].unit_price_cents,425);assert.match(h.stored.sale_id,/^V-\d{3}$/);assert.equal(h.stored.sale_id,h.calls.input.sale_id);assert.equal(h.context.cart.length,0);const first=h.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection();first.sales.length=0;assert.equal(h.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection().sales.length,1);h.calls.timers.shift()();assert.equal(h.calls.sync,1);});
+test('canonical cash captures effective cart economics and projects after one durable enqueue',async()=>{const h=harness();await h.context.confirmarVenta();assert.equal(h.calls.legacy,0);assert.equal(h.calls.enqueue,1);assert.equal(h.calls.project,1);assert.equal(h.calls.save,0);assert.equal(h.calls.sync,0);assert.equal(h.calls.timers.length,1);assert.equal(h.calls.fetch,0);assert.equal(h.calls.input.items[0].product_id,'7');assert.equal(h.calls.input.items[0].quantity,2);assert.equal(h.calls.input.items[0].precio,4.25);assert.equal(h.stored.items[0].unit_price_cents,425);assert.match(h.stored.sale_id,/^V-\d{3}$/);assert.equal(h.stored.sale_id,h.calls.input.sale_id);assert.equal(h.context.cart.length,0);const first=h.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection();first.sales.length=0;assert.equal(h.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection().sales.length,1);h.calls.timers.shift()();await Promise.resolve();assert.equal(h.calls.sync,1);});
 test('online sale releases the UI before cloud confirmation and syncs in background',async()=>{
   const h=harness({syncConfirmed:true});
   const result=await h.context.confirmarVenta();
@@ -98,6 +98,7 @@ test('online sale releases the UI before cloud confirmation and syncs in backgro
   assert.equal(h.calls.toast.some(([message])=>/espera el indicador verde/i.test(message)),false);
   assert.equal(h.calls.timers.length,1);
   h.calls.timers.shift()();
+  await Promise.resolve();
   assert.equal(h.calls.sync,1);
 });
 
