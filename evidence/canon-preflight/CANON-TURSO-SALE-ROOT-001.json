@@ -1,0 +1,127 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-TURSO-SALE-ROOT-001",
+  "base_ref": "11d044c15704dd6a86a5fbf8f84b26b6c9a2a585",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": "51f14d0c3b4d8ce016e7fb4f97ab4e40aa663d05ce37044050ab7c845aede535",
+    "cross-module-impact": "82567a5fcb0983e8483e82151ed6efb7128e12899119643f58b57abc3260d3d2",
+    "inventory-integrity": "02da27c92cb12f5472618d49e427929d717b48c0f26a281074c6d3a08da36b45",
+    "cash-integrity": "ba45d159ccf5cf4eda107df998409af07a657240a35730a89de17d6ebea16ade",
+    "credits-integrity": "e12717f1dabae860bfe22c6df90595c374498357cbd9270ac1d335b0b7a87dc2",
+    "canon-promotion": "daa542ec20631f75896c7fb88df16769a95ab5529a0a9c3599eba816cbf848c4",
+    "release-readiness": "f84d4f9d3392ea6fdbc9cd5ea881a3ae1d565672a4b3d084117558ff736fca34"
+  },
+  "analysis": {
+    "OBJECTIVE": "Reparar flujo existente POS→intent→outbox→sale.create→Turso→receipt→UI y eliminar refresh redundante de Caja. Reparación CANON directa autorizada; no promoción de un experimento LAB.",
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "docs/V1.3_STATUS.md",
+      "docs/V1.3_A6_GATE_P_LOCAL_IMPLEMENTATION.md",
+      "docs/CANON_GENERIC_SALE.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/inventory-integrity/SKILL.md",
+      ".agents/skills/cash-integrity/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      ".agents/skills/release-readiness/SKILL.md",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-integration.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "POS/js/sync/canonical-sale-projection.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "POS/js/sync/canonical-cash-bridge.js",
+      "POS/js/sync/canonical-expense-bridge.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "POS/js/legacy-inline/inline-01.js",
+      "POS/js/legacy-inline/inline-02.js",
+      "tools/cloudflare-lab/src/a6-commerce.js",
+      "tools/cloudflare-lab/src/a6-canonical.js",
+      "tools/cloudflare-lab/src/a6-mapping.js",
+      "tools/cloudflare-lab/src/worker.js"
+    ],
+    "WRITES": [
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-sale-integration.js",
+      "POS/js/sync/canonical-sale-outbox.js",
+      "POS/js/sync/canonical-sale-projection.js",
+      "POS/js/sync/canonical-sale-view.js",
+      "POS/js/sync/canonical-cash-bridge.js",
+      "POS/js/sync/canonical-expense-bridge.js",
+      "POS/js/legacy-inline/inline-03.js",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+      "tests/cloud-sync/turso-sqlite-protocol.mjs",
+      "tests/cloud-sync/canonical-sale-integration.test.mjs",
+      "tests/cloud-sync/canonical-cash-bridge.test.mjs",
+      "tests/cloud-sync/canonical-expense-bridge.test.mjs",
+      "tests/cloud-sync/canonical-sale-outbox.test.mjs",
+      "docs/CANON_TURSO_SALE_ROOT.md",
+      "README.md"
+    ],
+    "DOM_AFFECTED": [
+      "mCobro",
+      "mCobroRapido",
+      "mBtnConf",
+      "cartDrawer",
+      "ventasContent",
+      "mApertura",
+      "mMovCaja",
+      "mCierre",
+      "mGasto"
+    ],
+    "STATE_AFFECTED": [
+      "cart",
+      "productos",
+      "ventas",
+      "clientes",
+      "creditos",
+      "posProc",
+      "posPayM",
+      "cajEstado",
+      "cajMovs",
+      "proyección pending separada de confirmado"
+    ],
+    "STORAGE_AFFECTED": [
+      "na_canonical_sale_outbox_v1",
+      "journal CANON existente",
+      "réplica CANON existente"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Identidad exacta product_id sin nombres/fuzzy ni IDs nuevos",
+      "operation_id durable UUID y payload estable en retry",
+      "venta/stock/caja exactamente una vez",
+      "No vaciar carrito antes de readback durable",
+      "Turso autoridad; D1 intacto",
+      "No pérdida de pending ante timeout/ACK perdido",
+      "No venta comercial real automática"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Venta consume producto del adapter; proyección reserva stock local; receipt y refresh alimentan historial/caja/inventario",
+      "Caja y gastos comparten journal; no replay de intención financiera desconocida",
+      "Créditos conserva validaciones/retry y skipStatus exclusivo de payment"
+    ],
+    "RISKS": [
+      "Stock/caja CRITICAL: suites Worker usando TursoD1Adapter sobre protocolo SQL sintético",
+      "Global let: VM con bindings reales y pruebas browser",
+      "ACK: journal confirmado durable antes de eliminar outbox",
+      "API GitHub y endpoints públicos bloqueados por política HTTP 403; promoción externa pendiente hasta acceso"
+    ],
+    "ROLLBACK": [
+      "Revertir el commit/PR y redeploy Hosted POS mediante workflow oficial; no revertir Turso a D1."
+    ],
+    "TEST_PLAN": [
+      "Regresiones A–K de la solicitud",
+      "Prueba base fix02 T17 sin cambios",
+      "CANON Critical CI",
+      "Hosted POS gates",
+      "Worker/Turso adapter",
+      "E2E navegador y build público exacto tras deploy oficial"
+    ]
+  }
+}

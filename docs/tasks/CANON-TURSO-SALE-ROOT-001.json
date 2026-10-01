@@ -1,0 +1,38 @@
+{
+  "schema": "nuevo-amanecer.canon-task/v1",
+  "task_id": "CANON-TURSO-SALE-ROOT-001",
+  "base_ref": "11d044c15704dd6a86a5fbf8f84b26b6c9a2a585",
+  "zone": "CANON",
+  "owner_authorized": true,
+  "allowed_files": [
+    "POS/js/adapters/canonical-ui-adapter.js",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-projection.js",
+    "POS/js/sync/canonical-sale-view.js",
+    "POS/js/sync/canonical-cash-bridge.js",
+    "POS/js/sync/canonical-expense-bridge.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "tests/cloud-sync/turso-sqlite-protocol.mjs",
+    "tests/cloud-sync/canonical-sale-integration.test.mjs",
+    "tests/cloud-sync/canonical-cash-bridge.test.mjs",
+    "tests/cloud-sync/canonical-expense-bridge.test.mjs",
+    "tests/cloud-sync/canonical-sale-outbox.test.mjs",
+    "docs/CANON_TURSO_SALE_ROOT.md",
+    "README.md",
+    "docs/tasks/CANON-TURSO-SALE-ROOT-001.json",
+    "evidence/canon-preflight/CANON-TURSO-SALE-ROOT-001.json"
+  ],
+  "forbidden": [
+    "laboratorio/**",
+    "infra/database/migrations/**",
+    "D1 remoto",
+    "datos comerciales reales",
+    "esquema Turso",
+    "venta comercial real automática"
+  ],
+  "risk": "CRITICAL",
+  "rollback": "Revertir el commit/PR y redeploy Hosted POS mediante workflow oficial; no revertir Turso a D1."
+}
