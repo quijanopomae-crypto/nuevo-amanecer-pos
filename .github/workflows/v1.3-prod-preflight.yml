@@ -87,6 +87,16 @@ jobs:
                 COALESCE((SELECT instr(sql,'NEW.principal_id') > 0 FROM sqlite_master WHERE type='trigger' AND name='canonical_write_guards_authorized_insert'),0) AS session_guard_trigger;
             `))[0];
 
+            const customerCreateDeps = (await query('customer_create_dependencies', `
+              SELECT
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_assertions') AS canonical_assertions,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policy_operations') AS policy_operations,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_customer_credit_policies') AS policies,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_policy_collision') AS customer_policy_collision_trigger,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_namespace_insert') AS customer_namespace_trigger,
+                EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='canonical_customer_operations_authorized_insert') AS customer_authorized_trigger;
+            `))[0];
+
             const traffic = (await query('traffic', `
               SELECT
                 (SELECT COUNT(*) FROM sales) AS sales,
@@ -240,6 +250,7 @@ jobs:
                 first_live_operation_id: control.first_live_operation_id,
               },
               schema: Object.fromEntries(Object.entries(schema).map(([k,v]) => [k, Number(v)])),
+              customer_create_dependencies: Object.fromEntries(Object.entries(customerCreateDeps || {}).map(([k,v]) => [k, Number(v)])),
               traffic: Object.fromEntries(Object.entries(traffic).map(([k,v]) => [k, Number(v)])),
               observed_migrations: observedMigrations,
               missing_migrations: missingMigrations,
@@ -265,6 +276,10 @@ jobs:
             console.log(JSON.stringify(result));
 
             const failures = [];
+            if (Number(customerCreateDeps?.canonical_assertions)!==1) failures.push('canonical_assertions missing');
+            if (Number(customerCreateDeps?.customer_policy_collision_trigger)===1 && Number(customerCreateDeps?.policy_operations)!==1) failures.push('customer policy collision trigger references missing policy operations table');
+            if (Number(customerCreateDeps?.customer_namespace_trigger)!==1) failures.push('customer namespace trigger missing');
+            if (Number(customerCreateDeps?.customer_authorized_trigger)!==1) failures.push('customer authorized trigger missing');
             if (control.mode !== 'ACTIVE') failures.push('production canonical authority is not ACTIVE');
             if (!control.active_promotion_id) failures.push('active promotion missing');
             const effectiveMissingMigrations = Object.entries(migrationSchemaStatus)
