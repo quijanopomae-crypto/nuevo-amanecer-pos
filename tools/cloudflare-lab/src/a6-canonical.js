@@ -1,4 +1,5 @@
 import { getDatabase } from './database-binding.js';
+import { localWriter } from './a6-replication.js';
 import { A6_FIELD_MAP, A6_MAPPING_VERSION, A6_POLICY, A6_SCHEMA_VERSION, a6PolicyHash, mapStagingRow } from './a6-mapping.js';
 import { buildManifest, sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -36,10 +37,10 @@ export function canonicalRuntimeDenied(url, env, json) {
 
 async function authorizeCanonicalRead(request, env, helpers) {
   if (request.headers.get('authorization') || request.headers.get('x-session-token')) {
-    const auth = await helpers.authorizeSession(request, env);
-    return auth instanceof Response ? auth : null;
+    const auth = await helpers.authorizeSession(request, env, true);
+    return auth instanceof Response ? auth : {auth};
   }
-  return helpers.authorizeRead(request, env);
+  const denied=helpers.authorizeRead(request,env);return denied || {auth:null};
 }
 
 export async function handleA6(request, url, env, helpers) {
@@ -57,8 +58,8 @@ export async function handleA6(request, url, env, helpers) {
     }
 
     if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
-    const denied = await authorizeCanonicalRead(request,env,helpers); if (denied) return denied;
-    return canonicalRead(url,getDatabase(env),helpers.json);
+    const authorization = await authorizeCanonicalRead(request,env,helpers); if (authorization instanceof Response) return authorization;
+    return canonicalRead(url,getDatabase(env),helpers.json,authorization.auth);
   }
 
   const localDenied = a6LocalDenied(url, env, helpers.json);
@@ -446,7 +447,7 @@ async function rollback(body,deviceId,credentialHash,manifest,db,json){
   return json(result,201);
 }
 
-async function canonicalRead(url,db,json){
+async function canonicalRead(url,db,json,auth){
   const type=url.pathname.slice('/read/canonical/'.length);if(!READ_TABLES.has(type)&&type!=='status')return json({error:'not_found'},404);
   const initial=await control(db);if(!initial||!['CANONICAL_READ_ONLY','ACTIVE'].includes(initial.mode)||!initial.active_promotion_id)return json({error:'canonical_not_published'},409);
   const before=initial.mode==='ACTIVE'?await readControl(db):initial;
@@ -480,7 +481,7 @@ async function canonicalRead(url,db,json){
       counts.expenses=await expenseLedgerCount(db,before.active_promotion_id);
     }
     const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
-    if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});
+    if(!sameControl(before,after))return json({error:'authority_changed'},409);const writer=auth?await localWriter(db):null;return json({...readMeta(before),counts,...(auth?{write_authorized:auth.role==='writer' && (!writer || !writer.released_at && writer.principal_id===auth.principalId)}:{})});
   }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
   const sqlName=type.replaceAll('-','_');let rows;

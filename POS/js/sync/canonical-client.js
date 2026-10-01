@@ -21,7 +21,7 @@
       }
     }
   } catch (_) {}
-  var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
+  var binding = null, data = null, ready = false, loading = null, changed = false, localRequired = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function fail(code) { throw new Error(code); }
@@ -149,7 +149,7 @@
   }
   function replicaOf(value) { return { schema_version: 1, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
     revision: value.revision, financial_revision: value.financial_revision == null ? null : value.financial_revision,
-    canonical_digest: value.canonical_digest || null,
+    canonical_digest: value.canonical_digest || null, write_authorized:value.write_authorized,
     digests: copy(value.digests || {}),
     products: copy(value.products), customers: copy(value.customers), credits: copy(value.credits), credit_payments: copy(value.payments), credit_accounts: copy(value.creditAccounts || []),
     sales: copy(value.sales || []), sale_items: copy(value.saleItems || []), inventory_movements: copy(value.inventoryMovements || []), cash_movements: copy(value.cashMovements || []),
@@ -166,9 +166,10 @@
     try { var value = await root._naReadCanonicalReplica(); return validReplica(value) ? value : null; } catch (_) { return null; }
   }
   function publishReplica(replica, source) {
+    if(localFirst())return;
     var provisional = source === 'cache' || source === 'bootstrap';
     data = { authority: 'canonical', promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch, revision: replica.revision,
-      financial_revision: replica.financial_revision, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
+      financial_revision: replica.financial_revision,write_authorized:replica.write_authorized, products: copy(replica.products), customers: copy(replica.customers), credits: copy(replica.credits),
       payments: copy(replica.credit_payments), creditAccounts: copy(replica.credit_accounts || []), sales: copy(replica.sales || []), saleItems: copy(replica.sale_items || []),
       inventoryMovements: copy(replica.inventory_movements || []), cashMovements: copy(replica.cash_movements || []), cashSessions: copy(replica.cash_sessions || []), financialEvents: copy(replica.financial_events || []), expenses: copy(replica.expenses || []),
       mode: provisional ? 'CANONICAL_READ_ONLY' : (replica.mode || 'CANONICAL_READ_ONLY'),
@@ -203,7 +204,9 @@
       });
     });
   }
-  async function refresh() {
+  function localFirst() { var engine=root.NuevoAmanecerCanonicalLocalFirst; return engine && engine.active() ? engine : null; }
+  async function refresh() { if(localFirst())return localFirst().refresh(); if(localRequired)fail('LOCAL_BASELINE_REQUIRED'); return readRemote(); }
+  async function readRemote(options) {
     if (loading) return loading;
     if (!data) ready = false;
     loading = (async function () {
@@ -257,9 +260,9 @@
       applyEntries(await Promise.all(coreEntries.map(readEntry)));
       next.sales = []; next.saleItems = []; next.inventoryMovements = []; next.cashMovements = []; next.cashSessions = []; next.financialEvents = []; next.expenses = [];
       next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
-      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
+      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;next.write_authorized=statusMeta.write_authorized;
       if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
+      var cache = options && options.ignoreCache ? null : await localReplica(), bootstrapReplica = replicaOf(next);
       if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
       if (cache && cacheIsNewer(cache, bootstrapReplica)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
@@ -285,13 +288,15 @@
         JSON.stringify([incoming.products,incoming.customers,incoming.credits,incoming.credit_payments,incoming.credit_accounts||[],incoming.sales||[],incoming.sale_items||[],incoming.inventory_movements||[],incoming.cash_movements||[],incoming.cash_sessions||[],incoming.financial_events||[],incoming.expenses||[],incoming.digests||{}]);
       publishReplica(incoming, 'remote');
       if (!same && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
+      if(localFirst())return copy(next);
       replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
-    try { return await loading; } catch (error) { ready = false; replicaState.validation = root.navigator.onLine === false ? 'offline' : (data ? 'stale' : 'unavailable'); notifyReplicaUpdate(); throw error; } finally { loading = null; }
+    try { return await loading; } catch (error) { if(localFirst())throw error; ready = false; replicaState.validation = root.navigator.onLine === false ? 'offline' : (data ? 'stale' : 'unavailable'); notifyReplicaUpdate(); throw error; } finally { loading = null; }
   }
   function snapshot() { return copy(data || { products: [], customers: [], credits: [], payments: [], creditAccounts: [], sales: [], saleItems: [], inventoryMovements: [], cashMovements: [], cashSessions: [], financialEvents: [], expenses: [] }); }
   function sourceState() { return copy(replicaState); }
   function pendingSnapshot() {
+    if(localFirst())return null;
     var value = journal();
     return value && value.state === 'PENDING' ? copy(value) : null;
   }
@@ -301,7 +306,8 @@
   }
   function assertAction(action) {
     if (!COMMANDS.includes(action)) fail('UNSUPPORTED_CANONICAL_ACTION');
-    if (!ready || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.minimum_client_contract !== CONTRACT || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
+    if(localRequired && !localFirst())fail('LOCAL_BASELINE_REQUIRED');
+    if (!ready || changed || !data || data.read_only !== false || data.mode !== 'ACTIVE' || data.write_authorized===false || data.minimum_client_contract !== CONTRACT || !localFirst() && root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     assertBinding(binding);
     return true;
   }
@@ -906,6 +912,8 @@
     return copy(confirmed.receipt);
   }
   async function prepareCommand(command) {
+    if(localRequired && !localFirst())fail('LOCAL_BASELINE_REQUIRED');
+    if(localFirst()){assertAction(command);return legacySnapshot();}
     // Reuse a remotely validated snapshot. Backend authority/revision/CAS checks
     // and retry status verification remain mandatory; a full scan adds no guard.
     try { if (replicaState.validation === 'current') { assertAction(command); return legacySnapshot(); } } catch (_) {}
@@ -919,6 +927,7 @@
     return createCommand('sale.create', sale, durableIntent);
   }
   async function createCommand(command, input, skipStatus) {
+    if(localFirst())return localFirst().commit(command,input);
     return withWriterLock(async function () {
       var existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
@@ -946,6 +955,7 @@
     });
   }
   async function createPaymentBatch(inputs) {
+    if(localFirst()){var localReceipt=await localFirst().commit('payment.batch',inputs);return copy(localReceipt.receipts);}
     if (!Array.isArray(inputs) || !inputs.length || inputs.length > 60) fail('INVALID_CANONICAL_PAYMENT_BATCH');
 
     return withWriterLock(async function () {
@@ -1270,6 +1280,11 @@
   }
   async function startPOS() {
     if (!enabled()) return null;
+    if(root.NuevoAmanecerCanonicalLocalFirst){
+      localRequired=true;
+      if(await root.NuevoAmanecerCanonicalLocalFirst.boot())return snapshot();
+      ready=false;replicaState={source:'none',validation:'activation-required'};notifyReplicaUpdate();return null;
+    }
     var cached = await localReplica();
     if (cached) {
       publishReplica(cached, 'cache');
@@ -1286,8 +1301,54 @@
     return adapter.snapshot(data);
   }
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
-  root.addEventListener('offline', function () { ready = false; });
-  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
+  root.addEventListener('offline', function () { if(!localFirst())ready = false; });
+  function buildLocal(command,input,projection) {
+    assertBinding(binding);
+    var previous=data;data=copy(projection);
+    try {
+      assertAction(command);
+      if(command==='payment.batch') {
+        if(!Array.isArray(input)||!input.length||input.length>60)fail('INVALID_CANONICAL_PAYMENT_BATCH');
+        var payments=input.map(function(child){return makeFinancialPayload('payment.create',child);});
+        var batch=Object.assign(commonPayload(),{payments:payments}),parts=[];
+        for(var offset=0;offset<payments.length;offset+=20){
+          var part=Object.assign(commonPayload(),{payments:payments.slice(offset,offset+20)});
+          if(offset===0)part.operation_id=batch.operation_id;
+          if(!validPayload('payment.batch',part))fail('INVALID_CANONICAL_PAYLOAD');
+          parts.push({binding:copy(binding),command:command,route:'/commands/'+command,payload:part,receipt_ids:{},batch_credit_provenance:part.payments.map(function(p){return data.credits.find(function(c){return c.credit_id===p.credit_id;}).provenance;})});
+        }
+        return {command:command,payload:batch,envelope:{parts:parts,receipts:[]}};
+      }
+      if(command==='sale.create'){
+        input=copy(input);
+        var proposed=/^V-(\d+)$/.exec(String(input.sale_id||''));
+        if(proposed){var max=data.sales.reduce(function(n,s){var m=/^V-(\d+)$/.exec(String(s.sale_id||''));return Math.max(n,m?Number(m[1]):0);},0);if(!Number.isSafeInteger(max+1))fail('SALE_NUMBER_UNSAFE');input.sale_id='V-'+String(Math.max(Number(proposed[1]),max+1)).padStart(3,'0');}
+      }
+      var payload=command==='sale.create'   ? (input && input.version===1 ? makeIntentPayload(input) : makePayload(input)) : command==='product.create' ? makeProductPayload(input) : command==='customer.create' ? makeCustomerPayload(input) : command==='customer.credit-policy.set' ? makeCustomerCreditPolicyPayload(input) : command==='inventory.adjust' ? makeInventoryPayload(input) : command==='credit-account.create' ? makeCreditAccountPayload(input) : command==='expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command,input);
+      if(!validPayload(command,payload))fail('INVALID_CANONICAL_PAYLOAD');
+      var ids={};
+      if(command==='payment.create')ids.credit_provenance=data.credits.find(function(c){return c.credit_id===payload.credit_id;}).provenance;
+      if(command==='compensation.create'){var target=data.financialEvents.find(function(e){return e.operation_id===payload.compensates_operation_id;});if(target.credit_id!=null)ids={credit_id:target.credit_id,credit_provenance:target.credit_provenance};}
+      return {command:command,payload:payload,envelope:{parts:[{binding:copy(binding),command:command,route:'/commands/'+command,payload:payload,receipt_ids:ids}],receipts:[]}};
+    }finally{data=previous;}
+  }
+  function publishLocal(state) {
+    assertBinding(binding);
+    if(state.grant.promotion_id!==binding.promotion_id || state.grant.authority_epoch!==binding.authority_epoch || state.projection.revision!==binding.revision)fail('LOCAL_WRITER_AUTHORITY_CHANGED');
+    data=copy(state.projection);if(state.writer_released || state.cloud.state==='AUTHORITY_CHANGED')data.write_authorized=false;var pending=new Set(state.events.map(function(e){return e.operation_id;}));data.sales.forEach(function(s){s.pending_sync=pending.has(s.operation_id);});ready=true;
+    replicaState={source:'local',validation:'local',view_revision:state.projection_digest,sync_state:state.cloud.state,pending:state.events.length,review_pending:state.migration.evidence.filter(function(e){return e.state==='NEEDS_REVIEW';}).length};notifyReplicaUpdate();return snapshot();
+  }
+  root.NuevoAmanecerCanonicalLocalHooks=Object.freeze({build:buildLocal,publish:publishLocal,readRemote:readRemote,
+    binding:function(){assertBinding(binding);return copy(binding);},
+    session:function(){assertBinding(binding);var session=sessionCredentials(binding);if(!session)fail('SESSION_NOT_AVAILABLE');return session;},
+    writerProof:function(proof){
+      assertBinding(binding);var credentials=stored(CREDENTIALS_KEY);
+      if(!sessionCredentials(binding))fail('SESSION_NOT_AVAILABLE');
+      if(proof){credentials.local_writer_proof=proof;var raw=JSON.stringify(credentials);root.localStorage.setItem(CREDENTIALS_KEY,raw);if(root.localStorage.getItem(CREDENTIALS_KEY)!==raw)fail('LOCAL_WRITER_PROOF_NOT_DURABLE');}
+      return copy(credentials.local_writer_proof||null);
+    },
+    verify:verify,validReceipt:validReceipt});
+  root.NuevoAmanecerCanonical = Object.freeze({enableLocalFirst:function(secret){return root.NuevoAmanecerCanonicalLocalFirst.enable(secret);},syncLocal:function(){return root.NuevoAmanecerCanonicalLocalFirst.sync();}, CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
     createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });

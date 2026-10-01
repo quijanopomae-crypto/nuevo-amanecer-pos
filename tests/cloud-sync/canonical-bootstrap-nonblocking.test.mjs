@@ -6,15 +6,23 @@ const canonical=readFileSync(new URL('../../POS/js/sync/canonical-client.js',imp
 const inline03=readFileSync(new URL('../../POS/js/legacy-inline/inline-03.js',import.meta.url),'utf8');
 const layout=readFileSync(new URL('../../POS/css/layout.css',import.meta.url),'utf8');
 
-test('CANON cold start mounts UI without awaiting the remote bootstrap',()=>{
+test('CANON cold start restores local data before first render and never awaits remote bootstrap',()=>{
   const start=inline03.indexOf("document.addEventListener('DOMContentLoaded'");
   assert.ok(start>=0);
   const block=inline03.slice(start);
   assert.match(block,/const canonicalEnabled=/);
-  assert.match(block,/if\(canonicalEnabled\)\{productos=\[\];clientes=\[\];creditos=\[\];\}/);
+  assert.match(block,/if\(canonicalEnabled&&!localStartup\)_naClearCanonicalLegacyView\(\)/);
+  assert.ok(block.indexOf('await NuevoAmanecerCanonical.startPOS()')<block.indexOf('loadAppState();'),'local restore precedes first operational paint');
+  assert.match(block,/if\(canonicalEnabled&&typeof NuevoAmanecerCanonicalLocalFirst==='undefined'\)/);
   assert.match(block,/NuevoAmanecerCanonical\.startPOS\(\)\.catch/);
-  assert.doesNotMatch(block,/try\{await NuevoAmanecerCanonical\.startPOS\(\)/);
-  assert.match(block,/Conectando a CANON…/);
+  const startPOS=canonical.slice(canonical.indexOf('async function startPOS()'),canonical.indexOf('function legacySnapshot()'));
+  const localBranch=startPOS.slice(startPOS.indexOf('if(root.NuevoAmanecerCanonicalLocalFirst)'),startPOS.indexOf('var cached'));
+  assert.match(localBranch,/localRequired=true/);
+  assert.match(localBranch,/await root\.NuevoAmanecerCanonicalLocalFirst\.boot\(\)/);
+  assert.match(localBranch,/validation:'activation-required'/);
+  assert.match(localBranch,/return null/);
+  assert.doesNotMatch(localBranch,/refresh\(|readRemote\(/);
+  assert.match(block,/Activar este equipo para ventas/);
   assert.match(block,/posUpdateCart\(canonicalEnabled\?false:true\)/);
 });
 

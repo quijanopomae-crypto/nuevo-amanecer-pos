@@ -142,6 +142,7 @@
   async function capture() {
     if (!enabled()) return;
     if (busy || liveProcessing()) return;
+    if(root.NuevoAmanecerCanonical.snapshot().write_authorized===false){failClosed('Este dispositivo es de lectura. Registra la venta en el dispositivo autorizado.',null);return;}
     try {
       if (typeof root.isModuleLocked !== 'function' || root.isModuleLocked('ventas', { canonicalSaleCapture: true })) {
         var lockReason = browserLockReason();
@@ -241,8 +242,16 @@
     try {
       var intentApi = root.NuevoAmanecerCanonicalSaleIntent;
       var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+      if(root.NuevoAmanecerCanonicalLocalFirst && !root.NuevoAmanecerCanonicalLocalFirst.active())throw new Error('LOCAL_BASELINE_REQUIRED');
       if (!intentApi || typeof intentApi.build !== 'function' || !outbox || typeof outbox.enqueue !== 'function') throw new Error('CANONICAL_SALE_CAPTURE_UNAVAILABLE');
       var intent = intentApi.build(input);
+      if(root.NuevoAmanecerCanonicalLocalFirst && root.NuevoAmanecerCanonicalLocalFirst.active()){
+        var localReceipt=await root.NuevoAmanecerCanonical.createSale(intent);
+        if(!localReceipt || localReceipt.local_committed!==true)throw new Error('LOCAL_COMMIT_NOT_VERIFIED');
+        durable=true;saleId=localReceipt.sale_id;
+        updateAfterCommit(saleId,false);
+        return {status:'LOCAL_COMMITTED',operation_id:localReceipt.operation_id,sale_id:saleId};
+      }
       intent = await outbox.enqueue(intent);
       saleId = intent.sale_id;
       durable = true;

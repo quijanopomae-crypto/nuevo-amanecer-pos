@@ -1,0 +1,109 @@
+# Local-first POS V1.3 — implementation and promotion evidence
+
+Base fetched from GitHub: `feature/v1.3-mobile-cloud` at `f865ae53a3330ed9cbf71fe9141f64a3fc0ac165`. Isolated implementation branch: `feat/v1.3-local-first-replication`. Owner specification and task/preflight precede POS edits. This change is for review: no merge, deploy, remote migration, production restore or commercial sale is authorized by the attached implementation specification.
+
+## Current correction: Android startup P1 — 2026-10-01
+
+Starting HEAD `4c8a8057ec94a9afa0a95761bc34bf960ab6efb9`. Root cause reproduced in a new real-page regression: with no V10, `startPOS()` fell back to cloud refresh and accepted a cloud cash-open command. Older browser tests manually enabled local-first before loading the page, so they did not catch this. Startup also cleared operational arrays before local restore and remote-revalidated a sessionStorage-only grant proof before publishing V10.
+
+Normal configured CANON startup now requires the shipped local engine. It restores valid V10 before first operational render; without V10 it asks for the existing owner activation UI and rejects every commercial command/prepare/refresh instead of silently using cloud-first. Legacy cloud paths remain available to existing isolated protocol tests and shells that do not ship the local engine; the normal POS does not start the legacy sale outbox.
+
+The existing session proof (grant ID plus SHA-256 of the existing session token) accompanies the existing session credential record, outside commercial snapshots/backups. It is not a device credential or hardware identity. Changing the token invalidates the proof; released/changed grants stay read-only. A valid same-session proof permits a new tab or offline reload without network/another owner key. If an older baseline lacks that proof, boot publishes its data read-only before asynchronous session revalidation; no remote validation blocks display or silently grants commerce. Cooperative writer release/handover remains unchanged.
+
+Config uses the existing projection digest to distinguish commercial changes from sync metadata; metadata/ACK updates preserve its DOM and unsaved fields. No animation, commercial reducer, Worker, migration, LAB product or CI workflow was changed. The old bootstrap test's unconditional-empty expectation was replaced with the new requirement: restore before first render, clear only without a valid local baseline, require UI activation and do not remotely bootstrap the shipped local branch. Other assertions remain intact.
+
+The critical regression starts the shipped page from an existing synthetic authenticated session, with no V10, injected runtime, preparatory API refresh or programmatic enable call. Owner activation uses actual UI buttons. A real 60-second mock response delay proves local cash, consecutive sales, expense and two different customers' payments finish before ACK; zero foreground requests. It additionally covers offline cash→two sales→payment→expense→close, F5 preserving every pending operation, and background reconciliation of six sales/stock with the real Worker through synthetic Turso SQLite. A separate test asserts Config child mutations = 0 and preserves an unsaved input. Measurements and final CI are recorded in the PR metadata after verification; these are browser synthetic results, not physical Android acceptance.
+
+The broader historical test sweep was attempted and then isolated after discovering old extraction/release tests rewrite tracked POS/evidence files. Generated changes were restored without touching this patch; its affected suites were repeated on the clean product. Those checkpoint-only tests compare byte equality against old extraction heads and conflict with authorized functional changes. Their actual failures are retained in the test report, not counted as successful current release gates.
+
+The earlier results below are historical; Android physical validation remains pending. NO MERGE / NO DEPLOY / NO REMOTE DATABASE / NO REAL SALE.
+
+## Root causes and resulting behavior
+
+The legacy canonical client required online readiness, a single localStorage pending journal blocked unrelated commands, and sale capture waited for remote synchronization after durable intent capture. Cash bridges inherited the same refresh/command/refresh path. The cashier therefore depended on network latency even with IndexedDB available.
+
+V10 now stores the operational canonical snapshot and a small durable FIFO atomically in the existing `NuevoAmanecerPOS` database. The reducer applies current commercial state once; the client publishes only after a verified local transaction. Background replication sends the existing immutable `/commands/*` envelopes. UUID retries and Worker CAS/receipts preserve existing idempotence. ACK compacts the FIFO into its baseline without reapplying stock/cash. No DAG, CRDT, second ledger, generic replication endpoint or multiwriter is introduced.
+
+The base already fixed lexical global bindings and canonical product identity. Those fixes remain: UI adapter ID, cart ID, intent product_id and Turso product_id are the same exact ID. No product names, invented IDs or product creation are used to reconcile a sale. A sale number is reserved from the latest local projection inside the commit lock; that projection includes pending and acknowledged sales. Retrying the same intent returns the original receipt instead of reserving another sale number.
+
+Both sale buttons share the same durable route. Modal/button/cart/history update after local durability; messages explicitly indicate local storage and pending synchronization. A storage failure leaves the cart intact. F5 serves the validated local snapshot first. Local cash open/close/payment/expense commits make zero remote calls; background proof reads remain separate.
+
+The existing legacy IndexedDB open used version 1, conflicting with V10 version 2. It now opens the existing version and closes on versionchange. Existing data is preserved. Backend credit-account creation does not advance financial_revision; the local reducer now matches that rule. Compensation payment signs/method and customer TEXT color match Turso projections. These differences otherwise caused false cloud-recovery alerts.
+
+## Boundaries and recovery
+
+An additive migration 0019 defines one owner-approved writer grant under the current promotion/epoch. Existing write transactions enforce it; reader sessions can authenticate and read but cannot commit. The owner secret is never stored in commercial snapshots/backups. A changed session must revalidate online before using an old writer snapshot.
+
+Activation holds the existing legacy outbox and writer locks while capturing its baseline/migrating. Known legacy pending UUIDs reconcile by their original payload and receipt. Unknown entries remain intact as NEEDS_REVIEW evidence and block only their resource footprint. Existing localStorage is not wiped. Migration is complete only after a durable marker.
+
+Cloud loss, unexpected revision or mismatching business projection cannot overwrite valid local data. Background synchronization pauses; cloud loss permits continued local work. Authority changes close local commits. Slow scans reprogram newly queued work after completion; empty-FIFO authority changes are persisted.
+
+Owner cloud→local recovery requires a verified downloaded backup, explicit destructive consent, owner authentication and a final sequence/digest check inside the V10 lock. Corrupt local state can be exported as raw recovery evidence before replacement. Cancellation does nothing. Historical UUIDs whose effects were removed by that recovery fail explicitly rather than returning a misleading local success. The UI blocks cloud→local replacement when the cloud is known to be behind.
+
+**Remaining limitations:** local→cloud baseline reconstruction uses the existing owner backup/recovery process and is not automated here. Writer handover is now cooperative: finish the old sales session before activating another one; there is no forced takeover of an unreachable offline writer. V10 retains its existing full checkpoints/operations; storage quota and long-term retention require physical-device measurement. A browser-cleared origin cannot recover unreplicated data without an exported backup. No physical Android acceptance or production activation has been performed. These are promotion blockers, not claims of distributed recovery support.
+
+## Verification in this cloud environment
+
+- Cloud-sync suite: 571 tests pass, including TursoD1Adapter Worker transactions and hosted deploy safety tests.
+- Business/backup suites: 121 tests pass. Historical fix02 T17 passes locally; no test was weakened.
+- CANON interface/motion parity: 30 tests pass; versioned visual promotion check passes for 23 assets.
+- Real Chromium: 26 tests pass (22 local-first regressions plus 4 existing smoke tests). Covers offline/reload, real global let, both real UI sale buttons, exact identity, pending/confirmed numbering, local failure, lost ACK, exact stock/cash, batch, account, policy, customer/product/inventory/compensation, legacy migration, reader/session rejection, fabricated receipts, two tabs, cloud loss, owner recovery and slow-scan scheduling.
+- Six consecutive offline commercial commits: 343.5 ms total in the final desktop run, zero network requests on the commit path. This is evidence, not an Internet-dependent CI threshold or Android guarantee.
+- Production Worker configuration bundles successfully with `wrangler deploy --dry-run`; that command writes no deployed Worker or remote database. A displayed D1 binding is configuration metadata; fixtures deliberately reject D1 access and use Turso.
+
+Commands:
+
+```sh
+node --test tests/cloud-sync/*.test.mjs
+node --test tests/product-fixes/fix*/*.test.mjs tests/backup-complete.test.mjs tests/backup-restore.test.mjs
+node tools/pos-experience/promote-lab-visuals.mjs --check
+npx playwright test --config /workspace/.cache/pos-onboarding/playwright.config.ts --workers 2 --timeout 20000
+# tools/cloudflare-lab:
+npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.jsonc
+```
+
+The cloud override uses installed system Chromium; repository CI installs its pinned Playwright browser. Synthetic Worker fixtures run in a separate native Node process to avoid Playwright 1.47 transforming .mjs imports. Setup/install and startup instructions were saved to the cloud environment draft; no secrets or network-policy changes were introduced.
+
+## Technical closure — 2026-10-01 (America/Lima)
+
+Reviewed base `f865ae53a3330ed9cbf71fe9141f64a3fc0ac165`, initial head `f78471312b4119c97eb5470cd579cb527c111c99`, and corrective code head `6f9f08b805ee2d72e2ee99d3ca1a557cd7602b36`. The original five commits remain intact; the sixth fixes a demonstrated P1. No unresolved P0/P1 was found in the reviewed diff. `/auth/local-writer` previously revalidated a granted principal after its role became read-only; background status also ignored explicit `write_authorized:false`. The route now checks role, and both empty/pending FIFO paths durably record AUTHORITY_CHANGED before further local commits. One server regression and two real-browser regressions reproduced failure before the fix and pass afterward.
+
+READS: binding/session, canonical status/projections and existing V10 checkpoints. WRITES: one atomic V10 projection/FIFO/checkpoint commit and unchanged background command envelopes. DOM: existing sale/payment/cash bridges publish after durability. STATE/STORAGE: existing IndexedDB only; immutable UUID/payload, one writer, serialized tabs, exact product IDs, integer money and ACK without repeated stock/cash effects remain invariant. No owner secret is persisted in grants, commercial snapshots or exported evidence.
+
+0019 audit: additive CREATE TABLE and eight CREATE TRIGGER statements only; no existing rows changed, no destructive SQL, dormant without a grant. Grant id=1 is bound to current promotion/epoch. Owner activation authentication is server-side; frontend PIN cannot grant backend writer authority. Reader GETs remain allowed, writes denied. Existing behavior without a grant remains covered. Rollback requires backup and resolving the FIFO before reverting; never delete IndexedDB/localStorage or drop schema to hide pending data. Synthetic fixtures only: no real D1/Turso migration, sale or restore.
+
+PR #322 permanece separado y no fue integrado porque modifica rutas reemplazadas por la arquitectura local-first. Its sale-readiness/overlay and legacy outbox renumbering optimizations overlap the replaced foreground cloud-dependent path. No merge, cherry-pick, close or modification of #322 occurred.
+
+Final local verification: cloud 572/572, business+backup 121/121, interface/motion 30/30, browser 28/28 (24 local-first + 4 smoke), visual promotion 23 assets PASS, production-config Wrangler dry-run PASS, git diff --check PASS. Six offline commits took 172 ms with zero foreground network requests; this is a desktop synthetic measurement, not an Android guarantee. Windows uses pinned Playwright 1.47.2 with system Chrome and an equivalent temporary config (same test directory, two workers, 20000 ms timeout); the Linux `/workspace/.cache` path is unavailable. LF checkout avoids CRLF-sensitive static regex artifacts. The browser fixture explicitly resets network emulation before bootstrap, preventing offline state leakage between tests.
+
+An additional expanded static sweep found three existing expectations concerning header connection chrome and canonical expense projection. They are outside the required passing 30-test interface/motion set; automatic CI results will be recorded below, without weakening tests. Physical Android, real quota/retention, local→cloud recovery drill, writer handover and owner migration/promotion approval remain pending.
+
+Draft PR: [#323](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/pull/323), head `feat/v1.3-local-first-replication`, base `feature/v1.3-mobile-cloud`. Final HEAD is the published head of that PR (`git rev-parse origin/feat/v1.3-local-first-replication` after fetch); the exact final reporting-commit SHA is recorded in PR metadata/body, since a document cannot contain its own commit hash. CI-validated code/report head: `f1e2ec5e20054353470c47ddfc1d196b07a8a82f`. New commits: `6f9f08b` runtime fix, `f1e2ec5` local evidence, followed by this CI closure report; five original commits unchanged. Final workspace clean and branch published without force-push.
+
+| Workflow | Run ID | Status | Conclusion |
+| --- | --- | --- | --- |
+| CANON Critical CI | [36874951401](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/36874951401) | completed | success |
+| E2E Smoke CI | [36874951396](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/36874951396) | completed | success |
+| LAB Canon Mirror CI | [36874951479](https://github.com/quijanopomae-crypto/nuevo-amanecer-pos/actions/runs/36874951479) | completed | failure |
+
+LAB failure logs inspected (job `110411872118`): SKILL_PREFLIGHT_FAIL requires a new/changed LAB schema_version>=3 task and LAB SKILL_PREFLIGHT receipt. `laboratorio/pos-lab/skill-preflight.mjs` classifies every `tools/cloudflare-lab/` change as LAB and accepts only LAB task/receipt paths; it cannot recognize the existing authorized CANON preflight. A retroactive LAB receipt would also fail required temporal ordering. This is a governance/scope mismatch, not an external infrastructure failure. No fabricated receipt, gate bypass, LAB edit or infinite rerun was made. The report-only closure commit may trigger fresh automatic runs; those final-head run IDs/conclusions are recorded in PR metadata. No code changed after the passing code-head suites.
+
+P0 unresolved 0; P1 unresolved 0 (one corrected); runtime P2 unresolved 0; closure P2: one CI governance blocker; P3: three pre-existing static assertions reproduced on the archived base `f865ae5` (header chrome and canonical expense projection; 10/13 pass in the two affected files). No baseline assertions were removed/weakened. Verdict: NOT_READY_CI — cannot claim READY_FOR_ANDROID_AND_PROMOTION_REVIEW while LAB CI fails. Android, quota/retention, local→cloud recovery drill, writer handover and 0019 owner approval remain pending.
+
+Este PR no autoriza merge ni deploy. NO DEPLOY / NO PRODUCTION WRITES / NO REAL SALES.
+
+## Session writer handover — owner-approved functional correction
+
+The owner approved the minimal flow: **Terminar sesión de ventas** on A → **Activar este equipo para ventas** on B. The server cannot inspect another offline browser's IndexedDB, so B never assumes an unreachable A has an empty FIFO. A drains its existing FIFO, checks unresolved migration evidence, then durably freezes local commits under the existing V10 commit lock before releasing its grant. If offline/pending/conflicted, release is refused and data remains intact. Export remains available, but an export alone does not discard or acknowledge pending commands.
+
+0019 now includes nullable `released_at` in its new, still-unpromoted writer table. Releasing retains that row; Worker authorization and the eight existing transaction triggers reject writes during the gap. Owner-authenticated activation rotates the grant and replaces the current session using CAS against the released grant. Simultaneous activations have one winner. A becomes effectively read-only; after B releases, A may activate again. `principal_id` identifies the existing authenticated session, not hardware. No trusted-device list, fingerprinting, new accounts/services, multiwriter, lease or extra authentication mechanism was added. No remote migration ran; the revised 0019 requires the normal owner schema review before promotion.
+
+The owner secret is used only when activating and is never saved in commercial snapshots/backups. Existing bearer session authentication remains unchanged. The local proof now lives in sessionStorage and hashes the session token only; it does not inspect hardware/browser properties and does not ask for an owner key on sales/payments. Release uses the authenticated current grant without an additional owner-key prompt. Lost release ACK leaves A durably read-only; exact retry is safe. Reload preserves released state. Returning to a previously used browser refreshes its clean baseline without clearing IndexedDB/localStorage or removing V10 history, and rejects a cloud revision behind its previously synchronized baseline.
+
+Verified locally: 574 cloud tests + 121 business/backup + 17 preflight/scope = 712 PASS; full browser suite 32 PASS; interface/motion 30 PASS; additional Worker/LAB/HTML checks 30 PASS; visual promotion 23 assets PASS; production-config Wrangler dry-run PASS; git diff --check PASS. New regressions cover A→B→A, independent browser storage, blocked handover with offline pending data unchanged, lost release ACK, simultaneous activation, old grant rejection, B selling without another owner key, secret-free backups and the actual finish/activate buttons across reload. No sales/cash/stock/credit rules were changed. PR remains draft; no merge/deploy/production writes/real sales. Android physical validation remains pending.
+
+## Controlled promotion and rollback
+
+Before promotion: PR gates, review of migration 0019, owner-approved Turso migration contract, physical writer/offline/reload/quota exercise, export and recovery drill, and explicit approval of merge/deploy. Use only the versioned release/Hosted POS workflows; preserve production D1. A second reader must read the synchronized sale. Stop before a real commercial sale until owner authorization.
+
+Before reverting a build that has local pending work, export its backup and drain/resolve the FIFO. An old cloud-dependent build must not silently ignore unreplicated local state. Do not delete the V10 database or clear localStorage as rollback. Current public build remains unchanged. Verdict at implementation review: NOT_READY for a controlled real sale until these promotion blockers are closed.

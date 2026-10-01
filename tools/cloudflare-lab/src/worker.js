@@ -1,4 +1,5 @@
 import { getDatabase } from './database-binding.js';
+import { localWriter, localWriterRoute } from './a6-replication.js';
 // Gateway mínimo: POS OUTBOX -> Worker -> D1 sync_operations.
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
@@ -64,9 +65,14 @@ export default {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
         return await activateSession(request, env);
       }
+      if (url.pathname === '/auth/local-writer') {
+        const denied = canonicalRuntimeDenied(url, env, json); if (denied) return denied;
+        const auth = await authorizeSession(request, env, true); if (auth instanceof Response) return auth;
+        return cors(await localWriterRoute(request, env, auth, json), false);
+      }
       if (url.pathname === '/auth/session') {
         if (request.method !== 'GET') return json({ error: 'method_not_allowed' }, 405, { allow: 'GET, OPTIONS' });
-        const auth = await authorizeSession(request, env);
+        const auth = await authorizeSession(request, env, true);
         if (auth instanceof Response) return auth;
         return json({ status: 'ok', session_id: auth.sessionId });
       }
@@ -238,7 +244,7 @@ async function activateSession(request, env) {
   return json({ status: 'activated', session_token: token });
 }
 
-async function authorizeSession(request, env) {
+async function authorizeSession(request, env, allowReadOnly = false) {
   const authorization = String(request.headers.get('authorization') || '');
   const bearer = authorization.match(/^Bearer\s+([^\s]+)$/i);
   const provided = bearer?.[1] || String(request.headers.get('x-session-token') || '');
@@ -255,10 +261,12 @@ async function authorizeSession(request, env) {
   ).bind(tokenHash).first();
   if (!session || !constantTimeEqual(tokenHash, session.credential_hash)) return json({ error: 'unauthorized' }, 401);
   if (session.session_status !== 'active' || session.principal_status !== 'active') return json({ error: 'session_revoked' }, 403);
-  if (session.role !== 'writer') return json({ error: 'read_only_session' }, 403);
+  if (session.role !== 'writer' && !(allowReadOnly && session.role === 'read_only')) return json({ error: 'read_only_session' }, 403);
+  const writer = await localWriter(db);
+  if (!allowReadOnly && writer && (writer.released_at || writer.principal_id !== session.device_id)) return json({ error: 'read_only_session' }, 403);
   // Authorization is intentionally read-only. It must not create a write race
   // or interfere with the atomic business/canonical batch that follows.
-  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash };
+  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, role:session.role };
 }
 
 function randomToken() {

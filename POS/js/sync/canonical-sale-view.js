@@ -190,6 +190,13 @@
       return null;
     }
     try {
+      if(root.NuevoAmanecerCanonicalLocalFirst && root.NuevoAmanecerCanonicalLocalFirst.active()){
+        var local=canonical.legacySnapshot(),runtime=root.NuevoAmanecerCanonicalUIAdapter.runtime;
+        runtime.setProducts(copy(local.products));runtime.setSales(copy(local.sales));
+        clearPanel('naCanonicalPendingSales');clearPanel('naCanonicalPendingCredits');
+        last={products:copy(local.products),sales:copy(local.sales),credits:copy(local.credits)};
+        renderSalesNow();if(typeof root.posRender==='function')root.posRender();if(typeof root.invRender==='function')root.invRender();return copy(last);
+      }
       var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
       var projector = root.NuevoAmanecerCanonicalSaleProjection;
       if (typeof canonical.snapshot !== 'function' || typeof canonical.legacySnapshot !== 'function' ||

@@ -10,6 +10,8 @@
   }
   function clean(value){return String(value==null?'':value).trim().replace(/\s+/g,' ');}
   function notify(message,tone){
+    if(tone==='success' && root.NuevoAmanecerCanonicalLocalFirst && root.NuevoAmanecerCanonicalLocalFirst.active()){message=String(message).replace(/CONFIRMAD[OA] en CANON|CANON CONFIRMAD[OA]|CONFIRMAD[OA]/g,'guardado localmente')+' · pendiente de sincronización';}
+
     var fn=null;try{if(typeof toast==='function')fn=toast;}catch(_){}
     if(!fn&&typeof root.toast==='function')fn=root.toast;
     if(typeof fn==='function')fn(message,tone||'error');

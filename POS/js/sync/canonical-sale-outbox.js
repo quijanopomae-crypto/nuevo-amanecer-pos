@@ -123,6 +123,7 @@
     retryTimer = root.setTimeout(function () { retryTimer = null; return resumeOutbox(); }, 1000 * Math.pow(2, retryCount - 1));
   }
   async function sync() {
+    if(root.NuevoAmanecerCanonicalLocalFirst && root.NuevoAmanecerCanonicalLocalFirst.active())return result('WAITING',0,snapshot().intents.length,'LOCAL_FIRST_ACTIVE');
     if (syncing) return result('WAITING', 0, snapshot().intents.length, 'BUSY');
     syncing = (async function () {
       try {

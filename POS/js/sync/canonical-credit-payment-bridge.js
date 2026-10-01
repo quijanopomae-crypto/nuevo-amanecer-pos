@@ -43,6 +43,8 @@
   // are global lexical bindings and NOT properties of window. Resolve the
   // lexical binding first; fall back to a window property for other shells.
   function notify(message, tone) {
+    if(tone==='success' && root.NuevoAmanecerCanonicalLocalFirst && root.NuevoAmanecerCanonicalLocalFirst.active()){message=String(message).replace(/CONFIRMAD[OA] en CANON|CANON CONFIRMAD[OA]|CONFIRMAD[OA]/g,'guardado localmente')+' · pendiente de sincronización';}
+
     var fn = null;
     try { if (typeof toast === 'function') fn = toast; } catch (_) {}
     if (!fn && typeof root.toast === 'function') fn = root.toast;
@@ -72,7 +74,7 @@
         typeof client.assertAction !== 'function') return null;
     try {
       var state = client.sourceState();
-      if (!state || state.validation !== 'current') return null;
+      if (!state || state.validation !== 'current' && state.validation !== 'local') return null;
       client.assertAction('payment.create');
       return client.legacySnapshot();
     } catch (_) {

@@ -20,11 +20,19 @@ export const LAB_SPECIFIC_SKILLS = [
 
 const GUARDED_PREFIXES = [
   'laboratorio/pos-lab/',
-  'tools/cloudflare-lab/',
   '.agents/skills/'
 ];
 
+// Running LAB CI is broader than changing the LAB product: the Worker tree
+// also serves CANON. Keep LAB-only backend logic protected explicitly.
+// Exact classifier/test maintenance is governance, not a LAB product edit.
+const PREFLIGHT_TOOLING = new Set([
+  'laboratorio/pos-lab/skill-preflight.mjs',
+  'tests/laboratorio-skill-preflight.test.mjs'
+]);
+
 const GUARDED_EXACT = new Set([
+  'tools/cloudflare-lab/src/lab-workspace.js',
   'AGENTS.md',
   '.opencode/commands/lab-preflight.md',
   '.opencode/agents/pos-lab-implementer.md',
@@ -65,6 +73,7 @@ function isReceipt(path) {
 
 function isGuarded(path) {
   path = normalize(path);
+  if (PREFLIGHT_TOOLING.has(path)) return false;
   if (/^tests\/laboratorio-[^/]+\.test\.mjs$/.test(path)) return true;
   if (GUARDED_EXACT.has(path)) return true;
   return GUARDED_PREFIXES.some(prefix => path.startsWith(prefix));
