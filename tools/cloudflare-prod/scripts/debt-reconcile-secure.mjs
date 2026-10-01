@@ -20,6 +20,7 @@ const EXPECTED_COUNT = 29;
 const EXPECTED_TOTAL_CENTS = 2368495;
 const PRIVATE_AAD = Buffer.from('nuevo-amanecer-debt-reconcile-private-v1');
 const PAYLOAD_AAD = Buffer.from('nuevo-amanecer-debt-reconcile-payload-v1');
+const DIAGNOSTIC_AAD = Buffer.from('nuevo-amanecer-debt-diagnostic-v1');
 
 function b64(buf) { return Buffer.from(buf).toString('base64'); }
 function unb64(value) {
@@ -139,6 +140,45 @@ function normalizeName(value) {
     .replace(/\s+/g,' ');
 }
 
+function sealDiagnostic(value, recipientSpkiB64) {
+  if (typeof recipientSpkiB64 !== 'string' || !recipientSpkiB64) throw new Error('missing diagnostic public key');
+  const recipient = createPublicKey({ key:unb64(recipientSpkiB64), format:'der', type:'spki' });
+  const { publicKey:ephemeralPublic, privateKey:ephemeralPrivate } = generateKeyPairSync('x25519');
+  const ephemeralDer = ephemeralPublic.export({ format:'der', type:'spki' });
+  const shared = diffieHellman({ privateKey:ephemeralPrivate, publicKey:recipient });
+  const salt = createHash('sha256').update(unb64(recipientSpkiB64)).update(ephemeralDer).digest();
+  const key = Buffer.from(hkdfSync('sha256', shared, salt, Buffer.from('nuevo-amanecer-debt-diagnostic-key-v1'), 32));
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(DIAGNOSTIC_AAD);
+  const ciphertext = Buffer.concat([cipher.update(Buffer.from(JSON.stringify(value),'utf8')), cipher.final()]);
+  return { ephemeral_spki_b64:b64(ephemeralDer), iv_b64:b64(iv), tag_b64:b64(cipher.getAuthTag()), ciphertext_b64:b64(ciphertext) };
+}
+
+async function diagnose(rows, recipientSpkiB64) {
+  const control = (await cfQuery("SELECT mode,active_promotion_id,revision,authority_epoch FROM canonical_control WHERE id=1"))[0];
+  if (!control || control.mode !== 'ACTIVE' || !control.active_promotion_id) throw new Error('production CANON is not ACTIVE');
+  const sql = [
+    "WITH identity AS (",
+    "SELECT customer_id,trim(document) AS document,name,'IMPORT' AS customer_provenance FROM customers WHERE promotion_id=?1",
+    "UNION ALL",
+    "SELECT customer_id,trim(document) AS document,name,'LIVE' AS customer_provenance FROM canonical_live_customers WHERE promotion_id=?1",
+    "), credit_map AS (",
+    "SELECT promotion_id,customer_id,credit_id,'IMPORT' AS credit_provenance FROM credits",
+    "UNION ALL",
+    "SELECT promotion_id,customer_id,credit_id,'LIVE' AS credit_provenance FROM live_credits",
+    "), agg AS (",
+    "SELECT m.customer_id,COUNT(*) AS credit_count,COALESCE(SUM(b.opening_balance_cents),0) AS opening_cents,COALESCE(SUM(b.current_balance_cents),0) AS current_cents",
+    "FROM credit_map m JOIN canonical_credit_balances b ON b.promotion_id=m.promotion_id AND b.credit_id=m.credit_id AND b.provenance=m.credit_provenance",
+    "WHERE m.promotion_id=?1 GROUP BY m.customer_id",
+    ")",
+    "SELECT i.customer_id,i.document,i.name,i.customer_provenance,COALESCE(a.credit_count,0) credit_count,COALESCE(a.opening_cents,0) opening_cents,COALESCE(a.current_cents,0) current_cents",
+    "FROM identity i LEFT JOIN agg a ON a.customer_id=i.customer_id ORDER BY i.customer_id"
+  ].join(' ');
+  const identities = await cfQuery(sql,[control.active_promotion_id]);
+  const sealed = sealDiagnostic({format:'nuevo-amanecer-debt-diagnostic-v1',control:{revision:Number(control.revision),authority_epoch:Number(control.authority_epoch)},targets:rows,identities},recipientSpkiB64);
+  console.log('DEBT_RECONCILE_DIAGNOSTIC='+Buffer.from(JSON.stringify(sealed)).toString('base64url'));
+}
 async function inspect(rows) {
   const control = (await cfQuery(
     "SELECT mode,active_promotion_id,revision,authority_epoch,minimum_client_contract FROM canonical_control WHERE id=1"
@@ -293,6 +333,12 @@ async function main() {
   if (trigger.mode === 'inspect') {
     const rows = validateTargets(openPayload(trigger));
     await inspect(rows);
+    return;
+  }
+
+  if (trigger.mode === 'diagnose') {
+    const rows = validateTargets(openPayload(trigger));
+    await diagnose(rows,trigger.diagnostic_public_spki_b64);
     return;
   }
 
