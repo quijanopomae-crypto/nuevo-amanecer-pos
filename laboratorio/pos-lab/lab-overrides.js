@@ -1484,5 +1484,10 @@
     apply: labPwaApplyUpdate
   };
 
+  try {
+    var labPwaPreviewParams = new URLSearchParams(window.location.search || '');
+    if (labPwaPreviewParams.get('lab-update-preview') === '1') labPwaUpdateShow();
+  } catch (_) {}
+
   console.info('[NA-LAB] Punto de extensión listo para funciones nuevas.');
 })();
