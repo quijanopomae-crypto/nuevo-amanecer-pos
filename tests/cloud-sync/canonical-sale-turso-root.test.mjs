@@ -121,18 +121,26 @@ test('Turso sale validation uses four protocol trips cold and three warm includi
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,2);
 });
 
-test('pending V-001 reserves sale id; identical next cart is a new V-002 with its own UUID',async t=>{
+test('pending V-001 blocks a second sale until it resolves, then the next cart becomes V-002',async t=>{
   const {tab,add}=await fixture(t);
+  const queue=tab.context.NuevoAmanecerCanonicalSaleOutbox;
   tab.context.navigator.onLine=false; add();
   await vm.runInContext('confirmarVenta()',tab.context);
-  assert.equal(tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents[0].sale_id,'V-001');
+  let pending=queue.snapshot().intents;
+  assert.equal(pending.length,1);
+  assert.equal(pending[0].sale_id,'V-001');
+
   add();await vm.runInContext('confirmarVenta()',tab.context);
-  const pending=tab.context.NuevoAmanecerCanonicalSaleOutbox.snapshot().intents;
-  assert.equal(pending.length,2);
-  assert.equal(pending[1].sale_id,'V-002');
-  assert.notEqual(pending[0].operation_id,pending[1].operation_id);
-  assert.ok(tab.toasts.some(([m])=>/pendiente de sincronización/i.test(m)));
-  assert.equal(tab.toasts.some(([m])=>/venta realizada|confirmada/i.test(m)),false);
+  pending=queue.snapshot().intents;
+  assert.equal(pending.length,1,'a second sale cannot race an unresolved first sale');
+  assert.equal(vm.runInContext('cart.length',tab.context),1,'second cart stays intact while the first sale is pending');
+  assert.ok(tab.toasts.some(([m])=>/venta pendiente de sincronización/i.test(m)));
+
+  tab.context.navigator.onLine=true;
+  assert.equal((await queue.sync()).status,'DRAINED');
+  add();await vm.runInContext('confirmarVenta()',tab.context);
+  assert.equal(queue.snapshot().intents.length,0);
+  assert.equal(vm.runInContext('ventas.some(v=>v.id==="V-002")',tab.context),true);
 });
 
 test('lost ACK retains durable intent; exact retry confirms and never repeats stock/cash',async t=>{
