@@ -1296,5 +1296,198 @@
     clearRouteRestoreShield();
   }
 
+
+
+  // ===== LAB-PWA-FAST-UPDATE-001: ACTUALIZACIÓN PWA ACCIONABLE =====
+  // Prototipo aislado. En LAB el Service Worker real está deshabilitado, por lo
+  // que el flujo se valida con un stub determinista antes de promoverlo a CANON.
+  var labPwaUpdateBusy = false;
+  var labPwaUpdateReloadScheduled = false;
+  var labPwaUpdateControllerBound = false;
+  var labPwaUpdateFallbackTimer = 0;
+
+  function labPwaUpdateEnsurePrompt() {
+    var existing = document.getElementById('labPwaUpdatePrompt');
+    if (existing) return existing;
+
+    var prompt = document.createElement('aside');
+    prompt.id = 'labPwaUpdatePrompt';
+    prompt.className = 'lab-pwa-update-prompt';
+    prompt.hidden = true;
+    prompt.setAttribute('role', 'dialog');
+    prompt.setAttribute('aria-live', 'polite');
+    prompt.setAttribute('aria-label', 'Nueva versión disponible');
+    prompt.innerHTML =
+      '<div class="lab-pwa-update-icon" aria-hidden="true">⬆️</div>' +
+      '<div class="lab-pwa-update-copy">' +
+        '<strong>Nueva versión disponible</strong>' +
+        '<span id="labPwaUpdateStatus">Lista para actualizar.</span>' +
+      '</div>' +
+      '<button type="button" id="labPwaUpdateAction" class="lab-pwa-update-action">Actualizar ahora</button>';
+    document.body.appendChild(prompt);
+
+    var button = prompt.querySelector('#labPwaUpdateAction');
+    if (button) button.addEventListener('click', labPwaApplyUpdate);
+    return prompt;
+  }
+
+  function labPwaUpdateSetStatus(message, state) {
+    var prompt = labPwaUpdateEnsurePrompt();
+    var status = prompt.querySelector('#labPwaUpdateStatus');
+    if (status) status.textContent = String(message || '');
+    if (state) prompt.dataset.state = state;
+  }
+
+  function labPwaUpdateSetButton(enabled, label) {
+    var prompt = labPwaUpdateEnsurePrompt();
+    var button = prompt.querySelector('#labPwaUpdateAction');
+    if (!button) return;
+    button.disabled = !enabled;
+    button.textContent = label || 'Actualizar ahora';
+  }
+
+  function labPwaUpdateShow() {
+    var prompt = labPwaUpdateEnsurePrompt();
+    prompt.hidden = false;
+    prompt.dataset.state = 'ready';
+    labPwaUpdateSetStatus('Lista para actualizar.', 'ready');
+    labPwaUpdateSetButton(true, 'Actualizar ahora');
+    return prompt;
+  }
+
+  function labPwaUpdateScheduleReload(delay) {
+    if (labPwaUpdateReloadScheduled) return;
+    labPwaUpdateReloadScheduled = true;
+    window.clearTimeout(labPwaUpdateFallbackTimer);
+    labPwaUpdateSetStatus('Actualización lista. Recargando…', 'success');
+    labPwaUpdateSetButton(false, 'Recargando…');
+    window.setTimeout(function () {
+      window.location.reload();
+    }, Number(delay) || 80);
+  }
+
+  function labPwaUpdateBindControllerChange() {
+    if (labPwaUpdateControllerBound) return;
+    if (!navigator.serviceWorker || typeof navigator.serviceWorker.addEventListener !== 'function') return;
+    labPwaUpdateControllerBound = true;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      labPwaUpdateScheduleReload(80);
+    });
+  }
+
+  function labPwaUpdateActivateWorker(registration, worker) {
+    var candidate = registration && registration.waiting ? registration.waiting : worker;
+    if (!candidate || typeof candidate.postMessage !== 'function') return false;
+    candidate.postMessage({ type:'NA_ACTIVATE_UPDATE' });
+    return true;
+  }
+
+  function labPwaUpdateWaitForInstall(registration, worker) {
+    return new Promise(function (resolve) {
+      if (!worker) {
+        resolve(false);
+        return;
+      }
+
+      var settled = false;
+      var timer = 0;
+      function finish(ok) {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        if (typeof worker.removeEventListener === 'function') worker.removeEventListener('statechange', inspect);
+        resolve(ok);
+      }
+      function inspect() {
+        if (worker.state === 'installed' || worker.state === 'activated') {
+          labPwaUpdateActivateWorker(registration, worker);
+          finish(true);
+        } else if (worker.state === 'redundant') {
+          finish(false);
+        }
+      }
+
+      inspect();
+      if (settled) return;
+      if (typeof worker.addEventListener !== 'function') {
+        finish(false);
+        return;
+      }
+
+      worker.addEventListener('statechange', inspect);
+      timer = window.setTimeout(function () { finish(false); }, 12000);
+    });
+  }
+
+  async function labPwaApplyUpdate() {
+    if (labPwaUpdateBusy) return false;
+    labPwaUpdateBusy = true;
+    labPwaUpdateReloadScheduled = false;
+    window.clearTimeout(labPwaUpdateFallbackTimer);
+    labPwaUpdateShow();
+    labPwaUpdateSetStatus('Buscando la versión nueva…', 'working');
+    labPwaUpdateSetButton(false, 'Actualizando…');
+
+    try {
+      if (!navigator.serviceWorker || typeof navigator.serviceWorker.getRegistration !== 'function') {
+        throw new Error('SERVICE_WORKER_UNAVAILABLE');
+      }
+
+      labPwaUpdateBindControllerChange();
+      var controllerBefore = navigator.serviceWorker.controller || null;
+      var registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) throw new Error('SERVICE_WORKER_NOT_REGISTERED');
+
+      if (typeof registration.update === 'function') await registration.update();
+
+      var worker = registration.waiting || registration.installing || null;
+      if (registration.waiting) {
+        labPwaUpdateSetStatus('Aplicando la versión nueva…', 'working');
+        labPwaUpdateActivateWorker(registration, registration.waiting);
+      } else if (worker) {
+        labPwaUpdateSetStatus('Descargando la actualización…', 'working');
+        var ready = await labPwaUpdateWaitForInstall(registration, worker);
+        if (!ready) throw new Error('SERVICE_WORKER_INSTALL_TIMEOUT');
+      } else if (navigator.serviceWorker.controller !== controllerBefore) {
+        labPwaUpdateScheduleReload(80);
+        return true;
+      } else {
+        throw new Error('NO_UPDATE_WORKER_AVAILABLE');
+      }
+
+      // controllerchange es la ruta principal. Este fallback evita que el botón
+      // quede congelado si el navegador activa el worker sin emitir el evento.
+      labPwaUpdateFallbackTimer = window.setTimeout(function () {
+        labPwaUpdateScheduleReload(0);
+      }, 2500);
+      return true;
+    } catch (error) {
+      console.warn('[NA-LAB] No se pudo aplicar la actualización PWA.', error && error.message || error);
+      labPwaUpdateBusy = false;
+      labPwaUpdateReloadScheduled = false;
+      window.clearTimeout(labPwaUpdateFallbackTimer);
+      labPwaUpdateSetStatus('No se pudo actualizar. Comprueba internet y vuelve a intentar.', 'error');
+      labPwaUpdateSetButton(true, 'Reintentar');
+      return false;
+    }
+  }
+
+  function labPwaUpdateOnPending() {
+    labPwaUpdateBusy = false;
+    labPwaUpdateReloadScheduled = false;
+    labPwaUpdateShow();
+  }
+
+  window.addEventListener('na:version-update-pending', labPwaUpdateOnPending);
+  window.NA_LAB_PWA_UPDATE = {
+    show: labPwaUpdateShow,
+    apply: labPwaApplyUpdate
+  };
+
+  try {
+    var labPwaPreviewParams = new URLSearchParams(window.location.search || '');
+    if (labPwaPreviewParams.get('lab-update-preview') === '1') labPwaUpdateShow();
+  } catch (_) {}
+
   console.info('[NA-LAB] Punto de extensión listo para funciones nuevas.');
 })();

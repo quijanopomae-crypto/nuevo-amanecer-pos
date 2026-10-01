@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-PWA-FAST-UPDATE-001",
+  "environment": "LABORATORIO",
+  "base_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
+  "objective": "Prototipar en LAB una experiencia real de actualización PWA: cuando se detecte una nueva versión, mostrar una ventana visible con botón 'Actualizar ahora'; el botón debe solicitar una actualización real al Service Worker, activar la versión preparada y recargar una sola vez al tomar control. Debe mostrar estados de progreso/error y no modificar lógica comercial. La promoción a CANON queda fuera de esta tarea hasta aprobación explícita.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-PWA-FAST-UPDATE-001.json",
+    "laboratorio/pos-lab/preflight/LAB-PWA-FAST-UPDATE-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/lab-overrides.css",
+    "tests/laboratorio-pwa-fast-update.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/index.template.html",
+    "laboratorio/pos-lab/sections/**",
+    "tools/**",
+    ".github/**",
+    "D1/**",
+    "R2/**",
+    "OUTBOX/**",
+    "sync/**",
+    "evidence/v1.3/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-PWA-FAST-UPDATE-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
