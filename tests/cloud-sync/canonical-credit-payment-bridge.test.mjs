@@ -335,6 +335,7 @@ test('batch automatically clears a definitively rejected prior payment and conti
   assert.equal(result.ok,true);
   assert.equal(h.calls.filter(x=>x[0]==='discardRejectedPayment').length,1);
   assert.equal(h.calls.filter(x=>x[0]==='retryPending').length,0);
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(h.calls.filter(x=>x[0]==='refresh').length,2,'rejected stale payment forces a fresh snapshot and then background reconciliation');
   assert.equal(h.calls.filter(x=>x[0]==='createPaymentBatch').length,1);
   assert.equal(h.calls.some(x=>x[0]==='toast'&&/operación CANON pendiente/.test(x[1])),false);
