@@ -108,23 +108,37 @@ export async function createCanonicalCustomer(request,env,auth,json){
   if(checked.error)return json({error:checked.error,...(checked.field?{field:checked.field}:{})},400);
   const body=checked.value,db=getDatabase(env);
 
-  if(!await schemaReady(db))return json({error:'customer_schema_not_ready'},503);
-  const denied=await authorityError(db,auth,body);
+  let ready;
+  try{ready=await schemaReady(db);}catch{return json({error:'canonical_customer_stage_error',stage:'schema'},500);}
+  if(!ready)return json({error:'customer_schema_not_ready'},503);
+  let denied;
+  try{denied=await authorityError(db,auth,body);}catch{return json({error:'canonical_customer_stage_error',stage:'authority'},500);}
   if(denied)return json({error:denied},409);
 
-  const requestHash=await sha256Hex(stableStringify(body));
-  const existing=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_operations WHERE operation_id=?1')
-    .bind(body.operation_id).first();
+  let requestHash,existing;
+  try{
+    requestHash=await sha256Hex(stableStringify(body));
+    existing=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_operations WHERE operation_id=?1')
+      .bind(body.operation_id).first();
+  }catch{return json({error:'canonical_customer_stage_error',stage:'existing'},500);}
   if(existing){
     const stale=await authorityError(db,auth,body);if(stale)return json({error:stale},409);
     if(existing.request_hash!==requestHash)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
     return json({...JSON.parse(existing.result_json),status:'already_processed',idempotent:true},200);
   }
-  if(await operationConflict(db,body.operation_id))
+  let hasOperationConflict;
+  try{hasOperationConflict=await operationConflict(db,body.operation_id);}
+  catch{return json({error:'canonical_customer_stage_error',stage:'namespace'},500);}
+  if(hasOperationConflict)
     return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
-  if(await customerIdConflict(db,body))
+  let hasCustomerIdConflict;
+  try{hasCustomerIdConflict=await customerIdConflict(db,body);}
+  catch{return json({error:'canonical_customer_stage_error',stage:'customer_id'},500);}
+  if(hasCustomerIdConflict)
     return json({error:'customer_id_conflict',customer_id:body.customer_id},409);
-  const docOwner=await documentConflict(db,body);
+  let docOwner;
+  try{docOwner=await documentConflict(db,body);}
+  catch{return json({error:'canonical_customer_stage_error',stage:'document'},500);}
   if(docOwner)return json({error:'customer_document_conflict',customer_id:docOwner},409);
 
   const result={
@@ -159,17 +173,19 @@ export async function createCanonicalCustomer(request,env,auth,json){
 
   try{await db.batch(statements);}
   catch{
-    const replay=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_operations WHERE operation_id=?1')
-      .bind(body.operation_id).first();
-    const stale=await authorityError(db,auth,body);if(stale)return json({error:stale},409);
-    if(replay?.request_hash===requestHash)
-      return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
-    if(replay)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
-    const docOwnerAfter=await documentConflict(db,body);
-    if(docOwnerAfter)return json({error:'customer_document_conflict',customer_id:docOwnerAfter},409);
-    if(await customerIdConflict(db,body))
-      return json({error:'customer_id_conflict',customer_id:body.customer_id},409);
-    return json({error:'canonical_customer_conflict',operation_id:body.operation_id},409);
+    try{
+      const replay=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_operations WHERE operation_id=?1')
+        .bind(body.operation_id).first();
+      const stale=await authorityError(db,auth,body);if(stale)return json({error:stale},409);
+      if(replay?.request_hash===requestHash)
+        return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
+      if(replay)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+      const docOwnerAfter=await documentConflict(db,body);
+      if(docOwnerAfter)return json({error:'customer_document_conflict',customer_id:docOwnerAfter},409);
+      if(await customerIdConflict(db,body))
+        return json({error:'customer_id_conflict',customer_id:body.customer_id},409);
+      return json({error:'canonical_customer_conflict',operation_id:body.operation_id},409);
+    }catch{return json({error:'canonical_customer_stage_error',stage:'recovery'},500);}
   }
   return json(result,201);
 }
