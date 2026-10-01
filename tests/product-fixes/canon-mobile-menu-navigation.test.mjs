@@ -69,6 +69,7 @@ function harness(width=390) {
   const calls=[];
   const renders=[];
   const motionPresets=[];
+  const persistedPages=[];
   let clock = 100;
   const html={classList:classList()};
   const body={classList:classList()};
@@ -90,6 +91,11 @@ function harness(width=390) {
     setTimeout(cb){timerQueue.push(cb);return timerQueue.length;},
     scrollTo(){},
     _naSchedulePageRender(id){renders.push(id);},
+    saveAppState(){
+      const active=pages.find(p=>p.classList.contains('active'));
+      persistedPages.push(active?active.id:'pageMenu');
+      return Promise.resolve({ok:true});
+    },
     NA_MOTION:{
       scroll:{
         enablePreset(name){
@@ -118,7 +124,7 @@ function harness(width=390) {
   }
 
   return {
-    cards,listeners,calls,renders,motionPresets,pages,body,html,back,context,
+    cards,listeners,calls,renders,motionPresets,persistedPages,pages,body,html,back,context,
     flushFrames,flushAfterPaint,flushIdle,
     setClock(value){clock=value;}
   };
@@ -150,6 +156,11 @@ test('mobile tap exposes the requested page without calling goPage', () => {
   assert.equal(h.back.style.display,'block');
   assert.equal(h.context.NA_MOBILE_SAFE_NAV_ACTIVE,true);
   assert.deepEqual(h.renders,[]);
+  assert.deepEqual(h.persistedPages,[],'navigation persistence must not block the first paint');
+  h.flushFrames();
+  assert.deepEqual(h.persistedPages,[]);
+  h.flushFrames();
+  assert.deepEqual(h.persistedPages,['pageClientes']);
 });
 
 test('Clientes restores only its scroll-linked chrome after safe paint and idle', () => {
@@ -243,6 +254,8 @@ test('navigation layer stays free of business/storage/network authority', () => 
   assert.doesNotMatch(source,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|sale\.create|payment\.create|cash\.open|cash\.close|credit-account\.create/i);
   assert.match(source,/mobileSafeNavigate/);
   assert.match(source,/root\._naSchedulePageRender\(pageId\)/);
+  assert.match(source,/persistVisiblePage\(target\)/);
+  assert.match(source,/root\.saveAppState\(\)/);
   assert.match(source,/scheduleClientScrollMotion/);
   assert.match(source,/enablePreset\('clientes'\)/);
 });
