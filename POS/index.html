@@ -1074,7 +1074,14 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       });
     }
 
+    function enableManualUpdateMode() {
+      var controller = navigator.serviceWorker.controller;
+      if (!controller || typeof controller.postMessage !== 'function') return;
+      try { controller.postMessage({ type: 'NA_ENABLE_MANUAL_UPDATES' }); } catch (_) {}
+    }
+
     function scheduleReload() {
+      enableManualUpdateMode();
       if (!hadController || reloadingForWorkerUpdate) return;
       reloadingForWorkerUpdate = true;
       window.clearTimeout(updateFallbackTimer);
@@ -1094,7 +1101,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
         setUpdateUi('Buscando la versión nueva…', 'working', 'Actualizando…', false);
 
         try {
-          if (typeof pwaRegistration.update === 'function') {
+          if (!pwaRegistration.waiting && !pwaRegistration.installing && typeof pwaRegistration.update === 'function') {
             await pwaRegistration.update();
           }
 
@@ -1125,6 +1132,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 
     navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).then(function (registration) {
       pwaRegistration = registration;
+      enableManualUpdateMode();
 
       if (registration.waiting) markVersionPending();
       if (typeof registration.addEventListener === 'function') {
