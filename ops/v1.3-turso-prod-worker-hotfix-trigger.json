@@ -2,14 +2,15 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "El owner pidió arreglar en CANON la demora de validación de ventas.",
-  "target_commit": "8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06",
-  "rollback_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "authorization_context": "El owner pidió reducir la validación CANON de ~3 s a ~1 s o lo más inmediato posible, simplificando el recorrido.",
+  "target_commit": "6347dfab2767e33695be4b6f80dd3db50ec09a1c",
+  "rollback_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 2,
-  "previous_run_id": 36893292597,
-  "previous_run_outcome": "PRE_DEPLOY_TEST_PATH_FAILURE"
+  "attempt": 3,
+  "previous_run_id": 36893578100,
+  "previous_run_outcome": "PASS_PREVIOUS_LATENCY_HOTFIX",
+  "optimization": "SINGLE_TURSO_PIPELINE_SIMPLE_SALE"
 }

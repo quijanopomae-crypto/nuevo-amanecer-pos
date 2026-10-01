@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SALE-SINGLE-TURSO-TRIP-DEPLOY-013",
+  "environment": "CANON",
+  "base_ref": "6347dfab2767e33695be4b6f80dd3db50ec09a1c",
+  "objective": "Desplegar en el Worker CANON/Turso la ruta de venta simple de un solo pipeline ya validada por CI, sin migraciones ni ventas sintéticas.",
+  "owner_authorization": "El propietario pidió que la validación de venta CANON baje de ~3 segundos a ~1 segundo o lo más inmediato posible simplificando el recorrido.",
+  "target_commit": "6347dfab2767e33695be4b6f80dd3db50ec09a1c",
+  "rollback_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
+  "restrictions": [
+    "Turso sigue siendo el backend de producción.",
+    "No ejecutar migraciones.",
+    "No realizar venta real ni sintética durante deploy.",
+    "No modificar secrets.",
+    "Rollback de código debe mantener Turso."
+  ]
+}
