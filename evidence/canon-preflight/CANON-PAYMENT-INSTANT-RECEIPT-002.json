@@ -10,11 +10,26 @@
     "basis": "Patrón post-receipt de CANON-PAYMENT-ONE-SECOND-UI-001 / PR #251 ya aprobado y probado: Pagado solo después del receipt durable, reconciliación completa en background."
   },
   "skills": {
-    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
-    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
-    "credits-integrity": {"path": ".agents/skills/credits-integrity/SKILL.md", "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"},
-    "cash-integrity": {"path": ".agents/skills/cash-integrity/SKILL.md", "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"},
-    "canon-promotion": {"path": ".agents/skills/canon-promotion/SKILL.md", "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"}
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
   },
   "analysis": {
     "ROOT_CAUSE": "El POST de payment.create ya retorna un receipt durable y el modal/toast se liberan inmediatamente, pero el saldo, historial y ficha del cliente esperan a canonical.refresh(), que realiza status + múltiples colecciones (la regresión E2E actual observa 13 GET después del receipt). La latencia percibida es de visualización/reconciliación, no de commit.",
@@ -35,8 +50,7 @@
       "evidence/canon-preflight/CANON-PAYMENT-ONE-SECOND-UI-001.json"
     ],
     "WRITES": [
-      "Exponer de forma read-only el journal CONFIRMED completo (payload + receipt) desde canonical-client.",
-      "Tras confirmación, canonical-credit-payment-bridge emite un evento UI con datos exactos del journal durable para payment.create y los receipts hijos de payment.batch.",
+      "Después de durableJournal(CONFIRMED), canonical-client emite na:canonical-payment-receipt con el payload exacto y receipt durable; para payment.batch emite un evento por receipt hijo.",
       "Clientes V2 mantiene overlays efímeros por operation_id, aplica saldo/pago a clones visuales y re-renderiza la ficha inmediatamente.",
       "Al llegar na:canonical-updated, retirar overlays ya presentes en datos autoritativos y conservar solo los todavía no reconciliados."
     ],
@@ -75,7 +89,8 @@
       "Revert del PR y redeploy Hosted POS previo."
     ],
     "TEST_PLAN": [
-      "Pago individual: receipt durable -> evento -> saldo/historial visible antes de resolver refresh background.",
+      "Pago individual: durableJournal(CONFIRMED) ocurre antes de na:canonical-payment-receipt.",
+      "Receipt -> saldo/historial visible antes de resolver refresh background.",
       "ACK perdido/rechazo: cero evento de éxito antes del receipt.",
       "Replay: un operation_id produce un único pago visual.",
       "Reconciliación: el pago remoto reemplaza overlay sin duplicarlo.",
