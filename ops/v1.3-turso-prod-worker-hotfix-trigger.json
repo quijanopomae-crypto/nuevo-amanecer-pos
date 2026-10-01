@@ -8,5 +8,8 @@
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
-  "one_shot": true
+  "one_shot": true,
+  "attempt": 2,
+  "previous_run_id": 36893292597,
+  "previous_run_outcome": "PRE_DEPLOY_TEST_PATH_FAILURE"
 }
