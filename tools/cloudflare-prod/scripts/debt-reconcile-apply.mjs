@@ -202,7 +202,7 @@ async function createMissingCustomers(matches,writer,trigger) {
     });
     const receipt=await response.json().catch(()=>null);
     if(!response.ok||!receipt||!['created','already_processed'].includes(String(receipt.status||''))){
-      throw new Error('customer creation failed at index '+match.index+' status='+response.status);
+      throw new Error('customer creation failed at index '+match.index+' status='+response.status+' code='+String(receipt?.error||'unknown'));
     }
   }
 }
