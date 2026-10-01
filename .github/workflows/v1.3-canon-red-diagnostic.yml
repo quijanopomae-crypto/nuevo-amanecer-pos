@@ -1,0 +1,140 @@
+name: V1.3 CANON Red Indicator Diagnostic
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-canon-red-diagnostic-trigger.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+      HOSTED_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: "22"
+
+      - name: Require diagnostic secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$POS_ACTIVATION_SECRET"
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test -n "$TURSO_PROD_AUTH_TOKEN"
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+
+      - name: Install Turso adapter dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Probe hosted authenticated CANON reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { TursoD1Adapter } from './tools/cloudflare-lab/src/turso-d1-adapter.js';
+
+          const base=process.env.HOSTED_URL.replace(/\/+$/,'');
+          const db=new TursoD1Adapter({
+            url:process.env.TURSO_PROD_DATABASE_URL,
+            authToken:process.env.TURSO_PROD_AUTH_TOKEN
+          });
+          let sessionId='';
+          let principalId='';
+          let token='';
+          const routes=['products','customers','credits','credit-payments','credit-accounts','cash-sessions','financial-events','expenses','sales','sale-items','inventory-movements','cash-movements'];
+
+          function safeMeta(body){
+            return {
+              error:body?.error||null,
+              authority:body?.authority||null,
+              mode:body?.mode||null,
+              revision:Number.isSafeInteger(Number(body?.revision))?Number(body.revision):null,
+              financial_revision:Number.isSafeInteger(Number(body?.financial_revision))?Number(body.financial_revision):null,
+              items:Array.isArray(body?.items)?body.items.length:null,
+              next_cursor:body?.next_cursor?true:false
+            };
+          }
+
+          async function request(path, options={}){
+            const r=await fetch(base+path,{redirect:'error',cache:'no-store',...options});
+            const body=await r.json().catch(()=>null);
+            return {r,body};
+          }
+
+          try {
+            const health=await request('/health');
+            console.log('stage=health http='+health.r.status+' body='+JSON.stringify({ok:health.body?.ok,service:health.body?.service,environment:health.body?.environment}));
+            if(!health.r.ok||health.body?.ok!==true) throw new Error('HEALTH_FAILED');
+
+            const activate=await request('/auth/activate',{
+              method:'POST',
+              headers:{'x-activation-secret':process.env.POS_ACTIVATION_SECRET}
+            });
+            console.log('stage=activate http='+activate.r.status+' status='+(activate.body?.status||activate.body?.error||'none'));
+            if(!activate.r.ok||typeof activate.body?.session_token!=='string'||!activate.body.session_token) throw new Error('ACTIVATE_FAILED');
+            token=activate.body.session_token;
+            const tokenHash=createHash('sha256').update(token).digest('hex');
+            const headers={authorization:'Bearer '+token};
+
+            const session=await request('/auth/session',{headers});
+            console.log('stage=session http='+session.r.status+' status='+(session.body?.status||session.body?.error||'none'));
+            if(!session.r.ok||typeof session.body?.session_id!=='string'||!session.body.session_id) throw new Error('SESSION_FAILED');
+            sessionId=session.body.session_id;
+            principalId='session:'+sessionId;
+
+            const status=await request('/read/canonical/status',{headers});
+            console.log('stage=status http='+status.r.status+' meta='+JSON.stringify(safeMeta(status.body)));
+            if(!status.r.ok) throw new Error('STATUS_FAILED_'+status.r.status);
+            const expected={
+              authority:status.body?.authority,
+              mode:status.body?.mode,
+              revision:Number(status.body?.revision),
+              financial_revision:Number(status.body?.financial_revision)
+            };
+
+            let failed=0;
+            for(const route of routes){
+              const result=await request('/read/canonical/'+route+'?limit=100',{headers});
+              const meta=safeMeta(result.body);
+              const stable=result.r.ok &&
+                meta.authority===expected.authority &&
+                meta.mode===expected.mode &&
+                meta.revision===expected.revision &&
+                meta.financial_revision===expected.financial_revision;
+              console.log('stage=route route='+route+' http='+result.r.status+' stable='+stable+' meta='+JSON.stringify(meta));
+              if(!stable) failed+=1;
+            }
+            if(failed) throw new Error('ROUTE_FAILURES_'+failed);
+            console.log('CANON_RED_DIAGNOSTIC=PASS');
+          } finally {
+            if(sessionId){
+              await db.prepare('DELETE FROM auth_sessions WHERE session_id=?1').bind(sessionId).run();
+              await db.prepare('DELETE FROM devices WHERE device_id=?1').bind(principalId).run();
+              console.log('cleanup=PASS');
+            }
+          }
+          NODE
