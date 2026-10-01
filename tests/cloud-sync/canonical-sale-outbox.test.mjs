@@ -36,14 +36,16 @@ test('FIFO durable across reconstructed context', async () => {
   const second = fixture({ local: first.local });
   assert.deepEqual(copy(second.api.snapshot().intents), [makeIntent('A'), makeIntent('B'), makeIntent('C')]);
 });
-test('offline refresh failure leaves FIFO untouched and creates nothing', async () => {
-  const f = fixture({ canonical: { refresh() { throw Error('offline'); } } }); await enqueueAll(f, makeIntent('A'), makeIntent('B'));
-  const result = await f.api.sync(); assert.equal(result.status, 'WAITING'); assert.equal(f.calls.filter(x => Array.isArray(x) && x[0] === 'createSale').length, 0); assert.equal(f.api.snapshot().intents.length, 2);
+test('sale submission failure leaves FIFO untouched for durable retry', async () => {
+  const f = fixture({ canonical: { createSale() { throw Error('offline'); } } }); await enqueueAll(f, makeIntent('A'), makeIntent('B'));
+  const result = await f.api.sync(); assert.equal(result.status, 'WAITING'); assert.equal(f.calls.filter(x => Array.isArray(x) && x[0] === 'createSale').length, 1); assert.equal(f.api.snapshot().intents.length, 2);
 });
-test('drains FIFO with refresh before each sale and one refresh after receipts', async () => {
+test('drains FIFO without forcing a full refresh in front of each sale', async () => {
   const f = fixture(); await enqueueAll(f, makeIntent('A'), makeIntent('B'));
   const result = await f.api.sync(); assert.equal(result.status, 'DRAINED');
-  assert.deepEqual(f.calls, ['refresh', ['createSale', makeIntent('A')], 'refresh', ['createSale', makeIntent('B')], 'refresh']); assert.equal(f.api.snapshot().intents.length, 0);
+  await Promise.resolve();
+  assert.deepEqual(f.calls, [['createSale', makeIntent('A')], ['createSale', makeIntent('B')], 'refresh']);
+  assert.equal(f.api.snapshot().intents.length, 0);
 });
 test('lost ACK is not retried in same execution; reload retries same pending once', async () => {
   const state = { pending: null };

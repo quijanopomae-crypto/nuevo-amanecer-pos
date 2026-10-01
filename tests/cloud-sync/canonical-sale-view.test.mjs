@@ -26,7 +26,7 @@ function harness({ intents = [], enabled = true, storageKey = 'na_canonical_sale
     NuevoAmanecerCanonical: {
       enabled: () => enabled,
       snapshot: () => remoteSnapshot,
-      legacySnapshot: () => ({ products: [originalProduct] })
+      legacySnapshot: () => ({ products: [originalProduct], sales: [], customers: [{ id:'c1', nombre:'Cliente Uno' }] })
     },
     NuevoAmanecerCanonicalSaleOutbox: { KEY: storageKey, snapshot: () => ({ version: 1, intents }), sync() { globals.calls.sync++; throw Error('sync forbidden'); } },
     NuevoAmanecerCanonicalSaleProjection: { project(base, outbox) {
@@ -88,6 +88,36 @@ test('pending sales project stock and render safe read-only sales and credits', 
     assert.equal(all.some(n => n.tagName === 'BUTTON'), false);
     assert.equal(all.some(n => 'onclick' in n.attributes || 'data-na-credit-action' in n.attributes), false);
   }
+});
+
+test('durable sale receipt becomes a normal completed sale immediately and hides pending card', () => {
+  const pending = intent('V-004', 1, { total_cents:500, items:[{ product_id:'p1', quantity:1, unit_price_cents:500, line_total_cents:500 }] });
+  const h = harness({ intents:[pending] });
+  h.globals.dispatchEvent({
+    type:'na:canonical-sale-receipt',
+    detail:{
+      version:1,
+      command:'sale.create',
+      payload:{
+        operation_id:pending.operation_id,
+        sale_id:pending.sale_id,
+        created_at:'2026-10-01T02:24:37.744Z',
+        payment_method:'efectivo',
+        total_cents:500,
+        payment:{cash_cents:500,digital_cents:0,credit_cents:0,reference:''},
+        items:[{product_id:'p1',quantity:1,unit_price_cents:500,line_total_cents:500}]
+      },
+      receipt:{status:'created',operation_id:pending.operation_id,sale_id:pending.sale_id,idempotent:false}
+    }
+  });
+  assert.equal(h.globals.ventas.length,1);
+  assert.equal(h.globals.ventas[0].id,'V-004');
+  assert.equal(h.globals.ventas[0].total,5);
+  assert.equal(h.globals.ventas[0].estado,'completada');
+  assert.equal(h.globals.ventas[0].canonicalReceiptProjection,true);
+  assert.equal(h.globals.calls.ventas,1,'main Ventas renderer must run on the receipt path');
+  assert.equal(h.nodes.get('ventasContent').children.length,0,'same sale must not flash as pending after receipt');
+  assert.equal(h.globals.productos[0].stock,9,'receipt and still-present outbox must not double-decrement stock');
 });
 
 test('cumulative rebuild is idempotent and clearing outbox restores remote stock', () => {

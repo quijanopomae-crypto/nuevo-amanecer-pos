@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-SALE-INSTANT-RECEIPT-007",
+  "environment": "CANON",
+  "base_ref": "5b82750d289d321d9cee2c6cd9f2a9c9458a1c25",
+  "objective": "Eliminar la ruta normal de 'Venta pendiente de sincronización' cuando hay conexión: una venta nueva debe hacer el mínimo trabajo de red, esperar su receipt durable y aparecer inmediatamente como venta confirmada en la lista/KPIs, sin esperar un refresh canónico completo.",
+  "owner_authorization": "El owner mostró V-004 en 'Ventas pendientes' y pidió que las ventas se visualicen al instante, sin esperar trabajo en segundo plano.",
+  "promotion_basis": "Mismo principio ya validado para pagos en PR #314: el único gate de éxito visible es el receipt durable. Para ventas se combina con el flujo Turso sale root existente y sus pruebas sintéticas.",
+  "allowed_files": [
+    "tasks/CANON-SALE-INSTANT-RECEIPT-007.json",
+    "evidence/canon-preflight/CANON-SALE-INSTANT-RECEIPT-007.json",
+    "POS/js/sync/canonical-client.js",
+    "POS/js/sync/canonical-sale-outbox.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/sync/canonical-sale-view.js",
+    "POS/js/adapters/canonical-ui-adapter.js",
+    "tests/cloud-sync/canonical-sale-outbox.test.mjs",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "tests/cloud-sync/canonical-sale-view.test.mjs",
+    "tests/cloud-sync/canonical-sale-integration.test.mjs",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/**",
+    "POS/js/legacy-inline/**",
+    "POS/js/motion/**",
+    "POS/js/navigation/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "inventory-integrity",
+    "cash-integrity",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "Nunca mostrar una venta como COMPLETADA antes de que exista un receipt durable CONFIRMED del Worker/Turso.",
+    "La ruta online normal no muestra ni añade un panel de 'Ventas pendientes' antes de intentar el commit remoto.",
+    "Una venta nueva con réplica CANON vigente no hace refresh completo ni status GET redundante antes del POST; el Worker revalida autoridad, stock y caja atómicamente.",
+    "Un retry/ACK perdido conserva verificación remota e idempotencia por operation_id.",
+    "Después del receipt, la venta confirmada se proyecta inmediatamente en ventas[] visual, KPIs e historial usando intent+receipt exactos; sin esperar 12 colecciones.",
+    "La proyección confirmada es efímera/read-only y se retira cuando la réplica CANON contiene el mismo operation_id.",
+    "Stock, caja, crédito, payload y persistencia real siguen siendo responsabilidad exclusiva del Worker/Turso.",
+    "Si la red/ACK falla, se conserva el outbox durable y sí puede mostrarse estado pendiente; no se inventa confirmación."
+  ],
+  "rollback": "Revertir el PR y desplegar el Hosted POS anterior; no hay schema ni migraciones."
+}

@@ -829,6 +829,22 @@
     }
   }
 
+  function publishConfirmedSaleReceipt(record, result) {
+    if (!record || record.command !== 'sale.create' || !record.payload || !result ||
+        typeof root.dispatchEvent !== 'function' || typeof root.CustomEvent !== 'function') return;
+    if (record.payload.operation_id !== result.operation_id || record.payload.sale_id !== result.sale_id) return;
+    try {
+      root.dispatchEvent(new root.CustomEvent('na:canonical-sale-receipt', {
+        detail: {
+          version: 1,
+          command: 'sale.create',
+          payload: copy(record.payload),
+          receipt: copy(result)
+        }
+      }));
+    } catch (_) {}
+  }
+
   async function sendPending(record, skipStatus) {
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
@@ -883,6 +899,7 @@
     // UI can update immediately while the full canonical reconciliation stays
     // off the user-visible critical path.
     publishConfirmedPaymentReceipt(record, result);
+    publishConfirmedSaleReceipt(record, result);
     ready = false;
     return copy(confirmed.receipt);
   }
@@ -895,10 +912,11 @@
     return legacySnapshot();
   }
   async function createSale(sale) {
-    if (sale && typeof sale === 'object' && sale.version === 1) await prepareCommand('sale.create');
-    return createCommand('sale.create', sale);
+    var durableIntent = !!(sale && typeof sale === 'object' && sale.version === 1);
+    if (durableIntent) await prepareCommand('sale.create');
+    return createCommand('sale.create', sale, durableIntent);
   }
-  async function createCommand(command, input) {
+  async function createCommand(command, input, skipStatus) {
     return withWriterLock(async function () {
       var existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
@@ -918,7 +936,11 @@
       }
       if (!validPayload(command, record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
       durableJournal(record);
-      return sendPending(record, command === 'payment.create');
+      // New durable sale intents come from prepareCommand() with a validated
+      // current replica. The Worker re-checks authority, stock and cash
+      // atomically, so an extra status round-trip adds latency but no guard.
+      // Any retry still uses retryPending() -> sendPending(record) with status.
+      return sendPending(record, command === 'payment.create' || skipStatus === true);
     });
   }
   async function createPaymentBatch(inputs) {

@@ -97,9 +97,9 @@
         removeHead(head); processed += 1; continue;
       }
       try {
-        await canonical.refresh();
-      } catch (error) { return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'REFRESH_FAILED')); }
-      try {
+        // createSale() owns freshness. With a current replica it can go straight
+        // to the guarded POST; if the replica is stale it refreshes itself.
+        // Do not force a full multi-collection refresh in front of every sale.
         await canonical.createSale(head);
       } catch (error) {
         var afterFailure = canonical.pendingSnapshot();
@@ -128,10 +128,11 @@
       try {
         var outcome = await withLock(syncLocked);
         // Receipt is already durable and the confirmed intent has been removed.
-        // Refresh once after draining; failure cannot undo a confirmed sale.
+        // Return the commercial path immediately; reconciliation starts now but
+        // is never allowed to hold the sale UI after the durable receipt.
         if (outcome.processed > 0) {
-          try { await root.NuevoAmanecerCanonical.refresh(); }
-          catch (error) { if (root.console) root.console.warn('[Venta CANON] Confirmada; actualización pendiente', error.code || error.message); }
+          Promise.resolve().then(function () { return root.NuevoAmanecerCanonical.refresh(); })
+            .catch(function (error) { if (root.console) root.console.warn('[Venta CANON] Confirmada; reconciliación pendiente', error.code || error.message); });
         }
         if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
         if (started && outcome.status === 'WAITING' && outcome.reason !== 'BUSY' && root.navigator.onLine !== false && retryCount < 3) {

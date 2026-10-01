@@ -3,6 +3,7 @@
 
   var VERSION = 1;
   var last = null;
+  var confirmedReceipts = new Map();
 
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function sameId(a, b) { return a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b); }
@@ -38,8 +39,116 @@
     target.appendChild(panel);
     return panel;
   }
+  function confirmedOperationIds() { return new Set(Array.from(confirmedReceipts.keys())); }
+  function confirmedSaleIds() {
+    return new Set(Array.from(confirmedReceipts.values()).map(function (entry) { return String(entry.receipt.sale_id || entry.payload.sale_id || ''); }).filter(Boolean));
+  }
+  function acceptConfirmedReceipt(detail) {
+    var payload = detail && detail.payload, receipt = detail && detail.receipt;
+    if (!detail || detail.version !== 1 || detail.command !== 'sale.create' || !payload || !receipt) return false;
+    if (payload.operation_id !== receipt.operation_id || payload.sale_id !== receipt.sale_id ||
+        !payload.operation_id || !payload.sale_id || !Array.isArray(payload.items) || !payload.items.length ||
+        !Number.isSafeInteger(payload.total_cents) || payload.total_cents <= 0 ||
+        !['created','already_processed'].includes(String(receipt.status || ''))) return false;
+    confirmedReceipts.set(String(payload.operation_id), { payload: copy(payload), receipt: copy(receipt) });
+    return true;
+  }
+  function reconcileConfirmedReceipts(base) {
+    var sales = base && Array.isArray(base.sales) ? base.sales : [];
+    confirmedReceipts.forEach(function (_entry, operationId) {
+      if (sales.some(function (sale) { return sale && String(sale.operation_id || '') === operationId; })) confirmedReceipts.delete(operationId);
+    });
+  }
+  function localParts(value) {
+    var raw = String(value || ''), parsed = raw ? new Date(raw) : null;
+    if (!parsed || !Number.isFinite(parsed.getTime())) return { date:raw.slice(0,10), time:raw.slice(11,16), timestamp:raw || null };
+    function pad(v) { return String(v).padStart(2,'0'); }
+    return { date:parsed.getFullYear()+'-'+pad(parsed.getMonth()+1)+'-'+pad(parsed.getDate()), time:pad(parsed.getHours())+':'+pad(parsed.getMinutes()), timestamp:raw };
+  }
+  function confirmedLegacySale(entry, legacy) {
+    var payload = entry.payload, when = localParts(payload.created_at);
+    var products = legacy && Array.isArray(legacy.products) ? legacy.products : [];
+    var customers = legacy && Array.isArray(legacy.customers) ? legacy.customers : [];
+    var items = payload.items.map(function (row) {
+      var generic = row.generic_line && typeof row.generic_line === 'object';
+      var product = generic ? null : products.find(function (candidate) {
+        return candidate && sameId(candidate.product_id !== undefined ? candidate.product_id : candidate.id, row.product_id);
+      });
+      var name = generic ? String(row.generic_line.name || 'VARIOS') : String(product && (product.name || product.nombre) || 'Producto');
+      var code = generic ? String(row.generic_line.code || '') : String(product && (product.sku || product.barcode) || '');
+      return {
+        id:row.product_id, product_id:row.product_id, name:name, nombre:name, sku:code, barcode:code, codigoIngresado:code,
+        icon:generic?'📋':String(product && (product.icon || product.icono) || '📦'),
+        qty:Number(row.quantity), cantidad:Number(row.quantity),
+        precio:Number(row.unit_price_cents)/100, precioUnitario:Number(row.unit_price_cents)/100,
+        subtotal:Number(row.line_total_cents)/100,
+        costo:generic?0:Number(product && product.costo || 0),
+        ventaLibre:!!generic, tipoLinea:generic?'venta_libre':'producto',
+        controlInventario:generic?false:(product ? product.controlInventario !== false : true),
+        canonical:true
+      };
+    });
+    var customer = customers.find(function (candidate) { return candidate && sameId(candidate.id !== undefined ? candidate.id : candidate.customer_id, payload.customer_id); });
+    var payment = payload.payment || {}, breakdown = null;
+    if (payload.payment_method === 'mixto') {
+      breakdown = { efectivo:Number(payment.cash_cents||0)/100, digital:Number(payment.digital_cents||0)/100,
+        digitalMethod:String(payment.digital_method||''), reference:String(payment.reference||'') };
+    }
+    return {
+      id:payload.sale_id, sale_id:payload.sale_id, operation_id:payload.operation_id, operation:payload.operation_id,
+      fecha:when.date, hora:when.time, hora24:when.time, timestamp:when.timestamp,
+      total:Number(payload.total_cents)/100, metodo:payload.payment_method, metodoPago:payload.payment_method,
+      estado:payload.payment_method==='credito'?'credito':'completada',
+      paymentRef:String(payment.reference||''), paymentBreakdown:breakdown, anulada:false,
+      clienteId:payload.customer_id||null, customer_id:payload.customer_id||null,
+      clienteNombre:customer ? (customer.nombre || customer.name || String(payload.customer_id||'')) : (payload.customer_id ? String(payload.customer_id) : 'Consumidor final'),
+      clienteDni:customer ? (customer.dni || customer.document || '') : '',
+      cantidadLineas:items.length,
+      unidadesFisicas:items.reduce(function (sum,item) { return sum + Number(item.qty||0); },0),
+      items:items, canonical:true, canonicalReadOnly:true, canonicalReceiptProjection:true, source:'CANONICAL_RECEIPT'
+    };
+  }
+  function applyConfirmedProductProjection(projected, pendingOperations) {
+    if (!projected || !Array.isArray(projected.products)) return;
+    confirmedReceipts.forEach(function (entry, operationId) {
+      if (pendingOperations.has(operationId)) return;
+      entry.payload.items.forEach(function (item) {
+        if (item.generic_line) return;
+        var product = projected.products.find(function (candidate) {
+          return candidate && sameId(candidate.product_id !== undefined ? candidate.product_id : candidate.id, item.product_id);
+        });
+        if (!product || product.tracks_inventory === 0 || product.tracks_inventory === false || product.controlInventario === false) return;
+        var current = product.projected_stock !== undefined ? product.projected_stock :
+          (product.current_stock_quantity !== undefined ? product.current_stock_quantity : product.stock);
+        if (typeof current !== 'number' || !Number.isFinite(current)) return;
+        product.projected_stock = Math.max(0, current - Number(item.quantity || 0));
+      });
+    });
+  }
+  function applyConfirmedSalesRuntime(legacy) {
+    var visualSales = copy(legacy && Array.isArray(legacy.sales) ? legacy.sales : []);
+    var existing = new Set(visualSales.map(function (sale) { return String(sale && (sale.operation_id || sale.operation) || ''); }).filter(Boolean));
+    confirmedReceipts.forEach(function (entry, operationId) {
+      if (!existing.has(operationId)) visualSales.push(confirmedLegacySale(entry, legacy || {}));
+    });
+    var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+    if (runtime && typeof runtime.setSales === 'function') runtime.setSales(visualSales);
+    else if (typeof ventas !== 'undefined') ventas = visualSales;
+    else root.ventas = visualSales;
+    return visualSales;
+  }
+  function renderSalesNow() {
+    var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+    if (runtime && typeof runtime.renderSales === 'function') return runtime.renderSales();
+    if (typeof root.ventasRender === 'function') return root.ventasRender();
+  }
+
   function pendingSales(view) {
-    var sales = (view.sales || []).filter(function (sale) { return sale && (sale.status === 'PENDING_SYNC' || sale.source === 'CANONICAL_OUTBOX'); });
+    var confirmedOps = confirmedOperationIds(), confirmedSales = confirmedSaleIds();
+    var sales = (view.sales || []).filter(function (sale) {
+      return sale && (sale.status === 'PENDING_SYNC' || sale.source === 'CANONICAL_OUTBOX') &&
+        !confirmedOps.has(String(sale.operation_id || '')) && !confirmedSales.has(String(sale.sale_id || sale.id || ''));
+    });
     if (!sales.length) { clearPanel('naCanonicalPendingSales'); return; }
     var panel = section('ventasContent', 'naCanonicalPendingSales', 'Ventas pendientes');
     if (!panel) return;
@@ -56,7 +165,10 @@
     });
   }
   function pendingCredits(view) {
-    var credits = (view.credits || []).filter(function (credit) { return credit && credit.source === 'CANONICAL_OUTBOX'; });
+    var confirmedSales = confirmedSaleIds();
+    var credits = (view.credits || []).filter(function (credit) {
+      return credit && credit.source === 'CANONICAL_OUTBOX' && !confirmedSales.has(String(credit.sale_id || ''));
+    });
     if (!credits.length) { clearPanel('naCanonicalPendingCredits'); return; }
     var panel = section('cliList', 'naCanonicalPendingCredits', 'Créditos pendientes');
     if (!panel) return;
@@ -83,10 +195,14 @@
       if (typeof canonical.snapshot !== 'function' || typeof canonical.legacySnapshot !== 'function' ||
           !outbox || typeof outbox.snapshot !== 'function' || !projector || typeof projector.project !== 'function') throw new Error('CANONICAL_VIEW_UNAVAILABLE');
       var base = canonical.snapshot();
+      reconcileConfirmedReceipts(base);
       var legacy = canonical.legacySnapshot();
       if (!validBase(base) || !legacy || !Array.isArray(legacy.products)) throw new Error('CANONICAL_VIEW_BASE_INVALID');
-      var projected = projector.project(projectionBase(base), outbox.snapshot());
+      var outboxSnapshot = outbox.snapshot();
+      var projected = projector.project(projectionBase(base), outboxSnapshot);
       if (!projected || !Array.isArray(projected.products) || !Array.isArray(projected.sales) || !Array.isArray(projected.credits)) throw new Error('CANONICAL_VIEW_PROJECTION_INVALID');
+      var pendingOperations = new Set((outboxSnapshot.intents || []).map(function (intent) { return String(intent && intent.operation_id || ''); }).filter(Boolean));
+      applyConfirmedProductProjection(projected, pendingOperations);
       var visualProducts = copy(legacy.products);
       visualProducts.forEach(function (product) {
         if (!product) return;
@@ -105,6 +221,7 @@
       if (runtime) runtime.setProducts(visualProducts);
       else if (typeof productos !== 'undefined') productos = visualProducts;
       else root.productos = visualProducts;
+      applyConfirmedSalesRuntime(legacy);
       if (typeof root.posRender === 'function') root.posRender();
       if (typeof root.invRender === 'function') root.invRender();
       pendingSales(last);
@@ -121,6 +238,11 @@
   root.NuevoAmanecerCanonicalSaleView = api;
 
   if (typeof root.addEventListener === 'function') {
+    root.addEventListener('na:canonical-sale-receipt', function (event) {
+      if (!acceptConfirmedReceipt(event && event.detail)) return;
+      rebuild();
+      renderSalesNow();
+    });
     root.addEventListener('na:canonical-sale-projection', rebuild);
     root.addEventListener('na:canonical-updated', rebuild);
     root.addEventListener('na:sales-rendered', function () { if (last) pendingSales(last); });
