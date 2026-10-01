@@ -262,3 +262,88 @@ test('pre-0018 customer reads remain compatible and policy command fails closed'
   await tab.api.refresh();
   assert.equal(tab.api.legacySnapshot().customers.some(c=>String(c.id)===String(id)),true);
 });
+
+
+test('owner credit-line UI removes credit PIN/reason ceremony but keeps automatic backend audit metadata',()=>{
+  const manual=inline04.slice(
+    inline04.indexOf('async function guardarLineaCreditoManual'),
+    inline04.indexOf('async function restaurarLineaCreditoAutomatica')
+  );
+  const automatic=inline04.slice(
+    inline04.indexOf('async function restaurarLineaCreditoAutomatica'),
+    inline04.indexOf('function _naCreditModalSummaryHtml')
+  );
+  const open=inline04.slice(
+    inline04.indexOf('function abrirLineaCreditoManual'),
+    inline04.indexOf('function actualizarAdvertenciaLineaManual')
+  );
+
+  assert.doesNotMatch(index,/id="lineaManualMotivo"/);
+  assert.doesNotMatch(inline04,/function _naRequireMasterPinForCredit/);
+  assert.doesNotMatch(open,/_naVerifyPin|_naRequireMasterPinForCredit/);
+  assert.doesNotMatch(manual,/_naConfirmAction|lineaManualMotivo.*value/);
+  assert.doesNotMatch(automatic,/lineaManualMotivo.*value/);
+  assert.match(manual,/reason='Ajuste manual del propietario'/);
+  assert.match(automatic,/reason='Restauración automática del propietario'/);
+  assert.match(index,/Aplicar línea/);
+  assert.match(inline04,/Se aplicará como línea manual/);
+  assert.match(inline04,/Línea manual activa/);
+  assert.doesNotMatch(inline04,/Motivo: \$\{_naEsc\(e\.client\.lineaCreditoManualMotivo/);
+});
+
+test('confirmed policy renders immediately while full CANON reconciliation continues in background',async t=>{
+  const f=await activeCanon(t,{migrations:MIGRATIONS});
+  let policyWritten=false;
+  let releaseRefresh;
+  const refreshGate=new Promise(resolve=>{releaseRefresh=resolve;});
+
+  const tab=await policyTab(f,{
+    async onFetch(url,options,forward){
+      if(url.endsWith('/commands/customer.credit-policy.set')){
+        const response=await forward();
+        policyWritten=true;
+        return response;
+      }
+      if(policyWritten&&url.endsWith('/read/canonical/status')){
+        await refreshGate;
+        return forward();
+      }
+      return null;
+    }
+  });
+
+  const id=tab.api.snapshot().customers[0].customer_id;
+  tab.context.clientes=tab.api.legacySnapshot().customers;
+  const policyBridge=tab.context.NuevoAmanecerCanonicalCustomerCreditPolicyBridge;
+  const save=policyBridge.saveManual({
+    customer_id:id,
+    manual_limit_cents:280000,
+    reason:'Ajuste manual del propietario',
+    administrator_id:null,
+    administrator_name:'Propietario'
+  });
+
+  const result=await Promise.race([
+    save,
+    new Promise(resolve=>setTimeout(()=>resolve('BLOCKED_BY_FULL_REFRESH'),1500))
+  ]);
+  releaseRefresh();
+
+  assert.equal(result,true,'save must not wait for the full post-commit refresh');
+  const local=tab.context.clientes.find(c=>String(c.id)===String(id));
+  assert.equal(local.lineaCreditoManualActiva,true);
+  assert.equal(local.lineaCreditoManual,2800);
+  assert.equal(local.lineaCreditoPolicyRevision,1);
+  assert.equal(f.sql('SELECT manual_limit_cents FROM canonical_customer_credit_policies WHERE customer_id=?',id).manual_limit_cents,280000);
+
+  await new Promise(resolve=>setTimeout(resolve,0));
+});
+
+test('normal credit-policy write reuses the already-current CANON snapshot instead of preloading the full replica',()=>{
+  assert.match(bridge,/function currentCanonicalSnapshot\(\)/);
+  assert.match(bridge,/assertAction\('customer\.credit-policy\.set'\)/);
+  const commit=bridge.slice(bridge.indexOf('async function commit'),bridge.indexOf('// Called by guardarLineaCreditoManual'));
+  assert.match(commit,/resolvedForeign\?await refreshCanonical\(\):currentCanonicalSnapshot\(\)/);
+  assert.match(bridge,/function reconcileCanonicalInBackground\(customerId\)/);
+  assert.doesNotMatch(bridge,/async function afterCommit/);
+});

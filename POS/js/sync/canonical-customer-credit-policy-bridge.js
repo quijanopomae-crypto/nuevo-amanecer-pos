@@ -38,6 +38,53 @@
     await client.refresh();
     return client.legacySnapshot();
   }
+  function currentCanonicalSnapshot(){
+    var client=api(),state=null;
+    if(!client||typeof client.legacySnapshot!=='function')throw new Error('CANONICAL_CLIENT_UNAVAILABLE');
+    if(typeof client.assertAction==='function')client.assertAction('customer.credit-policy.set');
+    if(typeof client.sourceState==='function'){
+      state=client.sourceState();
+      if(!state||state.validation!=='current')throw new Error('CANONICAL_SNAPSHOT_NOT_CURRENT');
+    }
+    return client.legacySnapshot();
+  }
+  function projectConfirmedPolicy(input,receipt){
+    var adapter=root.NuevoAmanecerCanonicalUIAdapter;
+    var runtime=adapter&&adapter.runtime;
+    var rows=runtime&&typeof runtime.customers==='function'?runtime.customers():(Array.isArray(root.clientes)?root.clientes:[]);
+    if(!Array.isArray(rows))return false;
+    var customer=rows.find(function(row){
+      return row&&String(row.id!==undefined?row.id:row.customer_id)===String(input&&input.customer_id);
+    });
+    if(!customer)return false;
+    var mode=clean(receipt&&receipt.mode||input&&input.mode).toUpperCase();
+    var manual=mode==='MANUAL';
+    var revision=Number(receipt&&receipt.policy_revision);
+    if(!Number.isSafeInteger(revision)||revision<0)revision=(Number(customer.lineaCreditoPolicyRevision)||0)+1;
+    customer.lineaCreditoPolicyRevision=revision;
+    customer.lineaCreditoManualActiva=manual;
+    if(manual){
+      var cents=Number(receipt&&receipt.manual_limit_cents);
+      if(!Number.isSafeInteger(cents)||cents<0)cents=Number(input&&input.manual_limit_cents)||0;
+      customer.lineaCreditoManual=cents/100;
+      customer.lineaCreditoManualMotivo=clean(input&&input.reason);
+      customer.lineaCreditoManualAt=clean(input&&input.created_at)||new Date().toISOString();
+      customer.lineaCreditoManualPor=clean(input&&input.administrator_name)||'Propietario';
+      customer.lineaCreditoManualPorId=clean(input&&input.administrator_id);
+    }else{
+      customer.lineaCreditoManual=0;
+      customer.lineaCreditoManualMotivo='';
+      customer.lineaCreditoManualAt='';
+      customer.lineaCreditoManualPor='';
+      customer.lineaCreditoManualPorId='';
+    }
+    return true;
+  }
+  function reconcileCanonicalInBackground(customerId){
+    Promise.resolve().then(refreshCanonical).then(function(){
+      renderViews(customerId);
+    }).catch(function(){});
+  }
   function customerFrom(snapshot,id){
     return (snapshot&&Array.isArray(snapshot.customers)?snapshot.customers:[]).find(function(c){
       return c&&String(c.id!==undefined?c.id:c.customer_id)===String(id);
@@ -74,33 +121,29 @@
     }
     return pendingRecord();
   }
-  async function afterCommit(receipt,replayed,customerId){
+  function afterCommit(receipt,replayed,customerId,input){
     closeModal();
-    var operation=clean(receipt&&receipt.operation_id);
-    try{
-      await refreshCanonical();
-      renderViews(customerId);
-      notify(replayed
-        ? 'Se confirmó el cambio de línea CANON pendiente. No se creó otra operación.'
-        : receipt&&receipt.mode==='MANUAL'
-          ? 'Línea manual guardada en CANON'
-          : 'Se restauró la línea automática en CANON','success');
-    }catch(error){
-      notify('Política de crédito CONFIRMADA en CANON (operación '+operation+'). No se pudo actualizar la vista: '+
-        clean(error&&error.message)+'. NO repitas el cambio; recarga la pantalla.','success');
-    }
+    projectConfirmedPolicy(input||{},receipt||{});
+    renderViews(customerId);
+    notify(replayed
+      ? 'Se confirmó el cambio de línea CANON pendiente. No se creó otra operación.'
+      : receipt&&receipt.mode==='MANUAL'
+        ? 'Línea manual guardada en CANON'
+        : 'Se restauró la línea automática en CANON','success');
+    reconcileCanonicalInBackground(customerId);
     return true;
   }
   async function commit(input){
     if(!enabled()||busy)return false;
     input=input&&typeof input==='object'?Object.assign({},input):{};
-    var client=api(),pending=pendingRecord();
+    var client=api(),pending=pendingRecord(),resolvedForeign=false;
 
     busy=true;
     try{
       if(pending&&pending.command!=='customer.credit-policy.set'){
         pending=await resolveForeignPending(client,pending);
         if(pending)return false;
+        resolvedForeign=true;
       }
 
       if(pending&&pending.last_error&&typeof client.discardRejectedCustomerCreditPolicy==='function'){
@@ -116,12 +159,16 @@
       if(pending){
         var replay;
         try{replay=await client.retryPending();}catch(error){notify(pendingMessage(error),'error');return false;}
-        return afterCommit(replay,true,pending.payload&&pending.payload.customer_id);
+        return afterCommit(replay,true,pending.payload&&pending.payload.customer_id,pending.payload);
       }
 
       var snapshot;
-      try{snapshot=await refreshCanonical();}
-      catch(error){notify('No se guardó la línea: CANON no disponible ('+clean(error&&error.message)+')','error');return false;}
+      try{
+        snapshot=resolvedForeign?await refreshCanonical():currentCanonicalSnapshot();
+      }catch(error){
+        try{snapshot=await refreshCanonical();}
+        catch(refreshError){notify('No se guardó la línea: CANON no disponible ('+clean(refreshError&&refreshError.message)+')','error');return false;}
+      }
 
       var customer=customerFrom(snapshot,input.customer_id);
       if(!customer){notify('No se encontró el cliente CANON','error');return false;}
@@ -147,16 +194,16 @@
         }
         notify(pendingMessage(error),'error');return false;
       }
-      return afterCommit(receipt,false,input.customer_id);
+      return afterCommit(receipt,false,input.customer_id,input);
     }finally{busy=false;}
   }
 
-  // Called by guardarLineaCreditoManual after its existing PIN/risk validation.
+  // Called by guardarLineaCreditoManual after amount validation; audit metadata is generated by the owner UI.
   function saveManual(input){
     input=Object.assign({},input,{mode:'MANUAL'});
     return commit(input);
   }
-  // Called by restaurarLineaCreditoAutomatica after its existing PIN/reason validation.
+  // Called by restaurarLineaCreditoAutomatica with owner-generated audit metadata.
   function restoreAutomatic(input){
     input=Object.assign({},input,{mode:'AUTOMATIC',manual_limit_cents:null});
     return commit(input);
