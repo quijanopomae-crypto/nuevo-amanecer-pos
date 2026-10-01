@@ -25,7 +25,18 @@ function fixture({ local = storage(), lock = locks(), canonical = {} } = {}) {
   const context = vm.createContext({ localStorage: local, navigator: { locks: lock }, crypto: { randomUUID }, fetch() { throw Error('direct fetch forbidden'); } });
   vm.runInContext(intentSource, context); vm.runInContext(source, context);
   const calls = [];
-  const api = { async refresh() { calls.push('refresh'); if (canonical.refresh) return canonical.refresh(); }, async createSale(i) { calls.push(['createSale', copy(i)]); if (canonical.createSale) return canonical.createSale(i); canonical.receipt = { operation_id: i.operation_id, sale_id: i.sale_id }; return canonical.receipt; }, async retryPending() { calls.push('retryPending'); if (canonical.retryPending) return canonical.retryPending(); canonical.receipt = { operation_id: canonical.pending.payload.operation_id, sale_id: canonical.pending.payload.sale_id }; canonical.pending = null; return canonical.receipt; }, pendingSnapshot() { return copy(canonical.pending ?? null); }, receiptSnapshot() { return copy(canonical.receipt ?? null); } };
+  const api = {
+    async refresh() { calls.push('refresh'); if (canonical.refresh) return canonical.refresh(); },
+    async createSale(i) { calls.push(['createSale', copy(i)]); if (canonical.createSale) return canonical.createSale(i); canonical.receipt = { operation_id: i.operation_id, sale_id: i.sale_id }; return canonical.receipt; },
+    async retryPending() { calls.push('retryPending'); if (canonical.retryPending) return canonical.retryPending(); canonical.receipt = { operation_id: canonical.pending.payload.operation_id, sale_id: canonical.pending.payload.sale_id }; canonical.pending = null; return canonical.receipt; },
+    async repairRejectedSaleConflict(operationId,saleId) {
+      calls.push(['repairRejectedSaleConflict',operationId,saleId]);
+      if (canonical.repairRejectedSaleConflict) return canonical.repairRejectedSaleConflict(operationId,saleId);
+      return {status:'NOT_PROVEN'};
+    },
+    pendingSnapshot() { return copy(canonical.pending ?? null); },
+    receiptSnapshot() { return copy(canonical.receipt ?? null); }
+  };
   context.NuevoAmanecerCanonical = api;
   return { context, local, canonical, calls, api: context.NuevoAmanecerCanonicalSaleOutbox };
 }
@@ -44,7 +55,7 @@ test('drains FIFO without forcing a full refresh in front of each sale', async (
   const f = fixture(); await enqueueAll(f, makeIntent('A'), makeIntent('B'));
   const result = await f.api.sync(); assert.equal(result.status, 'DRAINED');
   await Promise.resolve();
-  assert.deepEqual(f.calls, [['createSale', makeIntent('A')], ['createSale', makeIntent('B')], 'refresh']);
+  assert.deepEqual(f.calls, [['createSale', makeIntent('A')], ['createSale', makeIntent('B')]]);
   assert.equal(f.api.snapshot().intents.length, 0);
 });
 test('lost ACK is not retried in same execution; reload retries same pending once', async () => {
@@ -60,6 +71,41 @@ test('hard pending rejection blocks queue without retry or create', async () => 
   const f = fixture({ canonical: { pending } }); await enqueueAll(f, makeIntent('A'), makeIntent('B'));
   assert.equal((await f.api.sync()).status, 'BLOCKED_PENDING_REJECTED'); assert.deepEqual(copy(f.api.snapshot().intents), [makeIntent('A'), makeIntent('B')]); assert.equal(f.calls.includes('retryPending'), false); assert.equal(f.calls.some(x => Array.isArray(x)), false);
 });
+test('proven remote sale-id collision renumbers the full FIFO without losing operations', async () => {
+  const mk=(n,op)=>({...makeIntent(op),operation_id:op,sale_id:'V-'+String(n).padStart(3,'0')});
+  const queued=[mk(3,'op-3-new'),mk(4,'op-4-new'),mk(5,'op-5-new')];
+  const local=storage(JSON.stringify({version:1,last_sale_number:5,intents:queued}));
+  const canonical={
+    pending:{state:'PENDING',command:'sale.create',payload:copy(queued[0]),last_status:409,last_error:'canonical_sale_conflict'},
+    repairRejectedSaleConflict(operationId,saleId){
+      assert.equal(operationId,'op-3-new');assert.equal(saleId,'V-003');
+      canonical.pending=null;
+      return {status:'SALE_ID_COLLISION',operation_id:operationId,sale_id:saleId,max_sale_number:3};
+    }
+  };
+  const f=fixture({local,canonical});
+  const outcome=await f.api.sync();
+  assert.equal(outcome.status,'DRAINED');
+  const sent=f.calls.filter(x=>Array.isArray(x)&&x[0]==='createSale').map(x=>x[1]);
+  assert.deepEqual(sent.map(x=>x.operation_id),['op-3-new','op-4-new','op-5-new']);
+  assert.deepEqual(sent.map(x=>x.sale_id),['V-006','V-007','V-008']);
+  assert.equal(f.api.snapshot().intents.length,0);
+  assert.equal(f.api.snapshot().last_sale_number,8);
+});
+
+test('unproven canonical_sale_conflict remains blocked and never renumbers or deletes', async () => {
+  const head={...makeIntent('X'),operation_id:'op-x',sale_id:'V-003'};
+  const local=storage(JSON.stringify({version:1,last_sale_number:3,intents:[head]}));
+  const canonical={
+    pending:{state:'PENDING',command:'sale.create',payload:copy(head),last_status:409,last_error:'canonical_sale_conflict'},
+    repairRejectedSaleConflict(){return {status:'NOT_PROVEN',max_sale_number:3};}
+  };
+  const f=fixture({local,canonical});
+  const outcome=await f.api.sync();
+  assert.equal(outcome.status,'BLOCKED_PENDING_REJECTED');
+  assert.deepEqual(copy(f.api.snapshot().intents),[head]);
+});
+
 test('foreign operation or command pending blocks without touching it', async () => {
   for (const pending of [{ state: 'PENDING', command: 'sale.create', payload: makeIntent('X') }, { state: 'PENDING', command: 'payment.create', payload: makeIntent('A') }]) {
     const f = fixture({ canonical: { pending } }); await f.api.enqueue(makeIntent('A')); assert.equal((await f.api.sync()).status, 'BLOCKED_FOREIGN_PENDING'); assert.equal(f.calls.includes('retryPending'), false); assert.equal(f.calls.some(x => Array.isArray(x)), false);
