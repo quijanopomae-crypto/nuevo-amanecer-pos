@@ -10,9 +10,7 @@
     "tasks/CANON-PAYMENT-INSTANT-RECEIPT-002.json",
     "evidence/canon-preflight/CANON-PAYMENT-INSTANT-RECEIPT-002.json",
     "POS/js/sync/canonical-client.js",
-    "POS/js/sync/canonical-credit-payment-bridge.js",
     "POS/js/modules/client-credit-accounts-v2.js",
-    "tests/cloud-sync/canonical-credit-payment-bridge.test.mjs",
     "tests/cloud-sync/canonical-credit-payment-e2e.test.mjs",
     "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
     "ops/v1.3-pos-web-deploy-trigger.json"
@@ -32,7 +30,8 @@
     "Un replay del mismo operation_id no duplica visualmente el pago.",
     "El refresh CANON completo continúa en background y sustituye la proyección temporal.",
     "No cambiar saldo, caja, idempotencia, reglas de crédito, Worker, Turso, D1 ni schema.",
-    "La latencia de red no se puede prometer; después del receipt la UI debe actualizarse sin esperar nuevas lecturas de red."
+    "La latencia de red no se puede prometer; después del receipt la UI debe actualizarse sin esperar nuevas lecturas de red.",
+    "El evento post-receipt se emite desde canonical-client inmediatamente después de durableJournal(CONFIRMED), evitando otra capa en el bridge."
   ],
   "rollback": "Revertir el PR y volver a desplegar el Hosted POS anterior; no hay migración, schema ni datos que revertir."
 }
