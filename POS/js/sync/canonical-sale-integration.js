@@ -11,6 +11,23 @@
     return !!(root.NuevoAmanecerCanonical && typeof root.NuevoAmanecerCanonical.enabled === 'function' && root.NuevoAmanecerCanonical.enabled());
   }
   function runtime() { return root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime; }
+  function canonicalSaleGate() {
+    var canonical = root.NuevoAmanecerCanonical;
+    if (!canonical || typeof canonical.sourceState !== 'function' || typeof canonical.snapshot !== 'function') return { ready:false, reason:'CANON no está listo' };
+    var state = canonical.sourceState(), snapshot = canonical.snapshot();
+    if (!state || state.validation !== 'current' || !snapshot || snapshot.mode !== 'ACTIVE' || snapshot.read_only !== false)
+      return { ready:false, reason:'CANON está sincronizando · espera el indicador verde' };
+    if (typeof canonical.pendingSnapshot === 'function' && canonical.pendingSnapshot())
+      return { ready:false, reason:'Hay una operación pendiente · espera su confirmación' };
+    var outbox = root.NuevoAmanecerCanonicalSaleOutbox;
+    try {
+      if (outbox && typeof outbox.snapshot === 'function' && outbox.snapshot().intents.length)
+        return { ready:false, reason:'Hay una venta pendiente de sincronización · espera su confirmación' };
+    } catch (_) {
+      return { ready:false, reason:'No se pudo validar la cola de ventas · reintenta' };
+    }
+    return { ready:true };
+  }
   function notify(message, tone) {
     if (runtime()) return runtime().notify(message, tone);
     var fn; try { if (typeof toast === 'function') fn = toast; } catch (_) {}
@@ -142,6 +159,8 @@
   async function capture() {
     if (!enabled()) return;
     if (busy || liveProcessing()) return;
+    var gate = canonicalSaleGate();
+    if (!gate.ready) { failClosed(gate.reason, null); return; }
     try {
       if (typeof root.isModuleLocked !== 'function' || root.isModuleLocked('ventas', { canonicalSaleCapture: true })) {
         var lockReason = browserLockReason();

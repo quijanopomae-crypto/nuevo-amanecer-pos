@@ -153,6 +153,17 @@
     started = true;
     async function resume() {
       if (resuming || syncing || root.navigator.onLine === false) return;
+      var canonical = root.NuevoAmanecerCanonical;
+      if (canonical && typeof canonical.enabled === 'function' && canonical.enabled()) {
+        var state = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null;
+        if (!state || state.validation !== 'current') {
+          if (state && ['stale','unavailable'].includes(state.validation) && typeof canonical.refresh === 'function') {
+            try { await canonical.refresh(); state = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null; }
+            catch (_) { scheduleResume(); return; }
+          }
+          if (!state || state.validation !== 'current') return;
+        }
+      }
       try { if (!snapshot().intents.length) return; } catch (_) { return; }
       resuming = true;
       try { await repairKnownTestPair(); return await sync(); }
@@ -164,7 +175,15 @@
     }
     resumeOutbox = resume;
     if (typeof root.addEventListener === 'function') {
-      root.addEventListener('online', function () { retryCount = 0; return resume(); });
+      root.addEventListener('online', function () {
+        retryCount = 0;
+        var canonical = root.NuevoAmanecerCanonical;
+        if (canonical && typeof canonical.enabled === 'function' && canonical.enabled() && typeof canonical.refresh === 'function') {
+          var state = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null;
+          if (!state || state.validation !== 'current') return canonical.refresh().catch(function () {});
+        }
+        return resume();
+      });
       root.addEventListener('na:canonical-updated', resume);
     }
     return resume();

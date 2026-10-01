@@ -14,7 +14,7 @@ test('CANON cold start mounts UI without awaiting the remote bootstrap',()=>{
   assert.match(block,/if\(canonicalEnabled\)\{productos=\[\];clientes=\[\];creditos=\[\];\}/);
   assert.match(block,/NuevoAmanecerCanonical\.startPOS\(\)\.catch/);
   assert.doesNotMatch(block,/try\{await NuevoAmanecerCanonical\.startPOS\(\)/);
-  assert.match(block,/Conectando a CANON…/);
+  assert.match(block,/Sincronizando CANON…/);
   assert.match(block,/posUpdateCart\(canonicalEnabled\?false:true\)/);
 });
 
@@ -37,15 +37,18 @@ test('canonical read requests are bounded without changing command write transpo
   assert.match(sendPending,/root\.fetch\(expected\.endpoint \+ record\.route/);
 });
 
-test('header confirms verified CANON connection before collection bootstrap finishes',()=>{
+test('header exposes transport as syncing and reserves green for current replica',()=>{
   const statusVerified=canonical.indexOf('notifyConnectionVerified();');
   const coreBootstrap=canonical.indexOf('Promise.all(coreEntries.map(readEntry))');
-  assert.ok(statusVerified>=0,'verified status must signal connectivity');
-  assert.ok(coreBootstrap>statusVerified,'connectivity must be visible before core collections finish');
+  assert.ok(statusVerified>=0,'verified status must still signal transport connectivity');
+  assert.ok(coreBootstrap>statusVerified,'transport can be known before collections finish');
   assert.match(canonical,/new root\.CustomEvent\('na:canonical-connected'\)/);
-  assert.match(inline03,/addEventListener\('na:canonical-connected'/);
-  assert.match(inline03,/_naCanonicalTransportConnected=true/);
-  assert.match(inline03,/state\.validation==='current'\|\|\(_naCanonicalTransportConnected&&state\.validation==='validating'\)/);
+  const connectedBlock=inline03.slice(inline03.indexOf("addEventListener('na:canonical-connected'"),inline03.indexOf('let _naCanonicalLoadError'));
+  assert.match(connectedBlock,/_naCanonicalTransportConnected=true/);
+  assert.match(connectedBlock,/_naSetHeaderConnectionState\('update','Sincronizando CANON…'\)/);
+  assert.doesNotMatch(connectedBlock,/_naSetHeaderConnectionState\('connected'/);
+  assert.match(inline03,/const connectionReady=state\.validation==='current',connectionSyncing=state\.validation==='validating'/);
+  assert.doesNotMatch(inline03,/state\.validation==='current'\|\|\(_naCanonicalTransportConnected&&state\.validation==='validating'\)/);
 });
 
 test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{

@@ -11,7 +11,7 @@ const html = readFileSync(new URL('../../POS/index.html', import.meta.url), 'utf
 const inline02 = readFileSync(new URL('../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
 const inline03 = readFileSync(new URL('../../POS/js/legacy-inline/inline-03.js', import.meta.url), 'utf8');
 
-function harness({ enabled = true, method = 'efectivo', cart = [{ id: 7, qty: 2, precio: 4.25, unitsPerQty: 1 }], enqueueError = null, projectionError = false, syncConfirmed = false, lock = false, storageFailure = false, sessionOpen = true, stock = 10, paymentValid = true, verified = true, duplicateReference = false } = {}) {
+function harness({ enabled = true, method = 'efectivo', cart = [{ id: 7, qty: 2, precio: 4.25, unitsPerQty: 1 }], enqueueError = null, projectionError = false, syncConfirmed = false, lock = false, storageFailure = false, sessionOpen = true, stock = 10, paymentValid = true, verified = true, duplicateReference = false, validation = 'current', mode = 'ACTIVE', readOnly = false, pendingJournal = null, outboxPending = false } = {}) {
   const els = new Map();
   for (const id of ['mMontoRec','mDigitalRef','mMixedRef','mMixedCash','mMixedDigitalMethod','mMixedDigitalVerified','mDigitalVerified','mCreditoCliente','mCreditoVence','mVentaCliente','mCobro','mBtnConf','cartDrawer','cartBackdrop','btnDescInfo']) els.set(id,{value:'',checked:true,classList:{remove(){},add(){}}});
   els.get('mMontoRec').value = '99'; els.get('mDigitalRef').value='real-ref'; els.get('mMixedRef').value='mixed-ref'; els.get('mMixedCash').value='3.00'; els.get('mMixedDigitalMethod').value='plin'; els.get('mCreditoCliente').value='cust-9'; els.get('mCreditoVence').value='2026-11-03';
@@ -26,7 +26,9 @@ function harness({ enabled = true, method = 'efectivo', cart = [{ id: 7, qty: 2,
     cart, productos:[{id:7,stock,precio:999}], ventas:duplicateReference?[{id:'V-004',paymentRef:method==='mixto'?'mixed-ref':'real-ref',anulada:false}]:[], clientes:[{id:'cust-9'}], creditos:[], cajMovs:[], inventoryMovements:[], posProc:false, posPayM:method, cajEstado:{abierta:true}, appConfig:{},
     NuevoAmanecerCanonical:{
       enabled:()=>enabled,
-      snapshot:()=>({products:[{id:'7',stock:10}],customers:[{id:'cust-9'}],credits:[]}),
+      sourceState:()=>({validation}),
+      snapshot:()=>({products:[{id:'7',stock:10}],customers:[{id:'cust-9'}],credits:[],sales:[],mode,read_only:readOnly}),
+      pendingSnapshot:()=>pendingJournal,
       receiptSnapshot:()=>canonicalReceipt
     },
     isModuleLocked:(name,options)=>lock,
@@ -45,7 +47,7 @@ function harness({ enabled = true, method = 'efectivo', cart = [{ id: 7, qty: 2,
   context.NuevoAmanecerCanonicalSaleOutbox={
     VERSION:outbox.VERSION,
     async enqueue(intent){calls.enqueue++;if(enqueueError)throw enqueueError;stored=await outbox.enqueue(intent);return stored;},
-    snapshot:outbox.snapshot,
+    snapshot:()=>outboxPending?{version:1,intents:[{operation_id:'pending-op',sale_id:'V-999'}]}:outbox.snapshot(),
     async sync(){
       calls.sync++;
       if(syncConfirmed&&stored){
@@ -63,6 +65,21 @@ function harness({ enabled = true, method = 'efectivo', cart = [{ id: 7, qty: 2,
 }
 
 test('legacy mode delegates exactly once and does not enter canonical pipeline', async()=>{const h=harness({enabled:false});await h.context.confirmarVenta();assert.equal(h.calls.legacy,1);assert.equal(h.calls.build+h.calls.enqueue+h.calls.project,0);});
+test('canonical sale waits for current ACTIVE runtime before creating an intent',async()=>{
+  for(const options of [
+    {validation:'validating'},
+    {validation:'offline'},
+    {mode:'CANONICAL_READ_ONLY',readOnly:true},
+    {pendingJournal:{state:'PENDING',command:'payment.create'}},
+    {outboxPending:true}
+  ]){
+    const h=harness(options),before=h.context.cart.length;
+    await h.context.confirmarVenta();
+    assert.equal(h.calls.enqueue,0);
+    assert.equal(h.context.cart.length,before);
+    assert.equal(h.calls.close,0);
+  }
+});
 test('canonical cash captures effective cart economics and projects after one durable enqueue',async()=>{const h=harness();await h.context.confirmarVenta();assert.equal(h.calls.legacy,0);assert.equal(h.calls.enqueue,1);assert.equal(h.calls.project,1);assert.equal(h.calls.save,0);assert.equal(h.calls.sync,1);assert.equal(h.calls.fetch,0);assert.equal(h.calls.input.items[0].product_id,'7');assert.equal(h.calls.input.items[0].quantity,2);assert.equal(h.calls.input.items[0].precio,4.25);assert.equal(h.stored.items[0].unit_price_cents,425);assert.match(h.stored.sale_id,/^V-\d{3}$/);assert.equal(h.stored.sale_id,h.calls.input.sale_id);assert.equal(h.context.cart.length,0);const first=h.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection();first.sales.length=0;assert.equal(h.context.NuevoAmanecerCanonicalSaleIntegration.lastProjection().sales.length,1);});
 test('online confirmed sale skips pending projection and releases UI only as confirmed',async()=>{
   const h=harness({syncConfirmed:true});
@@ -103,7 +120,7 @@ test('VARIOS enters canonical outbox while unsupported modes and storage failure
   assert.equal(h.calls.project,0);
   assert.equal(h.calls.save,0);
 });
-test('projection failure preserves durable intent and an identical new cart captures a distinct sale',async()=>{const h=harness({projectionError:true});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.ok(h.stored);assert.equal(h.context.cart.length,0);assert.match(h.calls.toast.at(-1)[0],/guardada localmente/);h.context.cart=[{id:7,qty:2,precio:4.25,unitsPerQty:1}];await h.context.confirmarVenta();assert.equal(h.calls.enqueue,2);assert.equal(h.stored.sale_id,'V-002');});
+test('projection failure preserves durable intent and blocks a second sale until the pending one resolves',async()=>{const h=harness({projectionError:true});await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.ok(h.stored);assert.equal(h.context.cart.length,0);assert.match(h.calls.toast.at(-1)[0],/guardada localmente/);h.context.cart=[{id:7,qty:2,precio:4.25,unitsPerQty:1}];await h.context.confirmarVenta();assert.equal(h.calls.enqueue,1);assert.equal(h.stored.sale_id,'V-001');assert.equal(h.context.cart.length,1);assert.match(h.calls.toast.at(-1)[0],/venta pendiente de sincronización/i);});
 test('capture lock option skips only canonical blanket lock and still evaluates all POS locks',()=>{const lockLine=inline03.split('\n').find(line=>line.startsWith('isModuleLocked=function(moduleName,options)'));assert.ok(lockLine);const context=vm.createContext({NuevoAmanecerCanonical:{enabled:()=>true},securityIsLocked:()=>false,storage:{getItem:key=>key==='master'?'false':'false'},LOCK_KEYS:{master:'master',readOnly:'readonly',modules:{ventas:'ventas',productos:'productos'}}});vm.runInContext(lockLine,context);assert.equal(context.isModuleLocked('ventas'),true);assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),false);assert.equal(context.isModuleLocked('productos',{canonicalSaleCapture:true}),true);context.securityIsLocked=()=>true;assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.securityIsLocked=()=>false;context.storage.getItem=key=>key==='master'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.storage.getItem=key=>key==='readonly'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);context.storage.getItem=key=>key==='ventas'?'true':'false';assert.equal(context.isModuleLocked('ventas',{canonicalSaleCapture:true}),true);});
 test('parsed script order places canonical dependencies before integration between inline 03 and 07',()=>{const scripts=[...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(match=>match[1]);const pos=needle=>scripts.findIndex(src=>src.endsWith(needle));assert.ok(pos('js/legacy-inline/inline-03.js')<pos('js/sync/canonical-sale-integration.js'));assert.ok(pos('js/sync/canonical-sale-integration.js')<pos('js/legacy-inline/inline-07.js'));for(const dep of ['canonical-sale-intent.js','canonical-sale-outbox.js','canonical-sale-projection.js'])assert.ok(pos(dep)<pos('js/sync/canonical-sale-integration.js'));});
 test('canonical non-credit sale keeps the selected optional POS customer', async()=>{const h=harness();h.els.get('mVentaCliente').value='cust-9';await h.context.confirmarVenta();assert.equal(h.calls.input.customer_id,'cust-9');});
@@ -254,7 +271,9 @@ test('real browser global let state is used even when window properties do not e
     },
     NuevoAmanecerCanonical:{
       enabled:()=>true,
-      snapshot:()=>({products:[{id:'7'}],customers:[],credits:[]})
+      sourceState:()=>({validation:'current'}),
+      snapshot:()=>({products:[{id:'7'}],customers:[],credits:[],sales:[],mode:'ACTIVE',read_only:false}),
+      pendingSnapshot:()=>null
     },
     NuevoAmanecerCanonicalSaleIntent:{
       build(input){

@@ -704,7 +704,7 @@ window.addEventListener('na:version-update-pending',()=>{
 let _naCanonicalTransportConnected=false;
 window.addEventListener('na:canonical-connected',()=>{
   _naCanonicalTransportConnected=true;
-  _naSetHeaderConnectionState('connected','Conectado');
+  _naSetHeaderConnectionState('update','Sincronizando CANON…');
 });
 let _naCanonicalLoadError=null;
 function _naEmptyCanonicalCashState(){return{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',cerrada:false,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null,canonical:true};}
@@ -745,8 +745,8 @@ window.addEventListener('na:canonical-updated',()=>{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     _naApplyCanonicalLegacyView(canonical);_naCanonicalLoadError=null;
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    const connectionReady=state.validation==='current'||(_naCanonicalTransportConnected&&state.validation==='validating');
-    _naSetHeaderConnectionState(connectionReady?'connected':'disconnected',connectionReady?'Conectado':'Desconectado');
+    const connectionReady=state.validation==='current',connectionSyncing=state.validation==='validating';
+    _naSetHeaderConnectionState(connectionReady?'connected':connectionSyncing?'update':'disconnected',connectionReady?'Conectado':connectionSyncing?'Sincronizando CANON…':'Desconectado');
     if(saveStatus)saveStatus.textContent='Persistencia canónica protegida';
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(canonical.customers.length)+' clientes';}
   }catch(error){
@@ -766,7 +766,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
   if(canonicalEnabled){_naClearCanonicalOperationalView();}
   loadAppState();loadMasterConfig();_naInitSecurity();_naNormalizeData();renderCategorySelects();_naApplyConfigUI();_naInitFreeSaleShortcut();_naInitBarcodeScanner();creditos.forEach(_naSyncCreditStatus);posUpdateCart(canonicalEnabled?false:true);_naSchedulePageRender(_naActivePageId());
   const cliBadge=document.getElementById('cliAuthorityBadge');if(canonicalEnabled&&cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico · conectando';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:800';}
-  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled){_naSetHeaderConnectionState('disconnected','Conectando a CANON…');if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
+  const saveStatus=document.getElementById('saveStatus');if(canonicalEnabled){_naSetHeaderConnectionState('update','Sincronizando CANON…');if(saveStatus)saveStatus.textContent='Esperando autoridad canónica';}
   document.querySelectorAll('.module-card').forEach(card=>{card.setAttribute('role','button');card.setAttribute('tabindex','0');card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();card.click();}});});
   if(!canonicalEnabled)await saveAllData();
   if(canonicalEnabled){
