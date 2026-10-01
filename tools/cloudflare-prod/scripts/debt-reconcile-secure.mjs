@@ -93,6 +93,9 @@ function validateTargets(payload) {
     if (!row || typeof row.document !== 'string' || !/^\d{8}$/.test(row.document)) {
       throw new Error('invalid target document at index '+(index+1));
     }
+    if (typeof row.name !== 'string' || row.name.trim().length < 1 || row.name.trim().length > 240) {
+      throw new Error('invalid target name at index '+(index+1));
+    }
     if (!Number.isSafeInteger(row.target_cents) || row.target_cents < 0) {
       throw new Error('invalid target cents at index '+(index+1));
     }
@@ -126,6 +129,16 @@ async function cfQuery(sql,params=[]) {
   if (!first || first.success === false) throw new Error('Cloudflare D1 query returned failure');
   return Array.isArray(first.results) ? first.results : [];
 }
+function normalizeName(value) {
+  return String(value || '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu,'')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim()
+    .replace(/\s+/g,' ');
+}
+
 async function inspect(rows) {
   const control = (await cfQuery(
     "SELECT mode,active_promotion_id,revision,authority_epoch,minimum_client_contract FROM canonical_control WHERE id=1"
@@ -134,14 +147,12 @@ async function inspect(rows) {
     throw new Error('production CANON is not ACTIVE');
   }
 
-  const docs = rows.map(x => x.document);
-  const placeholders = docs.map(() => '?').join(',');
   const sql = `
     WITH identity AS (
-      SELECT customer_id,trim(document) AS document,'IMPORT' AS customer_provenance
+      SELECT customer_id,trim(document) AS document,name,'IMPORT' AS customer_provenance
       FROM customers WHERE promotion_id=?1
       UNION ALL
-      SELECT customer_id,trim(document) AS document,'LIVE' AS customer_provenance
+      SELECT customer_id,trim(document) AS document,name,'LIVE' AS customer_provenance
       FROM canonical_live_customers WHERE promotion_id=?1
     ),
     credit_map AS (
@@ -164,7 +175,7 @@ async function inspect(rows) {
       WHERE m.promotion_id=?1
       GROUP BY m.customer_id
     )
-    SELECT i.customer_id,i.document,i.customer_provenance,
+    SELECT i.customer_id,i.document,i.name,i.customer_provenance,
       COALESCE(a.credit_count,0) AS credit_count,
       COALESCE(a.import_credits,0) AS import_credits,
       COALESCE(a.live_credits,0) AS live_credits,
@@ -172,26 +183,45 @@ async function inspect(rows) {
       COALESCE(a.current_cents,0) AS current_cents
     FROM identity i
     LEFT JOIN agg a ON a.customer_id=i.customer_id
-    WHERE i.document IN (${placeholders})
-    ORDER BY i.document,i.customer_id`;
+    ORDER BY i.customer_id`;
 
-  const found = await cfQuery(sql,[control.active_promotion_id,...docs]);
+  const found = await cfQuery(sql,[control.active_promotion_id]);
   const byDoc = new Map();
+  const byName = new Map();
   for (const row of found) {
-    const list = byDoc.get(String(row.document)) || [];
-    list.push(row);
-    byDoc.set(String(row.document),list);
+    const document = String(row.document || '').trim();
+    if (document) {
+      const list = byDoc.get(document) || [];
+      list.push(row);
+      byDoc.set(document,list);
+    }
+    const nameKey = normalizeName(row.name);
+    if (nameKey) {
+      const list = byName.get(nameKey) || [];
+      list.push(row);
+      byName.set(nameKey,list);
+    }
   }
 
   const sanitized = [];
   let currentTotal = 0, openingTotal = 0, targetTotal = 0;
   for (let index=0; index<rows.length; index++) {
     const target = rows[index];
-    const matches = byDoc.get(target.document) || [];
+    const docMatches = byDoc.get(target.document) || [];
+    const nameMatches = byName.get(normalizeName(target.name)) || [];
+    let matches = docMatches;
+    let matchedBy = 'document';
+    if (matches.length === 0) {
+      matches = nameMatches;
+      matchedBy = 'name';
+    }
     if (matches.length !== 1) {
       throw new Error('target identity match count at index '+(index+1)+' is '+matches.length);
     }
     const match = matches[0];
+    if (docMatches.length === 1 && nameMatches.length === 1 && docMatches[0].customer_id !== nameMatches[0].customer_id) {
+      throw new Error('target identity disagreement at index '+(index+1));
+    }
     const current = Number(match.current_cents||0);
     const opening = Number(match.opening_cents||0);
     if (!Number.isSafeInteger(current) || !Number.isSafeInteger(opening)) {
@@ -209,7 +239,8 @@ async function inspect(rows) {
       credit_count:Number(match.credit_count||0),
       import_credits:Number(match.import_credits||0),
       live_credits:Number(match.live_credits||0),
-      target_within_opening:target.target_cents<=opening
+      target_within_opening:target.target_cents<=opening,
+      matched_by:matchedBy
     });
   }
 
