@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-POLICY-SUBSECOND-002",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "686dfa96d05fb6ec068fee881ca66ac9e0c4c56d",
+  "analysis": {
+    "READS": [
+      "canonical-client sendPending/createCommand/setCustomerCreditPolicy",
+      "canonical-customer-credit-policy bridge ya optimizado",
+      "a6-customer-credit-policy happy path y recovery",
+      "migración 0018 triggers de autoridad, namespace e integridad",
+      "patrón Turso de a6-commerce y turso-sqlite-protocol tests"
+    ],
+    "WRITES": [
+      "cliente: fast path de customer.credit-policy.set",
+      "worker: eliminar prelecturas happy path y depender del batch/triggers existentes",
+      "pruebas de latencia estructural y regresión"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "journal CANON PENDING/CONFIRMED",
+      "credit_policy_revision del cliente",
+      "ready/replica current del cliente CANON"
+    ],
+    "STORAGE_AFFECTED": [
+      "sin schema nuevo",
+      "mismas tablas canonical_customer_credit_policy_operations y canonical_customer_credit_policies",
+      "mismo journal local CANON"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "receipt durable antes de confirmar UI",
+      "operation_id idempotente",
+      "CAS expected_policy_revision",
+      "writer ACTIVE y authority_epoch/control_revision vigentes",
+      "retries con status remoto",
+      "no fallback a saveAllData en CANON"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes y evaluación leen la política confirmada",
+      "Créditos consume la línea asignada",
+      "no afecta saldo, pagos, ventas, inventario o caja"
+    ],
+    "ROOT_CAUSE": [
+      "El frontend todavía ejecuta GET /read/canonical/status antes del POST de política.",
+      "El Worker ejecuta schemaReady + authority + customer + replay + namespace + revision como SELECT secuenciales antes del batch.",
+      "En Turso cada first() es un viaje HTTPS independiente.",
+      "La migración 0018 ya repite las guardas críticas como triggers dentro del batch de escritura, por lo que esas prelecturas son redundantes en el happy path."
+    ],
+    "RISKS": [
+      "permitir skipStatus sin revalidación backend sería inseguro; 0018 la mantiene dentro del INSERT trigger",
+      "eliminar prelecturas exige conservar clasificación de errores en recovery",
+      "un retry no puede usar el fast path"
+    ],
+    "TESTS": [
+      "customer credit policy local completo",
+      "nuevo test Turso: auth + atomic batch = 2 trips",
+      "primer browser call POST sin status GET",
+      "lost ACK, CAS, replay, pre-0018 fail closed",
+      "CANON Critical CI y E2E Smoke CI"
+    ]
+  }
+}
