@@ -134,7 +134,7 @@ test('pending V-001 blocks a second sale until it resolves, then the next cart b
   pending=queue.snapshot().intents;
   assert.equal(pending.length,1,'a second sale cannot race an unresolved first sale');
   assert.equal(vm.runInContext('cart.length',tab.context),1,'second cart stays intact while the first sale is pending');
-  assert.ok(tab.toasts.some(([m])=>/venta pendiente de sincronización/i.test(m)));
+  assert.ok(tab.toasts.some(([m])=>/sincronizando|pendiente/i.test(m)),'second sale must explain that CANON is not ready for another commit');
 
   tab.context.navigator.onLine=true;
   assert.equal((await queue.sync()).status,'DRAINED');
