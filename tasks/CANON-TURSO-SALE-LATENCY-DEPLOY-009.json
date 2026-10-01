@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-DEPLOY-009",
+  "environment": "CANON",
+  "base_ref": "8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06",
+  "objective": "Añadir un despliegue de hotfix exclusivamente de código del Worker CANON ya activo sobre Turso, sin migraciones, sin ventas reales y con rollback al código pre-hotfix manteniendo Turso.",
+  "owner_authorization": "El propietario pidió explícitamente arreglar en CANON la demora de validación de ventas.",
+  "allowed_files": [
+    "tasks/CANON-TURSO-SALE-LATENCY-DEPLOY-009.json",
+    "evidence/canon-preflight/CANON-TURSO-SALE-LATENCY-DEPLOY-009.json",
+    ".github/workflows/v1.3-turso-prod-worker-hotfix.yml",
+    "tests/cloud-sync/turso-production-worker-hotfix.test.mjs"
+  ],
+  "must_preserve": [
+    "El Worker activo sigue usando tools/cloudflare-prod/wrangler.turso-prod.jsonc.",
+    "No ejecutar migraciones ni SQL de negocio.",
+    "No crear ventas, pagos, créditos ni movimientos de inventario durante el deploy.",
+    "No borrar sesiones ni volver a D1.",
+    "Rollback de código conserva proveedor Turso."
+  ],
+  "tests": [
+    "node --test tests/cloud-sync/turso-production-worker-hotfix.test.mjs",
+    "node --test tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "node --test tests/cloud-sync/canonical-session-backend.test.mjs"
+  ],
+  "rollback": "Si falla la verificación posterior al deploy, desplegar el Worker desde f865ae53a3330ed9cbf71fe9141f64a3fc0ac165 usando el mismo wrangler.turso-prod.jsonc.",
+  "stop_conditions": [
+    "No desplegar si el target_commit del trigger no es ancestro del HEAD activo.",
+    "No desplegar si el dry-run Turso o las regresiones focales fallan.",
+    "No usar wrangler.jsonc D1 ni ejecutar migraciones."
+  ]
+}

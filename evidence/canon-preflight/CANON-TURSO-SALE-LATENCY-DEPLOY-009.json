@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-DEPLOY-009",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06",
+  "observed": [
+    "El cambio de latencia ya fue mergeado en 8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06 con CANON Critical CI y LAB Canon Mirror CI en PASS.",
+    "El Worker productivo actual usa la configuración Turso; los workflows de cutover existentes son demasiado amplios para un hotfix porque incluyen limpieza de sesiones y lógica de cutover/rollback a D1.",
+    "Un hotfix de código puede desplegar el mismo Worker con wrangler.turso-prod.jsonc sin migraciones ni cambios de datos."
+  ],
+  "risks": [
+    "Un workflow equivocado podría volver a D1 o tocar datos; se prohíbe toda referencia a wrangler.jsonc D1 y todo comando de migración.",
+    "Un deploy fallido puede dejar código no saludable; se exige health pre/post y rollback al ref pre-hotfix usando Turso."
+  ],
+  "verification": [
+    "Test estructural del workflow.",
+    "Regresión de venta Turso.",
+    "Regresión de sesión.",
+    "Wrangler dry-run con config Turso.",
+    "Health check antes y después del deploy."
+  ]
+}

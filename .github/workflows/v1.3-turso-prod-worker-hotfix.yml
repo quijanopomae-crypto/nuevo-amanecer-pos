@@ -1,0 +1,154 @@
+name: V1.3 Turso Production Worker Hotfix
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/v1.3-turso-prod-worker-hotfix-trigger.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-change
+  cancel-in-progress: false
+
+jobs:
+  deploy-hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 100
+
+      - name: Require owner-authorized Turso-only trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=100
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const {execFileSync}=require('node:child_process');
+          const path='ops/v1.3-turso-prod-worker-hotfix-trigger.json';
+          const t=JSON.parse(fs.readFileSync(path,'utf8'));
+          if(t.action!=='DEPLOY_TURSO_CANON_WORKER_HOTFIX') throw new Error('invalid action');
+          if(t.owner_authorized!==true) throw new Error('owner authorization missing');
+          if(t.turso_only!==true) throw new Error('turso_only=true required');
+          if(t.no_schema_changes!==true) throw new Error('no_schema_changes=true required');
+          if(t.no_live_sale!==true) throw new Error('no_live_sale=true required');
+          if(t.one_shot!==true) throw new Error('one_shot=true required');
+          if(!/^[0-9a-f]{40}$/.test(String(t.target_commit||''))) throw new Error('target_commit invalid');
+          if(!/^[0-9a-f]{40}$/.test(String(t.rollback_ref||''))) throw new Error('rollback_ref invalid');
+          execFileSync('git',['merge-base','--is-ancestor',t.target_commit,'HEAD']);
+          execFileSync('git',['merge-base','--is-ancestor',t.rollback_ref,t.target_commit]);
+          fs.appendFileSync(process.env.GITHUB_ENV,'TARGET_COMMIT='+t.target_commit+'\nROLLBACK_REF='+t.rollback_ref+'\n');
+          console.log('TURSO_WORKER_HOTFIX_AUTHORIZATION=PASS');
+          NODE
+
+      - name: Require exact latency-fix code in authorized history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show "$TARGET_COMMIT:tools/cloudflare-lab/src/a6-commerce.js" | grep -Fq "commerceCapabilities"
+          git show "$TARGET_COMMIT:tools/cloudflare-lab/src/a6-commerce.js" | grep -Fq "batched.map(firstBatchRow)"
+          git show "$TARGET_COMMIT:tests/cloud-sync/canonical-sale-turso-root.test.mjs" | grep -Fq "four protocol trips cold and three warm"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Focused Turso sale and session regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/canonical-sale-turso-root.test.mjs
+          node --test tests/cloud-sync/canonical-session-backend.test.mjs tests/cloud-sync/canonical-session-integration.test.mjs
+          node --test tests/cloud-sync/turso-d1-adapter.test.mjs
+
+      - name: Turso production Worker dry-run
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+
+      - name: Verify production health before hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/pre-health.json -w '%{http_code}' "$PROD_WORKER_URL/health")"
+          test "$code" = "200"
+          grep -Fq '"ok":true' /tmp/pre-health.json
+          grep -Fq '"environment":"production"' /tmp/pre-health.json
+
+      - name: Deploy Turso production Worker hotfix
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "HOTFIX_DEPLOY_ATTEMPTED=1" >> "$GITHUB_ENV"
+          npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+          echo "TURSO_WORKER_HOTFIX_DEPLOY=PASS"
+
+      - name: Verify production health after hotfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            code="$(curl -sS -o /tmp/post-health.json -w '%{http_code}' "$PROD_WORKER_URL/health" || true)"
+            if [ "$code" = "200" ] && grep -Fq '"ok":true' /tmp/post-health.json && grep -Fq '"environment":"production"' /tmp/post-health.json; then
+              echo "TURSO_WORKER_HOTFIX_HEALTH=PASS"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/post-health.json || true
+          exit 1
+
+      - name: Roll back code on Turso if deploy verification fails
+        if: ${{ failure() && env.HOTFIX_DEPLOY_ATTEMPTED == '1' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "$ROLLBACK_REF"
+          cd tools/cloudflare-lab
+          npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+          for i in $(seq 1 30); do
+            code="$(curl -sS -o /tmp/rollback-health.json -w '%{http_code}' "$PROD_WORKER_URL/health" || true)"
+            if [ "$code" = "200" ] && grep -Fq '"ok":true' /tmp/rollback-health.json; then
+              echo "TURSO_WORKER_HOTFIX_ROLLBACK=PASS"
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Hotfix summary
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          {
+            echo "## V1.3 Turso Worker hotfix"
+            echo "- Status: PASS"
+            echo "- Target code: $TARGET_COMMIT"
+            echo "- Persistence provider: Turso"
+            echo "- Schema/data migrations: NONE"
+            echo "- Live sale during deploy: NONE"
+            echo "- Production health: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"
