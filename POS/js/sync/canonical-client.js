@@ -105,6 +105,7 @@
   async function configure(options) {
     return withWriterLock(function () {
     ready = false;
+    saleWriteReady = false;
     var existing = journal();
     var candidate = {
       endpoint: String(options && options.endpoint || '').replace(/\/+$/, ''),
