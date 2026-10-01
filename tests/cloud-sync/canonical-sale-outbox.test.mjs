@@ -72,7 +72,7 @@ test('hard pending rejection blocks queue without retry or create', async () => 
   assert.equal((await f.api.sync()).status, 'BLOCKED_PENDING_REJECTED'); assert.deepEqual(copy(f.api.snapshot().intents), [makeIntent('A'), makeIntent('B')]); assert.equal(f.calls.includes('retryPending'), false); assert.equal(f.calls.some(x => Array.isArray(x)), false);
 });
 test('proven remote sale-id collision renumbers the full FIFO without losing operations', async () => {
-  const mk=(n,op)=>({...makeIntent(op),operation_id:op,sale_id:'V-'+String(n).padStart(3,'0')});
+  const mk=(n,op)=>({version:1,operation_id:op,sale_id:'V-'+String(n).padStart(3,'0'),created_at:'2026-01-02T03:04:05.000Z',payment_method:'efectivo',total_cents:250,payment:{cash_cents:250,digital_cents:0,credit_cents:0,digital_method:null,reference:''},items:[{product_id:'fake-product',quantity:1,unit_price_cents:250,line_total_cents:250}]});
   const queued=[mk(3,'op-3-new'),mk(4,'op-4-new'),mk(5,'op-5-new')];
   const local=storage(JSON.stringify({version:1,last_sale_number:5,intents:queued}));
   const canonical={
@@ -94,7 +94,7 @@ test('proven remote sale-id collision renumbers the full FIFO without losing ope
 });
 
 test('unproven canonical_sale_conflict remains blocked and never renumbers or deletes', async () => {
-  const head={...makeIntent('X'),operation_id:'op-x',sale_id:'V-003'};
+  const head={version:1,operation_id:'op-x',sale_id:'V-003',created_at:'2026-01-02T03:04:05.000Z',payment_method:'efectivo',total_cents:250,payment:{cash_cents:250,digital_cents:0,credit_cents:0,digital_method:null,reference:''},items:[{product_id:'fake-product',quantity:1,unit_price_cents:250,line_total_cents:250}]};
   const local=storage(JSON.stringify({version:1,last_sale_number:3,intents:[head]}));
   const canonical={
     pending:{state:'PENDING',command:'sale.create',payload:copy(head),last_status:409,last_error:'canonical_sale_conflict'},
