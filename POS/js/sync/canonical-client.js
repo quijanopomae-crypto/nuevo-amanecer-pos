@@ -176,6 +176,16 @@
     ready = true; replicaState = { source: source, cache: { cached_at: replica.cached_at, promotion_id: replica.promotion_id, authority_epoch: replica.authority_epoch,
       revision: replica.revision, financial_revision: replica.financial_revision }, validation: provisional ? 'validating' : 'current' };
   }
+  function operationalBootstrapSeed(current, expected) {
+    var empty = { sales: [], saleItems: [], inventoryMovements: [], cashMovements: [], cashSessions: [], financialEvents: [], expenses: [] };
+    if (!current || current.authority !== 'canonical' || !expected ||
+        current.promotion_id !== expected.promotion_id || current.authority_epoch !== expected.authority_epoch || current.revision !== expected.revision) return empty;
+    return {
+      sales: copy(current.sales || []), saleItems: copy(current.saleItems || []),
+      inventoryMovements: copy(current.inventoryMovements || []), cashMovements: copy(current.cashMovements || []),
+      cashSessions: copy(current.cashSessions || []), financialEvents: copy(current.financialEvents || []), expenses: copy(current.expenses || [])
+    };
+  }
   function notifyReplicaUpdate() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-updated', { detail: sourceState() })); } catch (_) {} }
   function notifyConnectionVerified() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-connected')); } catch (_) {} }
   function readFetch(url, options) {
@@ -255,7 +265,9 @@
       }
       var coreEntries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']];
       applyEntries(await Promise.all(coreEntries.map(readEntry)));
-      next.sales = []; next.saleItems = []; next.inventoryMovements = []; next.cashMovements = []; next.cashSessions = []; next.financialEvents = []; next.expenses = [];
+      var operationalSeed = operationalBootstrapSeed(data, statusMeta);
+      next.sales = operationalSeed.sales; next.saleItems = operationalSeed.saleItems; next.inventoryMovements = operationalSeed.inventoryMovements;
+      next.cashMovements = operationalSeed.cashMovements; next.cashSessions = operationalSeed.cashSessions; next.financialEvents = operationalSeed.financialEvents; next.expenses = operationalSeed.expenses;
       next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
       if (statusDigest) next.canonical_digest = statusDigest;
