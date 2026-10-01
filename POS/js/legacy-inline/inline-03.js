@@ -704,7 +704,7 @@ window.addEventListener('na:version-update-pending',()=>{
 let _naCanonicalTransportConnected=false;
 window.addEventListener('na:canonical-connected',()=>{
   _naCanonicalTransportConnected=true;
-  _naSetHeaderConnectionState('connected','Conectado');
+  _naSetHeaderConnectionState('update','CANON verificado · cargando datos');
 });
 let _naCanonicalLoadError=null;
 function _naEmptyCanonicalCashState(){return{abierta:false,fondo:0,cajero:'',cajeroNombre:'',cajeroId:null,hora:'',hora24:'',fechaApertura:'',cerrada:false,horaCierre:null,horaCierre24:null,sessionId:null,contado:null,esperado:null,diferencia:null,canonical:true};}
@@ -745,8 +745,9 @@ window.addEventListener('na:canonical-updated',()=>{
     const canonical=NuevoAmanecerCanonical.legacySnapshot();
     _naApplyCanonicalLegacyView(canonical);_naCanonicalLoadError=null;
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
-    const connectionReady=state.validation==='current'||(_naCanonicalTransportConnected&&state.validation==='validating');
-    _naSetHeaderConnectionState(connectionReady?'connected':'disconnected',connectionReady?'Conectado':'Desconectado');
+    const connectionReady=state.validation==='current';
+    const connectionLoading=_naCanonicalTransportConnected&&state.validation==='validating';
+    _naSetHeaderConnectionState(connectionReady?'connected':connectionLoading?'update':'disconnected',connectionReady?'Conectado':connectionLoading?'CANON verificado · cargando datos':'Desconectado');
     if(saveStatus)saveStatus.textContent='Persistencia canónica protegida';
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(canonical.customers.length)+' clientes';}
   }catch(error){
