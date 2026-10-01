@@ -171,13 +171,41 @@
 
     var client = api();
     var pending = pendingRecord();
+    var forceRefresh = false;
     if (pending) {
-      if (pending.command !== 'payment.create' || pending.invalid) {
-        notify('Hay otra operación CANON pendiente (' + clean(pending.command) + '). Resuélvela antes de registrar un pago.', 'error');
+      if (pending.invalid || !['payment.create','payment.batch'].includes(pending.command)) {
+        notify('Hay otra operación en curso. Termínala antes de registrar el pago.', 'error');
         return false;
       }
       if (pending.last_error) {
-        notify('Un pago anterior fue rechazado por CANON (' + clean(pending.last_error) + ') y bloquea nuevas operaciones. No se registró ningún pago nuevo.', 'error');
+        if (!client || typeof client.discardRejectedPayment !== 'function') {
+          notify('No se pudo liberar el pago anterior. Recarga la página y vuelve a intentar.', 'error');
+          return false;
+        }
+        try {
+          if (!await client.discardRejectedPayment()) {
+            notify('El pago anterior necesita revisión antes de continuar.', 'error');
+            return false;
+          }
+        } catch (error) {
+          notify('No se pudo liberar el pago anterior: ' + clean(error && error.message), 'error');
+          return false;
+        }
+        pending = null;
+        forceRefresh = true;
+      } else if (pending.command === 'payment.batch') {
+        if (!client || typeof client.retryPending !== 'function') {
+          notify('No se pudo recuperar el cobro anterior. Recarga la página y vuelve a intentar.', 'error');
+          return false;
+        }
+        try {
+          await client.retryPending();
+          await refreshCanonical();
+        } catch (error) {
+          notify(describePendingFailure(error), 'error');
+          return false;
+        }
+        notify('El cobro anterior ya quedó confirmado. Saldos actualizados; revisa el monto y confirma de nuevo.', 'success');
         return false;
       }
     }
@@ -233,7 +261,7 @@
 
       var snapshot;
       try {
-        snapshot = await paymentSnapshot();
+        snapshot = forceRefresh ? await refreshCanonical() : await paymentSnapshot();
       } catch (error) {
         notify('No se registró el pago: CANON no disponible (' + clean(error && error.message) + ')', 'error');
         return false;
@@ -375,14 +403,59 @@
 
     var client = api();
     var pending = pendingRecord();
+    var forceBatchRefresh = false;
     if (pending) {
-      notify('Hay una operación CANON pendiente. Resuélvela antes de iniciar un cobro múltiple.', 'error');
-      return { ok:false, partial:false, code:'CANONICAL_PENDING_BLOCKS_BATCH', completed:[] };
+      if (pending.invalid || !['payment.create','payment.batch'].includes(pending.command)) {
+        return batchFailure('Hay otra operación en curso. Termínala antes de cobrar.',
+          requestedCents, [], 'CANONICAL_OTHER_PENDING');
+      }
+      if (pending.last_error) {
+        if (!client || typeof client.discardRejectedPayment !== 'function') {
+          return batchFailure('No se pudo liberar el pago anterior. Recarga la página y vuelve a intentar.',
+            requestedCents, [], 'CANONICAL_REJECTED_PENDING_LOCKED');
+        }
+        try {
+          if (!await client.discardRejectedPayment()) {
+            return batchFailure('El pago anterior necesita revisión antes de continuar.',
+              requestedCents, [], 'CANONICAL_REJECTED_PENDING_REVIEW');
+          }
+        } catch (error) {
+          return batchFailure('No se pudo liberar el pago anterior (' + clean(error && error.message) + ').',
+            requestedCents, [], 'CANONICAL_REJECTED_PENDING_RELEASE_FAILED');
+        }
+        forceBatchRefresh = true;
+      } else {
+        if (!client || typeof client.retryPending !== 'function') {
+          return batchFailure('No se pudo recuperar el pago anterior. Recarga la página y vuelve a intentar.',
+            requestedCents, [], 'CANONICAL_PENDING_RECOVERY_UNAVAILABLE');
+        }
+        busy = true;
+        try {
+          await client.retryPending();
+          await refreshCanonical();
+        } catch (error) {
+          return batchFailure(describePendingFailure(error), requestedCents, [], 'CANONICAL_PENDING_RECOVERY_FAILED');
+        } finally {
+          busy = false;
+        }
+        notify('El pago anterior ya quedó confirmado. Saldos actualizados; revisa el monto y pulsa Registrar pago.', 'success');
+        return {
+          ok:false,
+          partial:false,
+          recovered:true,
+          code:'PRIOR_CANONICAL_PAYMENT_CONFIRMED',
+          requested_cents:requestedCents,
+          completed_cents:0,
+          completed_count:0,
+          completed:[],
+          remaining_cents:requestedCents
+        };
+      }
     }
 
     var snapshot;
     try {
-      snapshot = await paymentSnapshot();
+      snapshot = forceBatchRefresh ? await refreshCanonical() : await paymentSnapshot();
     } catch (error) {
       return batchFailure('No se pudo iniciar el lote: CANON no está disponible (' + clean(error && error.message) + ').',
         requestedCents, [], 'CANONICAL_BATCH_SNAPSHOT_FAILED');
