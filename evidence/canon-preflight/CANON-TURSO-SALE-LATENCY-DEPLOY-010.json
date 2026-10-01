@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-DEPLOY-010",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "e9f3d59b9a86adb817b7621f50c1c6a59f5dd189",
+  "evidence": [
+    "PR #327 merge 8e1ebd1c2d8085404d89bbe5bb0ef3b7d396de06: fix de latencia con CI CANON/LAB PASS.",
+    "PR #328 merge e9f3d59b9a86adb817b7621f50c1c6a59f5dd189: workflow Turso-only con CI CANON PASS.",
+    "La autorización del owner es explícita para corregir el comportamiento en CANON."
+  ],
+  "restrictions": [
+    "No D1.",
+    "No migraciones.",
+    "No venta real.",
+    "No limpieza de sesiones.",
+    "No modificación de secrets."
+  ]
+}
