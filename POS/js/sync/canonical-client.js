@@ -289,13 +289,12 @@
       if (cache && cacheIsNewer(cache, bootstrapReplica)) {
         publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
       }
-      publishReplica(bootstrapReplica, 'bootstrap');
       // Once status + core products/customers are coherent, sale.create can be
       // accepted without waiting for sales/items/inventory/cash history.
       if (statusMeta.mode === 'ACTIVE' && expected && !changed &&
           statusMeta.promotion_id === expected.promotion_id && statusMeta.authority_epoch === expected.authority_epoch &&
           statusMeta.revision === expected.revision) saleWriteReady = true;
-      notifyReplicaUpdate();
+      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
 
       if (statusMeta.mode === 'ACTIVE') {
         applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
