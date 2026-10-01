@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-DEPLOY-011",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "0d5d5ef315d770553a78ed620d5cd7b17b63b55d",
+  "cause_root": "El workflow referenció la prueba Turso adapter con una ruta equivocada. La ejecución se detuvo antes de dry-run y deploy; producción no fue modificada.",
+  "correction": "Cambiar solo la ruta a tools/cloudflare-lab/test/turso-d1-adapter.test.mjs y rearmar el trigger one-shot.",
+  "safety": [
+    "No secrets modificados.",
+    "No migraciones.",
+    "No venta real.",
+    "No deploy ocurrió en el intento fallido."
+  ]
+}
