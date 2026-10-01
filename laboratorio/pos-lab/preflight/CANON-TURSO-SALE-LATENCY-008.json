@@ -1,0 +1,91 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-TURSO-SALE-LATENCY-008",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md y AGENTS_Nuevo_Amanecer.md",
+      "laboratorio/pos-lab/UI_MAP.yaml y skill-preflight.mjs",
+      "tools/cloudflare-lab/src/a6-commerce.js",
+      "tools/cloudflare-lab/src/turso-d1-adapter.js",
+      "tools/cloudflare-lab/src/worker.js",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+    ],
+    "WRITES": [
+      "Agrupar en una sola db.batch las lecturas independientes previas a sale.create.",
+      "Cachear únicamente capacidades aditivas del esquema por binding de base para evitar repetir su consulta en cada venta.",
+      "Añadir una regresión que mida viajes de protocolo Turso en cold y warm path."
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "No cambia el estado lógico del POS ni el contrato del receipt; cambia únicamente el scheduling de lecturas server-side previas al commit."
+    ],
+    "STORAGE_AFFECTED": [
+      "Mismas tablas, filas, claves e idempotency keys; no hay migraciones ni nuevas escrituras de negocio."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Una venta solo se confirma después del receipt durable.",
+      "operation_id y payload_hash conservan idempotencia y recuperación de ACK perdido.",
+      "stock_revision conserva CAS y no permite stock negativo.",
+      "Caja conserva una sola mutación atómica por venta.",
+      "Ventas a crédito conservan customer, cuenta, cuotas y balance exactamente como antes."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Ventas consume inventario y caja en el mismo batch atómico existente.",
+      "Crédito usa el mismo bloque de escritura; solo se agrupan prelecturas de cliente/cuenta.",
+      "Autenticación y autoridad permanecen fuera del cambio y siguen siendo obligatorias."
+    ],
+    "RISKS": [
+      "Inventario/caja/créditos son HIGH; la agrupación de SELECT no puede debilitar las guardas dentro del batch atómico.",
+      "Las tablas opcionales solo deben consultarse cuando la capacidad de esquema ya fue verificada.",
+      "Replay durable debe revalidar autoridad antes de responder already_processed."
+    ],
+    "ROLLBACK": [
+      "Revertir el commit de a6-commerce.js y su prueba; no existe rollback de datos porque no cambia schema ni datos persistidos."
+    ],
+    "TESTS": [
+      "node --test tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+      "node --test tests/cloud-sync/canonical-session-backend.test.mjs tests/cloud-sync/canonical-session-integration.test.mjs",
+      "node --test tests/cloud-sync/turso-production-cutover.test.mjs tests/cloud-sync/turso-production-direct-cutover.test.mjs",
+      "CANON Critical CI y LAB Canon Mirror CI"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md",
+      "git_blob_sha": "5e061eab47a75b12aa068474831a1dd5b3ecda28"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    }
+  }
+}

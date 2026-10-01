@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-TURSO-SALE-LATENCY-008",
+  "status": "CANON_PREFLIGHT_PASS",
+  "base_ref": "f865ae53a3330ed9cbf71fe9141f64a3fc0ac165",
+  "observed": [
+    "El frontend CANON actual ya espera únicamente el receipt durable en el happy path y ejecuta la reconciliación completa después del receipt.",
+    "TursoD1Adapter.first()/all()/run() ejecutan un HTTP pipeline independiente por llamada; db.batch() agrupa múltiples sentencias en un solo HTTP pipeline.",
+    "createCanonicalSale realiza hoy varias lecturas await secuenciales antes del db.batch atómico: autoridad, replay de sale, conflicto financiero, capacidades de esquema, conflicto de product operation y lookup de producto; LIVE puede añadir otra lectura.",
+    "authorizeSession agrega además una lectura Turso por POST autenticado."
+  ],
+  "root_cause": "Tras el cutover CANON a Turso, la lógica heredada de D1 conserva muchas lecturas secuenciales. En Turso cada .first() equivale a un viaje HTTPS Worker→Turso, por lo que una venta de un solo producto puede acumular aproximadamente 8 viajes seriales incluyendo auth y commit antes de devolver el receipt.",
+  "minimal_plan": [
+    "Cachear por binding de base únicamente las capacidades de esquema aditivas necesarias para construir consultas seguras.",
+    "Agrupar en un solo db.batch de lectura la autoridad, replay/conflictos y lookups de producto/cliente/cuenta.",
+    "Mantener el db.batch de escritura existente sin modificar sus guardas ni sus efectos.",
+    "Conservar una revalidación de autoridad en el camino de replay durable.",
+    "Añadir regresión que cuente viajes del protocolo Turso: 4 en cold path y 3 en warm path."
+  ],
+  "risk_controls": [
+    "No se elimina ninguna guardia de negocio; solo se agrupan SELECT independientes.",
+    "Las tablas opcionales solo se consultan cuando las capacidades de esquema verificadas indican que existen.",
+    "El camino de error/ACK perdido conserva las comprobaciones actuales.",
+    "Sin cambios de esquema, payload ni respuesta."
+  ]
+}
