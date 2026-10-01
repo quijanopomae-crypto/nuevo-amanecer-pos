@@ -156,7 +156,13 @@
       var canonical = root.NuevoAmanecerCanonical;
       if (canonical && typeof canonical.enabled === 'function' && canonical.enabled()) {
         var state = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null;
-        if (!state || state.validation !== 'current') return;
+        if (!state || state.validation !== 'current') {
+          if (state && ['stale','unavailable'].includes(state.validation) && typeof canonical.refresh === 'function') {
+            try { await canonical.refresh(); state = typeof canonical.sourceState === 'function' ? canonical.sourceState() : null; }
+            catch (_) { scheduleResume(); return; }
+          }
+          if (!state || state.validation !== 'current') return;
+        }
       }
       try { if (!snapshot().intents.length) return; } catch (_) { return; }
       resuming = true;
