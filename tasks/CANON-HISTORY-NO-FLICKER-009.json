@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-HISTORY-NO-FLICKER-009",
+  "environment": "CANON",
+  "base_ref": "b800a2438c7ba2da11a46baa7e67115e7a4ce245",
+  "objective": "Evitar que el historial y KPIs de Ventas desaparezcan durante la reconciliacion posterior a una venta. El bootstrap staged debe conservar el ultimo bloque operacional validado de la misma autoridad mientras carga el nuevo, y luego sustituirlo atomica e inmediatamente por el snapshot remoto completo.",
+  "owner_authorization": "El owner reprodujo en produccion que al confirmar una venta el historial previo desaparece y vuelve aproximadamente dos minutos despues; exige que la venta nueva aparezca al instante sin ocultar el historial existente.",
+  "allowed_files": [
+    "tasks/CANON-HISTORY-NO-FLICKER-009.json",
+    "evidence/canon-preflight/CANON-HISTORY-NO-FLICKER-009.json",
+    "POS/js/sync/canonical-client.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+  ],
+  "forbidden_files": [
+    "tools/cloudflare-lab/src/**",
+    "tools/cloudflare-prod/**",
+    "infra/database/**",
+    "laboratorio/**",
+    "POS/js/legacy-inline/inline-10.js",
+    "POS/js/sync/canonical-sale-integration.js",
+    "POS/js/sync/canonical-sale-outbox.js"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "inventory-integrity",
+    "cash-integrity"
+  ],
+  "invariants": [
+    "No se cambian reglas de venta, stock, caja, credito, backend ni schema.",
+    "La etapa bootstrap sigue siendo CANONICAL_READ_ONLY y no autoriza escrituras.",
+    "Solo se conserva historia operacional previa si pertenece a la misma promotion_id, authority_epoch y revision.",
+    "En cold start sin replica previa valida, los arreglos operacionales siguen vacios hasta recibir datos remotos.",
+    "El receipt confirmado sigue proyectandose inmediatamente y el historial previo no desaparece.",
+    "Al completar la lectura remota, el snapshot operacional completo reemplaza al preservado."
+  ],
+  "rollback": "Revertir el PR; no hay cambios de datos, schema ni backend."
+}
