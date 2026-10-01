@@ -70,24 +70,8 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
   let raw;try{raw=await request.json();}catch{return json({error:'invalid_json'},400);}
   const checked=normalize(raw);if(checked.error)return json({error:checked.error,...(checked.field?{field:checked.field}:{})},400);
   const b=checked.value,db=getDatabase(env);
-  if(!await schemaReady(db))return json({error:'customer_credit_policy_schema_not_ready'},503);
-  const denied=await authorityError(db,auth,b);if(denied)return json({error:denied},409);
-  const customer=await db.prepare('SELECT provenance FROM canonical_customer_registry WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
-  if(!customer)return json({error:'customer_not_found'},409);
-
   const requestHash=await sha256Hex(stableStringify(b));
-  const existing=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_credit_policy_operations WHERE operation_id=?1').bind(b.operation_id).first();
-  if(existing){
-    const stale=await authorityError(db,auth,b);if(stale)return json({error:stale},409);
-    if(existing.request_hash!==requestHash)return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
-    return json({...JSON.parse(existing.result_json),status:'already_processed',idempotent:true},200);
-  }
-  if(await operationConflict(db,b.operation_id))return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
-
-  const current=await db.prepare('SELECT revision FROM canonical_customer_credit_policies WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
-  const currentRevision=Number(current?.revision)||0;
-  if(currentRevision!==b.expected_policy_revision)return json({error:'stale_policy',current_policy_revision:currentRevision},409);
-  const nextRevision=currentRevision+1;
+  const nextRevision=b.expected_policy_revision+1;
   const result={
     status:'created',command:'customer.credit-policy.set',operation_id:b.operation_id,
     promotion_id:b.promotion_id,customer_id:b.customer_id,mode:b.mode,
@@ -105,7 +89,7 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
         auth.principalId,auth.credentialHash,b.created_at),
     db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':operation')
   ];
-  if(currentRevision===0){
+  if(b.expected_policy_revision===0){
     statements.push(
       db.prepare(`INSERT INTO canonical_customer_credit_policies
         (promotion_id,customer_id,mode,manual_limit_cents,reason,administrator_id,administrator_name,updated_at,revision,operation_id)
@@ -124,14 +108,25 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
     db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':policy'),
     db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(token+':operation',token+':policy')
   );
-  try{await db.batch(statements);}
-  catch{
+  try{
+    // Happy path: one atomic database batch. Migration 0018 already revalidates
+    // writer authority, customer identity, operation namespace and policy CAS
+    // inside this transaction, so separate remote SELECTs only add Turso latency.
+    await db.batch(statements);
+  }catch{
+    // Error/replay classification is intentionally outside the happy path.
+    // It may use extra reads because latency is secondary once the write failed.
+    if(!await schemaReady(db))return json({error:'customer_credit_policy_schema_not_ready'},503);
     const replay=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_credit_policy_operations WHERE operation_id=?1').bind(b.operation_id).first();
     const stale=await authorityError(db,auth,b);if(stale)return json({error:stale},409);
     if(replay?.request_hash===requestHash)return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
     if(replay)return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
+    const customer=await db.prepare('SELECT provenance FROM canonical_customer_registry WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
+    if(!customer)return json({error:'customer_not_found'},409);
+    if(await operationConflict(db,b.operation_id))return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
     const now=await db.prepare('SELECT revision FROM canonical_customer_credit_policies WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
-    if((Number(now?.revision)||0)!==b.expected_policy_revision)return json({error:'stale_policy',current_policy_revision:Number(now?.revision)||0},409);
+    const currentRevision=Number(now?.revision)||0;
+    if(currentRevision!==b.expected_policy_revision)return json({error:'stale_policy',current_policy_revision:currentRevision},409);
     return json({error:'customer_credit_policy_conflict',operation_id:b.operation_id},409);
   }
   return json(result,201);
