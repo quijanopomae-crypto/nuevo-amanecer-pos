@@ -12,15 +12,16 @@ Provide a mobile-only fallback path that prioritizes entering the module over an
 4. Show Back and scroll to top.
 5. Let the browser paint.
 6. Apply module/config scroll classes.
-7. Schedule the existing renderer after the browser is idle.
-8. Keep LAB parity page-entry Motion disabled on mobile.
-9. For **Clientes only**, register the existing scroll-linked `clientes` preset after paint/idle so `.filter-bar` and `.stats-strip` recover the approved LAB collapse/fade behavior without delaying module entry.
+7. Persist the visible `ui.currentPage` through the existing CANON local configuration path, only after the first paint.
+8. Schedule the existing renderer after the browser is idle.
+9. Keep LAB parity page-entry Motion disabled on mobile.
+10. For **Clientes only**, register the existing scroll-linked `clientes` preset after paint/idle so `.filter-bar` and `.stats-strip` recover the approved LAB collapse/fade behavior without delaying module entry.
 
 Desktop keeps the existing goPage flow.
 
 ## Scope
 
-No sales, inventory, credit, cash, expense, sync, storage, D1 or R2 behavior is changed.
+No sales, inventory, credit, cash, expense, sync, D1, R2 or Turso behavior is changed. Navigation reuses the existing CANON local configuration persistence (`na_local_config_v1`) so a refresh can restore the page that is actually visible; no new storage key or remote write is introduced.
 
 
 ## Clientes targeted Motion recovery
