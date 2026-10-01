@@ -54,7 +54,8 @@
       "POS/js/adapters/canonical-ui-adapter.js",
       "POS/js/legacy-inline/inline-10.js READ-ONLY",
       "tools/cloudflare-lab/src/a6-commerce.js READ-ONLY",
-      "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+      "tests/cloud-sync/canonical-sale-outbox.test.mjs"
     ],
     "WRITES": [
       "No pintar estado pendiente en la ruta online normal antes de intentar sync.",
