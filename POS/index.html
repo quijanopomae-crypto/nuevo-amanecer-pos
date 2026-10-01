@@ -54,6 +54,14 @@
 
 </head>
 <body>
+<aside class="pwa-update-prompt" id="pwaUpdatePrompt" hidden role="dialog" aria-live="polite" aria-label="Nueva versión disponible">
+    <div class="pwa-update-icon" aria-hidden="true">⬆️</div>
+    <div class="pwa-update-copy">
+        <strong>Nueva versión disponible</strong>
+        <span id="pwaUpdateStatus">Lista para actualizar.</span>
+    </div>
+    <button class="pwa-update-action" id="pwaUpdateAction" type="button">Actualizar ahora</button>
+</aside>
 <div class="g-topbar">
     <div class="g-logo"><div class="g-logo-icon">🌅</div><div><div class="g-logo-text" id="topBusinessName">Nuevo Amanecer</div><div class="g-logo-sub" id="topBusinessSub">Puerto Súngaro · Multiservicios</div></div></div>
     <div class="g-spacer"></div>
@@ -995,29 +1003,157 @@
 <script src="js/ocr/ocr-purchase-apply.js"></script>
 <script src="js/ocr/ocr-purchase-integration.js"></script>
 <script>
+// CANON-PWA-UPDATE-001: actualización visible, accionable y de recarga única.
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
     var hadController = !!navigator.serviceWorker.controller;
     var reloadingForWorkerUpdate = false;
+    var updateBusy = false;
+    var updateFallbackTimer = 0;
+    var pwaRegistration = null;
+    var prompt = document.getElementById('pwaUpdatePrompt');
+    var status = document.getElementById('pwaUpdateStatus');
+    var action = document.getElementById('pwaUpdateAction');
 
-    navigator.serviceWorker.addEventListener('controllerchange', function () {
+    function setUpdateUi(message, state, buttonLabel, buttonEnabled) {
+      if (!prompt || !status || !action) return;
+      prompt.hidden = false;
+      prompt.dataset.state = state || 'ready';
+      status.textContent = String(message || '');
+      action.textContent = buttonLabel || 'Actualizar ahora';
+      action.disabled = buttonEnabled === false;
+    }
+
+    function markVersionPending(message) {
+      if (!hadController) return;
+      setUpdateUi(message || 'Lista para actualizar.', 'ready', 'Actualizar ahora', true);
+      try { window.dispatchEvent(new CustomEvent('na:version-update-pending')); } catch (_) {}
+    }
+
+    function activateWorker(registration, worker) {
+      var candidate = registration && registration.waiting ? registration.waiting : worker;
+      if (!candidate || typeof candidate.postMessage !== 'function') return false;
+      candidate.postMessage({ type: 'NA_ACTIVATE_UPDATE' });
+      return true;
+    }
+
+    function waitUntilInstalled(registration, worker) {
+      return new Promise(function (resolve) {
+        if (!worker) {
+          resolve(false);
+          return;
+        }
+
+        var settled = false;
+        var timer = 0;
+        function finish(ok) {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timer);
+          if (typeof worker.removeEventListener === 'function') {
+            worker.removeEventListener('statechange', inspect);
+          }
+          resolve(ok);
+        }
+        function inspect() {
+          if (worker.state === 'installed' || worker.state === 'activated') {
+            finish(activateWorker(registration, worker));
+          } else if (worker.state === 'redundant') {
+            finish(false);
+          }
+        }
+
+        inspect();
+        if (settled) return;
+        if (typeof worker.addEventListener !== 'function') {
+          finish(false);
+          return;
+        }
+        worker.addEventListener('statechange', inspect);
+        timer = window.setTimeout(function () { finish(false); }, 15000);
+      });
+    }
+
+    function enableManualUpdateMode() {
+      var controller = navigator.serviceWorker.controller;
+      if (!controller || typeof controller.postMessage !== 'function') return;
+      try { controller.postMessage({ type: 'NA_ENABLE_MANUAL_UPDATES' }); } catch (_) {}
+    }
+
+    function scheduleReload() {
+      enableManualUpdateMode();
       if (!hadController || reloadingForWorkerUpdate) return;
       reloadingForWorkerUpdate = true;
-      window.location.reload();
-    });
+      window.clearTimeout(updateFallbackTimer);
+      setUpdateUi('Actualización lista. Recargando…', 'success', 'Recargando…', false);
+      window.setTimeout(function () {
+        window.location.reload();
+      }, 80);
+    }
+
+    navigator.serviceWorker.addEventListener('controllerchange', scheduleReload);
+
+    if (action) {
+      action.addEventListener('click', async function () {
+        if (updateBusy || !pwaRegistration) return;
+        updateBusy = true;
+        window.clearTimeout(updateFallbackTimer);
+        setUpdateUi('Buscando la versión nueva…', 'working', 'Actualizando…', false);
+
+        try {
+          if (!pwaRegistration.waiting && !pwaRegistration.installing && typeof pwaRegistration.update === 'function') {
+            await pwaRegistration.update();
+          }
+
+          var worker = pwaRegistration.waiting || pwaRegistration.installing || null;
+          if (pwaRegistration.waiting) {
+            setUpdateUi('Aplicando la versión nueva…', 'working', 'Actualizando…', false);
+            if (!activateWorker(pwaRegistration, pwaRegistration.waiting)) {
+              throw new Error('UPDATE_WORKER_NOT_ACTIVATABLE');
+            }
+          } else if (worker) {
+            setUpdateUi('Descargando la actualización…', 'working', 'Actualizando…', false);
+            var ready = await waitUntilInstalled(pwaRegistration, worker);
+            if (!ready) throw new Error('UPDATE_INSTALL_TIMEOUT');
+          } else {
+            throw new Error('NO_UPDATE_WORKER_AVAILABLE');
+          }
+
+          updateFallbackTimer = window.setTimeout(scheduleReload, 3500);
+        } catch (error) {
+          updateBusy = false;
+          reloadingForWorkerUpdate = false;
+          window.clearTimeout(updateFallbackTimer);
+          setUpdateUi('No se pudo actualizar. Comprueba internet y vuelve a intentar.', 'error', 'Reintentar', true);
+          console.warn('No se pudo aplicar la nueva versión del POS.', error);
+        }
+      });
+    }
 
     navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' }).then(function (registration) {
-      function markVersionPending() {
-        if (!hadController) return;
-        try { window.dispatchEvent(new CustomEvent('na:version-update-pending')); } catch (_) {}
-      }
+      pwaRegistration = registration;
+      enableManualUpdateMode();
 
       if (registration.waiting) markVersionPending();
       if (typeof registration.addEventListener === 'function') {
         registration.addEventListener('updatefound', function () {
-          if (registration.installing) markVersionPending();
+          if (!registration.installing || !hadController) return;
+          markVersionPending('Descargando la versión nueva…');
+          var installing = registration.installing;
+          if (typeof installing.addEventListener === 'function') {
+            installing.addEventListener('statechange', function () {
+              if (installing.state === 'installed') markVersionPending('Lista para actualizar.');
+            });
+          }
         });
       }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') registration.update().catch(function () {});
+      });
+      window.addEventListener('online', function () {
+        registration.update().catch(function () {});
+      });
 
       return registration.update().catch(function () {});
     }).catch(function (error) {

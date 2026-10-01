@@ -114,9 +114,16 @@ test('hosted PWA precaches the complete CANON Motion runtime as one shell genera
   ]) assert.match(serviceWorker, new RegExp(asset.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&')));
 });
 
-test('hosted PWA activates a fully cached new build without requiring all POS tabs to close', () => {
-  assert.match(serviceWorker, /cache\.addAll\([\s\S]*self\.skipWaiting\(\)/);
+test('hosted PWA stages a complete build and applies it through the explicit updater', () => {
+  assert.match(serviceWorker, /cache\.addAll\(/);
+  assert.match(serviceWorker, /MANUAL_UPDATE_MARKER_CACHE/);
+  assert.match(serviceWorker, /caches\.has\(MANUAL_UPDATE_MARKER_CACHE\)/);
+  assert.match(serviceWorker, /manualModeEnabled\s*\?\s*undefined\s*:\s*self\.skipWaiting\(\)/);
+  assert.match(serviceWorker, /NA_ENABLE_MANUAL_UPDATES/);
+  assert.match(serviceWorker, /NA_ACTIVATE_UPDATE/);
   assert.match(serviceWorker, /self\.clients\.claim\(\)/);
+  assert.match(appIndex, /Actualizar ahora/);
+  assert.match(appIndex, /NA_ACTIVATE_UPDATE/);
   assert.match(appIndex, /updateViaCache:\s*'none'/);
 });
 

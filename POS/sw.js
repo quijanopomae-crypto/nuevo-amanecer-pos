@@ -1,5 +1,7 @@
 const CACHE_PREFIX = 'nuevo-amanecer-pos-shell-';
 const CACHE_NAME = `${CACHE_PREFIX}__BUILD_HASH__`;
+const VENDOR_CACHE_NAME = 'nuevo-amanecer-pos-vendor-tesseract-6.0.1';
+const MANUAL_UPDATE_MARKER_CACHE = 'nuevo-amanecer-pos-manual-update-v1';
 const PRECACHE_URLS = [
   './index.html',
   './manifest.webmanifest',
@@ -89,7 +91,6 @@ const PRECACHE_URLS = [
   './js/modules/client-credit-accounts-v2.js',
   './js/compat/legacy-globals.js',
   './js/app.js',
-  './js/ocr/vendor/tesseract-6.0.1/tesseract.min.js',
   './js/catalog/reference-catalog-data.js',
   './js/catalog/reference-catalog.js',
   './js/ocr/ocr-extract.js',
@@ -98,12 +99,16 @@ const PRECACHE_URLS = [
   './js/ocr/ocr-purchase-engine.js',
   './js/ocr/ocr-purchase-review.js',
   './js/ocr/ocr-purchase-apply.js',
-  './js/ocr/ocr-purchase-integration.js',
+  './js/ocr/ocr-purchase-integration.js'
+];
+const VENDOR_URLS = [
+  './js/ocr/vendor/tesseract-6.0.1/tesseract.min.js',
   './js/ocr/vendor/tesseract-6.0.1/worker.min.js',
   './js/ocr/vendor/tesseract-6.0.1/tesseract-core-simd-lstm.wasm.js',
   './js/ocr/vendor/tesseract-6.0.1/lang/spa.traineddata.gz'
 ];
 const PRECACHE_URLS_ABSOLUTE = new Set(PRECACHE_URLS.map((url) => new URL(url, self.registration.scope).href));
+const VENDOR_URLS_ABSOLUTE = new Set(VENDOR_URLS.map((url) => new URL(url, self.registration.scope).href));
 const START_URL = new URL('./index.html', self.registration.scope).href;
 const START_PATH = new URL(START_URL).pathname;
 
@@ -116,7 +121,9 @@ function isExcluded(request, url) {
     || request.headers.has('authorization')
     || request.headers.has('x-sync-token')
     || request.headers.has('x-read-token')
-    || (request.mode === 'navigate' ? url.pathname !== START_PATH : !PRECACHE_URLS_ABSOLUTE.has(url.href));
+    || (request.mode === 'navigate'
+      ? url.pathname !== START_PATH
+      : !PRECACHE_URLS_ABSOLUTE.has(url.href) && !VENDOR_URLS_ABSOLUTE.has(url.href));
 }
 
 self.addEventListener('install', (event) => {
@@ -125,7 +132,8 @@ self.addEventListener('install', (event) => {
       .then((cache) => cache.addAll(
         [...PRECACHE_URLS_ABSOLUTE].map((url) => new Request(url, { cache: 'reload' }))
       ))
-      .then(() => self.skipWaiting())
+      .then(() => caches.has(MANUAL_UPDATE_MARKER_CACHE))
+      .then((manualModeEnabled) => manualModeEnabled ? undefined : self.skipWaiting())
   );
 });
 
@@ -143,7 +151,19 @@ self.addEventListener('activate', (event) => {
 
 
 self.addEventListener('message', (event) => {
-  if (!event.data || event.data.type !== 'NA_BUILD_DIAGNOSTIC') return;
+  if (!event.data) return;
+
+  if (event.data.type === 'NA_ENABLE_MANUAL_UPDATES') {
+    event.waitUntil(caches.open(MANUAL_UPDATE_MARKER_CACHE).then(() => undefined));
+    return;
+  }
+
+  if (event.data.type === 'NA_ACTIVATE_UPDATE') {
+    event.waitUntil(Promise.resolve(self.skipWaiting()));
+    return;
+  }
+
+  if (event.data.type !== 'NA_BUILD_DIAGNOSTIC') return;
 
   const payload = {
     type: 'NA_BUILD_DIAGNOSTIC',
@@ -167,8 +187,22 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (isExcluded(request, url)) return;
 
+  if (VENDOR_URLS_ABSOLUTE.has(request.url)) {
+    event.respondWith(
+      caches.open(VENDOR_CACHE_NAME)
+        .then((cache) => cache.match(request).then((cached) => {
+          if (cached) return cached;
+          return fetch(request).then((response) => {
+            if (response && response.ok) cache.put(request, response.clone());
+            return response;
+          });
+        }))
+    );
+    return;
+  }
+
   // Keep HTML and its precached dependencies pinned to one build generation.
-  // The new worker activates only after the complete shell cache succeeds.
+  // A new worker remains waiting until the owner presses "Actualizar ahora".
   const key = request.mode === 'navigate' ? START_URL : request.url;
   event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(key)).then((cached) =>
     cached || new Response('Shell PWA incompleto. Cierre las pestanas del POS y vuelva a abrir con conexion.', {
