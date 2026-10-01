@@ -866,10 +866,11 @@
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
-    // A new payment.create or payment.batch already has a validated current
-    // replica. The Worker checks authority and credit revision atomically on
-    // write, so the first send may skip a redundant status GET. Retried pending
-    // commands still verify remote authority before replaying the intent.
+    // A new payment.create, payment.batch or customer.credit-policy.set can
+    // already come from a validated current replica. Their Worker handlers
+    // recheck authority and domain CAS atomically on write, so the first send
+    // may skip a redundant status GET. Retried pending commands still verify
+    // remote authority before replaying the exact durable intent.
     if (!skipStatus) {
       var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
         credentials: 'omit', redirect: 'error', cache: 'no-store',
@@ -1063,7 +1064,7 @@
 
   function createProduct(input) { return createCommand('product.create', input); }
   function createCustomer(input) { return createCommand('customer.create', input); }
-  function setCustomerCreditPolicy(input) { return createCommand('customer.credit-policy.set', input); }
+  function setCustomerCreditPolicy(input) { return createCommand('customer.credit-policy.set', input, true); }
   function adjustInventory(input) { return createCommand('inventory.adjust', input); }
   function createCreditAccount(input) { return createCommand('credit-account.create', input); }
   function createPayment(input) { return createCommand('payment.create', input); }
