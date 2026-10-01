@@ -41,6 +41,7 @@
   function currentCanonicalSnapshot(){
     var client=api(),state=null;
     if(!client||typeof client.legacySnapshot!=='function')throw new Error('CANONICAL_CLIENT_UNAVAILABLE');
+    if(typeof client.assertAction==='function')client.assertAction('customer.credit-policy.set');
     if(typeof client.sourceState==='function'){
       state=client.sourceState();
       if(!state||state.validation!=='current')throw new Error('CANONICAL_SNAPSHOT_NOT_CURRENT');
