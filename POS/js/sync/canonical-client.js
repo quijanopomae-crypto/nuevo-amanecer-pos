@@ -859,6 +859,39 @@
     } catch (_) {}
   }
 
+  function projectConfirmedCustomerCreditPolicy(record, result) {
+    if (!record || record.command !== 'customer.credit-policy.set' || !record.payload || !result ||
+        !data || !Array.isArray(data.customers)) return false;
+    if (record.payload.operation_id !== result.operation_id ||
+        record.payload.customer_id !== result.customer_id ||
+        result.policy_revision !== record.payload.expected_policy_revision + 1) return false;
+    var customer = data.customers.find(function (item) {
+      return item && String(item.customer_id) === String(record.payload.customer_id);
+    });
+    if (!customer) return false;
+
+    customer.credit_policy_mode = result.mode;
+    customer.credit_policy_manual_limit_cents = result.mode === 'MANUAL' ? result.manual_limit_cents : null;
+    customer.credit_policy_reason = record.payload.reason;
+    customer.credit_policy_administrator_id = record.payload.administrator_id == null ? null : record.payload.administrator_id;
+    customer.credit_policy_administrator_name = record.payload.administrator_name;
+    customer.credit_policy_updated_at = record.payload.created_at;
+    customer.credit_policy_revision = result.policy_revision;
+
+    ready = true;
+    replicaState.validation = 'current';
+    if (replicaState.cache) {
+      replicaState.cache = Object.assign({}, replicaState.cache, { cached_at: new Date().toISOString() });
+    }
+    if (typeof root._naWriteCanonicalReplica === 'function') {
+      try {
+        var projectedReplica = replicaOf(data);
+        Promise.resolve(root._naWriteCanonicalReplica(projectedReplica)).catch(function () {});
+      } catch (_) {}
+    }
+    return true;
+  }
+
   async function sendPending(record, skipStatus) {
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
@@ -915,7 +948,8 @@
     // off the user-visible critical path.
     publishConfirmedPaymentReceipt(record, result);
     publishConfirmedSaleReceipt(record, result);
-    ready = false;
+    var policyProjected = projectConfirmedCustomerCreditPolicy(record, result);
+    if (!policyProjected) ready = false;
     return copy(confirmed.receipt);
   }
   async function prepareCommand(command) {
