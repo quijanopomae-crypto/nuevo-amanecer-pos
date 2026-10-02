@@ -28,6 +28,8 @@ jobs:
       POS_WEB_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
       EXPECTED_DEBT_CENTS: "2368495"
       EXPECTED_DEBT_CUSTOMERS: "29"
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+      CREDIT_REPAIR_TRIGGER_PATH: ops/v1.3-canon-debt-ui-repair-trigger.json
 
     steps:
       - name: Require production credentials
@@ -70,6 +72,37 @@ jobs:
       - name: Install pinned Wrangler and Turso adapter dependencies
         working-directory: tools/cloudflare-lab
         run: npm ci --no-audit --no-fund
+
+      - name: Validate targeted credit installment repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check tools/cloudflare-prod/scripts/credit-installment-repair.mjs
+          node --check tools/cloudflare-prod/scripts/credit-document-audit-readonly.mjs
+          node --test tests/product-fixes/canon-credit-installment-repair.test.mjs
+
+      - name: Create fresh Turso backup before credit metadata writes
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/credit-installment-repair.mjs backup
+
+      - name: Store and verify credit repair backup in private R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-credit-installment-repair/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --remote --file=/tmp/credit-installment-repair-backup.json
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --remote --file=/tmp/credit-installment-repair-backup-check.json
+          test "$(sha256sum /tmp/credit-installment-repair-backup.json | awk '{print $1}')" = "$(sha256sum /tmp/credit-installment-repair-backup-check.json | awk '{print $1}')"
+          echo "CREDIT_INSTALLMENT_REPAIR_BACKUP_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Apply targeted imported credit schedules
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/credit-installment-repair.mjs apply
+
+      - name: Verify targeted credit schedules and debt invariants
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/credit-installment-repair.mjs verify
 
       - name: Prove production API exposes reconciled balances
         env:
@@ -133,6 +166,8 @@ jobs:
             echo "- Positive-debt customers: 29"
             echo "- Debt total: S/ 23,684.95"
             echo "- Hosted shell refreshed: YES"
+            echo "- Imported installment repair: VERIFIED"
+            echo "- Repair backup: $CREDIT_INSTALLMENT_REPAIR_BACKUP_KEY"
             echo "- Same-origin read model: PASS"
             echo "- Build: $GITHUB_SHA"
           } >> "$GITHUB_STEP_SUMMARY"

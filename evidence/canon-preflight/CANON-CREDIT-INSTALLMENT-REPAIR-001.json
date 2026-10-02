@@ -1,0 +1,83 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CREDIT-INSTALLMENT-REPAIR-001",
+  "base_ref": "e224423479c5f37a245f65bbf478aeb46493cb70",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "infra/database/migrations/0012_credit_accounts_v2.sql",
+      "infra/database/migrations/0017_canonical_live_customers.sql",
+      "CANON Turso audit run 36955898108",
+      "owner screenshots of source installment schedules and current CANON UI"
+    ],
+    "WRITES": [
+      "UI calculation/count fix in POS client credit module",
+      "Production maintenance script that only inserts missing imported-credit metadata/installments after exact preconditions",
+      "Existing production debt UI repair workflow gains backup/apply/verify stages",
+      "Owner trigger gains hashed installment repair payload"
+    ],
+    "DOM_AFFECTED": [
+      "Client financial account count text",
+      "Small-credit detail schedule/status rendering"
+    ],
+    "STATE_AFFECTED": [
+      "UI projection of imported credits",
+      "append-only canonical_credit_metadata / canonical_credit_installments for verified imported credits"
+    ],
+    "STORAGE_AFFECTED": [
+      "Turso production: only missing metadata/installment rows for matched imported credits",
+      "R2: one fresh pre-write logical backup"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "canonical_credit_balances unchanged",
+      "financial events/payments unchanged",
+      "sales/cash/inventory unchanged",
+      "total positive debt remains 2368495 cents across 29 customers",
+      "existing conflicting metadata/installments cause abort instead of overwrite"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Client UI reads installments through canonical read model",
+      "payment module continues to operate on credit balances, not installment rows",
+      "cash/financial ledgers are read-only to this repair"
+    ],
+    "RISKS": [
+      "Incorrect source-to-document match could attach a schedule to wrong credit; mitigated by customer hash + normalized document hash + exact total/paid/balance checks.",
+      "Historical paid amount may precede the visible reprogrammed schedule; UI must subtract the baseline paid portion before deriving installment progress.",
+      "A preexisting different schedule must not be overwritten."
+    ],
+    "ROLLBACK": [
+      "UI/code: revert PR and redeploy previous shell.",
+      "Data: no destructive rollback is automated; restore from fresh R2/Turso backup only if exceptional recovery is required."
+    ],
+    "TEST_PLAN": [
+      "Focused unit/static tests",
+      "CANON Critical CI",
+      "fresh Turso backup stored and verified in R2",
+      "idempotent apply",
+      "post-apply exact verification",
+      "hosted shell deploy verification"
+    ]
+  }
+}
