@@ -383,11 +383,12 @@ test('cash close, ingreso, egreso and expense use lexical movement state and no 
 });
 
 test('cash lost ACK retry revalidates authority and replays the exact operation once',async t=>{
-  let lose=true;
+  let lose=false;
   const {tab}=await fixture(t,{onFetch:async(url,options,next)=>{
     if(new URL(url).pathname==='/commands/cash.open'&&lose){lose=false;await next();throw Error('lost cash ACK');}
   }});
   await tab.api.closeCash({counted_cents:0});await tab.api.refresh();
+  lose=true;
   const before=tab.fetchLog.length;
   await assert.rejects(()=>tab.api.openCash({session_id:'cash-retry-1',opening_cents:100}),/CANONICAL_FINANCIAL_PENDING/);
   const first=tab.fetchLog.slice(before).map(r=>new URL(r.url).pathname);
