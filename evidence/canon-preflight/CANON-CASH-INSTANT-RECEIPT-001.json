@@ -1,0 +1,80 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CASH-INSTANT-RECEIPT-001",
+  "base_ref": "cad32a4ff8b3d763f86f84e3c2057fb0e4b462c9",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "candidate": {
+    "status": "CANDIDATO_A_CANON",
+    "basis": "Patrón post-receipt ya validado en pagos CANON; aplicado aquí solo a caja y sin tocar backend/schema."
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md"
+    },
+    "cash-integrity": {
+      "path": ".agents/skills/cash-integrity/SKILL.md"
+    }
+  },
+  "analysis": {
+    "ROOT_CAUSE": "El command de caja puede quedar confirmado en Worker/Turso, pero canonical-client deja ready=false y no proyecta cashSessions/financialEvents. El bridge libera el modal y lanza refresh completo en background, por lo que la pantalla sigue viendo la sesión vieja. Un segundo intento, ya contra el estado real del servidor, falla con INVALID_CANONICAL_CASH_SESSION. Además, cash.open/cash.close/adjustment.create pagan un GET /status redundante antes del POST aun con réplica current.",
+    "FIRST_PRINCIPLES": [
+      "Indispensable: un único receipt durable de la escritura autoritativa antes de declarar éxito.",
+      "Redundante en el camino crítico: GET /status cuando la réplica ya está current y el Worker vuelve a validar autoridad/CAS.",
+      "Redundante para la UI: releer todas las colecciones para representar una sesión de caja recién confirmada.",
+      "Solución mínima: un POST en el happy path, proyección exacta desde payload+receipt, refresh completo en background."
+    ],
+    "READS": [
+      "POS/js/sync/canonical-client.js",
+      "POS/js/sync/canonical-cash-bridge.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "tools/cloudflare-lab/src/a6-financial.js READ-ONLY",
+      "tests/cloud-sync/canonical-sale-turso-root.test.mjs"
+    ],
+    "WRITES": [
+      "Proyección efímera de cash.open/cash.close/adjustment.create después de durableJournal(CONFIRMED).",
+      "Omisión del status GET únicamente para nuevos comandos de caja con réplica current; retry usa status."
+    ],
+    "DOM_AFFECTED": [
+      "Caja del Día",
+      "Dashboard al renderizar desde snapshot CANON"
+    ],
+    "STATE_AFFECTED": [
+      "data.cashSessions",
+      "data.financialEvents",
+      "replicaState.validation después de receipt confirmado"
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno nuevo; journal CANON existente permanece como evidencia durable."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Una sola sesión OPEN.",
+      "Revisión de sesión avanza exactamente según receipt.",
+      "Sin doble movimiento por replay.",
+      "Sin éxito optimista.",
+      "Retry conserva operation_id y revalidación remota."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Caja se actualiza inmediatamente.",
+      "Ventas/créditos no cambian.",
+      "Dashboard puede leer el estado proyectado al siguiente render.",
+      "Persistencia legacy permanece cerrada."
+    ],
+    "RISKS": [
+      "Proyección duplicada en replay; mitigada por session_id/operation_id.",
+      "Estado remoto cambia concurrentemente; Worker CAS decide y solo receipt exitoso se proyecta.",
+      "Refresh background sustituye la proyección con autoridad completa."
+    ],
+    "TEST_PLAN": [
+      "cash.open: POST sin status GET desde réplica current y sesión visible antes del refresh.",
+      "cash.close: CLOSED/countado/diferencia visibles antes del refresh.",
+      "adjustment: expected_cents/revision/evento se proyectan una vez.",
+      "retry sigue haciendo status GET.",
+      "CANON Critical CI + E2E Smoke + Hosted POS deploy."
+    ]
+  }
+}

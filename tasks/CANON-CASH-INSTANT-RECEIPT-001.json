@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CASH-INSTANT-RECEIPT-001",
+  "environment": "CANON",
+  "base_ref": "cad32a4ff8b3d763f86f84e3c2057fb0e4b462c9",
+  "objective": "Eliminar la espera y el estado visual obsoleto al abrir/cerrar/ajustar Caja CANON: después del receipt durable la UI debe reflejar el nuevo estado inmediatamente y la reconciliación completa quedar fuera del camino crítico.",
+  "owner_authorization": "El owner reprodujo en CANON aperturas/cierres que tardan, muestran Procesando y luego arrojan INVALID_CANONICAL_CASH_SESSION aunque el cambio sí quedó aplicado; pidió eliminar intermediarios y hacer el flujo inmediato.",
+  "promotion_basis": "Reutiliza el patrón ya aprobado de payment instant receipt: esperar el receipt durable, proyectar solo lo confirmado y reconciliar en background. No hay éxito optimista.",
+  "allowed_files": [
+    "tasks/CANON-CASH-INSTANT-RECEIPT-001.json",
+    "evidence/canon-preflight/CANON-CASH-INSTANT-RECEIPT-001.json",
+    "POS/js/sync/canonical-client.js",
+    "tests/cloud-sync/canonical-client.test.mjs",
+    "tests/cloud-sync/canonical-sale-turso-root.test.mjs",
+    "tests/cloud-sync/canonical-cash-bridge.test.mjs",
+    "ops/v1.3-pos-web-deploy-trigger.json"
+  ],
+  "forbidden_files": [
+    "infra/database/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "laboratorio/**",
+    "POS/js/legacy-inline/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "cash-integrity"
+  ],
+  "invariants": [
+    "Nunca mostrar apertura/cierre/ajuste confirmado antes del receipt durable del Worker.",
+    "El Worker/Turso sigue siendo la única autoridad y mantiene CAS, atomicidad e idempotencia.",
+    "cash.open/cash.close/adjustment.create nuevos pueden omitir solo el status GET redundante cuando la réplica ya está current; cualquier retry conserva validación remota.",
+    "La proyección post-receipt modifica solo memoria CANON; no usa saveAllData ni persistencia legacy.",
+    "Un receipt repetido por el mismo operation_id no duplica sesión ni movimiento.",
+    "La reconciliación completa continúa en background y reemplaza la proyección.",
+    "No cambia ventas, créditos, inventario, schema ni datos existentes."
+  ],
+  "rollback": "Revertir el PR y desplegar Hosted POS anterior; no hay migración ni datos que revertir.",
+  "deploy_authorized": true
+}
