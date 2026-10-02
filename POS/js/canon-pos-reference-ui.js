@@ -260,3 +260,115 @@
     install();
   }
 })(globalThis);
+
+
+/* CANON-POS-REFERENCE-FIDELITY-002 · responsive real + estado operativo */
+(function (root) {
+  'use strict';
+
+  function page() {
+    return document.getElementById('pagePOS');
+  }
+
+  function phoneDevice() {
+    try {
+      var shortSide = Math.min(Number(root.screen && root.screen.width) || 9999, Number(root.screen && root.screen.height) || 9999);
+      var coarse = typeof root.matchMedia === 'function' ? root.matchMedia('(pointer: coarse)').matches : false;
+      return shortSide <= 600 && coarse;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function syncDeviceClass() {
+    document.body.classList.toggle('na-pos-phone-device', phoneDevice());
+  }
+
+  function syncPageClass() {
+    var pos = page();
+    document.body.classList.toggle('na-pos-reference-active', !!(pos && pos.classList.contains('active')));
+  }
+
+  function syncAllCategoryLabel() {
+    var first = document.querySelector('#pagePOS #posSidebar .cat-btn[data-cat="todo"]');
+    if (!first) return;
+    var wide = !phoneDevice() && root.innerWidth >= 1280;
+    var desired = wide ? 'Todas las categorías' : 'Todo';
+    var textNode = Array.prototype.find.call(first.childNodes, function (node) {
+      return node.nodeType === Node.TEXT_NODE && String(node.nodeValue || '').trim();
+    });
+    if (textNode && String(textNode.nodeValue || '').trim() !== desired) textNode.nodeValue = desired;
+  }
+
+  function installRuntimeStatus() {
+    var toolbar = document.querySelector('#pagePOS .pos-commandbar');
+    var actions = toolbar && toolbar.querySelector('.pos-toolbar-actions');
+    if (!actions) return;
+
+    var mirror = document.getElementById('posRuntimeStatus');
+    if (!mirror) {
+      mirror = document.createElement('div');
+      mirror.id = 'posRuntimeStatus';
+      mirror.className = 'pos-runtime-status';
+      mirror.setAttribute('role', 'status');
+      mirror.setAttribute('aria-live', 'polite');
+
+      var dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.setAttribute('aria-hidden', 'true');
+      var label = document.createElement('span');
+      label.className = 'label';
+      mirror.append(dot, label);
+      actions.insertBefore(mirror, actions.firstChild);
+    }
+
+    var source = document.getElementById('localStatus');
+    function sync() {
+      var state = source ? source.getAttribute('data-state') || 'disconnected' : 'disconnected';
+      var label = mirror.querySelector('.label');
+      mirror.setAttribute('data-state', state);
+      if (label) label.textContent = state === 'connected' ? 'Online' : state === 'update' ? 'Actualizar' : 'Sin conexión';
+      mirror.title = source ? (source.getAttribute('title') || label.textContent) : 'Estado de conexión';
+    }
+    sync();
+
+    if (source && typeof MutationObserver === 'function' && !source.__naReferenceStatusObserver) {
+      source.__naReferenceStatusObserver = new MutationObserver(sync);
+      source.__naReferenceStatusObserver.observe(source, { attributes: true, attributeFilter: ['data-state', 'title', 'aria-label'], childList: true, subtree: true });
+    }
+  }
+
+  function enhance() {
+    syncDeviceClass();
+    syncPageClass();
+    syncAllCategoryLabel();
+    installRuntimeStatus();
+  }
+
+  function observePage() {
+    var pos = page();
+    if (!pos || typeof MutationObserver !== 'function' || pos.__naReferencePageObserver) return;
+    pos.__naReferencePageObserver = new MutationObserver(function () {
+      syncPageClass();
+    });
+    pos.__naReferencePageObserver.observe(pos, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function start() {
+    enhance();
+    observePage();
+    root.addEventListener('resize', function () {
+      syncDeviceClass();
+      syncAllCategoryLabel();
+    }, { passive: true });
+    root.addEventListener('orientationchange', function () {
+      setTimeout(function () {
+        syncDeviceClass();
+        syncAllCategoryLabel();
+      }, 50);
+    }, { passive: true });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
+})(globalThis);

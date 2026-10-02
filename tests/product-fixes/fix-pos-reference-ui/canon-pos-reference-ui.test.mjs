@@ -91,3 +91,33 @@ test('CANON-only style selectors remain bounded to pagePOS or dark-mode pagePOS 
   assert.ok(relevant.length > 30);
   for (const selector of relevant) assert.match(selector, /#pagePOS/);
 });
+
+
+test('fidelity pass hides duplicate global chrome and matches reference proportions on real desktop', () => {
+  assert.match(css, /body\.na-pos-reference-active>\.g-topbar\{[\s\S]*position:absolute!important[\s\S]*width:0[\s\S]*height:0/);
+  assert.match(css, /body\.na-pos-reference-active #backBtn\{[\s\S]*display:flex!important/);
+  assert.match(css, /body\.na-pos-reference-active #pagePOS \.pos-menu-button\{visibility:hidden!important/);
+  assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:218px minmax\(0,1fr\) 440px/);
+  assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css, /#pagePOS \.p-stock-badge\.ok,[\s\S]*background:var\(--pos-ref-orange\)!important/);
+  assert.match(css, /#pagePOS \.cart-head-title\{font-size:25px/);
+  assert.match(css, /#pagePOS \.btn-cobro\{min-height:62px;font-size:16px/);
+});
+
+test('phone using Chrome desktop-site cannot be squeezed into the three-column desktop workbench', () => {
+  assert.match(css, /body\.na-pos-phone-device #pagePOS>\.pos-body\{display:flex!important\}/);
+  assert.match(css, /body\.na-pos-phone-device #pagePOS \.cart-drawer\{[\s\S]*right:-100%!important/);
+  assert.match(css, /body\.na-pos-phone-device #pagePOS \.cart-drawer\.open\{right:0!important\}/);
+  assert.match(css, /body\.na-pos-phone-device #pagePOS \.products-area\{[\s\S]*repeat\(2,minmax\(0,1fr\)\)!important/);
+  assert.match(decorator, /function phoneDevice\(\)/);
+  assert.match(decorator, /na-pos-phone-device/);
+  assert.match(decorator, /Math\.min\(Number\(root\.screen/);
+});
+
+test('production toolbar mirrors the real canonical connection state instead of drawing a fake status', () => {
+  assert.match(decorator, /id = 'posRuntimeStatus'/);
+  assert.match(decorator, /document\.getElementById\('localStatus'\)/);
+  assert.match(decorator, /state === 'connected' \? 'Online'/);
+  assert.match(decorator, /MutationObserver\(sync\)/);
+  assert.doesNotMatch(decorator, /setInterval\(/);
+});

@@ -304,3 +304,205 @@ body.dark #pagePOS .ci-sub,
 body.dark #pagePOS .p-name{color:var(--dark)}
 body.dark #pagePOS .pos-search-box{background:#1e2d40;border-color:var(--border)}
 body.dark #pagePOS .pos-search-box input{color:var(--dark)}
+
+
+/* CANON-POS-REFERENCE-FIDELITY-002
+   Corrección basada en comparación visual directa con la referencia aprobada.
+   Evita comprimir tres columnas en un teléfono usando "sitio de escritorio". */
+body.na-pos-reference-active>.g-topbar{
+  position:absolute!important;top:0;left:0;width:0;height:0;padding:0!important;border:0!important;
+  background:transparent!important;overflow:visible!important;z-index:100!important
+}
+body.na-pos-reference-active>.g-topbar>.g-logo,
+body.na-pos-reference-active>.g-topbar>.g-spacer{display:none!important}
+body.na-pos-reference-active>.g-topbar>div:last-child{
+  display:block!important;position:absolute!important;top:9px;left:14px;width:42px;height:42px
+}
+body.na-pos-reference-active>.g-topbar>div:last-child>*:not(#backBtn){display:none!important}
+body.na-pos-reference-active #backBtn{
+  display:flex!important;width:42px;height:42px;padding:0!important;border:1px solid #e1e7ed!important;border-radius:8px!important;
+  background:#fff!important;color:#334155!important;font-size:0!important;align-items:center!important;justify-content:center!important;
+  pointer-events:auto!important
+}
+body.na-pos-reference-active #backBtn::before{content:'☰';font:900 21px/1 'Nunito',sans-serif}
+body.na-pos-reference-active #pagePOS .pos-menu-button{visibility:hidden!important;pointer-events:none!important}
+
+#pagePOS .pos-commandbar{
+  min-height:72px;
+  padding:9px 14px;
+  grid-template-columns:minmax(250px,280px) minmax(360px,1fr) auto;
+  gap:14px;
+}
+#pagePOS .pos-module-identity{gap:11px}
+#pagePOS .pos-menu-button{
+  width:42px;height:42px;border-radius:8px;background:#fff;border:1px solid #e1e7ed;
+  color:#334155;font-size:21px;
+}
+#pagePOS .pos-module-mark{
+  width:44px;height:44px;border-radius:9px;background:#fff;color:var(--pos-ref-orange);
+  font-size:26px;box-shadow:none;
+}
+#pagePOS .pos-module-copy strong{font-size:20px;letter-spacing:-.02em}
+#pagePOS .pos-module-copy span{font-size:10px;letter-spacing:.09em;color:#657188}
+
+#pagePOS .pos-search-box{height:48px;border-radius:8px;padding:0 14px}
+#pagePOS .pos-search-box input{font-size:15px;font-weight:700}
+#pagePOS .pos-search-icon{font-size:23px}
+#pagePOS .scanner-indicator{min-height:28px}
+
+#pagePOS .pos-runtime-status{
+  height:38px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;
+  font:900 11px/1 'Nunito',sans-serif;white-space:nowrap;border:1px solid #bbf7d0;
+  background:#ecfdf5;color:#15803d;
+}
+#pagePOS .pos-runtime-status .dot{width:8px;height:8px;border-radius:50%;background:#22c55e}
+#pagePOS .pos-runtime-status[data-state="disconnected"]{background:#fef2f2;border-color:#fecaca;color:#b91c1c}
+#pagePOS .pos-runtime-status[data-state="disconnected"] .dot{background:#ef4444}
+#pagePOS .pos-runtime-status[data-state="update"]{background:#fffbeb;border-color:#fde68a;color:#a16207}
+#pagePOS .pos-runtime-status[data-state="update"] .dot{background:#f59e0b}
+
+#pagePOS .free-sale-btn,#pagePOS .pos-majorista-btn,#pagePOS .cart-fab{height:46px;border-radius:8px}
+#pagePOS .free-sale-btn{background:#fff;color:#a85b00;border-color:#f5d5ac}
+#pagePOS .pos-majorista-btn{font-size:12px}
+#pagePOS .cart-fab{width:46px;font-size:19px}
+
+/* Proporciones de escritorio de la referencia: ~14% categorías / 57% catálogo / 29% venta actual. */
+@media(min-width:1280px){
+  #pagePOS>.pos-body{grid-template-columns:218px minmax(0,1fr) 440px}
+  #pagePOS .sidebar{padding:9px 7px 16px}
+  #pagePOS .cat-btn{
+    min-height:48px;padding:9px 13px;gap:11px;border-radius:6px;font-size:13px;font-weight:800
+  }
+  #pagePOS .cat-btn .ci{width:25px;flex-basis:25px;font-size:19px}
+  #pagePOS .products-area{
+    padding:5px 7px 10px;
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:5px
+  }
+  #pagePOS .product-card{
+    min-height:194px;padding:11px 7px 12px;border-radius:6px
+  }
+  #pagePOS .p-price-badge{font-size:11px;padding:6px 11px;top:8px;left:8px}
+  #pagePOS .p-img{width:78px;height:78px;margin:24px 0 8px;font-size:37px}
+  #pagePOS .p-stock-badge{font-size:10px;padding:4px 9px;margin-bottom:8px}
+  #pagePOS .p-name{font-size:13px;line-height:1.3;font-weight:800}
+  #pagePOS .cart-head{min-height:72px;padding:13px 16px}
+  #pagePOS .cart-head-title{font-size:25px;letter-spacing:-.02em}
+  #pagePOS .cart-head-sub{font-size:11px}
+  #pagePOS .cart-items{padding:9px 10px}
+  #pagePOS .cart-item{
+    min-height:62px;margin-bottom:7px;padding:9px 10px;
+    grid-template-columns:48px minmax(0,1fr) auto auto 30px;gap:8px
+  }
+  #pagePOS .cart-item>div:first-child{width:48px;height:48px}
+  #pagePOS .ci-name{font-size:13px}
+  #pagePOS .ci-price{font-size:10px}
+  #pagePOS .qty-btn{width:29px;height:29px;font-size:15px}
+  #pagePOS .qty-num{font-size:13px;width:21px}
+  #pagePOS .ci-sub{font-size:15px}
+  #pagePOS .cart-secondary-actions{padding:9px 12px 0;gap:7px}
+  #pagePOS .cart-secondary-actions button{min-height:40px;font-size:10px}
+  #pagePOS .cart-totals{padding:12px 14px 9px}
+  #pagePOS .total-row{font-size:13px}
+  #pagePOS .total-main{min-height:52px;padding:8px 13px;font-size:26px}
+  #pagePOS .cart-actions{padding:9px 12px 12px}
+  #pagePOS .btn-cobro{min-height:62px;font-size:16px}
+}
+
+/* Escritorio mediano: tres columnas solo cuando realmente caben. */
+@media(min-width:1100px) and (max-width:1279px){
+  #pagePOS>.pos-body{grid-template-columns:170px minmax(0,1fr) 330px}
+  #pagePOS .cat-btn{min-height:44px;padding:8px 8px;font-size:10.5px}
+  #pagePOS .products-area{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:6px}
+  #pagePOS .product-card{min-height:178px;padding:9px 6px}
+  #pagePOS .p-img{width:64px;height:64px}
+  #pagePOS .cart-head-title{font-size:21px}
+}
+
+/* En stock normal la referencia usa una banda naranja, no un chip verde. */
+#pagePOS .p-stock-badge.ok,
+#pagePOS .p-stock-badge.low{
+  background:var(--pos-ref-orange)!important;
+  color:#fff!important;
+}
+#pagePOS .p-stock-badge.out{background:#dc2626!important;color:#fff!important}
+
+/* Por debajo de 1100 px la venta actual deja de robar ancho al catálogo y vuelve a drawer. */
+@media(max-width:1099px){
+  #pagePOS .pos-commandbar{
+    min-height:64px;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;padding:7px 9px
+  }
+  #pagePOS .pos-module-mark,#pagePOS .pos-module-copy{display:none}
+  #pagePOS .pos-module-identity{gap:0}
+  #pagePOS>.pos-body{display:flex}
+  #pagePOS .sidebar{width:96px;flex:0 0 96px;padding:7px 5px}
+  #pagePOS .cat-btn{
+    min-height:52px;padding:7px 4px;flex-direction:column;justify-content:center;gap:4px;
+    text-align:center;font-size:9.5px;border-left:0;border-bottom:2px solid transparent
+  }
+  #pagePOS .cat-btn .ci{font-size:18px}
+  #pagePOS .cat-btn.active{border-left:0;border-bottom-color:var(--pos-ref-teal)}
+  #pagePOS .cat-btn:first-child.active{border-bottom-color:var(--pos-ref-orange)}
+  #pagePOS .products-area{
+    grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px;padding:8px
+  }
+  #pagePOS .cart-backdrop{display:block}
+  #pagePOS .cart-drawer{
+    position:absolute;top:0;right:-430px!important;bottom:0;width:min(430px,100%);height:auto;z-index:81;
+    border-left:1px solid var(--pos-ref-line);box-shadow:-10px 0 30px rgba(15,23,42,.14);
+    transition:right .22s cubic-bezier(.4,0,.2,1)
+  }
+  #pagePOS .cart-drawer.open{right:0!important}
+  #pagePOS .cart-mobile-close{display:grid}
+  #pagePOS .cart-fab{display:flex}
+}
+
+/* Chrome "Sitio de escritorio" en teléfono: usa layout móvil real aunque el viewport sea ancho. */
+body.na-pos-phone-device #pagePOS .pos-commandbar{
+  min-height:58px!important;
+  grid-template-columns:38px minmax(0,1fr) auto!important;
+  padding:6px 7px!important;
+  gap:6px!important
+}
+body.na-pos-phone-device #pagePOS .pos-module-mark,
+body.na-pos-phone-device #pagePOS .pos-module-copy,
+body.na-pos-phone-device #pagePOS .pos-runtime-status{display:none!important}
+body.na-pos-phone-device #pagePOS>.pos-body{display:flex!important}
+body.na-pos-phone-device #pagePOS .sidebar{
+  width:72px!important;flex:0 0 72px!important;padding:6px 4px!important
+}
+body.na-pos-phone-device #pagePOS .cat-btn{
+  min-height:49px!important;padding:6px 2px!important;flex-direction:column!important;
+  justify-content:center!important;gap:4px!important;text-align:center!important;
+  font-size:8.5px!important;border-left:0!important;border-bottom:2px solid transparent!important
+}
+body.na-pos-phone-device #pagePOS .cat-btn .ci{font-size:16px!important}
+body.na-pos-phone-device #pagePOS .products-area{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;padding:7px!important
+}
+body.na-pos-phone-device #pagePOS .product-card{min-height:158px!important;padding:8px 5px 9px!important}
+body.na-pos-phone-device #pagePOS .p-img{width:58px!important;height:58px!important;margin:20px 0 7px!important}
+body.na-pos-phone-device #pagePOS .p-price-badge{font-size:8px!important;padding:4px 6px!important}
+body.na-pos-phone-device #pagePOS .p-stock-badge{font-size:8px!important}
+body.na-pos-phone-device #pagePOS .p-name{font-size:9.5px!important}
+body.na-pos-phone-device #pagePOS .cart-backdrop{display:block!important}
+body.na-pos-phone-device #pagePOS .cart-drawer{
+  position:absolute!important;top:0!important;right:-100%!important;bottom:0!important;
+  width:100%!important;height:auto!important;z-index:81!important;transition:right .22s cubic-bezier(.4,0,.2,1)!important
+}
+body.na-pos-phone-device #pagePOS .cart-drawer.open{right:0!important}
+body.na-pos-phone-device #pagePOS .cart-mobile-close{display:grid!important}
+body.na-pos-phone-device #pagePOS .free-sale-btn,
+body.na-pos-phone-device #pagePOS .pos-majorista-btn{width:38px;min-width:38px;padding:0;justify-content:center}
+body.na-pos-phone-device #pagePOS .free-sale-btn span,
+body.na-pos-phone-device #pagePOS .pos-majorista-btn span{display:none}
+body.na-pos-phone-device #pagePOS .cart-fab{width:38px;height:38px;border-radius:8px}
+
+/* Teléfono normal: mismo criterio que el modo escritorio móvil. */
+@media(max-width:700px){
+  #pagePOS .pos-runtime-status{display:none}
+}
+
+body.na-pos-phone-device.na-pos-reference-active>.g-topbar>div:last-child{top:6px;left:7px;width:36px;height:36px}
+body.na-pos-phone-device.na-pos-reference-active #backBtn{width:36px;height:36px}
+body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px}
