@@ -214,3 +214,21 @@ test('payment batch lean path uses one batch transport for one-to-twenty debts a
   assert.match(source,/record\.command === 'payment\.batch'/);
   assert.match(source,/createPaymentBatch:\s*createPaymentBatch/);
 });
+
+
+test('cash commands project only durable receipts and skip redundant status on the new happy path',()=>{
+  const projectionStart=source.indexOf('function projectConfirmedCashReceipt(record, result)');
+  const sendStart=source.indexOf('async function sendPending(record, skipStatus)');
+  assert.ok(projectionStart>=0&&sendStart>projectionStart);
+  const projection=source.slice(projectionStart,sendStart);
+  assert.match(projection,/\['cash\.open', 'cash\.close', 'adjustment\.create'\]\.includes\(record\.command\)/);
+  assert.match(projection,/payload\.operation_id !== result\.operation_id/);
+  assert.match(projection,/result\.session_revision !== payload\.expected_session_revision \+ 1/);
+  assert.match(projection,/eventExists/);
+  assert.match(projection,/notifyReplicaUpdate\(\)/);
+  assert.match(source,/var cashProjected = projectConfirmedCashReceipt\(record, result\)/);
+  assert.match(source,/\['payment\.create','cash\.open','cash\.close','adjustment\.create'\]\.includes\(command\)/);
+  assert.match(source,/sendPending\(record, skipRedundantStatus\)/);
+  assert.match(source,/retryPending[\s\S]*sendPending\(record\)/,
+    'retry path must keep the default remote status verification');
+});
