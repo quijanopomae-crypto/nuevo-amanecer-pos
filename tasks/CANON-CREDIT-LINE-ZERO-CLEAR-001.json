@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-LINE-ZERO-CLEAR-001",
+  "environment": "CANON",
+  "base_ref": "7a524036c5c7440a7a92c7a5722e03dc487b9c12",
+  "objective": "En Ajustar línea de crédito, cuando el valor inicial sea 0, vaciarlo al enfocar el campo para que el propietario pueda escribir el monto sin borrar manualmente el cero.",
+  "owner_authorization": "El propietario pidió el 2026-10-01 que al presionar el cero del campo Línea manual asignada este se elimine porque estorba al ingresar números.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-LINE-ZERO-CLEAR-001.json",
+    "POS/index.html",
+    "tests/cloud-sync/canonical-customer-credit-policy.test.mjs"
+  ],
+  "forbidden_files": [
+    "infra/database/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/**",
+    "ops/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity"
+  ],
+  "reads": [
+    "valor actual de #lineaManualMonto"
+  ],
+  "writes": [
+    "solo valor visual del input al recibir foco cuando es exactamente cero"
+  ],
+  "invariants": [
+    "No modifica deuda, saldo, pagos, ventas, caja ni persistencia.",
+    "No cambia el valor de líneas manuales o automáticas mayores que cero.",
+    "Guardar línea conserva validaciones, CAS, auditoría e idempotencia existentes.",
+    "Si el usuario deja el campo vacío, la lógica actual continúa interpretándolo como cero."
+  ],
+  "acceptance_criteria": [
+    "Si Línea manual asignada muestra 0, al enfocar el campo queda vacío.",
+    "Si el campo contiene un valor mayor que 0, el foco no lo borra.",
+    "El teclado numérico decimal sigue disponible en móvil.",
+    "Las pruebas de política de crédito siguen pasando."
+  ],
+  "rollback": "Revertir el cambio HTML y su aserción de prueba; no existen datos ni migraciones que revertir.",
+  "deploy_authorized": true
+}

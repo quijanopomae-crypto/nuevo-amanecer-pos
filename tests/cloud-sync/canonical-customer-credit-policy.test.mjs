@@ -353,3 +353,13 @@ test('new credit-policy command sends POST first with no redundant canonical sta
   const calls=tab.fetchLog.slice(start).map(row=>({method:row.method,path:new URL(row.url).pathname}));
   assert.deepEqual(calls,[{method:'POST',path:'/commands/customer.credit-policy.set'}]);
 });
+
+
+test('manual credit-line amount clears only an initial zero on focus',()=>{
+  const match=index.match(/<input[^>]*id="lineaManualMonto"[^>]*>/);
+  assert.ok(match,'missing lineaManualMonto input');
+  const input=match[0];
+  assert.match(input,/inputmode="decimal"/);
+  assert.match(input,/onfocus="if\(Number\(this\.value\)===0\)this\.value=''"/);
+  assert.match(input,/oninput="actualizarAdvertenciaLineaManual\(\)"/);
+});
