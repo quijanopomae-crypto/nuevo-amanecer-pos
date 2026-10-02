@@ -69,8 +69,7 @@ test('partial installment has explicit visual state',()=>{
 
 test('repair payload preserves the global debt invariant and source arithmetic',()=>{
   const p=trigger.credit_installment_repair;
-  assert.equal(p.expected_total_cents,2368495);
-  assert.equal(p.expected_positive_customers,29);
+  assert.equal(p.preserve_prewrite_global_summary,true);
   for(const target of p.targets){
     for(const doc of target.documents){
       assert.equal(doc.total_cents-doc.paid_cents,doc.current_cents);

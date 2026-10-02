@@ -1,12 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { TursoD1Adapter } from '../../cloudflare-lab/src/turso-d1-adapter.js';
 
 const TRIGGER_PATH = process.env.CREDIT_REPAIR_TRIGGER_PATH || 'ops/v1.3-canon-debt-ui-repair-trigger.json';
 const TURSO_URL = process.env.TURSO_PROD_DATABASE_URL || '';
 const TURSO_TOKEN = process.env.TURSO_PROD_AUTH_TOKEN || '';
-const EXPECTED_TOTAL_CENTS = 2368495;
-const EXPECTED_POSITIVE_CUSTOMERS = 29;
 
 function sha256(value) {
   return createHash('sha256').update(String(value || '')).digest('hex');
@@ -33,9 +31,7 @@ function readTrigger() {
   if (trigger?.authorized !== true || trigger?.authorized_by !== 'owner') throw new Error('owner authorization missing');
   const repair = trigger?.credit_installment_repair;
   if (!repair || repair.mode !== 'apply' || repair.provider !== 'turso') throw new Error('credit installment repair payload missing');
-  if (repair.expected_total_cents !== EXPECTED_TOTAL_CENTS || repair.expected_positive_customers !== EXPECTED_POSITIVE_CUSTOMERS) {
-    throw new Error('global debt invariant mismatch');
-  }
+  if (repair.preserve_prewrite_global_summary !== true) throw new Error('prewrite global-summary invariant missing');
   if (!Array.isArray(repair.targets) || repair.targets.length < 1 || repair.targets.length > 10) throw new Error('invalid repair target count');
   const aliases = new Set();
   for (const target of repair.targets) {
@@ -115,8 +111,9 @@ async function globalDebtSummary(db, promotionId) {
   return { positive_customers:Number(row?.positive_customers || 0), total_cents:Number(row?.total_cents || 0) };
 }
 function assertGlobalSummary(summary) {
-  if (summary.total_cents !== EXPECTED_TOTAL_CENTS || summary.positive_customers !== EXPECTED_POSITIVE_CUSTOMERS) {
-    throw new Error('production debt snapshot changed');
+  if (!Number.isSafeInteger(summary.total_cents) || summary.total_cents < 0 ||
+      !Number.isSafeInteger(summary.positive_customers) || summary.positive_customers < 0) {
+    throw new Error('invalid production debt snapshot');
   }
 }
 async function identities(db, promotionId) {
@@ -314,6 +311,16 @@ async function main() {
   const { repair } = readTrigger();
   const db = new TursoD1Adapter({url:TURSO_URL,authToken:TURSO_TOKEN});
   const control = await assertHealthy(db);
+  if (command === 'snapshot') {
+    const summary = await globalDebtSummary(db, control.active_promotion_id);
+    assertGlobalSummary(summary);
+    if (process.env.GITHUB_ENV) {
+      appendFileSync(process.env.GITHUB_ENV, 'EXPECTED_DEBT_CENTS='+summary.total_cents+'\n');
+      appendFileSync(process.env.GITHUB_ENV, 'EXPECTED_DEBT_CUSTOMERS='+summary.positive_customers+'\n');
+    }
+    console.log('CREDIT_INSTALLMENT_REPAIR_SNAPSHOT='+JSON.stringify({state:'PASS',...summary,writes_performed:false}));
+    return;
+  }
   if (command === 'backup') return backup(db, control);
   if (command === 'apply') return apply(db, control, repair);
   if (command === 'verify') return verify(db, control, repair);

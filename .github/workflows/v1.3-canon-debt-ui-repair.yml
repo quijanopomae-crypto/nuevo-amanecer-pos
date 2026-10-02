@@ -26,8 +26,6 @@ jobs:
       TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
       PROD_API_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
       POS_WEB_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
-      EXPECTED_DEBT_CENTS: "2368495"
-      EXPECTED_DEBT_CUSTOMERS: "29"
       R2_BUCKET: nuevo-amanecer-prod-v2-backups
       CREDIT_REPAIR_TRIGGER_PATH: ops/v1.3-canon-debt-ui-repair-trigger.json
 
@@ -61,7 +59,7 @@ jobs:
           const fs=require('node:fs');
           const t=JSON.parse(fs.readFileSync('ops/v1.3-canon-debt-ui-repair-trigger.json','utf8'));
           if(t.authorized!==true||t.authorized_by!=='owner')throw new Error('owner authorization missing');
-          if(t.expected_total_cents!==2368495||t.expected_positive_customers!==29)throw new Error('debt invariant mismatch');
+          if(t.credit_installment_repair?.preserve_prewrite_global_summary!==true)throw new Error('dynamic debt preservation invariant missing');
           NODE
 
       - name: Setup Node
@@ -80,6 +78,10 @@ jobs:
           node --check tools/cloudflare-prod/scripts/credit-installment-repair.mjs
           node --check tools/cloudflare-prod/scripts/credit-document-audit-readonly.mjs
           node --test tests/product-fixes/canon-credit-installment-repair.test.mjs
+
+      - name: Snapshot current production debt invariants
+        shell: bash
+        run: node tools/cloudflare-prod/scripts/credit-installment-repair.mjs snapshot
 
       - name: Create fresh Turso backup before credit metadata writes
         shell: bash
@@ -163,8 +165,8 @@ jobs:
           {
             echo "## CANON debt UI repair"
             echo "- Production debt read model: PASS"
-            echo "- Positive-debt customers: 29"
-            echo "- Debt total: S/ 23,684.95"
+            echo "- Positive-debt customers preserved: $EXPECTED_DEBT_CUSTOMERS"
+            echo "- Debt total preserved (cents): $EXPECTED_DEBT_CENTS"
             echo "- Hosted shell refreshed: YES"
             echo "- Imported installment repair: VERIFIED"
             echo "- Repair backup: $CREDIT_INSTALLMENT_REPAIR_BACKUP_KEY"

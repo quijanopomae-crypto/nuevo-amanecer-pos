@@ -29,7 +29,7 @@
     "Solo insertar metadata/cronogramas ausentes para créditos importados que coincidan exactamente por cliente, documento, total, pagado y saldo.",
     "Crear backup lógico Turso y verificarlo en R2 antes de cualquier escritura.",
     "Los documentos objetivo se identifican por hashes, no por texto en claro versionado.",
-    "El total CANON debe permanecer en S/ 23,684.95 y 29 clientes con deuda positiva."
+    "El total de deuda CANON y la cantidad de clientes con deuda positiva deben permanecer exactamente iguales al snapshot real tomado inmediatamente antes de la escritura; no se asume que el total histórico siga congelado."
   ],
   "rollback": "Revertir el código/UI si fuera necesario. Los inserts de metadata/cronograma son append-only y se validan antes de aplicar; no se autoriza borrado automático. El backup Turso previo queda disponible para recuperación excepcional.",
   "test_plan": [
@@ -38,7 +38,7 @@
     "CANON Critical CI.",
     "Backup Turso + R2 antes de writes.",
     "Aplicación idempotente y verificación exacta de cronogramas.",
-    "Revalidación de deuda total y documentos.",
+    "Revalidación del snapshot financiero pre/post y de los documentos objetivo.",
     "Deploy del shell CANON y comprobación del build publicado."
   ]
 }

@@ -24,11 +24,13 @@ Los saldos de los dos clientes auditados coinciden al céntimo con la fuente, pe
 
 Antes de la escritura remota:
 - comprobar CANON ACTIVE;
-- verificar 29 clientes con deuda positiva y S/ 23,684.95;
+- capturar el total de deuda y la cantidad de clientes con deuda positiva existentes en producción justo antes de escribir;
 - verificar montos exactos de los créditos objetivo;
 - crear backup lógico Turso;
 - guardar y releer el backup desde R2;
 - ejecutar inserts idempotentes;
-- volver a verificar deuda, documentos y cronogramas.
+- exigir que ese snapshot financiero sea idéntico después de la reparación y volver a verificar documentos y cronogramas.
 
 No hay migración de schema.
+
+La primera ejecución de producción (run 36959801832) se abortó antes del paso de escritura porque el gate comparaba contra un total histórico fijo. El backup previo sí quedó verificado. El gate se corrigió para preservar el snapshot financiero real de cada ejecución, que es la condición segura cuando existen operaciones legítimas posteriores.

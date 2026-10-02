@@ -54,7 +54,7 @@
       "canonical_credit_balances unchanged",
       "financial events/payments unchanged",
       "sales/cash/inventory unchanged",
-      "total positive debt remains 2368495 cents across 29 customers",
+      "global debt total and positive-customer count remain byte-for-byte numerically equal to the pre-write production snapshot",
       "existing conflicting metadata/installments cause abort instead of overwrite"
     ],
     "CROSS_MODULE_IMPACT": [
@@ -79,5 +79,12 @@
       "post-apply exact verification",
       "hosted shell deploy verification"
     ]
+  },
+  "runtime_amendment": {
+    "reason": "El primer APPLY se detuvo antes de cualquier escritura porque el gate usaba como constante el total histórico de la conciliación. Ese valor puede cambiar legítimamente por operaciones posteriores.",
+    "failed_run": 36959801832,
+    "writes_performed": false,
+    "backup_completed": true,
+    "correction": "Tomar el snapshot financiero real al inicio y exigir igualdad exacta pre/post; mantener además las comprobaciones exactas de los documentos objetivo."
   }
 }

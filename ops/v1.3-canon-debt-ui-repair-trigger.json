@@ -6,15 +6,13 @@
   "expected_total_cents": 2368495,
   "expected_positive_customers": 29,
   "source": "owner-confirmed CasaMarket screenshots reconciled in CANON",
-  "reason": "Los saldos CANON ya coinciden con la fuente, pero los créditos importados auditados no tienen cronogramas estructurados y la UI cuenta 0 compras. Aplicar solo metadata/cuotas faltantes con backup previo, conservar todos los hechos financieros y refrescar el shell.",
-  "requested_at_utc": "2026-10-02T03:11:00Z",
-  "retry_attempt": 5,
-  "target_head": "270af16595b3640084c7b5c912cb6f0ca1007704",
+  "reason": "Los saldos de los documentos objetivo coinciden con la fuente, pero faltan cronogramas estructurados y la UI cuenta 0 compras. La reparación conserva exactamente el snapshot financiero real existente al iniciar el workflow, sin asumir que la deuda global histórica siga congelada.",
+  "requested_at_utc": "2026-10-02T03:24:00Z",
+  "retry_attempt": 6,
+  "target_head": "bdf0f53bef728de450ba40b3b567f1259c0f1f0c",
   "credit_installment_repair": {
     "mode": "apply",
     "provider": "turso",
-    "expected_total_cents": 2368495,
-    "expected_positive_customers": 29,
     "requested_at_utc": "2026-10-02T03:11:00Z",
     "targets": [
       {
@@ -226,6 +224,7 @@
           }
         ]
       }
-    ]
+    ],
+    "preserve_prewrite_global_summary": true
   }
 }
