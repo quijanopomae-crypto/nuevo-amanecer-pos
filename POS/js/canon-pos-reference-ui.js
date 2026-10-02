@@ -1,6 +1,121 @@
 (function (root) {
   'use strict';
 
+  var customerId = '', previousLines = 0;
+
+  function lineIcon(path) {
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.8');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    var shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    shape.setAttribute('d', path);
+    svg.appendChild(shape);
+    return svg;
+  }
+
+  function decorateCategories() {
+    var paths = [
+      'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+      'M3 6h18l-2 13H5z M8 6V3h8v3 M8 10v5 M12 10v5 M16 10v5',
+      'M8 3h8v4l2 3v11H6V10l2-3z M6 12h12',
+      'M5 8h14l-2 13H7z M8 8V4 M12 8V3 M16 8V4',
+      'M8 3h8l2 8-6 10-6-10z M6 11h12',
+      'M8 3h8v4l2 3v11H6V10l2-3z M9 15h6',
+      'M4 20l8-16 8 16z M8 14h8',
+      'M5 21V9l7-6 7 6v12z M9 21v-7h6v7'
+    ];
+    var categoryIcons = {todo:0,abarrotes:1,bebidas:2,snacks:3,helados:4,licores:5,limpieza:6,cuidado:5,bebes:1,hogar:7,tecnologia:0,libreria:1,servicios:0};
+    document.querySelectorAll('#posSidebar .cat-btn .ci').forEach(function (icon) {
+      var category = icon.closest('[data-cat]').dataset.cat;
+      var index = Object.prototype.hasOwnProperty.call(categoryIcons, category) ? categoryIcons[category] : 1;
+      if (!icon.querySelector('svg')) icon.replaceChildren(lineIcon(paths[index]));
+    });
+  }
+
+  function syncCustomer() {
+    var select = document.getElementById('mVentaCliente');
+    var label = document.getElementById('posCustomer');
+    var option = select && Array.prototype.find.call(select.options, function (item) { return item.value === customerId; });
+    if (label) label.textContent = customerId && option ? option.textContent.split(' · ')[0] : 'Cliente genérico';
+  }
+
+  function editLine(kind) {
+    var items = cartSnapshot();
+    if (!items.length || typeof root._naSaleUiLocked !== 'function' || root._naSaleUiLocked() || (typeof posProc !== 'undefined' && posProc)) return;
+    var editor = document.getElementById('posLineEditor');
+    if (!editor) {
+      editor = element('div', 'pos-line-editor');
+      editor.id = 'posLineEditor';
+      editor.hidden = true;
+      editor.setAttribute('role', 'dialog');
+      editor.setAttribute('aria-modal', 'true');
+      editor.setAttribute('aria-labelledby', 'posLineEditorTitle');
+      var form = element('form');
+      var title = element('strong'); title.id = 'posLineEditorTitle';
+      var lineLabel = element('label', '', 'Producto');
+      var select = element('select'); select.id = 'posLineChoice'; lineLabel.appendChild(select);
+      var valueLabel = element('label'); valueLabel.id = 'posLineValueLabel';
+      var input = element('input'); input.id = 'posLineValue'; input.type = 'number'; input.required = true;
+      var error = element('div', 'pos-line-editor-error'); error.id = 'posLineError'; error.setAttribute('role', 'alert');
+      var save = element('button', '', 'Aplicar'); save.type = 'submit';
+      var cancel = actionButton('', 'Cancelar', function () { editor.hidden = true; document.getElementById(editor.dataset.kind === 'quantity' ? 'posQuantity' : 'posPrice').focus(); });
+      form.append(title, lineLabel, valueLabel, input, error, save, cancel);
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var current = cartSnapshot().find(function (item) { return String(item._lineKey) === select.value; });
+        if (!current || root._naSaleUiLocked() || (typeof posProc !== 'undefined' && posProc)) { error.textContent = 'La venta no está disponible para editar.'; return; }
+        var value = Number(input.value);
+        if (!Number.isFinite(value) || value <= 0 || (editor.dataset.kind === 'quantity' ? !Number.isSafeInteger(value) : Number(value.toFixed(2)) !== value)) {
+          error.textContent = 'Ingresa una cantidad entera o un precio con hasta dos decimales.'; return;
+        }
+        if (editor.dataset.kind === 'quantity') {
+          if (current.ventaLibre && value > 9999) { error.textContent = 'VARIOS admite hasta 9999 unidades.'; return; }
+          root.posQty(current._lineKey, value - Number(current.qty));
+          if (Number(current.qty) !== value) { error.textContent = 'Stock insuficiente para esa cantidad.'; return; }
+        } else {
+          if (!Number.isSafeInteger(Math.round(value * 100)) || !Number.isSafeInteger(Math.round(value * 100) * Number(current.qty))) {
+            error.textContent = 'El precio no produce un total válido en céntimos.'; return;
+          }
+          var cost = Number(current.costo || 0) * Number(current.unitsPerQty || 1);
+          if (typeof appConfig !== 'undefined' && appConfig.margenActive && value < cost) { error.textContent = 'El precio no puede quedar bajo costo.'; return; }
+          current.precio = value;
+          delete current._precioOriginal; delete current._descuento;
+          root.posUpdateCart();
+        }
+        editor.hidden = true;
+        document.getElementById(editor.dataset.kind === 'quantity' ? 'posQuantity' : 'posPrice').focus();
+      });
+      editor.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { editor.hidden = true; document.getElementById(editor.dataset.kind === 'quantity' ? 'posQuantity' : 'posPrice').focus(); }
+        if (event.key === 'Tab') {
+          var controls = form.querySelectorAll('select,input,button');
+          var first = controls[0], last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+      });
+      select.addEventListener('change', function () {
+        var row = cartSnapshot().find(function (item) { return String(item._lineKey) === select.value; });
+        if (row) input.value = editor.dataset.kind === 'quantity' ? row.qty : Number(row.precio).toFixed(2);
+        error.textContent = '';
+      });
+      editor.appendChild(form); document.getElementById('pagePOS').appendChild(editor);
+    }
+    editor.dataset.kind = kind;
+    var choice = document.getElementById('posLineChoice'); choice.replaceChildren();
+    items.forEach(function (item) { var option = element('option', '', item.name); option.value = String(item._lineKey); choice.appendChild(option); });
+    document.getElementById('posLineEditorTitle').textContent = kind === 'quantity' ? 'Cantidad' : 'Cambiar precio';
+    document.getElementById('posLineValueLabel').textContent = kind === 'quantity' ? 'Cantidad' : 'Precio por unidad de venta (S/)';
+    var input = document.getElementById('posLineValue'); input.step = kind === 'quantity' ? '1' : '0.01'; input.min = kind === 'quantity' ? '1' : '0.01';
+    input.value = kind === 'quantity' ? items[0].qty : Number(items[0].precio).toFixed(2);
+    document.getElementById('posLineError').textContent = ''; editor.hidden = false; input.focus(); input.select();
+  }
+
   function element(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -28,6 +143,10 @@
   function updateCartMeta() {
     var items = cartSnapshot();
     var lines = items.length;
+    if (previousLines && !lines) { customerId = ''; var select = document.getElementById('mVentaCliente'); if (select) select.value = ''; }
+    previousLines = lines;
+    syncCustomer();
+    ['posQuantity', 'posPrice', 'posDiscount'].forEach(function (id) { var button = document.getElementById(id); if (button) button.disabled = !lines; });
     var units = items.reduce(function (sum, item) {
       var qty = Number(item && item.qty);
       var factor = Number(item && item.unitsPerQty);
@@ -41,7 +160,7 @@
     var productCount = document.getElementById('posProductCount');
     var unitCount = document.getElementById('posUnitCount');
     if (summary) summary.textContent = productText;
-    if (productCount) productCount.textContent = productText;
+    if (productCount) productCount.textContent = 'Nro. de productos: ' + lines;
     if (unitCount) unitCount.textContent = unitText;
   }
 
@@ -80,6 +199,7 @@
     });
 
     var mark = element('div', 'pos-module-mark', '🛒');
+    mark.replaceChildren(lineIcon('M2 3h3l3 13h12l2-10H6 M9 9h10 M11 6v7 M16 6v7 M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2 M19 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2'));
     mark.setAttribute('aria-hidden', 'true');
 
     var copy = element('div', 'pos-module-copy');
@@ -141,10 +261,20 @@
     head.insertBefore(copy, title);
     copy.appendChild(title);
     copy.appendChild(element('div', 'cart-head-sub', '0 productos')).id = 'posCartSummary';
+    var customer = actionButton('♙', 'Cliente genérico', function () {
+      if (typeof root._naPopulateCreditClients !== 'function' || typeof root._naOpenClientPicker !== 'function') return;
+      root._naPopulateCreditClients();
+      var select = document.getElementById('mVentaCliente'); select.value = customerId;
+      root._naOpenClientPicker('mVentaCliente');
+    });
+    customer.className = 'pos-customer-button'; customer.lastElementChild.id = 'posCustomer';
+    customer.setAttribute('aria-label', 'Seleccionar cliente de la venta'); copy.appendChild(customer);
+    var clear = actionButton('⌫', 'Limpiar', function () { root.limpiarCarrito(); });
+    clear.className = 'cart-head-clear'; clear.id = 'posClear'; actionHost.insertBefore(clear, actionHost.firstChild);
 
     actionHost.classList.add('cart-head-actions');
     actionHost.removeAttribute('style');
-    var menuWrap = actionHost.firstElementChild;
+    var menuWrap = clear.nextElementSibling;
     if (menuWrap) {
       menuWrap.classList.add('cart-menu-wrap');
       menuWrap.removeAttribute('style');
@@ -183,11 +313,12 @@
     var secondary = element('div', 'cart-secondary-actions');
     secondary.setAttribute('aria-label', 'Acciones rápidas de venta');
     secondary.append(
+      actionButton('◇', 'Cantidad', function () { editLine('quantity'); }),
       actionButton('％', 'Descuento', function () { if (typeof root.abrirDescuento === 'function') root.abrirDescuento(); }),
-      actionButton('▣', 'Mayorista', function () { if (typeof root.toggleMayorista === 'function') root.toggleMayorista(); }),
-      actionButton('＋', 'VARIOS', function () { if (typeof root.abrirVentaLibre === 'function') root.abrirVentaLibre(); })
+      actionButton('✎', 'Cambiar precio', function () { editLine('price'); })
     );
-    footer.insertBefore(secondary, totals);
+    ['posQuantity','posDiscount','posPrice'].forEach(function (id, index) { secondary.children[index].id = id; });
+    footer.insertBefore(secondary, actions);
 
     var countLine = element('div', 'cart-count-line');
     var productCount = element('span', '', '0 productos');
@@ -206,18 +337,30 @@
       pay.replaceChildren(element('span', 'pay-action-icon', '▰'), element('span', '', 'Pagar'));
     }
     var cancel = actions.querySelector('.btn-cancelar-cart');
-    if (cancel) cancel.textContent = '🗑️ Limpiar venta';
+    if (cancel) cancel.remove();
   }
 
   function installObservers(page) {
     var products = page.querySelector('#posArea');
     var cartItems = page.querySelector('#cartItems');
+    var sidebar = page.querySelector('#posSidebar');
     if (typeof MutationObserver !== 'function') return;
     if (products) new MutationObserver(decoratePrices).observe(products, { childList: true, subtree: true });
     if (cartItems) new MutationObserver(updateCartMeta).observe(cartItems, { childList: true, subtree: true });
+    if (sidebar) new MutationObserver(decorateCategories).observe(sidebar, { childList: true });
   }
 
   function wrapRenderers() {
+    if (typeof root.abrirCobro === 'function' && !root.abrirCobro.__naReferenceCustomer) {
+      var openCheckout = root.abrirCobro;
+      root.abrirCobro = function () {
+        var result = openCheckout.apply(this, arguments);
+        var select = document.getElementById('mVentaCliente');
+        if (select && customerId) { select.value = customerId; select.dispatchEvent(new Event('change', { bubbles: true })); }
+        return result;
+      };
+      root.abrirCobro.__naReferenceCustomer = true;
+    }
     if (typeof root.posRender === 'function' && !root.posRender.__naReferenceUiWrapped) {
       var originalRender = root.posRender;
       var wrappedRender = function () {
@@ -252,6 +395,9 @@
     installObservers(page);
     decoratePrices();
     updateCartMeta();
+    decorateCategories();
+    var customer = document.getElementById('mVentaCliente');
+    if (customer) customer.addEventListener('change', function () { customerId = customer.value; syncCustomer(); });
   }
 
   if (document.readyState === 'loading') {
