@@ -50,9 +50,11 @@ Ejecutar pruebas focalizadas + CANON Critical CI + E2E Smoke. Solo después fusi
 ## Archivos permitidos
 - `docs/CANON_POS_REFERENCE_UI.md`
 - `POS/index.html`
-- `POS/css/experience-v2/pages/pos.css`
+- `POS/css/experience-v2/pages/pos.css` (solo restauración de paridad LAB→CANON)
+- `POS/css/canon-pos-reference-ui.css`
 - `POS/js/legacy-inline/inline-14.js`
-- `tests/ui-polish/canon-pos-reference-ui.test.mjs`
+- `POS/sw.js`
+- `tests/product-fixes/fix-pos-reference-ui/canon-pos-reference-ui.test.mjs`
 
 ## Archivos prohibidos
 - `laboratorio/**`
@@ -78,7 +80,7 @@ Ejecutar pruebas focalizadas + CANON Critical CI + E2E Smoke. Solo después fusi
 - Densidad excesiva en pantallas pequeñas.
 
 ## Mitigación
-- Overrides finales en `experience-v2/pages/pos.css`.
+- Mantener `experience-v2/pages/pos.css` byte-exacto con su fuente LAB y colocar el rediseño solicitado en una hoja CANON-only posterior para no romper el gate LAB→CANON.
 - Breakpoint explícito para volver a drawer bajo 980 px.
 - Pruebas estructurales sobre IDs, handlers y media queries.
 - No modificar lógica de cobro/persistencia.
