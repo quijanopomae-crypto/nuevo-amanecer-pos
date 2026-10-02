@@ -1,0 +1,102 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-POS-INSTOCK-ONLY-001",
+  "base_ref": "7f8d9852369aed9d6808a28ba2a621dcfd5c462c",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "lab-ui-edit": {
+      "path": ".agents/skills/lab-ui-edit/SKILL.md",
+      "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"
+    },
+    "lab-animation-edit": {
+      "path": ".agents/skills/lab-animation-edit/SKILL.md",
+      "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"
+    }
+  },
+  "analysis": {
+    "READS": [
+      "AGENTS.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      "POS/js/legacy-inline/inline-14.js",
+      "laboratorio/pos-lab/lab-overrides.js",
+      "User screenshot showing POS cards with Stock: positive, Sin stock and Faltante states"
+    ],
+    "WRITES": [
+      "LAB-only override for POS rendering so stock-controlled products with stock <= 0 are excluded from the visible product grid",
+      "Focused regression test",
+      "Task Contract and preflight receipt"
+    ],
+    "DOM_AFFECTED": [
+      "#posArea product-card render set only; out-of-stock and shortage cards will not be inserted in POS-LAB"
+    ],
+    "STATE_AFFECTED": [
+      "Render-time product projection only; authoritative productos array and inventory records remain unchanged",
+      "Category and search filtering continue to operate on the visible in-stock subset"
+    ],
+    "STORAGE_AFFECTED": [
+      "None; no localStorage, D1, OUTBOX, sync or persistence changes"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Inventory quantities are not modified",
+      "Products with positive controlled stock remain visible",
+      "Products without stock control remain available as before",
+      "Cart, sale totals, payment, cash, credits and synchronization are unchanged",
+      "POS/** remains untouched during LAB iteration"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Inventario continues to show and manage all products including zero/negative stock",
+      "Ventas and Caja consume completed sales and are not changed",
+      "No backend, cloud or persistence contract changes"
+    ],
+    "RISKS": [
+      "A render override must restore the original productos array even if canonical posRender throws",
+      "If a future canonical POS renderer changes its global contract, the LAB override test must detect drift",
+      "Hiding zero/negative stock removes card-based access to the configured registered-no-stock sale path in LAB; this is intentional for the requested POS view"
+    ],
+    "ROLLBACK": [
+      "Revert the LAB override block and focused test; inventory data requires no rollback because it is never modified"
+    ],
+    "TESTS": [
+      "Validate SKILL_PREFLIGHT before implementation",
+      "Focused test proves positive-stock and uncontrolled products remain visible while controlled stock <= 0 is hidden",
+      "Run tests/laboratorio-*.test.mjs",
+      "Run laboratorio/pos-lab/build-lab.mjs --check",
+      "Run laboratorio/pos-lab/scope-guard.mjs with this task contract",
+      "Require GitHub Actions LAB CI before considering promotion"
+    ]
+  }
+}
