@@ -5,6 +5,7 @@ import { activeCanon, device } from './canon-browser-harness.mjs';
 
 const bridge = readFileSync('POS/js/sync/canonical-product-bridge.js','utf8');
 const client = readFileSync('POS/js/sync/canonical-client.js','utf8');
+const inline02 = readFileSync('POS/js/legacy-inline/inline-02.js','utf8');
 const inline07 = readFileSync('POS/js/legacy-inline/inline-07.js','utf8');
 const index = readFileSync('POS/index.html','utf8');
 const sw = readFileSync('POS/sw.js','utf8');
@@ -195,6 +196,7 @@ test('shell/winner/client/migration expose only the canonical product-create pat
   assert.match(client,/['"]product\.create['"]/);
   assert.match(client,/function createProduct\(input\)/);
   assert.match(client,/createProduct:\s*createProduct/);
+  assert.match(inline02,/abrirModalProd=function\(\)\{if\(isModuleLocked\('productos',\{canonicalProductUi:true\}\)\)/);
   assert.match(inline07,/NuevoAmanecerCanonicalProductBridge/);
   assert.match(inline07,/bridge\.save\(\)/);
   assert.match(inline07,/_naF10BaseGuardarProd\.apply\(this,args\)/);
