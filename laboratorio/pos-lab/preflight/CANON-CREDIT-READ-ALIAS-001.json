@@ -1,0 +1,76 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "CANON-CREDIT-READ-ALIAS-001",
+  "base_ref": "73c8420ab41c7f16c9aab6acd377978354f6b848",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode"
+  ],
+  "analysis": {
+    "READS": [
+      "AGENTS.md y skills impact-analysis, cross-module-impact, lab-scope-guard y lab-feature-edit",
+      "tools/cloudflare-lab/src/a6-canonical.js read-model de /read/canonical/credits",
+      "POS/js/adapters/canonical-ui-adapter.js como consumidor de original_amount_cents/current_balance_cents",
+      "diagnóstico productivo que confirmó read-model S/23,684.95 pero proyección UI S/0"
+    ],
+    "WRITES": [
+      "aliases SQL explícitos en el SELECT de créditos cuando la reconciliación está activa",
+      "regresión estática focalizada para preservar nombres de columnas"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "snapshot de créditos entregado por canonical-client al adaptador UI",
+      "monto/pagado/saldo derivados en Clientes y Créditos"
+    ],
+    "STORAGE_AFFECTED": [
+      "ninguna tabla ni fila; solo cambia la forma del JSON de lectura",
+      "sin escrituras D1/Turso durante la implementación"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "current_balance_cents sigue siendo la autoridad del saldo",
+      "no se crean ni modifican créditos, pagos, ajustes, caja o ventas",
+      "paginación, provenance, idempotencia y financial_revision permanecen intactos"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes y Créditos consume original_amount_cents para proyectar monto/pagado",
+      "historial de crédito y cobro comparten el mismo snapshot canónico",
+      "backend Worker compartido por D1/Turso debe conservar nombres de campo idénticos"
+    ],
+    "RISKS": [
+      "romper orden o alias de columnas en UNION de créditos",
+      "cambiar accidentalmente saldos en lugar de solo la representación de lectura"
+    ],
+    "ROLLBACK": [
+      "revertir únicamente el cambio de aliases en a6-canonical.js",
+      "no hay migración ni datos que revertir"
+    ],
+    "TESTS": [
+      "CANON Critical CI",
+      "LAB Canon Mirror CI con preflight válido",
+      "canonical-debt-reconciliation.test.mjs",
+      "verificación productiva de canonical-ui-adapter contra 29 clientes y S/23,684.95 antes del deploy"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  }
+}
