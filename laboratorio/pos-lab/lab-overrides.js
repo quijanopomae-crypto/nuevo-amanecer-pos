@@ -1296,5 +1296,28 @@
     clearRouteRestoreShield();
   }
 
+  // LAB-POS-INSTOCK-ONLY-001: el catálogo del Punto de Venta muestra solo
+  // productos vendibles con stock disponible. Inventario y persistencia no cambian.
+  var labOriginalPosRender = (typeof posRender === 'function') ? posRender : null;
+
+  function labPosProductHasVisibleStock(product) {
+    if (!product) return false;
+    if (typeof _naTracksStock === 'function' && !_naTracksStock(product)) return true;
+    return (typeof _naNumber === 'function' ? _naNumber(product.stock) : Number(product.stock || 0)) > 0;
+  }
+
+  if (labOriginalPosRender && typeof productos !== 'undefined' && Array.isArray(productos)) {
+    posRender = function () {
+      var originalProducts = productos;
+      try {
+        productos = originalProducts.filter(labPosProductHasVisibleStock);
+        return labOriginalPosRender.apply(this, arguments);
+      } finally {
+        productos = originalProducts;
+      }
+    };
+    posRender.__naLabInStockOnly = true;
+  }
+
   console.info('[NA-LAB] Punto de extensión listo para funciones nuevas.');
 })();

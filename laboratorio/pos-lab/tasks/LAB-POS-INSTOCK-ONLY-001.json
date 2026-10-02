@@ -1,0 +1,35 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-POS-INSTOCK-ONLY-001",
+  "environment": "LABORATORIO",
+  "base_ref": "7f8d9852369aed9d6808a28ba2a621dcfd5c462c",
+  "objective": "En POS-LAB, mostrar en la cuadrícula del Punto de Venta únicamente productos vendibles con stock disponible; ocultar productos con stock controlado igual o menor que cero sin modificar inventario, persistencia ni CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-POS-INSTOCK-ONLY-001.json",
+    "laboratorio/pos-lab/preflight/LAB-POS-INSTOCK-ONLY-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "tests/laboratorio-pos-instock-only.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    "evidence/v1.3/**",
+    "infra/**",
+    "MANIFEST.yaml",
+    "laboratorio/pos-lab/index.html"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "lab-ui-edit",
+    "lab-animation-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-POS-INSTOCK-ONLY-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
