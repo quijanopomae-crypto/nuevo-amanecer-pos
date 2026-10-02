@@ -199,7 +199,6 @@
     });
 
     var mark = element('div', 'pos-module-mark', '🛒');
-    mark.replaceChildren(lineIcon('M2 3h3l3 13h12l2-10H6 M9 9h10 M11 6v7 M16 6v7 M9 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2 M19 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2'));
     mark.setAttribute('aria-hidden', 'true');
 
     var copy = element('div', 'pos-module-copy');
