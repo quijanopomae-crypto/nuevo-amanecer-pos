@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON del fix de Caja: un POST en happy path con réplica current, proyección inmediata tras receipt durable y reconciliación completa en background.",
-  "retry_attempt": 68,
-  "retry_reason": "PR #396 merged at c59c843eeceec7219fe0100e857d474ea99aa3ad; CANON Critical CI 37004948911 PASS y E2E Smoke CI 37004948981 PASS. Publicar únicamente el fix frontend de Caja CANON.",
-  "requested_at_utc": "2026-10-02T12:10:00Z",
-  "target_head": "c59c843eeceec7219fe0100e857d474ea99aa3ad"
+  "note": "Deploy CANON del rediseño POS aprobado: categorías izquierda, catálogo centro, venta actual persistente derecha en desktop y drawer responsive en móvil.",
+  "retry_attempt": 69,
+  "retry_reason": "PR #400 merged at e61ad95b61d0fd6dbda0a63b3349c9ad6e3a0383; CANON Critical CI 37068908696 PASS y E2E Smoke CI 37068908710 PASS. Publicar únicamente el frontend CANON aprobado.",
+  "requested_at_utc": "2026-10-02T21:49:00Z",
+  "target_head": "e61ad95b61d0fd6dbda0a63b3349c9ad6e3a0383"
 }
