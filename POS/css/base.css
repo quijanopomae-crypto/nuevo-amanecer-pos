@@ -529,7 +529,13 @@
             .hero-dashboard,.home-panels{grid-template-columns:1fr}
             .hero-actions{grid-template-columns:repeat(2,1fr)}
             .cat-inline-row,.cat-create-box{flex-direction:column;align-items:stretch}
-            .modules-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+            .modules-grid{grid-template-columns:repeat(2,1fr);gap:9px}
+            #pageMenu .module-card{border-radius:18px;padding:16.2px 14.4px 14.4px;gap:9.9px}
+            #pageMenu .module-icon{width:57.6px;height:57.6px;border-radius:18px;font-size:27.9px}
+            #pageMenu .module-badge{top:10.8px;right:10.8px;font-size:8.1px;padding:3.6px 8.1px}
+            #pageMenu .module-label{font-size:16.2px}
+            #pageMenu .module-desc{font-size:10.8px}
+            #pageMenu .module-arrow{font-size:10.8px}
             .quick-stats{grid-template-columns:repeat(2,1fr)}
             .home-links{grid-template-columns:1fr}
             .sidebar{width:70px}

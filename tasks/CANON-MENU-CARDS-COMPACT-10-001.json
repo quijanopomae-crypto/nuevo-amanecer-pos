@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-MENU-CARDS-COMPACT-10-001",
+  "environment": "CANON",
+  "base_ref": "7f8d9852369aed9d6808a28ba2a621dcfd5c462c",
+  "objective": "Hacer aproximadamente 10% más compactas en móvil las tarjetas grandes del menú principal (Punto de Venta, Inventario, Ventas, Clientes, Caja, Gastos) sin alterar navegación ni lógica.",
+  "owner_authorization": "El propietario pidió el 2026-10-01 encoger 10% las ventanas/tarjetas visibles del menú principal.",
+  "allowed_files": [
+    "tasks/CANON-MENU-CARDS-COMPACT-10-001.json",
+    "POS/css/base.css",
+    "tests/product-fixes/canon-menu-card-compact.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/js/**",
+    "infra/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/**",
+    "ops/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact"
+  ],
+  "reads": [
+    "layout móvil actual de #pageMenu .modules-grid y .module-card"
+  ],
+  "writes": [
+    "solo dimensiones visuales móviles de las tarjetas principales del menú"
+  ],
+  "dom_affected": [
+    "#pageMenu .module-card y elementos visuales hijos"
+  ],
+  "state_affected": [],
+  "storage_affected": [],
+  "invariants": [
+    "La grilla conserva dos columnas en móvil.",
+    "Los handlers onclick/goPage no cambian.",
+    "No se modifica lógica de ventas, inventario, clientes, caja, gastos ni configuración.",
+    "Desktop permanece sin cambios.",
+    "El área táctil sigue siendo la tarjeta completa."
+  ],
+  "acceptance_criteria": [
+    "En <=480px padding, icono, tipografía y radios de las tarjetas del menú quedan al 90% aproximado.",
+    "Punto de Venta, Inventario, Ventas, Clientes, Caja y Gastos siguen navegando.",
+    "Resumen superior no se modifica.",
+    "E2E Smoke y CANON Critical CI pasan."
+  ],
+  "rollback": "Revertir el bloque CSS móvil y el test; no existen datos ni migraciones que revertir.",
+  "deploy_authorized": true
+}
