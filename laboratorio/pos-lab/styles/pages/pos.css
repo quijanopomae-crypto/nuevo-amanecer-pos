@@ -37,3 +37,79 @@
   .lab-credit-installment-config>label,.lab-credit-installment-dates label{grid-template-columns:1fr}
   .lab-credit-installment-dates .fi{width:100%}
 }
+
+
+/* LAB-POS-PC-LAYOUT-CANON-READY-001
+   Capa exclusivamente desktop. No cambia DOM, handlers ni lógica comercial.
+   Se mantiene autocontenida para que una futura promoción a CANON sea un parche CSS mínimo. */
+@media (min-width: 1024px) {
+  #pagePOS .pos-body {
+    gap: 0;
+    background: #f5f8fb;
+  }
+
+  #pagePOS .sidebar {
+    width: 132px;
+    padding: 12px 10px 18px;
+    gap: 7px;
+  }
+
+  #pagePOS .cat-btn {
+    min-height: 54px;
+    padding: 8px 9px;
+    border-radius: 12px;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 9px;
+    text-align: left;
+  }
+
+  #pagePOS .cat-btn .ci {
+    width: 24px;
+    font-size: 18px;
+    text-align: center;
+    flex: 0 0 24px;
+  }
+
+  #pagePOS .products-area {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    padding: 18px;
+  }
+
+  #pagePOS .product-card {
+    min-height: 168px;
+    padding: 16px 12px 13px;
+    border-radius: 14px;
+  }
+
+  #pagePOS .p-img {
+    width: 62px;
+    height: 62px;
+    margin: 17px 0 9px;
+  }
+
+  #pagePOS .p-name {
+    font-size: 12px;
+  }
+
+  #pagePOS .pos-search-box {
+    max-width: 760px;
+  }
+}
+
+@media (min-width: 1280px) {
+  #pagePOS .sidebar {
+    width: 148px;
+  }
+
+  #pagePOS .products-area {
+    grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
+    gap: 14px;
+    padding: 20px;
+  }
+
+  #pagePOS .product-card {
+    min-height: 176px;
+  }
+}
