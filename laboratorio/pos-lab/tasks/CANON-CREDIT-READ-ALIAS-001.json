@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "task_id": "CANON-CREDIT-READ-ALIAS-001",
+  "environment": "LABORATORIO",
+  "base_ref": "73c8420ab41c7f16c9aab6acd377978354f6b848",
+  "objective": "Corregir en el read-model compartido de créditos CANON los aliases SQL perdidos al aplicar reconciliación, para que canonical-ui-adapter reciba original_amount_cents/opening_balance_cents/current_balance_cents con nombres estables; sin modificar deuda, pagos, caja, ventas ni datos comerciales.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/CANON-CREDIT-READ-ALIAS-001.json",
+    "laboratorio/pos-lab/preflight/CANON-CREDIT-READ-ALIAS-001.json",
+    "tools/cloudflare-lab/src/a6-canonical.js",
+    "tests/cloud-sync/canonical-debt-reconciliation.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "infra/database/migrations/**",
+    "laboratorio/pos-lab/index.html",
+    "laboratorio/pos-lab/styles/**",
+    "laboratorio/pos-lab/animations/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/CANON-CREDIT-READ-ALIAS-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
