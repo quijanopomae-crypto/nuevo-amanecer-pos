@@ -897,6 +897,102 @@
     return true;
   }
 
+  function projectConfirmedCashReceipt(record, result) {
+    if (!record || !record.payload || !result || !data ||
+        !['cash.open', 'cash.close', 'adjustment.create'].includes(record.command)) return false;
+    var payload = record.payload;
+    if (payload.operation_id !== result.operation_id || result.command !== record.command ||
+        result.promotion_id !== record.binding.promotion_id || result.authority_epoch !== record.binding.authority_epoch) return false;
+    if (!Array.isArray(data.cashSessions)) data.cashSessions = [];
+    if (!Array.isArray(data.financialEvents)) data.financialEvents = [];
+
+    var session = data.cashSessions.find(function (item) {
+      return item && String(item.session_id) === String(payload.session_id);
+    });
+
+    if (record.command === 'cash.open') {
+      if (result.session_id !== payload.session_id || result.session_revision !== 0 ||
+          result.expected_cents !== payload.opening_cents) return false;
+      if (session) {
+        if (session.status !== 'OPEN' || Number(session.opening_cents) !== payload.opening_cents) return false;
+        session.open_operation_id = session.open_operation_id || payload.operation_id;
+        session.expected_cents = result.expected_cents;
+        session.revision = result.session_revision;
+      } else {
+        if (data.cashSessions.some(function (item) { return item && item.status === 'OPEN'; })) return false;
+        data.cashSessions.push({
+          session_id: payload.session_id,
+          promotion_id: payload.promotion_id,
+          open_operation_id: payload.operation_id,
+          opening_cents: payload.opening_cents,
+          opened_at: payload.created_at,
+          status: 'OPEN',
+          close_operation_id: null,
+          expected_cents: result.expected_cents,
+          counted_cents: null,
+          difference_cents: null,
+          closed_at: null,
+          revision: result.session_revision
+        });
+      }
+    } else if (record.command === 'cash.close') {
+      if (result.session_id !== payload.session_id ||
+          result.session_revision !== payload.expected_session_revision + 1 ||
+          result.counted_cents !== payload.counted_cents ||
+          result.difference_cents !== payload.counted_cents - result.expected_cents) return false;
+      if (!session) return false;
+      if (session.status === 'CLOSED') {
+        if (session.close_operation_id && session.close_operation_id !== payload.operation_id) return false;
+      } else if (session.status !== 'OPEN' || Number(session.revision) !== payload.expected_session_revision) {
+        return false;
+      }
+      Object.assign(session, {
+        status: 'CLOSED',
+        close_operation_id: payload.operation_id,
+        expected_cents: result.expected_cents,
+        counted_cents: result.counted_cents,
+        difference_cents: result.difference_cents,
+        closed_at: payload.created_at,
+        revision: result.session_revision
+      });
+    } else {
+      if (result.session_id !== payload.session_id ||
+          result.session_revision !== payload.expected_session_revision + 1 ||
+          result.expected_cents !== Number(session && session.expected_cents) + payload.amount_cents ||
+          result.event_id !== payload.operation_id || result.cash_delta_cents !== payload.amount_cents) return false;
+      if (!session || session.status !== 'OPEN') return false;
+      var eventExists = data.financialEvents.some(function (item) {
+        return item && String(item.operation_id) === String(payload.operation_id);
+      });
+      if (!eventExists) {
+        if (Number(session.revision) !== payload.expected_session_revision) return false;
+        data.financialEvents.push({
+          event_id: result.event_id,
+          operation_id: payload.operation_id,
+          promotion_id: payload.promotion_id,
+          event_type: 'ADJUSTMENT',
+          session_id: payload.session_id,
+          credit_id: null,
+          credit_provenance: null,
+          credit_delta_cents: 0,
+          cash_delta_cents: payload.amount_cents,
+          payment_method: null,
+          reference: null,
+          reason: payload.reason,
+          compensates_operation_id: null,
+          created_at: payload.created_at
+        });
+      }
+      session.expected_cents = result.expected_cents;
+      session.revision = result.session_revision;
+    }
+
+    ready = true;
+    replicaState.validation = 'current';
+    notifyReplicaUpdate();
+    return true;
+  }
+
   async function sendPending(record, skipStatus) {
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
@@ -954,7 +1050,8 @@
     publishConfirmedPaymentReceipt(record, result);
     publishConfirmedSaleReceipt(record, result);
     var policyProjected = projectConfirmedCustomerCreditPolicy(record, result);
-    if (!policyProjected) ready = false;
+    var cashProjected = projectConfirmedCashReceipt(record, result);
+    if (!policyProjected && !cashProjected) ready = false;
     return copy(confirmed.receipt);
   }
   async function prepareCommand(command) {
@@ -994,7 +1091,8 @@
       // current replica. The Worker re-checks authority, stock and cash
       // atomically, so an extra status round-trip adds latency but no guard.
       // Any retry still uses retryPending() -> sendPending(record) with status.
-      return sendPending(record, command === 'payment.create' || skipStatus === true);
+      var skipRedundantStatus = ['payment.create','cash.open','cash.close','adjustment.create'].includes(command) || skipStatus === true;
+      return sendPending(record, skipRedundantStatus);
     });
   }
   async function createPaymentBatch(inputs) {
