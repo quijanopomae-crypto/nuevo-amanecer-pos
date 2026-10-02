@@ -6,8 +6,8 @@
   "expected_total_cents": 2368495,
   "expected_positive_customers": 29,
   "source": "owner-confirmed CasaMarket screenshots reconciled in CANON",
-  "reason": "Diagnose why Clientes still renders S/0 after verified Turso debt and cache-v2 deploy. Require canonical-ui-adapter projection itself to equal 29 positive customers / S/23,684.95 before any hosted redeploy.",
-  "requested_at_utc": "2026-10-02T00:31:00Z",
-  "retry_attempt": 3,
-  "target_head": "c3b476839f52f04c503ad1ecd766e42e440c30fc"
+  "reason": "Backend alias fix deployed successfully in Turso run 36946763956. Re-verify raw read-model and canonical-ui-adapter projection both equal 29 positive customers / S/23,684.95, then refresh Hosted POS shell.",
+  "requested_at_utc": "2026-10-02T00:39:00Z",
+  "retry_attempt": 4,
+  "target_head": "65b332ea30eaeaa3dfb1fc17bc998186eb788e2d"
 }
