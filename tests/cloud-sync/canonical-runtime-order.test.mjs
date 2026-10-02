@@ -55,3 +55,14 @@ test('online recovery refreshes authority first when runtime is not current',()=
   assert.match(listeners,/state\.validation !== 'current'/);
   assert.match(listeners,/canonical\.refresh\(\)/);
 });
+
+
+test('current CANON authority replaces pre-cutover replica caches for the same epoch/revision',()=>{
+  assert.match(client,/var REPLICA_SCHEMA_VERSION = 2;/);
+  assert.match(client,/replica\.schema_version === REPLICA_SCHEMA_VERSION/);
+  assert.match(client,/schema_version: REPLICA_SCHEMA_VERSION/);
+  const newer=client.slice(client.indexOf('function cacheIsNewer'),client.indexOf('async function localReplica'));
+  assert.match(newer,/if \(cache\.revision !== remote\.revision\) return cache\.revision > remote\.revision;/);
+  assert.doesNotMatch(newer,/financial_revision\s*\|\|\s*0\)\s*>/);
+  assert.match(newer,/return false;/);
+});
