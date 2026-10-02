@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON del ajuste solicitado: en Punto de Venta mostrar únicamente productos disponibles; ocultar stock controlado igual o menor que cero.",
-  "retry_attempt": 65,
-  "retry_reason": "PR #387 merged at 3e911582c0a1c28eaabdc543c544ae836a43acf9; CANON Critical CI PR run 36949691723 PASS, E2E Smoke CI run 36949691709 PASS y CANON Critical CI post-merge run 36949799030 PASS. Publicar únicamente este ajuste solicitado por el owner.",
-  "requested_at_utc": "2026-10-02T01:13:30Z",
-  "target_head": "3e911582c0a1c28eaabdc543c544ae836a43acf9"
+  "note": "Deploy CANON del ajuste visual solicitado: hacer aproximadamente 10% más compactas en móvil las tarjetas principales del menú, conservando dos columnas, navegación y lógica.",
+  "retry_attempt": 66,
+  "retry_reason": "PR #388 merged at 9d76232091f40830de9ac98bb61c002077d27ec1; CANON Critical CI run 36949921130 PASS y E2E Smoke CI run 36949920960 PASS. Publicar únicamente este ajuste visual solicitado por el owner.",
+  "requested_at_utc": "2026-10-02T01:15:00Z",
+  "target_head": "9d76232091f40830de9ac98bb61c002077d27ec1"
 }
