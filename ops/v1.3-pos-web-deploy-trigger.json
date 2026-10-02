@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON del rediseño POS aprobado: categorías izquierda, catálogo centro, venta actual persistente derecha en desktop y drawer responsive en móvil.",
-  "retry_attempt": 69,
-  "retry_reason": "PR #400 merged at e61ad95b61d0fd6dbda0a63b3349c9ad6e3a0383; CANON Critical CI 37068908696 PASS y E2E Smoke CI 37068908710 PASS. Publicar únicamente el frontend CANON aprobado.",
-  "requested_at_utc": "2026-10-02T21:49:00Z",
-  "target_head": "e61ad95b61d0fd6dbda0a63b3349c9ad6e3a0383"
+  "note": "Deploy CANON corrección de fidelidad visual contra referencia: cabecera unificada, proporciones desktop corregidas, 5 columnas en escritorio ancho y drawer real en teléfono incluso con 'Sitio de escritorio'.",
+  "retry_attempt": 70,
+  "retry_reason": "PR #402 merged at 589545e685c12db1f8b8fa50b5c4b5cc99fa8c19; CANON Critical CI 37072131281 PASS y E2E Smoke CI 37072131306 PASS.",
+  "requested_at_utc": "2026-10-02T22:24:00Z",
+  "target_head": "589545e685c12db1f8b8fa50b5c4b5cc99fa8c19"
 }
