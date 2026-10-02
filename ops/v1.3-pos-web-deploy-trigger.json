@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON del fix solicitado: permitir + Nuevo producto mediante la ruta canónica product.create, conservando bloqueos explícitos y sin habilitar persistencia legacy.",
-  "retry_attempt": 67,
-  "retry_reason": "PR #391 merged at 7df0c92b16e38fa690fd81b4ddbddbf9d5db80c8; CANON Critical CI run 36954319875 PASS y E2E Smoke CI run 36954319889 PASS. Publicar únicamente el fix del alta CANON de productos.",
-  "requested_at_utc": "2026-10-02T02:12:00Z",
-  "target_head": "7df0c92b16e38fa690fd81b4ddbddbf9d5db80c8"
+  "note": "Deploy CANON del fix de Caja: un POST en happy path con réplica current, proyección inmediata tras receipt durable y reconciliación completa en background.",
+  "retry_attempt": 68,
+  "retry_reason": "PR #396 merged at c59c843eeceec7219fe0100e857d474ea99aa3ad; CANON Critical CI 37004948911 PASS y E2E Smoke CI 37004948981 PASS. Publicar únicamente el fix frontend de Caja CANON.",
+  "requested_at_utc": "2026-10-02T12:10:00Z",
+  "target_head": "c59c843eeceec7219fe0100e857d474ea99aa3ad"
 }
