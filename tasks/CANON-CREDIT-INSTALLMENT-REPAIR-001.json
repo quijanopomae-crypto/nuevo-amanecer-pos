@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-INSTALLMENT-REPAIR-001",
+  "environment": "CANON",
+  "base_ref": "e224423479c5f37a245f65bbf478aeb46493cb70",
+  "objective": "Corregir en CANON la presentación y metadata de créditos importados ya conciliados, sin alterar saldos ni historial: persistir cronogramas de cuotas verificados para dos clientes, contar correctamente los créditos activos importados en 'Créditos pequeños' y derivar el avance de cuotas desde el tramo reprogramado.",
+  "owner_authorization": "El owner reportó que CANON sigue igual tras la comprobación y previamente autorizó actualizar los datos en CANON sin conflictos.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-INSTALLMENT-REPAIR-001.json",
+    "evidence/canon-preflight/CANON-CREDIT-INSTALLMENT-REPAIR-001.json",
+    "docs/CANON_CREDIT_INSTALLMENT_REPAIR.md",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tools/cloudflare-prod/scripts/credit-installment-repair.mjs",
+    "tools/cloudflare-prod/scripts/credit-document-audit-readonly.mjs",
+    ".github/workflows/v1.3-canon-debt-ui-repair.yml",
+    "ops/v1.3-canon-debt-ui-repair-trigger.json",
+    "tests/product-fixes/canon-credit-installment-repair.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "infra/database/migrations/**",
+    "POS/js/sync/**",
+    "POS/js/modules/canonical-runtime.js",
+    "tools/cloudflare-prod/wrangler*.jsonc"
+  ],
+  "invariants": [
+    "No cambiar saldos de crédito, pagos, ventas, caja, inventario ni deuda total.",
+    "No borrar ni reescribir metadata o cuotas existentes; si existe un valor distinto, abortar.",
+    "Solo insertar metadata/cronogramas ausentes para créditos importados que coincidan exactamente por cliente, documento, total, pagado y saldo.",
+    "Crear backup lógico Turso y verificarlo en R2 antes de cualquier escritura.",
+    "Los documentos objetivo se identifican por hashes, no por texto en claro versionado.",
+    "El total CANON debe permanecer en S/ 23,684.95 y 29 clientes con deuda positiva."
+  ],
+  "rollback": "Revertir el código/UI si fuera necesario. Los inserts de metadata/cronograma son append-only y se validan antes de aplicar; no se autoriza borrado automático. El backup Turso previo queda disponible para recuperación excepcional.",
+  "test_plan": [
+    "Pruebas focalizadas de cálculo de cuotas reprogramadas y conteo de créditos activos.",
+    "Validación estática del script de reparación.",
+    "CANON Critical CI.",
+    "Backup Turso + R2 antes de writes.",
+    "Aplicación idempotente y verificación exacta de cronogramas.",
+    "Revalidación de deuda total y documentos.",
+    "Deploy del shell CANON y comprobación del build publicado."
+  ]
+}
