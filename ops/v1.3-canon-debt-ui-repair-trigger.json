@@ -6,8 +6,8 @@
   "expected_total_cents": 2368495,
   "expected_positive_customers": 29,
   "source": "owner-confirmed CasaMarket screenshots reconciled in CANON",
-  "reason": "Deploy cache-authority fix fe370ed: invalidate pre-cutover CANON replica v1 and force coherent Turso remote snapshot to replace stale local balances; verify 29 positive-debt customers / S/ 23,684.95 before and after hosted deploy.",
-  "requested_at_utc": "2026-10-02T00:24:00Z",
-  "retry_attempt": 2,
-  "target_head": "fe370edacfa0c01bbef193b67d76ead724983ce4"
+  "reason": "Diagnose why Clientes still renders S/0 after verified Turso debt and cache-v2 deploy. Require canonical-ui-adapter projection itself to equal 29 positive customers / S/23,684.95 before any hosted redeploy.",
+  "requested_at_utc": "2026-10-02T00:31:00Z",
+  "retry_attempt": 3,
+  "target_head": "c3b476839f52f04c503ad1ecd766e42e440c30fc"
 }
