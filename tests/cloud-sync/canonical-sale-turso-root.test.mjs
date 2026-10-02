@@ -287,18 +287,23 @@ test('lost ACK retains durable intent; exact retry confirms and never repeats st
   assert.equal(tab.api.legacySnapshot().sales.length,1);
 });
 
-test('cash bridge uses current replica without pre-command full refresh; returns on receipt',async t=>{
+test('cash bridge current replica uses one POST and projects open state before reconciliation',async t=>{
   const {tab}=await fixture(t);
   await tab.api.closeCash({counted_cents:0});await tab.api.refresh();
   tab.context._naFindCashier=()=>({id:'cashier',nombre:'Caja'});
   tab.el('cajFondo').value='10';
+  const real=tab.api;let release;const gate=new Promise(resolve=>{release=resolve;});
+  tab.context.NuevoAmanecerCanonical={...real,refresh:async()=>{await gate;return real.refresh();}};
   vm.runInContext(source('sync/canonical-cash-bridge.js'),tab.context);
   const start=tab.fetchLog.length;
   assert.equal(await tab.context.abrirCaja(),true);
   const calls=tab.fetchLog.slice(start),postIndex=calls.findIndex(row=>new URL(row.url).pathname==='/commands/cash.open');
-  assert.ok(postIndex>=0);
-  assert.deepEqual(calls.slice(0,postIndex).map(r=>new URL(r.url).pathname),['/read/canonical/status']);
-  await tab.api.refresh();
+  assert.equal(postIndex,0,'cash.open happy path must POST directly without a redundant status GET');
+  const projected=real.legacySnapshot().cashState;
+  assert.equal(projected.abierta,true);
+  assert.equal(projected.fondo,10);
+  assert.equal(real.sourceState().validation,'current');
+  release();await real.refresh();
 });
 
 test('enqueue reserves sale id inside shared lock even for two captures from the same stale snapshot',async t=>{
@@ -357,7 +362,9 @@ test('cash close, ingreso, egreso and expense use lexical movement state and no 
     assert.equal(await action(),true);
     const calls=tab.fetchLog.slice(start),post=calls.findIndex(r=>new URL(r.url).pathname==='/commands/'+command);
     assert.ok(post>=0,command);
-    assert.deepEqual(calls.slice(0,post).map(r=>new URL(r.url).pathname),['/read/canonical/status'],command+' must not scan collections before POST');
+    const beforePost=calls.slice(0,post).map(r=>new URL(r.url).pathname);
+    assert.deepEqual(beforePost,command==='expense.create'?['/read/canonical/status']:[],
+      command+' must use the shortest authority-safe path before POST');
     await tab.api.refresh();
   }
   await tab.api.createAdjustment({amount_cents:1000,reason:'Synthetic fund'});
@@ -373,6 +380,25 @@ test('cash close, ingreso, egreso and expense use lexical movement state and no 
   assert.ok(tab.context.__closed.includes('mGasto'));
   tab.el('cajContado').value='9';
   await check('cash.close',()=>tab.context.cerrarCaja());
+});
+
+test('cash lost ACK retry revalidates authority and replays the exact operation once',async t=>{
+  let lose=true;
+  const {tab}=await fixture(t,{onFetch:async(url,options,next)=>{
+    if(new URL(url).pathname==='/commands/cash.open'&&lose){lose=false;await next();throw Error('lost cash ACK');}
+  }});
+  await tab.api.closeCash({counted_cents:0});await tab.api.refresh();
+  const before=tab.fetchLog.length;
+  await assert.rejects(()=>tab.api.openCash({session_id:'cash-retry-1',opening_cents:100}),/CANONICAL_FINANCIAL_PENDING/);
+  const first=tab.fetchLog.slice(before).map(r=>new URL(r.url).pathname);
+  assert.equal(first[0],'/commands/cash.open','new cash.open must POST directly');
+  const retryStart=tab.fetchLog.length;
+  const receipt=await tab.api.retryPending();
+  assert.equal(receipt.status,'already_processed');
+  const retryCalls=tab.fetchLog.slice(retryStart).map(r=>new URL(r.url).pathname);
+  assert.deepEqual(retryCalls.slice(0,2),['/read/canonical/status','/commands/cash.open'],
+    'retry must revalidate remote authority before replaying the same operation');
+  assert.equal(tab.api.legacySnapshot().cashState.abierta,true);
 });
 
 test('confirmed ID stays durably reserved after post-ACK refresh fails',async t=>{
