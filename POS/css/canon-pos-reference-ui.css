@@ -1,0 +1,306 @@
+/* CANON-POS-REFERENCE-UI-001
+   Referencia aprobada 2026-10-02: categorías / catálogo / venta actual.
+   Solo presentación; la autoridad comercial y los handlers existentes no cambian. */
+#pagePOS{
+  --pos-ref-teal:#08afa5;
+  --pos-ref-teal-dark:#078f88;
+  --pos-ref-orange:#ff6a00;
+  --pos-ref-orange-dark:#e85f00;
+  --pos-ref-ink:#10183a;
+  --pos-ref-muted:#62708b;
+  --pos-ref-line:#e2e8ef;
+  --pos-ref-soft:#f6f9fb;
+  --pos-ref-card:#ffffff;
+  background:#fff;
+  color:var(--pos-ref-ink);
+}
+
+/* Etapa 1/2 · barra de operación */
+#pagePOS .pos-commandbar{
+  min-height:66px;
+  padding:8px 12px;
+  display:grid;
+  grid-template-columns:minmax(210px,240px) minmax(280px,1fr) auto;
+  align-items:center;
+  gap:12px;
+  flex-shrink:0;
+  background:#fff;
+  border-bottom:1px solid var(--pos-ref-line);
+  box-shadow:0 2px 10px rgba(15,23,42,.035);
+  position:relative;
+  z-index:5;
+}
+#pagePOS .pos-module-identity{display:flex;align-items:center;gap:10px;min-width:0}
+#pagePOS .pos-menu-button{
+  width:38px;height:38px;border:0;border-radius:9px;background:#f3f6f9;color:#44506a;
+  font:900 18px/1 'Nunito',sans-serif;cursor:pointer;flex:0 0 auto;
+}
+#pagePOS .pos-menu-button:hover{background:#eaf1f5;color:var(--pos-ref-teal-dark)}
+#pagePOS .pos-module-mark{
+  width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+  background:linear-gradient(145deg,#fff7ed,#ffedd5);font-size:20px;flex:0 0 auto;
+}
+#pagePOS .pos-module-copy{display:flex;flex-direction:column;min-width:0;line-height:1.05}
+#pagePOS .pos-module-copy strong{font-size:17px;font-weight:900;color:#10183a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#pagePOS .pos-module-copy span{margin-top:4px;font-size:9px;letter-spacing:.08em;font-weight:900;color:#6b7890}
+#pagePOS .pos-search-box{
+  height:46px;min-width:0;padding:0 12px;display:flex;align-items:center;gap:9px;
+  border:1px solid #d8e0e8;border-radius:9px;background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.035);
+}
+#pagePOS .pos-search-box:focus-within{border-color:var(--pos-ref-teal);box-shadow:0 0 0 3px rgba(8,175,165,.10)}
+#pagePOS .pos-search-icon{font-size:22px;color:#54617a;line-height:1;transform:rotate(-18deg)}
+#pagePOS .pos-search-box input{font-size:13px;font-weight:700;color:#26324e}
+#pagePOS .pos-search-box input::placeholder{color:#7c879a;font-weight:700}
+#pagePOS .scanner-indicator{box-shadow:none}
+#pagePOS .pos-toolbar-actions{display:flex;align-items:center;gap:8px}
+#pagePOS .free-sale-btn,#pagePOS .pos-majorista-btn,#pagePOS .cart-fab{
+  height:42px;border-radius:9px;box-shadow:none;font-family:'Nunito',sans-serif;font-weight:900;
+}
+#pagePOS .free-sale-btn{
+  min-width:auto;padding:0 12px;background:#fff7ed;color:#b45309;border:1px solid #fed7aa;
+}
+#pagePOS .free-sale-btn:hover{background:#ffedd5;border-color:#fdba74}
+#pagePOS .pos-majorista-btn{
+  padding:0 12px;border:1px solid #d9e2ea;background:#fff;color:#46516a;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;font-size:11px;
+}
+#pagePOS .pos-majorista-btn:hover{border-color:#a7dcd7;color:var(--pos-ref-teal-dark);background:#f2fbfa}
+#pagePOS .cart-fab{width:42px;background:var(--pos-ref-teal);color:#fff}
+
+/* Etapa 2 · workbench de tres columnas */
+#pagePOS>.pos-body{
+  min-height:0;
+  display:grid;
+  grid-template-columns:220px minmax(0,1fr) 390px;
+  flex:1;
+  overflow:hidden;
+  position:relative;
+  background:#fff;
+}
+#pagePOS .sidebar{
+  width:auto;min-width:0;padding:8px 7px 14px;gap:2px;
+  background:#fff;border-right:1px solid var(--pos-ref-line);box-shadow:none;
+  overflow-y:auto;overscroll-behavior:contain;
+}
+#pagePOS .cat-btn{
+  min-height:44px;padding:8px 10px;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;
+  border:0;border-left:3px solid transparent;border-radius:7px;background:transparent;box-shadow:none;
+  color:#45516d;font-size:11px;font-weight:800;text-align:left;transition:background .14s,color .14s,border-color .14s;
+}
+#pagePOS .cat-btn .ci{width:24px;display:inline-grid;place-items:center;font-size:17px;flex:0 0 24px}
+#pagePOS .cat-btn:hover{transform:none;background:#f4f8fa;color:var(--pos-ref-teal-dark);border-color:#d7efec}
+#pagePOS .cat-btn.active{
+  background:#eaf9f7;color:var(--pos-ref-teal-dark);border-left-color:var(--pos-ref-teal);box-shadow:none;
+}
+#pagePOS .cat-btn:first-child{margin-bottom:5px}
+#pagePOS .cat-btn:first-child.active{
+  margin:0 0 5px;width:100%;border-radius:8px;background:var(--pos-ref-orange);color:#fff;border-left-color:var(--pos-ref-orange);
+}
+#pagePOS .products-area{
+  min-width:0;overflow-y:auto;overscroll-behavior:contain;padding:7px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:6px;align-content:start;
+  background:#f8fbfd;
+}
+#pagePOS .product-card{
+  min-width:0;min-height:184px;padding:10px 8px 11px;border:1px solid var(--pos-ref-line);border-radius:7px;
+  background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.035);gap:0;
+  transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease;
+}
+#pagePOS .product-card:hover{transform:translateY(-1px);border-color:#cbd7e0;box-shadow:0 5px 14px rgba(15,23,42,.07)}
+#pagePOS .product-card:active{transform:scale(.985);background:#f3fbfa}
+#pagePOS .p-price-badge{
+  top:8px;left:8px;padding:5px 9px;border-radius:7px;background:var(--pos-ref-teal);color:#fff;
+  font-size:9px;font-weight:900;box-shadow:none;
+}
+#pagePOS .p-img{
+  width:70px;height:70px;margin:22px 0 8px;border-radius:11px;background:#f4f7f9;
+  box-shadow:inset 0 0 0 1px rgba(148,163,184,.10);font-size:34px;
+}
+#pagePOS .p-img img{border-radius:11px;object-fit:contain;padding:3px;background:#fff}
+#pagePOS .p-stock-badge{
+  margin-bottom:7px;padding:3px 7px;border:0;border-radius:6px;font-size:9px;font-weight:900;
+}
+#pagePOS .p-stock-badge.ok{background:#dcfce7!important;color:#15803d!important}
+#pagePOS .p-stock-badge.low{background:#fff7ed!important;color:#c2410c!important}
+#pagePOS .p-stock-badge.out{background:#fef2f2!important;color:#b91c1c!important}
+#pagePOS .p-name{
+  margin-top:auto;color:#27334e;font-size:11px;font-weight:800;line-height:1.28;text-transform:none;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+
+/* Venta actual persistente en escritorio */
+#pagePOS .cart-backdrop{display:none}
+#pagePOS .cart-drawer{
+  position:relative;inset:auto;right:auto!important;bottom:auto;width:auto;min-width:0;height:100%;
+  z-index:2;display:flex;flex-direction:column;background:#fff;border-left:1px solid var(--pos-ref-line);
+  box-shadow:none;transition:none;overflow:hidden;
+}
+#pagePOS .cart-head{
+  min-height:64px;padding:12px 13px;background:#fff;color:var(--pos-ref-ink);
+  border-bottom:1px solid var(--pos-ref-line);display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+#pagePOS .cart-head-copy{min-width:0}
+#pagePOS .cart-head-title{font-size:20px;font-weight:900;line-height:1.05;color:#10183a}
+#pagePOS .cart-head-sub{margin-top:4px;font-size:10px;font-weight:800;color:#788499}
+#pagePOS .cart-mode-tag{margin-left:6px;padding:2px 7px;border-radius:999px;background:#fff7ed;color:#b45309;font-size:9px;font-weight:900;vertical-align:middle}
+#pagePOS .cart-head-actions{display:flex;align-items:center;gap:6px}
+#pagePOS .cart-menu-wrap{position:relative}
+#pagePOS .btn-close-x{
+  width:34px;height:34px;border:1px solid #e1e7ed;border-radius:8px;background:#f8fafc;color:#58647b;font-size:16px;
+}
+#pagePOS .btn-close-x:hover{background:#eef3f6;color:#1e293b}
+#pagePOS .cart-mobile-close{display:none}
+#pagePOS .cart-menu-dropdown{
+  position:absolute;top:40px;right:0;min-width:205px;z-index:300;background:#fff;border:1px solid var(--pos-ref-line);
+  border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.14);overflow:hidden;
+}
+#pagePOS .cart-menu-separator{height:1px;background:var(--pos-ref-line);margin:3px 0}
+#pagePOS .cart-menu-danger{color:#dc2626!important}
+#pagePOS #btnDescInfo{font-size:10px!important;background:#fff7ed!important;color:#9a5700!important;border-bottom:1px solid #fed7aa}
+#pagePOS .cart-items{flex:1;min-height:0;overflow-y:auto;padding:7px;background:#fff;overscroll-behavior:contain}
+#pagePOS .cart-empty{
+  min-height:180px;padding:50px 18px;display:grid;place-items:center;text-align:center;color:#94a3b8;
+  border:1px dashed #dce4eb;border-radius:9px;background:#fafcfd;
+}
+#pagePOS .cart-item{
+  margin:0 0 6px;padding:8px;display:grid;grid-template-columns:38px minmax(0,1fr) auto auto 28px;align-items:center;gap:7px;
+  border:1px solid var(--pos-ref-line);border-radius:8px;background:#fff;box-shadow:none;
+}
+#pagePOS .cart-item>div:first-child{
+  width:38px;height:38px;display:grid;place-items:center;border-radius:7px;background:#f4f7f9;overflow:hidden;
+}
+#pagePOS .cart-item>div:first-child img{width:100%!important;height:100%!important;border-radius:7px!important;object-fit:contain!important;background:#fff}
+#pagePOS .ci-info{min-width:0}
+#pagePOS .ci-name{font-size:11px;font-weight:800;color:#26324e;line-height:1.25}
+#pagePOS .ci-price{margin-top:3px;font-size:9px;font-weight:700;color:#7b879a}
+#pagePOS .ci-qty{gap:3px}
+#pagePOS .qty-btn{width:25px;height:25px;border:1px solid #dce3e9;border-radius:6px;background:#f8fafc;color:#475569;font-size:13px}
+#pagePOS .qty-btn:hover{background:#edf7f6;color:var(--pos-ref-teal-dark);border-color:#bfe4df}
+#pagePOS .qty-num{width:18px;font-size:11px;color:#26324e}
+#pagePOS .ci-sub{font-size:12px;font-weight:900;color:#1f2a44}
+#pagePOS .btn-rm{width:28px;height:28px;display:grid;place-items:center;border-radius:6px;color:#94a3b8;font-size:13px}
+#pagePOS .btn-rm:hover{background:#fef2f2;color:#dc2626}
+#pagePOS .cart-footer{flex:0 0 auto;border-top:1px solid var(--pos-ref-line);background:#fff}
+#pagePOS .cart-secondary-actions{
+  padding:8px 10px 0;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:#fff;
+}
+#pagePOS .cart-secondary-actions button{
+  min-height:36px;padding:6px 5px;border:1px solid #dbe3e9;border-radius:7px;background:#f8fafc;color:#526078;
+  font:800 9px/1.15 'Nunito',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;
+}
+#pagePOS .cart-secondary-actions button:hover{border-color:#b9ded9;background:#effaf8;color:var(--pos-ref-teal-dark)}
+#pagePOS .cart-totals{padding:10px 12px 8px}
+#pagePOS .cart-count-line{
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid #eef2f5;
+  color:#6c7890;font-size:9px;font-weight:800;
+}
+#pagePOS .total-row{margin-bottom:4px;font-size:11px;color:#64748b;font-weight:700}
+#pagePOS .total-main{
+  margin-top:8px;padding:8px 10px;border-top:0;border-radius:7px;background:var(--pos-ref-teal);color:#fff;
+  font-size:22px;font-weight:900;align-items:center;
+}
+#pagePOS .cart-actions{
+  padding:8px 10px 10px;display:grid;grid-template-columns:1fr 1.15fr;gap:7px;background:#fff;
+}
+#pagePOS .btn-cobro{
+  min-height:54px;padding:8px 10px;border-radius:8px;font-size:13px;font-weight:900;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+#pagePOS .btn-rapido{background:#f8fafc;color:#26324e;border:1px solid #dce3e9}
+#pagePOS .btn-pagar{background:var(--pos-ref-teal);color:#fff;border:1px solid var(--pos-ref-teal)}
+#pagePOS .btn-pagar:hover:not(:disabled){background:var(--pos-ref-teal-dark)}
+#pagePOS .btn-rapido:hover:not(:disabled){background:#edf6f5;border-color:#b9ded9}
+#pagePOS .pay-action-icon{font-size:17px}
+#pagePOS .btn-cancelar-cart{
+  grid-column:1/-1;min-height:32px;padding:5px 8px;border:0;border-radius:7px;background:transparent;color:#94a3b8;font-size:10px;font-weight:800;
+}
+#pagePOS .btn-cancelar-cart:hover{background:#fef2f2;color:#dc2626}
+
+/* Etapa 4 · tablet: catálogo principal + drawer */
+@media(max-width:979px){
+  #pagePOS .pos-commandbar{grid-template-columns:auto minmax(0,1fr) auto;gap:8px;padding:7px 9px}
+  #pagePOS .pos-module-copy{display:none}
+  #pagePOS .pos-module-mark{display:none}
+  #pagePOS .pos-module-identity{gap:0}
+  #pagePOS>.pos-body{display:flex}
+  #pagePOS .sidebar{width:88px;flex:0 0 88px;padding:7px 5px}
+  #pagePOS .cat-btn{min-height:50px;padding:7px 4px;flex-direction:column;justify-content:center;gap:4px;text-align:center;font-size:9px;border-left:0;border-bottom:2px solid transparent}
+  #pagePOS .cat-btn .ci{font-size:17px}
+  #pagePOS .cat-btn.active{border-left:0;border-bottom-color:var(--pos-ref-teal)}
+  #pagePOS .cat-btn:first-child.active{border-bottom-color:var(--pos-ref-orange)}
+  #pagePOS .products-area{grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:8px;padding:8px}
+  #pagePOS .cart-backdrop{display:block}
+  #pagePOS .cart-drawer{
+    position:absolute;top:0;right:-390px!important;bottom:0;width:min(390px,100%);height:auto;z-index:81;
+    border-left:1px solid var(--pos-ref-line);box-shadow:-10px 0 30px rgba(15,23,42,.14);
+    transition:right .22s cubic-bezier(.4,0,.2,1);
+  }
+  #pagePOS .cart-drawer.open{right:0!important}
+  #pagePOS .cart-mobile-close{display:grid}
+  #pagePOS .cart-fab{display:flex}
+}
+
+/* Teléfono */
+@media(max-width:700px){
+  #pagePOS .pos-commandbar{
+    min-height:58px;grid-template-columns:38px minmax(0,1fr) auto;padding:6px 7px;gap:6px;
+  }
+  #pagePOS .pos-menu-button{width:36px;height:36px}
+  #pagePOS .pos-search-box{height:40px;padding:0 9px}
+  #pagePOS .pos-search-icon{font-size:18px}
+  #pagePOS .scanner-indicator{padding:4px 5px}
+  #pagePOS .scanner-indicator .scanner-label{display:none}
+  #pagePOS .pos-toolbar-actions{gap:5px}
+  #pagePOS .free-sale-btn,#pagePOS .pos-majorista-btn{width:38px;min-width:38px;padding:0;justify-content:center}
+  #pagePOS .free-sale-btn span,#pagePOS .pos-majorista-btn span{display:none}
+  #pagePOS .cart-fab{width:38px;height:38px;border-radius:8px}
+  #pagePOS .sidebar{width:72px;flex-basis:72px;padding:6px 4px}
+  #pagePOS .cat-btn{min-height:48px;font-size:8.5px;padding:6px 2px}
+  #pagePOS .cat-btn .ci{font-size:16px}
+  #pagePOS .products-area{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:7px}
+  #pagePOS .product-card{min-height:154px;padding:8px 5px 9px}
+  #pagePOS .p-img{width:56px;height:56px;margin:20px 0 7px;font-size:28px}
+  #pagePOS .p-price-badge{top:6px;left:6px;padding:4px 6px;font-size:8px}
+  #pagePOS .p-stock-badge{font-size:8px}
+  #pagePOS .p-name{font-size:9.5px}
+  #pagePOS .cart-drawer{right:-100%!important;width:100%}
+  #pagePOS .cart-drawer.open{right:0!important}
+}
+
+/* Teléfonos muy estrechos */
+@media(max-width:360px){
+  #pagePOS .sidebar{width:66px;flex-basis:66px}
+  #pagePOS .products-area{gap:6px;padding:6px}
+  #pagePOS .product-card{min-height:148px}
+  #pagePOS .free-sale-btn{display:none}
+}
+
+/* Escritorio ancho: proporciones de la referencia */
+@media(min-width:1200px){
+  #pagePOS>.pos-body{grid-template-columns:220px minmax(0,1fr) 405px}
+  #pagePOS .products-area{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+}
+@media(min-width:1500px){
+  #pagePOS>.pos-body{grid-template-columns:230px minmax(0,1fr) 420px}
+  #pagePOS .products-area{grid-template-columns:repeat(auto-fill,minmax(165px,1fr))}
+}
+
+/* Dark mode coherente sin sacrificar contraste */
+body.dark #pagePOS,
+body.dark #pagePOS .pos-commandbar,
+body.dark #pagePOS .sidebar,
+body.dark #pagePOS .cart-drawer,
+body.dark #pagePOS .cart-head,
+body.dark #pagePOS .cart-items,
+body.dark #pagePOS .cart-footer,
+body.dark #pagePOS .cart-secondary-actions{background:var(--white)}
+body.dark #pagePOS .products-area{background:var(--bg)}
+body.dark #pagePOS .product-card,
+body.dark #pagePOS .cart-item{background:var(--white);border-color:var(--border)}
+body.dark #pagePOS .pos-module-copy strong,
+body.dark #pagePOS .cart-head-title,
+body.dark #pagePOS .ci-name,
+body.dark #pagePOS .ci-sub,
+body.dark #pagePOS .p-name{color:var(--dark)}
+body.dark #pagePOS .pos-search-box{background:#1e2d40;border-color:var(--border)}
+body.dark #pagePOS .pos-search-box input{color:var(--dark)}
