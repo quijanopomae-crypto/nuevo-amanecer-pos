@@ -92,6 +92,7 @@ const PRECACHE_URLS = [
   './js/modules/client-credit-accounts-v2.js',
   './js/compat/legacy-globals.js',
   './js/app.js',
+  './js/canon-pos-reference-ui.js',
   './js/catalog/reference-catalog-data.js',
   './js/catalog/reference-catalog.js',
   './js/ocr/ocr-extract.js',
