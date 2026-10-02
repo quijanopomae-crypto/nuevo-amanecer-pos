@@ -1,5 +1,8 @@
 
 // Seguridad: tarjetas y carrito del POS usan data-* y fuentes de imagen rasterizadas validadas.
+function _naSecProductVisibleInPos(product){
+  return !_naTracksStock(product)||_naNumber(product.stock)>0;
+}
 function _naSecProductCard(parent,product,allowNoStock){
   const box=modoMayorista&&product.precioCaja>0&&product.unidCaja>0,price=box?product.precioCaja:product.precio,label=box?`Caja x${product.unidCaja} · S/ ${_naNumber(price).toFixed(2)}`:`S/ ${_naNumber(price).toFixed(2)}`;
   const tracked=_naTracksStock(product),hasStock=!tracked||product.stock>0,available=hasStock||allowNoStock,stockTone=!tracked?'ok':product.stock<=0?'out':product.stock<=product.stockMin?'low':'ok';
@@ -21,7 +24,7 @@ function _naSecProductCard(parent,product,allowNoStock){
   _naSecAppend(card,'div','p-name',product.name||'Producto');
 }
 posRender=function(){
-  const search=sinTildes((document.getElementById('posSearch')?.value||'').toLowerCase()),rows=productos.filter(product=>(posCat==='todo'||product.cat===posCat)&&(sinTildes((product.name||'').toLowerCase()).includes(search)||sinTildes(product.descripcion||'').includes(search)||sinTildes((product.marca||'').toLowerCase()).includes(search)||(product.sku||'').toLowerCase().includes(search)||(product.barcode||'').includes(search)||_naProductAltCodes(product).some(code=>code.toLowerCase().includes(search))));
+  const search=sinTildes((document.getElementById('posSearch')?.value||'').toLowerCase()),rows=productos.filter(product=>_naSecProductVisibleInPos(product)&&(posCat==='todo'||product.cat===posCat)&&(sinTildes((product.name||'').toLowerCase()).includes(search)||sinTildes(product.descripcion||'').includes(search)||sinTildes((product.marca||'').toLowerCase()).includes(search)||(product.sku||'').toLowerCase().includes(search)||(product.barcode||'').includes(search)||_naProductAltCodes(product).some(code=>code.toLowerCase().includes(search))));
   const area=document.getElementById('posArea');
   if(!area)return;
   area.replaceChildren();
