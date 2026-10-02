@@ -1,0 +1,26 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-POS-PC-LAYOUT-CANON-READY-001",
+  "base_ref": "03fb82a61ff5f6762c8dabe4f62e68bebdd02596",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md","git_blob_sha":"f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md","git_blob_sha":"bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md","git_blob_sha":"d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-ui-edit": {"path": ".agents/skills/lab-ui-edit/SKILL.md","git_blob_sha":"cf8e82159fb7559a7453356435c792437e1bb097"}
+  },
+  "analysis": {
+    "READS": ["AGENTS.md","laboratorio/pos-lab/AGENTS.md","laboratorio/pos-lab/UI_MAP.yaml","laboratorio/pos-lab/sections/punto-venta.html","laboratorio/pos-lab/styles/pages/pos.css"],
+    "WRITES": ["laboratorio/pos-lab/sections/punto-venta.html","laboratorio/pos-lab/styles/pages/pos.css"],
+    "DOM_AFFECTED": ["pagePOS presentation classes only; existing functional IDs and onclick contracts preserved"],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": ["No sales, inventory, cash, credit, persistence, OUTBOX or sync logic changes.","Mobile behavior remains unchanged.","CANON POS/** remains untouched.","Existing functional IDs and event handlers remain intact."],
+    "CROSS_MODULE_IMPACT": ["Visual-only POS surface; no state producer/consumer changes."],
+    "RISKS": ["Desktop CSS could accidentally affect narrow screens.","Future CANON promotion could be harder if styles are not isolated."],
+    "ROLLBACK": ["Revert the two visual implementation files/commit; no data migration involved."],
+    "TESTS": ["Build LAB and build --check.","Scope guard for this task.","Review diff for POS/** absence.","Desktop responsive inspection at >=1024px and mobile regression inspection below 768px."]
+  }
+}
