@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON corrección de fidelidad visual contra referencia: cabecera unificada, proporciones desktop corregidas, 5 columnas en escritorio ancho y drawer real en teléfono incluso con 'Sitio de escritorio'.",
-  "retry_attempt": 70,
-  "retry_reason": "PR #402 merged at 589545e685c12db1f8b8fa50b5c4b5cc99fa8c19; CANON Critical CI 37072131281 PASS y E2E Smoke CI 37072131306 PASS.",
-  "requested_at_utc": "2026-10-02T22:24:00Z",
-  "target_head": "589545e685c12db1f8b8fa50b5c4b5cc99fa8c19"
+  "note": "Deploy CANON del PR #404: fidelidad visual final, categorías refinadas y Venta actual con Cantidad, Cambiar precio, Cliente y Limpiar funcionales.",
+  "retry_attempt": 71,
+  "retry_reason": "Owner autorizó merge y deploy. PR #404 merged at c675487d90a8a1d1d6a5bebc50904956712880c6; CANON Critical 37076644492 PASS y E2E Smoke 37076644547 PASS.",
+  "requested_at_utc": "2026-10-02T23:30:00Z",
+  "target_head": "c675487d90a8a1d1d6a5bebc50904956712880c6"
 }
