@@ -150,3 +150,9 @@ test('new cart actions use effective cart prices and stock-aware quantity handle
   assert.match(decorator, /root\.limpiarCarrito\(\)/);
   assert.doesNotMatch(decorator, /product\.precio\s*=/);
 });
+
+
+test('branding freeze keeps the original cart mark in the POS header', () => {
+  assert.match(decorator, /var mark = element\('div', 'pos-module-mark', '🛒'\);/);
+  assert.doesNotMatch(decorator, /mark\.replaceChildren\(lineIcon\(/);
+});
