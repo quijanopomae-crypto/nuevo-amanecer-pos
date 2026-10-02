@@ -37,33 +37,3 @@
   .lab-credit-installment-config>label,.lab-credit-installment-dates label{grid-template-columns:1fr}
   .lab-credit-installment-dates .fi{width:100%}
 }
-
-
-/* CANON POS visual refresh — reference 2026-10-02. Presentation only; no business logic. */
-#pagePOS{--pos-ref-teal:#08afa5;--pos-ref-teal-dark:#07988f;--pos-ref-orange:#ff6a00;--pos-ref-ink:#10183a;--pos-ref-line:#e3e9ef;--pos-ref-soft:#f7fafc;background:#fff;color:var(--pos-ref-ink)}
-#pagePOS>.pos-body{background:#fff}
-#pagePOS .pos-search-box{background:#fff;border:1px solid #dce4eb;border-radius:10px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
-#pagePOS .pos-search-box:focus-within{border-color:var(--pos-ref-teal);box-shadow:0 0 0 3px rgba(8,175,165,.10)}
-#pagePOS .sidebar{background:#fff;border-right:1px solid var(--pos-ref-line)}
-#pagePOS .cat-btn{min-height:42px;border-radius:0;color:#45516d;font-weight:700;border-left:3px solid transparent;transition:background .16s ease,color .16s ease,border-color .16s ease}
-#pagePOS .cat-btn:hover{background:#f7fbfb;color:var(--pos-ref-teal-dark)}
-#pagePOS .cat-btn.active{background:#ecfbf9;color:var(--pos-ref-teal-dark);border-left-color:var(--pos-ref-teal);box-shadow:none}
-#pagePOS .cat-btn:first-child.active{background:var(--pos-ref-orange);color:#fff;border-left-color:var(--pos-ref-orange);border-radius:9px;margin:7px;width:calc(100% - 14px)}
-#pagePOS .products-area{background:#fbfdfe;padding:7px;gap:6px;align-content:start}
-#pagePOS .product-card{background:#fff;border:1px solid var(--pos-ref-line);border-radius:7px;box-shadow:0 1px 3px rgba(15,23,42,.035);transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease}
-#pagePOS .product-card:hover{transform:translateY(-1px);border-color:#cddbe2;box-shadow:0 5px 14px rgba(15,23,42,.07)}
-#pagePOS .product-card:active{transform:scale(.985)}
-#pagePOS .p-name{color:#293552;font-weight:700}
-#pagePOS .p-price,#pagePOS .price-badge{background:var(--pos-ref-teal)!important;color:#fff!important;border-radius:7px!important;font-weight:900!important}
-#pagePOS .p-stock-badge{background:var(--pos-ref-orange)!important;color:#fff!important;border-radius:6px!important;border:0!important;font-weight:900!important}
-#pagePOS .cart-drawer{background:#fff;border-left:1px solid var(--pos-ref-line);box-shadow:-8px 0 24px rgba(15,23,42,.06)}
-#pagePOS .cart-head{background:#fff;border-bottom:1px solid var(--pos-ref-line);color:var(--pos-ref-ink)}
-#pagePOS .cart-head-title{font-size:19px;font-weight:900}
-#pagePOS .cart-item{border:1px solid var(--pos-ref-line);border-radius:8px;background:#fff;margin:5px 7px;box-shadow:none}
-#pagePOS .cart-total,#pagePOS .total-box,#pagePOS .cart-total-row{border-radius:8px}
-#pagePOS .pay-btn,#pagePOS .btn-pay,#pagePOS button[data-action="pay"]{background:var(--pos-ref-teal)!important;color:#fff!important;border-color:var(--pos-ref-teal)!important;box-shadow:none!important}
-#pagePOS .pay-btn:hover,#pagePOS .btn-pay:hover,#pagePOS button[data-action="pay"]:hover{background:var(--pos-ref-teal-dark)!important}
-#pagePOS .free-sale-btn{background:var(--pos-ref-orange);color:#fff;border-color:var(--pos-ref-orange);box-shadow:none}
-#pagePOS .cart-fab{background:var(--pos-ref-teal);color:#fff}
-@media(min-width:1000px){#pagePOS .products-area{grid-template-columns:repeat(5,minmax(132px,1fr))}#pagePOS .product-card{min-height:172px!important;padding:8px 6px}}
-@media(max-width:700px){#pagePOS .products-area{gap:8px;padding:9px}#pagePOS .product-card{border-radius:9px}#pagePOS .cat-btn:first-child.active{margin:4px;width:calc(100% - 8px)}}
