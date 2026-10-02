@@ -4,7 +4,7 @@ function _naSecProductVisibleInPos(product){
   return !_naTracksStock(product)||_naNumber(product.stock)>0;
 }
 function _naSecProductCard(parent,product,allowNoStock){
-  const box=modoMayorista&&product.precioCaja>0&&product.unidCaja>0,price=box?product.precioCaja:product.precio,label=box?`Caja x${product.unidCaja} · S/ ${_naNumber(price).toFixed(2)}`:`S/ ${_naNumber(price).toFixed(2)}`;
+  const box=modoMayorista&&product.precioCaja>0&&product.unidCaja>0,price=box?product.precioCaja:product.precio,label=box?`S/ ${_naNumber(price).toFixed(2)} x caja`:`S/ ${_naNumber(price).toFixed(2)} x und`;
   const tracked=_naTracksStock(product),hasStock=!tracked||product.stock>0,available=hasStock||allowNoStock,stockTone=!tracked?'ok':product.stock<=0?'out':product.stock<=product.stockMin?'low':'ok';
   const stockLabel=!tracked?'Sin control':product.stock<0?`Faltante: ${Math.abs(product.stock)}`:product.stock===0?(allowNoStock?'Sin stock · permitido':'Sin stock'):`Stock: ${product.stock}`;
   const card=_naSecAppend(parent,'div',`product-card${!hasStock?' no-stock':''}${!hasStock&&allowNoStock?' sale-allowed':''}${box?' box-mode':''}`);
@@ -74,8 +74,9 @@ function _naSecCartItem(parent,item){
 }
 posUpdateCart=function(){
   const parts=_naTaxBreakdownForSaleItems(cart,!!appConfig.igvActive),count=cart.reduce((sum,item)=>sum+_naNumber(item.qty),0),units=cart.reduce((sum,item)=>sum+_naUnitsSold(item),0),badge=document.getElementById('cartBadge');
+  const lines=cart.length,productText=lines===1?'1 producto':lines+' productos',unitText=units===1?'1 unidad':units+' unidades';
   if(badge){badge.style.display=count>0?'flex':'none';badge.textContent=String(count);badge.title=`${units} unidades físicas`;}
-  [['posSubtotal',fmt(parts.subtotal)],['posIgv',fmt(parts.totalIGV)],['posTotal',fmt(parts.totalVenta)]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=value;});
+  [['posCartSummary',productText],['posProductCount',productText],['posUnitCount',unitText],['posSubtotal',fmt(parts.subtotal)],['posIgv',fmt(parts.totalIGV)],['posTotal',fmt(parts.totalVenta)]].forEach(([id,value])=>{const element=document.getElementById(id);if(element)element.textContent=value;});
   const quick=document.getElementById('btnRapido'),pay=document.getElementById('btnPagar');
   if(quick)quick.disabled=!cart.length;
   if(pay)pay.disabled=!cart.length;
