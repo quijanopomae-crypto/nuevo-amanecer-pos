@@ -2,12 +2,230 @@
   "format": "nuevo-amanecer-v1.3-canon-debt-ui-repair-v1",
   "authorized": true,
   "authorized_by": "owner",
-  "requested_action": "verify-authoritative-debt-readmodel-and-refresh-hosted-canon-shell",
+  "requested_action": "repair-imported-credit-installments-and-refresh-hosted-canon-shell",
   "expected_total_cents": 2368495,
   "expected_positive_customers": 29,
   "source": "owner-confirmed CasaMarket screenshots reconciled in CANON",
-  "reason": "Backend alias fix deployed successfully in Turso run 36946763956. Re-verify raw read-model and canonical-ui-adapter projection both equal 29 positive customers / S/23,684.95, then refresh Hosted POS shell.",
-  "requested_at_utc": "2026-10-02T00:39:00Z",
-  "retry_attempt": 4,
-  "target_head": "65b332ea30eaeaa3dfb1fc17bc998186eb788e2d"
+  "reason": "Los saldos CANON ya coinciden con la fuente, pero los créditos importados auditados no tienen cronogramas estructurados y la UI cuenta 0 compras. Aplicar solo metadata/cuotas faltantes con backup previo, conservar todos los hechos financieros y refrescar el shell.",
+  "requested_at_utc": "2026-10-02T03:11:00Z",
+  "retry_attempt": 5,
+  "target_head": "270af16595b3640084c7b5c912cb6f0ca1007704",
+  "credit_installment_repair": {
+    "mode": "apply",
+    "provider": "turso",
+    "expected_total_cents": 2368495,
+    "expected_positive_customers": 29,
+    "requested_at_utc": "2026-10-02T03:11:00Z",
+    "targets": [
+      {
+        "alias": "A",
+        "name_hash": "4b954344e3d7bfdc8886f780fd6d73521740acf2b17ad0e9534d6a346a15848d",
+        "documents": [
+          {
+            "document_hash": "eac59331a9df1ed8ade1bd79d37cdbfcde572411f5c2cfedc76d6951ff83b60d",
+            "total_cents": 241250,
+            "paid_cents": 80415,
+            "current_cents": 160835,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-09-30",
+                "amount_cents": 16083
+              },
+              {
+                "number": 2,
+                "due_date": "2026-10-15",
+                "amount_cents": 16083
+              },
+              {
+                "number": 3,
+                "due_date": "2026-10-30",
+                "amount_cents": 16083
+              },
+              {
+                "number": 4,
+                "due_date": "2026-11-14",
+                "amount_cents": 16083
+              },
+              {
+                "number": 5,
+                "due_date": "2026-11-29",
+                "amount_cents": 16083
+              },
+              {
+                "number": 6,
+                "due_date": "2026-12-14",
+                "amount_cents": 16083
+              },
+              {
+                "number": 7,
+                "due_date": "2026-12-29",
+                "amount_cents": 16083
+              },
+              {
+                "number": 8,
+                "due_date": "2027-01-13",
+                "amount_cents": 16083
+              },
+              {
+                "number": 9,
+                "due_date": "2027-01-28",
+                "amount_cents": 16083
+              },
+              {
+                "number": 10,
+                "due_date": "2027-02-12",
+                "amount_cents": 16083
+              },
+              {
+                "number": 11,
+                "due_date": "2027-02-27",
+                "amount_cents": 16088
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "alias": "B",
+        "name_hash": "d1625bd6f9709dcbef7835c187fb274a59ec9dfb121d1e2fef278ed735daf2e2",
+        "documents": [
+          {
+            "document_hash": "965cffb5e764b27e2c26885646ee6c6281dcfb56169d346306dfafefbff042be",
+            "total_cents": 234000,
+            "paid_cents": 109500,
+            "current_cents": 124500,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-10-02",
+                "amount_cents": 19500
+              },
+              {
+                "number": 2,
+                "due_date": "2026-11-02",
+                "amount_cents": 19500
+              },
+              {
+                "number": 3,
+                "due_date": "2026-12-02",
+                "amount_cents": 19500
+              },
+              {
+                "number": 4,
+                "due_date": "2027-01-02",
+                "amount_cents": 19500
+              },
+              {
+                "number": 5,
+                "due_date": "2027-02-02",
+                "amount_cents": 19500
+              },
+              {
+                "number": 6,
+                "due_date": "2027-03-02",
+                "amount_cents": 19500
+              },
+              {
+                "number": 7,
+                "due_date": "2027-04-02",
+                "amount_cents": 19500
+              }
+            ]
+          },
+          {
+            "document_hash": "047939da073e815f88a08c7a0eda46fa6b9df03cdae97978a1e7693b2dde3511",
+            "total_cents": 600,
+            "paid_cents": 0,
+            "current_cents": 600,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-07-12",
+                "amount_cents": 600
+              }
+            ]
+          },
+          {
+            "document_hash": "9798835662b247511296dfd88e546086decf05978fce394e61621af251ee79da",
+            "total_cents": 200,
+            "paid_cents": 0,
+            "current_cents": 200,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-07-19",
+                "amount_cents": 200
+              }
+            ]
+          },
+          {
+            "document_hash": "a7cd07f2a66b1417b0c5c6836ca80edcd5912cbcb30e3736b2668a9ef913ec2b",
+            "total_cents": 1150,
+            "paid_cents": 0,
+            "current_cents": 1150,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-08-10",
+                "amount_cents": 1150
+              }
+            ]
+          },
+          {
+            "document_hash": "c1f5f43460b7822f03ce2505c3846255ee3dc70a1da3a82d1727ac7679991c74",
+            "total_cents": 100,
+            "paid_cents": 0,
+            "current_cents": 100,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-08-26",
+                "amount_cents": 100
+              }
+            ]
+          },
+          {
+            "document_hash": "142d52270e97d0697dd08484723fb410b2bdcc7f7ff71b55fa214000bdc8b691",
+            "total_cents": 600,
+            "paid_cents": 0,
+            "current_cents": 600,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-09-06",
+                "amount_cents": 600
+              }
+            ]
+          },
+          {
+            "document_hash": "837c421a2ff86fb13c6c50d60f4627db257a485f0e114ab16bbef1486fa5a4f9",
+            "total_cents": 800,
+            "paid_cents": 200,
+            "current_cents": 600,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-10-01",
+                "amount_cents": 800
+              }
+            ]
+          },
+          {
+            "document_hash": "320afdad9b004f80451e3ca8d408d40d10186215d5bcb577237d7a72e5672bde",
+            "total_cents": 500,
+            "paid_cents": 0,
+            "current_cents": 500,
+            "installments": [
+              {
+                "number": 1,
+                "due_date": "2026-10-11",
+                "amount_cents": 500
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }
