@@ -252,7 +252,7 @@
     var active = all.filter(function (cr) { return !labIsCanceled(cr); });
     var closed = all.filter(labIsCanceled);
     var pending = active.reduce(function (sum, cr) { return sum + labCreditPending(cr); }, 0);
-    var purchaseCount = all.filter(function (cr) { return !!cr.ventaId || cr.tipo === 'venta_credito'; }).length;
+    var purchaseCount = active.length;
     return {
       category:category, all:all, active:active, closed:closed,
       pending:Number(pending.toFixed(2)),
@@ -284,26 +284,41 @@
 
   function labInstallmentPlan(cr) {
     var raw = labInstallmentRawPlan(cr);
-    var amounts = labSplitInstallmentAmounts(Number(cr && cr.monto) || 0, raw.length);
-    var paidTotal = Math.min(Number(cr && cr.monto) || 0, Math.max(0, Number(cr && cr.pagado) || 0));
+    var originalAmount = Math.max(0, Number(cr && cr.monto) || 0);
+    var fallbackAmounts = labSplitInstallmentAmounts(originalAmount, raw.length);
+    var normalizedAmounts = raw.map(function (item, index) {
+      var amount = Number(item && item.amount);
+      if (!Number.isFinite(amount) || amount < 0) amount = fallbackAmounts[index];
+      return Number(amount.toFixed(2));
+    });
+    var scheduleTotal = normalizedAmounts.reduce(function (sum, amount) { return sum + amount; }, 0);
+    var paidTotal = Math.min(originalAmount, Math.max(0, Number(cr && cr.pagado) || 0));
+    var historicalBaseline = Math.max(0, Number((originalAmount - scheduleTotal).toFixed(2)));
+    var schedulePaid = Math.max(0, Math.min(scheduleTotal, Number((paidTotal - historicalBaseline).toFixed(2))));
     var payments = labEffectivePayments(cr), runningPayments = 0, paymentIndex = 0;
     var cumulativeDue = 0;
 
     return raw.map(function (item, index) {
-      var amount = Number(item && item.amount);
-      if (!Number.isFinite(amount) || amount < 0) amount = amounts[index];
+      var amount = normalizedAmounts[index];
+      var previousDue = cumulativeDue;
       cumulativeDue += amount;
-      while (paymentIndex < payments.length && runningPayments + 0.001 < cumulativeDue) {
+      var paidAmount = Math.max(0, Math.min(amount, Number((schedulePaid - previousDue).toFixed(2))));
+      var completionTarget = historicalBaseline + cumulativeDue;
+      while (paymentIndex < payments.length && runningPayments + 0.001 < completionTarget) {
         runningPayments += Math.max(0, Number(payments[paymentIndex].monto ?? payments[paymentIndex].montoPagado) || 0);
         paymentIndex += 1;
       }
-      var isPaid = paidTotal + 0.001 >= cumulativeDue;
+      var isPaid = paidAmount + 0.001 >= amount;
+      var isPartial = paidAmount > 0.001 && !isPaid;
       var completionPayment = isPaid && paymentIndex > 0 ? payments[paymentIndex - 1] : null;
       return {
         number:Number(item && item.number) || index + 1,
         due:String(item && item.due || item && item.fecha || cr && cr.vence || '').slice(0, 10),
         amount:Number(amount.toFixed(2)),
         paid:isPaid,
+        partial:isPartial,
+        paidAmount:Number(paidAmount.toFixed(2)),
+        remaining:Number(Math.max(0, amount - paidAmount).toFixed(2)),
         visualDerived:!!(item && item.visualDerived),
         paidAt:completionPayment ? (completionPayment.timestamp || ((completionPayment.fecha || '') + 'T' + (completionPayment.hora24 || completionPayment.hora || ''))) : null,
         paymentId:completionPayment ? (completionPayment.pagoId || completionPayment.id || null) : null
@@ -412,6 +427,7 @@
 
   function labInstallmentVisualState(item, nextPendingNumber, todayIso) {
     if (item && item.paid) return { key:'paid', label:'Pagada', next:false };
+    if (item && item.partial) return { key:'partial', label:'Parcial', next:true };
     var due = String(item && item.due || '').slice(0,10);
     var today = todayIso || labTodayIso();
     var isNext = Number(item && item.number) === Number(nextPendingNumber);
