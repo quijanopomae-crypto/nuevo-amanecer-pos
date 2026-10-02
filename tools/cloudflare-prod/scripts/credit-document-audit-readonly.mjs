@@ -20,6 +20,10 @@ function normalizeName(value) {
     .replace(/\s+/g, ' ');
 }
 
+function normalizeDocument(value) {
+  return String(value || '').trim().replace(/^NTV\s+/i, '').replace(/\s+/g, ' ');
+}
+
 function validHash(value) {
   return typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 }
@@ -165,7 +169,7 @@ function sanitizeCredit(row) {
   const current = Number(row.current_cents || 0);
   return {
     source: String(row.source || ''),
-    document_hash: row.document_number ? sha256(String(row.document_number).trim()) : null,
+    document_hash: row.document_number ? sha256(normalizeDocument(row.document_number)) : null,
     total_cents: total,
     paid_cents: total - current,
     current_cents: current,
