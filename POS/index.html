@@ -108,19 +108,28 @@
 <!-- POS -->
 <div class="page" id="pagePOS">
 
-  <!-- Barra superior: búsqueda + botones -->
-  <div style="background:linear-gradient(180deg,#ffffff 0%,#f8fbfd 100%);border-bottom:1px solid #dde7ef;padding:8px 12px;min-height:62px;display:flex;align-items:center;gap:10px;flex-shrink:0;box-shadow:0 8px 18px rgba(15,23,42,.03)">
+  <!-- CANON-POS-REFERENCE-UI-001 · barra de operación -->
+  <div class="pos-commandbar">
+    <div class="pos-module-identity" aria-label="Punto de Venta Nuevo Amanecer">
+      <button class="pos-menu-button" type="button" onclick="goMenu()" title="Volver al menú" aria-label="Volver al menú">☰</button>
+      <div class="pos-module-mark" aria-hidden="true">🛒</div>
+      <div class="pos-module-copy">
+        <strong>Nuevo Amanecer</strong>
+        <span>PUNTO DE VENTA</span>
+      </div>
+    </div>
     <div class="pos-search-box">
-      <span style="font-size:14px">🔍</span>
-      <input type="text" id="posSearch" placeholder="Buscar o escanear código..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <span class="pos-search-icon" aria-hidden="true">⌕</span>
+      <input type="text" id="posSearch" placeholder="Buscar productos o escanear código..." autocomplete="off" autocapitalize="off" spellcheck="false">
       <span id="scannerIndicator" class="scanner-indicator ready" role="status" aria-live="polite" title="Lectura automática de escáner HID activada"><span class="scanner-dot"></span><span class="scanner-label">Escáner listo</span></span>
     </div>
-    <button class="free-sale-btn" id="btnVentaLibre" type="button" onclick="abrirVentaLibre()" title="Venta libre / VARIOS (F2)">➕ <span class="free-sale-label">VARIOS</span></button>
-    <button class="cart-fab" onclick="toggleCart()">
-      🛒<span class="cart-fab-badge" id="cartBadge">0</span>
-    </button>
-    <button id="btnMayorista" onclick="toggleMayorista()"
-      style="background:linear-gradient(180deg,#ffffff 0%,#f8fbfd 100%);border:1.5px solid #dce5ed;border-radius:12px;padding:9px 12px;font-size:11px;font-weight:900;cursor:pointer;font-family:'Nunito',sans-serif;transition:all 0.2s;box-shadow:0 6px 16px rgba(15,23,42,.04)">🛍️ Mayor</button>
+    <div class="pos-toolbar-actions">
+      <button class="free-sale-btn" id="btnVentaLibre" type="button" onclick="abrirVentaLibre()" title="Venta libre / VARIOS (F2)">＋ <span class="free-sale-label">VARIOS</span></button>
+      <button id="btnMayorista" class="pos-majorista-btn" type="button" onclick="toggleMayorista()" title="Activar o desactivar mayorista">▣ <span>Mayor</span></button>
+      <button class="cart-fab" type="button" onclick="toggleCart()" title="Ver venta actual" aria-label="Ver venta actual">
+        🛒<span class="cart-fab-badge" id="cartBadge">0</span>
+      </button>
+    </div>
   </div>
 
   <div class="pos-body">
@@ -151,27 +160,25 @@
     <!-- Drawer carrito -->
     <aside class="cart-drawer" id="cartDrawer">
 
-      <!-- Cabecera del carrito -->
+      <!-- Cabecera de venta actual -->
       <div class="cart-head">
-        <div class="cart-head-title">🛒 Carrito actual <span id="modoMayoristaTag" style="display:none;background:var(--amber-light);color:#b45309;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px">MAYORISTA</span></div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <!-- Menú 3 puntos -->
-          <div style="position:relative">
-            <button class="btn-close-x" onclick="toggleCartMenu()" id="btnCartMenu" title="Opciones">⋮</button>
-            <div id="cartMenuDropdown"
-                 style="display:none;position:absolute;top:36px;right:0;
-                        background:var(--white);border:1px solid var(--border);
-                        border-radius:12px;min-width:190px;z-index:300;
-                        box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:hidden">
+        <div class="cart-head-copy">
+          <div class="cart-head-title">Venta actual <span id="modoMayoristaTag" class="cart-mode-tag" style="display:none">MAYORISTA</span></div>
+          <div class="cart-head-sub" id="posCartSummary">0 productos</div>
+        </div>
+        <div class="cart-head-actions">
+          <div class="cart-menu-wrap">
+            <button class="btn-close-x" onclick="toggleCartMenu()" id="btnCartMenu" title="Opciones" aria-label="Opciones de venta">⋮</button>
+            <div id="cartMenuDropdown" class="cart-menu-dropdown" style="display:none">
               <button onclick="abrirDescuento()"  class="cart-menu-item">💸 Aplicar descuento</button>
               <button onclick="guardarBorrador()" class="cart-menu-item">💾 Guardar borrador</button>
               <button onclick="cargarBorrador()"  class="cart-menu-item">📂 Cargar borrador</button>
               <button onclick="generarCatalogo()" class="cart-menu-item">📄 Generar catálogo</button>
-              <div style="height:1px;background:var(--border);margin:3px 0"></div>
-              <button onclick="limpiarCarrito()"  class="cart-menu-item" style="color:var(--red)">🧹 Limpiar carrito</button>
+              <div class="cart-menu-separator"></div>
+              <button onclick="limpiarCarrito()" class="cart-menu-item cart-menu-danger">🧹 Limpiar carrito</button>
             </div>
           </div>
-          <button class="btn-close-x" onclick="toggleCart()">✕</button>
+          <button class="btn-close-x cart-mobile-close" onclick="toggleCart()" title="Cerrar venta actual" aria-label="Cerrar venta actual">✕</button>
         </div>
       </div>
 
@@ -187,17 +194,23 @@
         <div class="cart-empty">El carrito está vacío</div>
       </div>
 
-      <!-- Pie del carrito -->
+      <!-- Pie de venta actual -->
       <div class="cart-footer">
+        <div class="cart-secondary-actions" aria-label="Acciones rápidas de venta">
+          <button type="button" onclick="abrirDescuento()">％ <span>Descuento</span></button>
+          <button type="button" onclick="toggleMayorista()">▣ <span>Mayorista</span></button>
+          <button type="button" onclick="abrirVentaLibre()">＋ <span>VARIOS</span></button>
+        </div>
         <div class="cart-totals">
+          <div class="cart-count-line"><span id="posProductCount">0 productos</span><span id="posUnitCount">0 unidades</span></div>
           <div class="total-row"><span>Subtotal</span><span id="posSubtotal">S/ 0.00</span></div>
           <div class="total-row"><span>IGV (18%)</span><span id="posIgv">S/ 0.00</span></div>
           <div class="total-main"><span>Total</span><span id="posTotal">S/ 0.00</span></div>
         </div>
         <div class="cart-actions">
-          <button class="btn-cobro btn-rapido" id="btnRapido" onclick="abrirCobro('rapido')" disabled>⚡ RÁPIDO</button>
-          <button class="btn-cobro btn-pagar"  id="btnPagar"  onclick="abrirCobro('normal')" disabled>💳 PAGAR</button>
-          <button class="btn-cancelar-cart" onclick="cancelarVenta()">🗑️ Cancelar venta</button>
+          <button class="btn-cobro btn-rapido" id="btnRapido" onclick="abrirCobro('rapido')" disabled><span class="pay-action-icon">⚡</span><span>Pago rápido</span></button>
+          <button class="btn-cobro btn-pagar" id="btnPagar" onclick="abrirCobro('normal')" disabled><span class="pay-action-icon">▰</span><span>Pagar</span></button>
+          <button class="btn-cancelar-cart" onclick="cancelarVenta()">🗑️ Limpiar venta</button>
         </div>
       </div>
 
