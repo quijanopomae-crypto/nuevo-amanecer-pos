@@ -6,6 +6,8 @@
   "expected_total_cents": 2368495,
   "expected_positive_customers": 29,
   "source": "owner-confirmed CasaMarket screenshots reconciled in CANON",
-  "reason": "CANON UI shows S/0 although Turso reconciliation finished PASS; verify the production credit read model first, then refresh the hosted shell without rewriting debt.",
-  "requested_at_utc": "2026-10-01T23:05:00Z"
+  "reason": "Deploy cache-authority fix fe370ed: invalidate pre-cutover CANON replica v1 and force coherent Turso remote snapshot to replace stale local balances; verify 29 positive-debt customers / S/ 23,684.95 before and after hosted deploy.",
+  "requested_at_utc": "2026-10-02T00:24:00Z",
+  "retry_attempt": 2,
+  "target_head": "fe370edacfa0c01bbef193b67d76ead724983ce4"
 }
