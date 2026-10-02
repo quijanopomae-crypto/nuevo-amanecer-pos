@@ -531,9 +531,9 @@ async function canonicalRead(url,db,json){
   } else if(sqlName==='credits'&&before.mode==='ACTIVE'){
     const reconciliationReady=await debtReconciliationSchemaAvailable(db);
     const importFields=TABLES.credits.map(column=>{
-      if(column==='current_balance_cents')return'b.current_balance_cents';
-      if(column==='opening_balance_cents')return reconciliationReady?'b.opening_balance_cents':'c.opening_balance_cents';
-      if(column==='original_amount_cents')return reconciliationReady?'c.original_amount_cents+b.baseline_delta_cents':'c.original_amount_cents';
+      if(column==='current_balance_cents')return'b.current_balance_cents AS current_balance_cents';
+      if(column==='opening_balance_cents')return reconciliationReady?'b.opening_balance_cents AS opening_balance_cents':'c.opening_balance_cents';
+      if(column==='original_amount_cents')return reconciliationReady?'c.original_amount_cents+b.baseline_delta_cents AS original_amount_cents':'c.original_amount_cents';
       return `c.${column}`;
     });
     const liveFields={
