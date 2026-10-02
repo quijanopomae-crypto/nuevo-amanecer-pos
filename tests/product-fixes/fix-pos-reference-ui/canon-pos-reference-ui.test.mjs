@@ -74,8 +74,8 @@ test('desktop uses categories + catalog + persistent current sale columns', () =
 });
 
 test('tablet and phone return the current sale to a real drawer', () => {
-  assert.match(css, /@media\(max-width:979px\)\{[\s\S]*#pagePOS>\.pos-body\{display:flex\}/);
-  assert.match(css, /@media\(max-width:979px\)\{[\s\S]*#pagePOS \.cart-drawer\{[\s\S]*position:absolute/);
+  assert.match(css, /@media\(max-width:1099px\)\{[\s\S]*#pagePOS>\.pos-body\{display:flex\}/);
+  assert.match(css, /@media\(max-width:1099px\)\{[\s\S]*#pagePOS \.cart-drawer\{[\s\S]*position:absolute/);
   assert.match(css, /#pagePOS \.cart-drawer\.open\{right:0!important\}/);
   assert.match(css, /@media\(max-width:700px\)\{[\s\S]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /@media\(max-width:700px\)\{[\s\S]*#pagePOS \.cart-drawer\{right:-100%!important;width:100%\}/);
@@ -101,7 +101,7 @@ test('fidelity pass hides duplicate global chrome and matches reference proporti
   assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /#pagePOS \.p-stock-badge\.ok,[\s\S]*background:var\(--pos-ref-orange\)!important/);
   assert.match(css, /#pagePOS \.cart-head-title\{font-size:25px/);
-  assert.match(css, /#pagePOS \.btn-cobro\{min-height:62px;font-size:16px/);
+  assert.match(css, /#pagePOS \.btn-cobro\{min-height:85px;font-size:20px/);
 });
 
 test('phone using Chrome desktop-site cannot be squeezed into the three-column desktop workbench', () => {
@@ -120,4 +120,33 @@ test('production toolbar mirrors the real canonical connection state instead of 
   assert.match(decorator, /state === 'connected' \? 'Online'/);
   assert.match(decorator, /MutationObserver\(sync\)/);
   assert.doesNotMatch(decorator, /setInterval\(/);
+});
+
+test('consolidated CSS has one rule per selector in each breakpoint scope', () => {
+  function check(source) {
+    const seen = new Set(); let cursor = 0;
+    while (cursor < source.length) {
+      const start = source.indexOf('{', cursor); if (start < 0) break;
+      const selector = source.slice(cursor, start).trim();
+      let depth = 1, end = start + 1;
+      for (; depth && end < source.length; end++) { if (source[end] === '{') depth++; if (source[end] === '}') depth--; }
+      assert.equal(depth, 0, 'balanced CSS blocks');
+      assert.ok(!seen.has(selector), 'duplicate selector: ' + selector); seen.add(selector);
+      if (selector.startsWith('@media')) check(source.slice(start + 1, end - 1));
+      cursor = end;
+    }
+  }
+  check(css.replace(/\/\*[\s\S]*?\*\//g, ''));
+  assert.doesNotMatch(css, /\.p-stock-badge[^{}]*body\./);
+});
+
+test('new cart actions use effective cart prices and stock-aware quantity handler', () => {
+  assert.match(decorator, /root\.posQty\(current\._lineKey, value - Number\(current\.qty\)\)/);
+  assert.match(decorator, /current\.precio = value/);
+  assert.match(decorator, /appConfig\.margenActive && value < cost/);
+  assert.match(decorator, /root\._naSaleUiLocked\(\)/);
+  assert.match(decorator, /root\._naOpenClientPicker\('mVentaCliente'\)/);
+  assert.match(decorator, /select\.value = customerId/);
+  assert.match(decorator, /root\.limpiarCarrito\(\)/);
+  assert.doesNotMatch(decorator, /product\.precio\s*=/);
 });
