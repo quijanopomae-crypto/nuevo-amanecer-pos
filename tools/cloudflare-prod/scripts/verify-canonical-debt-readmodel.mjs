@@ -42,9 +42,11 @@ try{
   sessionId=String(session.session_id||'');
   const status=await json(ENDPOINT+'/read/canonical/status',{headers});
   if(status.authority!=='canonical'||status.mode!=='ACTIVE')throw new Error('canonical status invalid');
-  const [customers,credits]=await Promise.all([
+  const [customers,credits,payments,creditAccounts]=await Promise.all([
     readAll('customers',headers,status),
-    readAll('credits',headers,status)
+    readAll('credits',headers,status),
+    readAll('credit-payments',headers,status),
+    readAll('credit-accounts',headers,status)
   ]);
   const byCustomer=new Map();
   for(const credit of credits){
@@ -58,6 +60,42 @@ try{
   const positive=[...byCustomer.values()].filter(v=>v>0).length;
   if(total!==EXPECTED_TOTAL)throw new Error('canonical credit read total mismatch: '+total);
   if(positive!==EXPECTED_POSITIVE_CUSTOMERS)throw new Error('canonical positive-customer count mismatch: '+positive);
+
+  await import('../../../POS/js/adapters/canonical-ui-adapter.js');
+  const adapter=globalThis.NuevoAmanecerCanonicalUIAdapter;
+  if(!adapter||typeof adapter.snapshot!=='function')throw new Error('canonical UI adapter unavailable');
+  const projected=adapter.snapshot({
+    authority:'canonical',
+    promotion_id:status.promotion_id,
+    authority_epoch:Number(status.authority_epoch),
+    revision:Number(status.revision),
+    financial_revision:Number(status.financial_revision),
+    mode:'ACTIVE',
+    read_only:false,
+    products:[],
+    customers,
+    credits,
+    payments,
+    creditAccounts,
+    sales:[],
+    saleItems:[],
+    inventoryMovements:[],
+    cashMovements:[],
+    cashSessions:[],
+    financialEvents:[],
+    expenses:[]
+  });
+  const projectedByCustomer=new Map();
+  for(const credit of projected.credits){
+    const debt=Math.max(0,Math.round((Number(credit.monto||0)-Number(credit.pagado||0))*100));
+    const id=String(credit.cliId??credit.clienteId??'');
+    if(!id)throw new Error('projected credit customer missing');
+    projectedByCustomer.set(id,(projectedByCustomer.get(id)||0)+debt);
+  }
+  const projectedTotal=[...projectedByCustomer.values()].reduce((a,b)=>a+b,0);
+  const projectedPositive=[...projectedByCustomer.values()].filter(v=>v>0).length;
+  if(projectedTotal!==EXPECTED_TOTAL)throw new Error('canonical UI projected debt total mismatch: '+projectedTotal);
+  if(projectedPositive!==EXPECTED_POSITIVE_CUSTOMERS)throw new Error('canonical UI projected positive-customer count mismatch: '+projectedPositive);
   console.log(JSON.stringify({
     state:'CANON_DEBT_READMODEL_PASS',
     endpoint:ENDPOINT,
@@ -65,6 +103,8 @@ try{
     credits:credits.length,
     positive_customers:positive,
     total_cents:total,
+    projected_total_cents:projectedTotal,
+    projected_positive_customers:projectedPositive,
     financial_revision:Number(status.financial_revision)
   }));
 }finally{
