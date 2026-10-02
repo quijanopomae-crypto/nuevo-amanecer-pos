@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const migration=readFileSync('infra/database/migrations/0019_canonical_debt_reconciliation.sql','utf8');
 const canonical=readFileSync('tools/cloudflare-lab/src/a6-canonical.js','utf8');
 const apply=readFileSync('tools/cloudflare-prod/scripts/debt-reconcile-apply.mjs','utf8');
+const canonicalRead=readFileSync('tools/cloudflare-lab/src/a6-canonical.js','utf8');
 const ownerValidation=readFileSync('tools/cloudflare-prod/scripts/owner-validation-readonly.mjs','utf8');
 const tursoMaintenance=readFileSync('tools/cloudflare-prod/scripts/turso-debt-reconcile-maintenance.mjs','utf8');
 const tursoWorkflow=readFileSync('.github/workflows/v1.3-turso-prod-debt-reconcile.yml','utf8');
@@ -68,4 +69,11 @@ test('production reconciliation can target the authoritative Turso backend witho
   assert.match(tursoWorkflow,/TURSO_DEBT_RECONCILE_FINAL=PASS/);
   assert.doesNotMatch(tursoWorkflow,/wrangler d1 execute/);
   assert.doesNotMatch(tursoWorkflow,/\/d1\/database\//);
+});
+
+
+test('canonical credit read-model keeps stable aliases after reconciliation arithmetic',()=>{
+  assert.match(canonicalRead,/b\.current_balance_cents AS current_balance_cents/);
+  assert.match(canonicalRead,/b\.opening_balance_cents AS opening_balance_cents/);
+  assert.match(canonicalRead,/c\.original_amount_cents\+b\.baseline_delta_cents AS original_amount_cents/);
 });
