@@ -6,6 +6,7 @@ on:
       - feature/v1.3-mobile-cloud
     paths:
       - "ops/v1.3-canon-red-diagnostic-trigger.json"
+      - "ops/v1.3-turso-credit-document-audit-trigger.json"
 
 permissions:
   contents: read
