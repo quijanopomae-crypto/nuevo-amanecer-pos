@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-PRODUCT-CREATE-UI-LOCK-001",
+  "environment": "CANON",
+  "base_ref": "6a5ba9cd5fdad1205e12ee41a2e7141e80a2f8e7",
+  "objective": "Permitir abrir y guardar el alta canónica de productos en Inventario cuando CANON está activo, sin desactivar los bloqueos explícitos de seguridad ni habilitar persistencia legacy.",
+  "owner_authorization": "El owner reportó en CANON 'Módulo de productos bloqueado' al tocar + Nuevo y pidió corregir el error.",
+  "allowed_files": [
+    "tasks/CANON-PRODUCT-CREATE-UI-LOCK-001.json",
+    "POS/js/legacy-inline/inline-02.js",
+    "POS/js/legacy-inline/inline-03.js",
+    "tests/cloud-sync/canonical-config-persistence.test.mjs",
+    "tests/cloud-sync/canonical-live-products.test.mjs"
+  ],
+  "forbidden_files": [
+    "infra/database/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "laboratorio/**",
+    "secrets/**"
+  ],
+  "reads": [
+    "isModuleLocked CANON blanket lock",
+    "abrirModalProd winner",
+    "guardarProd F10 canonical bridge",
+    "canonical-product-bridge"
+  ],
+  "writes": [
+    "excepción UI estricta canonicalProductUi para alta de producto"
+  ],
+  "dom_affected": [
+    "#mProd solo puede abrirse por el flujo existente"
+  ],
+  "state_affected": [
+    "ninguno fuera del estado existente del modal"
+  ],
+  "storage_affected": [
+    "ninguno"
+  ],
+  "invariants": [
+    "isModuleLocked('productos') sigue bloqueado por defecto en CANON.",
+    "La excepción solo aplica con {canonicalProductUi:true}.",
+    "securityIsLocked, master lock, readOnly y na_lock_productos siguen bloqueando.",
+    "Guardar producto CANON continúa pasando por NuevoAmanecerCanonicalProductBridge.",
+    "saveAllData legacy continúa bloqueado en CANON.",
+    "No se habilita edición CANON de productos existentes."
+  ],
+  "acceptance_criteria": [
+    "Con CANON activo y sin bloqueos explícitos, + Nuevo abre el modal.",
+    "Con na_lock_productos/master/readOnly/session lock activos, + Nuevo sigue bloqueado.",
+    "El guardado usa product.create canónico y no persistencia legacy.",
+    "CANON Critical CI y E2E Smoke pasan."
+  ],
+  "rollback": "Revertir los cambios de inline-02/03 y tests; no hay migraciones ni cambios de datos.",
+  "deploy_authorized": true
+}

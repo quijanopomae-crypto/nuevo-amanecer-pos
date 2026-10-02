@@ -43,10 +43,15 @@ test('CANON no longer treats configuration as a commercial legacy module', () =>
 
   assert.equal(context.isModuleLocked('configuracion'), false);
   assert.equal(context.isModuleLocked('productos'), true);
+  assert.equal(context.isModuleLocked('productos', { canonicalProductUi: true }), false);
   assert.equal(context.isModuleLocked('clientes'), true);
   assert.equal(context.isModuleLocked('clientes', { canonicalCustomerUi: true }), false);
   assert.equal(context.isModuleLocked('ventas'), true);
   assert.equal(context.isModuleLocked('ventas', { canonicalSaleCapture: true }), false);
+
+  values.set('na_lock_productos', 'true');
+  assert.equal(context.isModuleLocked('productos', { canonicalProductUi: true }), true, 'explicit product lock must still win');
+  values.set('na_lock_productos', 'false');
 
   values.set('na_lock_clientes', 'true');
   assert.equal(context.isModuleLocked('clientes', { canonicalCustomerUi: true }), true, 'explicit client lock must still win');
@@ -57,6 +62,7 @@ test('CANON no longer treats configuration as a commercial legacy module', () =>
   values.set('na_lock_configuracion', 'false');
   values.set('na_master_lock', 'true');
   assert.equal(context.isModuleLocked('configuracion'), true, 'master lock must still win');
+  assert.equal(context.isModuleLocked('productos', { canonicalProductUi: true }), true, 'master lock must still block canonical product UI');
 });
 
 test('CANON saveAppState uses verified local configuration storage while saveAllData stays fenced', () => {
