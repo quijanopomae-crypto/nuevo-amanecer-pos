@@ -94,7 +94,7 @@ test('CANON-only style selectors remain bounded to pagePOS or dark-mode pagePOS 
 
 
 test('fidelity pass hides duplicate global chrome and matches reference proportions on real desktop', () => {
-  assert.match(css, /body\.na-pos-reference-active>\.g-topbar\{display:none!important\}/);
+  assert.match(css, /body\.na-pos-reference-active>\.g-topbar\{[\s\S]*position:absolute!important[\s\S]*width:0[\s\S]*height:0/);\n  assert.match(css, /body\.na-pos-reference-active #backBtn\{[\s\S]*display:flex!important/);\n  assert.match(css, /body\.na-pos-reference-active #pagePOS \.pos-menu-button\{visibility:hidden!important/);
   assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:218px minmax\(0,1fr\) 440px/);
   assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /#pagePOS \.p-stock-badge\.ok,[\s\S]*background:var\(--pos-ref-orange\)!important/);
