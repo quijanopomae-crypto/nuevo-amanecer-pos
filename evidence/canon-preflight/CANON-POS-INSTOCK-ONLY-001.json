@@ -1,0 +1,85 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-POS-INSTOCK-ONLY-001",
+  "base_ref": "11aa099b66a60969c53c17e638dfd18de926fc04",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "candidate": {
+    "status": "CANDIDATO_A_CANON",
+    "basis": "El mismo comportamiento fue implementado y validado en POS-LAB mediante PR #386; LAB Canon Mirror CI run 36949184633 PASS y POS LAB Mobile run 36949184631 PASS. El owner pidió ahora aplicarlo en CANON."
+  },
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "canon-promotion": {
+      "path": ".agents/skills/canon-promotion/SKILL.md",
+      "git_blob_sha": "0a4116ce7f3f05807dce351995e3330482152361"
+    }
+  },
+  "observed": [
+    "POS/js/legacy-inline/inline-14.js construye rows desde todos los productos que coinciden con categoría/búsqueda y luego renderiza también stock 0 o negativo.",
+    "_naSecProductCard ya distingue stock positivo, cero y negativo, por lo que la causa de la visibilidad es el conjunto rows, no Inventario ni persistencia.",
+    "El candidato LAB validado ocultó stock controlado <= 0 sin mutar productos ni storage."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Aplicar el parche funcional mínimo directamente al render CANON del Punto de Venta para excluir stock controlado <= 0.",
+    "ROOT_CAUSE": [
+      "posRender no filtra por disponibilidad de stock antes de construir las tarjetas."
+    ],
+    "READS": [
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      "README.md",
+      "docs/V1.3_STATUS.md",
+      "docs/LABORATORIO_A_CANON.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "POS/js/legacy-inline/inline-14.js",
+      "candidato LAB PR #386"
+    ],
+    "WRITES": [
+      "Añadir un predicado local de visibilidad de stock en POS/js/legacy-inline/inline-14.js.",
+      "Aplicar ese predicado al filtro de rows de posRender.",
+      "Añadir una prueba de regresión focalizada."
+    ],
+    "DOM_AFFECTED": [
+      "#posArea: las tarjetas de productos con stock controlado 0 o negativo dejan de insertarse."
+    ],
+    "STATE_AFFECTED": [
+      "Solo la proyección visual del catálogo POS; el array productos permanece intacto."
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno."
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Inventario no cambia.",
+      "No se mutan cantidades ni productos.",
+      "Ventas, caja, créditos, OUTBOX y sincronización permanecen sin cambios.",
+      "Productos sin control de stock siguen visibles."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Inventario conserva todos los productos.",
+      "El carrito y venta solo reciben productos visibles seleccionados; no se altera su lógica interna.",
+      "No hay cambio backend ni de base de datos."
+    ],
+    "RISKS": [
+      "Ocultar stock cero/negativo elimina el acceso por tarjeta al camino de venta registrada sin stock; esto coincide con la solicitud explícita de mostrar solo productos disponibles.",
+      "Un cambio futuro en _naTracksStock debe conservar el contrato de productos sin control."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR y redeploy del Hosted POS anterior si ya fue publicado."
+    ],
+    "TEST_PLAN": [
+      "Prueba focalizada para stock positivo, cero, negativo y sin control.",
+      "Verificar que posRender usa el predicado sin mutar productos.",
+      "CANON Critical CI.",
+      "Hosted POS Web Deploy tras merge."
+    ]
+  }
+}

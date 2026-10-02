@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-POS-INSTOCK-ONLY-001",
+  "environment": "CANON",
+  "base_ref": "11aa099b66a60969c53c17e638dfd18de926fc04",
+  "objective": "En CANON, mostrar en la cuadrícula del Punto de Venta únicamente productos con stock disponible; ocultar productos con stock controlado igual o menor que cero sin modificar inventario, persistencia ni reglas de venta fuera de la visibilidad del catálogo.",
+  "owner_authorization": "El owner corrigió explícitamente el alcance: 'En canon no en laboratorio', autorizando promover este candidato concreto a CANON.",
+  "candidate_source": {
+    "lab_task": "LAB-POS-INSTOCK-ONLY-001",
+    "lab_pr": 386,
+    "lab_merge_commit": "11aa099b66a60969c53c17e638dfd18de926fc04",
+    "lab_ci_run": 36949184633,
+    "lab_pages_run": 36949184631,
+    "status": "CANDIDATO_A_CANON"
+  },
+  "allowed_files": [
+    "tasks/CANON-POS-INSTOCK-ONLY-001.json",
+    "evidence/canon-preflight/CANON-POS-INSTOCK-ONLY-001.json",
+    "POS/js/legacy-inline/inline-14.js",
+    "tests/product-fixes/canon-pos-instock-only.test.mjs"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "D1/**",
+    "R2/**",
+    "POS/js/sync/**",
+    "POS/js/modules/**",
+    "POS/js/navigation/**",
+    "POS/js/motion/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "No se modifica la cantidad de stock ni el modelo de inventario.",
+    "Inventario conserva visibilidad y gestión de todos los productos, incluidos stock cero o negativo.",
+    "Productos con stock controlado mayor que cero continúan visibles en Punto de Venta.",
+    "Productos sin control de stock continúan visibles como antes.",
+    "Carrito, totales, pagos, caja, créditos, persistencia, OUTBOX y sincronización no cambian.",
+    "No se copian archivos LAB completos a CANON."
+  ],
+  "rollback": "Revertir el PR; no hay migraciones, datos, backend ni cambios de schema.",
+  "test_plan": [
+    "node --test tests/product-fixes/canon-pos-instock-only.test.mjs",
+    "CANON Critical CI",
+    "Hosted POS Web Deploy solo después de merge autorizado"
+  ]
+}
