@@ -10,6 +10,7 @@
   var COMMANDS = ['sale.create', 'product.create', 'customer.create', 'customer.credit-policy.set', 'inventory.adjust', 'credit-account.create', 'payment.create', 'payment.batch', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var READ_TIMEOUT_MS = 8000;
+  var REPLICA_SCHEMA_VERSION = 2;
   var HOSTED_API_ORIGIN = null;
   try {
     var hostedConfig = root.NA_HOSTED_CONFIG;
@@ -132,7 +133,7 @@
     function hasSecretKey(value) { if (!value || typeof value !== 'object') return false; return Object.keys(value).some(function (key) {
       return /(?:token|secret|password|api.?key|credential)/i.test(key) || hasSecretKey(value[key]); }); }
     function rowsValid(rows) { return Array.isArray(rows) && rows.every(function (row) { return !!row && typeof row === 'object' && !Array.isArray(row); }); }
-    return !!(replica && replica.schema_version === 1 && typeof replica.promotion_id === 'string' && replica.promotion_id &&
+    return !!(replica && replica.schema_version === REPLICA_SCHEMA_VERSION && typeof replica.promotion_id === 'string' && replica.promotion_id &&
       Number.isSafeInteger(replica.authority_epoch) && replica.authority_epoch >= 0 && Number.isSafeInteger(replica.revision) && replica.revision >= 0 &&
       typeof replica.cached_at === 'string' && Number.isFinite(Date.parse(replica.cached_at)) && ['CANONICAL_READ_ONLY','ACTIVE'].includes(replica.mode) && typeof replica.read_only === 'boolean' &&
       (replica.financial_revision == null || uint(replica.financial_revision)) && ['products','customers','credits','credit_payments'].every(function (key) { return Array.isArray(replica[key]); }) &&
@@ -147,7 +148,7 @@
       rowsValid(replica.cash_sessions || []) && rowsValid(replica.financial_events || []) && rowsValid(replica.expenses || []) &&
       !hasSecretKey(replica));
   }
-  function replicaOf(value) { return { schema_version: 1, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
+  function replicaOf(value) { return { schema_version: REPLICA_SCHEMA_VERSION, cached_at: new Date().toISOString(), promotion_id: value.promotion_id, authority_epoch: value.authority_epoch,
     revision: value.revision, financial_revision: value.financial_revision == null ? null : value.financial_revision,
     canonical_digest: value.canonical_digest || null,
     digests: copy(value.digests || {}),
@@ -159,7 +160,11 @@
     if (cache.authority_epoch !== remote.authority_epoch) return cache.authority_epoch > remote.authority_epoch;
     if (cache.promotion_id !== remote.promotion_id) return false;
     if (cache.revision !== remote.revision) return cache.revision > remote.revision;
-    return (cache.financial_revision || 0) > (remote.financial_revision || 0);
+    // Once the configured CANON authority has returned a complete, internally
+    // consistent snapshot for the same epoch/revision, it wins over a local
+    // financial revision. This prevents a cache captured from a previous
+    // backend provider from pinning the UI to stale balances after cutover.
+    return false;
   }
   async function localReplica() {
     if (typeof root._naReadCanonicalReplica !== 'function') return null;
