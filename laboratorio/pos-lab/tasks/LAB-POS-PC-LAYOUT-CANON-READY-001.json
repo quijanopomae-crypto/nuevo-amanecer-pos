@@ -1,0 +1,21 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-POS-PC-LAYOUT-CANON-READY-001",
+  "environment": "LABORATORIO",
+  "base_ref": "03fb82a61ff5f6762c8dabe4f62e68bebdd02596",
+  "objective": "Optimizar exclusivamente la interfaz de Punto de Venta en escritorio dentro de POS-LAB, conservando DOM funcional y lógica comercial, sin alterar la experiencia móvil y dejando el cambio aislado para una futura promoción mínima a CANON.",
+  "allowed_files": [
+    "laboratorio/pos-lab/sections/punto-venta.html",
+    "laboratorio/pos-lab/styles/pages/pos.css",
+    "laboratorio/pos-lab/tasks/LAB-POS-PC-LAYOUT-CANON-READY-001.json",
+    "laboratorio/pos-lab/preflight/LAB-POS-PC-LAYOUT-CANON-READY-001.json"
+  ],
+  "forbidden_files": ["POS/**","tools/cloudflare-lab/**","evidence/**","infra/**",".github/**","laboratorio/pos-lab/index.html","laboratorio/pos-lab/index.template.html","laboratorio/pos-lab/js/**","laboratorio/pos-lab/animations/**"],
+  "required_skills": ["impact-analysis","cross-module-impact","lab-scope-guard","lab-ui-edit"],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-POS-PC-LAYOUT-CANON-READY-001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false
+}
