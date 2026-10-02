@@ -52,7 +52,8 @@ Ejecutar pruebas focalizadas + CANON Critical CI + E2E Smoke. Solo después fusi
 - `POS/index.html`
 - `POS/css/experience-v2/pages/pos.css` (solo restauración de paridad LAB→CANON)
 - `POS/css/canon-pos-reference-ui.css`
-- `POS/js/legacy-inline/inline-14.js`
+- `POS/js/legacy-inline/inline-14.js` (solo restauración del core compartido)
+- `POS/js/canon-pos-reference-ui.js`
 - `POS/sw.js`
 - `tests/product-fixes/fix-pos-reference-ui/canon-pos-reference-ui.test.mjs`
 
@@ -69,7 +70,7 @@ Ejecutar pruebas focalizadas + CANON Critical CI + E2E Smoke. Solo después fusi
 ## Invariantes
 - Los IDs `posSearch`, `posArea`, `posSidebar`, `cartDrawer`, `cartItems`, `posSubtotal`, `posIgv`, `posTotal`, `btnRapido`, `btnPagar` y `cartBadge` permanecen.
 - `posRender()`, `posUpdateCart()`, `posAdd()`, `posQty()`, `posRm()`, `abrirCobro()`, `toggleMayorista()` y `abrirVentaLibre()` mantienen semántica comercial.
-- El cambio es visual/DOM presentacional salvo el conteo de ítems del carrito.
+- El cambio es visual/DOM presentacional. La decoración exclusiva de producción vive en `POS/js/canon-pos-reference-ui.js`; el core compartido LAB/CANON permanece sin cambios.
 - El CANON local-first y su outbox no se modifican.
 
 ## Riesgos
