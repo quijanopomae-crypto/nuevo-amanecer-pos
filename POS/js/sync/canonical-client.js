@@ -958,14 +958,16 @@
     } else {
       if (result.session_id !== payload.session_id ||
           result.session_revision !== payload.expected_session_revision + 1 ||
-          result.expected_cents !== Number(session && session.expected_cents) + payload.amount_cents ||
           result.event_id !== payload.operation_id || result.cash_delta_cents !== payload.amount_cents) return false;
       if (!session || session.status !== 'OPEN') return false;
       var eventExists = data.financialEvents.some(function (item) {
         return item && String(item.operation_id) === String(payload.operation_id);
       });
-      if (!eventExists) {
-        if (Number(session.revision) !== payload.expected_session_revision) return false;
+      if (eventExists) {
+        if (Number(session.revision) !== result.session_revision || Number(session.expected_cents) !== result.expected_cents) return false;
+      } else {
+        if (Number(session.revision) !== payload.expected_session_revision ||
+            result.expected_cents !== Number(session.expected_cents) + payload.amount_cents) return false;
         data.financialEvents.push({
           event_id: result.event_id,
           operation_id: payload.operation_id,
