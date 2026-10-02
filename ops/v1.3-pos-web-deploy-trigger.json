@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON del fix de alta de clientes: permitir abrir + Cliente cuando el bridge canónico está activo, conservando bloqueo maestro, solo lectura y protección explícita del módulo.",
-  "retry_attempt": 63,
-  "retry_reason": "PR #350 merged at 0250070dacbfb945b6e57e7f34cfa292c57d2d2e; CANON Critical CI #460 y E2E Smoke CI #141 PASS. Publicar únicamente este hotfix CANON solicitado por el owner.",
-  "requested_at_utc": "2026-10-01T20:37:48Z",
-  "target_head": "0250070dacbfb945b6e57e7f34cfa292c57d2d2e"
+  "note": "Deploy CANON del ajuste UX en Línea manual asignada: si el valor inicial es 0, al enfocar el campo se limpia para escribir directamente.",
+  "retry_attempt": 64,
+  "retry_reason": "PR #384 merged at 0bc6a0295eedef24fbf56eb5b0cc1eb514ebcb6b; CANON Critical CI #498 PASS y E2E Smoke CI #143 PASS. Publicar únicamente este ajuste de interfaz solicitado por el owner.",
+  "requested_at_utc": "2026-10-02T00:56:00Z",
+  "target_head": "0bc6a0295eedef24fbf56eb5b0cc1eb514ebcb6b"
 }
