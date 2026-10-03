@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync('laboratorio/pos-lab/lab-overrides.js', 'utf8');
+const canonModule = readFileSync('POS/js/modules/client-credit-accounts-v2.js', 'utf8');
 function context(){
   const document={documentElement:{classList:{remove(){}},removeAttribute(){}},body:{appendChild(){}},getElementById(){return null;},querySelector(){return null;},querySelectorAll(){return[];},createElement(){return{className:'',hidden:true,innerHTML:'',dataset:{},appendChild(){},querySelector(){return null;}};}};
   const c={console:{info(){},warn(){},error(){}},setTimeout(fn){if(typeof fn==='function')fn();return 1;},clearTimeout(){},requestAnimationFrame(fn){if(typeof fn==='function')fn();return 1;},document,MutationObserver:undefined,clientes:[],creditos:[],diasHasta(){return 10;},_naSyncCreditStatus(cr){return cr.status||'vigente';},_naCreditOutstanding(cr){return Math.max(0,Number(cr.monto||0)-Number(cr.pagado||0));},_naEvaluateClientCredit(){return{exists:true,enabled:true,eligible:true,automaticLine:1000,assignedLine:1000,available:1000,manualActive:false,history:{debt:0,total:0,punctual:0,late:0,completed:0,partial:0,overdueActive:0,behavior:'sin_historial'}};},fmt(v){return'S/ '+Number(v).toFixed(2);},_naEsc(v){return String(v);},saveAllData(){throw Error('visual ordering must not persist');},_naWasPersisted(){return true;}};
@@ -20,6 +21,9 @@ test('latest credit sale renders first; same-day timestamp is descending; source
 });
 
 test('batch payment keeps oldest-first FIFO independent from visual ordering',()=>{
-  const block=source.slice(source.indexOf('function labBatchAllocationPlan'),source.indexOf('function labBatchRow'));
+  const start=canonModule.indexOf('function labBatchAllocationPlan');
+  const end=canonModule.indexOf('function labBatchRow',start);
+  assert.ok(start>=0&&end>start,'batch allocation implementation must remain present');
+  const block=canonModule.slice(start,end);
   assert.match(block,/labBatchCreditDate\(a\)\.localeCompare\(labBatchCreditDate\(b\)\)/);
 });
