@@ -24,8 +24,8 @@ test('all CSS outside Venta actual and the reference decorator remain frozen',()
 });
 
 test('approved upper panel stays frozen during the footer adjustment',()=>{
- // Baseline: approved PR #410 dbfaa90db094c476467ee94bc180f21593a6d242.
+ // Baseline: PR #410 con el título autorizado VENTA ACTUAL en mayúsculas.
  const source=readFileSync('POS/css/canon-pos-reference-ui.css','utf8').replace(/\r\n/g,'\n');
  const frozen=source.replace(/#pagePOS \.(?:total-main|cart-secondary-actions(?: button)?|cart-actions|btn-cobro|cart-totals)\{[^}]*\}/g,'');
- assert.equal(hash(frozen), 'c9f1e5094670a55e61c012079bc07cd05a997b1c7fcd5f4e91d91d20a66f7027');
+ assert.equal(hash(frozen), '75a51dc303c80bacf8f39ff218f9313a19c98a888dd3dbb930bad715bade38c6');
 });
