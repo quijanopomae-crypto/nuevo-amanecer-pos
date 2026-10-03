@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-HISTORY-TIME-001",
+  "environment": "CANON",
+  "base_ref": "8bede521f9861ee28a42dabf56407e6efe94609d",
+  "objective": "Mostrar en cada venta/crédito de Créditos pequeños la fecha junto con la hora y minuto reales de la operación, y repetir ese momento en el encabezado del detalle VENTA, sin inventar horas para registros históricos que no las conserven.",
+  "owner_authorization": "El owner mostró capturas del CANON y autorizó explícitamente: 'Si implimentalo'.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-HISTORY-TIME-001.json",
+    "evidence/canon-preflight/CANON-CREDIT-HISTORY-TIME-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tests/product-fixes/fix-credit-history-time/canon-credit-history-time.test.mjs",
+    ".github/workflows/canon-credit-history-time-apply.yml"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/sync/**",
+    "POS/js/legacy-inline/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/database/migrations/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "No modificar ledger creditos ni datos persistidos",
+    "No cambiar saldos, pagos, cuotas, FIFO, caja, ventas ni inventario",
+    "Prioridad de hora visual: hora24, luego hora, luego timestamp",
+    "Mostrar solo HH:MM; no mostrar segundos",
+    "Si el registro no conserva una hora válida, mostrar solo la fecha existente",
+    "El orden newest-first aprobado previamente permanece intacto",
+    "El workflow aplicador es temporal, solo puede modificar el módulo CANON permitido, ejecuta sintaxis + regresión focal antes de commit y se elimina antes del merge"
+  ],
+  "rollback": "Revertir el PR/commit de esta tarea; no existen migraciones ni cambios de datos que revertir."
+}

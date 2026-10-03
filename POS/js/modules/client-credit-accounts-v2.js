@@ -1329,9 +1329,45 @@ function labCategorySummary(client, category) {
     }
   };
 
+function labCreditDisplayTime(cr) {
+  function direct(value) {
+    var raw = String(value || '').trim();
+    if (!raw) return '';
+    var compact = raw.toLowerCase().replace(/[.\s]/g, '');
+    var match = /^(\d{1,2}):(\d{2})(?::\d{2})?(am|pm)?$/.exec(compact);
+    if (!match) return '';
+    var hour = Number(match[1]), minute = Number(match[2]), suffix = match[3] || '';
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) return '';
+    if (suffix) {
+      if (hour < 1 || hour > 12) return '';
+      if (suffix === 'pm' && hour < 12) hour += 12;
+      if (suffix === 'am' && hour === 12) hour = 0;
+    } else if (hour < 0 || hour > 23) return '';
+    return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+  }
+
+  var exact = direct(cr && cr.hora24) || direct(cr && cr.hora);
+  if (exact) return exact;
+
+  var timestamp = String(cr && cr.timestamp || '').trim();
+  if (!/[T ]\d{2}:\d{2}/.test(timestamp)) return '';
+  var parsed = new Date(timestamp);
+  if (Number.isFinite(parsed.getTime())) {
+    return String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0');
+  }
+  var fallback = /[T ](\d{2}):(\d{2})/.exec(timestamp);
+  return fallback ? fallback[1] + ':' + fallback[2] : '';
+}
+
+function labCreditDisplayMoment(cr, fallbackDate) {
+  var date = labCreditVisualDate(cr) || String(fallbackDate || '');
+  var time = labCreditDisplayTime(cr);
+  return date + (date && time ? ' · ' + time : '');
+}
+
   function labPurchaseRow(cr) {
     return '<button type="button" class="na-v2-row na-v2-purchase-row" onclick="naCanonOpenSmallPurchase(\'' + labEsc(String(cr.id)) + '\')">' +
-      '<span><strong>' + labEsc(cr.fecha || 'Fecha no registrada') + '</strong><small>' + labEsc(labProductSummary(cr)) + '</small></span>' +
+      '<span><strong>' + labEsc(labCreditDisplayMoment(cr, 'Fecha no registrada')) + '</strong><small>' + labEsc(labProductSummary(cr)) + '</small></span>' +
       '<span class="na-v2-row-value"><strong>' + labMoney(Number(cr.monto) || 0) + '</strong>' +
         (labCreditPending(cr) + 0.001 < Number(cr.monto || 0) ? '<small>' + labMoney(labCreditPending(cr)) + ' pendiente</small>' : '') + '</span><b>›</b>' +
     '</button>';
@@ -1394,7 +1430,7 @@ function labCategorySummary(client, category) {
     var isSingleInstallmentItem = hasInstallmentSchedule && items.length === 1;
     var planLabel = isSingleInstallmentItem ? labPurchasePlanLabel(cr, installments) : '';
     return '<div class="na-v2-screen">' + labBackButton(NA_SMALL_ACCOUNT_NAME) +
-      '<header class="na-v2-subhead na-v2-tone-teal"><span class="na-v2-eyebrow">Crédito pequeño</span><h2>VENTA ' + labEsc(cr.fecha || '') + '</h2>' +
+      '<header class="na-v2-subhead na-v2-tone-teal"><span class="na-v2-eyebrow">Crédito pequeño</span><h2>VENTA ' + labEsc(labCreditDisplayMoment(cr, '')) + '</h2>' +
         (hasInstallmentSchedule ? '<small>' + installments.paidCount + ' cuotas pagadas · ' + installments.pendingCount + ' pendientes</small>' : '') + '</header>' +
       '<section class="na-v2-product-list">' +
         (items.length ? items.map(function (item) {
