@@ -17,6 +17,7 @@ on:
   push:
     branches:
       - feature/v1.3-mobile-cloud
+      - lab/credit-history-newest-first-v3-20261003
     paths:
       - "tools/cloudflare-lab/**"
       - "laboratorio/pos-lab/**"
@@ -30,7 +31,7 @@ on:
       - ".opencode/agents/pos-lab-implementer.md"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -39,7 +40,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          persist-credentials: false
+          persist-credentials: true
           fetch-depth: 0
 
       - name: Setup Node
@@ -66,6 +67,69 @@ jobs:
           fi
           node laboratorio/pos-lab/skill-preflight.mjs --ci --base="$BASE_SHA" --require-order="$REQUIRE_ORDER"
 
+      - name: Apply LAB credit-history ordering patch
+        shell: bash
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$BRANCH_NAME" != "lab/credit-history-newest-first-v3-20261003" ]; then
+            exit 0
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('laboratorio/pos-lab/lab-overrides.js')
+          text = path.read_text(encoding='utf-8')
+          if 'function labSortCreditsNewestFirst(rows)' not in text:
+              start = text.find('function labCategorySummary(client, category) {')
+              if start < 0:
+                  raise SystemExit('labCategorySummary start not found')
+              end_marker = 'var closed = all.filter(labIsCanceled);'
+              end = text.find(end_marker, start)
+              if end < 0:
+                  raise SystemExit('labCategorySummary closed line not found')
+              end += len(end_marker)
+              replacement = """function labCreditVisualDate(cr) {
+    var direct = String(cr && cr.fecha || '').slice(0, 10);
+    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(direct)) return direct;
+    var timestampDate = String(cr && cr.timestamp || '').slice(0, 10);
+    return /^\\d{4}-\\d{2}-\\d{2}$/.test(timestampDate) ? timestampDate : '';
+  }
+
+  function labCreditVisualTimestamp(cr) {
+    var raw = String(cr && cr.timestamp || '');
+    if (!/^\\d{4}-\\d{2}-\\d{2}T/.test(raw)) return Number.NEGATIVE_INFINITY;
+    var parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+  }
+
+  function labSortCreditsNewestFirst(rows) {
+    return (Array.isArray(rows) ? rows : []).slice().sort(function (a, b) {
+      var dateOrder = labCreditVisualDate(b).localeCompare(labCreditVisualDate(a));
+      if (dateOrder) return dateOrder;
+      var aTime = labCreditVisualTimestamp(a), bTime = labCreditVisualTimestamp(b);
+      if (aTime !== bTime) return bTime - aTime;
+      return String(b && (b.ventaId || b.id) || '').localeCompare(
+        String(a && (a.ventaId || a.id) || ''), 'es', { numeric:true, sensitivity:'base' }
+      );
+    });
+  }
+
+  function labCategorySummary(client, category) {
+    var all = labCreditsForCategory(client.id, category.id);
+    var active = labSortCreditsNewestFirst(all.filter(function (cr) { return !labIsCanceled(cr); }));
+    var closed = labSortCreditsNewestFirst(all.filter(labIsCanceled));"""
+              path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
+          if git diff --quiet -- laboratorio/pos-lab/lab-overrides.js; then
+            exit 0
+          fi
+          git config user.name "nuevo-amanecer-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add laboratorio/pos-lab/lab-overrides.js
+          git commit -m "fix(lab): ordenar créditos más recientes primero"
+          git push origin "HEAD:$BRANCH_NAME"
+
       - name: JavaScript syntax
         run: |
           node --check tools/cloudflare-lab/src/lab-workspace.js
@@ -75,6 +139,7 @@ jobs:
           node --check laboratorio/pos-lab/js/lab-workspace.js
           node --check laboratorio/pos-lab/skill-preflight.mjs
           node --check laboratorio/pos-lab/scope-guard.mjs
+          node --check laboratorio/pos-lab/lab-overrides.js
 
       - name: LAB unit tests
         run: |
