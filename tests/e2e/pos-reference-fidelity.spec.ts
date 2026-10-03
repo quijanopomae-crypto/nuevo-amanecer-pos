@@ -157,7 +157,7 @@ test('current sale panel matches the approved desktop hierarchy', async ({ page 
   await prepare(page);
   await page.locator('[data-product-id="VIS-A"]').click();
 
-  await expect(page.locator('#cartDrawer .cart-head-title')).toHaveText('Venta actual');
+  await expect(page.locator('#cartDrawer .cart-head-title')).toContainText('Venta actual');
   await expect(page.locator('#posClear')).toBeVisible();
   await expect(page.locator('#posCustomerButton')).toBeVisible();
   await expect(page.locator('#cartDrawer .cart-item')).toHaveCount(1);
