@@ -178,6 +178,39 @@
     });
   }
 
+  function buildCustomerButton() {
+    var customer = actionButton('', 'Cliente genérico', function () {
+      if (typeof root._naPopulateCreditClients !== 'function' || typeof root._naOpenClientPicker !== 'function') return;
+      root._naPopulateCreditClients();
+      var select = document.getElementById('mVentaCliente');
+      if (select) select.value = customerId;
+      root._naOpenClientPicker('mVentaCliente');
+    });
+    customer.className = 'pos-customer-button';
+    customer.id = 'posCustomerButton';
+    customer.setAttribute('aria-label', 'Seleccionar cliente de la venta');
+    customer.insertBefore(lineIcon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M4 21a8 8 0 0 1 16 0'), customer.firstChild);
+    var label = customer.querySelector('span:last-child');
+    if (label) label.id = 'posCustomer';
+    return customer;
+  }
+
+  function decorateCartRows() {
+    var items = cartSnapshot();
+    document.querySelectorAll('#pagePOS #cartItems .cart-item').forEach(function (row, index) {
+      var item = items[index];
+      var name = row.querySelector('.ci-name');
+      if (!item || !name) return;
+      var unit = name.querySelector('.cart-line-unit');
+      if (!unit) {
+        unit = element('span', 'cart-line-unit');
+        name.appendChild(unit);
+      }
+      var qty = Number(item.qty) || 0;
+      unit.textContent = ' ' + qty + (qty === 1 ? ' unidad' : ' unidades');
+    });
+  }
+
   function installToolbar(page) {
     var toolbar = page.firstElementChild;
     if (!toolbar || toolbar.classList.contains('pos-commandbar')) return;
@@ -230,6 +263,7 @@
       major.replaceChildren(document.createTextNode('▣ '), element('span', '', 'Mayor'));
       actions.appendChild(major);
     }
+    actions.appendChild(buildCustomerButton());
     if (cartButton) {
       cartButton.type = 'button';
       cartButton.title = 'Ver venta actual';
@@ -260,16 +294,10 @@
     head.insertBefore(copy, title);
     copy.appendChild(title);
     copy.appendChild(element('div', 'cart-head-sub', '0 productos')).id = 'posCartSummary';
-    var customer = actionButton('♙', 'Cliente genérico', function () {
-      if (typeof root._naPopulateCreditClients !== 'function' || typeof root._naOpenClientPicker !== 'function') return;
-      root._naPopulateCreditClients();
-      var select = document.getElementById('mVentaCliente'); select.value = customerId;
-      root._naOpenClientPicker('mVentaCliente');
-    });
-    customer.className = 'pos-customer-button'; customer.lastElementChild.id = 'posCustomer';
-    customer.setAttribute('aria-label', 'Seleccionar cliente de la venta'); copy.appendChild(customer);
-    var clear = actionButton('⌫', 'Limpiar', function () { root.limpiarCarrito(); });
-    clear.className = 'cart-head-clear'; clear.id = 'posClear'; actionHost.insertBefore(clear, actionHost.firstChild);
+    var clear = actionButton('', 'Limpiar', function () { root.limpiarCarrito(); });
+    clear.className = 'cart-head-clear'; clear.id = 'posClear';
+    clear.insertBefore(lineIcon('M4 7h16 M9 7V4h6v3 M7 7l1 13h8l1-13 M10 11v5 M14 11v5'), clear.firstChild);
+    actionHost.insertBefore(clear, actionHost.firstChild);
 
     actionHost.classList.add('cart-head-actions');
     actionHost.removeAttribute('style');
@@ -311,11 +339,13 @@
 
     var secondary = element('div', 'cart-secondary-actions');
     secondary.setAttribute('aria-label', 'Acciones rápidas de venta');
-    secondary.append(
-      actionButton('◇', 'Cantidad', function () { editLine('quantity'); }),
-      actionButton('％', 'Descuento', function () { if (typeof root.abrirDescuento === 'function') root.abrirDescuento(); }),
-      actionButton('✎', 'Cambiar precio', function () { editLine('price'); })
-    );
+    var quantityAction = actionButton('', 'Cantidad', function () { editLine('quantity'); });
+    quantityAction.insertBefore(lineIcon('M20 13l-7 7-9-9V4h7z M8.5 8.5h.01'), quantityAction.firstChild);
+    var discountAction = actionButton('', 'Descuento', function () { if (typeof root.abrirDescuento === 'function') root.abrirDescuento(); });
+    discountAction.insertBefore(lineIcon('M19 5L5 19 M7.5 7.5h.01 M16.5 16.5h.01'), discountAction.firstChild);
+    var priceAction = actionButton('', 'Cambiar precio', function () { editLine('price'); });
+    priceAction.insertBefore(lineIcon('M4 20h4l10-10-4-4L4 16z M13 7l4 4'), priceAction.firstChild);
+    secondary.append(quantityAction, discountAction, priceAction);
     ['posQuantity','posDiscount','posPrice'].forEach(function (id, index) { secondary.children[index].id = id; });
     footer.insertBefore(secondary, actions);
 
@@ -330,10 +360,14 @@
     var quick = page.querySelector('#btnRapido');
     var pay = page.querySelector('#btnPagar');
     if (quick) {
-      quick.replaceChildren(element('span', 'pay-action-icon', '⚡'), element('span', '', 'Pago rápido'));
+      var quickIcon = lineIcon('M13 2L4 14h7l-1 8 9-12h-7z');
+      quickIcon.classList.add('pay-action-icon');
+      quick.replaceChildren(quickIcon, element('span', '', 'Pago rápido'));
     }
     if (pay) {
-      pay.replaceChildren(element('span', 'pay-action-icon', '▰'), element('span', '', 'Pagar'));
+      var payIcon = lineIcon('M3 6h18v12H3z M3 10h18 M7 15h4');
+      payIcon.classList.add('pay-action-icon');
+      pay.replaceChildren(payIcon, element('span', '', 'Pagar'));
     }
     var cancel = actions.querySelector('.btn-cancelar-cart');
     if (cancel) cancel.remove();
@@ -376,6 +410,7 @@
       var wrappedUpdate = function () {
         var result = originalUpdate.apply(this, arguments);
         updateCartMeta();
+        decorateCartRows();
         return result;
       };
       wrappedUpdate.__naReferenceUiWrapped = true;
@@ -394,6 +429,7 @@
     installObservers(page);
     decoratePrices();
     updateCartMeta();
+    decorateCartRows();
     decorateCategories();
     var customer = document.getElementById('mVentaCliente');
     if (customer) customer.addEventListener('change', function () { customerId = customer.value; syncCustomer(); });
