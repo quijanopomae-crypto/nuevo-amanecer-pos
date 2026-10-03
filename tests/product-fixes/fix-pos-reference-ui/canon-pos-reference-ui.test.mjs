@@ -177,3 +177,9 @@ test('current sale scope does not introduce unsupported sale notes', () => {
   assert.doesNotMatch(decorator, /Nota de venta/);
   assert.doesNotMatch(decorator, /saleNote|sale_note|note\s*:/);
 });
+
+test('short desktop viewport compacts only the current-sale footer', () => {
+  assert.match(css, /@media\(min-width:1100px\) and \(max-height:700px\)\{[\s\S]*#pagePOS \.total-main\{[^}]*min-height:36px[^}]*font-size:22px/);
+  assert.match(css, /@media\(min-width:1100px\) and \(max-height:700px\)\{[\s\S]*#pagePOS \.cart-secondary-actions button\{[^}]*min-height:32px[^}]*font-size:11px/);
+  assert.match(css, /@media\(min-width:1100px\) and \(max-height:700px\)\{[\s\S]*#pagePOS \.btn-cobro\{[^}]*min-height:44px[^}]*font-size:16px/);
+});
