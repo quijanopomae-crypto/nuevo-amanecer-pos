@@ -150,3 +150,25 @@ test('Android desktop-site keeps mobile drawer on a wide viewport', async ({ bro
   await expect(page.locator('.cart-mobile-close')).toBeVisible();
   await context.close();
 });
+
+
+test('current sale panel matches the approved desktop hierarchy', async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await prepare(page);
+  await page.locator('[data-product-id="VIS-A"]').click();
+
+  await expect(page.locator('#cartDrawer .cart-head-title')).toContainText('Venta actual');
+  await expect(page.locator('#posClear')).toBeVisible();
+  await expect(page.locator('#posCustomerButton')).toBeVisible();
+  await expect(page.locator('#cartDrawer .cart-item')).toHaveCount(1);
+  await expect(page.locator('#cartDrawer .cart-line-unit')).toContainText('1 unidad');
+  await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
+  await expect(page.locator('#posUnitCount')).toBeHidden();
+  await expect(page.locator('#posTotal')).toHaveText('S/ 10.00');
+  await expect(page.locator('#posQuantity')).toBeEnabled();
+  await expect(page.locator('#posDiscount')).toBeEnabled();
+  await expect(page.locator('#posPrice')).toBeEnabled();
+  await expect(page.locator('#btnRapido')).toBeEnabled();
+  await expect(page.locator('#btnPagar')).toBeEnabled();
+  await expect(page.getByPlaceholder('Nota de venta (opcional)')).toHaveCount(0);
+});

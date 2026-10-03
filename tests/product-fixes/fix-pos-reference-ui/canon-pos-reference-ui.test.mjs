@@ -100,8 +100,8 @@ test('fidelity pass hides duplicate global chrome and matches reference proporti
   assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:218px minmax\(0,1fr\) 440px/);
   assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /#pagePOS \.p-stock-badge\.ok,[\s\S]*background:var\(--pos-ref-orange\)!important/);
-  assert.match(css, /#pagePOS \.cart-head-title\{font-size:25px/);
-  assert.match(css, /#pagePOS \.btn-cobro\{min-height:85px;font-size:20px/);
+  assert.match(css, /#pagePOS \.cart-head-title\{font-size:26px/);
+  assert.match(css, /#pagePOS \.btn-cobro\{min-height:78px;font-size:19px/);
 });
 
 test('phone using Chrome desktop-site cannot be squeezed into the three-column desktop workbench', () => {
@@ -155,4 +155,25 @@ test('new cart actions use effective cart prices and stock-aware quantity handle
 test('branding freeze keeps the original cart mark in the POS header', () => {
   assert.match(decorator, /var mark = element\('div', 'pos-module-mark', '🛒'\);/);
   assert.doesNotMatch(decorator, /mark\.replaceChildren\(lineIcon\(/);
+});
+
+
+test('current sale fidelity keeps customer functional and matches the approved summary hierarchy', () => {
+  assert.match(decorator, /function buildCustomerButton\(\)/);
+  assert.match(decorator, /customer\.id = 'posCustomerButton'/);
+  assert.match(decorator, /root\._naOpenClientPicker\('mVentaCliente'\)/);
+  assert.match(decorator, /decorateCartRows\(\)/);
+  assert.match(decorator, /cart-line-unit/);
+  assert.match(decorator, /root\.limpiarCarrito\(\)/);
+  assert.match(css, /#pagePOS \.cart-totals\{[^}]*display:grid[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(165px,auto\)/);
+  assert.match(css, /#pagePOS \.cart-count-line\{[^}]*grid-row:1 \/ span 2/);
+  assert.match(css, /#pagePOS #posUnitCount\{display:none\}/);
+  assert.match(css, /#pagePOS \.total-main\{[^}]*grid-column:1 \/ -1/);
+  assert.match(css, /#pagePOS \.cart-head-clear svg\{/);
+  assert.match(css, /#pagePOS \.cart-secondary-actions button svg\{/);
+});
+
+test('current sale scope does not introduce unsupported sale notes', () => {
+  assert.doesNotMatch(decorator, /Nota de venta/);
+  assert.doesNotMatch(decorator, /saleNote|sale_note|note\s*:/);
 });
