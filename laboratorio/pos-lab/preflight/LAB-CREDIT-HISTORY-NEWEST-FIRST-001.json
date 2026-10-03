@@ -1,0 +1,76 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-CREDIT-HISTORY-NEWEST-FIRST-001",
+  "base_ref": "baeade3a2162dec6bd197aa3ea13f9166a276219",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": ["ChatGPT", "GitHub connector", "OpenCode"],
+  "analysis": {
+    "OBJECTIVE": "Ordenar visualmente las ventas/créditos por fecha descendente dentro de la cuenta del cliente, con timestamp descendente como desempate, sin tocar ledger ni FIFO.",
+    "READS": [
+      "AGENTS.md",
+      "laboratorio/pos-lab/UI_MAP.yaml",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/lab-scope-guard/SKILL.md",
+      ".agents/skills/lab-feature-edit/SKILL.md",
+      ".agents/skills/lab-ui-edit/SKILL.md",
+      ".agents/skills/lab-animation-edit/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      "laboratorio/pos-lab/lab-overrides.js: labClientCredits, labCategorySummary, labBatchAllocationPlan, labPurchaseRow, labCategoryHtml",
+      "POS/js/adapters/canonical-ui-adapter.js READ-ONLY para confirmar campos fecha/timestamp disponibles",
+      "captura del owner donde fechas 2026-09-01/03/04 aparecen en orden ascendente y se mezclan al registrar nuevas ventas"
+    ],
+    "WRITES": [
+      "Un helper de orden visual newest-first en laboratorio/pos-lab/lab-overrides.js",
+      "Aplicación del orden únicamente a summary.active/closed mostrado por la categoría",
+      "Prueba de regresión con fechas y timestamps sintéticos"
+    ],
+    "DOM_AFFECTED": [
+      "Orden de filas renderizadas en Clientes > cuenta de créditos; no cambia estructura HTML"
+    ],
+    "STATE_AFFECTED": [
+      "Solo arreglos derivados/copiados para presentación; no se muta el array creditos autoritativo"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "Saldo, monto, pagado, estado, cuotas y pagos permanecen idénticos",
+      "labBatchAllocationPlan conserva su sort ascendente/FIFO independiente",
+      "No se escribe saveAllData ni storage",
+      "No se cambia categoría ni identidad de crédito",
+      "No se toca CANON durante la fase LAB"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes consume los mismos créditos y solo cambia la presentación",
+      "Cobro múltiple recibe summary.active visualmente ordenado pero vuelve a ordenar por labBatchCreditDate ascendente antes de asignar pagos, por lo que FIFO no cambia",
+      "Ventas, Caja, Inventario y sincronización no reciben nuevas rutas de escritura"
+    ],
+    "RISKS": [
+      "Ordenar el array original y alterar otros consumidores; se evita usando slice()",
+      "Usar id aleatorio como tiempo; se usa solo como desempate determinista después de fecha/timestamp",
+      "Tratar fecha inválida como reciente; fechas inválidas quedan al final"
+    ],
+    "ROLLBACK": [
+      "Revertir helper y sort visual",
+      "Revertir prueba focalizada"
+    ],
+    "TESTS": [
+      "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json --receipt=laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
+      "node --test tests/laboratorio-client-credit-accounts-v2.test.mjs",
+      "node laboratorio/pos-lab/build-lab.mjs",
+      "node laboratorio/pos-lab/build-lab.mjs --check",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
+      "node laboratorio/check.mjs"
+    ]
+  },
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md", "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-feature-edit": {"path": ".agents/skills/lab-feature-edit/SKILL.md", "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"},
+    "lab-ui-edit": {"path": ".agents/skills/lab-ui-edit/SKILL.md", "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"},
+    "lab-animation-edit": {"path": ".agents/skills/lab-animation-edit/SKILL.md", "git_blob_sha": "15bf08c2e70a4543532e92522b63450c751661d7"},
+    "credits-integrity": {"path": ".agents/skills/credits-integrity/SKILL.md", "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"}
+  }
+}
