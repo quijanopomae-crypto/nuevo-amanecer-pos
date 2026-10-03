@@ -43,7 +43,7 @@
 #pagePOS .cart-drawer{position:relative;inset:auto;right:auto!important;bottom:auto;width:auto;min-width:0;height:100%;z-index:2;display:flex;flex-direction:column;background:#fff;border-left:1px solid var(--pos-ref-line);box-shadow:none;transition:none;overflow:hidden}
 #pagePOS .cart-head{min-height:60px;padding:9px 14px;background:#fff;color:var(--pos-ref-ink);border-bottom:1px solid var(--pos-ref-line);display:flex;align-items:center;justify-content:space-between;gap:10px}
 #pagePOS .cart-head-copy{min-width:0}
-#pagePOS .cart-head-title{font-size:24px;font-weight:900;line-height:1.05;color:#10183a;letter-spacing:-.02em}
+#pagePOS .cart-head-title{font-size:24px;font-weight:900;line-height:1.05;color:#10183a;letter-spacing:-.02em;text-transform:uppercase}
 #pagePOS .cart-head-sub{margin-top:5px;font-size:10px;font-weight:800;color:#788499}
 #pagePOS #posCartSummary{display:none}
 #pagePOS .cart-mode-tag{margin-left:6px;padding:2px 7px;border-radius:999px;background:#fff7ed;color:#b45309;font-size:9px;font-weight:900;vertical-align:middle}
