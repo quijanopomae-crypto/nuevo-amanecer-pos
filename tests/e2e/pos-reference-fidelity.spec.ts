@@ -206,3 +206,103 @@ test('short desktop viewport compacts the current-sale footer without changing t
   expect(tall.secondary).toBeGreaterThanOrEqual(36);
   expect(tall.pay).toBeGreaterThanOrEqual(52);
 });
+for (const count of [1, 6]) {
+  test(`short CANON footer renders compactly at 1366x625 with ${count} products`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1366, height: 625 });
+    await prepare(page);
+    await page.evaluate((lineCount) => window.eval(`
+      productos = Array.from({length:6}, (_, index) => ({id:'FOOTER-'+index,name:'Producto de prueba '+(index+1),cat:'abarrotes',precio:2.5,costo:1,stock:20,stockMin:1,icon:'📦'}));
+      cart = []; posRender(); productos.slice(0,${lineCount}).forEach(product => posAdd(product.id));
+    `), count);
+    await expect(page.locator('.cart-item')).toHaveCount(count);
+    const dimensions = await page.evaluate(() => ({
+      total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+      secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+      pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+      footer: document.querySelector('.cart-footer')!.getBoundingClientRect().height,
+    }));
+    expect(dimensions.total).toBeLessThanOrEqual(36);
+    expect(dimensions.secondary).toBeLessThanOrEqual(32);
+    expect(dimensions.pay).toBeLessThanOrEqual(44);
+    expect(dimensions.footer).toBeLessThanOrEqual(150);
+    await testInfo.attach(`canon-1366x625-${count}-products`, {
+      body: await page.screenshot({ type: 'png' }), contentType: 'image/png',
+    });    await testInfo.attach(`canon-1366x625-${count}-products-cart-panel`, {
+      body: await page.locator('#cartDrawer').screenshot({ type: 'png' }), contentType: 'image/png',
+    });
+  });
+}
+
+test('scaled 625px physical capture compacts; 768px and tall layouts remain unchanged', async ({ browser }, testInfo) => {
+  const scaled = await browser.newContext({ viewport: { width: 1821, height: 833 }, deviceScaleFactor: 0.75 });
+  const scaledPage = await scaled.newPage();
+  await prepare(scaledPage);
+  const media = '(min-width:1100px) and (max-height:700px), (min-width:1100px) and (max-resolution:0.9dppx) and (max-height:850px)';
+  const at625 = await scaledPage.evaluate((query) => ({
+    width: innerWidth, height: innerHeight, dpr: devicePixelRatio,
+    physicalWidth: innerWidth * devicePixelRatio, physicalHeight: innerHeight * devicePixelRatio,
+    short: matchMedia(query).matches,
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }), media);
+  expect(at625.physicalWidth).toBeCloseTo(1366, 0);
+  expect(at625.physicalHeight).toBeCloseTo(625, 0);
+  expect(at625.short).toBe(true);
+  expect(at625.total).toBeLessThanOrEqual(36);
+  expect(at625.secondary).toBeLessThanOrEqual(32);
+  expect(at625.pay).toBeLessThanOrEqual(44);
+  await testInfo.attach('canon-1366x625-dpr075', { body: await scaledPage.screenshot({ type: 'png' }), contentType: 'image/png' });
+
+  await scaledPage.setViewportSize({ width: 1821, height: 1024 });
+  const at768 = await scaledPage.evaluate((query) => ({
+    short: matchMedia(query).matches,
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }), media);
+  expect(at768.short).toBe(false);
+  expect(at768.total).toBeGreaterThanOrEqual(44);
+  expect(at768.secondary).toBeGreaterThanOrEqual(36);
+  expect(at768.pay).toBeGreaterThanOrEqual(52);
+
+  await scaledPage.setViewportSize({ width: 1821, height: 1200 });
+  const at900 = await scaledPage.evaluate((query) => ({
+    short: matchMedia(query).matches,
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }), media);
+  expect(at900.short).toBe(false);
+  expect(at900.total).toBeGreaterThanOrEqual(44);
+  expect(at900.secondary).toBeGreaterThanOrEqual(36);
+  expect(at900.pay).toBeGreaterThanOrEqual(52);
+  await scaled.close();
+
+  const cssPixels = await browser.newContext({ viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 });
+  const cssPage = await cssPixels.newPage();
+  await prepare(cssPage);
+  const atCss768 = await cssPage.evaluate((query) => ({
+    short: matchMedia(query).matches,
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }), media);
+  expect(atCss768.short).toBe(false);
+  expect(atCss768.total).toBeGreaterThanOrEqual(44);
+  expect(atCss768.secondary).toBeGreaterThanOrEqual(36);
+  expect(atCss768.pay).toBeGreaterThanOrEqual(52);
+
+  await cssPage.setViewportSize({ width: 1366, height: 900 });
+  const atCss900 = await cssPage.evaluate((query) => ({
+    short: matchMedia(query).matches,
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }), media);
+  expect(atCss900.short).toBe(false);
+  expect(atCss900.total).toBeGreaterThanOrEqual(44);
+  expect(atCss900.secondary).toBeGreaterThanOrEqual(36);
+  expect(atCss900.pay).toBeGreaterThanOrEqual(52);
+  await cssPixels.close();
+});
