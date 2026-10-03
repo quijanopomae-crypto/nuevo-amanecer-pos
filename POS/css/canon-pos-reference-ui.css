@@ -214,8 +214,8 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
 #pagePOS .cart-head-title{font-size:21px}
 }
 
-/* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */
-@media(min-width:1100px) and (max-height:700px){
+/* Short desktop viewports, including sub-1x display scaling, compact only the current-sale footer. */
+@media(min-width:1100px) and (max-height:700px), (min-width:1100px) and (max-resolution:0.9dppx) and (max-height:850px){
 #pagePOS .cart-totals{padding:0 8px 3px;column-gap:10px}
 #pagePOS .cart-count-line{font-size:11px;padding:1px 0}
 #pagePOS .total-row{font-size:12px;line-height:1.1}
