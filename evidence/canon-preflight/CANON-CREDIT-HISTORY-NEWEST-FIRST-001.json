@@ -1,0 +1,74 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CREDIT-HISTORY-NEWEST-FIRST-001",
+  "base_ref": "baeade3a2162dec6bd197aa3ea13f9166a276219",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "En CANON, 2026-07-08 aparece entre ventas 2026-08-23.",
+    "Después de 2026-09-05 reaparece una venta 2026-08-24.",
+    "Al final del historial 2026-10-03 aparece antes de 2026-10-01 en el flujo físico de datos, no por criterio cronológico global.",
+    "La función labCategorySummary de POS/js/modules/client-credit-accounts-v2.js filtra active/closed pero no ordena esos arrays antes de renderizar.",
+    "El candidato LAB equivalente ordena copias derivadas y pasó LAB Canon Mirror CI run 37125221465."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Corregir solo el orden visual del historial de créditos CANON.",
+    "READS": [
+      "README.md",
+      "AGENTS.md",
+      "AGENTS_Nuevo_Amanecer.md",
+      ".opencode/commands/canon-preflight.md",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "tests/cloud-sync/canonical-credit-accounts-v2-ui.test.mjs",
+      ".github/workflows/canon-critical-ci.yml",
+      "PR #416 LAB-CREDIT-HISTORY-NEWEST-FIRST-003",
+      "capturas reales del owner"
+    ],
+    "WRITES": [
+      "Helper puro para resolver fecha visual",
+      "Helper puro para resolver timestamp visual",
+      "Sort descendente sobre copias de active/closed",
+      "Regresión CANON que reproduce el desorden real"
+    ],
+    "DOM_AFFECTED": [
+      "Orden de las filas de créditos en la vista de categoría Créditos pequeños"
+    ],
+    "STATE_AFFECTED": [
+      "Solo arrays derivados de presentación retornados por categorySummary"
+    ],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "creditos autoritativo no se muta",
+      "pagos continúan ordenándose independientemente para su lógica financiera",
+      "batchAllocationPlan conserva FIFO oldest-first",
+      "saldos, pagos, cuotas, caja, ventas y persistencia no cambian"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes: cambia únicamente orden visual",
+      "Cobro múltiple: sin cambio; mantiene su orden FIFO propio",
+      "Ventas/Caja/Inventario/Sync: sin cambios"
+    ],
+    "ROOT_CAUSE": [
+      "labCreditsForCategory conserva el orden físico de la réplica/array y labCategorySummary usa filter() sin sort(); labCategoryHtml renderiza summary.active directamente."
+    ],
+    "RISKS": [
+      "Mutar creditos si se ordena in-place; se evita usando slice() antes de sort().",
+      "Fechas legacy sin timestamp; se usa fecha YYYY-MM-DD como clave primaria y timestamp solo como desempate.",
+      "Afectar FIFO de cobro múltiple; no se toca labBatchAllocationPlan ni labEffectivePayments."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR/commit completo; no hay datos ni migraciones que revertir."
+    ],
+    "TEST_PLAN": [
+      "La prueba debe fallar antes del cambio CANON reproduciendo 23/08 -> 08/07 -> 23/08.",
+      "Después del parche debe ordenar por fecha descendente y timestamp descendente en el mismo día.",
+      "El array creditos original debe permanecer idéntico.",
+      "CANON Critical CI debe pasar."
+    ]
+  }
+}
