@@ -30,8 +30,9 @@
       "Tres filas de actividad reciente derivadas de ventas existentes",
       "Pendientes derivados de créditos, stock y estado de caja",
       "Stylesheet CANON específico para no romper la paridad LAB→CANON de experience-v2",
-      "Precache del nuevo stylesheet en el service worker",
-      "Regresión focal del layout responsive dentro del patrón fix* ejecutado por CANON Critical CI"
+      "Link estático y precache del nuevo stylesheet",
+      "Regresión focal del layout responsive dentro del patrón fix* ejecutado por CANON Critical CI",
+      "Workflow temporal exclusivamente para cablear link/precache; debe retirarse antes del merge"
     ],
     "DOM_AFFECTED": ["#pageMenu únicamente"],
     "STATE_AFFECTED": [],
@@ -60,6 +61,7 @@
       "Regresión focal: estructura, breakpoint, tendencia, actividad, pendientes, link CSS y precache.",
       "LAB to CANON promotion gate debe pasar sin drift.",
       "CANON Critical CI y E2E Smoke deben pasar antes del merge.",
+      "Retirar el workflow temporal y volver a ejecutar CI sobre un HEAD sin tooling temporal.",
       "Hosted POS Web Deploy solo después del merge autorizado."
     ]
   }
