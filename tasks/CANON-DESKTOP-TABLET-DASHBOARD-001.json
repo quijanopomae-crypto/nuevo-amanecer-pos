@@ -8,6 +8,7 @@
   "allowed_files": [
     "tasks/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
     "evidence/canon-preflight/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
+    ".github/workflows/canon-desktop-dashboard-wire.yml",
     "POS/index.html",
     "POS/css/experience-v2/pages/menu.css",
     "POS/css/canon-desktop-dashboard.css",
@@ -33,7 +34,8 @@
     "Tablet y escritorio comparten los mismos datos existentes; solo cambia presentación.",
     "La comparación de ventas usa únicamente ventas no anuladas de hoy contra ayer.",
     "Los assets experience-v2 promovidos desde LAB deben permanecer en paridad; el diseño CANON específico vive en un stylesheet separado.",
-    "El nuevo stylesheet debe quedar precargado por el service worker."
+    "El nuevo stylesheet debe quedar precargado por el service worker.",
+    "El workflow temporal de cableado debe eliminarse antes del merge."
   ],
   "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos."
 }
