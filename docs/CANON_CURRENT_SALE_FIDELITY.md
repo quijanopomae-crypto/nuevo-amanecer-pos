@@ -43,3 +43,6 @@ Solicitud explícita del owner el 2026-10-02: ajustar exclusivamente la zona **V
 
 ## Rollback
 Revertir el PR de esta tarea. Sin migraciones ni cambios de datos.
+
+## Nota de validación
+- Un primer CANON Critical CI falló en T17 de cashClosures porque el fixture generó dos IDs iguales antes de la aserción de sessionId; es una prueba ajena a este cambio y no se modificó. Se reejecuta el pipeline sin alterar backup/caja.
