@@ -1,0 +1,67 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-CREDIT-HISTORY-TIME-001",
+  "base_ref": "8bede521f9861ee28a42dabf56407e6efe94609d",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "Las capturas del owner muestran que las filas de Créditos pequeños y el encabezado VENTA enseñan solo la fecha.",
+    "labPurchaseRow renderiza actualmente cr.fecha sin hora.",
+    "labPurchaseHtml renderiza actualmente VENTA + cr.fecha sin hora.",
+    "Los créditos CANON conservan timestamp y algunos registros legacy pueden traer hora24/hora; no se requiere migración de datos."
+  ],
+  "analysis": {
+    "OBJECTIVE": "Añadir hora y minuto reales a las superficies visuales de cada venta/crédito pequeño.",
+    "READS": [
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      ".agents/skills/credits-integrity/SKILL.md",
+      ".agents/skills/canon-promotion/SKILL.md",
+      "POS/js/modules/client-credit-accounts-v2.js",
+      "POS/js/adapters/canonical-ui-adapter.js",
+      "tests/product-fixes/fix-credit-history-newest-first/canon-credit-history-newest-first.test.mjs",
+      ".github/workflows/canon-critical-ci.yml",
+      "capturas reales del owner"
+    ],
+    "WRITES": [
+      "Helper visual puro para resolver HH:MM desde hora24, hora o timestamp",
+      "Helper visual puro para componer fecha · HH:MM cuando la hora existe",
+      "Uso del helper en la fila de compra y en el encabezado VENTA",
+      "Regresión CANON focal"
+    ],
+    "DOM_AFFECTED": [
+      "Texto principal de cada fila de Créditos pequeños",
+      "Título VENTA del detalle de la compra"
+    ],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No se muta creditos",
+      "No cambian pagos, saldos, cuotas, FIFO, caja, ventas, inventario ni persistencia",
+      "No se inventa hora cuando no existe dato temporal válido",
+      "El orden newest-first vigente no cambia"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Clientes/Créditos: solo presentación",
+      "Ventas: solo lectura de metadata temporal ya proyectada",
+      "Caja/Inventario/Sync/Backend: sin cambios"
+    ],
+    "RISKS": [
+      "Mostrar segundos innecesarios; se recorta siempre a HH:MM.",
+      "Hora legacy en formato 12h; se normaliza a 24h cuando contiene a. m./p. m.",
+      "Timestamp con zona horaria; se interpreta con Date para mostrar la hora local del dispositivo POS.",
+      "Registros importados con solo fecha; se mantiene únicamente la fecha."
+    ],
+    "ROLLBACK": [
+      "Revertir el PR/commit; no hay cambios de datos ni migraciones."
+    ],
+    "TEST_PLAN": [
+      "RED: la nueva regresión debe fallar porque no existe el helper ni se muestra la hora.",
+      "GREEN: fila y detalle deben mostrar 2026-10-03 · 10:47.",
+      "Verificar prioridad hora24 > hora > timestamp.",
+      "Verificar fallback a fecha sola cuando no existe hora válida.",
+      "CANON Critical CI completo debe pasar antes del merge."
+    ]
+  }
+}
