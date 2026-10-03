@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-CREDIT-HISTORY-NEWEST-FIRST-001",
+  "environment": "CANON",
+  "base_ref": "baeade3a2162dec6bd197aa3ea13f9166a276219",
+  "objective": "Ordenar visualmente las ventas/créditos de la cuenta Créditos pequeños por fecha descendente: la venta más reciente arriba y la más antigua abajo; dentro del mismo día, el timestamp más reciente primero.",
+  "owner_authorization": "El owner mostró capturas reales del CANON desordenado y autorizó explícitamente corregirlo 'En canon directamente'.",
+  "source_candidate": "LAB-CREDIT-HISTORY-NEWEST-FIRST-003 / PR #416, validado en LAB Canon Mirror CI run 37125221465.",
+  "allowed_files": [
+    "tasks/CANON-CREDIT-HISTORY-NEWEST-FIRST-001.json",
+    "evidence/canon-preflight/CANON-CREDIT-HISTORY-NEWEST-FIRST-001.json",
+    "POS/js/modules/client-credit-accounts-v2.js",
+    "tests/product-fixes/fix-credit-history-newest-first/canon-credit-history-newest-first.test.mjs",
+    ".github/workflows/canon-credit-history-newest-first-apply.yml"
+  ],
+  "forbidden_files": [
+    "laboratorio/**",
+    "POS/index.html",
+    "POS/sw.js",
+    "POS/js/sync/**",
+    "POS/js/legacy-inline/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/database/migrations/**",
+    "secrets/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "credits-integrity",
+    "canon-promotion"
+  ],
+  "invariants": [
+    "No mutar el array autoritativo creditos",
+    "No cambiar monto, saldo, pagos, cuotas, caja, ventas ni persistencia",
+    "El cobro múltiple conserva su FIFO ascendente independiente",
+    "No cambiar categorías ni identidad durable de créditos",
+    "Solo cambia el orden visual derivado de active/closed",
+    "El workflow aplicador es temporal, solo modifica el módulo permitido, ejecuta la regresión focal y se elimina antes del merge"
+  ],
+  "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos que revertir."
+}
