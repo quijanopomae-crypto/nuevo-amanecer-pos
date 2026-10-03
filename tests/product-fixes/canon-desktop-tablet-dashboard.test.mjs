@@ -24,10 +24,11 @@ test('CANON incorpora KPIs comparativos, actividad y pendientes en Inicio', () =
   ]) assert.match(html, new RegExp(`id="${id}"`));
 });
 
-test('layout mantiene móvil por defecto y activa shell específico desde 768 px', () => {
+test('layout mantiene móvil por defecto y activa shell específico solo cuando Inicio está activo desde 768 px', () => {
   assert.match(css, /\.menu-desktop-sidebar\s*\{[^}]*display\s*:\s*none/);
   assert.match(css, /@media\s*\(min-width\s*:\s*768px\)/);
-  assert.match(css, /#pageMenu\s*\{[^}]*grid-template-columns\s*:\s*220px\s+minmax\(0,1fr\)/);
+  assert.match(css, /#pageMenu\.active\s*\{[^}]*grid-template-columns\s*:\s*220px\s+minmax\(0,1fr\)/);
+  assert.match(css, /#pageMenu:not\(\.active\)\s*\{[^}]*display\s*:\s*none/);
   assert.match(css, /#pageMenu\s+\.menu-modules-label[^}]*display\s*:\s*none/);
   assert.match(css, /#pageMenu\s+\.modules-grid[^}]*display\s*:\s*none/);
   assert.match(css, /@media\s*\(min-width\s*:\s*1100px\)/);
