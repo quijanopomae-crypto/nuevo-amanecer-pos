@@ -102,9 +102,13 @@ test('CANON muestra fecha con HH:MM en la fila y en el detalle VENTA', () => {
   assert.equal(typeof hooks.creditMoment, 'function', 'debe existir un formatter visual de fecha y hora');
 
   const cr = credit({ hora24: '10:47:33', hora: '10:47:33 a. m.', timestamp: '2026-10-03T15:47:33.000Z' });
+  const row = hooks.purchaseRow(cr);
+  const detail = hooks.purchaseHtml({ id: 'A', nombre: 'CLIENTE' }, cr);
   assert.equal(hooks.creditMoment(cr), '2026-10-03 · 10:47');
-  assert.match(hooks.purchaseRow(cr), /2026-10-03 · 10:47/);
-  assert.match(hooks.purchaseHtml({ id: 'A', nombre: 'CLIENTE' }, cr), /VENTA 2026-10-03 · 10:47/);
+  assert.match(row, /2026-10-03 · 10:47/);
+  assert.match(detail, /VENTA 2026-10-03 · 10:47/);
+  assert.doesNotMatch(row, /10:47:33/);
+  assert.doesNotMatch(detail, /VENTA 2026-10-03 · 10:47:33/);
 });
 
 test('CANON usa hora24, luego hora, luego timestamp y no inventa hora', () => {
