@@ -1,11 +1,21 @@
-import {test,expect} from '@playwright/test';
+import {test,expect,Page} from '@playwright/test';
+
+async function enterPos(page:Page){
+ if(await page.evaluate(()=>innerWidth>=768)){
+  const sidebar=page.locator('[data-menu-target="pagePOS"]');
+  await expect(sidebar).toBeVisible();
+  await sidebar.click();
+  return;
+ }
+ await page.locator('.module-card').first().click();
+}
 
 for(const count of [0,1,2,6]) {
  test(`current sale density with ${count} products`,async({page})=>{
   await page.setViewportSize({width:1536,height:1024});
   await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
   await page.goto('/index.html');
-  await page.locator('.module-card').first().click();
+  await enterPos(page);
   await page.evaluate(count=>window.eval(`
     productos=Array.from({length:6},(_,index)=>({id:'DENSITY-'+index,name:'Producto de prueba '+(index+1),cat:'abarrotes',precio:2.5,costo:1,stock:20,stockMin:1,icon:'📦'}));
     cart=[]; posRender(); productos.slice(0,${count}).forEach(product=>posAdd(product.id));
@@ -32,7 +42,7 @@ for(const count of [0,1,2,6]) {
 test('long names and VARIOS stay bounded while quantity and selected customer remain real',async({page})=>{
  await page.setViewportSize({width:1536,height:1024});
  await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
- await page.goto('/index.html'); await page.locator('.module-card').first().click();
+ await page.goto('/index.html'); await enterPos(page);
  await page.evaluate(()=>window.eval(`
   productos=[{id:'LONG',name:'PRODUCTO CON NOMBRE EXTREMADAMENTE LARGO QUE DEBE QUEDAR LIMITADO A DOS LÍNEAS SIN INFLAR LA FILA',cat:'abarrotes',precio:5,costo:1,stock:10,stockMin:1,icon:'📦'}];
   clientes=[{id:'DENSITY-C',nombre:'Cliente seleccionado',dni:''}];
