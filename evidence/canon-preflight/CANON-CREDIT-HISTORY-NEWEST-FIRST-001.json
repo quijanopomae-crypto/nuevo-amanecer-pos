@@ -10,6 +10,7 @@
     "Después de 2026-09-05 reaparece una venta 2026-08-24.",
     "Al final del historial 2026-10-03 aparece antes de 2026-10-01 en el flujo físico de datos, no por criterio cronológico global.",
     "La función labCategorySummary de POS/js/modules/client-credit-accounts-v2.js filtra active/closed pero no ordena esos arrays antes de renderizar.",
+    "La regresión CANON roja falló como se esperaba en CANON Critical CI run 37127994010: 134 pass / 1 fail, mostrando el orden físico actual.",
     "El candidato LAB equivalente ordena copias derivadas y pasó LAB Canon Mirror CI run 37125221465."
   ],
   "analysis": {
@@ -33,7 +34,8 @@
       "Helper puro para resolver fecha visual",
       "Helper puro para resolver timestamp visual",
       "Sort descendente sobre copias de active/closed",
-      "Regresión CANON que reproduce el desorden real"
+      "Regresión CANON que reproduce el desorden real",
+      "Workflow temporal, acotado a esta rama, para aplicar el reemplazo exacto en el archivo grande y ejecutar la regresión focal; se elimina antes del merge"
     ],
     "DOM_AFFECTED": [
       "Orden de las filas de créditos en la vista de categoría Créditos pequeños"
@@ -59,16 +61,18 @@
     "RISKS": [
       "Mutar creditos si se ordena in-place; se evita usando slice() antes de sort().",
       "Fechas legacy sin timestamp; se usa fecha YYYY-MM-DD como clave primaria y timestamp solo como desempate.",
-      "Afectar FIFO de cobro múltiple; no se toca labBatchAllocationPlan ni labEffectivePayments."
+      "Afectar FIFO de cobro múltiple; no se toca labBatchAllocationPlan ni labEffectivePayments.",
+      "El aplicador temporal podría tocar más código; se limita a un reemplazo exacto y falla si no encuentra el bloque esperado."
     ],
     "ROLLBACK": [
       "Revertir el PR/commit completo; no hay datos ni migraciones que revertir."
     ],
     "TEST_PLAN": [
-      "La prueba debe fallar antes del cambio CANON reproduciendo 23/08 -> 08/07 -> 23/08.",
+      "La prueba roja ya falló reproduciendo 23/08 -> 08/07 -> 23/08.",
       "Después del parche debe ordenar por fecha descendente y timestamp descendente en el mismo día.",
       "El array creditos original debe permanecer idéntico.",
-      "CANON Critical CI debe pasar."
+      "CANON Critical CI debe pasar.",
+      "El workflow temporal debe desaparecer del diff final."
     ]
   }
 }
