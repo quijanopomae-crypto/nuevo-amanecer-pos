@@ -57,6 +57,7 @@
     ],
     "TESTS": [
       "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json --receipt=laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
+      "node --test tests/lab-credit-history-newest-first.test.mjs",
       "node --test tests/laboratorio-client-credit-accounts-v2.test.mjs",
       "node laboratorio/pos-lab/build-lab.mjs",
       "node laboratorio/pos-lab/build-lab.mjs --check",
