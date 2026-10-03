@@ -22,3 +22,10 @@ test('all CSS outside Venta actual and the reference decorator remain frozen',()
  assert.equal(hash(frozenRules(readFileSync('POS/css/canon-pos-reference-ui.css','utf8')).join('\n')), '23d82354eed75dce6b59a345785eb81f9cae5f34b90db8c333e484a0a6604ac1');
  assert.equal(hash(readFileSync('POS/js/canon-pos-reference-ui.js','utf8').replace(/\r\n/g,'\n')), '2acea7c1562d0e3f1b8294bcf3fab59128f54deec73c7109f21cee55892f1a33');
 });
+
+test('approved upper panel stays frozen during the footer adjustment',()=>{
+ // Baseline: approved PR #410 dbfaa90db094c476467ee94bc180f21593a6d242.
+ const source=readFileSync('POS/css/canon-pos-reference-ui.css','utf8').replace(/\r\n/g,'\n');
+ const frozen=source.replace(/#pagePOS \.(?:total-main|cart-secondary-actions(?: button)?|cart-actions|btn-cobro|cart-totals)\{[^}]*\}/g,'');
+ assert.equal(hash(frozen), 'c9f1e5094670a55e61c012079bc07cd05a997b1c7fcd5f4e91d91d20a66f7027');
+});

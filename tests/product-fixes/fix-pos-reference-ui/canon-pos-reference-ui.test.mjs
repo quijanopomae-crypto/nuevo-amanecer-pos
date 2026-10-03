@@ -101,7 +101,7 @@ test('fidelity pass hides duplicate global chrome and matches reference proporti
   assert.match(css, /@media\(min-width:1280px\)\{[\s\S]*grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
   assert.match(css, /#pagePOS \.p-stock-badge\.ok,[\s\S]*background:var\(--pos-ref-orange\)!important/);
   assert.match(css, /#pagePOS \.cart-head-title\{font-size:24px/);
-  assert.match(css, /#pagePOS \.btn-cobro\{[^}]*min-height:64px[^}]*font-size:18px/);
+  assert.match(css, /#pagePOS \.btn-cobro\{[^}]*min-height:52px[^}]*font-size:18px/);
 });
 
 test('phone using Chrome desktop-site cannot be squeezed into the three-column desktop workbench', () => {

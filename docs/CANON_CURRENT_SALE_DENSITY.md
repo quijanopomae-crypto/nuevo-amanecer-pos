@@ -17,3 +17,9 @@ Resultado local: 735 regresiones Node PASS, 22 E2E Chrome PASS y 31 gates de par
 Capturas finales sintéticas, panel recortado a 440px, viewport 1536x1024: `../current-sale-screenshots/1-productos.png`, `2-productos.png`, `6-productos.png`. Filas cortas medidas 62px; nombre largo hasta 74.5px; Total 50px y CTAs 64px. Espacio restante queda en la lista independiente y no estira filas para rellenar el panel.
 
 Archivos de producto: solo `POS/css/canon-pos-reference-ui.css`. Pruebas: `tests/product-fixes/fix-pos-reference-ui/canon-pos-reference-ui.test.mjs`, `current-sale-scope-freeze.test.mjs`, `tests/e2e/current-sale-density.spec.ts`. Documento: este archivo. No hay nuevas reglas visuales fuera del panel ni cambios a los handlers de cantidad, stock, descuento, margen, cliente, VARIOS o cobro.
+
+## Ajuste exclusivo del footer — mismo PR #410
+
+Parte superior aprobada congelada respecto a dbfaa90: filas, miniaturas, nombres, cantidad, precios, eliminar y encabezado. Solo se editan seis reglas existentes del footer, sin nuevos overrides ni JavaScript/DOM. Total 44px y texto 26px; acciones secundarias 36px; cobro 52px; separación entre los tres bloques 5px. Padding exterior reducido. Regresión adicional verifica checksum de todo el CSS salvo esas seis reglas. Captura nueva: `../current-sale-screenshots/6-productos-footer-final.png`.
+
+Validación del ajuste: 16 pruebas focales Node PASS; 22 E2E Chrome PASS; `git diff --check` PASS. Footer desktop con seis productos: 176.19px (antes 221.19px), reducción 20.3%; Total 44px, acciones 36px, cobro 52px. Captura espera la inicialización del decorator antes de tomarse.
