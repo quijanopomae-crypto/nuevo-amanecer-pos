@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-CREDIT-HISTORY-NEWEST-FIRST-003",
+  "environment": "LABORATORIO",
+  "base_ref": "baeade3a2162dec6bd197aa3ea13f9166a276219",
+  "objective": "Ordenar visualmente las ventas/créditos de una cuenta por fecha descendente: la más reciente arriba; dentro del mismo día, el timestamp más reciente primero. Sin modificar saldos, pagos, FIFO, caja, ventas ni persistencia.",
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-003.json",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-CREDIT-HISTORY-NEWEST-FIRST-003.json",
+    "laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-003.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "tests/laboratorio-credit-history-newest-first.test.mjs",
+    ".github/workflows/lab-cloud-ci.yml"
+  ],
+  "forbidden_files": ["POS/**", "infra/**", "tools/cloudflare-prod/**", "secrets/**"],
+  "required_skills": ["impact-analysis", "cross-module-impact", "lab-scope-guard", "lab-feature-edit", "lab-ui-edit", "lab-animation-edit", "credits-integrity"],
+  "production_data_authority": false,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false,
+  "acceptance_criteria": [
+    "La fecha más reciente aparece arriba y fechas anteriores debajo.",
+    "En la misma fecha, el timestamp más reciente aparece primero.",
+    "El array autoritativo creditos no se muta.",
+    "El cobro múltiple conserva su FIFO ascendente independiente.",
+    "No cambia monto, saldo, pagos, cuotas, caja ni persistencia.",
+    "La regresión focalizada se ejecuta en LAB Canon Mirror CI y pasa."
+  ],
+  "rollback": "Revertir helper/sort visual, prueba focalizada y su línea de CI; no hay migraciones ni datos que revertir."
+}
