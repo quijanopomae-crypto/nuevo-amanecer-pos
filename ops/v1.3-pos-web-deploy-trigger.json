@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON PR #412: compactar exclusivamente el footer de VENTA ACTUAL en escritorios de <=700px de alto, preservando el layout aprobado en pantallas altas y todas las superficies congeladas.",
-  "retry_attempt": 75,
-  "retry_reason": "PR #412 merged at dbed47876def752ea6eac6d5ee502dcfce95c64c; CANON Critical 37091777383 PASS y E2E Smoke 37091777378 PASS, incluyendo reproducción 1366x627 y verificación de que 1366x900 conserva el layout anterior.",
-  "requested_at_utc": "2026-10-03T03:04:30Z",
-  "target_head": "dbed47876def752ea6eac6d5ee502dcfce95c64c"
+  "note": "Deploy CANON PR #417: ordenar visualmente el historial de Créditos pequeños de fecha más reciente a más antigua y timestamp más reciente primero dentro del mismo día, sin alterar ledger, FIFO, saldos, pagos ni persistencia.",
+  "retry_attempt": 76,
+  "retry_reason": "PR #417 merged at aeb2f795d0b49eecc143bc4d30ed1410231d25ff; CANON Critical CI 37128602901 PASS y E2E Smoke 37128602857 PASS. El owner autorizó explícitamente aplicar la corrección en CANON directamente.",
+  "requested_at_utc": "2026-10-03T14:16:30Z",
+  "target_head": "aeb2f795d0b49eecc143bc4d30ed1410231d25ff"
 }
