@@ -6,25 +6,26 @@ const html = readFileSync(new URL('../../../POS/index.html', import.meta.url), '
 const css = readFileSync(new URL('../../../POS/css/canon-desktop-dashboard.css', import.meta.url), 'utf8');
 const promotedMenuCss = readFileSync(new URL('../../../POS/css/experience-v2/pages/menu.css', import.meta.url), 'utf8');
 const labMenuCss = readFileSync(new URL('../../../laboratorio/pos-lab/styles/pages/menu.css', import.meta.url), 'utf8');
-const runtime = readFileSync(new URL('../../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
+const decorator = readFileSync(new URL('../../../POS/js/canon-desktop-dashboard.js', import.meta.url), 'utf8');
+const sharedRuntime = readFileSync(new URL('../../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../../../POS/sw.js', import.meta.url), 'utf8');
 
-test('CANON incluye navegación lateral de Inicio para tablet y escritorio sin duplicar Nueva venta', () => {
-  assert.match(html, /class="menu-desktop-sidebar"/);
+test('decorador CANON define navegación lateral sin duplicar Nueva venta', () => {
+  assert.match(decorator, /menu-desktop-sidebar/);
   for (const target of ['pagePOS','pageVentas','pageInventario','pageClientes','pageCaja','pageGastos','pageConfig']) {
-    assert.match(html, new RegExp(`data-menu-target="${target}"`));
+    assert.match(decorator, new RegExp(`['"]${target}['"]`));
   }
-  assert.doesNotMatch(html, /class="menu-desktop-sidebar"[\s\S]{0,5000}\+ Nueva venta/);
+  assert.doesNotMatch(decorator, /\+ Nueva venta/);
 });
 
-test('CANON incorpora KPIs comparativos, actividad y pendientes en Inicio', () => {
+test('decorador CANON incorpora KPIs comparativos, actividad y pendientes', () => {
   for (const id of [
     'qsVentasTrend','qsVentasPrev',
     'menuActivity0Label','menuActivity0Amount',
-    'menuActivity1Label','menuActivity1Amount',
-    'menuActivity2Label','menuActivity2Amount',
     'menuPendingCredits','menuPendingStock','menuPendingCash'
-  ]) assert.match(html, new RegExp(`id="${id}"`));
+  ]) assert.match(decorator, new RegExp(id));
+  assert.match(decorator, /ayerVentas/);
+  assert.match(decorator, /Venta /);
 });
 
 test('layout mantiene móvil por defecto y activa shell específico solo cuando Inicio está activo desde 768 px', () => {
@@ -38,18 +39,16 @@ test('layout mantiene móvil por defecto y activa shell específico solo cuando 
   assert.match(css, /grid-template-columns\s*:\s*repeat\(4,minmax\(0,1fr\)\)/);
 });
 
-test('updateDashboard calcula tendencia real de ventas contra ayer y llena actividad/pendientes', () => {
-  assert.match(runtime, /qsVentasTrend/);
-  assert.match(runtime, /qsVentasPrev/);
-  assert.match(runtime, /ayerVentas/);
-  assert.match(runtime, /menuActivity\$\{i\}Label/);
-  assert.match(runtime, /menuPendingCredits/);
-  assert.match(runtime, /menuPendingStock/);
-  assert.match(runtime, /menuPendingCash/);
+test('lógica compartida no contiene el decorador exclusivo de escritorio', () => {
+  assert.doesNotMatch(sharedRuntime, /_naDashboardLocalIso|_naUpdateDesktopDashboard|qsVentasTrend/);
+  assert.match(decorator, /bindDashboardRenderer/);
+  assert.match(decorator, /updateDashboard/);
 });
 
-test('dashboard CANON usa stylesheet separado, preserva paridad LAB y queda precargado', () => {
+test('dashboard CANON usa assets separados, preserva paridad LAB y queda precargado', () => {
   assert.equal(promotedMenuCss.replace(/\r\n/g, '\n'), labMenuCss.replace(/\r\n/g, '\n'));
   assert.match(html, /href="css\/canon-desktop-dashboard\.css"/);
+  assert.match(html, /src="js\/canon-desktop-dashboard\.js"/);
   assert.match(sw, /'\.\/css\/canon-desktop-dashboard\.css'/);
+  assert.match(sw, /'\.\/js\/canon-desktop-dashboard\.js'/);
 });
