@@ -9,6 +9,7 @@
     "tasks/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
     "evidence/canon-preflight/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
     ".github/workflows/canon-desktop-tablet-dashboard-apply.yml",
+    "tools/canon-desktop-tablet-dashboard-apply.py",
     "POS/index.html",
     "POS/css/experience-v2/pages/menu.css",
     "POS/js/legacy-inline/inline-02.js",
@@ -30,7 +31,7 @@
     "Móvil menor de 768 px conserva su composición actual de tarjetas.",
     "Tablet y escritorio comparten los mismos datos existentes; solo cambia presentación.",
     "La comparación de ventas usa únicamente ventas no anuladas de hoy contra ayer.",
-    "El workflow temporal de aplicación debe eliminarse antes del merge."
+    "El workflow y script temporales de aplicación deben eliminarse antes del merge."
   ],
   "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos."
 }
