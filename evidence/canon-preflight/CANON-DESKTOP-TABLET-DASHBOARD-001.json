@@ -27,7 +27,7 @@
       "Tres filas de actividad reciente derivadas de ventas existentes",
       "Pendientes derivados de créditos, stock y estado de caja",
       "Regresión focal del layout responsive",
-      "Workflow temporal de aplicación, retirado antes del merge"
+      "Workflow y script temporales de aplicación, retirados antes del merge"
     ],
     "DOM_AFFECTED": ["#pageMenu únicamente"],
     "STATE_AFFECTED": [],
@@ -53,7 +53,7 @@
       "RED: la regresión exige sidebar, breakpoints, tendencia y paneles que todavía no existen.",
       "GREEN: validar estructura, CSS tablet/escritorio y hooks de updateDashboard.",
       "Ejecutar la regresión focal desde el workflow temporal, después CANON Critical CI y E2E Smoke.",
-      "Eliminar el workflow temporal antes del merge."
+      "Eliminar workflow y script temporales antes del merge."
     ]
   }
 }
