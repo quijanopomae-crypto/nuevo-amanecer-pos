@@ -17,6 +17,7 @@ const PRECACHE_URLS = [
   './css/motion/modals.css',
   './css/motion/notifications.css',
   './css/client-credit-accounts-v2.css',
+  './css/canon-desktop-dashboard.css',
   './css/experience-v2/tokens.css',
   './css/experience-v2/layout.css',
   './css/experience-v2/responsive.css',
