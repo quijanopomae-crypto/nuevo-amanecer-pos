@@ -20,12 +20,14 @@
       ".agents/skills/credits-integrity/SKILL.md",
       "laboratorio/pos-lab/lab-overrides.js: labClientCredits, labCategorySummary, labBatchAllocationPlan, labPurchaseRow, labCategoryHtml",
       "POS/js/adapters/canonical-ui-adapter.js READ-ONLY para confirmar campos fecha/timestamp disponibles",
+      ".github/workflows/lab-cloud-ci.yml para asegurar que la regresión nueva sí se ejecute",
       "captura del owner donde fechas 2026-09-01/03/04 aparecen en orden ascendente y se mezclan al registrar nuevas ventas"
     ],
     "WRITES": [
       "Un helper de orden visual newest-first en laboratorio/pos-lab/lab-overrides.js",
       "Aplicación del orden únicamente a summary.active/closed mostrado por la categoría",
-      "Prueba de regresión con fechas y timestamps sintéticos"
+      "Prueba de regresión con fechas y timestamps sintéticos",
+      "Una línea en LAB Canon Mirror CI para ejecutar la regresión"
     ],
     "DOM_AFFECTED": [
       "Orden de filas renderizadas en Clientes > cuenta de créditos; no cambia estructura HTML"
@@ -44,20 +46,23 @@
     "CROSS_MODULE_IMPACT": [
       "Clientes consume los mismos créditos y solo cambia la presentación",
       "Cobro múltiple recibe summary.active visualmente ordenado pero vuelve a ordenar por labBatchCreditDate ascendente antes de asignar pagos, por lo que FIFO no cambia",
-      "Ventas, Caja, Inventario y sincronización no reciben nuevas rutas de escritura"
+      "Ventas, Caja, Inventario y sincronización no reciben nuevas rutas de escritura",
+      "CI LAB gana una regresión focalizada adicional sin cambiar despliegues"
     ],
     "RISKS": [
       "Ordenar el array original y alterar otros consumidores; se evita usando slice()",
       "Usar id aleatorio como tiempo; se usa solo como desempate determinista después de fecha/timestamp",
-      "Tratar fecha inválida como reciente; fechas inválidas quedan al final"
+      "Tratar fecha inválida como reciente; fechas inválidas quedan al final",
+      "Agregar prueba sin ejecutarla; se mitiga conectándola explícitamente a LAB Canon Mirror CI"
     ],
     "ROLLBACK": [
       "Revertir helper y sort visual",
-      "Revertir prueba focalizada"
+      "Revertir prueba focalizada",
+      "Revertir la línea de ejecución de la prueba en CI"
     ],
     "TESTS": [
       "node laboratorio/pos-lab/skill-preflight.mjs --task=laboratorio/pos-lab/tasks/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json --receipt=laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
-      "node --test tests/lab-credit-history-newest-first.test.mjs",
+      "node --test tests/laboratorio-credit-history-newest-first.test.mjs",
       "node --test tests/laboratorio-client-credit-accounts-v2.test.mjs",
       "node laboratorio/pos-lab/build-lab.mjs",
       "node laboratorio/pos-lab/build-lab.mjs --check",
