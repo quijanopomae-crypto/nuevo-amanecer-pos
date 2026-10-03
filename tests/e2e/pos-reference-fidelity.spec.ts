@@ -1,12 +1,22 @@
 import { test, expect, Page } from '@playwright/test';
 
+async function enterPos(page: Page) {
+  if (await page.evaluate(() => innerWidth >= 768)) {
+    const sidebar = page.locator('[data-menu-target="pagePOS"]');
+    await expect(sidebar).toBeVisible();
+    await sidebar.click();
+    return;
+  }
+  await page.locator('.module-card').first().click();
+}
+
 async function prepare(page: Page) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
   });
   await page.goto('/index.html');
-  await page.locator('.module-card').first().click();
+  await enterPos(page);
   await page.evaluate(() => {
     // Isolated synthetic session. No remote API or actual business data.
     window.eval(`productos = [

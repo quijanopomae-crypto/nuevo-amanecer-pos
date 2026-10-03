@@ -1,0 +1,71 @@
+/* CANON — Inicio específico para tablet/escritorio. Móvil conserva la composición existente. */
+.menu-desktop-sidebar{display:none}
+.menu-desktop-heading{display:none}
+.menu-desktop-sections{display:none}
+#pageMenu .qs-trend,#pageMenu .qs-prev{display:none}
+
+@media (min-width:768px){
+  #pageMenu:not(.active){display:none}
+  #pageMenu.active{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:0;overflow:hidden;background:#f7f9fc}
+  #pageMenu .menu-desktop-sidebar{display:flex;flex-direction:column;min-width:0;padding:18px 12px 14px;background:var(--white);border-right:1px solid var(--border);overflow-y:auto}
+  #pageMenu .menu-sidebar-title{padding:0 12px 12px;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--slate)}
+  #pageMenu .menu-side-link{width:100%;min-height:46px;border:0;border-radius:10px;background:transparent;color:var(--dark);display:grid;grid-template-columns:24px minmax(0,1fr) 14px;align-items:center;gap:9px;padding:0 10px;text-align:left;font:800 13px/1.2 'Nunito',sans-serif;cursor:pointer;transition:background .15s ease,color .15s ease,transform .15s ease}
+  #pageMenu .menu-side-link:hover{background:#f1f5f9}
+  #pageMenu .menu-side-link:active{transform:translateY(1px)}
+  #pageMenu .menu-side-link.is-active{background:#eafaf7;color:#087f71}
+  #pageMenu .menu-side-icon{width:22px;height:22px;display:grid;place-items:center;color:currentColor}
+  #pageMenu .menu-side-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  #pageMenu .menu-side-chevron{justify-self:end;color:#94a3b8;font-size:20px;font-weight:700}
+  #pageMenu .menu-sidebar-spacer{flex:1;min-height:24px}
+  #pageMenu .main-scroll.home-shell{width:100%;max-width:none;margin:0;padding:24px 26px 44px;overflow-y:auto;background:#f7f9fc}
+  #pageMenu .menu-desktop-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin:0 0 22px}
+  #pageMenu .menu-desktop-eyebrow{display:block;margin-bottom:3px;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#64748b}
+  #pageMenu .menu-desktop-heading h1{margin:0;color:var(--dark);font-size:26px;line-height:1.08;font-weight:900}
+  #pageMenu .menu-desktop-heading p{margin:6px 0 0;color:var(--slate);font-size:12px;font-weight:700;text-transform:capitalize}
+  #pageMenu .menu-desktop-live{display:flex;align-items:center;gap:7px;margin-top:3px;padding:7px 10px;border:1px solid #dce7e4;border-radius:999px;background:#fff;color:#475569;font-size:11px;font-weight:800;white-space:nowrap}
+  #pageMenu .menu-desktop-live>span{width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.10)}
+  #pageMenu .main-scroll.home-shell>.section-label:not(.menu-modules-label){display:none}
+  #pageMenu .quick-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 18px}
+  #pageMenu .qs-card{min-height:128px;border:1px solid #dbe4ea;border-radius:14px;padding:15px 16px 13px;background:var(--white);box-shadow:0 4px 14px rgba(15,23,42,.035)}
+  #pageMenu .qs-top{align-items:flex-start}
+  #pageMenu .qs-icon{display:none}
+  #pageMenu .qs-label{font-size:11px;font-weight:900;color:#536273}
+  #pageMenu .qs-val{margin-top:10px;font-size:24px;line-height:1.05;font-weight:900;letter-spacing:-.025em}
+  #pageMenu .qs-sub{margin-top:auto;padding-top:9px;font-size:10px;font-weight:700;color:#64748b}
+  #pageMenu .qs-card-sales{position:relative}
+  #pageMenu .qs-trend,#pageMenu .qs-prev{display:block}
+  #pageMenu .qs-trend{position:absolute;top:15px;right:16px;font-size:10px;font-weight:900}
+  #pageMenu .qs-trend[data-trend="up"]{color:#15803d}
+  #pageMenu .qs-trend[data-trend="down"]{color:#b91c1c}
+  #pageMenu .qs-trend[data-trend="flat"]{color:#64748b}
+  #pageMenu .qs-prev{margin-top:7px;padding-top:8px;border-top:1px solid #edf2f7;font-size:10px;font-weight:700;color:#64748b}
+  #pageMenu .menu-desktop-sections{display:grid;grid-template-columns:1fr;gap:14px;margin-top:4px}
+  #pageMenu .menu-data-panel{min-width:0;border:1px solid #dbe4ea;border-radius:14px;background:var(--white);padding:17px 18px;box-shadow:0 4px 14px rgba(15,23,42,.03)}
+  #pageMenu .menu-panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  #pageMenu .menu-panel-head span{display:block;font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#94a3b8}
+  #pageMenu .menu-panel-head h2{margin:2px 0 0;font-size:15px;color:var(--dark);font-weight:900}
+  #pageMenu .menu-activity-list,#pageMenu .menu-pending-list{display:grid;gap:0}
+  #pageMenu .menu-activity-row{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:42px;border-top:1px solid #edf2f7;color:#475569;font-size:12px;font-weight:700}
+  #pageMenu .menu-activity-row:first-child{border-top:0}
+  #pageMenu .menu-activity-row strong{font-size:12px;color:var(--dark);font-weight:900}
+  #pageMenu .menu-activity-dot{width:6px;height:6px;border-radius:50%;background:#14b8a6}
+  #pageMenu .menu-pending-row{display:grid;grid-template-columns:8px minmax(0,1fr);align-items:center;gap:10px;min-height:42px;border-top:1px solid #edf2f7;color:#475569;font-size:12px;font-weight:800}
+  #pageMenu .menu-pending-row:first-child{border-top:0}
+  #pageMenu .menu-pending-mark{width:7px;height:7px;border-radius:50%}
+  #pageMenu .menu-pending-mark.amber{background:#f59e0b}
+  #pageMenu .menu-pending-mark.red{background:#ef4444}
+  #pageMenu .menu-pending-mark.teal{background:#14b8a6}
+  #pageMenu .menu-modules-label{display:none}
+  #pageMenu .modules-grid{display:none}
+}
+
+@media (min-width:1100px){
+  #pageMenu .main-scroll.home-shell{padding:28px 34px 48px}
+  #pageMenu .quick-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  #pageMenu .menu-desktop-sections{grid-template-columns:minmax(0,1.35fr) minmax(290px,.8fr)}
+}
+
+@media (min-width:1400px){
+  #pageMenu.active{grid-template-columns:236px minmax(0,1fr)}
+  #pageMenu .main-scroll.home-shell{padding-left:42px;padding-right:42px}
+}

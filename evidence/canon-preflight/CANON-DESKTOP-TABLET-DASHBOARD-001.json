@@ -1,0 +1,77 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-DESKTOP-TABLET-DASHBOARD-001",
+  "base_ref": "36459852b6be86525b7a9751561969cb6af8ddd4",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura real del owner muestra que CANON en escritorio sigue renderizando cuatro KPIs y grandes tarjetas de módulos.",
+    "POS/index.html conserva el bloque Módulos principales y modules-grid.",
+    "POS/css/experience-v2/pages/menu.css es un asset promovido desde LAB y el gate de paridad exige que permanezca idéntico a su fuente LAB.",
+    "updateDashboard ya expone varios hooks de resumen y usa ventas, caja, créditos y stock como lectura de UI.",
+    "Los E2E de escritorio entraban a Punto de Venta haciendo click en .module-card; al ocultar esas tarjetas desde 768 px deben usar la nueva sidebar, conservando module-card en móvil."
+  ],
+  "analysis": {
+    "READS": [
+      "POS/index.html",
+      "POS/css/experience-v2/pages/menu.css",
+      "POS/sw.js",
+      "POS/js/legacy-inline/inline-02.js",
+      "tests/e2e/pos-smoke.spec.ts",
+      "tests/e2e/current-sale-density.spec.ts",
+      "tests/e2e/pos-reference-fidelity.spec.ts",
+      "tools/pos-experience/promote-lab-visuals.mjs",
+      "tools/pos-experience/visual-assets.mjs",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      "captura real del owner"
+    ],
+    "WRITES": [
+      "Estructura de navegación lateral solo visible desde 768 px",
+      "Panel de resumen para tablet/escritorio",
+      "Tendencia de ventas hoy contra ayer",
+      "Tres filas de actividad reciente derivadas de ventas existentes",
+      "Pendientes derivados de créditos, stock y estado de caja",
+      "Stylesheet CANON específico para no romper la paridad LAB→CANON de experience-v2",
+      "Link y precache de los assets CANON del dashboard",
+      "Regresión focal del layout responsive dentro del patrón fix* ejecutado por CANON Critical CI",
+      "Ajuste E2E mínimo: sidebar en >=768 px y tarjetas existentes en móvil",
+      "Workflow temporal exclusivamente para cablear assets; debe retirarse antes del merge"
+    ],
+    "DOM_AFFECTED": ["#pageMenu únicamente"],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No crear ni modificar datos financieros.",
+      "No duplicar navegación ni funciones de venta.",
+      "No alterar móvil menor de 768 px.",
+      "No introducir una segunda fuente de estado.",
+      "No modificar laboratorio para resolver un detalle exclusivo de presentación CANON.",
+      "Restaurar paridad exacta de POS/css/experience-v2/pages/menu.css con LAB.",
+      "Los E2E siguen verificando el mismo destino pagePOS; solo cambia el control visible que usan en escritorio."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Punto de Venta, Ventas, Inventario, Clientes, Caja, Gastos y Configuración: solo accesos goPage ya existentes.",
+      "Ventas/Caja/Créditos/Stock: solo lectura para resumen visual.",
+      "E2E: navegación adaptada al nuevo control visible de escritorio; flujos internos del POS permanecen iguales.",
+      "Backend/Sync/Persistencia: sin cambios."
+    ],
+    "RISKS": [
+      "Ocultar por error los módulos en móvil; se evita manteniendo el comportamiento actual por defecto y aplicando cambios desde min-width:768px.",
+      "Duplicar acciones; la barra lateral usa exactamente los destinos existentes y no añade + Nueva venta.",
+      "Comparación incorrecta; se limita a ventas no anuladas de hoy contra ayer usando fecha local ISO del POS.",
+      "Drift visual LAB→CANON; se evita dejando menu.css en paridad y aislando la extensión en canon-desktop-dashboard.css.",
+      "E2E esperando tarjetas ocultas; se corrige con helper responsive que usa sidebar en escritorio y module-card en móvil."
+    ],
+    "ROLLBACK": ["Revertir el PR; no hay datos ni migraciones que revertir."],
+    "TEST_PLAN": [
+      "Regresión focal: estructura, breakpoint, tendencia, actividad, pendientes, links y precache.",
+      "LAB to CANON promotion gate debe pasar sin drift.",
+      "E2E debe probar navegación por sidebar en >=768 px y tarjetas en móvil.",
+      "CANON Critical CI y E2E Smoke deben pasar antes del merge.",
+      "Retirar el workflow temporal y volver a ejecutar CI sobre un HEAD sin tooling temporal.",
+      "Hosted POS Web Deploy solo después del merge autorizado."
+    ]
+  }
+}
