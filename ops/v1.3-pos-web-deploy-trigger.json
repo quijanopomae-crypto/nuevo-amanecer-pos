@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON corrección quirúrgica: restaurar únicamente el icono original 🛒 del encabezado POS; conservar intactas categorías, Venta actual y controles funcionales del PR #404.",
-  "retry_attempt": 72,
-  "retry_reason": "Owner autorizó corrección. PR #406 merged at 49340899494d291f5f89d946f7a615c8f8685846; CANON Critical 37079344771 PASS y E2E Smoke 37079344777 PASS.",
-  "requested_at_utc": "2026-10-02T23:50:30Z",
-  "target_head": "49340899494d291f5f89d946f7a615c8f8685846"
+  "note": "Deploy CANON ajuste exclusivo de Venta actual: cliente funcional, líneas de carrito, conteo/subtotal/IGV/total y CTAs alineados a la referencia. Branding, categorías y catálogo intactos.",
+  "retry_attempt": 73,
+  "retry_reason": "PR #408 merged at 06091b7c774b949e6f2ef79fadcc0cddf5d2e292; CANON Critical 37080737606 PASS y E2E Smoke 37080737599 PASS.",
+  "requested_at_utc": "2026-10-03T00:10:00Z",
+  "target_head": "06091b7c774b949e6f2ef79fadcc0cddf5d2e292"
 }
