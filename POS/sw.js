@@ -94,6 +94,7 @@ const PRECACHE_URLS = [
   './js/compat/legacy-globals.js',
   './js/app.js',
   './js/canon-pos-reference-ui.js',
+  './js/canon-desktop-dashboard.js',
   './js/catalog/reference-catalog-data.js',
   './js/catalog/reference-catalog.js',
   './js/ocr/ocr-extract.js',
