@@ -311,6 +311,59 @@ function _naApplyConfigUI(){
 function updateDashboard(){const hoy=obtenerHoy(),validas=ventas.filter(v=>v.fecha===hoy&&!v.anulada),total=validas.reduce((sum,v)=>sum+totalV(v),0);const qv=document.getElementById('qsVentas');if(qv)qv.textContent=fmt(total);const qvs=document.getElementById('qsVentasSub');if(qvs)qvs.textContent=`${validas.length} transacción${validas.length===1?'':'es'}`;const cajaActiva=_naSessionOpen(),t=typeof cajTotales==='function'?cajTotales():{ef:0};const qc=document.getElementById('qsCaja');if(qc)qc.textContent=fmt(cajaActiva?t.ef:0);const qcs=document.getElementById('qsCajaSub');const cajaTexto=cajaActiva?`Abierta · ${cajEstado.cajero||''}`:(cajEstado?.cerrada?'Caja cerrada':'Caja no abierta');if(qcs)qcs.textContent=cajaTexto;creditos.forEach(_naSyncCreditStatus);const activos=creditos.filter(cr=>!cr.anulado&&cr.status!=='cancelado'&&cr.monto>cr.pagado),deuda=activos.reduce((a,cr)=>a+(cr.monto-cr.pagado),0);const qp=document.getElementById('qsPorCobrar');if(qp)qp.textContent=fmt(deuda);const qps=document.getElementById('qsPorCobrarSub');if(qps)qps.textContent=`${activos.length} crédito${activos.length===1?'':'s'} activo${activos.length===1?'':'s'}`;const crit=appConfig.stockAlertActive?productos.filter(p=>_naTracksStock(p)&&p.stock<=p.stockMin).length:0;const qs=document.getElementById('qsStockCritico');if(qs)qs.textContent=appConfig.stockAlertActive?crit:'—';const qss=document.getElementById('qsStockCriticoSub');if(qss)qss.textContent=appConfig.stockAlertActive?(crit===1?'producto por reponer':'productos por reponer'):'alertas desactivadas';const heroSales=document.getElementById('menuVentasHero');if(heroSales)heroSales.textContent=fmt(total);const heroSalesSub=document.getElementById('menuVentasHeroSub');if(heroSalesSub)heroSalesSub.textContent=`${validas.length} transacción${validas.length===1?'':'es'} registradas hoy`;const heroCaja=document.getElementById('menuCajaEstado');if(heroCaja){heroCaja.textContent=cajaTexto;heroCaja.className='hero-pill '+(cajaActiva?'success':'warn');}const heroProductos=document.getElementById('menuProductosEstado');if(heroProductos)heroProductos.textContent=`${productos.length} productos cargados`;const heroCreditos=document.getElementById('menuCreditosEstado');if(heroCreditos)heroCreditos.textContent=`${activos.length} crédito${activos.length===1?'':'s'} activo${activos.length===1?'':'s'}`;const productosCargados=document.getElementById('menuProductosCargados');if(productosCargados)productosCargados.textContent=String(productos.length);const clientesCargados=document.getElementById('menuClientesCargados');if(clientesCargados)clientesCargados.textContent=String(clientes.length);const ultimaVenta=document.getElementById('menuUltimaVenta');const ultimoMov=document.getElementById('menuUltimoMovimiento');const ultima=ventas.filter(v=>!v.anulada).slice().sort((a,b)=>new Date((b.fecha||'')+'T'+((b.hora24||'00:00:00').substring(0,8)||'00:00:00'))-new Date((a.fecha||'')+'T'+((a.hora24||'00:00:00').substring(0,8)||'00:00:00')))[0];if(ultima){const monto=fmt(totalV(ultima));if(ultimaVenta)ultimaVenta.textContent=`${monto}`;if(ultimoMov)ultimoMov.textContent=`Último movimiento: ${ultima.id||'venta'} · ${monto}`;}else{if(ultimaVenta)ultimaVenta.textContent='Sin ventas';if(ultimoMov)ultimoMov.textContent='Sin movimientos recientes';}}
 
 
+function _naDashboardLocalIso(date){
+  const d=date instanceof Date?date:new Date(date);
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function _naDashboardRecentTimestamp(v){
+  const rawDate=String(v?.fecha||''),rawTime=String(v?.hora24||v?.hora||'00:00:00').slice(0,8);
+  const parsed=Date.parse(`${rawDate}T${/^\d{2}:\d{2}/.test(rawTime)?rawTime:'00:00:00'}`);
+  return Number.isFinite(parsed)?parsed:0;
+}
+function _naUpdateDesktopDashboard(){
+  const now=new Date(),yesterdayDate=new Date(now.getTime());
+  yesterdayDate.setDate(yesterdayDate.getDate()-1);
+  const today=obtenerHoy(),yesterday=_naDashboardLocalIso(yesterdayDate);
+  const todaySales=ventas.filter(v=>v.fecha===today&&!v.anulada),ayerVentas=ventas.filter(v=>v.fecha===yesterday&&!v.anulada);
+  const todayTotal=todaySales.reduce((sum,v)=>sum+totalV(v),0),yesterdayTotal=ayerVentas.reduce((sum,v)=>sum+totalV(v),0);
+  const trend=document.getElementById('qsVentasTrend'),previous=document.getElementById('qsVentasPrev');
+  if(trend){
+    if(yesterdayTotal>0){
+      const pct=((todayTotal-yesterdayTotal)/yesterdayTotal)*100,up=pct>0.049,down=pct<-.049;
+      trend.dataset.trend=up?'up':down?'down':'flat';
+      trend.textContent=`${up?'↑':down?'↓':'—'} ${Math.abs(pct).toFixed(1)}% vs ayer`;
+    }else if(todayTotal>0){trend.dataset.trend='up';trend.textContent='↑ Sin ventas ayer';}
+    else{trend.dataset.trend='flat';trend.textContent='— Sin variación vs ayer';}
+  }
+  if(previous)previous.textContent=`Ayer: ${fmt(yesterdayTotal)}`;
+  const dateLabel=document.getElementById('menuDesktopDate');
+  if(dateLabel)dateLabel.textContent=now.toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'long'});
+  const recent=ventas.filter(v=>!v.anulada).slice().sort((a,b)=>_naDashboardRecentTimestamp(b)-_naDashboardRecentTimestamp(a)).slice(0,3);
+  for(let i=0;i<3;i++){
+    const label=document.getElementById(`menuActivity${i}Label`),amount=document.getElementById(`menuActivity${i}Amount`),sale=recent[i];
+    if(!label||!amount)continue;
+    if(!sale){label.textContent=i===0?'Sin movimientos recientes':'—';amount.textContent='—';continue;}
+    const id=String(sale.id||'Venta').replace(/^V-/,'#'),time=String(sale.hora24||sale.hora||'').slice(0,5);
+    label.textContent=`Venta ${id}${time?' · '+time:''}`;
+    amount.textContent=fmt(totalV(sale));
+  }
+  const pendingCredits=document.getElementById('menuPendingCredits'),pendingStock=document.getElementById('menuPendingStock'),pendingCash=document.getElementById('menuPendingCash');
+  const debtValue=document.getElementById('qsPorCobrar')?.textContent||'S/ 0.00',debtCount=document.getElementById('qsPorCobrarSub')?.textContent||'Sin créditos activos';
+  const stockValue=document.getElementById('qsStockCritico')?.textContent||'0',stockCopy=document.getElementById('qsStockCriticoSub')?.textContent||'productos por reponer';
+  const cashState=document.getElementById('qsCajaSub')?.textContent||'Caja no abierta';
+  if(pendingCredits)pendingCredits.textContent=`${debtCount} · ${debtValue}`;
+  if(pendingStock)pendingStock.textContent=`${stockValue} ${stockCopy}`;
+  if(pendingCash)pendingCash.textContent=cashState;
+}
+const _naBaseDashboardRenderer=updateDashboard;
+updateDashboard=function(){
+  const result=_naBaseDashboardRenderer.apply(this,arguments);
+  try{_naUpdateDesktopDashboard();}catch(error){console.warn('[Nuevo Amanecer] No se pudo actualizar el resumen visual de escritorio.',error?.message||error);}
+  return result;
+};
+
+
 const _NA_DB_NAME='NuevoAmanecerPOS',_NA_DB_STORE='state',_NA_SNAPSHOT_KEY='snapshot_v9',_NA_LOCAL_KEY='na_snapshot_v9',_NA_SESSION_KEY='na_snapshot_v9_session',_NA_LOCAL_CONFIG_KEY='na_local_config_v1';
 let _naDbPromise=null,_naDbLastError=null,_naPersistChain=Promise.resolve(),_naLastPersistOK=true,_naLoadedUIState={},_naPersistWarningState='';
 let _naLastPersistResult={ok:true,durable:true,temporary:false,storage:'unknown',verified:false,error:null};
