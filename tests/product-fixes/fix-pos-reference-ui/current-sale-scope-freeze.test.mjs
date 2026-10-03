@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
 const SHORT_VIEWPORT_MEDIA='@media(min-width:1100px) and (max-height:700px)';
+const SHORT_VIEWPORT_COMMENT='/* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */\n';
 
 export function frozenRules(source, scope='') {
  const rows=[]; source=source.replace(/\/\*[\s\S]*?\*\//g,''); let cursor=0;
@@ -26,7 +27,8 @@ function stripShortViewportMedia(source){
  if(start<0)return source;
  let depth=1,end=start+marker.length;
  for(;depth&&end<source.length;end++){if(source[end]==='{')depth++;if(source[end]==='}')depth--;}
- return source.slice(0,start)+source.slice(end);
+ const withoutMedia=source.slice(0,start)+source.slice(end);
+ return withoutMedia.replace(SHORT_VIEWPORT_COMMENT,'');
 }
 
 test('all CSS outside Venta actual and the reference decorator remain frozen',()=>{
@@ -47,4 +49,5 @@ test('short-height exception is isolated to its dedicated media block',()=>{
  assert.ok(source.includes(SHORT_VIEWPORT_MEDIA+'{'));
  const stripped=stripShortViewportMedia(source);
  assert.ok(!stripped.includes(SHORT_VIEWPORT_MEDIA+'{'));
+ assert.ok(!stripped.includes(SHORT_VIEWPORT_COMMENT.trim()));
 });
