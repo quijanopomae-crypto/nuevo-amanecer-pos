@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/canon-desktop-tablet-dashboard-apply.yml"
       - "tools/canon-desktop-tablet-dashboard-apply.py"
+      - "tests/product-fixes/canon-desktop-tablet-dashboard.test.mjs"
 
 permissions:
   contents: write
