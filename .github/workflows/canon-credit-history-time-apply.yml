@@ -33,6 +33,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import textwrap
 
           path = Path('POS/js/modules/client-credit-accounts-v2.js')
           text = path.read_text(encoding='utf-8')
@@ -41,43 +42,44 @@ jobs:
           if text.count(marker) != 1:
               raise SystemExit('Expected exactly one labPurchaseRow marker')
 
-          helper = r'''  function labCreditDisplayTime(cr) {
-            function direct(value) {
-              var raw = String(value || '').trim();
-              if (!raw) return '';
-              var compact = raw.toLowerCase().replace(/[.\s]/g, '');
-              var match = /^(\d{1,2}):(\d{2})(?::\d{2})?(am|pm)?$/.exec(compact);
-              if (!match) return '';
-              var hour = Number(match[1]), minute = Number(match[2]), suffix = match[3] || '';
-              if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) return '';
-              if (suffix) {
-                if (hour < 1 || hour > 12) return '';
-                if (suffix === 'pm' && hour < 12) hour += 12;
-                if (suffix === 'am' && hour === 12) hour = 0;
-              } else if (hour < 0 || hour > 23) return '';
-              return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+          helper = textwrap.dedent("""\
+            function labCreditDisplayTime(cr) {
+              function direct(value) {
+                var raw = String(value || '').trim();
+                if (!raw) return '';
+                var compact = raw.toLowerCase().replace(/[.\\s]/g, '');
+                var match = /^(\\d{1,2}):(\\d{2})(?::\\d{2})?(am|pm)?$/.exec(compact);
+                if (!match) return '';
+                var hour = Number(match[1]), minute = Number(match[2]), suffix = match[3] || '';
+                if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) return '';
+                if (suffix) {
+                  if (hour < 1 || hour > 12) return '';
+                  if (suffix === 'pm' && hour < 12) hour += 12;
+                  if (suffix === 'am' && hour === 12) hour = 0;
+                } else if (hour < 0 || hour > 23) return '';
+                return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+              }
+
+              var exact = direct(cr && cr.hora24) || direct(cr && cr.hora);
+              if (exact) return exact;
+
+              var timestamp = String(cr && cr.timestamp || '').trim();
+              if (!/[T ]\\d{2}:\\d{2}/.test(timestamp)) return '';
+              var parsed = new Date(timestamp);
+              if (Number.isFinite(parsed.getTime())) {
+                return String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0');
+              }
+              var fallback = /[T ](\\d{2}):(\\d{2})/.exec(timestamp);
+              return fallback ? fallback[1] + ':' + fallback[2] : '';
             }
 
-            var exact = direct(cr && cr.hora24) || direct(cr && cr.hora);
-            if (exact) return exact;
-
-            var timestamp = String(cr && cr.timestamp || '').trim();
-            if (!/[T ]\d{2}:\d{2}/.test(timestamp)) return '';
-            var parsed = new Date(timestamp);
-            if (Number.isFinite(parsed.getTime())) {
-              return String(parsed.getHours()).padStart(2, '0') + ':' + String(parsed.getMinutes()).padStart(2, '0');
+            function labCreditDisplayMoment(cr, fallbackDate) {
+              var date = labCreditVisualDate(cr) || String(fallbackDate || '');
+              var time = labCreditDisplayTime(cr);
+              return date + (date && time ? ' · ' + time : '');
             }
-            var fallback = /[T ](\d{2}):(\d{2})/.exec(timestamp);
-            return fallback ? fallback[1] + ':' + fallback[2] : '';
-          }
 
-          function labCreditDisplayMoment(cr, fallbackDate) {
-            var date = labCreditVisualDate(cr) || String(fallbackDate || '');
-            var time = labCreditDisplayTime(cr);
-            return date + (date && time ? ' · ' + time : '');
-          }
-
-'''
+          """)
           text = text.replace(marker, helper + marker, 1)
 
           old_row = "labEsc(cr.fecha || 'Fecha no registrada')"
