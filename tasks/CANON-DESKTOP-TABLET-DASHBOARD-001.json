@@ -15,7 +15,10 @@
     "POS/js/canon-desktop-dashboard.js",
     "POS/js/legacy-inline/inline-02.js",
     "POS/sw.js",
-    "tests/product-fixes/fix-desktop-tablet-dashboard/canon-desktop-tablet-dashboard.test.mjs"
+    "tests/product-fixes/fix-desktop-tablet-dashboard/canon-desktop-tablet-dashboard.test.mjs",
+    "tests/e2e/pos-smoke.spec.ts",
+    "tests/e2e/current-sale-density.spec.ts",
+    "tests/e2e/pos-reference-fidelity.spec.ts"
   ],
   "forbidden_files": [
     "laboratorio/**",
@@ -37,6 +40,7 @@
     "Las secciones HTML aprobadas LAB→CANON permanecen estáticamente en paridad; la decoración exclusiva CANON se inyecta en runtime.",
     "Los assets experience-v2 promovidos desde LAB deben permanecer en paridad; el diseño CANON específico vive en un stylesheet separado.",
     "Los nuevos assets CANON deben quedar precargados por el service worker.",
+    "E2E navega por la sidebar en tablet/escritorio y conserva module-card en móvil.",
     "El workflow temporal de cableado debe eliminarse antes del merge."
   ],
   "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos."
