@@ -1,0 +1,57 @@
+{
+  "schema": "nuevo-amanecer.canon-preflight/v1",
+  "task_id": "CANON-DESKTOP-TABLET-DASHBOARD-001",
+  "base_ref": "36459852b6be86525b7a9751561969cb6af8ddd4",
+  "phase": "BEFORE_WRITE",
+  "status": "CANON_PREFLIGHT_PASS",
+  "owner_authorized": true,
+  "observed": [
+    "La captura real del owner muestra que CANON en escritorio sigue renderizando cuatro KPIs y grandes tarjetas de módulos.",
+    "POS/index.html conserva el bloque Módulos principales y modules-grid.",
+    "POS/css/experience-v2/pages/menu.css solo oculta el hero; no existe layout lateral para tablet/escritorio.",
+    "updateDashboard ya expone varios hooks de resumen y usa ventas, caja, créditos y stock como lectura de UI."
+  ],
+  "analysis": {
+    "READS": [
+      "POS/index.html",
+      "POS/css/experience-v2/pages/menu.css",
+      "POS/js/legacy-inline/inline-02.js",
+      ".agents/skills/impact-analysis/SKILL.md",
+      ".agents/skills/cross-module-impact/SKILL.md",
+      "captura real del owner"
+    ],
+    "WRITES": [
+      "Estructura de navegación lateral solo visible desde 768 px",
+      "Panel de resumen para tablet/escritorio",
+      "Tendencia de ventas hoy contra ayer",
+      "Tres filas de actividad reciente derivadas de ventas existentes",
+      "Pendientes derivados de créditos, stock y estado de caja",
+      "Regresión focal del layout responsive"
+    ],
+    "DOM_AFFECTED": ["#pageMenu únicamente"],
+    "STATE_AFFECTED": [],
+    "STORAGE_AFFECTED": [],
+    "DOMAIN_INVARIANTS": [
+      "No crear ni modificar datos financieros.",
+      "No duplicar navegación ni funciones de venta.",
+      "No alterar móvil menor de 768 px.",
+      "No introducir una segunda fuente de estado."
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Punto de Venta, Ventas, Inventario, Clientes, Caja, Gastos y Configuración: solo accesos goPage ya existentes.",
+      "Ventas/Caja/Créditos/Stock: solo lectura para resumen visual.",
+      "Backend/Sync/Persistencia: sin cambios."
+    ],
+    "RISKS": [
+      "Ocultar por error los módulos en móvil; se evita manteniendo el comportamiento actual por defecto y aplicando cambios desde min-width:768px.",
+      "Duplicar acciones; la barra lateral usa exactamente los destinos existentes y no añade + Nueva venta.",
+      "Comparación incorrecta; se limita a ventas no anuladas de hoy contra ayer usando fecha local ISO del POS."
+    ],
+    "ROLLBACK": ["Revertir el PR; no hay datos ni migraciones que revertir."],
+    "TEST_PLAN": [
+      "RED: la regresión exige sidebar, breakpoints, tendencia y paneles que todavía no existen.",
+      "GREEN: validar estructura, CSS tablet/escritorio y hooks de updateDashboard.",
+      "Ejecutar CANON Critical CI y E2E Smoke antes del merge."
+    ]
+  }
+}
