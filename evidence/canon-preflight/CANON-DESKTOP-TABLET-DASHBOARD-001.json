@@ -8,14 +8,17 @@
   "observed": [
     "La captura real del owner muestra que CANON en escritorio sigue renderizando cuatro KPIs y grandes tarjetas de módulos.",
     "POS/index.html conserva el bloque Módulos principales y modules-grid.",
-    "POS/css/experience-v2/pages/menu.css solo oculta el hero; no existe layout lateral para tablet/escritorio.",
+    "POS/css/experience-v2/pages/menu.css es un asset promovido desde LAB y el gate de paridad exige que permanezca idéntico a su fuente LAB.",
     "updateDashboard ya expone varios hooks de resumen y usa ventas, caja, créditos y stock como lectura de UI."
   ],
   "analysis": {
     "READS": [
       "POS/index.html",
       "POS/css/experience-v2/pages/menu.css",
+      "POS/sw.js",
       "POS/js/legacy-inline/inline-02.js",
+      "tools/pos-experience/promote-lab-visuals.mjs",
+      "tools/pos-experience/visual-assets.mjs",
       ".agents/skills/impact-analysis/SKILL.md",
       ".agents/skills/cross-module-impact/SKILL.md",
       "captura real del owner"
@@ -26,8 +29,9 @@
       "Tendencia de ventas hoy contra ayer",
       "Tres filas de actividad reciente derivadas de ventas existentes",
       "Pendientes derivados de créditos, stock y estado de caja",
-      "Regresión focal del layout responsive",
-      "Workflow y script temporales de aplicación, retirados antes del merge"
+      "Stylesheet CANON específico para no romper la paridad LAB→CANON de experience-v2",
+      "Precache del nuevo stylesheet en el service worker",
+      "Regresión focal del layout responsive dentro del patrón fix* ejecutado por CANON Critical CI"
     ],
     "DOM_AFFECTED": ["#pageMenu únicamente"],
     "STATE_AFFECTED": [],
@@ -36,7 +40,9 @@
       "No crear ni modificar datos financieros.",
       "No duplicar navegación ni funciones de venta.",
       "No alterar móvil menor de 768 px.",
-      "No introducir una segunda fuente de estado."
+      "No introducir una segunda fuente de estado.",
+      "No modificar laboratorio para resolver un detalle exclusivo de presentación CANON.",
+      "Restaurar paridad exacta de POS/css/experience-v2/pages/menu.css con LAB."
     ],
     "CROSS_MODULE_IMPACT": [
       "Punto de Venta, Ventas, Inventario, Clientes, Caja, Gastos y Configuración: solo accesos goPage ya existentes.",
@@ -46,14 +52,15 @@
     "RISKS": [
       "Ocultar por error los módulos en móvil; se evita manteniendo el comportamiento actual por defecto y aplicando cambios desde min-width:768px.",
       "Duplicar acciones; la barra lateral usa exactamente los destinos existentes y no añade + Nueva venta.",
-      "Comparación incorrecta; se limita a ventas no anuladas de hoy contra ayer usando fecha local ISO del POS."
+      "Comparación incorrecta; se limita a ventas no anuladas de hoy contra ayer usando fecha local ISO del POS.",
+      "Drift visual LAB→CANON; se evita dejando menu.css en paridad y aislando la extensión en canon-desktop-dashboard.css."
     ],
     "ROLLBACK": ["Revertir el PR; no hay datos ni migraciones que revertir."],
     "TEST_PLAN": [
-      "RED: la regresión exige sidebar, breakpoints, tendencia y paneles que todavía no existen.",
-      "GREEN: validar estructura, CSS tablet/escritorio y hooks de updateDashboard.",
-      "Ejecutar la regresión focal desde el workflow temporal, después CANON Critical CI y E2E Smoke.",
-      "Eliminar workflow y script temporales antes del merge."
+      "Regresión focal: estructura, breakpoint, tendencia, actividad, pendientes, link CSS y precache.",
+      "LAB to CANON promotion gate debe pasar sin drift.",
+      "CANON Critical CI y E2E Smoke deben pasar antes del merge.",
+      "Hosted POS Web Deploy solo después del merge autorizado."
     ]
   }
 }
