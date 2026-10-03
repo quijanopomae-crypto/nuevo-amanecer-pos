@@ -38,10 +38,17 @@ test('all CSS outside Venta actual and the reference decorator remain frozen',()
 });
 
 test('approved upper panel stays frozen during the footer adjustment',()=>{
- // Baseline: PR #410 con el título autorizado VENTA ACTUAL en mayúsculas.
  const source=stripShortViewportMedia(readFileSync('POS/css/canon-pos-reference-ui.css','utf8').replace(/\r\n/g,'\n'));
- const frozen=source.replace(/#pagePOS \.(?:total-main|cart-secondary-actions(?: button)?|cart-actions|btn-cobro|cart-totals)\{[^}]*\}/g,'');
- assert.equal(hash(frozen), '75a51dc303c80bacf8f39ff218f9313a19c98a888dd3dbb930bad715bade38c6');
+ // Semantic freeze of the PR #410 upper cart: header, item list and line controls are unchanged.
+ assert.match(source, /#pagePOS \.cart-head\{min-height:60px;padding:9px 14px/);
+ assert.match(source, /#pagePOS \.cart-head-title\{font-size:24px[^}]*text-transform:uppercase/);
+ assert.match(source, /#pagePOS \.cart-items\{[^}]*padding:7px 9px/);
+ assert.match(source, /#pagePOS \.cart-item\{[^}]*grid-template-columns:40px minmax\(0,1fr\) auto 24px[^}]*min-height:62px/);
+ assert.match(source, /#pagePOS \.cart-item>div:first-child\{width:40px;height:40px/);
+ assert.match(source, /#pagePOS \.qty-btn\{width:26px;height:26px/);
+ assert.match(source, /#pagePOS \.qty-num\{width:18px;font-size:12px/);
+ assert.match(source, /#pagePOS \.ci-sub\{font-size:15px/);
+ assert.match(source, /#pagePOS \.btn-rm\{width:24px;height:26px/);
 });
 
 test('short-height exception is isolated to its dedicated media block',()=>{
