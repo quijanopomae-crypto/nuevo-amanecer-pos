@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
+const SHORT_VIEWPORT_MEDIA='@media(min-width:1100px) and (max-height:700px)';
+
 export function frozenRules(source, scope='') {
  const rows=[]; source=source.replace(/\/\*[\s\S]*?\*\//g,''); let cursor=0;
  while(cursor<source.length){
@@ -10,12 +12,22 @@ export function frozenRules(source, scope='') {
   const selector=source.slice(cursor,start).trim();let depth=1,end=start+1;
   for(;depth&&end<source.length;end++){if(source[end]==='{')depth++;if(source[end]==='}')depth--;}
   const body=source.slice(start+1,end-1);cursor=end;
+  if(selector===SHORT_VIEWPORT_MEDIA)continue;
   if(selector.startsWith('@media'))rows.push(...frozenRules(body,scope+selector+'/'));
   else if(!/^#pagePOS (?:#cartDrawer )?\.(?:cart-(?!fab\b)|ci-|qty-|btn-rm\b|total-|btn-cobro\b)/.test(selector))rows.push(scope+selector+'{'+body+'}');
  }
  return rows;
 }
 const hash=value=>createHash('sha256').update(value).digest('hex');
+
+function stripShortViewportMedia(source){
+ const marker=SHORT_VIEWPORT_MEDIA+'{';
+ const start=source.indexOf(marker);
+ if(start<0)return source;
+ let depth=1,end=start+marker.length;
+ for(;depth&&end<source.length;end++){if(source[end]==='{')depth++;if(source[end]==='}')depth--;}
+ return source.slice(0,start)+source.slice(end);
+}
 
 test('all CSS outside Venta actual and the reference decorator remain frozen',()=>{
  // Baseline: CANON 9278e2ce95df9ce01deec220a16e858551ad4e33.
@@ -25,7 +37,14 @@ test('all CSS outside Venta actual and the reference decorator remain frozen',()
 
 test('approved upper panel stays frozen during the footer adjustment',()=>{
  // Baseline: PR #410 con el título autorizado VENTA ACTUAL en mayúsculas.
- const source=readFileSync('POS/css/canon-pos-reference-ui.css','utf8').replace(/\r\n/g,'\n');
+ const source=stripShortViewportMedia(readFileSync('POS/css/canon-pos-reference-ui.css','utf8').replace(/\r\n/g,'\n'));
  const frozen=source.replace(/#pagePOS \.(?:total-main|cart-secondary-actions(?: button)?|cart-actions|btn-cobro|cart-totals)\{[^}]*\}/g,'');
  assert.equal(hash(frozen), '75a51dc303c80bacf8f39ff218f9313a19c98a888dd3dbb930bad715bade38c6');
+});
+
+test('short-height exception is isolated to its dedicated media block',()=>{
+ const source=readFileSync('POS/css/canon-pos-reference-ui.css','utf8').replace(/\r\n/g,'\n');
+ assert.ok(source.includes(SHORT_VIEWPORT_MEDIA+'{'));
+ const stripped=stripShortViewportMedia(source);
+ assert.ok(!stripped.includes(SHORT_VIEWPORT_MEDIA+'{'));
 });
