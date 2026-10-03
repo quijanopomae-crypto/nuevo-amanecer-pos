@@ -12,6 +12,7 @@
     "POS/index.html",
     "POS/css/experience-v2/pages/menu.css",
     "POS/css/canon-desktop-dashboard.css",
+    "POS/js/canon-desktop-dashboard.js",
     "POS/js/legacy-inline/inline-02.js",
     "POS/sw.js",
     "tests/product-fixes/fix-desktop-tablet-dashboard/canon-desktop-tablet-dashboard.test.mjs"
@@ -33,8 +34,9 @@
     "Móvil menor de 768 px conserva su composición actual de tarjetas.",
     "Tablet y escritorio comparten los mismos datos existentes; solo cambia presentación.",
     "La comparación de ventas usa únicamente ventas no anuladas de hoy contra ayer.",
+    "Las secciones HTML aprobadas LAB→CANON permanecen estáticamente en paridad; la decoración exclusiva CANON se inyecta en runtime.",
     "Los assets experience-v2 promovidos desde LAB deben permanecer en paridad; el diseño CANON específico vive en un stylesheet separado.",
-    "El nuevo stylesheet debe quedar precargado por el service worker.",
+    "Los nuevos assets CANON deben quedar precargados por el service worker.",
     "El workflow temporal de cableado debe eliminarse antes del merge."
   ],
   "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos."
