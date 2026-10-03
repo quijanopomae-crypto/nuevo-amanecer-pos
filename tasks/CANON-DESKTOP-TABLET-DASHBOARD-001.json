@@ -8,14 +8,15 @@
   "allowed_files": [
     "tasks/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
     "evidence/canon-preflight/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
-    ".github/workflows/canon-desktop-tablet-dashboard-apply.yml",
-    "tools/canon-desktop-tablet-dashboard-apply.py",
     "POS/index.html",
     "POS/css/experience-v2/pages/menu.css",
+    "POS/css/canon-desktop-dashboard.css",
     "POS/js/legacy-inline/inline-02.js",
-    "tests/product-fixes/canon-desktop-tablet-dashboard.test.mjs"
+    "POS/sw.js",
+    "tests/product-fixes/fix-desktop-tablet-dashboard/canon-desktop-tablet-dashboard.test.mjs"
   ],
   "forbidden_files": [
+    "laboratorio/**",
     "POS/js/sync/**",
     "POS/js/modules/**",
     "POS/js/adapters/**",
@@ -31,7 +32,8 @@
     "Móvil menor de 768 px conserva su composición actual de tarjetas.",
     "Tablet y escritorio comparten los mismos datos existentes; solo cambia presentación.",
     "La comparación de ventas usa únicamente ventas no anuladas de hoy contra ayer.",
-    "El workflow y script temporales de aplicación deben eliminarse antes del merge."
+    "Los assets experience-v2 promovidos desde LAB deben permanecer en paridad; el diseño CANON específico vive en un stylesheet separado.",
+    "El nuevo stylesheet debe quedar precargado por el service worker."
   ],
   "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos."
 }
