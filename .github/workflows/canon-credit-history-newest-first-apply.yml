@@ -42,12 +42,14 @@ jobs:
           if 'function labSortCreditsNewestFirst(rows)' in text:
               print('newest-first helper already present')
           else:
-              old = """  function labCategorySummary(client, category) {
-            var all = labCreditsForCategory(client.id, category.id);
-            var active = all.filter(function (cr) { return !labIsCanceled(cr); });
-            var closed = all.filter(labIsCanceled);
-          """
-              new = """  function labCreditVisualDate(cr) {
+              start_marker = '  function labCategorySummary(client, category) {'
+              end_marker = '    var closed = all.filter(labIsCanceled);'
+              start = text.find(start_marker)
+              end = text.find(end_marker, start)
+              if start < 0 or end < 0:
+                  raise SystemExit('expected labCategorySummary range not found; refusing broad edit')
+              end += len(end_marker)
+              replacement = """  function labCreditVisualDate(cr) {
             var direct = String(cr && cr.fecha || '').slice(0, 10);
             if (/^\\d{4}-\\d{2}-\\d{2}$/.test(direct)) return direct;
             var timestampDate = String(cr && cr.timestamp || '').slice(0, 10);
@@ -76,11 +78,8 @@ jobs:
           function labCategorySummary(client, category) {
             var all = labCreditsForCategory(client.id, category.id);
             var active = labSortCreditsNewestFirst(all.filter(function (cr) { return !labIsCanceled(cr); }));
-            var closed = labSortCreditsNewestFirst(all.filter(labIsCanceled));
-          """
-              if old not in text:
-                  raise SystemExit('expected labCategorySummary block not found exactly; refusing broad edit')
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+            var closed = labSortCreditsNewestFirst(all.filter(labIsCanceled));"""
+              path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
           PY
 
           node --check POS/js/modules/client-credit-accounts-v2.js
