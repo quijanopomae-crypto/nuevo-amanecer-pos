@@ -10,7 +10,8 @@
     "tasks/CANON-CREDIT-HISTORY-NEWEST-FIRST-001.json",
     "evidence/canon-preflight/CANON-CREDIT-HISTORY-NEWEST-FIRST-001.json",
     "POS/js/modules/client-credit-accounts-v2.js",
-    "tests/product-fixes/fix-credit-history-newest-first/canon-credit-history-newest-first.test.mjs"
+    "tests/product-fixes/fix-credit-history-newest-first/canon-credit-history-newest-first.test.mjs",
+    ".github/workflows/canon-credit-history-newest-first-apply.yml"
   ],
   "forbidden_files": [
     "laboratorio/**",
@@ -34,7 +35,8 @@
     "No cambiar monto, saldo, pagos, cuotas, caja, ventas ni persistencia",
     "El cobro múltiple conserva su FIFO ascendente independiente",
     "No cambiar categorías ni identidad durable de créditos",
-    "Solo cambia el orden visual derivado de active/closed"
+    "Solo cambia el orden visual derivado de active/closed",
+    "El workflow aplicador es temporal, solo modifica el módulo permitido, ejecuta la regresión focal y se elimina antes del merge"
   ],
   "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos que revertir."
 }
