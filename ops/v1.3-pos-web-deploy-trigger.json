@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON PR #417: ordenar visualmente el historial de Créditos pequeños de fecha más reciente a más antigua y timestamp más reciente primero dentro del mismo día, sin alterar ledger, FIFO, saldos, pagos ni persistencia.",
-  "retry_attempt": 76,
-  "retry_reason": "PR #417 merged at aeb2f795d0b49eecc143bc4d30ed1410231d25ff; CANON Critical CI 37128602901 PASS y E2E Smoke 37128602857 PASS. El owner autorizó explícitamente aplicar la corrección en CANON directamente.",
-  "requested_at_utc": "2026-10-03T14:16:30Z",
-  "target_head": "aeb2f795d0b49eecc143bc4d30ed1410231d25ff"
+  "note": "Deploy CANON PR #419: mostrar fecha y hora HH:MM en cada fila de Créditos pequeños y en el encabezado VENTA, sin mostrar segundos ni alterar ledger, saldos, pagos, cuotas, FIFO o persistencia.",
+  "retry_attempt": 77,
+  "retry_reason": "PR #419 merged at fb051e5505640f43d422c32828dc803ce5326aa4; CANON Critical CI 37136300727 PASS y E2E Smoke 37136300607 PASS. El owner autorizó explícitamente aplicarlo también en CANON.",
+  "requested_at_utc": "2026-10-03T16:20:00Z",
+  "target_head": "fb051e5505640f43d422c32828dc803ce5326aa4"
 }
