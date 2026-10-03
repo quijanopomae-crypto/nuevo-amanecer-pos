@@ -39,7 +39,7 @@ test('updateDashboard calcula tendencia real de ventas contra ayer y llena activ
   assert.match(runtime, /qsVentasTrend/);
   assert.match(runtime, /qsVentasPrev/);
   assert.match(runtime, /ayerVentas/);
-  assert.match(runtime, /menuActivity0Label/);
+  assert.match(runtime, /menuActivity\$\{i\}Label/);
   assert.match(runtime, /menuPendingCredits/);
   assert.match(runtime, /menuPendingStock/);
   assert.match(runtime, /menuPendingCash/);
