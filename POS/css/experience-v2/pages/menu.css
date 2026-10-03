@@ -25,7 +25,7 @@
   #pageMenu .menu-desktop-heading p{margin:6px 0 0;color:var(--slate);font-size:12px;font-weight:700;text-transform:capitalize}
   #pageMenu .menu-desktop-live{display:flex;align-items:center;gap:7px;margin-top:3px;padding:7px 10px;border:1px solid #dce7e4;border-radius:999px;background:#fff;color:#475569;font-size:11px;font-weight:800;white-space:nowrap}
   #pageMenu .menu-desktop-live>span{width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 0 4px rgba(16,185,129,.10)}
-  #pageMenu .main-scroll.home-shell>.section-label:first-of-type{display:none}
+  #pageMenu .main-scroll.home-shell>.section-label:not(.menu-modules-label){display:none}
   #pageMenu .quick-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 18px}
   #pageMenu .qs-card{min-height:128px;border:1px solid #dbe4ea;border-radius:14px;padding:15px 16px 13px;background:var(--white);box-shadow:0 4px 14px rgba(15,23,42,.035)}
   #pageMenu .qs-top{align-items:flex-start}
