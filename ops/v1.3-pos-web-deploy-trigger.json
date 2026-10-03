@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON PR #419: mostrar fecha y hora/minuto reales en Créditos pequeños y en el encabezado VENTA, con prioridad hora24 > hora > timestamp y sin inventar hora para históricos sin dato temporal.",
-  "retry_attempt": 77,
-  "retry_reason": "PR #419 merged at fb051e5505640f43d422c32828dc803ce5326aa4; CANON Critical CI 37136300727 PASS y E2E Smoke CI 37136300607 PASS. El owner autorizó explícitamente implementarlo en CANON.",
-  "requested_at_utc": "2026-10-03T16:20:00Z",
-  "target_head": "fb051e5505640f43d422c32828dc803ce5326aa4"
+  "note": "Deploy CANON PR #422: nuevo Inicio responsive para PC y tablet con sidebar, KPIs compactos con tendencia vs ayer, actividad reciente y pendientes; móvil <768 px conserva su interfaz actual.",
+  "retry_attempt": 78,
+  "retry_reason": "PR #422 merged at d062ef8c3da6fcefe959a423ce4e80a8aa3e81e9; CANON Critical CI 37141973041 PASS y E2E Smoke CI 37141973039 PASS. El owner autorizó explícitamente implementarlo en CANON.",
+  "requested_at_utc": "2026-10-03T17:52:30Z",
+  "target_head": "d062ef8c3da6fcefe959a423ce4e80a8aa3e81e9"
 }
