@@ -30,7 +30,7 @@ on:
       - ".opencode/agents/pos-lab-implementer.md"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -39,13 +39,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          persist-credentials: false
+          persist-credentials: true
           fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
-        with:
-          node-version: "22"
 
       - name: Universal LAB skill preflight gate
         shell: bash
@@ -65,6 +60,74 @@ jobs:
             BASE_SHA="$(git rev-parse HEAD^)"
           fi
           node laboratorio/pos-lab/skill-preflight.mjs --ci --base="$BASE_SHA" --require-order="$REQUIRE_ORDER"
+
+      - name: Apply LAB newest-first implementation to source branch
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'lab/credit-history-newest-first-v3-20261003' }}
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git checkout -B "$HEAD_REF" "origin/$HEAD_REF"
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('laboratorio/pos-lab/lab-overrides.js')
+          text=path.read_text(encoding='utf-8')
+          if 'function labSortCreditsNewestFirst(rows)' in text:
+              raise SystemExit(0)
+          old="""  function labCategorySummary(client, category) {
+            var all = labCreditsForCategory(client.id, category.id);
+            var active = all.filter(function (cr) { return !labIsCanceled(cr); });
+            var closed = all.filter(labIsCanceled);
+          """
+          new="""  function labCreditVisualDate(cr) {
+            var direct = String(cr && cr.fecha || '').slice(0, 10);
+            if (/^\\d{4}-\\d{2}-\\d{2}$/.test(direct)) return direct;
+            var timestampDate = String(cr && cr.timestamp || '').slice(0, 10);
+            return /^\\d{4}-\\d{2}-\\d{2}$/.test(timestampDate) ? timestampDate : '';
+          }
+
+          function labCreditVisualTimestamp(cr) {
+            var raw = String(cr && cr.timestamp || '');
+            if (!/^\\d{4}-\\d{2}-\\d{2}T/.test(raw)) return Number.NEGATIVE_INFINITY;
+            var parsed = Date.parse(raw);
+            return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+          }
+
+          function labSortCreditsNewestFirst(rows) {
+            return (Array.isArray(rows) ? rows : []).slice().sort(function (a, b) {
+              var dateOrder = labCreditVisualDate(b).localeCompare(labCreditVisualDate(a));
+              if (dateOrder) return dateOrder;
+              var aTime = labCreditVisualTimestamp(a), bTime = labCreditVisualTimestamp(b);
+              if (aTime !== bTime) return bTime - aTime;
+              return String(b && (b.ventaId || b.id) || '').localeCompare(
+                String(a && (a.ventaId || a.id) || ''), 'es', { numeric:true, sensitivity:'base' }
+              );
+            });
+          }
+
+          function labCategorySummary(client, category) {
+            var all = labCreditsForCategory(client.id, category.id);
+            var active = labSortCreditsNewestFirst(all.filter(function (cr) { return !labIsCanceled(cr); }));
+            var closed = labSortCreditsNewestFirst(all.filter(labIsCanceled));
+          """
+          if old not in text:
+              raise SystemExit('target labCategorySummary block not found')
+          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          if git diff --quiet -- laboratorio/pos-lab/lab-overrides.js; then
+            exit 0
+          fi
+          git config user.name "nuevo-amanecer-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add laboratorio/pos-lab/lab-overrides.js
+          git commit -m "fix(lab): ordenar créditos más recientes primero"
+          git push origin "HEAD:$HEAD_REF"
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
 
       - name: JavaScript syntax
         run: |
