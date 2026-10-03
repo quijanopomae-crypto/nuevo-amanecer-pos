@@ -20,6 +20,19 @@ test('latest credit sale renders first; same-day timestamp is descending; source
   assert.deepEqual(c.creditos.map(x=>x.id),before);
 });
 
+test('owner reproduction: an older July row cannot remain between August 23 sales',()=>{
+  const c=context(),api=c.NA_LAB_CLIENT_CREDIT_ACCOUNTS_V2,client={id:'A',nombre:'A'};
+  c.creditos=[
+    credit('aug19','2026-08-19','2026-08-19T09:00:00-05:00'),
+    credit('aug23-early','2026-08-23','2026-08-23T08:00:00-05:00'),
+    credit('jul08','2026-07-08','2026-07-08T12:00:00-05:00'),
+    credit('aug23-late','2026-08-23','2026-08-23T18:00:00-05:00'),
+    credit('sep03','2026-09-03','2026-09-03T10:00:00-05:00')
+  ];
+  const summary=api.categorySummary(client,api.categoriesForClient(client)[0]);
+  assert.deepEqual(Array.from(summary.active,x=>x.id),['sep03','aug23-late','aug23-early','aug19','jul08']);
+});
+
 test('batch payment keeps oldest-first FIFO independent from visual ordering',()=>{
   const start=canonModule.indexOf('function labBatchAllocationPlan');
   const end=canonModule.indexOf('function labBatchRow',start);
