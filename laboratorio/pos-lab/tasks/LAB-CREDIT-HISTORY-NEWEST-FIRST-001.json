@@ -8,7 +8,8 @@
     "laboratorio/pos-lab/tasks/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
     "laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
     "laboratorio/pos-lab/lab-overrides.js",
-    "tests/laboratorio-client-credit-accounts-v2.test.mjs"
+    "tests/laboratorio-client-credit-accounts-v2.test.mjs",
+    "tests/lab-credit-history-newest-first.test.mjs"
   ],
   "forbidden_files": [
     "POS/**",
