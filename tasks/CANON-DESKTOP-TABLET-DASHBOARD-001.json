@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-DESKTOP-TABLET-DASHBOARD-001",
+  "environment": "CANON",
+  "base_ref": "36459852b6be86525b7a9751561969cb6af8ddd4",
+  "objective": "Rediseñar únicamente el Inicio de CANON para tablet y escritorio con navegación lateral limpia, KPIs comparativos, actividad reciente y pendientes, manteniendo intacto el diseño móvil y toda la lógica comercial.",
+  "owner_authorization": "El owner aprobó el diseño y pidió explícitamente implementarlo para PC y tablet y también en CANON.",
+  "allowed_files": [
+    "tasks/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
+    "evidence/canon-preflight/CANON-DESKTOP-TABLET-DASHBOARD-001.json",
+    "POS/index.html",
+    "POS/css/experience-v2/pages/menu.css",
+    "POS/js/legacy-inline/inline-02.js",
+    "tests/product-fixes/canon-desktop-tablet-dashboard.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/js/sync/**",
+    "POS/js/modules/**",
+    "POS/js/adapters/**",
+    "tools/cloudflare-prod/**",
+    "tools/cloudflare-lab/**",
+    "infra/database/**",
+    "secrets/**"
+  ],
+  "required_skills": ["impact-analysis", "cross-module-impact"],
+  "invariants": [
+    "No modificar ventas, caja, créditos, inventario, persistencia ni sincronización.",
+    "Los mismos goPage existentes siguen siendo la autoridad de navegación.",
+    "Móvil menor de 768 px conserva su composición actual de tarjetas.",
+    "Tablet y escritorio comparten los mismos datos existentes; solo cambia presentación.",
+    "La comparación de ventas usa únicamente ventas no anuladas de hoy contra ayer."
+  ],
+  "rollback": "Revertir el PR/commit de esta tarea; no hay migraciones ni cambios de datos."
+}
