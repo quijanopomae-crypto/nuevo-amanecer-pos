@@ -172,3 +172,27 @@ test('current sale panel matches the approved desktop hierarchy', async ({ page 
   await expect(page.locator('#btnPagar')).toBeEnabled();
   await expect(page.getByPlaceholder('Nota de venta (opcional)')).toHaveCount(0);
 });
+
+test('short desktop viewport compacts the current-sale footer without changing tall desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 627 });
+  await prepare(page);
+  await page.locator('[data-product-id="VIS-A"]').click();
+  const compact = await page.evaluate(() => ({
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }));
+  expect(compact.total).toBeLessThanOrEqual(36);
+  expect(compact.secondary).toBeLessThanOrEqual(32);
+  expect(compact.pay).toBeLessThanOrEqual(44);
+
+  await page.setViewportSize({ width: 1366, height: 900 });
+  const tall = await page.evaluate(() => ({
+    total: document.querySelector('.total-main')!.getBoundingClientRect().height,
+    secondary: document.querySelector('.cart-secondary-actions button')!.getBoundingClientRect().height,
+    pay: document.querySelector('#btnPagar')!.getBoundingClientRect().height,
+  }));
+  expect(tall.total).toBeGreaterThanOrEqual(44);
+  expect(tall.secondary).toBeGreaterThanOrEqual(36);
+  expect(tall.pay).toBeGreaterThanOrEqual(52);
+});
