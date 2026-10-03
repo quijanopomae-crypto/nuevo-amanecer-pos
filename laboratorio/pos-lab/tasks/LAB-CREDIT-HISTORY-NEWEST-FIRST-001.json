@@ -9,7 +9,9 @@
     "laboratorio/pos-lab/preflight/LAB-CREDIT-HISTORY-NEWEST-FIRST-001.json",
     "laboratorio/pos-lab/lab-overrides.js",
     "tests/laboratorio-client-credit-accounts-v2.test.mjs",
-    "tests/lab-credit-history-newest-first.test.mjs"
+    "tests/lab-credit-history-newest-first.test.mjs",
+    "tests/laboratorio-credit-history-newest-first.test.mjs",
+    ".github/workflows/lab-cloud-ci.yml"
   ],
   "forbidden_files": [
     "POS/**",
@@ -35,8 +37,9 @@
     "Con dos créditos de la misma fecha y timestamp conocido, el timestamp más reciente aparece primero.",
     "Registros sin timestamp completo usan la fecha como orden principal y un desempate determinista sin mutar datos.",
     "El orden FIFO de cobro múltiple permanece intacto y sigue priorizando las deudas más antiguas.",
+    "La regresión focalizada se ejecuta en LAB Canon Mirror CI.",
     "No cambia monto, saldo, estado, pagos, cuotas, caja ni persistencia.",
     "LAB build/check, scope guard y pruebas focalizadas pasan."
   ],
-  "rollback": "Revertir únicamente el helper/comparador de orden visual y su prueba; no hay migraciones ni datos que revertir."
+  "rollback": "Revertir únicamente el helper/comparador de orden visual, su prueba y la línea que la ejecuta en CI; no hay migraciones ni datos que revertir."
 }
