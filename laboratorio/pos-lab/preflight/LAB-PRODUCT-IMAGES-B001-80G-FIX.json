@@ -1,0 +1,71 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-PRODUCT-IMAGES-B001-80G-FIX",
+  "base_ref": "f47fc7b9b31a26e40d16961ff837e9fa8513b732",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md", "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-feature-edit": {"path": ".agents/skills/lab-feature-edit/SKILL.md", "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"}
+  },
+  "analysis": {
+    "OBJECTIVE": "Sustituir dos SKIP del manifest batch-001 por APPLY porque nueva evidencia confirma exactamente las presentaciones de 80 g.",
+    "READS": [
+      "Capturas aportadas por el owner donde se ve TRULULU PINGUINOS 80GR y TRULULU SNACKS OSOS ORO 80G",
+      "Fuente Comercial Moy: Gomitas Trululu Pinguinos 80G",
+      "Fuente E-Fast: GOMITAS TRULULU ORO 80G y su imagen directa",
+      "Manifest batch-001 actualmente publicado en LAB"
+    ],
+    "WRITES": [
+      "Solo dos entradas del manifest batch-001: action/confidence/source_page/image_url",
+      "Fecha reviewed_on del manifest"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Ninguno durante el cambio de repositorio; solo cambia la elegibilidad declarativa de dos candidatos en el manifest"
+    ],
+    "STORAGE_AFFECTED": [
+      "Ninguno hasta que el owner ejecute explicitamente la herramienta LAB; esta tarea no escribe Turso ni CANON"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "El lote conserva exactamente 10 entradas",
+      "Los otros 8 candidatos conservan id, nombre, presentacion, accion y fuentes",
+      "No se cambian productos, stock, precio, costo, categoria, codigo ni ventas",
+      "No se modifica ningun archivo POS/** ni codigo de importacion",
+      "La herramienta existente sigue fallando cerrado si la imagen remota no es descargable, segura o unica por nombre"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Solo Inventario/POS podrian mostrar la imagen cuando el lote se ejecute posteriormente; no cambia logica comercial"
+    ],
+    "RISKS": [
+      "La imagen remota de Pinguinos puede bloquear CORS; en ese caso la herramienta la marca SKIP y no escribe",
+      "Una fuente externa puede cambiar; por eso se conserva source_page y la herramienta valida MIME/tamano antes de aplicar",
+      "El nombre exacto del producto debe existir una sola vez en Turso LAB; cero o multiples coincidencias producen SKIP"
+    ],
+    "ROLLBACK": [
+      "Revertir el commit del manifest vuelve ambos candidatos a SKIP sin tocar datos reales",
+      "No hay rollback de Turso/CANON porque esta tarea no ejecuta el lote"
+    ],
+    "TESTS": [
+      "Universal LAB skill preflight gate",
+      "Validar JSON y exactamente 10 entries",
+      "Confirmar que solo cambian las dos entradas 80 g y reviewed_on",
+      "LAB Canon Mirror CI",
+      "POS LAB Mobile wildcard tests y build al fusionar"
+    ]
+  }
+}
