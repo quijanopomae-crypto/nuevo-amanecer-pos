@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { activeCanon, device } from './canon-browser-harness.mjs';
 
 const migration = readFileSync('infra/database/migrations/0020_canonical_product_images.sql', 'utf8');
+const applyMigration = readFileSync('infra/database/migrations/0021_canonical_product_image_apply.sql', 'utf8');
 const SAFE_A = 'data:image/jpeg;base64,QUFBQQ==';
 const SAFE_B = 'data:image/webp;base64,QkJCQg==';
 const HASH_A = 'a'.repeat(64);
@@ -13,7 +14,8 @@ async function fixture(t) {
   return activeCanon(t, { migrations: [
     '0014_canonical_live_products.sql',
     '0015_canonical_inventory_adjust.sql',
-    '0020_canonical_product_images.sql'
+    '0020_canonical_product_images.sql',
+    '0021_canonical_product_image_apply.sql'
   ] });
 }
 
@@ -42,7 +44,7 @@ function insertImageEvent(f, {
 }
 
 function applyImage(f, row, provenance, image, operationId, revision = 1) {
-  insertImageEvent(f, {
+  return insertImageEvent(f, {
     operationId,
     productId: row.product_id,
     provenance,
@@ -52,11 +54,9 @@ function applyImage(f, row, provenance, image, operationId, revision = 1) {
     hash: image === SAFE_B ? HASH_B : HASH_A,
     revision,
   });
-  const table = provenance === 'LIVE' ? 'canonical_live_products' : 'products';
-  f.exec(`UPDATE ${table} SET image=? WHERE promotion_id=? AND product_id=?`, image, control(f).active_promotion_id, row.product_id);
 }
 
-test('audited IMPORT image update changes only image and stays append-only', async (t) => {
+test('audited IMPORT image event changes only image and stays append-only', async (t) => {
   const f = await fixture(t);
   const before = f.sql(`SELECT product_id,name,image,price_cents,cost_cents,current_stock_quantity,stock_revision,
     sku,barcode,category,tracks_inventory FROM products LIMIT 1`);
@@ -78,10 +78,6 @@ test('unaudited image change and mixed metadata/image change are rejected', asyn
   const row = f.sql('SELECT product_id,name,image FROM products LIMIT 1');
   assert.throws(() => f.exec('UPDATE products SET image=? WHERE product_id=?', SAFE_A, row.product_id), /immutable_canonical_candidate/);
 
-  insertImageEvent(f, {
-    operationId: 'img-mixed-1', productId: row.product_id, provenance: 'IMPORT', productName: row.name,
-    previousImage: row.image ?? null, image: SAFE_A
-  });
   assert.throws(() => f.exec('UPDATE products SET image=?,price_cents=price_cents+1 WHERE product_id=?', SAFE_A, row.product_id), /immutable_canonical_candidate/);
 });
 
@@ -96,7 +92,7 @@ test('CANON read returns the new IMPORT image after refresh', async (t) => {
   assert.equal(seen.image, SAFE_A);
 });
 
-test('audited LIVE image update works and preserves price/stock', async (t) => {
+test('audited LIVE image event works and preserves price/stock', async (t) => {
   const f = await fixture(t);
   const tab = await device(f, { deviceId: 'img-live-writer', token: 'img-live-writer-token' });
   const created = await tab.api.createProduct({
@@ -119,7 +115,7 @@ test('audited LIVE image update works and preserves price/stock', async (t) => {
   assert.equal(tab.api.snapshot().products.find((p) => p.product_id === 'LIVE-IMAGE-1').image, SAFE_B);
 });
 
-test('image authorization rejects wrong name/provenance/state and unsafe data URLs', async (t) => {
+test('image authorization rejects wrong name/provenance/state, no-op and unsafe data URLs', async (t) => {
   const f = await fixture(t);
   const row = f.sql('SELECT product_id,name,image FROM products LIMIT 1');
   const base = { productId: row.product_id, previousImage: row.image ?? null, productName: row.name };
@@ -128,12 +124,13 @@ test('image authorization rejects wrong name/provenance/state and unsafe data UR
   assert.throws(() => insertImageEvent(f, { ...base, operationId:'wrong-prov', provenance:'LIVE' }), /mismatch/);
   assert.throws(() => insertImageEvent(f, { ...base, operationId:'svg', provenance:'IMPORT', image:'data:image/svg+xml;base64,PHN2Zz4=' }), /CHECK constraint|constraint/i);
   assert.throws(() => insertImageEvent(f, { ...base, operationId:'huge', provenance:'IMPORT', image:'data:image/jpeg;base64,'+'A'.repeat(180001) }), /CHECK constraint|constraint/i);
+  if (row.image) assert.throws(() => insertImageEvent(f, { ...base, operationId:'noop', provenance:'IMPORT', image:row.image }), /noop/);
 
   f.exec("UPDATE canonical_control SET mode='CANONICAL_READ_ONLY' WHERE id=1");
   assert.throws(() => insertImageEvent(f, { ...base, operationId:'inactive', provenance:'IMPORT' }), /requires_active/);
 });
 
-test('inventory.adjust still works after migration 0020 and preserves image', async (t) => {
+test('inventory.adjust still works after image migrations and preserves image', async (t) => {
   const f = await fixture(t);
   const row = f.sql('SELECT product_id,name,image,current_stock_quantity,stock_revision FROM products WHERE tracks_inventory=1 ORDER BY product_id LIMIT 1');
   applyImage(f, row, 'IMPORT', SAFE_A, 'img-before-stock');
@@ -148,11 +145,14 @@ test('inventory.adjust still works after migration 0020 and preserves image', as
   assert.equal(after.stock_revision, row.stock_revision + 1);
 });
 
-test('migration narrows the exception to audited image-only writes', () => {
+test('migrations narrow the exception to audited image-only writes', () => {
   assert.match(migration, /canonical_product_image_events/);
   assert.match(migration, /previous_image IS OLD\.image/);
   assert.match(migration, /NEW\.image IS NOT OLD\.image/);
   assert.match(migration, /immutable_canonical_candidate/);
   assert.match(migration, /immutable_live_product/);
   assert.match(migration, /canonical_inventory_operations/);
+  assert.match(applyMigration, /canonical_product_image_events_apply_import/);
+  assert.match(applyMigration, /canonical_product_image_events_apply_live/);
+  assert.match(applyMigration, /SET image=NEW\.image/);
 });
