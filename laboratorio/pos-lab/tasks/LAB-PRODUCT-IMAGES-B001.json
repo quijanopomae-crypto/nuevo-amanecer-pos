@@ -1,0 +1,51 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-PRODUCT-IMAGES-B001",
+  "environment": "LABORATORIO",
+  "base_ref": "14e781955b67a83b8910a3fed595cee7ec823804",
+  "objective": "Aplicar en LAB un lote maximo de 10 imagenes de productos por coincidencia exacta de nombre y presentacion, modificando unicamente el campo imagen del producto y rechazando coincidencias ambiguas.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-PRODUCT-IMAGES-B001.json",
+    "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001.json",
+    "laboratorio/pos-lab/data/product-image-batches/batch-001.json",
+    "laboratorio/pos-lab/lab-overrides.js",
+    "tests/laboratorio-product-images-batch.test.mjs"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    ".github/**",
+    "evidence/v1.3/**",
+    "infra/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "inventory-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false,
+  "acceptance_criteria": [
+    "El lote contiene como maximo 10 entradas.",
+    "Cada entrada exige nombre exacto y presentacion esperada declarada.",
+    "Solo producto.imagen puede cambiar en un producto aceptado.",
+    "Precio, costo, stock, categoria, codigo, historial y demas metadatos permanecen byte-equivalentes tras retirar imagen de la comparacion.",
+    "Una entrada sin coincidencia exacta o con multiples coincidencias se omite sin escribir.",
+    "Una imagen que no pueda convertirse a data:image raster segura y menor al limite del POS se omite sin escribir.",
+    "No hay escrituras CANON ni credenciales de produccion.",
+    "Las pruebas focalizadas, build/check LAB y scope guard deben pasar antes de declarar CANDIDATO_A_CANON."
+  ],
+  "out_of_scope": [
+    "Cambiar precios, costos o stock.",
+    "Crear, borrar o renombrar productos.",
+    "Modificar sincronizacion CANON o endpoints de produccion.",
+    "Promover a CANON en esta tarea.",
+    "Forzar una imagen cuando el gramaje, variante o empaque no coincide."
+  ]
+}
