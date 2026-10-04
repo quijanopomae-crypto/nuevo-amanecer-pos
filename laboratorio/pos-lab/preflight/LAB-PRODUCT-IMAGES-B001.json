@@ -16,46 +16,34 @@
     "future agents"
   ],
   "skills": {
-    "impact-analysis": {
-      "path": ".agents/skills/impact-analysis/SKILL.md",
-      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
-    },
-    "cross-module-impact": {
-      "path": ".agents/skills/cross-module-impact/SKILL.md",
-      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
-    },
-    "lab-scope-guard": {
-      "path": ".agents/skills/lab-scope-guard/SKILL.md",
-      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
-    },
-    "lab-feature-edit": {
-      "path": ".agents/skills/lab-feature-edit/SKILL.md",
-      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
-    },
-    "inventory-integrity": {
-      "path": ".agents/skills/inventory-integrity/SKILL.md",
-      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
-    }
+    "impact-analysis": {"path": ".agents/skills/impact-analysis/SKILL.md", "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"},
+    "cross-module-impact": {"path": ".agents/skills/cross-module-impact/SKILL.md", "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"},
+    "lab-scope-guard": {"path": ".agents/skills/lab-scope-guard/SKILL.md", "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"},
+    "lab-feature-edit": {"path": ".agents/skills/lab-feature-edit/SKILL.md", "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"},
+    "lab-ui-edit": {"path": ".agents/skills/lab-ui-edit/SKILL.md", "git_blob_sha": "cf8e82159fb7559a7453356435c792437e1bb097"},
+    "inventory-integrity": {"path": ".agents/skills/inventory-integrity/SKILL.md", "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"}
   },
   "analysis": {
-    "OBJECTIVE": "Aplicar en LAB hasta 10 imagenes verificadas a productos existentes, por coincidencia exacta de nombre/presentacion, sin modificar ningun otro campo comercial.",
+    "OBJECTIVE": "Aplicar desde una herramienta LAB aislada hasta 10 imagenes verificadas a productos existentes, por coincidencia exacta de nombre/presentacion, sin modificar ningun otro campo comercial.",
     "READS": [
-      "window.productos / snapshot.data.productos ya cargado por LAB",
+      "productos del iframe POS LAB tras cargar la revision remota actual",
       "manifest LAB batch-001 con nombre exacto, presentacion y fuente de imagen",
-      "_naSafeProductImageSource cuando este disponible para validar data URL",
-      "saveAllData existente para persistencia LAB"
+      "credenciales/sesion LAB ya gestionadas por el workspace existente sin leerlas desde la herramienta"
     ],
     "WRITES": [
       "producto.imagen exclusivamente para entradas aceptadas",
-      "manifest versionado de maximo 10 candidatos sin datos comerciales sensibles",
-      "helper LAB aislado y prueba focalizada"
+      "manifest versionado de 10 candidatos sin precios, stock ni secretos",
+      "helper de conversion/aplicacion y pagina LAB aislada para ejecucion explicita",
+      "prueba focalizada"
     ],
-    "DOM_AFFECTED": [],
+    "DOM_AFFECTED": [
+      "Solo laboratorio/pos-lab/tools/product-image-batch.html; el entrypoint normal de POS LAB no cambia"
+    ],
     "STATE_AFFECTED": [
       "Solo propiedad imagen de productos LAB coincidentes; no se crea ni elimina producto"
     ],
     "STORAGE_AFFECTED": [
-      "Snapshot LAB existente y su persistencia Turso LAB a traves del flujo ya autorizado; CANON no se escribe"
+      "Snapshot LAB existente y su persistencia Turso LAB a traves de saveAllData/NuevoAmanecerLabWorkspace; CANON no se escribe"
     ],
     "DOMAIN_INVARIANTS": [
       "Precio, costo, stock, categoria, codigo y demas campos del producto permanecen sin cambios",
@@ -64,28 +52,31 @@
       "Gramaje/variante ambiguo produce SKIP",
       "La imagen final debe ser raster data:image segura y respetar el limite vigente del POS",
       "No hay credenciales de produccion, endpoints de escritura CANON ni cambios POS/**",
-      "El lote nunca supera 10 entradas"
+      "Abrir el POS LAB normal nunca ejecuta el importador",
+      "El lote contiene exactamente 10 candidatos y nunca procesa mas de 10"
     ],
     "CROSS_MODULE_IMPACT": [
       "Inventario y Punto de Venta consumen el mismo objeto producto; solo cambia su representacion visual imagen",
       "Ventas, caja, creditos y movimientos de stock no deben observar cambios funcionales"
     ],
     "RISKS": [
-      "Una fuente remota puede bloquear CORS o cambiar; la conversion debe fallar cerrada y omitir la entrada",
+      "Una fuente remota puede bloquear CORS o cambiar; la conversion falla cerrada y omite la entrada",
       "Productos duplicados por nombre podrian recibir una imagen incorrecta; se exige exactamente una coincidencia",
-      "Una presentacion visualmente parecida puede tener gramaje distinto; el manifest declara presentacion y las dudosas no se aplican",
-      "El crecimiento del snapshot por base64 puede afectar rendimiento; se conserva compresion y limites del POS"
+      "Una presentacion visualmente parecida puede tener gramaje distinto; el manifest declara presentacion y las dudosas quedan SKIP",
+      "El crecimiento del snapshot por base64 puede afectar rendimiento; se conserva compresion y limites del POS",
+      "La herramienta requiere una sesion LAB de escritura ya activada; si no existe, no debe persistir cambios"
     ],
     "ROLLBACK": [
-      "Revertir el commit funcional del PR LAB restaura el helper/manifest",
-      "Antes de persistir se conserva la imagen previa por entrada para permitir restauracion en la misma sesion LAB",
+      "Si falla la persistencia, restaurar las imagenes previas antes de devolver error",
+      "Revertir el PR elimina por completo la herramienta aislada y su manifest",
       "No existe rollback CANON porque esta tarea no escribe CANON"
     ],
     "TESTS": [
-      "Validador rechaza lotes de mas de 10 entradas",
+      "Validador rechaza lotes distintos de 10 o mayores al maximo",
       "Coincidencia exacta unica actualiza solo imagen",
       "Cero coincidencias no cambia datos",
       "Nombre duplicado no cambia datos",
+      "Entrada marcada SKIP no descarga ni escribe",
       "Imagen insegura o demasiado grande no cambia datos",
       "Comparacion antes/despues ignora solo imagen y exige igualdad del resto del producto",
       "node laboratorio/pos-lab/build-lab.mjs --check",
