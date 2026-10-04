@@ -27,10 +27,15 @@ const allowedHosts = new Set([
   'caest-imagenes.s3.us-east-2.amazonaws.com'
 ]);
 
-function loadOverlay() {
+function loadRuntime() {
   const source = readFileSync(inline13Path, 'utf8');
   const context = { window: {}, URL };
   runInNewContext(source, context, { filename: inline13Path });
+  return context;
+}
+
+function loadOverlay() {
+  const context = loadRuntime();
   return JSON.parse(JSON.stringify(context.window.NuevoAmanecerProductImageOverlay));
 }
 
@@ -48,13 +53,23 @@ test('batch 001 contiene exactamente los 10 productos y URLs aprobadas', () => {
 });
 
 test('resolver CANON prioriza imagen propia válida y limita overlay a HTTPS allowlist', () => {
-  const inline13 = readFileSync(inline13Path, 'utf8');
-  assert.match(inline13, /function\s+_naProductImageSource\s*\(/);
-  assert.match(inline13, /NuevoAmanecerProductImageOverlay/);
-  assert.match(inline13, /_naSafeProductImageSource\(product\?\.imagen\)/);
-  assert.match(inline13, /new\s+URL\(/);
-  for (const host of allowedHosts) assert.ok(inline13.includes(host), `resolver no autoriza explícitamente ${host}`);
-  assert.match(inline13, /data:image\\\/(?:png|jpeg|webp|gif)/);
+  const context = loadRuntime();
+  const custom = 'data:image/png;base64,AAAA';
+  assert.equal(
+    context._naProductImageSource({ name: 'TRULULU AROS 90GR', imagen: custom }),
+    custom,
+    'una imagen propia raster válida debe tener prioridad sobre el overlay'
+  );
+  assert.equal(
+    context._naProductImageSource({ name: 'TRULULU AROS 90GR' }),
+    expected['TRULULU AROS 90GR'],
+    'el nombre exacto debe resolver la imagen aprobada'
+  );
+  assert.equal(context._naProductImageSource({ name: 'TRULULU AROS 90G' }), null, 'una coincidencia no exacta no debe resolver imagen');
+  assert.equal(context._naProductImageSource({ name: 'NO EXISTE' }), null, 'un producto fuera del lote no debe obtener overlay');
+  assert.equal(context._naSafeOverlayProductImageSource('http://trululustore.wordpress.com/a.jpg'), null, 'HTTP debe rechazarse');
+  assert.equal(context._naSafeOverlayProductImageSource('https://evil.example/a.jpg'), null, 'host no autorizado debe rechazarse');
+  assert.equal(context._naSafeProductImageSource('data:image/svg+xml;base64,AAAA'), null, 'SVG embebido debe rechazarse');
 });
 
 test('tarjetas y carrito usan un único resolver y degradan a icono si la URL falla', () => {
