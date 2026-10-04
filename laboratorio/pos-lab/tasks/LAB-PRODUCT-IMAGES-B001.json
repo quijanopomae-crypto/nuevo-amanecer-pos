@@ -9,7 +9,7 @@
     "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001.json",
     "laboratorio/pos-lab/data/product-image-batches/batch-001.json",
     "laboratorio/pos-lab/js/product-image-batch.js",
-    "laboratorio/pos-lab/lab-overrides.js",
+    "laboratorio/pos-lab/tools/product-image-batch.html",
     "tests/laboratorio-product-images-batch.test.mjs"
   ],
   "forbidden_files": [
@@ -24,6 +24,7 @@
     "cross-module-impact",
     "lab-scope-guard",
     "lab-feature-edit",
+    "lab-ui-edit",
     "inventory-integrity"
   ],
   "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001.json",
@@ -33,12 +34,13 @@
   "production_writes": false,
   "canon_writes": false,
   "acceptance_criteria": [
-    "El lote contiene como maximo 10 entradas.",
+    "El lote contiene exactamente 10 candidatos y nunca procesa mas de 10.",
     "Cada entrada exige nombre exacto y presentacion esperada declarada.",
     "Solo producto.imagen puede cambiar en un producto aceptado.",
     "Precio, costo, stock, categoria, codigo, historial y demas metadatos permanecen byte-equivalentes tras retirar imagen de la comparacion.",
     "Una entrada sin coincidencia exacta o con multiples coincidencias se omite sin escribir.",
     "Una imagen que no pueda convertirse a data:image raster segura y menor al limite del POS se omite sin escribir.",
+    "La herramienta se ejecuta fuera del entrypoint normal del LAB; abrir el POS LAB normal no inicia importaciones.",
     "No hay escrituras CANON ni credenciales de produccion.",
     "Las pruebas focalizadas, build/check LAB y scope guard deben pasar antes de declarar CANDIDATO_A_CANON."
   ],
