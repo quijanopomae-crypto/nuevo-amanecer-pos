@@ -1,7 +1,19 @@
 
-// Seguridad: tarjetas y carrito del POS usan data-* y fuentes de imagen rasterizadas validadas.
+// Seguridad: tarjetas y carrito del POS usan data-* y fuentes de imagen validadas por un resolver único.
 function _naSecProductVisibleInPos(product){
   return !_naTracksStock(product)||_naNumber(product.stock)>0;
+}
+function _naSecRenderProductImage(visual,product,safeImage,size){
+  if(!safeImage){visual.textContent=product?.icon||'📦';return;}
+  const image=document.createElement('img');
+  image.src=safeImage;
+  image.alt=String(product?.name||'Producto');
+  if(size)image.style.cssText=`width:${size}px;height:${size}px;object-fit:cover;border-radius:6px`;
+  image.addEventListener('error',()=>{
+    image.remove();
+    visual.textContent=product?.icon||'📦';
+  },{once:true});
+  visual.appendChild(image);
 }
 function _naSecProductCard(parent,product,allowNoStock){
   const box=modoMayorista&&product.precioCaja>0&&product.unidCaja>0,price=box?product.precioCaja:product.precio,label=box?`Caja x${product.unidCaja} · S/ ${_naNumber(price).toFixed(2)}`:`S/ ${_naNumber(price).toFixed(2)}`;
@@ -13,13 +25,8 @@ function _naSecProductCard(parent,product,allowNoStock){
   card.setAttribute('aria-disabled',available?'false':'true');
   if(available)card.dataset.productId=String(product.id);
   _naSecAppend(card,'div','p-price-badge',label);
-  const visual=_naSecAppend(card,'div','p-img'),safeImage=_naSafeProductImageSource(product.imagen);
-  if(safeImage){
-    const image=document.createElement('img');
-    image.src=safeImage;
-    image.alt=String(product.name||'Producto');
-    visual.appendChild(image);
-  }else visual.textContent=product.icon||'📦';
+  const visual=_naSecAppend(card,'div','p-img'),safeImage=_naProductImageSource(product);
+  _naSecRenderProductImage(visual,product,safeImage);
   _naSecAppend(card,'div',`p-stock-badge ${stockTone}`,stockLabel);
   _naSecAppend(card,'div','p-name',product.name||'Producto');
 }
@@ -48,14 +55,8 @@ function _naSecCartButton(text,action,key){
 function _naSecCartItem(parent,item){
   const box=_naUnitsPerQty(item)>1,row=_naSecAppend(parent,'div','cart-item'),visual=_naSecAppend(row,'div');
   visual.style.fontSize='19px';
-  const safeImage=_naSafeProductImageSource(item.imagen);
-  if(safeImage){
-    const image=document.createElement('img');
-    image.src=safeImage;
-    image.alt=String(item.name||'Producto');
-    image.style.cssText='width:30px;height:30px;object-fit:cover;border-radius:6px';
-    visual.appendChild(image);
-  }else visual.textContent=item.icon||'📦';
+  const safeImage=_naProductImageSource(item);
+  _naSecRenderProductImage(visual,item,safeImage,30);
   const info=_naSecAppend(row,'div','ci-info'),name=_naSecAppend(info,'div','ci-name',item.name||'Producto');
   if(_naNumber(item._descuento)>0){
     const discount=_naSecAppend(name,'span','',`-${_naNumber(item._descuento).toFixed(1)}%`);

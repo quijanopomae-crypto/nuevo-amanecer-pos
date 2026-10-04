@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import test from 'node:test';
+
+const inline13Path = 'POS/js/legacy-inline/inline-13.js';
+const inline14Path = 'POS/js/legacy-inline/inline-14.js';
+
+const expected = {
+  'TRULULU AROS 90GR': 'https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-aros-1.jpg?w=1024',
+  'TRULULU FRESITAS 90GR': 'https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-fresa-1.jpg?w=1024',
+  'TRULULU ORO 90GR': 'https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-oro-12b-x-90g-v3.jpg?w=1024',
+  'TRULULU SABORES 90GR': 'https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-sabores-12b-x-90g-v20.jpg?w=1024',
+  'TRULULU DINOS 90GR': 'https://firebasestorage.stagebeta.kyte.site/v0/b/kyte-7c484.appspot.com/o/8x5kblSeRMWUzzF9K1Awa7foUQw1%2Fthumb_280_3406a3c4-734c-4b9f-a22e-b1301cbaae69.jpg?alt=media',
+  'GOMITAS TRULULU SABORES 90 GR': 'https://aceleralastatic.nyc3.cdn.digitaloceanspaces.com/files/uploads/1499/1671033109-35-trululu-sabores-90g-jpg.jpg',
+  'GOMAS TRULULU DINOSS 90G*': 'https://firebasestorage.stagebeta.kyte.site/v0/b/kyte-7c484.appspot.com/o/8x5kblSeRMWUzzF9K1Awa7foUQw1%2Fthumb_280_3406a3c4-734c-4b9f-a22e-b1301cbaae69.jpg?alt=media',
+  'TRULULU CASQUITOS VITAMINA C 90GR': 'https://firebasestorage.stagebeta.kyte.site/v0/b/kyte-7c484.appspot.com/o/8x5kblSeRMWUzzF9K1Awa7foUQw1%2Fthumb_280_b4aeab63-4486-49c3-93e3-eabf5e3e67dd.jpg?alt=media',
+  'TRULULU PINGUINOS 80GR': 'https://domun.co/default/image-tool-lambda?new-height=700&new-quality=80&new-width=700&url-image=https%3A%2F%2Fsumerlabs.com%2Fsumer-app-90b8f.appspot.com%2Fproduct_photos%252Ffd0aa6876516aef8f062203b07b2e439%252Fe003f880-ff3c-11ec-9263-67049881eeef%3Falt%3Dmedia%26token%3D9cbe4add-c612-4f9b-b3b0-899148471547',
+  'TRULULU SNACKS OSOS ORO 80G': 'https://caest-imagenes.s3.us-east-2.amazonaws.com/products/local/1040784_1_z.webp'
+};
+
+const allowedHosts = new Set([
+  'trululustore.wordpress.com',
+  'firebasestorage.stagebeta.kyte.site',
+  'aceleralastatic.nyc3.cdn.digitaloceanspaces.com',
+  'domun.co',
+  'caest-imagenes.s3.us-east-2.amazonaws.com'
+]);
+
+function loadRuntime() {
+  const source = readFileSync(inline13Path, 'utf8');
+  const context = { window: {}, URL };
+  runInNewContext(source, context, { filename: inline13Path });
+  return context;
+}
+
+function loadOverlay() {
+  const context = loadRuntime();
+  return JSON.parse(JSON.stringify(context.window.NuevoAmanecerProductImageOverlay));
+}
+
+test('batch 001 contiene exactamente los 10 productos y URLs aprobadas', () => {
+  const overlay = loadOverlay();
+  assert.deepEqual(overlay, expected);
+  assert.equal(new Set(Object.keys(overlay)).size, 10);
+  for (const [name, source] of Object.entries(overlay)) {
+    assert.ok(name.length > 0);
+    const url = new URL(source);
+    assert.equal(url.protocol, 'https:');
+    assert.ok(allowedHosts.has(url.hostname), `host no autorizado: ${url.hostname}`);
+    assert.doesNotMatch(source, /^http:|javascript:|data:/i);
+  }
+});
+
+test('resolver CANON prioriza imagen propia válida y limita overlay a HTTPS allowlist', () => {
+  const context = loadRuntime();
+  const custom = 'data:image/png;base64,AAAA';
+  assert.equal(
+    context._naProductImageSource({ name: 'TRULULU AROS 90GR', imagen: custom }),
+    custom,
+    'una imagen propia raster válida debe tener prioridad sobre el overlay'
+  );
+  assert.equal(
+    context._naProductImageSource({ name: 'TRULULU AROS 90GR' }),
+    expected['TRULULU AROS 90GR'],
+    'el nombre exacto debe resolver la imagen aprobada'
+  );
+  assert.equal(context._naProductImageSource({ name: 'TRULULU AROS 90G' }), null, 'una coincidencia no exacta no debe resolver imagen');
+  assert.equal(context._naProductImageSource({ name: 'NO EXISTE' }), null, 'un producto fuera del lote no debe obtener overlay');
+  assert.equal(context._naSafeOverlayProductImageSource('http://trululustore.wordpress.com/a.jpg'), null, 'HTTP debe rechazarse');
+  assert.equal(context._naSafeOverlayProductImageSource('https://evil.example/a.jpg'), null, 'host no autorizado debe rechazarse');
+  assert.equal(context._naSafeProductImageSource('data:image/svg+xml;base64,AAAA'), null, 'SVG embebido debe rechazarse');
+});
+
+test('tarjetas y carrito usan un único resolver y degradan a icono si la URL falla', () => {
+  const inline14 = readFileSync(inline14Path, 'utf8');
+  assert.match(inline14, /_naProductImageSource\(product\)/);
+  assert.match(inline14, /_naProductImageSource\(item\)/);
+  assert.doesNotMatch(inline14, /_naSafeProductImageSource\(product\.imagen\)/);
+  assert.doesNotMatch(inline14, /_naSafeProductImageSource\(item\.imagen\)/);
+  assert.match(inline14, /addEventListener\(['"]error['"]/);
+});
