@@ -15,7 +15,6 @@ permission:
     "POS/**": allow
     "tests/product-fixes/**": allow
     "tests/cloud-sync/**": allow
-    "tools/cloudflare-lab/src/**": allow
     "infra/database/migrations/**": allow
     "tools/cloudflare-backup/**": allow
     "docs/**": allow
@@ -38,15 +37,19 @@ permission:
 
 CANON_WRITE_LOCAL_ONLY.
 
-Usa este rol cuando la tarea autorizada modifica el producto CANON (`POS/**`) o
-código CANON versionado. El alcance concreto lo define la solicitud del owner y
-la especificación durable aplicable.
+`CANON_DEFAULT = true`
+`LAB_TEMPORARILY_DISABLED = true`
+
+Usa este rol para toda tarea normal del producto mientras LAB permanezca temporalmente deshabilitado. El alcance concreto lo define la solicitud del owner y la especificación durable aplicable.
 
 Reglas duras:
 - no escribir `laboratorio/**`;
+- no escribir `tools/cloudflare-lab/**`;
+- no desviar la tarea hacia LAB por costumbre, seguridad o documentación histórica;
 - no ampliar el alcance por cuenta propia;
 - no desplegar Cloudflare/Pages;
-- no ejecutar `wrangler ... --remote`, migraciones remotas, imports de producción
-  ni cambios de secrets;
+- no ejecutar `wrangler ... --remote`, migraciones remotas, imports de producción ni cambios de secrets;
 - no activar rutas o modos de escritura CANON sin autorización explícita separada;
-- probar localmente, revisar diff y usar PR/CI antes de merge.
+- probar localmente, revisar diff y usar PR/CI antes de merge cuando aplique.
+
+LAB solo puede reactivarse mediante una orden explícita del propietario.

@@ -1,5 +1,26 @@
 ﻿# AGENTS.md — Modos de trabajo del proyecto Nuevo Amanecer
 
+## Estado operativo temporal del propietario
+
+**LAB_TEMPORARILY_DISABLED = true**
+**CANON_DEFAULT = true**
+
+Por instrucción explícita del propietario, el laboratorio queda temporalmente fuera de servicio como destino de trabajo para IA, agentes, OpenCode, ChatGPT, Claude, DeepSeek, Codex y cualquier writer asistido.
+
+Hasta que el propietario ordene explícitamente reactivar/habilitar el laboratorio:
+
+- toda tarea normal del POS se interpreta como **CANON**;
+- usar `pos-canon-implementer` para cambios funcionales del producto;
+- `laboratorio/**` y `tools/cloudflare-lab/**` son **READ-ONLY / FROZEN**;
+- no seleccionar `pos-lab-implementer`;
+- no ejecutar `/lab-preflight` ni `/lab-validate`;
+- no crear contratos, preflights, receipts, ramas ni PRs LAB;
+- no desviar una solicitud CANON hacia LAB por seguridad, costumbre, documentación histórica o preferencia del agente;
+- si una especificación histórica recomienda LAB, esta orden temporal del propietario prevalece;
+- si una tarea requiere realmente reactivar LAB para poder completarse, detenerse e informar al propietario; no reactivarlo por cuenta propia.
+
+El código y la documentación LAB se conservan únicamente como respaldo/referencia reversible. **Desactivar LAB no significa borrarlo ni promoverlo a CANON.**
+
 ## Regla principal
 
 La solicitud explícita actual del propietario es la máxima autoridad para tareas normales de desarrollo del producto.
@@ -9,9 +30,9 @@ La solicitud explícita actual del propietario es la máxima autoridad para tare
 Antes de actuar, identifica una sola zona y no mezcles permisos:
 
 - **CANON** → `pos-canon-implementer`: producto `POS/**` y código CANON versionado dentro del alcance autorizado. No deploy ni remote por defecto.
-- **LAB** → `pos-lab-implementer`: solo `laboratorio/**` y pruebas LAB permitidas.
+- **LAB** → TEMPORALMENTE DESHABILITADO. No usar `pos-lab-implementer` ni escribir `laboratorio/**` / `tools/cloudflare-lab/**` hasta reactivación explícita del propietario.
 - **SHADOW legacy** → `pos-implementer`: el nombre se conserva por compatibilidad con `MANIFEST.yaml`, pero `PRODUCT_WRITE = DENIED`.
-- **PLANNER** → `pos-planner`: READ-ONLY; declara CANON/LAB/SHADOW.
+- **PLANNER** → `pos-planner`: READ-ONLY; durante el freeze temporal debe seleccionar CANON para tareas normales del producto.
 - **REVIEWER** → `pos-reviewer`: READ-ONLY independiente.
 - **TESTER** → `pos-tester`: TEST-ONLY; no modifica expectativas.
 
@@ -23,7 +44,7 @@ son evidencia histórica o específica de una fase y no sustituyen esas fuentes.
 
 Comandos:
 - CANON: `/canon-preflight`, `/canon-validate`.
-- LAB: `/lab-preflight`, `/lab-validate`.
+- LAB: `/lab-preflight`, `/lab-validate` están TEMPORALMENTE DESHABILITADOS y deben redirigir a CANON.
 - `/preflight`, `/validate`, `/feature-spec`, `/orchestrate` y `/resume`
   son comandos SHADOW legacy y requieren invocación explícita de SHADOW.
 
@@ -39,6 +60,7 @@ entonces se permite modificar los archivos expresamente autorizados por esa espe
 Para estas tareas normales:
 
 - PRODUCT_WRITE está permitido únicamente dentro del alcance autorizado.
+- El destino por defecto es CANON mientras `LAB_TEMPORARILY_DISABLED = true`.
 - No usar MANIFEST.yaml como gate.
 - No usar shadow_write_policy como gate.
 - No ejecutar el preflight global de shadow mode.
@@ -68,47 +90,28 @@ Antes y después de cambios:
 
 No tocar cambios ajenos ni evidence/v1.3 salvo autorización explícita.
 
-## Laboratorio y promoción a CANON
+## Laboratorio y promoción a CANON — CONGELADO TEMPORALMENTE
 
-- `laboratorio/` es la zona general de experimentación del POS.
-- `tools/cloudflare-lab/` conserva su función separada de laboratorio de infraestructura.
-- Los experimentos importantes usan ramas `lab/<nombre>`.
-- LAB no usa autoridad comercial de producción, credenciales de producción en cliente/repositorio ni escrituras de producción.
-- Los datos comerciales reales pueden existir **solo** como copia aislada dentro de D1 LAB cuando provienen del flujo autorizado `CANON -> backup R2 -> D1 LAB`; nunca se versionan en Git/HTML/fixtures/evidence ni convierten LAB en autoridad CANON.
-- Los fixtures y pruebas unitarias usan datos sintéticos por defecto. GitHub Actions Secrets cifrados pueden usarse en workflows autorizados; sus valores nunca se versionan, imprimen ni exponen al navegador.
+Todo este bloque queda suspendido mientras `LAB_TEMPORARILY_DISABLED = true`.
+
+- `laboratorio/` se conserva como zona histórica de experimentación, pero está READ-ONLY.
+- `tools/cloudflare-lab/` se conserva como infraestructura histórica LAB, pero está READ-ONLY.
+- No iniciar nuevos experimentos LAB.
+- No crear ramas `lab/<nombre>` para tareas nuevas.
 - `POS/` nunca debe depender en runtime de archivos bajo `laboratorio/`.
-- Un experimento aprobado se promueve como parche mínimo revisado hacia `POS/`; nunca se sobrescribe CANON con todo LAB.
-- Antes de promover: ejecutar `node laboratorio/check.mjs`, pruebas funcionales aplicables, revisar diff y definir rollback.
-- Ver `docs/LABORATORIO_A_CANON.md` para el contrato durable.
+- No ejecutar promoción LAB→CANON durante el freeze; los cambios nuevos se implementan y validan directamente en CANON dentro del alcance autorizado.
 
+Las reglas detalladas históricas permanecen documentadas en `docs/LABORATORIO_A_CANON.md`, pero no habilitan escritura mientras este freeze esté activo.
 
-## Preflight obligatorio para POS-LAB
+## Preflight POS-LAB — DESHABILITADO TEMPORALMENTE
+
+No ejecutar el preflight LAB ni crear nuevos Task Contracts/receipts mientras `LAB_TEMPORARILY_DISABLED = true`.
+
+Si cualquier writer intenta iniciar trabajo LAB:
+1. detener la escritura;
+2. informar `LAB_TEMPORARILY_DISABLED`;
+3. reclasificar la tarea normal del producto como CANON;
+4. usar `pos-canon-implementer` y los comandos CANON;
+5. solo esperar una orden explícita del propietario si realmente se necesita reactivar LAB.
 
 Esta regla aplica a **ALL_WRITERS** sin excepción: ChatGPT, ChatGPT Work, conector GitHub, OpenCode, Claude, DeepSeek, Codex, agentes futuros y humanos asistidos por IA.
-
-Antes del **primer cambio funcional** en LAB:
-1. leer este archivo;
-2. leer `.agents/skills/impact-analysis/SKILL.md`;
-3. leer `.agents/skills/cross-module-impact/SKILL.md`;
-4. leer `.agents/skills/lab-scope-guard/SKILL.md`;
-5. leer la skill específica (`lab-ui-edit`, `lab-animation-edit` o `lab-feature-edit`);
-6. leer `laboratorio/pos-lab/UI_MAP.yaml` cuando aplique a POS-LAB;
-7. leer/crear el contrato JSON schema v3 de la tarea y verificar `allowed_files`;
-8. registrar un recibo `laboratorio/pos-lab/preflight/<TASK_ID>.json` con hashes de las skills y análisis de READS, WRITES, DOM, STATE, STORAGE, invariantes, impacto cruzado, riesgos, rollback y pruebas;
-9. ejecutar `node laboratorio/pos-lab/skill-preflight.mjs --task=<contrato> --receipt=<recibo>`;
-10. obtener `SKILL_PREFLIGHT_PASS`.
-
-**NO SKILL_PREFLIGHT_PASS → NO WRITE.**
-
-El Task Contract y el recibo deben estar versionados en Git **antes** del primer commit que cambie código/infraestructura LAB. En Pull Requests, CI verifica ese orden temporal. Crear o completar el preflight después de editar no satisface el gate.
-
-Reglas duras:
-- una tarea LAB no escribe `POS/**`;
-- `laboratorio/pos-lab/index.html` es generado y no se edita manualmente para cambios normales;
-- cambios de pantalla se realizan en `sections/` y capas `styles/` / `animations/`;
-- ningún writer puede ampliar su propia allowlist;
-- el gate aplica también cuando el writer opera mediante ChatGPT o el conector GitHub;
-- cambios LAB protegidos se realizan en rama + Pull Request; no se usa push directo a la rama activa para saltar el orden temporal;
-- al terminar ejecutar build/check, tests LAB, scope guard y revisar diff;
-- cualquier archivo fuera de alcance convierte el resultado en FAIL;
-- la promoción a CANON requiere la skill `canon-promotion` y aprobación explícita del owner.

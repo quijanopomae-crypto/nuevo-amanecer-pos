@@ -1,12 +1,13 @@
 ---
-description: "Valida build, alcance y pruebas del POS-LAB antes de declarar PASS."
+description: "POS-LAB temporalmente deshabilitado; no valida ni habilita trabajo LAB."
 ---
 
-Ejecuta en este orden:
-1. `node laboratorio/pos-lab/build-lab.mjs --check`
-2. `node --test tests/laboratorio-*.test.mjs`
-3. `node laboratorio/pos-lab/scope-guard.mjs --task=<contrato>`
-4. `git diff --check`
-5. `git diff`
+`LAB_TEMPORARILY_DISABLED = true`
 
-Si cualquier paso falla, no declares PASS. Si aparece un archivo fuera del contrato, detente.
+No ejecutar build, pruebas, scope guard ni validación LAB para habilitar nuevas escrituras.
+
+Acción obligatoria:
+1. detener cualquier flujo LAB;
+2. informar `LAB_TEMPORARILY_DISABLED`;
+3. para una tarea normal del producto, usar `/canon-validate` sobre el alcance CANON correspondiente;
+4. no reactivar LAB sin una orden explícita del propietario.
