@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LAB · Lote de imágenes 001</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111827;background:#f8fafc}
+    *{box-sizing:border-box}body{margin:0;padding:20px}.wrap{max-width:980px;margin:auto}.head{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}.badge{display:inline-flex;padding:6px 10px;border-radius:999px;background:#111827;color:#fff;font-weight:800;font-size:12px;border:2px solid #f59e0b}.note{color:#475569;max-width:720px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:800;cursor:pointer;background:#0f766e;color:#fff}.btn:disabled{opacity:.5;cursor:not-allowed}.btn.secondary{background:#334155}.status{padding:12px 14px;border-radius:10px;background:#e2e8f0;font-weight:700;white-space:pre-wrap}.status[data-state="ok"]{background:#dcfce7}.status[data-state="error"]{background:#fee2e2}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:16px}.card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px;box-shadow:0 4px 16px rgba(15,23,42,.05)}.thumb{width:100%;height:170px;object-fit:contain;background:#fff;border-radius:10px;border:1px solid #f1f5f9}.name{font-weight:900;margin-top:9px}.meta{font-size:12px;color:#64748b;margin-top:4px}.state{font-size:11px;font-weight:900;margin-top:7px}.state.apply{color:#047857}.state.skip{color:#b45309}.reason{font-size:12px;color:#92400e;margin-top:5px}.result{margin-top:18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre-wrap;background:#0f172a;color:#e2e8f0;padding:14px;border-radius:12px;min-height:70px}a{color:#0f766e}iframe{display:none}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="head">
+      <div>
+        <span class="badge">🧪 LABORATORIO · NO PRODUCCIÓN</span>
+        <h1>Lote de imágenes 001</h1>
+        <p class="note">Procesa exactamente 10 candidatos. Solo las filas verificadas como <strong>APPLY</strong> pueden escribir <code>producto.imagen</code>. Las filas con gramaje dudoso quedan <strong>SKIP</strong>. Precio, stock y demás campos no se modifican.</p>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn secondary" id="reloadBtn" type="button">Revisar lote 001</button>
+      <button class="btn" id="applyBtn" type="button" disabled>Aplicar lote 001 en Turso LAB</button>
+      <a href="../index.html" target="_blank" rel="noopener">Abrir POS LAB</a>
+    </div>
+    <div class="status" id="status">Cargando manifest…</div>
+    <section class="grid" id="grid" aria-live="polite"></section>
+    <pre class="result" id="result">Sin ejecución.</pre>
+    <iframe id="labFrame" src="../index.html" title="POS LAB aislado"></iframe>
+  </main>
+
+  <script type="module">
+    import { runBatchFromManifest } from '../js/product-image-batch.js';
+
+    const manifestUrl = new URL('../data/product-image-batches/batch-001.json', location.href);
+    const grid = document.getElementById('grid');
+    const status = document.getElementById('status');
+    const result = document.getElementById('result');
+    const applyBtn = document.getElementById('applyBtn');
+    const reloadBtn = document.getElementById('reloadBtn');
+    const frame = document.getElementById('labFrame');
+    let manifest = null;
+
+    function setStatus(text, state = '') {
+      status.textContent = text;
+      status.dataset.state = state;
+    }
+
+    function cardFor(entry) {
+      const card = document.createElement('article');
+      card.className = 'card';
+      if (entry.image_url) {
+        const img = document.createElement('img');
+        img.className = 'thumb';
+        img.loading = 'lazy';
+        img.referrerPolicy = 'no-referrer';
+        img.src = entry.image_url;
+        img.alt = entry.product_name;
+        card.appendChild(img);
+      }
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = entry.product_name;
+      card.appendChild(name);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = `Presentación esperada: ${entry.expected_presentation} · confianza: ${entry.confidence}`;
+      card.appendChild(meta);
+      const state = document.createElement('div');
+      state.className = `state ${entry.action}`;
+      state.textContent = entry.action === 'apply' ? 'APPLY · candidata a escritura' : 'SKIP · no se escribe';
+      card.appendChild(state);
+      if (entry.reason) {
+        const reason = document.createElement('div');
+        reason.className = 'reason';
+        reason.textContent = entry.reason;
+        card.appendChild(reason);
+      }
+      if (entry.source_page) {
+        const source = document.createElement('a');
+        source.href = entry.source_page;
+        source.target = '_blank';
+        source.rel = 'noopener noreferrer';
+        source.textContent = 'Ver fuente';
+        card.appendChild(source);
+      }
+      return card;
+    }
+
+    async function loadManifest() {
+      applyBtn.disabled = true;
+      setStatus('Cargando y validando lote 001…');
+      const response = await fetch(manifestUrl, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Manifest HTTP ${response.status}`);
+      manifest = await response.json();
+      if (!Array.isArray(manifest.entries) || manifest.entries.length !== 10) throw new Error('El lote no contiene exactamente 10 candidatos.');
+      grid.replaceChildren(...manifest.entries.map(cardFor));
+      const ready = manifest.entries.filter(entry => entry.action === 'apply').length;
+      const blocked = manifest.entries.length - ready;
+      setStatus(`Lote 001: ${manifest.entries.length} candidatos · ${ready} APPLY · ${blocked} SKIP.`, 'ok');
+      applyBtn.disabled = false;
+    }
+
+    function frameReady() {
+      if (frame.contentWindow?.document?.readyState === 'complete') return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('El POS LAB no terminó de cargar.')), 15000);
+        frame.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
+    }
+
+    function getProducts(win) {
+      const products = win.eval('productos');
+      if (!Array.isArray(products)) throw new Error('No se pudo leer el catálogo LAB.');
+      return products;
+    }
+
+    async function applyBatch() {
+      if (!manifest) await loadManifest();
+      applyBtn.disabled = true;
+      result.textContent = 'Ejecutando…';
+      setStatus('Cargando la revisión vigente desde Turso LAB…');
+      try {
+        await frameReady();
+        const win = frame.contentWindow;
+        const workspace = win.NuevoAmanecerLabWorkspace;
+        if (!workspace?.load || !workspace?.saveNow) throw new Error('Workspace LAB no disponible.');
+        const loaded = await workspace.load();
+        if (!loaded) throw new Error('No se pudo cargar Turso LAB. Abre POS LAB y activa una sesión válida antes de ejecutar el lote.');
+        const products = getProducts(win);
+
+        setStatus('Descargando, verificando y optimizando imágenes…');
+        const execution = await runBatchFromManifest({
+          products,
+          manifestUrl,
+          save: async () => {
+            await win.eval('saveAllData()');
+            await workspace.saveNow();
+          }
+        });
+
+        const expected = new Map();
+        for (const item of execution.applied) {
+          const matches = products.filter(product => String(product?.nombre ?? '') === item.product_name);
+          if (matches.length === 1) expected.set(item.product_name, matches[0].imagen);
+        }
+
+        if (expected.size) {
+          setStatus('Verificando persistencia contra Turso LAB…');
+          const reloaded = await workspace.load();
+          if (!reloaded) throw new Error('No se pudo recargar Turso LAB para verificar persistencia.');
+          const persistedProducts = getProducts(win);
+          for (const [name, image] of expected) {
+            const matches = persistedProducts.filter(product => String(product?.nombre ?? '') === name);
+            if (matches.length !== 1 || matches[0].imagen !== image) {
+              throw new Error(`Persistencia no confirmada para ${name}.`);
+            }
+          }
+        }
+
+        result.textContent = JSON.stringify(execution, null, 2);
+        setStatus(`Lote terminado y verificado: ${execution.applied.length} imágenes persistidas; ${execution.skipped.length} productos sin escritura.`, 'ok');
+      } catch (error) {
+        result.textContent = String(error?.stack || error);
+        setStatus(`BLOQUEADO: ${error?.message || error}`, 'error');
+      } finally {
+        applyBtn.disabled = false;
+      }
+    }
+
+    reloadBtn.addEventListener('click', () => loadManifest().catch(error => setStatus(`BLOQUEADO: ${error.message}`, 'error')));
+    applyBtn.addEventListener('click', applyBatch);
+    loadManifest().catch(error => setStatus(`BLOQUEADO: ${error.message}`, 'error'));
+  </script>
+</body>
+</html>
