@@ -1,0 +1,96 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-PRODUCT-IMAGES-B001",
+  "base_ref": "14e781955b67a83b8910a3fed595cee7ec823804",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    },
+    "inventory-integrity": {
+      "path": ".agents/skills/inventory-integrity/SKILL.md",
+      "git_blob_sha": "5a4248619be5d4fa554c8efd3532118b8e170e26"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Aplicar en LAB hasta 10 imagenes verificadas a productos existentes, por coincidencia exacta de nombre/presentacion, sin modificar ningun otro campo comercial.",
+    "READS": [
+      "window.productos / snapshot.data.productos ya cargado por LAB",
+      "manifest LAB batch-001 con nombre exacto, presentacion y fuente de imagen",
+      "_naSafeProductImageSource cuando este disponible para validar data URL",
+      "saveAllData existente para persistencia LAB"
+    ],
+    "WRITES": [
+      "producto.imagen exclusivamente para entradas aceptadas",
+      "manifest versionado de maximo 10 candidatos sin datos comerciales sensibles",
+      "helper LAB aislado y prueba focalizada"
+    ],
+    "DOM_AFFECTED": [],
+    "STATE_AFFECTED": [
+      "Solo propiedad imagen de productos LAB coincidentes; no se crea ni elimina producto"
+    ],
+    "STORAGE_AFFECTED": [
+      "Snapshot LAB existente y su persistencia Turso LAB a traves del flujo ya autorizado; CANON no se escribe"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Precio, costo, stock, categoria, codigo y demas campos del producto permanecen sin cambios",
+      "Cantidad de productos permanece identica",
+      "Coincidencia cero o multiple produce SKIP y cero escritura",
+      "Gramaje/variante ambiguo produce SKIP",
+      "La imagen final debe ser raster data:image segura y respetar el limite vigente del POS",
+      "No hay credenciales de produccion, endpoints de escritura CANON ni cambios POS/**",
+      "El lote nunca supera 10 entradas"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "Inventario y Punto de Venta consumen el mismo objeto producto; solo cambia su representacion visual imagen",
+      "Ventas, caja, creditos y movimientos de stock no deben observar cambios funcionales"
+    ],
+    "RISKS": [
+      "Una fuente remota puede bloquear CORS o cambiar; la conversion debe fallar cerrada y omitir la entrada",
+      "Productos duplicados por nombre podrian recibir una imagen incorrecta; se exige exactamente una coincidencia",
+      "Una presentacion visualmente parecida puede tener gramaje distinto; el manifest declara presentacion y las dudosas no se aplican",
+      "El crecimiento del snapshot por base64 puede afectar rendimiento; se conserva compresion y limites del POS"
+    ],
+    "ROLLBACK": [
+      "Revertir el commit funcional del PR LAB restaura el helper/manifest",
+      "Antes de persistir se conserva la imagen previa por entrada para permitir restauracion en la misma sesion LAB",
+      "No existe rollback CANON porque esta tarea no escribe CANON"
+    ],
+    "TESTS": [
+      "Validador rechaza lotes de mas de 10 entradas",
+      "Coincidencia exacta unica actualiza solo imagen",
+      "Cero coincidencias no cambia datos",
+      "Nombre duplicado no cambia datos",
+      "Imagen insegura o demasiado grande no cambia datos",
+      "Comparacion antes/despues ignora solo imagen y exige igualdad del resto del producto",
+      "node laboratorio/pos-lab/build-lab.mjs --check",
+      "node laboratorio/check.mjs",
+      "node laboratorio/pos-lab/scope-guard.mjs --task=laboratorio/pos-lab/tasks/LAB-PRODUCT-IMAGES-B001.json"
+    ]
+  }
+}
