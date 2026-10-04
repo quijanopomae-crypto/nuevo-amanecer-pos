@@ -13,6 +13,7 @@
     "infra/database/migrations/0021_canonical_product_image_apply.sql",
     "ops/CANON-PRODUCT-IMAGES-B001.json",
     "ops/product-images/batch-001.json",
+    "ops/v1.3-prod-product-images-trigger.example.json",
     "tools/cloudflare-prod/scripts/product-image-batch-apply.mjs",
     "tools/cloudflare-prod/scripts/product-image-batch-verify-worker.mjs",
     "tests/cloud-sync/canonical-product-images.test.mjs",
