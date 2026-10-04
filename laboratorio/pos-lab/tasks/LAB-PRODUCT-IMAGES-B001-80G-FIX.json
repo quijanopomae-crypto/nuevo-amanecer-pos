@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "task_id": "LAB-PRODUCT-IMAGES-B001-80G-FIX",
+  "environment": "LABORATORIO",
+  "base_ref": "f47fc7b9b31a26e40d16961ff837e9fa8513b732",
+  "objective": "Corregir dos candidatos del lote 001 que fueron bloqueados por gramaje: TRULULU PINGUINOS 80GR y TRULULU SNACKS OSOS ORO 80G, usando fuentes que confirman exactamente 80 g y sin cambiar ningun otro candidato ni logica.",
+  "allowed_files": [
+    "laboratorio/pos-lab/tasks/LAB-PRODUCT-IMAGES-B001-80G-FIX.json",
+    "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001-80G-FIX.json",
+    "laboratorio/pos-lab/data/product-image-batches/batch-001.json"
+  ],
+  "forbidden_files": [
+    "POS/**",
+    "tools/cloudflare-lab/**",
+    ".github/**",
+    "laboratorio/pos-lab/js/**",
+    "laboratorio/pos-lab/tools/**",
+    "tests/**",
+    "evidence/v1.3/**",
+    "infra/**"
+  ],
+  "required_skills": [
+    "impact-analysis",
+    "cross-module-impact",
+    "lab-scope-guard",
+    "lab-feature-edit",
+    "inventory-integrity"
+  ],
+  "skill_preflight_receipt": "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001-80G-FIX.json",
+  "production_data_authority": false,
+  "isolated_d1_data_allowed": true,
+  "production_credentials": false,
+  "production_writes": false,
+  "canon_writes": false,
+  "acceptance_criteria": [
+    "El lote sigue teniendo exactamente 10 candidatos.",
+    "TRULULU PINGUINOS 80GR cambia de SKIP a APPLY con fuente que declara 80 g.",
+    "TRULULU SNACKS OSOS ORO 80G cambia de SKIP a APPLY con fuente que declara 80 g.",
+    "Los otros 8 candidatos permanecen sin cambios funcionales.",
+    "No se modifica codigo, UI, stock, precio, costo ni CANON.",
+    "Las fuentes son HTTPS y la herramienta existente mantiene validacion fail-closed si una imagen no descarga o no cumple seguridad."
+  ],
+  "out_of_scope": [
+    "Cambiar el motor de importacion.",
+    "Modificar productos reales directamente.",
+    "Promover a CANON.",
+    "Cambiar nombres de productos o datos comerciales."
+  ]
+}
