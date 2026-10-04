@@ -7,7 +7,7 @@ Aplicar el primer lote de 10 imágenes de producto aprobadas por el owner al POS
 ## Scope
 
 - Batch exacto de 10 productos ya revisados visualmente por el owner.
-- Overlay estático CANON por coincidencia exacta de `product.name`.
+- Overlay estático CANON por coincidencia exacta de `product.name`, integrado en el runtime de imagen ya cargado (`POS/js/legacy-inline/inline-13.js`) para no añadir dependencias de shell.
 - Las imágenes del lote 001 se resuelven desde URLs HTTPS exactas de fuentes previamente verificadas; no se modifica el producto para guardar esas URLs.
 - El campo `product.imagen` existente conserva prioridad cuando contiene una imagen raster `data:` válida.
 - Si `product.imagen` está vacío, el renderer puede resolver una imagen del overlay por nombre exacto.
@@ -54,8 +54,7 @@ Las imágenes externas pueden cambiar o dejar de estar disponibles. Este lote pr
 - `product.imagen` raster válida tiene prioridad.
 - Producto sin coincidencia exacta conserva fallback de icono.
 - El renderer de tarjeta y carrito usa el resolver único.
-- `POS/index.html` carga el overlay antes del resolver.
-- El service worker precachea el archivo JS del overlay, no URLs externas.
+- El mapa vive en el runtime de imagen ya precargado por CANON, sin tocar `index.html` ni `sw.js`.
 - CANON Critical CI debe quedar verde antes de merge.
 
 ## Rollback
