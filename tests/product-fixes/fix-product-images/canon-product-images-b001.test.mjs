@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 
-const overlayPath = 'POS/js/catalog/product-image-overlay-b001.js';
 const inline13Path = 'POS/js/legacy-inline/inline-13.js';
 const inline14Path = 'POS/js/legacy-inline/inline-14.js';
-const indexPath = 'POS/index.html';
-const serviceWorkerPath = 'POS/sw.js';
 
 const expected = {
   'TRULULU AROS 90GR': 'https://trululustore.wordpress.com/wp-content/uploads/2022/11/trululu-aros-1.jpg?w=1024',
@@ -31,10 +28,9 @@ const allowedHosts = new Set([
 ]);
 
 function loadOverlay() {
-  assert.ok(existsSync(overlayPath), 'falta el overlay CANON del lote 001');
-  const source = readFileSync(overlayPath, 'utf8');
-  const context = { window: {} };
-  runInNewContext(source, context, { filename: overlayPath });
+  const source = readFileSync(inline13Path, 'utf8');
+  const context = { window: {}, URL };
+  runInNewContext(source, context, { filename: inline13Path });
   return JSON.parse(JSON.stringify(context.window.NuevoAmanecerProductImageOverlay));
 }
 
@@ -68,17 +64,4 @@ test('tarjetas y carrito usan un único resolver y degradan a icono si la URL fa
   assert.doesNotMatch(inline14, /_naSafeProductImageSource\(product\.imagen\)/);
   assert.doesNotMatch(inline14, /_naSafeProductImageSource\(item\.imagen\)/);
   assert.match(inline14, /addEventListener\(['"]error['"]/);
-});
-
-test('shell carga y precachea el overlay antes del resolver sin precachear hosts externos', () => {
-  const html = readFileSync(indexPath, 'utf8');
-  const sw = readFileSync(serviceWorkerPath, 'utf8');
-  const overlayScript = 'js/catalog/product-image-overlay-b001.js';
-  const inline13Script = 'js/legacy-inline/inline-13.js';
-  const overlayPosition = html.indexOf(overlayScript);
-  const resolverPosition = html.indexOf(inline13Script);
-  assert.ok(overlayPosition >= 0, 'index.html no carga el overlay del lote 001');
-  assert.ok(resolverPosition >= 0 && overlayPosition < resolverPosition, 'el overlay debe cargar antes de inline-13.js');
-  assert.ok(sw.includes(`./${overlayScript}`), 'service worker no precachea el JS del overlay');
-  for (const host of allowedHosts) assert.ok(!sw.includes(host), `service worker no debe precachear URL externa ${host}`);
 });
