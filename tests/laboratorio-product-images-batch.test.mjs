@@ -106,6 +106,15 @@ test('imagen insegura no modifica el producto', () => {
   assert.equal(products[0].imagen, undefined);
 });
 
+test('rollback conserva ausencia original de la propiedad imagen', () => {
+  const products = [{ nombre: 'P0', stock: 5 }];
+  const result = applyPreparedEntries(products, makeManifest(), { 'p-0': SAFE_IMAGE });
+  assert.equal(Object.prototype.hasOwnProperty.call(products[0], 'imagen'), true);
+  result.rollback();
+  assert.equal(Object.prototype.hasOwnProperty.call(products[0], 'imagen'), false);
+  assert.deepEqual(products[0], { nombre: 'P0', stock: 5 });
+});
+
 test('fallo al persistir revierte todas las imágenes aplicadas', async () => {
   const manifest = makeManifest();
   const products = [{ nombre: 'P0', stock: 3, imagen: 'data:image/jpeg;base64,BBBB' }];
