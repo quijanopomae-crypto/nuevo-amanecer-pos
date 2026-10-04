@@ -1,24 +1,15 @@
 ---
-description: "Preflight obligatorio y verificable antes de modificar POS-LAB."
+description: "POS-LAB temporalmente deshabilitado; redirige el trabajo a CANON."
 ---
 
-No escribas código durante este preflight.
+`LAB_TEMPORARILY_DISABLED = true`
 
-1. Lee `AGENTS.md`.
-2. Lee `.agents/skills/impact-analysis/SKILL.md`.
-3. Lee `.agents/skills/cross-module-impact/SKILL.md`.
-4. Lee `.agents/skills/lab-scope-guard/SKILL.md`.
-5. Lee la skill específica de la tarea: `lab-ui-edit`, `lab-animation-edit` o `lab-feature-edit`.
-6. Lee `laboratorio/pos-lab/UI_MAP.yaml` cuando aplique.
-7. Lee el Task Contract schema v3.
+No ejecutar preflight LAB mientras dure el freeze ordenado por el propietario.
 
-Declara antes de escribir:
-`OBJECTIVE`, `ALLOWED_FILES`, `FORBIDDEN_FILES`, `READS`, `WRITES`, `DOM_AFFECTED`, `STATE_AFFECTED`, `STORAGE_AFFECTED`, `DOMAIN_INVARIANTS`, `CROSS_MODULE_IMPACT`, `RISKS`, `ROLLBACK` y `TESTS`.
-
-Crea el recibo `laboratorio/pos-lab/preflight/<TASK_ID>.json` con los hashes Git blob de cada `SKILL.md` leído y ejecútalo con:
-
-`node laboratorio/pos-lab/skill-preflight.mjs --task=<contrato> --receipt=<recibo>`
-
-Solo `SKILL_PREFLIGHT_PASS` habilita escritura. El contrato y el recibo deben estar commiteados antes del primer cambio funcional.
-
-Esta regla aplica a cualquier writer, incluido ChatGPT/conector GitHub, OpenCode, Claude, DeepSeek y Codex.
+Acción obligatoria:
+1. no escribir ningún archivo LAB;
+2. no crear Task Contract ni receipt LAB;
+3. no ejecutar `skill-preflight.mjs`;
+4. informar `LAB_TEMPORARILY_DISABLED`;
+5. reclasificar una tarea normal del producto como CANON y usar `/canon-preflight`;
+6. solo esperar una orden explícita del propietario si realmente se necesita reactivar LAB.
