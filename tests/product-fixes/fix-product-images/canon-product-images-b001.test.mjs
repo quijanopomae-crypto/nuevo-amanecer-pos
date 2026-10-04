@@ -6,6 +6,8 @@ import test from 'node:test';
 const overlayPath = 'POS/js/catalog/product-image-overlay-b001.js';
 const inline13Path = 'POS/js/legacy-inline/inline-13.js';
 const inline14Path = 'POS/js/legacy-inline/inline-14.js';
+const indexPath = 'POS/index.html';
+const serviceWorkerPath = 'POS/sw.js';
 
 const expected = {
   'TRULULU AROS 90GR': './assets/product-images/b001/trululu-aros-90.webp',
@@ -65,4 +67,19 @@ test('tarjetas y carrito usan un único resolver de imagen', () => {
   assert.match(inline14, /_naProductImageSource\(item\)/);
   assert.doesNotMatch(inline14, /_naSafeProductImageSource\(product\.imagen\)/);
   assert.doesNotMatch(inline14, /_naSafeProductImageSource\(item\.imagen\)/);
+});
+
+test('shell carga el overlay antes del resolver y el service worker lo precachea con las 10 imágenes', () => {
+  const html = readFileSync(indexPath, 'utf8');
+  const sw = readFileSync(serviceWorkerPath, 'utf8');
+  const overlayScript = 'js/catalog/product-image-overlay-b001.js';
+  const inline13Script = 'js/legacy-inline/inline-13.js';
+  const overlayPosition = html.indexOf(overlayScript);
+  const resolverPosition = html.indexOf(inline13Script);
+  assert.ok(overlayPosition >= 0, 'index.html no carga el overlay del lote 001');
+  assert.ok(resolverPosition >= 0 && overlayPosition < resolverPosition, 'el overlay debe cargar antes de inline-13.js');
+  assert.match(sw, /\.\/js\/catalog\/product-image-overlay-b001\.js/);
+  for (const path of Object.values(expected)) {
+    assert.ok(sw.includes(path), `service worker no precachea ${path}`);
+  }
 });
