@@ -1,7 +1,7 @@
 {
   "schema": "nuevo-amanecer.lab-product-image-batch/v1",
   "batch_id": "001",
-  "reviewed_on": "2026-10-03",
+  "reviewed_on": "2026-10-04",
   "max_items": 10,
   "entries": [
     {
@@ -80,17 +80,19 @@
       "id": "trululu-pinguinos-80",
       "product_name": "TRULULU PINGUINOS 80GR",
       "expected_presentation": "80 g",
-      "action": "skip",
-      "confidence": "blocked",
-      "reason": "La fuente localizada muestra presentacion de 90 g; no se fuerza sobre el SKU de 80 g."
+      "action": "apply",
+      "confidence": "high",
+      "source_page": "https://comercialmoy.sumerlabs.com/catalogo/comercialmoy/producto/gomitas-trululu-pinguinos-g--bolsita-smr-653b5ab8700d07de69b640571a59a458378248a5",
+      "image_url": "https://domun.co/default/image-tool-lambda?new-height=700&new-quality=80&new-width=700&url-image=https%3A%2F%2Fsumerlabs.com%2Fsumer-app-90b8f.appspot.com%2Fproduct_photos%252Ffd0aa6876516aef8f062203b07b2e439%252Fe003f880-ff3c-11ec-9263-67049881eeef%3Falt%3Dmedia%26token%3D9cbe4add-c612-4f9b-b3b0-899148471547"
     },
     {
       "id": "trululu-osos-oro-80",
       "product_name": "TRULULU SNACKS OSOS ORO 80G",
       "expected_presentation": "80 g",
-      "action": "skip",
-      "confidence": "blocked",
-      "reason": "Las fuentes localizadas muestran Osos/Oro de 90 g; no se fuerza sobre el SKU de 80 g."
+      "action": "apply",
+      "confidence": "high",
+      "source_page": "https://www.efastonline.com/product/1040784",
+      "image_url": "https://caest-imagenes.s3.us-east-2.amazonaws.com/products/local/1040784_1_z.webp"
     }
   ]
 }
