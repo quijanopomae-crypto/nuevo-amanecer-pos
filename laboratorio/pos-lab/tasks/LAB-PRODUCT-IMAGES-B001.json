@@ -8,6 +8,7 @@
     "laboratorio/pos-lab/tasks/LAB-PRODUCT-IMAGES-B001.json",
     "laboratorio/pos-lab/preflight/LAB-PRODUCT-IMAGES-B001.json",
     "laboratorio/pos-lab/data/product-image-batches/batch-001.json",
+    "laboratorio/pos-lab/js/product-image-batch.js",
     "laboratorio/pos-lab/lab-overrides.js",
     "tests/laboratorio-product-images-batch.test.mjs"
   ],
