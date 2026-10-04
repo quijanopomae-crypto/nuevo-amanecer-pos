@@ -72,6 +72,7 @@ export function applyPreparedEntries(products, manifest, preparedDataUrls = {}) 
   const baselineLength = products.length;
   const baseline = products.map(product => ({
     product,
+    hadOwnImage: Object.prototype.hasOwnProperty.call(product, 'imagen'),
     previousImage: product?.imagen,
     comparable: stableComparable(product)
   }));
@@ -79,7 +80,10 @@ export function applyPreparedEntries(products, manifest, preparedDataUrls = {}) 
   const skipped = [];
 
   const rollback = () => {
-    for (const item of baseline) item.product.imagen = item.previousImage;
+    for (const item of baseline) {
+      if (item.hadOwnImage) item.product.imagen = item.previousImage;
+      else delete item.product.imagen;
+    }
   };
 
   try {
