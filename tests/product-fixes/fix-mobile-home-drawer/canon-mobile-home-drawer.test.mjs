@@ -1,56 +1,70 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
-const cssPath='POS/css/canon-mobile-home.css';
-const jsPath='POS/js/canon-mobile-home.js';
-const css=existsSync(cssPath)?readFileSync(cssPath,'utf8'):'';
-const js=existsSync(jsPath)?readFileSync(jsPath,'utf8'):'';
+const css=readFileSync('POS/css/experience-v2/pages/menu.css','utf8');
+const nav=readFileSync('POS/js/navigation/menu-navigation.js','utf8');
 const index=readFileSync('POS/index.html','utf8');
-const sw=readFileSync('POS/sw.js','utf8');
-
 const menu=index.slice(index.indexOf('<div class="page active" id="pageMenu">'),index.indexOf('<!-- POS -->'));
 
-test('CANON ships isolated mobile-only home assets',()=>{
-  assert.ok(existsSync(cssPath),'missing mobile-only CSS asset');
-  assert.ok(existsSync(jsPath),'missing mobile-only JS asset');
-  assert.match(index,/css\/canon-mobile-home\.css/);
-  assert.match(index,/js\/canon-mobile-home\.js/);
-  assert.match(sw,/'\.\/css\/canon-mobile-home\.css'/);
-  assert.match(sw,/'\.\/js\/canon-mobile-home\.js'/);
-});
-
-test('mobile redesign is hard-scoped below tablet and keeps desktop decorator separate',()=>{
+test('mobile redesign stays isolated below tablet while source desktop modules remain intact',()=>{
   assert.match(css,/@media\s*\(max-width:\s*767px\)/);
-  assert.doesNotMatch(css,/@media\s*\(min-width:\s*768px\)[\s\S]*#pageMenu\.active\s*\{[^}]*grid-template-columns/);
-  assert.match(js,/MOBILE_MAX_WIDTH\s*=\s*767/);
-  assert.doesNotMatch(js,/canon-desktop-dashboard/);
-  assert.match(index,/css\/canon-desktop-dashboard\.css[\s\S]*css\/canon-mobile-home\.css/);
+  assert.match(nav,/MOBILE_HOME_MAX_WIDTH\s*=\s*767/);
+  assert.doesNotMatch(nav,/canon-desktop-dashboard/);
+  assert.match(menu,/Módulos principales/);
+  assert.match(menu,/module-label">Punto de Venta/);
+  assert.match(menu,/module-label">Inventario/);
+  assert.match(menu,/module-label">Ventas/);
+  assert.match(menu,/module-label">Clientes/);
+  assert.match(menu,/module-label">Caja/);
+  assert.match(menu,/module-label">Gastos/);
 });
 
-test('mobile home replaces duplicate module cards with quick work surfaces',()=>{
-  assert.match(js,/Acciones rápidas/);
-  assert.match(js,/Actividad reciente/);
-  for(const label of ['Nueva venta','Registrar abono','Ingresar mercadería','Registrar gasto','Buscar cliente','Abrir \/ cerrar caja']){
-    assert.match(js,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  }
+test('phone home hides duplicate module navigation and exposes work-focused sections',()=>{
   assert.match(css,/#pageMenu\s+\.modules-grid\s*\{\s*display\s*:\s*none\s*!important/);
   assert.match(css,/#pageMenu\s+\.menu-modules-label\s*\{\s*display\s*:\s*none\s*!important/);
-  assert.match(menu,/Módulos principales/,'desktop/tablet source modules must remain in canonical HTML');
-});
-
-test('drawer contains only supported CANON destinations and reuses safe navigation',()=>{
-  for(const label of ['Inicio','Punto de Venta','Ventas','Inventario','Clientes','Cuentas por cobrar','Caja','Gastos','Configuración']){
-    assert.match(js,new RegExp(label));
+  assert.match(nav,/Acciones rápidas/);
+  assert.match(nav,/Actividad reciente/);
+  for(const label of ['Nueva venta','Registrar abono','Ingresar mercadería','Registrar gasto','Buscar cliente','Abrir / cerrar caja']){
+    assert.match(nav,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   }
-  assert.match(js,/NA_MENU_NAVIGATION/);
-  assert.match(js,/\.navigate\(pageId\)/);
-  assert.doesNotMatch(js,/pageCompras|pageProveedores|pageFinanzas/);
-  assert.match(js,/Escape/);
-  assert.match(js,/na-mobile-drawer-overlay/);
 });
 
-test('mobile decorator remains read-only with respect to business persistence and network',()=>{
-  assert.doesNotMatch(js,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|\.open\(['"](?:POST|PUT|PATCH|DELETE)/i);
-  assert.doesNotMatch(js,/sale\.create|payment\.create|cash\.open|cash\.close|inventory\.adjust|credit-account\.create/i);
+test('quick actions route only to existing CANON destinations',()=>{
+  for(const pageId of ['pagePOS','pageInventario','pageClientes','pageGastos','pageCaja']){
+    assert.match(nav,new RegExp("quickAction\\([^)]*['\"]"+pageId+"['\"]"));
+  }
+  assert.match(nav,/Registrar abono[\s\S]{0,500}pageClientes/);
+  assert.doesNotMatch(nav,/pageCompras|pageProveedores|pageFinanzas/);
+});
+
+test('mobile drawer contains supported navigation and closes through all expected paths',()=>{
+  for(const label of ['Inicio','Punto de Venta','Ventas','Inventario','Clientes','Cuentas por cobrar','Caja','Gastos','Configuración']){
+    assert.match(nav,new RegExp(label));
+  }
+  assert.match(nav,/NA_MENU_NAVIGATION/);
+  assert.match(nav,/navigate\(pageId\)/);
+  assert.match(nav,/na-mobile-drawer-overlay/);
+  assert.match(nav,/Escape/);
+  assert.match(nav,/closeMobileDrawer/);
+});
+
+test('mobile dashboard activity is read-only and uses existing UI/runtime state',()=>{
+  assert.match(nav,/qsPorCobrar/);
+  assert.match(nav,/qsStockCritico/);
+  assert.match(nav,/qsCaja/);
+  assert.match(nav,/root\.ventas/);
+  assert.doesNotMatch(nav,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest/i);
+  assert.doesNotMatch(nav,/sale\.create|payment\.create|cash\.open|cash\.close|inventory\.adjust|credit-account\.create/i);
+});
+
+test('drawer and mobile dashboard styles exist only in the phone media block',()=>{
+  const mobileStart=css.search(/@media\s*\(max-width:\s*767px\)/);
+  assert.ok(mobileStart>=0,'missing <=767px mobile block');
+  const beforeMobile=css.slice(0,mobileStart);
+  const mobile=css.slice(mobileStart);
+  assert.doesNotMatch(beforeMobile,/na-mobile-drawer|na-mobile-quick-actions|na-mobile-activity/);
+  assert.match(mobile,/\.na-mobile-drawer/);
+  assert.match(mobile,/\.na-mobile-quick-actions/);
+  assert.match(mobile,/\.na-mobile-activity/);
 });
