@@ -7,13 +7,13 @@
   "owner_authorization": "El propietario aprobó explícitamente el 2026-10-04 aplicar el diseño únicamente al CANON móvil, excluyendo PC y tablet.",
   "allowed_files": [
     "tasks/CANON-MOBILE-HOME-DRAWER-001.json",
-    "POS/index.html",
-    "POS/css/canon-mobile-home.css",
-    "POS/js/canon-mobile-home.js",
-    "POS/sw.js",
+    "POS/css/experience-v2/pages/menu.css",
+    "POS/js/navigation/menu-navigation.js",
     "tests/product-fixes/fix-mobile-home-drawer/canon-mobile-home-drawer.test.mjs"
   ],
   "forbidden_files": [
+    "POS/index.html",
+    "POS/sw.js",
     "POS/css/canon-desktop-dashboard.css",
     "POS/js/canon-desktop-dashboard.js",
     "laboratorio/**",
@@ -25,14 +25,15 @@
   "reads": [
     "POS/index.html home actual y shell global",
     "POS/js/navigation/menu-navigation.js navegación móvil segura existente",
-    "POS/js/canon-desktop-dashboard.js solo como referencia de frontera >=768px",
-    "POS/css/canon-desktop-dashboard.css solo como referencia de frontera >=768px"
+    "POS/css/experience-v2/pages/menu.css hoja ya cargada en CANON",
+    "POS/js/canon-desktop-dashboard.js y POS/css/canon-desktop-dashboard.css solo como frontera >=768px"
   ],
   "writes": [
-    "overlay visual y DOM decorador mobile-only del home",
+    "decorador DOM mobile-only dentro de la capa de navegación ya existente",
     "drawer mobile-only",
     "acciones rápidas que reutilizan navegación existente",
-    "actividad reciente derivada solo en lectura de estado ya cargado"
+    "actividad reciente derivada solo en lectura de estado ya cargado",
+    "estilos encapsulados bajo @media (max-width:767px)"
   ],
   "dom_affected": [
     "#pageMenu en <=767px",
@@ -46,18 +47,18 @@
     "No se modifica canon-desktop-dashboard.css ni canon-desktop-dashboard.js.",
     "No se crean nuevas reglas comerciales ni nuevas páginas de negocio.",
     "Las acciones rápidas reutilizan funciones/páginas ya existentes.",
-    "La navegación a módulos en móvil sigue usando NA_MENU_NAVIGATION cuando esté disponible.",
+    "La navegación a módulos en móvil sigue usando el mismo NA_MENU_NAVIGATION.",
     "No hay escrituras de datos, red, localStorage, D1 ni Turso desde el decorador móvil.",
-    "Compras, Proveedores y Finanzas no se presentan como módulos independientes porque CANON no expone páginas propias para ellos en el estado base."
+    "Compras, Proveedores y Finanzas no se presentan como módulos independientes porque CANON no expone páginas propias para ellos en el estado base.",
+    "POS/index.html y POS/sw.js permanecen intactos porque menu.css y menu-navigation.js ya están cargados y precacheados."
   ],
   "acceptance_criteria": [
     "En <=767px la grilla Módulos principales queda oculta y el home muestra Resumen, Acciones rápidas y Actividad reciente.",
     "En <=767px existe botón hamburguesa y drawer accesible con Inicio, Punto de Venta, Ventas, Inventario, Clientes/Cuentas por cobrar, Caja, Gastos y Configuración.",
     "Nueva venta, Ingresar mercadería, Registrar gasto, Buscar cliente y Abrir/cerrar caja navegan a páginas existentes; Registrar abono abre Clientes sin inventar lógica de pago nueva.",
     "El drawer cierra al seleccionar destino, tocar overlay o presionar Escape.",
-    "En >=768px el CSS/JS mobile-only no altera la composición actual.",
-    "Los nuevos assets se cargan desde POS/index.html y se precachean en POS/sw.js.",
+    "En >=768px no se aplica ninguna regla visual ni decorador móvil.",
     "CANON Critical CI y las regresiones focalizadas pasan."
   ],
-  "rollback": "Revertir los dos assets mobile-only, sus referencias en index/sw y el test; no hay datos ni migraciones que revertir."
+  "rollback": "Revertir los bloques mobile-only añadidos a menu.css/menu-navigation.js y el test; no hay datos ni migraciones que revertir."
 }
