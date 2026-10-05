@@ -1,4 +1,12 @@
 /* Nuevo Amanecer CANON — Inicio y drawer exclusivos de teléfono. */
+.na-mobile-menu-toggle,
+.na-mobile-drawer-overlay,
+.na-mobile-drawer,
+#pageMenu .na-mobile-welcome,
+#pageMenu .na-mobile-home-section {
+  display:none;
+}
+
 @media (max-width:767px) {
   .g-topbar {
     min-height:64px;
@@ -51,6 +59,7 @@
     background:linear-gradient(180deg,#f7fcfc 0%,#f8fafc 46%,#f8fafc 100%);
   }
   #pageMenu .na-mobile-welcome {
+    display:block;
     position:relative;overflow:hidden;min-height:104px;
     border:1px solid #ccece8;border-radius:20px;padding:17px 18px;
     background:radial-gradient(circle at 84% 24%,rgba(250,204,21,.34) 0 31px,transparent 32px),linear-gradient(145deg,#ffffff 0%,#effcf9 62%,#dff8f3 100%);
@@ -87,6 +96,7 @@
   #pageMenu .modules-grid {display:none!important}
 
   #pageMenu .na-mobile-home-section {
+    display:block;
     border:1px solid #dce7ec;border-radius:18px;padding:14px;background:#fff;
     box-shadow:0 8px 24px rgba(15,23,42,.045);
   }
