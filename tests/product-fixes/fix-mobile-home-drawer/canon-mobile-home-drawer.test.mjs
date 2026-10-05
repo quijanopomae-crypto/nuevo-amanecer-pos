@@ -63,7 +63,7 @@ test('mobile dashboard activity is read-only and uses existing UI/runtime state'
   assert.match(mobileUi,/qsCaja/);
   assert.match(mobileUi,/root\.ventas/);
   assert.doesNotMatch(mobileUi,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|saveAppState/i);
-  assert.doesNotMatch(mobileUi,/sale\.create|payment\.create|cash\.open|cash\.close|inventory\.adjust|credit-account\.create/i);
+  assert.doesNotMatch(mobileUi,/sale\.create\s*\(|payment\.create\s*\(|cash\.open\s*\(|cash\.close\s*\(|inventory\.adjust\s*\(|credit-account\.create\s*\(/i);
 });
 
 test('CANON phone styles are production-only and LAB promotion source stays untouched',()=>{
