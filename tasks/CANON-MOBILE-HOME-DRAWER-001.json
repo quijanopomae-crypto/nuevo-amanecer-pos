@@ -11,7 +11,7 @@
     "POS/css/canon-mobile-home.css",
     "POS/js/canon-mobile-home.js",
     "POS/sw.js",
-    "tests/product-fixes/canon-mobile-home-drawer.test.mjs"
+    "tests/product-fixes/fix-mobile-home-drawer/canon-mobile-home-drawer.test.mjs"
   ],
   "forbidden_files": [
     "POS/css/canon-desktop-dashboard.css",
