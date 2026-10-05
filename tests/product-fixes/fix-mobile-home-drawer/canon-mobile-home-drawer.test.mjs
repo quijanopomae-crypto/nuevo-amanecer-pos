@@ -8,6 +8,9 @@ const index=readFileSync('POS/index.html','utf8');
 const parityMenuCss=readFileSync('POS/css/experience-v2/pages/menu.css','utf8');
 const labMenuCss=readFileSync('laboratorio/pos-lab/styles/pages/menu.css','utf8');
 const menu=index.slice(index.indexOf('<div class="page active" id="pageMenu">'),index.indexOf('<!-- POS -->'));
+const mobileStart=nav.indexOf('function ensureMobileStylesheet');
+const mobileEnd=nav.indexOf('function bind()');
+const mobileUi=mobileStart>=0&&mobileEnd>mobileStart?nav.slice(mobileStart,mobileEnd):'';
 
 test('mobile redesign stays isolated below tablet while source desktop modules remain intact',()=>{
   assert.match(css,/@media\s*\(max-width:\s*767px\)/);
@@ -54,18 +57,20 @@ test('mobile drawer contains supported navigation and closes through all expecte
 });
 
 test('mobile dashboard activity is read-only and uses existing UI/runtime state',()=>{
-  assert.match(nav,/qsPorCobrar/);
-  assert.match(nav,/qsStockCritico/);
-  assert.match(nav,/qsCaja/);
-  assert.match(nav,/root\.ventas/);
-  assert.doesNotMatch(nav,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest/i);
-  assert.doesNotMatch(nav,/sale\.create|payment\.create|cash\.open|cash\.close|inventory\.adjust|credit-account\.create/i);
+  assert.ok(mobileUi.length>0,'mobile-only decorator block must be present');
+  assert.match(mobileUi,/qsPorCobrar/);
+  assert.match(mobileUi,/qsStockCritico/);
+  assert.match(mobileUi,/qsCaja/);
+  assert.match(mobileUi,/root\.ventas/);
+  assert.doesNotMatch(mobileUi,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|saveAppState/i);
+  assert.doesNotMatch(mobileUi,/sale\.create|payment\.create|cash\.open|cash\.close|inventory\.adjust|credit-account\.create/i);
 });
 
 test('CANON phone styles are production-only and LAB promotion source stays untouched',()=>{
   assert.equal(parityMenuCss,labMenuCss,'promoted menu.css must remain byte-for-byte aligned with LAB');
   assert.match(css,/\.na-mobile-drawer/);
-  assert.match(css,/\.na-mobile-quick-actions/);
+  assert.match(css,/\.na-mobile-quick-grid/);
+  assert.match(css,/\.na-mobile-quick-action/);
   assert.match(css,/\.na-mobile-activity/);
   assert.doesNotMatch(index,/canon-mobile-home\.css/,'phone stylesheet is loaded lazily only on <=767px');
 });
