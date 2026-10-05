@@ -143,10 +143,36 @@
     });
   }
 
+  function labCreditVisualDate(cr) {
+    var direct = String(cr && cr.fecha || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+    var timestampDate = String(cr && cr.timestamp || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(timestampDate) ? timestampDate : '';
+  }
+
+  function labCreditVisualTimestamp(cr) {
+    var raw = String(cr && cr.timestamp || '');
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(raw)) return Number.NEGATIVE_INFINITY;
+    var parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+  }
+
+  function labSortCreditsNewestFirst(rows) {
+    return (Array.isArray(rows) ? rows : []).slice().sort(function (a, b) {
+      var dateOrder = labCreditVisualDate(b).localeCompare(labCreditVisualDate(a));
+      if (dateOrder) return dateOrder;
+      var aTime = labCreditVisualTimestamp(a), bTime = labCreditVisualTimestamp(b);
+      if (aTime !== bTime) return bTime - aTime;
+      return String(b && (b.ventaId || b.id) || '').localeCompare(
+        String(a && (a.ventaId || a.id) || ''), 'es', { numeric:true, sensitivity:'base' }
+      );
+    });
+  }
+
   function labCategorySummary(client, category) {
     var all = labCreditsForCategory(client.id, category.id);
-    var active = all.filter(function (cr) { return !labIsCanceled(cr); });
-    var closed = all.filter(labIsCanceled);
+    var active = labSortCreditsNewestFirst(all.filter(function (cr) { return !labIsCanceled(cr); }));
+    var closed = labSortCreditsNewestFirst(all.filter(labIsCanceled));
     var pending = active.reduce(function (sum, cr) { return sum + labCreditPending(cr); }, 0);
     var purchaseCount = all.filter(function (cr) { return !!cr.ventaId || cr.tipo === 'venta_credito'; }).length;
     return {

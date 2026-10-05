@@ -75,6 +75,7 @@ jobs:
           node --check laboratorio/pos-lab/js/lab-workspace.js
           node --check laboratorio/pos-lab/skill-preflight.mjs
           node --check laboratorio/pos-lab/scope-guard.mjs
+          node --check laboratorio/pos-lab/lab-overrides.js
 
       - name: LAB unit tests
         run: |
@@ -87,6 +88,7 @@ jobs:
           node --test tests/cloud-sync/session-auth.test.mjs tests/cloud-sync/session-architecture.test.mjs
           node --test tests/laboratorio-skill-preflight.test.mjs tests/laboratorio-scope-guard.test.mjs
           node --test tests/laboratorio-pos-html.test.mjs tests/laboratorio-html-build.test.mjs tests/laboratorio-pages-current-head.test.mjs
+          node --test tests/laboratorio-credit-history-newest-first.test.mjs
           node laboratorio/pos-lab/build-lab.mjs --check
           node laboratorio/check.mjs
 
