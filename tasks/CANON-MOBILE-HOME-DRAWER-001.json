@@ -11,7 +11,9 @@
     "POS/js/navigation/menu-navigation.js",
     "POS/sw.js",
     "tests/product-fixes/fix-mobile-home-drawer/canon-mobile-home-drawer.test.mjs",
-    "tests/e2e/canon-mobile-home.spec.ts"
+    "tests/product-fixes/fix-mobile-home-drawer/pos-reference-entry.test.mjs",
+    "tests/e2e/canon-mobile-home.spec.ts",
+    "tests/e2e/pos-reference-fidelity.spec.ts"
   ],
   "forbidden_files": [
     "POS/index.html",
@@ -38,7 +40,8 @@
     "drawer mobile-only",
     "acciones rápidas que reutilizan navegación existente",
     "actividad reciente derivada solo en lectura de estado ya cargado",
-    "pruebas E2E de teléfono, tablet/PC y rotación de breakpoint"
+    "pruebas E2E de teléfono, tablet/PC y rotación de breakpoint",
+    "adaptación del helper E2E responsive para entrar por Nueva venta cuando la grilla de módulos está oculta en teléfono"
   ],
   "dom_affected": [
     "#pageMenu en <=767px",
@@ -68,7 +71,8 @@
     "canon-mobile-home.css queda disponible offline en el mismo build del shell PWA.",
     "La paridad visual LAB→CANON continúa pasando.",
     "El E2E demuestra home/drawer en 390px, ausencia del mobile chrome en 1024px y ocultamiento al rotar de 390px a 844px.",
+    "El E2E responsive legacy entra al Punto de Venta mediante Nueva venta en <768px y conserva el flujo existente en >=768px.",
     "CANON Critical CI y E2E Smoke CI pasan."
   ],
-  "rollback": "Revertir POS/css/canon-mobile-home.css, el bloque mobile-only de menu-navigation.js, su entrada de precache en POS/sw.js y las pruebas; no hay datos ni migraciones que revertir."
+  "rollback": "Revertir POS/css/canon-mobile-home.css, el bloque mobile-only de menu-navigation.js, su entrada de precache en POS/sw.js y las pruebas/adaptaciones E2E de esta tarea; no hay datos ni migraciones que revertir."
 }

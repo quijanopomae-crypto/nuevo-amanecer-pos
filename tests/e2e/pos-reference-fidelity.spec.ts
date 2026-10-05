@@ -7,6 +7,11 @@ async function enterPos(page: Page) {
     await sidebar.click();
     return;
   }
+  const quickSale = page.getByRole('button', { name: 'Nueva venta', exact: true });
+  if (await quickSale.isVisible()) {
+    await quickSale.click();
+    return;
+  }
   await page.locator('.module-card').first().click();
 }
 
