@@ -5,12 +5,15 @@ import { readFileSync } from 'node:fs';
 const css=readFileSync('POS/css/canon-mobile-home.css','utf8');
 const nav=readFileSync('POS/js/navigation/menu-navigation.js','utf8');
 const index=readFileSync('POS/index.html','utf8');
+const sw=readFileSync('POS/sw.js','utf8');
 const parityMenuCss=readFileSync('POS/css/experience-v2/pages/menu.css','utf8');
 const labMenuCss=readFileSync('laboratorio/pos-lab/styles/pages/menu.css','utf8');
 const menu=index.slice(index.indexOf('<div class="page active" id="pageMenu">'),index.indexOf('<!-- POS -->'));
 const mobileStart=nav.indexOf('function ensureMobileStylesheet');
 const mobileEnd=nav.indexOf('function bind()');
 const mobileUi=mobileStart>=0&&mobileEnd>mobileStart?nav.slice(mobileStart,mobileEnd):'';
+const phoneMediaStart=css.search(/@media\s*\(max-width:\s*767px\)/);
+const cssBeforePhoneMedia=phoneMediaStart>=0?css.slice(0,phoneMediaStart):'';
 
 test('mobile redesign stays isolated below tablet while source desktop modules remain intact',()=>{
   assert.match(css,/@media\s*\(max-width:\s*767px\)/);
@@ -66,11 +69,20 @@ test('mobile dashboard activity is read-only and uses existing UI/runtime state'
   assert.doesNotMatch(mobileUi,/sale\.create\s*\(|payment\.create\s*\(|cash\.open\s*\(|cash\.close\s*\(|inventory\.adjust\s*\(|credit-account\.create\s*\(/i);
 });
 
-test('CANON phone styles are production-only and LAB promotion source stays untouched',()=>{
+test('CANON phone styles are production-only, offline-ready and LAB promotion source stays untouched',()=>{
   assert.equal(parityMenuCss,labMenuCss,'promoted menu.css must remain byte-for-byte aligned with LAB');
   assert.match(css,/\.na-mobile-drawer/);
   assert.match(css,/\.na-mobile-quick-grid/);
   assert.match(css,/\.na-mobile-quick-action/);
   assert.match(css,/\.na-mobile-activity/);
   assert.doesNotMatch(index,/canon-mobile-home\.css/,'phone stylesheet is loaded lazily only on <=767px');
+  assert.match(sw,/'\.\/css\/canon-mobile-home\.css'/,'phone stylesheet must be in the PWA shell for first-run offline use');
+});
+
+test('mobile-generated chrome stays hidden after crossing into tablet or desktop width',()=>{
+  assert.ok(phoneMediaStart>0,'mobile stylesheet needs a non-mobile guard before its phone media block');
+  assert.match(cssBeforePhoneMedia,/\.na-mobile-menu-toggle[\s\S]*display\s*:\s*none/);
+  assert.match(cssBeforePhoneMedia,/\.na-mobile-drawer[\s\S]*display\s*:\s*none/);
+  assert.match(cssBeforePhoneMedia,/#pageMenu\s+\.na-mobile-welcome[\s\S]*display\s*:\s*none/);
+  assert.match(cssBeforePhoneMedia,/#pageMenu\s+\.na-mobile-home-section[\s\S]*display\s*:\s*none/);
 });
