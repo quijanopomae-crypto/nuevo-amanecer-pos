@@ -152,6 +152,8 @@
         document.body.classList.add('module-mobile-scroll');
       }
 
+      // Persist only after the destination has painted so storage work never
+      // competes with the visual page switch on mobile.
       persistVisiblePage(target);
       scheduleRenderer(pageId);
       scheduleClientScrollMotion(pageId, target);
@@ -207,7 +209,6 @@
     link.id = 'naMobileHomeStyles';
     link.rel = 'stylesheet';
     link.href = 'css/canon-mobile-home.css';
-    link.media = '(max-width: 767px)';
     head.appendChild(link);
     return true;
   }
