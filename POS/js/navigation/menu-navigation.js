@@ -152,8 +152,6 @@
         document.body.classList.add('module-mobile-scroll');
       }
 
-      // Persist only after the destination has painted so storage work never
-      // competes with the visual page switch on mobile.
       persistVisiblePage(target);
       scheduleRenderer(pageId);
       scheduleClientScrollMotion(pageId, target);
@@ -198,6 +196,20 @@
     if (className) element.className = className;
     if (text !== undefined && text !== null) element.textContent = String(text);
     return element;
+  }
+
+  function ensureMobileStylesheet() {
+    if (!isMobile() || typeof document.createElement !== 'function') return false;
+    if (document.getElementById('naMobileHomeStyles')) return true;
+    var head = document.head || (document.querySelector && document.querySelector('head'));
+    if (!head || typeof head.appendChild !== 'function') return false;
+    var link = node('link');
+    link.id = 'naMobileHomeStyles';
+    link.rel = 'stylesheet';
+    link.href = 'css/canon-mobile-home.css';
+    link.media = '(max-width: 767px)';
+    head.appendChild(link);
+    return true;
   }
 
   function insertAfter(reference, element) {
@@ -362,6 +374,7 @@
 
   function ensureMobileHome() {
     if (!isMobile() || typeof document.createElement !== 'function' || !document.body) return false;
+    ensureMobileStylesheet();
     var page = document.getElementById('pageMenu');
     if (!page || typeof page.querySelector !== 'function') return false;
     var scroll = page.querySelector('.main-scroll.home-shell');
