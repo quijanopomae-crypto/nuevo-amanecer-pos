@@ -10,7 +10,8 @@
     "POS/css/canon-mobile-home.css",
     "POS/js/navigation/menu-navigation.js",
     "POS/sw.js",
-    "tests/product-fixes/fix-mobile-home-drawer/canon-mobile-home-drawer.test.mjs"
+    "tests/product-fixes/fix-mobile-home-drawer/canon-mobile-home-drawer.test.mjs",
+    "tests/e2e/canon-mobile-home.spec.ts"
   ],
   "forbidden_files": [
     "POS/index.html",
@@ -36,7 +37,8 @@
     "precache del stylesheet móvil para conservar funcionamiento offline",
     "drawer mobile-only",
     "acciones rápidas que reutilizan navegación existente",
-    "actividad reciente derivada solo en lectura de estado ya cargado"
+    "actividad reciente derivada solo en lectura de estado ya cargado",
+    "pruebas E2E de teléfono, tablet/PC y rotación de breakpoint"
   ],
   "dom_affected": [
     "#pageMenu en <=767px",
@@ -54,17 +56,19 @@
     "La navegación a módulos en móvil sigue usando el mismo NA_MENU_NAVIGATION.",
     "No hay escrituras de datos, red, localStorage, D1 ni Turso desde el decorador móvil.",
     "Compras, Proveedores y Finanzas no se presentan como módulos independientes porque CANON no expone páginas propias para ellos en el estado base.",
-    "POS/index.html permanece intacto; el stylesheet móvil se solicita solo en <=767px y POS/sw.js únicamente lo incorpora al shell precache para conservar offline."
+    "POS/index.html permanece intacto; el stylesheet móvil se solicita solo en <=767px y POS/sw.js únicamente lo incorpora al shell precache para conservar offline.",
+    "Si un teléfono cruza a >=768px por rotación/redimensionado, el chrome móvil queda oculto y vuelve a dominar la interfaz tablet/escritorio existente."
   ],
   "acceptance_criteria": [
     "En <=767px la grilla Módulos principales queda oculta y el home muestra Resumen, Acciones rápidas y Actividad reciente.",
     "En <=767px existe botón hamburguesa y drawer accesible con Inicio, Punto de Venta, Ventas, Inventario, Clientes/Cuentas por cobrar, Caja, Gastos y Configuración.",
     "Nueva venta, Ingresar mercadería, Registrar gasto, Buscar cliente y Abrir/cerrar caja navegan a páginas existentes; Registrar abono abre Clientes sin inventar lógica de pago nueva.",
     "El drawer cierra al seleccionar destino, tocar overlay o presionar Escape.",
-    "En >=768px no se carga ni se aplica el decorador móvil.",
+    "En >=768px no se muestra ni se aplica el decorador móvil.",
     "canon-mobile-home.css queda disponible offline en el mismo build del shell PWA.",
     "La paridad visual LAB→CANON continúa pasando.",
-    "CANON Critical CI y las regresiones focalizadas pasan."
+    "El E2E demuestra home/drawer en 390px, ausencia del mobile chrome en 1024px y ocultamiento al rotar de 390px a 844px.",
+    "CANON Critical CI y E2E Smoke CI pasan."
   ],
-  "rollback": "Revertir POS/css/canon-mobile-home.css, el bloque mobile-only de menu-navigation.js, su entrada de precache en POS/sw.js y el test; no hay datos ni migraciones que revertir."
+  "rollback": "Revertir POS/css/canon-mobile-home.css, el bloque mobile-only de menu-navigation.js, su entrada de precache en POS/sw.js y las pruebas; no hay datos ni migraciones que revertir."
 }
