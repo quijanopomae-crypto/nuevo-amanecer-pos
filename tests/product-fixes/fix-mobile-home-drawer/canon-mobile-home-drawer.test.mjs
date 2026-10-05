@@ -19,7 +19,7 @@ test('mobile redesign stays isolated below tablet while source desktop modules r
   assert.match(css,/@media\s*\(max-width:\s*767px\)/);
   assert.match(nav,/MOBILE_HOME_MAX_WIDTH\s*=\s*767/);
   assert.match(nav,/css\/canon-mobile-home\.css/);
-  assert.match(nav,/link\.media\s*=\s*['"]\(max-width:\s*767px\)['"]/);
+  assert.doesNotMatch(nav,/link\.media\s*=/,'the stylesheet must stay active after rotation so its >=768 hide guards still apply');
   assert.doesNotMatch(nav,/canon-desktop-dashboard/);
   assert.match(menu,/Módulos principales/);
   assert.match(menu,/module-label">Punto de Venta/);
@@ -75,7 +75,7 @@ test('CANON phone styles are production-only, offline-ready and LAB promotion so
   assert.match(css,/\.na-mobile-quick-grid/);
   assert.match(css,/\.na-mobile-quick-action/);
   assert.match(css,/\.na-mobile-activity/);
-  assert.doesNotMatch(index,/canon-mobile-home\.css/,'phone stylesheet is loaded lazily only on <=767px');
+  assert.doesNotMatch(index,/canon-mobile-home\.css/,'phone stylesheet is injected only when the phone decorator initializes');
   assert.match(sw,/'\.\/css\/canon-mobile-home\.css'/,'phone stylesheet must be in the PWA shell for first-run offline use');
 });
 
