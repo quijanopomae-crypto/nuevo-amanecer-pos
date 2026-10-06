@@ -41,10 +41,17 @@ test('phone home hides duplicate module navigation and exposes work-focused sect
 });
 
 test('quick actions route only to existing CANON destinations',()=>{
-  for(const pageId of ['pagePOS','pageInventario','pageClientes','pageGastos','pageCaja']){
-    assert.match(nav,new RegExp("quickAction\\([^)]*['\"]"+pageId+"['\"]"));
+  const routes=[
+    ['Nueva venta','pagePOS'],
+    ['Registrar abono','pageClientes'],
+    ['Ingresar mercadería','pageInventario'],
+    ['Registrar gasto','pageGastos'],
+    ['Buscar cliente','pageClientes'],
+    ['Abrir / cerrar caja','pageCaja']
+  ];
+  for(const [label,pageId] of routes){
+    assert.match(nav,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[\\s\\S]{0,500}'+pageId));
   }
-  assert.match(nav,/Registrar abono[\s\S]{0,500}pageClientes/);
   assert.doesNotMatch(nav,/pageCompras|pageProveedores|pageFinanzas/);
 });
 
@@ -85,4 +92,19 @@ test('mobile-generated chrome stays hidden after crossing into tablet or desktop
   assert.match(cssBeforePhoneMedia,/\.na-mobile-drawer[\s\S]*display\s*:\s*none/);
   assert.match(cssBeforePhoneMedia,/#pageMenu\s+\.na-mobile-welcome[\s\S]*display\s*:\s*none/);
   assert.match(cssBeforePhoneMedia,/#pageMenu\s+\.na-mobile-home-section[\s\S]*display\s*:\s*none/);
+});
+
+test('approved visual refinement keeps phone chrome compact and professional',()=>{
+  assert.match(css,/--na-mobile-header-h\s*:\s*56px/,'phone header must use the compact approved height');
+  assert.match(css,/\.g-topbar[\s\S]{0,500}background\s*:\s*#fff/,'phone topbar must be white');
+  assert.match(css,/#localStatus[\s\S]{0,120}display\s*:\s*none\s*!important/,'connection dot must not compete with the phone home header');
+  assert.match(css,/\.na-mobile-welcome[\s\S]{0,2200}radial-gradient/,'hero must render a local sun layer');
+  assert.match(css,/\.na-mobile-welcome[\s\S]{0,2200}linear-gradient/,'hero must render layered local landscape gradients');
+  assert.match(css,/--na-mobile-stat-h\s*:\s*76px/,'summary cards must be compact');
+  assert.match(css,/--na-mobile-action-h\s*:\s*62px/,'quick actions must be compact');
+  assert.match(css,/--na-mobile-activity-h\s*:\s*44px/,'activity rows must be compact');
+  assert.match(css,/\.na-mobile-drawer-nav::before[\s\S]{0,900}Administrador/,'drawer must expose the approved visual user card');
+  assert.match(css,/data:image\/svg\+xml/,'visible phone icons must use local SVG artwork');
+  assert.match(css,/\.na-mobile-quick-icon[\s\S]{0,400}font-size\s*:\s*0/,'quick-action emoji glyphs must be visually replaced');
+  assert.match(css,/\.na-mobile-drawer-icon[\s\S]{0,400}font-size\s*:\s*0/,'drawer emoji glyphs must be visually replaced');
 });

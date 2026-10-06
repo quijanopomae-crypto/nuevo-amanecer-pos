@@ -3,8 +3,8 @@
   "task_id": "CANON-MOBILE-HOME-DRAWER-001",
   "environment": "CANON",
   "base_ref": "c73d5a5f64be6a9a16bd94b07f94535f9ae84c6c",
-  "objective": "Rediseñar exclusivamente el Inicio móvil de CANON para separar navegación completa en un drawer y convertir el home en panel de resumen, acciones rápidas y actividad reciente, sin alterar tablet ni escritorio.",
-  "owner_authorization": "El propietario aprobó explícitamente el 2026-10-04 aplicar el diseño únicamente al CANON móvil, excluyendo PC y tablet.",
+  "objective": "Rediseñar exclusivamente el Inicio móvil de CANON para separar navegación completa en un drawer y convertir el home en panel de resumen, acciones rápidas y actividad reciente, refinando su fidelidad visual con barra superior blanca/compacta, hero paisajístico, tarjetas densas, ficha visual de usuario e iconografía SVG local, sin alterar tablet, escritorio ni lógica de negocio.",
+  "owner_authorization": "El propietario aprobó explícitamente aplicar y refinar el diseño únicamente al CANON móvil, excluyendo PC y tablet.",
   "allowed_files": [
     "tasks/CANON-MOBILE-HOME-DRAWER-001.json",
     "POS/css/canon-mobile-home.css",
@@ -41,7 +41,8 @@
     "acciones rápidas que reutilizan navegación existente",
     "actividad reciente derivada solo en lectura de estado ya cargado",
     "pruebas E2E de teléfono, tablet/PC y rotación de breakpoint",
-    "adaptación del helper E2E responsive para entrar por Nueva venta cuando la grilla de módulos está oculta en teléfono"
+    "adaptación del helper E2E responsive para entrar por Nueva venta cuando la grilla de módulos está oculta en teléfono",
+    "refinamiento visual mobile-only mediante CSS local: barra superior compacta, paisaje, densidad e iconografía SVG embebida"
   ],
   "dom_affected": [
     "#pageMenu en <=767px",
@@ -72,7 +73,12 @@
     "La paridad visual LAB→CANON continúa pasando.",
     "El E2E demuestra home/drawer en 390px, ausencia del mobile chrome en 1024px y ocultamiento al rotar de 390px a 844px.",
     "El E2E responsive legacy entra al Punto de Venta mediante Nueva venta en <768px y conserva el flujo existente en >=768px.",
+    "En <=767px la barra superior es blanca y compacta, ocultando controles secundarios que compiten con la navegación principal sin eliminar su lógica.",
+    "El hero móvil muestra un paisaje local sin dependencias remotas.",
+    "Resumen, acciones rápidas y actividad reciente reducen su altura manteniendo legibilidad y targets táctiles.",
+    "El drawer añade una ficha visual de usuario y sustituye visualmente emojis por iconografía SVG local sin inventar módulos ni acciones.",
+    "No se modifica lógica de negocio, almacenamiento, sincronización, datos, LAB, PC/tablet ni infraestructura.",
     "CANON Critical CI y E2E Smoke CI pasan."
   ],
-  "rollback": "Revertir POS/css/canon-mobile-home.css, el bloque mobile-only de menu-navigation.js, su entrada de precache en POS/sw.js y las pruebas/adaptaciones E2E de esta tarea; no hay datos ni migraciones que revertir."
+  "rollback": "Revertir el bloque mobile-only de fidelidad visual en POS/css/canon-mobile-home.css y sus pruebas/contrato; si se revierte toda la tarea, revertir además el bloque mobile-only de menu-navigation.js y la entrada de precache en POS/sw.js. No hay datos ni migraciones que revertir."
 }
