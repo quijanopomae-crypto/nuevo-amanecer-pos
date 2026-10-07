@@ -8,23 +8,26 @@ Run from a Windows machine where GitHub CLI (`gh`) is authenticated as the repos
 powershell -ExecutionPolicy Bypass -File tools/owner-finalize-v1.3.ps1
 ~~~
 
-The script:
+The current script:
 
-1. generates the independent LAB import HMAC secret locally;
-2. asks the owner to enter the private POS activation secret once without echoing it;
-3. stores both values as GitHub Actions secrets;
-4. enables branch protection;
-5. deploys the LAB Worker, binding `LAB_IMPORT_HMAC_SECRET` and `POS_ACTIVATION_SECRET`;
-6. runs the real backup/recovery drill.
+1. asks the owner to enter the private POS activation secret once without echoing it;
+2. stores `POS_ACTIVATION_SECRET` as a GitHub Actions secret;
+3. enables/verifies branch protection;
+4. runs the real backup/recovery drill.
+
+POS-LAB deployment and `LAB_IMPORT_HMAC_SECRET` provisioning are retired from the current script. Their old runs remain historical evidence only.
 
 There is no per-device provisioning step. `DEVICE_CREDENTIAL_PEPPER`, `LAB_DEVICE_SYNC_TOKEN`, `lab-phone-main` and the device provisioning workflow are no longer part of the current architecture.
 
 
 ## Completed evidence
 
-- LAB deployment run `36037787889`: PASS.
+Historical:
+- LAB deployment run `36037787889`: PASS under the previous architecture.
+
+Current/reusable:
 - Backup/recovery drill run `36040032934`: PASS.
-- Real GitHub Actions secrets configured: `LAB_IMPORT_HMAC_SECRET` and `POS_ACTIVATION_SECRET`.
+- `POS_ACTIVATION_SECRET` configured for the persistent-session model.
 - Branch protection configured on `feature/v1.3-mobile-cloud` from the owner-authenticated GitHub CLI session.
 - Owner finalization state: `OWNER_FINALIZATION_PASS`.
 
@@ -45,7 +48,6 @@ Expected terminal result:
 ~~~text
 OWNER FINALIZATION PASS
 HEAD: <current feature/v1.3-mobile-cloud SHA>
-LAB deploy run: <run id>
 Backup/recovery drill run: <run id>
 Branch protection: PASS
 ~~~
