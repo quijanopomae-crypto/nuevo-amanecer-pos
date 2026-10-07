@@ -12,8 +12,8 @@ sources_of_truth:
   work_modes_and_git_boundaries: AGENTS.md
   product_rules: AGENTS_Nuevo_Amanecer.md
   agent_role_map: .opencode/ROLE_MAP.md
-  lab_to_canon_contract: docs/LABORATORIO_A_CANON.md
-  lab_cloud_contract: docs/LAB_CANON_MIRROR.md
+  branch_preview_workflow: docs/BRANCH_PREVIEW_WORKFLOW.md
+  lab_retirement: docs/LAB_RETIREMENT.md
   security_phase: docs/REMEDIATION_PHASE7_SECURITY.md
 
 zones:
@@ -26,28 +26,24 @@ zones:
     paths:
       - INICIAR_POS.cmd
       - tools/pos-local/
-  ui_lab:
+  retired_pos_lab:
     path: laboratorio/pos-lab/
-    authority: lab_only
-    generated:
-      - laboratorio/pos-lab/index.html
-    source_edits:
-      - laboratorio/pos-lab/sections/
-      - laboratorio/pos-lab/styles/
-      - laboratorio/pos-lab/animations/
-      - laboratorio/pos-lab/js/
-  experience_promotion:
-    path: tools/pos-experience/
-    authority: build_time_promotion_tooling
-    source_visuals:
-      - laboratorio/pos-lab/styles/
-      - laboratorio/pos-lab/animations/
-    canon_mirror: POS/css/experience-v2/
-    runtime_dependency_on_lab: false
-    check_command: node tools/pos-experience/promote-lab-visuals.mjs --check
+    authority: historical_read_only
+    runtime: disabled
+    promotion_source: false
+    new_writes: forbidden
+  branch_preview:
+    authority: validation_only
+    source: exact_pr_sha
+    persistent_product_copy: false
+    merge_authority: owner_only
+  backend_runtime_historical_path:
+    path: tools/cloudflare-lab/
+    authority: canon_backend_and_test_tooling
+    note: historical_name_do_not_delete_or_rename_in_lab_retirement
   cloudflare_lab:
     path: tools/cloudflare-lab/
-    authority: isolated_lab_infrastructure
+    authority: canon_backend_and_test_tooling_historical_name
     worker: tools/cloudflare-lab/src/worker.js
     workspace: tools/cloudflare-lab/src/lab-workspace.js
     migrations: infra/database/migrations/
@@ -69,7 +65,6 @@ zones:
     commands: .opencode/commands/
     skills: .agents/skills/
     canon_writer: .opencode/agents/pos-canon-implementer.md
-    lab_writer: .opencode/agents/pos-lab-implementer.md
     shadow_legacy_writer_name: .opencode/agents/pos-implementer.md
   evidence:
     path: evidence/
@@ -122,14 +117,14 @@ v1_3_runtime:
 ci:
   workflows:
     canon_critical: .github/workflows/canon-critical-ci.yml
-    lab_mirror: .github/workflows/lab-cloud-ci.yml
+    e2e_smoke: .github/workflows/e2e-smoke-ci.yml
     opencode_and_repo_map: .github/workflows/opencode-config-ci.yml
-    pages_lab: .github/workflows/lab-pages.yml
   policy:
     actions_pinned_to_sha: true
-    pages_pos_entrypoint: disabled
-    manual_remote_workflows: do_not_dispatch_without_owner_operation
-    lab_canon_visual_parity_gate: true
+    branch_preview_required: true
+    preview_must_match_pr_sha: true
+    merge_owner_only: true
+    production_deploy_separate_from_merge: true
 
 historical_or_gate_specific_docs:
   note: These documents are evidence or contracts for a specific gate; they do not override current status.
@@ -181,12 +176,7 @@ owner_finalizer:
   script: tools/owner-finalize-v1.3.ps1
   instructions: docs/OWNER_FINALIZATION.md
   recovery_drill_workflow: .github/workflows/owner-backup-recovery-drill.yml
-  status: OWNER_FINALIZATION_PASS
-  closes_when:
-    - independent_lab_secrets_configured
-    - branch_protection_verified
-    - current_lab_deploy_pass
-    - real_backup_r2_temporary_d1_drill_pass
+  status: LEGACY_OWNER_FINALIZER_REQUIRES_UPDATE_AFTER_LAB_RETIREMENT
 
 
 motion:
