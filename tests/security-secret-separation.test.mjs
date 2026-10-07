@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { handleLabWorkspace } from '../tools/cloudflare-lab/src/lab-workspace.js';
 
 const jsonLab = (body, status = 200, headers = {}) => Response.json(body, { status, headers });
@@ -66,12 +66,10 @@ test('dedicated LAB import HMAC is required and invalid signatures fail before D
   assert.equal((await response.json()).error, 'invalid_import_signature');
 });
 
-test('publisher keeps the LAB import signing secret independent from R2 access', () => {
+test('legacy snapshot publisher keeps import signing secret independent from R2 access', () => {
   const publisher = readFileSync('tools/cloudflare-lab/scripts/publish-lab-snapshot.mjs', 'utf8');
-  const deploy = readFileSync('.github/workflows/deploy-lab-cloud.yml', 'utf8');
   assert.match(publisher, /LAB_IMPORT_HMAC_SECRET/);
   assert.doesNotMatch(publisher, /R2_CANON_READ_TOKEN/);
-  assert.match(deploy, /POS_ACTIVATION_SECRET/);
 });
 
 test('all GitHub Actions are pinned to immutable commit SHAs', () => {
@@ -83,23 +81,17 @@ test('all GitHub Actions are pinned to immutable commit SHAs', () => {
   }
 });
 
-test('Pages auto-deploy is LAB-only and canonical POS entry point is replaced', () => {
-  const pages = readFileSync('.github/workflows/lab-pages.yml', 'utf8');
-  const pushBlock = pages.split('workflow_dispatch:')[0];
-  assert.doesNotMatch(pushBlock, /"POS\/\*\*"/);
-  assert.doesNotMatch(pushBlock, /\.github\/workflows\/lab-pages\.yml/);
-  assert.match(pages, /cp -a POS\/\. _site\/POS\//, 'LAB still needs canonical static assets through its base href');
-  assert.match(pages, /cat > _site\/POS\/index\.html/);
-  assert.match(pages, /LAB support assets only/);
-  assert.match(pages, /canonical POS is not served from GitHub Pages/);
-});
-
-test('Pages write permissions are scoped to deploy job', () => {
-  const pages = readFileSync('.github/workflows/lab-pages.yml', 'utf8');
-  const beforeJobs = pages.split('jobs:')[0];
-  assert.match(beforeJobs, /permissions:\s*\n\s+contents: read/);
-  assert.doesNotMatch(beforeJobs, /pages: write|id-token: write/);
-  assert.match(pages, /deploy:\s*\n\s+permissions:\s*\n\s+pages: write\s*\n\s+id-token: write/);
+test('retired POS-LAB publication and remote workflows are absent', () => {
+  for (const path of [
+    '.github/workflows/lab-cloud-ci.yml',
+    '.github/workflows/lab-pages.yml',
+    '.github/workflows/deploy-lab-cloud.yml',
+    '.github/workflows/lab-cloud-deploy.yml',
+    '.github/workflows/lab-data-refresh.yml',
+    '.github/workflows/lab-workspace-repair.yml',
+  ]) {
+    assert.equal(existsSync(path), false, path);
+  }
 });
 
 test('Worker import verifier does not retain R2 read token dependency', () => {
@@ -110,7 +102,7 @@ test('Worker import verifier does not retain R2 read token dependency', () => {
 });
 
 
-test('LAB and activation secrets tolerate PowerShell trailing newlines', () => {
+test('backend import and activation secrets tolerate PowerShell trailing newlines', () => {
   const publisher = readFileSync('tools/cloudflare-lab/scripts/publish-lab-snapshot.mjs', 'utf8');
   const worker = readFileSync('tools/cloudflare-lab/src/worker.js', 'utf8');
   assert.match(publisher, /LAB_IMPORT_HMAC_SECRET\|\|'\'\)\.trim\(\)/);
