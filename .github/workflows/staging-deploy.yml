@@ -231,8 +231,20 @@ jobs:
             if test "$attempt" = "20"; then echo "STAGING backend health failed" >&2; exit 1; fi
             sleep 3
           done
-          ACTIVATE="$(curl --fail --silent --show-error -X POST -H "x-activation-secret: $STAGING_ACTIVATION_SECRET" "$STAGING_BACKEND_URL/auth/activate")"
-          TOKEN="$(printf '%s' "$ACTIVATE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);if(typeof x.session_token!=="string"||!x.session_token)process.exit(2);process.stdout.write(x.session_token)})')"
+          for activate_attempt in $(seq 1 20); do
+            ACTIVATE_CODE="$(curl -sS -o /tmp/staging-activate.json -w '%{http_code}' --max-time 15 -X POST -H "x-activation-secret: $STAGING_ACTIVATION_SECRET" "$STAGING_BACKEND_URL/auth/activate" || true)"
+            if test "$ACTIVATE_CODE" = "200" &&
+               node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("/tmp/staging-activate.json","utf8"));if(typeof x.session_token!=="string"||!x.session_token)process.exit(2)'; then
+              echo "STAGING_ACTIVATION_READY attempt=$activate_attempt"
+              break
+            fi
+            if test "$activate_attempt" = "20"; then
+              echo "STAGING activation secret propagation failed status=$ACTIVATE_CODE" >&2
+              exit 1
+            fi
+            sleep 3
+          done
+          TOKEN="$(node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("/tmp/staging-activate.json","utf8"));process.stdout.write(x.session_token)')"
           echo "::add-mask::$TOKEN"
           SESSION="$(curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_BACKEND_URL/auth/session")"
           SESSION_ID="$(printf '%s' "$SESSION" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);if(typeof x.session_id!=="string"||!x.session_id)process.exit(2);process.stdout.write(x.session_id)})')"
