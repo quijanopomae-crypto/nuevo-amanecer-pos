@@ -16,6 +16,14 @@ on:
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
       - "tools/pos-experience/**"
+      - "AGENTS.md"
+      - "REPO_MAP.yaml"
+      - ".opencode/**"
+      - "docs/BRANCH_PREVIEW_WORKFLOW.md"
+      - "docs/LAB_RETIREMENT.md"
+      - "tests/repo-map.test.mjs"
+      - "tests/opencode-role-map.test.mjs"
+      - "tests/security-secret-separation.test.mjs"
       - ".github/workflows/canon-critical-ci.yml"
       - ".github/workflows/v1.3-prod-cutover.yml"
       - ".github/workflows/v1.3-prod-preflight.yml"
@@ -36,6 +44,14 @@ on:
       - "tools/cloudflare-lab/scripts/**"
       - "tools/cloudflare-lab/test/**"
       - "tools/pos-experience/**"
+      - "AGENTS.md"
+      - "REPO_MAP.yaml"
+      - ".opencode/**"
+      - "docs/BRANCH_PREVIEW_WORKFLOW.md"
+      - "docs/LAB_RETIREMENT.md"
+      - "tests/repo-map.test.mjs"
+      - "tests/opencode-role-map.test.mjs"
+      - "tests/security-secret-separation.test.mjs"
       - ".github/workflows/canon-critical-ci.yml"
       - ".github/workflows/v1.3-prod-cutover.yml"
       - ".github/workflows/v1.3-prod-preflight.yml"
@@ -58,17 +74,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: LAB to CANON promotion gate
+      - name: CANON UI and repository architecture contracts
         shell: bash
         run: |
           set -euo pipefail
-          node tools/pos-experience/promote-lab-visuals.mjs --check
           node --test \
-            tests/product-fixes/canon-lab-interface-parity.test.mjs \
-            tests/product-fixes/lab-canon-promotion-parity.test.mjs \
             tests/product-fixes/canon-motion-bootstrap.test.mjs \
-            tests/product-fixes/canon-lab-motion-lazy-bridge.test.mjs \
-            tests/product-fixes/canonical-ui-contract.test.mjs
+            tests/product-fixes/canonical-ui-contract.test.mjs \
+            tests/repo-map.test.mjs \
+            tests/opencode-role-map.test.mjs \
+            tests/security-secret-separation.test.mjs
 
       - name: Install Cloudflare test dependencies
         working-directory: tools/cloudflare-lab
@@ -91,11 +106,15 @@ jobs:
           set -euo pipefail
           node --test tests/cloud-sync/*.test.mjs
 
-      - name: Backup manifest and SQL snapshot contract
+      - name: Backend harness, backup manifest and SQL snapshot contracts
         shell: bash
         run: |
           set -euo pipefail
-          node --test tools/cloudflare-lab/test/canon-backup-manifest.test.mjs
+          node --test \
+            tools/cloudflare-lab/test/canon-backup-manifest.test.mjs \
+            tools/cloudflare-lab/test/lab-workspace.test.mjs \
+            tools/cloudflare-lab/test/turso-d1-adapter.test.mjs \
+            tools/cloudflare-lab/test/d1-remote-compat.test.mjs
           python3 -m unittest tools/cloudflare-lab/test/test_lab_snapshot_from_sql.py
 
       - name: Apply all D1 migrations in isolated local database
