@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      TARGET_SHA: 3e0c3f20d2d604ebaff03ff7e763ddb011639b62
+      TARGET_SHA: 5de26e49373a04c3595ca97f8ee9c59fc0aa29a3
       TARGET_BRANCH: fix/release-pipeline-same-origin-proxy-20261007
       BASE_BRANCH: feature/v1.3-mobile-cloud
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
