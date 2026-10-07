@@ -1,0 +1,45 @@
+{
+  "schema": "nuevo-amanecer.canon-promotion-contract/v1",
+  "promotion_id": "CANON-PRODUCT-IMAGES-B001",
+  "owner_authorized": true,
+  "authorization_context": "Owner requested: Aplícalo en canon, after reviewing LAB batch 001.",
+  "source_lab_batch": "laboratorio/pos-lab/data/product-image-batches/batch-001.json",
+  "source_lab_commit": "0b6dc822eefddc1caac9a2a24b2391f489f53a05",
+  "production_batch": "ops/product-images/batch-001.json",
+  "behavior": "Apply exactly ten approved product images to the existing CANON product image field through an append-only authorization event; no general product.update command is introduced.",
+  "allowed_files": [
+    "docs/superpowers/plans/2026-10-04-canon-product-images-batch-001.md",
+    "infra/database/migrations/0020_canonical_product_images.sql",
+    "infra/database/migrations/0021_canonical_product_image_apply.sql",
+    "ops/CANON-PRODUCT-IMAGES-B001.json",
+    "ops/product-images/batch-001.json",
+    "ops/v1.3-prod-product-images-trigger.example.json",
+    "tools/cloudflare-prod/scripts/product-image-batch-apply.mjs",
+    "tools/cloudflare-prod/scripts/product-image-batch-verify-worker.mjs",
+    "tests/cloud-sync/canonical-product-images.test.mjs",
+    "tests/cloud-sync/canonical-product-image-batch-script.test.mjs",
+    ".github/workflows/v1.3-prod-product-images-batch.yml"
+  ],
+  "forbidden_scopes": [
+    "POS/**",
+    "laboratorio/**",
+    "sales/cash/credits business data mutation",
+    "price/cost/stock/product-code/name/category/provenance mutation",
+    "general browser product.update API"
+  ],
+  "invariants": [
+    "Exactly 10 approved entries are required.",
+    "Each product name must resolve to exactly one active CANON IMPORT or LIVE product.",
+    "Image payload must be jpeg/png/webp/gif data URL <= 180000 characters.",
+    "An append-only canonical_product_image_events row must authorize the exact previous and replacement image.",
+    "Price, cost, stock quantity, stock revision, SKU, barcode, category, product identity and provenance remain unchanged.",
+    "Sales, sale_items, inventory_movements, cash_movements, credit_payments, financial_events and expenses counts remain unchanged.",
+    "Production backup must be exported and checksum-verified in private R2 before migration or image writes.",
+    "Production Worker must return the exact ten applied images before PASS."
+  ],
+  "rollback": {
+    "normal": "Append compensating image events that restore each recorded previous_image.",
+    "emergency": "Restore the fresh production D1 backup captured by the production workflow before writes."
+  },
+  "activation": "A separate trigger-only commit is required after implementation merge and CI verification."
+}
