@@ -69,6 +69,14 @@ test('staging activation secret is generated, masked, and never sourced from pro
   assert.doesNotMatch(workflow,/secrets\.POS_ACTIVATION_SECRET/);
 });
 
+test('staging smoke tolerates bounded activation-secret edge propagation and still fails closed', () => {
+  assert.match(workflow,/for activate_attempt in \$\(seq 1 20\); do/);
+  assert.match(workflow,/STAGING_ACTIVATION_READY attempt=\$activate_attempt/);
+  assert.match(workflow,/STAGING activation secret propagation failed status=\$ACTIVATE_CODE/);
+  assert.match(workflow,/test "\$ACTIVATE_CODE" = "200"/);
+  assert.match(workflow,/typeof x\.session_token!=="string"/);
+});
+
 test('staging smoke proves canonical reads, LAB-route isolation, runtime config and R2', () => {
   assert.match(workflow,/read\/canonical\/status/);
   assert.match(workflow,/read\/canonical\/products/);
