@@ -5,10 +5,10 @@
   "target_branch": "feature/v1.3-mobile-cloud",
   "target_head": "e7c2b9cd96869bfe1c2830f3a0d8f0cb30f8fb8e",
   "requested_action": "deploy-staging",
-  "requested_reason": "Retry isolated STAGING release-candidate build for exact merged target e7c2b9c after fixing bounded activation-secret propagation (PR #438). Previous run 37650642154 stopped safely on immediate 401 before candidate publication.",
+  "requested_reason": "Republish exact e7c2b9c release candidate after PR #444 fixed remote R2 persistence. Previous successful smoke run 37676760093 wrote candidate runner-locally; this retry must persist artifact and descriptor to remote R2.",
   "phase": "release-candidate",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
-  "retry_attempt": 2,
-  "trigger_base": "e7c2b9cd96869bfe1c2830f3a0d8f0cb30f8fb8e"
+  "retry_attempt": 3,
+  "trigger_base": "cb21e90309105ddadae35d5ed28f1b09074c3a7a"
 }
