@@ -12,19 +12,6 @@ function Require-Command([string]$Name) {
   }
 }
 
-function New-HexSecret([int]$Bytes = 32) {
-  if ($Bytes -le 0) { throw "Secret byte count must be positive." }
-  $raw = New-Object byte[] $Bytes
-  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-  try {
-    $rng.GetBytes($raw)
-  }
-  finally {
-    if ($null -ne $rng) { $rng.Dispose() }
-  }
-  return ([BitConverter]::ToString($raw).Replace("-", "").ToLowerInvariant())
-}
-
 function Invoke-GhJson([string[]]$GhArgs) {
   $output = & gh @GhArgs
   if ($LASTEXITCODE -ne 0) { throw "gh failed: gh $($GhArgs -join ' ')" }
@@ -69,7 +56,6 @@ $head = (& gh api "repos/$Repo/commits/$([uri]::EscapeDataString($Branch))" --jq
 if ($LASTEXITCODE -ne 0 -or -not $head) { throw "Could not resolve current branch HEAD." }
 Write-Host "Finalizing repository at HEAD $head"
 
-$labImportSecret = New-HexSecret 32
 $activationSecure = Read-Host "Create the one-time POS activation secret you will enter once on each new browser" -AsSecureString
 $activationBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($activationSecure)
 $activationSecret = $null
@@ -80,14 +66,10 @@ try {
     throw "POS activation secret must be at least 12 characters."
   }
 
-  $labImportSecret | & gh secret set LAB_IMPORT_HMAC_SECRET --repo $Repo
-  if ($LASTEXITCODE -ne 0) { throw "Failed to set LAB_IMPORT_HMAC_SECRET" }
-
   $activationSecret | & gh secret set POS_ACTIVATION_SECRET --repo $Repo
   if ($LASTEXITCODE -ne 0) { throw "Failed to set POS_ACTIVATION_SECRET" }
 }
 finally {
-  $labImportSecret = $null
   $activationSecret = $null
   if ($activationBstr -ne [IntPtr]::Zero) {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($activationBstr)
@@ -120,10 +102,6 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to configure branch protection." }
 
 Write-Host "Branch protection configured."
 
-& gh workflow run deploy-lab-cloud.yml --repo $Repo --ref $Branch
-if ($LASTEXITCODE -ne 0) { throw "Could not dispatch deploy-lab-cloud.yml" }
-$deployRun = Wait-LatestWorkflow "deploy-lab-cloud.yml" $head
-
 & gh workflow run owner-backup-recovery-drill.yml --repo $Repo --ref $Branch
 if ($LASTEXITCODE -ne 0) { throw "Could not dispatch owner-backup-recovery-drill.yml" }
 $drillRun = Wait-LatestWorkflow "owner-backup-recovery-drill.yml" $head
@@ -148,6 +126,5 @@ if ($protectionCheck.allow_deletions.enabled -eq $true) {
 Write-Host ""
 Write-Host "OWNER FINALIZATION PASS"
 Write-Host "HEAD: $head"
-Write-Host "LAB deploy run: $deployRun"
 Write-Host "Backup/recovery drill run: $drillRun"
 Write-Host "Branch protection: PASS"

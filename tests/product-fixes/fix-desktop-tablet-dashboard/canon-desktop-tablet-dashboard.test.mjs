@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../../../POS/index.html', import.meta.url), 'utf8');
 const css = readFileSync(new URL('../../../POS/css/canon-desktop-dashboard.css', import.meta.url), 'utf8');
 const promotedMenuCss = readFileSync(new URL('../../../POS/css/experience-v2/pages/menu.css', import.meta.url), 'utf8');
-const labMenuCss = readFileSync(new URL('../../../laboratorio/pos-lab/styles/pages/menu.css', import.meta.url), 'utf8');
 const decorator = readFileSync(new URL('../../../POS/js/canon-desktop-dashboard.js', import.meta.url), 'utf8');
 const sharedRuntime = readFileSync(new URL('../../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../../../POS/sw.js', import.meta.url), 'utf8');
@@ -45,10 +44,12 @@ test('lógica compartida no contiene el decorador exclusivo de escritorio', () =
   assert.match(decorator, /updateDashboard/);
 });
 
-test('dashboard CANON usa assets separados, preserva paridad LAB y queda precargado', () => {
-  assert.equal(promotedMenuCss.replace(/\r\n/g, '\n'), labMenuCss.replace(/\r\n/g, '\n'));
+test('dashboard CANON usa assets canónicos separados y queda precargado', () => {
+  assert.ok(promotedMenuCss.length > 0);
+  assert.match(html, /href="css\/experience-v2\/pages\/menu\.css"/);
   assert.match(html, /href="css\/canon-desktop-dashboard\.css"/);
   assert.match(html, /src="js\/canon-desktop-dashboard\.js"/);
   assert.match(sw, /'\.\/css\/canon-desktop-dashboard\.css'/);
   assert.match(sw, /'\.\/js\/canon-desktop-dashboard\.js'/);
+  assert.doesNotMatch(html, /laboratorio\/pos-lab/i);
 });

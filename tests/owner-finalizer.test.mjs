@@ -5,9 +5,8 @@ import { readFileSync } from 'node:fs';
 const finalizer = readFileSync('tools/owner-finalize-v1.3.ps1', 'utf8');
 const drill = readFileSync('.github/workflows/owner-backup-recovery-drill.yml', 'utf8');
 
-test('owner finalizer configures import signing plus one reusable activation secret', () => {
-  assert.match(finalizer, /New-HexSecret 32/);
-  assert.match(finalizer, /gh secret set LAB_IMPORT_HMAC_SECRET/);
+test('owner finalizer configures one reusable activation secret without reviving retired LAB secrets', () => {
+  assert.doesNotMatch(finalizer, /LAB_IMPORT_HMAC_SECRET/);
   assert.match(finalizer, /gh secret set POS_ACTIVATION_SECRET/);
   assert.match(finalizer, /Read-Host .*activation secret.*-AsSecureString/i);
   assert.doesNotMatch(finalizer, /Write-Host.*activationSecret/i);
@@ -20,8 +19,8 @@ test('owner finalizer protects main and disables force push/deletion', () => {
   assert.match(finalizer, /required_conversation_resolution = \$true/);
 });
 
-test('owner finalizer runs deployment and recovery closure workflows', () => {
-  assert.match(finalizer, /deploy-lab-cloud\.yml/);
+test('owner finalizer runs recovery closure without dispatching retired LAB deployment', () => {
+  assert.doesNotMatch(finalizer, /deploy-lab-cloud\.yml/);
   assert.match(finalizer, /owner-backup-recovery-drill\.yml/);
   assert.match(finalizer, /gh run watch/);
 });
@@ -58,13 +57,4 @@ test('gh JSON helper is Windows PowerShell safe', () => {
   assert.match(finalizer, /& gh @GhArgs/);
   assert.match(finalizer, /\$output -join \[Environment\]::NewLine/);
   assert.doesNotMatch(finalizer, /Invoke-GhJson\(\[string\[\]\]\$Args\)/);
-});
-
-
-test('secret generation remains compatible with Windows PowerShell 5.1', () => {
-  assert.match(finalizer, /RandomNumberGenerator\]::Create\(\)/);
-  assert.match(finalizer, /\.GetBytes\(\$raw\)/);
-  assert.match(finalizer, /BitConverter\]::ToString\(\$raw\)/);
-  assert.doesNotMatch(finalizer, /RandomNumberGenerator\]::GetBytes\(\$Bytes\)/);
-  assert.doesNotMatch(finalizer, /Convert\]::ToHexString/);
 });

@@ -41,5 +41,4 @@ Este archivo se conserva como `pos-implementer.md` únicamente porque el
 
 WRITE solo para infraestructura shadow expresamente autorizada.
 `PRODUCT_WRITE = DENIED`: no escribe `POS/**`, `laboratorio/**` ni runtime
-CANON. Para producto usa `pos-canon-implementer`; para laboratorio usa
-`pos-lab-implementer`.
+CANON. Para producto usa `pos-canon-implementer`; POS-LAB está retirado.

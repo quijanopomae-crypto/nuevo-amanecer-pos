@@ -6,13 +6,11 @@ const html = readFileSync('POS/index.html', 'utf8');
 const css = readFileSync('POS/css/canon-pos-reference-ui.css', 'utf8');
 const decorator = readFileSync('POS/js/canon-pos-reference-ui.js', 'utf8');
 const mirroredPosCss = readFileSync('POS/css/experience-v2/pages/pos.css', 'utf8');
-const labPosCss = readFileSync('laboratorio/pos-lab/styles/pages/pos.css', 'utf8');
-const labSection = readFileSync('laboratorio/pos-lab/sections/punto-venta.html', 'utf8').replace(/\n$/,'');
 const sw = readFileSync('POS/sw.js', 'utf8');
 
-test('CANON keeps the approved LAB POS shell exact and adds production-only UI assets', () => {
-  assert.equal(mirroredPosCss, labPosCss);
-  assert.ok(html.includes(labSection), 'punto-venta LAB section must remain byte-compatible inside CANON');
+test('CANON owns the POS shell and production-only UI assets without LAB runtime dependency', () => {
+  assert.ok(mirroredPosCss.length > 0);
+  assert.match(html, /id="pagePOS"/);
 
   const mirrored = html.indexOf('css/experience-v2/pages/pos.css');
   const canonOnly = html.indexOf('css/canon-pos-reference-ui.css');
