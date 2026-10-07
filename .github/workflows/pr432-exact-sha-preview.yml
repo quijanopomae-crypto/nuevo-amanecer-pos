@@ -1,0 +1,319 @@
+name: PR432 Exact SHA STAGING Preview
+
+on:
+  push:
+    branches:
+      - arch/pr432-exact-sha-preview
+    paths:
+      - ".github/workflows/pr432-exact-sha-preview.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-pr432-exact-sha-preview
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      TARGET_SHA: 450f2d11503d25443225af24316fe1c61c81677f
+      TARGET_BRANCH: perf/outbox-stale-stock-fix-v13
+      BASE_BRANCH: feature/v1.3-mobile-cloud
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_D1_NAME: nuevo-amanecer-staging
+      STAGING_BACKEND_URL: https://nuevo-amanecer-pos-staging.nuevo-amanecer-pos.workers.dev
+      STAGING_WEB_URL: https://nuevo-amanecer-pos-web-staging.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Checkout preview trigger branch
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Prove exact PR head before any remote access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "arch/pr432-exact-sha-preview"
+          git fetch origin "$TARGET_BRANCH" "$BASE_BRANCH" --depth=100
+          test "$(git rev-parse "origin/$TARGET_BRANCH")" = "$TARGET_SHA"
+          git merge-base --is-ancestor "origin/$BASE_BRANCH" "$TARGET_SHA"
+          git cat-file -e "$TARGET_SHA^{commit}"
+          echo "PREVIEW_EXACT_SHA=$TARGET_SHA" >> "$GITHUB_ENV"
+
+      - name: Checkout exact candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach "$TARGET_SHA"
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Require STAGING Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Worker dependencies
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate STAGING isolation locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test             tests/cloud-sync/staging-isolation-contract.test.mjs             tests/cloud-sync/staging-runtime-boundary.test.mjs             tests/cloud-sync/staging-deploy-workflow.test.mjs
+
+      - name: Reuse or create isolated STAGING D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { appendFileSync } = require("node:fs");
+          const account=process.env.CLOUDFLARE_ACCOUNT_ID;
+          const token=process.env.CLOUDFLARE_API_TOKEN;
+          const name=process.env.STAGING_D1_NAME;
+          async function cf(path,options={}) {
+            const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+account+path,{
+              ...options,
+              headers:{authorization:"Bearer "+token,"content-type":"application/json",...(options.headers||{})}
+            });
+            const body=await response.json().catch(()=>null);
+            if(!response.ok||body?.success!==true) throw new Error("Cloudflare API failed "+path+" status="+response.status);
+            return body.result;
+          }
+          (async()=>{
+            const databases=await cf("/d1/database?per_page=100");
+            let db=(Array.isArray(databases)?databases:[]).find(x=>x.name===name);
+            if(!db) db=await cf("/d1/database",{method:"POST",body:JSON.stringify({name})});
+            if(!db?.uuid||db.name!==name) throw new Error("staging D1 mismatch");
+            appendFileSync(process.env.GITHUB_ENV,"STAGING_D1_DATABASE_ID="+db.uuid+"\n");
+            console.log(JSON.stringify({state:"STAGING_D1_READY",database_name:name}));
+          })().catch(error=>{console.error(error.message);process.exit(1)});
+          NODE
+
+      - name: Render isolated backend config
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/cloudflare-staging/scripts/render-backend-config.mjs
+          ! grep -Fq "__STAGING_D1_DATABASE_ID__" tools/cloudflare-staging/wrangler.backend.generated.jsonc
+          ! grep -Fq "nuevo-amanecer-pos-prod" tools/cloudflare-staging/wrangler.backend.generated.jsonc
+
+      - name: Apply neutral migrations to STAGING only
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc
+
+      - name: Ensure synthetic STAGING baseline
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTROL="$(npx wrangler d1 execute "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc --json --command "SELECT mode,active_promotion_id FROM canonical_control WHERE id=1")"
+          MODE="$(printf '%s' "$CONTROL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const r=Array.isArray(x)?x[0]:x;process.stdout.write(String(r?.results?.[0]?.mode||""))})')"
+          PROMO="$(printf '%s' "$CONTROL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const r=Array.isArray(x)?x[0]:x;process.stdout.write(String(r?.results?.[0]?.active_promotion_id||""))})')"
+          if test "$MODE" = "LEGACY"; then
+            npx wrangler d1 execute "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc --file ../cloudflare-staging/synthetic-seed.sql
+          else
+            test "$MODE" = "CANONICAL_READ_ONLY" -o "$MODE" = "ACTIVE"
+            test "$PROMO" = "staging-synthetic-promotion-v1"
+          fi
+
+      - name: Activate synthetic STAGING authority safely
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTROL="$(npx wrangler d1 execute "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc --json --command "SELECT mode,active_promotion_id FROM canonical_control WHERE id=1")"
+          MODE="$(printf '%s' "$CONTROL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const r=Array.isArray(x)?x[0]:x;process.stdout.write(String(r?.results?.[0]?.mode||""))})')"
+          PROMO="$(printf '%s' "$CONTROL" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const r=Array.isArray(x)?x[0]:x;process.stdout.write(String(r?.results?.[0]?.active_promotion_id||""))})')"
+          test "$PROMO" = "staging-synthetic-promotion-v1"
+          restore_guard() {
+            npx wrangler d1 execute "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc --file ../../infra/database/migrations/0013_canonical_expenses.sql >/dev/null
+          }
+          if test "$MODE" = "CANONICAL_READ_ONLY"; then
+            trap restore_guard EXIT
+            npx wrangler d1 execute "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc --command "DROP TRIGGER canonical_control_no_legacy; UPDATE canonical_control SET mode='ACTIVE',revision=revision+1,authority_epoch=authority_epoch+1,minimum_client_contract='a6-gate-c-v1' WHERE id=1 AND mode='CANONICAL_READ_ONLY' AND active_promotion_id='staging-synthetic-promotion-v1';"
+            restore_guard
+            trap - EXIT
+          else
+            test "$MODE" = "ACTIVE"
+          fi
+
+      - name: Deploy exact backend to isolated STAGING
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config ../cloudflare-staging/wrangler.backend.generated.jsonc
+          npx wrangler deploy --config ../cloudflare-staging/wrangler.backend.generated.jsonc
+
+      - name: Generate and bind STAGING-only activation secret
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          SECRET="$(openssl rand -hex 32)"
+          echo "::add-mask::$SECRET"
+          echo "STAGING_ACTIVATION_SECRET=$SECRET" >> "$GITHUB_ENV"
+          printf '%s' "$SECRET" | npx wrangler secret put POS_ACTIVATION_SECRET --config ../cloudflare-staging/wrangler.backend.generated.jsonc
+
+      - name: Assemble exact SHA web shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/cloudflare-pos-web/_site
+          mkdir -p tools/cloudflare-pos-web/_site/app
+          cp -a POS/. tools/cloudflare-pos-web/_site/app/
+          cp tools/cloudflare-pos-web/public/index.html tools/cloudflare-pos-web/_site/index.html
+          cp tools/cloudflare-pos-web/public/activate.js tools/cloudflare-pos-web/_site/activate.js
+          sed -i "s/__BUILD_HASH__/$TARGET_SHA/g" tools/cloudflare-pos-web/_site/index.html
+          sed -i "s/__BUILD_HASH__/$TARGET_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$TARGET_SHA" tools/cloudflare-pos-web/_site/index.html
+          grep -Fq "$TARGET_SHA" tools/cloudflare-pos-web/_site/app/sw.js
+
+      - name: Deploy exact web shell to isolated STAGING
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config ../cloudflare-staging/wrangler.web.template.jsonc
+          npx wrangler deploy --config ../cloudflare-staging/wrangler.web.template.jsonc
+
+      - name: Remote health, identity and exact-SHA smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            HEALTH="$(curl -sS --max-time 15 "$STAGING_BACKEND_URL/health" || true)"
+            if printf '%s' "$HEALTH" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const x=JSON.parse(s);process.exit(x.ok===true&&x.environment==="staging"&&x.service==="nuevo-amanecer-pos-staging"&&x.d1==="ok"?0:1)}catch{process.exit(1)}})'; then break; fi
+            if test "$attempt" = "20"; then echo "STAGING backend health failed" >&2; exit 1; fi
+            sleep 3
+          done
+          ACTIVATE="$(curl --fail --silent --show-error -X POST -H "x-activation-secret: $STAGING_ACTIVATION_SECRET" "$STAGING_BACKEND_URL/auth/activate")"
+          TOKEN="$(printf '%s' "$ACTIVATE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);if(typeof x.session_token!=="string"||!x.session_token)process.exit(2);process.stdout.write(x.session_token)})')"
+          echo "::add-mask::$TOKEN"
+          echo "STAGING_SESSION_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          SESSION="$(curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_BACKEND_URL/auth/session")"
+          SESSION_ID="$(printf '%s' "$SESSION" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);if(typeof x.session_id!=="string"||!x.session_id)process.exit(2);process.stdout.write(x.session_id)})')"
+          echo "STAGING_SMOKE_SESSION_ID=$SESSION_ID" >> "$GITHUB_ENV"
+          STATUS="$(curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_BACKEND_URL/read/canonical/status")"
+          printf '%s' "$STATUS" > /tmp/staging-status.json
+          node <<'NODE'
+          const fs=require('node:fs');
+          const x=JSON.parse(fs.readFileSync('/tmp/staging-status.json','utf8'));
+          if(x.authority!=='canonical'||x.mode!=='ACTIVE'||x.promotion_id!=='staging-synthetic-promotion-v1') process.exit(2);
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            'STAGING_PROMOTION_ID='+x.promotion_id+'\n'+
+            'STAGING_AUTHORITY_EPOCH='+x.authority_epoch+'\n'+
+            'STAGING_CONTROL_REVISION='+x.revision+'\n');
+          NODE
+          CONFIG="$(curl --fail --silent --show-error "$STAGING_WEB_URL/runtime-config.js")"
+          printf '%s' "$CONFIG" | grep -Fq '"environment":"staging"'
+          printf '%s' "$CONFIG" | grep -Fq "$STAGING_BACKEND_URL"
+          ! printf '%s' "$CONFIG" | grep -Fq "nuevo-amanecer-pos-prod"
+          curl --fail --silent --show-error -o /tmp/staging-root.html "$STAGING_WEB_URL/"
+          curl --fail --silent --show-error -o /tmp/staging-app.html "$STAGING_WEB_URL/app/"
+          curl --fail --silent --show-error -o /tmp/staging-sw.js "$STAGING_WEB_URL/app/sw.js"
+          grep -Fq "$TARGET_SHA" /tmp/staging-root.html
+          grep -Fq "$TARGET_SHA" /tmp/staging-sw.js
+          grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html
+
+      - name: Install Playwright for hosted preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Browser smoke hosted STAGING — bulk OFF and ON
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { chromium } from '@playwright/test';
+
+          const WEB=process.env.STAGING_WEB_URL;
+          const API=process.env.STAGING_BACKEND_URL;
+          const TOKEN=process.env.STAGING_SESSION_TOKEN;
+          const promotion=process.env.STAGING_PROMOTION_ID;
+          const epoch=Number(process.env.STAGING_AUTHORITY_EPOCH);
+          const revision=Number(process.env.STAGING_CONTROL_REVISION);
+          const targets=['pagePOS','pageInventario','pageVentas','pageClientes','pageCaja','pageGastos','pageConfig'];
+
+          const browser=await chromium.launch({headless:true});
+          try {
+            for (const bulk of ['0','1']) {
+              const context=await browser.newContext({viewport:{width:1280,height:900}});
+              await context.addInitScript(({API,TOKEN,promotion,epoch,revision,bulk})=>{
+                localStorage.setItem('na_canonical_binding',JSON.stringify({endpoint:API,promotion_id:promotion,authority_epoch:epoch,revision}));
+                localStorage.setItem('na_cloud_sync_credentials',JSON.stringify({endpoint:API,token:TOKEN}));
+                localStorage.setItem('na_canon_bulk_snapshot',bulk);
+              },{API,TOKEN,promotion,epoch,revision,bulk});
+              const page=await context.newPage();
+              const pageErrors=[];
+              page.on('pageerror',error=>pageErrors.push(String(error?.message||error)));
+              await page.goto(WEB+'/app/',{waitUntil:'domcontentloaded',timeout:30000});
+              await page.locator('#pageMenu').waitFor({state:'visible',timeout:15000});
+              const hosted=await page.evaluate(()=>({
+                canon:document.documentElement.dataset.naHostedCanon,
+                environment:document.documentElement.dataset.naHostedEnvironment,
+                title:document.title
+              }));
+              if(hosted.canon!=='bound'||hosted.environment!=='staging'||!/Nuevo Amanecer/i.test(hosted.title)) {
+                throw new Error('hosted guard/runtime mismatch '+JSON.stringify({bulk,hosted}));
+              }
+              for (const target of targets) {
+                const nav=page.locator('[data-menu-target="'+target+'"]');
+                await nav.waitFor({state:'visible',timeout:5000});
+                await nav.click({timeout:5000});
+                await page.locator('#'+target).waitFor({state:'visible',timeout:5000});
+                const back=page.locator('#backBtn');
+                await back.click({timeout:5000});
+                await page.locator('#pageMenu').waitFor({state:'visible',timeout:5000});
+              }
+              if(pageErrors.length) throw new Error('pageerror bulk='+bulk+' '+pageErrors.join(' | '));
+              console.log(JSON.stringify({state:'HOSTED_BROWSER_PASS',bulk,modules:targets.length,sha:process.env.TARGET_SHA}));
+              await context.close();
+            }
+          } finally {
+            await browser.close();
+          }
+          NODE
+
+      - name: Cleanup preview session
+        if: ${{ always() && env.STAGING_SMOKE_SESSION_ID != '' && env.STAGING_D1_DATABASE_ID != '' }}
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          npx wrangler d1 execute "$STAGING_D1_NAME" --remote --config ../cloudflare-staging/wrangler.backend.generated.jsonc --command "DELETE FROM auth_sessions WHERE session_id='$STAGING_SMOKE_SESSION_ID'; DELETE FROM devices WHERE device_id='session:$STAGING_SMOKE_SESSION_ID';" || true
+
+      - name: Exact-SHA preview summary
+        shell: bash
+        run: |
+          {
+            echo "## PR #432 Exact SHA STAGING Preview"
+            echo "- Status: PREVIEW_PASS"
+            echo "- Target SHA: $TARGET_SHA"
+            echo "- Branch checked: $TARGET_BRANCH"
+            echo "- Web: $STAGING_WEB_URL"
+            echo "- Backend: $STAGING_BACKEND_URL"
+            echo "- Data: SYNTHETIC ONLY"
+            echo "- Browser: bulk OFF + bulk ON; 7 modules each"
+            echo "- Production resources touched: NO"
+          } >> "$GITHUB_STEP_SUMMARY"
