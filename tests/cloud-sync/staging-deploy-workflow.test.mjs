@@ -100,8 +100,9 @@ test('staging smoke proves canonical reads, LAB-route isolation, runtime config 
   assert.match(workflow,/grep -Fq "Nuevo Amanecer POS" \/tmp\/staging-root\.html/);
   assert.match(workflow,/grep -Fq "Nuevo Amanecer — ERP &amp; POS" \/tmp\/staging-app\.html/);
   assert.doesNotMatch(workflow,/\$STAGING_WEB_URL\/.*\| grep -Fq/);
-  assert.match(workflow,/r2 object put/);
-  assert.match(workflow,/r2 object put .* --remote --file=\/tmp\/na-site\.tar\.gz/);
-  assert.match(workflow,/r2 object put .* --remote --file=\/tmp\/release-candidate\.json/);
-  assert.doesNotMatch(workflow,/r2 object put .* --file=\/tmp\/(?:na-site\.tar\.gz|release-candidate\.json)(?!.*--remote)/);
+  const r2Puts = workflow.split(/\r?\n/).filter(line => line.includes('wrangler r2 object put'));
+  assert.equal(r2Puts.length, 2, 'release candidate must publish exactly artifact + descriptor');
+  for (const line of r2Puts) assert.match(line, /\s--remote(?:\s|$)/, line);
+  assert.ok(r2Puts.some(line => line.includes('--file=/tmp/na-site.tar.gz')));
+  assert.ok(r2Puts.some(line => line.includes('--file=/tmp/release-candidate.json')));
 });
