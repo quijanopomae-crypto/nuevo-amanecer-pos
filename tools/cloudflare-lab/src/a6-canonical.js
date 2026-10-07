@@ -447,11 +447,13 @@ async function rollback(body,deviceId,credentialHash,manifest,db,json){
 }
 
 async function canonicalRead(url,db,json){
-  const type=url.pathname.slice('/read/canonical/'.length);if(!READ_TABLES.has(type)&&type!=='status')return json({error:'not_found'},404);
+  const type=url.pathname.slice('/read/canonical/'.length);if(!READ_TABLES.has(type)&&type!=='status'&&type!=='snapshot')return json({error:'not_found'},404);
   const initial=await control(db);if(!initial||!['CANONICAL_READ_ONLY','ACTIVE'].includes(initial.mode)||!initial.active_promotion_id)return json({error:'canonical_not_published'},409);
   const before=initial.mode==='ACTIVE'?await readControl(db):initial;
   if(!sameControl({...initial,financial_revision:before?.financial_revision},before))return json({error:'authority_changed'},409);
   if(['cash-sessions','financial-events'].includes(type)&&before.mode!=='ACTIVE')return json({error:'canonical_not_active'},409);
+  // FASE7 LAB: additive bulk snapshot under ONE financial_revision fence.
+  if(type==='snapshot')return canonicalSnapshot(db,json,before);
   if(type==='status'){
     const counts={};for(const table of Object.keys(TABLES))counts[table]=Number((await db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE promotion_id=?1`).bind(before.active_promotion_id).first()).count);
     if(before.mode==='ACTIVE'){
@@ -485,6 +487,20 @@ async function canonicalRead(url,db,json){
     if(!sameControl(before,after))return json({error:'authority_changed'},409);return json({...readMeta(before),counts});
   }
   const page=parsePage(url.searchParams,before);if(page.error)return json({error:page.error},400);
+  const sqlName=type.replaceAll('-','_');
+  const rows=await loadCollectionRows(db,type,before,page);
+  const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
+  if(!sameControl(before,after))return json({error:'authority_changed'},409);
+  const source=rows.results??[],selected=source.slice(0,page.limit),last=selected.at(-1);let lastKey=null;if(last)lastKey=last.read_key??(sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')]);
+  for(const item of selected){
+    delete item.read_key;
+    // Preserve the imported read shape; only LIVE entries carry ledger metadata.
+    if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
+  }
+  return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),...(before.mode==='ACTIVE'?{financial_revision:before.financial_revision}:{}),key:lastKey}):null,limit:page.limit});
+}
+
+async function loadCollectionRows(db,type,before,page){
   const sqlName=type.replaceAll('-','_');let rows;
   if(sqlName==='products'&&before.mode==='ACTIVE'&&await liveProductSchemaAvailable(db)){
     rows=await db.prepare(`SELECT * FROM (
@@ -656,15 +672,67 @@ async function canonicalRead(url,db,json){
     rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName].split(',').map(c=>'r.'+c).join(',')}${context}${cashSession} FROM ${join} WHERE x.promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   }
   else {const key=sqlName==='sale_items'?"sale_id || char(0) || printf('%020d',line_number)":sqlName==='sales'?'sale_id':'movement_id';rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName]} FROM ${sqlName} WHERE ${key}>?1 ORDER BY ${key} LIMIT ?2`).bind(page.key,page.limit+1).all();}
+  return rows||{results:[]};
+}
+
+// Exact set of the 12 current entity routes (kebab paths → snake payload keys).
+const SNAPSHOT_COLLECTIONS=[
+  ['products','products'],
+  ['customers','customers'],
+  ['credits','credits'],
+  ['credit-payments','credit_payments'],
+  ['credit-accounts','credit_accounts'],
+  ['cash-sessions','cash_sessions'],
+  ['financial-events','financial_events'],
+  ['expenses','expenses'],
+  ['sales','sales'],
+  ['sale-items','sale_items'],
+  ['inventory-movements','inventory_movements'],
+  ['cash-movements','cash_movements'],
+];
+
+/**
+ * LAB bulk snapshot: ONE financial_revision fence for meta + all 12 collections.
+ * Control is captured by caller (before); we re-check after every page and at end.
+ * Pagination: pages under the same fence until complete; lab dataset fits ≤100/page.
+ * On mid-read drift → 409 entire response (ZERO partial payload).
+ */
+async function canonicalSnapshot(db,json,before){
+  if(!before||!['CANONICAL_READ_ONLY','ACTIVE'].includes(before.mode)||!before.active_promotion_id)return json({error:'canonical_not_published'},409);
+  const payload={};
+  for(const [type,key] of SNAPSHOT_COLLECTIONS){
+    if(['cash-sessions','financial-events'].includes(type)&&before.mode!=='ACTIVE'){payload[key]=[];continue;}
+    const items=[];
+    let pageKey='';
+    let pages=0;
+    for(;;){
+      pages+=1;
+      if(pages>50)return json({error:'snapshot_pagination_overflow',collection:key},500);
+      const page={limit:100,key:pageKey};
+      const rows=await loadCollectionRows(db,type,before,page);
+      const source=rows.results??[];
+      const selected=source.slice(0,page.limit);
+      const last=selected.at(-1);
+      const sqlName=type.replaceAll('-','_');
+      let lastKey=null;
+      if(last)lastKey=last.read_key??(sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')]);
+      for(const item of selected){
+        delete item.read_key;
+        if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
+      }
+      items.push(...selected);
+      const midControl=await control(db),mid=midControl?.mode==='ACTIVE'?await readControl(db):midControl;
+      if(!sameControl(before,mid))return json({error:'authority_changed'},409);
+      if(source.length<=page.limit)break;
+      if(lastKey==null)return json({error:'snapshot_pagination_key_missing',collection:key},500);
+      pageKey=lastKey;
+    }
+    payload[key]=items;
+  }
   const afterControl=await control(db),after=afterControl?.mode==='ACTIVE'?await readControl(db):afterControl;
   if(!sameControl(before,after))return json({error:'authority_changed'},409);
-  const source=rows.results??[],selected=source.slice(0,page.limit),last=selected.at(-1);let lastKey=null;if(last)lastKey=last.read_key??(sqlName==='sale_items'?`${last.sale_id}\0${String(last.line_number).padStart(20,'0')}`:last[TABLES[sqlName]?.[0]??(sqlName==='sales'?'sale_id':'movement_id')]);
-  for(const item of selected){
-    delete item.read_key;
-    // Preserve the imported read shape; only LIVE entries carry ledger metadata.
-    if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
-  }
-  return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),...(before.mode==='ACTIVE'?{financial_revision:before.financial_revision}:{}),key:lastKey}):null,limit:page.limit});
+  // Flatten: meta + exact 12 keys (empty arrays never omitted). Additive lab endpoint.
+  return json({...readMeta(before),lab_snapshot:true,...payload});
 }
 
 async function readProvenance(promotionId,url,db,json){
