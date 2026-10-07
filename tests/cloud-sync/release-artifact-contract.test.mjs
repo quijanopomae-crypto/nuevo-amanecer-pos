@@ -85,6 +85,9 @@ test('production release promotes verified STAGING bytes and never rebuilds stat
   assert.doesNotMatch(workflow,/sed -i .*__BUILD_HASH__/);
   assert.doesNotMatch(workflow,/d1 (?:execute|migrations|create|delete)/);
   assert.doesNotMatch(workflow,/tools\/cloudflare-prod/);
+  assert.match(workflow,/grep -Fq "\$PROD_WEB_URL" \/tmp\/prod-runtime-config\.js/);
+  assert.match(workflow,/\$PROD_WEB_URL\/health/);
+  assert.match(workflow,/service!==\"nuevo-amanecer-pos-prod\"/);
 });
 
 test('production release validates archive namespace before extraction', () => {
