@@ -57,16 +57,25 @@ test('commerce remains fail closed until CANON is ready and ACTIVE',()=>{
 });
 
 
-test('CANON core bootstrap is parallel and visible before financial completion',()=>{
+test('CANON refresh keeps read-only bootstrap fail-closed and ACTIVE reads in one parallel wave',()=>{
   assert.match(canonical,/source === 'cache' \|\| source === 'bootstrap'/);
-  assert.match(canonical,/Promise\.all\(coreEntries\.map\(readEntry\)\)/);
-  assert.match(canonical,/publishReplica\(bootstrapReplica, 'bootstrap'\); notifyReplicaUpdate\(\)/);
   assert.match(canonical,/mode: provisional \? 'CANONICAL_READ_ONLY'/);
   assert.match(canonical,/read_only: provisional \|\| replica\.read_only !== false/);
-  assert.match(canonical,/Promise\.all\(\[\['cash-sessions', 'cashSessions'\], \['financial-events', 'financialEvents'\]\]\.map\(readEntry\)\)/);
-  const bootstrapPos=canonical.indexOf("publishReplica(bootstrapReplica, 'bootstrap')");
-  const financialPos=canonical.indexOf("['cash-sessions', 'cashSessions']");
-  assert.ok(bootstrapPos>=0 && financialPos>bootstrapPos,'bootstrap must publish before financial routes finish');
+  assert.match(canonical,/var activeEntries = \[\['cash-sessions', 'cashSessions'\], \['financial-events', 'financialEvents'\], \['expenses', 'expenses'\], \['sales', 'sales'\], \['sale-items', 'saleItems'\], \['inventory-movements', 'inventoryMovements'\], \['cash-movements', 'cashMovements'\]\];/);
+
+  const activeStart=canonical.indexOf("if (statusMeta.mode === 'ACTIVE')");
+  const readOnlyStart=canonical.indexOf('} else {',activeStart);
+  const fallbackEnd=canonical.indexOf('} // end !bulkApplied fallback',readOnlyStart);
+  assert.ok(activeStart>=0 && readOnlyStart>activeStart && fallbackEnd>readOnlyStart,'refresh branches must remain explicit');
+
+  const activeBlock=canonical.slice(activeStart,readOnlyStart);
+  assert.match(activeBlock,/Promise\.all\(coreEntries\.concat\(activeEntries\)\.map\(readEntry\)\)/);
+  assert.doesNotMatch(activeBlock,/publishReplica\(bootstrapReplica/);
+
+  const readOnlyBlock=canonical.slice(readOnlyStart,fallbackEnd);
+  assert.match(readOnlyBlock,/Promise\.all\(coreEntries\.map\(readEntry\)\)/);
+  assert.match(readOnlyBlock,/publishReplica\(bootstrapReplica, 'bootstrap'\); notifyReplicaUpdate\(\)/);
+  assert.doesNotMatch(readOnlyBlock,/coreEntries\.concat\(activeEntries\)/);
 });
 
 test('mobile status shows runtime CANON state instead of a hardcoded Local label',()=>{

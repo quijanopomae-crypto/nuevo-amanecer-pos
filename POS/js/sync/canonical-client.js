@@ -24,6 +24,22 @@
   } catch (_) {}
   var binding = null, data = null, ready = false, loading = null, changed = false, replicaState = { source: 'none', cache: null, validation: 'pending' };
 
+  // FASE7 LAB experimental: bulk snapshot (1 request) vs FASE6 13-request wave.
+  // Enable via localStorage na_canon_bulk_snapshot=1 or window.__NA_CANON_BULK_SNAPSHOT=true.
+  // On any bulk failure → fall back to 13-route path (no data loss).
+  function bulkSnapshotEnabled() {
+    try {
+      if (root.__NA_CANON_BULK_SNAPSHOT === true) return true;
+      if (root.__NA_CANON_BULK_SNAPSHOT === false) return false;
+      var ls = root.localStorage && root.localStorage.getItem('na_canon_bulk_snapshot');
+      if (ls === '1' || ls === 'true') return true;
+      if (ls === '0' || ls === 'false') return false;
+      if (root.location && /(?:^|[?&])bulk=1(?:&|$)/.test(root.location.search || '')) return true;
+    } catch (_) {}
+    return false;
+  }
+  var SNAPSHOT_KEYS = ['products','customers','credits','credit_payments','credit_accounts','sales','sale_items','inventory_movements','cash_movements','cash_sessions','financial_events','expenses'];
+
   function copy(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
   function fail(code) { throw new Error(code); }
   function validId(value) { return typeof value === 'string' && value.length > 0 && value.length <= 160 && !/[\x00-\x1f\x7f]/.test(value); }
@@ -228,18 +244,57 @@
       var endpoint = expected.endpoint, session = sessionCredentials(expected);
       if (!session) fail('SESSION_NOT_AVAILABLE');
       var authHeaders = { authorization: 'Bearer ' + session.token };
-      var status = await readFetch(endpoint + '/read/canonical/status', {
-        credentials: 'omit', redirect: 'error', cache: 'no-store', headers: authHeaders
-      });
-      if (!status.ok) fail('CANONICAL_READ_' + status.status);
-      statusMeta = await status.json();
-      verify(statusMeta, expected);
-      var statusDigest = statusMeta && (statusMeta.canonical_digest || statusMeta.revision_digest || statusMeta.digest);
-      if (statusMeta && statusMeta.mode === 'ACTIVE' && !uint(statusMeta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
       var next = { authority: 'canonical', promotion_id: expected.promotion_id, authority_epoch: expected.authority_epoch, revision: expected.revision, digests: {} };
-      if (binding && !changed) assertBinding(expected);
-      notifyConnectionVerified();
-      var expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : null]);
+      var statusDigest = null;
+      var expectedPageMeta = null;
+      var cache = await localReplica();
+      var bulkApplied = false;
+
+      // FASE7 LAB: optional 1-request bulk snapshot (meta + 12 collections, one FR fence).
+      // On failure → fall back to FASE6 status + 13 entity routes. Old routes never removed.
+      if (bulkSnapshotEnabled()) {
+        try {
+          var snapRes = await readFetch(endpoint + '/read/canonical/snapshot', {
+            credentials: 'omit', redirect: 'error', cache: 'no-store', headers: authHeaders
+          });
+          if (!snapRes.ok) throw new Error('CANONICAL_READ_' + snapRes.status);
+          var snap = await snapRes.json();
+          verify(snap, expected);
+          if (snap.mode !== 'ACTIVE') throw new Error('SNAPSHOT_NOT_ACTIVE');
+          if (!uint(snap.financial_revision)) fail('STALE_AUTHORITY_BINDING');
+          for (var si = 0; si < SNAPSHOT_KEYS.length; si++) {
+            if (!Array.isArray(snap[SNAPSHOT_KEYS[si]])) fail('INVALID_CANONICAL_SNAPSHOT');
+          }
+          statusMeta = {
+            authority: snap.authority, promotion_id: snap.promotion_id, authority_epoch: snap.authority_epoch,
+            revision: snap.revision, financial_revision: snap.financial_revision, read_only: snap.read_only,
+            mode: snap.mode, minimum_client_contract: snap.minimum_client_contract
+          };
+          statusDigest = snap.canonical_digest || snap.revision_digest || snap.digest || null;
+          expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.financial_revision]);
+          if (binding && !changed) assertBinding(expected);
+          notifyConnectionVerified();
+          next.products = snap.products;
+          next.customers = snap.customers;
+          next.credits = snap.credits;
+          next.payments = snap.credit_payments;
+          next.creditAccounts = snap.credit_accounts;
+          next.cashSessions = snap.cash_sessions;
+          next.financialEvents = snap.financial_events;
+          next.expenses = snap.expenses;
+          next.sales = snap.sales;
+          next.saleItems = snap.sale_items;
+          next.inventoryMovements = snap.inventory_movements;
+          next.cashMovements = snap.cash_movements;
+          if (statusDigest) next.canonical_digest = statusDigest;
+          bulkApplied = true;
+        } catch (bulkErr) {
+          bulkApplied = false;
+          statusMeta = null;
+          try { if (root.console && root.console.warn) root.console.warn('[canon] bulk snapshot failed, falling back to 13-route', bulkErr && (bulkErr.message || String(bulkErr))); } catch (_) {}
+        }
+      }
+
       async function readEntry(entry) {
         var route = entry[0], name = entry[1], cursor = null, seen = new Set(), items = [], digest = null;
         do {
@@ -269,25 +324,38 @@
         });
       }
       var coreEntries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']];
-      applyEntries(await Promise.all(coreEntries.map(readEntry)));
-      var operationalSeed = operationalBootstrapSeed(data, statusMeta);
-      next.sales = operationalSeed.sales; next.saleItems = operationalSeed.saleItems; next.inventoryMovements = operationalSeed.inventoryMovements;
-      next.cashMovements = operationalSeed.cashMovements; next.cashSessions = operationalSeed.cashSessions; next.financialEvents = operationalSeed.financialEvents; next.expenses = operationalSeed.expenses;
-      next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
-      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
-      if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
-      if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
-      if (cache && cacheIsNewer(cache, bootstrapReplica)) {
-        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
-      }
-      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
+      var activeEntries = [['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents'], ['expenses', 'expenses'], ['sales', 'sales'], ['sale-items', 'saleItems'], ['inventory-movements', 'inventoryMovements'], ['cash-movements', 'cashMovements']];
 
+      if (!bulkApplied) {
+      var status = await readFetch(endpoint + '/read/canonical/status', {
+        credentials: 'omit', redirect: 'error', cache: 'no-store', headers: authHeaders
+      });
+      if (!status.ok) fail('CANONICAL_READ_' + status.status);
+      statusMeta = await status.json();
+      verify(statusMeta, expected);
+      statusDigest = statusMeta && (statusMeta.canonical_digest || statusMeta.revision_digest || statusMeta.digest);
+      if (statusMeta && statusMeta.mode === 'ACTIVE' && !uint(statusMeta.financial_revision)) fail('STALE_AUTHORITY_BINDING');
+      if (binding && !changed) assertBinding(expected);
+      notifyConnectionVerified();
+      expectedPageMeta = JSON.stringify([statusMeta.mode, statusMeta.read_only, statusMeta.minimum_client_contract, statusMeta.mode === 'ACTIVE' ? statusMeta.financial_revision : null]);
+      if (statusDigest) next.canonical_digest = statusDigest;
       if (statusMeta.mode === 'ACTIVE') {
-        applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
-        applyEntries(await Promise.all([['expenses','expenses']].map(readEntry)));
-        applyEntries(await Promise.all([['sales','sales'], ['sale-items','saleItems'], ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements']].map(readEntry)));
+        // FASE6 path: one parallel wave after status (13 routes total with status).
+        applyEntries(await Promise.all(coreEntries.concat(activeEntries).map(readEntry)));
+      } else {
+        applyEntries(await Promise.all(coreEntries.map(readEntry)));
+        var operationalSeed = operationalBootstrapSeed(data, statusMeta);
+        next.sales = operationalSeed.sales; next.saleItems = operationalSeed.saleItems; next.inventoryMovements = operationalSeed.inventoryMovements;
+        next.cashMovements = operationalSeed.cashMovements; next.cashSessions = operationalSeed.cashSessions; next.financialEvents = operationalSeed.financialEvents; next.expenses = operationalSeed.expenses;
+        next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
+        var bootstrapReplica = replicaOf(next);
+        if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
+        if (cache && cacheIsNewer(cache, bootstrapReplica)) {
+          publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
+        }
+        publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
       }
+      } // end !bulkApplied fallback
       if (binding && !changed) assertBinding(expected);
       next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
       if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
@@ -1278,6 +1346,20 @@
       return true;
     });
   }
+  async function discardRejectedSale() {
+    return withWriterLock(function () {
+      var record = journal();
+      if (!record || record.state !== 'PENDING' || record.command !== 'sale.create') return false;
+      // 400/409 are definitive Worker rejections. D1 sale.create is atomic, so
+      // these statuses prove this pending intent did not commit a sale/mov/stock.
+      // Transport uncertainty (5xx / lost ACK) must stay pending for same operation_id replay.
+      var safeErrors = ['stale_stock', 'insufficient_stock', 'stock_revision_conflict', 'invalid_sale_request', 'product_not_found', 'operation_id_conflict', 'sale_id_conflict', 'stale_authority', 'canonical_not_active', 'canonical_sale_conflict', 'cash_session_required', 'cash_session_closed'];
+      if (![400, 404, 409].includes(record.last_status) || !safeErrors.includes(record.last_error)) return false;
+      root.localStorage.removeItem(JOURNAL);
+      if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+      return true;
+    });
+  }
   function renderCredits(container) {
     container.replaceChildren(); container.style.overflowWrap = 'anywhere';
     var current = snapshot();
@@ -1440,7 +1522,7 @@
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale,
     createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);

@@ -211,9 +211,13 @@
           return candidate && (sameId(id, candidate.product_id) || sameId(id, candidate.id));
         });
         if (match && typeof match.projected_stock === 'number' && Number.isFinite(match.projected_stock)) {
-          product._canonicalRemoteStock = product.stock;
+          var remoteStock = Number(product.stock);
+          product._canonicalRemoteStock = remoteStock;
+          product._canonicalProjectedStock = match.projected_stock;
+          product._canonicalPendingDelta = Math.max(0, remoteStock - match.projected_stock);
+          product._canonicalPendingStock = product._canonicalPendingDelta > 0 || !!(outboxSnapshot.intents && outboxSnapshot.intents.length);
+          // Availability uses projected stock; labels must show CANON + pending badge.
           product.stock = match.projected_stock;
-          product._canonicalPendingStock = true;
         }
       });
       last = copy(projected);

@@ -116,11 +116,13 @@ test('online sale critical path commits locally first, then one POST reaches rec
   assert.ok(calls.slice(1).every(row=>row.method==='GET'||row.method==='POST'),'any reconciliation work must occur only after the receipt POST');
 });
 
-test('post-sale staged refresh keeps previous history visible until the new complete snapshot arrives',async t=>{
-  let holdSales=false, releaseSales;
+test('post-sale ACTIVE refresh keeps previous history visible until the new complete snapshot arrives',async t=>{
+  let holdSales=false, releaseSales, markSalesRequested;
   const salesGate=new Promise(resolve=>{releaseSales=resolve;});
+  const salesRequested=new Promise(resolve=>{markSalesRequested=resolve;});
   const {tab,add}=await fixture(t,{onFetch:async(url,options,next)=>{
     if(holdSales&&new URL(url).pathname==='/read/canonical/sales'){
+      markSalesRequested();
       await salesGate;
       return next();
     }
@@ -131,19 +133,14 @@ test('post-sale staged refresh keeps previous history visible until the new comp
   await tab.api.refresh();
   assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001']);
 
-  let bootstrapResolve;
-  const bootstrapSeen=new Promise(resolve=>{bootstrapResolve=resolve;});
-  tab.context.addEventListener('na:canonical-updated',()=>{
-    if(tab.api.sourceState().validation==='validating') bootstrapResolve();
-  });
   holdSales=true;
   add();
   await vm.runInContext('confirmarVenta()',tab.context);
-  await bootstrapSeen;
+  await salesRequested;
 
-  assert.equal(tab.api.sourceState().validation,'validating');
-  assert.deepEqual(Array.from(tab.api.legacySnapshot().sales.map(v=>v.id)),['V-001'],'bootstrap must retain the last complete same-authority history');
-  assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002'],'receipt must append instantly without hiding prior history');
+  assert.equal(tab.api.sourceState().validation,'current','ACTIVE one-wave refresh keeps the last complete replica current until replacement is complete');
+  assert.deepEqual(Array.from(tab.api.legacySnapshot().sales.map(v=>v.id)),['V-001'],'remote snapshot must remain the last complete history while one ACTIVE route is blocked');
+  assert.deepEqual(Array.from(vm.runInContext('ventas.map(v=>v.id)',tab.context)),['V-001','V-002'],'receipt projection must append instantly without hiding prior history');
 
   releaseSales();
   await tab.api.refresh();

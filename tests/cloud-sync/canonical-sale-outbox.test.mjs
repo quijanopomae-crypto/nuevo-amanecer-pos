@@ -25,7 +25,7 @@ function fixture({ local = storage(), lock = locks(), canonical = {} } = {}) {
   const context = vm.createContext({ localStorage: local, navigator: { locks: lock }, crypto: { randomUUID }, fetch() { throw Error('direct fetch forbidden'); } });
   vm.runInContext(intentSource, context); vm.runInContext(source, context);
   const calls = [];
-  const api = { async refresh() { calls.push('refresh'); if (canonical.refresh) return canonical.refresh(); }, async createSale(i) { calls.push(['createSale', copy(i)]); if (canonical.createSale) return canonical.createSale(i); canonical.receipt = { operation_id: i.operation_id, sale_id: i.sale_id }; return canonical.receipt; }, async retryPending() { calls.push('retryPending'); if (canonical.retryPending) return canonical.retryPending(); canonical.receipt = { operation_id: canonical.pending.payload.operation_id, sale_id: canonical.pending.payload.sale_id }; canonical.pending = null; return canonical.receipt; }, pendingSnapshot() { return copy(canonical.pending ?? null); }, receiptSnapshot() { return copy(canonical.receipt ?? null); } };
+  const api = { async refresh() { calls.push('refresh'); if (canonical.refresh) return canonical.refresh(); }, async createSale(i) { calls.push(['createSale', copy(i)]); if (canonical.createSale) return canonical.createSale(i); canonical.receipt = { operation_id: i.operation_id, sale_id: i.sale_id }; return canonical.receipt; }, async retryPending() { calls.push('retryPending'); if (canonical.retryPending) return canonical.retryPending(); canonical.receipt = { operation_id: canonical.pending.payload.operation_id, sale_id: canonical.pending.payload.sale_id }; canonical.pending = null; return canonical.receipt; }, async discardRejectedSale() { calls.push('discardRejectedSale'); if (canonical.discardRejectedSale) return canonical.discardRejectedSale(); return false; }, pendingSnapshot() { return copy(canonical.pending ?? null); }, receiptSnapshot() { return copy(canonical.receipt ?? null); } };
   context.NuevoAmanecerCanonical = api;
   return { context, local, canonical, calls, api: context.NuevoAmanecerCanonicalSaleOutbox };
 }
@@ -60,6 +60,38 @@ test('hard pending rejection blocks queue without retry or create', async () => 
   const f = fixture({ canonical: { pending } }); await enqueueAll(f, makeIntent('A'), makeIntent('B'));
   assert.equal((await f.api.sync()).status, 'BLOCKED_PENDING_REJECTED'); assert.deepEqual(copy(f.api.snapshot().intents), [makeIntent('A'), makeIntent('B')]); assert.equal(f.calls.includes('retryPending'), false); assert.equal(f.calls.some(x => Array.isArray(x)), false);
 });
+test('stale-stock recovery never drops the durable intent when the retry becomes an unsafe 5xx rejection', async () => {
+  let attempt = 0;
+  const canonical = {
+    pending: null,
+    async createSale(i) {
+      attempt += 1;
+      if (attempt === 1) {
+        canonical.pending = { state: 'PENDING', command: 'sale.create', payload: copy(i), last_error: 'stale_stock', last_status: 409 };
+        throw Error('CANONICAL_FINANCIAL_REJECTED_409');
+      }
+      canonical.pending = { state: 'PENDING', command: 'sale.create', payload: copy(i), last_error: 'financial_storage_error', last_status: 503 };
+      throw Error('CANONICAL_FINANCIAL_REJECTED_503');
+    },
+    async discardRejectedSale() {
+      if (canonical.pending?.last_status === 409 && canonical.pending?.last_error === 'stale_stock') {
+        canonical.pending = null;
+        return true;
+      }
+      return false;
+    }
+  };
+  const f = fixture({ canonical });
+  await f.api.enqueue(makeIntent('A'));
+  const result = await f.api.sync();
+  assert.equal(result.status, 'WAITING');
+  assert.equal(result.reason, 'financial_storage_error');
+  assert.deepEqual(copy(f.api.snapshot().intents), [makeIntent('A')], 'unsafe retry must keep the durable sale intent');
+  assert.equal(canonical.pending?.last_status, 503);
+  assert.equal(canonical.pending?.payload?.operation_id, 'op-A');
+  assert.equal(f.calls.filter(x => Array.isArray(x) && x[0] === 'createSale').length, 2);
+});
+
 test('foreign operation or command pending blocks without touching it', async () => {
   for (const pending of [{ state: 'PENDING', command: 'sale.create', payload: makeIntent('X') }, { state: 'PENDING', command: 'payment.create', payload: makeIntent('A') }]) {
     const f = fixture({ canonical: { pending } }); await f.api.enqueue(makeIntent('A')); assert.equal((await f.api.sync()).status, 'BLOCKED_FOREIGN_PENDING'); assert.equal(f.calls.includes('retryPending'), false); assert.equal(f.calls.some(x => Array.isArray(x)), false);
