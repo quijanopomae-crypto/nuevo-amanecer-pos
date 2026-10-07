@@ -29,6 +29,10 @@ test('staging templates cannot resolve to known production or LAB resources', ()
     'nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev'
   ]) assert.equal(all.includes(forbidden), false, forbidden);
   assert.match(backend, /__STAGING_D1_DATABASE_ID__/);
+  const parsedWeb = JSON.parse(web);
+  assert.deepEqual(parsedWeb.services, [
+    { binding: 'CANON_BACKEND', service: 'nuevo-amanecer-pos-staging' }
+  ]);
   assert.doesNotMatch(all, /CLOUDFLARE_API_TOKEN|POS_ACTIVATION_SECRET|LAB_IMPORT_HMAC_SECRET/);
 });
 
