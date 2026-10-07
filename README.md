@@ -15,23 +15,23 @@ Fuentes rápidas:
 - Reglas de trabajo y zonas: [AGENTS.md](AGENTS.md)
 - Reglas funcionales del producto: [AGENTS_Nuevo_Amanecer.md](AGENTS_Nuevo_Amanecer.md)
 - Roles OpenCode: [.opencode/ROLE_MAP.md](.opencode/ROLE_MAP.md)
-- Contrato LAB -> CANON: [docs/LABORATORIO_A_CANON.md](docs/LABORATORIO_A_CANON.md)
-- Espejo CANON -> R2 -> D1 LAB: [docs/LAB_CANON_MIRROR.md](docs/LAB_CANON_MIRROR.md)
+- Flujo de ramas y preview: [docs/BRANCH_PREVIEW_WORKFLOW.md](docs/BRANCH_PREVIEW_WORKFLOW.md)
+- Retiro controlado de POS-LAB: [docs/LAB_RETIREMENT.md](docs/LAB_RETIREMENT.md)
 
 ## Zonas
 
 | Zona | Rol |
 | --- | --- |
 | `POS/` | CANON del producto |
-| `laboratorio/pos-lab/` | LAB de UI/funciones; no es CANON |
-| `tools/cloudflare-lab/` | Worker, D1 y herramientas de infraestructura LAB |
+| `laboratorio/pos-lab/` | histórico/read-only; POS-LAB retirado del flujo activo |
+| `tools/cloudflare-lab/` | backend/harnesses con nombre histórico; no borrar por el retiro de POS-LAB |
 | `tools/cloudflare-backup/` | backup/recovery |
 | `tests/` | regresiones de producto, cloud-sync, infraestructura y seguridad |
 | `.opencode/` | agentes y comandos |
 | `.agents/skills/` | skills canónicas |
 | `evidence/` | evidencia histórica/de tareas; no asumir que describe el HEAD actual |
 
-`MANIFEST.yaml` y `orchestrator/` pertenecen al modo SHADOW legacy. No son gates automáticos para trabajo normal de CANON/LAB salvo invocación explícita.
+`MANIFEST.yaml` y `orchestrator/` pertenecen al modo SHADOW legacy. No son gates automáticos para trabajo normal de CANON salvo invocación explícita.
 
 ## Ejecutar el POS estable local
 
@@ -67,11 +67,13 @@ Pruebas focalizadas de abonos CANON (Worker/SQLite local con datos sintéticos):
 node --test tests/cloud-sync/canonical-credit-payment-e2e.test.mjs tests/cloud-sync/canonical-credit-payment-bridge.test.mjs tests/cloud-sync/client-renderer-collision.test.mjs
 ```
 
-## LAB móvil
+## Desarrollo por ramas y preview
 
-El LAB se abre localmente desde `laboratorio/pos-lab/` y puede publicarse como vista LAB por GitHub Pages. El Pages build no sirve el `POS/index.html` canónico como aplicación de producción.
+POS-LAB permanente está retirado. Todo cambio nuevo nace desde el HEAD CANON vigente en una rama aislada, pasa Draft PR + CI + revisión independiente y, cuando corresponde, un preview temporal del mismo SHA.
 
-Los datos comerciales reales, cuando se usan para pruebas autorizadas, solo pueden existir como copia aislada en D1 LAB mediante el flujo documentado CANON -> backup R2 -> D1 LAB. Nunca se incrustan en Git, HTML, fixtures o evidence.
+No existe promoción LAB -> CANON para trabajo nuevo. Los artefactos históricos bajo `laboratorio/pos-lab/` se conservan únicamente como referencia hasta su limpieza documental controlada.
+
+El directorio `tools/cloudflare-lab/` mantiene un nombre histórico pero contiene piezas de backend/harnesses usadas por CANON; no debe borrarse ni renombrarse como parte del retiro de POS-LAB.
 
 ## V1.3 y documentación histórica
 
