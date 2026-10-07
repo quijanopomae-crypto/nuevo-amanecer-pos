@@ -110,7 +110,17 @@
               var afterRetry = canonical.pendingSnapshot();
               if (afterRetry && afterRetry.command === 'sale.create' && afterRetry.payload &&
                   afterRetry.payload.operation_id === head.operation_id && afterRetry.payload.sale_id === head.sale_id && afterRetry.last_error) {
-                try { if (typeof canonical.discardRejectedSale === 'function') await canonical.discardRejectedSale(); } catch (_) {}
+                var retryDiscarded = false;
+                try {
+                  if (typeof canonical.discardRejectedSale === 'function') retryDiscarded = await canonical.discardRejectedSale();
+                } catch (_) { retryDiscarded = false; }
+                // Only a definitive allowlisted rejection may remove the durable
+                // intent. 5xx/429/unknown ACK remains pending with the same
+                // operation_id so a later replay cannot lose or duplicate a sale.
+                if (!retryDiscarded) {
+                  return result('WAITING', processed, parseStored().intents.length,
+                    String(afterRetry.last_error || error && (error.code || error.message) || 'CREATE_UNACKNOWLEDGED'));
+                }
                 removeHead(head);
                 var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
                 if (runtime && typeof runtime.notify === 'function') runtime.notify('Venta ' + head.sale_id + ' rechazada por CANON (' + rejectReason + '). No se descontó stock; vuelve a cobrarla.', 'error');
