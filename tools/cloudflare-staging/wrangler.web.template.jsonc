@@ -19,5 +19,11 @@
   "vars": {
     "HOSTED_ENVIRONMENT": "staging",
     "CANON_API_ORIGIN": "https://nuevo-amanecer-pos-staging.nuevo-amanecer-pos.workers.dev"
-  }
+  },
+  "services": [
+    {
+      "binding": "CANON_BACKEND",
+      "service": "nuevo-amanecer-pos-staging"
+    }
+  ]
 }
