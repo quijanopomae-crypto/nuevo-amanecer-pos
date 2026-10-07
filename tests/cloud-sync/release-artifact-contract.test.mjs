@@ -85,9 +85,11 @@ test('production release promotes verified STAGING bytes and never rebuilds stat
   assert.doesNotMatch(workflow,/sed -i .*__BUILD_HASH__/);
   assert.doesNotMatch(workflow,/d1 (?:execute|migrations|create|delete)/);
   assert.doesNotMatch(workflow,/tools\/cloudflare-prod/);
-  assert.match(workflow,/r2 object get .* --remote --file=\/tmp\/release-candidate\.json/);
-  assert.match(workflow,/r2 object get .* --remote --file=\/tmp\/na-prod-site\.tar\.gz/);
-  assert.doesNotMatch(workflow,/r2 object get .* --file=\/tmp\/(?:release-candidate\.json|na-prod-site\.tar\.gz)(?!.*--remote)/);
+  const r2Gets = workflow.split(/\r?\n/).filter(line => line.includes('wrangler r2 object get'));
+  assert.equal(r2Gets.length, 2, 'production must fetch exactly descriptor + immutable artifact');
+  for (const line of r2Gets) assert.match(line, /\s--remote(?:\s|$)/, line);
+  assert.ok(r2Gets.some(line => line.includes('--file=/tmp/release-candidate.json')));
+  assert.ok(r2Gets.some(line => line.includes('--file=/tmp/na-prod-site.tar.gz')));
   assert.match(workflow,/grep -Fq "\$PROD_WEB_URL" \/tmp\/prod-runtime-config\.js/);
   assert.match(workflow,/\$PROD_WEB_URL\/health/);
   assert.match(workflow,/service!==\"nuevo-amanecer-pos-prod\"/);
