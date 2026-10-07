@@ -305,7 +305,7 @@ jobs:
           test "$(sha256sum /tmp/na-release-candidate/site-manifest.json | awk '{print $1}')" = "$SITE_MANIFEST_SHA256"
           ARTIFACT_KEY="release-candidates/$STAGING_TARGET_HEAD/$SITE_ARTIFACT_SHA256/pos-site.tar.gz"
           CANDIDATE_KEY="release-candidates/$STAGING_TARGET_HEAD/candidate.json"
-          npx wrangler r2 object put "$STAGING_R2_BUCKET/$ARTIFACT_KEY" --file=/tmp/na-site.tar.gz
+          npx wrangler r2 object put "$STAGING_R2_BUCKET/$ARTIFACT_KEY" --remote --file=/tmp/na-site.tar.gz
           cat > /tmp/release-candidate.json <<EOF
           {
             "format": "nuevo-amanecer-pos-release-candidate-v1",
@@ -319,7 +319,7 @@ jobs:
             "data_policy": "synthetic-only"
           }
           EOF
-          npx wrangler r2 object put "$STAGING_R2_BUCKET/$CANDIDATE_KEY" --file=/tmp/release-candidate.json
+          npx wrangler r2 object put "$STAGING_R2_BUCKET/$CANDIDATE_KEY" --remote --file=/tmp/release-candidate.json
           echo "STAGING_ARTIFACT_KEY=$ARTIFACT_KEY" >> "$GITHUB_ENV"
           echo "STAGING_CANDIDATE_KEY=$CANDIDATE_KEY" >> "$GITHUB_ENV"
 
