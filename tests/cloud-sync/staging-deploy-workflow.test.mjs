@@ -76,8 +76,16 @@ test('staging smoke proves canonical reads, LAB-route isolation, runtime config 
   assert.match(workflow,/LAB_CODE/);
   assert.match(workflow,/runtime-config\.js/);
   assert.match(workflow,/environment.*staging/);
-  assert.match(workflow,/curl --fail --silent --show-error -o \/tmp\/staging-root\.html/);
-  assert.match(workflow,/curl --fail --silent --show-error -o \/tmp\/staging-app\.html/);
+  assert.match(workflow,/staging-runtime-config\.js/);
+  assert.match(workflow,/for web_attempt in \$\(seq 1 20\)/);
+  assert.match(workflow,/STAGING web propagation\/smoke failed/);
+  assert.match(workflow,/\$STAGING_WEB_URL\/health/);
+  assert.match(workflow,/\$STAGING_WEB_URL\/auth\/session/);
+  assert.match(workflow,/\$STAGING_WEB_URL\/read\/canonical\/status/);
+  assert.match(workflow,/ROOT_CODE=.*staging-root\.html.*http_code.*STAGING_WEB_URL/);
+  assert.match(workflow,/APP_CODE=.*staging-app\.html.*http_code.*STAGING_WEB_URL/);
+  assert.ok(workflow.includes('test "$ROOT_CODE" = "200"'));
+  assert.ok(workflow.includes('test "$APP_CODE" = "200"'));
   assert.match(workflow,/grep -Fq "Nuevo Amanecer POS" \/tmp\/staging-root\.html/);
   assert.match(workflow,/grep -Fq "Nuevo Amanecer — ERP &amp; POS" \/tmp\/staging-app\.html/);
   assert.doesNotMatch(workflow,/\$STAGING_WEB_URL\/.*\| grep -Fq/);
