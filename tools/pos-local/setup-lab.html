@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lab CANON activate (Path C)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; }
+    code, pre { background: #f4f4f5; padding: 0.15rem 0.35rem; border-radius: 4px; }
+    pre { padding: 0.75rem; overflow: auto; }
+    .ok { color: #047857; } .err { color: #b91c1c; }
+    input, button { font-size: 1rem; padding: 0.5rem 0.75rem; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Lab CANON — activación local</h1>
+  <p>Endpoint fijo: <code>http://127.0.0.1:8787</code> (Worker lab D1). No usa prod/workers.dev.</p>
+  <p>Cashier por defecto en POS: <code>CAJ-001</code> / Frank (appConfig). Productos seed: <code>PERF-PROD-001</code>, <code>PERF-PROD-002</code>.</p>
+  <form id="setupForm">
+    <label>POS_ACTIVATION_SECRET (lab .dev.vars)<br />
+      <input id="activationSecret" type="password" autocomplete="off" style="width:100%" />
+    </label>
+    <p><button id="save" type="submit">Activar sesión + binding CANON</button></p>
+  </form>
+  <p id="status"></p>
+  <pre id="detail"></pre>
+  <p>Después: abre el POS de esta misma origin con <code>?perf=1</code> (misma origin = mismo localStorage).</p>
+  <script src="/POS/js/sync/outbox.js"></script>
+  <script src="/POS/js/sync/canonical-client.js"></script>
+  <script src="/tools/pos-local/setup-lab.js"></script>
+</body>
+</html>

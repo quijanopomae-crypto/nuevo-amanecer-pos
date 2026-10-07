@@ -218,11 +218,18 @@
 
   function accept(next) { state = clone(next); }
 
+  function assertSyncEndpoint(url) {
+    var localHttp = url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost');
+    if ((!localHttp && url.protocol !== 'https:') || url.username || url.password || url.search || url.hash) {
+      throw new Error('INVALID_SYNC_ENDPOINT');
+    }
+  }
+
   function configure(options) {
     var next = options || {};
     var endpoint = next.endpoint === undefined ? runtime.endpoint : String(next.endpoint).replace(/\/+$/, '');
     var url = new URL(endpoint);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('INVALID_SYNC_ENDPOINT');
+    assertSyncEndpoint(url);
     var token = typeof next.token === 'string' ? next.token : runtime.token;
     if (/[\r\n]/.test(token)) throw new Error('INVALID_SYNC_TOKEN');
     runtime.endpoint = endpoint; runtime.token = token;
@@ -243,7 +250,7 @@
     var next = options || {};
     var endpoint = next.endpoint === undefined ? runtime.endpoint : String(next.endpoint).replace(/\/+$/, '');
     var url = new URL(endpoint);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('INVALID_SYNC_ENDPOINT');
+    assertSyncEndpoint(url);
     if (typeof secret !== 'string' || !secret || /[\r\n]/.test(secret)) throw new Error('INVALID_ACTIVATION_SECRET');
     var send = fetchImpl || root.fetch;
     if (typeof send !== 'function') throw new Error('FETCH_UNAVAILABLE');
