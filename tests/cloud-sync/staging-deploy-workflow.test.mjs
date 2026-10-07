@@ -76,6 +76,10 @@ test('staging smoke proves canonical reads, LAB-route isolation, runtime config 
   assert.match(workflow,/LAB_CODE/);
   assert.match(workflow,/runtime-config\.js/);
   assert.match(workflow,/environment.*staging/);
+  assert.match(workflow,/printf '%s' "\$CONFIG" \| grep -Fq "\$STAGING_WEB_URL"/);
+  assert.match(workflow,/\$STAGING_WEB_URL\/health/);
+  assert.match(workflow,/\$STAGING_WEB_URL\/auth\/session/);
+  assert.match(workflow,/\$STAGING_WEB_URL\/read\/canonical\/status/);
   assert.match(workflow,/curl --fail --silent --show-error -o \/tmp\/staging-root\.html/);
   assert.match(workflow,/curl --fail --silent --show-error -o \/tmp\/staging-app\.html/);
   assert.match(workflow,/grep -Fq "Nuevo Amanecer POS" \/tmp\/staging-root\.html/);
