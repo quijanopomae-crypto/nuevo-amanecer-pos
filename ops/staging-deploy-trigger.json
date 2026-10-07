@@ -5,10 +5,10 @@
   "target_branch": "feature/v1.3-mobile-cloud",
   "target_head": "213b18534dd05313651134c57a19a40f00959429",
   "requested_action": "deploy-staging",
-  "requested_reason": "Owner-authorized release candidate build for merged PR #432 plus release-pipeline fix PR #434. Deploy exact target to isolated STAGING, run canonical/same-origin smoke, seal immutable artifact, and publish candidate for production promotion.",
+  "requested_reason": "Retry isolated STAGING release-candidate build for exact target 213b185 after bounded same-origin proxy propagation fix #436. Previous run 37649608430 stopped safely on transient immediate 401 before candidate publication.",
   "phase": "release-candidate",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
-  "retry_attempt": 0,
-  "trigger_base": "213b18534dd05313651134c57a19a40f00959429"
+  "retry_attempt": 1,
+  "trigger_base": "eb407ac48aec4b97af67425f65fb2206642010fd"
 }
