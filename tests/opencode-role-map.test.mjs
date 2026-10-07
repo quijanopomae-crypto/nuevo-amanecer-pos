@@ -6,7 +6,6 @@ const read = (path) => readFileSync(path, 'utf8');
 
 const agents = {
   canon: '.opencode/agents/pos-canon-implementer.md',
-  lab: '.opencode/agents/pos-lab-implementer.md',
   shadow: '.opencode/agents/pos-implementer.md',
   planner: '.opencode/agents/pos-planner.md',
   reviewer: '.opencode/agents/pos-reviewer.md',
@@ -17,7 +16,7 @@ test('OpenCode exposes one explicit role for every working zone', () => {
   for (const [role, path] of Object.entries(agents)) {
     assert.equal(existsSync(path), true, role + ': ' + path);
   }
-  assert.match(read('.opencode/ROLE_MAP.md'), /CANON[\s\S]*LAB[\s\S]*SHADOW[\s\S]*PLANNER[\s\S]*REVIEWER[\s\S]*TESTER/);
+  assert.match(read('.opencode/ROLE_MAP.md'), /CANON[\s\S]*Preview[\s\S]*SHADOW[\s\S]*PLANNER[\s\S]*REVIEWER[\s\S]*TESTER/i);
 });
 
 test('CANON implementer cannot silently deploy or write LAB', () => {
@@ -28,12 +27,8 @@ test('CANON implementer cannot silently deploy or write LAB', () => {
   assert.doesNotMatch(value, /wrangler deploy.*allow/i);
 });
 
-test('LAB and SHADOW writers are fenced from CANON product writes', () => {
-  const lab = read(agents.lab);
-  assert.match(lab, /LAB_ONLY_ROLE/);
-  assert.match(lab, /No escribas `POS\/\*\*`/);
-  assert.match(lab, /No escribas [\s\S]*`tools\/cloudflare-lab\/\*\*`/);
-
+test('retired LAB writer is absent and SHADOW remains fenced from CANON product writes', () => {
+  assert.equal(existsSync('.opencode/agents/pos-lab-implementer.md'), false);
   const shadow = read(agents.shadow);
   assert.match(shadow, /SHADOW_ONLY_LEGACY_FILENAME/);
   assert.match(shadow, /PRODUCT_WRITE = DENIED/);
@@ -57,9 +52,12 @@ test('legacy generic commands require explicit SHADOW invocation', () => {
   }
 });
 
-test('CANON and LAB have unambiguous command entrypoints', () => {
-  for (const name of ['canon-preflight', 'canon-validate', 'lab-preflight', 'lab-validate']) {
+test('CANON commands remain active and retired LAB commands are absent', () => {
+  for (const name of ['canon-preflight', 'canon-validate']) {
     assert.equal(existsSync(`.opencode/commands/${name}.md`), true, name);
+  }
+  for (const name of ['lab-preflight', 'lab-validate']) {
+    assert.equal(existsSync(`.opencode/commands/${name}.md`), false, name);
   }
   assert.match(read('.opencode/commands/canon-preflight.md'), /CANON_COMMAND/);
   assert.match(read('.opencode/commands/canon-validate.md'), /CANON_COMMAND/);
@@ -72,10 +70,10 @@ test('legacy shadow manifest remains explicitly shadow and keeps compatibility a
   assert.doesNotMatch(manifest, /runtime_agent_id:\s*pos-canon-implementer/);
 });
 
-test('skills have a single canonical source and role map classifies sensitive skills', () => {
+test('retired LAB skills are absent from active tooling', () => {
   assert.equal(existsSync('.opencode/skills'), false);
-  const roleMap = read('.opencode/ROLE_MAP.md');
-  for (const skill of ['lab-scope-guard', 'lab-ui-edit', 'lab-animation-edit', 'lab-feature-edit', 'canon-promotion']) {
-    assert.match(roleMap, new RegExp(skill));
+  for (const skill of ['lab-scope-guard', 'lab-ui-edit', 'lab-animation-edit', 'lab-feature-edit']) {
+    assert.equal(existsSync(`.agents/skills/${skill}`), false, skill);
   }
+  assert.match(read('.opencode/ROLE_MAP.md'), /skills LAB antiguas quedan retiradas/);
 });
