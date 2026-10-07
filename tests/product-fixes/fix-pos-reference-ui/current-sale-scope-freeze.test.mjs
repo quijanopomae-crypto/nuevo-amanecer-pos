@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
-const SHORT_VIEWPORT_MEDIA='@media(min-width:1100px) and (max-height:700px)';
-const SHORT_VIEWPORT_COMMENT='/* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */\n';
+const SHORT_VIEWPORT_MEDIA='@media(min-width:1100px) and (max-height:700px), (min-width:1100px) and (max-resolution:0.9dppx) and (max-height:850px)';
+const SHORT_VIEWPORT_COMMENT='/* Short desktop viewports, including sub-1x display scaling, compact only the current-sale footer. */\n';
 
 export function frozenRules(source, scope='') {
  const rows=[]; source=source.replace(/\/\*[\s\S]*?\*\//g,''); let cursor=0;

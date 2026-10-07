@@ -177,7 +177,11 @@ test('current sale scope does not introduce unsupported sale notes', () => {
 });
 
 test('short desktop viewport compacts only the current-sale footer', () => {
-  assert.match(css, /@media\(min-width:1100px\) and \(max-height:700px\)\{[\s\S]*#pagePOS \.total-main\{[^}]*min-height:36px[^}]*font-size:22px/);
-  assert.match(css, /@media\(min-width:1100px\) and \(max-height:700px\)\{[\s\S]*#pagePOS \.cart-secondary-actions button\{[^}]*min-height:32px[^}]*font-size:11px/);
-  assert.match(css, /@media\(min-width:1100px\) and \(max-height:700px\)\{[\s\S]*#pagePOS \.btn-cobro\{[^}]*min-height:44px[^}]*font-size:16px/);
+  const query = '@media(min-width:1100px) and (max-height:700px), (min-width:1100px) and (max-resolution:0.9dppx) and (max-height:850px)';
+  assert.equal(css.split(query).length - 1, 1);
+  const start = css.indexOf(query);
+  const block = css.slice(start, css.indexOf('/* Preserve touch comfort', start));
+  assert.match(block, /#pagePOS \.total-main\{[^}]*min-height:36px[^}]*font-size:22px/);
+  assert.match(block, /#pagePOS \.cart-secondary-actions button\{[^}]*min-height:32px[^}]*font-size:11px/);
+  assert.match(block, /#pagePOS \.btn-cobro\{[^}]*min-height:44px[^}]*font-size:16px/);
 });
