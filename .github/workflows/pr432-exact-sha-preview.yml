@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      TARGET_SHA: 58074e6252a336f67a742186f5479f867ac6e8ab
+      TARGET_SHA: 64742bcb04effe34779735e20673677a4076fd40
       TARGET_BRANCH: fix/release-pipeline-same-origin-proxy-20261007
       BASE_BRANCH: feature/v1.3-mobile-cloud
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -223,16 +223,36 @@ jobs:
             'STAGING_AUTHORITY_EPOCH='+x.authority_epoch+'\n'+
             'STAGING_CONTROL_REVISION='+x.revision+'\n');
           NODE
-          CONFIG="$(curl --fail --silent --show-error "$STAGING_WEB_URL/runtime-config.js")"
-          printf '%s' "$CONFIG" | grep -Fq '"environment":"staging"'
-          printf '%s' "$CONFIG" | grep -Fq "$STAGING_WEB_URL"
-          ! printf '%s' "$CONFIG" | grep -Fq "nuevo-amanecer-pos-prod"
-          curl --fail --silent --show-error -o /tmp/staging-root.html "$STAGING_WEB_URL/"
-          curl --fail --silent --show-error -o /tmp/staging-app.html "$STAGING_WEB_URL/app/"
-          curl --fail --silent --show-error -o /tmp/staging-sw.js "$STAGING_WEB_URL/app/sw.js"
-          grep -Fq "$TARGET_SHA" /tmp/staging-root.html
-          grep -Fq "$TARGET_SHA" /tmp/staging-sw.js
-          grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html
+          for web_attempt in $(seq 1 20); do
+            CONFIG_CODE="$(curl -sS -o /tmp/staging-runtime-config.js -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/runtime-config.js" || true)"
+            ROOT_CODE="$(curl -sS -o /tmp/staging-root.html -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/" || true)"
+            APP_CODE="$(curl -sS -o /tmp/staging-app.html -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/app/" || true)"
+            SW_CODE="$(curl -sS -o /tmp/staging-sw.js -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/app/sw.js" || true)"
+            HEALTH_CODE="$(curl -sS -o /tmp/staging-web-health.json -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/health" || true)"
+            if test "$CONFIG_CODE" = "200" &&
+               test "$ROOT_CODE" = "200" &&
+               test "$APP_CODE" = "200" &&
+               test "$SW_CODE" = "200" &&
+               test "$HEALTH_CODE" = "200" &&
+               grep -Fq '"environment":"staging"' /tmp/staging-runtime-config.js &&
+               grep -Fq "$STAGING_WEB_URL" /tmp/staging-runtime-config.js &&
+               grep -Fq "$TARGET_SHA" /tmp/staging-root.html &&
+               grep -Fq "$TARGET_SHA" /tmp/staging-sw.js &&
+               grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html &&
+               node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("/tmp/staging-web-health.json","utf8"));if(x.ok!==true||x.environment!=="staging"||x.service!=="nuevo-amanecer-pos-staging"||x.d1!=="ok")process.exit(2)'; then
+              break
+            fi
+            if test "$web_attempt" = "20"; then
+              echo "STAGING web propagation/smoke failed config=$CONFIG_CODE root=$ROOT_CODE app=$APP_CODE sw=$SW_CODE health=$HEALTH_CODE" >&2
+              exit 1
+            fi
+            sleep 3
+          done
+          WEB_SESSION_CODE="$(curl -sS --max-time 15 -o /tmp/staging-web-session.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/auth/session" || true)"
+          WEB_STATUS_CODE="$(curl -sS --max-time 15 -o /tmp/staging-web-status.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/read/canonical/status" || true)"
+          test "$WEB_SESSION_CODE" = "200"
+          test "$WEB_STATUS_CODE" = "200"
+          node -e 'const fs=require("node:fs");const s=JSON.parse(fs.readFileSync("/tmp/staging-web-session.json","utf8"));const x=JSON.parse(fs.readFileSync("/tmp/staging-web-status.json","utf8"));if(typeof s.session_id!=="string"||!s.session_id||x.authority!=="canonical"||x.mode!=="ACTIVE"||x.promotion_id!=="staging-synthetic-promotion-v1")process.exit(2)'
 
       - name: Install Playwright for hosted preview
         shell: bash
