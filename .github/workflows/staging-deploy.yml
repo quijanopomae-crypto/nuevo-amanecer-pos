@@ -243,19 +243,32 @@ jobs:
           curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_BACKEND_URL/read/canonical/customers?limit=5" >/tmp/staging-customers.json
           LAB_CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$STAGING_BACKEND_URL/lab/workspace")"
           test "$LAB_CODE" = "404"
-          CONFIG="$(curl --fail --silent --show-error "$STAGING_WEB_URL/runtime-config.js")"
-          printf '%s' "$CONFIG" | grep -Fq '"environment":"staging"'
-          printf '%s' "$CONFIG" | grep -Fq "$STAGING_WEB_URL"
-          ! printf '%s' "$CONFIG" | grep -Fq "nuevo-amanecer-pos-prod"
-          WEB_HEALTH="$(curl --fail --silent --show-error "$STAGING_WEB_URL/health")"
-          printf '%s' "$WEB_HEALTH" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);if(x.ok!==true||x.environment!=="staging"||x.service!=="nuevo-amanecer-pos-staging"||x.d1!=="ok")process.exit(2)})'
+          for web_attempt in $(seq 1 20); do
+            CONFIG_CODE="$(curl -sS -o /tmp/staging-runtime-config.js -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/runtime-config.js" || true)"
+            HEALTH_CODE="$(curl -sS -o /tmp/staging-web-health.json -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/health" || true)"
+            ROOT_CODE="$(curl -sS -o /tmp/staging-root.html -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/" || true)"
+            APP_CODE="$(curl -sS -o /tmp/staging-app.html -w '%{http_code}' --max-time 15 "$STAGING_WEB_URL/app/" || true)"
+            if test "$CONFIG_CODE" = "200" &&
+               test "$HEALTH_CODE" = "200" &&
+               test "$ROOT_CODE" = "200" &&
+               test "$APP_CODE" = "200" &&
+               grep -Fq '"environment":"staging"' /tmp/staging-runtime-config.js &&
+               grep -Fq "$STAGING_WEB_URL" /tmp/staging-runtime-config.js &&
+               ! grep -Fq "nuevo-amanecer-pos-prod" /tmp/staging-runtime-config.js &&
+               node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("/tmp/staging-web-health.json","utf8"));if(x.ok!==true||x.environment!=="staging"||x.service!=="nuevo-amanecer-pos-staging"||x.d1!=="ok")process.exit(2)' &&
+               grep -Fq "Nuevo Amanecer POS" /tmp/staging-root.html &&
+               grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html; then
+              break
+            fi
+            if test "$web_attempt" = "20"; then
+              echo "STAGING web propagation/smoke failed config=$CONFIG_CODE health=$HEALTH_CODE root=$ROOT_CODE app=$APP_CODE" >&2
+              exit 1
+            fi
+            sleep 3
+          done
           curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/auth/session" >/tmp/staging-web-session.json
           curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/read/canonical/status" >/tmp/staging-web-status.json
           node -e 'const fs=require("node:fs");const s=JSON.parse(fs.readFileSync("/tmp/staging-web-session.json","utf8"));const x=JSON.parse(fs.readFileSync("/tmp/staging-web-status.json","utf8"));if(typeof s.session_id!=="string"||!s.session_id||x.authority!=="canonical"||x.mode!=="ACTIVE"||x.promotion_id!=="staging-synthetic-promotion-v1")process.exit(2)'
-          curl --fail --silent --show-error -o /tmp/staging-root.html "$STAGING_WEB_URL/"
-          curl --fail --silent --show-error -o /tmp/staging-app.html "$STAGING_WEB_URL/app/"
-          grep -Fq "Nuevo Amanecer POS" /tmp/staging-root.html
-          grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/staging-app.html
 
       - name: Publish smoke-verified immutable release candidate
         working-directory: tools/cloudflare-lab
