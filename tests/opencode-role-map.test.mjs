@@ -40,7 +40,7 @@ test('planner reviewer tester remain non-writers and zone-aware', () => {
     const value = read(agents[role]);
     assert.match(value, /edit: deny/);
     assert.match(value, /CANON/);
-    assert.match(value, /LAB/);
+    assert.match(value, /PREVIEW/);
     assert.match(value, /SHADOW/);
   }
 });
