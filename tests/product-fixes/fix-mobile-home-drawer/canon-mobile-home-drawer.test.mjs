@@ -108,3 +108,18 @@ test('approved visual refinement keeps phone chrome compact and professional',()
   assert.match(css,/\.na-mobile-quick-icon[\s\S]{0,400}font-size\s*:\s*0/,'quick-action emoji glyphs must be visually replaced');
   assert.match(css,/\.na-mobile-drawer-icon[\s\S]{0,400}font-size\s*:\s*0/,'drawer emoji glyphs must be visually replaced');
 });
+
+test('approved reference icon family replaces legacy mobile emoji artwork',()=>{
+  assert.match(css,/PR #431 — reference icon family/);
+  assert.ok(css.includes('#pageMenu .quick-stats .qs-icon {font-size:0!important'),'summary emoji glyphs must be hidden');
+  for(const token of [
+    '#pageMenu .quick-stats .qs-card:nth-child(1) .qs-icon {background-color:#e6f8f1!important;background-image:url("data:image/svg+xml,',
+    '#pageMenu .quick-stats .qs-card:nth-child(2) .qs-icon {background-color:#e8f2ff!important;background-image:url("data:image/svg+xml,',
+    '#pageMenu .quick-stats .qs-card:nth-child(3) .qs-icon {background-color:#fff3df!important;background-image:url("data:image/svg+xml,',
+    '#pageMenu .quick-stats .qs-card:nth-child(4) .qs-icon {background-color:#ffe8ea!important;background-image:url("data:image/svg+xml,'
+  ]) assert.ok(css.includes(token),'each summary card must use its approved local SVG');
+  for(const color of ['#22c8ad','#438ff0','#8b6ff0','#ff7a38','#20bcd2','#f4b714']) assert.ok(css.includes('background-color:'+color+'!important'));
+  assert.ok(css.includes('.na-mobile-drawer-link:nth-child(3) .na-mobile-drawer-icon {background-image:url("data:image/svg+xml,'));
+  assert.ok(css.includes('.na-mobile-drawer-icon {font-size:0!important;background-color:transparent!important'));
+});
+
