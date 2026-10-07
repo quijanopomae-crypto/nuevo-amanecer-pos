@@ -80,6 +80,9 @@ test('staging smoke proves canonical reads, LAB-route isolation, runtime config 
   assert.match(workflow,/for web_attempt in \$\(seq 1 20\)/);
   assert.match(workflow,/STAGING web propagation\/smoke failed/);
   assert.match(workflow,/\$STAGING_WEB_URL\/health/);
+  assert.match(workflow,/for proxy_attempt in \$\(seq 1 20\)/);
+  assert.match(workflow,/STAGING_WEB_PROXY_READY/);
+  assert.match(workflow,/STAGING same-origin proxy propagation failed/);
   assert.match(workflow,/\$STAGING_WEB_URL\/auth\/session/);
   assert.match(workflow,/\$STAGING_WEB_URL\/read\/canonical\/status/);
   assert.match(workflow,/ROOT_CODE=.*staging-root\.html.*http_code.*STAGING_WEB_URL/);
