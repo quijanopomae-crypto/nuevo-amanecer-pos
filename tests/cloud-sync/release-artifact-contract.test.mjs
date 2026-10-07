@@ -85,6 +85,9 @@ test('production release promotes verified STAGING bytes and never rebuilds stat
   assert.doesNotMatch(workflow,/sed -i .*__BUILD_HASH__/);
   assert.doesNotMatch(workflow,/d1 (?:execute|migrations|create|delete)/);
   assert.doesNotMatch(workflow,/tools\/cloudflare-prod/);
+  assert.match(workflow,/r2 object get .* --remote --file=\/tmp\/release-candidate\.json/);
+  assert.match(workflow,/r2 object get .* --remote --file=\/tmp\/na-prod-site\.tar\.gz/);
+  assert.doesNotMatch(workflow,/r2 object get .* --file=\/tmp\/(?:release-candidate\.json|na-prod-site\.tar\.gz)(?!.*--remote)/);
   assert.match(workflow,/grep -Fq "\$PROD_WEB_URL" \/tmp\/prod-runtime-config\.js/);
   assert.match(workflow,/\$PROD_WEB_URL\/health/);
   assert.match(workflow,/service!==\"nuevo-amanecer-pos-prod\"/);
