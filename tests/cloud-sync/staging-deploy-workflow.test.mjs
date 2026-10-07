@@ -100,5 +100,7 @@ test('staging smoke proves canonical reads, LAB-route isolation, runtime config 
   assert.match(workflow,/grep -Fq "Nuevo Amanecer POS" \/tmp\/staging-root\.html/);
   assert.match(workflow,/grep -Fq "Nuevo Amanecer — ERP &amp; POS" \/tmp\/staging-app\.html/);
   assert.doesNotMatch(workflow,/\$STAGING_WEB_URL\/.*\| grep -Fq/);
-  assert.match(workflow,/r2 object put/);
+  assert.match(workflow,/r2 object put "\$STAGING_R2_BUCKET\/\$ARTIFACT_KEY" --remote --file=\/tmp\/na-site\.tar\.gz/);
+  assert.match(workflow,/r2 object put "\$STAGING_R2_BUCKET\/\$CANDIDATE_KEY" --remote --file=\/tmp\/release-candidate\.json/);
+  assert.doesNotMatch(workflow,/r2 object put[^\n]*--local/);
 });
