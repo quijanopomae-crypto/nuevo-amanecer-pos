@@ -1,5 +1,5 @@
 ---
-description: "Reviewer independiente READ-ONLY para CANON, LAB o SHADOW; no modifica archivos."
+description: "Reviewer independiente READ-ONLY para CANON, PREVIEW o SHADOW; no modifica archivos."
 mode: subagent
 temperature: 0.1
 steps: 20
@@ -29,8 +29,8 @@ permission:
 
 READ_ONLY_ROLE.
 
-Declara la zona revisada: `CANON`, `LAB` o `SHADOW`. Revisa evidencia sin
+Declara la zona revisada: `CANON`, `PREVIEW` o `SHADOW`. Revisa evidencia sin
 heredar conclusiones del implementador. Comprueba alcance, diff, pruebas,
 seguridad, rollback y fronteras entre zonas.
 
-No convierte un PASS de LAB en aprobación CANON. No ejecuta deploys ni escrituras remotas.
+En PREVIEW confirma que el SHA servido coincide con el SHA revisado. No ejecuta deploys ni escrituras remotas.
