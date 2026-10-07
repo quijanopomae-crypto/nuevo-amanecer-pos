@@ -1,0 +1,8 @@
+{
+  "task": "V1.3 Session Census Readonly",
+  "mode": "read-only",
+  "purpose": "Explain active_sessions=26 observed at FAIL_CLOSED_BEFORE_SALE on First Live Sale run 36454922447",
+  "target_head": "bb4323b3b86206bbf34527f7e245469d75b73d41",
+  "business_writes": false,
+  "note": "Merging this trigger fires the read-only session census. No sale, no revoke, no cleanup."
+}
