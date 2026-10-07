@@ -9,15 +9,28 @@ const expenseBridgeSource=readFileSync('POS/js/sync/canonical-expense-bridge.js'
 const indexSource=readFileSync('POS/index.html','utf8');
 const swSource=readFileSync('POS/sw.js','utf8');
 
-test('canonical client reads all operational routes only through the existing read pipeline',()=>{
+test('canonical client maps every operational entity through fallback reads and bulk snapshot',()=>{
+  const compact=source.replace(/\s+/g,'');
   for(const pair of [
+    "['cash-sessions','cashSessions']",
+    "['financial-events','financialEvents']",
+    "['expenses','expenses']",
     "['sales','sales']",
     "['sale-items','saleItems']",
     "['inventory-movements','inventoryMovements']",
-    "['cash-movements','cashMovements']",
-    "['cash-sessions', 'cashSessions']",
-    "['financial-events', 'financialEvents']"
-  ]) assert.ok(source.includes(pair),pair);
+    "['cash-movements','cashMovements']"
+  ]) assert.ok(compact.includes(pair),pair);
+  assert.match(source,/coreEntries\.concat\(activeEntries\)\.map\(readEntry\)/,'ACTIVE fallback must keep one complete parallel read wave');
+  assert.match(source,/endpoint \+ '\/read\/canonical\/snapshot'/,'bulk path must use the canonical snapshot endpoint');
+  for(const marker of [
+    'next.cashSessions = snap.cash_sessions',
+    'next.financialEvents = snap.financial_events',
+    'next.expenses = snap.expenses',
+    'next.sales = snap.sales',
+    'next.saleItems = snap.sale_items',
+    'next.inventoryMovements = snap.inventory_movements',
+    'next.cashMovements = snap.cash_movements'
+  ]) assert.ok(source.includes(marker),marker);
 });
 
 test('operational arrays survive replica cache round-trips without becoming required for old caches',()=>{
@@ -74,7 +87,7 @@ test('operational adapter preserves sale totals, mixed payment parts and exact c
 
 test('canonical client treats expenses as a durable command and replicated operational entity',()=>{
   assert.match(source,/['"]expense\.create['"]/);
-  assert.match(source,/\['expenses','expenses'\]/);
+  assert.match(source,/\['expenses'\s*,\s*'expenses'\]/);
   assert.match(source,/expenses:\s*copy\(value\.expenses \|\| \[\]\)/);
   assert.match(source,/expenses:\s*copy\(replica\.expenses \|\| \[\]\)/);
   assert.match(source,/function makeExpensePayload\(input\)/);
