@@ -181,6 +181,14 @@
     var gate = canonicalSaleGate();
     if (!gate.ready) { failClosed(gate.reason, null); return; }
     try {
+      var client = root.NuevoAmanecerCanonical;
+      var pendingGate = client && typeof client.pendingSnapshot === 'function' ? client.pendingSnapshot() : null;
+      if (pendingGate && pendingGate.state === 'PENDING' && pendingGate.last_error) {
+        failClosed('CANON rechazó una venta pendiente (' + String(pendingGate.last_error) + '). No se encolan más ventas hasta recuperar o descartar esa operación.', null);
+        return;
+      }
+    } catch (_) {}
+    try {
       if (typeof root.isModuleLocked !== 'function' || root.isModuleLocked('ventas', { canonicalSaleCapture: true })) {
         var lockReason = browserLockReason();
         failClosed(lockReason ? 'Venta bloqueada: ' + lockReason : 'Las ventas están bloqueadas', null); return;

@@ -91,7 +91,43 @@
       if (pending) {
         var payload = pending.payload;
         if (pending.command !== 'sale.create' || !payload || payload.operation_id !== head.operation_id || payload.sale_id !== head.sale_id) return result('BLOCKED_FOREIGN_PENDING', processed, current.intents.length, 'FOREIGN_PENDING');
-        if (pending.last_error) return result('BLOCKED_PENDING_REJECTED', processed, current.intents.length, String(pending.last_error));
+        if (pending.last_error) {
+          // Safe sale rejects (409/400) prove no D1 commit. Clear journal and
+          // rebuild createSale with fresh ESR (same operation_id), or drop the
+          // head when the Worker still rejects — never freeze the whole drain.
+          var rejectReason = String(pending.last_error);
+          var discarded = false;
+          if (typeof canonical.discardRejectedSale === 'function') {
+            try { discarded = await canonical.discardRejectedSale(); } catch (_) { discarded = false; }
+          }
+          if (!discarded) return result('BLOCKED_PENDING_REJECTED', processed, current.intents.length, rejectReason);
+          var recoverable = rejectReason === 'stale_stock' || rejectReason === 'stock_revision_conflict';
+          if (recoverable) {
+            try {
+              if (typeof canonical.refresh === 'function') await canonical.refresh();
+              await canonical.createSale(head);
+            } catch (error) {
+              var afterRetry = canonical.pendingSnapshot();
+              if (afterRetry && afterRetry.command === 'sale.create' && afterRetry.payload &&
+                  afterRetry.payload.operation_id === head.operation_id && afterRetry.payload.sale_id === head.sale_id && afterRetry.last_error) {
+                try { if (typeof canonical.discardRejectedSale === 'function') await canonical.discardRejectedSale(); } catch (_) {}
+                removeHead(head);
+                var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+                if (runtime && typeof runtime.notify === 'function') runtime.notify('Venta ' + head.sale_id + ' rechazada por CANON (' + rejectReason + '). No se descontó stock; vuelve a cobrarla.', 'error');
+                if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
+                continue;
+              }
+              return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'CREATE_UNACKNOWLEDGED'));
+            }
+            if (!matching(canonical.receiptSnapshot(), head)) return result('WAITING', processed, parseStored().intents.length, 'RECEIPT_NOT_CONFIRMED');
+            removeHead(head); processed += 1; continue;
+          }
+          removeHead(head);
+          var runtimeDrop = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+          if (runtimeDrop && typeof runtimeDrop.notify === 'function') runtimeDrop.notify('Venta ' + head.sale_id + ' rechazada por CANON (' + rejectReason + '). No se descontó stock.', 'error');
+          if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-sale-projection'));
+          continue;
+        }
         try { await canonical.retryPending(); } catch (error) { return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'RETRY_FAILED')); }
         if (!matching(canonical.receiptSnapshot(), head)) return result('WAITING', processed, parseStored().intents.length, 'RECEIPT_NOT_CONFIRMED');
         removeHead(head); processed += 1; continue;
@@ -103,7 +139,12 @@
         await canonical.createSale(head);
       } catch (error) {
         var afterFailure = canonical.pendingSnapshot();
-        if (afterFailure && afterFailure.command === 'sale.create' && afterFailure.payload && afterFailure.payload.operation_id === head.operation_id && afterFailure.payload.sale_id === head.sale_id) return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'CREATE_UNACKNOWLEDGED'));
+        if (afterFailure && afterFailure.command === 'sale.create' && afterFailure.payload && afterFailure.payload.operation_id === head.operation_id && afterFailure.payload.sale_id === head.sale_id) {
+          // Safe 409/400 rejects leave last_error; loop again so discard+retry
+          // runs in this same syncLocked pass instead of freezing until next sync.
+          if (afterFailure.last_error) continue;
+          return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'CREATE_UNACKNOWLEDGED'));
+        }
         if (afterFailure && (afterFailure.command !== 'sale.create' || !afterFailure.payload || afterFailure.payload.operation_id !== head.operation_id || afterFailure.payload.sale_id !== head.sale_id)) return result('BLOCKED_FOREIGN_PENDING', processed, parseStored().intents.length, 'FOREIGN_PENDING');
         return result('WAITING', processed, parseStored().intents.length, String(error && (error.code || error.message) || 'CREATE_FAILED'));
       }
