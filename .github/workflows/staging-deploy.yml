@@ -266,9 +266,21 @@ jobs:
             fi
             sleep 3
           done
-          curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/auth/session" >/tmp/staging-web-session.json
-          curl --fail --silent --show-error -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/read/canonical/status" >/tmp/staging-web-status.json
-          node -e 'const fs=require("node:fs");const s=JSON.parse(fs.readFileSync("/tmp/staging-web-session.json","utf8"));const x=JSON.parse(fs.readFileSync("/tmp/staging-web-status.json","utf8"));if(typeof s.session_id!=="string"||!s.session_id||x.authority!=="canonical"||x.mode!=="ACTIVE"||x.promotion_id!=="staging-synthetic-promotion-v1")process.exit(2)'
+          for proxy_attempt in $(seq 1 20); do
+            SESSION_CODE="$(curl -sS -o /tmp/staging-web-session.json -w '%{http_code}' --max-time 15 -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/auth/session" || true)"
+            STATUS_CODE="$(curl -sS -o /tmp/staging-web-status.json -w '%{http_code}' --max-time 15 -H "Authorization: Bearer $TOKEN" "$STAGING_WEB_URL/read/canonical/status" || true)"
+            if test "$SESSION_CODE" = "200" &&
+               test "$STATUS_CODE" = "200" &&
+               node -e 'const fs=require("node:fs");const s=JSON.parse(fs.readFileSync("/tmp/staging-web-session.json","utf8"));const x=JSON.parse(fs.readFileSync("/tmp/staging-web-status.json","utf8"));if(typeof s.session_id!=="string"||!s.session_id||x.authority!=="canonical"||x.mode!=="ACTIVE"||x.promotion_id!=="staging-synthetic-promotion-v1")process.exit(2)'; then
+              echo "STAGING_WEB_PROXY_READY attempt=$proxy_attempt"
+              break
+            fi
+            if test "$proxy_attempt" = "20"; then
+              echo "STAGING same-origin proxy propagation failed session=$SESSION_CODE status=$STATUS_CODE" >&2
+              exit 1
+            fi
+            sleep 3
+          done
 
       - name: Publish smoke-verified immutable release candidate
         working-directory: tools/cloudflare-lab
