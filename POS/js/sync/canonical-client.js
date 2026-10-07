@@ -269,24 +269,26 @@
         });
       }
       var coreEntries = [['products', 'products'], ['customers', 'customers'], ['credits', 'credits'], ['credit-payments', 'payments'], ['credit-accounts', 'creditAccounts']];
-      applyEntries(await Promise.all(coreEntries.map(readEntry)));
-      var operationalSeed = operationalBootstrapSeed(data, statusMeta);
-      next.sales = operationalSeed.sales; next.saleItems = operationalSeed.saleItems; next.inventoryMovements = operationalSeed.inventoryMovements;
-      next.cashMovements = operationalSeed.cashMovements; next.cashSessions = operationalSeed.cashSessions; next.financialEvents = operationalSeed.financialEvents; next.expenses = operationalSeed.expenses;
-      next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
-      if (statusMeta.mode === 'ACTIVE') next.financial_revision = statusMeta.financial_revision;
+      var activeEntries = [['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents'], ['expenses', 'expenses'], ['sales', 'sales'], ['sale-items', 'saleItems'], ['inventory-movements', 'inventoryMovements'], ['cash-movements', 'cashMovements']];
+      var cache = await localReplica();
       if (statusDigest) next.canonical_digest = statusDigest;
-      var cache = await localReplica(), bootstrapReplica = replicaOf(next);
-      if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
-      if (cache && cacheIsNewer(cache, bootstrapReplica)) {
-        publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
-      }
-      publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
-
       if (statusMeta.mode === 'ACTIVE') {
-        applyEntries(await Promise.all([['cash-sessions', 'cashSessions'], ['financial-events', 'financialEvents']].map(readEntry)));
-        applyEntries(await Promise.all([['expenses','expenses']].map(readEntry)));
-        applyEntries(await Promise.all([['sales','sales'], ['sale-items','saleItems'], ['inventory-movements','inventoryMovements'], ['cash-movements','cashMovements']].map(readEntry)));
+        // FASE6: one parallel wave after status (was 4 serial waves). Same routes,
+        // same per-page financial_revision/digest checks; single final publish so
+        // commerce is not briefly forced into CANONICAL_READ_ONLY mid-refresh.
+        applyEntries(await Promise.all(coreEntries.concat(activeEntries).map(readEntry)));
+      } else {
+        applyEntries(await Promise.all(coreEntries.map(readEntry)));
+        var operationalSeed = operationalBootstrapSeed(data, statusMeta);
+        next.sales = operationalSeed.sales; next.saleItems = operationalSeed.saleItems; next.inventoryMovements = operationalSeed.inventoryMovements;
+        next.cashMovements = operationalSeed.cashMovements; next.cashSessions = operationalSeed.cashSessions; next.financialEvents = operationalSeed.financialEvents; next.expenses = operationalSeed.expenses;
+        next.read_only = true; next.mode = 'CANONICAL_READ_ONLY'; next.minimum_client_contract = statusMeta.minimum_client_contract;
+        var bootstrapReplica = replicaOf(next);
+        if (!validReplica(bootstrapReplica)) fail('INVALID_CANONICAL_REPLICA');
+        if (cache && cacheIsNewer(cache, bootstrapReplica)) {
+          publishReplica(cache, 'cache'); replicaState.validation = 'remote-older'; notifyReplicaUpdate(); return snapshot();
+        }
+        publishReplica(bootstrapReplica, 'bootstrap'); notifyReplicaUpdate();
       }
       if (binding && !changed) assertBinding(expected);
       next.read_only = statusMeta.read_only; next.mode = statusMeta.mode; next.minimum_client_contract = statusMeta.minimum_client_contract;
