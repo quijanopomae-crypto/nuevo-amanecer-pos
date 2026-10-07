@@ -1,0 +1,79 @@
+{
+  "schema": "nuevo-amanecer.lab-skill-preflight/v1",
+  "task_id": "LAB-SMALL-CREDIT-DUPLICATE-AMOUNT-TEST-FIX-001",
+  "base_ref": "25ca79216d4d173f2474ecfddc4e52f3e1d5092c",
+  "phase": "BEFORE_WRITE",
+  "status": "SKILL_PREFLIGHT_PASS",
+  "applies_to_all_writers": true,
+  "writer_classes": [
+    "ChatGPT",
+    "GitHub connector",
+    "OpenCode",
+    "Claude",
+    "DeepSeek",
+    "Codex",
+    "human-assisted agents",
+    "future agents"
+  ],
+  "skills": {
+    "impact-analysis": {
+      "path": ".agents/skills/impact-analysis/SKILL.md",
+      "git_blob_sha": "f330c05452b494a0b96e3e71c15ba0f8650c6a61"
+    },
+    "cross-module-impact": {
+      "path": ".agents/skills/cross-module-impact/SKILL.md",
+      "git_blob_sha": "bc83fce054ed1b22d1710c4a8d1b5cc1e82e45ea"
+    },
+    "lab-scope-guard": {
+      "path": ".agents/skills/lab-scope-guard/SKILL.md",
+      "git_blob_sha": "d25ed517b74f61424ae6863709b8f59b8f7497f6"
+    },
+    "credits-integrity": {
+      "path": ".agents/skills/credits-integrity/SKILL.md",
+      "git_blob_sha": "91324e72831aded8c703e6dac009654212ff041f"
+    },
+    "lab-feature-edit": {
+      "path": ".agents/skills/lab-feature-edit/SKILL.md",
+      "git_blob_sha": "33575c01e450315a50247395b17e23f2cd1a7526"
+    }
+  },
+  "analysis": {
+    "OBJECTIVE": "Test-only repair for duplicated amount validation.",
+    "READS": [
+      "POS LAB Mobile run 36255297175",
+      "tests/laboratorio-client-credit-accounts-v2.test.mjs"
+    ],
+    "WRITES": [
+      "test 27 only"
+    ],
+    "DOM_AFFECTED": [
+      "None"
+    ],
+    "STATE_AFFECTED": [
+      "None"
+    ],
+    "STORAGE_AFFECTED": [
+      "None"
+    ],
+    "DOMAIN_INVARIANTS": [
+      "Runtime unchanged",
+      "Financial logic unchanged",
+      "CANON unchanged"
+    ],
+    "CROSS_MODULE_IMPACT": [
+      "None"
+    ],
+    "RISKS": [
+      "None beyond preserving test intent"
+    ],
+    "ROLLBACK": [
+      "Revert test-only PR"
+    ],
+    "TESTS": [
+      "preflight",
+      "full LAB suite",
+      "POS LAB Mobile",
+      "Pages"
+    ]
+  }
+}
