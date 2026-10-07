@@ -187,13 +187,29 @@ jobs:
           grep -Fq "$TARGET_SHA" tools/cloudflare-pos-web/_site/index.html
           grep -Fq "$TARGET_SHA" tools/cloudflare-pos-web/_site/app/sw.js
 
+      - name: Render STAGING web service binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const {readFileSync,writeFileSync}=require('node:fs');
+          const src='tools/cloudflare-staging/wrangler.web.template.jsonc';
+          const out='tools/cloudflare-staging/wrangler.web.generated.jsonc';
+          const config=JSON.parse(readFileSync(src,'utf8'));
+          config.services=[{binding:'CANON_BACKEND',service:'nuevo-amanecer-pos-staging'}];
+          writeFileSync(out,JSON.stringify(config,null,2)+'\n');
+          NODE
+          grep -Fq '"CANON_BACKEND"' tools/cloudflare-staging/wrangler.web.generated.jsonc
+          grep -Fq '"nuevo-amanecer-pos-staging"' tools/cloudflare-staging/wrangler.web.generated.jsonc
+          ! grep -Fq '"nuevo-amanecer-pos-prod"' tools/cloudflare-staging/wrangler.web.generated.jsonc
+
       - name: Deploy exact web shell to isolated STAGING
         working-directory: tools/cloudflare-lab
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --dry-run --config ../cloudflare-staging/wrangler.web.template.jsonc
-          npx wrangler deploy --config ../cloudflare-staging/wrangler.web.template.jsonc
+          npx wrangler deploy --dry-run --config ../cloudflare-staging/wrangler.web.generated.jsonc
+          npx wrangler deploy --config ../cloudflare-staging/wrangler.web.generated.jsonc
 
       - name: Remote health, identity and exact-SHA smoke
         shell: bash
@@ -225,7 +241,7 @@ jobs:
           NODE
           CONFIG="$(curl --fail --silent --show-error "$STAGING_WEB_URL/runtime-config.js")"
           printf '%s' "$CONFIG" | grep -Fq '"environment":"staging"'
-          printf '%s' "$CONFIG" | grep -Fq "$STAGING_BACKEND_URL"
+          printf '%s' "$CONFIG" | grep -Fq "$STAGING_WEB_URL"
           ! printf '%s' "$CONFIG" | grep -Fq "nuevo-amanecer-pos-prod"
           curl --fail --silent --show-error -o /tmp/staging-root.html "$STAGING_WEB_URL/"
           curl --fail --silent --show-error -o /tmp/staging-app.html "$STAGING_WEB_URL/app/"
@@ -249,7 +265,7 @@ jobs:
           import { chromium } from '@playwright/test';
 
           const WEB=process.env.STAGING_WEB_URL;
-          const API=process.env.STAGING_BACKEND_URL;
+          const API=process.env.STAGING_WEB_URL;
           const TOKEN=process.env.STAGING_SESSION_TOKEN;
           const promotion=process.env.STAGING_PROMOTION_ID;
           const epoch=Number(process.env.STAGING_AUTHORITY_EPOCH);
