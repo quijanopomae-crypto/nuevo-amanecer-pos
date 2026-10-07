@@ -68,6 +68,8 @@ test('STAGING publishes release candidate only after smoke and seals exactly wha
   assert.match(workflow,/status.*STAGING_SMOKE_PASS/);
   assert.match(workflow,/release-candidates\/\$STAGING_TARGET_HEAD\/\$SITE_ARTIFACT_SHA256\/pos-site\.tar\.gz/);
   assert.match(workflow,/release-candidates\/\$STAGING_TARGET_HEAD\/candidate\.json/);
+  assert.match(workflow,/r2 object put "\$STAGING_R2_BUCKET\/\$ARTIFACT_KEY" --remote --file=\/tmp\/na-site\.tar\.gz/);
+  assert.match(workflow,/r2 object put "\$STAGING_R2_BUCKET\/\$CANDIDATE_KEY" --remote --file=\/tmp\/release-candidate\.json/);
 });
 
 test('production release promotes verified STAGING bytes and never rebuilds static POS', () => {
@@ -85,6 +87,8 @@ test('production release promotes verified STAGING bytes and never rebuilds stat
   assert.doesNotMatch(workflow,/sed -i .*__BUILD_HASH__/);
   assert.doesNotMatch(workflow,/d1 (?:execute|migrations|create|delete)/);
   assert.doesNotMatch(workflow,/tools\/cloudflare-prod/);
+  assert.match(workflow,/r2 object get "\$ARTIFACT_BUCKET\/\$CANDIDATE_KEY" --remote --file=\/tmp\/release-candidate\.json/);
+  assert.match(workflow,/r2 object get "\$ARTIFACT_BUCKET\/\$RELEASE_ARTIFACT_KEY" --remote --file=\/tmp\/na-prod-site\.tar\.gz/);
   assert.match(workflow,/grep -Fq "\$PROD_WEB_URL" \/tmp\/prod-runtime-config\.js/);
   assert.match(workflow,/\$PROD_WEB_URL\/health/);
   assert.match(workflow,/service!==\"nuevo-amanecer-pos-prod\"/);
