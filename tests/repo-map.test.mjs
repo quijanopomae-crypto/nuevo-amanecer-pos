@@ -19,18 +19,15 @@ test('REPO_MAP identifies current authority and release boundary', () => {
 test('REPO_MAP canonical navigation paths exist', () => {
   const required = [
     'POS',
-    'laboratorio/pos-lab',
     'tools/cloudflare-lab/src/worker.js',
     'tools/cloudflare-lab/src/lab-workspace.js',
     'infra/database/migrations',
     'tools/cloudflare-backup',
     '.opencode/ROLE_MAP.md',
     '.opencode/agents/pos-canon-implementer.md',
-    '.opencode/agents/pos-lab-implementer.md',
-    '.agents/skills/canon-promotion',
     'docs/V1.3_STATUS.md',
-    'docs/LABORATORIO_A_CANON.md',
-    'docs/LAB_CANON_MIRROR.md',
+    'docs/BRANCH_PREVIEW_WORKFLOW.md',
+    'docs/LAB_RETIREMENT.md',
     'docs/REMEDIATION_PHASE9_BRANCH_CLASSIFICATION.md',
     'docs/REMEDIATION_FINAL_VERIFICATION.md',
     'tests/cloud-sync',
@@ -41,7 +38,7 @@ test('REPO_MAP canonical navigation paths exist', () => {
   }
 });
 
-test('REPO_MAP preserves historical artifacts instead of declaring blind deletion', () => {
+test('REPO_MAP preserves unrelated historical artifacts while retiring active POS-LAB', () => {
   for (const path of [
     'CVV1.1.html',
     'CVV2.4_backup_antes_demo-1.html',
@@ -59,4 +56,15 @@ test('REPO_MAP records conservative branch hygiene', () => {
   assert.match(map, /merged_recoverable_refs: 24/);
   assert.match(map, /safe_file_deletions_demonstrated: 0/);
   assert.match(map, /remote_branch_refs_deleted: false/);
+});
+
+
+test('REPO_MAP declares branch-preview as active development model and POS-LAB as historical', () => {
+  assert.match(map, /retired_pos_lab:/);
+  assert.match(map, /authority: historical_read_only/);
+  assert.match(map, /branch_preview:/);
+  assert.match(map, /source: exact_pr_sha/);
+  assert.match(map, /preview_must_match_pr_sha: true/);
+  assert.doesNotMatch(map, /lab_mirror:/);
+  assert.doesNotMatch(map, /pages_lab:/);
 });
