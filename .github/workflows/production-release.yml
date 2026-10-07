@@ -79,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           CANDIDATE_KEY="release-candidates/$PROD_TARGET_HEAD/candidate.json"
-          npx wrangler r2 object get "$ARTIFACT_BUCKET/$CANDIDATE_KEY" --file=/tmp/release-candidate.json
+          npx wrangler r2 object get "$ARTIFACT_BUCKET/$CANDIDATE_KEY" --remote --file=/tmp/release-candidate.json
           node <<'NODE'
           const { readFileSync, appendFileSync } = require("node:fs");
           const c = JSON.parse(readFileSync("/tmp/release-candidate.json","utf8"));
@@ -109,7 +109,7 @@ jobs:
           set -euo pipefail
           rm -rf /tmp/na-prod-release /tmp/na-prod-site.tar.gz /tmp/na-prod-tar-list.txt
           mkdir -p /tmp/na-prod-release
-          npx wrangler r2 object get "$ARTIFACT_BUCKET/$RELEASE_ARTIFACT_KEY" --file=/tmp/na-prod-site.tar.gz
+          npx wrangler r2 object get "$ARTIFACT_BUCKET/$RELEASE_ARTIFACT_KEY" --remote --file=/tmp/na-prod-site.tar.gz
           test "$(sha256sum /tmp/na-prod-site.tar.gz | awk '{print $1}')" = "$RELEASE_ARTIFACT_SHA256"
           tar -tzf /tmp/na-prod-site.tar.gz > /tmp/na-prod-tar-list.txt
           node <<'NODE'
