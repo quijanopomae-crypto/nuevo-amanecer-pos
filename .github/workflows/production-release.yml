@@ -174,7 +174,10 @@ jobs:
                grep -Fq "Nuevo Amanecer — ERP &amp; POS" /tmp/prod-app.html &&
                grep -Fq "$PROD_TARGET_HEAD" /tmp/prod-sw.js &&
                grep -Fq '"environment":"production"' /tmp/prod-runtime-config.js &&
-               grep -Fq "nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev" /tmp/prod-runtime-config.js &&
+               grep -Fq "$PROD_WEB_URL" /tmp/prod-runtime-config.js &&
+               ! grep -Fq "nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev" /tmp/prod-runtime-config.js &&
+               curl --fail --silent --show-error "$PROD_WEB_URL/health" >/tmp/prod-health.json &&
+               node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("/tmp/prod-health.json","utf8"));if(x.ok!==true||x.environment!=="production"||x.service!=="nuevo-amanecer-pos-prod"||x.d1!=="ok")process.exit(2)' &&
                grep -Fiq "cache-control: no-store" /tmp/prod-root.headers; then
               echo "PRODUCTION_ARTIFACT_PROMOTION_PASS target=$PROD_TARGET_HEAD"
               exit 0
