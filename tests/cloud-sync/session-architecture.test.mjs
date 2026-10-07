@@ -9,8 +9,6 @@ const activeAuthFiles = [
   'tools/cloudflare-lab/src/a6-commerce.js',
   'tools/cloudflare-lab/src/a6-financial.js',
   'POS/js/sync/outbox.js',
-  'laboratorio/pos-lab/js/lab-workspace.js',
-  '.github/workflows/deploy-lab-cloud.yml',
   'tools/owner-finalize-v1.3.ps1',
   'tools/cloudflare-lab/.dev.vars.example',
 ];
@@ -45,27 +43,20 @@ test('worker exchanges one activation secret for persistent sessions', () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS auth_sessions/);
 });
 
-test('browser clients persist session token and never persist activation secret', () => {
+test('CANON browser client persists session token and never persists activation secret', () => {
   const outbox = readFileSync('POS/js/sync/outbox.js', 'utf8');
-  const lab = readFileSync('laboratorio/pos-lab/js/lab-workspace.js', 'utf8');
   assert.match(outbox, /\/auth\/activate/);
   assert.match(outbox, /remember: true/);
   assert.match(outbox, /authorization.*Bearer/i);
   const commandBuilder = outbox.slice(outbox.indexOf('function saleCommand'), outbox.indexOf('function initializeBaseline'));
   assert.doesNotMatch(commandBuilder, /device_id|deviceId/);
   assert.match(outbox, /version: 3/);
-  assert.match(lab, /naLabActivationSecret/);
-  assert.match(lab, /sessionToken/);
-  assert.match(lab, /authorization.*Bearer/i);
-  assert.doesNotMatch(lab, /localStorage\.setItem\([^\n]*activation/i);
   assert.doesNotMatch(outbox, /localStorage\.setItem\([^\n]*activation/i);
 });
 
-test('deployment binds activation secret and does not provision a device', () => {
-  const deploy = readFileSync('.github/workflows/deploy-lab-cloud.yml', 'utf8');
+test('owner finalizer keeps activation secret setup without retired LAB deployment', () => {
   const finalizer = readFileSync('tools/owner-finalize-v1.3.ps1', 'utf8');
-  assert.match(deploy, /POS_ACTIVATION_SECRET/);
-  assert.match(deploy, /wrangler secret put POS_ACTIVATION_SECRET/);
   assert.match(finalizer, /gh secret set POS_ACTIVATION_SECRET/);
+  assert.doesNotMatch(finalizer, /deploy-lab-cloud/);
   assert.doesNotMatch(finalizer, /provision-lab-device/);
 });
