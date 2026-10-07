@@ -19,8 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      TARGET_SHA: 450f2d11503d25443225af24316fe1c61c81677f
-      TARGET_BRANCH: perf/outbox-stale-stock-fix-v13
+      TARGET_SHA: 58074e6252a336f67a742186f5479f867ac6e8ab
+      TARGET_BRANCH: fix/release-pipeline-same-origin-proxy-20261007
       BASE_BRANCH: feature/v1.3-mobile-cloud
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -187,29 +187,13 @@ jobs:
           grep -Fq "$TARGET_SHA" tools/cloudflare-pos-web/_site/index.html
           grep -Fq "$TARGET_SHA" tools/cloudflare-pos-web/_site/app/sw.js
 
-      - name: Render STAGING web service binding
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE'
-          const {readFileSync,writeFileSync}=require('node:fs');
-          const src='tools/cloudflare-staging/wrangler.web.template.jsonc';
-          const out='tools/cloudflare-staging/wrangler.web.generated.jsonc';
-          const config=JSON.parse(readFileSync(src,'utf8'));
-          config.services=[{binding:'CANON_BACKEND',service:'nuevo-amanecer-pos-staging'}];
-          writeFileSync(out,JSON.stringify(config,null,2)+'\n');
-          NODE
-          grep -Fq '"CANON_BACKEND"' tools/cloudflare-staging/wrangler.web.generated.jsonc
-          grep -Fq '"nuevo-amanecer-pos-staging"' tools/cloudflare-staging/wrangler.web.generated.jsonc
-          ! grep -Fq '"nuevo-amanecer-pos-prod"' tools/cloudflare-staging/wrangler.web.generated.jsonc
-
       - name: Deploy exact web shell to isolated STAGING
         working-directory: tools/cloudflare-lab
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --dry-run --config ../cloudflare-staging/wrangler.web.generated.jsonc
-          npx wrangler deploy --config ../cloudflare-staging/wrangler.web.generated.jsonc
+          npx wrangler deploy --dry-run --config ../cloudflare-staging/wrangler.web.template.jsonc
+          npx wrangler deploy --config ../cloudflare-staging/wrangler.web.template.jsonc
 
       - name: Remote health, identity and exact-SHA smoke
         shell: bash
