@@ -5,10 +5,11 @@
   "target_branch": "feature/v1.3-mobile-cloud",
   "target_head": "e7c2b9cd96869bfe1c2830f3a0d8f0cb30f8fb8e",
   "requested_action": "promote-staging-artifact",
-  "requested_reason": "Promote the immutable STAGING candidate validated by run 37676760093 for exact target e7c2b9cd96869bfe1c2830f3a0d8f0cb30f8fb8e. Candidate smoke, same-origin proxy, activation propagation and artifact publication all passed. Deploy verified static site bytes only; no production D1 writes.",
-  "staging_run_id": 37676760093,
+  "requested_reason": "Retry production promotion using the remote-R2 candidate published by STAGING run 37677602182 after PR #444 fixed R2 persistence. Promote exact verified static bytes only; no production D1 writes.",
+  "staging_run_id": 37677602182,
   "artifact_sha256": "95dfc87466ab6d3ed8e7060b3e40e77b3e5e592d201caa6859d28b6dec90f3f0",
   "site_manifest_sha256": "2d668155959201b4460e91eb1e964787927904fea43f6bf11aff438ef5cd179d",
   "production_d1_writes_allowed": false,
-  "one_shot": true
+  "one_shot": true,
+  "retry_attempt": 1
 }
