@@ -3,12 +3,12 @@
   "authorized": true,
   "authorized_by": "owner",
   "target_branch": "feature/v1.3-mobile-cloud",
-  "target_head": "e8fb2db963141301a258c023204355a16c707d29",
+  "target_head": "213b18534dd05313651134c57a19a40f00959429",
   "requested_action": "deploy-staging",
-  "requested_reason": "Phase 5 build-once validation: deploy exact merged target to isolated STAGING, smoke it, then seal and publish immutable release candidate.",
-  "phase": "5",
+  "requested_reason": "Owner-authorized release candidate build for merged PR #432 plus release-pipeline fix PR #434. Deploy exact target to isolated STAGING, run canonical/same-origin smoke, seal immutable artifact, and publish candidate for production promotion.",
+  "phase": "release-candidate",
   "production_resources_allowed": false,
   "data_policy": "synthetic-only",
   "retry_attempt": 0,
-  "trigger_base": "e8fb2db963141301a258c023204355a16c707d29"
+  "trigger_base": "213b18534dd05313651134c57a19a40f00959429"
 }
