@@ -83,6 +83,7 @@ jobs:
             tests/product-fixes/canonical-ui-contract.test.mjs \
             tests/repo-map.test.mjs \
             tests/opencode-role-map.test.mjs \
+            tests/owner-finalizer.test.mjs \
             tests/security-secret-separation.test.mjs
 
       - name: Install Cloudflare test dependencies
