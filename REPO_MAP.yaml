@@ -37,13 +37,10 @@ zones:
     source: exact_pr_sha
     persistent_product_copy: false
     merge_authority: owner_only
-  backend_runtime_historical_path:
+  backend_runtime_legacy_path:
     path: tools/cloudflare-lab/
     authority: canon_backend_and_test_tooling
-    note: historical_name_do_not_delete_or_rename_in_lab_retirement
-  cloudflare_lab:
-    path: tools/cloudflare-lab/
-    authority: canon_backend_and_test_tooling_historical_name
+    note: historical_name_do_not_delete_or_rename_in_pos_lab_retirement
     worker: tools/cloudflare-lab/src/worker.js
     workspace: tools/cloudflare-lab/src/lab-workspace.js
     migrations: infra/database/migrations/
@@ -90,8 +87,10 @@ cloud_data:
     credential: R2_CANON_READ_TOKEN
     worker_binding: forbidden
   secrets:
-    lab_import_hmac: LAB_IMPORT_HMAC_SECRET
     pos_activation_secret: POS_ACTIVATION_SECRET
+    historical_lab_import_hmac:
+      name: LAB_IMPORT_HMAC_SECRET
+      status: retired_not_managed_by_current_owner_finalizer
     values_in_git: forbidden
 
 v1_3_runtime:
@@ -176,7 +175,7 @@ owner_finalizer:
   script: tools/owner-finalize-v1.3.ps1
   instructions: docs/OWNER_FINALIZATION.md
   recovery_drill_workflow: .github/workflows/owner-backup-recovery-drill.yml
-  status: LEGACY_OWNER_FINALIZER_REQUIRES_UPDATE_AFTER_LAB_RETIREMENT
+  status: UPDATED_FOR_POS_LAB_RETIREMENT
 
 
 motion:
