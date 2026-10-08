@@ -833,8 +833,13 @@
   }
 }
 
-/* Payment modal must render above the V2 financial workspace but below security overlays. */
+/* Credit dialogs replace the workspace visually, preserving its navigation state.
+   Keep them above app navigation and below master security overlays. */
+#pageClientes .na-client-account-screen.na-client-workspace-suspended{display:none!important}
 #mPagoCred{z-index:1300}
+#mCred{z-index:1300}
+#mEvaluacionCredito.modal-overlay,#mLineaCreditoManual.modal-overlay{z-index:1300!important}
+#mCreditoDetalle.modal-overlay{z-index:1300!important}
 
 
 /* CANON BATCH CREDIT PAYMENTS 001 — multi-select payment without a second ledger */

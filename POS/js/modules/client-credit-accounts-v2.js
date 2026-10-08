@@ -893,6 +893,7 @@ function labCategorySummary(client, category) {
     var screen = labScreen();
     if (!screen) return;
     var content = screen.querySelector('.na-client-account-content');
+    naSyncClientDialogVisibility();
     var wasHidden = screen.hidden;
     if (wasHidden) {
       if (content) content.innerHTML = html;
@@ -2140,7 +2141,37 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     return true;
   }
 
+  // Legacy credit dialogs and the V2 workspace share one navigation surface.
+  // Suspend presentation/input, preserving route, scroll and financial data.
+  var naClientDialogIds = ['mEvaluacionCredito','mLineaCreditoManual','mCred','mPagoCred','mCreditoDetalle'];
+  var naClientObservedDialogs = new Set();
+
+  function naSyncClientDialogVisibility() {
+    var page = document.getElementById('pageClientes');
+    var screen = page && page.querySelector('.na-client-account-screen');
+    if (!screen) return;
+    var suspended = naClientDialogIds.some(function (id) {
+      var modal = document.getElementById(id);
+      return !!(modal && modal.classList.contains('open'));
+    });
+    screen.classList.toggle('na-client-workspace-suspended', suspended);
+    screen.inert = suspended;
+  }
+
+  function naBindClientDialogs() {
+    if (typeof MutationObserver === 'function') {
+      naClientDialogIds.forEach(function (id) {
+        var modal = document.getElementById(id);
+        if (!modal || naClientObservedDialogs.has(modal)) return;
+        new MutationObserver(naSyncClientDialogVisibility).observe(modal, {attributes:true, attributeFilter:['class']});
+        naClientObservedDialogs.add(modal);
+      });
+    }
+    naSyncClientDialogVisibility();
+  }
+
   function naBindRuntime() {
+    naBindClientDialogs();
     if (typeof abrirCobro === 'function' && !abrirCobro.__naCreditAccountsV2) {
       var open=abrirCobro;
       abrirCobro=function(){var result=open.apply(this,arguments);setTimeout(labEnsureSaleDestinationUi,0);return result;};

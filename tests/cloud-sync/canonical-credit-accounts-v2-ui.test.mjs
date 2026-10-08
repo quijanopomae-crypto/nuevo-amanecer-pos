@@ -533,3 +533,36 @@ test('financial panel is hidden only after visual close and subviews slide direc
   assert.match(css,/na-client-view-enter-back/);
   assert.doesNotMatch(css,/#pageClientes\.na-client-detail-open #cliList\{visibility:hidden\}/);
 });
+
+
+test('credit dialogs suspend the financial workspace and restore its route on close',()=>{
+  const ctx=context();
+  const tokens=new Set();
+  const screen={hidden:false,scrollTop:123,innerHTML:'current credit line',inert:false,
+    classList:{toggle(name,on){if(on)tokens.add(name);else tokens.delete(name);},contains(name){return tokens.has(name);}}};
+  const page={querySelector(){return screen;},classList:{contains(){return true;}}};
+  const ids=['mEvaluacionCredito','mLineaCreditoManual','mCred','mPagoCred','mCreditoDetalle'];
+  const modals=new Map(ids.map(id=>[id,{open:false,classList:{contains(name){return name==='open' && modals.get(id).open;}}}]));
+  const callbacks=[];
+  ctx.MutationObserver=class {constructor(fn){this.fn=fn;}observe(node,options){assert.deepEqual(Array.from(options.attributeFilter),['class']);callbacks.push(this.fn);}};
+  ctx.document.getElementById=id=>id==='pageClientes'?page:(modals.get(id)||null);
+  ctx.dispatchEvent({type:'load'});
+  const notify=()=>callbacks.forEach(fn=>fn());
+  modals.get('mEvaluacionCredito').open=true;notify();
+  assert.equal(screen.inert,true,'underlying menu must not accept input');
+  assert.equal(tokens.has('na-client-workspace-suspended'),true,'underlying menu must be hidden');
+  modals.get('mEvaluacionCredito').open=false;modals.get('mLineaCreditoManual').open=true;notify();
+  assert.equal(screen.inert,true,'evaluation-to-manual transition must stay suspended');
+  modals.get('mLineaCreditoManual').open=false;notify();
+  assert.equal(screen.inert,false);
+  assert.equal(tokens.has('na-client-workspace-suspended'),false);
+  assert.equal(screen.hidden,false);
+  assert.equal(screen.scrollTop,123);
+  assert.equal(screen.innerHTML,'current credit line');
+  const observations=callbacks.length;
+  ctx.dispatchEvent({type:'pageshow'});
+  assert.equal(callbacks.length,observations,'runtime rebind must not duplicate observers');
+  for(const id of ids){modals.get(id).open=true;notify();assert.equal(screen.inert,true,id);modals.get(id).open=false;notify();assert.equal(screen.inert,false,id);}
+  screen.hidden=true;modals.get('mEvaluacionCredito').open=true;notify();modals.get('mEvaluacionCredito').open=false;notify();
+  assert.equal(screen.hidden,true,'closing a dialog must never reopen a closed workspace');
+});
