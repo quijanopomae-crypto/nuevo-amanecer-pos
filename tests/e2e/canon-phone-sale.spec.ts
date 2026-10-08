@@ -273,3 +273,15 @@ for(const width of [320,360,390,430]) test(`approved phone cash layout ${width}:
  await expect(page.locator('#mBtnConf')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('phone hides only redundant cash success hint and retains digital success feedback',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'HINT-DESIGN',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';_naRenderCashQuickOptions(7.7);document.getElementById('mMontoRec').value='7.70';calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ const hint=page.locator('#mPaymentHint');
+ await hint.evaluate(el=>{el.classList.add('ok');el.textContent='Monto exacto listo para cobrar.';});
+ await expect(hint).toBeHidden();
+ await page.locator('#mCobro [data-digital-group]').click();
+ await hint.evaluate(el=>{el.classList.add('ok');el.textContent='Pago digital verificado.';});
+ await expect(hint).toBeVisible();
+});
