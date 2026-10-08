@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Rediseño de cobro móvil CANON según referencia aprobada: tarjetas verticales Efectivo, Pago digital y Crédito; monto recibido, montos rápidos y vuelto visibles.",
-  "retry_attempt": 99,
-  "retry_reason": "Owner autorizó aplicar en CANON la referencia aprobada para teléfono. PR #476 integrado en db9ac0dec0aa3db2b1e73750e9cebe8457ee7a7c; CANON Critical CI #714 y E2E Smoke CI #271 verdes, revisión independiente aprobada.",
-  "requested_at_utc": "2026-10-08T16:27:00Z",
-  "target_head": "db9ac0dec0aa3db2b1e73750e9cebe8457ee7a7c"
+  "note": "Publicación CANON del panel móvil de cobro aprobado: efectivo recibido, tres montos rápidos, vuelto resaltado y Dividir pago debajo del efectivo. Solo Worker web; sin cambios de backend, datos, migraciones ni secretos.",
+  "retry_attempt": 100,
+  "retry_reason": "Owner autorizó llevar el diseño aprobado al CANON. PR #478 integrado en db390a6c4dfae7c57bb20bd1482059e4b632213a; CANON Critical CI #721 y E2E Smoke CI #278 verdes; revisión independiente y forense READY.",
+  "requested_at_utc": "2026-10-08T17:50:00Z",
+  "target_head": "db390a6c4dfae7c57bb20bd1482059e4b632213a"
 }
