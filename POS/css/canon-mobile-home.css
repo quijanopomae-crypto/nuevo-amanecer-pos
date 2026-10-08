@@ -45,6 +45,8 @@
   #pageMenu .na-mobile-activity-copy {min-width:0}
   #pageMenu .na-mobile-activity-copy strong {display:block;font-size:14px;line-height:1.35;font-weight:800;color:#18334a;overflow-wrap:anywhere}
   #pageMenu .na-mobile-activity-copy small {display:block;margin-top:3px;font-size:12px;line-height:1.4;color:#73869b;overflow-wrap:anywhere}
+  #pageMenu .na-mobile-activity-time {font-size:11px;color:#60778b}
+  #pageMenu .is-credit .na-mobile-activity-value {color:#88734b}
   #pageMenu .na-mobile-activity-value {align-self:start;padding-top:2px;color:#307b65;font-size:13px;font-weight:800;white-space:nowrap}
   #pageMenu .is-expense .na-mobile-activity-value {color:#ad7055}
 

@@ -132,3 +132,24 @@ test('hidden document pauses decorative movement and resumes without extra chrom
   await expect(page.locator('#naMobileLandscape')).toHaveAttribute('data-motion', 'running');
   await expect(page.locator('#naMobileMenuToggle')).toHaveCount(1);
 });
+
+test('mobile groups money and distinguishes credit with full Lima date and known time', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/index.html');
+  await expect(page.locator('#naMobileWelcome')).toBeVisible();
+  await page.evaluate(() => window.eval(`ventas=[{id:'V-065',metodo:'efectivo',timestamp:'2026-10-08T00:21:00Z',clienteNombre:'Cliente venta',total:6},{id:'V-064',metodoPago:'credito',timestamp:'2026-10-07T18:37:00Z',clienteNombre:'Cliente crédito',total:10}];cajMovs=[{id:'M-1',tipo:'cob',timestamp:'2026-10-07T18:38:00Z',clienteNombre:'Cliente abono',monto:18.5},{id:'M-2',tipo:'cob',canonicalDateKnown:false,fecha:'Fecha no registrada',monto:1}];document.getElementById('qsPorCobrar').textContent='S/ 22387.35';NA_MENU_NAVIGATION.refreshMobileHome();`));
+  await expect(page.locator('#qsPorCobrar')).toHaveText('S/ 22,387.35');
+  const rows = page.locator('#naMobileActivityList .na-mobile-activity-row');
+  await expect(rows.nth(0)).toContainText('Venta #065');
+  await expect(rows.nth(0)).toContainText('miércoles, 07/10/2026');
+  await expect(rows.nth(0)).toContainText('07:21 PM');
+  await expect(rows.nth(1)).toContainText('Abono registrado');
+  await expect(rows.nth(1)).toContainText('Cliente abono');
+  await expect(rows.nth(2)).toContainText('Venta a crédito #064');
+  await expect(rows.nth(3)).toContainText('Fecha y hora no registradas');
+  await page.evaluate(() => window.eval(`ventas=[{id:'V-1',fecha:'2026-10-07',hora:'12:00 AM',metodo:'credito',total:10},{id:'V-2',fecha:'2026-10-06',total:2}];cajMovs=[];NA_MENU_NAVIGATION.refreshMobileHome();`));
+  await expect(rows.nth(0)).toContainText('miércoles, 07/10/2026 · 12:00 AM');
+  await expect(rows.nth(1)).toContainText('martes, 06/10/2026 · Hora no registrada');
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await expect(page.locator('#qsPorCobrar')).toHaveText('S/ 22387.35');
+});

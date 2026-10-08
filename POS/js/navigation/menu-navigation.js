@@ -28,6 +28,7 @@
   var mobileActivityObserver = null;
   var mobileHomeObserver = null;
   var landscapeTimer = null;
+  var mobileMoneyOriginals = Object.create(null);
   var MOVE_TOLERANCE_PX = 12;
   var SYNTHETIC_CLICK_WINDOW_MS = 900;
 
@@ -387,14 +388,26 @@
   }
 
   function saleStamp(sale) {
-    if (!sale) return 0;
+    if (!sale || sale.canonicalDateKnown === false) return 0;
     var raw = sale.timestamp || sale.createdAt || sale.fechaCreacion || '';
+    // Naive legacy dates belong to the store's Lima timezone.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(raw)) raw += '-05:00';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) raw += 'T00:00:00-05:00';
     var parsed = Date.parse(raw);
     if (Number.isFinite(parsed)) return parsed;
     var date = String(sale.fecha || '');
-    var time = String(sale.hora24 || sale.hora || '00:00:00').slice(0, 8);
-    parsed = Date.parse(date + 'T' + (/^\d{2}:\d{2}/.test(time) ? time : '00:00:00'));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 0;
+    var time = typeof _naParseTime24 === 'function' ? _naParseTime24(sale.hora24 || sale.hora) : sale.hora24;
+    parsed = Date.parse(date + 'T' + (time || '00:00:00') + '-05:00');
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function activityWhen(source, stamp) {
+    if (!stamp || source.canonicalDateKnown === false) return 'Fecha y hora no registradas';
+    var date = new Date(stamp);
+    var label = date.toLocaleDateString('es-PE', { timeZone:'America/Lima', weekday:'long' }) + ', ' + date.toLocaleDateString('es-PE', { timeZone:'America/Lima', day:'2-digit', month:'2-digit', year:'numeric' });
+    var knownTime = /[T ]\d{2}:\d{2}/.test(String(source.timestamp || source.createdAt || source.fechaCreacion || '')) || !!(source.hora24 || source.hora);
+    return label + ' · ' + (knownTime ? date.toLocaleTimeString('en-US', { timeZone:'America/Lima', hour:'2-digit', minute:'2-digit', hour12:true }) : 'Hora no registrada');
   }
 
   function saleAmount(sale) {
@@ -406,13 +419,42 @@
   }
 
   function money(value) {
-    if (typeof fmt === 'function') {
-      try { return fmt(value); } catch (_) {}
-    }
-    return 'S/ ' + Number(value || 0).toFixed(2);
+    var amount = Number(value);
+    return 'S/ ' + (Number.isFinite(amount) ? amount : 0).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
   }
 
-  function activityRow(icon, title, detail, amount, tone) {
+  function syncMobileMoney() {
+    ['qsVentas','qsCaja','qsPorCobrar'].forEach(function (id) {
+      var element = document.getElementById(id);
+      if (!element) return;
+      var text = element.textContent;
+      var original = mobileMoneyOriginals[id];
+      if (!isMobile()) {
+        if (original && text === original.formatted) element.textContent = original.raw;
+        delete mobileMoneyOriginals[id];
+        return;
+      }
+      if (original && text === original.formatted) return;
+      var numeric = text.replace(/^S\/\s*/, '').replace(/,/g, '').trim();
+      if (!/^-?\d+(\.\d+)?$/.test(numeric)) return;
+      var formatted = money(Number(numeric));
+      mobileMoneyOriginals[id] = { raw:text, formatted:formatted };
+      if (text !== formatted) element.textContent = formatted;
+    });
+  }
+
+  function activityClient(movement) {
+    if (movement.clienteNombre) return String(movement.clienteNombre);
+    var credits = typeof creditos !== 'undefined' && Array.isArray(creditos) ? creditos : [];
+    var credit = credits.find(function (item) { return String(item.id) === String(movement.creditoId); });
+    if (credit && credit.clienteNombre) return String(credit.clienteNombre);
+    var clientId = movement.clienteId || (credit && (credit.clienteId || credit.cliId));
+    var customers = typeof clientes !== 'undefined' && Array.isArray(clientes) ? clientes : [];
+    var customer = clientId && customers.find(function (item) { return String(item.id) === String(clientId); });
+    return customer ? String(customer.nombre || '') : String(movement.desc || 'Movimiento de caja');
+  }
+
+  function activityRow(icon, title, detail, amount, tone, when) {
     var row = node('div', 'na-mobile-activity-row' + (tone ? ' is-' + tone : ''));
     var iconNode = node('span', 'na-mobile-activity-icon');
     iconNode.setAttribute('data-icon', icon);
@@ -420,6 +462,7 @@
     var copy = node('span', 'na-mobile-activity-copy');
     copy.appendChild(node('strong', '', title));
     copy.appendChild(node('small', '', detail));
+    if (when) copy.appendChild(node('small', 'na-mobile-activity-time', when));
     row.appendChild(iconNode);
     row.appendChild(copy);
     if (amount) row.appendChild(node('span', 'na-mobile-activity-value', amount));
@@ -427,13 +470,15 @@
   }
 
   function refreshMobileActivity() {
+    syncMobileMoney();
     if (!isMobile()) return;
     refreshMobileProfile();
     updateDrawerSelection();
     var list = document.getElementById('naMobileActivityList');
     if (!list || typeof list.replaceChildren !== 'function') return;
     var records = saleRows().filter(function (sale) { return sale && !sale.anulada; }).map(function (sale) {
-      return { stamp:saleStamp(sale), icon:'sale', tone:'sale', title:'Venta ' + String(sale.id || sale.ventaId || 'reciente').replace(/^V-/, '#'), detail:String(sale.clienteNombre || sale.customerName || 'Consumidor final'), amount:money(saleAmount(sale)) };
+      var credit = sale.metodo === 'credito' || sale.metodoPago === 'credito' || sale.estado === 'credito';
+      return { source:sale, stamp:saleStamp(sale), icon:credit ? 'people' : 'sale', tone:credit ? 'credit' : 'sale', title:(credit ? 'Venta a crédito ' : 'Venta ') + String(sale.id || sale.ventaId || 'reciente').replace(/^V-/, '#'), detail:String(sale.clienteNombre || sale.customerName || 'Consumidor final'), amount:money(saleAmount(sale)) };
     });
     var movements = typeof cajMovs !== 'undefined' ? cajMovs : root.cajMovs;
     (Array.isArray(movements) ? movements : []).forEach(function (movement) {
@@ -441,13 +486,12 @@
       if (!movement || movement.ventaId || movement.anulado) return;
       var payment = movement.tipo === 'cob';
       var expense = movement.tipo === 'gas' || movement.tipo === 'egr';
-      records.push({ stamp:saleStamp(movement), icon:payment ? 'payment' : expense ? 'expense' : 'cash', tone:expense ? 'expense' : 'cash', title:payment ? 'Abono registrado' : expense ? 'Egreso registrado' : 'Ingreso de caja', detail:String(movement.desc || 'Movimiento de caja'), amount:money(movement.monto) });
+      records.push({ source:movement, stamp:saleStamp(movement), icon:payment ? 'payment' : expense ? 'expense' : 'cash', tone:payment ? 'payment' : expense ? 'expense' : 'cash', title:payment ? 'Abono registrado' : expense ? 'Egreso registrado' : 'Ingreso de caja', detail:activityClient(movement), amount:money(movement.monto) });
     });
     records.sort(function (a, b) { return b.stamp - a.stamp; });
     var fragment = document.createDocumentFragment ? document.createDocumentFragment() : node('div');
     records.slice(0, 6).forEach(function (record) {
-      var time = record.stamp ? new Date(record.stamp).toLocaleString('es-PE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
-      fragment.appendChild(activityRow(record.icon, record.title, record.detail + (time ? ' · ' + time : ''), record.amount, record.tone));
+      fragment.appendChild(activityRow(record.icon, record.title, record.detail, record.amount, record.tone, activityWhen(record.source, record.stamp)));
     });
     if (!records.length) fragment.appendChild(activityRow('sale', 'Sin movimientos recientes', 'La actividad aparecerá aquí al registrar movimientos.', '', 'muted'));
     list.replaceChildren(fragment);
@@ -591,7 +635,7 @@
     document.addEventListener('visibilitychange', syncMobileLandscape);
     if (typeof root.addEventListener === 'function') {
       root.addEventListener('resize', function () {
-        if (!isMobile()) closeMobileDrawer();
+        if (!isMobile()) { closeMobileDrawer(); syncMobileMoney(); }
         else ensureMobileHome();
         syncMobileLandscape();
       });
