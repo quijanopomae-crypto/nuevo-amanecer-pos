@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publicar carrito de actividad móvil aprobado: trazo fino, rejilla discreta y ruedas pequeñas; solo un SVG CSS.",
-  "retry_attempt": 85,
-  "retry_reason": "Owner aprobó la imagen y aplicación a CANON. 23 E2E PASS, revisión independiente sin P0/P1; integrar tras CI verde.",
-  "requested_at_utc": "2026-10-08T02:36:18.804Z",
-  "target_head": "9aa0856f4a189bcdc9d6284f7af0557aa18489ff"
+  "note": "Dejar un solo engranaje móvil: Configuración en drawer, ocultar duplicado de cabecera.",
+  "retry_attempt": 86,
+  "retry_reason": "Owner solicitó solo una tuerca. 23 E2E PASS en ocho anchos; revisión independiente sin P0/P1. Publicar tras CI verde.",
+  "requested_at_utc": "2026-10-08T02:59:27.790Z",
+  "target_head": "18b75f90cb3500cb23f528a813d329423c97a792"
 }
