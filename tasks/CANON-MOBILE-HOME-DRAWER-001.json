@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "task_id": "CANON-MOBILE-HOME-DRAWER-001",
+  "environment": "CANON",
+  "base_ref": "c73d5a5f64be6a9a16bd94b07f94535f9ae84c6c",
+  "objective": "Refinar exclusivamente Inicio y drawer móvil conforme al modelo aprobado: blanco, métricas legibles, iconos vectoriales mate de distintos colores suaves, acciones únicamente en drawer y paisaje por hora local/estación del hemisferio sur. Conservar >=768px, CANON, lógica y datos; continuar PR #431 sin merge ni deploy.",
+  "owner_authorization": "Solicitud explícita del propietario: implementar en feat/canon-mobile-home-drawer / PR #431 desde 848738a798a28eda92751dac95c79f6ca49b6ef9; no merge a feature/v1.3-mobile-cloud, no producción, no reemplazar CANON y mantener PC/tablet y negocio.",
+  "allowed_files": [
+    "tasks/CANON-MOBILE-HOME-DRAWER-001.json",
+    "POS/css/canon-mobile-home.css",
+    "POS/js/navigation/menu-navigation.js",
+    "POS/sw.js",
+    "tests/product-fixes/fix-mobile-home-drawer/canon-mobile-home-drawer.test.mjs",
+    "tests/product-fixes/fix-mobile-home-drawer/pos-reference-entry.test.mjs",
+    "tests/e2e/canon-mobile-home.spec.ts",
+    "tests/e2e/pos-reference-fidelity.spec.ts"
+  ],
+  "forbidden_files": [
+    "POS/index.html",
+    "POS/css/experience-v2/pages/menu.css",
+    "laboratorio/**",
+    "POS/css/canon-desktop-dashboard.css",
+    "POS/js/canon-desktop-dashboard.js",
+    "tools/cloudflare-lab/**",
+    "tools/cloudflare-prod/**",
+    "infra/**",
+    "secrets/**"
+  ],
+  "reads": [
+    "POS/index.html home actual y shell global",
+    "POS/js/navigation/menu-navigation.js navegación móvil segura existente",
+    "POS/sw.js contrato de shell/offline",
+    "POS/css/experience-v2/pages/menu.css y laboratorio/pos-lab/styles/pages/menu.css para preservar paridad byte-for-byte",
+    "POS/js/canon-desktop-dashboard.js y POS/css/canon-desktop-dashboard.css solo como frontera >=768px"
+  ],
+  "writes": [
+    "Decoración DOM mobile-only en menu-navigation.js sin cambiar navigate/mobileSafeNavigate ni negocio",
+    "Stylesheet mobile-only existente con SVG embebidos, tarjetas blancas y tipografía legible",
+    "Drawer único con acciones y descripción de módulo existente, selección, Escape y foco",
+    "Actividad real en lectura: ventas y movimientos de caja sin duplicar ventaId ni convertir métricas en eventos",
+    "Paisaje decorativo por hora local/estación sur, actualización por minuto, pausa fuera de Inicio y con documento oculto, prefers-reduced-motion",
+    "Pruebas móviles/PC/tablet y helper E2E Nueva venta dentro del drawer"
+  ],
+  "dom_affected": [
+    "#pageMenu en <=767px",
+    ".g-topbar en <=767px",
+    "nuevo #naMobileDrawer y overlay asociados"
+  ],
+  "state_affected": [],
+  "storage_affected": [],
+  "invariants": [
+    "PC y tablet >=768px conservan exactamente el dashboard actual.",
+    "No se modifica canon-desktop-dashboard.css ni canon-desktop-dashboard.js.",
+    "No se modifica el asset promovido POS/css/experience-v2/pages/menu.css ni su fuente LAB.",
+    "No se crean nuevas reglas comerciales ni nuevas páginas de negocio.",
+    "Las acciones rápidas reutilizan funciones/páginas ya existentes.",
+    "La navegación a módulos en móvil sigue usando el mismo NA_MENU_NAVIGATION.",
+    "No hay escrituras de datos, red, localStorage, D1 ni Turso desde el decorador móvil.",
+    "Compras, Proveedores y Finanzas no se presentan como módulos independientes porque CANON no expone páginas propias para ellos en el estado base.",
+    "POS/index.html permanece intacto; el stylesheet móvil se solicita solo en <=767px y POS/sw.js únicamente lo incorpora al shell precache para conservar offline.",
+    "Si un teléfono cruza a >=768px por rotación/redimensionado, el chrome móvil queda oculto y vuelve a dominar la interfaz tablet/escritorio existente."
+  ],
+  "acceptance_criteria": [
+    "<=767px: Inicio contiene saludo, paisaje, cuatro métricas y actividad; no hay acciones rápidas duplicadas ni grilla de módulos.",
+    "Un drawer contiene Inicio, Nueva venta (Punto de Venta), Ventas, Ingresar mercadería (Inventario), Buscar cliente (Clientes), Registrar abono (Cuentas por cobrar), Abrir / cerrar caja (Caja), Registrar gasto (Gastos) y Configuración.",
+    "Las acciones navegan a destinos existentes; no se ejecutan cobros ni escrituras desde el decorador.",
+    "El drawer cierra por selección, overlay y Escape; foco vuelve al toggle y Tab permanece dentro.",
+    "Perfil y saludo usan identidad cargada en lectura, sin nombres ni roles hardcodeados.",
+    "Iconos SVG locales de familia mate coherente, colores suaves diferentes; tarjetas blancas, texto oscuro.",
+    "Paisaje representa amanecer, mediodía, atardecer, noche y medianoche con transición suave según hora local del dispositivo y variaciones de verano/otoño/invierno/primavera del hemisferio sur.",
+    "El timer se limpia fuera de Inicio, al ocultar el documento y al cruzar >=768px; movimiento reducido elimina animaciones.",
+    "Actividad compacta muestra registros existentes y estado vacío real; no inventa movimientos ni repite métricas.",
+    "320/360/390/430px sin overflow horizontal; 768/1024/1366/1920px sin chrome móvil; rotación reversible.",
+    "POS/index.html, experiencia compartida, escritorio/tablet, negocio, almacenamiento, sincronización, infraestructura y LAB permanecen intactos.",
+    "El stylesheet y JS ya precacheados conservan recursos SVG/paisaje offline sin agregar requests.",
+    "Pruebas focales, regresiones y diff revisados; fallos existentes de otras suites se documentan sin cambiar módulos ajenos.",
+    "Actualizar solo la rama del PR #431; no merge, deploy, producción ni reemplazo CANON."
+  ],
+  "rollback": "Revertir el commit de esta continuación del PR #431. No hay cambios de datos, migraciones ni dependencias nuevas.",
+  "continuation_from": "848738a798a28eda92751dac95c79f6ca49b6ef9"
+}
