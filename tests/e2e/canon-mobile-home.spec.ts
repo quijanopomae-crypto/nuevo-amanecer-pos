@@ -137,6 +137,8 @@ test('mobile groups money and distinguishes credit with full Lima date and known
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/index.html');
   await expect(page.locator('#naMobileWelcome')).toBeVisible();
+  await page.waitForFunction(() => window.eval('_naFreeSaleShortcutState.ready'));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0))));
   await page.evaluate(() => window.eval(`ventas=[{id:'V-065',metodo:'efectivo',timestamp:'2026-10-08T00:21:00Z',clienteNombre:'Cliente venta',total:6},{id:'V-064',metodoPago:'credito',timestamp:'2026-10-07T18:37:00Z',clienteNombre:'Cliente crédito',total:10}];cajMovs=[{id:'M-1',tipo:'cob',timestamp:'2026-10-07T18:38:00Z',clienteNombre:'Cliente abono',monto:18.5},{id:'M-2',tipo:'cob',canonicalDateKnown:false,fecha:'Fecha no registrada',monto:1}];document.getElementById('qsPorCobrar').textContent='S/ 22387.35';NA_MENU_NAVIGATION.refreshMobileHome();`));
   await expect(page.locator('#qsPorCobrar')).toHaveText('S/ 22,387.35');
   const rows = page.locator('#naMobileActivityList .na-mobile-activity-row');
@@ -152,4 +154,22 @@ test('mobile groups money and distinguishes credit with full Lima date and known
   await expect(rows.nth(1)).toContainText('martes, 06/10/2026 · Hora no registrada');
   await page.setViewportSize({ width: 1024, height: 844 });
   await expect(page.locator('#qsPorCobrar')).toHaveText('S/ 22387.35');
+});
+
+test('mobile CSS loads in head and page/cart updates do not fade out', async ({ page }) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/index.html');
+  await expect(page.locator('#naMobileWelcome')).toBeVisible();
+  expect(await page.locator('#naMobileHomeBaseStyles').evaluate(el => el.parentElement?.tagName)).toBe('HEAD');
+  expect(await page.locator('#pageMenu').evaluate(el => {el.classList.add('na-enter-fade');return getComputedStyle(el).animationName;})).toBe('none');
+  await page.evaluate(() => {const el=document.createElement('span');el.id='motionProbe';el.className='na-cart-pulse';document.getElementById('pagePOS')?.append(el);});
+  expect(await page.locator('#motionProbe').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+});
+
+test('failed mobile enhancement cannot leave home invisible indefinitely', async ({ page }) => {
+  await page.setViewportSize({width:390,height:844});
+  await page.route('**/js/navigation/menu-navigation.js',route=>route.abort());
+  await page.goto('/index.html');
+  await expect(page.locator('#pageMenu')).toBeVisible({timeout:5000});
+  expect(await page.locator('#pageMenu').evaluate(el=>getComputedStyle(el).visibility)).toBe('visible');
 });

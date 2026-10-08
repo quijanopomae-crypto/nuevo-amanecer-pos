@@ -7,7 +7,6 @@
   const HOSTED_HOST = CONFIG && CONFIG.hostedHost;
   const BINDING_KEY = 'na_canonical_binding';
   const CREDENTIALS_KEY = 'na_cloud_sync_credentials';
-  const SHELL_CACHE_PREFIX = 'nuevo-amanecer-pos-shell-';
   const status = document.getElementById('status');
   const panel = document.getElementById('activatePanel');
   const input = document.getElementById('activationSecret');
@@ -30,12 +29,8 @@
           .map(registration => registration.unregister()));
       }
 
-      if ('caches' in window && typeof caches.keys === 'function') {
-        const names = await caches.keys();
-        await Promise.all(names
-          .filter(name => name.startsWith(SHELL_CACHE_PREFIX))
-          .map(name => caches.delete(name)));
-      }
+      // Unregistering does not release workers controlling other open tabs.
+      // Keep their shell files until the replacement worker activates safely.
 
       setStatus('Interfaz actualizada. Abriendo el POS con archivos nuevos…', 'ok');
       const nonce = Date.now().toString(36);
