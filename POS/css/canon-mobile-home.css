@@ -6,7 +6,7 @@
 #pageMenu .na-mobile-home-section { display:none }
 
 @media (max-width:767px) {
-  .g-topbar {height:60px;min-height:60px;padding:0 12px;gap:8px;background:#fff;border-bottom:1px solid #eef3f5;box-shadow:none}
+  .g-topbar {height:56px;min-height:56px;padding:0 12px;gap:8px;background:#fff;border-bottom:1px solid #eef3f5;box-shadow:none}
   .g-topbar .g-logo {min-width:0;gap:6px;flex:1}
   .g-topbar .g-logo-icon {width:36px;height:36px;flex:0 0 36px;font-size:0;background-color:transparent;border:0;box-shadow:none;background-repeat:no-repeat;background-position:center;background-size:contain}
   .g-topbar .g-logo-text {font-size:17px;font-weight:850;color:#087d89;letter-spacing:-.5px;white-space:nowrap}
@@ -16,24 +16,24 @@
   .g-topbar .back-btn {width:36px;min-width:36px;height:40px;padding:0;border:0;background:transparent;color:#15334b;font-size:0}
   .g-topbar .back-btn::before {content:'←';font-size:24px}
   .na-mobile-menu-toggle:focus-visible,.na-mobile-drawer button:focus-visible {outline:2px solid #168b91;outline-offset:2px}
-  #pageMenu .main-scroll.home-shell {max-width:none;padding:0 16px 32px;gap:16px;background:#fff}
+  #pageMenu .main-scroll.home-shell {max-width:none;padding:0 16px 32px;gap:12px;background:#fff}
   #pageMenu .hero-dashboard,#pageMenu .main-scroll>.section-label {display:none!important}
   #pageMenu .menu-modules-label {display:none!important}
   #pageMenu .modules-grid {display:none!important}
 
-  #pageMenu .na-mobile-welcome {display:flex;align-items:center;position:relative;isolation:isolate;min-height:120px;margin:0 -16px;padding:20px 20px;overflow:hidden;border:0;border-radius:0;box-shadow:none;background:#fff}
+  #pageMenu .na-mobile-welcome {display:flex;align-items:center;position:relative;isolation:isolate;min-height:90px;margin:0 -16px;padding:14px 20px;overflow:hidden;border:0;border-radius:0;box-shadow:none;background:#fff}
   #pageMenu .na-mobile-welcome-copy {position:relative;z-index:2;max-width:100%;pointer-events:none}
   #pageMenu .na-mobile-welcome h1 {margin:0 0 6px;color:#11233f;font-size:27px;line-height:1.15;font-weight:850;letter-spacing:-.8px;max-width:100%;overflow-wrap:anywhere}
   #pageMenu .na-mobile-welcome p {margin:0;color:#263e55;font-size:15px;line-height:1.4;font-weight:600}
-  #pageMenu .quick-stats {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0}
-  #pageMenu .qs-card {position:relative;display:grid;grid-template-columns:1fr;grid-template-rows:32px auto auto auto;align-content:start;gap:4px;min-height:150px;height:auto;padding:16px 14px;border:1px solid #e7eef2;border-radius:12px;background:#fff!important;box-shadow:0 3px 14px rgba(34,75,94,.035)}
+  #pageMenu .quick-stats {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}
+  #pageMenu .qs-card {position:relative;display:grid;grid-template-columns:minmax(0,1fr) 24px;grid-template-rows:auto auto auto;align-content:center;column-gap:6px;row-gap:5px;min-height:108px;height:auto;padding:12px;border:1px solid #e7eef2;border-radius:12px;background:#fff!important;box-shadow:0 3px 14px rgba(34,75,94,.035)}
   #pageMenu .qs-top {display:contents}
-  #pageMenu .qs-icon {grid-row:1;width:32px;height:32px;border-radius:0;font-size:0!important;color:transparent!important;background-color:transparent!important;background-repeat:no-repeat!important;background-position:center!important;background-size:contain!important}
-  #pageMenu .qs-val {grid-row:2;margin:4px 0 0;font-size:26px;font-weight:850;line-height:1.2;letter-spacing:-.6px;color:#11233f!important;overflow-wrap:anywhere}
-  #pageMenu .qs-label {grid-row:3;font-size:15px;font-weight:700;line-height:1.25;color:#263e55}
+  #pageMenu .qs-icon {grid-column:2;grid-row:2;align-self:center;justify-self:end;width:24px;height:24px;border-radius:0;font-size:0!important;color:transparent!important;background-color:transparent!important;background-repeat:no-repeat!important;background-position:center!important;background-size:contain!important}
+  #pageMenu .qs-val {grid-column:1 / -1;grid-row:1;min-width:0;margin:0;font-size:clamp(18px,5.1vw,22px);font-weight:850;line-height:1.2;letter-spacing:-.6px;color:#11233f!important;white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums}
+  #pageMenu .qs-label {grid-column:1;grid-row:2;font-size:14px;font-weight:700;line-height:1.25;color:#263e55}
   #pageMenu #qsCajaSub::before {content:"";display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:50%;background:#c98768}
   #pageMenu #qsCajaSub[data-state="open"]::before {background:#4b9f7d}
-  #pageMenu .qs-sub {grid-row:4;margin:0;font-size:12px;line-height:1.35;color:#73869b;font-weight:500;white-space:normal}
+  #pageMenu .qs-sub {grid-column:1 / -1;grid-row:3;margin:0;font-size:11px;line-height:1.35;color:#73869b;font-weight:500;white-space:normal}
   #pageMenu .na-mobile-home-section {display:block;margin-top:8px;padding:0;border:0;background:transparent;box-shadow:none;border-radius:0}
   #pageMenu .na-mobile-section-head {display:flex;align-items:center;gap:12px;margin:0 0 12px}
   #pageMenu .na-mobile-section-head::after {content:'';height:1px;flex:1;background:#e4ecef}
@@ -99,8 +99,8 @@
   .g-topbar .g-logo-text {font-size:15px}
   .g-topbar .g-logo-icon {width:30px;height:30px;flex-basis:30px}
   #pageMenu .main-scroll.home-shell {padding-right:12px;padding-left:12px}
-  #pageMenu .qs-card {padding:12px;min-height:144px}
-  #pageMenu .qs-val {font-size:22px}
+  #pageMenu .qs-card {padding:12px;min-height:108px}
+  #pageMenu .qs-val {font-size:16px}
   #pageMenu .qs-label {font-size:14px}
   #pageMenu .na-mobile-welcome h1 {font-size:25px}
 }
