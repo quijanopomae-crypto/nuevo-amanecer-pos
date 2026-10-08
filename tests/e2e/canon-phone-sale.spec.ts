@@ -89,3 +89,27 @@ test('closing camera while permission is pending stops late stream without addin
  await expect.poll(()=>page.evaluate(()=>(window as any).phoneStopped)).toBe(1);
  await expect(page.locator('.cart-item')).toHaveCount(0);
 });
+
+test('phone payment stays inside changing visual viewport, including keyboard and credit account',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.addInitScript(()=>{
+  const viewport=new EventTarget();
+  Object.assign(viewport,{height:760,offsetTop:0,scale:1});
+  Object.defineProperty(window,'visualViewport',{value:viewport,configurable:true});
+  (window as any).setPhoneVisibleArea=(height:number,offsetTop=0)=>{
+   Object.assign(viewport,{height,offsetTop});viewport.dispatchEvent(new Event('resize'));viewport.dispatchEvent(new Event('scroll'));
+  };
+ });
+ await page.goto('/index.html');await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`clientes=[{id:'VIEW-C',nombre:'Crédito prueba',lineaCreditoManualActiva:true,lineaCreditoManual:100}];document.getElementById('mVentaCliente').innerHTML='<option value="VIEW-C" selected>Crédito prueba</option>';document.getElementById('mVentaCliente').dispatchEvent(new Event('change'));`));
+ await expect(page.locator('#posPhoneAccount')).toBeVisible();
+ for(const [height,top] of [[760,0],[680,0],[400,35],[760,0]]){
+  await page.evaluate(([h,t])=>(window as any).setPhoneVisibleArea(h,t),[height,top]);
+  await expect.poll(async()=>{const r=await page.locator('#btnPagar').boundingBox();return !!r&&r.y>=top&&r.y+r.height<=height+top-8;}).toBe(true);
+  const r=await page.locator('#btnPagar').boundingBox();
+  expect(await page.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('#btnPagar'),{x:r!.x+r!.width/2,y:r!.y+r!.height/2})).toBe(true);
+ }
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pageClientes'));
+ await expect(page.locator('#pageClientes')).toBeVisible();
+ expect(await page.locator('#pageClientes').evaluate(el=>getComputedStyle(el).position)).not.toBe('fixed');
+});

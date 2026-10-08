@@ -1,6 +1,8 @@
 /* Phone mode uses the existing device classifier; tablet and PC retain their DOM/layout. */
 #posPhoneTitle,#posPhoneAdd,#posPhoneScan,#posPhoneAccount{display:none}
 #posPhoneCatalog:not([open]),#posPhoneCamera:not([open]){display:none}
+/* Fit the visible area, rather than the larger layout viewport behind browser/system UI. */
+body.na-pos-phone-device #pagePOS.phone-sale.active{position:fixed;left:0;right:0;top:var(--phone-visible-top,0px);height:var(--phone-visible-height,100dvh);min-height:0;max-height:var(--phone-visible-height,100dvh);overflow:hidden}
 body.na-pos-phone-device #pagePOS.phone-sale .pos-commandbar{display:grid!important;grid-template-columns:1fr!important;padding:10px 16px!important;gap:10px!important;background:#fff}
 body.na-pos-phone-device #pagePOS.phone-sale .pos-module-identity{height:38px;gap:10px}
 body.na-pos-phone-device #pagePOS.phone-sale #posPhoneTitle{display:block;font-size:22px;color:var(--pos-ref-ink);font-weight:800}
