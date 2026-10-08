@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Ayudas de Configuración móvil ocultas bajo icono de información en todas las categorías.",
-  "retry_attempt": 88,
-  "retry_reason": "Owner solicitó aplicar ayudas desplegables en todas las categorías. 36 E2E PASS; revisión independiente sin P0/P1; publicar tras CI verde.",
-  "requested_at_utc": "2026-10-08T11:36:11.675271+00:00",
-  "target_head": "d25dbfd0c2e78458f97c4c0d5495eef4cfe69fa7"
+  "note": "Venta compacta solo para teléfonos: cliente, Agregar y cámara; catálogo oculto. PC y tablet conservan interfaz.",
+  "retry_attempt": 89,
+  "retry_reason": "Owner autorizó merge y deploy de PR #456. CI del candidato SUCCESS; 11 E2E PASS sobre merge combinado.",
+  "requested_at_utc": "2026-10-08T11:52:17.173Z",
+  "target_head": "480535ba05f07b12025dd27b4e88e2f169b9edc6"
 }
