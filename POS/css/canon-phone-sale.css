@@ -171,3 +171,6 @@ body.na-pos-phone-device #mCobro .pay-modal-footer .pay-btn-secondary{border:1px
  body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-digital-group] .pml,
  body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="credito"] .pml{font-size:12px}
 }
+
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"].active{border:1px solid #9bdbd8;background:#e8f8f6;color:#0f766e}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"].active .pml{color:#0f766e}
