@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Dejar un solo engranaje móvil: Configuración en drawer, ocultar duplicado de cabecera.",
-  "retry_attempt": 86,
-  "retry_reason": "Owner solicitó solo una tuerca. 23 E2E PASS en ocho anchos; revisión independiente sin P0/P1. Publicar tras CI verde.",
-  "requested_at_utc": "2026-10-08T02:59:27.790Z",
-  "target_head": "18b75f90cb3500cb23f528a813d329423c97a792"
+  "note": "Configuración móvil compacta: datos editables primero, cabecera y tarjetas ajustadas.",
+  "retry_attempt": 87,
+  "retry_reason": "Continuación del ajuste CANON solicitado por owner. 31 E2E PASS en ocho anchos; revisión independiente sin P0/P1. Publicar tras CI verde.",
+  "requested_at_utc": "2026-10-08T10:51:07.661Z",
+  "target_head": "e685e251941591607524597a9c4c8751e62dce88"
 }
