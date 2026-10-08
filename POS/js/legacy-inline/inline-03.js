@@ -64,6 +64,37 @@ function _naCfgInfoHelp(){
   });
 }
 window.addEventListener('resize',_naCfgInfoHelp);
+// Keep accordion state only in memory, independently of saved business settings.
+const _naCfgAccordionState=new Map();
+function _naCfgAccordions(){
+  const cont=document.getElementById('cfgContent');if(!cont)return;
+  if(window.innerWidth>=768){
+    cont.querySelectorAll('.cfg-accordion-panel').forEach(panel=>{
+      const heading=panel.querySelector(':scope>.cfg-panel-title'),button=heading?.querySelector('.cfg-accordion-toggle'),body=panel.querySelector(':scope>.cfg-accordion-body');
+      if(button){const label=button.querySelector('.cfg-accordion-label');if(label)while(label.firstChild)heading.insertBefore(label.firstChild,button);button.remove();}
+      if(body){while(body.firstChild)panel.insertBefore(body.firstChild,body);body.remove();}
+      heading?.classList.remove('cfg-accordion-heading');panel.classList.remove('cfg-accordion-panel');
+    });
+    return;
+  }
+  cont.querySelectorAll('.cfg-panel').forEach((panel,index)=>{
+    if(panel.classList.contains('cfg-accordion-panel'))return;
+    const heading=panel.querySelector(':scope>.cfg-panel-title');if(!heading)return;
+    const key=currentCfgCategory+':'+heading.textContent.trim()+':'+index;
+    const button=document.createElement('button'),label=document.createElement('span'),body=document.createElement('div');
+    button.type='button';button.className='cfg-accordion-toggle';label.className='cfg-accordion-label';
+    Array.from(heading.childNodes).filter(node=>!(node.nodeType===1&&node.classList.contains('cfg-help-toggle'))).forEach(node=>label.append(node));
+    button.append(label);button.insertAdjacentHTML('beforeend','<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    body.className='cfg-accordion-body';body.id='cfgAccordionBody'+index;button.setAttribute('aria-controls',body.id);
+    Array.from(panel.childNodes).filter(node=>node!==heading).forEach(node=>body.append(node));
+    heading.prepend(button);heading.classList.add('cfg-accordion-heading');panel.append(body);panel.classList.add('cfg-accordion-panel');
+    const setOpen=open=>{body.hidden=!open;button.setAttribute('aria-expanded',String(open));_naCfgAccordionState.set(key,open);};
+    setOpen(_naCfgAccordionState.get(key)===true);
+    button.addEventListener('click',()=>setOpen(body.hidden));
+    heading.querySelectorAll('.cfg-help-toggle').forEach(help=>help.addEventListener('click',()=>{if(help.getAttribute('aria-expanded')==='true')setOpen(true);}));
+  });
+}
+window.addEventListener('resize',_naCfgAccordions);
 function abrirDisenadorTicket(){tkCurrentVenta={id:'V-000001',operation:'00000001',fecha:obtenerHoy(),hora:nowT(),cajero:appConfig.business?.cajero||'Frank',metodo:'efectivo',recibido:150,vuelto:11.5,anulada:false,items:[{name:'Arroz Costeño',qty:2,precio:7},{name:'Azúcar Rubia',qty:1,precio:6.5},{name:'Leche Gloria',qty:3,precio:5},{name:'Aceite Primor',qty:2,precio:9},{name:'Atún Florida',qty:5,precio:5}]};_naHydrateTicket();const editor=document.getElementById('editorPanel');if(editor)editor.style.display='block';const btn=document.getElementById('btnEditorToggle');if(btn)btn.textContent='👁 Vista previa';document.getElementById('mTicket').classList.add('open');renderTicketPreview();}
 renderCfgContent=function(cat){
   const cont=document.getElementById('cfgContent');if(!cont)return;

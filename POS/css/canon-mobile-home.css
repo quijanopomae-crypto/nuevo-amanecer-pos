@@ -7,6 +7,15 @@
 #pageConfig .cfg-help-toggle {display:none}
 
 @media (max-width:767px) {
+  #pageConfig .cfg-accordion-heading {display:flex;align-items:center;gap:4px;margin:0}
+  #pageConfig .cfg-accordion-toggle {display:flex;align-items:center;justify-content:space-between;gap:8px;flex:1;min-width:0;min-height:44px;border:0;padding:0;background:transparent;color:var(--dark);font:inherit;text-align:left;cursor:pointer}
+  #pageConfig .cfg-accordion-label {min-width:0;overflow-wrap:anywhere}
+  #pageConfig .cfg-accordion-toggle>svg {flex-shrink:0;transition:transform .15s ease}
+  #pageConfig .cfg-accordion-toggle[aria-expanded=true]>svg {transform:rotate(180deg)}
+  #pageConfig .cfg-accordion-toggle:focus-visible {outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+  #pageConfig .cfg-accordion-body {padding-top:8px}
+  #pageConfig .cfg-accordion-body[hidden] {display:none!important}
+
   #pageConfig .cfg-help-toggle {display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;width:32px;height:32px;margin-left:4px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--slate);cursor:pointer;flex-shrink:0}
   #pageConfig .cfg-help-toggle:hover,#pageConfig .cfg-help-toggle[aria-expanded=true] {background:var(--teal-light);color:var(--teal-dark)}
   #pageConfig .cfg-help-toggle:focus-visible {outline:2px solid var(--teal);outline-offset:2px}
