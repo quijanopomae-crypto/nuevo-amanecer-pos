@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON PR #431: inicio móvil limpio, iconos SVG con colores suaves, acciones en drawer y paisaje por hora y estación; PC/tablet y lógica comercial intactos.",
-  "retry_attempt": 80,
-  "retry_reason": "PR #431 merged at 5f7a377c9c686b2a8ad7efdef6199ce7ef89fda5; CANON Critical CI post-merge 37710801366 PASS. El owner autorizó explícitamente Aplicalo para publicar la interfaz en CANON.",
-  "requested_at_utc": "2026-10-08T01:02:49.610Z",
-  "target_head": "5f7a377c9c686b2a8ad7efdef6199ce7ef89fda5"
+  "note": "Publicar diseño compacto móvil aprobado: tarjetas de 108px, iconos a la derecha, importe en una línea y bienvenida más baja; solo CSS móvil.",
+  "retry_attempt": 81,
+  "retry_reason": "El owner aprobó la imagen y autorizó Implementalo. Pruebas móviles, responsive y animaciones PASS; 28 pruebas de producto/despliegue PASS. Publicar tras CI del PR.",
+  "requested_at_utc": "2026-10-08T01:24:14.766Z",
+  "target_head": "7599201b95874fa8c1b8c985729e51dbb0c63c2a"
 }
