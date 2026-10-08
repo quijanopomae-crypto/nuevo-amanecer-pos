@@ -1915,18 +1915,12 @@ function labCreditDisplayMoment(cr, fallbackDate) {
     var section = document.getElementById('mCreditoSection');
     if (!section) return false;
     var wrap = section.querySelector('.na-credit-destination');
-    if (!wrap) {
-      wrap = document.createElement('div');
-      wrap.className = 'na-credit-destination';
-      section.appendChild(wrap);
-    }
     var client = labSaleClient();
     var currentId = client ? String(client.id) : null;
     if (labSaleCreditState.clientId !== currentId) {
       labSaleCreditState = { clientId:currentId, categoryId:NA_SMALL_ACCOUNT_ID, installmentCount:1 };
     }
-    wrap.innerHTML = labSaleDestinationHtml(client);
-    if (client && labSelectedCategory(client).mode === 'separate') requestAnimationFrame(labRenderInstallmentDates);
+    if (wrap) wrap.remove();
     return true;
   }
 
