@@ -156,14 +156,18 @@ for (const width of [320,360,390,430,768,1024,1366,1920]) {
   });
 }
 
-test('Android desktop-site keeps mobile drawer on a wide viewport', async ({ browser }) => {
+test('Android desktop-site keeps phone sale and hidden catalog on a wide viewport', async ({ browser }) => {
   const context=await browser.newContext({viewport:{width:1280,height:900},screen:{width:390,height:844},hasTouch:true,isMobile:true});
   const page=await context.newPage(); await prepare(page);
   await expect(page.locator('body')).toHaveClass(/na-pos-phone-device/);
+  await expect(page.locator('#posArea')).toBeHidden();
+  await expect(page.locator('#cartItems')).toBeVisible();
+  expect(await page.locator('#cartDrawer').evaluate(el=>getComputedStyle(el).position)).toBe('relative');
+  await page.locator('#posPhoneAdd').click();
+  await expect(page.locator('#posPhoneCatalog')).toBeVisible();
   expect(await page.locator('#posArea').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(2);
-  expect(await page.locator('#cartDrawer').evaluate(el=>getComputedStyle(el).position)).toBe('absolute');
-  await page.locator('.cart-fab').click();
-  await expect(page.locator('.cart-mobile-close')).toBeVisible();
+  await page.locator('#posPhoneCatalogClose').click();
+  await expect(page.locator('#posArea')).toBeHidden();
   await context.close();
 });
 

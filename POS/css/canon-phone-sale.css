@@ -1,0 +1,61 @@
+/* Phone mode uses the existing device classifier; tablet and PC retain their DOM/layout. */
+#posPhoneTitle,#posPhoneAdd,#posPhoneScan,#posPhoneAccount{display:none}
+#posPhoneCatalog:not([open]),#posPhoneCamera:not([open]){display:none}
+body.na-pos-phone-device #pagePOS.phone-sale .pos-commandbar{display:grid!important;grid-template-columns:1fr!important;padding:10px 16px!important;gap:10px!important;background:#fff}
+body.na-pos-phone-device #pagePOS.phone-sale .pos-module-identity{height:38px;gap:10px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneTitle{display:block;font-size:22px;color:var(--pos-ref-ink);font-weight:800}
+body.na-pos-phone-device #pagePOS.phone-sale .pos-toolbar-actions{display:flex;width:100%;gap:10px;align-items:center}
+body.na-pos-phone-device #pagePOS.phone-sale .pos-toolbar-actions>.pos-runtime-status,
+body.na-pos-phone-device #pagePOS.phone-sale .cart-fab{display:none!important}
+body.na-pos-phone-device #pagePOS.phone-sale #posCustomerButton{display:flex;width:auto;max-width:none;min-width:0;flex:1;height:44px;padding:0;border:0;background:transparent;font-size:14px;gap:8px}
+body.na-pos-phone-device #pagePOS.phone-sale #posCustomerButton span:last-child{display:block}
+body.na-pos-phone-device #pagePOS.phone-sale #posCustomerButton::after{content:'⌄';color:#7b879a}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneAdd,
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneScan{display:inline-flex;align-items:center;justify-content:center;min-height:44px;border:0;background:transparent;color:var(--pos-ref-teal);font:700 14px 'Nunito',sans-serif;padding:0 4px;white-space:nowrap}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneScan{width:44px;border-left:1px solid var(--pos-ref-line);padding-left:10px}
+body.na-pos-phone-device #pagePOS.phone-sale svg{width:22px;height:22px;flex-shrink:0}
+body.na-pos-phone-device #pagePOS.phone-sale>.pos-body{display:flex!important;min-height:0;flex:1}
+body.na-pos-phone-device #pagePOS.phone-sale #cartDrawer{position:relative!important;inset:auto!important;right:auto!important;width:100%!important;height:100%!important;flex:1;border:0;box-shadow:none;transition:none;z-index:2}
+body.na-pos-phone-device #pagePOS.phone-sale #cartBackdrop{display:none!important}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-head{min-height:42px;padding:8px 16px;border:0}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-head-title{font-size:14px;text-transform:none;color:#7b879a;font-weight:600}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-head-title::first-letter{font-size:14px}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-head-actions{display:none}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-items{padding:0 16px}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-item{grid-template-columns:58px minmax(0,1fr) auto;grid-template-rows:auto auto;gap:6px 10px;min-height:106px;padding:12px 0;margin:0;border:0;border-bottom:1px solid var(--pos-ref-line);border-radius:0;box-shadow:none}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-item>div:first-child{width:58px;height:66px}
+body.na-pos-phone-device #pagePOS.phone-sale .ci-name{font-size:14px;line-height:1.3}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-line-unit{display:none}
+body.na-pos-phone-device #pagePOS.phone-sale .ci-price{display:block;font-size:12px;font-weight:500}
+body.na-pos-phone-device #pagePOS.phone-sale .ci-qty{gap:0;grid-row:2;align-self:end}
+body.na-pos-phone-device #pagePOS.phone-sale .qty-btn{width:34px;height:34px;border:1px solid #9bdbd8;background:#fff;color:var(--pos-ref-teal);border-radius:5px;font-size:20px}
+body.na-pos-phone-device #pagePOS.phone-sale .qty-num{width:30px;font-weight:600}
+body.na-pos-phone-device #pagePOS.phone-sale .ci-sub{grid-column:3;grid-row:2;font-size:16px;align-self:end;line-height:34px}
+body.na-pos-phone-device #pagePOS.phone-sale .btn-rm{grid-column:3;grid-row:1;justify-self:end;width:34px;height:34px}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-empty{background:transparent;border:0;font-size:14px}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-secondary-actions,
+body.na-pos-phone-device #pagePOS.phone-sale .total-row,
+body.na-pos-phone-device #pagePOS.phone-sale #btnRapido{display:none}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-totals{display:flex;justify-content:space-between;align-items:center;padding:10px 16px}
+body.na-pos-phone-device #pagePOS.phone-sale .total-main{display:flex;gap:8px;min-height:0;padding:0;background:transparent;color:var(--pos-ref-ink);font-size:19px}
+body.na-pos-phone-device #pagePOS.phone-sale .total-main>span:first-child{font-size:13px;color:#7b879a}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-count-line{font-size:13px;white-space:nowrap}
+body.na-pos-phone-device #pagePOS.phone-sale .cart-actions{display:block;padding:0 16px max(12px,env(safe-area-inset-bottom))}
+body.na-pos-phone-device #pagePOS.phone-sale #btnPagar{width:100%;min-height:48px;font-size:17px;font-weight:800}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneAccount:not([hidden]){display:block;width:100%;padding:12px 16px;text-align:left;border:0;border-top:1px solid var(--pos-ref-line);background:#fff;color:var(--pos-ref-ink);font:600 13px 'Nunito',sans-serif}
+body.na-pos-phone-device #pagePOS.phone-sale dialog{position:fixed;inset:0;margin:auto;width:calc(100% - 16px);max-width:600px;max-height:calc(100dvh - 24px);padding:12px;border:1px solid var(--pos-ref-line);border-radius:12px;background:#fff;color:var(--pos-ref-ink);box-sizing:border-box;overflow:auto}
+body.na-pos-phone-device #pagePOS.phone-sale dialog::backdrop{background:rgba(15,23,42,.4)}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+body.na-pos-phone-device #pagePOS.phone-sale dialog button{min-height:40px;border:1px solid var(--pos-ref-line);background:#fff;border-radius:6px;color:var(--pos-ref-teal);padding:6px 10px}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-tools{display:flex;flex-wrap:wrap;gap:8px}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-tools .pos-search-box{width:100%;flex:auto;height:44px}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-tools input{font-size:16px}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-tools #btnVentaLibre,
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-tools #btnMayorista{width:auto;min-width:80px;padding:8px}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-tools button span{display:inline}
+body.na-pos-phone-device #pagePOS.phone-sale .phone-catalog-body{display:flex;height:min(55dvh,480px);margin-top:12px;min-height:160px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .p-price-badge{transform:none;left:6px!important}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .products-area{grid-template-columns:repeat(2,minmax(0,1fr))!important;min-width:0}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCamera video{display:block;width:100%;max-height:50dvh;background:#0f172a;border-radius:8px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCameraStatus{font-size:14px}
+@media(max-width:340px){body.na-pos-phone-device #pagePOS.phone-sale .ci-sub{font-size:14px}body.na-pos-phone-device #pagePOS.phone-sale .cart-item{grid-template-columns:44px minmax(0,1fr) auto;gap:6px}body.na-pos-phone-device #pagePOS.phone-sale .cart-item>div:first-child{width:44px}}
