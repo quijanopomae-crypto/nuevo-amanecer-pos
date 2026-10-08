@@ -113,3 +113,21 @@ test('phone payment stays inside changing visual viewport, including keyboard an
  await expect(page.locator('#pageClientes')).toBeVisible();
  expect(await page.locator('#pageClientes').evaluate(el=>getComputedStyle(el).position)).not.toBe('fixed');
 });
+
+for(const width of [320,390,430]) test(`long customer name ${width} keeps add and scanner fully visible`,async({page})=>{
+ await page.setViewportSize({width,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ const name='ALCY STALIM CASTRO PONCE Y APELLIDO EXTRA LARGO';
+ await page.evaluate(name=>window.eval(`clientes=[{id:'LONG-C',nombre:${JSON.stringify(name)}}];`),name);
+ await page.locator('#posCustomerButton').click();
+ await page.locator('.na-client-picker-row').filter({hasText:name}).click();
+ await expect(page.locator('#posCustomer')).toHaveText(name);
+ for(const id of ['posCustomerButton','posPhoneAdd','posPhoneScan']){
+  const box=await page.locator('#'+id).boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(width);
+  expect(await page.evaluate(({x,y,id})=>!!document.elementFromPoint(x,y)?.closest('#'+id),{x:box!.x+box!.width/2,y:box!.y+box!.height/2,id})).toBe(true);
+ }
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.locator('#posPhoneScan').click();await expect(page.locator('#posPhoneCamera')).toBeVisible();await page.locator('#posPhoneCameraClose').click();
+ await page.locator('#posPhoneAdd').click();await expect(page.locator('#posPhoneCatalog')).toBeVisible();await page.locator('#posPhoneCatalogClose').click();
+ await page.locator('#posCustomerButton').click();await expect(page.locator('.na-client-picker-row').filter({hasText:name})).toBeVisible();
+});
