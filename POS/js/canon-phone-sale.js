@@ -6,6 +6,27 @@
     var toolbar = page.querySelector('.pos-commandbar'), actions = toolbar.querySelector('.pos-toolbar-actions');
     var phone = false, stream = null, cameraSession = 0, timer = 0;
     var rowButtons = new WeakMap();
+    var viewportFrame = 0;
+    function syncViewport() {
+      viewportFrame = 0;
+      var viewport = root.visualViewport;
+      if (!phone || !page.classList.contains('active') || (viewport && viewport.scale !== 1)) {
+        page.style.removeProperty('--phone-visible-height');
+        page.style.removeProperty('--phone-visible-top');
+        return;
+      }
+      var height = viewport ? viewport.height : root.innerHeight;
+      if (height > 0) page.style.setProperty('--phone-visible-height',height + 'px');
+      page.style.setProperty('--phone-visible-top',(viewport ? viewport.offsetTop : 0) + 'px');
+    }
+    function scheduleViewport() {
+      if (!viewportFrame) viewportFrame = root.requestAnimationFrame(syncViewport);
+    }
+    root.addEventListener('resize',scheduleViewport);
+    if (root.visualViewport) {
+      root.visualViewport.addEventListener('resize',scheduleViewport);
+      root.visualViewport.addEventListener('scroll',scheduleViewport);
+    }
     function node(tag, text, id) {
       var el = document.createElement(tag); if (text) el.textContent = text; if (id) el.id = id; return el;
     }
@@ -109,6 +130,7 @@
       var enabled = document.body.classList.contains('na-pos-phone-device');
       if (enabled === phone) { syncSale(); return; }
       phone = enabled; page.classList.toggle('phone-sale',phone);
+      scheduleViewport();
       if (phone) {
         movable.forEach(function (item,index) { (index < 3 ? catalogTools : catalogBody).appendChild(item.el); });
         pay.replaceChildren(label); syncSale();
@@ -128,7 +150,7 @@
     new MutationObserver(syncSale).observe(document.getElementById('posTotal'),{childList:true});
     document.getElementById('mVentaCliente').addEventListener('change',syncSale);
     root.addEventListener('na:canonical-updated',syncSale);
-    new MutationObserver(function () { if (!page.classList.contains('active')) { closeCatalog(); closeCamera(); } }).observe(page,{attributes:true,attributeFilter:['class']});
+    new MutationObserver(function () { scheduleViewport(); if (!page.classList.contains('active')) { closeCatalog(); closeCamera(); } }).observe(page,{attributes:true,attributeFilter:['class']});
     document.addEventListener('visibilitychange',function () { if (document.hidden) closeCamera(); });
     root.addEventListener('pagehide',stopCamera); syncDevice();
   }
