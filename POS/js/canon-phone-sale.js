@@ -174,7 +174,7 @@
     }
     dropdown.addEventListener('click',function (event) {
       if (phone && checkout.classList.contains('open') && event.target.closest('button')) {
-        root.cerrarModal('mCobro');
+        cerrarModal('mCobro');
       }
     },true);
     new MutationObserver(syncMenu).observe(checkout,{attributes:true,attributeFilter:['class']});
