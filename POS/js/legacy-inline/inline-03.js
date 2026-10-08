@@ -41,6 +41,29 @@ function _naCfgHead(icon,title,sub,pills=''){return `<div class="cfg-screen-head
 function _naCfgPill(text,tone=''){return `<span class="cfg-pill ${tone}">${text}</span>`;}
 function _naCfgField(label,id,value,placeholder='',type='text',full=false,hint=''){return `<div class="cfg-field ${full?'full':''}"><div class="cfg-field-label">${label}</div>${hint?`<div class="cfg-field-hint">${hint}</div>`:''}<input class="cfg-input" id="${id}" value="${_naEsc(value)}" placeholder="${_naEsc(placeholder)}" type="${type}"></div>`;}
 function _naCfgSetting(icon,title,desc,right){return `<div class="cfg-setting"><div class="cfg-setting-main"><div class="cfg-setting-icon">${icon}</div><div><div class="cfg-setting-title">${title}</div><div class="cfg-setting-desc">${desc}</div></div></div><div class="cfg-setting-tail">${right}</div></div>`;}
+// Presentation-only disclosures: preserve the original help nodes and controls.
+function _naCfgInfoHelp(){
+  const cont=document.getElementById('cfgContent');if(!cont)return;
+  if(window.innerWidth>=768){
+    cont.querySelectorAll('.cfg-help-toggle').forEach(button=>button.remove());
+    cont.querySelectorAll('.cfg-help-text').forEach(text=>{text.classList.remove('cfg-help-text','is-open');if(text.dataset.cfgHelpGeneratedId){text.removeAttribute('id');delete text.dataset.cfgHelpGeneratedId;}});
+    return;
+  }
+  const selectors='.cfg-screen-head-sub,.cfg-panel-sub,.cfg-setting-desc,.cfg-field-hint,.cfg-business-note,.cfg-action-desc,.cfg-overview-sub,.cfg-upload-box>.import-note,.credit-policy-field>small';
+  cont.querySelectorAll(selectors).forEach((text,index)=>{
+    if(text.classList.contains('cfg-help-text')||!text.textContent.trim())return;
+    const title=text.previousElementSibling;
+    const label=text.closest('.credit-policy-field')?.querySelector('label')||(title?.matches('.cfg-screen-head-title,.cfg-panel-title,.cfg-setting-title,.cfg-field-label,.cfg-action-title')?title:null);
+    const context=label?.textContent.trim()||text.closest('.cfg-panel')?.querySelector('.cfg-panel-title')?.textContent.trim()||'Configuración';
+    const button=document.createElement('button');button.type='button';button.className='cfg-help-toggle';
+    button.setAttribute('aria-label','Información: '+context);button.setAttribute('aria-expanded','false');
+    if(!text.id){text.id='cfgHelpText'+index;text.dataset.cfgHelpGeneratedId='true';}button.setAttribute('aria-controls',text.id);text.classList.add('cfg-help-text');
+    button.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="7.5" r="1" fill="currentColor"/></svg>';
+    button.addEventListener('click',()=>{const open=button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));text.classList.toggle('is-open',open);});
+    if(label)label.append(button);else text.before(button);
+  });
+}
+window.addEventListener('resize',_naCfgInfoHelp);
 function abrirDisenadorTicket(){tkCurrentVenta={id:'V-000001',operation:'00000001',fecha:obtenerHoy(),hora:nowT(),cajero:appConfig.business?.cajero||'Frank',metodo:'efectivo',recibido:150,vuelto:11.5,anulada:false,items:[{name:'Arroz Costeño',qty:2,precio:7},{name:'Azúcar Rubia',qty:1,precio:6.5},{name:'Leche Gloria',qty:3,precio:5},{name:'Aceite Primor',qty:2,precio:9},{name:'Atún Florida',qty:5,precio:5}]};_naHydrateTicket();const editor=document.getElementById('editorPanel');if(editor)editor.style.display='block';const btn=document.getElementById('btnEditorToggle');if(btn)btn.textContent='👁 Vista previa';document.getElementById('mTicket').classList.add('open');renderTicketPreview();}
 renderCfgContent=function(cat){
   const cont=document.getElementById('cfgContent');if(!cont)return;

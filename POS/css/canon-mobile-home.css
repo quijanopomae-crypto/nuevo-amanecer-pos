@@ -4,8 +4,15 @@
 .na-mobile-drawer,
 #pageMenu .na-mobile-welcome,
 #pageMenu .na-mobile-home-section { display:none }
+#pageConfig .cfg-help-toggle {display:none}
 
 @media (max-width:767px) {
+  #pageConfig .cfg-help-toggle {display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;width:32px;height:32px;margin-left:4px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--slate);cursor:pointer;flex-shrink:0}
+  #pageConfig .cfg-help-toggle:hover,#pageConfig .cfg-help-toggle[aria-expanded=true] {background:var(--teal-light);color:var(--teal-dark)}
+  #pageConfig .cfg-help-toggle:focus-visible {outline:2px solid var(--teal);outline-offset:2px}
+  #pageConfig .cfg-help-text:not(.is-open) {display:none!important}
+  #pageConfig .cfg-help-text.is-open {display:block!important;font-size:12px;line-height:1.5;font-weight:400;margin-top:6px}
+
   body:has(#pageConfig.active) .na-mobile-menu-toggle {display:none}
   #pageConfig .cfg-topbar-simple {display:flex;flex-wrap:nowrap;gap:8px;padding:10px 12px;min-height:56px;height:auto}
   #pageConfig .cfg-topbar-title-wrap {flex:1;gap:8px;min-width:0}
