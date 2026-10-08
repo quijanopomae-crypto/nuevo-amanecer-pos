@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publicar títulos móviles aprobados de Actividad reciente: mayúsculas, 12px, peso700 y espaciado fino. Solo presentación CSS.",
-  "retry_attempt": 83,
-  "retry_reason": "Owner: Aplica al canon aprobado implementar. 23 E2E PASS en ocho tamaños; revisión independiente sin P0/P1. Integrar tras CI verde.",
-  "requested_at_utc": "2026-10-08T02:10:55.241Z",
-  "target_head": "d11f3211197d85b1fbc09fb87eaa71de83af6a5c"
+  "note": "Publicar iconos delineados de actividad aprobados: recibo para créditos, carrito para ventas, mano con moneda sin divisa extranjera para abonos.",
+  "retry_attempt": 84,
+  "retry_reason": "Owner: Aplicado a canon. 23 E2E PASS, vista real verificada, revisión independiente sin P0/P1; integrar tras CI verde.",
+  "requested_at_utc": "2026-10-08T02:22:25.900Z",
+  "target_head": "63bd8b5eb87794b3d9ade376e136586c8de9d882"
 }
