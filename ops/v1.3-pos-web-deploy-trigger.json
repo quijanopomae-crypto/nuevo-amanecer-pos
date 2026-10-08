@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publicar corrección visual móvil: separador de miles, ventas a crédito diferenciadas, cliente separado y fecha completa con día de semana y AM/PM en Lima.",
-  "retry_attempt": 82,
-  "retry_reason": "Continuación de la interfaz CANON autorizada: solicitud del owner sobre coma, ventas/créditos/abonos y fecha/hora completa. 23 E2E y 28 pruebas focalizadas PASS; integrar tras CI.",
-  "requested_at_utc": "2026-10-08T01:33:22.867Z",
-  "target_head": "8b41aae060624259cbad08b6e1cb6d98f63254a0"
+  "note": "Publicar títulos móviles aprobados de Actividad reciente: mayúsculas, 12px, peso700 y espaciado fino. Solo presentación CSS.",
+  "retry_attempt": 83,
+  "retry_reason": "Owner: Aplica al canon aprobado implementar. 23 E2E PASS en ocho tamaños; revisión independiente sin P0/P1. Integrar tras CI verde.",
+  "requested_at_utc": "2026-10-08T02:10:55.241Z",
+  "target_head": "d11f3211197d85b1fbc09fb87eaa71de83af6a5c"
 }
