@@ -149,3 +149,26 @@ for(const width of [320,390,430]) test(`phone catalog ${width}: dropdown categor
  await page.locator('#posArea').evaluate(el=>{el.scrollTop=el.scrollHeight});expect(await page.locator('#posArea').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
  await page.locator('[data-product-id="GRID-35"]').click();await expect(page.locator('#posTotal')).toHaveText('S/ 3.50');
 });
+
+for(const width of [320,360,390,430]) test(`phone checkout ${width}: footer stays within visible viewport`,async({page})=>{
+ await page.setViewportSize({width,height:844});
+ await page.addInitScript(()=>{
+  const viewport=new EventTarget();Object.assign(viewport,{height:760,offsetTop:0,scale:1});
+  Object.defineProperty(window,'visualViewport',{value:viewport,configurable:true});
+  (window as any).resizeCheckout=(height:number,offsetTop:number)=>{Object.assign(viewport,{height,offsetTop});viewport.dispatchEvent(new Event('resize'));};
+ });
+ await page.goto('/index.html');await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'CHECK',name:'Prueba',precio:1,qty:1}];posPayM='efectivo';document.getElementById('mMontoRec').value='1';_naRenderCashQuickOptions(1);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ for(const [height,top] of [[760,0],[500,0],[340,35],[760,0]]){
+  await page.evaluate(([h,t])=>(window as any).resizeCheckout(h,t),[height,top]);
+  await expect.poll(async()=>{const b=await page.locator('#mBtnConf').boundingBox();return !!b&&b.y>=top&&b.y+b.height<=top+height-8;}).toBe(true);
+  const b=await page.locator('#mBtnConf').boundingBox();
+  expect(await page.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('#mBtnConf'),{x:b!.x+b!.width/2,y:b!.y+b!.height/2})).toBe(true);
+ }
+ await expect(page.locator('#mCashInlineNote')).toBeHidden();await expect(page.locator('#mPaymentHint')).toContainText('Monto exacto');
+ await page.locator('#mCobro .cash-other-btn').click();await expect(page.locator('#mMontoRec')).toBeVisible();
+ await page.locator('#mMontoRec').fill('5');await expect(page.locator('#mCambio')).toHaveText('S/ 4.00');
+ await page.locator('#mCobro [data-method="yape"]').click();await expect(page.locator('#mDigitalVerified')).toBeVisible();
+ await expect(page.locator('#mPaymentHint')).toContainText('verificaste');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
