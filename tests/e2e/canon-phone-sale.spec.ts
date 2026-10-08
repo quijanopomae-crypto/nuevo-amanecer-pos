@@ -349,7 +349,7 @@ for(const width of [320,360,390,430]) test(`compact phone payment cards ${width}
  await page.locator('#mCobro [data-digital-group]').click();
  const methods=page.locator('#mCobro [data-method="efectivo"],#mCobro [data-digital-group],#mCobro [data-method="credito"]');
  for(const card of await methods.all()){
-  const box=await card.boundingBox();expect(box!.height).toBeLessThanOrEqual(110);expect(box!.height).toBeGreaterThanOrEqual(44);
+  const box=await card.boundingBox();expect(box!.height).toBeLessThanOrEqual(96);expect(box!.height).toBeGreaterThanOrEqual(44);
  }
  await expect(page.locator('#mDigitalVerified')).toBeVisible();
  await expect(page.locator('#mDigitalRef')).toBeVisible();
