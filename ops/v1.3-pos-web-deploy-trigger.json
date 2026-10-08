@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Deploy CANON PR #429: lote 001 de imágenes de producto para 10 Trululu aprobados, overlay exact-name HTTPS con fallback seguro y sin escrituras D1.",
-  "retry_attempt": 79,
-  "retry_reason": "PR #429 merged at 4574f2da85a59b1d1db671a25571b1f6297d1733; CANON Critical CI post-merge 37234382310 PASS. El owner autorizó explícitamente aplicarlo en CANON.",
-  "requested_at_utc": "2026-10-04T21:02:30Z",
-  "target_head": "4574f2da85a59b1d1db671a25571b1f6297d1733"
+  "note": "Deploy CANON PR #431: inicio móvil limpio, iconos SVG con colores suaves, acciones en drawer y paisaje por hora y estación; PC/tablet y lógica comercial intactos.",
+  "retry_attempt": 80,
+  "retry_reason": "PR #431 merged at 5f7a377c9c686b2a8ad7efdef6199ce7ef89fda5; CANON Critical CI post-merge 37710801366 PASS. El owner autorizó explícitamente Aplicalo para publicar la interfaz en CANON.",
+  "requested_at_utc": "2026-10-08T01:02:49.610Z",
+  "target_head": "5f7a377c9c686b2a8ad7efdef6199ce7ef89fda5"
 }
