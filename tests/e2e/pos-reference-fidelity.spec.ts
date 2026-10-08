@@ -165,7 +165,7 @@ test('Android desktop-site keeps phone sale and hidden catalog on a wide viewpor
   expect(await page.locator('#cartDrawer').evaluate(el=>getComputedStyle(el).position)).toBe('relative');
   await page.locator('#posPhoneAdd').click();
   await expect(page.locator('#posPhoneCatalog')).toBeVisible();
-  expect(await page.locator('#posArea').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(2);
+  expect(await page.locator('#posArea').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length)).toBe(3);
   await page.locator('#posPhoneCatalogClose').click();
   await expect(page.locator('#posArea')).toBeHidden();
   await context.close();

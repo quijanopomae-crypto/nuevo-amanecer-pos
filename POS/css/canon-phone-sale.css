@@ -64,3 +64,26 @@ body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCameraStatus{font-size:14p
 @media(max-width:340px){body.na-pos-phone-device #pagePOS.phone-sale .ci-sub{font-size:14px}body.na-pos-phone-device #pagePOS.phone-sale .cart-item{grid-template-columns:44px minmax(0,1fr) auto;gap:6px}body.na-pos-phone-device #pagePOS.phone-sale .cart-item>div:first-child{width:44px}}
 
 body.na-pos-phone-device #pagePOS.phone-sale #posPhoneAdd{flex:0 0 auto}
+
+/* Approved phone catalog: category dropdown above a vertical three-column grid. */
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog[open]{display:flex;flex-direction:column;height:min(720px,calc(100dvh - 24px));overflow:hidden;padding:10px;gap:8px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .phone-dialog-head{margin:0;flex-shrink:0}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .phone-catalog-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;flex-shrink:0}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .pos-search-box{grid-column:1/-1;min-width:0;padding:0 8px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .phone-catalog-tools button{width:100%;min-width:0;height:40px;padding:4px;font-size:12px;gap:4px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCategories{background:var(--pos-ref-teal);color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCategoryPanel{flex:0 1 auto;min-height:0;max-height:160px;overflow:auto;background:var(--pos-ref-soft);border:1px solid var(--pos-ref-line);border-radius:8px}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCategoryPanel[hidden]{display:none}
+body.na-pos-phone-device #pagePOS.phone-sale #posSidebar{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));width:100%!important;min-width:0!important;padding:6px;gap:5px;overflow:visible;border:0}
+body.na-pos-phone-device #pagePOS.phone-sale #posSidebar .cat-btn{min-height:40px!important;width:100%;padding:5px!important;border:1px solid var(--pos-ref-line)!important;border-radius:6px;background:#fff;font-size:11px!important;overflow-wrap:anywhere}
+body.na-pos-phone-device #pagePOS.phone-sale #posSidebar .cat-btn .ci{display:none}
+body.na-pos-phone-device #pagePOS.phone-sale #posSidebar .cat-btn.active{background:#e3f7f5;color:var(--pos-ref-teal-dark);border-color:var(--pos-ref-teal)!important}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .phone-catalog-body{display:flex;flex:1;min-height:0;height:auto;margin:0;overflow:hidden}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog #posArea{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))!important;grid-auto-rows:minmax(104px,max-content);align-content:start;width:100%;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;gap:6px;padding:0 2px 4px 0;touch-action:pan-y;overscroll-behavior:contain}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .product-card{--phone-thumb:clamp(28px,8vw,40px);display:grid;grid-template-columns:var(--phone-thumb) minmax(0,1fr);grid-template-rows:minmax(36px,1fr) auto auto;min-width:0;min-height:104px!important;padding:6px 4px!important;gap:3px 4px;border-radius:7px;overflow:hidden;transform:none;text-align:left}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .p-img{grid-column:1;grid-row:1/4;align-self:center;width:var(--phone-thumb)!important;height:var(--phone-thumb)!important;min-width:var(--phone-thumb);max-width:var(--phone-thumb);margin:0!important;border:1px solid var(--pos-ref-line);border-radius:5px;background:var(--pos-ref-soft);overflow:hidden;font-size:20px;box-sizing:border-box}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .p-img img{display:block;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;border-radius:0!important}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .p-name{grid-column:2;grid-row:1;margin:0;font-size:10px;line-height:1.2;-webkit-line-clamp:3;overflow-wrap:anywhere;align-self:center}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .p-price-badge{grid-column:2;grid-row:2;position:static!important;transform:none;margin:0;padding:0;background:none;color:var(--pos-ref-teal-dark);font-size:11px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;box-shadow:none}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog .p-stock-badge{grid-column:2;grid-row:3;position:static!important;margin:0;padding:3px 2px;border-radius:6px;font-size:9px;line-height:1.15;white-space:normal;overflow-wrap:anywhere;background:#fff0d3;color:#a85b00;text-align:center}
+body.na-pos-phone-device #pagePOS.phone-sale #posPhoneCatalog #btnVentaLibre:not([hidden]){display:inline-flex;align-items:center;justify-content:center}

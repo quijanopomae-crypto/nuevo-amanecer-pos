@@ -48,14 +48,32 @@
     var catalogHead = node('div'); catalogHead.className = 'phone-dialog-head';
     catalogHead.append(node('strong','Agregar productos','posPhoneCatalogTitle'),button('Cerrar','posPhoneCatalogClose','Cerrar selección de productos',closeCatalog));
     var catalogTools = node('div'); catalogTools.className = 'phone-catalog-tools';
+    var categoriesPanel = node('div',null,'posPhoneCategoryPanel'); categoriesPanel.hidden = true;
+    var categories = button('Todo ⌄','posPhoneCategories','Seleccionar categoría de productos',function () {
+      categoriesPanel.hidden = !categoriesPanel.hidden;
+      categories.setAttribute('aria-expanded',String(!categoriesPanel.hidden));
+    });
+    categories.setAttribute('aria-controls','posPhoneCategoryPanel'); categories.setAttribute('aria-expanded','false');
+    function syncCategory() {
+      var selected = document.querySelector('#posSidebar .cat-btn.active');
+      var text = selected ? Array.from(selected.childNodes).filter(function (item) { return item.nodeType === 3; }).map(function (item) { return item.textContent; }).join('').trim() : 'Todo';
+      categories.textContent = (text || 'Todo') + ' ⌄';
+    }
+    document.getElementById('posSidebar').addEventListener('click',function (event) {
+      if (!phone || !event.target.closest('.cat-btn')) return;
+      syncCategory(); categoriesPanel.hidden = true; categories.setAttribute('aria-expanded','false'); categories.focus();
+      document.getElementById('posArea').scrollTop = 0;
+    });
     var catalogBody = node('div'); catalogBody.className = 'phone-catalog-body';
-    catalog.append(catalogHead,catalogTools,catalogBody); page.appendChild(catalog);
+    catalog.append(catalogHead,catalogTools,categoriesPanel,catalogBody); page.appendChild(catalog);
     var movable = ['.pos-search-box','#btnVentaLibre','#btnMayorista','#posSidebar','#posArea'].map(function (selector) {
       var el = page.querySelector(selector), anchor = document.createComment('phone-sale-return'); el.before(anchor); return {el:el,anchor:anchor};
     });
     function openCatalog() {
       if (!phone) return;
-      root.posRender(); catalog.showModal(); document.getElementById('posSearch').focus();
+      root.posRender(); syncCategory(); categoriesPanel.hidden = true; categories.setAttribute('aria-expanded','false'); catalog.showModal();
+      catalog.scrollTop = 0;
+      categories.focus();
     }
     function closeCatalog() { catalog.close(); if (phone) add.focus(); }
     document.getElementById('btnVentaLibre').addEventListener('click',function () { if (phone && catalog.open) closeCatalog(); },true);
@@ -132,7 +150,8 @@
       phone = enabled; page.classList.toggle('phone-sale',phone);
       scheduleViewport();
       if (phone) {
-        movable.forEach(function (item,index) { (index < 3 ? catalogTools : catalogBody).appendChild(item.el); });
+        movable.forEach(function (item,index) { (index < 3 ? catalogTools : index === 3 ? categoriesPanel : catalogBody).appendChild(item.el); });
+        catalogTools.appendChild(categories);
         pay.replaceChildren(label); syncSale();
       } else {
         closeCatalog(); closeCamera(); movable.forEach(function (item) { item.anchor.after(item.el); });

@@ -131,3 +131,21 @@ for(const width of [320,390,430]) test(`long customer name ${width} keeps add an
  await page.locator('#posPhoneAdd').click();await expect(page.locator('#posPhoneCatalog')).toBeVisible();await page.locator('#posPhoneCatalogClose').click();
  await page.locator('#posCustomerButton').click();await expect(page.locator('.na-client-picker-row').filter({hasText:name})).toBeVisible();
 });
+
+for(const width of [320,390,430]) test(`phone catalog ${width}: dropdown categories, three columns, bounded photos and vertical scroll`,async({page})=>{
+ await page.setViewportSize({width,height:844});await page.goto('/index.html');await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`productos=Array.from({length:36},(_,i)=>({id:'GRID-'+i,name:i%2?'Producto de nombre largo prueba':'Agua prueba',precio:3.5,costo:1,stock:10,cat:i%2?'snacks':'bebidas',imagen:(()=>{const c=document.createElement('canvas');c.width=i%2?1200:80;c.height=i%2?80:1200;c.getContext('2d').fillRect(0,0,c.width,c.height);return c.toDataURL('image/png');})()}));cart=[];posRender();`));
+ await page.locator('#posPhoneAdd').click();
+ await expect(page.locator('#posPhoneCategories')).toHaveText(/Todo/);
+ await expect(page.locator('#posSidebar')).toBeHidden();
+ await expect(page.locator('#btnMayorista')).toBeVisible();
+ const actions=await page.locator('#btnVentaLibre,#btnMayorista,#posPhoneCategories').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().y));expect(Math.max(...actions)-Math.min(...actions)).toBeLessThan(2);
+ await page.locator('#posPhoneCategories').click();await expect(page.locator('#posSidebar')).toBeVisible();
+ await page.locator('#posSidebar [data-cat="bebidas"]').click();await expect(page.locator('#posSidebar')).toBeHidden();await expect(page.locator('#posPhoneCategories')).toContainText('Bebidas');await expect(page.locator('#posArea .product-card')).toHaveCount(18);
+ await page.locator('#posPhoneCategories').click();await page.locator('#posSidebar [data-cat="todo"]').click();await expect(page.locator('#posArea .product-card')).toHaveCount(36);
+ const metrics=await page.locator('#posArea').evaluate(el=>({columns:getComputedStyle(el).gridTemplateColumns.split(' ').length,scroll:el.scrollHeight>el.clientHeight,horizontal:el.scrollWidth>el.clientWidth}));expect(metrics).toEqual({columns:3,scroll:true,horizontal:false});
+ const images=await page.locator('#posArea .p-img').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect(),im=n.querySelector('img')!,ir=im.getBoundingClientRect();return {w:r.width,h:r.height,contain:getComputedStyle(im).objectFit,inside:ir.x>=r.x&&ir.y>=r.y&&ir.right<=r.right&&ir.bottom<=r.bottom};}));
+ expect(new Set(images.map(x=>x.w+':'+x.h)).size).toBe(1);expect(images.every(x=>x.w===x.h&&x.contain==='contain'&&x.inside)).toBe(true);
+ await page.locator('#posArea').evaluate(el=>{el.scrollTop=el.scrollHeight});expect(await page.locator('#posArea').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+ await page.locator('[data-product-id="GRID-35"]').click();await expect(page.locator('#posTotal')).toHaveText('S/ 3.50');
+});
