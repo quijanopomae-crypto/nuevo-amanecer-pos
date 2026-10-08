@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publicar reducción adicional solicitada de cuadros móviles de cobro, funciones conservadas.",
-  "retry_attempt": 104,
-  "retry_reason": "PR486 fusionado; CANON CI736 y E2E291 verdes; Reviewer/Forensic READY y captura real c8382fd8 inspeccionada.",
-  "requested_at_utc": "2026-10-08T22:29:00Z",
-  "target_head": "253945c9d2c3f04cd69ce9443779e5ef78b2b787"
+  "note": "Publicar corrección de superposición de ficha de cliente y evaluación/línea manual aprobada por owner: Aplicalo.",
+  "retry_attempt": 105,
+  "retry_reason": "PR488 fusionado. CANON Critical CI740 y E2E294 verdes (114 pruebas). Reviewer/Forensic sin P0/P1. Capturas reales teléfono/PC del candidato inspeccionadas.",
+  "requested_at_utc": "2026-10-08T23:15:39.389Z",
+  "target_head": "f27bca058056a5197f126e532794f25271f27db8"
 }
