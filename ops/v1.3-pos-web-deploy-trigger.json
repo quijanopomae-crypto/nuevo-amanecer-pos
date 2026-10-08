@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Configuración móvil organizada en secciones desplegables según preview aprobado.",
-  "retry_attempt": 92,
-  "retry_reason": "Owner aprobó aplicar a CANON. Conserva actualización concurrente de nombres largos; UI configuración probada, revisión sin P0/P1. Publicar tras CI verde.",
-  "requested_at_utc": "2026-10-08T12:25:57.030Z",
-  "target_head": "e045be95647ebe1c09745ab307de8dbd803d9070"
+  "note": "Catálogo móvil aprobado: categorías desplegables, tres columnas verticales e imágenes contenidas.",
+  "retry_attempt": 93,
+  "retry_reason": "Owner pidió aplicar a CANON. PR464 Critical y E2E SUCCESS;32 focales PASS;revisión independiente sin P0/P1;preview exacto.",
+  "requested_at_utc": "2026-10-08T13:30:42.019Z",
+  "target_head": "2548b0e842f660451939c24bb0a4f13b4f9d4546"
 }
