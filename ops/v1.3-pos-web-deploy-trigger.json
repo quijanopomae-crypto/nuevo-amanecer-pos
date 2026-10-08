@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Corrección de estilos y parpadeo al actualizar e iniciar en teléfono.",
-  "retry_attempt": 96,
-  "retry_reason": "Owner solicitó corregir la carga sin estilos y el parpadeo de navegación en CANON. Promover solo después de CANON Critical CI y E2E Smoke CI verdes sobre el SHA actual.",
-  "requested_at_utc": "2026-10-08T15:11:03.740Z",
-  "target_head": "b5d1310626bd70a8ee15d470caaa44654c44141c"
+  "note": "Quitar campos de cliente repetidos y controles innecesarios del cobro móvil.",
+  "retry_attempt": 97,
+  "retry_reason": "Owner solicitó simplificar el cobro móvil: reutilizar el cliente seleccionado al inicio y retirar controles redundantes. CANON Critical CI y E2E Smoke CI verdes sobre el commit objetivo.",
+  "requested_at_utc": "2026-10-08T15:30:00Z",
+  "target_head": "d52219229ae894c8254474f9acf00a371fc18b5a"
 }
