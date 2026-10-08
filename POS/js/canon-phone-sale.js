@@ -10,6 +10,16 @@
     function syncViewport() {
       viewportFrame = 0;
       var viewport = root.visualViewport;
+      var checkout = document.getElementById('mCobro');
+      if (checkout) {
+        if (phone && (!viewport || viewport.scale === 1)) {
+          checkout.style.setProperty('--phone-checkout-height',(viewport ? viewport.height : root.innerHeight) + 'px');
+          checkout.style.setProperty('--phone-checkout-top',(viewport ? viewport.offsetTop : 0) + 'px');
+        } else {
+          checkout.style.removeProperty('--phone-checkout-height');
+          checkout.style.removeProperty('--phone-checkout-top');
+        }
+      }
       if (!phone || !page.classList.contains('active') || (viewport && viewport.scale !== 1)) {
         page.style.removeProperty('--phone-visible-height');
         page.style.removeProperty('--phone-visible-top');
