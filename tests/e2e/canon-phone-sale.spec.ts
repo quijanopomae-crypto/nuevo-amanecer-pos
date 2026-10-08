@@ -218,3 +218,20 @@ test('phone credit keeps one picker when no customer was selected at sale start'
  await page.locator('#mCobro [data-method="efectivo"]').click();
  await expect(page.locator('#mClienteDetails')).toBeHidden();
 });
+
+test('phone checkout groups digital payments while retaining the selected channel',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'DIGITAL-CHECK',name:'Producto prueba',precio:5,qty:1}];posPayM='efectivo';document.getElementById('mCobro').classList.add('open');`));
+ await expect(page.locator('#mCobro .pay-methods [data-method]')).toHaveCount(4);
+ await expect(page.locator('#mCobro .pay-methods [data-method="transferencia"]')).toHaveCount(0);
+ await page.locator('#mCobro .pay-methods [data-digital-group]').click();
+ await expect(page.locator('#mDigitalSection')).toBeVisible();
+ await expect(page.locator('#mDigitalChannels')).toContainText('Yape / Plin');
+ await expect(page.locator('#mDigitalChannels')).toContainText('Transferencia');
+ await page.locator('#mDigitalChannels [data-digital-method="transferencia"]').click();
+ expect(await page.evaluate(()=>posPayM)).toBe('transferencia');
+ await expect(page.locator('#mCobro .pay-methods [data-digital-group]')).toHaveClass(/active/);
+ await page.locator('#mDigitalChannels [data-digital-method="yape"]').click();
+ expect(await page.evaluate(()=>posPayM)).toBe('yape');
+});
