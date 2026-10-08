@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Corrección del botón Cobrar dentro del viewport visible solo en venta móvil.",
-  "retry_attempt": 90,
-  "retry_reason": "Owner pidió aplicar corrección al flujo móvil previamente autorizado. PR459 Critical y E2E SUCCESS;26 E2E focales PASS;review independiente sin P0/P1;preview mismo SHA.",
-  "requested_at_utc": "2026-10-08T12:10:31.042Z",
-  "target_head": "8c8c8f1a12807c95a8c97c5a7bf550ca9384a2f8"
+  "note": "Nombres largos de cliente sin ocultar Agregar y lector en teléfonos.",
+  "retry_attempt": 91,
+  "retry_reason": "Owner solicitó corregir el flujo móvil publicado. PR461 Critical y E2E SUCCESS;29 pruebas focales PASS;review independiente sin P0/P1;preview exacto.",
+  "requested_at_utc": "2026-10-08T12:20:11.831Z",
+  "target_head": "304c4caf1204e53af70ce27cfb3f9bf6d49c556d"
 }
