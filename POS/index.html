@@ -419,7 +419,6 @@
       <div id="mEfSection" class="pay-cash-section">
         <div id="mCashSimple" class="cash-simple-actions">
           <div class="cash-inline-note" id="mCashInlineNote">Monto exacto listo para cobrar.</div>
-          <div id="mCashQuickInline" class="cash-quick-inline"></div>
           <button type="button" class="cash-other-btn" onclick="toggleOtherCashAmounts(true)">
             <span>💵</span>
             <span><strong>Otros montos</strong><small>Ingresar efectivo y calcular vuelto</small></span>
@@ -433,8 +432,9 @@
           </div>
           <div class="pay-amount-input-wrap">
             <span>S/</span>
-            <input class="fi-big pay-amount-input" id="mMontoRec" min="0" inputmode="decimal" oninput="calcCambio()" placeholder="0.00" step="0.10" type="number"/>
+            <input class="fi-big pay-amount-input" id="mMontoRec" min="0" inputmode="decimal" oninput="calcCambio()" placeholder="Otro monto" step="0.10" type="number"/>
           </div>
+          <div id="mCashQuickInline" class="cash-quick-inline"></div>
           <div class="cash-quick-row pay-quick-row">
             <button type="button" data-cash="20" onclick="setMontoRecibido(20)">20</button>
             <button type="button" data-cash="50" onclick="setMontoRecibido(50)">50</button>
