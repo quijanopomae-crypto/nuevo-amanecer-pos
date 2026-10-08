@@ -287,7 +287,7 @@ test('phone hides only redundant cash success hint and retains digital success f
 });
 
 for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: total scrolls in flow without covering payment methods`,async({page},testInfo)=>{
- await page.setViewportSize({width,height:650});await page.goto('/index.html');
+ await page.setViewportSize({width,height:500});await page.goto('/index.html');
  await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
  await page.evaluate(()=>window.eval(`cart=[{id:'VISUAL-TOTAL',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 7.70';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
  const body=page.locator('#mCobro .pay-modal-body'),total=page.locator('#mCobro .pay-total-card');
@@ -340,4 +340,25 @@ test('phone overflow preserves original sale actions in sale and checkout, then 
  await expect(page.locator('.cart-secondary-actions #posPrice')).toBeVisible();
  await expect(page.locator('.cart-actions #btnRapido')).toBeVisible();
  await expect(page.locator('#btnCartMenu')).toHaveCount(1);
+});
+
+for(const width of [320,360,390,430]) test(`compact phone payment cards ${width}: smaller cards retain all digital controls`,async({page},testInfo)=>{
+ await page.setViewportSize({width,height:740});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'COMPACT',name:'Producto prueba',precio:22,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 22.00';document.getElementById('mMontoRec').value='22.00';_naRenderCashQuickOptions(22);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ await page.locator('#mCobro [data-digital-group]').click();
+ const methods=page.locator('#mCobro [data-method="efectivo"],#mCobro [data-digital-group],#mCobro [data-method="credito"]');
+ for(const card of await methods.all()){
+  const box=await card.boundingBox();expect(box!.height).toBeLessThanOrEqual(110);expect(box!.height).toBeGreaterThanOrEqual(44);
+ }
+ await expect(page.locator('#mDigitalVerified')).toBeVisible();
+ await expect(page.locator('#mDigitalRef')).toBeVisible();
+ await page.locator('#mDigitalChannels [data-digital-method="transferencia"]').click();
+ expect(await page.evaluate(()=>posPayM)).toBe('transferencia');
+ await page.locator('#mDigitalRef').fill('12345678');await page.locator('#mDigitalVerified').check();
+ await expect(page.locator('#mDigitalRef')).toHaveValue('12345678');
+ await expect(page.locator('#mCobro .pay-modal-head #btnCartMenu')).toBeVisible();
+ const confirm=await page.locator('#mBtnConf').boundingBox();expect(confirm!.y+confirm!.height).toBeLessThanOrEqual(740);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await testInfo.attach('compact-digital-'+width,{body:await page.screenshot(),contentType:'image/png'});
 });
