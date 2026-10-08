@@ -285,3 +285,30 @@ test('phone hides only redundant cash success hint and retains digital success f
  await hint.evaluate(el=>{el.classList.add('ok');el.textContent='Pago digital verificado.';});
  await expect(hint).toBeVisible();
 });
+
+for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: total remains visible while payment details scroll`,async({page})=>{
+ await page.setViewportSize({width,height:650});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'VISUAL-TOTAL',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 7.70';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ const body=page.locator('#mCobro .pay-modal-body'),total=page.locator('#mCobro .pay-total-card');
+ await expect(total).toContainText('Total a cobrar');
+ await expect(page.locator('#mCobroTotal')).toHaveText('S/ 7.70');
+ await page.waitForFunction(()=>{const el=document.querySelector('#mCobro .pay-modal-body');return !!el&&el.scrollHeight>el.clientHeight+40;});
+ await body.evaluate(el=>{el.scrollTop=150;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
+ const boxes=await Promise.all([body.boundingBox(),total.boundingBox()]);
+ expect(boxes[1]!.y).toBeGreaterThanOrEqual(boxes[0]!.y-1);
+ expect(boxes[1]!.y).toBeLessThan(boxes[0]!.y+30);
+ const quick=await page.locator('#mCashQuickInline button:visible').allTextContents();
+ expect(quick).toEqual(['S/ 10','S/ 20','S/ 50']);
+});
+
+test('phone checkout uses reference line icons and separates the currency from the cash amount',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'VISUAL-TOTAL',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 7.70';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ await expect(page.locator('#mCobro .pay-methods .pmi-icon svg')).toHaveCount(4);
+ const icons=await page.locator('#mCobro .pay-methods .pmi-icon').evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).display));
+ expect(icons.every(display=>display!=='none')).toBe(true);
+ const divider=await page.locator('#mCashAdvanced .pay-amount-input-wrap>span').evaluate(el=>getComputedStyle(el).borderRightWidth);
+ expect(parseFloat(divider)).toBeGreaterThan(0);
+});
