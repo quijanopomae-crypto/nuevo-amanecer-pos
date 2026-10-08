@@ -1117,6 +1117,13 @@
         .pay-methods .pm-btn.active{border-color:var(--teal);background:var(--teal-light);box-shadow:none}
         .pay-methods .pmi{font-size:19px;line-height:1}
         .pay-methods .pml{font-size:10px;font-weight:850;color:var(--dark);line-height:1.1}
+        .pay-methods .pm-copy{display:flex;flex-direction:column;align-items:inherit;gap:3px;min-width:0}
+        .pay-methods .pms{font-size:9px;font-weight:700;color:var(--slate);line-height:1.15}
+        .digital-channel-label{font-size:11px;font-weight:850;color:var(--dark);margin:0 0 8px}
+        .digital-channel-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+        .digital-channel-btn{min-height:44px;border:1.5px solid var(--border);border-radius:10px;background:var(--white);color:var(--dark);padding:8px 10px;font:800 12px 'Nunito',sans-serif;cursor:pointer;transition:border-color .15s,background .15s}
+        .digital-channel-btn.active{border-color:var(--teal);background:var(--teal-light);color:var(--teal-dark)}
+        .digital-channel-btn:focus-visible{outline:3px solid color-mix(in srgb,var(--teal) 24%,transparent);outline-offset:2px}
         .pay-client-details{border:1px solid var(--border);border-radius:11px;background:var(--bg);margin-bottom:12px;overflow:hidden}
         .pay-client-details summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;cursor:pointer;font-size:12px;font-weight:850;color:var(--dark)}
         .pay-client-details summary::-webkit-details-marker{display:none}
@@ -1205,6 +1212,7 @@
         body.dark .pay-total-card{background:#0f172a}
         body.dark .pay-client-details,body.dark .pay-panel{background:#1e293b}
         body.dark .digital-payment-confirmation{background:#1e293b}
+        body.dark .digital-channel-btn{background:#1e293b;color:#e2e8f0}
         body.dark .pay-amount-input-wrap,body.dark .cash-exact-btn{background:#111827}
         @media(max-width:520px){
             #mCobro{padding:10px;align-items:flex-end}
