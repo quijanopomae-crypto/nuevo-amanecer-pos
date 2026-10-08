@@ -208,13 +208,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Keep HTML and its precached dependencies pinned to one build generation.
+  // Serve the installed generation first. Recover missing shell files online
+  // without writing newer responses into that generation.
   // A new worker remains waiting until the owner presses "Actualizar ahora".
   const key = request.mode === 'navigate' ? START_URL : request.url;
   event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(key)).then((cached) =>
-    cached || new Response('Shell PWA incompleto. Cierre las pestanas del POS y vuelva a abrir con conexion.', {
+    cached || fetch(new Request(request, { cache: 'no-store' })).catch(() => new Response('No se pudo recuperar la interfaz. Compruebe la conexion y vuelva a intentar.', {
       status: 503,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
-    })
+    }))
   ));
 });

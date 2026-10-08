@@ -134,8 +134,7 @@ test('launcher exposes a shell-only recovery path that preserves activation stor
   assert.match(activation, /navigator\.serviceWorker\.getRegistrations\(\)/);
   assert.match(activation, /registration\.scope\.startsWith\(window\.location\.origin \+ '\/app\/'\)/);
   assert.match(activation, /registration\.unregister\(\)/);
-  assert.match(activation, /nuevo-amanecer-pos-shell-/);
-  assert.match(activation, /caches\.delete\(name\)/);
+  assert.doesNotMatch(activation, /caches\.delete\(name\)/);
   assert.match(activation, /window\.location\.replace\('\/app\/\?shell_refresh='/);
   const refreshStart = activation.indexOf('async function refreshShellOnly()');
   const refreshEnd = activation.indexOf('function setStatus', refreshStart);

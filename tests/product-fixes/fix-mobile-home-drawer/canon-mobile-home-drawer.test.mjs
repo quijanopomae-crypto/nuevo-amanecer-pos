@@ -79,7 +79,7 @@ test('CANON phone styles are production-only, offline-ready and LAB promotion so
   assert.match(css,/\.na-mobile-drawer/);
   assert.match(css,/\.na-mobile-landscape/);
   assert.match(css,/\.na-mobile-activity/);
-  assert.doesNotMatch(index,/canon-mobile-home\.css/,'phone stylesheet is injected only when the phone decorator initializes');
+  assert.match(index.split('</head>')[0],/id="naMobileHomeBaseStyles"[^>]*href="css\/canon-mobile-home\.css"/,'mobile stylesheet must load before first paint');
   assert.match(sw,/'\.\/css\/canon-mobile-home\.css'/,'phone stylesheet must be in the PWA shell for first-run offline use');
 });
 
