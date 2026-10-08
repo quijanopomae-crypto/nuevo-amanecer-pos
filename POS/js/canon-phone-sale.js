@@ -154,10 +154,37 @@
         el.setAttribute('aria-label','Quitar producto');
       });
     }
+    // Reuse the original menu and actions; never duplicate handlers or IDs.
+    var menuWrap = document.getElementById('btnCartMenu').parentElement;
+    var menuAnchor = document.createComment('phone-menu-return');
+    menuWrap.before(menuAnchor);
+    var dropdown = document.getElementById('cartMenuDropdown');
+    var checkout = document.getElementById('mCobro');
+    var extraActions = ['posQuantity','posPrice','btnRapido'].map(function (id) {
+      var el = document.getElementById(id), anchor = document.createComment('phone-action-return');
+      el.before(anchor); return {el:el,anchor:anchor};
+    });
+    function syncMenu() {
+      var inCheckout = phone && checkout.classList.contains('open');
+      var destination = inCheckout ? checkout.querySelector('.pay-modal-head') : menuAnchor.parentNode;
+      if (menuWrap.parentNode !== destination) {
+        root.closeCartMenu();
+        if (inCheckout) destination.appendChild(menuWrap); else menuAnchor.after(menuWrap);
+      }
+    }
+    dropdown.addEventListener('click',function (event) {
+      if (phone && checkout.classList.contains('open') && event.target.closest('button')) {
+        root.cerrarModal('mCobro');
+      }
+    },true);
+    new MutationObserver(syncMenu).observe(checkout,{attributes:true,attributeFilter:['class']});
     function syncDevice() {
       var enabled = document.body.classList.contains('na-pos-phone-device');
       if (enabled === phone) { syncSale(); return; }
-      phone = enabled; page.classList.toggle('phone-sale',phone);
+      phone = enabled;
+      extraActions.forEach(function (item) { if (phone) dropdown.appendChild(item.el); else item.anchor.after(item.el); });
+      syncMenu();
+      page.classList.toggle('phone-sale',phone);
       scheduleViewport();
       if (phone) {
         movable.forEach(function (item,index) { (index < 3 ? catalogTools : index === 3 ? categoriesPanel : catalogBody).appendChild(item.el); });

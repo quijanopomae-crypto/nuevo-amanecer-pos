@@ -286,7 +286,7 @@ test('phone hides only redundant cash success hint and retains digital success f
  await expect(hint).toBeVisible();
 });
 
-for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: total remains visible while payment details scroll`,async({page})=>{
+for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: total scrolls in flow without covering payment methods`,async({page})=>{
  await page.setViewportSize({width,height:650});await page.goto('/index.html');
  await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
  await page.evaluate(()=>window.eval(`cart=[{id:'VISUAL-TOTAL',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 7.70';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
@@ -294,10 +294,13 @@ for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: to
  await expect(total).toContainText('Total a cobrar');
  await expect(page.locator('#mCobroTotal')).toHaveText('S/ 7.70');
  await page.waitForFunction(()=>{const el=document.querySelector('#mCobro .pay-modal-body');return !!el&&el.scrollHeight>el.clientHeight+40;});
- await body.evaluate(el=>{el.scrollTop=150;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
- const boxes=await Promise.all([body.boundingBox(),total.boundingBox()]);
- expect(boxes[1]!.y).toBeGreaterThanOrEqual(boxes[0]!.y-1);
- expect(boxes[1]!.y).toBeLessThan(boxes[0]!.y+30);
+ const before=await total.boundingBox();
+ const method=page.locator('#mCobro [data-method="efectivo"]');
+ await body.evaluate(el=>{el.scrollTop=100;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
+ const after=await total.boundingBox(), methodBox=await method.boundingBox();
+ expect(before!.y-after!.y).toBeGreaterThan(80);
+ expect(after!.y+after!.height).toBeLessThanOrEqual(methodBox!.y);
+ expect(await method.evaluate(el=>getComputedStyle(el,'::after').display)).toBe('none');
  const quick=await page.locator('#mCashQuickInline button:visible').allTextContents();
  expect(quick).toEqual(['S/ 10','S/ 20','S/ 50']);
 });
@@ -311,4 +314,27 @@ test('phone checkout uses reference line icons and separates the currency from t
  expect(icons.every(display=>display!=='none')).toBe(true);
  const divider=await page.locator('#mCashAdvanced .pay-amount-input-wrap>span').evaluate(el=>getComputedStyle(el).borderRightWidth);
  expect(parseFloat(divider)).toBeGreaterThan(0);
+});
+
+test('phone overflow preserves original sale actions in sale and checkout, then restores desktop',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.locator('#btnCartMenu').click();
+ for(const label of ['Aplicar descuento','Guardar borrador','Cargar borrador','Generar catálogo','Limpiar carrito','Cantidad','Cambiar precio','Pago rápido']){
+  await expect(page.locator('#cartMenuDropdown button').filter({hasText:label})).toBeVisible();
+ }
+ await page.evaluate(()=>window.eval(`closeCartMenu();cart=[{id:'MENU-PRODUCT',name:'Prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 7.70';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ await expect(page.locator('#mCobro .pay-modal-head #btnCartMenu')).toBeVisible();
+ await page.locator('#btnCartMenu').click();await expect(page.locator('#cartMenuDropdown')).toBeVisible();
+ const discountPrompt=page.waitForEvent('dialog');
+ page.once('dialog',dialog=>dialog.dismiss());
+ await page.locator('#cartMenuDropdown button').filter({hasText:'Aplicar descuento'}).click();
+ expect((await discountPrompt).message()).toContain('Descuento global');
+ await expect(page.locator('#mCobro')).toBeHidden();
+ await page.evaluate(()=>window.eval(`closeCartMenu();`));
+ await page.setViewportSize({width:1366,height:900});
+ await expect(page.locator('.cart-secondary-actions #posQuantity')).toBeVisible();
+ await expect(page.locator('.cart-secondary-actions #posPrice')).toBeVisible();
+ await expect(page.locator('.cart-actions #btnRapido')).toBeVisible();
+ await expect(page.locator('#btnCartMenu')).toHaveCount(1);
 });
