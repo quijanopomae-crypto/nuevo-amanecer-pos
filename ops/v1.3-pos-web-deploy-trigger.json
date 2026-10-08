@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Quitar campos de cliente repetidos y controles innecesarios del cobro móvil.",
-  "retry_attempt": 97,
-  "retry_reason": "Owner solicitó simplificar el cobro móvil: reutilizar el cliente seleccionado al inicio y retirar controles redundantes. CANON Critical CI y E2E Smoke CI verdes sobre el commit objetivo.",
-  "requested_at_utc": "2026-10-08T15:30:00Z",
-  "target_head": "d52219229ae894c8254474f9acf00a371fc18b5a"
+  "note": "Agrupar Yape/Plin y transferencia bajo Pago digital en cobro móvil, conservando el canal seleccionado.",
+  "retry_attempt": 98,
+  "retry_reason": "Owner autorizó aplicar el rediseño de pagos digitales en CANON. CANON Critical CI #709 y E2E Smoke CI #265 verdes sobre ef80c841f7801dd60ec0dcf0d958eaae440bf706; PR #474 integrado.",
+  "requested_at_utc": "2026-10-08T15:54:30Z",
+  "target_head": "96ff8a156fbbccb56f2162d1da419544fdfe5404"
 }
