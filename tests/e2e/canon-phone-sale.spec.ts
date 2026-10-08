@@ -252,3 +252,36 @@ for(const width of [320,360,390,430]) test(`phone checkout reference layout ${wi
  await expect(page.locator('#mCobro .pay-methods [data-method="mixto"]')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+
+for(const width of [320,360,390,430]) test(`approved phone cash layout ${width}: concise received amount, three presets and highlighted change`,async({page})=>{
+ await page.setViewportSize({width,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'CASH-DESIGN',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ await expect(page.locator('#mCashAdvanced')).toBeVisible();
+ await expect(page.locator('#mCashAdvanced .pay-amount-head label')).toHaveText('Efectivo recibido');
+ await expect(page.locator('#mCashQuickInline button:visible')).toHaveCount(3);
+ const changeStyle=await page.locator('#mCambio').evaluate(el=>({background:getComputedStyle(el.parentElement!).backgroundColor,radius:getComputedStyle(el.parentElement!).borderRadius}));
+ expect(changeStyle.background).not.toBe('rgba(0, 0, 0, 0)');expect(changeStyle.radius).not.toBe('0px');
+ const split=await page.locator('#mCobro .pay-methods [data-method="mixto"]').evaluate(el=>({background:getComputedStyle(el).backgroundColor,border:getComputedStyle(el).borderTopWidth}));
+ expect(split.background).not.toBe('rgba(0, 0, 0, 0)');expect(split.border).not.toBe('0px');
+ await page.locator('#mCashQuickInline [data-cash-inline="10"]').click();
+ await expect(page.locator('#mMontoRec')).toHaveValue('10.00');await expect(page.locator('#mCambio')).toHaveText('S/ 2.30');
+ const cashBox=await page.locator('#mCashAdvanced').boundingBox();
+ const splitBox=await page.locator('#mCobro .pay-methods [data-method="mixto"]').boundingBox();
+ expect(splitBox!.y).toBeGreaterThanOrEqual(cashBox!.y+cashBox!.height-1);
+ await expect(page.locator('#mBtnConf')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('phone hides only redundant cash success hint and retains digital success feedback',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'HINT-DESIGN',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';_naRenderCashQuickOptions(7.7);document.getElementById('mMontoRec').value='7.70';calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ const hint=page.locator('#mPaymentHint');
+ await hint.evaluate(el=>{el.classList.add('ok');el.textContent='Monto exacto listo para cobrar.';});
+ await expect(hint).toBeHidden();
+ await page.locator('#mCobro [data-digital-group]').click();
+ await hint.evaluate(el=>{el.classList.add('ok');el.textContent='Pago digital verificado.';});
+ await expect(hint).toBeVisible();
+});

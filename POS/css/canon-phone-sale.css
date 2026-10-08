@@ -174,3 +174,33 @@ body.na-pos-phone-device #mCobro .pay-modal-footer .pay-btn-secondary{border:1px
 
 body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"].active{border:1px solid #9bdbd8;background:#e8f8f6;color:#0f766e}
 body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"].active .pml{color:#0f766e}
+
+
+/* Approved cash panel details: quick amounts and change stay readable on phones. */
+body.na-pos-phone-device #mCobro #mCashAdvanced .cash-quick-inline button:nth-child(n+4){display:none!important}
+body.na-pos-phone-device #mCobro #mCashAdvanced .pay-change-row{margin-top:2px;padding:12px 14px;border:0;border-radius:10px;background:#e7f7f6}
+body.na-pos-phone-device #mCobro #mCashAdvanced .pay-change-row span{color:#64748b}
+body.na-pos-phone-device #mCobro #mCashAdvanced .pay-change-row strong{color:#0f8a82}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"]{min-height:52px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#334155;font-size:14px}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"] .pmi{font-size:20px}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"] .pml{font-size:14px;color:#334155}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"].active{border:2px solid #159c98;background:#e8f8f6;color:#0f766e}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"].active .pml{color:#0f766e}
+
+
+
+/* Match approved order: cash panel first, split-payment action underneath. */
+body.na-pos-phone-device #mCobro .pay-modal-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:min-content;gap:10px 8px;align-content:start}
+body.na-pos-phone-device #mCobro .pay-total-card{grid-column:1/-1;grid-row:1}
+body.na-pos-phone-device #mCobro .pay-section-label{grid-column:1/-1;grid-row:2}
+body.na-pos-phone-device #mCobro .pay-methods{display:contents}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="efectivo"]{grid-column:1;grid-row:3}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-digital-group]{grid-column:2;grid-row:3}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="credito"]{grid-column:3;grid-row:3}
+body.na-pos-phone-device #mCobro #mEfSection,
+body.na-pos-phone-device #mCobro #mCreditoSection,
+body.na-pos-phone-device #mCobro #mDigitalSection,
+body.na-pos-phone-device #mCobro #mMixedSection{grid-column:1/-1;grid-row:4}
+body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"]{grid-column:1/-1!important;grid-row:5}
+body.na-pos-phone-device #mCobro #mPaymentHint{grid-column:1/-1;grid-row:6}
+body.na-pos-phone-device #mCobro:has(.pm-btn[data-method="efectivo"].active) #mPaymentHint.ok{display:none!important}
