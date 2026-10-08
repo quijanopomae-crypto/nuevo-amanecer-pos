@@ -173,7 +173,7 @@ for(const width of [320,360,390,430]) test(`phone checkout ${width}: footer stay
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
-test('phone credit uses the customer selected at sale start and shows one customer picker',async({page})=>{
+test('phone credit reuses the sale customer without repeating customer or category controls',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
  await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
  await page.evaluate(()=>window.eval(`clientes=[{id:'CREDIT-START',nombre:'Cliente elegido al inicio',lineaCreditoManualActiva:true,lineaCreditoManual:100},{id:'CREDIT-SECOND',nombre:'Segundo cliente',lineaCreditoManualActiva:true,lineaCreditoManual:100}];productos=[{id:'CREDIT-PRODUCT',name:'Producto prueba',precio:5,costo:1,stock:10,cat:'bebidas'}];cart=[{id:'CREDIT-PRODUCT',name:'Producto prueba',precio:5,qty:1}];cajEstado={abierta:true,cerrada:false,fechaApertura:obtenerHoy()};posUpdateCart(false);posRender();`));
@@ -182,18 +182,39 @@ test('phone credit uses the customer selected at sale start and shows one custom
  await page.evaluate(()=>window.eval(`abrirCobro();`));
  await page.locator('#mCobro [data-method="credito"]').click();
  await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-START');
- await expect(page.locator('#mCreditoClienteSearchTrigger')).toContainText('Cliente elegido al inicio');
+ await expect(page.locator('#mCreditoClienteSearchTrigger').locator('xpath=..')).toBeHidden();
  await expect(page.locator('#mClienteDetails')).toBeHidden();
- await page.locator('#mCreditoClienteSearchTrigger').click();
- await page.locator('.na-client-picker-row').filter({hasText:'Segundo cliente'}).click();
- await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-SECOND');
- await expect(page.locator('#mVentaCliente')).toHaveValue('CREDIT-SECOND');
- await expect(page.locator('#posCustomer')).toHaveText('Segundo cliente');
+ await expect(page.locator('#mCreditoSection')).not.toContainText('¿Dónde registrar esta venta?');
+ await expect(page.locator('#mCreditoSection .na-credit-destination-options')).toHaveCount(0);
+ await expect(page.locator('#mCreditoSection .na-credit-new-category')).toHaveCount(0);
+ expect(await page.evaluate(()=>({accountId:NA_CLIENT_CREDIT_ACCOUNTS_V2.saleDraft()?.account.account_id,defaultId:NA_CLIENT_CREDIT_ACCOUNTS_V2.smallAccountId}))).toMatchObject({accountId:'small',defaultId:'small'});
  await page.locator('#mCobro [data-method="efectivo"]').click();
- await expect(page.locator('#mClienteDetails')).toBeVisible();
+ await expect(page.locator('#mClienteDetails')).toBeHidden();
+ await page.locator('#mCobro .pay-close').click();
+ await page.locator('#posCustomerButton').click();
+ await page.locator('.na-client-picker-row').filter({hasText:'Segundo cliente'}).click();
+ await expect(page.locator('#posCustomer')).toHaveText('Segundo cliente');
+ await page.evaluate(()=>window.eval(`abrirCobro();`));
  await page.locator('#mCobro [data-method="credito"]').click();
  await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-SECOND');
  await expect(page.locator('#mClienteDetails')).toBeHidden();
  await page.evaluate(()=>window.eval(`cerrarModal('mCobro');document.getElementById('mCreditoCliente').value='CREDIT-START';document.getElementById('mCreditoCliente').dispatchEvent(new Event('change',{bubbles:true}));abrirCobro();`));
  await expect(page.locator('#mCreditoCliente')).toHaveValue('');
+});
+
+test('phone credit keeps one picker when no customer was selected at sale start',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`clientes=[{id:'CREDIT-ONLY',nombre:'Cliente de crédito',lineaCreditoManualActiva:true,lineaCreditoManual:100}];productos=[{id:'CREDIT-PRODUCT',name:'Producto prueba',precio:5,costo:1,stock:10,cat:'bebidas'}];cart=[{id:'CREDIT-PRODUCT',name:'Producto prueba',precio:5,qty:1}];cajEstado={abierta:true,cerrada:false,fechaApertura:obtenerHoy()};posUpdateCart(false);posRender();`));
+ await page.evaluate(()=>window.eval(`abrirCobro();`));
+ await page.locator('#mCobro [data-method="credito"]').click();
+ await expect(page.locator('#mClienteDetails')).toBeHidden();
+ await expect(page.locator('#mCreditoClienteSearchTrigger').locator('xpath=..')).toBeVisible();
+ await page.locator('#mCreditoClienteSearchTrigger').click();
+ await page.locator('.na-client-picker-row').filter({hasText:'Cliente de crédito'}).click();
+ await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-ONLY');
+ await expect(page.locator('#mCreditoClienteSearchTrigger').locator('xpath=..')).toBeHidden();
+ await expect(page.locator('#mVentaCliente')).toHaveValue('CREDIT-ONLY');
+ await page.locator('#mCobro [data-method="efectivo"]').click();
+ await expect(page.locator('#mClienteDetails')).toBeHidden();
 });
