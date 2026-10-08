@@ -235,3 +235,20 @@ test('phone checkout groups digital payments while retaining the selected channe
  await page.locator('#mDigitalChannels [data-digital-method="yape"]').click();
  expect(await page.evaluate(()=>posPayM)).toBe('yape');
 });
+
+for(const width of [320,360,390,430]) test(`phone checkout reference layout ${width}: three method cards and cash change are visible`,async({page})=>{
+ await page.setViewportSize({width,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'CASH-REF',name:'Producto de prueba',precio:9.5,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 9.50';document.getElementById('mMontoRec').value='9.50';_naRenderCashQuickOptions(9.5);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ const columns=await page.locator('#mCobro .pay-methods').evaluate(el=>getComputedStyle(el).gridTemplateColumns.trim().split(/\\s+/).length);
+ expect(columns).toBe(3);
+ await expect(page.locator('#mCobro .pay-methods [data-method="efectivo"]')).toBeVisible();
+ await expect(page.locator('#mCobro .pay-methods [data-digital-group]')).toBeVisible();
+ await expect(page.locator('#mCobro .pay-methods [data-method="credito"]')).toBeVisible();
+ await expect(page.locator('#mCashAdvanced')).toBeVisible();
+ await expect(page.locator('#mMontoRec')).toBeVisible();
+ await expect(page.locator('#mCashQuickInline button')).toHaveCount(5);
+ await expect(page.locator('#mCambio')).toBeVisible();
+ await expect(page.locator('#mCobro .pay-methods [data-method="mixto"]')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
