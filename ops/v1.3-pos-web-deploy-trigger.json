@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publicar únicamente Worker web en CANON. Ajuste móvil de cobro según la referencia aprobada: total visible al desplazar, iconos de línea, moneda separada del monto; backend, datos, migraciones y secretos sin cambios.",
-  "retry_attempt": 101,
-  "retry_reason": "Autorización del usuario para aplicar al CANON la referencia corregida. PR #480 fusionado en 945a1d013a7dbda3551fcc1505bef77b52b1ebed; CANON Critical CI #724 y E2E Smoke CI #282 verdes; revisión independiente y forense READY.",
-  "requested_at_utc": "2026-10-08T18:50:00Z",
-  "target_head": "945a1d013a7dbda3551fcc1505bef77b52b1ebed"
+  "note": "Publicar Worker web CANON con diseño móvil aprobado, total en flujo normal y menú original restaurado.",
+  "retry_attempt": 102,
+  "retry_reason": "Owner autorizó aplicar a CANON. PR482 fusionado; CANON Critical CI730 y E2E Smoke CI287 verdes, Reviewer y Forensic READY, capturas reales verificadas.",
+  "requested_at_utc": "2026-10-08T19:47:00Z",
+  "target_head": "85091945b4b449dce7a1040f33c530c392af28a9"
 }
