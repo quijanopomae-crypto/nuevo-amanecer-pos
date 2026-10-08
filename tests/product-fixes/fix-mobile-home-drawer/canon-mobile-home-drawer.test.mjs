@@ -33,7 +33,7 @@ test('mobile redesign stays isolated below tablet while source desktop modules r
 test('phone home hides duplicate module navigation and exposes work-focused sections',()=>{
   assert.match(css,/#pageMenu\s+\.modules-grid\s*\{\s*display\s*:\s*none\s*!important/);
   assert.match(css,/#pageMenu\s+\.menu-modules-label\s*\{\s*display\s*:\s*none\s*!important/);
-  assert.match(nav,/Acciones rápidas/);
+  assert.doesNotMatch(nav,/naMobileQuickActions/);
   assert.match(nav,/Actividad reciente/);
   for(const label of ['Nueva venta','Registrar abono','Ingresar mercadería','Registrar gasto','Buscar cliente','Abrir \/ cerrar caja']){
     assert.match(nav,new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
@@ -68,9 +68,7 @@ test('mobile drawer contains supported navigation and closes through all expecte
 
 test('mobile dashboard activity is read-only and uses existing UI/runtime state',()=>{
   assert.ok(mobileUi.length>0,'mobile-only decorator block must be present');
-  assert.match(mobileUi,/qsPorCobrar/);
-  assert.match(mobileUi,/qsStockCritico/);
-  assert.match(mobileUi,/qsCaja/);
+  assert.match(mobileUi,/root\.cajMovs/);
   assert.match(mobileUi,/root\.ventas/);
   assert.doesNotMatch(mobileUi,/localStorage|sessionStorage|indexedDB|fetch\(|XMLHttpRequest|saveAppState/i);
   assert.doesNotMatch(mobileUi,/sale\.create\s*\(|payment\.create\s*\(|cash\.open\s*\(|cash\.close\s*\(|inventory\.adjust\s*\(|credit-account\.create\s*\(/i);
@@ -79,8 +77,7 @@ test('mobile dashboard activity is read-only and uses existing UI/runtime state'
 test('CANON phone styles are production-only, offline-ready and LAB promotion source stays untouched',()=>{
   assert.equal(parityMenuCss,labMenuCss,'promoted menu.css must remain byte-for-byte aligned with LAB');
   assert.match(css,/\.na-mobile-drawer/);
-  assert.match(css,/\.na-mobile-quick-grid/);
-  assert.match(css,/\.na-mobile-quick-action/);
+  assert.match(css,/\.na-mobile-landscape/);
   assert.match(css,/\.na-mobile-activity/);
   assert.doesNotMatch(index,/canon-mobile-home\.css/,'phone stylesheet is injected only when the phone decorator initializes');
   assert.match(sw,/'\.\/css\/canon-mobile-home\.css'/,'phone stylesheet must be in the PWA shell for first-run offline use');
@@ -94,32 +91,11 @@ test('mobile-generated chrome stays hidden after crossing into tablet or desktop
   assert.match(cssBeforePhoneMedia,/#pageMenu\s+\.na-mobile-home-section[\s\S]*display\s*:\s*none/);
 });
 
-test('approved visual refinement keeps phone chrome compact and professional',()=>{
-  assert.match(css,/--na-mobile-header-h\s*:\s*56px/,'phone header must use the compact approved height');
-  assert.match(css,/\.g-topbar[\s\S]{0,500}background\s*:\s*#fff/,'phone topbar must be white');
-  assert.match(css,/#localStatus[\s\S]{0,120}display\s*:\s*none\s*!important/,'connection dot must not compete with the phone home header');
-  assert.match(css,/\.na-mobile-welcome[\s\S]{0,2200}radial-gradient/,'hero must render a local sun layer');
-  assert.match(css,/\.na-mobile-welcome[\s\S]{0,2200}linear-gradient/,'hero must render layered local landscape gradients');
-  assert.match(css,/--na-mobile-stat-h\s*:\s*76px/,'summary cards must be compact');
-  assert.match(css,/--na-mobile-action-h\s*:\s*62px/,'quick actions must be compact');
-  assert.match(css,/--na-mobile-activity-h\s*:\s*44px/,'activity rows must be compact');
-  assert.match(css,/\.na-mobile-drawer-nav::before[\s\S]{0,900}Administrador/,'drawer must expose the approved visual user card');
-  assert.match(css,/data:image\/svg\+xml/,'visible phone icons must use local SVG artwork');
-  assert.match(css,/\.na-mobile-quick-icon[\s\S]{0,400}font-size\s*:\s*0/,'quick-action emoji glyphs must be visually replaced');
-  assert.match(css,/\.na-mobile-drawer-icon[\s\S]{0,400}font-size\s*:\s*0/,'drawer emoji glyphs must be visually replaced');
+test('mobile decoration is local, safe for reduced motion and has no invented identity',()=>{
+  assert.match(css,/prefers-reduced-motion:reduce/);
+  assert.match(css,/data:image\/svg\+xml/);
+  assert.doesNotMatch(nav,/Cristian Quijano|Hola 👋/);
+  assert.doesNotMatch(mobileUi,/innerHTML|outerHTML|insertAdjacentHTML|document.write/);
+  assert.match(mobileUi,/clearInterval/);
+  assert.match(mobileUi,/document.hidden/);
 });
-
-test('approved reference icon family replaces legacy mobile emoji artwork',()=>{
-  assert.match(css,/PR #431 — reference icon family/);
-  assert.ok(css.includes('#pageMenu .quick-stats .qs-icon {font-size:0!important'),'summary emoji glyphs must be hidden');
-  for(const token of [
-    '#pageMenu .quick-stats .qs-card:nth-child(1) .qs-icon {background-color:#e6f8f1!important;background-image:url("data:image/svg+xml,',
-    '#pageMenu .quick-stats .qs-card:nth-child(2) .qs-icon {background-color:#e8f2ff!important;background-image:url("data:image/svg+xml,',
-    '#pageMenu .quick-stats .qs-card:nth-child(3) .qs-icon {background-color:#fff3df!important;background-image:url("data:image/svg+xml,',
-    '#pageMenu .quick-stats .qs-card:nth-child(4) .qs-icon {background-color:#ffe8ea!important;background-image:url("data:image/svg+xml,'
-  ]) assert.ok(css.includes(token),'each summary card must use its approved local SVG');
-  for(const color of ['#22c8ad','#438ff0','#8b6ff0','#ff7a38','#20bcd2','#f4b714']) assert.ok(css.includes('background-color:'+color+'!important'));
-  assert.ok(css.includes('.na-mobile-drawer-link:nth-child(3) .na-mobile-drawer-icon {background-image:url("data:image/svg+xml,'));
-  assert.ok(css.includes('.na-mobile-drawer-icon {font-size:0!important;background-color:transparent!important'));
-});
-

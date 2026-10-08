@@ -7,6 +7,7 @@ async function enterPos(page: Page) {
     await sidebar.click();
     return;
   }
+  await page.locator('#naMobileMenuToggle').click();
   const quickSale = page.getByRole('button', { name: 'Nueva venta', exact: true });
   if (await quickSale.isVisible()) {
     await quickSale.click();

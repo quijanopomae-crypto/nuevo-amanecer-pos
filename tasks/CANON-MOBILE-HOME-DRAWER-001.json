@@ -3,8 +3,8 @@
   "task_id": "CANON-MOBILE-HOME-DRAWER-001",
   "environment": "CANON",
   "base_ref": "c73d5a5f64be6a9a16bd94b07f94535f9ae84c6c",
-  "objective": "Rediseñar exclusivamente el Inicio móvil de CANON para separar navegación completa en un drawer y convertir el home en panel de resumen, acciones rápidas y actividad reciente, refinando su fidelidad visual con barra superior blanca/compacta, hero paisajístico, tarjetas densas, ficha visual de usuario e iconografía SVG local, sin alterar tablet, escritorio ni lógica de negocio.",
-  "owner_authorization": "El propietario aprobó explícitamente aplicar y refinar el diseño únicamente al CANON móvil, excluyendo PC y tablet.",
+  "objective": "Refinar exclusivamente Inicio y drawer móvil conforme al modelo aprobado: blanco, métricas legibles, iconos vectoriales mate de distintos colores suaves, acciones únicamente en drawer y paisaje por hora local/estación del hemisferio sur. Conservar >=768px, CANON, lógica y datos; continuar PR #431 sin merge ni deploy.",
+  "owner_authorization": "Solicitud explícita del propietario: implementar en feat/canon-mobile-home-drawer / PR #431 desde 848738a798a28eda92751dac95c79f6ca49b6ef9; no merge a feature/v1.3-mobile-cloud, no producción, no reemplazar CANON y mantener PC/tablet y negocio.",
   "allowed_files": [
     "tasks/CANON-MOBILE-HOME-DRAWER-001.json",
     "POS/css/canon-mobile-home.css",
@@ -34,15 +34,12 @@
     "POS/js/canon-desktop-dashboard.js y POS/css/canon-desktop-dashboard.css solo como frontera >=768px"
   ],
   "writes": [
-    "decorador DOM mobile-only dentro de la capa de navegación ya existente",
-    "stylesheet CANON production-only cargado dinámicamente solo en teléfono",
-    "precache del stylesheet móvil para conservar funcionamiento offline",
-    "drawer mobile-only",
-    "acciones rápidas que reutilizan navegación existente",
-    "actividad reciente derivada solo en lectura de estado ya cargado",
-    "pruebas E2E de teléfono, tablet/PC y rotación de breakpoint",
-    "adaptación del helper E2E responsive para entrar por Nueva venta cuando la grilla de módulos está oculta en teléfono",
-    "refinamiento visual mobile-only mediante CSS local: barra superior compacta, paisaje, densidad e iconografía SVG embebida"
+    "Decoración DOM mobile-only en menu-navigation.js sin cambiar navigate/mobileSafeNavigate ni negocio",
+    "Stylesheet mobile-only existente con SVG embebidos, tarjetas blancas y tipografía legible",
+    "Drawer único con acciones y descripción de módulo existente, selección, Escape y foco",
+    "Actividad real en lectura: ventas y movimientos de caja sin duplicar ventaId ni convertir métricas en eventos",
+    "Paisaje decorativo por hora local/estación sur, actualización por minuto, pausa fuera de Inicio y con documento oculto, prefers-reduced-motion",
+    "Pruebas móviles/PC/tablet y helper E2E Nueva venta dentro del drawer"
   ],
   "dom_affected": [
     "#pageMenu en <=767px",
@@ -64,21 +61,21 @@
     "Si un teléfono cruza a >=768px por rotación/redimensionado, el chrome móvil queda oculto y vuelve a dominar la interfaz tablet/escritorio existente."
   ],
   "acceptance_criteria": [
-    "En <=767px la grilla Módulos principales queda oculta y el home muestra Resumen, Acciones rápidas y Actividad reciente.",
-    "En <=767px existe botón hamburguesa y drawer accesible con Inicio, Punto de Venta, Ventas, Inventario, Clientes/Cuentas por cobrar, Caja, Gastos y Configuración.",
-    "Nueva venta, Ingresar mercadería, Registrar gasto, Buscar cliente y Abrir/cerrar caja navegan a páginas existentes; Registrar abono abre Clientes sin inventar lógica de pago nueva.",
-    "El drawer cierra al seleccionar destino, tocar overlay o presionar Escape.",
-    "En >=768px no se muestra ni se aplica el decorador móvil.",
-    "canon-mobile-home.css queda disponible offline en el mismo build del shell PWA.",
-    "La paridad visual LAB→CANON continúa pasando.",
-    "El E2E demuestra home/drawer en 390px, ausencia del mobile chrome en 1024px y ocultamiento al rotar de 390px a 844px.",
-    "El E2E responsive legacy entra al Punto de Venta mediante Nueva venta en <768px y conserva el flujo existente en >=768px.",
-    "En <=767px la barra superior es blanca y compacta, ocultando controles secundarios que compiten con la navegación principal sin eliminar su lógica.",
-    "El hero móvil muestra un paisaje local sin dependencias remotas.",
-    "Resumen, acciones rápidas y actividad reciente reducen su altura manteniendo legibilidad y targets táctiles.",
-    "El drawer añade una ficha visual de usuario y sustituye visualmente emojis por iconografía SVG local sin inventar módulos ni acciones.",
-    "No se modifica lógica de negocio, almacenamiento, sincronización, datos, LAB, PC/tablet ni infraestructura.",
-    "CANON Critical CI y E2E Smoke CI pasan."
+    "<=767px: Inicio contiene saludo, paisaje, cuatro métricas y actividad; no hay acciones rápidas duplicadas ni grilla de módulos.",
+    "Un drawer contiene Inicio, Nueva venta (Punto de Venta), Ventas, Ingresar mercadería (Inventario), Buscar cliente (Clientes), Registrar abono (Cuentas por cobrar), Abrir / cerrar caja (Caja), Registrar gasto (Gastos) y Configuración.",
+    "Las acciones navegan a destinos existentes; no se ejecutan cobros ni escrituras desde el decorador.",
+    "El drawer cierra por selección, overlay y Escape; foco vuelve al toggle y Tab permanece dentro.",
+    "Perfil y saludo usan identidad cargada en lectura, sin nombres ni roles hardcodeados.",
+    "Iconos SVG locales de familia mate coherente, colores suaves diferentes; tarjetas blancas, texto oscuro.",
+    "Paisaje representa amanecer, mediodía, atardecer, noche y medianoche con transición suave según hora local del dispositivo y variaciones de verano/otoño/invierno/primavera del hemisferio sur.",
+    "El timer se limpia fuera de Inicio, al ocultar el documento y al cruzar >=768px; movimiento reducido elimina animaciones.",
+    "Actividad compacta muestra registros existentes y estado vacío real; no inventa movimientos ni repite métricas.",
+    "320/360/390/430px sin overflow horizontal; 768/1024/1366/1920px sin chrome móvil; rotación reversible.",
+    "POS/index.html, experiencia compartida, escritorio/tablet, negocio, almacenamiento, sincronización, infraestructura y LAB permanecen intactos.",
+    "El stylesheet y JS ya precacheados conservan recursos SVG/paisaje offline sin agregar requests.",
+    "Pruebas focales, regresiones y diff revisados; fallos existentes de otras suites se documentan sin cambiar módulos ajenos.",
+    "Actualizar solo la rama del PR #431; no merge, deploy, producción ni reemplazo CANON."
   ],
-  "rollback": "Revertir el bloque mobile-only de fidelidad visual en POS/css/canon-mobile-home.css y sus pruebas/contrato; si se revierte toda la tarea, revertir además el bloque mobile-only de menu-navigation.js y la entrada de precache en POS/sw.js. No hay datos ni migraciones que revertir."
+  "rollback": "Revertir el commit de esta continuación del PR #431. No hay cambios de datos, migraciones ni dependencias nuevas.",
+  "continuation_from": "848738a798a28eda92751dac95c79f6ca49b6ef9"
 }
