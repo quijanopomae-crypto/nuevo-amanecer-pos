@@ -205,7 +205,7 @@
 
   function ensureMobileStylesheet() {
     if (!isMobile() || typeof document.createElement !== 'function') return false;
-    if (document.getElementById('naMobileHomeStyles')) return true;
+    if (document.getElementById('naMobileHomeBaseStyles') || document.getElementById('naMobileHomeStyles')) return true;
     var head = document.head || (document.querySelector && document.querySelector('head'));
     if (!head || typeof head.appendChild !== 'function') return false;
     var link = node('link');
@@ -606,6 +606,7 @@
 
     refreshMobileActivity();
     syncMobileLandscape();
+    page.classList.add('na-mobile-ready');
     if (!mobileHomeObserver && root.MutationObserver) {
       mobileHomeObserver = new root.MutationObserver(function () { syncMobileLandscape(); refreshMobileActivity(); });
       mobileHomeObserver.observe(page, { attributes:true, attributeFilter:['class'] });
