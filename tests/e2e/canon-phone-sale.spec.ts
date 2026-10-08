@@ -267,6 +267,9 @@ for(const width of [320,360,390,430]) test(`approved phone cash layout ${width}:
  expect(split.background).not.toBe('rgba(0, 0, 0, 0)');expect(split.border).not.toBe('0px');
  await page.locator('#mCashQuickInline [data-cash-inline="10"]').click();
  await expect(page.locator('#mMontoRec')).toHaveValue('10.00');await expect(page.locator('#mCambio')).toHaveText('S/ 2.30');
+ const cashBox=await page.locator('#mCashAdvanced').boundingBox();
+ const splitBox=await page.locator('#mCobro .pay-methods [data-method="mixto"]').boundingBox();
+ expect(splitBox!.y).toBeGreaterThanOrEqual(cashBox!.y+cashBox!.height-1);
  await expect(page.locator('#mBtnConf')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
