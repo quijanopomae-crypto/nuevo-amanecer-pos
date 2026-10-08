@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Publicar iconos delineados de actividad aprobados: recibo para créditos, carrito para ventas, mano con moneda sin divisa extranjera para abonos.",
-  "retry_attempt": 84,
-  "retry_reason": "Owner: Aplicado a canon. 23 E2E PASS, vista real verificada, revisión independiente sin P0/P1; integrar tras CI verde.",
-  "requested_at_utc": "2026-10-08T02:22:25.900Z",
-  "target_head": "63bd8b5eb87794b3d9ade376e136586c8de9d882"
+  "note": "Publicar carrito de actividad móvil aprobado: trazo fino, rejilla discreta y ruedas pequeñas; solo un SVG CSS.",
+  "retry_attempt": 85,
+  "retry_reason": "Owner aprobó la imagen y aplicación a CANON. 23 E2E PASS, revisión independiente sin P0/P1; integrar tras CI verde.",
+  "requested_at_utc": "2026-10-08T02:36:18.804Z",
+  "target_head": "9aa0856f4a189bcdc9d6284f7af0557aa18489ff"
 }
