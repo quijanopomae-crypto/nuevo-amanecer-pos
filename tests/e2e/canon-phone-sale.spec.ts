@@ -331,7 +331,9 @@ test('phone overflow preserves original sale actions in sale and checkout, then 
  page.once('dialog',dialog=>dialog.dismiss());
  await page.locator('#cartMenuDropdown button').filter({hasText:'Aplicar descuento'}).click();
  expect((await discountPrompt).message()).toContain('Descuento global');
- await expect(page.locator('#mCobro')).toBeHidden();
+ await expect(page.locator('#mCobro')).not.toHaveClass(/open/);
+ await expect(page.locator('#mCobro')).toHaveCSS('opacity','0');
+ await expect(page.locator('#mCobro')).toHaveCSS('pointer-events','none');
  await page.evaluate(()=>window.eval(`closeCartMenu();`));
  await page.setViewportSize({width:1366,height:900});
  await expect(page.locator('.cart-secondary-actions #posQuantity')).toBeVisible();
