@@ -4,7 +4,7 @@ test.beforeEach(async ({page}) => {await page.route('**/*', route => new URL(rou
 
 for(const width of [320,360,390,430,768,1024,1366,1920])test('settings '+width,async({page})=>{await page.setViewportSize({width,height:844});await page.goto('/index.html');
     await page.waitForFunction(()=>_naFreeSaleShortcutState.ready);
-    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0))));await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pageConfig'));await expect(page.locator('#cfgNombre')).toBeVisible();if(width<768)await expect(page.locator('#naMobileMenuToggle')).toBeHidden();for(const cat of ['pos','apariencia','ticket','control','reseteo','importar','info','negocio']){await page.evaluate(cat=>window.switchCfgCategory(cat),cat);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0))));await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pageConfig'));if(width<768){await expect(page.locator('#cfgNombre')).toBeHidden();await page.locator('.cfg-accordion-toggle').filter({hasText:'Datos principales'}).click();}await expect(page.locator('#cfgNombre')).toBeVisible();if(width<768)await expect(page.locator('#naMobileMenuToggle')).toBeHidden();for(const cat of ['pos','apariencia','ticket','control','reseteo','importar','info','negocio']){await page.evaluate(cat=>window.switchCfgCategory(cat),cat);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}});
 
 for (const width of [320, 360, 390, 430]) {
   test(`configuration help opens and closes without changing data at ${width}px`, async ({page}) => {
@@ -15,6 +15,7 @@ for (const width of [320, 360, 390, 430]) {
     await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pageConfig'));
     for (const cat of ['negocio','pos','apariencia','ticket','control','reseteo','importar','info']) {
       await page.evaluate(cat=>window.switchCfgCategory(cat),cat);
+      const sections=page.locator('.cfg-accordion-toggle[aria-expanded=false]');while(await sections.count())await sections.first().click();
       const before=await page.evaluate(()=>JSON.stringify(appConfig));
       const buttons=page.locator('#cfgContent .cfg-help-toggle');
       expect(await buttons.count()).toBeGreaterThan(0);
@@ -40,7 +41,8 @@ test('configuration help adapts to rotation without duplicates',async({page})=>{
     await page.waitForFunction(()=>_naFreeSaleShortcutState.ready);
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0))));
   await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pageConfig'));
-  await expect(page.locator('#cfgNombre')).toBeVisible();
+  await expect(page.locator('.cfg-accordion-toggle').filter({hasText:'Datos principales'})).toBeVisible();
+  await expect(page.locator('#cfgNombre')).toBeHidden();
   expect(await page.locator('.cfg-help-toggle').count()).toBeGreaterThan(0);
   const count=await page.locator('.cfg-help-toggle').count();
   await page.setViewportSize({width:1024,height:768});
@@ -50,4 +52,29 @@ test('configuration help adapts to rotation without duplicates',async({page})=>{
   await expect(page.locator('.cfg-help-toggle')).toHaveCount(count);
   await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
   await expect(page.locator('.cfg-help-toggle')).toHaveCount(count);
+});
+
+test('mobile configuration panels start collapsed and retain edits when toggled',async({page})=>{
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/index.html');
+  await page.waitForFunction(()=>_naFreeSaleShortcutState.ready);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0))));
+  await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pageConfig'));
+  const section=page.locator('.cfg-accordion-toggle').filter({hasText:'Datos principales'});
+  await expect(section).toHaveAttribute('aria-expanded','false');
+  await expect(page.locator('#cfgNombre')).toBeHidden();
+  await section.click();
+  await expect(page.locator('#cfgNombre')).toBeVisible();
+  await page.locator('#cfgNombre').fill('Nombre de prueba local');
+  await section.click();
+  await expect(page.locator('#cfgNombre')).toBeHidden();
+  await page.evaluate(()=>_naCaptureVisibleConfig());
+  expect(await page.evaluate(()=>appConfig.business.nombre)).toBe('Nombre de prueba local');
+  await section.click();
+  await expect(page.locator('#cfgNombre')).toHaveValue('Nombre de prueba local');
+  await page.evaluate(()=>renderCfgContent('negocio'));
+  await expect(page.locator('#cfgNombre')).toBeVisible();
+  await page.setViewportSize({width:1024,height:768});
+  await expect(page.locator('.cfg-accordion-toggle')).toHaveCount(0);
+  await expect(page.locator('#cfgNombre')).toBeVisible();
 });
