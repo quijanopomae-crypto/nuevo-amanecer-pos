@@ -166,7 +166,7 @@ for(const width of [320,360,390,430]) test(`phone checkout ${width}: footer stay
   expect(await page.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('#mBtnConf'),{x:b!.x+b!.width/2,y:b!.y+b!.height/2})).toBe(true);
  }
  await expect(page.locator('#mCashInlineNote')).toBeHidden();await expect(page.locator('#mPaymentHint')).toContainText('Monto exacto');
- await page.locator('#mCobro .cash-other-btn').click();await expect(page.locator('#mMontoRec')).toBeVisible();
+ await expect(page.locator('#mMontoRec')).toBeVisible();
  await page.locator('#mMontoRec').fill('5');await expect(page.locator('#mCambio')).toHaveText('S/ 4.00');
  await page.locator('#mCobro [data-method="yape"]').click();await expect(page.locator('#mDigitalVerified')).toBeVisible();
  await expect(page.locator('#mPaymentHint')).toContainText('verificaste');
@@ -190,7 +190,7 @@ test('phone credit reuses the sale customer without repeating customer or catego
  expect(await page.evaluate(()=>({accountId:NA_CLIENT_CREDIT_ACCOUNTS_V2.saleDraft()?.account.account_id,defaultId:NA_CLIENT_CREDIT_ACCOUNTS_V2.smallAccountId}))).toMatchObject({accountId:'small',defaultId:'small'});
  await page.locator('#mCobro [data-method="efectivo"]').click();
  await expect(page.locator('#mClienteDetails')).toBeHidden();
- await page.locator('#mCobro .pay-close').click();
+ await page.locator('#mCobro .pay-modal-footer .pay-btn-secondary').click();
  await page.locator('#posCustomerButton').click();
  await page.locator('.na-client-picker-row').filter({hasText:'Segundo cliente'}).click();
  await expect(page.locator('#posCustomer')).toHaveText('Segundo cliente');
@@ -234,4 +234,21 @@ test('phone checkout groups digital payments while retaining the selected channe
  await expect(page.locator('#mCobro .pay-methods [data-digital-group]')).toHaveClass(/active/);
  await page.locator('#mDigitalChannels [data-digital-method="yape"]').click();
  expect(await page.evaluate(()=>posPayM)).toBe('yape');
+});
+
+for(const width of [320,360,390,430]) test(`phone checkout reference layout ${width}: three method cards and cash change are visible`,async({page})=>{
+ await page.setViewportSize({width,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`cart=[{id:'CASH-REF',name:'Producto de prueba',precio:9.5,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 9.50';document.getElementById('mMontoRec').value='9.50';_naRenderCashQuickOptions(9.5);calcCambio();document.getElementById('mCobro').classList.add('open');`));
+ const row=await page.locator('#mCobro .pay-methods [data-method="efectivo"],#mCobro .pay-methods [data-digital-group],#mCobro .pay-methods [data-method="credito"]').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height};}));
+ expect(row).toHaveLength(3);
+ expect(row.every(r=>r.width>0&&r.height>0)).toBe(true);
+ expect(Math.max(...row.map(r=>r.y))-Math.min(...row.map(r=>r.y))).toBeLessThan(2);
+ await expect(page.locator('#mCashAdvanced')).toBeVisible();
+ await expect(page.locator('#mMontoRec')).toBeVisible();
+ await expect(page.locator('#mCashQuickInline button')).toHaveCount(5);
+ await expect(page.locator('#mCambio')).toBeVisible();
+ await page.locator('#mCashQuickInline [data-cash-inline="10"]').click();await expect(page.locator('#mMontoRec')).toHaveValue('10.00');await expect(page.locator('#mCambio')).toHaveText('S/ 0.50');
+ await expect(page.locator('#mCobro .pay-methods [data-method="mixto"]')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
