@@ -204,3 +204,13 @@ body.na-pos-phone-device #mCobro #mMixedSection{grid-column:1/-1;grid-row:4}
 body.na-pos-phone-device #mCobro .pay-methods .pm-btn[data-method="mixto"]{grid-column:1/-1!important;grid-row:5}
 body.na-pos-phone-device #mCobro #mPaymentHint{grid-column:1/-1;grid-row:6}
 body.na-pos-phone-device #mCobro:has(.pm-btn[data-method="efectivo"].active) #mPaymentHint.ok{display:none!important}
+
+/* Approved phone checkout reference: keep the amount visible and use compact line icons. */
+#mCobro .pmi-icon{display:none}
+body.na-pos-phone-device #mCobro .pay-total-card{position:sticky;top:0;z-index:4;align-self:start}
+body.na-pos-phone-device #mCobro .pmi-emoji{display:none}
+body.na-pos-phone-device #mCobro .pmi-icon{display:inline-flex;align-items:center;justify-content:center;color:currentColor}
+body.na-pos-phone-device #mCobro .pmi-icon svg{display:block;width:44px;height:44px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+body.na-pos-phone-device #mCobro .pmi-icon .digital-arrow{stroke:#1685e8;stroke-width:3}
+body.na-pos-phone-device #mCobro .pay-amount-input-wrap>span{display:flex;align-items:center;align-self:stretch;flex:0 0 auto;padding-right:12px;border-right:1px solid #d7dde5}
+body.na-pos-phone-device #mCobro .pay-amount-input{padding-left:12px}
