@@ -408,7 +408,7 @@
         <button type="button" class="pm-btn active" data-method="efectivo" onclick="selPM(this)"><span class="pmi">💵</span><span class="pml">Efectivo</span></button>
         <button type="button" class="pm-btn" data-method="yape" data-digital-group="true" onclick="selPM(this)" aria-pressed="false" aria-describedby="mDigitalMethodHint"><span class="pmi">📲</span><span class="pm-copy"><span class="pml">Pago digital</span><small class="pms" id="mDigitalMethodHint">Yape, Plin o transferencia</small></span></button>
         <button type="button" class="pm-btn" data-method="credito" onclick="selPM(this)"><span class="pmi">🧾</span><span class="pml">Crédito</span></button>
-        <button type="button" class="pm-btn" data-method="mixto" onclick="selPM(this)"><span class="pmi">🔀</span><span class="pml">Pago mixto · Efectivo + digital</span></button>
+        <button type="button" class="pm-btn" data-method="mixto" onclick="selPM(this)"><span class="pmi">🔀</span><span class="pml">Dividir pago</span></button>
       </div>
 
       <details class="pay-client-details" id="mClienteDetails">
@@ -427,7 +427,7 @@
         </div>
         <div id="mCashAdvanced" class="pay-panel cash-advanced-panel" hidden>
           <div class="pay-amount-head">
-            <label for="mMontoRec">Monto recibido</label>
+            <label for="mMontoRec">Efectivo recibido</label>
             <button type="button" class="cash-exact-btn" onclick="setMontoExacto(true)">Usar monto exacto</button>
           </div>
           <div class="pay-amount-input-wrap">
