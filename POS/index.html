@@ -406,8 +406,7 @@
       <div class="pay-section-label">Método de pago</div>
       <div class="pm-grid pay-methods">
         <button type="button" class="pm-btn active" data-method="efectivo" onclick="selPM(this)"><span class="pmi">💵</span><span class="pml">Efectivo</span></button>
-        <button type="button" class="pm-btn" data-method="yape" onclick="selPM(this)"><span class="pmi">📱</span><span class="pml">Yape / Plin</span></button>
-        <button type="button" class="pm-btn" data-method="transferencia" onclick="selPM(this)"><span class="pmi">🏦</span><span class="pml">Transferencia</span></button>
+        <button type="button" class="pm-btn" data-method="yape" data-digital-group="true" onclick="selPM(this)" aria-pressed="false" aria-describedby="mDigitalMethodHint"><span class="pmi">📲</span><span class="pm-copy"><span class="pml">Pago digital</span><small class="pms" id="mDigitalMethodHint">Yape, Plin o transferencia</small></span></button>
         <button type="button" class="pm-btn" data-method="credito" onclick="selPM(this)"><span class="pmi">🧾</span><span class="pml">Crédito</span></button>
         <button type="button" class="pm-btn" data-method="mixto" onclick="selPM(this)"><span class="pmi">🔀</span><span class="pml">Pago mixto · Efectivo + digital</span></button>
       </div>
@@ -455,6 +454,11 @@
       </div>
 
       <div id="mDigitalSection" class="pay-panel pay-alt-panel" style="display:none">
+        <div class="digital-channel-label">¿Cómo pagó?</div>
+        <div class="digital-channel-list" id="mDigitalChannels" role="group" aria-label="Canal de pago digital">
+          <button type="button" class="digital-channel-btn active" data-digital-method="yape" aria-pressed="true" onclick="selPM(this)">Yape / Plin</button>
+          <button type="button" class="digital-channel-btn" data-digital-method="transferencia" aria-pressed="false" onclick="selPM(this)">Transferencia</button>
+        </div>
         <label class="digital-payment-confirmation" for="mDigitalVerified">
           <input type="checkbox" id="mDigitalVerified" onchange="_naValidatePaymentForm()">
           <span>He verificado que el pago fue recibido</span>
