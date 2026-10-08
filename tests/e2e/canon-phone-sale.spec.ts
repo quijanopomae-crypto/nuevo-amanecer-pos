@@ -172,3 +172,28 @@ for(const width of [320,360,390,430]) test(`phone checkout ${width}: footer stay
  await expect(page.locator('#mPaymentHint')).toContainText('verificaste');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('phone credit uses the customer selected at sale start and shows one customer picker',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/index.html');
+ await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
+ await page.evaluate(()=>window.eval(`clientes=[{id:'CREDIT-START',nombre:'Cliente elegido al inicio',lineaCreditoManualActiva:true,lineaCreditoManual:100},{id:'CREDIT-SECOND',nombre:'Segundo cliente',lineaCreditoManualActiva:true,lineaCreditoManual:100}];productos=[{id:'CREDIT-PRODUCT',name:'Producto prueba',precio:5,costo:1,stock:10,cat:'bebidas'}];cart=[{id:'CREDIT-PRODUCT',name:'Producto prueba',precio:5,qty:1}];cajEstado={abierta:true,cerrada:false,fechaApertura:obtenerHoy()};posUpdateCart(false);posRender();`));
+ await page.locator('#posCustomerButton').click();
+ await page.locator('.na-client-picker-row').filter({hasText:'Cliente elegido al inicio'}).click();
+ await page.evaluate(()=>window.eval(`abrirCobro();`));
+ await page.locator('#mCobro [data-method="credito"]').click();
+ await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-START');
+ await expect(page.locator('#mCreditoClienteSearchTrigger')).toContainText('Cliente elegido al inicio');
+ await expect(page.locator('#mClienteDetails')).toBeHidden();
+ await page.locator('#mCreditoClienteSearchTrigger').click();
+ await page.locator('.na-client-picker-row').filter({hasText:'Segundo cliente'}).click();
+ await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-SECOND');
+ await expect(page.locator('#mVentaCliente')).toHaveValue('CREDIT-SECOND');
+ await expect(page.locator('#posCustomer')).toHaveText('Segundo cliente');
+ await page.locator('#mCobro [data-method="efectivo"]').click();
+ await expect(page.locator('#mClienteDetails')).toBeVisible();
+ await page.locator('#mCobro [data-method="credito"]').click();
+ await expect(page.locator('#mCreditoCliente')).toHaveValue('CREDIT-SECOND');
+ await expect(page.locator('#mClienteDetails')).toBeHidden();
+ await page.evaluate(()=>window.eval(`cerrarModal('mCobro');document.getElementById('mCreditoCliente').value='CREDIT-START';document.getElementById('mCreditoCliente').dispatchEvent(new Event('change',{bubbles:true}));abrirCobro();`));
+ await expect(page.locator('#mCreditoCliente')).toHaveValue('');
+});
