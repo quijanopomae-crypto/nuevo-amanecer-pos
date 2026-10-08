@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Cobro móvil: contenido desplazable y acciones completas dentro del área visible.",
-  "retry_attempt": 94,
-  "retry_reason": "Owner: Aplicalo. PR467 Critical y E2E SUCCESS;36 focales PASS;review independiente sin P0/P1;preview SHA exacto.",
-  "requested_at_utc": "2026-10-08T14:27:08.564Z",
-  "target_head": "ab2784dcd47dbc9579aa636e21b3fad6d63122e3"
+  "note": "Cobro móvil: reutilizar cliente ya seleccionado al inicio al elegir Crédito y ocultar selector duplicado.",
+  "retry_attempt": 95,
+  "retry_reason": "Owner autorizó Aplicalo en esta corrección CANON; PR469 Critical y E2E SUCCESS;37 pruebas focales PASS; revisión independiente sin P0/P1; SHA integrado 609530fd84a8b59709797d6eec57d28a8b8c3d40.",
+  "requested_at_utc": "2026-10-08T14:47:00.000Z",
+  "target_head": "609530fd84a8b59709797d6eec57d28a8b8c3d40"
 }
