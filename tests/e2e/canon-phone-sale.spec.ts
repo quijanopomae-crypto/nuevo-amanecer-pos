@@ -286,7 +286,7 @@ test('phone hides only redundant cash success hint and retains digital success f
  await expect(hint).toBeVisible();
 });
 
-for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: total scrolls in flow without covering payment methods`,async({page})=>{
+for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: total scrolls in flow without covering payment methods`,async({page},testInfo)=>{
  await page.setViewportSize({width,height:650});await page.goto('/index.html');
  await page.evaluate(()=>window.NA_MENU_NAVIGATION.navigate('pagePOS'));
  await page.evaluate(()=>window.eval(`cart=[{id:'VISUAL-TOTAL',name:'Producto prueba',precio:7.7,qty:1}];posPayM='efectivo';document.getElementById('mCobroTotal').textContent='S/ 7.70';document.getElementById('mMontoRec').value='7.70';_naRenderCashQuickOptions(7.7);calcCambio();document.getElementById('mCobro').classList.add('open');`));
@@ -294,6 +294,7 @@ for(const width of [320,360,390,430]) test(`approved phone checkout ${width}: to
  await expect(total).toContainText('Total a cobrar');
  await expect(page.locator('#mCobroTotal')).toHaveText('S/ 7.70');
  await page.waitForFunction(()=>{const el=document.querySelector('#mCobro .pay-modal-body');return !!el&&el.scrollHeight>el.clientHeight+40;});
+ await testInfo.attach('checkout-approved-'+width,{body:await page.screenshot(),contentType:'image/png'});
  const before=await total.boundingBox();
  const method=page.locator('#mCobro [data-method="efectivo"]');
  await body.evaluate(el=>{el.scrollTop=100;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
