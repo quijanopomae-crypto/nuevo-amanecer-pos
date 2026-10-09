@@ -24,12 +24,15 @@ test('CANON image batch previews, persists, resolves and undoes without mutating
   await expect(page.locator('#productImageBatchStatus')).toContainText('1 fotos guardadas y verificadas');
   expect(await page.evaluate('JSON.stringify(productos)')).toBe(before);
   expect(await page.evaluate('NuevoAmanecerImageBatch.source(productos[0])')).toBe(image);
+  await expect(page.locator('#invBody img')).toHaveCount(1);
+  await expect(page.locator('#invBody img')).toHaveAttribute('src',image);
   // Reimporting exported bytes stays idempotent.
   await page.locator('#productImageBatchFiles').setInputFiles({name:'otra.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({version:1,entries:[{codes:[code],image}]}))});
   await expect(page.locator('#productImageBatchRows')).toContainText('Sin cambios');
   await page.locator('#productImageBatchUndo').click();
   await expect(page.locator('#productImageBatchStatus')).toContainText('restauró');
   expect(await page.evaluate('NuevoAmanecerImageBatch.source(productos[0])')).toBeNull();
+  await expect(page.locator('#invBody img')).toHaveCount(0);
   expect(await page.evaluate('JSON.stringify(productos)')).toBe(before);
 });
 test('a changed stored catalog rejects a stale preview',async({page})=>{
