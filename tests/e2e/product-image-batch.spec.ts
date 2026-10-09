@@ -6,7 +6,7 @@ async function setup(page:any){
   await page.evaluate("productos=[{id:99001,name:'Producto de prueba',sku:'04692485',barcode:'01',codigosAlternativos:['12345'],precio:2,costo:1,stock:20,stockMin:2,cat:'abarrotes',icon:'📦',unidad:'unidad',venc:'',imagen:''}]");
   await page.evaluate(()=>{
     // Synthetic canonical promotion; no production writes or backend calls.
-    (window as any).NuevoAmanecerCanonical={enabled:()=>true,snapshot:()=>({promotion_id:'image-batch-test'})};
+    (window as any).NuevoAmanecerCanonical={enabled:()=>true,sourceState:()=>({cache:{promotion_id:'image-batch-test'}}),snapshot:()=>{throw new Error('Photo lookup copied the full CANON snapshot');}};
     (window as any)._naAuthorize=()=>true;
     (window as any).securityIsLocked=()=>false;
     // Use the real renderers against a synthetic product.
