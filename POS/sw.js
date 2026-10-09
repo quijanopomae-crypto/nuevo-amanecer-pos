@@ -77,6 +77,7 @@ const PRECACHE_URLS = [
   './js/legacy-inline/inline-10.js',
   './js/legacy-inline/inline-11.js',
   './js/legacy-inline/inline-12.js',
+  './js/products/image-batch.js',
   './js/legacy-inline/inline-13.js',
   './js/modules/ticket/secure-print.js',
   './js/legacy-inline/inline-14.js',
