@@ -20,6 +20,8 @@ test('CANON image batch previews, persists, resolves and undoes without mutating
   const before=await page.evaluate('JSON.stringify(productos)'),code=await page.evaluate('productos[0].sku');
   await page.locator('#productImageBatchFiles').setInputFiles({name:'lote.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({version:1,entries:[{codes:[code],image}]}))});
   await expect(page.locator('#productImageBatchStatus')).toContainText('1 fotos listas');
+  await page.locator('#productImageBatchReplace').check();
+  await expect(page.locator('#productImageBatchStatus')).toContainText('1 fotos listas');
   await page.locator('#productImageBatchApply').click();
   await expect(page.locator('#productImageBatchStatus')).toContainText('1 fotos guardadas y verificadas');
   expect(await page.evaluate('JSON.stringify(productos)')).toBe(before);
