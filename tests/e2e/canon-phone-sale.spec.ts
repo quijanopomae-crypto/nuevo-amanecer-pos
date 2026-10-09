@@ -145,7 +145,13 @@ for(const width of [320,390,430]) test(`phone catalog ${width}: dropdown categor
  await page.locator('#posPhoneCategories').click();await page.locator('#posSidebar [data-cat="todo"]').click();await expect(page.locator('#posArea .product-card')).toHaveCount(36);
  const metrics=await page.locator('#posArea').evaluate(el=>({columns:getComputedStyle(el).gridTemplateColumns.split(' ').length,scroll:el.scrollHeight>el.clientHeight,horizontal:el.scrollWidth>el.clientWidth}));expect(metrics).toEqual({columns:3,scroll:true,horizontal:false});
  const images=await page.locator('#posArea .p-img').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect(),im=n.querySelector('img')!,ir=im.getBoundingClientRect();return {w:r.width,h:r.height,contain:getComputedStyle(im).objectFit,inside:ir.x>=r.x&&ir.y>=r.y&&ir.right<=r.right&&ir.bottom<=r.bottom};}));
- expect(new Set(images.map(x=>x.w+':'+x.h)).size).toBe(1);expect(images.every(x=>x.w===x.h&&x.contain==='contain'&&x.inside)).toBe(true);
+ expect(new Set(images.map(x=>x.w+':'+x.h)).size).toBe(1);
+ expect(images.every(x=>x.w>=58&&x.w<=72&&x.w===x.h&&x.contain==='contain'&&x.inside)).toBe(true);
+ const photoLayout=await page.locator('#posArea .product-card').evaluateAll(cards=>cards.map(card=>{
+  const box=card.getBoundingClientRect(),photo=card.querySelector('.p-img')!.getBoundingClientRect(),name=card.querySelector('.p-name')!.getBoundingClientRect(),stock=card.querySelector('.p-stock-badge')!.getBoundingClientRect();
+  return {photoInside:photo.left>=box.left&&photo.right<=box.right,photoAboveName:photo.bottom<=name.top+1,stockBelowName:stock.top>=name.bottom-1};
+ }));
+ expect(photoLayout.every(card=>card.photoInside&&card.photoAboveName&&card.stockBelowName)).toBe(true);
  await page.locator('#posArea').evaluate(el=>{el.scrollTop=el.scrollHeight});expect(await page.locator('#posArea').evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
  await page.locator('[data-product-id="GRID-35"]').click();await expect(page.locator('#posTotal')).toHaveText('S/ 3.50');
 });
