@@ -16,9 +16,9 @@
       [row.querySelector('.prod-sku-sm'),cells[1].firstElementChild,cells[2].children[1],cells[3].firstElementChild].filter(Boolean).forEach(node=>{const line=document.createElement('div');line.textContent=node.textContent;content.append(line);});
       for(const button of actions.querySelectorAll('button')){button.dataset.inventoryOriginalText=button.textContent;button.textContent=button.classList.contains('btn-ent')?'Entrada de stock':button.classList.contains('btn-sal')?'Salida de stock':button.classList.contains('btn-edt')?'Editar producto':'Sin control de stock';}
       actions.before(menu);content.append(actions);menu.append(content);
-      const name=row.querySelector('.prod-name-sm');if(name){name.tabIndex=0;name.setAttribute('role','button');name.setAttribute('aria-label','Ver detalles de '+name.textContent);name.onclick=event=>{event.stopPropagation();menu.open=!menu.open;};name.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();menu.open=!menu.open;}};}
+      const name=row.querySelector('.prod-name-sm');if(name){const stock=cells[4].querySelector('.stock-pill');if(stock)name.parentElement.append(stock);name.tabIndex=0;name.setAttribute('role','button');name.setAttribute('aria-label','Ver detalles de '+name.textContent);name.onclick=event=>{event.stopPropagation();menu.open=!menu.open;};name.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();menu.open=!menu.open;}};}
     });
-    const count=page.querySelector('.inv-mobile-count');if(count)count.textContent=(document.getElementById('invB0')?.textContent||'0')+' productos';
+    const count=page.querySelector('.inv-mobile-count');if(count){const total=document.getElementById('invB0')?.textContent||'0';count.textContent=total+(total==='1'?' producto':' productos');}
   }
   function enable(){
     if(page.classList.contains('inv-mobile-simple'))return;
@@ -36,7 +36,7 @@
     page.classList.remove('inv-mobile-simple');
     page.querySelectorAll('.inv-product-menu').forEach(menu=>{const actions=menu.querySelector('.act-btns');menu.before(actions);menu.remove();});
     page.querySelectorAll('[data-inventory-original-text]').forEach(button=>{button.textContent=button.dataset.inventoryOriginalText;delete button.dataset.inventoryOriginalText;button.classList.remove('inv-mobile-add');});
-    page.querySelectorAll('#invBody tr').forEach(row=>{delete row.dataset.mobileInventory;const name=row.querySelector('.prod-name-sm');if(name){name.removeAttribute('tabindex');name.removeAttribute('role');name.removeAttribute('aria-label');name.onclick=null;name.onkeydown=null;}});
+    page.querySelectorAll('#invBody tr').forEach(row=>{delete row.dataset.mobileInventory;const name=row.querySelector('.prod-name-sm');if(name){const stock=name.parentElement.querySelector('.stock-pill');if(stock)row.children[4].append(stock);name.removeAttribute('tabindex');name.removeAttribute('role');name.removeAttribute('aria-label');name.onclick=null;name.onkeydown=null;}});
     while(moves.length){const [node,marker]=moves.pop();marker.replaceWith(node);}
     page.querySelectorAll('.inv-tools,.inv-filters,.inv-mobile-count').forEach(node=>node.remove());
   }
