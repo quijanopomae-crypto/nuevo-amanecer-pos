@@ -28,6 +28,13 @@ test('LAB approved page sections are the CANON shell with only explicit producti
     } else if (name === 'clientes') {
       const normalized=posIndex.replace('<span id="cliAuthorityBadge" hidden></span>','');
       assert.ok(normalized.includes(section),`Clientes differs beyond the allowed CANON authority badge`);
+    } else if (name === 'inventario') {
+      // CANON-only importer approved in PR490; LAB is a frozen historical fixture.
+      const imageBatchButton='<button class="top-btn-nuevo" onclick="NuevoAmanecerImageBatch.open()">Cargar fotos</button>';
+      assert.equal(posIndex.split(imageBatchButton).length - 1,1,'CANON must expose exactly one image batch action');
+      assert.ok(posIndex.replace(imageBatchButton,'').includes(section),'Inventario differs beyond the approved image batch action');
+      assert.match(posIndex,/<script[^>]+src="js\/products\/image-batch\.js"/);
+      assert.match(posIndex,/id="productImageBatchModal"[^>]+role="dialog"/);
     } else {
       assert.ok(posIndex.includes(section),`${name} LAB section drifted from CANON shell`);
     }
