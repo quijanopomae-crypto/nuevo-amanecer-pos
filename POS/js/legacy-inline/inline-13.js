@@ -32,6 +32,8 @@ function _naSafeOverlayProductImageSource(value){
   }catch(_error){return null;}
 }
 function _naProductImageSource(product){
+  const imported=_naSafeProductImageSource(window.NuevoAmanecerImageBatch?.source(product));
+  if(imported)return imported;
   const direct=_naSafeProductImageSource(product?.imagen);
   if(direct)return direct;
   const name=String(product?.name||product?.nombre||'');
