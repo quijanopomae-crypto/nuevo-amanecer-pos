@@ -40,3 +40,15 @@ test('CANON, tarjetas, inventario y shell offline integran el mismo módulo',()=
  assert.match(fs.readFileSync('POS/js/legacy-inline/inline-13.js','utf8'),/NuevoAmanecerImageBatch/);
  assert.match(fs.readFileSync('POS/js/legacy-inline/inline-01.js','utf8'),/safeImage=.*_naProductImageSource\(p\)/);
 });
+
+test('photo lookups read small authority metadata without copying the full canonical snapshot',()=>{
+ let metadataReads=0,snapshotReads=0;
+ const ctx={productos:[],NuevoAmanecerCanonical:{enabled:()=>true,sourceState:()=>{metadataReads++;return {cache:{promotion_id:'photos'}};},snapshot:()=>{snapshotReads++;throw Error('Full snapshot must not be copied for a photo');}}};
+ vm.runInNewContext(source,ctx);
+ for(let i=0;i<500;i++)assert.equal(ctx.NuevoAmanecerImageBatch.source(p),null);
+ assert.equal(snapshotReads,0);assert.ok(metadataReads>=500);
+});
+test('missing canonical metadata never falls back to a stale full snapshot',()=>{
+ let snapshots=0;const ctx={NuevoAmanecerCanonical:{enabled:()=>true,sourceState:()=>({cache:null}),snapshot:()=>{snapshots++;return {promotion_id:'old'};}}};
+ vm.runInNewContext(source,ctx);assert.equal(ctx.NuevoAmanecerImageBatch.source(p),null);assert.equal(snapshots,0);
+});
