@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Owner aprobó 'Aplicado' para imágenes grandes en Agregar productos (PR #494), sin alterar lógica comercial ni datos.",
-  "retry_attempt": 106,
-  "retry_reason": "PR #494 fusionado; CANON Critical CI #751 y E2E Smoke CI #299 exitosos. Difusión del CSS de catálogo móvil; sin migraciones ni cambio del Worker backend. La revisión visual física sigue pendiente.",
-  "requested_at_utc": "2026-10-09T07:59:34.167Z",
-  "target_head": "261db34d26a5c5e26ab74f09e1d767eecad28a0f"
+  "note": "Owner solicita aplicar corrección de lentitud de fotos; PR #497 aprobado y fusionado.",
+  "retry_attempt": 107,
+  "retry_reason": "Publicar optimización de consultas de fotos sin copiar todo CANON. CANON Critical CI #757 y E2E Smoke CI #303 PASS; Reviewer y Forensic READY. Sin migraciones ni secrets.",
+  "requested_at_utc": "2026-10-09T19:16:19.371Z",
+  "target_head": "0163129da6d4f07f7e1ae467273baa23db57121a"
 }
