@@ -29,10 +29,25 @@ test('LAB approved page sections are the CANON shell with only explicit producti
       const normalized=posIndex.replace('<span id="cliAuthorityBadge" hidden></span>','');
       assert.ok(normalized.includes(section),`Clientes differs beyond the allowed CANON authority badge`);
     } else if (name === 'inventario') {
-      // CANON-only importer approved in PR490; LAB is a frozen historical fixture.
-      const imageBatchButton='<button class="top-btn-nuevo" onclick="NuevoAmanecerImageBatch.open()">Cargar fotos</button>';
-      assert.equal(posIndex.split(imageBatchButton).length - 1,1,'CANON must expose exactly one image batch action');
-      assert.ok(posIndex.replace(imageBatchButton,'').includes(section),'Inventario differs beyond the approved image batch action');
+      // LAB is historical. PR503 approves CANON's automatic OCR chooser and
+      // three direct actions; every other inventory control remains identical.
+      const inventory=posIndex.match(/<div class="page" id="pageInventario">[\s\S]*?(?=\n<!-- CLIENTES -->)/)?.[0];
+      assert.ok(inventory,'CANON inventory section must exist');
+      const actions=inventory.match(/<div class="ocr-purchase-actions">([\s\S]*?)<\/div>/)?.[1];
+      assert.ok(actions,'CANON must expose its direct inventory actions');
+      assert.equal((actions.match(/<button\b/g)||[]).length,3,'exactly three direct inventory actions');
+      for(const handler of ["document.getElementById('mOcrPurchaseSource').classList.add('open')",'NuevoAmanecerImageBatch.open()','abrirModalProd()']) {
+        assert.equal(actions.split(`onclick="${handler}"`).length-1,1,`exactly one action for ${handler}`);
+      }
+      for(const label of ['OCR compras','Cargar fotos','+ Nuevo']) assert.ok(actions.includes(`>${label}</button>`));
+      const normalizeHeader=html=>html.replace(/<div class="top-mod-bar">[^\n]*<\/div>/,'<CANON_INVENTORY_HEADER>')
+        .replace(/<div class="ocr-purchase-status"[^\n]*<\/div>/,'<CANON_OCR_STATUS>').trim();
+      assert.equal(normalizeHeader(inventory),normalizeHeader(section),'filters, tabs, metrics and table must retain their complete historical contract');
+      for(const id of ['ocrPurchaseCamera','ocrPurchaseFile','ocrPurchaseDocument']) {
+        assert.equal((posIndex.match(new RegExp(`id="${id}"`,'g'))||[]).length,1,`one input for ${id}`);
+      }
+      assert.match(posIndex,/id="ocrPurchaseDocument"[^>]+accept="\.pdf,\.docx,/);
+      assert.match(posIndex,/<script[^>]+src="js\/ocr\/ocr-document-extract\.js"/);
       assert.match(posIndex,/<script[^>]+src="js\/products\/image-batch\.js"/);
       assert.match(posIndex,/id="productImageBatchModal"[^>]+role="dialog"/);
     } else {
