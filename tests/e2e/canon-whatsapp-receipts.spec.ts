@@ -59,11 +59,11 @@ test('configured receipt format and prompt survive real app reload',async({page}
 
 test('invalid WhatsApp recipient explains error, focuses field and never opens a chat',async({page})=>{
   await boot(page);await receipt(page);
-  await page.evaluate(()=>{const w=window as any;w.__opened=null;w.__notice='';w.open=(url:string)=>{w.__opened=url;return{};};w.toast=(message:string)=>{w.__notice=message;};});
+  await page.evaluate(()=>{const w=window as any;w.__opened=null;w.open=(url:string)=>{w.__opened=url;return{};};});
   await page.locator('#naReceiptFormat').selectOption('text');await expect(page.locator('#naReceiptSend')).toBeEnabled();
   await page.locator('#naReceiptPhone').fill('123');await page.locator('#naReceiptSend').click();
   expect(await page.evaluate(()=>(window as any).__opened)).toBeNull();
-  expect(await page.evaluate(()=>(window as any).__notice)).toContain('número de WhatsApp válido');
+  await expect(page.locator('#gToast')).toContainText('número de WhatsApp válido');
   await expect(page.locator('#naReceiptPhone')).toBeFocused();
   await expect(page.locator('#naReceiptSend')).toBeEnabled();
 });
