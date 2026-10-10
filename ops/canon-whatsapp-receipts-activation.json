@@ -1,0 +1,10 @@
+{
+  "action": "activate-whatsapp-receipts",
+  "authorized": true,
+  "authorized_by": "owner",
+  "authorization": "Aplica a CANON; Autorizado; continuar sin repetir permisos para esta implementación",
+  "provider": "turso",
+  "migration": "0020",
+  "destructive": false,
+  "feature_commit": "4ecf6fc272a48c57dbed368ff9207a278b2cad8f"
+}
