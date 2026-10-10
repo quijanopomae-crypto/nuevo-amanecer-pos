@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Owner aprobó publicar corrección de respuesta del efectivo contado; PR #500 fusionado.",
-  "retry_attempt": 108,
-  "retry_reason": "CANON Critical CI #761 y E2E Smoke CI #305 PASS. Revisión independiente sin P0/P1. Solo frontend; sin migraciones ni secrets.",
-  "requested_at_utc": "2026-10-10T20:56:30.122Z",
-  "target_head": "88177e2d0bb856169307251dd121100f29d26011"
+  "note": "Pulido de comprobantes solicitado por owner: datos históricos desconocidos, identificador de abono y validación de destinatario.",
+  "retry_attempt": 109,
+  "retry_reason": "Publicar correcciones focalizadas después de CI y revisión independiente; solo frontend.",
+  "requested_at_utc": "2026-10-10T22:52:43.996653+00:00",
+  "approved_base": "ae5a5e87b7f96c8c3a31a748ac8913d3e2fcf8b8"
 }
