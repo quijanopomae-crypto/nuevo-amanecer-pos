@@ -58,7 +58,7 @@ function harness(canonical=true){
     crypto:{randomUUID(){return 'session-uuid-1';}},
     toast(msg,tone){calls.push(['toast',msg,tone]);},
     cerrarModal(id){calls.push(['closeModal',id]);},
-    cajRender(){calls.push(['renderCash']);},
+    cajRender(){calls.push(['renderCash']);calls.push(['dashboard']);},
     updateDashboard(){calls.push(['dashboard']);},
     _naF10AuthorizePermission(){calls.push(['permission']);return true;},
     _naAuthorize(){calls.push(['close-authorize']);return true;},
@@ -154,4 +154,10 @@ test('CANON shell loads the cash bridge late and precaches it',()=>{
 
 test('cash renderer does not emit protected-module toast when canonical bridge is enabled',()=>{
   assert.match(cashRender,/NuevoAmanecerCanonical.*enabled/);
+});
+
+// cajRender owns the dashboard update (inline-11); the bridge must not repeat it.
+test('confirmed cash action updates dashboard once per cash render',async()=>{
+  const h=harness(true);await h.context.cerrarCaja();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(x=>x[0]==='dashboard').length,h.calls.filter(x=>x[0]==='renderCash').length);
 });

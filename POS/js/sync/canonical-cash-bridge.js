@@ -51,8 +51,9 @@
   }
 
   function renderCash() {
+    // cajRender already updates the dashboard. Only fall back if unavailable.
     if (typeof root.cajRender === 'function') root.cajRender();
-    if (typeof root.updateDashboard === 'function') root.updateDashboard();
+    else if (typeof root.updateDashboard === 'function') root.updateDashboard();
   }
 
   async function refreshCanonical() {

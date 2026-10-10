@@ -868,8 +868,22 @@ function _baseCajRender(){
 
 
 
-function prepCierre(){if(!cajEstado.abierta||cajEstado.cerrada){toast('La caja ya está cerrada','error');return;}const t=cajTotales();document.getElementById('cierreBox').innerHTML=`<div class="cc-row"><span>Ventas del día</span><span class="ccv">${fmt(t.ven)}</span></div><div class="cc-row"><span>Egresos totales</span><span class="ccv">${fmt(t.egr)}</span></div><div class="cc-row hl"><span>💰 Efectivo esperado</span><span class="ccv">${fmt(t.ef)}</span></div>`;document.getElementById('cajContado').value='';document.getElementById('difBanner').style.display='none';document.getElementById('mCierre').classList.add('open');}
-function calcDif(){const t=cajTotales(),cont=parseFloat(document.getElementById('cajContado').value)||0,dif=cont-t.ef;const b=document.getElementById('difBanner');b.style.display='block';if(Math.abs(dif)<0.01){b.style.cssText='background:var(--green-light);border:1px solid #bbf7d0;border-radius:9px;padding:10px 13px;margin-bottom:13px;display:block;text-align:center';document.getElementById('difLbl').textContent='✅ Cuadra perfectamente';document.getElementById('difVal').textContent='Sin diferencia';}else if(dif>0){b.style.cssText='background:var(--amber-light);border:1px solid #fcd34d;border-radius:9px;padding:10px 13px;margin-bottom:13px;display:block;text-align:center';document.getElementById('difLbl').textContent='⚠ Sobrante en caja';document.getElementById('difVal').textContent=`+${fmt(dif)}`;}else{b.style.cssText='background:var(--red-light);border:1px solid #fca5a5;border-radius:9px;padding:10px 13px;margin-bottom:13px;display:block;text-align:center';document.getElementById('difLbl').textContent='🔴 Faltante en caja';document.getElementById('difVal').textContent=fmt(dif);}}
+// The closing dialog owns its displayed balance; keystrokes only subtract.
+// Caja renders refresh this balance when a confirmed movement changes the turn.
+let _naClosingCashExpected=null;
+function _naRefreshClosingCashTotals(t){
+  _naClosingCashExpected=t.ef;
+  document.getElementById('cierreBox').innerHTML=`<div class="cc-row"><span>Ventas del día</span><span class="ccv">${fmt(t.ven)}</span></div><div class="cc-row"><span>Egresos totales</span><span class="ccv">${fmt(t.egr)}</span></div><div class="cc-row hl"><span>💰 Efectivo esperado</span><span class="ccv">${fmt(t.ef)}</span></div>`;
+  if(document.getElementById('cajContado').value!=='')calcDif();
+}
+function prepCierre(){
+  if(!cajEstado.abierta||cajEstado.cerrada){toast('La caja ya está cerrada','error');return;}
+  document.getElementById('cajContado').value='';
+  _naRefreshClosingCashTotals(cajTotales());
+  document.getElementById('difBanner').style.display='none';
+  document.getElementById('mCierre').classList.add('open');
+}
+function calcDif(){if(_naClosingCashExpected===null)_naClosingCashExpected=cajTotales().ef;const cont=parseFloat(document.getElementById('cajContado').value)||0,dif=cont-_naClosingCashExpected;const b=document.getElementById('difBanner');b.style.display='block';if(Math.abs(dif)<0.01){b.style.cssText='background:var(--green-light);border:1px solid #bbf7d0;border-radius:9px;padding:10px 13px;margin-bottom:13px;display:block;text-align:center';document.getElementById('difLbl').textContent='✅ Cuadra perfectamente';document.getElementById('difVal').textContent='Sin diferencia';}else if(dif>0){b.style.cssText='background:var(--amber-light);border:1px solid #fcd34d;border-radius:9px;padding:10px 13px;margin-bottom:13px;display:block;text-align:center';document.getElementById('difLbl').textContent='⚠ Sobrante en caja';document.getElementById('difVal').textContent=`+${fmt(dif)}`;}else{b.style.cssText='background:var(--red-light);border:1px solid #fca5a5;border-radius:9px;padding:10px 13px;margin-bottom:13px;display:block;text-align:center';document.getElementById('difLbl').textContent='🔴 Faltante en caja';document.getElementById('difVal').textContent=fmt(dif);}}
 
 
 // ===== VENTAS =====
