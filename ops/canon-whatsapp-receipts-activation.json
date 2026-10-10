@@ -6,5 +6,6 @@
   "provider": "turso",
   "migration": "0020",
   "destructive": false,
-  "feature_commit": "4ecf6fc272a48c57dbed368ff9207a278b2cad8f"
+  "feature_commit": "4ecf6fc272a48c57dbed368ff9207a278b2cad8f",
+  "attempt": 2
 }
