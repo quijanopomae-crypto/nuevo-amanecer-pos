@@ -104,6 +104,7 @@ const PRECACHE_URLS = [
   './js/catalog/reference-catalog-data.js',
   './js/catalog/reference-catalog.js',
   './js/ocr/ocr-extract.js',
+  './js/ocr/ocr-document-extract.js',
   './js/ocr/ocr-parse.js',
   './js/ocr/ocr-reference-matcher.js',
   './js/ocr/ocr-purchase-engine.js',
@@ -115,7 +116,26 @@ const VENDOR_URLS = [
   './js/ocr/vendor/tesseract-6.0.1/tesseract.min.js',
   './js/ocr/vendor/tesseract-6.0.1/worker.min.js',
   './js/ocr/vendor/tesseract-6.0.1/tesseract-core-simd-lstm.wasm.js',
-  './js/ocr/vendor/tesseract-6.0.1/lang/spa.traineddata.gz'
+  './js/ocr/vendor/tesseract-6.0.1/lang/spa.traineddata.gz',
+  './js/ocr/vendor/pdfjs-6.4.299/pdf.worker.min.mjs',
+  './js/ocr/vendor/pdfjs-6.4.299/pdf.min.mjs',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitDingbats.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/LICENSE_LIBERATION',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/LICENSE_FOXIT',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitSerifBold.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitSymbol.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitSerif.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitFixedBold.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/LiberationSans-Italic.ttf',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/LiberationSans-Regular.ttf',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitFixedItalic.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/LiberationSans-Bold.ttf',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitFixed.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitSerifBoldItalic.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitFixedBoldItalic.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/FoxitSerifItalic.pfb',
+  './js/ocr/vendor/pdfjs-6.4.299/standard_fonts/LiberationSans-BoldItalic.ttf',
+  './js/ocr/vendor/mammoth-1.13.0/mammoth.browser.min.js'
 ];
 const PRECACHE_URLS_ABSOLUTE = new Set(PRECACHE_URLS.map((url) => new URL(url, self.registration.scope).href));
 const VENDOR_URLS_ABSOLUTE = new Set(VENDOR_URLS.map((url) => new URL(url, self.registration.scope).href));
