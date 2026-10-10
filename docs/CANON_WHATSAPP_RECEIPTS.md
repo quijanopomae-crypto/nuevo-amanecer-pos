@@ -1,0 +1,37 @@
+# Comprobantes para compartir sin API de WhatsApp
+
+Después del guardado duradero de una venta, crédito o abono se ofrece compartir o cancelar. Cancelar y volver a compartir son acciones de presentación: no crean ventas, movimientos ni pagos. Las ventas pendientes del outbox se identifican como guardadas localmente, pendientes de sincronización.
+
+Configuración → Ticket permite elegir imagen PNG, texto o PDF y activar/desactivar la pregunta al finalizar. La preferencia usa la configuración persistente existente. El formulario también permite cambiar el formato para un comprobante concreto.
+
+Texto abre `wa.me` con el número del cliente y el contenido prellenado. Imagen/PDF generan un archivo real y usan el menú de compartir del dispositivo: el usuario debe elegir WhatsApp/contacto y confirmar. Un navegador sin compartir archivos ofrece descarga. Abrir o compartir nunca se registra como entrega confirmada. No hay envío automático ni API de WhatsApp.
+
+El contenido reutiliza `_naBuildThermalTicket` con los ajustes guardados: zonas, orden, alineación, ancho y productos/precios de la operación. La rasterización utiliza Courier; no replica todos los estilos tipográficos del editor. PDF divide tickets largos en páginas sin cortar líneas. Los abonos identifican la compra original y los saldos de ese pago. Si un dato histórico no existe, se muestra “No registrado”. El reenvío de una venta a crédito resuelve su crédito relacionado para mostrar el saldo actual.
+
+Clientes → Datos del cliente permite guardar nombre y WhatsApp. En CANON esto usa `customer.contact.set`, con revisión esperada, idempotencia, autoridad y registro inmutable separado. Una edición concurrente obsoleta se rechaza. Una respuesta perdida reintenta el mismo payload; una edición pendiente de otro cliente no se confirma como propia. Las versiones de contacto se incorporan a la lectura bajo la misma cerca de revisión del snapshot. Los registros financieros originales no cambian.
+
+## Activación y compatibilidad
+
+1. Candidato y revisión: rama aislada desde CANON, Draft PR, CANON Critical CI, E2E y revisión independiente.
+2. Con autorización separada para migración remota, aplicar `0020_canonical_customer_contacts.sql` sobre el esquema CANON existente (prerrequisitos 0014–0018). Es aditiva y no cambia registros financieros. Conservar backup y evidencia del destino antes de ejecutarla.
+3. Desplegar el Worker del mismo candidato y comprobar lectura/contactos. Sin 0020 el Worker conserva lecturas existentes y rechaza las ediciones nuevas con 503 `customer_contact_schema_not_ready`.
+4. Publicar el POS del mismo SHA. Verificar ajustes, cliente, venta y abono en datos aislados; confirmar recepción manual en WhatsApp con una prueba autorizada.
+
+El despliegue web y el hotfix de Worker existentes no aplican esta migración. No ejecutar una publicación web sola como activación completa. El rollback de aplicación puede volver al SHA anterior conservando la tabla aditiva y sus contactos; nunca eliminar las versiones guardadas para revertir la interfaz.
+
+## Evidencia local
+
+- Regresión relevante: 787/787 antes del último test adicional de captura; pruebas focalizadas finales: 52/52.
+- Contratos de arquitectura y backend: 54/54.
+- Navegador: 13/13; 320, 360, 390, 430, 768, 1024, 1366 y 1920 px, cancelar sin mutar, archivos PNG/PDF, destino del texto, reenvío de crédito, recuperación de contactos y configuración tras recarga.
+- Suite completa de navegador: 140/147; los siete fallos (medidas de tarjetas de pago y botones de venta) se reprodujeron exactamente en la base `451c5b6`, 7/8 en el barrido focalizado de esa base. No se alteraron sus assertions.
+- Todas las migraciones, incluida 0020, aplicadas en D1 local aislado: PASS. Snapshot SQL: PASS. PDF real validado y renderizado con Poppler: PASS.
+- Build Worker producción: `wrangler deploy --dry-run` PASS.
+- Barrido ampliado inicial: 869/874; los cinco fallos se reprodujeron en la base `451c5b6` (contratos estructurales anteriores de menú, proyección operativa y stock). No se modificaron esas expectativas.
+- Reviewer/Forensic independiente: sin P0/P1 abiertos tras corregir los hallazgos.
+
+Las pruebas de compartir usan un adaptador de navegador y no envían mensajes reales. La elección y confirmación en la aplicación WhatsApp siguen siendo acciones del usuario.
+
+## Estado de publicación
+
+El candidato permanece en la rama local `feature/canon-whatsapp-receipts`. La revisión automática rechazó el push a `quijanopomae-crypto/nuevo-amanecer-pos` por falta de autorización explícita para exportar el código y la migración a ese destino. No se creó PR ni se ejecutó CI remota, merge, deploy o migración remota. Es necesario autorizar esa publicación para continuar los gates de CANON.

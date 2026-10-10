@@ -595,7 +595,7 @@ async function loadCollectionRows(db,type,before,page){
       ${reconciliationUnion}
     ) WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   } else if(sqlName==='credit_payments'&&before.mode==='ACTIVE'){
-    const fields={payment_id:'event_id',credit_id:'credit_id',amount_cents:'-credit_delta_cents',payment_date:'substr(created_at,1,10)',payment_timestamp:'created_at',payment_date_known:'1',date_precision:"'TIMESTAMP'",method:'payment_method',source_origin:"'LIVE'",source_operation_reference:'reference'};
+    const fields={payment_id:'event_id',credit_id:'credit_id',amount_cents:'-credit_delta_cents',payment_date:'substr(created_at,1,10)',payment_timestamp:'created_at',payment_date_known:'1',date_precision:"'TIMESTAMP'",method:'payment_method',source_origin:"'LIVE'",source_operation_reference:'reference',source_balance_after_cents:"(SELECT CAST(json_extract(o.result_json,'$.current_balance_cents') AS INTEGER) FROM canonical_financial_operations o WHERE o.operation_id=canonical_financial_events.operation_id)"};
     rows=await db.prepare(`SELECT * FROM (SELECT 'I:' || payment_id AS read_key,${TABLES.credit_payments.join(',')},'IMPORT' AS provenance,NULL AS operation_id,NULL AS credit_provenance,NULL AS credit_delta_cents,NULL AS cash_delta_cents,NULL AS session_id,NULL AS reason,NULL AS compensates_operation_id FROM credit_payments WHERE promotion_id=?1 UNION ALL
       SELECT 'L:' || event_id AS read_key,${TABLES.credit_payments.map(c=>fields[c]??'NULL').join(',')},'LIVE',operation_id,credit_provenance,credit_delta_cents,cash_delta_cents,session_id,reason,compensates_operation_id FROM canonical_financial_events WHERE promotion_id=?1 AND credit_id IS NOT NULL)
       WHERE read_key>?2 ORDER BY read_key LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
@@ -672,6 +672,19 @@ async function loadCollectionRows(db,type,before,page){
     rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName].split(',').map(c=>'r.'+c).join(',')}${context}${cashSession} FROM ${join} WHERE x.promotion_id=?1 AND ${key}>?2 ORDER BY ${key} LIMIT ?3`).bind(before.active_promotion_id,page.key,page.limit+1).all();
   }
   else {const key=sqlName==='sale_items'?"sale_id || char(0) || printf('%020d',line_number)":sqlName==='sales'?'sale_id':'movement_id';rows=await db.prepare(`SELECT ${A3_PUBLIC_COLUMNS[sqlName]} FROM ${sqlName} WHERE ${key}>?1 ORDER BY ${key} LIMIT ?2`).bind(page.key,page.limit+1).all();}
+  if(sqlName==='customers'&&before.mode==='ACTIVE'&&await customerContactSchemaAvailable(db)){
+    const selected=rows.results??[];
+    if(selected.length){
+      const ids=selected.map(item=>item.customer_id);
+      // One JSON binding avoids D1's parameter limit on full customer pages.
+      const edits=await db.prepare(`SELECT c.customer_id,c.name,c.phone,c.revision FROM canonical_customer_contacts c
+        WHERE c.promotion_id=?1 AND c.customer_id IN (SELECT value FROM json_each(?2))
+        AND c.revision=(SELECT MAX(e.revision) FROM canonical_customer_contacts e WHERE e.promotion_id=c.promotion_id AND e.customer_id=c.customer_id)`)
+        .bind(before.active_promotion_id,JSON.stringify(ids)).all();
+      const contacts=new Map((edits.results??[]).map(c=>[c.customer_id,c]));
+      for(const row of selected){const contact=contacts.get(row.customer_id);if(contact){row.name=contact.name;row.phone=contact.phone;row.contact_revision=contact.revision;}}
+    }
+  }
   return rows||{results:[]};
 }
 
@@ -822,13 +835,20 @@ async function debtReconciliationLedgerCount(db,promotionId){
     (SELECT COUNT(*) FROM canonical_credit_baseline_adjustments WHERE promotion_id=?1) AS count`).bind(promotionId).first();
   return Number(row?.count)||0;
 }
+async function customerContactSchemaAvailable(db){
+  const row=await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name='canonical_customer_contacts'").first();return Number(row?.n)===1;
+}
+async function customerContactLedgerCount(db,promotionId){
+  if(!promotionId||!await customerContactSchemaAvailable(db))return 0;
+  const row=await db.prepare('SELECT COUNT(*) n FROM canonical_customer_contacts WHERE promotion_id=?1').bind(promotionId).first();return Number(row?.n)||0;
+}
 async function readControl(db){
   const row=await db.prepare(`SELECT c.mode,c.active_promotion_id,c.revision,c.authority_epoch,
     c.minimum_client_contract,c.first_live_operation_id,CASE WHEN c.mode='ACTIVE' THEN
     (SELECT COUNT(*) FROM canonical_sale_context WHERE promotion_id=c.active_promotion_id)+
     (SELECT COUNT(*) FROM canonical_financial_operations WHERE promotion_id=c.active_promotion_id)
     ELSE NULL END AS financial_revision FROM canonical_control c WHERE c.id=1`).first();
-  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id)+await customerCreditPolicyLedgerCount(db,row.active_promotion_id)+await debtReconciliationLedgerCount(db,row.active_promotion_id);
+  if(row?.mode==='ACTIVE')row.financial_revision=Number(row.financial_revision)+await expenseLedgerCount(db,row.active_promotion_id)+await productLedgerCount(db,row.active_promotion_id)+await inventoryLedgerCount(db,row.active_promotion_id)+await customerLedgerCount(db,row.active_promotion_id)+await customerCreditPolicyLedgerCount(db,row.active_promotion_id)+await debtReconciliationLedgerCount(db,row.active_promotion_id)+await customerContactLedgerCount(db,row.active_promotion_id);
   return row;
 }
 async function zeroTraffic(db){const row=await db.prepare('SELECT (SELECT COUNT(*) FROM sales) sales,(SELECT COUNT(*) FROM sale_items) sale_items,(SELECT COUNT(*) FROM cash_movements) cash_movements,(SELECT COUNT(*) FROM inventory_movements) inventory_movements,(SELECT COUNT(*) FROM sync_operations) sync_operations').first();return Object.fromEntries(Object.entries(row).map(([k,v])=>[k,Number(v)]));}

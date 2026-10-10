@@ -256,6 +256,11 @@
           notify(describePendingFailure(error), 'error');
           return false;
         }
+        try {
+          var retrySnapshot=client.legacySnapshot(),retryCredit=findCredit(retrySnapshot,pending.payload.credit_id);
+          if(retryCredit&&Number.isFinite(Number(replay.current_balance_cents)))retryCredit=Object.assign({},retryCredit,{saldo:(Number(replay.current_balance_cents)+Number(pendingAmount))/100});
+          root.NAReceiptShare?.onPayment(retryCredit,replay,pendingAmount,pending.payload.payment_method,pending.payload.reference,pending.payload.created_at);
+        }catch(_){}
         return await afterCommit(replay, pendingAmount, true);
       }
 
@@ -316,6 +321,7 @@
         notify(describePendingFailure(error), 'error');
         return false;
       }
+      try { root.NAReceiptShare?.onPayment(credit,receipt,amountCents,method,reference,client.pendingSnapshot?.()?.payload?.created_at||new Date().toISOString()); } catch(_){}
       return await afterCommit(receipt, amountCents, false);
     } finally {
       busy = false;
@@ -508,6 +514,7 @@
           });
         });
 
+        try { root.NAReceiptShare?.onPayments(receipts.map(function(receipt,index){var allocation=allocations[index];return {receipt:receipt,credit:findCredit(snapshot,allocation.credit_id),amount_cents:allocation.amount_cents};}),method,reference,new Date().toISOString()); }catch(_){}
         if (!batchResult || batchResult.ok !== true) {
           if (fastCompleted.length) reconcileBatchAfterCommit(requestedCents, fastCompleted.length);
           if (batchResult && batchResult.pending_unresolved) {
@@ -540,6 +547,7 @@
 
     busy = true;
     var completed = [];
+    var shareEntries = [];
     try {
       for (var index = 0; index < allocations.length; index += 1) {
         var allocation = allocations[index];
@@ -592,6 +600,7 @@
           }
         }
 
+        shareEntries.push({credit:Object.assign({},credit),receipt:receipt,amount_cents:allocation.amount_cents});
         completed.push({
           credit_id:allocation.credit_id,
           amount_cents:allocation.amount_cents,
@@ -634,6 +643,7 @@
         remaining_cents:0
       };
     } finally {
+      try { root.NAReceiptShare?.onPayments(shareEntries,method,reference,new Date().toISOString()); }catch(_){}
       busy = false;
     }
   }

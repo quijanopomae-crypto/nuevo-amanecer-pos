@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {activeCanon,device} from './canon-browser-harness.mjs';
+const migrations=['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0017_canonical_live_customers.sql','0018_canonical_customer_credit_policy.sql','0020_canonical_customer_contacts.sql'];
+test('customer contact edits survive refresh and second device, with CAS and no financial changes',async(t)=>{
+  const f=await activeCanon(t,{migrations});
+  const a=await device(f,{deviceId:'device-a',token:'device-a-token'});
+  assert.equal(typeof a.api.setCustomerContact,'function');
+  const id=a.api.snapshot().customers[0].customer_id;
+  const before=f.counts();
+  const receipt=await a.api.setCustomerContact({customer_id:id,name:'María Nueva',phone:'+51987654321'});
+  assert.equal(receipt.contact_revision,1);
+  await a.api.refresh();
+  assert.equal(a.api.snapshot().customers.find(c=>c.customer_id===id).phone,'+51987654321');
+  const b=await device(f,{deviceId:'device-b',token:'device-b-token'});
+  assert.equal(b.api.snapshot().customers.find(c=>c.customer_id===id).name,'María Nueva');
+  await a.api.setCustomerContact({customer_id:id,name:'María Nueva',phone:'+51999888777'});
+  await assert.rejects(()=>b.api.setCustomerContact({customer_id:id,name:'Stale',phone:'+51987654321'}),/CANONICAL_FINANCIAL_REJECTED_409/);
+  assert.equal(b.api.pendingSnapshot().last_error,'stale_contact');
+  assert.deepEqual(f.counts(),before);
+});
+test('lost contact response replays one immutable version and rejects altered operation',async(t)=>{
+  const f=await activeCanon(t,{migrations});let lose=true;
+  const a=await device(f,{deviceId:'device-a',token:'device-a-token',onFetch:async(url,options,next)=>{if(url.endsWith('/commands/customer.contact.set')&&lose){lose=false;await next();throw new Error('RESPONSE_LOST');}}});
+  const id=a.api.snapshot().customers[0].customer_id;
+  await assert.rejects(()=>a.api.setCustomerContact({customer_id:id,name:'María',phone:'+51987654321'}),/CANONICAL_FINANCIAL_PENDING/);
+  const pending=a.api.pendingSnapshot();
+  assert.ok(pending);
+  const replay=await a.api.retryPending();assert.equal(replay.status,'already_processed');
+  assert.equal(f.database.prepare('SELECT COUNT(*) n FROM canonical_customer_contacts').get().n,1);
+  assert.throws(()=>f.database.exec("UPDATE canonical_customer_contacts SET name='Changed'"));
+  assert.throws(()=>f.database.exec('DELETE FROM canonical_customer_contacts'));
+  const request=a.fetchLog.find(row=>row.url.endsWith('/commands/customer.contact.set'));
+  const altered=JSON.parse(request.body);altered.name='Changed';
+  const result=await f.fetch(request.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer device-a-token'},body:JSON.stringify(altered)});
+  assert.equal(result.status,409);assert.equal((await result.json()).error,'operation_id_conflict');
+});

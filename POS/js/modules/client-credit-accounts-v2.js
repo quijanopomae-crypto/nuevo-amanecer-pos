@@ -966,6 +966,7 @@ function labCategorySummary(client, category) {
         '<div class="na-v2-list na-v2-card-list">' + categories.map(function (cat) { return labAccountRow(client, cat); }).join('') + '</div></section>' +
       '<section class="na-v2-section"><div class="na-v2-section-title"><span>GESTIÓN DEL CLIENTE</span><small>Consulta y seguimiento</small></div>' +
         '<div class="na-v2-list na-v2-card-list na-v2-nav-grid">' +
+          '<button type="button" class="na-v2-row na-v2-nav-card" data-edit-contact="' + labEsc(String(client.id)) + '"><span><strong>DATOS DEL CLIENTE</strong><small>Nombre y WhatsApp</small></span><b>›</b></button>' +
           labNavRow('↺','slate','HISTORIAL DE PAGOS',paymentCount + ' pagos / cuotas canceladas','naCanonOpenClientPaymentHistory()') +
           labNavRow('✓','green','CRÉDITOS CANCELADOS',s.closed.length + ' créditos finalizados','naCanonOpenCanceledCredits()') +
           labNavRow('S/','blue','LÍNEA DE CRÉDITO',available === null ? 'Evaluación disponible' : labMoney(available) + ' disponible','naCanonOpenCreditLine()') +
@@ -1451,6 +1452,7 @@ function labCreditDisplayMoment(cr, fallbackDate) {
         ? '<section class="na-v2-section na-v2-schedule-section"><div class="na-v2-section-title"><span>CRONOGRAMA DE CUOTAS</span><small>' + installments.plan.length + ' cuotas en total</small></div>' + labPendingInstallmentsHtml(installments) + '</section>'
         : '') +
       '<div class="na-v2-credit-actions">' +
+        '<button type="button" class="na-receipt-history" data-share-credit="' + labEsc(String(cr.id)) + '">Compartir comprobante</button>' +
         (!labIsCanceled(cr) && labCreditPending(cr) > 0.001 ? '<button type="button" class="na-v2-pay" onclick="abrirPago(\'' + labEsc(String(cr.id)) + '\')">Registrar pago</button>' : '') +
       '</div>' +
     '</div>';
@@ -1521,7 +1523,8 @@ function labCreditDisplayMoment(cr, fallbackDate) {
         var pay = item.paymentId ? labEffectivePayments(cr).find(function (p) { return String(p.pagoId || p.id) === String(item.paymentId); }) : null;
         return '<div class="na-v2-paid-row"><span>✓</span><div><strong>Cuota ' + item.number + '</strong><small>' + labEsc(pay ? labFormatPaymentMoment(pay) : (item.paidAt || 'Pago histórico sin hora canónica')) + '</small></div></div>';
       }).join('') : '<div class="na-v2-empty">Todavía no hay cuotas pagadas.</div>') +
-      '</section></div>';
+      '</section><section class="na-v2-section"><h3>COMPROBANTES DE ABONOS</h3>' +
+      labEffectivePayments(cr).map(function(pay){return '<div class="na-receipt-payment-row"><span><strong>'+labMoney(pay.monto||pay.montoPagado||0)+'</strong><small>'+labEsc(labFormatPaymentMoment(pay))+'</small></span><button type="button" class="na-receipt-history" data-share-payment="'+labEsc(String(pay.id||pay.pagoId))+'" data-share-credit-id="'+labEsc(String(cr.id))+'">Compartir</button></div>';}).join('') + '</section></div>';
   }
 
   function labPaymentGroups(client) {

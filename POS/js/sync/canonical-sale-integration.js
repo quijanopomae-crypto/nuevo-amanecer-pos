@@ -285,6 +285,8 @@
       if (creditV2 && creditV2.account) input.credit_account = copy(creditV2.account);
       if (creditV2 && Array.isArray(creditV2.installment_dates) && creditV2.installment_dates.length) input.installment_dates = copy(creditV2.installment_dates);
     }
+    var receiptItems=copy(cart),receiptReceived=method==='efectivo'?Number(root.document.getElementById('mMontoRec')?.value):method==='mixto'?mixed.cash:cart.reduce(function(sum,item){return sum+Number(item.qty)*Number(item.precio);},0);
+    var receiptCashier=root._naCashierSnapshot?.()||{nombre:root._naGetBusiness?.().cajero||''};
     var durable = false;
     var ownsBusy = true;
     setBusy(true);
@@ -307,6 +309,14 @@
       setBusy(false);
       ownsBusy = false;
       syncOutboxInBackground(outbox);
+      try {
+        var share=root.NAReceiptShare;
+        if(share){
+          var when=new Date(createdAt),received=receiptReceived;
+          var saleReceipt={id:saleId,operation_id:intent.operation_id,fecha:when.toLocaleDateString('en-CA',{timeZone:'America/Lima'}),hora:when.toLocaleTimeString('es-PE',{timeZone:'America/Lima',hour12:true}),metodo:method,items:receiptItems,clienteId:customer?.id||null,clienteNombre:customer?.nombre||'',cajero:receiptCashier.nombre,recibido:received,vuelto:method==='efectivo'?Math.max(0,received-intent.total_cents/100):0,paymentRef:reference,paymentBreakdown:mixed?{efectivo:mixed.cash,digital:mixed.digital,digitalMethod:mixed.digitalMethod}:null};
+          share.onSale(saleReceipt,customer,{pendingSync:true,due:due});
+        }
+      } catch(shareError){root.console?.warn('[Comprobante venta]',shareError.message);}
       return { status: 'PENDING_SYNC', operation_id: intent.operation_id, sale_id: saleId };
     } catch (error) {
       if (durable) {
