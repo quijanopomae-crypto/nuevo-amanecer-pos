@@ -43,7 +43,7 @@ export async function backup(db){
   const rows=await db.batch(names.map(n=>db.prepare('SELECT * FROM "'+n.replaceAll('"','""')+'"')));
   const tables=Object.fromEntries(names.map((n,i)=>[n,rows[i].results]));
   const bytes=Buffer.from(JSON.stringify({format:'nuevo-amanecer-turso-contacts-backup-v1',created_at:new Date().toISOString(),schema,tables}));
-  const encrypted=encryptBackup(bytes,process.env.POS_ACTIVATION_SECRET);
+  const encrypted=encryptBackup(bytes,process.env.TURSO_PROD_AUTH_TOKEN);
   writeFileSync('/tmp/turso-contacts-backup.json',encrypted,{mode:0o600});
   console.log(JSON.stringify({state:'TURSO_CONTACT_BACKUP_READY',tables:names.length,size_bytes:encrypted.length,sha256:createHash('sha256').update(encrypted).digest('hex')}));
 }
