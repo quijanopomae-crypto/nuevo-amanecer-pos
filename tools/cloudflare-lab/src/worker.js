@@ -1,3 +1,4 @@
+import { setCanonicalCustomerContact } from './a6-customer-contacts.js';
 import { getDatabase } from './database-binding.js';
 // Gateway mínimo: POS OUTBOX -> Worker -> D1 sync_operations.
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
@@ -103,6 +104,12 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return auth;
         return await createCanonicalProduct(request, env, auth, json);
+      }
+      if (financialCommand === 'customer.contact.set') {
+        if (request.method !== 'POST') return json({error:'method_not_allowed'},405);
+        const denied=canonicalRuntimeDenied(url,env,json);if(denied)return denied;
+        const auth=await authorizeSession(request,env);if(auth instanceof Response)return auth;
+        return await setCanonicalCustomerContact(request,env,auth,json);
       }
       if (CUSTOMER_COMMANDS.has(financialCommand)) {
         if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });

@@ -7,7 +7,7 @@
   var LOCK = 'na-canonical-financial-writer';
   var CREDENTIALS_KEY = 'na_cloud_sync_credentials';
   var METHODS = ['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto'];
-  var COMMANDS = ['sale.create', 'product.create', 'customer.create', 'customer.credit-policy.set', 'inventory.adjust', 'credit-account.create', 'payment.create', 'payment.batch', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
+  var COMMANDS = ['sale.create', 'product.create', 'customer.create', 'customer.contact.set', 'customer.credit-policy.set', 'inventory.adjust', 'credit-account.create', 'payment.create', 'payment.batch', 'cash.open', 'cash.close', 'adjustment.create', 'compensation.create', 'expense.create'];
   var FINANCIAL_METHODS = ['efectivo', 'yape', 'plin', 'transferencia'];
   var READ_TIMEOUT_MS = 8000;
   var REPLICA_SCHEMA_VERSION = 2;
@@ -464,6 +464,12 @@
     });
   }
 
+  function makeCustomerContactPayload(input){
+    const customer=data?.customers?.find(c=>String(c.customer_id)===String(input?.customer_id));
+    const name=String(input?.name||'').trim().replace(/\s+/g,' '),phone=input?.phone===null?null:String(input?.phone||'');
+    if(!customer||!name||name.length>240||/[\x00-\x1f\x7f]/.test(name)||!(phone===null||/^\+[1-9]\d{8,14}$/.test(phone)))fail('INVALID_CANONICAL_CUSTOMER_CONTACT');
+    return Object.assign(commonPayload(),{customer_id:String(input.customer_id),name,phone,expected_contact_revision:Number(customer.contact_revision)||0});
+  }
   function makeCustomerCreditPolicyPayload(input) {
     input=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
     var customer=data&&Array.isArray(data.customers)
@@ -743,6 +749,7 @@
         typeof payload.name === 'string' && payload.name.trim().length > 0 && payload.name.trim().length <= 60 &&
         ['accumulated','separate'].includes(payload.mode);
     }
+    if (command === 'customer.contact.set') return validId(payload.customer_id)&&uint(payload.expected_contact_revision)&&typeof payload.name==='string'&&payload.name.trim().length>0&&payload.name.length<=240&&!/[\x00-\x1f\x7f]/.test(payload.name)&&(payload.phone===null||typeof payload.phone==='string'&&/^\+[1-9]\d{8,14}$/.test(payload.phone));
     if (command === 'customer.create') {
       return validId(payload.customer_id) &&
         typeof payload.name==='string' && payload.name.trim().length>0 && payload.name.length<=240 &&
@@ -826,6 +833,7 @@
   function validReceipt(record, result) {
     if (!result || result.operation_id !== record.payload.operation_id) return false;
     if (!(result.status === 'created' && result.idempotent === false || result.status === 'already_processed' && result.idempotent === true)) return false;
+    if (record.command === 'customer.contact.set') return result.command===record.command&&result.customer_id===record.payload.customer_id&&result.promotion_id===record.binding.promotion_id&&result.authority_epoch===record.binding.authority_epoch&&result.contact_revision===record.payload.expected_contact_revision+1;
     if (record.command === 'customer.create') return result.command===record.command &&
       result.customer_id===record.payload.customer_id &&
       result.promotion_id===record.binding.promotion_id &&
@@ -1144,7 +1152,7 @@
       assertAction(command);
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
       var record = { state: 'PENDING', binding: copy(binding), command: command, route: '/commands/' + command,
-        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'product.create' ? makeProductPayload(input) : command === 'customer.create' ? makeCustomerPayload(input) : command === 'customer.credit-policy.set' ? makeCustomerCreditPolicyPayload(input) : command === 'inventory.adjust' ? makeInventoryPayload(input) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
+        payload: command === 'sale.create' ? (input && input.version === 1 ? makeIntentPayload(input) : makePayload(input)) : command === 'product.create' ? makeProductPayload(input) : command === 'customer.create' ? makeCustomerPayload(input) : command === 'customer.contact.set' ? makeCustomerContactPayload(input) : command === 'customer.credit-policy.set' ? makeCustomerCreditPolicyPayload(input) : command === 'inventory.adjust' ? makeInventoryPayload(input) : command === 'credit-account.create' ? makeCreditAccountPayload(input) : command === 'expense.create' ? makeExpensePayload(input) : makeFinancialPayload(command, input) };
       record.receipt_ids = {};
       if (command === 'product.create') record.receipt_ids.product_id = record.payload.product_id;
       if (command === 'customer.create') record.receipt_ids.customer_id = record.payload.customer_id;
@@ -1270,6 +1278,7 @@
   }
 
   function createProduct(input) { return createCommand('product.create', input); }
+  function setCustomerContact(input){return createCommand('customer.contact.set',input);}
   function createCustomer(input) { return createCommand('customer.create', input); }
   function setCustomerCreditPolicy(input) { return createCommand('customer.credit-policy.set', input, true); }
   function adjustInventory(input) { return createCommand('inventory.adjust', input); }
@@ -1323,6 +1332,9 @@
       if(root.localStorage.getItem(JOURNAL)!==null)fail('CANONICAL_STORAGE_NOT_DURABLE');
       return true;
     });
+  }
+  async function discardRejectedCustomerContact(){
+    return withWriterLock(function(){const r=journal();if(!r||r.state!=='PENDING'||r.command!=='customer.contact.set'||![400,409].includes(r.last_status)||!['invalid_customer_contact','customer_not_found','stale_contact','operation_id_conflict','stale_authority','customer_contact_conflict'].includes(r.last_error))return false;root.localStorage.removeItem(JOURNAL);if(root.localStorage.getItem(JOURNAL)!==null)fail('CANONICAL_STORAGE_NOT_DURABLE');return true;});
   }
   async function discardRejectedCustomerCreditPolicy() {
     return withWriterLock(function () {
@@ -1522,7 +1534,7 @@
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; } });
   root.addEventListener('offline', function () { ready = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale,
-    createProduct: createProduct, createCustomer: createCustomer, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale,
+    createProduct: createProduct, createCustomer: createCustomer, setCustomerContact: setCustomerContact, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense,
     renderCredits: renderCredits, startPOS: startPOS, legacySnapshot: legacySnapshot, sourceState: sourceState });
 })(globalThis);

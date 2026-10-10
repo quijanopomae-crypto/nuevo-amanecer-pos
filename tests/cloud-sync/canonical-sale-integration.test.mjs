@@ -353,3 +353,14 @@ test('canonical sale integration does not regress to window-only POS state acces
   assert.match(source,/typeof posProc !== 'undefined'/);
   assert.doesNotMatch(source,/var cart = Array\.isArray\(root\.cart\)/);
 });
+test('receipt uses committed product and cash snapshot; failed persistence never offers it',async()=>{
+  for(const method of ['efectivo','yape','plin','transferencia','mixto','credito']){
+    const h=harness({method});const receipts=[];
+    h.context.NAReceiptShare={onSale:(sale,customer,extra)=>receipts.push({sale,customer,extra})};
+    await h.context.confirmarVenta();
+    assert.equal(receipts.length,1);assert.equal(receipts[0].sale.items[0].precio,4.25);assert.equal(receipts[0].sale.items[0].qty,2);assert.equal(h.context.cart.length,0);
+    if(method==='efectivo'){assert.equal(receipts[0].sale.recibido,99);assert.equal(receipts[0].sale.vuelto,90.5);}
+    assert.equal(receipts[0].extra.pendingSync,true);
+  }
+  const h=harness({storageFailure:true});let calls=0;h.context.NAReceiptShare={onSale:()=>calls++};await h.context.confirmarVenta();assert.equal(calls,0);
+});

@@ -89,6 +89,7 @@ jobs:
           node --test \
             tests/product-fixes/canon-motion-bootstrap.test.mjs \
             tests/product-fixes/canonical-ui-contract.test.mjs \
+            tests/product-fixes/canon-whatsapp-receipts.test.mjs \
             tests/repo-map.test.mjs \
             tests/opencode-role-map.test.mjs \
             tests/owner-finalizer.test.mjs \
