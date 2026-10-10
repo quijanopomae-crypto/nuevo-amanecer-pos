@@ -73,3 +73,25 @@ test('PDF serializer embeds JPEG bytes with correct offsets and multiple pages',
   const offsets=[...str.matchAll(/(\d{10}) 00000 n/g)].map(x=>Number(x[1]));
   offsets.forEach((offset,i)=>assert.equal(str.slice(offset,offset+String(i+1).length+6),`${i+1} 0 obj`));
 });
+
+function realTicketApi(){
+  const ctx=vm.createContext({console,Blob,TextEncoder,Uint8Array,atob,navigator:{},document:{addEventListener(){}},_naDefaults:{ticket:{}},appConfig:{ticket:{}},_naGetBusiness:()=>({nombre:'Negocio',cajero:'Cajero actual'}),totalV:s=>(s.items||[]).reduce((sum,i)=>sum+i.qty*i.precio,0),desglosarIGV:total=>({subtotal:total,igv:0,total}),obtenerHoy:()=> '2099-12-31',nowT:()=> '23:59',_naHydrateTicket(){},_naSaveTicketSettings(){}});
+  for(const p of ['POS/js/modules/ticket/legacy.js','POS/js/modules/ticket/zones.js',path])vm.runInContext(readFileSync(p,'utf8'),ctx);
+  return ctx.NAReceiptShare;
+}
+test('real thermal generator preserves unknown historical metadata instead of using current date or cashier',()=>{
+  const a=realTicketApi();
+  const result=a.build({kind:'payment',credit:{id:'C-OLD',monto:30,saldo:20},payment:{id:'P-OLD',monto:10}});
+  assert.doesNotMatch(result.text,/2099|23:59|Cajero actual/);
+  assert.match(result.text,/Fecha: No registrada/);
+  assert.match(result.text,/Hora: No registrada/);
+  const dated=a.build({kind:'sale',sale:{id:'V-DATED',fecha:'2026-10-10',hora:'10:30',cajero:'Frank',items:[]}});
+  assert.match(dated.text,/10\/10\/2026/);
+  assert.match(dated.text,/Frank/);
+});
+test('repayment receipt identifier distinguishes separate payments for the same sale',()=>{
+  const a=realTicketApi(),sale={id:'V-1',items:[]};
+  const one=a.build({kind:'payment',sale,payment:{id:'P-1',monto:5}});
+  const two=a.build({kind:'payment',sale,payment:{id:'P-2',monto:5}});
+  assert.equal(one.id,'P-1');assert.equal(two.id,'P-2');
+});

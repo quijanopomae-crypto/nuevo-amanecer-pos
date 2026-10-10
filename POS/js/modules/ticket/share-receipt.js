@@ -24,6 +24,10 @@
     if(pay.saldoAntes===undefined)pay.saldoAntes=pay.saldoAnterior;if(pay.saldoDespues===undefined)pay.saldoDespues=pay.saldoActual;
     let sale=data.sale||{id:cr.ventaId||cr.id,fecha:cr.fecha||'',hora:cr.hora||'',cajero:cr.cajeroNombre||cr.cajero||'',metodo:'credito',items:itemsFromCredit(cr)};
     sale={...sale,clienteNombre:customer.nombre||customer.name||sale.clienteNombre||cr.clienteNombre||'',clienteDni:customer.dni||customer.document||sale.clienteDni||''};
+    // Shared historical receipts must never substitute today's metadata.
+    sale.fecha=sale.fecha||'No registrada';
+    if(!sale.hora24&&!sale.hora)sale.hora='No registrada';
+    if(!sale.cajeroNombre&&!sale.cajero)sale.cajero='No registrado';
     const generator=root._naBuildThermalTicket;
     if(typeof generator!=='function')throw new Error('Generador de ticket no disponible');
     const built=generator(sale,false);let lines=built.lines.slice();const width=built.width||42;
@@ -55,7 +59,7 @@
       if(cr.vence||data.due||sale.credit_due)field('Vencimiento',cr.vence||data.due||sale.credit_due);
     }
     if(data.pendingSync)field('Estado','Guardado local · pendiente de sincronización');
-    return{kind:data.kind,id:String(sale.id||pay.id||cr.id||'comprobante'),customerName:sale.clienteNombre||'Sin cliente',phone:normalizePhone(customer.tel||customer.phone||''),lines,text:lines.join('\n'),width,mm:built.mm||80};
+    return{kind:data.kind,id:String((data.kind==='payment'&&(pay.id||pay.pagoId||pay.operation_id))||sale.id||cr.id||'comprobante'),customerName:sale.clienteNombre||'Sin cliente',phone:normalizePhone(customer.tel||customer.phone||''),lines,text:lines.join('\n'),width,mm:built.mm||80};
   }
   function pdf(pages){
     if(!pages.length)throw new Error('PDF sin páginas');
@@ -142,7 +146,10 @@
   }
   function downloadFile(file){const url=root.URL.createObjectURL(file),a=el('a');a.href=url;a.download=file.name;root.document.body.append(a);a.click();a.remove();root.setTimeout(()=>root.URL.revokeObjectURL(url),30000);notify('Comprobante descargado. Puedes adjuntarlo en WhatsApp.','success');}
   async function share(){
-    if(!active||busy||!active.file)return;const state=active;busy=true;
+    if(!active||busy||!active.file)return;const state=active;
+    const phone=root.document.getElementById('naReceiptPhone');
+    if(state.format==='text'&&!normalizePhone(phone.value)){notify('Ingresa un número de WhatsApp válido, con código de país');phone.focus();return;}
+    busy=true;
     const send=root.document.getElementById('naReceiptSend');send.disabled=true;
     try{
       if(state.format==='text'){
