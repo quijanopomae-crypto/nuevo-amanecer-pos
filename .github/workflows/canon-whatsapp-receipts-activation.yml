@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
-          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          git fetch origin feature/v1.3-mobile-cloud
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
           node --input-type=module <<'NODE'
           import {readFileSync} from 'node:fs';

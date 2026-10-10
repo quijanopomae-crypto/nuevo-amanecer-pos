@@ -47,3 +47,24 @@ test('backups are authenticated encrypted before upload and reject absent keys',
   decipher.setAuthTag(Buffer.from(packet.tag,'base64'));
   assert.deepEqual(Buffer.concat([decipher.update(Buffer.from(packet.data,'base64')),decipher.final()]),plain);
 });
+
+test('workflow refresh preserves ancestry needed to validate approved feature commit',async(t)=>{
+  const {mkdtempSync,rmSync}=await import('node:fs');
+  const {tmpdir}=await import('node:os');
+  const {join}=await import('node:path');
+  const {execFileSync,spawnSync}=await import('node:child_process');
+  const root=mkdtempSync(join(tmpdir(),'receipt-history-'));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const origin=join(root,'origin'),clone=join(root,'clone');
+  const git=(cwd,...args)=>execFileSync('git',args,{cwd,stdio:['ignore','pipe','pipe']}).toString().trim();
+  git(root,'init','--initial-branch=feature/v1.3-mobile-cloud',origin);
+  git(origin,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-m','approved feature');
+  const feature=git(origin,'rev-parse','HEAD');
+  git(origin,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--allow-empty','-m','activation');
+  git(root,'clone','file://'+origin,clone);
+  const workflow=readFileSync('.github/workflows/canon-whatsapp-receipts-activation.yml','utf8');
+  const fetch=workflow.split('\n').find(line=>line.trim().startsWith('git fetch origin ')).trim().split(/\s+/).slice(1);
+  git(clone,...fetch);
+  const out=spawnSync('git',['merge-base','--is-ancestor',feature,'HEAD'],{cwd:clone});
+  assert.equal(out.status,0,'refresh must retain feature ancestry');
+});
