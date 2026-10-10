@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Owner solicita aplicar corrección de lentitud de fotos; PR #497 aprobado y fusionado.",
-  "retry_attempt": 107,
-  "retry_reason": "Publicar optimización de consultas de fotos sin copiar todo CANON. CANON Critical CI #757 y E2E Smoke CI #303 PASS; Reviewer y Forensic READY. Sin migraciones ni secrets.",
-  "requested_at_utc": "2026-10-09T19:16:19.371Z",
-  "target_head": "0163129da6d4f07f7e1ae467273baa23db57121a"
+  "note": "Owner aprobó publicar corrección de respuesta del efectivo contado; PR #500 fusionado.",
+  "retry_attempt": 108,
+  "retry_reason": "CANON Critical CI #761 y E2E Smoke CI #305 PASS. Revisión independiente sin P0/P1. Solo frontend; sin migraciones ni secrets.",
+  "requested_at_utc": "2026-10-10T20:56:30.122Z",
+  "target_head": "88177e2d0bb856169307251dd121100f29d26011"
 }
