@@ -1,0 +1,6 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import vm from 'node:vm';import {readFileSync} from 'node:fs';
+const context=vm.createContext({Blob,Uint8Array,DataView,TextDecoder,console});vm.runInContext(readFileSync('POS/js/ocr/ocr-document-extract.js','utf8'),context);const api=context._NA_OCR_DOCUMENT;
+function file(name,type,bytes){const b=new Blob([bytes],{type});Object.defineProperty(b,'name',{value:name});return b;}
+test('unsupported documents and oversized uploads are rejected before reading',()=>{assert.ok(api.validate(file('x.exe','application/octet-stream','bad')));assert.ok(api.validate({name:'a.pdf',size:21*1024*1024,type:'application/pdf'}));assert.ok(api.validate(file('x.pdf','application/pdf','')));});
+test('renamed invalid PDF never reaches a worker',async()=>{const r=await api.extract(file('x.pdf','application/pdf','not a PDF'));assert.equal(r.ok,false);assert.match(r.error.message,/no es un PDF/);});
+test('renamed invalid Word never loads its reader',async()=>{const r=await api.extract(file('x.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document','junk'));assert.equal(r.ok,false);assert.match(r.error.message,/DOCX válido/);});

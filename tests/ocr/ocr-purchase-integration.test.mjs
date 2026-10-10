@@ -285,7 +285,7 @@ test('I09 lote incompleto no llega a WP-06', async () => {
 
 test('I10 imagen inválida produce error visible controlado', () => {
   const sb = sandbox();
-  assert.equal(sb.integration.selectImage(image('x.pdf', [1], 'application/pdf')), false);
+  assert.equal(sb.integration.selectImage(image('x.exe', [1], 'application/octet-stream')), false);
   assert.equal(sb.elements.status.dataset.state, 'error');
   assert.match(sb.elements.status.textContent, /no es una imagen/i);
 });
@@ -326,7 +326,7 @@ test('I15 file protocol conserva indisponibilidad controlada', async () => {
 });
 
 test('entrada OCR vive en Inventario y acepta cámara móvil', () => {
-  assert.match(INDEX, /id="pageInventario"[\s\S]*id="ocrPurchaseFile"[^>]*accept="image\/\*"[^>]*capture="environment"/);
+  assert.match(INDEX, /id="ocrPurchaseCamera"[^>]*accept="image\/\*"[^>]*capture="environment"/);
   assert.match(INDEX, /id="mOcrPurchaseReview"/);
 });
 
@@ -348,4 +348,20 @@ test('scripts OCR clásicos respetan el orden real de dependencias', () => {
   assert.deepEqual(positions, positions.slice().sort((a, b) => a - b));
   assert.ok(INDEX.indexOf('js/legacy-inline/inline-16.js') < positions[0]);
   assert.ok(!INDEX.includes('type="module"'));
+});
+
+// Removing automatic dispatch would leave the review closed and stock untouched.
+test('selection reads automatically and opens verification without applying stock', async () => {
+ const sb = sandbox(); sb.elements.file.files = [image()];
+ await sb.elements.file.dispatch('change');
+ assert.equal(sb.elements.modal.classList.contains('open'), true);
+ assert.equal(sb.products[0].stock, 10);
+ assert.equal(sb.calls.apply, 0);
+});
+test('PDF and DOCX can enter the verification flow', async () => {
+ for (const [name,type] of [['purchase.pdf','application/pdf'],['purchase.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document']]) {
+  const sb=sandbox(); assert.equal(sb.integration.selectImage(image(name,[1,2],type)),true);
+  assert.equal((await sb.integration.processSelectedImage()).ok,true);
+  assert.equal(sb.products[0].stock,10);
+ }
 });

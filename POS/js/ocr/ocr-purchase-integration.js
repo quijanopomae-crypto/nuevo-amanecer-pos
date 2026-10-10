@@ -38,7 +38,7 @@
 
   function defaultDependencies() {
     return {
-      extract: root.extractOcrText,
+      extract: root.extractPurchaseDocument || root.extractOcrText,
       process: root.processPurchaseOcrText,
       createReview: root.createPurchaseReview,
       apply: root.applyApprovedPurchaseProposals,
@@ -51,6 +51,10 @@
     var deps = settings.dependencies || defaultDependencies();
     var elements = settings.elements || {
       file: byId(doc, 'ocrPurchaseFile'),
+      camera: byId(doc, 'ocrPurchaseCamera'),
+      documentFile: byId(doc, 'ocrPurchaseDocument'),
+      reviewStatus: byId(doc, 'ocrReviewStatus'),
+      source: byId(doc, 'ocrPurchaseSource'),
       start: byId(doc, 'ocrPurchaseStart'),
       status: byId(doc, 'ocrPurchaseStatus'),
       modal: byId(doc, 'mOcrPurchaseReview'),
@@ -81,6 +85,7 @@
       if (!elements.status) return;
       elements.status.textContent = String(message || '');
       if (elements.status.dataset) elements.status.dataset.state = kind;
+      if(elements.reviewStatus) elements.reviewStatus.textContent=String(message||'');
     }
 
     function setBusy(button, busy) {
@@ -95,29 +100,40 @@
       if (elements.modal && elements.modal.classList) elements.modal.classList.remove('open');
     }
 
+    var sourceUrl=null;
+    function clearSource(){if(sourceUrl){URL.revokeObjectURL(sourceUrl);sourceUrl=null;}if(elements.source)elements.source.textContent='';}
+    function showSource(file){
+      clearSource();if(!elements.source||!doc)return;
+      var label=doc.createElement('div');label.textContent=file.name||'Documento original';elements.source.appendChild(label);
+      sourceUrl=URL.createObjectURL(file);
+      if(file.type.indexOf('image/')===0){var img=doc.createElement('img');img.src=sourceUrl;img.alt='Documento original para verificar';img.style.maxWidth='100%';elements.source.appendChild(img);}
+      else {var link=doc.createElement('a');link.href=sourceUrl;link.download=file.name;link.textContent='Abrir copia del documento original';elements.source.appendChild(link);}
+    }
     function selectImage(file) {
       if (reading || applying) {
         setStatus('error', 'Espera a que termine la operación en curso.');
         return false;
       }
       currentBatch = null;
+      clearSource();
       if (reviewController && typeof reviewController.destroy === 'function') reviewController.destroy();
       reviewController = null;
       closeReview();
       selectedFile = file || null;
       if (!selectedFile) {
         setBusy(elements.apply, true);
-        setStatus('idle', 'Selecciona una foto de la compra.');
+        setStatus('idle', 'Toma una foto o sube una imagen, PDF o documento.');
         return false;
       }
-      if (selectedFile.type && selectedFile.type.indexOf('image/') !== 0) {
+      var invalid = root._NA_OCR_DOCUMENT ? root._NA_OCR_DOCUMENT.validate(selectedFile) : (selectedFile.type && selectedFile.type.indexOf('image/')!==0 && !/\.(pdf|docx)$/i.test(selectedFile.name||''));
+      if (invalid) {
         selectedFile = null;
         setBusy(elements.apply, true);
-        setStatus('error', 'El archivo seleccionado no es una imagen válida.');
+        setStatus('error', typeof invalid==='string'?invalid:'El archivo seleccionado no es una imagen o documento válido.');
         return false;
       }
       setBusy(elements.apply, true);
-      setStatus('ready', 'Imagen lista para leer.');
+      setStatus('ready', 'Archivo listo para leer.');
       return true;
     }
 
@@ -129,17 +145,18 @@
       }
       reading = true;
       currentBatch = null;
+      clearSource();
       if (reviewController && typeof reviewController.destroy === 'function') reviewController.destroy();
       reviewController = null;
       closeReview();
       setBusy(elements.start, true);
       setBusy(elements.apply, true);
-      setStatus('progress', 'Leyendo imagen…');
+      setStatus('progress', 'Leyendo archivo…');
       try {
         var extracted = await deps.extract(selectedFile, {
           logger: function (progress) {
             if (!progress || typeof progress.progress !== 'number') return;
-            setStatus('progress', 'Leyendo imagen… ' + Math.round(progress.progress * 100) + '%');
+            setStatus('progress', (progress.status||'Leyendo archivo…')+' ' + Math.round(progress.progress * 100) + '%');
           },
         });
         if (!extracted || !extracted.ok) {
@@ -160,6 +177,7 @@
 
         if (reviewController && typeof reviewController.destroy === 'function') reviewController.destroy();
         if (elements.rawText) elements.rawText.textContent = extracted.rawText;
+        showSource(selectedFile);
         reviewController = deps.createReview(elements.review, { proposals: processed.proposals }, {
           products: getProducts(),
         });
@@ -169,7 +187,7 @@
           processed: processed,
         };
         setBusy(elements.apply, false);
-        setStatus('review', 'Lectura completada. Revisa cada fila antes de aplicar.');
+        setStatus('review', 'Verifica si los datos son correctos. Confirma o descarta cada fila antes de guardar.');
         openReview();
         return { ok: true, operationId: currentBatch.operationId, proposals: processed.proposals };
       } catch (error) {
@@ -232,6 +250,7 @@
           : (duplicateCount ? 'Esta compra ya había sido aplicada; no se duplicó inventario.' : 'No hubo movimientos para aplicar.'));
         closeReview();
         selectedFile = null;
+        clearSource();
         currentBatch = null;
         if (reviewController && typeof reviewController.destroy === 'function') reviewController.destroy();
         reviewController = null;
@@ -251,20 +270,25 @@
 
     function onFileChange(event) {
       var files = event && event.target && event.target.files;
-      selectImage(files && files[0]);
+      if(selectImage(files && files[0])) {
+        if(event.target)event.target.value='';
+        var chooser=byId(doc,'mOcrPurchaseSource');if(chooser)chooser.classList.remove('open');
+        return processSelectedImage();
+      }
     }
 
     function bind() {
-      if (elements.file) elements.file.addEventListener('change', onFileChange);
+      [elements.file,elements.camera,elements.documentFile].filter(Boolean).forEach(function(input){input.addEventListener('change',onFileChange);});
       if (elements.start) elements.start.addEventListener('click', processSelectedImage);
       if (elements.apply) elements.apply.addEventListener('click', applyReviewed);
       if (elements.close) elements.close.addEventListener('click', closeReview);
       setBusy(elements.apply, true);
-      setStatus('idle', 'Selecciona una foto de la compra.');
+      setStatus('idle', 'Toma una foto o sube una imagen, PDF o documento.');
     }
 
     function destroy() {
-      if (elements.file) elements.file.removeEventListener('change', onFileChange);
+      [elements.file,elements.camera,elements.documentFile].filter(Boolean).forEach(function(input){input.removeEventListener('change',onFileChange);});
+      clearSource();
       if (elements.start) elements.start.removeEventListener('click', processSelectedImage);
       if (elements.apply) elements.apply.removeEventListener('click', applyReviewed);
       if (elements.close) elements.close.removeEventListener('click', closeReview);
