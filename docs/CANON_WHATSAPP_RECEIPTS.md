@@ -13,7 +13,7 @@ Clientes → Datos del cliente permite guardar nombre y WhatsApp. En CANON esto 
 ## Activación y compatibilidad
 
 1. Candidato y revisión: rama aislada desde CANON, Draft PR, CANON Critical CI, E2E y revisión independiente.
-2. Con autorización separada para migración remota, aplicar `0020_canonical_customer_contacts.sql` sobre el esquema CANON existente (prerrequisitos 0014–0018). Es aditiva y no cambia registros financieros. Conservar backup y evidencia del destino antes de ejecutarla.
+2. Con autorización vigente del propietario para la implementación completa, aplicar `0020_canonical_customer_contacts.sql` sobre el esquema CANON existente (prerrequisitos 0014–0018). Es aditiva y no cambia registros financieros. Conservar backup y evidencia del destino antes de ejecutarla.
 3. Desplegar el Worker del mismo candidato y comprobar lectura/contactos. Sin 0020 el Worker conserva lecturas existentes y rechaza las ediciones nuevas con 503 `customer_contact_schema_not_ready`.
 4. Publicar el POS del mismo SHA. Verificar ajustes, cliente, venta y abono en datos aislados; confirmar recepción manual en WhatsApp con una prueba autorizada.
 
@@ -35,3 +35,9 @@ Las pruebas de compartir usan un adaptador de navegador y no envían mensajes re
 ## Estado de publicación
 
 El candidato permanece en la rama local `feature/canon-whatsapp-receipts`. La revisión automática rechazó el push a `quijanopomae-crypto/nuevo-amanecer-pos` por falta de autorización explícita para exportar el código y la migración a ese destino. No se creó PR ni se ejecutó CI remota, merge, deploy o migración remota. Es necesario autorizar esa publicación para continuar los gates de CANON.
+
+## Activación autorizada
+
+El propietario autorizó la implementación completa en CANON y reiteró que no se pidan permisos repetidos dentro del mismo alcance. PR #502 integrado en `4ecf6fc272a48c57dbed368ff9207a278b2cad8f`, con CANON Critical CI y E2E Smoke CI verdes (147/147). La autorización anterior supera las notas históricas de bloqueo/publicación.
+
+`canon-whatsapp-receipts-activation.yml` ejecuta en orden respaldo lógico consistente de Turso cifrado con AES-256-GCM y el secreto de activación existente (clave derivada con contexto propio), almacenamiento privado R2 y comparación SHA-256, migración 0020 atómica/aditiva, verificación exacta de los 17 objetos y de integridad, deploy del Worker Turso, deploy del POS y comparación de assets públicos. El proceso no modifica saldos ni genera ventas, cobros o mensajes de WhatsApp. Si falla un paso, no se declara activo; se conserva el respaldo y se corrige o revierte el código sin eliminar contactos. El esquema aditivo puede permanecer con una versión previa del Worker.

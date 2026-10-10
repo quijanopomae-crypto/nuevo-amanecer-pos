@@ -55,7 +55,9 @@ Reglas duras:
 - no ampliar el alcance por cuenta propia;
 - no desplegar Cloudflare/Pages;
 - no ejecutar `wrangler ... --remote`, migraciones remotas, imports de producción ni cambios de secrets;
-- no activar rutas o modos de escritura CANON sin autorización explícita separada;
+- no activar rutas o modos de escritura CANON fuera de la autorización vigente del owner;
 - probar localmente, revisar diff y usar PR/CI antes de merge cuando aplique.
 
 El POS-LAB no es un destino activo. Validar mediante Draft PR + CI + preview del mismo SHA cuando aplique.
+
+Este subagente conserva su límite de escritura local. El coordinador completa publicación, merge, migración aditiva necesaria y deploy cuando estén cubiertos por la autorización vigente de `AGENTS.md`, sin volver a solicitar el mismo permiso.

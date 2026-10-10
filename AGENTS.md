@@ -18,7 +18,7 @@ Toda tarea normal del POS debe ejecutarse así:
 6. exigir CANON Critical CI + E2E Smoke CI cuando apliquen;
 7. revisión independiente Reviewer/Forensic;
 8. preview temporal del mismo SHA cuando la validación visual o de navegador sea necesaria;
-9. solicitar autorización del owner antes de merge/deploy;
+9. completar merge/deploy cuando estén incluidos en la autorización vigente del owner;
 10. borrar la rama después del merge.
 
 No existe promoción LAB -> CANON para trabajo nuevo.
@@ -27,9 +27,11 @@ No existe promoción LAB -> CANON para trabajo nuevo.
 
 La solicitud explícita actual del propietario es la máxima autoridad para tareas normales de desarrollo del producto.
 
+Cuando el propietario diga «impleméntalo», «aplícalo a CANON» o autorice continuar una implementación, esa autorización cubre publicar la rama/PR, integrar y desplegar el cambio solicitado y aplicar las migraciones aditivas indispensables para activarlo. No se vuelve a pedir permiso para esos pasos dentro del mismo alcance. Se conservan pruebas, revisión independiente, respaldo previo a migraciones remotas y verificación posterior. Una petición de debatir, revisar o preparar un borrador no autoriza producción. Acciones destructivas, force-push, cambios de secrets o ampliaciones del alcance requieren autorización explícita específica. Las restricciones de la plataforma no pueden desactivarse desde este repositorio.
+
 ## Zonas y agentes
 
-- **CANON** → `pos-canon-implementer`: producto `POS/**` y código CANON versionado dentro del alcance autorizado. No deploy remoto por defecto.
+- **CANON** → `pos-canon-implementer`: producto `POS/**` y código CANON versionado dentro del alcance autorizado. Deploy remoto únicamente dentro de la autorización vigente descrita arriba.
 - **PREVIEW DE RAMA** → no es otra copia del producto: sirve exactamente el SHA del Draft PR/candidato.
 - **POS-LAB histórico** → retirado. `laboratorio/pos-lab/**` no es destino de nuevas escrituras ni fuente de promoción.
 - **SHADOW legacy** → `pos-implementer`: solo infraestructura/evidence shadow; `PRODUCT_WRITE = DENIED`.
@@ -50,13 +52,13 @@ Antes y después de cambios:
 - `git diff --check`;
 - revisar diff completo.
 
-Prohibido en una rama de trabajo sin autorización separada:
+Prohibido sin autorización vigente que cubra la acción:
 
-- merge a CANON;
-- deploy de producción;
+- merge a CANON fuera del alcance aprobado;
+- deploy de producción fuera del alcance aprobado;
 - force-push;
 - cambios de secrets;
-- migraciones remotas;
+- migraciones remotas fuera del alcance aprobado;
 - borrar datos;
 - ocultar o saltar tests fallidos.
 

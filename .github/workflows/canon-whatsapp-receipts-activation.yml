@@ -1,0 +1,196 @@
+name: CANON WhatsApp Receipts Activation
+
+on:
+  push:
+    branches:
+      - feature/v1.3-mobile-cloud
+    paths:
+      - "ops/canon-whatsapp-receipts-activation.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuevo-amanecer-production-change
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      POS_ACTIVATION_SECRET: ${{ secrets.POS_ACTIVATION_SECRET }}
+      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
+      PROD_WORKER_URL: https://nuevo-amanecer-pos-prod.nuevo-amanecer-pos.workers.dev
+      POS_WEB_URL: https://nuevo-amanecer-pos-web.nuevo-amanecer-pos.workers.dev
+
+    steps:
+      - name: Require existing deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "${#POS_ACTIVATION_SECRET}" -ge 32
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$'
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test -n "$TURSO_PROD_AUTH_TOKEN"
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+
+      - name: Checkout exact authorized HEAD
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate authorized scope and current CANON head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+          git fetch origin feature/v1.3-mobile-cloud --depth=1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/feature/v1.3-mobile-cloud)"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const t=JSON.parse(readFileSync('ops/canon-whatsapp-receipts-activation.json','utf8'));
+          if(t.authorized_by!=='owner'||t.authorized!==true||t.provider!=='turso'||t.migration!=='0020'||t.action!=='activate-whatsapp-receipts'||t.destructive!==false)throw new Error('invalid activation scope');
+          if(!/^[a-f0-9]{40}$/.test(t.feature_commit))throw new Error('feature commit missing');
+          execFileSync('git',['merge-base','--is-ancestor',t.feature_commit,'HEAD']);
+          NODE
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "22"
+
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify receipt activation contracts before remote writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/canonical-customer-contact.test.mjs tests/cloud-sync/canonical-sale-integration.test.mjs tests/cloud-sync/canon-receipts-activation.test.mjs tests/product-fixes/canon-whatsapp-receipts.test.mjs tools/cloudflare-lab/test/turso-d1-adapter.test.mjs
+          cd tools/cloudflare-lab
+          npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+
+      - name: Create consistent encrypted logical Turso backup
+        run: node tools/cloudflare-prod/scripts/turso-customer-contacts-maintenance.mjs backup
+
+      - name: Store and verify backup in private remote R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="canon-customer-contacts/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --remote --file=/tmp/turso-contacts-backup.json
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --remote --file=/tmp/turso-contacts-backup-check.json
+          test "$(sha256sum /tmp/turso-contacts-backup.json | awk '{print $1}')" = "$(sha256sum /tmp/turso-contacts-backup-check.json | awk '{print $1}')"
+          echo "CONTACT_BACKUP_KEY=$KEY" >> "$GITHUB_ENV"
+
+      - name: Apply additive migration 0020 to Turso authority
+        run: node tools/cloudflare-prod/scripts/turso-customer-contacts-maintenance.mjs migrate
+
+      - name: Deploy authoritative Turso Worker
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-prod/wrangler.turso-prod.jsonc
+
+      - name: Verify production Worker before publishing POS
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/cloudflare-prod/scripts/turso-customer-contacts-maintenance.mjs verify
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 --max-time 15 "$PROD_WORKER_URL/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);if(x.ok!==true||x.service!=="nuevo-amanecer-pos-prod"||x.environment!=="production")process.exit(1)})'
+
+      - name: Assemble hosted POS
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf tools/cloudflare-pos-web/_site
+          mkdir -p tools/cloudflare-pos-web/_site/app
+          cp -a POS/. tools/cloudflare-pos-web/_site/app/
+          cp tools/cloudflare-pos-web/public/index.html tools/cloudflare-pos-web/_site/index.html
+          cp tools/cloudflare-pos-web/public/activate.js tools/cloudflare-pos-web/_site/activate.js
+          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/index.html
+          sed -i "s/__BUILD_HASH__/$GITHUB_SHA/g" tools/cloudflare-pos-web/_site/app/sw.js
+          if grep -Fq '__BUILD_HASH__' tools/cloudflare-pos-web/_site/app/sw.js tools/cloudflare-pos-web/_site/index.html; then
+            echo "Service Worker build hash placeholder was not replaced" >&2
+            exit 1
+          fi
+          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/app/sw.js
+          grep -Fq "$GITHUB_SHA" tools/cloudflare-pos-web/_site/index.html
+
+      - name: Hosted POS safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/cloud-sync/v1.3-pos-web-deploy.test.mjs
+          test -f tools/cloudflare-pos-web/_site/app/index.html
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/canonical-client.js
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/canonical-sale-integration.js
+          test -f tools/cloudflare-pos-web/_site/app/js/sync/hosted-canonical-guard.js
+
+      - name: Static Worker dry-run
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --dry-run --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Deploy hosted POS
+        working-directory: tools/cloudflare-lab
+        run: npx wrangler deploy --config ../cloudflare-pos-web/wrangler.jsonc
+
+      - name: Verify public launcher and POS assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            ROOT_CODE="$(curl -sS -D /tmp/pos-root.headers -o /tmp/pos-root.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/" || true)"
+            APP_CODE="$(curl -sS -o /tmp/pos-app.html -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/" || true)"
+            JS_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/canonical-client.js" || true)"
+            GUARD_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/js/sync/hosted-canonical-guard.js" || true)"
+            SW_CODE="$(curl -sS -o /tmp/pos-sw.js -w '%{http_code}' --max-time 15 "$POS_WEB_URL/app/sw.js" || true)"
+            API_PROXY_CODE="$(curl -sS -o /tmp/pos-health.json -w '%{http_code}' --max-time 15 "$POS_WEB_URL/health" || true)"
+            echo "probe attempt=$attempt root=$ROOT_CODE app=$APP_CODE canonical_client=$JS_CODE guard=$GUARD_CODE sw=$SW_CODE api_proxy=$API_PROXY_CODE"
+            if test "$ROOT_CODE" = "200" &&
+               test "$APP_CODE" = "200" &&
+               test "$JS_CODE" = "200" &&
+               test "$GUARD_CODE" = "200" &&
+               test "$SW_CODE" = "200" &&
+               test "$API_PROXY_CODE" = "200" &&
+               grep -Fq 'Nuevo Amanecer POS' /tmp/pos-root.html &&
+               grep -Fiq 'cache-control: no-store' /tmp/pos-root.headers &&
+               grep -Fq 'Nuevo Amanecer — ERP &amp; POS' /tmp/pos-app.html &&
+               grep -Fq '"ok":true' /tmp/pos-health.json &&
+               grep -Fq "$GITHUB_SHA" /tmp/pos-sw.js; then
+              echo "HOSTED_POS_WEB_PASS url=$POS_WEB_URL/"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Hosted POS public verification failed" >&2
+          exit 1
+
+
+      - name: Verify public receipt assets match deployed commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ASSET in js/modules/ticket/share-receipt.js js/modules/ticket/share-receipt-ui.js css/receipt-share.css; do
+            curl --fail --silent --show-error --max-time 20 "$POS_WEB_URL/app/$ASSET" -o /tmp/receipt-asset
+            cmp "/tmp/receipt-asset" "POS/$ASSET"
+          done
+          node tools/cloudflare-prod/scripts/turso-customer-contacts-maintenance.mjs verify
+          {
+            echo "## CANON receipt activation"
+            echo "- Status: ACTIVE_AND_VERIFIED"
+            echo "- Migration: 0020, Turso authority"
+            echo "- Backup: $CONTACT_BACKUP_KEY"
+            echo "- Worker and POS: $GITHUB_SHA"
+            echo "- Public POS: $POS_WEB_URL/app/"
+            echo "- Financial writes / WhatsApp messages during verification: none"
+          } >> "$GITHUB_STEP_SUMMARY"

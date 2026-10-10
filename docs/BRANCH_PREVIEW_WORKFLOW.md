@@ -19,9 +19,9 @@ CANON HEAD
   -> Reviewer + Forensic
   -> preview temporal del mismo SHA, cuando aplique
   -> veredicto READY FOR MERGE
-  -> autorización del owner
+  -> comprobar autorización vigente del owner
   -> merge
-  -> deploy separado si corresponde
+  -> deploy incluido en el alcance autorizado si corresponde
   -> borrar rama
 ```
 
@@ -70,7 +70,7 @@ Crear rama, commit y Draft PR no equivale a:
 - escritura de producción;
 - cambio de secrets.
 
-Cada acción remota sensible requiere autorización separada.
+La autorización vigente se interpreta según `AGENTS.md`: «impleméntalo» o «aplícalo a CANON» cubre la publicación, integración, despliegue y migraciones aditivas necesarias del cambio solicitado. No se repite la consulta dentro del alcance aprobado. Borrados, migraciones destructivas, force-push, cambios de secrets y ampliaciones requieren autorización explícita específica. Se conservan respaldo, pruebas, revisión independiente y verificación posterior.
 
 ## Fuente de verdad
 
