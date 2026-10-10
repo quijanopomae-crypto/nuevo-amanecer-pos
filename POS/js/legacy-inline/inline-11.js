@@ -108,6 +108,7 @@ cajRender=function(){
   let totals;
   cajMovs=movements;
   try{totals=cajTotales();}finally{cajMovs=allMovements;}
+  if(document.getElementById('mCierre')?.classList.contains('open'))_naRefreshClosingCashTotals(totals);
   container.replaceChildren();
   if(!cajEstado.abierta&&!cajEstado.cerrada){
     const outer=_naSecAppend(container,'div');
