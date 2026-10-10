@@ -93,6 +93,12 @@
       &&typeof motion.scroll.enablePreset==='function';
   }
   function gesturesActive(){
+    // The compact inventory keeps its search and menus in a stable sticky chrome.
+    // Legacy display:none removes that chrome from flow and changes scrollY while
+    // the same gesture is still moving, causing jumps in products and suggestions.
+    var page=activePageEl();
+    if(window.innerWidth<=767&&page&&page.id==='pageInventario'
+      &&page.classList.contains('inv-mobile-simple'))return false;
     if(document.body.classList.contains('module-mobile-scroll')){
       // Clientes ya tiene un único controlador visual (NA_MOTION.scroll).
       // Evita que la máquina legacy compita durante refresh/bootstrap y produzca
