@@ -349,3 +349,71 @@ test('double tap on the real stack produces exactly one payment.create request',
   assert.equal(tab.fetchLog.filter((x) => x.url.endsWith('/commands/payment.create')).length, 1);
   assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n, 1);
 });
+
+
+test('unanswered batch transport returns pending and replay keeps the exact operation IDs',async t=>{
+  const f=await activeCanon(t);
+  let block=false,requestBody=null;
+  const tab=await device(f,{token:'timeout-token',deviceId:'timeout-device',onFetch:async(url,init,next)=>{
+    if(block && new URL(url).pathname==='/commands/payment.batch') {
+      requestBody=init.body;
+      return new Promise(()=>{});
+    }
+    return next();
+  }});
+  const originalTimer=tab.context.setTimeout;
+  tab.context.setTimeout=(fn,ms)=>originalTimer(fn,ms===8000?5:ms);
+  block=true;
+  let timer;
+  const result=await Promise.race([
+    tab.api.createPaymentBatch([{credit_id:CREDIT,amount_cents:100,payment_method:'yape',reference:'TIMEOUT-SYNTHETIC'}]),
+    new Promise(resolve=>{timer=setTimeout(()=>resolve({hung:true}),150);})
+  ]);
+  clearTimeout(timer);
+  assert.equal(result.hung,undefined,'payment must stop waiting when its transport times out');
+  assert.equal(result.pending_unresolved,true);
+  const pending=tab.api.pendingSnapshot();
+  assert.equal(pending.state,'PENDING');
+  assert.equal(JSON.stringify(pending.payload),requestBody);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,0);
+  block=false;
+  tab.context.setTimeout=originalTimer;
+  await tab.api.retryPending();
+  await tab.api.refresh();
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,1);
+  assert.equal(creditOf(tab).saldo,6);
+});
+
+
+test('committed batch with a stalled receipt body replays once after bounded status body timeout',async t=>{
+  const f=await activeCanon(t);
+  let blockBody=false,blockStatus=false;
+  const tab=await device(f,{token:'body-timeout-token',deviceId:'body-timeout-device',onFetch:async(url,init,next)=>{
+    const path=new URL(url).pathname;
+    const response=await next();
+    if((blockBody && path==='/commands/payment.batch') || (blockStatus && path==='/read/canonical/status'))
+      return {ok:response.ok,status:response.status,json:()=>new Promise(()=>{})};
+    return response;
+  }});
+  const originalTimer=tab.context.setTimeout;
+  tab.context.setTimeout=(fn,ms)=>originalTimer(fn,ms===8000?20:ms);
+  blockBody=true;
+  const result=await tab.api.createPaymentBatch([{credit_id:CREDIT,amount_cents:100,payment_method:'yape',reference:'BODY-TIMEOUT-SYNTHETIC'}]);
+  assert.equal(result.pending_unresolved,true);
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,1);
+  const originalPayload=JSON.stringify(tab.api.pendingSnapshot().payload);
+  blockBody=false;blockStatus=true;
+  let timer;
+  const retry=await Promise.race([tab.api.retryPending().then(()=>({ok:true}),e=>({error:e.message})),
+    new Promise(resolve=>{timer=setTimeout(()=>resolve({hung:true}),250);})]);
+  clearTimeout(timer);
+  assert.equal(retry.hung,undefined,'retry status body must also have a deadline');
+  assert.equal(retry.error,'CANONICAL_READ_TIMEOUT');
+  assert.equal(JSON.stringify(tab.api.pendingSnapshot().payload),originalPayload);
+  blockStatus=false;tab.context.setTimeout=originalTimer;
+  const receipt=await tab.api.retryPending();
+  assert.equal(receipt.status,'already_processed');
+  await tab.api.refresh();
+  assert.equal(f.sql("SELECT COUNT(*) n FROM canonical_financial_events WHERE event_type='PAYMENT'").n,1);
+  assert.equal(creditOf(tab).saldo,6);
+});

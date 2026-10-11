@@ -1213,7 +1213,7 @@ function labCategorySummary(client, category) {
     var screen = labScreen();
     if (!screen || !result || !Array.isArray(result.completed) || !result.completed.length) return false;
 
-    var currentCredits = labBatchCurrentCredits();
+    var currentCredits = labClientCredits(labClientScreenState.clientId);
     var completedCents = 0;
     var fullyPaid = 0;
 
@@ -1225,7 +1225,7 @@ function labCategorySummary(client, category) {
 
       var credit = currentCredits.find(function (row) { return String(row && row.id) === creditId; });
       var pendingCents = credit ? Math.max(0, Math.round(labCreditPending(credit) * 100)) : amountCents;
-      var paidInFull = amountCents >= pendingCents;
+      var paidInFull = pendingCents === 0;
       if (paidInFull) fullyPaid += 1;
 
       var row = Array.from(screen.querySelectorAll('[data-na-batch-credit-id]')).find(function (candidate) {
@@ -1286,7 +1286,7 @@ function labCategorySummary(client, category) {
     if (client && category) {
       var currentSummary = labCategorySummary(client, category);
       var balance = screen.querySelector('.na-v2-category-balance strong');
-      if (balance) balance.textContent = labMoney(Math.max(0, currentSummary.pending - completedCents / 100));
+      if (balance) balance.textContent = labMoney(currentSummary.pending);
     }
 
     labBatchAwaitingReconcile = true;
