@@ -27,7 +27,10 @@ test('CANON image batch previews, persists, resolves and undoes without mutating
   expect(await page.evaluate('JSON.stringify(productos)')).toBe(before);
   expect(await page.evaluate('NuevoAmanecerImageBatch.source(productos[0])')).toBe(image);
   await expect(page.locator('#invBody img')).toHaveCount(1);
-  await expect(page.locator('#invBody img')).toHaveAttribute('src',image);
+  // The lightweight display URL must contain exactly the original persisted raster bytes.
+  await expect(page.locator('#invBody img')).toHaveAttribute('src',/^blob:/);
+  const raster=await page.locator('#invBody img').evaluate(async img=>{await img.decode();const bytes=new Uint8Array(await (await fetch(img.src)).arrayBuffer());return {width:img.naturalWidth,bytes:Array.from(bytes)};});
+  expect(raster.width).toBe(1);expect(Buffer.from(raster.bytes)).toEqual(Buffer.from(image.split(',')[1],'base64'));
   // Reimporting exported bytes stays idempotent.
   await page.locator('#productImageBatchFiles').setInputFiles({name:'otra.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({version:1,entries:[{codes:[code],image}]}))});
   await expect(page.locator('#productImageBatchRows')).toContainText('Sin cambios');
