@@ -26,14 +26,16 @@ test('cold-start read failure exits pending and exposes retryable unavailable UI
   assert.match(inline03,/Autoridad canónica no validada/);
 });
 
-test('canonical read requests are bounded without changing command write transport',()=>{
+test('canonical reads and payment receipts are bounded while other command transports stay direct',()=>{
   assert.match(canonical,/var READ_TIMEOUT_MS = 8000/);
-  assert.match(canonical,/function readFetch\(url, options\)/);
+  assert.match(canonical,/function readFetch\(url, options, includeJson\)/);
   assert.match(canonical,/reject\(new Error\('CANONICAL_READ_TIMEOUT'\)\)/);
   assert.match(canonical,/await readFetch\(endpoint \+ '\/read\/canonical\/status'/);
   assert.match(canonical,/await readFetch\(endpoint \+ '\/read\/canonical\/' \+ route/);
   const sendPending=canonical.slice(canonical.indexOf('async function sendPending'),canonical.indexOf('async function createSale'));
-  assert.doesNotMatch(sendPending,/readFetch\(/);
+  assert.match(sendPending,/record\.command === 'payment\.create' \|\| record\.command === 'payment\.batch'/);
+  assert.match(sendPending,/await readFetch\(expected\.endpoint \+ record\.route, requestOptions, true\)/);
+  assert.match(sendPending,/statusTransport = await readFetch[\s\S]*}, true\)/);
   assert.match(sendPending,/root\.fetch\(expected\.endpoint \+ record\.route/);
 });
 

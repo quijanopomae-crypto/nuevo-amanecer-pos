@@ -10,7 +10,7 @@ const integration=readFileSync(new URL('../../POS/js/sync/canonical-sale-integra
 const intent=readFileSync(new URL('../../POS/js/sync/canonical-sale-intent.js',import.meta.url),'utf8');
 const canonicalClient=readFileSync(new URL('../../POS/js/sync/canonical-client.js',import.meta.url),'utf8');
 
-function context() {
+function context(instrumentBatch = false) {
   const dueMap=new Map([['2026-09-20',-6],['2026-09-26',0],['2026-10-01',5],['2026-11-01',36]]);
   const listeners=new Map();
   const document={
@@ -51,7 +51,8 @@ function context() {
   };
   ctx.window=ctx; ctx.globalThis=ctx;
   vm.createContext(ctx);
-  vm.runInContext(source,ctx,{filename:'client-credit-accounts-v2.js'});
+  const evaluated = instrumentBatch ? source.replace('})(window);', 'root.__batchTest={confirm:labBatchShowConfirmed,state:labClientScreenState};})(window);') : source;
+  vm.runInContext(evaluated,ctx,{filename:'client-credit-accounts-v2.js'});
   return ctx;
 }
 function credit(id,clientId='stable',amount=100,paid=0,extra={}){
@@ -266,7 +267,7 @@ test('durable batch receipt paints Pagado immediately and reconciliation later r
   assert.match(confirmed,/Pagado ✓/);
   assert.match(confirmed,/✓ Pagado/);
   assert.match(confirmed,/labBatchAwaitingReconcile = true/);
-  assert.match(confirmed,/currentSummary\.pending - completedCents \/ 100/);
+  assert.match(confirmed,/labMoney\(currentSummary\.pending\)/);
   assert.match(source,/labBatchAwaitingReconcile \|\| labPaymentReceiptOverlays\.size/);
   assert.match(source,/labBatchAwaitingReconcile = false;\s*labRenderRoute\('replace'\)/);
   assert.match(css,/\.na-v2-batch-row-paid/);
@@ -565,4 +566,23 @@ test('credit dialogs suspend the financial workspace and restore its route on cl
   for(const id of ids){modals.get(id).open=true;notify();assert.equal(screen.inert,true,id);modals.get(id).open=false;notify();assert.equal(screen.inert,false,id);}
   screen.hidden=true;modals.get('mEvaluacionCredito').open=true;notify();modals.get('mEvaluacionCredito').open=false;notify();
   assert.equal(screen.hidden,true,'closing a dialog must never reopen a closed workspace');
+});
+
+
+for (const amountCents of [100,200,300]) test('batch confirmation projects once and classifies remaining balance: '+amountCents,()=>{
+  const ctx=context(true),api=ctx.NA_CLIENT_CREDIT_ACCOUNTS_V2;
+  ctx.clientes=[{id:'stable',nombre:'Synthetic client'}];
+  ctx.creditos=[credit('CR:001','stable',3,0),credit('CR:002','stable',657.70,0)];
+  ctx.dispatchEvent({type:'na:canonical-payment-receipt',detail:{version:1,command:'payment.create',
+    payload:{operation_id:'PAY-ONE',credit_id:'CR:001',amount_cents:amountCents,payment_method:'efectivo'},
+    receipt:{operation_id:'PAY-ONE',credit_id:'CR:001',status:'created',current_balance_cents:300-amountCents}}});
+  assert.equal(api.categorySummary(ctx.clientes[0],{id:'small'}).pending,660.70-amountCents/100);
+  const balance={textContent:''},summary={textContent:''},status={textContent:''};
+  const row={classList:{add(){}},getAttribute:()=> 'CR:001',querySelector:s=>s==='.na-v2-row-value'?{querySelector:()=>status}:null};
+  const screen={querySelector:s=>s==='.na-v2-category-balance strong'?balance:s==='#naV2BatchSummary'?summary:null,querySelectorAll:()=>[row]};
+  ctx.document.getElementById=id=>id==='pageClientes'?{querySelector:()=>screen}:null;
+  Object.assign(ctx.__batchTest.state,{clientId:'stable',categoryId:'small'});
+  ctx.__batchTest.confirm({completed:[{credit_id:'CR:001',amount_cents:amountCents}]},{});
+  assert.equal(balance.textContent,'S/ '+(660.70-amountCents/100).toFixed(2));
+  assert.equal(status.textContent,amountCents===300?'Pagado ✓':'Abono confirmado ✓');
 });

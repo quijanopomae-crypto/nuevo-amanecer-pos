@@ -209,7 +209,7 @@
   }
   function notifyReplicaUpdate() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-updated', { detail: sourceState() })); } catch (_) {} }
   function notifyConnectionVerified() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:canonical-connected')); } catch (_) {} }
-  function readFetch(url, options) {
+  function readFetch(url, options, includeJson) {
     return new Promise(function (resolve, reject) {
       var settled = false;
       var controller = typeof root.AbortController === 'function' ? new root.AbortController() : null;
@@ -222,6 +222,9 @@
       var requestOptions = Object.assign({}, options || {});
       if (controller) requestOptions.signal = controller.signal;
       Promise.resolve(root.fetch(url, requestOptions)).then(function (response) {
+        // Keep the deadline active through the body: headers alone are not a receipt.
+        return includeJson ? response.json().then(function (result) { return { response:response, result:result }; }) : response;
+      }).then(function (response) {
         if (settled) return;
         settled = true;
         root.clearTimeout(timer);
@@ -1084,12 +1087,13 @@
     // may skip a redundant status GET. Retried pending commands still verify
     // remote authority before replaying the exact durable intent.
     if (!skipStatus) {
-      var statusResponse = await root.fetch(expected.endpoint + '/read/canonical/status', {
+      var statusTransport = await readFetch(expected.endpoint + '/read/canonical/status', {
         credentials: 'omit', redirect: 'error', cache: 'no-store',
         headers: { authorization: 'Bearer ' + session.token }
-      });
+      }, true);
+      var statusResponse = statusTransport.response;
       if (!statusResponse.ok) fail('CANONICAL_READ_' + statusResponse.status);
-      var meta = await statusResponse.json(); verify(meta, expected);
+      var meta = statusTransport.result; verify(meta, expected);
       if (meta.mode !== 'ACTIVE') fail('CANONICAL_COMMERCE_CLOSED');
     }
     assertBinding(expected);
@@ -1098,16 +1102,22 @@
     unchanged();
     // A retry must also fail before POST when storage has become unwritable.
     durableJournal(record);
-    var response;
+    var response, result;
     try {
-      response = await root.fetch(expected.endpoint + record.route, {
+      var payment = record.command === 'payment.create' || record.command === 'payment.batch';
+      var requestOptions = {
         method: 'POST', credentials: 'omit', redirect: 'error', cache: 'no-store',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + session.token },
         body: JSON.stringify(record.payload)
-      });
+      };
+      if (payment) {
+        var transport = await readFetch(expected.endpoint + record.route, requestOptions, true);
+        response = transport.response; result = transport.result;
+      } else {
+        response = await root.fetch(expected.endpoint + record.route, requestOptions);
+        result = await response.json();
+      }
     } catch (_) { fail('CANONICAL_FINANCIAL_PENDING'); }
-    var result;
-    try { result = await response.json(); } catch (_) { fail('CANONICAL_FINANCIAL_PENDING'); }
     unchanged();
     if (!response.ok) {
       durableJournal(Object.assign({}, record, {
