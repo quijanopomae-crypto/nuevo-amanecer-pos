@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
-const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jT3sAAAAASUVORK5CYII=';
+// Valid 1px PNG; the previous fixture had an invalid IDAT checksum.
+const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNg2LIAAAIMAVUeX9q0AAAAAElFTkSuQmCC';
 async function setup(page:any){
   await page.goto('/index.html');
   await page.waitForFunction('_naFreeSaleShortcutState.ready');
@@ -29,7 +30,7 @@ test('CANON image batch previews, persists, resolves and undoes without mutating
   await expect(page.locator('#invBody img')).toHaveCount(1);
   // The lightweight display URL must contain exactly the original persisted raster bytes.
   await expect(page.locator('#invBody img')).toHaveAttribute('src',/^blob:/);
-  const raster=await page.locator('#invBody img').evaluate(async img=>{await img.decode();const bytes=new Uint8Array(await (await fetch(img.src)).arrayBuffer());return {width:img.naturalWidth,bytes:Array.from(bytes)};});
+  const raster=await page.locator('#invBody img').evaluate(async img=>{const blob=await (await fetch(img.src)).blob(),bitmap=await createImageBitmap(blob),width=bitmap.width;bitmap.close();return {width,bytes:Array.from(new Uint8Array(await blob.arrayBuffer()))};});
   expect(raster.width).toBe(1);expect(Buffer.from(raster.bytes)).toEqual(Buffer.from(image.split(',')[1],'base64'));
   // Reimporting exported bytes stays idempotent.
   await page.locator('#productImageBatchFiles').setInputFiles({name:'otra.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({version:1,entries:[{codes:[code],image}]}))});

@@ -6,7 +6,7 @@ function _naCancelInventoryRows(){if(_naInventoryRowsObserver)_naInventoryRowsOb
 function _naRenderInventoryRows(container,items,renderItem){
   _naCancelInventoryRows();let next=0;
   const chunk=()=>{const end=Math.min(items.length,next+24);container.insertAdjacentHTML('beforeend',items.slice(next,end).map(renderItem).join(''));next=end;};
-  const renderChunk=callback=>{const withPhotos=()=>window.NuevoAmanecerImageBatch?.withSources?window.NuevoAmanecerImageBatch.withSources(callback):callback();return _naWithCategoryCatalog(withPhotos);};
+  const renderChunk=callback=>{const withPhotos=()=>window.NuevoAmanecerImageBatch?.withSources?window.NuevoAmanecerImageBatch.withSources(callback):callback();try{return _naWithCategoryCatalog(withPhotos);}finally{if(typeof _naInventoryImageDisplay!=='undefined')_naInventoryImageDisplay.prune();}};
   container.replaceChildren();
   // Search visibility badges are applied synchronously by the existing visibility wrapper.
   if(typeof IntersectionObserver!=='function'||document.getElementById('invSearch')?.value.trim()){renderChunk(()=>{container.innerHTML=items.map(renderItem).join('');});return;}
@@ -14,8 +14,7 @@ function _naRenderInventoryRows(container,items,renderItem){
   const tab=invTab,observer=new IntersectionObserver(entries=>{
     if(observer!==_naInventoryRowsObserver||invTab!==tab||!container.isConnected)return;
     if(!entries.some(entry=>entry.isIntersecting))return;observer.disconnect();
-    const append=()=>{chunk();if(typeof _naInventoryImageDisplay!=='undefined')_naInventoryImageDisplay.prune();};
-    renderChunk(append);
+    renderChunk(chunk);
     if(next<items.length)observer.observe(container.lastElementChild);else _naCancelInventoryRows();
   },{rootMargin:'600px 0px'});
   _naInventoryRowsObserver=observer;observer.observe(container.lastElementChild);
