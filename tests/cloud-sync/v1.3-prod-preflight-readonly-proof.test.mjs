@@ -74,3 +74,20 @@ test('production D1 preflight contains no SQL business or schema mutation', () =
   assert.doesNotMatch(workflow, /\bCREATE\s+(?:TABLE|VIEW|TRIGGER|INDEX)\b/i);
   assert.doesNotMatch(workflow, /wrangler\s+d1\s+(?:execute|migrations\s+apply)/i);
 });
+
+
+test('production read-only preflight proves customer credit policy 0018 without mutating D1', () => {
+  assert.ok(workflow.includes('0018_canonical_customer_credit_policy.sql'));
+  for (const marker of [
+    'canonical_customer_credit_policy_operations',
+    'canonical_customer_credit_policies',
+    'customer_credit_policy_operation_authorized_insert',
+    'customer_credit_policy_operations_no_update',
+    'customer_credit_policy_operations_no_delete',
+    'customer_credit_policy_insert_guard',
+    'customer_credit_policy_update_guard',
+    'customer_credit_policy_no_delete',
+    'missing_customer_credit_policy_fks',
+    'migration_0018_readonly_proof',
+  ]) assert.ok(workflow.includes(marker), 'missing 0018 read-only proof marker ' + marker);
+});
