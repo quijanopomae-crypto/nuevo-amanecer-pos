@@ -209,7 +209,7 @@
   if (!pendingBase || typeof pendingBase !== 'object') pendingBase = null;
   // appReady: la app ya cargó su configuración local (loadAppState corre después de loadAllData). Antes de eso
   // appConfig tiene los valores por defecto y no sirve para comparar un guardado pendiente.
-  var appReady = false, waitingPending = false;
+  var appReady = false, waitingPending = false, deferredApply = false;
   function setPending(value) {
     pendingBase = value;
     try { if (value) root.localStorage.setItem(PENDING_KEY, JSON.stringify(value)); else root.localStorage.removeItem(PENDING_KEY); } catch (_) {}
@@ -222,6 +222,9 @@
   // keys: solo esas claves (por defecto, todas las que hay en la copia del servidor).
   function applyServer(keys) {
     var c = cfg(); if (!c) return false; var changed = false;
+    // Antes de loadAppState, appConfig tiene los valores por defecto: aplicar y guardar aquí escribiría esos valores
+    // en el aparato y la carga los tomaría en vez del cambio del dueño. Se aplica al terminar loadAppState.
+    if (!appReady) { deferredApply = true; return false; }
     // Sin claves explícitas y con un guardado pendiente, no se tocan las claves que el dueño cambió: al arrancar,
     // antes de confirmar el rol, el aparato se trata como solo lectura y la copia del servidor pisaría ese cambio.
     var list = keys || Object.keys(SHARED).filter(function (k) { return !pendingBase || (pendingBase[k] && same(SHARED[k].get(c), pendingBase[k].value)); });
@@ -381,6 +384,7 @@
     root.loadAppState = function () {
       var out = baseLoad.apply(this, arguments);
       appReady = true;
+      if (deferredApply) { deferredApply = false; setTimeout(function () { try { applyServer(); } catch (_) {} }, 0); }
       if (waitingPending) { waitingPending = false; setTimeout(function () { pullSettings(); }, 0); }
       return out;
     };
