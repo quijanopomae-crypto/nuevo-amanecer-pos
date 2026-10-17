@@ -765,11 +765,11 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
   para [oculto]», «clave de tortuga» → «clave de [oculto]».
 
 ### Espacios (Bot 5)
-- Una racha de más de 160 espacios tras la etiqueta se junta en uno antes de las reglas del PIN (regla ya existente): «clave» + 200 espacios +
+- (Tope 120 desde la ampliación sobre 36f6ae51.) Una racha de más de 160 espacios tras la etiqueta se junta en uno antes de las reglas del PIN (regla ya existente): «clave» + 200 espacios +
   «4321» → «clave [oculto]». La ventana de la etiqueta NO se suelta por los espacios.
 
 ### Dinero (decisión final: sin cambios)
-- La regla de 39ccd25c queda igual. «la clave es precio S/ 43.21» → «la clave es [oculto] S/ 43.21» (el monto sigue visible, como en 39ccd25c). De los 12 montos del dueño de Bot 2, 9 visibles (igual que
+- La regla de 39ccd25c queda igual. «la clave es precio S/ 43.21» → «la clave es [oculto] S/ 43.21» (el monto sigue visible, como en 39ccd25c; desde 36f6ae51+ la palabra «precio» tampoco se tapa, ver abajo). De los 12 montos del dueño de Bot 2, 9 visibles (igual que
   39ccd25c), también envueltos en `**` y `` ` ``.
 
 ### Etiqueta neutra para 8 dígitos (Bot 4)
@@ -786,7 +786,7 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
 - Campo lleno = como maxlength nativo: escribir no inserta nada y el valor queda igual; lo que no cabe se quita de lo recién escrito (antes del
   cursor), no del final. Sin contador N/80 (opcional, no hecho).
 - Valor puesto por script sin evento: al tocar «Confirmar» se revisa (recheck); si cambió, se limpia a la vista y ese toque no manda nada (lo visible
-  = lo enviado).
+  = lo enviado). (36f6ae51+) también con el foco en el campo: el blur que hace el clic marca el cambio y el primer toque no manda.
 
 ### Confirmar con señal débil (Bot 3, 7a)
 - Cada intento arma su propio límite (12 s) ANTES de llamar a fetch y lo quita solo en finally. Además un reloj de pared (Date.now) revisa el límite
@@ -798,3 +798,63 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
   simuladas de 7a). Contra 39ccd25c fallan 14 de 16 (pasan 3b, costo lineal, y 7, puntitos, que ya estaban bien).
 - Actualizadas (etiqueta «código»): `assistant-followups-25ffde10`, `-6280deae`, `-6e0b3c5d`, `assistant-worker`. `assistant-live-access`: el patrón
   del doble toque admite la revisión síncrona de campos.
+
+## Ampliación sobre 36f6ae51 (Bot 2 INFORME 36f6ae51, Bot 5 ev-36f6ae51)
+
+### Comilla o envoltorio: salto de línea y ventana (Bot 2 F1/F2, Bot 5)
+- Entre la apertura (cualquier comilla o envoltorio) y el valor se aceptan espacios y UN salto de línea (`\n` o `\r\n`): «la clave del wifi es
+  "⏎tortuga» → «… "⏎[oculto]», «… «⏎tortuga»» → «… «⏎[oculto]»». Una línea en blanco entera (dos saltos) no entra en esta regla.
+- La ventana cuenta desde el comienzo del valor y mide 80 caracteres (antes 40). Con cierre dentro de los 80 se tapa todo lo de dentro (una comilla
+  cerrada de 41–80 caracteres ya no deja cola: «"[oculto]nco gris"» → «"[oculto]"»).
+- Sin cierre: se tapa la primera palabra (siempre entera) y luego hasta lo primero entre `.` `;` `!` `?` seguido de espacio o fin, salto de línea, otra
+  etiqueta o los 80 caracteres; si los 80 caen a mitad de palabra, se sigue hasta el final de esa palabra (a lo sumo 20 más). Nunca hasta el final
+  del texto. «…es "perro azul verde amarillo rojo naranja morado gris» → «…es "[oculto]». Límite conocido: una sola «palabra» de más de 100
+  caracteres sin espacios deja ver lo que pasa de 100.
+- Bloque de código: la etiqueta de lenguaje cuenta solo si sigue un salto («```text⏎tortuga⏎```» → «```text⏎[oculto]⏎```»); «```tortuga```» →
+  «```[oculto]```» (antes «```tortuga[oculto]»). Etiquetas HTML de formato `<b> <strong> <code> <em> <i> <u> <mark> <kbd> <pre>` abren y cierran con «</».
+
+### Cabecera y separadores (Bot 5 1 y 3)
+- Entre la etiqueta (y su frase) y la comilla: hasta 200 espacios de cualquier tipo (espacio, tab, NBSP, em…) en el separador (antes 16:
+  «clave del wifi:» + 17–160 espacios + «"tortuga"» se veía; regresión frente a 39ccd25c). Con más de 200 no entra (límite conocido; tras «clave:»,
+  «clave es» o «pin» sin frase la racha de más de 120 ya se junta en uno y sí entra).
+- Separadores además de «:», «=», es/era/fue: «->», «=>», «→», «—», «–», «|» (tabla «| clave del wifi | tortuga |») y la cita de markdown
+  «clave del wifi:⏎> tortuga» (también para el PIN numérico: «pin:⏎> 4321»).
+- Tras es/era/fue, una palabra de enlace (para/en/de/del/que) y el valor: se tapa el valor si tiene letras y dígitos («la clave es para
+  Tortuga22» → «… para [oculto]») o, con palabra fuerte (contraseña/password o sustantivo de credencial), si empieza con mayúscula («la contraseña es
+  en Tortuga», «la clave del wifi es de Tortuga»). La palabra de enlace sola sigue visible («la clave es para», «la clave: de»); «la contraseña es
+  para proteger tu cuenta» queda igual.
+- Montos: con los separadores nuevos, en tablas y con flechas los 12 montos del dueño de Bot 2 dan lo mismo que en texto plano (9/12 visibles) y los
+  5 precios normales quedan intactos.
+
+### Palabra de precio (Bot 2, INFO)
+- La palabra de precio (precio, costo, efectivo, monto, total, vuelto) nunca se tapa como «valor de la etiqueta»: «la clave es precio S/ 43.21» queda
+  igual. El número lo sigue decidiendo la regla de dinero («la clave es precio 4321» → «… precio [oculto]», «pin precio S/ 43.21» → «… S/ [oculto]»).
+
+### Espacios e invisibles (Bot 2 INFO, Bot 5 4b)
+- La racha tras una etiqueta se junta en uno cuando pasa de 120 caracteres (antes 160). La etapa de espacios retiene a lo sumo 120: «pin» + 500
+  espacios + «4321» retiene 123 (antes 163; medido como largo filtrado del prefijo menos lo emitido). Medido como «entrada − salida» sigue dando ~500
+  porque los espacios descartados nunca salen: no es retención.
+- Caracteres invisibles de formato (U+200B–U+200F, U+2060–U+2064, U+FEFF, U+180E, U+00AD, U+202A–U+202E, U+2066–U+2069) dentro de esa racha cuentan
+  como parte de la racha y se quitan: «clave:» + « ⏎U+200B» ×70 + «4321» → «clave: [oculto]». Fuera de una racha tras etiqueta no se tocan; una racha
+  corta de puros invisibles queda como estaba.
+
+### DNI (Bot 5 4c)
+- Con «documento», «doc.» o «identidad» justo delante (con «:», «#» o espacios) no se repite la etiqueta: «documento ****5678», «identidad: ****5678»
+  (antes «documento DNI ****5678»). Más lejos («documento del cliente 12345678») sigue «DNI ****5678».
+
+### Streaming y retención
+- Mismo criterio en las 4 vías y en partes: 430 textos, 1 146 496 cortes, 0 diferencias, 0 fugas (b5fix/run-<hash>/ev/allcuts.txt).
+- Retención (largo filtrado del prefijo − emitido, trozos 1 y 5, 8000 caracteres): casos normales y repetidos ≤ 130 (máx. medido 130, «pin » repetido);
+  «pin» + 500 espacios 123; con la ventana nueva de 80+20, «clave "⏎abcde » repetido 110 y «la contraseña es **⏎perro azul** » 106. Máximo medido:
+  298, solo con 200 espacios en la cabecera antes de la comilla («clave del wifi:» + 200 espacios + «"perro" y » repetido; 248 con 150): la cabecera
+  entera más la ventana tiene que llegar junta. Los puntitos de «escribiendo» siguen visibles mientras se retiene.
+
+### Campo de la tarjeta (Bot 5 4a)
+- Con el foco en el campo, el clic en «Confirmar» saca el foco antes: si el blur encuentra un valor cambiado sin evento (script/extensión), lo limpia a
+  la vista y el primer toque que sigue no manda nada; el siguiente manda lo visible. Una entrada real (input/composición) borra la marca. Sin
+  temporizador.
+
+### Pruebas
+- Nueva: `assistant-followups-36f6ae51.test.mjs` (11). Contra 36f6ae51 fallan 9 de 11; pasan 9 (dinero en tablas/flechas: es una guarda de no
+  regresión) y 11 (retención acotada y paridad con los repetidos nuevos: guarda).
+- Actualizadas (etiqueta sin repetir): `assistant-followups-25ffde10` («Doc: ****5678»), `assistant-followups-39ccd25c` (documento/Doc:/identidad).
