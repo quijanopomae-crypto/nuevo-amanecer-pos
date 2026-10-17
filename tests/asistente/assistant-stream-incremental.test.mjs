@@ -186,3 +186,25 @@ test('9) Bot 4: puntitos mientras llega, «Pensando» tras un reset, contraste d
   const lastNote = new Function('LAST_N', 'rootEl', 'getComputedStyle', 'pinned', src + '\nreturn lastNote;')(40, { contains: () => false }, () => ({ visibility: 'visible' }), () => false);
   const best = lastNote({ querySelectorAll: () => ps }, box(500, 700, 0, 360)); assert.equal(best.el, ps[1], 'el párrafo con texto más bajo, en la franja de la burbuja');
 });
+
+// ---------- 10. Bot 2 sobre c97c41ca: las 21 frases que dejaban ver el costo ----------
+const BOT2 = ['El costo. S/ 1.80', 'costo\nS/ 1.80', 'Costo:\nS/ 1.80', 'costo; S/ 1.80', 'Inversión. S/ 7,797.00', 'Margen\n30%',
+  'costo, aunque S/ 1.80', 'costo pero S/ 1.80', 'no es el costo sino S/ 1.80', 'costo mientras S/ 1.80',
+  'costo sin PVP: S/ 1.80', 'costo, precio S/ 1.80', 'El costo y el precio: S/ 1.80.',
+  'El costo, se vende S/ 1.80.', 'costo, vendemos S/ 1.80', 'costo vendo S/ 1.80',
+  'S/ 1.80 es el costo.', 'S/ 1.80, ese es el costo.', 'P. de compra S/ 1.80',
+  'costo (no de venta) S/ 1.80', 'costo aprox. S/ 1.80'];
+const MORE2 = ['costo, pero S/ 1.80', 'costo, sino S/ 1.80', 'costo, mientras S/ 1.80', 'Margen Bruto 30%', 'Arroz Margen Bruto 30%', 'Ganancia Neta S/ 500', 'Leche Gloria Utilidad Total 15%'];
+for (const n of [1, 2, 5, 47, 48, 49, 100]) {
+  test('10) trozos de ' + n + ': las 21 frases de Bot 2 (punto, salto de línea, pero/aunque/sino/mientras, PVP negado, «se vende» sin «a», P. de compra…) quedan tapadas', () => {
+    assert.equal(BOT2.length, 21);
+    for (const t of [...BOT2, ...MORE2]) {
+      const want = redactOwnerData(t); assert.ok(!/1\.80|7,797|30%|500|15%/.test(want) && want.includes('[dato del dueño]'), t + ' -> ' + want);
+      assert.equal(stream(t, EMP, n).text, want, n + ': ' + t);
+      assert.equal(stream(t, 'owner', n).text, t, 'el dueño ve todo');
+    }
+    // solo una etiqueta de venta explícita deja ver el monto
+    for (const t of ['El costo no lo tengo, pero el precio de venta es S/ 2.50', 'El costo es S/ 1.80. Se vende a S/ 2.50', 'costo S/ 1.80, PVP S/ 2.50', 'costo S/ 1.80; lo vendemos a S/ 2.50'])
+      assert.ok(stream(t, EMP, n).text.includes('2.50'), t);
+  });
+}

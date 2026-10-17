@@ -124,4 +124,5 @@ Importante: DeepSeek procesa los datos en servidores en China. Por eso el protot
 - CPU (4000 caracteres en trozos de 5): dueño 1-4 ms, empleado 3-7 ms (antes 20-42 ms y 3,3 s con dígitos). Primera letra a los 25 caracteres en los dos roles; peor caso del empleado (monto al inicio, línea sin punto) 205 caracteres.
 - Pedido a DeepSeek abortado si el celular se va o pasa el tope de 90 s del servidor. Relojes del celular con tiempo de subida de la foto. Foto de empleado rechazada antes de subir.
 - Bot 4: puntitos mientras llega, «Pensando» tras un reset, tandas de ~48 caracteres al pintar, contraste del aviso en modo oscuro, sin «unid..», último párrafo con texto cuenta para el espacio de abajo.
+- Bot 2 (17-10): la ventana de 60 tras «costo/margen/…» ya no se cierra con punto, salto de línea, «;» ni «pero/aunque/sino/mientras»; solo una etiqueta de venta explícita (no negada) deja ver el monto. «P. de compra» y «Margen Bruto/Neto/Total/Unitario» cuentan. Las 21 frases de Bot 2 están como prueba (texto entero y trozos de 1, 2, 5, 47, 48, 49 y 100).
 - Pendiente: medirlo con DeepSeek real; el tiempo de inactividad del dueño sigue esperando su decisión.

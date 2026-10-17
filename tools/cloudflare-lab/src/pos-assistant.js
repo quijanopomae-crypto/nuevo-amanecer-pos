@@ -86,9 +86,10 @@ export function redactText(value) {
 // Lectura de izquierda a derecha con un estado chico: una palabra del dueño (costo, costó, costaron, cto., c. unit, precio de compra,
 // precio (al) proveedor, el proveedor (nos) lo vende, margen, ganancia, utilidad, inversión, invertí, ganamos… / «compré a», «lo
 // compré a», «compramos a» con el monto después de «a», «por» o «en») abre una ventana de 60 caracteres (40 para «compré»). El primer
-// MONTO dentro de la ventana se tapa. Cierran la ventana: fin de frase (. ; ! ? salto de línea, no el punto de «aprox.», «unid.», «c/u.»),
-// «pero/aunque/sino/mientras» y las etiquetas de VENTA: «precio de venta», «P. venta», «PVP», «se vende a», «(lo) vendemos a», «vendo a»
-// (no después de proveedor/nos). «precio» solo NO es etiqueta de venta («costo, precio S/ 1.80» se tapa).
+// MONTO dentro de la ventana se tapa, aunque haya punto, salto de línea, «pero», «aunque», «sino» o «mientras» en medio (Bot 2).
+// Solo una etiqueta de VENTA explícita cierra la ventana y deja ver el monto que le sigue: «precio de venta», «P. venta», «PVP»,
+// «se vende a», «(lo) vendemos a», «vendo a» (no después de proveedor/nos, ni negada: «sin PVP», «no es precio de venta»).
+// «precio» solo, «se vende» sin «a», «vendemos»/«vendo» sin «a» NO son etiquetas de venta.
 // Monto: con S/, PEN o $; o con decimales; o seguido de soles/sol/PEN/%/por ciento. Cantidad (se salta): número + unidad o «x12».
 // Monto ANTES de la palabra («S/ 1.80 es el costo», «S/ 1.80 de costo»): el monto (y lo que sigue) espera hasta el fin de la frase;
 // si en la frase aparece una palabra del dueño se tapa; con etiqueta de venta o fin de frase sale; a los 160 caracteres sin fin de
@@ -101,7 +102,7 @@ export function redactText(value) {
 // que puede serlo al final) mientras se decide. Sin palabras del dueño cerca, el monto sale apenas se ve que no sigue una.
 const NOT_LETTER = '(?![a-záéíóúñ])';
 const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:lo|la|los|las)\\s+)?venden?|nos\\s+(?:(?:lo|la|los|las)\\s+)?venden?)';
-const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron))' + NOT_LETTER;
+const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron))' + NOT_LETTER;
 const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó)' + NOT_LETTER;
 const UNIT = '(?:unidad(?:es)?|unid|unds?|uds?|u|cajas?|cjs?|docenas?|kg|kilos?|g|gr|gramos?|paquetes?|pqts?|piezas?|pzas?|frascos?|sobres?|bl[íi]sters?|tabletas?|pastillas?|bolsas?|litros?|lts?|l|ml|botellas?|latas?|packs?|cientos?)' + NOT_LETTER;
 const NUM = '(?:\\d{1,3}(?:[.,]\\d{3})+|\\d{1,6})(?:[.,]\\d{1,2})?(?!\\d)';
@@ -111,13 +112,15 @@ const AMOUNT_Y = new RegExp('(?:(?:S\\/\\.?|PEN|US\\$|\\$)\\s?-?' + NUM + CUR_TA
   '|-?\\d{1,6}\\s?(?:soles|sol|pen|%|por\\s?ciento)' + NOT_LETTER + ')', 'iy');
 const QTY_Y = new RegExp('(?:\\d{1,4}(?:[.,]\\d{1,3})?\\s?' + UNIT + '|x\\s?\\d{1,4}(?!\\d))', 'iy');
 const ABBR_Y = /(?:aprox|approx|aprx|unid|unds?|uds?|u|c\/u|pzas?|kg|grs?|g|ml|lts?|cjs?|cja|ej|etc|prom|sr|sra|dr|nro|n[°º])\./iy;
-const SALE_STOP = '(?:pero|aunque|sino|mientras|pvp)' + NOT_LETTER + '|p\\.?\\s?venta' + NOT_LETTER + '|precio\\s+de\\s+venta' + NOT_LETTER +
-  '|(?<!(?:proveedor|nos)\\s+)se\\s+vende\\s+a' + NOT_LETTER + '|(?:lo\\s+)?vendemos\\s+a' + NOT_LETTER + '|vendo\\s+a' + NOT_LETTER;
+// Solo etiquetas de venta explícitas; negadas («sin PVP», «no es precio de venta») no cuentan.
+const SALE_STOP = '(?<!(?:\\bsin|\\bno|\\bni)\\s+(?:es\\s+(?:el\\s+)?)?)(?:pvp' + NOT_LETTER + '|p\\.?\\s?venta' + NOT_LETTER + '|precio\\s+de\\s+venta' + NOT_LETTER +
+  '|(?<!(?:proveedor|nos)\\s+)se\\s+vende\\s+a' + NOT_LETTER + '|(?:lo\\s+)?vendemos\\s+a' + NOT_LETTER + '|vendo\\s+a' + NOT_LETTER + ')';
 const STOP_Y = new RegExp('(?:' + SALE_STOP + ')', 'iy');
 const OWNER_WORD_Y = new RegExp(OWNER_WORD, 'iy'), BUY_WORD_Y = new RegExp(BUY_WORD, 'iy');
+const OWNER_MODIFIER = /^(?:brut[oa]s?|net[oa]s?|total(?:es)?|unitari[oa]s?|mensual(?:es)?|anual(?:es)?|real(?:es)?|estimad[oa]s?)$/i;
 const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
 // Palabras con las que puede empezar una frase de varias palabras: para decidirlas se esperan hasta 36 caracteres.
-const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pero|aunque|sino|mientras|pvp)$/i;
+const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
 const isLetter = (c) => !!c && /[a-záéíóúñü]/i.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
 export const OWNER_DATA_LABEL = '[dato del dueño]';
@@ -194,6 +197,8 @@ function createAmountLayer(out) {
   // Parte de un nombre propio (Bot 2: «Distribuidora Inversiones Lima»): con mayúscula y detrás de otra palabra con mayúscula, en la
   // misma frase. No vale para costo/cto/c. unit/precio de compra/proveedor (esas siempre cuentan).
   const nameWord = (i) => { const c = ch(i); if (c !== c.toUpperCase() || /^(?:c|p)/i.test(c)) return false;
+    let e = i; while (isLetter(ch(e))) e++; let n = e; while (ch(n) === ' ') n++; let ne = n; while (isLetter(ch(ne))) ne++;
+    if (n > e && OWNER_MODIFIER.test(buf.slice(n - base, ne - base))) return false; // «Margen Bruto», «Ganancia Neta»: siguen siendo del dueño
     let j = i; if (ch(j - 1) !== ' ') return false; j--; while (ch(j - 1) === ' ') j--;
     let w = j; while (isLetter(ch(w - 1))) w--; const f = ch(w); return w < j && !!f && f !== f.toLowerCase(); };
   const run = (final) => {
@@ -208,7 +213,7 @@ function createAmountLayer(out) {
         if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false }; pass(k + n); continue; }
         if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { limit: Math.max(ctx.limit, k + n + 40), lead: ctx.lead } : { limit: k + n + 40, lead: true }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
-        if ((n = sticky(STOP_Y, k))) { ctx = /^(?:pero|aunque|sino|mientras)/i.test(buf.slice(k - base, k - base + 8)) ? null : { limit: k + n + 60, sale: true }; pass(k + n); continue; }
+        if ((n = sticky(STOP_Y, k))) { ctx = { limit: k + n + 60, sale: true }; pass(k + n); continue; }
         if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
         if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
       }
@@ -228,8 +233,7 @@ function createAmountLayer(out) {
         }
       }
       if (isDigit(c)) { let e = k; while (e < end() && isDigit(ch(e))) e++; pass(e); continue; }
-      if (c === '.' || c === ';' || c === '!' || c === '?' || c === '\n') { ctx = null; pass(k + 1); continue; }
-      pass(k + 1);
+      pass(k + 1); // la puntuación ya no cierra la ventana (Bot 2: «El costo. S/ 1.80», «Margen\n30%»)
     }
     if (final) { pass(end()); return; }
     // Sale ya lo que seguro no es monto (hasta el próximo posible monto), aunque la palabra de antes siga sin decidirse.

@@ -350,7 +350,9 @@ const LEAKS4 = [
   ['costo PEN 1.80', ['1.80'], []],
   ['el costo es S/ 1.80, pero el precio de venta es S/ 2.50', ['1.80'], ['S/ 2.50']]
 ];
-const KEEP4 = ['El costo es 2 y listo', 'El costo lo revisa el dueño. Hay 40 unidades.', 'Se vende a S/ 4.00 de precio.', 'El costo no lo sé. Son 2 cajas a S/ 5.00 de precio de venta.'];
+const KEEP4 = ['El costo es 2 y listo', 'El costo lo revisa el dueño. Hay 40 unidades.', 'Se vende a S/ 4.00 de precio.', 'El costo no lo sé. Son 2 cajas. El precio de venta es S/ 5.00.'];
+// Bot 2: la etiqueta de venta tiene que ir ANTES del monto; después de «costo» y sin etiqueta previa se tapa (a prueba de fallas).
+const MASK4 = ['El costo no lo sé. Son 2 cajas a S/ 5.00 de precio de venta.'];
 for (const n of [1, 2, 47, 48, 49, 100, 0]) {
   test('6) ' + (n ? 'trozos de ' + n : 'texto completo') + ': P. compra fuera de tabla, cantidades en medio, «aprox.» y montos sin S/ se tapan; PVP y precio de venta visibles', () => {
     for (const [txt, hide, show] of LEAKS4) {
@@ -363,6 +365,7 @@ for (const n of [1, 2, 47, 48, 49, 100, 0]) {
       assert.equal(n ? emitSplit(full, n, 'owner') : redactText(full), full, 'el dueño ve todo');
     }
     for (const txt of KEEP4) assert.equal(n ? emitSplit(txt, n, 'empleado:consultas') : redactOwnerData(txt), txt, 'no se tapa: ' + txt);
+    for (const txt of MASK4) assert.ok(!(n ? emitSplit(txt, n, 'empleado:consultas') : redactOwnerData(txt)).includes('5.00'), 'se tapa: ' + txt);
   });
 }
 
