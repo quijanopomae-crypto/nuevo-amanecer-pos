@@ -86,10 +86,14 @@ test('3) propuesta con U+202E/U+2066 (preparar_compra / leer_factura_compra): el
 test('4) tras «pin» ninguna excepción de dinero; producto/precio solo en las primeras 5 palabras, antes de «,» «:» «=» o es/era y sin credencial', () => {
   for (const [t, v] of [['pin precio S/ 4321', '4321'], ['pin S/ 43.21', '43.21'], ['pin S/ 4321.00', '4321.00'], ['el pin del costo es $ 4321', '4321'], ['pin del monto US$ 12.50', '12.50'],
     ['pin de cobro PEN 1,234.50', '1,234.50'], ['la clave, producto de mi trabajo, es código 4321', '4321'], ['la clave, como el precio, es S/ 4321', '4321'], ['clave: monto S/ 4321', '4321'],
-    ['contraseña del wifi del producto código 4321', '4321'], ['la clave es el producto código 4321', '4321'], ['clave de la caja del local precio S/ 4321', '4321']]) hidden(t, [v]);
+    ['contraseña del wifi del producto código 4321', '4321'], ['la clave es el producto código 4321', '4321'], ['clave de la caja del local precio S/ 4321', '4321'],
+    // (Bots 2/5 sobre 6e0b3c5d, regla final, a propósito) entero tras clave + dinero: tapado aunque haya precio/costo/monto
+    ['clave del precio: S/ 4521', '4521'], ['la clave del costo es S/ 1250', '1250'], ['clave del monto PEN 3000', '3000'],
+    // (Bots 2/5 sobre 6e0b3c5d, a propósito) número justo después de la etiqueta, aunque lleve unidad: tapado («clave 2.5 kg» antes se veía)
+    ['clave 2.5 kg', '2.5']]) hidden(t, [v]);
   // el dueño sigue viendo lo suyo
-  for (const [t, v] of [['clave del producto Arroz código 77501234', '77501234'], ['clave del artículo cód. 4521', '4521'], ['clave del precio: S/ 4521', '4521'], ['la clave del costo es S/ 1250', '1250'],
-    ['clave del monto PEN 3000', '3000'], ['clave del precio S/ 4321.00', '4321.00'], ['la clave del costo es S/ 12.50', '12.50'], ['clave 2.5 kg', '2.5'], ['Factura F001-00012345 total S/ 4521.00', '4521.00'], ['Total S/ 43.21', '43.21'], ['el pin. Total S/ 43.21', '43.21']]) ownerSees(t, v);
+  for (const [t, v] of [['clave del producto Arroz código 77501234', '77501234'], ['clave del artículo cód. 4521', '4521'],
+    ['clave del precio S/ 4321.00', '4321.00'], ['la clave del costo es S/ 12.50', '12.50'], ['Factura F001-00012345 total S/ 4521.00', '4521.00'], ['Total S/ 43.21', '43.21'], ['el pin. Total S/ 43.21', '43.21']]) ownerSees(t, v);
 });
 
 test('5) clave de puras letras dicha como clave (credencial o «contraseña»/«password»): tapada para los dos roles, de entrada y de salida', () => {
@@ -116,13 +120,14 @@ test('6) relleno parecido a un asterisco (⁕ ✻ ٭ ⁑ ⁂ ✲-✽ ❉-❋ ⚹
 test('Bot 2 / 1) decimales: tras pin siempre tapados; tras clave/contraseña solo se ven con precio/costo/monto (o una unidad); una sola pieza', () => {
   for (const [t, v] of [['la clave es 43.21', '43.21'], ['clave S/ 43.21', '43.21'], ['pin S/ 43.21', '43.21'], ['la contraseña: 1,234.50', '1,234.50'], ['clave de cobro S/ 12.50', '12.50']]) hidden(t, [v]);
   for (const [t, v] of [['pin 4321.00', '00'], ['clave 4321,00', '00'], ['pin S/ 4321.00', '00']]) { hidden(t, ['4321']); for (const f of Object.values(vias)) { assert.ok(!f(t).includes('[oculto].') && !f(t).includes('[oculto],'), t + ' → ' + f(t)); assert.ok(!has(f(t), v), t + ' → ' + f(t)); } }
-  for (const [t, v] of [['clave del precio: S/ 43.21', '43.21'], ['la clave del costo es S/ 12.50', '12.50'], ['clave del monto 99.90', '99.90'], ['clave 2.5 kg', '2.5'], ['Total S/ 43.21 hoy', '43.21']]) ownerSees(t, v);
+  for (const [t, v] of [['clave del precio: S/ 43.21', '43.21'], ['la clave del costo es S/ 12.50', '12.50'], ['clave del monto 99.90', '99.90'], ['Total S/ 43.21 hoy', '43.21']]) ownerSees(t, v);
 });
 
 test('Bot 2 / 2) unidad: suelta el número solo sin «:», «=», es/era/fue entre la etiqueta y el número y sin repetir un sustantivo de la etiqueta', () => {
   for (const [t, v] of [['clave de la caja 4321 cajas', '4321'], ['la clave de la caja fuerte es 4321 botellas', '4321'], ['clave de la caja chica: 2500 soles', '2500'], ['la clave del saco es 4321 sacos', '4321'],
-    ['contraseña de la bolsa 1234 bolsas', '1234'], ['la clave fue 4321 unidades', '4321'], ['clave 4321 paquetes', '4321'], ['contraseña 1234 docenas', '1234'], ['pin 4321 cajas', '4321']]) hidden(t, [v]);
-  for (const [t, v] of [['clave de la caja 4521 kg', '4521'], ['Producto clave de la semana 2500 unidades', '2500'], ['clave del mes 1500 bolsas', '1500'], ['clave del verano 2500 botellas', '2500']]) ownerSees(t, v);
+    ['contraseña de la bolsa 1234 bolsas', '1234'], ['la clave fue 4321 unidades', '4321'], ['clave 4321 paquetes', '4321'], ['contraseña 1234 docenas', '1234'], ['pin 4321 cajas', '4321'],
+    ['clave de la caja 4521 kg', '4521'] /* (Bot 2 sobre c16a407d, a propósito: credencial en la etiqueta, la unidad no suelta) */]) hidden(t, [v]);
+  for (const [t, v] of [['Producto clave de la semana 2500 unidades', '2500'], ['clave del mes 1500 bolsas', '1500'], ['clave del verano 2500 botellas', '2500']]) ownerSees(t, v);
   // INFO del dueño (sin cambio): «clave de la caja en 2019» sigue visible
   ownerSees('clave de la caja en 2019', '2019');
 });
