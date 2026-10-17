@@ -196,42 +196,65 @@
     'pos.ticket': { get: function (c) { return Object.assign({}, c.ticket || {}); }, set: function (c, v) { c.ticket = Object.assign(c.ticket || {}, v); } }
   };
   var CACHE_KEY = 'na_pos_settings_cache_v1';
-  var server = {}; // key -> { value, revision }
+  var server = {}; // key -> { value, revision }: copia local (puede venir de la caché) para aplicar en solo lectura.
   try { server = JSON.parse(root.localStorage.getItem(CACHE_KEY) || '{}') || {}; } catch (_) { server = {}; }
-  var baseSave = null, pushTimer = null;
+  // Último valor que el servidor confirmó en esta sesión (GET o POST con éxito). Nunca sale solo de la caché:
+  // así un push no puede tomar una revisión vieja de la caché y pisar la configuración buena del servidor.
+  var confirmed = {}, pulled = false;
+  var baseSave = null;
   /* global appConfig */
   function cfg() { try { return typeof appConfig !== 'undefined' ? appConfig : null; } catch (_) { return null; } }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function copy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
   function applyServer() {
     var c = cfg(); if (!c) return false; var changed = false;
     Object.keys(SHARED).forEach(function (k) { if (!server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
+    // baseSave es el saveAppState original (sin envolver): guarda en el aparato y no envía nada al servidor.
     if (changed) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
     return changed;
   }
-  async function pullSettings() {
+  // Lee /settings y actualiza lo confirmado. No aplica nada: devuelve true solo si el GET funcionó.
+  async function fetchSettings() {
     if (!cloud() || !R()) return false;
     try {
       var out = await R().api('/settings', null, 'GET');
-      (out.settings || []).forEach(function (r) { if (SHARED[r.key]) server[r.key] = { value: r.value, revision: r.revision }; });
+      var fresh = {};
+      (out && out.settings || []).forEach(function (r) { if (SHARED[r.key]) fresh[r.key] = { value: r.value, revision: r.revision }; });
+      confirmed = fresh; pulled = true;
+      Object.keys(fresh).forEach(function (k) { server[k] = copy(fresh[k]); });
       try { root.localStorage.setItem(CACHE_KEY, JSON.stringify(server)); } catch (_) {}
-    } catch (_) {}
+      return true;
+    } catch (_) { return false; }
+  }
+  async function pullSettings() {
+    if (!cloud() || !R()) return false;
+    await fetchSettings();
     var owner = R().isOwner && R().isOwner();
     // El dueño solo recibe del servidor lo que ya existe allí; nunca pierde lo que aún no subió.
     return owner ? applyServerIfMissingLocal() : applyServer();
   }
   function applyServerIfMissingLocal() { return Object.keys(server).length ? applyServer() : false; }
+  // Solo se llama al guardar de verdad (guardarConfig o Configuración v9). Envía únicamente las claves que
+  // cambiaron frente a lo último confirmado por el servidor; sin un GET exitoso no envía nada.
   async function pushSettings() {
     var c = cfg(); if (!c || !cloud() || !R() || !R().isOwner()) return { ok: false, reason: 'owner_only' };
-    var failed = [];
+    if (!pulled && !(await fetchSettings())) return { ok: false, reason: 'not_synced', failed: [] };
+    var failed = [], conflict = false;
     for (var k in SHARED) {
       var value = SHARED[k].get(c);
-      if (server[k] && same(server[k].value, value)) continue;
+      if (confirmed[k] && same(confirmed[k].value, value)) continue;
       try {
-        var res = await R().api('/settings', { key: k, value: value, expected_revision: server[k] ? server[k].revision : 0 });
-        server[k] = { value: value, revision: res.revision };
-      } catch (e) { failed.push(k); if (e && e.message === 'revision_conflict') { await pullSettings(); } }
+        var res = await R().api('/settings', { key: k, value: value, expected_revision: confirmed[k] ? confirmed[k].revision : 0 });
+        confirmed[k] = { value: copy(value), revision: res.revision };
+        server[k] = copy(confirmed[k]);
+      } catch (e) {
+        failed.push(k);
+        // Otro aparato guardó antes: se trae lo del servidor y no se reintenta con los valores locales.
+        if (e && e.message === 'revision_conflict') { conflict = true; break; }
+      }
     }
     try { root.localStorage.setItem(CACHE_KEY, JSON.stringify(server)); } catch (_) {}
+    if (conflict) { await pullSettings(); return { ok: false, reason: 'revision_conflict', failed: failed }; }
     return { ok: !failed.length, failed: failed };
   }
   function wrapSettings() {
@@ -239,10 +262,8 @@
       baseSave = root.saveAppState;
       root.saveAppState = function () {
         var out = baseSave.apply(this, arguments);
-        if (cloud() && R()) {
-          if (R().isOwner()) { clearTimeout(pushTimer); pushTimer = setTimeout(function () { pushSettings(); }, 600); }
-          else if (Object.keys(server).length) setTimeout(applyServer, 0); // solo lectura: se vuelve a la copia del servidor
-        }
+        // Guardar el estado (navegar, abrir reportes, etc.) ya no envía /settings: eso solo pasa al guardar Configuración.
+        if (cloud() && R() && !R().isOwner() && Object.keys(server).length) setTimeout(applyServer, 0); // solo lectura: se vuelve a la copia del servidor
         return out;
       };
       root.saveAppState.__naG = true;
@@ -256,7 +277,6 @@
         }
         var ok = await baseGuardar.apply(this, arguments);
         if (!cloud() || !ok) return ok;
-        clearTimeout(pushTimer);
         var res = await pushSettings();
         if (!res.ok) { toast('No se pudo guardar en el servidor. Revisa internet e inténtalo de nuevo.', 'error'); return false; }
         toast('Configuración guardada en el servidor', 'success');
@@ -336,7 +356,6 @@
   root.addEventListener('load', install);
   // Configuración v9 (PC/tablet): guardar ya y esperar al servidor para mostrar «Guardado ✓».
   async function flush() {
-    clearTimeout(pushTimer);
     try { if (baseSave) await baseSave(); else if (typeof root.saveAppState === 'function') await root.saveAppState(); } catch (_) {}
     if (!cloud() || !R()) return { ok: true, local: true };
     return pushSettings();
