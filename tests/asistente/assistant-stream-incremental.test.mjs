@@ -503,7 +503,11 @@ const T20_MASK = [
   ['Compras de hoy en la tienda central de la avenida: Galleta S/ 1.80, Arroz S/ 3.10', ['1.80', '3.10']], ['**Compras** de hoy en la tienda: Galleta S/ 1.80', ['1.80']],
   ['Lo que nos trajo hoy el proveedor de la avenida: Galleta S/ 1.80', ['1.80']], ['Estos son los precios de compra de la semana pasada: Galleta S/ 1.80', ['1.80']],
   ['Lo que anoto de la tienda central sobre el costo de hoy: Galleta S/ 1.80', ['1.80']],
-  ['Compras ' + 'de la tienda '.repeat(8) + 'hoy: Galleta S/ 1.80', ['1.80']]];
+  ['Compras ' + 'de la tienda '.repeat(8) + 'hoy: Galleta S/ 1.80', ['1.80']],
+  // «cliente» solo anula lo que viene únicamente de «compras» (Bot 5 sobre 6f9f3dae)
+  ['Costo del pedido del cliente: S/ 1.80', ['1.80']], ['Compras al proveedor para el cliente Juan: S/ 1.80', ['1.80']], ['Precio de compra del cliente: S/ 1.80', ['1.80']],
+  ['Compras al proveedor para el cliente Juan: Galleta S/ 1.80, Arroz S/ 3.10', ['1.80', '3.10']], ['Proveedor del cliente: Galleta S/ 1.80', ['1.80']],
+  ['Lo que anoto del costo para el cliente de la avenida: Galleta S/ 1.80', ['1.80']]];
 const T20_SHOW = [
   ['Las compras del cliente: S/ 30', ['30']], ['El cliente pagó sus compras: S/ 30', ['30']], ['Compras del cliente Juan en la tienda: S/ 30', ['30']],
   ['Compras de hoy en la tienda: Galleta S/ 1.80, PVP S/ 2.50', ['2.50']], ['Estos son los precios de venta de la semana pasada en tienda: Galleta S/ 1.80', ['1.80']],

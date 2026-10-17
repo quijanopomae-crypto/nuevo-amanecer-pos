@@ -337,8 +337,10 @@ function createAmountLayer(out) {
       if (c !== ' ' && c !== '\t' && c !== '\r' && c !== '\n') { lineHas = true; lineLast = c; }
       // Título corto en la misma línea («Compras de hoy: Galleta S/ 1.80», «Los precios de compra: Galleta S/ 1.80, Arroz S/ 3.10»): hasta 5 palabras
       // y 40 caracteres antes del «:», con compras/proveedor o palabra del dueño sin negar. Todo monto que sigue en ESA línea se tapa, salvo con etiqueta de venta.
-      // Título largo (Bot 5 sobre a82a747f): empieza con «Compras» o nombra proveedor / de compra / costo sin negar, hasta 120 caracteres. Con «cliente» ninguno cuenta.
-      if (c === ':' && !lineTitle && !lt.cli && !lineDelim && mode !== 'table' && ((k - lineBegin <= LONG_TITLE_MAX && (lt.compras || (lt.buy && !lt.neg)))
+      // Título largo (Bot 5 sobre a82a747f): empieza con «Compras» o nombra proveedor / de compra / costo sin negar, hasta 120 caracteres.
+      // «cliente» solo anula lo que viene ÚNICAMENTE de «compras» («Las compras del cliente: S/ 30»); con proveedor / de compra / costo u otra
+      // palabra del dueño sin negar sigue contando («Costo del pedido del cliente: S/ 1.80»).
+      if (c === ':' && !lineTitle && !(lt.cli && !lt.buy && !(lineOwner && sent.pos)) && !lineDelim && mode !== 'table' && ((k - lineBegin <= LONG_TITLE_MAX && (lt.compras || (lt.buy && !lt.neg)))
         || ((lineIntro || (lineOwner && sent.pos)) && k - lineBegin <= 40 && (buf.slice(Math.max(lineBegin, base) - base, k - base).match(/[a-záéíóúñü0-9]+/gi) || []).length <= 5))) lineTitle = true;
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
