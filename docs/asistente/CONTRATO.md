@@ -579,15 +579,15 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 
 Reemplaza «PIN numérico (Bot 5, INFO; propuesta aceptada)» de la ampliación sobre 58200f60 y completa «403 `forbidden_role`» de la tarjeta.
 
-### PIN numérico (FALLA 1)
+### PIN numérico (decisión final; reemplaza FALLA 1 y la regla de 58200f60)
 
-- **Tras «pin»**: 4-8 dígitos dentro de las 6 palabras siguientes (enlace + 5), sin palabras de corte y SIN excepción de unidad (un pin nunca es una cantidad). Separador «:», «=», «: es», «: era», «es», «era» o espacios. Las palabras no cruzan «.», «;», «!», «?». «pin por favor 4321», «El pin de la caja cambió a 4321», «El pin del local nuevo de la esquina es 4321», «pin de la caja 4321 unidades», «El pin de la caja: 4321», «el pin del año 4321» → tapados. Ahora va antes de la regla general: «pin por favor 4321» → «pin por favor [oculto]» (antes «pin [oculto] favor 4321»).
-- **Tras «clave»/«contraseña»**: enlace + hasta 2 palabras, con las palabras de corte de antes (en, del, por, a, año…) salvo con «:»/«=», y excepción de unidad SOLO para cantidades claras: unidades, unidad, unid, und, uds, kg, kilos, g, gr, gramos, l, lt, litros, ml, soles, sol, S/, % (ya no paquetes/cajas/bolsas/u). Se acepta «: es»/«: era».
-- **Frase de credencial** (una palabra entre la etiqueta y el número nombra algo que se abre con clave: wifi, caja, local, acceso, sistema, puerta, tienda, alarma, red, internet, correo, cuenta, celular, teléfono, tarjeta, banco, app, aplicación, usuario, computadora, laptop, pc, candado, cajero, router, módem, admin, administrador, pos, seguridad, bodega, almacén, yape, plin): hasta 5 palabras tras el enlace y sin palabras de corte; la única excepción es un AÑO (19xx/20xx) justo detrás de «en/desde/hasta/del/año(s)» sin «:»/«=» («Cambié la clave de la caja en 2024 y anda bien» se ve). «La clave de la caja: es 4321», «clave del wifi por 4321», «clave del local en 4321», «clave del wifi del local 12345678» → tapados, también al dueño.
-- Un número justo detrás de «S/» o «$» nunca es PIN. «Producto clave de la semana 2500 unidades», «clave de la caja chica: 2500 soles», «La clave del negocio en 2024…», «contraseña del año 2024» → se ven. «clave de producto 4521» → tapado (aceptado).
-- **Valor con letras y dígitos**: la regla de 5 palabras tras el enlace queda igual. Única ampliación: si una de esas palabras es de credencial, llega a 6 («clave del wifi del local de la esquina Zq9xK2mPw7», la fuga restante de pin-d72b).
-- Vale para la respuesta al empleado, la respuesta al dueño y lo que va al modelo (redactText / redactModelOwner). En partes: mientras «pin/clave/contraseña» + hasta 7 palabras (+ «: es») esperan un número no se corta (`PIN_NUM_WAIT`), y con «… 2500 » recién llegado tampoco (la unidad que sigue decide clave/contraseña). En partes = texto entero.
-- Tapados de más aceptados (Bot 5 INFO): «pin 4321 unidades», «El pin de la impresora 1234 no funciona», «La clave del éxito: 5000 ventas», «… arroz 5x2025».
+- **Misma regla para «pin», «clave» y «contraseña»** (`pinNumber`): se tapa cada tramo de 4-8 dígitos que esté a lo sumo a **60 caracteres** y a **5 palabras** de la etiqueta. No cuentan como palabra las de enlace (de, del, la, las, el, los, lo, mi, mis, tu, tus, su, sus, nuestra, nuestro, para, en, que) ni «es/era/fue/son/a»; «:», «=», «: es», «: era» se aceptan. Sin palabras de corte. No cruza «.», «;», «!», «?» ni salto de línea. Si hay varias etiquetas, cuenta la más cercana antes del número.
+- **Excepciones**: (1) una unidad clara pegada detrás (unidades, unidad, unid, und, uds, kg, kilos, g, gr, gramos, l, lt, litros, ml, soles, sol, S/, %), solo tras «clave»/«contraseña»: un pin nunca es una cantidad, así que «pin de la caja 4321 unidades» (caso de Bot 5) sigue tapado; (2) un número justo detrás de «S/», «$», «US$» o «PEN»; (3) un número justo detrás de «código», «cód.», «EAN» o «barras» (el dueño ve su código de producto).
+- Se tapan: «la clave de la caja fuerte 4321», «…caja fuerte: 4321», «la clave de la caja chica 4321», «clave de la caja en 2024 era 4321» (el 2024 y el 4321), «pin por favor 4321», «El pin del local nuevo de la esquina es 4321», «clave de producto 4521». Se ven: «Producto clave de la semana 2500 unidades», «clave de la caja chica: 2500 soles», «clave de la venta S/ 1250».
+- Tapados de más aceptados (sin palabras de corte): «Cambié la clave de la caja en 2024», «La clave del negocio en 2024 fue el arroz», «contraseña del año 2024», «Mi clave para el año 2025», «La clave de este mes: vender 3000 paquetes», «pin 4321 unidades», «El pin de la impresora 1234 no funciona», «La clave del éxito: 5000 ventas».
+- Va antes de la regla de la etiqueta; la regla general (que tapa la palabra que sigue a la etiqueta) no actúa si ya hay un «[oculto]» en los 60 caracteres siguientes, así «pin por favor 4321» queda «pin por favor [oculto]» y no «pin [oculto] favor [oculto]».
+- **Valor con letras y dígitos**: la regla de 5 palabras tras el enlace queda igual (6 si una de esas palabras es de credencial: wifi, caja, local…).
+- Vale para la respuesta al empleado, la respuesta al dueño y lo que va al modelo (redactText / redactModelOwner). En partes: mientras haya «pin/clave/contraseña» seguida de a lo sumo 61 caracteres sin fin de frase al final del texto, no se suelta (`PIN_NUM_WAIT`), y con «… 2500 » espera la unidad. Retenido máximo medido con la sonda de Bot 3: 54 caracteres (tope pedido 80); CPU empleado texto 4000 trozo 1: igual que d72b7601 en la misma máquina (ver informe).
 
 ### 403 `forbidden_role`: todas las tarjetas (FALLA menor 2)
 
@@ -608,7 +608,23 @@ Reemplaza «PIN numérico (Bot 5, INFO; propuesta aceptada)» de la ampliación 
 
 - Sin el producto en el catálogo local, un `l.nombre` con máscara no se escribe: el campo queda vacío, con borde ámbar, `placeholder` «Complete el producto», `aria-invalid="true"` y `data-na-need="1"`.
 
+### Lo escrito a mano: normalización (Bot 2, decisión final)
+
+- Servidor (`normManual`/`manualBad`, en `fillCheck`) y celular (`C.normManual`/`C.manualBad`, en `needFields`, `fillValues`, `purchaseValue`), misma regla: fuera U+200B-U+200D, U+2060, U+FEFF y los de control; U+00A0, U+2007, U+202F → espacio; U+2010-U+2015 (U+2011 incluido) → «-»; recorte; tope del campo.
+- Rechazo (422 `fields_required` con ese campo; en la tarjeta «Complete este dato» con el borde de alerta de siempre, no un error general): vacío tras quitar invisibles, sin ninguna letra o dígito, una tira de 2+ símbolos de relleno (*, ∗, ＊, •, ●, ·, _, #, ▪, ■, ×, …, ◦, □, ▫, ~; con o sin un espacio entre ellos) o una marca «[oculto]»/«(oculto)».
+- **Solo documento (y RUC)**: además 2+ X/x seguidas de dígitos («XX6789», «xx-6789») y el resto de `MASK_LEFT_RE`. En el proveedor no: «Ferretería XXL SAC», «Distribuidora XX» pasan.
+- Se guarda y se reenvía el valor normalizado (`body.manual`, la propuesta devuelta, el hash del reenvío).
+
+### Tarjeta: nombre del catálogo (Bot 2, INFO)
+
+- En la tarjeta de compra, una línea con `product_id` que está en el catálogo local muestra el nombre del catálogo (`lineName`), no el de la propuesta (que puede venir tapado). Sin el producto en el catálogo, el de la propuesta.
+
+### Serie en la tabla del asistente: 14 px (Bot 4)
+
+- `.na-asst-tbl .na-asst-code.na-asst-cc{font-size:14px}` (selector de la tabla del asistente; gana a `base.css` `td{font-size:12px}` sin tocar otras tablas). Con el `<wbr>` tras el guion no hizo falta reservar alto de fila: CLS del empleado (tabla de códigos, sonda de Bot 4) 0.0109 a 360, 0.0103 a 375, 0.0015 a 768, 0.0009 a 1280 (antes 0.0159/0.0152; tope 0.0137); dueño 0.
+
 ### Pruebas
 
 - `assistant-followups-d72b7601.test.mjs`: 49 frases de PIN (las 45 de pin-d72b + 4) en las 4 vías y en partes de 1/3/7/48; unidad recién por llegar en partes de 1-9; máscaras nuevas en servidor y celular + `cardPrefix` + tarjeta; HMAC del reenvío (valor exacto, no sha256, registro viejo → 409, sin secreto nuevo); `fillPurchase` con nombre tapado; `roleLost` con 4 tarjetas y «Nueva compra» prellenada (código real de asistente-ui.js en un DOM mínimo con la forma de `openNew`), almacenamiento vacío, «Nueva compra» abierta a mano intacta.
-- `assistant-followups-58200f60.test.mjs`: la revisión estática de `roleLost` acepta `refreshAccess` (rol del servidor) y `wipeCard(c)`.
+- `assistant-followups-58200f60.test.mjs`: la revisión estática de `roleLost` acepta `refreshAccess` (rol del servidor) y `wipeCard(c)`; las máscaras con x/X o «…» del caso 3 se prueban en el documento.
+- `assistant-normalize-d72b7601.test.mjs`: normalización igual en servidor y celular (U+2011/U+2010/U+2014, ZWSP, BOM, NBSP, U+202F, U+2007), rechazos («■■■■», «××××», «XX6789», solo invisibles, «▪▪▪▪», «____6789»…), «Ferretería XXL SAC» y «Distribuidora XX» pasan, 422 con el campo y valor normalizado en la respuesta, «Complete este dato» en la tarjeta, nombre del catálogo, texto del 403 igual al de CONTRATO.md, selector de 14 px.
