@@ -142,6 +142,10 @@
 .na-asst-card table{width:100%;border-collapse:collapse;font-size:16px}
 .na-asst-card td{padding:4px 2px;border-bottom:1px solid #f1f5f9}.na-asst-card td.r{text-align:right;white-space:nowrap}
 .na-asst-card .warn{background:#fef2f2;color:#991b1b;border-radius:10px;padding:6px 10px;font-weight:700;font-size:15px}
+/* (Bot 2 sobre 6280deae) dato que el servidor dejó vacío en la tarjeta de compra: se completa a mano */
+.na-asst-need-box{display:flex;flex-direction:column;gap:8px}.na-asst-need-l{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:15px}
+.na-asst-need{font:inherit;font-weight:400;padding:8px 10px;border-radius:10px;border:2px solid #b91c1c;background:#fff;color:#0f172a;min-height:44px}.na-asst-need.ok{border-color:#16a34a}
+.na-asst-need-t{color:#991b1b;font-size:14px;font-weight:700}
 .na-asst-card .note{color:#475569;font-size:14px}
 .na-asst-card ol{margin:0;padding-left:22px}.na-asst-card li{margin:3px 0}
 .na-asst-card .acts{display:flex;gap:8px}
@@ -168,6 +172,7 @@ body.dark .na-asst-card td{border-color:#1f3b2b}
 body.dark .na-asst-card .note,body.dark .na-asst-mode,body.dark .na-asst-card .meta{color:#b6cbbf}
 body.dark .na-asst-card .res{color:#86efac}
 body.dark .na-asst-card .warn{background:#3b1212;color:#fecaca}
+body.dark .na-asst-need{background:#07130c;color:#e5f3ea;border-color:#f87171}body.dark .na-asst-need.ok{border-color:#4ade80}body.dark .na-asst-need-t{color:#fecaca}
 body.dark .na-asst-msg.u{background:#15803d}
 body.dark .na-asst-msg.sys{background:#1f3b2b;color:#e5f3ea}
 body.dark .na-asst-chips button{background:#10241a;color:#bbf7d0;border-color:#166534}

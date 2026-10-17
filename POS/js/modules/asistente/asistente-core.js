@@ -13,6 +13,43 @@
     [/\b(?:DNI\s*[:#-]?\s*)?\d{8}\b/gi, '[DNI oculto]']
   ];
   function redactText(v) { var s = String(v == null ? '' : v); PATTERNS.forEach(function (p) { s = s.replace(p[0], p[1]); }); return s; }
+  // (Bot 2 sobre 6280deae) contexto del DUEÑO: RUC de empresa (20/15/17) y 8 dígitos junto a «código», «cód.», «EAN» o «barra(s)» van exactos.
+  // RUC 10 y 8 dígitos sueltos, tapados. El servidor vuelve a filtrar según el rol de SU sesión (esto solo es lo que manda el aparato).
+  var CODE_LABEL = /(?:^|[^a-záéíóúñü])(?:c[óo]d(?:igos?)?\.?|ean(?:-?(?:13|8))?|barras?)(?![a-záéíóúñü])[^\n\d]{0,24}$/i;
+  function redactOwnerContext(v) { var s = String(v == null ? '' : v);
+    PATTERNS.forEach(function (p, i) {
+      if (i === 2) s = s.replace(p[0], function (m) { return /^(?:20|15|17)/.test(m.replace(/^\D+/, '')) ? m : '[RUC oculto]'; });
+      else if (i === 4) s = s.replace(p[0], function (m, off, str) { return /^\d/.test(m) && CODE_LABEL.test(str.slice(Math.max(0, off - 48), off)) ? m : '[DNI oculto]'; });
+      else s = s.replace(p[0], p[1]); });
+    return s; }
+  // (Bot 2 sobre 6280deae) Tarjeta de compra: un campo que el servidor dejó vacío (tenía algo tapado) se completa a mano. Borde de alerta,
+  // «Complete este dato», foco en el primero y «Confirmar» apagado hasta llenarlos. Solo createElement / textContent. Lo escrito queda en
+  // state (fuera de la propuesta firmada) y lo usa fillPurchase; nunca se escribe una máscara.
+  var MASK_LEFT = /\*{3,}|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]/i;
+  function maskLeft(v) { return MASK_LEFT.test(String(v == null ? '' : v)); }
+  var NEED_LABEL = { proveedor: 'Proveedor', documento: 'Documento' }, NEED_MAX = { proveedor: 120, documento: 80 };
+  function needFields(doc, p, onChange) {
+    var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
+    if (!names.length) return null;
+    var state = {}, inputs = [], box = doc.createElement('div'); box.className = 'na-asst-need-box';
+    names.forEach(function (n, i) {
+      var lab = doc.createElement('label'); lab.className = 'na-asst-need-l';
+      var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = NEED_LABEL[n];
+      var inp = doc.createElement('input'); inp.type = 'text'; inp.className = 'na-asst-need'; inp.maxLength = NEED_MAX[n];
+      inp.setAttribute('data-need', n); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('autocomplete', 'off');
+      var hint = doc.createElement('span'); hint.className = 'na-asst-need-t'; hint.textContent = 'Complete este dato'; hint.id = 'naNeed' + n + (++needSeq);
+      inp.setAttribute('aria-describedby', hint.id);
+      inp.addEventListener('input', function () {
+        var v = String(inp.value == null ? '' : inp.value).trim(), ok = !!v && !maskLeft(v); state[n] = ok ? v : '';
+        inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); inp.className = ok ? 'na-asst-need ok' : 'na-asst-need'; hint.hidden = ok;
+        if (onChange) onChange(); });
+      lab.appendChild(t); lab.appendChild(inp); lab.appendChild(hint); box.appendChild(lab); inputs.push(inp);
+    });
+    return { el: box, state: state, first: inputs[0], inputs: inputs, missing: function () { return names.filter(function (n) { return !state[n]; }).length; } };
+  }
+  var needSeq = 0;
+  // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
+  function purchaseValue(p, n) { var m = p && p._manual && p._manual[n]; if (m && !maskLeft(m)) return m; var v = p ? p[n] : ''; return v && !maskLeft(v) ? v : ''; }
   function perms() { return root.NA_PERMISSIONS; }
   function canDo(role, action) { var P = perms(); return !!(P && P.canDo(role, action)); }
 
@@ -25,7 +62,7 @@
     var ranked = list.slice().sort(function (a, b) { return score(b) - score(a); }).slice(0, 80);
     var costs = canDo(role, 'purchases.costs.view');
     return capContext({ screen: screen || null, products: ranked.map(function (p) {
-      var o = { id: String(p.id), nombre: redactText(String(p.name || p.nombre || '')).slice(0, 60), precio: Number(p.precio) || 0, stock: Number(p.stock) || 0 };
+      var o = { id: String(p.id), nombre: (role === 'owner' ? redactOwnerContext : redactText)(String(p.name || p.nombre || '')).slice(0, 60), precio: Number(p.precio) || 0, stock: Number(p.stock) || 0 };
       if (costs && Number(p.costo) > 0) o.costo = Number(p.costo);
       if (!tracksStock(p)) o.controla = false;
       return o;
@@ -540,7 +577,7 @@
     return Math.max(0, over);
   }
 
-  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

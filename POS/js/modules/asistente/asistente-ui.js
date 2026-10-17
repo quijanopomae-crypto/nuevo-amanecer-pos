@@ -295,7 +295,8 @@
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
       var s = w.querySelector('#naPurSupplier'), d = w.querySelector('#naPurDoc');
-      if (s && p.proveedor) s.value = p.proveedor; if (d && p.documento) d.value = p.documento;
+      // nunca una máscara: lo escrito a mano en la tarjeta o el valor exacto del servidor (Bot 2 sobre 6280deae)
+      var pv = C.purchaseValue(p, 'proveedor'), dv = C.purchaseValue(p, 'documento'); if (s && pv) s.value = pv; if (d && dv) d.value = dv;
       var add = w.querySelector('.na-pur-add');
       p.lineas.forEach(function (l, i) {
         if (i > 0 && add) add.click();
@@ -443,7 +444,11 @@
     var decided = {};
     function pendingRows() { return Array.prototype.filter.call(c.querySelectorAll('tr.flag'), function (tr) { return !decided[tr.dataset.row]; }).length; }
     function review() { if (p.type !== 'compra') return null; var a = [], d = []; Object.keys(decided).forEach(function (k) { (decided[k] === 'drop' ? d : a).push(Number(k)); }); return { op: tokenOp(p), accept: a, drop: d }; }
-    function syncOk() { if (!ok || c.dataset.st !== 'pending') return; var n = pendingRows(); ok.disabled = n > 0; ok.textContent = n > 0 ? 'Revisa ' + n + (n === 1 ? ' fila' : ' filas') : (c.dataset.btn || 'Confirmar'); }
+    // (Bot 2 sobre 6280deae) campos vacíos de la tarjeta de compra: Confirmar apagado hasta llenarlos
+    var need = C.needFields(doc, p, function () { syncOk(); });
+    if (need) { Object.defineProperty(p, '_manual', { value: need.state, enumerable: false, configurable: true }); var tb = c.querySelector('table'); c.insertBefore(need.el, tb || c.firstChild); }
+    function syncOk() { if (!ok || c.dataset.st !== 'pending') return; var n = pendingRows(), miss = need ? need.missing() : 0; ok.disabled = n > 0 || miss > 0;
+      ok.textContent = miss > 0 ? 'Complete ' + miss + (miss === 1 ? ' dato' : ' datos') : n > 0 ? 'Revisa ' + n + (n === 1 ? ' fila' : ' filas') : (c.dataset.btn || 'Confirmar'); }
     var again = c.querySelector('[data-again]');
     // 422: el servidor dice qué filas faltan revisar; se marcan en rojo «Revisa este dato» (aunque el celular no las hubiera marcado).
     function markRows(idx, limit) {
@@ -486,6 +491,7 @@
       var sec = Math.ceil(ms / 1000); left.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }
     syncOk();
+    if (need && need.first) { try { need.first.focus({ preventScroll: false }); } catch (_) {} }
     if (left && p.needsConfirm) { tick(); timer = setInterval(function () { if (c.dataset.st !== 'pending') { clearInterval(timer); return; } tick(); }, 1000); }
     if (ok) ok.onclick = async function () {
       if (c.dataset.st !== 'pending') return;
