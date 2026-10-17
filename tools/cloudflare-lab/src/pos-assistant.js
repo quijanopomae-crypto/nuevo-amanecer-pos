@@ -104,7 +104,7 @@ export function redactText(value) {
 // que puede serlo al final) mientras se decide. Sin palabras del dueño cerca, el monto sale apenas se ve que no sigue una.
 const NOT_LETTER = '(?![a-záéíóúñ])';
 const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:lo|la|los|las)\\s+)?venden?|nos\\s+(?:(?:lo|la|los|las)\\s+)?venden?)';
-const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron)' +
+const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:(?:anterior|actual|habitual|normal|real|unitario|viejo|nuevo)\\s+)?(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron)' +
   // Frases de bodega del dueño (17-10): «lo que pagué», «pagué», «me salió a», «me sale a», «lo traje a». «me costó», «nos costó», «mi costo» ya entran por «costó»/«costo»;
   // «lo compré a» por BUY_WORD. «pagó» (el cliente pagó, pagó con Yape) NO es palabra del dueño; «pague» sin tilde solo dentro de «lo que pague».
   '|lo\\s+que\\s+pagu[eé]|pagué|me\\s+(?:sali[óo]|sale)\\s+a|lo\\s+traje\\s+a)' + NOT_LETTER;
@@ -125,9 +125,12 @@ const OWNER_WORD_Y = new RegExp(OWNER_WORD, 'iy'), BUY_WORD_Y = new RegExp(BUY_W
 const OWNER_MODIFIER = /^(?:brut[oa]s?|net[oa]s?|total(?:es)?|unitari[oa]s?|mensual(?:es)?|anual(?:es)?|real(?:es)?|estimad[oa]s?)$/i;
 // Palabra del dueño NEGADA («No tengo el costo», «No sé el costo», «sin dato de costo», «desconozco el margen»): zona negada por el resto
 // de esa frase Y la frase/línea siguiente (Bot 5: «No sé el costo.\nEra S/ 1.80» se tapa). En la zona TODO monto se tapa salvo detrás de una
-// etiqueta de venta; aquí también cuenta «precio» solo («El precio es S/ 2.50», «Precio: S/ 2.50»). El «;» no termina la frase; «.\n» es UN fin.
+// etiqueta de venta; «precio» solo cuenta pegado al monto (ver NEG_PRICE_Y). El «;» no termina la frase; «.\n» es UN fin.
 const NEG_BEFORE = /(?:^|[^a-záéíóúñ])(?:no\s+(?:lo\s+|la\s+|los\s+|las\s+)?(?:tengo|tenemos|s[eé]|sabemos|hay|conozco|conocemos)|sin\s+datos?|desconozco|desconocemos)(?:\s+(?:el|la|los|las|de|del|un|una|su|mi|ese|esa|este|esta|dato|datos))*\s+$/i;
-const NEG_PRICE_Y = new RegExp('precio' + NOT_LETTER, 'iy');
+// Bot 5 (f58a3947): «precio» solo cuenta en formas pegadas al monto: «precio es/sería/será S/ 2.50», «Precio: S/ 2.50», o «Precio S/ 2.50»
+// al empezar frase/línea (grupo 1). Cualquier otra palabra en medio («precio al que lo traje:», «precio anterior del proveedor», «, precio S/»)
+// no cuenta y el monto se tapa.
+const NEG_PRICE_Y = /precio(?:\s{1,3}(?:es|ser[íi]a|ser[áa])\s{1,3}|\s{0,3}:\s{0,3}|(\s{1,3}))(?=S\/|PEN|US\$|\$|-?\d)/iy;
 const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
 // Palabras con las que puede empezar una frase de varias palabras: para decidirlas se esperan hasta 36 caracteres.
 const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|me|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
@@ -174,6 +177,9 @@ function createTableLayer(out) {
 // Montos y palabras del dueño, en partes. out(texto). Lo único que espera es un monto (o lo que puede serlo) mientras se decide.
 function createAmountLayer(out) {
   let buf = '', base = 0, k = 0, rel = 0, ctx = null, negZone = null;
+  // Filas de tabla (| o tabulador, con o sin fila separadora): la ventana del dueño y la zona negada abiertas ANTES de una fila de verdad
+  // (2+ celdas con texto) no pasan a las celdas de la fila siguiente; se sueltan al cerrar su primera celda con texto. Un monto en esa primera celda sigue tapado.
+  let row = { cells: 0, has: false, from: null };
   const ch = (i) => (i >= base ? buf[i - base] : undefined);
   const end = () => base + buf.length;
   const sticky = (re, i) => { re.lastIndex = i - base; const m = re.exec(buf); return m ? m[0].length : 0; };
@@ -191,6 +197,9 @@ function createAmountLayer(out) {
     return (gap.match(/[a-záéíóúñü0-9]+/gi) || []).length <= 3; };
   // ¿Este fin de frase sigue a otro (solo espacios entre medio)? «costo.\nEra»: el punto y el salto son UN solo fin.
   const sameEnd = (i) => { let j = i - 1; while (j >= Math.max(0, i - 32) && (ch(j) === ' ' || ch(j) === '\t' || ch(j) === '\r')) j--; const p = j >= 0 ? ch(j) : undefined; return p === '.' || p === '!' || p === '?' || p === '\n'; };
+  // ¿empieza frase o línea en i? (solo espacios desde el último . ! ? o salto de línea, o el comienzo del texto)
+  const sentStart = (i) => { let j = i - 1; while (j >= Math.max(0, i - 32) && (ch(j) === ' ' || ch(j) === '\t' || ch(j) === '\r')) j--; if (j < 0) return true; const p = ch(j); return p === '.' || p === '!' || p === '?' || p === '\n'; };
+  const negPrice = (i) => { NEG_PRICE_Y.lastIndex = i - base; const m = NEG_PRICE_Y.exec(buf); return m && (m[1] === undefined || sentStart(i)) ? m[0].length : 0; };
   const leadOk = (i) => /(?:^|[^a-záéíóúñ])(?:a|por|en)\s+$/i.test(buf.slice(Math.max(0, i - 6 - base), i - base));
   const amountStart = (i) => { const c = ch(i), p = ch(i - 1); if (isDigit(p) || isLetter(p)) return false;
     if (isDigit(c) || c === '$') return true;
@@ -233,17 +242,18 @@ function createAmountLayer(out) {
       if (ctx && k > ctx.limit && !ctx.seg) ctx = null; // la ventana de una palabra del dueño dura 60 caracteres Y hasta el fin de su frase
       if (k >= end()) break;
       const c = ch(k), p = ch(k - 1);
+      if (c !== '|' && c !== '\t' && c !== '\n' && c !== ' ' && c !== '\r') row.has = true;
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
         let n;
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
-        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2 };
-          ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n }; pass(k + n); continue; }
-        if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40) } : { limit: k + n + 40, lead: true }; pass(k + n); continue; }
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k };
+          ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n, at: k }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
         // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
-        if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true }; pass(k + n); continue; }
-        if (negZone && !(ctx && !ctx.sale && !ctx.neg) && (n = sticky(NEG_PRICE_Y, k))) { ctx = { limit: k + n + 60, sale: true }; pass(k + n); continue; }
+        if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true, at: k }; pass(k + n); continue; }
+        if (negZone && !(ctx && !ctx.sale && !ctx.neg) && (n = negPrice(k))) { ctx = { limit: k + n, sale: true, at: k }; pass(k + n); continue; } // el monto va justo detrás
         if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
         if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
       }
@@ -270,6 +280,10 @@ function createAmountLayer(out) {
         if (ctx && (ctx.seg || ctx.neg)) { if (ctx.neg && c !== ';') ctx = null; else ctx.seg = false; }
         if (negZone && c !== ';' && !sameEnd(k) && --negZone.left <= 0) negZone = null;
       }
+      if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
+        // se suelta al cerrar la primera celda con texto de la fila nueva (el monto de esa celda sigue tapado)
+        if (filled && row.from != null) { if (ctx && ctx.at < row.from) ctx = null; if (negZone && negZone.at < row.from) negZone = null; row.from = null; } }
+      else if (c === '\n') { if (row.has) row.cells++; row.from = row.cells >= 2 ? k + 1 : null; row.cells = 0; row.has = false; }
       pass(k + 1);
     }
     if (final) { pass(end()); return; }
@@ -278,7 +292,7 @@ function createAmountLayer(out) {
     if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
-  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0 }; } };
+  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0 }; row = { cells: 0, has: false, from: null }; } };
 }
 function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
   return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }

@@ -281,3 +281,25 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     for (const [t, v] of NEG_SHOW) { const w = redactOwnerData(t); assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
   });
 }
+
+// ---------- 14. Bot 5 sobre f58a3947: «precio» suelto en la zona negada + filas de tabla ----------
+// En la zona negada «precio» solo deja ver en formas pegadas al monto: «precio es/sería/será S/», «precio: S/», o «Precio S/» al
+// empezar frase/línea. Con cualquier palabra en medio, o «, precio S/» en la misma frase, se tapa.
+const PRECIO_MASK = [['No sé el costo. El precio al que lo traje: S/ 1.80', ['1.80']], ['No sé el costo. Precio anterior del proveedor S/ 1.80', ['1.80']],
+  ['Precio anterior del proveedor S/ 1.80', ['1.80']], ['No sé el costo, precio S/ 1.80', ['1.80']], ['No sé el costo. Precio de compra S/ 1.80', ['1.80']],
+  ['No sé el costo. El precio que pagué S/ 1.80', ['1.80']], ['No sé el costo. Precio del proveedor: S/ 1.80', ['1.80']], ['No tengo el costo. El precio de antes fue S/ 1.80', ['1.80']],
+  ['No sé el costo.\nPrecio anterior S/ 1.80', ['1.80']], ['No sé el costo. El precio es S/ 2.50 y antes S/ 1.80', ['1.80']]];
+const PRECIO_SHOW = [['No sé el costo. Precio: S/ 2.50', '2.50'], ['No sé el costo. El precio es S/ 2.50', '2.50'], ['No sé el costo.\nPrecio S/ 2.50', '2.50'],
+  ['No sé el costo. El precio sería S/ 2.50', '2.50'], ['No sé el costo. El precio será 2.50 soles', '2.50'], ['No sé el costo. Precio S/ 2.50', '2.50']];
+// Tablas (con o sin fila separadora, | o tabulador): la ventana del dueño y la zona negada no pasan a las celdas de la fila siguiente.
+const ROW_SHOW = [['| Producto | Nota |\n| Arroz | no sé el costo |\n| Azúcar | S/ 2.50 |', '2.50'], ['| Producto | Nota |\n|---|---|\n| Arroz | no sé el costo |\n| Azúcar | S/ 2.50 |', '2.50'],
+  ['Producto\tNota\nArroz\tno sé el costo\nAzúcar\tS/ 2.50', '2.50'], ['| Producto | Nota |\n| Arroz | costo pendiente |\n| Azúcar | S/ 2.50 |', '2.50'],
+  ['Producto\tNota\nArroz\tcosto pendiente\nAzúcar\t2.50 soles', '2.50'], ['| Producto | Nota | Precio |\n| Arroz | sin datos de costo | |\n| Azúcar | ok | S/ 2.50 |', '2.50']];
+const ROW_MASK = [['| Costo unitario |\n| S/ 1.80 |', ['1.80']], ['Producto\tNota\nArroz\tno sé el costo\nAzúcar\tcosto S/ 1.80', ['1.80']], ['Producto | Nota\nArroz | no sé el costo\nS/ 1.80', ['1.80']],
+  ['| Producto | Nota |\n| Arroz | no sé el costo, S/ 1.80 |', ['1.80']], ['Producto\tNota\nArroz\tno sé el costo\nS/ 1.80\tAzúcar', ['1.80']], ['| Producto | Nota |\n| Arroz | el costo |\n| S/ 1.80 | x |', ['1.80']]];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('14) trozos de ' + n + ': zona negada: «precio» solo pegado al monto deja ver; con palabras en medio o «, precio S/» se tapa; la ventana y la zona no cruzan filas de tabla', () => {
+    for (const [t, hide] of [...PRECIO_MASK, ...ROW_MASK]) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, v] of [...PRECIO_SHOW, ...ROW_SHOW]) { const w = redactOwnerData(t); assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
+  });
+}
