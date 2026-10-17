@@ -160,7 +160,11 @@ test('A) dinero tras pin/clave/contraseña: S/, $, PEN ya no sueltan el número 
     ['clave de la caja: código 4321', '4321'], ['el pin es código 4321', '4321']];
   for (const [t, v] of MASK) { for (const [via, f] of Object.entries(vias)) assert.ok(!has(f(t), v), via + ' ' + JSON.stringify(t) + ' → ' + f(t));
     for (const role of [EMP, 'owner']) for (const step of [1, 3, 7]) { const s = stream(role, t, step); assert.ok(!has(s.seen, v), role + '/' + step + ' ' + t); assert.equal(s.o, A.capReply(A.redactFor(role)(t))); } }
-  for (const [t, v] of [['clave del precio: S/ 4521', '4521'], ['la clave del costo es S/ 1250', '1250'], ['clave del monto PEN 3000', '3000'], ['clave del precio S/ 43.21', '43.21'], ['Factura F001-00012345 total S/ 4521.00', '4521.00']])
+  // (Bots 2/5 sobre 6e0b3c5d, regla final, a propósito) un ENTERO tras clave/contraseña ya no se suelta por dinero: «clave del precio: S/ 4521»,
+  // «la clave del costo es S/ 1250», «clave del monto PEN 3000» se tapan; con céntimos y palabra de precio justo antes, sí se ve
+  for (const [t, v] of [['clave del precio: S/ 4521', '4521'], ['la clave del costo es S/ 1250', '1250'], ['clave del monto PEN 3000', '3000']])
+    for (const f of [A.redactOwnerText, A.redactModelOwner]) assert.ok(!has(f(t), v), JSON.stringify(t) + ' → ' + f(t));
+  for (const [t, v] of [['clave del precio S/ 43.21', '43.21'], ['Factura F001-00012345 total S/ 4521.00', '4521.00']])
     for (const f of [A.redactOwnerText, A.redactModelOwner]) assert.ok(has(f(t), v), JSON.stringify(t) + ' → ' + f(t));
   // (Bot 2 sobre 5646a4c9, a propósito) «clave S/ 43.21» ya NO se ve: un decimal tras clave/contraseña solo se ve con precio/costo/monto
   for (const f of [A.redactOwnerText, A.redactModelOwner]) assert.ok(!has(f('clave S/ 43.21'), '43.21'));
