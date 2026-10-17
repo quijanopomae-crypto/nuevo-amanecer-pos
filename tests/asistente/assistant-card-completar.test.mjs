@@ -34,27 +34,39 @@ test('A) la tarjeta conserva la parte exacta antes de la máscara (sin etiqueta 
   assert.equal(cardPrefix('F001-[DNI oculto]'), 'F001-'); assert.equal(cardPrefix('RUC N°: *******9012'), ''); assert.equal(cardPrefix('Alicorp'), 'Alicorp');
 });
 
-test('B) servidor: confirm sin valor para «completar» → 422 fields_required con los nombres; nada se marca usado; con valor → 200 y la compra lleva lo escrito', async () => {
+test('B) servidor: «manual» fuera de la propuesta firmada; cada rechazo (4xx, nada aplicado ni marcado usado) y el camino feliz', async () => {
   const p = toProposal({ name: 'preparar_compra', arguments: { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345 pedido 87654321', lineas: LINEAS } }, 'owner', { products: [] }, 1);
   assert.deepEqual(p.completar, ['proveedor', 'documento']);
   const store = createMemoryUsageStore();
-  for (const fill of [undefined, {}, { proveedor: '   ' }, { proveedor: 'Bodega Juan RUC *******9012', documento: 'F001-00012345 pedido 87654321' }, { proveedor: 'Bodega Juan [dato del dueño]', documento: 'x' },
-    { proveedor: ['Bodega'], documento: 'x' }, { proveedor: 'Bodega Juan RUC 10456789012' }, 'Bodega']) {
-    const r = await confirm(p, fill === undefined ? {} : { fill }, store);
-    assert.equal(r.status, 422, JSON.stringify(fill)); assert.equal(r.body.error, 'fields_required'); assert.ok(!r.body.ok && Array.isArray(r.body.fields) && r.body.fields.length, JSON.stringify(r.body));
+  const good = { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345 pedido 87654321' };
+  // 422 fields_required: falta, vacío, con máscara, no texto
+  for (const manual of [undefined, {}, { proveedor: '   ', documento: good.documento }, { proveedor: 'Bodega Juan RUC *******9012', documento: good.documento }, { proveedor: 'Bodega Juan [dato del dueño]', documento: 'x' },
+    { proveedor: ['Bodega'], documento: 'x' }, { proveedor: good.proveedor }]) {
+    const r = await confirm(p, manual === undefined ? {} : { manual }, store);
+    assert.equal(r.status, 422, JSON.stringify(manual)); assert.equal(r.body.error, 'fields_required'); assert.ok(!r.body.ok && !r.body.proposal && r.body.fields.length, JSON.stringify(r.body));
     assert.ok(r.writes.some((w) => w.outcome === 'rejected:fields_required'), 'queda en la bitácora'); }
-  // con los dos valores (sin máscara): 200 y lo escrito sale en la propuesta aplicada; la propuesta firmada no cambió
-  const fill = { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345 pedido 87654321' };
-  const ok = await confirm(p, { fill }, store); assert.equal(ok.status, 200, JSON.stringify(ok.body)); assert.equal(ok.body.ok, true);
-  assert.equal(ok.body.proposal.proveedor, fill.proveedor); assert.equal(ok.body.proposal.documento, fill.documento);
-  // reenvío (corte de señal): already_confirmed con lo mismo
-  const again = await assistantConfirmRoute(new Request('https://w.test/auth/assistant/confirm', { method: 'POST', body: JSON.stringify({ token: ok.token, proposal: p, fill }) }), { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET }, AUTH, jsonR,
+  // 400 manual_not_allowed: cualquier clave fuera del «completar» firmado, o «manual» que no es un objeto plano
+  for (const manual of [{ ...good, precio: 1 }, { ...good, cantidad: 99 }, { ...good, producto: 'X' }, { ...good, product_id: 'P9' }, { ...good, lineas: [] }, { ...good, completar: [] }, { ...good, fecha: '2026-01-01' },
+    'Bodega', ['Bodega'], 7, true]) {
+    const r = await confirm(p, { manual }, store);
+    assert.equal(r.status, 400, JSON.stringify(manual)); assert.equal(r.body.error, 'manual_not_allowed'); assert.ok(!r.body.ok && !r.body.proposal); }
+  // con «completar» vacío, cualquier «manual» con claves → 400
+  const plain = toProposal({ name: 'preparar_compra', arguments: { proveedor: 'Alicorp SAC', documento: 'F001-1', lineas: LINEAS } }, 'owner', { products: [] }, 1);
+  const pr = await confirm(plain, { manual: { proveedor: 'Otro' } }, createMemoryUsageStore()); assert.equal(pr.status, 400); assert.deepEqual(pr.body.fields, ['proveedor']);
+  // sesión de empleado: 403 antes de mirar nada
+  const tokE = await issueConfirmToken(p, 'owner', AUTH, SECRET, Date.now());
+  const re = await assistantConfirmRoute(new Request('https://w.test/auth/assistant/confirm', { method: 'POST', body: JSON.stringify({ token: tokE, proposal: p, manual: good }) }), { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET }, AUTH, jsonR,
+    { store, resolveRole: async () => 'empleado:consultas_documentos', reader, audit: async () => {} });
+  assert.equal(re.status, 403); const eb = await re.json(); assert.ok(!eb.ok && !eb.proposal);
+  // la propuesta firmada no cambia por /confirm: lo escrito DENTRO de la propuesta → 409 proposal_changed
+  const changed = await confirm({ ...p, ...good }, { manual: good }, createMemoryUsageStore(), p); assert.equal(changed.status, 409); assert.equal(changed.body.error, 'proposal_changed');
+  // camino feliz (los rechazos no marcaron la tarjeta usada): 200, lo escrito en la propuesta aplicada
+  const ok = await confirm(p, { manual: good }, store); assert.equal(ok.status, 200, JSON.stringify(ok.body)); assert.equal(ok.body.ok, true); assert.ok(!ok.body.already_confirmed);
+  assert.equal(ok.body.proposal.proveedor, good.proveedor); assert.equal(ok.body.proposal.documento, good.documento); assert.deepEqual(ok.body.proposal.lineas, p.lineas);
+  // respuesta perdida y reintento: already_confirmed con lo mismo (confirm no crea registros: solo marca la tarjeta usada)
+  const again = await assistantConfirmRoute(new Request('https://w.test/auth/assistant/confirm', { method: 'POST', body: JSON.stringify({ token: ok.token, proposal: p, manual: good }) }), { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET }, AUTH, jsonR,
     { store, resolveRole: async () => 'owner', reader, audit: async () => {} });
-  const ab = await again.json(); assert.equal(ab.already_confirmed, true); assert.equal(ab.proposal.proveedor, fill.proveedor);
-  // reglas del hash: poner lo escrito DENTRO de la propuesta firmada → 409 proposal_changed
-  const changed = await confirm({ ...p, proveedor: fill.proveedor, documento: fill.documento }, { fill }, createMemoryUsageStore(), p); assert.equal(changed.status, 409); assert.equal(changed.body.error, 'proposal_changed');
-  // solo lo nombrado: el que falta aparece en fields
-  const one = await confirm(p, { fill: { proveedor: fill.proveedor } }, createMemoryUsageStore()); assert.deepEqual(one.body.fields, ['documento']);
+  const ab = await again.json(); assert.equal(ab.already_confirmed, true); assert.equal(ab.operation_id, ok.body.operation_id); assert.equal(ab.proposal.proveedor, good.proveedor);
 });
 
 test('B) servidor: una máscara en CUALQUIER campo de la propuesta (firmada así) → 422 fields_required; sin máscara ni completar, como siempre', async () => {
@@ -74,12 +86,12 @@ function fakeDoc() {
     addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }, fire(t) { (this.listeners[t] || []).forEach((f) => f({ target: this })); }, focus() { fakeDoc.focused = this; } });
   return { createElement: mk };
 }
-test('celular (Bot 2 A / Bot 4): campo con la parte exacta de inicio; 422 fields_required → aviso junto al campo, foco, lo escrito y la tarjeta quedan; fill va aparte', async () => {
+test('celular (Bot 2 A / Bot 4): campo con la parte exacta de inicio; 422 fields_required → aviso junto al campo, foco, lo escrito y la tarjeta quedan; «manual» va aparte', async () => {
   const doc = fakeDoc(), p = { id: 'c1', type: 'compra', needsConfirm: true, confirm_token: 't', proveedor: 'Alicorp SAC', documento: 'F001-', completar: ['documento'], lineas: [] };
   const need = C.needFields(doc, p, () => {}); const [d] = need.inputs; assert.equal(d.value, 'F001-'); assert.equal(need.missing(), 1);
   d.fire('input'); assert.equal(need.missing(), 1, 'la parte exacta sola no cuenta'); d.value = 'F001-00012345'; d.fire('input'); assert.equal(need.missing(), 0);
   Object.defineProperty(p, '_manual', { value: need.state, enumerable: false });
-  assert.deepEqual(C.fillValues(p), { documento: 'F001-00012345' }); assert.ok(!JSON.stringify(p).includes('00012345'), 'fill fuera de la propuesta firmada');
+  assert.deepEqual(C.fillValues(p), { documento: 'F001-00012345' }); assert.ok(!JSON.stringify(p).includes('00012345'), 'manual fuera de la propuesta firmada');
   // el servidor rechaza: la puerta deja la tarjeta pendiente y pasa los nombres
   const owner = { role: 'owner', isOwner: () => true }; let sent = null;
   const g = C.createGate({ roles: () => owner, online: () => true, productos: () => [], confirm: async (pp) => { sent = C.fillValues(pp); return { ok: false, error: 'fields_required', fields: ['documento', 'lineas'] }; } });
@@ -92,8 +104,53 @@ test('celular (Bot 2 A / Bot 4): campo con la parte exacta de inicio; 422 fields
   assert.equal(C.confirmFailureView({ ok: false, code: 'fields_required', fields: ['documento'] }).msg, 'Complete los datos marcados y vuelva a confirmar.');
   // cableado: confirmRemote manda fill; la tarjeta marca los campos y deja el aviso con textContent; nada de innerHTML en lo nuevo
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8'), CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8');
-  assert.match(UI, /var fill = C\.fillValues \? C\.fillValues\(p\) : null; if \(fill\) body\.fill = fill;/);
+  assert.match(UI, /var manual = C\.fillValues \? C\.fillValues\(p\) : null; if \(manual\) body\.manual = manual;/);
+  assert.match(UI, /ok\.textContent = 'Guardando…'/); assert.match(UI, /class="na-asst-bits" aria-hidden="true"/);
   assert.match(UI, /if \(f\.kind === 'fields'\) \{ var rest = need \? need\.flag\(f\.fields\) : f\.fields; res\.textContent = /);
   const fn = CORE.slice(CORE.indexOf('function needFields'), CORE.indexOf('var needSeq')); assert.ok(/function flag/.test(fn) && !/innerHTML|insertAdjacentHTML/.test(fn));
   assert.match(CORE, /fields_required: \['Complete los datos marcados y vuelva a confirmar\.'\]/);
+});
+
+test('celular (Bot 4): lo escrito llega a «Nueva compra» con la propuesta que devuelve /confirm (respuesta simulada); sin respuesta → aviso corto y editable', async () => {
+  const owner = { role: 'owner', isOwner: () => true };
+  const p = { id: 'c2', type: 'compra', needsConfirm: true, confirm_token: 't', proveedor: 'Bodega Juan', documento: 'F001-', completar: ['proveedor', 'documento'], lineas: [{ nombre: 'Galleta', cantidad: 1, costo_unitario: 1 }] };
+  Object.defineProperty(p, '_manual', { value: { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' }, enumerable: false });
+  let filled = null, calls = 0, sentBody = null;
+  const deps = { roles: () => owner, online: () => true, productos: () => [],
+    confirm: async (pp) => { calls++; sentBody = { manual: C.fillValues(pp), proposal: JSON.parse(JSON.stringify(pp)) };
+      if (calls === 1) { const e = new Error('cortada'); e.timeout = true; throw e; } // respuesta cortada a medias
+      return { ok: true, operation_id: 'AST-1', type: 'compra', proposal: { ...sentBody.proposal } }; }, // servidor viejo: sin los valores escritos
+    openPurchase: () => ({ querySelector: () => null }), fillPurchase: (w, ap) => { filled = { proveedor: C.purchaseValue(ap, 'proveedor'), documento: C.purchaseValue(ap, 'documento') }; return true; },
+    navigate: () => {} };
+  const g = C.createGate(deps); const key = g.add(p);
+  const r1 = await g.execute(key, { confirmed: true }); assert.equal(r1.ok, false); assert.equal(g.state(key) || 'pending', 'pending');
+  const v = C.confirmFailureView(r1); assert.equal(v.kind, 'network'); assert.equal(v.button, 'Reintentar'); assert.match(v.msg, /No se pudo confirmar/); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
+  assert.deepEqual(sentBody.manual, { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' }); assert.equal(sentBody.proposal.proveedor, 'Bodega Juan', 'la propuesta enviada es la firmada');
+  await g.execute(key, { confirmed: true });
+  assert.ok(filled, 'se abrió Nueva compra'); assert.deepEqual(filled, { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' });
+});
+test('pantalla (Bot 4): borde de alerta en Nocturno gana a theme-dark.css (contraste ≥ 3); serie de comprobante no se parte al pintar', () => {
+  const CSS = readFileSync(new URL('../../POS/css/asistente.css', import.meta.url), 'utf8'), DARK = readFileSync(new URL('../../POS/css/theme-dark.css', import.meta.url), 'utf8');
+  const spec = (sel) => { const a = (sel.match(/#[\w-]+/g) || []).length; const b = (sel.match(/\.[\w-]+|\[[^\]]+\]|:(?!not\()[\w-]+/g) || []).length; const c = (sel.replace(/:not\(|\)|\[[^\]]+\]|\.[\w-]+|#[\w-]+|:[\w-]+/g, ' ').match(/\b[a-z]+\b/g) || []).length; return a * 1e4 + b * 100 + c; };
+  const darkSel = 'body.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])'; assert.ok(DARK.includes(darkSel));
+  const m = CSS.match(/body\.dark input\.na-asst-need:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\):not\(\[type="color"\]\)\{[^}]*border-color:(#[0-9a-f]{6})/); assert.ok(m, 'regla nocturna del campo');
+  assert.ok(spec(m[0].split('{')[0]) > spec(darkSel), 'especificidad');
+  assert.match(CSS, /body\.dark input\.na-asst-need\.ok:not\(\[type="checkbox"\]\)[^{]*\{border-color:#4ade80\}/);
+  const lum = (h) => { const v = h.match(/\w\w/g).map((x) => parseInt(x, 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  for (const bg of ['#10241a', '#07130c']) { assert.ok(ratio(m[1], bg) >= 3, m[1] + ' sobre ' + bg); assert.ok(ratio('#4ade80', bg) >= 3); }
+  // serie con guion que no corta (U+2011) solo al pintar; el texto del mensaje no cambia
+  const doc = { createElement: (t) => ({ tagName: t, children: [], attrs: {}, appendChild(c) { this.children.push(c); return c; }, setAttribute(k, v) { this.attrs[k] = v; }, set textContent(v) { this._t = v; }, get textContent() { return this._t || this.children.map((c) => c.data || c.textContent || '').join(''); } }),
+    createTextNode: (d) => ({ data: d }) };
+  const CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8');
+  assert.match(CORE, /var DOC_HY_RE = \/\\b\(\[FBET\]\[A-Z0-9\]\{3\}\|0\\d\{3\}\)-\(\?=\\d\)\/g;/); assert.match(CORE, /\.replace\(DOC_HY_RE, '\$1\\u2011'\)/);
+  class N { constructor(tag) { this.tagName = tag.toUpperCase(); this.childNodes = []; this.attrs = {}; this.className = ''; }
+    appendChild(k) { this.childNodes.push(k); k.parentNode = this; return k; } insertBefore(k) { this.childNodes.push(k); k.parentNode = this; return k; } get nextSibling() { return null; }
+    setAttribute(a, v) { this.attrs[a] = String(v); } get textContent() { return this.childNodes.map((k) => (k.nodeType === 3 ? k.data : k.textContent)).join(''); }
+    set textContent(v) { this.childNodes = v ? [{ nodeType: 3, data: String(v) }] : []; } set innerHTML(_) { throw new Error('innerHTML usado'); } }
+  const d2 = { createElement: (t) => new N(t), createTextNode: (t) => ({ nodeType: 3, data: String(t) }) };
+  const txt = 'Factura B001-00000123 y guía T001-00012345, serie 0001-00012345; fecha 2024-12345 y F001 suelto.';
+  for (const step of [1, 2, 3, 7, 47, 999]) { const host = new N('div'); const r = C.createReplyRenderer(d2, (n) => host.appendChild(n)); for (let i = 0; i < txt.length; i += step) r.push(txt.slice(i, i + step)); r.finish();
+    const out = host.textContent; assert.equal(out, txt.replace(/(B001|T001|0001)-/g, '$1\u2011'), 'trozos de ' + step + ': ' + out); }
+  void doc;
 });
