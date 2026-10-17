@@ -6,10 +6,13 @@ Copia del contrato de pruebas de Bot 5 adaptada a esta rama: `docs/asistente/con
 ## Rutas del Worker
 | Ruta | Método | Roles (tabla `API_ROUTES`) | Qué hace |
 |---|---|---|---|
-| `/auth/assistant/chat` | POST | dueño, empleado (el servidor revisa el nivel) | Conversa con DeepSeek y devuelve propuestas. Nunca escribe datos del negocio. `{ping:true}` devuelve SOLO `{ok, enabled, role, level}` (nivel de ESTE aparato; nada del dueño, de otros aparatos ni de la configuración) sin llamar al modelo ni gastar cupo. El rol (y el 403 `reason:"sin_rol"`) se revisa ANTES que la clave: un Worker sin clave igual responde el ping; el chat falla cerrado con 503 `assistant_not_configured`. Empleado que pide un documento solo del dueño, o cualquier documento estando en «consultas»: **403 `forbidden_document`** con `allowed` para todo el pedido (no viaja ninguna tarjeta). |
+| `/auth/assistant/chat` | POST | dueño, empleado (el servidor revisa el nivel) | Conversa con el proveedor de IA (DeepSeek por defecto; ver «Proveedor de IA») y devuelve propuestas. Nunca escribe datos del negocio. `{ping:true}` devuelve SOLO `{ok, enabled, role, level}` (nivel de ESTE aparato; nada del dueño, de otros aparatos ni de la configuración) sin llamar al modelo ni gastar cupo. El rol (y el 403 `reason:"sin_rol"`) se revisa ANTES que la clave: un Worker sin clave igual responde el ping; el chat falla cerrado con 503 `assistant_not_configured`. Empleado que pide un documento solo del dueño, o cualquier documento estando en «consultas»: **403 `forbidden_document`** con `allowed` para todo el pedido (no viaja ninguna tarjeta). |
 | `/auth/assistant/confirm` | POST | dueño, empleado (nivel revisado OTRA vez) | Gasta el token de UNA tarjeta (un uso, 5 min). Devuelve el `operation_id`. No escribe datos del negocio. |
 | `/auth/assistant/audit` | GET | dueño (fila `owner` explícita; si no 403 `admin_only`) | Bitácora A20: una fila por llamada a herramienta (`proposed`/`dropped:<motivo>`) y por confirmación (`confirmed`, con `operation_id`). Sin textos, argumentos, PIN ni DNI. También las confirmaciones RECHAZADAS (`rejected:<error>`); 429 y 403 de rol agrupados (`internal:asst:audit:a:<minuto>:<aparato>:<resultado>`, con `count`). Cajones con tope propio en `pos_settings`: `o:` dueño 1000, `r:` empleados/rechazos 300, `a:` agrupados 300; sin migración. Respuesta `{entries, keep, caps, write_errors, last_write_error_at}` (`write_errors`: fallos al anotar en esta instancia del Worker; el chat y el confirm nunca se cortan por eso, y el Worker deja un `console.warn` con solo el código de error). |
 | `/auth/assistant/employee-access` | GET, POST | dueño | Lista los aparatos de empleado con su nivel / cambia el nivel (dueño + aprobación estricta). |
+| `/auth/assistant/provider` | GET | dueño (si no 403 `admin_only`) | Proveedores del catálogo con `status` «Conectado» / «Falta clave», el que está en uso y los modelos que se pueden elegir. **Nunca** la clave ni la URL. |
+| `/auth/assistant/provider/test` | POST | dueño | `{provider, model?}` «Probar»: una llamada chica sin herramientas ni datos del negocio (máx. 6 por minuto, 429 después). Devuelve `{ok, status, message, ms}` en palabras simples. |
+| `/auth/assistant/provider/select` | POST | dueño | `{provider, model?, confirm:true}` desde la tarjeta Confirmar (sin PIN). 400 sin `confirm`, proveedor o modelo fuera de la lista; 409 `provider_not_ready` si no tiene clave. Guarda solo `{provider, model}`. |
 | `/auth/assistant/owner-device` | GET | dueño | Aparatos dueño y pendientes de aprobar. **Bandera `ASSISTANT_OWNER_BOOTSTRAP=1`.** |
 | `/auth/assistant/owner-device/register` | POST | aparato sin fila de rol | «Registrar este teléfono como dueño» `{pin}`. **Bandera.** |
 | `/auth/assistant/owner-device/approve` | POST | dueño | `{device_id, operation_id, decision:"approve"|"reject"}` + `x-owner-approval`. **Bandera.** |
@@ -24,13 +27,37 @@ Copia del contrato de pruebas de Bot 5 adaptada a esta rama: `docs/asistente/con
 |---|---|
 | `ASSISTANT_ENABLED` | `1` para encender. Otro valor: 404. |
 | `ASSISTANT_OWNER_BOOTSTRAP` | `1` para las rutas `owner-device`. Necesita el visto bueno del jefe y la migración 0035 (no aplicada). |
-| `DEEPSEEK_API_KEY` | Secreto, solo en el Worker. Sin clave: 503 `assistant_not_configured`, salvo `ASSISTANT_DEMO=1`. |
+| `AI_PROVIDER` | Proveedor por defecto: `deepseek`, `openai`, `xai`, `openrouter`, `groq`, `mistral`, `together`, `anthropic`, `gemini`. Sin esta variable y con `DEEPSEEK_API_KEY`: DeepSeek (como antes). |
+| `AI_MODEL` | Modelo del proveedor de `AI_PROVIDER` (si falta, el de fábrica; ver tabla abajo). |
+| `AI_BASE_URL` | Opcional. Solo `https`, sin usuario/clave, sin `?`/`#`, y de la lista de hosts conocidos salvo `AI_ALLOW_CUSTOM_BASE=1`. Si no pasa: 503 (falla cerrado). |
+| `AI_ALLOW_CUSTOM_BASE` | `1` permite un host propio (proxy), igual solo `https`. |
+| `AI_VISION` | `1`/`0` fuerza si el modelo de `AI_PROVIDER` lee fotos (si falta, se deduce del nombre del modelo). |
+| Claves (secretos) | Una por proveedor (tabla abajo). `AI_API_KEY` sirve de respaldo SOLO para el proveedor de `AI_PROVIDER`. Sin proveedor listo: 503 `assistant_not_configured`, salvo `ASSISTANT_DEMO=1`. |
 | `ASSISTANT_DEMO` | Solo prototipo local y pruebas (respuestas de demostración). Nunca en un Worker real. |
-| `DEEPSEEK_BASE_URL` | Opcional (mock de Bot 2: `http://127.0.0.1:4599`). |
+| `DEEPSEEK_BASE_URL` | Nombre viejo de `AI_BASE_URL` para DeepSeek, con la MISMA revisión: un mock local necesita `https` y `AI_ALLOW_CUSTOM_BASE=1` (`http://127.0.0.1:4599` ya no se acepta). |
 | `ASSISTANT_CONFIRM_SECRET` | HMAC de los tokens (16+ caracteres). Sin él no se confirma nada (503). |
 | Límites `ASSISTANT_*` | Por minuto (dueño 30, empleado 10), fotos, por día, tope mensual, confirms por minuto. |
 
-Modelo fijo: `deepseek-flash`, `thinking: {type:"disabled"}`, `tool_choice:"auto"`.
+### Proveedor de IA (capa de proveedores, 17-10)
+- **Solo del Worker.** El celular nunca manda proveedor, URL ni clave (si los manda, se ignoran). Las claves no se guardan en la base ni salen hacia el celular; la respuesta de `/provider` no trae claves ni URLs.
+- **Elección del dueño:** Configuración › Aparatos › «Asistente: proveedor de IA» (solo sesión dueño en el aparato dueño, en modo Admin). «Usar» abre una tarjeta Confirmar; sin PIN. Solo se puede elegir un proveedor que ya tenga clave y un modelo de la lista del servidor. Se guarda `{provider, model, at}` en `pos_settings` con clave interna `internal:asst:provider` (la lista pública `/auth/settings` excluye `internal:%`): **sin migración**. Si después quitan la clave del elegido, se vuelve a `AI_PROVIDER`.
+- **Adaptadores** (mismos eventos internos: texto, herramienta, uso, fin, error): OpenAI compatible (`/chat/completions` con SSE y `tool_calls`), Anthropic Messages (`/v1/messages`, `x-api-key`, `anthropic-version: 2023-06-01`, `tool_use`/`input_json_delta`) y Gemini (`:streamGenerateContent?alt=sse`, clave en la cabecera `x-goog-api-key`, nunca en la URL; `functionCall`). Errores: 429 (y 529 Anthropic, 503 Gemini) → `upstream_busy`; otro → `upstream_error`; corte/tiempo/celular ido → `upstream_timeout`. Nunca se reenvía el texto de error del proveedor.
+- **Igual para todos:** puertas (rol, nivel, cupo, documento, foto solo del dueño), filtro del empleado en cada trozo y en `final`, guardia de herramientas a mitad, tiempos y corte (Bot 3), demostración sin cambios. **Foto** con un modelo que no lee fotos: 422 `image_unsupported` «Leer fotos no está disponible por ahora.» sin cupo ni llamada.
+- DeepSeek sigue igual: `deepseek-flash`, `thinking: {type:"disabled"}` (solo DeepSeek), `tool_choice:"auto"`. `mode` en la respuesta = id del proveedor (`deepseek`, `anthropic`, …) o `mock`.
+
+| Proveedor | `AI_PROVIDER` | Clave (secreto) | Modelo de fábrica | Fotos |
+|---|---|---|---|---|
+| DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-flash` | sí (como antes) |
+| OpenAI | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | gpt-4o, 4.1, 5, o-series |
+| xAI Grok | `xai` | `XAI_API_KEY` | `grok-3-mini` | grok-4 / vision |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `openai/gpt-4o-mini` | según el modelo |
+| Groq | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | llama-4 / vision |
+| Mistral | `mistral` | `MISTRAL_API_KEY` | `mistral-small-latest` | pixtral, small, medium |
+| Together | `together` | `TOGETHER_API_KEY` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | vision / VL / llama-4 |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` | sí |
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash` | sí |
+
+Las claves se ponen con `wrangler secret put NOMBRE` (nunca en el repo ni en `wrangler.jsonc`). `AI_API_KEY` = respaldo del proveedor de `AI_PROVIDER`.
 
 ## Matriz de roles
 | | Dueño | Empleado «Consultas y documentos» | Empleado «Solo consultas» | Empleado «Apagado» (por defecto) / sin rol |

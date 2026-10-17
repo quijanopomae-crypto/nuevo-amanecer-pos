@@ -53,8 +53,8 @@ test('sin clave con ASSISTANT_DEMO=1: modo demostración con propuestas y token 
 
 test('petición a DeepSeek: deepseek-flash, sin thinking, herramientas, URL base configurable y clave solo en cabecera', async () => {
   const cap = [];
-  const { body } = await chat({ text: 'Mi DNI es 45678912, cel 987654321, merma de paracetamol' }, { e: env({ DEEPSEEK_API_KEY: 'sk-test-local', DEEPSEEK_BASE_URL: 'http://127.0.0.1:4599/' }), fetch: deepseekStub({ content: 'Listo', tool_calls: [tool('proponer_ajuste_stock', { product_id: 'P1', tipo: 'salida', cantidad: 3, motivo: 'Merma / daño' })] }, cap) });
-  assert.equal(cap[0].url, 'http://127.0.0.1:4599/chat/completions');
+  const { body } = await chat({ text: 'Mi DNI es 45678912, cel 987654321, merma de paracetamol' }, { e: env({ DEEPSEEK_API_KEY: 'sk-test-local', DEEPSEEK_BASE_URL: 'https://127.0.0.1:4599/', AI_ALLOW_CUSTOM_BASE: '1' }), fetch: deepseekStub({ content: 'Listo', tool_calls: [tool('proponer_ajuste_stock', { product_id: 'P1', tipo: 'salida', cantidad: 3, motivo: 'Merma / daño' })] }, cap) });
+  assert.equal(cap[0].url, 'https://127.0.0.1:4599/chat/completions'); // URL propia: solo https y con AI_ALLOW_CUSTOM_BASE=1
   assert.equal(cap[0].init.headers.authorization, 'Bearer sk-test-local');
   const b = cap[0].body;
   assert.equal(b.model, DEEPSEEK_MODEL); assert.equal(b.model, 'deepseek-flash');

@@ -764,8 +764,58 @@
     host.appendChild(box);
     decorateOwners(host, box);
     get(ACCESS_PATH).then(function (d) { paintAccess(box, d); }, function () { box.querySelector('.na-asst-acc-l').textContent = 'No se pudo cargar. Revisa internet.'; });
+    decorateProvider(host);
   }
   var ACCESS_PATH = '/auth/assistant/employee-access';
+
+  // ---------- Configuración > Asistente: proveedor de IA (solo dueño) ----------
+  // Lista del servidor con «Conectado» / «Falta clave» (nunca se ve una clave ni una URL). «Probar» hace una llamada chica.
+  // Cambiar: «Usar» -> tarjeta Confirmar (sin PIN). El servidor exige sesión dueño en el aparato dueño; un empleado recibe 403 y no ve el bloque.
+  var PROVIDER_PATH = '/auth/assistant/provider';
+  function decorateProvider(host) {
+    var box = el('div', 'na-asst-prov'); box.hidden = true;
+    box.innerHTML = '<h4>Asistente: proveedor de IA</h4><p class="na-asst-acc-n">Las claves se ponen en el servidor, nunca aquí. Solo se puede elegir un proveedor que ya tenga clave.</p><div class="na-asst-prov-l" role="list"></div>';
+    host.appendChild(box);
+    var list = box.querySelector('.na-asst-prov-l'), data = null;
+    function find(id) { for (var i = 0; data && i < data.providers.length; i++) if (data.providers[i].id === id) return data.providers[i]; return null; }
+    function paint(d) {
+      if (!d || !d.providers) { box.hidden = true; return; } // 403 o 404: sin bloque
+      data = d; box.hidden = false;
+      list.innerHTML = d.providers.map(function (p) {
+        var models = p.models || [], cur = p.current && d.current ? d.current.model : null;
+        return '<div class="na-asst-prov-r" role="listitem" data-prov="' + C.esc(p.id) + '"><div><strong>' + C.esc(p.label) + (p.current ? ' <em>En uso</em>' : '') + '</strong>' +
+          '<small class="' + (p.connected ? 'ok' : 'off') + '">' + C.esc(p.status) + (cur ? ' · ' + C.esc(cur) : '') + '</small><small class="st" role="status"></small></div>' +
+          (p.connected ? '<div class="na-asst-prov-a">' + (models.length > 1 ? '<select aria-label="Modelo de ' + C.esc(p.label) + '">' + models.map(function (m) { return '<option' + (m === cur ? ' selected' : '') + '>' + C.esc(m) + '</option>'; }).join('') + '</select>' : '') +
+            '<button type="button" class="na-asst-prov-t" data-act="test">Probar</button>' + (p.current && models.length < 2 ? '' : '<button type="button" class="na-asst-ok" data-act="use">Usar</button>') + '</div>' : '') + '</div>';
+      }).join('');
+    }
+    function confirmCard(row, p, model) {
+      var old = box.querySelector('.na-asst-prov-c'); if (old) old.remove();
+      var c = el('div', 'na-asst-prov-c'); c.setAttribute('role', 'group'); c.setAttribute('aria-label', 'Confirmar cambio de proveedor');
+      c.innerHTML = '<p>¿Usar <strong>' + C.esc(p.label) + '</strong>' + (model ? ' (' + C.esc(model) + ')' : '') + ' en el asistente? Aplica desde la próxima pregunta, en todos los aparatos.</p>' +
+        '<button type="button" class="na-asst-ok" data-act="confirm" data-model="' + C.esc(model || '') + '">Confirmar</button><button type="button" class="na-asst-no" data-act="cancel">Cancelar</button>';
+      row.appendChild(c); c.querySelector('[data-act=confirm]').focus();
+    }
+    box.onclick = function (e) {
+      var b = e.target.closest('button'); if (!b || !isOwnerAccess()) return; // solo en modo Admin con acceso de dueño
+      var row = b.closest('[data-prov]'), p = row && find(row.dataset.prov); if (!p) return;
+      var st = row.querySelector('.st'), sel = row.querySelector('select'), model = sel ? sel.value : null, act = b.dataset.act;
+      if (act === 'test') {
+        b.disabled = true; st.textContent = 'Probando…';
+        post(PROVIDER_PATH + '/test', { provider: p.id, model: model }, null, 15000).then(function (r) { st.textContent = r && r.message ? r.message : r && r.error === 'rate_limited' ? 'Espera un minuto y prueba otra vez.' : 'No se pudo probar.'; },
+          function () { st.textContent = 'No se pudo probar. Revisa internet.'; }).then(function () { b.disabled = false; });
+      } else if (act === 'use') confirmCard(row, p, model);
+      else if (act === 'cancel') { var c = row.querySelector('.na-asst-prov-c'); if (c) c.remove(); }
+      else if (act === 'confirm') {
+        b.disabled = true;
+        post(PROVIDER_PATH + '/select', { provider: p.id, model: b.dataset.model || null, confirm: true }, null, 15000).then(function (r) {
+          if (r && r.ok) { paint(r); var s2 = list.querySelector('[data-prov="' + p.id + '"] .st'); if (s2) s2.textContent = 'Listo. El asistente usa ' + p.label + '.'; return; }
+          st.textContent = r && r.error === 'provider_not_ready' ? 'Falta la clave en el servidor.' : 'No se pudo cambiar.'; b.disabled = false;
+        }, function () { st.textContent = 'No se pudo cambiar. Revisa internet.'; b.disabled = false; });
+      }
+    };
+    get(PROVIDER_PATH).then(paint, function () { box.hidden = true; });
+  }
 
   // ---------- Aparatos de dueño y «Pendiente de aprobar» (maquetas v2). Solo si el servidor tiene ASSISTANT_OWNER_BOOTSTRAP=1;
   // si la ruta responde 404 no se muestra nada. Aprobar, rechazar y quitar piden PIN -> aprobación estricta 'assistant.owner_device'.

@@ -23,6 +23,7 @@ import { dniLookupRoute, DNI_LOOKUP_PATH } from './pos-dni-lookup.js';
 import { assistantChatRoute, assistantConfirmRoute, ASSISTANT_CHAT_PATH, ASSISTANT_CONFIRM_PATH } from './pos-assistant.js';
 import { employeeAccessRoute, ACCESS_PATH as ASSISTANT_ACCESS_PATH } from './pos-assistant-access.js';
 import { ownerDeviceRoute, isOwnerDevicePath } from './pos-owner-device.js';
+import { providerRoute, PROVIDER_PATH as ASSISTANT_PROVIDER_PATH } from './pos-assistant-provider-route.js';
 import { auditRoute, AUDIT_PATH as ASSISTANT_AUDIT_PATH } from './pos-assistant-audit.js';
 import { handleRoles, ownerGate, posRoleFor, ROLE_PATHS, flagSaleDiscount, flagReview } from './pos-roles.js';
 
@@ -134,6 +135,13 @@ export default {
         return cors(await auditRoute(request, env, auth, json, { db: getDatabase(env) }));
       }
       // Registro del aparato dueño: además necesita ASSISTANT_OWNER_BOOTSTRAP=1 (la ruta responde 404 sin esa bandera).
+      // Proveedor del asistente (solo dueño): estado de las claves (sin mostrarlas), «Probar» y cambio con tarjeta Confirmar.
+      if (url.pathname === ASSISTANT_PROVIDER_PATH || url.pathname === ASSISTANT_PROVIDER_PATH + '/test' || url.pathname === ASSISTANT_PROVIDER_PATH + '/select') {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await providerRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
       if (isOwnerDevicePath(url.pathname)) {
         if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
         const auth = await authorizeSession(request, env);

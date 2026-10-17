@@ -17,6 +17,8 @@
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
+import { resolveProvider, callModel, callModelStream, linkAbort } from './pos-assistant-providers.js';
+import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
@@ -27,7 +29,7 @@ import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
 export const ASSISTANT_CONFIRM_PATH = '/auth/assistant/confirm';
 export const CONFIRM_TTL_MS = 5 * 60 * 1000;
-export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com';
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com'; // valores de fábrica de DeepSeek (ver PROVIDERS en pos-assistant-providers.js)
 export const DEEPSEEK_MODEL = 'deepseek-flash';
 export const ASSISTANT_LIMITS = Object.freeze({
   perMinute: 10, ownerPerMinute: 30, perDay: 150, photosPerMinute: 2, photosPerDay: 30, confirmsPerMinute: 5,
@@ -615,73 +617,10 @@ export function buildDeepSeekRequest({ role, ctx, history, text, image }) {
 }
 
 export function payloadBytes(body) { return new TextEncoder().encode(JSON.stringify(body)).length; }
-// Señal de afuera (Bot 3): si el celular se va, se pasa el tope de 90 s o vence un tiempo, el pedido a DeepSeek se corta (deja de recibir).
-function linkAbort(controller, outer) { if (!outer) return; if (outer.aborted) controller.abort(); else outer.addEventListener('abort', () => controller.abort(), { once: true }); }
-export async function callDeepSeek(body, env, fetchImpl, timeoutMs, outer) {
-  const controller = new AbortController(); linkAbort(controller, outer);
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const base = String(env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL).replace(/\/+$/, '');
-    const res = await fetchImpl(`${base}/chat/completions`, { method: 'POST', signal: controller.signal,
-      headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) return { error: res.status === 429 ? 'upstream_busy' : 'upstream_error', status: res.status };
-    const data = await res.json();
-    const msg = data?.choices?.[0]?.message || {};
-    const calls = (Array.isArray(msg.tool_calls) ? msg.tool_calls : []).map((c, i) => ({ id: String(c?.id || 'call_' + i).slice(0, 64), name: c?.function?.name, arguments: c?.function?.arguments }));
-    return { content: String(msg.content || ''), calls, usage: data?.usage || null };
-  } catch (e) {
-    return { error: e?.name === 'AbortError' ? 'upstream_timeout' : 'upstream_error' };
-  } finally { clearTimeout(timer); }
-}
-
-// Igual que callDeepSeek pero con stream:true: cada trozo de texto va a onText en cuanto llega; las llamadas a herramientas se juntan
-// aquí y recién al final se devuelven (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs).
-// Si se corta a mitad: { error, partial:true } y lo ya recibido queda en content.
-export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, onTool, guard, outer) {
-  const controller = new AbortController(); let timer = null; let reader = null; linkAbort(controller, outer);
-  controller.signal.addEventListener('abort', () => { try { if (reader) reader.cancel().catch(() => {}); } catch { /* ya cortado */ } }, { once: true });
-  const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), idleMs); };
-  let content = '', usage = null, forbidden = null; const calls = [];
-  try {
-    arm();
-    const base = String(env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL).replace(/\/+$/, '');
-    const res = await fetchImpl(`${base}/chat/completions`, { method: 'POST', signal: controller.signal,
-      headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json', accept: 'text/event-stream' }, body: JSON.stringify({ ...body, stream: true }) });
-    if (!res.ok) return { error: res.status === 429 ? 'upstream_busy' : 'upstream_error', status: res.status };
-    if (!res.body || typeof res.body.getReader !== 'function') return { error: 'upstream_error' };
-    reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '', done = false;
-    const line = (l) => {
-      if (!l.startsWith('data:')) return; const d = l.slice(5).trim(); if (!d) return;
-      if (d === '[DONE]') { done = true; return; }
-      let j; try { j = JSON.parse(d); } catch { return; }
-      if (j.usage) usage = j.usage;
-      const delta = j?.choices?.[0]?.delta || {};
-      if (typeof delta.content === 'string' && delta.content) { content += delta.content; onText(delta.content); }
-      if (Array.isArray(delta.tool_calls) && delta.tool_calls.length && onTool) onTool(); // el modelo arma una búsqueda: aviso «buscando»
-      for (const tc of Array.isArray(delta.tool_calls) ? delta.tool_calls : []) {
-        const i = Number.isInteger(tc?.index) ? tc.index : calls.length; const c = calls[i] || (calls[i] = { id: '', name: '', arguments: '' });
-        if (tc.id) c.id = String(tc.id).slice(0, 64); if (tc.function?.name) c.name += tc.function.name; if (typeof tc.function?.arguments === 'string') c.arguments += tc.function.arguments;
-        const why = guard ? guard(c) : null; if (why && !forbidden) { forbidden = why; done = true; } // herramienta prohibida: se corta aquí
-      }
-      if (j?.choices?.[0]?.finish_reason) done = true;
-    };
-    for (;;) {
-      const { value, done: end } = await reader.read(); arm();
-      if (end) break;
-      buf += dec.decode(value, { stream: true });
-      let k; while (!forbidden && (k = buf.indexOf('\n')) >= 0) { line(buf.slice(0, k).replace(/\r$/, '')); buf = buf.slice(k + 1); }
-      if (forbidden) { try { reader.cancel().catch(() => {}); } catch { /* ya cortado */ } controller.abort(); return { forbidden, content, calls: [], usage }; }
-    }
-    if (controller.signal.aborted && !forbidden) return { error: 'upstream_timeout', partial: !!content, content }; // tiempo, tope o celular ido
-    if (buf) line(buf.trim());
-    if (forbidden) return { forbidden, content, calls: [], usage };
-    // Sin [DONE] ni finish_reason: el corte fue a mitad (lo recibido queda, las herramientas a medias NO se usan).
-    if (!done) return { error: 'upstream_error', partial: true, content };
-    return { content, calls: calls.filter(Boolean).map((c, i) => ({ id: c.id || 'call_' + i, name: c.name, arguments: c.arguments })), usage };
-  } catch (e) {
-    return { error: e?.name === 'AbortError' ? 'upstream_timeout' : 'upstream_error', partial: !!content, content };
-  } finally { clearTimeout(timer); }
-}
+// Compatibilidad: las llamadas viejas a DeepSeek pasan por la capa de proveedores (pos-assistant-providers.js) con la config del Worker.
+function envConfig(env) { const c = resolveProvider(env, null); return c.ok ? c : null; }
+export async function callDeepSeek(body, env, fetchImpl, timeoutMs, outer) { const c = envConfig(env); return c ? callModel(c, body, fetchImpl, timeoutMs, outer) : { error: 'upstream_error' }; }
+export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, onTool, guard, outer) { const c = envConfig(env); return c ? callModelStream(c, body, fetchImpl, idleMs, onText, onTool, guard, outer) : { error: 'upstream_error' }; }
 
 // Canal SSE hacia el celular (sin Durable Objects: un TransformStream por pedido, plan gratis de Workers).
 // Eventos: open (enseguida), text {t} o {reset:true}, final {…el mismo cuerpo de siempre…}, error {error, status}.
@@ -1026,6 +965,7 @@ export function parseChatBody(body) {
 // Foto de un aparato que no es del dueño: 403 con código propio (no forbidden_role, que en el celular quitaría todo el asistente).
 export const EMPLOYEE_MAX_BODY_BYTES = 64_000;
 export const IMAGE_OWNER_ONLY = Object.freeze({ error: 'image_owner_only', message: 'Eso solo lo puede hacer el dueño.' });
+export const IMAGE_UNSUPPORTED = Object.freeze({ error: 'image_unsupported', message: 'Leer fotos no está disponible por ahora.' });
 // Lee el cuerpo con tope: null si pasa el tope (se corta la lectura, no se baja el resto), undefined si falla la lectura.
 export async function readBounded(request, max) {
   try {
@@ -1090,7 +1030,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   let body; try { body = JSON.parse(raw); } catch { return json({ error: 'bad_request' }, 400); }
   // Comprobación para la tarjeta de Inicio y la burbuja: no llama a DeepSeek ni gasta cupo. El servidor dice rol y nivel.
   // Rol y sin_rol se revisan ANTES de la clave: en un Worker sin clave el registro del dueño igual se ve. El ping no llama al modelo.
-  const configured = !!env.DEEPSEEK_API_KEY || String(env.ASSISTANT_DEMO || '') === '1';
+  // Proveedor: solo de la config del Worker (más la elección guardada del dueño entre los que tienen clave). Nada del celular.
+  const store0 = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null);
+  const cfg = body && body.ping === true ? null : resolveProvider(env, await readProviderChoice(store0));
+  const configured = !!(cfg && cfg.ok) || String(env.ASSISTANT_DEMO || '') === '1';
   // Respuesta MÍNIMA (Bots 3 y 5): solo si este aparato tiene asistente y con qué nivel. Nada del dueño, de otros aparatos ni de la configuración.
   if (body && body.ping === true) return json(pingBody(role));
   // Falla cerrado: sin clave no hay chat ni tarjetas, salvo modo demostración explícito (ASSISTANT_DEMO=1, solo prototipo local y pruebas).
@@ -1098,15 +1041,17 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (role !== 'owner' && body && body.image != null) return json(IMAGE_OWNER_ONLY, 403); // respaldo: nunca llega a parseChatBody
   const parsed = parseChatBody(body);
   if (parsed.error) return json({ error: parsed.error }, parsed.error === 'image_too_large' ? 413 : 400);
+  // Foto con un modelo que no lee fotos: «no disponible», sin cupo y sin llamar al proveedor.
+  if (parsed.image && cfg && cfg.ok && !cfg.vision) return json(IMAGE_UNSUPPORTED, 422);
   const ctx = sanitizeContext(parsed.context, role);
   // Documento del dueño pedido con todas las letras por un empleado: 403 en JSON antes de abrir el canal, sin cupo ni DeepSeek (Bot 5).
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
-  const store = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null);
+  const store = store0;
   if (!store) return json({ error: 'usage_store_missing' }, 500);
   const quota = await reserveUsage(store, { ...auth, posRole: role }, env, (deps.now || Date.now)(), !!parsed.image);
   if (!quota.ok) return json({ error: quota.reason, retry_after_s: quota.retryAfter || null }, quota.reason === 'busy' ? 503 : 429);
 
-  const mode = env.DEEPSEEK_API_KEY ? 'deepseek' : 'mock';
+  const mode = cfg && cfg.ok ? cfg.id : 'mock'; // 'deepseek', 'anthropic', … o 'mock' (demostración)
   const now = (deps.now || Date.now)();
   // Todas las puertas pasaron: recién aquí se abre el canal en partes (si el celular lo pidió y la ruta lo permite).
   const sse = parsed.stream && deps.sse ? deps.sse : null;
@@ -1128,8 +1073,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   } else {
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image });
     bytes.push(payloadBytes(req));
-    result = emit ? await callDeepSeekStream(req, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
-      : await callDeepSeek(req, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
+      : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     if (emit && !result.error && !result.forbidden) emit.flush();
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}) }, ERR_STATUS[result.error] || 502);
   }
@@ -1193,14 +1138,14 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
     // Segunda llamada (sin herramientas) para explicar el resumen en palabras sencillas. Si falla, queda el texto armado con los números.
-    if (mode === 'deepseek' && toolMsgs.length) {
+    if (mode !== 'mock' && toolMsgs.length) {
       const calls = consultas.map((c) => ({ id: c._call.id, type: 'function', function: { name: 'consultar', arguments: typeof c._call.arguments === 'string' ? c._call.arguments : JSON.stringify(c._call.arguments || {}) } }));
       const req2 = { model: DEEPSEEK_MODEL, messages: [...req.messages, { role: 'assistant', content: result.content || '', tool_calls: calls }, ...toolMsgs], thinking: { type: 'disabled' }, temperature: 0.2, max_tokens: 350, stream: false };
       bytes.push(payloadBytes(req2));
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
       if (emit) { emit.reset(); beat.start(); beat.tick(); }
-      const second = emit ? await callDeepSeekStream(req2, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
-        : await callDeepSeek(req2, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+      const second = emit ? await callModelStream(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
+        : await callModel(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       if (emit && !second.error) emit.flush();
       if (!second.error && second.content) reply = role !== 'owner' ? redactOwnerData(cleanText(second.content, 1200)) : cleanText(second.content, 1200);
     }

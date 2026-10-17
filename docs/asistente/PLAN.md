@@ -126,3 +126,20 @@ Importante: DeepSeek procesa los datos en servidores en China. Por eso el protot
 - Bot 4: puntitos mientras llega, «Pensando» tras un reset, tandas de ~48 caracteres al pintar, contraste del aviso en modo oscuro, sin «unid..», último párrafo con texto cuenta para el espacio de abajo.
 - Bot 2 (17-10): la ventana de 60 tras «costo/margen/…» ya no se cierra con punto, salto de línea, «;» ni «pero/aunque/sino/mientras»; solo una etiqueta de venta explícita (no negada) deja ver el monto. «P. de compra» y «Margen Bruto/Neto/Total/Unitario» cuentan. Las 21 frases de Bot 2 están como prueba (texto entero y trozos de 1, 2, 5, 47, 48, 49 y 100).
 - Pendiente: medirlo con DeepSeek real; el tiempo de inactividad del dueño sigue esperando su decisión.
+
+### Elegir el proveedor de IA (17-10)
+El asistente ya no está atado a DeepSeek. El dueño pone la clave en el servidor (Cloudflare) y elige el proveedor en Configuración › Aparatos › «Asistente: proveedor de IA»: ve cuáles dicen «Conectado» o «Falta clave», puede tocar «Probar» y cambia con «Usar» → «Confirmar» (sin PIN). La clave nunca se ve ni se escribe en el teléfono.
+
+| Proveedor | Secreto con la clave | Para que sea el de por defecto |
+|---|---|---|
+| DeepSeek | `DEEPSEEK_API_KEY` | `AI_PROVIDER=deepseek` (o solo la clave, como antes) |
+| OpenAI | `OPENAI_API_KEY` | `AI_PROVIDER=openai` |
+| xAI Grok | `XAI_API_KEY` | `AI_PROVIDER=xai` |
+| OpenRouter | `OPENROUTER_API_KEY` | `AI_PROVIDER=openrouter` |
+| Groq | `GROQ_API_KEY` | `AI_PROVIDER=groq` |
+| Mistral | `MISTRAL_API_KEY` | `AI_PROVIDER=mistral` |
+| Together | `TOGETHER_API_KEY` | `AI_PROVIDER=together` |
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `AI_PROVIDER=anthropic` |
+| Google Gemini | `GEMINI_API_KEY` | `AI_PROVIDER=gemini` |
+
+Opcional: `AI_MODEL` (otro modelo), `AI_API_KEY` (clave del proveedor de `AI_PROVIDER` si no se usa su nombre propio), `AI_BASE_URL` (solo https de la lista; un proxy propio necesita `AI_ALLOW_CUSTOM_BASE=1`), `AI_VISION=1|0`. Sin proveedor listo el asistente responde «no disponible» (503). Detalle en CONTRATO.md, «Proveedor de IA». No necesita migración (usa `pos_settings`). Pendiente: probar cada proveedor con clave real (las pruebas usan respuestas de mentira, sin red).

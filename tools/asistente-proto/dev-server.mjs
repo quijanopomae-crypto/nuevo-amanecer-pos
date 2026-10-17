@@ -5,6 +5,7 @@
 // - El rol se simula con el encabezado x-proto-role (solo aquí; el Worker real usa la sesión).
 // - Sin DEEPSEEK_API_KEY en el entorno funciona en modo demostración.
 // Uso: node tools/asistente-proto/dev-server.mjs [puerto]
+import { providerRoute, PROVIDER_PATH } from '../cloudflare-lab/src/pos-assistant-provider-route.js';
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -22,6 +23,8 @@ const store = createMemoryUsageStore();
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 const env = { ASSISTANT_OWNER_BOOTSTRAP: '1', ASSISTANT_ENABLED: '1', DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY || '', DEEPSEEK_BASE_URL: process.env.DEEPSEEK_BASE_URL || '', ASSISTANT_PER_MINUTE: process.env.ASSISTANT_PER_MINUTE || '', ASSISTANT_CONFIRM_SECRET: randomBytes(24).toString('hex'), ASSISTANT_DEMO: '1' };
+// Proveedor: solo de variables del proceso local (nunca del celular ni del repo).
+for (const k of ['AI_PROVIDER', 'AI_MODEL', 'AI_BASE_URL', 'AI_ALLOW_CUSTOM_BASE', 'AI_API_KEY', 'AI_VISION', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY', 'OPENROUTER_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY', 'TOGETHER_API_KEY']) if (process.env[k]) env[k] = process.env[k];
 // SOLO PROTOTIPO LOCAL: aprobación del dueño de mentira (cualquier PIN de 4-8 dígitos), en memoria, ligada al operation_id y de un solo uso.
 // En el Worker real la da POST /auth/owner-approval (pos-roles.js) con el PIN verdadero y se gasta con consumeApproval.
 const demoApprovals = new Map();
@@ -91,6 +94,13 @@ http.createServer(async (req, res) => {
         return send(200, { ok: true });
       }
       return send(404, { error: 'not_found' });
+    }
+    // Proveedor del asistente: la misma ruta del Worker (rol de prueba por x-proto-role).
+    if (url.pathname === PROVIDER_PATH || url.pathname === PROVIDER_PATH + '/test' || url.pathname === PROVIDER_PATH + '/select') {
+      const chunks = []; for await (const c of req) chunks.push(c);
+      const r = await providerRoute(new Request(url, { method: req.method, headers: { 'content-type': 'application/json' }, body: req.method === 'GET' ? undefined : Buffer.concat(chunks) }), env, { principalId: 'proto-device-owner' }, json,
+        { store, resolveRole: async () => (req.headers['x-proto-role'] === 'empleado' ? 'empleado:consultas' : req.headers['x-proto-role'] ? 'sin_rol' : 'owner') });
+      res.writeHead(r.status, { 'content-type': 'application/json' }); res.end(await r.text()); return;
     }
     // Nivel del asistente por aparato de empleado (en memoria; en el Worker real: pos-assistant-access.js con PIN real).
     if (url.pathname === '/auth/assistant/employee-access') {

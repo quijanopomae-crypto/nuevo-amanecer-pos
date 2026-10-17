@@ -303,6 +303,7 @@
     product_missing: ['Ese producto ya no está en el inventario.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
     review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
     empty_after_review: ['Quitaste todas las filas. Pide la compra de nuevo.'], other_device: ['Esta propuesta es de otro aparato. Pídela aquí otra vez.'],
+    image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
     image_too_large: ['La foto es muy grande. Toma otra más cerca.'], bad_image: ['No pude leer esa foto. Toma otra con más luz.'],
     not_found: ['El asistente no está disponible por ahora.'], HTTP_404: ['El asistente no está disponible por ahora.'], bad_request: [MSG.again, true], bad_token: [MSG.changed]
   };

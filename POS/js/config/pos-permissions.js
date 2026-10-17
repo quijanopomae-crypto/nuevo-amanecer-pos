@@ -44,6 +44,9 @@
   API_ROUTES.push({ path: '/auth/assistant/confirm', methods: ['POST'], roles: ['owner', 'empleado'] });
   API_ROUTES.push({ path: '/auth/assistant/employee-access', methods: ['GET', 'POST'], roles: owner });
   API_ROUTES.push({ path: '/auth/assistant/audit', methods: ['GET'], roles: owner });
+  // Proveedor del asistente: solo dueño (el Worker responde 403 admin_only a cualquier otro).
+  API_ROUTES.push({ path: '/auth/assistant/provider', methods: ['GET'], roles: owner });
+  ['test', 'select'].forEach(function (k) { API_ROUTES.push({ path: '/auth/assistant/provider/' + k, methods: ['POST'], roles: owner }); });
   // Registro del aparato dueño (detrás de ASSISTANT_OWNER_BOOTSTRAP=1). register: aparato sin fila (cuenta como dueño); el servidor rechaza empleados (409).
   API_ROUTES.push({ path: '/auth/assistant/owner-device', methods: ['GET'], roles: owner });
   ['register', 'approve', 'revoke'].forEach(function (k) { API_ROUTES.push({ path: '/auth/assistant/owner-device/' + k, methods: ['POST'], roles: owner }); });
