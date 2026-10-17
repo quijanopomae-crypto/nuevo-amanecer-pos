@@ -37,10 +37,10 @@ const PIN = [
   // (Bot 2 sobre d72b7601) regresión frente a 58200f60: sin palabras de corte
   ['la clave de la caja fuerte 4321', '4321', 'secreto'], ['la clave de la caja fuerte: 4321', '4321', 'secreto'], ['la clave de la caja chica 4321', '4321', 'secreto'], ['clave de la caja en 2024 era 4321', '4321', 'secreto'],
   ['la contraseña de la caja fuerte es 87654321', '87654321', 'secreto'], ['El pin de la caja es 1111 y la clave del wifi 2222', '2222', 'secreto'], ['El pin de la caja es 1111 y la clave del wifi 2222', '1111', 'secreto'], ['El PIN de la caja: era 4321', '4321', 'secreto'], ['La contraseña del sistema cambió a 87654321', '87654321', 'secreto'], ['clave de acceso de la puerta trasera: es 2580', '2580', 'secreto'],
-  ['contraseña del año 2024', '2024', 'tapa'], ['La clave del negocio en 2024 fue el arroz.', '2024', 'tapa'], ['Producto clave de la semana 2500 unidades', '2500', 'normal'],
-  ['La clave para vender más es tener 1500 unidades.', '1500', 'normal'], ['Cambié la clave de la caja en 2024 y anda bien.', '2024', 'tapa'], ['El token de la sesión del 2026 venció', '2026', 'normal'],
-  ['Mi clave para el año 2025: vender más', '2025', 'tapa'], ['la clave de este mes son 3000 soles', '3000', 'normal'], ['clave del producto Arroz Costeño 5kg código 77501234', '77501234', 'normal'],
-  ['La clave del pedido: Arroz 2024', 'Arroz', 'normal'], ['clave de la venta S/ 1250', '1250', 'normal'], ['clave de la caja chica: 2500 soles', '2500', 'normal'], ['Producto clave de la semana: Galleta Soda 6x4', 'Soda', 'normal'],
+  ['contraseña del año 2024', '2024', 'normal'], ['La clave del negocio en 2024 fue el arroz.', '2024', 'normal'], ['Producto clave de la semana 2500 unidades', '2500', 'normal'],
+  ['La clave para vender más es tener 1500 unidades.', '1500', 'normal'], ['Cambié la clave de la caja en 2024 y anda bien.', '2024', 'normal'], ['El token de la sesión del 2026 venció', '2026', 'normal'],
+  ['Mi clave para el año 2025: vender más', '2025', 'normal'], ['la clave de este mes son 3000 soles', '3000', 'normal'], ['clave del producto Arroz Costeño 5kg código 77501234', '77501234', 'normal'],
+  ['La clave del pedido: Arroz 2024', 'Arroz', 'normal'], ['clave de la venta S/ 1250', '1250', 'secreto'], ['clave del precio de venta S/ 1250', '1250', 'normal'], ['clave de la caja chica: 2500 soles', '2500', 'normal'], ['Producto clave de la semana: Galleta Soda 6x4', 'Soda', 'normal'],
   ['El producto clave es Leche Gloria 400g', 'Gloria', 'normal'],
   // tapados de más ACEPTADOS (un pin nunca es una cantidad; Bot 5 los dejó como INFO)
   ['pin 4321 unidades', '4321', 'tapa'], ['El pin de la impresora 1234 no funciona', '1234', 'tapa'], ['La clave del éxito: 5000 ventas', '5000', 'tapa'], ['La clave del negocio está en el arroz 5x2025', '5x2025', 'tapa']
@@ -65,8 +65,8 @@ test('1) PIN numérico (Bot 5 pin-d72b): secretos tapados en las 4 vías, normal
   assert.ok(sees(VIAS.own('pin ' + 'x'.repeat(60) + ' 4321'), '4321')); assert.ok(!sees(VIAS.own('pin ' + 'x'.repeat(50) + ' 4321'), '4321'));
   // un número detrás de «código»/«EAN» no es PIN (el dueño ve el código)
   assert.ok(sees(VIAS.own('clave del producto Arroz código 77501234'), '77501234'));
-  // un número detrás de S/ o $ nunca es PIN
-  assert.ok(sees(VIAS.own('pin de cobro S/ 1250'), '1250'));
+  // (Bot 2 sobre 3ee80c18) S/ o $ ya no sueltan el número solos: hace falta precio/costo/monto en medio (o decimales, que nunca entran)
+  assert.ok(!sees(VIAS.own('pin de cobro S/ 1250'), '1250')); assert.ok(sees(VIAS.own('clave del costo S/ 1250'), '1250')); assert.ok(sees(VIAS.own('pin de cobro S/ 12.50'), '12.50'));
 });
 
 test('1b) en partes: con la unidad recién por llegar («2500 » + «unidades») no se suelta antes de tiempo', () => {

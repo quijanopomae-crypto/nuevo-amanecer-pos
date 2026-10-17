@@ -64,7 +64,9 @@ test('tablas y tarjetas: la serie en la celda (con etiqueta de tarjeta y con má
   assert.deepEqual(created.map((x) => x.className), ['na-asst-code']);
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   assert.match(UI, /'<div class="note" data-docnote><\/div>'/);
-  assert.match(UI, /var dn = c\.querySelector\('\[data-docnote\]'\); if \(dn\) C\.appendCoded\(doc, dn, \[p\.proveedor, p\.documento, p\.fecha\]/);
+  // (Bot 4 sobre 3ee80c18) cada valor en su span (proveedor y documento aislados de izquierda a derecha), la serie sigue por appendCoded
+  assert.match(UI, /var dn = c\.querySelector\('\[data-docnote\]'\); if \(dn\) \[\[p\.proveedor, true\], \[p\.documento, true\], \[p\.fecha, false\]\]/);
+  assert.match(UI, /if \(x\[1\]\) ltrIsolate\(sp\); C\.appendCoded\(doc, sp, String\(x\[0\]\)\)/);
 });
 
 test('XSS (Bot 5): etiquetas alrededor/dentro de una serie salen como texto; 0 elementos creados aparte de la span; nada de innerHTML', () => {
