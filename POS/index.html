@@ -1336,6 +1336,7 @@
 // CANON-PWA-UPDATE-001: actualización visible, accionable y de recarga única.
 if ('serviceWorker' in navigator && window.isSecureContext) {
   window.addEventListener('load', function () {
+    var PWA_UPDATE_FAIL_MS = 120000;
     var hadController = !!navigator.serviceWorker.controller;
     var reloadingForWorkerUpdate = false;
     var updateBusy = false;
@@ -1489,7 +1490,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
           installing.removeEventListener('error', failPwaUpdate);
         };
       }
-      updateInstallTimer = window.setTimeout(failPwaUpdate, 60000);
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
       inspect();
     }
     async function checkPwaUpdate(registration) {
@@ -1508,7 +1509,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
       updateAttempt++;
       clearInstallWatch();
       setUpdateUi('Descargando la versión nueva…', 'working', 'Descargando…', false);
-      updateInstallTimer = window.setTimeout(failPwaUpdate, 60000);
+      updateInstallTimer = window.setTimeout(failPwaUpdate, PWA_UPDATE_FAIL_MS);
       if (!await checkPwaUpdate(pwaRegistration) || updateFailed || updateDismissed || reloadingForWorkerUpdate) return;
       if (pwaRegistration.waiting) {
         clearInstallWatch();
@@ -1580,7 +1581,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
         }
         worker.addEventListener('statechange', inspect);
         worker.addEventListener('error', failed);
-        timer = window.setTimeout(function () { finish(false); }, 60000);
+        timer = window.setTimeout(function () { finish(false); }, PWA_UPDATE_FAIL_MS);
       });
     }
 

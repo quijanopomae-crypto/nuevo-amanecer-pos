@@ -68,7 +68,13 @@ for (const width of [390, 768, 1366]) {
       let navigations = 0;
       page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations++; });
       const fail = async () => {
-        if (failure === 'timeout') await page.clock.runFor(60001);
+        if (failure === 'timeout') {
+          await page.clock.runFor(119000);
+          await expect(prompt).toBeVisible();
+          await expect(prompt).not.toHaveAttribute('data-state', 'error');
+          // Reach 120001 ms in total, just beyond the 120 s failure deadline.
+          await page.clock.runFor(1001);
+        }
         else await page.evaluate(type => (window as any).__pwaUpdateTest.fail(type), failure);
       };
       await fail();
@@ -91,7 +97,7 @@ for (const width of [390, 768, 1366]) {
       await fail();
       await expect(prompt).toBeHidden();
       await expect(prompt).toHaveCount(1);
-      await page.clock.runFor(65000);
+      await page.clock.runFor(125000);
       await expect(prompt).toBeHidden();
       expect(navigations).toBe(0);
     });

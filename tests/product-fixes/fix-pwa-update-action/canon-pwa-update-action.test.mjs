@@ -178,7 +178,7 @@ for (const failure of ['redundant', 'update rejection', 'install error', 'timeou
         app.window.dispatchEvent({ type: 'online' });
       }
       if (failure === 'timeout') {
-        t.mock.timers.tick(59999);
+        t.mock.timers.tick(119999);
         assert.equal(app.prompt.hidden, false);
         assert.notEqual(app.prompt.dataset.state, 'error');
         t.mock.timers.tick(1);
@@ -226,7 +226,10 @@ test('retry check that never settles times out and a late resolution does not re
   let resolve;
   app.setUpdate(() => new Promise(done => { resolve = done; }));
   await app.click();
-  t.mock.timers.tick(60000);
+  t.mock.timers.tick(119999);
+  assert.equal(app.prompt.hidden, false);
+  assert.equal(app.prompt.dataset.state, 'working');
+  t.mock.timers.tick(1);
   assert.equal(app.prompt.hidden, true);
   resolve(app.registration);
   await flushPromises();
@@ -247,7 +250,7 @@ test('installed success clears the deadline, preserves ready messages and manual
   worker.changeState('installed');
   assert.equal(app.status.textContent, 'Hay una versión nueva, recarga.');
   assert.equal(app.action.textContent, 'Recargar');
-  t.mock.timers.tick(60000);
+  t.mock.timers.tick(120000);
   assert.equal(app.prompt.dataset.state, 'ready');
   await app.click();
   assert.equal(app.status.textContent, 'Aplicando la versión nueva…');
@@ -269,7 +272,7 @@ test('retry success resumes the installed, activation and single reload flow', a
   await app.click();
   worker.changeState('installed');
   assert.equal(app.status.textContent, 'Hay una versión nueva, recarga.');
-  t.mock.timers.tick(60000);
+  t.mock.timers.tick(120000);
   assert.equal(app.prompt.dataset.state, 'ready');
   await app.click();
   assert.equal(worker.messages[0].type, 'NA_ACTIVATE_UPDATE');
@@ -282,14 +285,14 @@ test('activation clears the deadline and controllerchange still waits for an act
   const app = await updater(t);
   const worker = app.installingWorker();
   worker.changeState('activated');
-  t.mock.timers.tick(60000);
+  t.mock.timers.tick(120000);
   assert.notEqual(app.prompt.dataset.state, 'error');
   app.context.cart.push({ id: 'test-product' });
   app.serviceWorker.dispatchEvent({ type: 'controllerchange' });
   app.serviceWorker.dispatchEvent({ type: 'controllerchange' });
   assert.equal(app.status.textContent, 'Actualización lista. Se aplicará al terminar la venta en curso.');
   assert.equal(app.action.textContent, 'Esperando la venta…');
-  t.mock.timers.tick(60000);
+  t.mock.timers.tick(120000);
   assert.equal(app.reloads(), 0);
   app.context.cart.length = 0;
   t.mock.timers.tick(1000);
