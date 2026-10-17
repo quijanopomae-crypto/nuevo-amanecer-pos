@@ -231,3 +231,39 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - **Espacios sin redactText (Bot 3)**: en la etapa de datos sensibles, un tramo soltado que es solo espacios sale tal cual, sin pasar por `redactText` (ningún patrón puede tapar solo espacios). Dónde se corta no cambia: con una clave/pin/token, RUC, DNI o `data:` esperando su valor no se suelta nada, tampoco durante una racha de espacios. 3300 espacios en trozos de 1: dueño 2,4 → 0,6 ms; empleado 3,2 → 1,2–2,1 ms. La salida es la misma.
 - **Tope de 1200 con aviso (Bot 2)**: igual para dueño y empleado, contado sobre el texto YA filtrado (lo que se ve). Si se pasa, se corta en el último salto de línea dentro de los últimos 160 caracteres (una fila no queda a medias); si no hay, en el último espacio; si tampoco, en 1200. Después va una línea en blanco y «Respuesta cortada por largo. Escriba "sigue" para ver el resto, o pida el documento.». Pasa igual en la respuesta final (`capReply`) y en lo pintado: cerca del tope el emisor espera a lo más 160 caracteres para saber si se pasa, así las dos coinciden. `max_tokens` no cambia.
 - **«sigue» del empleado (Bot 5)**: si el último par FIRMADO y válido terminó con el aviso, el filtro del empleado arranca con un contexto (`cutPrime`): la cola del párrafo anterior (~150), más el comienzo del último párrafo (presentación y encabezado, ~300, en líneas enteras), más su última línea. Unos 300–600 caracteres. El contexto pone el estado (presentación, zona negada, tabla abierta) y nunca sale. No hay contexto para el dueño ni sin par válido. Costo: unos 0,1 ms; la retención no cambia (40 → 40).
+
+## Servidor sobre 5c19afb8 (Bot 5 «sigue», tope y tabla; Bot 2 tapado de más)
+
+### «sigue»: el contexto solo puede tapar más (Bot 5, FALLA en 5c19afb8)
+
+- **Marca de corte firmada**: el SERVIDOR marca el par que él mismo cortó (`cut: true` en el turno del asistente). La marca va DENTRO de la firma HMAC del par: solo se agrega `"cut"` a lo firmado cuando es true, así que los pares sin corte firman igual que antes. Si el aparato agrega `cut:true` a un par sin corte, o se lo quita a uno cortado, la firma no verifica y el par se descarta entero. El celular guarda `cut` tal cual con el turno.
+- **Nunca por el texto**: `cutPrime(reply, cut)` ya no mira si la respuesta termina con el aviso. Sin la marca firmada devuelve false. Una respuesta del modelo que trae el aviso no prepara nada.
+- **Solo un sí/no**: de la parte cortada pasa solo «había contexto del dueño abierto». Cuenta como sí: una presentación sin negar, la ventana de una palabra del dueño, una lista o tabla presentada por el dueño, o una tabla con columna del dueño. Nunca pasa el estado de una tabla de venta, de una zona negada ni de columnas.
+- **Superconjunto por construcción**: con el sí, el filtro corre exactamente igual que sin contexto (mismo estado, mismas decisiones). Además tapa todo monto que dejaría ver, mientras dure: hasta la fila `|---|` de una tabla NUEVA (desde ahí deciden sus columnas: una tabla de venta nueva se ve) o hasta el 2.º párrafo de la continuación.
+- **Diferencial**: 455 casos × 17 contextos, los 16 de Bot 5 más «sí» forzado, tratando también los avisos forjados como marcados (el peor caso): 0 destapes, 822 más estrictos, el contexto nunca sale, partes = entero. 30 000 textos al azar más el corpus de 710 frases, sí contra no: 0 destapes. Hay una prueba en el repo.
+
+### Tope de 1200 (Bot 5)
+
+- El corte nunca parte una etiqueta («[dato del dueño]», «[oculto]», «[imagen omitida]»). Nunca deja «S/ », «US$», «$» o «PEN» sin número, ni un monto a medias en el corte duro sin espacios: retrocede hasta antes de la etiqueta o la moneda, como mucho `CUT_SLACK` = 24 caracteres más.
+- Lo pintado espera `CUT_ZONE + CUT_SLACK` = 184 caracteres cerca del tope (antes 160) y corta en el mismo lugar que `capReply`.
+- Sonda de tope de Bot 5 (1586 casos): 0 fallas.
+
+### Tabla del dueño con una línea en medio (Bot 5)
+
+- UNA línea, en blanco o de texto, justo después de `|---|` ya no corta la tabla, ni en la capa de columnas ni en la de presentación. Ejemplo: «Te paso los costos:\n| Producto | Precio |\n|---|---|\n\n| Producto 0 | S/ 1.80 |» se tapa. Una tabla de venta con esa línea se sigue viendo.
+
+### Tapado de más (Bot 2 sobre 66f1ecb5)
+
+- **(a)** En la línea SIGUIENTE (mirada de 20) solo cuentan frases de compra: «lo que pagué», «me costó», «costó», «(costo)», «costo:» + monto, «a costo», «de compra», «precio de compra», «lo pagamos», «me salió», «lo traje», «lo conseguí», «proveedor». «costo» suelto no cuenta: «Arroz S/ 4.20\nEl costo lo ve el dueño.» deja ver 4.20.
+- **(b)** La palabra del dueño dentro de un ítem de lista tapa solo ese ítem: «Precios de hoy:\n- Arroz: costo S/ 1.80\n- Leche: S/ 3.80» tapa 1.80 y deja 3.80. Una presentación del dueño antes de la lista sigue tapando todos los ítems. Lo mismo vale para las filas con tabulador.
+- **(c)** «Compras del cliente:» (título solo por «compras», con «cliente») no presenta la lista ni la tabla de abajo. Con costo, proveedor o «de compra» en el ítem, ese ítem se tapa igual.
+- **(d)** La presentación del dueño, y la ventana de 60 de una palabra del dueño, alcanzan su párrafo y el inmediatamente siguiente. Un párrafo neutro en medio las corta.
+- Los 9 casos del informe de Bot 2 pasan a verse. En el corpus de 710 frases solo cambian esos 9, y ninguna prueba de tapado existente cambió.
+
+### Queda como INFO (sin arreglar, a propósito)
+
+- **factura**: los montos de una factura de compra (eco de la foto, lista o tabla «De tu factura:», «Según la factura…») se siguen viendo para el empleado. Es el mismo INFO de antes. El empleado no puede leer facturas: la foto es solo del dueño.
+- **Soltar los espacios mientras una etiqueta espera su valor (Bot 3, opcional)**: no se hizo, porque el texto visible no queda igual. Con RUC, DNI y «data:», la redacción del texto entero se traga los espacios («RUC:<500 espacios>20123456789» → «RUC *******6789», «DNI ****5678», «[imagen omitida]»), así que soltarlos antes cambia la forma. Con clave o pin haría falta un estado nuevo sin la palabra en el mismo tramo, con riesgo de soltar el valor. La retención de esas rachas sigue igual (515–565).
+- Texto sin ningún espacio: la etapa de datos sensibles retiene todo hasta el final (1547 en la sonda de Bot 5). Sin fuga.
+- Un par cortado de una charla anterior (<24 h) se puede repetir y vuelve a preparar el filtro. Ahora solo tapa más.
+- «Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10» y los límites ya conocidos (más de 20 caracteres en la línea siguiente, «Precios:», títulos de más de 120 caracteres o sin «:»).

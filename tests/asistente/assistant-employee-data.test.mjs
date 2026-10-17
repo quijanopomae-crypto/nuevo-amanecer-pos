@@ -134,7 +134,7 @@ test('dueño: su historial sigue igual (sin exigir firma); sin secreto del servi
 });
 test('celular: guarda los turnos firmados tal cual; si cambia el rol (dueño -> empleado) o se cierra la sesión, se borra la charla anterior (historial y pantalla)', () => {
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
-  assert.match(UI, /if \(Array\.isArray\(d\.turns\) && d\.turns\.length === 2\) history\.push\(\{ role: 'user', content: d\.turns\[0\]\.content, sig: d\.turns\[0\]\.sig, n: d\.turns\[0\]\.n, iat: d\.turns\[0\]\.iat \}, \{ role: 'assistant', content: d\.turns\[1\]\.content, sig: d\.turns\[1\]\.sig, n: d\.turns\[1\]\.n, iat: d\.turns\[1\]\.iat \}\)/);
+  assert.match(UI, /if \(Array\.isArray\(d\.turns\) && d\.turns\.length === 2\) history\.push\(\{ role: 'user', content: d\.turns\[0\]\.content, sig: d\.turns\[0\]\.sig, n: d\.turns\[0\]\.n, iat: d\.turns\[0\]\.iat \}, \{ role: 'assistant', content: d\.turns\[1\]\.content, sig: d\.turns\[1\]\.sig, n: d\.turns\[1\]\.n, iat: d\.turns\[1\]\.iat, cut: d\.turns\[1\]\.cut === true \}\)/);
   assert.match(UI, /var prevRole = access \? access\.role : null;/);
   assert.match(UI, /if \(prevRole && \(!access \|\| access\.role !== prevRole\) && \(rootEl \|\| panelEl \|\| history\.length\)\) dropUi\(\);/);
   assert.match(UI, /function dropUi\(\) \{[\s\S]*?history\.length = 0;/);
