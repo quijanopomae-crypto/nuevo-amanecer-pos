@@ -124,6 +124,38 @@ test('(a) owner opens a report and other pages: 0 POST /settings even if the ser
   expect(mock.posts).toEqual([]);
 });
 
+test('(a2) stale local config (old IGV, extra ticket field) differs from the server, owner with GET OK opens reports: 0 POST and the server state is unchanged', async ({ page }) => {
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  // Servidor: la configuración buena del dueño (otro IGV). El ticket del servidor no tiene el campo viejo del aparato.
+  const flags = { ...(local['pos.flags'] as Record<string, unknown>) };
+  flags.igvActive = !flags.igvActive;
+  const serverState = asServer({ ...local, 'pos.flags': flags });
+  mock.settings = serverState;
+  const before = JSON.stringify(serverState);
+  // Aparato con configuración local vieja: IGV anterior y un campo de ticket que el servidor ya no tiene. Se escribe
+  // directo en na_local_config_v1 (sin saveAppState) y la caché coincide con el servidor (revisión 3).
+  await page.evaluate(async () => {
+    if (!localStorage.getItem('na_local_config_v1')) await (window as any).saveAppState();
+    const state = JSON.parse(localStorage.getItem('na_local_config_v1') || 'null');
+    state.appConfig.ticket = { ...(state.appConfig.ticket || {}), mensajeAntiguo: 'Texto viejo de este aparato' };
+    localStorage.setItem('na_local_config_v1', JSON.stringify(state));
+  });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await boot(page, mock, serverState);
+  expect(await page.evaluate(() => (window as any).eval('appConfig').ticket.mensajeAntiguo)).toBe('Texto viejo de este aparato');
+  // Misma navegación que (a). El config-g.js anterior subía aquí pos.ticket con el campo viejo (y pisaba el servidor).
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  await page.evaluate(() => (window as any).goPage('pageClienteHistorial'));
+  await expect(page.locator('#pageClienteHistorial')).toHaveClass(/active/);
+  await navigate(page);
+  expect(mock.gets).toBeGreaterThan(0);
+  expect(mock.posts).toEqual([]);
+  expect(JSON.stringify(mock.settings)).toBe(before);
+  expect((await localSettings(page))['pos.flags']).toEqual(flags);
+});
+
 test('(b) a real change in Configuración sends exactly one POST with that key and the confirmed revision', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   const mock = newMock();
