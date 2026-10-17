@@ -107,7 +107,7 @@ const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:l
 const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:(?:anterior|actual|habitual|normal|real|unitario|viejo|nuevo)\\s+)?(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron)' +
   // Frases de bodega del dueño (17-10): «lo que pagué», «pagué», «me salió a», «me sale a», «lo traje a». «me costó», «nos costó», «mi costo» ya entran por «costó»/«costo»;
   // «lo compré a» por BUY_WORD. «pagó» (el cliente pagó, pagó con Yape) NO es palabra del dueño; «pague» sin tilde solo dentro de «lo que pague».
-  '|lo\\s+que\\s+pagu[eé]|pagué|me\\s+(?:sali[óo]|sale)\\s+a|lo\\s+traje\\s+a)' + NOT_LETTER;
+  '|lo\\s+que\\s+pagu[eé]|pagué|pagamos|(?:me|nos)\\s+sali[óo]\\s+a|me\\s+sale\\s+a|lo\\s+traje\\s+a|lo\\s+consegu[íi]\\s+a)' + NOT_LETTER;
 const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó)' + NOT_LETTER;
 const UNIT = '(?:unidad(?:es)?|unid|unds?|uds?|u|cajas?|cjs?|docenas?|kg|kilos?|g|gr|gramos?|paquetes?|pqts?|piezas?|pzas?|frascos?|sobres?|bl[íi]sters?|tabletas?|pastillas?|bolsas?|litros?|lts?|l|ml|botellas?|latas?|packs?|cientos?)' + NOT_LETTER;
 const NUM = '(?:\\d{1,3}(?:[.,]\\d{3})+|\\d{1,6})(?:[.,]\\d{1,2})?(?!\\d)';
@@ -145,25 +145,49 @@ const OWNER_HEADER = { test: (c) => OWNER_HEADER_RE.test(String(c).toLowerCase()
 // antes de la separadora |---| (Bot 5: una fila de datos con «Costo» en el nombre ya no vuelve encabezado al resto).
 const SEP_CELL = /^\s*:?-{2,}:?\s*$/;
 function headerCols(cells) { const idx = cells.map((c, n) => (OWNER_HEADER.test(c) ? n : -1)).filter((n) => n >= 0); return idx.length && cells.filter((c) => c.trim()).length >= 2 ? idx : null; }
+// Etiqueta de venta explícita como encabezado o celda (PVP, P. venta, Precio de venta, Precio venta, Venta).
+const SALE_CELL_RE = /^\s*(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?venta|venta)\s*$/;
+const isSaleCell = (c) => SALE_CELL_RE.test(String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+// Montos dentro de una celda (mismo patrón que el lector; no pegado a letra o número por delante).
+const AMOUNT_G = new RegExp(AMOUNT_Y.source, 'gi');
+const cellAmounts = (c, f) => c.replace(AMOUNT_G, (m, off, all) => { const p = all[off - 1]; return p && (isLetter(p) || isDigit(p)) ? m : f(m); });
+const hasAmount = (c) => { let any = false; cellAmounts(c, (m) => { any = true; return m; }); return any; };
+// Presentación del dueño justo antes de la tabla (Bot 4/5 sobre 7150d291): la última frase de la línea de texto anterior (con o sin
+// líneas en blanco) tiene una palabra del dueño, o la frase de antes tiene una palabra del dueño NEGADA (zona negada). Párrafos más
+// atrás no cuentan. Esa tabla tapa TODO monto salvo las columnas con encabezado de venta; sin encabezado, todos.
+const OWNER_ANY_G = new RegExp('(?<![a-záéíóúñü])(?:' + OWNER_WORD + '|' + BUY_WORD + ')', 'gi');
+function ownerIntro(prevLine, line) {
+  const sents = (prevLine + '\n' + line).split(/(?:[.!?](?!\d)|\n)+/).map((x) => x.trim()).filter(Boolean);
+  const last = sents[sents.length - 1] || '', before = sents[sents.length - 2] || '';
+  OWNER_ANY_G.lastIndex = 0; if (OWNER_ANY_G.test(last)) return true;
+  OWNER_ANY_G.lastIndex = 0; for (let m; (m = OWNER_ANY_G.exec(before));) { if (NEG_BEFORE.test(before.slice(Math.max(0, m.index - 48), m.index))) return true; }
+  return false;
+}
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
-  if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
+  if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.introT = false; st.saleCols = null;
+    if (!d) { if (full.trim()) { st.intro = ownerIntro(st.introPrev || '', full); st.introPrev = full; } return null; } }
   const cells = full.split(d); st.sep = d; st.rows = (st.rows || 0) + 1;
+  if (st.rows === 1) { st.introT = !!st.intro; st.intro = false; st.introPrev = ''; st.saleCols = null; }
   const isSep = d === '|' && cells.some((c) => c.trim()) && cells.every((c) => !c.trim() || SEP_CELL.test(c));
   if (isSep) { if (!st.cols && st.prev && st.rows === st.prevRow + 1) st.cols = headerCols(st.prev); st.prev = null; return null; }
-  if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1; return null; }
-  st.prev = cells; st.prevRow = st.rows;
-  if (!st.cols) return null;
+  let header = false;
+  if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1;
+    if (st.introT && !cells.some(hasAmount)) { st.saleCols = cells.map((c, n) => (isSaleCell(c) ? n : -1)).filter((n) => n >= 0); header = true; }
+    if (!st.introT || header) return null; }
+  else { st.prev = cells; st.prevRow = st.rows; }
   let changed = false;
-  for (const n of st.cols) { if (n < cells.length && cells[n].trim()) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
+  if (st.cols && st.rows > 1) for (const n of st.cols) { if (n < cells.length && cells[n].trim() && !isSaleCell(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
+  if (st.introT) for (let n = 0; n < cells.length; n++) { if (st.saleCols && st.saleCols.includes(n)) continue;
+    const r = cellAmounts(cells[n], () => OWNER_DATA_LABEL); if (r !== cells[n]) { cells[n] = r; changed = true; } }
   return changed ? cells.join(d) : null;
 }
 function createTableLayer(out) {
-  const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0 }; let line = '', holding = false;
+  const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0, intro: false, introPrev: '', introT: false, saleCols: null }; let line = '', holding = false;
   return {
     push(txt) { const s = txt;
       for (let i = 0; i < s.length;) {
-        if (!line && !holding && st.cols) holding = true; // empieza una fila de una tabla del dueño: espera la línea entera
+        if (!line && !holding && (st.cols || st.intro || st.introT)) holding = true; // empieza una fila de una tabla del dueño: espera la línea entera
         const nl = s.indexOf('\n', i), piece = nl < 0 ? s.slice(i) : s.slice(i, nl + 1);
         line += nl < 0 ? piece : piece.slice(0, -1); i += piece.length;
         if (nl < 0) { if (!holding) out(piece); break; }
@@ -171,7 +195,7 @@ function createTableLayer(out) {
         line = '';
       }
     },
-    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; }
+    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.intro = false; st.introPrev = ''; st.introT = false; st.saleCols = null; }
   };
 }
 // Montos y palabras del dueño, en partes. out(texto). Lo único que espera es un monto (o lo que puede serlo) mientras se decide.
@@ -179,7 +203,7 @@ function createAmountLayer(out) {
   let buf = '', base = 0, k = 0, rel = 0, ctx = null, negZone = null;
   // Filas de tabla (| o tabulador, con o sin fila separadora): la ventana del dueño y la zona negada abiertas ANTES de una fila de verdad
   // (2+ celdas con texto) no pasan a las celdas de la fila siguiente; se sueltan al cerrar su primera celda con texto. Un monto en esa primera celda sigue tapado.
-  let row = { cells: 0, has: false, from: null };
+  let row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
   const ch = (i) => (i >= base ? buf[i - base] : undefined);
   const end = () => base + buf.length;
   const sticky = (re, i) => { re.lastIndex = i - base; const m = re.exec(buf); return m ? m[0].length : 0; };
@@ -214,16 +238,18 @@ function createAmountLayer(out) {
   // Monto sin palabra del dueño delante (Bot 3): espera hasta que termine la frase (. ; ! ? salto de línea). Si en la frase aparece
   // una palabra del dueño, se tapa; si aparece una etiqueta de venta o termina la frase, sale. Tope OWNER_RETRO caracteres: si se llega
   // al tope sin terminar la frase, se tapa (a prueba de fallas).
-  let memo = { e: -1, i: 0 }; // sigue donde quedó la vez anterior (lo ya mirado no cambia)
-  const retro = (e, final) => {
+  let memo = { e: -1, i: 0, nl: 0 }; // sigue donde quedó la vez anterior (lo ya mirado no cambia)
+  const retro = (e, final, nlMax = 0) => {
+    let nl = memo.e === e ? memo.nl : nlMax;
     for (let i = memo.e === e ? memo.i : e; ; i++) {
       if (i >= e + OWNER_RETRO) return true;
-      if (i >= end()) { memo = { e, i }; return final ? false : NEED; }
+      if (i >= end()) { memo = { e, i, nl }; return final ? false : NEED; }
       const c = ch(i);
+      if (c === '\n' && nl > 0) { nl--; continue; }
       if (c === ';' || c === '!' || c === '?' || c === '\n') return false;
-      if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i }; return NEED; } if (!isDigit(n)) return false; continue; }
+      if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i, nl }; return NEED; } if (!isDigit(n)) return false; continue; }
       if (isLetter(c) && !isLetter(ch(i - 1))) {
-        if (!final && end() < wordNeed(i)) { memo = { e, i }; return NEED; }
+        if (!final && end() < wordNeed(i)) { memo = { e, i, nl }; return NEED; }
         if ((sticky(OWNER_WORD_Y, i) && !nameWord(i)) || sticky(BUY_WORD_Y, i)) return true;
         if (sticky(STOP_Y, i)) return false;
         const ab = sticky(ABBR_Y, i); if (ab) i += ab - 1;
@@ -242,18 +268,18 @@ function createAmountLayer(out) {
       if (ctx && k > ctx.limit && !ctx.seg) ctx = null; // la ventana de una palabra del dueño dura 60 caracteres Y hasta el fin de su frase
       if (k >= end()) break;
       const c = ch(k), p = ch(k - 1);
-      if (c !== '|' && c !== '\t' && c !== '\n' && c !== ' ' && c !== '\r') row.has = true;
+      if (c !== '|' && c !== '\t' && c !== '\n' && c !== ' ' && c !== '\r') { row.has = true; if (c !== '-' && c !== ':') row.sep = false; }
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
         let n;
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
-        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k };
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k };
           ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n, at: k }; pass(k + n); continue; }
         if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
         // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
         if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true, at: k }; pass(k + n); continue; }
-        if (negZone && !(ctx && !ctx.sale && !ctx.neg) && (n = negPrice(k))) { ctx = { limit: k + n, sale: true, at: k }; pass(k + n); continue; } // el monto va justo detrás
+        if (negZone && !(ctx && !ctx.sale && !ctx.neg) && (n = negPrice(k))) { ctx = { limit: k + n, sale: true, at: k, np: true }; pass(k + n); continue; } // el monto va justo detrás
         if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
         if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
       }
@@ -265,6 +291,9 @@ function createAmountLayer(out) {
         if (n) {
           if (!final && end() < k + n + 16) break;
           const e = k + n;
+          // «Precio S/ 1.80» en la zona negada espera hasta el fin de su frase (puede cruzar UN salto de línea, tope OWNER_RETRO):
+          // «… (lo que pagué)», «…, lo que me costó» lo tapan
+          if (ctx && ctx.sale && ctx.np) { const r = retro(e, final, 1); if (r === NEED) break; ctx = null; if (r) mask(e); else pass(e); continue; }
           if (ctx && ctx.sale) { ctx = null; pass(e); continue; }
           if (ctx && (!ctx.lead || leadOk(k))) { ctx = null; mask(e); continue; }
           if (negZone) { mask(e); continue; } // zona negada: sin etiqueta de venta delante, se tapa
@@ -283,7 +312,10 @@ function createAmountLayer(out) {
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
         // se suelta al cerrar la primera celda con texto de la fila nueva (el monto de esa celda sigue tapado)
         if (filled && row.from != null) { if (ctx && ctx.at < row.from) ctx = null; if (negZone && negZone.at < row.from) negZone = null; row.from = null; } }
-      else if (c === '\n') { if (row.has) row.cells++; row.from = row.cells >= 2 ? k + 1 : null; row.cells = 0; row.has = false; }
+      else if (c === '\n') { if (row.has) row.cells++; const real = row.cells >= 2; row.n = real ? row.n + 1 : 0;
+        // suelta una fila de datos, o la 1.ª fila (encabezado) si su primera celda no es del dueño. NO suelta la separadora |---| ni una
+        // 1.ª fila tipo clave-valor («Costo\tGalleta», «| Costo | S/ 1.80 |»): el título/etiqueta del dueño sigue tapando la fila de abajo
+        row.from = real && !row.sep && (row.n >= 2 || !row.fo) ? k + 1 : null; row.cells = 0; row.has = false; row.sep = true; row.fo = false; }
       pass(k + 1);
     }
     if (final) { pass(end()); return; }
@@ -292,7 +324,7 @@ function createAmountLayer(out) {
     if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
-  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0 }; row = { cells: 0, has: false, from: null }; } };
+  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0, nl: 0 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false }; } };
 }
 function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
   return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }

@@ -303,3 +303,42 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     for (const [t, v] of [...PRECIO_SHOW, ...ROW_SHOW]) { const w = redactOwnerData(t); assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
   });
 }
+
+// ---------- 15. Bot 5 FALLA sobre 7150d291 (+ Bot 4): título del dueño antes de la tabla, «Precio S/» con dueño detrás, frases nuevas ----------
+// Una palabra del dueño (o zona negada) en la frase/línea JUSTO antes de una tabla tapa todos sus montos salvo las columnas con encabezado
+// de venta (PVP, P. venta, Precio de venta, Precio venta, Venta); sin encabezado, todos. Párrafos más atrás no cuentan.
+const T15_MASK = [
+  ['Te paso los costos:\n\n| Producto | Monto |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
+  ['El costo de cada uno:\n| Producto | Monto |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Te paso los costos:\n| Producto | Monto |\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
+  ['Costo\tGalleta\nArroz\tS/ 1.80', ['1.80']],
+  ['Costos:\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
+  ['Costos de compra\nGalleta\tS/ 1.80\nArroz\tS/ 3.10', ['1.80', '3.10']],
+  ['No sé el costo.\nAquí la lista:\n| Producto | Monto |\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
+  ['Te paso costo y precio:\n| Producto | Costo | PVP |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.20']],
+  ['Lo que pagué por cada uno:\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |\n| Azúcar | S/ 2.90 |', ['1.80', '3.10', '2.90']],
+  // «Precio S/» en la zona negada espera el fin de su frase (y un salto de línea): dueño detrás lo tapa
+  ['No sé el costo.\nPrecio S/ 1.80 (lo que pagué)', ['1.80']], ['No sé el costo.\nPrecio: S/ 1.80, lo que me costó', ['1.80']],
+  ['No sé el costo.\nPrecio S/ 1.80\n(lo que pagué)', ['1.80']], ['No sé el costo. El precio es S/ 1.80, lo que me costó', ['1.80']],
+  // frases nuevas del dueño
+  ['Pagamos S/ 1.80', ['1.80']], ['Nos salió a S/ 1.80', ['1.80']], ['nos salio a 1.80 soles', ['1.80']], ['Lo conseguí a S/ 1.80', ['1.80']], ['lo consegui a S/ 1.80 la caja', ['1.80']]];
+const T15_SHOW = [
+  ['Te paso costo y precio:\n| Producto | Costo | PVP |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.80']],
+  ['El costo no lo tengo, pero esta es la lista:\n| Producto | P. venta |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
+  ['Te paso los costos:\n| Producto | Venta | Precio venta | Precio de venta |\n| Galleta | S/ 2.00 | S/ 2.10 | S/ 2.20 |', ['2.00', '2.10', '2.20']],
+  ['El costo es alto este mes.\n\nOtra cosa. Aquí la lista de precios:\n| Producto | PVP |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['| Costo | S/ 1.80 |\n| PVP | S/ 2.50 |', ['PVP', '2.50']], ['| Producto | Costo |\n|---|---|\n| Galleta | S/ 1.20 |\n| x | PVP |', ['PVP']],
+  ['No sé el costo.\nPrecio S/ 2.50\nGracias', ['2.50']], ['No sé el costo. Precio: S/ 2.50. Lo que pagué no lo sé.', ['2.50']],
+  ['Pagamos con Yape y salió bien, PVP S/ 2.50', ['2.50']], ['El cliente pagó S/ 2.50', ['2.50']],
+  ['Lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | costo pendiente |\n| Azúcar | S/ 2.50 |', ['1.80', '2.50']]];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('15) trozos de ' + n + ': título del dueño justo antes de la tabla tapa sus montos (salvo columnas de venta); «Precio S/» con dueño detrás se tapa; pagamos/nos salió a/lo conseguí a; «PVP» bajo «Costo» no se tapa', () => {
+    for (const [t, hide] of T15_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, vs] of T15_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+  });
+}
+test('15) los nombres de la tabla se quedan: con título del dueño solo salen los montos («Galleta», «Arroz», «Producto», «Monto» visibles)', () => {
+  const w = redactOwnerData('Te paso los costos:\n| Producto | Monto |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 c/u |');
+  assert.equal(w, 'Te paso los costos:\n| Producto | Monto |\n|---|---|\n| Galleta | [dato del dueño] |\n| Arroz | [dato del dueño] c/u |');
+});
