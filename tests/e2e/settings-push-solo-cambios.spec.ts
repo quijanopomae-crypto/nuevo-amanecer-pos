@@ -5,7 +5,7 @@ import { test, expect, type Page } from '@playwright/test';
 test.use({ timezoneId: 'UTC', serviceWorkers: 'block' });
 
 type Setting = { key: string; value: unknown; revision: number };
-type Mock = { settings: Setting[]; getFails: boolean; conflict: null | { revision: number; then: Setting[] }; gets: number; posts: { key: string; value: unknown; expected_revision: unknown }[]; revision: number; me?: { role: string; device: string } };
+type Mock = { settings: Setting[]; getFails: boolean; conflict: null | { revision: number; then: Setting[] }; gets: number; posts: { key: string; value: unknown; expected_revision: unknown }[]; revision: number; me?: { role: string; device: string }; meFails?: boolean };
 const OWNER_DEVICE = 'settings-test-device', EMPLOYEE_DEVICE = 'settings-test-cashier';
 
 const KEYS = ['pos.business', 'pos.flags', 'pos.credit', 'pos.lots', 'pos.ticket'];
@@ -21,6 +21,7 @@ async function boot(page: Page, mock: Mock, cache?: Setting[]) {
     const request = route.request(), url = new URL(request.url());
     if (url.hostname !== 'permissions.test') return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
     const json = (status: number, body: unknown) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname === '/auth/me' && mock.meFails) return json(500, { error: 'boom' });
     if (url.pathname === '/auth/me') { const me = mock.me || { role: 'owner', device: OWNER_DEVICE }; return json(200, { pos_role: me.role, owner_pin_set: true, roles_ready: true, device_id: me.device }); }
     if (url.pathname === '/settings' && request.method() === 'GET') {
       mock.gets++;
@@ -343,6 +344,8 @@ async function changeIgvOffline(page: Page, mock: Mock) {
   await clickSwitch(page, 'igvActive');
   await expect(page.locator('#na9Saved')).toHaveText('No se guardó en el servidor: revisa internet');
   expect(await page.evaluate(() => localStorage.getItem('na_pos_settings_pending_v1'))).not.toBeNull();
+  // El pendiente queda atado a la sesión del dueño (device_id de /auth/me), nunca a un usuario vacío.
+  expect(JSON.parse((await page.evaluate(() => localStorage.getItem('na_pos_settings_pending_v1'))) || 'null')).toMatchObject({ user: OWNER_DEVICE });
   expect(mock.posts).toEqual([]);
   const ownerFlags = (await localSettings(page))['pos.flags'];
   return { local, ownerFlags };
@@ -470,5 +473,75 @@ test('(p) loadAllData fails (loadAppState never runs): settings sync is not defe
   mock.me = { role: 'empleado', device: EMPLOYEE_DEVICE };
   await boot(page, mock);
   await expect.poll(async () => (await localSettings(page))['pos.flags']).toEqual(flags);
+  expect(mock.posts).toEqual([]);
+});
+
+test('(q) same principal leaves a pending change as owner, then its role becomes empleado: 0 POST (also via flush), cashier sees the server IGV, pending kept', async ({ page }) => {
+  const mock = newMock();
+  const { local, ownerFlags } = await changeIgvOffline(page, mock);
+  const serverFlags = local['pos.flags'];
+  expect(ownerFlags).not.toEqual(serverFlags);
+  mock.getFails = false;
+  const gets = mock.gets;
+  // Mismo device_id (misma sesión), pero el servidor ahora dice que es empleado.
+  await relogin(page, mock, 'empleado', OWNER_DEVICE);
+  await expect.poll(() => mock.gets).toBeGreaterThan(gets);
+  await expect.poll(async () => (await localSettings(page))['pos.flags']).toEqual(serverFlags);
+  await navigate(page);
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  expect(await page.evaluate(() => (window as any).NA_CONFIG_G.flush())).toMatchObject({ ok: false, reason: 'owner_only' });
+  expect(mock.posts).toEqual([]);
+  expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
+  const stored = JSON.parse((await pendingKey(page)) || 'null');
+  expect(stored).toMatchObject({ user: OWNER_DEVICE });
+  expect(stored.values['pos.flags']).toEqual(ownerFlags);
+});
+
+test('(r) /auth/me and GET both fail at change time: Configuración stays closed with the notice, nothing pending; with both OK after reload 0 POST and the server IGV', async ({ page }) => {
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  mock.settings = asServer(local);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await boot(page, mock, mock.settings);
+  mock.meFails = true;
+  mock.getFails = true;
+  const meFailed = page.waitForResponse(response => new URL(response.url()).pathname === '/auth/me' && response.status() === 500);
+  await page.reload();
+  await meFailed;
+  // Sin /auth/me el rol del dueño no se confirma: sin device_id no hay a quién atar un pendiente.
+  await page.waitForFunction(() => !(window as any).NA_ROLES?.confirmed && !!(window as any).NA_CONFIG_G);
+  await page.evaluate(() => (window as any).goPage('pageConfig'));
+  await expect(page.locator('.na-offline-cfg .na-pin-title')).toHaveText('Confirmando permisos…');
+  await expect(page.locator('.na-offline-cfg .na-pin-detail')).toHaveText('Necesitamos conexión para confirmar tus permisos con el servidor.');
+  await expect(page.locator('#pageConfig')).not.toHaveClass(/\bactive\b/);
+  // Aunque se fuerce el cambio por código, no sale nada ni queda un pendiente sin usuario.
+  const flushed = await page.evaluate(() => { const c = (window as any).eval('appConfig'); c.igvActive = !c.igvActive; return (window as any).NA_CONFIG_G.flush(); });
+  expect(flushed).toMatchObject({ ok: false, reason: 'owner_only' });
+  expect(await pendingKey(page)).toBeNull();
+  mock.meFails = false;
+  mock.getFails = false;
+  await page.reload();
+  await waitRole(page, 'owner');
+  await expect.poll(async () => (await localSettings(page))['pos.flags']).toEqual(local['pos.flags']);
+  await navigate(page);
+  expect(mock.posts).toEqual([]);
+  expect(await pendingKey(page)).toBeNull();
+});
+
+test('(s) confirmed owner but /auth/me without device_id and GET failing: no pending with an empty user, the owner sees «No se guardó en el servidor: revisa internet»', async ({ page }) => {
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  mock.settings = asServer(local);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  mock.me = { role: 'owner', device: '' };
+  mock.getFails = true;
+  await boot(page, mock, mock.settings);
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await openConfig(page, 'prod', 'igv');
+  await clickSwitch(page, 'igvActive');
+  await expect(page.locator('#na9Saved')).toHaveText('No se guardó en el servidor: revisa internet');
+  expect(await pendingKey(page)).toBeNull();
   expect(mock.posts).toEqual([]);
 });

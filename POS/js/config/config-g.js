@@ -219,14 +219,18 @@
   var appReady = false, waitingPending = false, deferredApply = false;
   // value = base; se guarda con la sesión actual y los valores locales de ese momento.
   function setPending(value) {
-    var c = cfg();
+    var c = cfg(), user = String((R() && R().deviceId) || '');
+    // Nunca se guarda un pendiente sin usuario (al recargar se descartaría como antiguo, en silencio). Solo llega aquí
+    // un dueño confirmado, que siempre trae device_id de /auth/me; si faltara, no se escribe y el guardado queda como
+    // «No se guardó en el servidor: revisa internet».
+    if (value && !user) return false;
     pendingBase = value || null;
-    pendingUser = value ? String((R() && R().deviceId) || '') : null;
+    pendingUser = value ? user : null;
     pendingValues = null;
     if (value && c) { pendingValues = {}; Object.keys(SHARED).forEach(function (k) { pendingValues[k] = copy(SHARED[k].get(c)); }); }
     try { if (value) root.localStorage.setItem(PENDING_KEY, JSON.stringify({ user: pendingUser, base: pendingBase, values: pendingValues })); else root.localStorage.removeItem(PENDING_KEY); } catch (_) {}
   }
-  // El pendiente es de la sesión confirmada actual (mismo usuario que lo dejó).
+  // El pendiente es de la sesión confirmada actual (mismo usuario que lo dejó). Solo identidad: el rol se revisa aparte.
   function pendingMine() { return !!(pendingBase && pendingUser && R() && R().confirmed && R().deviceId && String(R().deviceId) === pendingUser); }
   // Claves que el dueño cambió en el pendiente (frente a base).
   function pendingChanged(k) {
@@ -236,7 +240,8 @@
   }
   // El filtro del pendiente solo protege mientras el rol no está confirmado o la sesión es la del dueño que lo dejó.
   // Con otro usuario confirmado (cajero u otra sesión) gana el servidor en todas las claves.
-  function guardPending() { return !!pendingBase && (!R() || !R().confirmed || pendingMine()); }
+  // El mismo usuario con rol empleado (el dueño le cambió el rol) cuenta como otro usuario: gana el servidor.
+  function guardPending() { return !!pendingBase && (!R() || !R().confirmed || (pendingMine() && !!R().isOwner && R().isOwner())); }
   var baseSave = null;
   /* global appConfig */
   function cfg() { try { return typeof appConfig !== 'undefined' ? appConfig : null; } catch (_) { return null; } }
