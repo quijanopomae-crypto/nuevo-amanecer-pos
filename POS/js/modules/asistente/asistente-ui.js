@@ -37,7 +37,7 @@
     for (var j = 0; j < 10; j++) { var a = j / 10 * Math.PI * 2; conf += '<b style="--dx:' + Math.round(Math.cos(a) * 46) + 'px;--dy:' + Math.round(Math.sin(a) * 46 - 18) + 'px;background:' + colors[j % 5] + '"></b>'; }
     return '<div class="na-asst-char" data-state="listo" data-q="high"><div class="na-asst-shadow"></div><div class="na-asst-hop"><div class="na-asst-squash">' +
       '<div class="na-asst-orbit" aria-hidden="true">' + orbit + '</div>' +
-      '<div class="na-asst-sphere"><div class="na-asst-bits"><div>' + bits() + bits() + '</div></div>' +
+      '<div class="na-asst-sphere"><div class="na-asst-bits" aria-hidden="true"><div>' + bits() + bits() + '</div></div>' +
       '<svg class="na-asst-face" viewBox="0 0 100 100" aria-hidden="true"><defs>' +
       '<radialGradient id="' + u + 'Iris" cx="40%" cy="35%"><stop offset="0" stop-color="#bbf7d0"/><stop offset=".45" stop-color="#22c55e"/><stop offset="1" stop-color="#14532d"/></radialGradient>' +
       '<radialGradient id="' + u + 'IrisB" cx="40%" cy="35%"><stop offset="0" stop-color="#bfdbfe"/><stop offset=".5" stop-color="#2563eb"/><stop offset="1" stop-color="#1e3a8a"/></radialGradient>' +
@@ -257,8 +257,8 @@
     // Cada intento se corta a los ~12 s; 2 intentos y después «Pulsa Confirmar otra vez» (mismo token y operation_id).
     for (var i = 0; i < (C.CONFIRM_ATTEMPTS || 2); i++) {
       try { var body = { token: p.confirm_token, proposal: clean }; if (review) body.review = review;
-        // (Bot 2 sobre 84a49517) lo escrito a mano en «Complete este dato» va aparte de la propuesta firmada; el servidor lo exige
-        var fill = C.fillValues ? C.fillValues(p) : null; if (fill) body.fill = fill;
+        // (Bots 2/5 sobre 84a49517) lo escrito a mano en «Complete este dato» va en «manual», aparte de la propuesta firmada; el servidor lo exige
+        var manual = C.fillValues ? C.fillValues(p) : null; if (manual) body.manual = manual;
         var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm); return d.ok ? d : { ok: false, error: d.error, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null }; }
       catch (e) { lastErr = e; if (i === 0) await new Promise(function (r) { setTimeout(r, 600); }); }
     }
@@ -488,7 +488,7 @@
     }
     function tick() {
       if (!left) return; var ms = exp - (Date.now() + clockOffset); if (!exp) { left.textContent = '-'; return; }
-      if (ms <= 0 && ok && ok.textContent === 'Confirmando…') { left.textContent = '0:00'; return; } // en curso: el servidor decide (ya usada = mismo id)
+      if (ms <= 0 && ok && ok.textContent === 'Guardando…') { left.textContent = '0:00'; return; } // en curso: el servidor decide (ya usada = mismo id)
       if (ms <= 0) { clearInterval(timer); if (c.dataset.st === 'pending') { gate.cancel(key); expire(); if (again) { again.hidden = false; again.disabled = false; } } left.textContent = '0:00'; return; }
       var sec = Math.ceil(ms / 1000); left.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }
@@ -497,7 +497,7 @@
     if (left && p.needsConfirm) { tick(); timer = setInterval(function () { if (c.dataset.st !== 'pending') { clearInterval(timer); return; } tick(); }, 1000); }
     if (ok) ok.onclick = async function () {
       if (c.dataset.st !== 'pending') return;
-      ok.disabled = true; no.disabled = true; ok.textContent = 'Confirmando…'; setState('concentrado');
+      ok.disabled = true; no.disabled = true; ok.textContent = 'Guardando…'; setState('concentrado');
       if (again) again.disabled = true;
       // Antes de confirmar: si el POS no puede abrir la pantalla, se dice el motivo real y no se gasta la tarjeta.
       var pre = C.precheck ? C.precheck(p, deps) : null;

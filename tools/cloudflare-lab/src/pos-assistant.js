@@ -808,18 +808,24 @@ const CARD_LABEL_TAIL = /(?:^|\s)(?:RUC|DNI|pin|clave|contrase(?:ñ|n)a|token)(?
 export function cardPrefix(v) { const m = MASK_LEFT_RE.exec(v); if (!m) return v; let pre = v.slice(0, m.index); let prev;
   do { prev = pre; pre = pre.replace(CARD_LABEL_TAIL, ''); } while (pre !== prev); return pre.replace(/\s+$/, '').replace(/^\s+/, '').slice(0, 120); }
 function cardField(role, value, max, name, missing) { const v = cleanFor(role, value, max); if (v && MASK_LEFT_RE.test(v)) { missing.push(name); return cardPrefix(v); } return v; }
-// (Bot 2 / Bot 4 sobre 84a49517) confirm: el servidor exige cada campo de «completar» con valor (no vacío y sin máscara) en body.fill, y
-// rechaza una propuesta con una máscara en CUALQUIER campo de texto. Lo escrito por el dueño va EXACTO (sin filtro: no va al modelo, solo a
-// «Nueva compra» del dueño), sin caracteres de control y con el tope del campo. 422 fields_required
-// con los nombres; nada se crea ni se marca usado. La propuesta firmada no cambia (fill va aparte del hash).
+// (Bots 2 / 4 / 5 sobre 84a49517) confirm: lo escrito por el dueño en «Complete este dato» llega en body.manual ({ campo: valor }), FUERA de la
+// propuesta firmada (que no cambia nunca por /confirm: su hash sigue igual). El servidor lo acepta solo si: la sesión es del dueño (rol del
+// servidor; el empleado ya recibe 403 antes), es un objeto plano, sus claves son un SUBCONJUNTO del «completar» firmado (otra clave —precio,
+// cantidad, producto…— → 400 manual_not_allowed, nada se aplica) y cada valor es texto no vacío y sin máscara. Falta un campo de «completar»
+// o un valor es vacío/con máscara → 422 fields_required. También 422 si cualquier campo de texto de la propuesta trae una máscara.
+// Lo escrito va EXACTO (sin filtro: no va al modelo, solo a «Nueva compra» del dueño), sin caracteres de control y con el tope del campo.
+// /confirm NO crea registros (solo marca la tarjeta usada, la bitácora y devuelve la propuesta para abrir «Nueva compra»).
 const FILL_MAX = { proveedor: 120, documento: 80 };
-function fillCheck(p, fill) {
-  const names = Array.isArray(p.completar) ? [...new Set(p.completar.map((n) => String(n)))] : [];
-  const f = fill && typeof fill === 'object' && !Array.isArray(fill) ? fill : {}, out = {}, fields = [];
-  for (const n of names) { const v = Object.hasOwn(FILL_MAX, n) && typeof f[n] === 'string' ? f[n].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').trim().slice(0, FILL_MAX[n]).trim() : ''; if (!v || MASK_LEFT_RE.test(v)) fields.push(n); else out[n] = v; }
+function fillCheck(p, manual) {
+  const names = Array.isArray(p.completar) ? [...new Set(p.completar.map((n) => String(n)).filter((n) => Object.hasOwn(FILL_MAX, n)))] : [];
+  if (manual != null && (typeof manual !== 'object' || Array.isArray(manual) || Object.getPrototypeOf(manual) !== Object.prototype)) return { status: 400, error: 'manual_not_allowed', fields: [] };
+  const m = manual || {}, extra = Object.keys(m).filter((k) => !names.includes(k));
+  if (extra.length) return { status: 400, error: 'manual_not_allowed', fields: extra.slice(0, 10).map((k) => String(k).slice(0, 40)) };
+  const out = {}, fields = [];
+  for (const n of names) { const v = typeof m[n] === 'string' ? m[n].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').trim().slice(0, FILL_MAX[n]).trim() : ''; if (!v || MASK_LEFT_RE.test(v)) fields.push(n); else out[n] = v; }
   const masked = (x, d = 0) => (typeof x === 'string' ? MASK_LEFT_RE.test(x) : d < 4 && x && typeof x === 'object' ? Object.values(x).some((y) => masked(y, d + 1)) : false);
   for (const [k, v] of Object.entries(p)) if (k !== 'completar' && k !== 'confirm_token' && !fields.includes(k) && masked(v)) fields.push(k);
-  return { fields, out };
+  return fields.length ? { status: 422, error: 'fields_required', fields, out } : { fields, out };
 }
 function money(v) { const n = Math.round(Number(v) * 100) / 100; return Number.isFinite(n) && n >= 0 && n < 100000 ? n : null; }
 function qty(v) { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= 9999 ? Math.round(n * 1000) / 1000 : null; }
@@ -1598,10 +1604,10 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   // Ya usada se revisa ANTES que vencida: un reenvío tardío (corte de señal) recibe el mismo operation_id, no 410.
   const withDrops = (drop) => (tok.t === 'compra' && Array.isArray(drop) && drop.length ? { ...body.proposal, lineas: body.proposal.lineas.filter((_, i) => !drop.includes(i)), quitadas: drop } : body.proposal);
   const used = await store.get(usedKey);
-  if (used.value?.op) return json({ ok: true, already_confirmed: true, operation_id: used.value.op, type: tok.t, proposal: { ...withDrops(used.value.drop), ...(used.value.fill && typeof used.value.fill === 'object' ? used.value.fill : {}) } });
+  if (used.value?.op) return json({ ok: true, already_confirmed: true, operation_id: used.value.op, type: tok.t, proposal: { ...withDrops(used.value.drop), ...(used.value.manual && typeof used.value.manual === 'object' ? used.value.manual : {}) } });
   if (!(tok.exp > now)) return json({ error: 'confirm_expired' }, 410);
-  const fc = fillCheck(body.proposal, body.fill);
-  if (fc.fields.length) return json({ error: 'fields_required', fields: fc.fields, operation_id: tok.op }, 422);
+  const fc = fillCheck(body.proposal, body.manual);
+  if (fc.error) return json({ error: fc.error, fields: fc.fields, operation_id: tok.op }, fc.status);
   // Sin PIN (pedido del dueño): la tarjeta se confirma con UN toque desde la sesión dueño. Un doble toque o un reenvío por corte de
   // señal no repite: la tarjeta se marca usada con escritura condicional (store.put con revision) y el segundo recibe already_confirmed.
   // Filas marcadas «Revisa este dato»: hay que aceptarlas o quitarlas una por una, con el op de ESTE token (la consola no se salta el botón).
@@ -1652,7 +1658,7 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   const w = await store.get(devKey); const wv = w.value.min === minute ? { ...w.value } : { min: minute, n: 0 };
   if (wv.n >= capFrom(env, 'ASSISTANT_CONFIRMS_PER_MINUTE', ASSISTANT_LIMITS.confirmsPerMinute)) return json({ error: 'rate_limited', retry_after_s: 60 - Math.floor((now % 60000) / 1000) }, 429);
   wv.n++;
-  if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(Object.keys(fc.out).length ? { fill: fc.out } : {}) }, used.revision))) {
+  if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(Object.keys(fc.out).length ? { manual: fc.out } : {}) }, used.revision))) {
     const again = await store.get(usedKey);
     return json({ ok: true, already_confirmed: true, operation_id: again.value?.op || tok.op, type: tok.t, proposal: withDrops(again.value?.drop) });
   }

@@ -66,7 +66,7 @@
   var needSeq = 0;
   // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
   function purchaseValue(p, n) { var m = p && p._manual && p._manual[n]; if (m && !maskLeft(m)) return m; var v = p ? p[n] : ''; return v && !maskLeft(v) ? v : ''; }
-  // lo escrito a mano para los campos de «completar» (va en body.fill del confirm, fuera de la propuesta firmada); nunca una máscara
+  // lo escrito a mano para los campos de «completar» (va en body.manual del confirm, fuera de la propuesta firmada); nunca una máscara
   function fillValues(p) { var m = p && p._manual; if (!m || !Array.isArray(p.completar)) return null; var o = {}, k = 0;
     p.completar.forEach(function (n) { if (NEED_LABEL[n] && typeof m[n] === 'string' && m[n] && !maskLeft(m[n])) { o[n] = m[n]; k++; } }); return k ? o : null; }
   function perms() { return root.NA_PERMISSIONS; }
@@ -295,7 +295,9 @@
   // línea siguiente (si es «|---|» es tabla; si no, vuelve como texto). El resto del texto se pinta enseguida, como antes.
   var MASK_LABEL = '[dato del dueño]', MASK_NOTE = 'Montos ocultos para empleado';
   var CUR_SP_RE = /(S\/\.?|US\$|PEN)[ \t](?=-?\d)/g;
-  function nbsp(v) { return v.replace(CUR_SP_RE, '$1\u00a0'); }
+  // (Bot 4 sobre 84a49517) solo al pintar: la serie de un comprobante («B001-00000123») no se parte en el guion a 360 (guion que no corta, U+2011)
+  var DOC_HY_RE = /\b([FBET][A-Z0-9]{3}|0\d{3})-(?=\d)/g;
+  function nbsp(v) { return v.replace(CUR_SP_RE, '$1\u00a0').replace(DOC_HY_RE, '$1\u2011'); }
   var AMOUNT_RE = /(?:S\/\.?|PEN|US\$|\$)\s?-?\d|\d[.,]\d{1,2}(?!\d)|\d\s?%/i; // monto visible en una celda (para la nota)
   var TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$|^\s*\|\s*:?-{3,}:?\s*\|\s*$/;
   function tableCells(line) {
@@ -466,7 +468,7 @@
     upstream_error: [MSG.again, true], stock_check_unavailable: ['No pude revisar el inventario ahora. Toca «Reintentar» en un momento.', true], HTTP_503: [MSG.again, true], HTTP_502: [MSG.again, true], HTTP_500: [MSG.again, true],
     confirm_expired: [MSG.expired], HTTP_410: [MSG.expired], proposal_changed: [MSG.changed], proposal_id_mismatch: [MSG.changed], HTTP_409: [MSG.changed],
     product_missing: ['Ese producto ya no está en el inventario.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
-    review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], fields_required: ['Complete los datos marcados y vuelva a confirmar.'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
+    review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], fields_required: ['Complete los datos marcados y vuelva a confirmar.'], manual_not_allowed: ['Esa tarjeta no se puede cambiar así. Toque «Pedir de nuevo».'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
     empty_after_review: ['Quitaste todas las filas. Pide la compra de nuevo.'], other_device: ['Esta propuesta es de otro aparato. Pídela aquí otra vez.'],
     image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
     image_too_large: ['La foto es muy grande. Toma otra más cerca.'], bad_image: ['No pude leer esa foto. Toma otra con más luz.'],
@@ -498,7 +500,7 @@
       return { kind: 'fields', rows: [], fields: fl, button: 'Confirmar', again: true, msg: own ? 'Complete los datos marcados y vuelva a confirmar.' : 'Esta propuesta trae un dato tapado. Complete los datos marcados o toque «Pedir de nuevo».' }; }
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
-    if (code === 'network') return { kind: 'network', rows: [], button: 'Reintentar', again: true, msg: friendlyError('network').msg };
+    if (code === 'network') return { kind: 'network', rows: [], button: 'Reintentar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : friendlyError('network').msg };
     return { kind: 'other', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : friendlyError(code).msg };
   }
 
@@ -543,12 +545,15 @@
         var pre = precheck(it.p, deps); if (pre) { it.state = 'pending'; return { ok: false, code: 'precheck', msg: pre }; }
         if (!it.p.confirm_token) { it.state = 'denied'; return { ok: false, msg: 'Esta propuesta no se puede confirmar. Pídela otra vez.' }; }
         var c;
-        try { c = await deps.confirm(it.p, it.review || null); } catch (e) { it.state = 'pending'; return { ok: false, retry: true, code: 'network', msg: e && e.timeout ? MSG.slow : 'Se cortó la conexión. Toca «Reintentar»: no se duplicará.' }; }
+        // sin respuesta (corte o tiempo): la tarjeta sigue editable; confirmar no crea registros, así que reintentar es seguro (Bot 3)
+        try { c = await deps.confirm(it.p, it.review || null); } catch (e) { it.state = 'pending'; return { ok: false, retry: true, code: 'network', msg: 'No se pudo confirmar: no llegó respuesta. Revise los datos y toque «Reintentar».' }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
           return { ok: false, code: (c && c.error) || 'error', rows: c && Array.isArray(c.rows) ? c.rows : null, fields: c && Array.isArray(c.fields) ? c.fields : null, retry_after_s: c && c.retry_after_s || null, msg: friendlyError((c && c.error) || 'error', c && ['over_limit', 'sin_control_stock', 'stock_check_unavailable', 'product_missing'].indexOf(c.error) >= 0 ? c.message : null).msg }; }
         it.operationId = c.operation_id;
         // Se aplica la propuesta que el servidor verificó para ESTE token, nunca otra que esté en memoria.
-        if (c.proposal) { if (c.proposal.id !== it.p.id || c.proposal.type !== it.p.type) { it.state = 'denied'; return { ok: false, msg: 'La propuesta no coincide. Pídela otra vez.' }; } it.applied = c.proposal; }
+        if (c.proposal) { if (c.proposal.id !== it.p.id || c.proposal.type !== it.p.type) { it.state = 'denied'; return { ok: false, msg: 'La propuesta no coincide. Pídela otra vez.' }; } it.applied = c.proposal;
+          // (Bot 4 sobre 84a49517) lo escrito a mano sigue con la propuesta que devolvió el servidor: «Nueva compra» abre con Proveedor/Documento
+          if (it.p._manual && it.applied && typeof it.applied === 'object') { try { Object.defineProperty(it.applied, '_manual', { value: it.p._manual, enumerable: false, configurable: true }); } catch (_) {} } }
         if (c.already_confirmed && it.executed) { it.state = 'done'; return { ok: true, msg: 'Ya se hizo. No se repitió.' }; }
       }
       if (it.executed) { it.state = 'done'; return { ok: true, msg: 'Ya se hizo. No se repitió.' }; }

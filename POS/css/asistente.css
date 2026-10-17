@@ -172,7 +172,10 @@ body.dark .na-asst-card td{border-color:#1f3b2b}
 body.dark .na-asst-card .note,body.dark .na-asst-mode,body.dark .na-asst-card .meta{color:#b6cbbf}
 body.dark .na-asst-card .res{color:#86efac}
 body.dark .na-asst-card .warn{background:#3b1212;color:#fecaca}
-body.dark .na-asst-need{background:#07130c;color:#e5f3ea;border-color:#f87171}body.dark .na-asst-need.ok{border-color:#4ade80}body.dark .na-asst-need-t{color:#fecaca}
+body.dark .na-asst-need{background:#07130c;color:#e5f3ea;border-color:#f87171}body.dark .na-asst-need.ok{border-color:#4ade80}
+/* (Bot 4 sobre 84a49517) theme-dark.css (body.dark input:not(...)×4) ganaba por especificidad y dejaba el borde gris (1.57:1) */
+body.dark input.na-asst-need:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]){background:#07130c;color:#e5f3ea;border-color:#f87171}
+body.dark input.na-asst-need.ok:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]){border-color:#4ade80}body.dark .na-asst-need-t{color:#fecaca}
 body.dark .na-asst-msg.u{background:#15803d}
 body.dark .na-asst-msg.sys{background:#1f3b2b;color:#e5f3ea}
 body.dark .na-asst-chips button{background:#10241a;color:#bbf7d0;border-color:#166534}
