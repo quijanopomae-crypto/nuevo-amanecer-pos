@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, redactFor, redactText, redactOwnerData, OWNER_RETRO, FIRST_TEXT_MIN } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, redactFor, redactText, redactOwnerData, OWNER_RETRO, FIRST_TEXT_MIN, capReply } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { runAssistantQuery } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 const require = createRequire(import.meta.url);
 const C = require('../../POS/js/modules/asistente/asistente-core.js');
@@ -20,7 +20,7 @@ function stream(text, role, sizes) { // sizes: número fijo o función que da el
   for (let i = 0; i < text.length;) { const n = typeof sizes === 'function' ? sizes() : sizes; e.push(text.slice(i, i + n)); i += n; marks.push([i, out.filter((d) => d.t).map((d) => d.t).join('').length]); }
   e.flush(); return { text: out.filter((d) => d.t).map((d) => d.t).join(''), marks, events: out };
 }
-const full = (text, role) => redactFor(role)(clean(text)).slice(0, 1200);
+const full = (text, role) => capReply(redactFor(role)(clean(text))); // tope de 1200 con aviso (Bot 2), sobre el texto ya filtrado
 
 // ---------- 1. correo ----------
 // Estable con la máquina cargada: 7 corridas por caso; la MÁS RÁPIDA debe bajar de 25 ms (lo que cuesta de verdad, sin picos de carga)
@@ -547,4 +547,11 @@ test('20) Bot 5: una etiqueta de clave/pin/token, RUC, DNI o data: que espera su
     let i = 0; for (; i < t.length; i++) { em.push(t[i]); const pendingWs = i >= label.length && !/\S/.test(t.slice(label.length, i + 1).replace(/\bes\b/, '')); if (pendingWs) assert.ok(o.length <= label.length, role + ' ' + label + ': soltó ' + o.length + ' caracteres con la etiqueta esperando'); }
     em.flush(); assert.ok(!secret.test(o), role + ' ' + label + ' -> ' + o); assert.equal(o, red(t), role + ' ' + label + ': igual al texto entero');
   }
+});
+test('20) Bot 3: un tramo de solo espacios no pasa por redactText (mismo resultado); con una etiqueta esperando su valor no se suelta', () => {
+  const SRCF = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant.js', import.meta.url), 'utf8');
+  assert.match(SRCF, /out\(WS_ONLY\.test\(piece\) \? piece : redactText\(piece\)\)/); assert.match(SRCF, /const WS_ONLY = \/\^\\s\+\$\/;/);
+  for (const t of [' '.repeat(3300), 'Paracetamol caja S/ 1.80\n' + ' '.repeat(3300) + 'listo', 'RUC:' + ' '.repeat(3300) + '20123456789', 'clave' + '\n'.repeat(5) + ' '.repeat(3000) + 'abc123'])
+    for (const role of ['owner', EMP]) { const red = redactFor(role); let o = ''; const em = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red); for (const ch of t) em.push(ch); em.flush();
+      assert.equal(o, red(t)); assert.ok(!/20123456789|abc123/.test(o)); }
 });

@@ -208,8 +208,9 @@ function createTableLayer(out) {
   };
 }
 // Montos y palabras del dueño, en partes. out(texto). Lo único que espera es un monto (o lo que puede serlo) mientras se decide.
-function createAmountLayer(out) {
-  let buf = '', base = 0, k = 0, rel = 0, ctx = null, negZone = null;
+function createAmountLayer(out0) {
+  let buf = '', base = 0, k = 0, rel = 0, ctx = null, negZone = null, muted = false;
+  const out = (x) => { if (!muted) out0(x); }; // priming («sigue»): el contexto pone el estado pero nunca sale
   // Filas de tabla (| o tabulador, con o sin fila separadora): la ventana del dueño y la zona negada abiertas ANTES de una fila de verdad
   // (2+ celdas con texto) no pasan a las celdas de la fila siguiente; se sueltan al cerrar su primera celda con texto. Un monto en esa primera celda sigue tapado.
   let row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
@@ -448,13 +449,18 @@ function createAmountLayer(out) {
     if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
-  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
+  return { push(str) { buf += str; run(false); },
+    // Contexto del par anterior cortado por largo (Bot 5): se lee entero y en silencio; queda el estado (presentación, zona negada, tabla).
+    prime(str) { if (!str) return; muted = true; buf += str; run(true); muted = false; const keep = k - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; } },
+    flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
     sent = { has: false, owner: false, neg: false, intro: false }; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
-function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
+function createOwnerPipeline(out, prime = '') { let priming = false; const amounts = createAmountLayer(out), tables = createTableLayer((x) => (priming ? amounts.prime(x) : amounts.push(x)));
+  // el contexto termina en salto de línea: la capa de tablas ya soltó todo lo suyo al terminar
+  if (prime) { priming = true; tables.push(prime.endsWith('\n') ? prime : prime + '\n'); priming = false; }
   return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }
-export function redactOwnerData(value) {
-  let out = ''; const p = createOwnerPipeline((s) => { out += s; }); p.push(String(value ?? '')); p.flush(); return out;
+export function redactOwnerData(value, prime = '') {
+  let out = ''; const p = createOwnerPipeline((s) => { out += s; }, prime); p.push(String(value ?? '')); p.flush(); return out;
 }
 // Compatibilidad (pruebas viejas): ya no se usa para el texto en partes.
 export const OWNER_HOLD = 160;
@@ -859,6 +865,7 @@ export function createSseChannel() {
 //    un espacio seguido de letra. Solo espera la última palabra.
 //  - Datos del dueño (solo empleado): el lector de montos de arriba (createOwnerPipeline), que es el mismo para el texto entero.
 const WS = /\s/;
+const WS_ONLY = /^\s+$/;
 const isWs = (c) => !!c && WS.test(c);
 const ASCII_WORD = /[A-Za-z0-9_]/;
 const CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, CTRL_CHAR = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
@@ -915,7 +922,9 @@ function createTextStage(out) {
   return {
     push(str) {
       pend += str; scan();
-      if (best > 0) { out(redactText(pend.slice(0, best))); pend = pend.slice(best); off += best; seen -= best; best = 0;
+      // (Bot 3) un tramo soltado que es solo espacios no pasa por redactText (no hay nada que tapar: todos los patrones piden un carácter
+      // que no es espacio). El corte sigue igual: con una clave/pin/token, RUC, DNI o data: esperando su valor no se suelta nada (ver scan).
+      if (best > 0) { const piece = pend.slice(0, best); out(WS_ONLY.test(piece) ? piece : redactText(piece)); pend = pend.slice(best); off += best; seen -= best; best = 0;
         while (data.length && data[0].phase === 2 && data[0].pos <= off) data.shift(); }
     },
     flush() { if (pend) out(redactText(pend)); pend = ''; off = 0; seen = 0; best = 0; wsm = { at: -1, open: false }; data.length = 0; }
@@ -927,24 +936,51 @@ export const FIRST_TEXT_MIN = 20, TEXT_BATCH = 48;
 // Lo primero que sale tiene al menos FIRST_TEXT_MIN caracteres (nunca un «El » suelto) y lo liberado de una vez se manda en tandas
 // de ~TEXT_BATCH caracteres cortadas en espacios. El texto definitivo igual llega en «final» (reply).
 export const STREAM_HOLDBACK = 48;
-export function createTextEmitter(send, max = 1200, redact = redactText, hold = null) {
+// Tope de 1200 caracteres (Bot 2): igual para dueño y empleado, ya no corta en silencio. Se cuenta sobre el texto YA filtrado (lo que se ve).
+// Corte en el último salto de línea dentro de los últimos 160 caracteres antes del tope (una fila de tabla no queda a medias); si no hay,
+// en el último espacio; si tampoco, en el tope. Luego una línea en blanco y el aviso. El aviso va DESPUÉS del filtro: no destapa nada.
+export const REPLY_MAX = 1200, CUT_ZONE = 160;
+export const CUT_NOTICE = 'Respuesta cortada por largo. Escriba "sigue" para ver el resto, o pida el documento.';
+function cutKeep(p, max) { // p: los primeros max caracteres (o más) del texto; cuánto queda antes del aviso
+  const w = p.slice(0, max), nl = w.lastIndexOf('\n'); if (nl >= max - CUT_ZONE) return nl + 1;
+  const sp = w.lastIndexOf(' '); return sp >= max - CUT_ZONE ? sp + 1 : max; }
+const cutTail = (kept) => (kept.endsWith('\n') ? '\n' : '\n\n') + CUT_NOTICE;
+export function capReply(text, max = REPLY_MAX) { const t = String(text ?? ''); if (t.length <= max) return t; const kept = t.slice(0, cutKeep(t, max)); return kept + cutTail(kept); }
+// Contexto para «sigue» (Bot 5): lo que el filtro del empleado necesita recordar de la parte cortada (sin el aviso), unos 600 caracteres:
+// la cola del párrafo anterior (desde un inicio de frase, ~150) + el último párrafo: entero si es corto; si no, su comienzo (presentación,
+// encabezado de la tabla o primeros ítems, ~300, en líneas enteras) y su última línea (la tabla o lista sigue abierta).
+export function cutPrime(reply) {
+  const r = String(reply ?? ''); if (!r.endsWith(CUT_NOTICE)) return '';
+  const t = r.slice(0, -CUT_NOTICE.length).replace(/\s+$/, ''); if (!t) return '';
+  const m = /\n[ \t]*\n(?![\s\S]*\n[ \t]*\n)/.exec(t); const prev = m ? t.slice(0, m.index) : '', P = m ? t.slice(m.index + m[0].length) : t;
+  let head = P;
+  if (P.length > 400) { const nl = P.lastIndexOf('\n', 300), last = P.slice(P.lastIndexOf('\n') + 1);
+    if (nl > 0) head = P.slice(0, nl + 1) + last; else { const tail = P.slice(-400), k = tail.search(/[.!?]\s+\S/); head = k >= 0 ? tail.slice(k + 1).replace(/^\s+/, '') : tail; } }
+  let pre = ''; if (prev) { pre = prev.slice(-150); const k = prev.length > 150 ? pre.search(/[\n.!?]\s*\S/) : -1; if (k >= 0) pre = pre.slice(k + 1).replace(/^\s+/, ''); pre += '\n\n'; }
+  return pre + head + '\n'; }
+export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = '') {
   const stages = redact === redactText ? 1 : redact === redactEmployee ? 2 : 0;
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
-  let sent = 0, ready = '', prevCtrl = false, s1, s2;
+  // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
+  // lo pone capReply y lo pintado es igual a la respuesta final.
+  let sent = 0, ready = '', prevCtrl = false, s1, s2, cut = false;
+  const batches = (n) => { while (n > 0) { let m = n; if (m > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); m = sp > 8 && sp < n ? sp + 1 : Math.min(TEXT_BATCH, n); }
+    send({ t: ready.slice(0, m) }); sent += m; n -= m; ready = ready.slice(m); } };
   const deliver = (final) => {
-    if (sent >= max) { ready = ''; return; }
-    if (!sent && !final && ready.length < FIRST_TEXT_MIN) return;
-    let room = max - sent;
-    while (ready && room > 0) {
-      let n = Math.min(ready.length, room);
-      if (n > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); n = sp > 8 ? sp + 1 : TEXT_BATCH; }
-      send({ t: ready.slice(0, n) }); sent += n; room -= n; ready = ready.slice(n);
+    if (cut) { ready = ''; return; }
+    if (sent + ready.length > max) { // se pasa: corte en línea/espacio y aviso
+      const zone = Math.max(0, max - CUT_ZONE - sent), w = ready.slice(0, max - sent);
+      const nl = w.lastIndexOf('\n'); let keep = nl >= zone ? nl + 1 : -1; if (keep < 0) { const sp = w.lastIndexOf(' '); keep = sp >= zone ? sp + 1 : max - sent; }
+      const kept = ready.slice(0, keep); const endsNl = kept ? kept.endsWith('\n') : true; // sent > 0 aquí (max >= CUT_ZONE)
+      batches(keep); send({ t: (endsNl ? '\n' : '\n\n') + CUT_NOTICE }); cut = true; ready = ''; return;
     }
-    if (room <= 0) ready = '';
+    if (!sent && !final && ready.length < FIRST_TEXT_MIN) return;
+    const n = final ? ready.length : Math.min(ready.length, Math.max(0, max - CUT_ZONE - sent));
+    batches(n);
   };
   const init = () => {
-    sent = 0; ready = ''; prevCtrl = false;
-    s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; }) : null;
+    sent = 0; ready = ''; prevCtrl = false; cut = false;
+    s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; }, prime) : null;
     s1 = createTextStage((x) => { if (s2) s2.push(x); else ready += x; });
   };
   init();
@@ -953,7 +989,7 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
       const raw = String(d || ''); if (!raw) return;
       let c = raw.replace(CTRL_RE, ' '); if (prevCtrl && CTRL_CHAR.test(raw[0])) c = c.slice(1);
       prevCtrl = CTRL_CHAR.test(raw[raw.length - 1]);
-      if (sent >= max) return;
+      if (cut) return;
       s1.push(c); deliver(false);
     },
     flush() { s1.flush(); if (s2) s2.flush(); deliver(true); },
@@ -1320,6 +1356,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const turnSecret = env.ASSISTANT_CONFIRM_SECRET && String(env.ASSISTANT_CONFIRM_SECRET).length >= 16 ? env.ASSISTANT_CONFIRM_SECRET : null;
   let nextPair = Math.floor(((!parsed.error && parsed.history) || []).length / 2);
   if (!parsed.error && role !== 'owner') { parsed.history = await verifiedEmployeeHistory(parsed.history || [], turnSecret, auth?.principalId, (deps.now || Date.now)()); nextPair = parsed.history.next; }
+  // «sigue» (Bot 5): si el último par FIRMADO y válido del empleado terminó cortado por largo, su cola prepara el filtro (solo estado, no sale).
+  // Dueño o sin par válido: nada.
+  const lastA = !parsed.error && role !== 'owner' && parsed.history.length ? parsed.history[parsed.history.length - 1] : null;
+  const prime = lastA && lastA.role === 'assistant' && typeof lastA.raw === 'string' ? cutPrime(lastA.raw) : '';
   if (parsed.error) return json({ error: parsed.error }, parsed.error === 'image_too_large' ? 413 : 400);
   // Foto con un modelo que no lee fotos: «no disponible», sin cupo y sin llamar al proveedor.
   if (parsed.image && cfg.ok && !cfg.vision) return json(IMAGE_UNSUPPORTED, 422); // respaldo (el corte de arriba ya no deja llegar aquí)
@@ -1336,7 +1376,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // Todas las puertas pasaron: recién aquí se abre el canal en partes (si el celular lo pidió y la ruta lo permite).
   const sse = parsed.stream && deps.sse ? deps.sse : null;
   const red = redactFor(role), guard = employeeToolGuard(role);
-  const emit = sse ? createTextEmitter((d) => sse.send('text', d), 1200, red, role === 'owner' ? null : ownerHold) : null;
+  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, role === 'owner' ? null : ownerHold, prime) : null;
   const beat = createStatusBeat(sse, emit, deps.statusEveryMs); ctxOut.beat = beat; // se para al cerrar el canal (assistantChatRoute)
   // Tope del servidor (Bot 3): 90 s desde que el cuerpo (y la foto) ya se leyó; también corta si el celular se fue.
   const up = new AbortController(); if (deps.sse && deps.sse.signal) linkAbort(up, deps.sse.signal);
@@ -1416,8 +1456,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const forModel = r.error ? { error: r.error } : { tipo: r.tipo, resumen: role === 'owner' ? r.resumen : stripOwnerKeys(r.resumen) };
     if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: redactText(JSON.stringify(forModel)).slice(0, 2000) });
   }
-  let reply = cleanText(result.content, 1200);
-  if (role !== 'owner') reply = redactOwnerData(reply); // mismo filtro que el texto en partes (Bot 5)
+  // mismo filtro que el texto en partes (Bot 5) y DESPUÉS el tope con aviso (Bot 2), igual que lo pintado
+  const finalText = (c) => capReply(role !== 'owner' ? redactOwnerData(cleanText(c, Infinity), prime) : cleanText(c, Infinity));
+  let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
     // Segunda llamada (sin herramientas) para explicar el resumen en palabras sencillas. Si falla, queda el texto armado con los números.
@@ -1430,7 +1471,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       const second = emit ? await callModelStream(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
         : await callModel(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       if (emit && !second.error) emit.flush();
-      if (!second.error && second.content) reply = role !== 'owner' ? redactOwnerData(cleanText(second.content, 1200)) : cleanText(second.content, 1200);
+      if (!second.error && second.content) reply = finalText(second.content);
     }
   }
   for (const p of proposals) delete p._call;
