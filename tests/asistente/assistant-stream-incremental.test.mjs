@@ -245,7 +245,8 @@ const B5_MASK = ['costo, se vende a S/ 1.80', 'costo PVP S/ 1.80', 'Costo: PVP S
   'No tengo el costo exacto, pero fue S/ 1.80', 'No sé el costo de hoy; ayer fue S/ 1.80', 'No hay costo registrado, S/ 1.80', 'El costo. S/ 1.80',
   'El costo de este producto, que es el arroz extra superior de la marca que siempre traemos de Lima, es S/ 1.80',
   'Me costó, según la boleta del proveedor que vino el martes en la tarde con todo el pedido, S/ 1.80 la unidad'];
-const B5_SHOW = ['El costo no lo tengo, pero el precio de venta es S/ 2.50', 'No tengo el costo. Hay 24 unidades a S/ 2.50', 'No sé el costo.\nEl precio es S/ 2.50',
+// «No tengo el costo. Hay 24 unidades a S/ 2.50» pasó a tapado (zona negada de dos frases, a prueba de fallas): ver sección 13.
+const B5_SHOW = ['El costo no lo tengo, pero el precio de venta es S/ 2.50', 'No sé el costo.\nEl precio es S/ 2.50',
   'Desconozco el margen. El precio es S/ 2.50.', 'Sin dato de costo.\nPrecio S/ 2.50', 'El costo es S/ 1.80. Se vende a S/ 2.50', 'costo S/ 1.80, PVP S/ 2.50'];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('12) trozos de ' + n + ': lista de 480 filas con «Arroz Costeño»/«Galletas Costa» intacta (con y sin encabezado, tabulador); columnas Costo, P. compra, Inversión tapadas', () => {
@@ -264,3 +265,19 @@ test('12) la lista de 480 filas sale rápido y en partes (no espera la tabla ent
   assert.equal(s.text, LIST_WITH_HEAD); assert.ok(ms < 2000, ms.toFixed(0) + ' ms');
   const firstAt = s.marks.find(([, out]) => out > 0)[0]; assert.ok(firstAt < 200, 'primer trozo a los ' + firstAt);
 });
+
+// ---------- 13. Zona negada (Bot 5 sobre 57d368c6): resto de la frase + la siguiente, solo etiqueta de venta deja ver ----------
+const NEG_MASK = [['No sé el costo.\nEra S/ 1.80', ['1.80']], ['No tengo el costo. Hay 24 unidades a S/ 2.50', ['2.50']], ['No sé el costo.\n\nEra S/ 1.80 o S/ 1.90', ['1.80', '1.90']],
+  ['No tengo el costo exacto, pero fue S/ 1.80', ['1.80']], ['No sé el costo de hoy; ayer fue S/ 1.80', ['1.80']], ['No hay costo registrado, S/ 1.80', ['1.80']],
+  ['No sé el costo. Era S/ 1.80. El precio es S/ 2.50', ['1.80']], ['No sé el costo. El precio es S/ 2.50 y antes S/ 1.80', ['1.80']],
+  // sin negación: etiqueta del dueño al final de la línea y el monto en la siguiente
+  ['Costo unitario:\nS/ 1.80', ['1.80']], ['P. compra\n1.80', ['1.80']], ['Costo\n\nS/ 1.80', ['1.80']]];
+const NEG_SHOW = [['No sé el costo.\nEl precio es S/ 2.50', '2.50'], ['Desconozco el margen. El precio es S/ 2.50.', '2.50'], ['Sin dato de costo.\nPrecio: S/ 2.50', '2.50'],
+  ['No sé el costo.\nPVP S/ 2.50', '2.50'], ['No sé el costo. Se vende a S/ 2.50', '2.50'], ['No sé el costo. Era S/ 1.80. El precio es S/ 2.50', '2.50'],
+  ['No sé el costo. Ok. Fin. Hay 3 a S/ 2.50', '2.50'], ['Costo desconocido, P. venta S/ 2.50', '2.50'], ['El costo no lo tengo, pero el precio de venta es S/ 2.50', '2.50']];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('13) trozos de ' + n + ': zona negada (resto de la frase + la siguiente) tapa todo monto salvo detrás de una etiqueta de venta o «precio»; etiqueta del dueño al final de línea tapa el monto de abajo', () => {
+    for (const [t, hide] of NEG_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, v] of NEG_SHOW) { const w = redactOwnerData(t); assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
+  });
+}
