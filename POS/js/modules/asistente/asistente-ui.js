@@ -257,7 +257,9 @@
     // Cada intento se corta a los ~12 s; 2 intentos y después «Pulsa Confirmar otra vez» (mismo token y operation_id).
     for (var i = 0; i < (C.CONFIRM_ATTEMPTS || 2); i++) {
       try { var body = { token: p.confirm_token, proposal: clean }; if (review) body.review = review;
-        var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm); return d.ok ? d : { ok: false, error: d.error, rows: d.rows, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null }; }
+        // (Bot 2 sobre 84a49517) lo escrito a mano en «Complete este dato» va aparte de la propuesta firmada; el servidor lo exige
+        var fill = C.fillValues ? C.fillValues(p) : null; if (fill) body.fill = fill;
+        var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm); return d.ok ? d : { ok: false, error: d.error, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null }; }
       catch (e) { lastErr = e; if (i === 0) await new Promise(function (r) { setTimeout(r, 600); }); }
     }
     throw lastErr || new Error('network');
@@ -514,6 +516,7 @@
         var f = C.confirmFailureView(r) || { kind: 'other', rows: [], button: 'Confirmar', again: true };
         c.dataset.fail = f.kind;
         if (f.kind === 'review' || f.kind === 'limit') markRows(f.rows, f.kind === 'limit');
+        if (f.kind === 'fields') { var rest = need ? need.flag(f.fields) : f.fields; res.textContent = rest.length || !need ? f.msg : 'Complete los datos marcados y vuelva a confirmar.'; }
         if (again) { again.hidden = !f.again; again.disabled = false; }
         if (c.dataset.st === 'pending') { c.dataset.btn = f.button; ok.disabled = false; no.disabled = false; ok.textContent = f.button; syncOk(); }
       });

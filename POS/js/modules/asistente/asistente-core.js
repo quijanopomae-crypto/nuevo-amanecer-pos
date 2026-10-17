@@ -31,7 +31,7 @@
   function needFields(doc, p, onChange) {
     var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
     if (!names.length) return null;
-    var state = {}, inputs = [], box = doc.createElement('div'); box.className = 'na-asst-need-box';
+    var state = {}, inputs = [], hints = {}, byName = {}, box = doc.createElement('div'); box.className = 'na-asst-need-box';
     names.forEach(function (n, i) {
       var lab = doc.createElement('label'); lab.className = 'na-asst-need-l';
       var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = NEED_LABEL[n];
@@ -39,17 +39,36 @@
       inp.setAttribute('data-need', n); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('autocomplete', 'off');
       var hint = doc.createElement('span'); hint.className = 'na-asst-need-t'; hint.textContent = 'Complete este dato'; hint.id = 'naNeed' + n + (++needSeq);
       inp.setAttribute('aria-describedby', hint.id);
+      // (Bot 2 sobre 84a49517) la parte exacta que trajo el servidor («F001-») va de inicio; cuenta solo cuando se le agrega lo que falta
+      var pre = p[n] && typeof p[n] === 'string' && !maskLeft(p[n]) ? String(p[n]).slice(0, NEED_MAX[n]) : '';
+      if (pre) inp.value = pre;
+      hints[n] = hint; byName[n] = inp;
       inp.addEventListener('input', function () {
-        var v = String(inp.value == null ? '' : inp.value).trim(), ok = !!v && !maskLeft(v); state[n] = ok ? v : '';
+        var v = String(inp.value == null ? '' : inp.value).trim(), ok = !!v && !maskLeft(v) && v !== pre.trim(); state[n] = ok ? v : '';
+        hint.textContent = 'Complete este dato';
         inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); inp.className = ok ? 'na-asst-need ok' : 'na-asst-need'; hint.hidden = ok;
         if (onChange) onChange(); });
       lab.appendChild(t); lab.appendChild(inp); lab.appendChild(hint); box.appendChild(lab); inputs.push(inp);
     });
-    return { el: box, state: state, first: inputs[0], inputs: inputs, missing: function () { return names.filter(function (n) { return !state[n]; }).length; } };
+    // (Bot 4 sobre 84a49517) el servidor rechazó (422 fields_required): aviso junto a cada campo nombrado, foco en el primero; lo escrito queda.
+    // Devuelve los nombres que no son campos de esta tarjeta (para el aviso general).
+    function flag(fields, text) {
+      var other = [], first = null;
+      (Array.isArray(fields) ? fields : []).forEach(function (n) {
+        var inp = byName[n], hint = hints[n]; if (!inp) { other.push(String(n)); return; }
+        hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); inp.className = 'na-asst-need'; if (!first) first = inp; });
+      if (first) { try { first.focus({ preventScroll: false }); } catch (_) {} }
+      return other;
+    }
+    function values() { var o = {}; names.forEach(function (n) { if (state[n]) o[n] = state[n]; }); return o; }
+    return { el: box, state: state, first: inputs[0], inputs: inputs, flag: flag, values: values, missing: function () { return names.filter(function (n) { return !state[n]; }).length; } };
   }
   var needSeq = 0;
   // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
   function purchaseValue(p, n) { var m = p && p._manual && p._manual[n]; if (m && !maskLeft(m)) return m; var v = p ? p[n] : ''; return v && !maskLeft(v) ? v : ''; }
+  // lo escrito a mano para los campos de «completar» (va en body.fill del confirm, fuera de la propuesta firmada); nunca una máscara
+  function fillValues(p) { var m = p && p._manual; if (!m || !Array.isArray(p.completar)) return null; var o = {}, k = 0;
+    p.completar.forEach(function (n) { if (NEED_LABEL[n] && typeof m[n] === 'string' && m[n] && !maskLeft(m[n])) { o[n] = m[n]; k++; } }); return k ? o : null; }
   function perms() { return root.NA_PERMISSIONS; }
   function canDo(role, action) { var P = perms(); return !!(P && P.canDo(role, action)); }
 
@@ -447,7 +466,7 @@
     upstream_error: [MSG.again, true], stock_check_unavailable: ['No pude revisar el inventario ahora. Toca «Reintentar» en un momento.', true], HTTP_503: [MSG.again, true], HTTP_502: [MSG.again, true], HTTP_500: [MSG.again, true],
     confirm_expired: [MSG.expired], HTTP_410: [MSG.expired], proposal_changed: [MSG.changed], proposal_id_mismatch: [MSG.changed], HTTP_409: [MSG.changed],
     product_missing: ['Ese producto ya no está en el inventario.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
-    review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
+    review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], fields_required: ['Complete los datos marcados y vuelva a confirmar.'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
     empty_after_review: ['Quitaste todas las filas. Pide la compra de nuevo.'], other_device: ['Esta propuesta es de otro aparato. Pídela aquí otra vez.'],
     image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
     image_too_large: ['La foto es muy grande. Toma otra más cerca.'], bad_image: ['No pude leer esa foto. Toma otra con más luz.'],
@@ -474,6 +493,9 @@
     if (!r || r.ok) return null;
     var code = r.code || (r.retry ? 'network' : 'error');
     if (code === 'review_required') return { kind: 'review', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: 'Revisa este dato en las filas marcadas y vuelve a confirmar.' };
+    if (code === 'fields_required') { var fl = (Array.isArray(r.fields) ? r.fields : []).filter(function (n) { return typeof n === 'string' && n.length <= 40; });
+      var own = fl.every(function (n) { return n === 'proveedor' || n === 'documento'; });
+      return { kind: 'fields', rows: [], fields: fl, button: 'Confirmar', again: true, msg: own ? 'Complete los datos marcados y vuelva a confirmar.' : 'Esta propuesta trae un dato tapado. Complete los datos marcados o toque «Pedir de nuevo».' }; }
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
     if (code === 'network') return { kind: 'network', rows: [], button: 'Reintentar', again: true, msg: friendlyError('network').msg };
@@ -523,7 +545,7 @@
         var c;
         try { c = await deps.confirm(it.p, it.review || null); } catch (e) { it.state = 'pending'; return { ok: false, retry: true, code: 'network', msg: e && e.timeout ? MSG.slow : 'Se cortó la conexión. Toca «Reintentar»: no se duplicará.' }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
-          return { ok: false, code: (c && c.error) || 'error', rows: c && Array.isArray(c.rows) ? c.rows : null, retry_after_s: c && c.retry_after_s || null, msg: friendlyError((c && c.error) || 'error', c && ['over_limit', 'sin_control_stock', 'stock_check_unavailable', 'product_missing'].indexOf(c.error) >= 0 ? c.message : null).msg }; }
+          return { ok: false, code: (c && c.error) || 'error', rows: c && Array.isArray(c.rows) ? c.rows : null, fields: c && Array.isArray(c.fields) ? c.fields : null, retry_after_s: c && c.retry_after_s || null, msg: friendlyError((c && c.error) || 'error', c && ['over_limit', 'sin_control_stock', 'stock_check_unavailable', 'product_missing'].indexOf(c.error) >= 0 ? c.message : null).msg }; }
         it.operationId = c.operation_id;
         // Se aplica la propuesta que el servidor verificó para ESTE token, nunca otra que esté en memoria.
         if (c.proposal) { if (c.proposal.id !== it.p.id || c.proposal.type !== it.p.type) { it.state = 'denied'; return { ok: false, msg: 'La propuesta no coincide. Pídela otra vez.' }; } it.applied = c.proposal; }
@@ -577,7 +599,7 @@
     return Math.max(0, over);
   }
 
-  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
