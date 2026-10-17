@@ -201,14 +201,17 @@
   // Último valor que el servidor confirmó en esta sesión (GET o POST con éxito). Nunca sale solo de la caché:
   // así un push no puede tomar una revisión vieja de la caché y pisar la configuración buena del servidor.
   var confirmed = {}, pulled = false;
+  // Guardado que no llegó al servidor (GET fallido): base con la que se compara cuando vuelva la conexión.
+  var pendingBase = null;
   var baseSave = null;
   /* global appConfig */
   function cfg() { try { return typeof appConfig !== 'undefined' ? appConfig : null; } catch (_) { return null; } }
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
   function copy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
-  function applyServer() {
+  // keys: solo esas claves (por defecto, todas las que hay en la copia del servidor).
+  function applyServer(keys) {
     var c = cfg(); if (!c) return false; var changed = false;
-    Object.keys(SHARED).forEach(function (k) { if (!server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
+    (keys || Object.keys(SHARED)).forEach(function (k) { if (!SHARED[k] || !server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
     // baseSave es el saveAppState original (sin envolver): guarda en el aparato y no envía nada al servidor.
     if (changed) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
     return changed;
@@ -228,33 +231,49 @@
   }
   async function pullSettings() {
     if (!cloud() || !R()) return false;
+    // Un cambio del dueño que no se pudo guardar nunca se descarta en silencio: se completa ese guardado
+    // (se envía si el servidor no tocó la clave; si la tocó, gana el servidor y se avisa).
+    if (pendingBase && R().isOwner && R().isOwner()) { await pushSettings(); return true; }
     await fetchSettings();
     var owner = R().isOwner && R().isOwner();
     // El dueño solo recibe del servidor lo que ya existe allí; nunca pierde lo que aún no subió.
     return owner ? applyServerIfMissingLocal() : applyServer();
   }
   function applyServerIfMissingLocal() { return Object.keys(server).length ? applyServer() : false; }
+  var CONFLICT_MSG = 'Otro equipo cambió la configuración; se cargó la versión del servidor, revisa y guarda de nuevo';
   // Solo se llama al guardar de verdad (guardarConfig o Configuración v9). Envía únicamente las claves que
   // cambiaron frente a lo último confirmado por el servidor; sin un GET exitoso no envía nada.
   async function pushSettings() {
     var c = cfg(); if (!c || !cloud() || !R() || !R().isOwner()) return { ok: false, reason: 'owner_only' };
-    if (!pulled && !(await fetchSettings())) return { ok: false, reason: 'not_synced', failed: [] };
-    var failed = [], conflict = false;
+    // Si el GET del arranque falló, base = lo que tenía este aparato (su copia del servidor). Se envían solo
+    // las claves que el dueño cambió frente a base; las demás nunca se envían.
+    var base = null;
+    if (!pulled) { base = pendingBase || copy(server); if (!(await fetchSettings())) { pendingBase = base; return { ok: false, reason: 'not_synced', failed: [] }; } }
+    pendingBase = null;
+    var failed = [], conflicts = [], untouched = [];
     for (var k in SHARED) {
-      var value = SHARED[k].get(c);
-      if (confirmed[k] && same(confirmed[k].value, value)) continue;
+      var value = SHARED[k].get(c), now = confirmed[k];
+      if (base) {
+        var had = base[k];
+        if (had && same(had.value, value)) { if (now && !same(now.value, had.value)) untouched.push(k); continue; } // el dueño no la tocó
+        // El dueño la cambió. Si el servidor también cambió desde base (o tiene un valor que este aparato no vio), gana el servidor.
+        if (now ? !(had && same(now.value, had.value)) && !same(now.value, value) : false) { conflicts.push(k); continue; }
+      }
+      if (now && same(now.value, value)) continue;
       try {
-        var res = await R().api('/settings', { key: k, value: value, expected_revision: confirmed[k] ? confirmed[k].revision : 0 });
+        var res = await R().api('/settings', { key: k, value: value, expected_revision: now ? now.revision : 0 });
         confirmed[k] = { value: copy(value), revision: res.revision };
         server[k] = copy(confirmed[k]);
       } catch (e) {
-        failed.push(k);
-        // Otro aparato guardó antes: se trae lo del servidor y no se reintenta con los valores locales.
-        if (e && e.message === 'revision_conflict') { conflict = true; break; }
+        // Otro aparato guardó antes: gana el servidor y no se reintenta con los valores locales.
+        if (e && e.message === 'revision_conflict') conflicts.push(k); else failed.push(k);
       }
     }
+    if (conflicts.length) await fetchSettings();
+    // Se aplica lo del servidor solo en claves en conflicto o que el dueño no tocó; nunca se pisa un cambio pendiente.
+    if (conflicts.length || untouched.length) applyServer(conflicts.concat(untouched));
     try { root.localStorage.setItem(CACHE_KEY, JSON.stringify(server)); } catch (_) {}
-    if (conflict) { await pullSettings(); return { ok: false, reason: 'revision_conflict', failed: failed }; }
+    if (conflicts.length) { toast(CONFLICT_MSG, 'error'); return { ok: false, reason: 'revision_conflict', failed: failed.concat(conflicts), conflicts: conflicts }; }
     return { ok: !failed.length, failed: failed };
   }
   function wrapSettings() {
@@ -278,7 +297,8 @@
         var ok = await baseGuardar.apply(this, arguments);
         if (!cloud() || !ok) return ok;
         var res = await pushSettings();
-        if (!res.ok) { toast('No se pudo guardar en el servidor. Revisa internet e inténtalo de nuevo.', 'error'); return false; }
+        // En conflicto pushSettings ya avisó con CONFLICT_MSG; «Revisa internet» queda solo para fallas de red.
+        if (!res.ok) { if (res.reason !== 'revision_conflict') toast('No se pudo guardar en el servidor. Revisa internet e inténtalo de nuevo.', 'error'); return false; }
         toast('Configuración guardada en el servidor', 'success');
         return true;
       };
@@ -360,5 +380,5 @@
     if (!cloud() || !R()) return { ok: true, local: true };
     return pushSettings();
   }
-  root.NA_CONFIG_G = { flush: flush, savePin: savePin, loadDevices: loadDevices, render: render, unconfirmedSales: unconfirmedSales, pullSettings: pullSettings, pushSettings: pushSettings, discountLog: function () { return JSON.parse(JSON.stringify(discountLog())); } };
+  root.NA_CONFIG_G = { flush: flush, savePin: savePin, loadDevices: loadDevices, render: render, unconfirmedSales: unconfirmedSales, pullSettings: pullSettings, pushSettings: pushSettings, sharedKeys: function () { return Object.keys(SHARED); }, conflictMessage: CONFLICT_MSG, discountLog: function () { return JSON.parse(JSON.stringify(discountLog())); } };
 })(window);
