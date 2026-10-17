@@ -574,3 +574,41 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 - `assistant-followups-58200f60.test.mjs`: sondas de Bot 5 (línea de texto, tabla de venta con tabuladores, máscaras no ASCII en manual/propuesta/celular, prefijo, «Leche 12345678», PIN numérico en dueño/empleado/modelo y en partes), Bot 4 (Confirmar apagado tras 422 hasta cambiar el campo; 422 bloqueado con solo «Cancelar»), `cardPrefix` F001-DNI/F001-RUC/F001-0001, 403 `forbidden_role` (fuera de la memoria, sin reintento, igual con cualquier rol guardado).
 - `assistant-card-completar.test.mjs`: la prueba de la serie ahora pide «-» ASCII, sin U+2011 y una span nowrap por serie en trozos de 1/2/3/7/47.
 
+
+## Ampliación sobre d72b7601 (Bot 5 ev-d72b7601)
+
+Reemplaza «PIN numérico (Bot 5, INFO; propuesta aceptada)» de la ampliación sobre 58200f60 y completa «403 `forbidden_role`» de la tarjeta.
+
+### PIN numérico (FALLA 1)
+
+- **Tras «pin»**: 4-8 dígitos dentro de las 6 palabras siguientes (enlace + 5), sin palabras de corte y SIN excepción de unidad (un pin nunca es una cantidad). Separador «:», «=», «: es», «: era», «es», «era» o espacios. Las palabras no cruzan «.», «;», «!», «?». «pin por favor 4321», «El pin de la caja cambió a 4321», «El pin del local nuevo de la esquina es 4321», «pin de la caja 4321 unidades», «El pin de la caja: 4321», «el pin del año 4321» → tapados. Ahora va antes de la regla general: «pin por favor 4321» → «pin por favor [oculto]» (antes «pin [oculto] favor 4321»).
+- **Tras «clave»/«contraseña»**: enlace + hasta 2 palabras, con las palabras de corte de antes (en, del, por, a, año…) salvo con «:»/«=», y excepción de unidad SOLO para cantidades claras: unidades, unidad, unid, und, uds, kg, kilos, g, gr, gramos, l, lt, litros, ml, soles, sol, S/, % (ya no paquetes/cajas/bolsas/u). Se acepta «: es»/«: era».
+- **Frase de credencial** (una palabra entre la etiqueta y el número nombra algo que se abre con clave: wifi, caja, local, acceso, sistema, puerta, tienda, alarma, red, internet, correo, cuenta, celular, teléfono, tarjeta, banco, app, aplicación, usuario, computadora, laptop, pc, candado, cajero, router, módem, admin, administrador, pos, seguridad, bodega, almacén, yape, plin): hasta 5 palabras tras el enlace y sin palabras de corte; la única excepción es un AÑO (19xx/20xx) justo detrás de «en/desde/hasta/del/año(s)» sin «:»/«=» («Cambié la clave de la caja en 2024 y anda bien» se ve). «La clave de la caja: es 4321», «clave del wifi por 4321», «clave del local en 4321», «clave del wifi del local 12345678» → tapados, también al dueño.
+- Un número justo detrás de «S/» o «$» nunca es PIN. «Producto clave de la semana 2500 unidades», «clave de la caja chica: 2500 soles», «La clave del negocio en 2024…», «contraseña del año 2024» → se ven. «clave de producto 4521» → tapado (aceptado).
+- **Valor con letras y dígitos**: la regla de 5 palabras tras el enlace queda igual. Única ampliación: si una de esas palabras es de credencial, llega a 6 («clave del wifi del local de la esquina Zq9xK2mPw7», la fuga restante de pin-d72b).
+- Vale para la respuesta al empleado, la respuesta al dueño y lo que va al modelo (redactText / redactModelOwner). En partes: mientras «pin/clave/contraseña» + hasta 7 palabras (+ «: es») esperan un número no se corta (`PIN_NUM_WAIT`), y con «… 2500 » recién llegado tampoco (la unidad que sigue decide clave/contraseña). En partes = texto entero.
+- Tapados de más aceptados (Bot 5 INFO): «pin 4321 unidades», «El pin de la impresora 1234 no funciona», «La clave del éxito: 5000 ventas», «… arroz 5x2025».
+
+### 403 `forbidden_role`: todas las tarjetas (FALLA menor 2)
+
+- `roleLost` ya no olvida solo la tarjeta del 403: `gate.forgetAll()` (cada propuesta con su `_manual` y lo aplicado), TODAS las `.na-asst-card` salen del DOM y de la memoria (`wipeCard`: estado y campos de «Complete este dato», cualquier input de la tarjeta, `_manual`, `_naKey/_naNeed/_naP`).
+- «Nueva compra» abierta y prellenada desde una tarjeta (marca `data-na-asst="1"` que pone `fillPurchase`; al guardar el POS la cierra solo, así que si está abierta no se guardó) → se vacían todos sus campos y se cierra con su propio botón «Cancelar» (`closeW` del POS; si no estuviera, se quita como al tocar fuera). Sin cambiar el núcleo de compras ni `codigos-duplicados.js`. Una «Nueva compra» abierta a mano no se toca.
+- Luego `refreshAccess()` (con `lastPing = 0`) pregunta el rol al servidor. Sigue sin mirarse el rol guardado ni reintentarse el confirm. Si al cambiar de rol el panel se rearma (sin la charla) y el aviso ya no está, el aviso va por el aviso del POS (`toast`).
+- Nada de propuestas ni de lo escrito va a localStorage, sessionStorage ni IndexedDB (el asistente solo guarda `na_asistente_acc`). El núcleo de compras guarda su propia huella de operación (`OPS`) solo después de «Registrar compra», para no duplicar; el asistente no la toca.
+
+### Reenvío del confirm: HMAC (INFO)
+
+- `s` = HMAC-SHA256(`ASSISTANT_CONFIRM_SECRET`, `confirm-replay:v1|s|` + sesión) (32 caracteres base64url) y `rh` = HMAC-SHA256(mismo secreto, `confirm-replay:v1|r|` + propuesta firmada + operation_id + lo escrito + filas) (48). Mismo secreto que firma las propuestas (sin secreto nuevo), con separación de dominio; ya no se pueden precalcular desde `h`/`op` del token. Un registro con el sha256 viejo no coincide → 409 `already_confirmed` sin propuesta.
+
+### Máscaras (INFO)
+
+- `MASK_LEFT_RE` / `MASK_LEFT`: además `_{2,}`, `#{2,}`, `~{2,}`, `?{2,}`, `-{3,}` pegados a dígitos («____6789», «####6789», «----6789»), `[▪■◦□▫]{2,}` («▪▪▪▪», «■■■■»), `XXX-XX-6789`, y UN carácter de máscara pegado a dígitos al inicio del valor o tras la serie («*6789», «•6789», «F001-*6789» → prefijo «F001-»). «Galleta #2», «Promo 2*1», «Ana_Lopez», «| --- |» no son máscara.
+
+### fillPurchase (INFO)
+
+- Sin el producto en el catálogo local, un `l.nombre` con máscara no se escribe: el campo queda vacío, con borde ámbar, `placeholder` «Complete el producto», `aria-invalid="true"` y `data-na-need="1"`.
+
+### Pruebas
+
+- `assistant-followups-d72b7601.test.mjs`: 49 frases de PIN (las 45 de pin-d72b + 4) en las 4 vías y en partes de 1/3/7/48; unidad recién por llegar en partes de 1-9; máscaras nuevas en servidor y celular + `cardPrefix` + tarjeta; HMAC del reenvío (valor exacto, no sha256, registro viejo → 409, sin secreto nuevo); `fillPurchase` con nombre tapado; `roleLost` con 4 tarjetas y «Nueva compra» prellenada (código real de asistente-ui.js en un DOM mínimo con la forma de `openNew`), almacenamiento vacío, «Nueva compra» abierta a mano intacta.
+- `assistant-followups-58200f60.test.mjs`: la revisión estática de `roleLost` acepta `refreshAccess` (rol del servidor) y `wipeCard(c)`.

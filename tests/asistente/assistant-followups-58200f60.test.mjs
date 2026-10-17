@@ -156,7 +156,8 @@ test('403 forbidden_role al confirmar: la propuesta y lo escrito salen de la mem
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   assert.match(UI, /if \(r && r\.code === 'forbidden_role'\) \{ roleLost\(c, key, p, need\); return; \}/);
   const fn = UI.slice(UI.indexOf('function roleLost'), UI.indexOf('function accessLost'));
-  assert.ok(/gate\.forget\(key\)/.test(fn) && /c\.remove\(\)/.test(fn) && /C\.wipeManual\(p\)/.test(fn) && /b\.textContent = 'Cerrar'/.test(fn) && /t\.textContent = C\.ROLE_LOST_MSG/.test(fn));
-  assert.ok(!/access|roles\(|isOwner|refreshAccess|lastPing|setTimeout|send\(|innerHTML|localStorage/.test(fn), 'no mira el rol guardado ni reintenta');
+  assert.ok(/gate\.forget\(key\)/.test(fn) && /wipeCard\(c\)/.test(fn) && /card\.remove\(\)/.test(UI.slice(UI.indexOf('function wipeCard'), UI.indexOf('function roleLost'))) && /C\.wipeManual\(p\)/.test(fn) && /b\.textContent = 'Cerrar'/.test(fn) && /t\.textContent = C\.ROLE_LOST_MSG/.test(fn));
+  // (Bot 5 sobre d72b7601) ahora sí pregunta el rol al SERVIDOR (refreshAccess) tras olvidar todo; sigue sin mirar el rol guardado ni reintentar
+  assert.ok(!/access\b|roles\(|isOwner|setTimeout|send\(|innerHTML|localStorage/.test(fn), 'no mira el rol guardado ni reintenta');
   assert.ok(UI.indexOf("r.code === 'forbidden_role'") < UI.indexOf('if (r && ACCESS_LOST[r.code])'), 'antes del cierre general');
 });
