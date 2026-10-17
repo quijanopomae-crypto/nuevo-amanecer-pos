@@ -93,18 +93,85 @@ const PIN_NUM_AMOUNT = /(?:^|[^a-záéíóúñü])(?:precios?|costos?|montos?)(?
 // que vienen después en la ventana («clave de la caja en 2024 era 4321» tapa el 4321).
 const PIN_NUM_YEAR_BEFORE = /(?:^|[^a-záéíóúñü])(?:d?el\s+a[ñn]o|en)\s+$/i, PIN_NUM_YEAR = /^(?:19|20)\d\d$/;
 const PIN_NUM_PROD = /(?:^|[^a-záéíóúñü])(?:productos?|art[íi]culos?)(?![a-záéíóúñü])/i;
-function pinNumber(m, off, str) {
+// (Bot 5 sobre 5646a4c9) «:», «=» o un verbo de ser (es/era/fue/será/sería) entre la etiqueta y el número: la frase DICE cuál es la clave.
+// Con eso, un año ya no suelta el número («la clave es del año 2024», «contraseña: el año 1987», «clave = en 2020» se tapan);
+// «clave del año 2024» y «Cambié la clave de la caja en 2024» siguen visibles.
+const PIN_NUM_ASSERT = /[:=]|(?:^|[^a-záéíóúñü])(?:es|era|fue|ser[áa]|ser[íi]a)(?![a-záéíóúñü])/i;
+// (Bot 5 sobre 5646a4c9) «producto/artículo» (excepción de código) y «precio/costo/monto» (excepción de dinero) cuentan SOLO si están dentro
+// de las primeras 5 palabras de la etiqueta (sin contar las de enlace) y ANTES de cualquier «,», «:», «=» o verbo de ser: «clave del producto Arroz
+// código 77501234» y «clave del precio: S/ 4521» siguen visibles; «la clave, producto de mi trabajo, es código 4321», «la clave, como el precio,
+// es S/ 4321» y «clave: monto S/ 4321» se tapan. Tampoco con una palabra de credencial antes (wifi, caja, local…: PIN_CRED_WORD).
+function pinExcWord(between, re) {
+  const x = re.exec(between); if (!x) return false;
+  const head = between.slice(0, x.index + (/^[a-záéíóúñü]/i.test(x[0]) ? 0 : 1));
+  if (/[,:=]/.test(head) || PIN_NUM_ASSERT.test(head) || PIN_CRED_RE.test(head)) return false; // «contraseña del wifi del producto código 4321» se tapa
+  return head.trim().split(/\s+/).filter((w) => w && !PIN_LINK_SET.has(w.toLowerCase())).length < PIN_NUM_MAX_WORDS;
+}
+// etiqueta pin/clave/contraseña más cercana antes de off, con la ventana de 60 caracteres / 5 palabras y sin fin de frase en medio; null si no
+function pinWindow(off, str) {
   const pre = str.slice(Math.max(0, off - PIN_NUM_MAX_CHARS - 16), off); let k = null, x; PIN_NUM_KW.lastIndex = 0;
   while ((x = PIN_NUM_KW.exec(pre))) { k = x; PIN_NUM_KW.lastIndex = x.index + x[0].length; }
-  if (!k) return m;
+  if (!k) return null;
   const between = pre.slice(k.index + k[0].length);
-  if (between.length > PIN_NUM_MAX_CHARS || PIN_NUM_STOP.test(between) || (PIN_NUM_MONEY.test(between) && PIN_NUM_AMOUNT.test(between))
-    || (k[1].toLowerCase() !== 'pin' && PIN_NUM_YEAR.test(m) && PIN_NUM_YEAR_BEFORE.test(between))
-    || (k[1].toLowerCase() !== 'pin' && PIN_NUM_CODE.test(between) && PIN_NUM_PROD.test(between))) return m;
+  if (between.length > PIN_NUM_MAX_CHARS || PIN_NUM_STOP.test(between)) return null;
   const words = between.replace(/[:=,]/g, ' ').trim().split(/\s+/).filter((w) => w && !PIN_LINK_SET.has(w.toLowerCase())).length;
-  if (words > PIN_NUM_MAX_WORDS) return m;
-  if (k[1].toLowerCase() !== 'pin' && PIN_NUM_UNIT.test(str.slice(off + m.length, off + m.length + 16))) return m;
+  if (words > PIN_NUM_MAX_WORDS) return null;
+  return { kw: k[1].toLowerCase(), between };
+}
+function pinNumber(m, off, str) {
+  const w = pinWindow(off, str); if (!w) return m;
+  const { kw, between } = w, notPin = kw !== 'pin';
+  // (Bot 5 sobre 5646a4c9) tras «pin» ninguna excepción de dinero («pin precio S/ 4321», «el pin del costo es $ 4321» se tapan)
+  if ((notPin && PIN_NUM_MONEY.test(between) && pinExcWord(between, PIN_NUM_AMOUNT))
+    || (notPin && PIN_NUM_YEAR.test(m) && PIN_NUM_YEAR_BEFORE.test(between) && !PIN_NUM_ASSERT.test(between))
+    || (notPin && PIN_NUM_CODE.test(between) && pinExcWord(between, PIN_NUM_PROD))) return m;
+  if (notPin && pinUnitOk(between, str.slice(off + m.length, off + m.length + 16))) return m;
   return '[oculto]';
+}
+// (Bot 2 sobre 5646a4c9) la unidad detrás suelta el número (solo clave/contraseña) SOLO si entre la etiqueta y el número NO hay «:», «=» ni
+// es/era/fue/será/sería (igual que el año) y si la unidad no repite un sustantivo de la frase de la etiqueta: «clave de la caja 4321 cajas»,
+// «la clave de la caja fuerte es 4321 botellas», «clave de la caja chica: 2500 soles» se tapan; «Producto clave de la semana 2500 unidades» y
+// «clave de la caja 4521 kg» se ven.
+const unitStem = (w) => w.toLowerCase().replace(/(?:es|s)$/, '');
+function pinUnitOk(between, after) {
+  const u = PIN_NUM_UNIT.exec(after); if (!u) return false;
+  if (PIN_NUM_ASSERT.test(between)) return false;
+  const st = unitStem(u[0].trim()); if (!/^[a-zñ]{3,}$/.test(st)) return true;
+  return !between.split(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü]+/).some((w) => w && unitStem(w) === st);
+}
+// (Bots 5/2 sobre 5646a4c9) número con decimales (con o sin S/, $, US$, PEN delante) en la ventana de pin/clave/contraseña: UNA pieza, se tapa
+// entera («pin 4321.00» → «pin [oculto]», no «[oculto].00»). Tras «pin» siempre («pin S/ 43.21»); tras clave/contraseña salvo «precio/costo/monto»
+// en la ventana (pinExcWord: primeras 5 palabras, antes de «,» «:» «=» o es/era, sin credencial antes) o una unidad (pinUnitOk): se tapan
+// «la clave es 43.21», «clave S/ 43.21»; se ven «clave del precio: S/ 43.21», «la clave del costo es S/ 12.50», «clave 2.5 kg».
+function pinDecimal(m, off, str) {
+  const w = pinWindow(off, str); if (!w) return m;
+  if (w.kw === 'pin') return '[oculto]';
+  if (pinExcWord(w.between, PIN_NUM_AMOUNT) || pinUnitOk(w.between, str.slice(off + m.length, off + m.length + 16))) return m;
+  return '[oculto]';
+}
+// (Bot 5 sobre 5646a4c9) clave de PURAS LETRAS dicha como clave: «clave del wifi: tortuga», «la contraseña del correo es tortuga». La etiqueta
+// va con enlace + hasta 4 palabras y después «:», «=» o es/era, y el valor es la primera palabra (empieza con letra, 3+ caracteres). Vale si
+// esas palabras nombran algo que se abre con clave (wifi, caja, local, acceso, sistema, puerta, correo, cuenta… PIN_CRED_WORD) o si la etiqueta
+// es «contraseña»/«password» (siempre una credencial). No se tapan palabras que no pueden ser la clave («la misma», «nueva», «la que…»).
+// «la clave del éxito es vender más» no entra (sin palabra de credencial).
+const PIN_ALPHA_SKIP = new Set([...PIN_LINK_SET, 'son', 'misma', 'mismo', 'igual', 'nueva', 'nuevo', 'otra', 'otro', 'otras', 'otros', 'secreta', 'secreto', 'larga', 'corta', 'segura', 'seguro',
+  'fácil', 'facil', 'difícil', 'dificil', 'correcta', 'correcto', 'incorrecta', 'incorrecto', 'esta', 'este', 'esa', 'ese', 'eso', 'esto', 'aquella', 'cual', 'cuál', 'una', 'uno', 'unos', 'unas', 'muy',
+  'más', 'mas', 'menos', 'no', 'sí', 'si', 'solo', 'sólo', 'con', 'sin', 'por', 'como', 'cómo', 'qué', 'quien', 'quién', 'cuando', 'cuándo', 'donde', 'dónde', 'hasta', 'desde', 'pero', 'porque',
+  'también', 'tambien', 'ya', 'aquí', 'aqui', 'ahí', 'ahi', 'abajo', 'arriba', 'siguiente', 'anterior', 'vieja', 'viejo', 'antigua', 'antiguo', 'actual', 'tuya', 'tuyo', 'suya', 'suyo', 'mía', 'mío',
+  'mia', 'mio', 'personal', 'privada', 'privado', 'importante', 'obligatoria', 'necesaria', 'válida', 'valida', 'distinta', 'distinto', 'diferente', 'temporal', 'provisional', 'cambiada',
+  'olvidada', 'bloqueada', 'vencida', 'caso', 'decir', 'hay', 'tiene', 'tengo', 'está', 'esta', 'estaba', 'sirve', 'funciona', 'cambió', 'cambio', 'nadie', 'algo', 'todo', 'todos', 'nada', 'ninguna',
+  'simple', 'sencilla', 'fuerte', 'débil', 'debil', 'oculto',
+  // palabras que anuncian otro dato (el número que sigue lo decide pinNumber): «la clave de la caja es código 4321» → «… es código [oculto]»
+  'código', 'codigo', 'códigos', 'codigos', 'cód', 'cod', 'ean', 'barras', 'barra', 'precio', 'costo', 'monto', 'año', 'número', 'numero', 'pin', 'clave', 'contraseña', 'contrasena']);
+const PIN_ALPHA_RE = new RegExp('(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(pin|clave|contrase(?:ñ|n)a|password)((?:\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=!?]+){0,4}?)?)(\\s*[:=]\\s*|\\s+(?:es|era)(?:\\s*:)?\\s+)([A-Za-zÁÉÍÓÚáéíóúÑñÜü][^\\s,.;!?]{2,})', 'gi');
+const PIN_CRED_RE = new RegExp('(?<![a-záéíóúñü])' + PIN_CRED_WORD, 'i');
+function pinAlpha(m, kw, mid, sep, val) {
+  const k = kw.toLowerCase();
+  // (Bot 2 sobre 5646a4c9) «contraseña»/«password» también sin enlace: «la contraseña es perrito, el saldo 4321» tapa «perrito»
+  if (!(k === 'password' || k.startsWith('contrase') || (mid && PIN_CRED_RE.test(mid)))) return m;
+  const w = val.toLowerCase().replace(/[^a-záéíóúñü]+$/i, '');
+  if (PIN_ALPHA_SKIP.has(w)) return m;
+  return kw + mid + sep + '[oculto]';
 }
 // un carácter dentro de la misma frase (el punto de «cód.» no la corta); para la regla de la etiqueta (abajo)
 const PIN_SAME = '(?:[^.;!?\\n]|(?<=c[óo]d)\\.)';
@@ -125,11 +192,15 @@ const PATTERNS = [
   // token/api key) antes del «[oculto]». «api key sk-123456, la clave 4321» tapaba solo el 4321 y dejaba la api key a la vista en el texto entero
   // (en partes sí se tapaba); «la clave del pin es 4321» sigue «la clave del pin es [oculto]».
   [/(?<![\w/$])\d{4,8}(?!\d)(?![.,]\d)/g, pinNumber],
+  // (Bots 5/2 sobre 5646a4c9) número con decimales en la ventana de la etiqueta (ver pinDecimal) y clave de puras letras dicha como clave (ver pinAlpha); antes de la regla
+  // de la etiqueta, que no tapa nada si ya hay un «[oculto]» cerca.
+  [/(?<![\w.,])\d{1,8}(?:[.,]\d{3})*[.,]\d{1,2}(?!\d)(?![.,]\d)/g, pinDecimal],
+  [PIN_ALPHA_RE, pinAlpha],
   // El valor con letras y dígitos: hasta 5 palabras tras el enlace; si una de esas palabras nombra algo que se abre con clave (wifi, caja, local…)
   // llega a 6 («clave del wifi del local de la esquina Zq9xK2mPw7»).
   [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}?(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
     + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?=(?:\\s+[^\\s,.;:=]+){0,5}\\s+' + PIN_CRED_WORD + ')(?:\\s+[^\\s,.;:=]+){6}(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
-    + '|(?!(?=' + PIN_SAME + '{0,62}\\[oculto\\])(?!' + PIN_SAME + '{0,62}?\\d' + PIN_SAME + '{0,62}?(?<![a-zñ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b' + PIN_SAME + '{0,62}?\\[oculto\\]))(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
+    + '|(?!(?=' + PIN_SAME + '{0,62}\\[oculto\\])(?!(?:' + PIN_SAME + '{0,62}?\\d|\\s*(?:es|era|de|:|=)?\\s*(?!(?:' + PIN_LINK + '|es|era|fue|son)(?![a-zñáéíóú])|\\[)[^\\s,.;]{3,})' + PIN_SAME + '{0,62}?(?<![a-zñ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b' + PIN_SAME + '{0,62}?\\[oculto\\]))(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
     (m, kw, a, c, b) => kw + (a ?? c ?? b) + '[oculto]'],
   // Bot 3: acotado (parte local 1-64, etiquetas de dominio 1-63, hasta 8, final 2-24) y sin cuantificadores anidados sin tope: lineal
   // también con 50 KB de dígitos o letras seguidas (antes ~1,9 s).
@@ -224,7 +295,7 @@ export function redactModelOwner(value) {
 // «**» solo cuenta pegado a dígitos (un «**negrita**» no es máscara).
 // (Bot 5 sobre d72b7601, INFO) y «____6789», «####6789», «~~~~6789», «????6789», «----6789», «▪▪▪▪», «■■■■», «◦◦◦◦», «XXX-XX-6789», y UN carácter de
 // máscara pegado a dígitos al inicio del valor o tras la serie («*6789», «•6789», «F001-*6789»).
-export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
   let out = collapseWs(String(value ?? ''));
@@ -875,7 +946,11 @@ function cleanFor(role, value, max) {
 const CARD_LABEL_TAIL = /(?<=^|[\s\-(/])(?:RUC|DNI|pin|clave|contrase(?:ñ|n)a|token)(?:\s*N[°º.]?)?\s*[:#=-]?\s*$/i;
 export function cardPrefix(v) { v = String(v ?? ''); const m = MASK_LEFT_RE.exec(v); if (!m && !CARD_LABEL_TAIL.test(v)) return v; let pre = m ? v.slice(0, m.index) : v; let prev;
   do { prev = pre; pre = pre.replace(CARD_LABEL_TAIL, '').replace(/[\s(\[/:#=]+$/, ''); } while (pre !== prev); return pre.replace(/^\s+/, '').slice(0, 120); }
-function cardField(role, value, max, name, missing) { const v = cleanFor(role, value, max); if (v && MASK_LEFT_RE.test(v)) { missing.push(name); return cardPrefix(v); } return v; }
+// (Bot 5 sobre 5646a4c9) el valor de la PROPUESTA (modelo o factura leída) también sale sin caracteres de formato: NFC, fuera \p{Cf} (U+202E,
+// U+2066-2069, U+200E…), U+FE00-FE0F, U+034F, etiquetas y marcas sueltas, NFC (lo mismo que normManual; dir=ltr no deshace un U+202E de adentro).
+// «U+202E 1234-100F» llega a la tarjeta y a «Nueva compra» como «1234-100F». Antes de filtrar: el filtro ve lo mismo que se muestra.
+export function fmtClean(v) { return String(v ?? '').normalize('NFC').replace(MANUAL_FMT_RE, '').replace(MANUAL_LOOSE_MARK_RE, '$1').normalize('NFC'); }
+function cardField(role, value, max, name, missing) { const v = cleanFor(role, fmtClean(value), max); if (v && MASK_LEFT_RE.test(v)) { missing.push(name); return cardPrefix(v); } return v; }
 // (Bots 2 / 4 / 5 sobre 84a49517) confirm: lo escrito por el dueño en «Complete este dato» llega en body.manual ({ campo: valor }), FUERA de la
 // propuesta firmada (que no cambia nunca por /confirm: su hash sigue igual). El servidor lo acepta solo si: la sesión es del dueño (rol del
 // servidor; el empleado ya recibe 403 antes), es un objeto plano, sus claves son un SUBCONJUNTO del «completar» firmado (otra clave —precio,
@@ -898,14 +973,16 @@ export function normManual(v) {
   return String(v ?? '').normalize('NFC').replace(MANUAL_FMT_RE, '').replace(MANUAL_LOOSE_MARK_RE, '$1').normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim();
 }
 // (Bot 2 sobre 3ee80c18) relleno también ∙ (U+2219), ✱ (U+2731), ⁎ (U+204E); los de ancho completo (＿, ＃, ＊…) llegan por la copia NFKC.
-const FILL_RUN_RE = /[*∗＊•●·∙✱⁎_#▪■×…◦□▫~](?:\s?[*∗＊•●·∙✱⁎_#▪■×…◦□▫~])+/;
+// (Bot 5 sobre 5646a4c9) y los parecidos a un asterisco: ⁕ (U+2055), ⁑, ⁂, ✲-✽ (✻ U+273B), ❉-❋, ⚹, ⊛, ٭ (U+066D, asterisco árabe), ﹡ (U+FE61)
+const FILL_RUN_RE = /[*∗＊•●·∙✱⁎_#▪■×…◦□▫~⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?:\s?[*∗＊•●·∙✱⁎_#▪■×…◦□▫~⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡])+/u;
+const FILL_STAR1_RE = /(?<![\p{L}\p{N}])[*∗＊⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)/u;
 const MARK_RE = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // (Bot 2 sobre 3ee80c18) las revisiones corren sobre una COPIA NFKC (＿＿＿＿6789 → ____6789, ＃＃＃＃6789 → ####6789); se guarda el valor NFC.
 // Documento/RUC: también X separadas («x x 6789», «X-X-6789»). Proveedor: también «*» pegado a dígitos al inicio de una palabra («*6789»).
 // Se revisa el valor NFC y su copia NFKC: malo si cualquiera de los dos falla (NFKC cambia «…» por «...», así que la NFC sigue contando).
 function manualBad1(name, k) {
   if (!/[\p{L}\p{N}]/u.test(k) || FILL_RUN_RE.test(k) || MARK_RE.test(k)) return true;
-  if (/(?<![\p{L}\p{N}])[*∗](?=\d)/u.test(k)) return true;
+  if (FILL_STAR1_RE.test(k)) return true;
   if (name === 'documento' || name === 'ruc') return /(?<!\p{L})x(?:[\s-]?x)+[\s-]?\d/iu.test(k) || MASK_LEFT_RE.test(k);
   return false;
 }
@@ -1031,7 +1108,7 @@ function productIndex(ctx) { const m = new Map(); for (const p of ctx.products) 
 function matchLine(line, idx) {
   const id = safeId(line?.product_id);
   const p = id ? idx.get(id) : null;
-  return { product_id: p ? p.id : null, nombre: cleanText(p?.nombre || line?.nombre, 80) };
+  return { product_id: p ? p.id : null, nombre: cleanText(p?.nombre || fmtClean(line?.nombre ?? ''), 80) };
 }
 
 // ---------- Revisión de compras (factura leída de una foto) ----------
@@ -1196,7 +1273,7 @@ export function toProposal(call, role, ctx, n) {
     // Un campo con algo tapado (RUC 10, DNI suelto, clave…) va vacío y en «completar»: el dueño lo escribe a mano en la tarjeta.
     const completar = [], proveedor = cardField(role, args.proveedor, 120, 'proveedor', completar), documento = cardField(role, args.documento, 80, 'documento', completar);
     return { id, type: 'compra', needsConfirm: true, title: name === 'leer_factura_compra' ? 'Compra leída de la foto' : 'Preparar compra',
-      proveedor, documento, ...(completar.length ? { completar } : {}), fecha: cleanText(args.fecha, 20), lineas,
+      proveedor, documento, ...(completar.length ? { completar } : {}), fecha: cleanText(fmtClean(args.fecha), 20), lineas,
       sinProducto: lineas.filter((l) => !l.product_id).length, revisarFilas: lineas.filter((l) => l.revisar).length, fueraDeLimite: lineas.filter((l) => l.limite).length };
   }
   if (name === 'proponer_cambio_precio') {

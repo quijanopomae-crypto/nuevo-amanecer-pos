@@ -27,7 +27,7 @@
   // state (fuera de la propuesta firmada) y lo usa fillPurchase; nunca se escribe una máscara.
   // (Bot 5 sobre 58200f60) igual que MASK_LEFT_RE del servidor: también «∗∗∗∗6789», «••••6789», «**6789», «…6789», «xxxx6789», «(oculto)»
   // (Bot 5 sobre d72b7601) y «____6789», «####6789», «▪▪▪▪», «XXX-XX-6789», «*6789» (un carácter al inicio o tras la serie «F001-»); sin lookbehind
-  var MASK_LEFT = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|\b[A-Z0-9]{4}-)[*∗＊•●·▪■◦#_](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+  var MASK_LEFT = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|\b[A-Z0-9]{4}-)[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
   function maskLeft(v) { return MASK_LEFT.test(String(v == null ? '' : v)); }
   // (Bot 2 sobre d72b7601, decisión final) misma regla que normManual/manualBad del servidor: fuera invisibles y de control, NBSP/U+2007/U+202F → espacio,
   // U+2010-U+2015 → «-», recorte; malo si queda vacío o sin letra/dígito, con 2+ símbolos de relleno seguidos o con «[oculto]»; solo el documento
@@ -38,9 +38,11 @@
   function normManual(v) { return String(v == null ? '' : v).normalize('NFC').replace(MANUAL_FMT, '').replace(MANUAL_LOOSE_MARK, '$1').normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim(); }
   // (Bot 2 sobre 3ee80c18) igual que el servidor: ∙ ✱ ⁎ en el relleno; revisiones sobre una copia NFKC (se guarda NFC); documento: «x x 6789»;
   // proveedor: «*6789» (asterisco pegado a dígitos al inicio de una palabra).
-  var FILL_RUN = /[*∗＊•●·∙✱⁎_#▪■×…◦□▫~](?:\s?[*∗＊•●·∙✱⁎_#▪■×…◦□▫~])+/, MARK = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+  // (Bot 5 sobre 5646a4c9) igual que el servidor: ⁕ ⁑ ⁂ ✲-✽ ❉-❋ ⚹ ⊛ ٭ ﹡ en el relleno y pegados a dígitos
+  var FILL_STAR1 = /(?<![\p{L}\p{N}])[*∗＊⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)/u;
+  var FILL_RUN = /[*∗＊•●·∙✱⁎_#▪■×…◦□▫~⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?:\s?[*∗＊•●·∙✱⁎_#▪■×…◦□▫~⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡])+/u, MARK = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
   function manualBad1(n, k) { if (!/[\p{L}\p{N}]/u.test(k) || FILL_RUN.test(k) || MARK.test(k)) return true;
-    if (/(?<![\p{L}\p{N}])[*∗](?=\d)/u.test(k)) return true;
+    if (FILL_STAR1.test(k)) return true;
     return (n === 'documento' || n === 'ruc') ? (/(?<!\p{L})x(?:[\s-]?x)+[\s-]?\d/iu.test(k) || maskLeft(k)) : false; }
   function manualBad(n, v) { if (!v) return true; v = String(v); return manualBad1(n, v) || manualBad1(n, v.normalize('NFKC')); } // NFC y copia NFKC
   var NEED_LABEL = { proveedor: 'Proveedor', documento: 'Documento' }, NEED_MAX = { proveedor: 120, documento: 80 };
@@ -85,7 +87,10 @@
   }
   var needSeq = 0;
   // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
-  function purchaseValue(p, n) { var m = p && p._manual && normManual(p._manual[n]); if (m && !manualBad(n, m)) return m; var v = p ? p[n] : ''; return v && !maskLeft(v) ? v : ''; }
+  // (Bot 5 sobre 5646a4c9) el valor de la propuesta también sin caracteres de formato (igual que fmtClean del servidor): «U+202E 1234-100F» se
+  // muestra y se escribe en «Nueva compra» como «1234-100F» (dir=ltr no deshace un U+202E de adentro)
+  function fmtClean(v) { return String(v == null ? '' : v).normalize('NFC').replace(MANUAL_FMT, '').replace(MANUAL_LOOSE_MARK, '$1').normalize('NFC'); }
+  function purchaseValue(p, n) { var m = p && p._manual && normManual(p._manual[n]); if (m && !manualBad(n, m)) return m; var v = p ? fmtClean(p[n]).trim() : ''; return v && !maskLeft(v) ? v : ''; }
   // lo escrito a mano para los campos de «completar» (va en body.manual del confirm, fuera de la propuesta firmada); nunca una máscara
   function fillValues(p) { var m = p && p._manual; if (!m || !Array.isArray(p.completar)) return null; var o = {}, k = 0;
     p.completar.forEach(function (n) { var v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, NEED_MAX[n]).trim() : ''; if (NEED_LABEL[n] && !manualBad(n, v)) { o[n] = v; k++; } }); return k ? o : null; }
@@ -333,7 +338,8 @@
   }
   // Texto ya completo (celdas, tarjetas): trozos de texto + una span por serie (cell: la forma partible tras el guion).
   function appendCoded(doc, parent, v, cell) {
-    v = String(v); var re = new RegExp(DOC_CODE_RE.source, 'g'), m, at = 0, n = 0;
+    // (Bot 5 sobre 5646a4c9) sin U+202E/U+2066…: lo que se ve es lo que hay
+    v = fmtClean(v); var re = new RegExp(DOC_CODE_RE.source, 'g'), m, at = 0, n = 0;
     while ((m = re.exec(v))) { if (m.index > at) parent.appendChild(doc.createTextNode(v.slice(at, m.index))); parent.appendChild(cell ? cellCodeSpan(doc, m[0]) : codeSpan(doc, m[0])); at = m.index + m[0].length; n++; }
     if (at < v.length) parent.appendChild(doc.createTextNode(v.slice(at)));
     return n;
@@ -702,7 +708,7 @@
     return Math.max(0, over);
   }
 
-  var api = { normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { fmtClean: fmtClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
