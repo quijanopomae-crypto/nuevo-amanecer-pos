@@ -71,24 +71,43 @@ const PIN_LINK = '(?:del?|la|las|el|los|lo|mi|mis|tu|tus|su|sus|nuestra|nuestro|
 // que esté a lo sumo a 60 caracteres y a 5 palabras de la etiqueta (sin contar las de enlace: de, del, la, el, mi, para, en, que… ni es/era/fue/
 // son/a), sin fin de frase en medio (. ; ! ? salto). Sin palabras de corte: «clave de la caja en 2024 era 4321» tapa los dos. Se acepta «:», «=»,
 // «: es/era». Excepciones: una unidad clara pegada detrás (unidades, und, kg, g, l, soles, S/, %), solo para clave/contraseña (un pin nunca es
-// una cantidad); un número detrás de S/, $ o PEN; un número detrás de «código/cód./EAN/barras». El valor con letras y dígitos va aparte (abajo).
+// una cantidad); un número detrás de S/, $ o PEN solo con precio/costo/monto en medio; un año tras «del año/el año/en»; un número detrás de «código/cód./EAN/barras» solo con «producto/artículo» en medio y nunca tras «pin». El valor con letras y dígitos va aparte (abajo).
 const PIN_LINK_SET = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'lo', 'mi', 'mis', 'tu', 'tus', 'su', 'sus', 'nuestra', 'nuestro', 'para', 'en', 'que', 'es', 'era', 'fue', 'son', 'a']);
 const PIN_CRED_WORD = '(?:wi-?fi|caja|local|acceso|sistema|puerta|tienda|alarma|red|internet|correo|cuenta|celular|tel[eé]fono|tarjeta|banco|app|aplicaci[oó]n|usuario|computadora|laptop|pc|candado|cajero|router|m[oó]dem|admin|administrador|pos|seguridad|bodega|almac[eé]n|yape|plin)(?![a-záéíóúñü])';
 const PIN_NUM_MAX_CHARS = 60, PIN_NUM_MAX_WORDS = 5;
 const PIN_NUM_KW = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])/gi;
-const PIN_NUM_UNIT = /^\s*(?:(?:unidades|unidad|unid|und|uds|kg|kilos?|g|gr|gramos|l|lt|litros?|ml|soles|sol)(?![a-zñáéíóú])|S\/|%)/i;
+// (Bot 2 sobre 3ee80c18) más unidades de compra/stock (solo clave/contraseña; tras «pin» nunca): paquete, caja, bolsa, docena, saco, botella y sus plurales
+const PIN_NUM_UNIT = /^\s*(?:(?:unidades|unidad|unid|und|uds|kg|kilos?|g|gr|gramos|l|lt|litros?|ml|soles|sol|paquetes?|cajas?|bolsas?|docenas?|sacos?|botellas?)(?![a-zñáéíóú])|S\/|%)/i;
 const PIN_NUM_MONEY = /(?:S\/\.?|US\$|\$|PEN)\s*$/i, PIN_NUM_CODE = /(?:^|[^a-záéíóúñü])(?:c[óo]d(?:igos?)?\.?|ean(?:-?(?:13|8))?|barras?)\s*[:#]?\s*$/i;
+// (Bots 2/5 sobre 3ee80c18, decisión final) la excepción de código (número justo detrás de «código/cód./EAN/barras») NUNCA vale tras «pin»
+// («pin código 4321», «pin del EAN 4321», «PIN EAN-13 4321» se tapan). Tras «clave»/«contraseña» vale SOLO si entre la etiqueta y el número
+// aparece «producto», «productos», «artículo» o «artículos», sin importar cuántos dígitos tenga: «clave del producto Arroz código 77501234» queda visible para el
+// dueño; «clave: código 4321», «clave del wifi código 12345678», «contraseña del local cod 12345678» se tapan.
+// fin de frase entre la etiqueta y el número: . ; ! ? salto, salvo el punto de la abreviatura «cód.»/«cod.» («pin cód. 4321» se tapa)
+const PIN_NUM_STOP = /[;!?\n]|(?<!(?:^|[^a-záéíóúñü])c[óo]d)\./i;
+// (Bot 2 sobre 3ee80c18) dinero: «S/», «$», «US$», «PEN» delante ya NO sueltan el número solo («clave de la caja S/ 4321» se tapa); lo suelta
+// si entre la etiqueta y el número aparece precio/costo/monto («clave del precio: S/ 4521»). Con decimales («S/ 43.21», «S/ 4321.00») el número
+// nunca entra en la regla (el patrón no toma montos con decimales).
+const PIN_NUM_AMOUNT = /(?:^|[^a-záéíóúñü])(?:precios?|costos?|montos?)(?![a-záéíóúñü])/i;
+// (Bot 2 sobre 3ee80c18) año (solo clave/contraseña; tras «pin» nunca, «pin en 2019» se tapa): 19xx/20xx justo detrás de «del año»/«el año»/«en» se ve («clave del año 2024»); la revisión sigue con los números
+// que vienen después en la ventana («clave de la caja en 2024 era 4321» tapa el 4321).
+const PIN_NUM_YEAR_BEFORE = /(?:^|[^a-záéíóúñü])(?:d?el\s+a[ñn]o|en)\s+$/i, PIN_NUM_YEAR = /^(?:19|20)\d\d$/;
+const PIN_NUM_PROD = /(?:^|[^a-záéíóúñü])(?:productos?|art[íi]culos?)(?![a-záéíóúñü])/i;
 function pinNumber(m, off, str) {
   const pre = str.slice(Math.max(0, off - PIN_NUM_MAX_CHARS - 16), off); let k = null, x; PIN_NUM_KW.lastIndex = 0;
   while ((x = PIN_NUM_KW.exec(pre))) { k = x; PIN_NUM_KW.lastIndex = x.index + x[0].length; }
   if (!k) return m;
   const between = pre.slice(k.index + k[0].length);
-  if (between.length > PIN_NUM_MAX_CHARS || /[.;!?\n]/.test(between) || PIN_NUM_MONEY.test(between) || PIN_NUM_CODE.test(between)) return m;
+  if (between.length > PIN_NUM_MAX_CHARS || PIN_NUM_STOP.test(between) || (PIN_NUM_MONEY.test(between) && PIN_NUM_AMOUNT.test(between))
+    || (k[1].toLowerCase() !== 'pin' && PIN_NUM_YEAR.test(m) && PIN_NUM_YEAR_BEFORE.test(between))
+    || (k[1].toLowerCase() !== 'pin' && PIN_NUM_CODE.test(between) && PIN_NUM_PROD.test(between))) return m;
   const words = between.replace(/[:=,]/g, ' ').trim().split(/\s+/).filter((w) => w && !PIN_LINK_SET.has(w.toLowerCase())).length;
   if (words > PIN_NUM_MAX_WORDS) return m;
   if (k[1].toLowerCase() !== 'pin' && PIN_NUM_UNIT.test(str.slice(off + m.length, off + m.length + 16))) return m;
   return '[oculto]';
 }
+// un carácter dentro de la misma frase (el punto de «cód.» no la corta); para la regla de la etiqueta (abajo)
+const PIN_SAME = '(?:[^.;!?\\n]|(?<=c[óo]d)\\.)';
 const PATTERNS = [
   // Bot 5: un «data:» (foto pegada como texto, base64) nunca va a DeepSeek dentro del mensaje: se cambia por un aviso corto. Va primero para que
   // sus dígitos no parezcan DNI o teléfono. La foto real va aparte (campo image, solo dueño).
@@ -102,12 +121,15 @@ const PATTERNS = [
   // (58200f60 y la primera versión de d72b7601 usaban palabras de corte, unidad y 2 palabras: reemplazado por la decisión final, ver pinNumber.)
   // (Bots 2/3/5 sobre d72b7601) PIN numérico por número (ver pinNumber): va ANTES que la regla de la etiqueta; así «pin por favor 4321» →
   // «pin por favor [oculto]» y la regla general no tapa además la palabra de enlace (no tapa nada si ya hay un «[oculto]» en los 60 siguientes).
+  // (3ee80c18) …salvo que ese «[oculto]» sea de OTRA etiqueta: un valor con dígito y después otra etiqueta (pin/clave/contraseña/password/
+  // token/api key) antes del «[oculto]». «api key sk-123456, la clave 4321» tapaba solo el 4321 y dejaba la api key a la vista en el texto entero
+  // (en partes sí se tapaba); «la clave del pin es 4321» sigue «la clave del pin es [oculto]».
   [/(?<![\w/$])\d{4,8}(?!\d)(?![.,]\d)/g, pinNumber],
   // El valor con letras y dígitos: hasta 5 palabras tras el enlace; si una de esas palabras nombra algo que se abre con clave (wifi, caja, local…)
   // llega a 6 («clave del wifi del local de la esquina Zq9xK2mPw7»).
   [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}?(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
     + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?=(?:\\s+[^\\s,.;:=]+){0,5}\\s+' + PIN_CRED_WORD + ')(?:\\s+[^\\s,.;:=]+){6}(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
-    + '|(?![^.;!?\\n]{0,62}\\[oculto\\])(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
+    + '|(?!(?=' + PIN_SAME + '{0,62}\\[oculto\\])(?!' + PIN_SAME + '{0,62}?\\d' + PIN_SAME + '{0,62}?(?<![a-zñ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b' + PIN_SAME + '{0,62}?\\[oculto\\]))(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
     (m, kw, a, c, b) => kw + (a ?? c ?? b) + '[oculto]'],
   // Bot 3: acotado (parte local 1-64, etiquetas de dominio 1-63, hasta 8, final 2-24) y sin cuantificadores anidados sin tope: lineal
   // también con 50 KB de dígitos o letras seguidas (antes ~1,9 s).
@@ -867,16 +889,27 @@ const FILL_MAX = { proveedor: 120, documento: 80 };
 // (422 fields_required → «Complete este dato» en ese campo) si queda vacío o sin letra/dígito, si trae una tira de 2+ símbolos de relleno
 // (*, ∗, ＊, •, ●, ·, _, #, ▪, ■, ×, …, ◦, □, ▫, ~) o una marca de tapado («[oculto]»). Solo documento (y RUC): además 2+ X/x seguidas de
 // dígitos («XX6789») y el resto de MASK_LEFT_RE. «Ferretería XXL SAC» y «Distribuidora XX» pasan. Se guarda y se reenvía el valor normalizado.
+// (Bot 5 sobre 3ee80c18) antes de todo: NFC («José» con acento combinante queda «José», válido); fuera todo \p{Cf} (incluye los de dirección
+// U+202A-202E y U+2066-2069 —«U+202E 1234-100F» se veía «F001-4321»—, U+00AD, U+2061-2064, U+200E/F, U+E0000-E007F), los selectores de variante
+// U+FE00-FE0F, U+034F y toda marca combinante (\p{M}) que no vaya pegada a una letra (tras dígitos o símbolos de relleno: U+20DD, U+0301…);
+// después NFC otra vez. Misma función, carácter por carácter, en el celular (asistente-core.js normManual).
+const MANUAL_FMT_RE = /[\p{Cf}\uFE00-\uFE0F\u034F\u{E0000}-\u{E007F}]/gu, MANUAL_LOOSE_MARK_RE = /(^|[^\p{L}\p{M}])\p{M}+/gu;
 export function normManual(v) {
-  return String(v ?? '').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim();
+  return String(v ?? '').normalize('NFC').replace(MANUAL_FMT_RE, '').replace(MANUAL_LOOSE_MARK_RE, '$1').normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim();
 }
-const FILL_RUN_RE = /[*∗＊•●·_#▪■×…◦□▫~](?:\s?[*∗＊•●·_#▪■×…◦□▫~])+/;
+// (Bot 2 sobre 3ee80c18) relleno también ∙ (U+2219), ✱ (U+2731), ⁎ (U+204E); los de ancho completo (＿, ＃, ＊…) llegan por la copia NFKC.
+const FILL_RUN_RE = /[*∗＊•●·∙✱⁎_#▪■×…◦□▫~](?:\s?[*∗＊•●·∙✱⁎_#▪■×…◦□▫~])+/;
 const MARK_RE = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
-export function manualBad(name, v) {
-  if (!v || !/[\p{L}\p{N}]/u.test(v) || FILL_RUN_RE.test(v) || MARK_RE.test(v)) return true;
-  if (name === 'documento' || name === 'ruc') return /x{2,}[\s-]?\d/i.test(v) || MASK_LEFT_RE.test(v);
+// (Bot 2 sobre 3ee80c18) las revisiones corren sobre una COPIA NFKC (＿＿＿＿6789 → ____6789, ＃＃＃＃6789 → ####6789); se guarda el valor NFC.
+// Documento/RUC: también X separadas («x x 6789», «X-X-6789»). Proveedor: también «*» pegado a dígitos al inicio de una palabra («*6789»).
+// Se revisa el valor NFC y su copia NFKC: malo si cualquiera de los dos falla (NFKC cambia «…» por «...», así que la NFC sigue contando).
+function manualBad1(name, k) {
+  if (!/[\p{L}\p{N}]/u.test(k) || FILL_RUN_RE.test(k) || MARK_RE.test(k)) return true;
+  if (/(?<![\p{L}\p{N}])[*∗](?=\d)/u.test(k)) return true;
+  if (name === 'documento' || name === 'ruc') return /(?<!\p{L})x(?:[\s-]?x)+[\s-]?\d/iu.test(k) || MASK_LEFT_RE.test(k);
   return false;
 }
+export function manualBad(name, v) { if (!v) return true; v = String(v); return manualBad1(name, v) || manualBad1(name, v.normalize('NFKC')); }
 function fillCheck(p, manual) {
   const names = Array.isArray(p.completar) ? [...new Set(p.completar.map((n) => String(n)).filter((n) => Object.hasOwn(FILL_MAX, n)))] : [];
   if (manual != null && (typeof manual !== 'object' || Array.isArray(manual) || Object.getPrototypeOf(manual) !== Object.prototype)) return { status: 400, error: 'manual_not_allowed', fields: [] };
@@ -1297,7 +1330,7 @@ const PIN_TOKEN_END = /(?:es|era|de|:|=)$/i;
 // (Bot 5 sobre d72b7601) PIN numérico: tras «pin» el número puede venir hasta 6 palabras después (sin palabras de corte), tras clave/contraseña
 // hasta enlace + 6 (frase de credencial), con «: es» en medio. Mientras tanto no se corta. Y con «… 4321 » recién llegado tampoco: la unidad
 // que podría seguir («2500 unidades») cambia el resultado de clave/contraseña.
-const PIN_NUM_WAIT = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])[^.;!?\n]{0,61}$/i;
+const PIN_NUM_WAIT = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:[^.;!?\n]{0,61}|[^.;!?\n]{0,60}(?<=(?:^|[^a-záéíóúñü])c[óo]d)\.[^.;!?\n]{0,60})$/i; // (3ee80c18) también tras un «cód.» (clase simple: CPU)
 const PIN_NUM_TAIL = /(?<![\d])\d{4,8}\s+$/;
 function skipWsBack(t, i) { while (i > 0 && isWs(t[i - 1])) i--; return i; }
 // ¿Hay una palabra de clave antes de h esperando su valor? (espacios, opcional «es/era/de/:/=», espacios)

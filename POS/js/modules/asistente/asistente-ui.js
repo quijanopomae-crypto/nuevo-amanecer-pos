@@ -297,6 +297,10 @@
   }
   function mark(i) { i.style.outline = '3px solid #16a34a'; try { i.focus({ preventScroll: true }); } catch (_) {} }
   function g(name) { try { return (0, eval)('typeof ' + name + '!=="undefined"?' + name + ':undefined'); } catch (_) { return undefined; } }
+  // (Bot 4 sobre 3ee80c18) valores de documento/RUC: dir="ltr" + unicode-bidi:isolate (clase na-asst-ltr y el estilo en línea, porque «Nueva compra»
+  // es del POS y no lleva la hoja del asistente garantizada). «U+202E 1234-100F» ya llega normalizado («1234-100F»); esto cubre lo que trae la propuesta.
+  function ltrIsolate(n) { if (!n || !n.setAttribute) return n; n.setAttribute('dir', 'ltr'); if (n.classList) n.classList.add('na-asst-ltr'); else n.className = (n.className ? n.className + ' ' : '') + 'na-asst-ltr';
+    if (n.style) { n.style.unicodeBidi = 'isolate'; n.style.direction = 'ltr'; } return n; }
   var deps = {
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
@@ -307,6 +311,8 @@
       var s = w.querySelector('#naPurSupplier'), d = w.querySelector('#naPurDoc');
       // nunca una máscara: lo escrito a mano en la tarjeta o el valor exacto del servidor (Bot 2 sobre 6280deae)
       var pv = C.purchaseValue(p, 'proveedor'), dv = C.purchaseValue(p, 'documento'); if (s && pv) s.value = pv; if (d && dv) d.value = dv;
+      // (Bot 4 sobre 3ee80c18) documento y proveedor (lleva el RUC) aislados de izquierda a derecha: un control de dirección no da vuelta la serie
+      [s, d].forEach(function (n) { if (!n) return; n.setAttribute('dir', 'ltr'); n.className = (n.className ? n.className + ' ' : '') + 'na-asst-ltr'; if (n.style) { n.style.unicodeBidi = 'isolate'; n.style.direction = 'ltr'; } });
       var add = w.querySelector('.na-pur-add');
       p.lineas.forEach(function (l, i) {
         if (i > 0 && add) add.click();
@@ -452,7 +458,9 @@
   function addCard(p, prompt) {
     var key = gate.add(p); if (!key) return;
     var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
-    var dn = c.querySelector('[data-docnote]'); if (dn) C.appendCoded(doc, dn, [p.proveedor, p.documento, p.fecha].filter(Boolean).map(String).join(' · '));
+    // (Bot 4 sobre 3ee80c18) cada valor en su span; proveedor (RUC) y documento aislados de izquierda a derecha
+    var dn = c.querySelector('[data-docnote]'); if (dn) [[p.proveedor, true], [p.documento, true], [p.fecha, false]].filter(function (x) { return x[0]; }).forEach(function (x, i) {
+      if (i) dn.appendChild(doc.createTextNode(' · ')); var sp = doc.createElement('span'); if (x[1]) ltrIsolate(sp); C.appendCoded(doc, sp, String(x[0])); dn.appendChild(sp); });
     var res = c.querySelector('.res');
     var go = c.querySelector('[data-go]'); if (go) go.onclick = function () { gate.execute(key, { confirmed: true }).then(function () { closePanel(); }); };
     // Documento local (solo lectura): se puede abrir varias veces, sin servidor ni PIN.
@@ -467,6 +475,7 @@
     // (Bot 2 sobre 6280deae) campos vacíos de la tarjeta de compra: Confirmar apagado hasta llenarlos
     var need = C.needFields(doc, p, function () { syncOk(); }); c._naNeed = need; c._naP = p; // roleLost vacía TODAS las tarjetas
     if (need) { Object.defineProperty(p, '_manual', { value: need.state, enumerable: false, configurable: true }); var tb = c.querySelector('table'); c.insertBefore(need.el, tb || c.firstChild); }
+    if (need && need.inputs) need.inputs.forEach(function (i) { ltrIsolate(i); }); // (Bot 4 sobre 3ee80c18) lo escrito en documento/proveedor, de izquierda a derecha
     function lockFields(on) { if (need && need.inputs) need.inputs.forEach(function (i) { i.disabled = !!on; i.readOnly = !!on; }); Array.prototype.forEach.call(c.querySelectorAll('tr.flag button'), function (b) { b.disabled = !!on; }); c.dataset.locked = on ? '1' : ''; }
     function syncOk() { if (!ok || c.dataset.st !== 'pending' || c.dataset.locked === '1') return; var n = pendingRows(), miss = need ? need.missing() : 0; ok.disabled = n > 0 || miss > 0;
       ok.textContent = miss > 0 ? 'Complete ' + miss + (miss === 1 ? ' dato' : ' datos') : n > 0 ? 'Revisa ' + n + (n === 1 ? ' fila' : ' filas') : (c.dataset.btn || 'Confirmar'); }

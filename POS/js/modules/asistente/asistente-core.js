@@ -32,10 +32,17 @@
   // (Bot 2 sobre d72b7601, decisión final) misma regla que normManual/manualBad del servidor: fuera invisibles y de control, NBSP/U+2007/U+202F → espacio,
   // U+2010-U+2015 → «-», recorte; malo si queda vacío o sin letra/dígito, con 2+ símbolos de relleno seguidos o con «[oculto]»; solo el documento
   // además «XX6789» (2+ X y dígitos) y el resto de MASK_LEFT. «Ferretería XXL SAC» y «Distribuidora XX» pasan.
-  function normManual(v) { return String(v == null ? '' : v).replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim(); }
-  var FILL_RUN = /[*∗＊•●·_#▪■×…◦□▫~](?:\s?[*∗＊•●·_#▪■×…◦□▫~])+/, MARK = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
-  function manualBad(n, v) { if (!v || !/[\p{L}\p{N}]/u.test(v) || FILL_RUN.test(v) || MARK.test(v)) return true;
-    return (n === 'documento' || n === 'ruc') ? (/x{2,}[\s-]?\d/i.test(v) || maskLeft(v)) : false; }
+  // (Bot 5 sobre 3ee80c18) igual que el servidor: NFC; fuera \p{Cf} (dirección U+202A-202E/U+2066-2069, U+00AD, U+2061, etiquetas U+E0000-E007F…),
+  // U+FE00-FE0F, U+034F y las marcas combinantes que no van pegadas a una letra; NFC otra vez. «José» (acento combinante) sigue válido.
+  var MANUAL_FMT = /[\p{Cf}\uFE00-\uFE0F\u034F\u{E0000}-\u{E007F}]/gu, MANUAL_LOOSE_MARK = /(^|[^\p{L}\p{M}])\p{M}+/gu;
+  function normManual(v) { return String(v == null ? '' : v).normalize('NFC').replace(MANUAL_FMT, '').replace(MANUAL_LOOSE_MARK, '$1').normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim(); }
+  // (Bot 2 sobre 3ee80c18) igual que el servidor: ∙ ✱ ⁎ en el relleno; revisiones sobre una copia NFKC (se guarda NFC); documento: «x x 6789»;
+  // proveedor: «*6789» (asterisco pegado a dígitos al inicio de una palabra).
+  var FILL_RUN = /[*∗＊•●·∙✱⁎_#▪■×…◦□▫~](?:\s?[*∗＊•●·∙✱⁎_#▪■×…◦□▫~])+/, MARK = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+  function manualBad1(n, k) { if (!/[\p{L}\p{N}]/u.test(k) || FILL_RUN.test(k) || MARK.test(k)) return true;
+    if (/(?<![\p{L}\p{N}])[*∗](?=\d)/u.test(k)) return true;
+    return (n === 'documento' || n === 'ruc') ? (/(?<!\p{L})x(?:[\s-]?x)+[\s-]?\d/iu.test(k) || maskLeft(k)) : false; }
+  function manualBad(n, v) { if (!v) return true; v = String(v); return manualBad1(n, v) || manualBad1(n, v.normalize('NFKC')); } // NFC y copia NFKC
   var NEED_LABEL = { proveedor: 'Proveedor', documento: 'Documento' }, NEED_MAX = { proveedor: 120, documento: 80 };
   function needFields(doc, p, onChange) {
     var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
@@ -634,7 +641,10 @@
         // Se aplica la propuesta que el servidor verificó para ESTE token, nunca otra que esté en memoria.
         if (c.proposal) { if (c.proposal.id !== it.p.id || c.proposal.type !== it.p.type) { it.state = 'denied'; return { ok: false, msg: 'La propuesta no coincide. Pídela otra vez.' }; } it.applied = c.proposal;
           // (Bot 4 sobre 84a49517) lo escrito a mano sigue con la propuesta que devolvió el servidor: «Nueva compra» abre con Proveedor/Documento
-          if (it.p._manual && it.applied && typeof it.applied === 'object') { try { Object.defineProperty(it.applied, '_manual', { value: it.p._manual, enumerable: false, configurable: true }); } catch (_) {} } }
+          // (Bot 5 sobre 3ee80c18, INFO) lo que ENTRA a «Nueva compra» es lo que se MANDÓ (sentNow.manual, el cuerpo guardado), no lo que haya en vivo
+          // en los campos (bloqueados, pero se podrían forzar por consola). Sin cuerpo guardado (puerta sin confirmRemote), lo escrito como antes.
+          var km2 = sentNow ? (sentNow.manual && typeof sentNow.manual === 'object' ? sentNow.manual : null) : (it.p._manual || null);
+          if (km2 && it.applied && typeof it.applied === 'object') { try { Object.defineProperty(it.applied, '_manual', { value: km2, enumerable: false, configurable: true }); } catch (_) {} } }
         if (c.already_confirmed && it.executed) { it.state = 'done'; return { ok: true, msg: 'Ya se hizo. No se repitió.' }; }
       }
       if (it.executed) { it.state = 'done'; return { ok: true, msg: 'Ya se hizo. No se repitió.' }; }

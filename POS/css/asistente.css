@@ -419,3 +419,5 @@ body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.da
   body.dark .na-asst-tbl tr{border-color:#1f3b2b}
 }
 .na-asst-msg.a.na-asst-wide{max-width:100%} /* clase puesta desde JS al pintar la 1.ª tabla (antes :has) */
+/* (Bot 4 sobre 3ee80c18) documento / RUC / proveedor: de izquierda a derecha y aislado (un control de dirección no da vuelta «F001-…») */
+.na-asst-ltr{direction:ltr;unicode-bidi:isolate}
