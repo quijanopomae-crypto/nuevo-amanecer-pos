@@ -155,5 +155,5 @@ test('tarjeta sin PIN: resumen antes → después, «Confirmar» de un toque que
   assert.match(card, /soles\(p\.costo_actual\) : 'sin costo'\) \+ ' → <b>' \+ soles\(p\.costo_nuevo\)/, 'costo: antes → después');
   assert.match(card, /<span class="pill">Solo dueño<\/span>/); assert.match(card, /data-ok>Confirmar</);
   assert.ok(!/type="password"|inputmode="numeric"|PIN/.test(card), 'sin campo de PIN en la tarjeta');
-  assert.match(ui, /if \(ok\) ok\.onclick = async function \(\) \{\n\s*if \(c\.dataset\.st !== 'pending'\) return;\n\s*ok\.disabled = true;/, 'un segundo toque no dispara otro envío');
+  assert.match(ui, /if \(ok\) ok\.onclick = async function \(\) \{\n\s*if \(c\.dataset\.st !== 'pending'\) return;\n(?:\s*if \(need && need\.recheck && need\.recheck\(\)\) \{ syncOk\(\); return; \}[^\n]*\n)?\s*ok\.disabled = true;/, 'un segundo toque no dispara otro envío'); // (39ccd25c) la revisión síncrona de campos no cede el turno: un segundo toque sigue sin pasar
 });

@@ -218,9 +218,12 @@ test('Bots 4/5/2: series de comprobante y guía intactas en ambos roles; «2024-
     const t = 'Comprobante ' + r + ' del 17/10/2026.'; assert.equal(same(t, role), t, role + ' ' + r);
     assert.equal(redactText(t), t, 'también en lo que va al modelo'); }
   // la excepción es SOLO la serie: un año u otro número de 4 + guion sigue siendo DNI para el empleado
-  for (const t of ['2024-12345678', '1234-12345678', 'DNI-12345678', 'DNI 12345678', 'Doc: 12345678', 'X001-12345678', 'f001-12345678']) assert.match(same(t, EMP), /DNI \*{4}5678/, t);
+  for (const t of ['DNI-12345678', 'DNI 12345678', 'Doc: 12345678']) assert.match(same(t, EMP), /DNI \*{4}5678/, t);
+  // (Bot 4 sobre 39ccd25c) sin DNI/documento/doc/identidad delante: tapado con etiqueta neutra «código ****»
+  for (const t of ['2024-12345678', '1234-12345678', 'X001-12345678', 'f001-12345678']) assert.match(same(t, EMP), /código \*{4}5678/, t);
   // (Bot 5 sobre 6280deae, antes INFO) letra o «_» pegados a los dígitos: (?<![0-9]) en vez de \b, ahora se tapan para el empleado
-  for (const t of ['Doc:x12345678', 'Doc:A12345678', 'ref_12345678']) assert.match(same(t, EMP), /DNI \*{4}5678$/, t);
+  for (const t of ['Doc:x12345678', 'Doc:A12345678']) assert.match(same(t, EMP), /DNI \*{4}5678$/, t);
+  assert.match(same('ref_12345678', EMP), /código \*{4}5678$/);
   assert.match(same('RUC 20100055237', EMP), /RUC \*{7}5237/);
   // dueño (Bot 2, ev/dueno-comprobantes.json): sin DNI/RUC tapados; PIN, clave, token y data: siguen tapados
   const doc = 'Compra registrada\n| Comprobante | Proveedor | RUC | Total |\n|---|---|---|---|\n| F001-00012345 | Alicorp SAC | 20100055237 | S/ 229.40 |\n| B001-00000123 | Gloria SA | RUC 20100190797 | S/ 58.10 |\nCódigo interno 12345678\nDNI del cliente 44556677';
@@ -228,7 +231,7 @@ test('Bots 4/5/2: series de comprobante y guía intactas en ambos roles; «2024-
   assert.equal(red(doc, 'owner'), doc);
   for (const [t, v] of [['clave: abc123', 'abc123'], ['PIN 4321', '4321'], ['token = sk-999999', 'sk-999999'], ['data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFS', 'QUJD']]) assert.ok(!same(t, 'owner').includes(v), t);
   // lo que va al modelo sigue con el filtro completo
-  assert.equal(redactText('RUC 20100055237 y 12345678'), 'RUC *******5237 y DNI ****5678');
+  assert.equal(redactText('RUC 20100055237 y 12345678'), 'RUC *******5237 y código ****5678');
 });
 
 test('Bot 4: el corte de 1200 no separa un número de su unidad corta («1,250 unid.», «12.5 kg», «3 cajas», «2 paq.»); partes = final', () => {
