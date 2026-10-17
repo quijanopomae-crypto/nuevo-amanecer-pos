@@ -455,3 +455,44 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     for (const [t, vs] of T18_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
   });
 }
+
+// ---------- 19. Bot 5 sobre 43a80dbc: dueño dentro de la celda de venta; título de precios con compra/proveedor; título en la misma línea; listas ----------
+const T19_MASK = [
+  ['Te paso los costos:\n| Producto | PVP |\n|---|---|\n| Galleta | costo S/ 1.80 |', ['1.80']], ['Te paso los costos:\n| Producto | PVP |\n|---|---|\n| Galleta | Costo: S/ 1.80 |', ['1.80']],
+  ['Te paso los costos:\n| Producto | PVP |\n| Galleta | lo que pagué S/ 1.80 |', ['1.80']], ['Te paso los costos:\nProducto\tPVP\nGalleta\tcosto S/ 1.80', ['1.80']],
+  ['Te paso los costos:\n\nPrecios del proveedor:\n- Galleta: S/ 1.80', ['1.80']], ['Te paso los costos:\n\nPrecios de hoy (compra):\n- Galleta: S/ 1.80', ['1.80']],
+  ['Te paso los costos:\n\nPrecios de compra:\n| Producto | Monto |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos:\n\nPrecios de costo:\n- Galleta S/ 1.80', ['1.80']],
+  ['Precios del proveedor:\n- Galleta: S/ 1.80', ['1.80']], ['Precios de hoy (compra):\n| Producto | Monto |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Compras de hoy: Galleta S/ 1.80', ['1.80']], ['Compras de hoy: Galleta S/ 1.80, PVP S/ 2.50, Arroz S/ 3.10', ['1.80', '3.10']],
+  ['Precios de compra: Galleta S/ 1.80', ['1.80']], ['Los precios de compra: Galleta S/ 1.80, Arroz S/ 3.10', ['1.80', '3.10']], ['Factura del proveedor: S/ 18.00', ['18.00']],
+  ['Te paso los costos:\n-Galleta: S/ 1.80\n-Arroz: S/ 3.10', ['1.80', '3.10']], ['Te paso los costos:\na) Galleta: S/ 1.80\nb) Arroz: S/ 3.10', ['1.80', '3.10']],
+  ['Te paso los costos:\nGalleta: S/ 1.80\nArroz: S/ 3.10\nAzúcar S/ 4.20', ['1.80', '3.10', '4.20']], ['Compras de hoy:\nGalleta S/ 1.80\nArroz S/ 3.10', ['1.80', '3.10']],
+  ['Galleta S/ 1.80\n\n(lo que pagué)', ['1.80']], ['Galleta S/ 1.80\n\n\n  Eso es lo que pagué', ['1.80']]];
+const T19_SHOW = [
+  ['Te paso los costos:\n| Producto | PVP |\n|---|---|\n| Galleta | S/ 2.50 |', ['2.50']], ['Compras de hoy: Galleta S/ 1.80, PVP S/ 2.50', ['2.50']],
+  ['El costo: S/ 1.80, se vende a S/ 2.50', ['2.50']], ['Las compras de hoy fueron buenas: arroz a S/ 2.50', ['2.50']], ['Hola:\nGalleta: S/ 1.80\nArroz: S/ 3.10', ['1.80', '3.10']],
+  ['Te paso los costos:\nGalleta: S/ 1.80\nArroz: S/ 3.10\n\nEl precio de venta es S/ 5.00', ['5.00']], ['Lista:\na) Galleta S/ 1.80', ['1.80']],
+  ['El costo subió.\n\nPrecios de hoy:\n- Galleta S/ 1.80', ['1.80']], ['El costo subió.\n\nPrecios de venta:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Galleta S/ 1.80\n\nGracias por tu compra.', ['1.80']], ['El proveedor llegó tarde. Arroz a S/ 2.50', ['2.50']]];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('19) trozos de ' + n + ': dueño en la celda de venta; título con compra/proveedor no corta; título en la misma línea; listas -Galleta, a), sin viñeta; línea en blanco antes de «(lo que pagué)»', () => {
+    for (const [t, hide] of T19_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, vs] of T19_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+  });
+}
+test('19) retención acotada: ítems sin viñeta, lista «a)», monto con líneas en blanco detrás', () => {
+  const lines = 'Te paso los costos:\n' + Array.from({ length: 200 }, (_, i) => 'Producto ' + i + ': S/ 1.80\n').join('');
+  assert.ok(!redactOwnerData(lines).includes('1.80')); assert.ok(held(lines).max <= 60, 'sin viñeta ' + held(lines).max);
+  const abc = 'Te paso los costos:\n' + Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i) + ') Producto: S/ 1.80\n').join('');
+  assert.ok(!redactOwnerData(abc).includes('1.80')); assert.ok(held(abc).max <= 60, 'a) ' + held(abc).max);
+  const gap = 'Galleta S/ 1.80\n\n\n' + FILL(4000); const h = held(gap); assert.ok(h.max <= 80, 'líneas en blanco ' + h.max); assert.ok(h.last <= 40);
+});
+test('19) siguen los ajustes anteriores: «Precio» solo tras presentación sin negar, solo título de venta corta, llave HMAC una vez, cabeza del monto guardada', () => {
+  assert.ok(!redactOwnerData('Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |').includes('1.80'));
+  assert.ok(redactOwnerData('El costo no lo tengo, pero esta es la lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |').includes('1.80'));
+  assert.ok(!redactOwnerData('Te paso los costos.\n\nDetalle:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |').includes('1.80'));
+  assert.ok(redactOwnerData('El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |').includes('1.80'));
+  const SRC = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant.js', import.meta.url), 'utf8');
+  assert.match(SRC, /if \(hmacKeyCache\.secret !== secret\) hmacKeyCache = \{ secret, key: crypto\.subtle\.importKey\(/);
+  assert.match(SRC, /const numNeed = \(i\) => \{ let e; if \(nm\.i === i\) e = nm\.e;/);
+});

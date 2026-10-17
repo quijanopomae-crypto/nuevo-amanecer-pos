@@ -186,3 +186,18 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - Un título neutro tras la línea en blanco («Detalle:», «Aquí va:», «Resumen:») NO corta la presentación.
 - En las listas no cambia nada: un ítem con «Precio» solo bajo una presentación del dueño sigue tapado.
 - Velocidad (Bot 3): la llave HMAC se importa una vez por secreto, y mientras se espera el mismo monto no se relee su cabeza. No se aflojó ningún tapado.
+
+## Bot 5 sobre 43a80dbc
+
+- **Celda de venta con dueño delante**: una palabra del dueño en la MISMA celda antes del monto («| costo S/ 1.80 |», «| Costo: S/ 1.80 |» bajo PVP) tapa el monto. Antes solo se miraba lo que venía después.
+- **Título de precios con dueño**: un título que nombra compra, proveedor o costo («Precios del proveedor:», «Precios de hoy (compra):», «Precios de compra:») NO corta la presentación del dueño y además cuenta como presentación. Plural nuevo: «precios de compra», «precios del proveedor».
+- **Título en la misma línea**: hasta 5 palabras y 40 caracteres antes de «:», con compras/proveedor o una palabra del dueño sin negar («Compras de hoy: Galleta S/ 1.80», «Los precios de compra: Galleta S/ 1.80, Arroz S/ 3.10»). Todo monto que sigue en ESA línea se tapa, salvo los que llevan etiqueta de venta. En una frase larga («Las compras de hoy fueron buenas: …») no se aplica.
+- **Listas**: también cuentan «-Galleta» sin espacio y «a) Galleta». Tras una presentación del dueño sin negar que termina en «:», las líneas seguidas sin viñeta son ítems y se tapan todas, hasta una línea en blanco.
+- **Monto al final de línea**: las líneas en blanco no cortan la mirada. Se miran los primeros 20 caracteres con texto de la siguiente línea que tenga texto, dentro del tope de 160 («Galleta S/ 1.80\n\n(lo que pagué)» se tapa).
+- **Partes**: en una celda o etiqueta de venta, si llega otro monto a medias («10 por ciento» partido entre partes), se espera a tenerlo entero antes de decidir. Así el resultado en partes es igual al del texto entero.
+- **Historial firmado por par**: una sola firma HMAC ata pregunta y respuesta, junto con versión p2, clase, aparato, número de par y hora de emisión (`n`, `iat`). En pedidos de empleado se descartan:
+  - pares empalmados (pregunta de un par con respuesta de otro);
+  - números o horas cambiados;
+  - pares repetidos o fuera de orden (solo valen números crecientes);
+  - pares con más de 24 h, o con hora más de 5 min en el futuro.
+  El número del par nuevo sigue al último par válido. El cliente guarda `n` e `iat` tal como llegan.
