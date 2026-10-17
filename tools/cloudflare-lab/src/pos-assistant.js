@@ -67,8 +67,28 @@ const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 // ---------- Datos sensibles ----------
 const PIN_LINK = '(?:del?|la|las|el|los|lo|mi|mis|tu|tus|su|sus|nuestra|nuestro|para|en|que)';
-const PIN_NO_UNIT = '(?!\\s*(?:(?:unidades|unidad|unid|und|uds|u|kg|kilos?|g|gr|gramos|l|lt|litros?|ml|soles|sol|paquetes|cajas|bolsas)(?![a-zñ])|S\\/|%))';
-const PIN_STOP_BEFORE = /(?:^|\s)(?:en|del|desde|hasta|por|al|a|para|y|o|año|años|de|el|la)\s+$/i;
+// (Bots 2/3/5 sobre d72b7601, decisión final) PIN NUMÉRICO, la misma regla para «pin», «clave» y «contraseña»: se tapa cada tramo de 4-8 dígitos
+// que esté a lo sumo a 60 caracteres y a 5 palabras de la etiqueta (sin contar las de enlace: de, del, la, el, mi, para, en, que… ni es/era/fue/
+// son/a), sin fin de frase en medio (. ; ! ? salto). Sin palabras de corte: «clave de la caja en 2024 era 4321» tapa los dos. Se acepta «:», «=»,
+// «: es/era». Excepciones: una unidad clara pegada detrás (unidades, und, kg, g, l, soles, S/, %), solo para clave/contraseña (un pin nunca es
+// una cantidad); un número detrás de S/, $ o PEN; un número detrás de «código/cód./EAN/barras». El valor con letras y dígitos va aparte (abajo).
+const PIN_LINK_SET = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'lo', 'mi', 'mis', 'tu', 'tus', 'su', 'sus', 'nuestra', 'nuestro', 'para', 'en', 'que', 'es', 'era', 'fue', 'son', 'a']);
+const PIN_CRED_WORD = '(?:wi-?fi|caja|local|acceso|sistema|puerta|tienda|alarma|red|internet|correo|cuenta|celular|tel[eé]fono|tarjeta|banco|app|aplicaci[oó]n|usuario|computadora|laptop|pc|candado|cajero|router|m[oó]dem|admin|administrador|pos|seguridad|bodega|almac[eé]n|yape|plin)(?![a-záéíóúñü])';
+const PIN_NUM_MAX_CHARS = 60, PIN_NUM_MAX_WORDS = 5;
+const PIN_NUM_KW = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])/gi;
+const PIN_NUM_UNIT = /^\s*(?:(?:unidades|unidad|unid|und|uds|kg|kilos?|g|gr|gramos|l|lt|litros?|ml|soles|sol)(?![a-zñáéíóú])|S\/|%)/i;
+const PIN_NUM_MONEY = /(?:S\/\.?|US\$|\$|PEN)\s*$/i, PIN_NUM_CODE = /(?:^|[^a-záéíóúñü])(?:c[óo]d(?:igos?)?\.?|ean(?:-?(?:13|8))?|barras?)\s*[:#]?\s*$/i;
+function pinNumber(m, off, str) {
+  const pre = str.slice(Math.max(0, off - PIN_NUM_MAX_CHARS - 16), off); let k = null, x; PIN_NUM_KW.lastIndex = 0;
+  while ((x = PIN_NUM_KW.exec(pre))) { k = x; PIN_NUM_KW.lastIndex = x.index + x[0].length; }
+  if (!k) return m;
+  const between = pre.slice(k.index + k[0].length);
+  if (between.length > PIN_NUM_MAX_CHARS || /[.;!?\n]/.test(between) || PIN_NUM_MONEY.test(between) || PIN_NUM_CODE.test(between)) return m;
+  const words = between.replace(/[:=,]/g, ' ').trim().split(/\s+/).filter((w) => w && !PIN_LINK_SET.has(w.toLowerCase())).length;
+  if (words > PIN_NUM_MAX_WORDS) return m;
+  if (k[1].toLowerCase() !== 'pin' && PIN_NUM_UNIT.test(str.slice(off + m.length, off + m.length + 16))) return m;
+  return '[oculto]';
+}
 const PATTERNS = [
   // Bot 5: un «data:» (foto pegada como texto, base64) nunca va a DeepSeek dentro del mensaje: se cambia por un aviso corto. Va primero para que
   // sus dígitos no parezcan DNI o teléfono. La foto real va aparte (campo image, solo dueño).
@@ -79,14 +99,16 @@ const PATTERNS = [
   // (Bot 5 sobre 6280deae, INFO) «La clave del wifi Zq9xK2mPw7»: si tras clave/contraseña/pin/token viene una palabra de enlace (del, de, la, el,
   // mi, para…), se tapa el VALOR (letras y dígitos mezclados, 6+ caracteres) dentro de las 4 palabras siguientes, no la palabra de enlace.
   // Si no hay tal valor, como siempre: se tapa lo que sigue a la etiqueta.
-  // (Bot 5 sobre 58200f60) PIN SOLO NUMÉRICO (4-8 dígitos) por palabra de enlace: solo tras pin / clave / contraseña, a lo sumo 2 palabras después
-  // del enlace (más «es»/«era» o «:»/«=»), sin una unidad detrás (unidades, und, kg, g, l, soles, S/, %…) y sin que la palabra justo antes sea
-  // «en», «del», «desde», «por»… (un año o una cantidad: «la clave del negocio en 2024»). «clave de producto 4521», «El pin de la caja: 4321» y
-  // «El pin de la caja es 4321» se tapan; «Producto clave de la semana 2500 unidades» no. El valor con letras y dígitos: hasta 5 palabras tras el enlace («La clave del wifi de la tienda: Zq9xK2mPw7»).
+  // (58200f60 y la primera versión de d72b7601 usaban palabras de corte, unidad y 2 palabras: reemplazado por la decisión final, ver pinNumber.)
+  // (Bots 2/3/5 sobre d72b7601) PIN numérico por número (ver pinNumber): va ANTES que la regla de la etiqueta; así «pin por favor 4321» →
+  // «pin por favor [oculto]» y la regla general no tapa además la palabra de enlace (no tapa nada si ya hay un «[oculto]» en los 60 siguientes).
+  [/(?<![\w/$])\d{4,8}(?!\d)(?![.,]\d)/g, pinNumber],
+  // El valor con letras y dígitos: hasta 5 palabras tras el enlace; si una de esas palabras nombra algo que se abre con clave (wifi, caja, local…)
+  // llega a 6 («clave del wifi del local de la esquina Zq9xK2mPw7»).
   [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}?(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
-    + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,2}?(?:\\s+(?:es|era))?(?:\\s*[:=]\\s*|\\s+))\\d{4,8}(?!\\d)' + PIN_NO_UNIT
-    + '|(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
-    (m, kw, a, n, b) => (n != null && !/[:=]/.test(n) && PIN_STOP_BEFORE.test(n) ? m : kw + (a ?? n ?? b) + '[oculto]')],
+    + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?=(?:\\s+[^\\s,.;:=]+){0,5}\\s+' + PIN_CRED_WORD + ')(?:\\s+[^\\s,.;:=]+){6}(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
+    + '|(?![^.;!?\\n]{0,62}\\[oculto\\])(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
+    (m, kw, a, c, b) => kw + (a ?? c ?? b) + '[oculto]'],
   // Bot 3: acotado (parte local 1-64, etiquetas de dominio 1-63, hasta 8, final 2-24) y sin cuantificadores anidados sin tope: lineal
   // también con 50 KB de dígitos o letras seguidas (antes ~1,9 s).
   [/[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,8}[A-Za-z]{2,24}/g, '[correo oculto]'],
@@ -178,7 +200,9 @@ export function redactModelOwner(value) {
 // ¿Quedó algo tapado? («****», «[dato del dueño]», «[oculto]», «[imagen omitida]», «[correo oculto]»…): en una tarjeta ese campo va VACÍO
 // (Bot 5 sobre 58200f60) también máscaras no ASCII: «∗∗∗∗6789», «＊＊6789», «••••6789», «●●●●6789», «**6789», «…6789», «xxxx6789», «(oculto)».
 // «**» solo cuenta pegado a dígitos (un «**negrita**» no es máscara).
-export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·]{3,}|…\s?\d|\bx{3,}\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+// (Bot 5 sobre d72b7601, INFO) y «____6789», «####6789», «~~~~6789», «????6789», «----6789», «▪▪▪▪», «■■■■», «◦◦◦◦», «XXX-XX-6789», y UN carácter de
+// máscara pegado a dígitos al inicio del valor o tras la serie («*6789», «•6789», «F001-*6789»).
+export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
   let out = collapseWs(String(value ?? ''));
@@ -835,16 +859,31 @@ function cardField(role, value, max, name, missing) { const v = cleanFor(role, v
 // servidor; el empleado ya recibe 403 antes), es un objeto plano, sus claves son un SUBCONJUNTO del «completar» firmado (otra clave —precio,
 // cantidad, producto…— → 400 manual_not_allowed, nada se aplica) y cada valor es texto no vacío y sin máscara. Falta un campo de «completar»
 // o un valor es vacío/con máscara → 422 fields_required. También 422 si cualquier campo de texto de la propuesta trae una máscara.
-// Lo escrito va EXACTO (sin filtro: no va al modelo, solo a «Nueva compra» del dueño), sin caracteres de control y con el tope del campo.
+// Lo escrito va normalizado (normManual; sin filtro: no va al modelo, solo a «Nueva compra» del dueño) y con el tope del campo.
 // /confirm NO crea registros (solo marca la tarjeta usada, la bitácora y devuelve la propuesta para abrir «Nueva compra»).
 const FILL_MAX = { proveedor: 120, documento: 80 };
+// (Bot 2 sobre d72b7601, decisión final) lo escrito a mano se NORMALIZA antes de revisar (misma regla en el celular, asistente-core.js normManual):
+// fuera los invisibles (U+200B-U+200D, U+2060, U+FEFF) y los de control; NBSP/U+2007/U+202F → espacio; U+2010-U+2015 → «-»; recorte. Se rechaza
+// (422 fields_required → «Complete este dato» en ese campo) si queda vacío o sin letra/dígito, si trae una tira de 2+ símbolos de relleno
+// (*, ∗, ＊, •, ●, ·, _, #, ▪, ■, ×, …, ◦, □, ▫, ~) o una marca de tapado («[oculto]»). Solo documento (y RUC): además 2+ X/x seguidas de
+// dígitos («XX6789») y el resto de MASK_LEFT_RE. «Ferretería XXL SAC» y «Distribuidora XX» pasan. Se guarda y se reenvía el valor normalizado.
+export function normManual(v) {
+  return String(v ?? '').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim();
+}
+const FILL_RUN_RE = /[*∗＊•●·_#▪■×…◦□▫~](?:\s?[*∗＊•●·_#▪■×…◦□▫~])+/;
+const MARK_RE = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+export function manualBad(name, v) {
+  if (!v || !/[\p{L}\p{N}]/u.test(v) || FILL_RUN_RE.test(v) || MARK_RE.test(v)) return true;
+  if (name === 'documento' || name === 'ruc') return /x{2,}[\s-]?\d/i.test(v) || MASK_LEFT_RE.test(v);
+  return false;
+}
 function fillCheck(p, manual) {
   const names = Array.isArray(p.completar) ? [...new Set(p.completar.map((n) => String(n)).filter((n) => Object.hasOwn(FILL_MAX, n)))] : [];
   if (manual != null && (typeof manual !== 'object' || Array.isArray(manual) || Object.getPrototypeOf(manual) !== Object.prototype)) return { status: 400, error: 'manual_not_allowed', fields: [] };
   const m = manual || {}, extra = Object.keys(m).filter((k) => !names.includes(k));
   if (extra.length) return { status: 400, error: 'manual_not_allowed', fields: extra.slice(0, 10).map((k) => String(k).slice(0, 40)) };
   const out = {}, fields = [];
-  for (const n of names) { const v = typeof m[n] === 'string' ? m[n].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').trim().slice(0, FILL_MAX[n]).trim() : ''; if (!v || MASK_LEFT_RE.test(v)) fields.push(n); else out[n] = v; }
+  for (const n of names) { const v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, FILL_MAX[n]).trim() : ''; if (manualBad(n, v)) fields.push(n); else out[n] = v; }
   const masked = (x, d = 0) => (typeof x === 'string' ? MASK_LEFT_RE.test(x) : d < 4 && x && typeof x === 'object' ? Object.values(x).some((y) => masked(y, d + 1)) : false);
   // (Bot 5 sobre 58200f60) el nombre de una línea CON product_id no se revisa: «Nueva compra» toma el producto de la base por su id («Leche 12345678»
   // llega como «Leche DNI ****5678» y la tarjeta no se podía confirmar nunca). Una línea sin product_id sí se revisa (ese nombre iría tal cual).
@@ -1255,12 +1294,19 @@ const PIN_KW_END = /(?:^|[^A-Za-z0-9_])(?:pin|clave|contrase(?:ñ|n)a|password|t
 // «clave del wifi de la tienda …»: hasta 5 palabras tras la etiqueta y una palabra de enlace, el valor puede venir más adelante (ver PATTERNS)
 const PIN_LINK_END = new RegExp('(?:^|[^A-Za-z0-9_])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}\\s*[:=]?$', 'i');
 const PIN_TOKEN_END = /(?:es|era|de|:|=)$/i;
+// (Bot 5 sobre d72b7601) PIN numérico: tras «pin» el número puede venir hasta 6 palabras después (sin palabras de corte), tras clave/contraseña
+// hasta enlace + 6 (frase de credencial), con «: es» en medio. Mientras tanto no se corta. Y con «… 4321 » recién llegado tampoco: la unidad
+// que podría seguir («2500 unidades») cambia el resultado de clave/contraseña.
+const PIN_NUM_WAIT = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])[^.;!?\n]{0,61}$/i;
+const PIN_NUM_TAIL = /(?<![\d])\d{4,8}\s+$/;
 function skipWsBack(t, i) { while (i > 0 && isWs(t[i - 1])) i--; return i; }
 // ¿Hay una palabra de clave antes de h esperando su valor? (espacios, opcional «es/era/de/:/=», espacios)
 function pinOpen(t, h) {
   let i = skipWsBack(t, h); const a = t.slice(Math.max(0, i - 20), i);
   if (PIN_KW_END.test(a)) return true;
   if (PIN_LINK_END.test(t.slice(Math.max(0, i - 80), i))) return true;
+  { const w = t.slice(Math.max(0, i - 80), i); if (PIN_NUM_WAIT.test(w)) return true;
+    const d = PIN_NUM_TAIL.exec(t.slice(Math.max(0, h - 40), h)); if (d && PIN_NUM_WAIT.test(t.slice(Math.max(0, h - d[0].length - 80), h - d[0].length))) return true; }
   const m = PIN_TOKEN_END.exec(a); if (!m) return false;
   i = skipWsBack(t, i - m[0].length);
   return PIN_KW_END.test(t.slice(Math.max(0, i - 20), i));
@@ -1555,12 +1601,16 @@ function sameText(a, b) { a = String(a); b = String(b); if (a.length !== b.lengt
 function stable(v) { return Array.isArray(v) ? '[' + v.map(stable).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}' : JSON.stringify(v ?? null); }
 // Sesión que confirmó (hash; nunca el id en claro en el almacén): la sesión del POS; si la autenticación no trae una, la credencial; si
 // tampoco, el aparato (el token ya va atado al aparato).
-async function sessionHash(auth) { return (await sha256Hex('s:' + String(auth?.sessionId || auth?.credentialHash || auth?.principalId || ''))).slice(0, 32); }
+// (Bot 5 sobre d72b7601, INFO) HMAC-SHA256 con ASSISTANT_CONFIRM_SECRET (el MISMO secreto que firma las propuestas; sin secreto nuevo) y una
+// etiqueta de dominio («confirm-replay:v1|s|» / «confirm-replay:v1|r|»): ya no se pueden precalcular desde h/op del token. Un registro viejo con
+// sha256 sin clave no coincide → 409 already_confirmed sin propuesta (el lado seguro).
+export const REPLAY_HMAC_LABEL = 'confirm-replay:v1';
+async function sessionHash(secret, auth) { return (await hmac(secret, REPLAY_HMAC_LABEL + '|s|' + String(auth?.sessionId || auth?.credentialHash || auth?.principalId || ''))).slice(0, 32); }
 // Hash del reenvío: propuesta firmada + lo escrito (normalizado) + filas aceptadas/quitadas (compra).
-async function replayHash(tok, manual, review, proposal) {
+async function replayHash(secret, tok, manual, review, proposal) {
   const ints = (a) => (Array.isArray(a) ? a : []).filter((i) => Number.isInteger(i) && i >= 0 && i < (proposal?.lineas?.length || 0));
   const rv = review ? { a: [...new Set(ints(review.accept))].sort((x, y) => x - y), d: [...new Set(ints(review.drop))].sort((x, y) => x - y) } : null;
-  return (await sha256Hex(stable({ h: tok.h, op: tok.op, m: manual || {}, r: rv }))).slice(0, 48);
+  return (await hmac(secret, REPLAY_HMAC_LABEL + '|r|' + stable({ h: tok.h, op: tok.op, m: manual || {}, r: rv }))).slice(0, 48);
 }
 export function proposalHash(p) { const { confirm_token, ...rest } = p || {}; return sha256Hex(stable(rest)); }
 function randomHex(n) { const b = new Uint8Array(n); crypto.getRandomValues(b); return [...b].map((x) => x.toString(16).padStart(2, '0')).join(''); }
@@ -1625,7 +1675,13 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   if (!tok) return json({ error: 'bad_token' }, 403);
   ctx.tok = tok;
   const now = (deps.now || Date.now)();
-  if (tok.d !== (await sha256Hex(String(auth.principalId || ''))).slice(0, 24)) return json({ error: 'other_device' }, 403);
+  // (Bots 3/4/5 sobre d72b7601) otro aparato: 403 other_device; con confirmed:true solo si esa tarjeta ya se confirmó (el celular dice «Ya se
+  // confirmó en otro aparato» SOLO en ese caso). Nada más: ni propuesta, ni operation_id, ni lo escrito.
+  if (tok.d !== (await sha256Hex(String(auth.principalId || ''))).slice(0, 24)) {
+    const st0 = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null); let done = false;
+    try { done = !!(st0 && (await st0.get(USAGE_PREFIX + 'u:' + tok.n)).value?.op); } catch { done = false; }
+    return json(done ? { error: 'other_device', confirmed: true } : { error: 'other_device' }, 403);
+  }
   const tool = TYPE_TOOL[tok.t];
   if (!tool || !toolAllowed(role, tool) || (tok.r === 'owner' && role !== 'owner')) return json({ error: 'forbidden_role' }, 403);
   if (hasForbiddenParam(body?.proposal)) return json({ error: 'forbidden_param' }, 400);
@@ -1640,15 +1696,24 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   // (almacén existente, sin migración), el hash de la sesión dueño que confirmó y el hash de propuesta + lo escrito + filas revisadas.
   // Reenvío de ESA sesión con los mismos datos → 200 con la MISMA propuesta aplicada (el dueño abre «Nueva compra» igual).
   // Otra sesión, datos distintos o un registro viejo sin esos hashes → 409 already_confirmed, sin la propuesta ni lo escrito.
-  const sess = await sessionHash(auth);
+  const sess = await sessionHash(secret, auth);
   const replay = async (v) => {
     const rf = fillCheck(body.proposal, body.manual); const rv = body.review && typeof body.review === 'object' ? body.review : {};
-    if (!rf.error && v?.s && v?.rh && sameText(v.s, sess) && sameText(v.rh, await replayHash(tok, rf.out, tok.t === 'compra' ? (rv.op === tok.op ? rv : {}) : null, body.proposal))) {
+    if (!rf.error && v?.s && v?.rh && sameText(v.s, sess) && sameText(v.rh, await replayHash(secret, tok, rf.out, tok.t === 'compra' ? (rv.op === tok.op ? rv : {}) : null, body.proposal))) {
       const m = Object.keys(rf.out).length ? rf.out : {};
       const drop = Array.isArray(v.drop) ? v.drop : [];
       const applied = tok.t === 'compra' ? { ...body.proposal, ...m, lineas: body.proposal.lineas.filter((_, i) => !drop.includes(i)), aceptadas: Array.isArray(v.acc) ? v.acc : [], quitadas: drop } : { ...body.proposal, ...m };
       return json({ ok: true, already_confirmed: true, replay: true, operation_id: v.op, type: tok.t, role, proposal: applied });
     }
+    // (Bots 3/4/5 sobre d72b7601) MISMO aparato (tok.d ya comprobado) y MISMA sesión dueño, pero otro «manual» u otras filas (el dueño corrigió
+    // tras un corte): 409 already_confirmed_same_session CON la propuesta firmada (las filas quitadas/aceptadas del registro) y SIN lo escrito
+    // (el servidor solo guarda hashes; nunca devuelve un «manual»). El celular abre «Nueva compra» con esa propuesta + lo que él mismo mandó.
+    if (v?.s && sameText(v.s, sess)) {
+      const drop = Array.isArray(v.drop) ? v.drop : [];
+      const signed = tok.t === 'compra' ? { ...body.proposal, lineas: body.proposal.lineas.filter((_, i) => !drop.includes(i)), aceptadas: Array.isArray(v.acc) ? v.acc : [], quitadas: drop } : { ...body.proposal };
+      return json({ error: 'already_confirmed_same_session', already_confirmed: true, operation_id: v.op, type: tok.t, role, proposal: signed }, 409);
+    }
+    // otra sesión dueño (o registro viejo sin hashes): 409 SIN propuesta ni lo escrito («Esta compra ya se confirmó en otra sesión.»)
     return json({ error: 'already_confirmed', already_confirmed: true, operation_id: v?.op || tok.op }, 409);
   };
   const used = await store.get(usedKey);
@@ -1708,7 +1773,7 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   wv.n++;
   const rvUsed = tok.t === 'compra' ? { accept: applied.aceptadas || [], drop: applied.quitadas || [] } : null;
   if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(tok.t === 'compra' ? { acc: applied.aceptadas || [] } : {}),
-    s: sess, rh: await replayHash(tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
+    s: sess, rh: await replayHash(secret, tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
     // dos envíos a la vez: el que perdió la escritura sigue la misma regla que un reenvío
     const again = await store.get(usedKey);
     return replay(again.value || { op: tok.op });

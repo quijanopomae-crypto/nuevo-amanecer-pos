@@ -26,8 +26,16 @@
   // «Complete este dato», foco en el primero y «Confirmar» apagado hasta llenarlos. Solo createElement / textContent. Lo escrito queda en
   // state (fuera de la propuesta firmada) y lo usa fillPurchase; nunca se escribe una máscara.
   // (Bot 5 sobre 58200f60) igual que MASK_LEFT_RE del servidor: también «∗∗∗∗6789», «••••6789», «**6789», «…6789», «xxxx6789», «(oculto)»
-  var MASK_LEFT = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·]{3,}|…\s?\d|\bx{3,}\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+  // (Bot 5 sobre d72b7601) y «____6789», «####6789», «▪▪▪▪», «XXX-XX-6789», «*6789» (un carácter al inicio o tras la serie «F001-»); sin lookbehind
+  var MASK_LEFT = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|\b[A-Z0-9]{4}-)[*∗＊•●·▪■◦#_](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
   function maskLeft(v) { return MASK_LEFT.test(String(v == null ? '' : v)); }
+  // (Bot 2 sobre d72b7601, decisión final) misma regla que normManual/manualBad del servidor: fuera invisibles y de control, NBSP/U+2007/U+202F → espacio,
+  // U+2010-U+2015 → «-», recorte; malo si queda vacío o sin letra/dígito, con 2+ símbolos de relleno seguidos o con «[oculto]»; solo el documento
+  // además «XX6789» (2+ X y dígitos) y el resto de MASK_LEFT. «Ferretería XXL SAC» y «Distribuidora XX» pasan.
+  function normManual(v) { return String(v == null ? '' : v).replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim(); }
+  var FILL_RUN = /[*∗＊•●·_#▪■×…◦□▫~](?:\s?[*∗＊•●·_#▪■×…◦□▫~])+/, MARK = /\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
+  function manualBad(n, v) { if (!v || !/[\p{L}\p{N}]/u.test(v) || FILL_RUN.test(v) || MARK.test(v)) return true;
+    return (n === 'documento' || n === 'ruc') ? (/x{2,}[\s-]?\d/i.test(v) || maskLeft(v)) : false; }
   var NEED_LABEL = { proveedor: 'Proveedor', documento: 'Documento' }, NEED_MAX = { proveedor: 120, documento: 80 };
   function needFields(doc, p, onChange) {
     var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
@@ -45,7 +53,7 @@
       if (pre) inp.value = pre;
       hints[n] = hint; byName[n] = inp;
       inp.addEventListener('input', function () {
-        var v = String(inp.value == null ? '' : inp.value).trim(), ok = !!v && !maskLeft(v) && v !== pre.trim(); state[n] = ok ? v : '';
+        var v = normManual(inp.value).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre); state[n] = ok ? v : '';
         if (stale[n] != null && v !== stale[n]) delete stale[n]; // (Bot 4 sobre 58200f60) tras un 422 cuenta recién cuando cambia
         ok = ok && stale[n] == null;
         hint.textContent = 'Complete este dato';
@@ -61,7 +69,7 @@
         var inp = byName[n], hint = hints[n]; if (!inp) { other.push(String(n)); return; }
         hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); inp.className = 'na-asst-need'; if (!first) first = inp;
         // (Bot 4 sobre 58200f60) lo escrito queda, pero el campo no vuelve a contar como lleno (ni «Confirmar» se enciende) hasta que cambie
-        stale[n] = String(inp.value == null ? '' : inp.value).trim(); });
+        stale[n] = normManual(inp.value).slice(0, NEED_MAX[n]).trim(); });
       if (first) { try { first.focus({ preventScroll: false }); } catch (_) {} }
       return other;
     }
@@ -70,10 +78,10 @@
   }
   var needSeq = 0;
   // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
-  function purchaseValue(p, n) { var m = p && p._manual && p._manual[n]; if (m && !maskLeft(m)) return m; var v = p ? p[n] : ''; return v && !maskLeft(v) ? v : ''; }
+  function purchaseValue(p, n) { var m = p && p._manual && normManual(p._manual[n]); if (m && !manualBad(n, m)) return m; var v = p ? p[n] : ''; return v && !maskLeft(v) ? v : ''; }
   // lo escrito a mano para los campos de «completar» (va en body.manual del confirm, fuera de la propuesta firmada); nunca una máscara
   function fillValues(p) { var m = p && p._manual; if (!m || !Array.isArray(p.completar)) return null; var o = {}, k = 0;
-    p.completar.forEach(function (n) { if (NEED_LABEL[n] && typeof m[n] === 'string' && m[n] && !maskLeft(m[n])) { o[n] = m[n]; k++; } }); return k ? o : null; }
+    p.completar.forEach(function (n) { var v = typeof m[n] === 'string' ? normManual(m[n]).slice(0, NEED_MAX[n]).trim() : ''; if (NEED_LABEL[n] && !manualBad(n, v)) { o[n] = v; k++; } }); return k ? o : null; }
   function perms() { return root.NA_PERMISSIONS; }
   function canDo(role, action) { var P = perms(); return !!(P && P.canDo(role, action)); }
 
@@ -306,10 +314,20 @@
   var DOC_CODE_RE = /\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b/g;
   function nbsp(v) { return v.replace(CUR_SP_RE, '$1\u00a0'); }
   function codeSpan(doc, v) { var s = doc.createElement('span'); s.className = 'na-asst-code'; s.textContent = v; return s; }
-  // Texto ya completo (celdas, tarjetas): trozos de texto + una span por serie.
-  function appendCoded(doc, parent, v) {
+  // (Bots 3/4 sobre d72b7601, lo acordado) DENTRO de una celda de tabla la serie solo puede bajar de renglón justo después del guion:
+  // <span class="na-asst-code na-asst-cc"><span class="na-asst-cs">F001-</span><wbr><span class="na-asst-cn">00012345</span></span>, cada parte
+  // nowrap y a 14 px (CSS). Nunca se parte entre dígitos; copiar da «F001-00012345» con el guion ASCII (wbr no agrega texto). Solo
+  // createElement/textContent. En la burbuja (texto) y en la nota de la tarjeta la serie sigue entera en una sola span nowrap (codeSpan).
+  function cellCodeSpan(doc, v) {
+    var k = v.indexOf('-'), s = doc.createElement('span'); s.className = 'na-asst-code na-asst-cc';
+    var a = doc.createElement('span'); a.className = 'na-asst-cs'; a.textContent = v.slice(0, k + 1);
+    var b = doc.createElement('span'); b.className = 'na-asst-cn'; b.textContent = v.slice(k + 1);
+    s.appendChild(a); s.appendChild(doc.createElement('wbr')); s.appendChild(b); return s;
+  }
+  // Texto ya completo (celdas, tarjetas): trozos de texto + una span por serie (cell: la forma partible tras el guion).
+  function appendCoded(doc, parent, v, cell) {
     v = String(v); var re = new RegExp(DOC_CODE_RE.source, 'g'), m, at = 0, n = 0;
-    while ((m = re.exec(v))) { if (m.index > at) parent.appendChild(doc.createTextNode(v.slice(at, m.index))); parent.appendChild(codeSpan(doc, m[0])); at = m.index + m[0].length; n++; }
+    while ((m = re.exec(v))) { if (m.index > at) parent.appendChild(doc.createTextNode(v.slice(at, m.index))); parent.appendChild(cell ? cellCodeSpan(doc, m[0]) : codeSpan(doc, m[0])); at = m.index + m[0].length; n++; }
     if (at < v.length) parent.appendChild(doc.createTextNode(v.slice(at)));
     return n;
   }
@@ -343,7 +361,7 @@
     function cellInto(cellEl, value) { // «[dato del dueño]» en un span que no se parte
       var parts = String(value).split(MASK_LABEL), codes = 0;
       for (var i = 0; i < parts.length; i++) {
-        if (parts[i]) codes += appendCoded(doc, cellEl, nbsp(parts[i]));
+        if (parts[i]) codes += appendCoded(doc, cellEl, nbsp(parts[i]), true);
         if (i < parts.length - 1) { var m = doc.createElement('span'); m.className = 'na-asst-mask'; m.textContent = MASK_LABEL; cellEl.appendChild(m); }
       }
       return codes;
@@ -497,8 +515,11 @@
     image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
     image_too_large: ['La foto es muy grande. Toma otra más cerca.'], bad_image: ['No pude leer esa foto. Toma otra con más luz.'],
     not_found: ['El asistente no está disponible por ahora.'], HTTP_404: ['El asistente no está disponible por ahora.'], bad_request: [MSG.again, true], bad_token: [MSG.changed],
-    already_confirmed: ['Esta compra ya se confirmó en otro aparato.'] // (Bots 3/5 sobre 58200f60) 409: otra sesión o datos distintos
+    // (Bots 3/4/5 sobre d72b7601) 409 already_confirmed = OTRA sesión dueño (el mismo aparato y sesión recibe already_confirmed_same_session);
+    // «otro aparato» solo con 403 other_device (+ confirmed)
+    already_confirmed: ['Esta compra ya se confirmó en otra sesión.']
   };
+  var NO_LINK_MSG = 'Sin conexión. Toque Reintentar', RECONNECT_MSG = 'Reconectando…', SAME_SESSION_MSG = 'Esta compra ya se confirmó. Corrija los datos en Nueva compra.', OTHER_DEVICE_DONE_MSG = 'Ya se confirmó en otro aparato.';
   // ¿El texto trae algo que parece código? (palabra_con_guion_bajo, «HTTP», «error 403», «Error:»). Entonces no se muestra tal cual.
   function looksTechnical(t) { return /[a-z0-9]+_[a-z0-9_]+|\berror\b|HTTP|\b(error|status|code)\b\s*:?\s*\d{3}\b|^\s*[45]\d\d\b|undefined|null|NaN|Exception|TypeError/i.test(String(t || '')); }
   function friendlyError(code, serverMsg) {
@@ -531,6 +552,8 @@
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
     if (code === 'already_confirmed') return { kind: 'elsewhere', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : FRIENDLY.already_confirmed[0] };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
+    if (code === 'other_device') return { kind: 'elsewhere', rows: [], button: null, again: true, msg: r.msg || FRIENDLY.other_device[0] };
+    if (code === 'network' && r.locked) return { kind: 'network', locked: true, rows: [], button: 'Reintentar', again: false, msg: NO_LINK_MSG };
     if (code === 'network') return { kind: 'network', rows: [], button: 'Reintentar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : friendlyError('network').msg };
     return { kind: 'other', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : friendlyError(code).msg };
   }
@@ -571,7 +594,7 @@
   function wipeManual(p) { var m = p && p._manual; if (m && typeof m === 'object') Object.keys(m).forEach(function (k) { m[k] = ''; delete m[k]; }); if (p) { try { delete p._manual; } catch (_) {} } }
   function createGate(deps) {
     var items = Object.create(null);
-    function forget(it) { if (!it) return; wipeManual(it.p); wipeManual(it.applied); delete items[it.key]; it.state = 'forgotten'; it.p = null; it.applied = null; it.review = null; }
+    function forget(it) { if (!it) return; wipeManual(it.p); wipeManual(it.applied); if (it.sent && it.sent.manual && typeof it.sent.manual === 'object') Object.keys(it.sent.manual).forEach(function (k) { delete it.sent.manual[k]; }); delete items[it.key]; it.state = 'forgotten'; it.p = null; it.applied = null; it.review = null; it.sent = null; it.onRetry = null; }
     async function run(it) {
       var perm = canExecute(deps.roles(), it.p);
       if (!perm.ok) { it.state = 'denied'; return perm; }
@@ -581,12 +604,30 @@
         if (!it.p.confirm_token) { it.state = 'denied'; return { ok: false, msg: 'Esta propuesta no se puede confirmar. Pídela otra vez.' }; }
         var c;
         // sin respuesta (corte o tiempo): la tarjeta sigue editable; confirmar no crea registros, así que reintentar es seguro (Bot 3)
-        try { c = await deps.confirm(it.p, it.review || null); } catch (e) { it.state = 'pending'; return { ok: false, retry: true, code: 'network', msg: 'No se pudo confirmar: no llegó respuesta. Revise los datos y toque «Reintentar».' }; }
+        // (Bots 3/4/5 sobre d72b7601) sin respuesta: NO se invita a editar. La puerta guarda el cuerpo EXACTO que se mandó (it.sent) y «Reintentar»
+        // reenvía ese mismo cuerpo; los campos siguen bloqueados (locked) hasta un 200 o un 4xx real. Un 5xx también deja el cuerpo guardado.
+        try { c = await deps.confirm(it.p, it.review || null, { body: it.sent || null, onRetry: it.onRetry || null }); }
+        catch (e) { it.state = 'pending'; if (e && e.sentBody) it.sent = e.sentBody; return { ok: false, retry: true, locked: true, code: 'network', msg: NO_LINK_MSG }; }
+        if (c && !c.ok && Number(c.status) >= 500) { it.state = 'pending'; if (c.sentBody) it.sent = c.sentBody; return { ok: false, retry: true, locked: true, code: 'network', msg: NO_LINK_MSG }; }
+        var sentNow = (c && c.sentBody) || it.sent || null; it.sent = null; // 200 o 4xx real: se puede volver a editar
+        // MISMO aparato y MISMA sesión dueño, otro «manual»: el servidor devuelve la propuesta firmada (sin lo escrito); «Nueva compra» se abre
+        // con ella + lo que este celular mandó, y la nota «Esta compra ya se confirmó. Corrija los datos en Nueva compra.»
+        if (c && !c.ok && c.error === 'already_confirmed_same_session') {
+          if (!c.proposal || c.proposal.id !== it.p.id || c.proposal.type !== it.p.type) { it.state = 'denied'; return { ok: false, code: 'already_confirmed_same_session', msg: SAME_SESSION_MSG }; }
+          it.operationId = c.operation_id; it.applied = c.proposal;
+          var km = sentNow && sentNow.manual && typeof sentNow.manual === 'object' ? sentNow.manual : null;
+          if (km) { try { Object.defineProperty(it.applied, '_manual', { value: km, enumerable: false, configurable: true }); } catch (_) {} }
+          if (it.executed) { it.state = 'done'; return { ok: true, code: 'already_confirmed_same_session', msg: SAME_SESSION_MSG }; }
+          try { var rs = await EXECUTORS[it.p.type](it.applied, deps, it.operationId); if (rs.ok) it.executed = true; it.state = rs.ok ? 'done' : 'denied';
+            return rs.ok ? { ok: true, code: 'already_confirmed_same_session', msg: SAME_SESSION_MSG } : rs; }
+          catch (e2) { it.state = 'denied'; return { ok: false, code: 'already_confirmed_same_session', msg: SAME_SESSION_MSG }; }
+        }
         // (Bots 3/5 sobre 58200f60) 409 already_confirmed: la tarjeta la usó otra sesión (u otros datos). Nota corta, sin error crudo ni propuesta.
         // (Bots 4/5 sobre 58200f60) 403 forbidden_role al confirmar: manda el rol del SERVIDOR (no se mira el rol guardado en el aparato).
         // La propuesta y lo escrito a mano salen de la memoria del celular (la tarjeta sale de la pantalla en la UI); sin reintento automático.
         if (c && !c.ok && c.error === 'forbidden_role') { forget(it); return { ok: false, code: 'forbidden_role', dropped: true, msg: ROLE_LOST_MSG }; }
-        if (c && !c.ok && c.error === 'already_confirmed') { it.state = 'denied'; return { ok: false, code: 'already_confirmed', msg: it.p.type === 'compra' ? FRIENDLY.already_confirmed[0] : 'Este cambio ya se confirmó en otro aparato.' }; }
+        if (c && !c.ok && c.error === 'already_confirmed') { it.state = 'denied'; return { ok: false, code: 'already_confirmed', msg: it.p.type === 'compra' ? FRIENDLY.already_confirmed[0] : 'Este cambio ya se confirmó en otra sesión.' }; }
+        if (c && !c.ok && c.error === 'other_device') { it.state = 'denied'; return { ok: false, code: 'other_device', msg: c.confirmed ? OTHER_DEVICE_DONE_MSG : FRIENDLY.other_device[0] }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
           return { ok: false, code: (c && c.error) || 'error', rows: c && Array.isArray(c.rows) ? c.rows : null, fields: c && Array.isArray(c.fields) ? c.fields : null, retry_after_s: c && c.retry_after_s || null, msg: friendlyError((c && c.error) || 'error', c && ['over_limit', 'sin_control_stock', 'stock_check_unavailable', 'product_missing'].indexOf(c.error) >= 0 ? c.message : null).msg }; }
         it.operationId = c.operation_id;
@@ -618,6 +659,10 @@
       operationId: function (id) { return items[id] ? items[id].operationId : null; },
       cancel: function (id) { if (items[id] && items[id].state === 'pending') items[id].state = 'cancelled'; },
       forget: function (id) { forget(items[id]); },
+      // (Bots 3/4/5 sobre d72b7601) ¿hay un cuerpo guardado tras un corte? (los campos siguen bloqueados y «Reintentar» lo reenvía igual)
+      locked: function (id) { return !!(items[id] && items[id].sent); },
+      // (Bot 5 sobre d72b7601) 403 forbidden_role: TODAS las propuestas (y lo escrito a mano) salen de la memoria, no solo la del 403
+      forgetAll: function () { Object.keys(items).forEach(function (k) { forget(items[k]); }); },
       size: function () { return Object.keys(items).length; },
       execute: function (id, opts) {
         var it = items[id];
@@ -626,7 +671,8 @@
         if (it.inflight) return it.inflight;
         if (it.state === 'done') return Promise.resolve({ ok: true, msg: 'Ya se hizo. No se repitió.' });
         if (it.state !== 'pending') return Promise.resolve({ ok: false, msg: it.state === 'cancelled' ? 'Se canceló.' : 'No permitido.' });
-        if (opts.review) it.review = opts.review;
+        if (opts.review && !it.sent) it.review = opts.review; // con un cuerpo guardado (corte) se reenvía ese, igual
+        it.onRetry = typeof opts.onRetry === 'function' ? opts.onRetry : null;
         it.state = 'running';
         it.inflight = run(it).finally(function () { it.inflight = null; });
         return it.inflight;
@@ -646,7 +692,7 @@
     return Math.max(0, over);
   }
 
-  var api = { BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

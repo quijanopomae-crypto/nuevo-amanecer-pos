@@ -399,6 +399,9 @@ body.dark .na-asst-prov-t{background:#0f172a;border-color:#334155;color:#e2e8f0}
    de la span (nowrap gana a overflow-wrap:anywhere de la burbuja). Si una serie sola fuera más ancha que la burbuja, se desplaza dentro
    de su caja (max-width:100%) en vez de desbordar. */
 .na-asst-code{white-space:nowrap;overflow-wrap:normal;word-break:keep-all;display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:bottom}
+/* (Bots 3/4 sobre d72b7601) serie dentro de una celda de la tabla del asistente: solo baja de renglón tras el guion (<wbr>), cada parte nowrap,
+   14 px con selector de la tabla del asistente (.na-asst-tbl), que gana a base.css td{font-size:12px} sin tocar otras tablas */
+.na-asst-tbl .na-asst-code.na-asst-cc{white-space:normal;display:inline;max-width:none;overflow:visible;font-size:14px;vertical-align:baseline}.na-asst-tbl .na-asst-cc .na-asst-cs,.na-asst-tbl .na-asst-cc .na-asst-cn{white-space:nowrap;overflow-wrap:normal;word-break:keep-all}
 /* (Bot 4 sobre 25ffde10) todos los montos de la tabla tapados: máscara corta (el texto sigue en el DOM) y una sola nota bajo la tabla */
 .na-asst-allmask .na-asst-mask{font-size:0;letter-spacing:0}.na-asst-allmask .na-asst-mask::after{content:'•••';font-size:15px;color:#64748b;letter-spacing:1px}
 .na-asst-tnote{font-size:12px;color:#475569;margin:-2px 0 6px}.na-asst-tnote.na-asst-off{display:none}body.dark .na-asst-tnote{color:#a7c4b3}body.dark .na-asst-allmask .na-asst-mask::after{color:#a7c4b3}

@@ -250,19 +250,26 @@
     var d = r.data || {}; if (!r.ok) { d.error = d.error || 'HTTP_' + r.status; d.status = r.status; }
     return d;
   }
-  // Confirmación: el MISMO token se reenvía hasta 3 veces si se corta la señal (mismo operation_id).
-  async function confirmRemote(p, review) {
-    var clean = JSON.parse(JSON.stringify(p)); delete clean.confirm_token;
+  // Confirmación: el MISMO token se reenvía si se corta la señal (mismo operation_id).
+  // (Bots 3/4/5 sobre d72b7601) el cuerpo se arma UNA vez y se reenvía IDÉNTICO: en el reintento automático (opts.onRetry: «Reconectando…») y
+  // en «Reintentar» (opts.body: el cuerpo guardado por la puerta). Lo escrito NO se vuelve a leer de los campos (quedan bloqueados).
+  async function confirmRemote(p, review, opts) {
+    var body = opts && opts.body;
+    if (!body) { var clean = JSON.parse(JSON.stringify(p)); delete clean.confirm_token; body = { token: p.confirm_token, proposal: clean }; if (review) body.review = review;
+      // (Bots 2/5 sobre 84a49517) lo escrito a mano en «Complete este dato» va en «manual», aparte de la propuesta firmada; el servidor lo exige
+      var manual = C.fillValues ? C.fillValues(p) : null; if (manual) body.manual = manual; }
     var lastErr;
-    // Cada intento se corta a los ~12 s; 2 intentos y después «Pulsa Confirmar otra vez» (mismo token y operation_id).
+    // Cada intento se corta a los ~12 s; 2 intentos y después «Sin conexión. Toque Reintentar» (mismo cuerpo, token y operation_id).
     for (var i = 0; i < (C.CONFIRM_ATTEMPTS || 2); i++) {
-      try { var body = { token: p.confirm_token, proposal: clean }; if (review) body.review = review;
-        // (Bots 2/5 sobre 84a49517) lo escrito a mano en «Complete este dato» va en «manual», aparte de la propuesta firmada; el servidor lo exige
-        var manual = C.fillValues ? C.fillValues(p) : null; if (manual) body.manual = manual;
-        var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm); return d.ok ? d : { ok: false, error: d.error, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null }; }
+      try { if (i > 0 && opts && typeof opts.onRetry === 'function') { try { opts.onRetry(); } catch (_) {} }
+        var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm);
+        var out = d.ok ? d : { ok: false, error: d.error, status: d.status, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null,
+          confirmed: d.confirmed === true, operation_id: d.operation_id, type: d.type, proposal: d.error === 'already_confirmed_same_session' && d.proposal && typeof d.proposal === 'object' ? d.proposal : undefined };
+        try { Object.defineProperty(out, 'sentBody', { value: body, enumerable: false, configurable: true }); } catch (_) {}
+        return out; }
       catch (e) { lastErr = e; if (i === 0) await new Promise(function (r) { setTimeout(r, 600); }); }
     }
-    throw lastErr || new Error('network');
+    var err = lastErr || new Error('network'); try { err.sentBody = body; } catch (_) {} throw err;
   }
 
   // ---------- Funciones existentes del POS ----------
@@ -296,6 +303,7 @@
     navigate: function (id) { try { root.NA_MENU_NAVIGATION.navigate(id); } catch (_) { try { root.goPage(id); } catch (__) {} } },
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
+      w.dataset.naAsst = '1'; // prellenada desde una tarjeta del asistente (ver roleLost: se vacía y se cierra si el rol cambia antes de guardar)
       var s = w.querySelector('#naPurSupplier'), d = w.querySelector('#naPurDoc');
       // nunca una máscara: lo escrito a mano en la tarjeta o el valor exacto del servidor (Bot 2 sobre 6280deae)
       var pv = C.purchaseValue(p, 'proveedor'), dv = C.purchaseValue(p, 'documento'); if (s && pv) s.value = pv; if (d && dv) d.value = dv;
@@ -304,7 +312,11 @@
         if (i > 0 && add) add.click();
         var row = w.querySelectorAll('.na-pur-line')[i]; if (!row) return;
         var prod = l.product_id && deps.productos().find(function (x) { return String(x.id) === String(l.product_id); });
-        row.querySelector('.na-pur-prod').value = prod ? (prod.nombre || prod.name) : l.nombre;
+        // (Bot 5 sobre d72b7601) sin el producto en el catálogo local, el nombre de la propuesta puede venir tapado: nunca se escribe una
+        // máscara; el campo queda vacío y marcado para completar
+        var pin = row.querySelector('.na-pur-prod'), nm = prod ? (prod.nombre || prod.name) : (l.nombre && !C.maskLeft(l.nombre) ? l.nombre : '');
+        pin.value = nm;
+        if (!prod && !nm) { pin.placeholder = 'Complete el producto'; pin.setAttribute('aria-invalid', 'true'); pin.dataset.naNeed = '1'; }
         row.querySelector('.na-pur-qty').value = l.cantidad;
         if (l.costo_unitario != null) row.querySelector('.na-pur-cost').value = l.costo_unitario;
         if (!prod) row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b';
@@ -376,6 +388,10 @@
   function soles(n) { return C.soles(n); }
   // Nombre del cliente en la tarjeta: solo en documentos de UN cliente (estado de cuenta), con su etiqueta. En la lista de precios, nunca.
   var CUSTOMER_DOCS = ['estado_cuenta'];
+  // (Bot 2 sobre d72b7601, INFO) en la tarjeta, una línea con product_id del catálogo local muestra el nombre del catálogo, no el de la propuesta
+  // (que puede venir tapado: «Leche DNI ****5678»); sin el producto en el catálogo, el de la propuesta tal cual.
+  function lineName(l) { var prod = null; try { prod = l && l.product_id && deps.productos().find(function (x) { return String(x.id) === String(l.product_id); }); } catch (_) { prod = null; }
+    var n = prod && (prod.nombre || prod.name); return n ? n : (l ? l.nombre : ''); }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +
@@ -396,7 +412,7 @@
       var flag = l.revisar && l.revisar.length;
       var why = flag ? l.revisar.map(function (k) { return REVIEW_TEXT[k] || k; }).join(', ') : '';
       var diff = l.costo_actual != null && l.costo_unitario != null && Math.abs(l.costo_unitario - l.costo_actual) > Math.max(0.01, l.costo_actual * 0.01);
-      return '<tr' + (flag ? ' class="flag" data-row="' + i + '"' : '') + '><td>' + E(l.cantidad) + ' × ' + E(l.nombre) + (l.product_id ? '' : ' <b class="nr">(no registrado)</b>') +
+      return '<tr' + (flag ? ' class="flag" data-row="' + i + '"' : '') + '><td>' + E(l.cantidad) + ' × ' + E(lineName(l)) + (l.product_id ? '' : ' <b class="nr">(no registrado)</b>') +
         (l.limite && l.limite.length ? '<div class="flag-t">Fuera del límite: ' + E(why) + '. Corrige la factura o quita la fila.</div><div class="flag-a"><button type="button" data-drop="' + i + '">Quitar fila</button></div>'
           : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
         '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') + '</td></tr>'; }).join('');
@@ -449,9 +465,10 @@
     function pendingRows() { return Array.prototype.filter.call(c.querySelectorAll('tr.flag'), function (tr) { return !decided[tr.dataset.row]; }).length; }
     function review() { if (p.type !== 'compra') return null; var a = [], d = []; Object.keys(decided).forEach(function (k) { (decided[k] === 'drop' ? d : a).push(Number(k)); }); return { op: tokenOp(p), accept: a, drop: d }; }
     // (Bot 2 sobre 6280deae) campos vacíos de la tarjeta de compra: Confirmar apagado hasta llenarlos
-    var need = C.needFields(doc, p, function () { syncOk(); });
+    var need = C.needFields(doc, p, function () { syncOk(); }); c._naNeed = need; c._naP = p; // roleLost vacía TODAS las tarjetas
     if (need) { Object.defineProperty(p, '_manual', { value: need.state, enumerable: false, configurable: true }); var tb = c.querySelector('table'); c.insertBefore(need.el, tb || c.firstChild); }
-    function syncOk() { if (!ok || c.dataset.st !== 'pending') return; var n = pendingRows(), miss = need ? need.missing() : 0; ok.disabled = n > 0 || miss > 0;
+    function lockFields(on) { if (need && need.inputs) need.inputs.forEach(function (i) { i.disabled = !!on; i.readOnly = !!on; }); Array.prototype.forEach.call(c.querySelectorAll('tr.flag button'), function (b) { b.disabled = !!on; }); c.dataset.locked = on ? '1' : ''; }
+    function syncOk() { if (!ok || c.dataset.st !== 'pending' || c.dataset.locked === '1') return; var n = pendingRows(), miss = need ? need.missing() : 0; ok.disabled = n > 0 || miss > 0;
       ok.textContent = miss > 0 ? 'Complete ' + miss + (miss === 1 ? ' dato' : ' datos') : n > 0 ? 'Revisa ' + n + (n === 1 ? ' fila' : ' filas') : (c.dataset.btn || 'Confirmar'); }
     var again = c.querySelector('[data-again]');
     // 422: el servidor dice qué filas faltan revisar; se marcan en rojo «Revisa este dato» (aunque el celular no las hubiera marcado).
@@ -499,19 +516,24 @@
     if (left && p.needsConfirm) { tick(); timer = setInterval(function () { if (c.dataset.st !== 'pending') { clearInterval(timer); return; } tick(); }, 1000); }
     if (ok) ok.onclick = async function () {
       if (c.dataset.st !== 'pending') return;
-      ok.disabled = true; no.disabled = true; ok.textContent = 'Guardando…'; setState('concentrado');
+      ok.disabled = true; no.disabled = true; ok.textContent = gate.locked && gate.locked(key) ? C.RECONNECT_MSG : 'Guardando…'; setState('concentrado');
+      lockFields(true); // (Bots 3/4/5 sobre d72b7601) nada se edita mientras se confirma ni después de un corte
       if (again) again.disabled = true;
       // Antes de confirmar: si el POS no puede abrir la pantalla, se dice el motivo real y no se gasta la tarjeta.
       var pre = C.precheck ? C.precheck(p, deps) : null;
-      if (pre) { res.textContent = pre; no.disabled = false; ok.disabled = false; ok.textContent = c.dataset.btn || 'Confirmar'; if (again) { again.hidden = false; again.disabled = false; } c.dataset.fail = 'precheck'; syncOk(); setState('error', 2000); return; }
+      if (pre) { lockFields(!!(gate.locked && gate.locked(key))); res.textContent = pre; no.disabled = false; ok.disabled = false; ok.textContent = c.dataset.btn || 'Confirmar'; if (again) { again.hidden = false; again.disabled = false; } c.dataset.fail = 'precheck'; syncOk(); setState('error', 2000); return; }
       // Sin PIN: un toque. El botón queda apagado al instante (un doble toque no dispara otro), la puerta reusa el pedido en curso y el
       // servidor marca la tarjeta usada una sola vez (el segundo envío recibe already_confirmed con el mismo operation_id).
-      gate.execute(key, { confirmed: true, review: review() }).then(function (r) {
+      gate.execute(key, { confirmed: true, review: review(), onRetry: function () { if (!c.isConnected) return; ok.textContent = C.RECONNECT_MSG; res.textContent = C.RECONNECT_MSG; } }).then(function (r) {
         if (r && r.code === 'forbidden_role') { roleLost(c, key, p, need); return; } // (Bots 4/5 sobre 58200f60) ver roleLost
         if (r && ACCESS_LOST[r.code]) { accessLost(r.code); return; } // 403 de permiso al confirmar: igual que en el chat
         if (!c.isConnected) return;
         wake();
         res.textContent = r.msg; c.dataset.st = gate.state(key) || 'pending';
+        // sin respuesta: campos y cuerpo quedan como se mandaron; solo «Reintentar» (mismo cuerpo). Con 200 o un 4xx real se puede editar.
+        if (r.locked) { lockFields(true); c.dataset.fail = 'network'; c.dataset.btn = 'Reintentar'; ok.disabled = false; no.disabled = false; ok.textContent = 'Reintentar'; if (again) { again.hidden = true; } setState('error', 2600); return; }
+        lockFields(false);
+        if (r.code === 'already_confirmed_same_session' && r.ok) posNotice(r.msg);
         if (r.code === 'confirm_expired') { expire(); setState('error', 2600); return; }
         if (c.dataset.st !== 'pending') ok.textContent = { done: 'Hecho', denied: 'No disponible', cancelled: 'Cancelada', expired: 'Venció' }[c.dataset.st] || 'Confirmar';
         if (r.ok) { if (again) again.hidden = true; setState('feliz', 2600); setTimeout(closePanel, 1400); return; }
@@ -546,15 +568,39 @@
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
   // olvidó; aquí se vacían los campos y la referencia de la tarjeta). Queda solo el aviso con «Cerrar». Solo createElement/textContent.
+  // (Bot 5 sobre d72b7601) y no solo esa tarjeta: TODAS las propuestas salen de la puerta (gate.forgetAll), TODAS las .na-asst-card salen
+  // de la pantalla y de la memoria (campos escritos, _manual, referencias), y si «Nueva compra» está abierta prellenada desde una tarjeta
+  // (sin guardar: al guardar el POS la cierra), se vacían sus campos y se cierra con su propio «Cancelar» (sin tocar el núcleo de compras).
+  // Luego refreshAccess pregunta el rol al servidor. Nada de esto se guarda en localStorage/sessionStorage/IndexedDB.
+  function wipeCard(card) {
+    if (!card) return;
+    var nd = card._naNeed, pp = card._naP;
+    if (nd && nd.state) Object.keys(nd.state).forEach(function (k) { delete nd.state[k]; });
+    if (nd && nd.inputs) nd.inputs.forEach(function (i) { i.value = ''; });
+    if (card.querySelectorAll) Array.prototype.forEach.call(card.querySelectorAll('input, textarea'), function (i) { i.value = ''; });
+    if (pp) C.wipeManual(pp);
+    card._naKey = null; card._naNeed = null; card._naP = null; if (card.remove) card.remove();
+  }
+  function closeAssistantPurchase() {
+    var w = doc.getElementById('naPurchaseDialog'); if (!w || !w.dataset || w.dataset.naAsst !== '1') return false;
+    Array.prototype.forEach.call(w.querySelectorAll('input, textarea'), function (i) { i.value = ''; });
+    try { w.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+    var cancel = w.querySelector('.na-pur-cancel'); if (cancel) cancel.click(); // el «Cancelar» del POS (closeW)
+    if (w.isConnected) w.remove(); // igual que tocar fuera de la ventana (overlay del POS)
+    return true;
+  }
   function roleLost(c, key, p, need) {
     try { gate.forget(key); } catch (_) {}
-    if (need && need.state) Object.keys(need.state).forEach(function (k) { delete need.state[k]; });
-    if (need && need.inputs) need.inputs.forEach(function (i) { i.value = ''; });
-    C.wipeManual(p);
-    if (c) { c._naKey = null; if (c.remove) c.remove(); }
+    try { if (gate.forgetAll) gate.forgetAll(); } catch (_) {}
+    if (c) { if (!c._naNeed) c._naNeed = need; if (!c._naP) c._naP = p; }
+    wipeCard(c); C.wipeManual(p);
+    Array.prototype.forEach.call(doc.querySelectorAll('.na-asst-card'), wipeCard);
+    closeAssistantPurchase();
     var m = el('div', 'na-asst-msg sys na-asst-rolelost'), t = el('div'); t.textContent = C.ROLE_LOST_MSG; m.appendChild(t);
     var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Cerrar'; b.onclick = function () { m.remove(); closePanel(); }; m.appendChild(b);
     if (msgsEl) { msgsEl.appendChild(m); scrollEnd(); } announce(C.ROLE_LOST_MSG);
+    // el servidor dice el rol nuevo; si al cambiar de rol se rearma el panel (sin la charla), el aviso queda en el aviso del POS
+    lastPing = 0; Promise.resolve(refreshAccess()).then(function () { if (!m.isConnected && !doc.querySelector('.na-asst-rolelost')) posNotice(C.ROLE_LOST_MSG); }, function () {});
   }
   function accessLost(code) {
     access = null; adminOff = true; noRole = false;
