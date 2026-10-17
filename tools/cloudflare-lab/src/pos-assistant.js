@@ -107,8 +107,8 @@ const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:l
 const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:(?:anterior|actual|habitual|normal|real|unitario|viejo|nuevo)\\s+)?(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron)' +
   // Frases de bodega del dueño (17-10): «lo que pagué», «pagué», «me salió a», «me sale a», «lo traje a». «me costó», «nos costó», «mi costo» ya entran por «costó»/«costo»;
   // «lo compré a» por BUY_WORD. «pagó» (el cliente pagó, pagó con Yape) NO es palabra del dueño; «pague» sin tilde solo dentro de «lo que pague».
-  '|lo\\s+que\\s+pagu[eé]|pagué|pagamos|(?:me|nos)\\s+sali[óo]\\s+a|me\\s+sale\\s+a|lo\\s+traje\\s+a|lo\\s+consegu[íi]\\s+a)' + NOT_LETTER;
-const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó)' + NOT_LETTER;
+  '|lo\\s+que\\s+pagu[eé]|pagué|pagamos|(?:lo|la|los|las)\\s+pag(?:u[eé]|amos|aron)\\s+a|(?:me|nos)\\s+(?:sale|salen|sali[óo]|salieron|sal[íi]an?)\\s+a|te\\s+(?:sali[óo]|salieron)\\s+a|(?:lo|la|los|las)\\s+traj(?:e|imos|eron)\\s+a|(?:lo|la|los|las)\\s+consegu(?:í|i|imos|ieron|ió|io)\\s+a)' + NOT_LETTER;
+const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó|aste)' + NOT_LETTER;
 const UNIT = '(?:unidad(?:es)?|unid|unds?|uds?|u|cajas?|cjs?|docenas?|kg|kilos?|g|gr|gramos?|paquetes?|pqts?|piezas?|pzas?|frascos?|sobres?|bl[íi]sters?|tabletas?|pastillas?|bolsas?|litros?|lts?|l|ml|botellas?|latas?|packs?|cientos?)' + NOT_LETTER;
 const NUM = '(?:\\d{1,3}(?:[.,]\\d{3})+|\\d{1,6})(?:[.,]\\d{1,2})?(?!\\d)';
 const CUR_TAIL = '(?:\\s?(?:soles|sol|pen)' + NOT_LETTER + ')?';
@@ -133,7 +133,7 @@ const NEG_BEFORE = /(?:^|[^a-záéíóúñ])(?:no\s+(?:lo\s+|la\s+|los\s+|las\s+
 const NEG_PRICE_Y = /precio(?:\s{1,3}(?:es|ser[íi]a|ser[áa])\s{1,3}|\s{0,3}:\s{0,3}|(\s{1,3}))(?=S\/|PEN|US\$|\$|-?\d)/iy;
 const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
 // Palabras con las que puede empezar una frase de varias palabras: para decidirlas se esperan hasta 36 caracteres.
-const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|me|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
+const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|me|te|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
 const isLetter = (c) => !!c && /[a-záéíóúñü]/i.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
 export const OWNER_DATA_LABEL = '[dato del dueño]';
@@ -148,46 +148,36 @@ function headerCols(cells) { const idx = cells.map((c, n) => (OWNER_HEADER.test(
 // Etiqueta de venta explícita como encabezado o celda (PVP, P. venta, Precio de venta, Precio venta, Venta).
 const SALE_CELL_RE = /^\s*(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?venta|venta)\s*$/;
 const isSaleCell = (c) => SALE_CELL_RE.test(String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-// Montos dentro de una celda (mismo patrón que el lector; no pegado a letra o número por delante).
-const AMOUNT_G = new RegExp(AMOUNT_Y.source, 'gi');
-const cellAmounts = (c, f) => c.replace(AMOUNT_G, (m, off, all) => { const p = all[off - 1]; return p && (isLetter(p) || isDigit(p)) ? m : f(m); });
-const hasAmount = (c) => { let any = false; cellAmounts(c, (m) => { any = true; return m; }); return any; };
-// Presentación del dueño justo antes de la tabla (Bot 4/5 sobre 7150d291): la última frase de la línea de texto anterior (con o sin
-// líneas en blanco) tiene una palabra del dueño, o la frase de antes tiene una palabra del dueño NEGADA (zona negada). Párrafos más
-// atrás no cuentan. Esa tabla tapa TODO monto salvo las columnas con encabezado de venta; sin encabezado, todos.
-const OWNER_ANY_G = new RegExp('(?<![a-záéíóúñü])(?:' + OWNER_WORD + '|' + BUY_WORD + ')', 'gi');
-function ownerIntro(prevLine, line) {
-  const sents = (prevLine + '\n' + line).split(/(?:[.!?](?!\d)|\n)+/).map((x) => x.trim()).filter(Boolean);
-  const last = sents[sents.length - 1] || '', before = sents[sents.length - 2] || '';
-  OWNER_ANY_G.lastIndex = 0; if (OWNER_ANY_G.test(last)) return true;
-  OWNER_ANY_G.lastIndex = 0; for (let m; (m = OWNER_ANY_G.exec(before));) { if (NEG_BEFORE.test(before.slice(Math.max(0, m.index - 48), m.index))) return true; }
-  return false;
+// Encabezado de venta en una tabla con presentación del dueño (Bot 5 sobre 1c17310c): acepta «PVP (S/)», «Precio de venta S/», «P. venta (S/)»,
+// «**Venta**»…; nunca si nombra al dueño («Costo de venta», «Venta (costo)», «P. venta / costo»). «Precio» solo: venta SOLO si otra columna
+// del encabezado es del dueño (Costo, P. compra) o, sin columna del dueño, si la presentación fue negada; si no, se tapa (a prueba de fallas).
+const SALE_HDR_RE = /^(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?venta|venta|precio)$/;
+const normCell = (c) => String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function saleHeader(text, ownerCol, neg) {
+  const t = normCell(text).replace(/\(?\s*(?:s\/\.?|soles|pen)\s*\)?/g, ' ').replace(/[()[\]:*_#]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t || OWNER_HEADER_RE.test(t) || !SALE_HDR_RE.test(t)) return false;
+  return t === 'precio' ? !!(ownerCol || neg) : true;
 }
+const LIST_NUM_Y = /\d{1,3}[.)][ \t]/y;
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
-  if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.introT = false; st.saleCols = null;
-    if (!d) { if (full.trim()) { st.intro = ownerIntro(st.introPrev || '', full); st.introPrev = full; } return null; } }
+  if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
   const cells = full.split(d); st.sep = d; st.rows = (st.rows || 0) + 1;
-  if (st.rows === 1) { st.introT = !!st.intro; st.intro = false; st.introPrev = ''; st.saleCols = null; }
   const isSep = d === '|' && cells.some((c) => c.trim()) && cells.every((c) => !c.trim() || SEP_CELL.test(c));
   if (isSep) { if (!st.cols && st.prev && st.rows === st.prevRow + 1) st.cols = headerCols(st.prev); st.prev = null; return null; }
-  let header = false;
-  if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1;
-    if (st.introT && !cells.some(hasAmount)) { st.saleCols = cells.map((c, n) => (isSaleCell(c) ? n : -1)).filter((n) => n >= 0); header = true; }
-    if (!st.introT || header) return null; }
-  else { st.prev = cells; st.prevRow = st.rows; }
-  let changed = false;
-  if (st.cols && st.rows > 1) for (const n of st.cols) { if (n < cells.length && cells[n].trim() && !isSaleCell(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
-  if (st.introT) for (let n = 0; n < cells.length; n++) { if (st.saleCols && st.saleCols.includes(n)) continue;
-    const r = cellAmounts(cells[n], () => OWNER_DATA_LABEL); if (r !== cells[n]) { cells[n] = r; changed = true; } }
+  if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1; return null; }
+  st.prev = cells; st.prevRow = st.rows;
+  if (!st.cols) return null;
+  let changed = false; // en una columna del dueño se tapa la celda; una celda que es solo una etiqueta de venta («PVP») queda
+  for (const n of st.cols) { if (n < cells.length && cells[n].trim() && !isSaleCell(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
   return changed ? cells.join(d) : null;
 }
 function createTableLayer(out) {
-  const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0, intro: false, introPrev: '', introT: false, saleCols: null }; let line = '', holding = false;
+  const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0 }; let line = '', holding = false;
   return {
     push(txt) { const s = txt;
       for (let i = 0; i < s.length;) {
-        if (!line && !holding && (st.cols || st.intro || st.introT)) holding = true; // empieza una fila de una tabla del dueño: espera la línea entera
+        if (!line && !holding && st.cols) holding = true; // empieza una fila de una tabla del dueño: espera la línea entera
         const nl = s.indexOf('\n', i), piece = nl < 0 ? s.slice(i) : s.slice(i, nl + 1);
         line += nl < 0 ? piece : piece.slice(0, -1); i += piece.length;
         if (nl < 0) { if (!holding) out(piece); break; }
@@ -195,7 +185,7 @@ function createTableLayer(out) {
         line = '';
       }
     },
-    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.intro = false; st.introPrev = ''; st.introT = false; st.saleCols = null; }
+    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; }
   };
 }
 // Montos y palabras del dueño, en partes. out(texto). Lo único que espera es un monto (o lo que puede serlo) mientras se decide.
@@ -204,6 +194,16 @@ function createAmountLayer(out) {
   // Filas de tabla (| o tabulador, con o sin fila separadora): la ventana del dueño y la zona negada abiertas ANTES de una fila de verdad
   // (2+ celdas con texto) no pasan a las celdas de la fila siguiente; se sueltan al cerrar su primera celda con texto. Un monto en esa primera celda sigue tapado.
   let row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
+  // Presentación del dueño (Bot 4/5 sobre 1c17310c): si alguna de las 3 últimas frases del bloque de texto (líneas en blanco valen) tiene una
+  // palabra del dueño (negada o no), la tabla o lista que empieza en la línea siguiente tapa sus montos (tabla: salvo columnas de venta; lista:
+  // salvo ítems con etiqueta de venta). Se decide con los primeros caracteres de la línea (| , tabulador antes de un monto, -, *, •, «1.», «1)»):
+  // NO se retiene nada extra; si la línea no es tabla ni lista, sigue como texto normal.
+  let sent = { has: false, owner: false, neg: false }, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
+  const endSentence = () => { if (sent.has) { ring.push(sent); if (ring.length > 3) ring.shift(); } sent = { has: false, owner: false, neg: false }; };
+  const introOn = () => ring.some((x) => x.owner) || sent.owner;
+  const introNeg = () => ring.some((x) => x.neg) || sent.neg;
+  // texto de una celda de encabezado: solo si es corta (<= 48); una más larga no cuenta como venta (igual en partes y entero)
+  const cellText = (from, to) => (to - from <= 48 && from >= base ? buf.slice(from - base, to - base) : '');
   const ch = (i) => (i >= base ? buf[i - base] : undefined);
   const end = () => base + buf.length;
   const sticky = (re, i) => { re.lastIndex = i - base; const m = re.exec(buf); return m ? m[0].length : 0; };
@@ -239,18 +239,26 @@ function createAmountLayer(out) {
   // una palabra del dueño, se tapa; si aparece una etiqueta de venta o termina la frase, sale. Tope OWNER_RETRO caracteres: si se llega
   // al tope sin terminar la frase, se tapa (a prueba de fallas).
   let memo = { e: -1, i: 0, nl: 0 }; // sigue donde quedó la vez anterior (lo ya mirado no cambia)
-  const retro = (e, final, nlMax = 0) => {
+  // sale: monto con etiqueta de venta (zona negada, celda de tabla, lista): termina también en el fin de la celda (cell) y no lo tapa una
+  // frase del dueño que mira hacia ADELANTE y viene tras «y» («Precio S/ 2.50 y lo traje a S/ 1.80»: «lo traje a» es del 1.80), ni otro monto.
+  const retro = (e, final, nlMax = 0, cell = false, sale = false) => {
     let nl = memo.e === e ? memo.nl : nlMax;
     for (let i = memo.e === e ? memo.i : e; ; i++) {
       if (i >= e + OWNER_RETRO) return true;
       if (i >= end()) { memo = { e, i, nl }; return final ? false : NEED; }
       const c = ch(i);
+      if (cell && (c === '|' || c === '\t')) return false;
       if (c === '\n' && nl > 0) { nl--; continue; }
       if (c === ';' || c === '!' || c === '?' || c === '\n') return false;
+      if (sale && amountStart(i) && sticky(AMOUNT_Y, i)) return false;
       if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i, nl }; return NEED; } if (!isDigit(n)) return false; continue; }
       if (isLetter(c) && !isLetter(ch(i - 1))) {
         if (!final && end() < wordNeed(i)) { memo = { e, i, nl }; return NEED; }
-        if ((sticky(OWNER_WORD_Y, i) && !nameWord(i)) || sticky(BUY_WORD_Y, i)) return true;
+        const ow = sticky(OWNER_WORD_Y, i), bw = ow ? 0 : sticky(BUY_WORD_Y, i);
+        if ((ow && !nameWord(i)) || bw) {
+          if (sale && /(?:^|[^a-záéíóúñü])y\s+$/i.test(buf.slice(e - base, i - base)) && (bw || /\sa$/i.test(buf.slice(i - base, i + ow - base)))) return false;
+          return true;
+        }
         if (sticky(STOP_Y, i)) return false;
         const ab = sticky(ABBR_Y, i); if (ab) i += ab - 1;
       }
@@ -268,14 +276,30 @@ function createAmountLayer(out) {
       if (ctx && k > ctx.limit && !ctx.seg) ctx = null; // la ventana de una palabra del dueño dura 60 caracteres Y hasta el fin de su frase
       if (k >= end()) break;
       const c = ch(k), p = ch(k - 1);
+      if (lineStart && c !== ' ' && c !== '\r' && c !== '\n') {
+        // primer carácter de la línea: ¿tabla, lista o texto?
+        if ((c === '-' || c === '*' || c === '•') && ch(k + 1) === undefined && !final) break;
+        if (isDigit(c) && !final && end() < k + 5) break;
+        const isList = ((c === '-' || c === '*' || c === '•') && (ch(k + 1) === ' ' || ch(k + 1) === '\t')) || (isDigit(c) && sticky(LIST_NUM_Y, k) > 0);
+        if (mode === 'table' && tbl.d === '|' && c !== '|') { mode = null; tbl = null; ring = []; }
+        if (mode === 'list' && !isList) { mode = null; ring = []; }
+        if (mode === 'pend') {
+          if (c === '|' || c === '\t') { mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
+          else if (isList) mode = 'list';
+          else mode = 'pendTab'; // puede ser una tabla con tabuladores: lo dice un tabulador antes de cualquier monto
+        }
+        lineStart = false;
+      }
       if (c !== '|' && c !== '\t' && c !== '\n' && c !== ' ' && c !== '\r') { row.has = true; if (c !== '-' && c !== ':') row.sep = false; }
+      if (isLetter(c) || isDigit(c)) sent.has = true;
+      if (c !== ' ' && c !== '\t' && c !== '\r' && c !== '\n') lineHas = true;
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
         let n;
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
-        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k };
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k }; sent.owner = true; if (neg) sent.neg = true;
           ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n, at: k }; pass(k + n); continue; }
-        if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k))) { sent.owner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
         // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
         if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true, at: k }; pass(k + n); continue; }
@@ -291,9 +315,22 @@ function createAmountLayer(out) {
         if (n) {
           if (!final && end() < k + n + 16) break;
           const e = k + n;
-          // «Precio S/ 1.80» en la zona negada espera hasta el fin de su frase (puede cruzar UN salto de línea, tope OWNER_RETRO):
-          // «… (lo que pagué)», «…, lo que me costó» lo tapan
-          if (ctx && ctx.sale && ctx.np) { const r = retro(e, final, 1); if (r === NEED) break; ctx = null; if (r) mask(e); else pass(e); continue; }
+          if (mode === 'pendTab') mode = 'pend'; // un monto antes de cualquier tabulador: esta línea es texto
+          lineAmt = true;
+          // Tabla con presentación del dueño: todo monto se tapa salvo en una columna de venta (y aún ahí, si la celda nombra al dueño después).
+          if (mode === 'table') {
+            if (tbl.row === 0) tbl.headerless = true;
+            if (!tbl.headerless && tbl.sale && tbl.sale.has(tbl.cell)) { const r = retro(e, final, 0, true, true); if (r === NEED) break; ctx = null; if (r) mask(e); else pass(e); continue; }
+            ctx = null; mask(e); continue;
+          }
+          // Lista con presentación del dueño: ítem por ítem; solo deja ver un monto con etiqueta de venta («- PVP: S/ 2.50»), mirando hasta el fin del ítem.
+          if (mode === 'list') {
+            if (ctx && ctx.sale) { const r = retro(e, final, 0, false, true); if (r === NEED) break; ctx = null; if (r) mask(e); else pass(e); continue; }
+            ctx = null; mask(e); continue;
+          }
+          // Etiqueta de venta en la zona negada o en una celda de tabla (y «Precio S/» de la zona): espera hasta el fin de su frase/celda
+          // (cruza hasta DOS saltos de línea, tope OWNER_RETRO); una palabra del dueño después lo tapa: «PVP S/ 1.80, lo que me costó», «| PVP | S/ 1.80 (costo) |».
+          if (ctx && ctx.sale && (ctx.np || negZone || lineDelim)) { const r = retro(e, final, lineDelim ? 0 : 2, lineDelim, true); if (r === NEED) break; ctx = null; if (r) mask(e); else pass(e); continue; }
           if (ctx && ctx.sale) { ctx = null; pass(e); continue; }
           if (ctx && (!ctx.lead || leadOk(k))) { ctx = null; mask(e); continue; }
           if (negZone) { mask(e); continue; } // zona negada: sin etiqueta de venta delante, se tapa
@@ -308,6 +345,22 @@ function createAmountLayer(out) {
         if (c === '.') { const nx = ch(k + 1); if (nx === undefined && !final) break; if (isDigit(nx)) { pass(k + 1); continue; } }
         if (ctx && (ctx.seg || ctx.neg)) { if (ctx.neg && c !== ';') ctx = null; else ctx.seg = false; }
         if (negZone && c !== ';' && !sameEnd(k) && --negZone.left <= 0) negZone = null;
+      }
+      if (c === '.' || c === '!' || c === '?') { const nx = ch(k + 1); if (c === '.' && nx === undefined && !final) break; if (!(c === '.' && isDigit(nx))) endSentence(); }
+      if ((c === '|' || c === '\t') && mode === 'pendTab' && !lineAmt) { mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
+      if ((c === '|' || c === '\t') && mode === 'table') { if (tbl.row === 0 && !tbl.headerless) tbl.hdr[tbl.cell] = cellText(tbl.from, k); tbl.cell++; tbl.from = k + 1; }
+      if (c === '|' || c === '\t') lineDelim = true;
+      if (c === '\n') {
+        endSentence();
+        const blank = !lineHas;
+        if (mode === 'table') {
+          if (!lineDelim) { mode = null; tbl = null; ring = []; } // fin de una tabla con tabuladores (o línea en blanco)
+          else { if (tbl.row === 0 && !tbl.headerless) { tbl.hdr[tbl.cell] = cellText(tbl.from, k); const oc = tbl.hdr.some((h) => OWNER_HEADER.test(h || ''));
+              tbl.sale = new Set(tbl.hdr.map((h, i) => (saleHeader(h || '', oc, tbl.neg) ? i : -1)).filter((i) => i >= 0)); }
+            tbl.row++; tbl.cell = 0; tbl.from = k + 1; }
+        } else if (lineDelim) { mode = null; ring = []; } // una fila de tabla no es presentación (su «Costo» lo ven las columnas)
+        else if (mode !== 'list' && !blank) mode = introOn() ? 'pend' : null; // línea de texto: ¿presenta algo del dueño?
+        lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false;
       }
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
         // se suelta al cerrar la primera celda con texto de la fila nueva (el monto de esa celda sigue tapado)
@@ -324,7 +377,8 @@ function createAmountLayer(out) {
     if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
-  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0, nl: 0 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false }; } };
+  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0, nl: 0 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
+    sent = { has: false, owner: false, neg: false }; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
   return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }
@@ -334,6 +388,8 @@ export function redactOwnerData(value) {
 // Compatibilidad (pruebas viejas): ya no se usa para el texto en partes.
 export const OWNER_HOLD = 160;
 const OWNER_WORD_RE = new RegExp('\\b(?:' + OWNER_WORD + '|' + BUY_WORD + ')', 'i');
+export const HISTORY_OMITTED = '[mensaje anterior omitido]';
+const OWNER_HISTORY_RE = new RegExp('(?<![a-záéíóúñü])(?:' + OWNER_WORD + '|' + BUY_WORD + '|proveedor(?:es)?|supplier|precio\\s+de\\s+compra)', 'i');
 export function ownerHold(red) { const from = Math.max(0, red.length - OWNER_HOLD), m = OWNER_WORD_RE.exec(red.slice(from)); return m ? from + m.index : Infinity; }
 const redactEmployee = (v) => redactOwnerData(redactText(v));
 export function redactFor(role) { return role === 'owner' ? redactText : redactEmployee; }
@@ -688,7 +744,12 @@ export async function reserveUsage(store, auth, env, nowMs, hasImage) {
 // ---------- DeepSeek ----------
 export function buildDeepSeekRequest({ role, ctx, history, text, image }) {
   const messages = [{ role: 'system', content: systemPrompt(role, ctx) }, contextMessage(ctx)];
-  for (const m of history) messages.push({ role: m.role, content: m.role === 'user' ? '<dato_usuario>' + m.content.replace(/<\/?dato_usuario>/gi, '') + '</dato_usuario>' : m.content });
+  // Empleado (defensa en datos): el historial lo manda el aparato (un aparato que antes fue del dueño puede guardar respuestas con costos):
+  // antes del modelo pasa por el mismo filtro de montos del dueño. El texto nuevo de la persona va tal cual (es lo que ella escribió).
+  // Un turno anterior que nombra al dueño (costo, compré, margen, proveedor…) NO va al modelo: se cambia por un aviso corto (puede venir de
+  // una charla del dueño en el mismo aparato); el resto pasa por el filtro de montos.
+  const hist = role === 'owner' ? (x) => x : (x) => (OWNER_HISTORY_RE.test(x) ? HISTORY_OMITTED : redactOwnerData(x));
+  for (const m of history) messages.push({ role: m.role, content: m.role === 'user' ? '<dato_usuario>' + hist(m.content).replace(/<\/?dato_usuario>/gi, '') + '</dato_usuario>' : hist(m.content) });
   const userText = '<dato_usuario>' + (text || (image ? 'Lee esta foto de factura o producto y propone las líneas de compra.' : '')).replace(/<\/?dato_usuario>/gi, '') + '</dato_usuario>';
   messages.push(image
     ? { role: 'user', content: [{ type: 'text', text: userText }, { type: 'image_url', image_url: { url: image, detail: 'auto' } }] }
@@ -847,6 +908,13 @@ export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
 // ganancia, inversión, caja, deudas) se quita ANTES de mandar cualquier trozo y antes de dárselo al modelo.
 const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'stock', 'minimo'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
 export const OWNER_ONLY_KEY = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles/i;
+const OWNER_ONLY_KEY_MODEL = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles|proveedor|supplier|compra|purchase|precio_compra/i;
+export function stripOwnerKeys(v, depth = 0) {
+  if (depth > 6) return null;
+  if (Array.isArray(v)) return v.map((x) => stripOwnerKeys(x, depth + 1));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).filter(([k]) => !OWNER_ONLY_KEY_MODEL.test(k)).map(([k, x]) => [k, stripOwnerKeys(x, depth + 1)]));
+  return v;
+}
 export function employeeQueryResult(r) {
   if (!r || r.error) return r;
   const keep = (v) => Array.isArray(v) ? v.map(keep) : v && typeof v === 'object'
@@ -1226,7 +1294,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (role !== 'owner') r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null };
     consultas.push(p);
-    if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: redactText(JSON.stringify(r.error ? { error: r.error } : { tipo: r.tipo, resumen: r.resumen })).slice(0, 2000) });
+    // Al modelo: solo { tipo, resumen }. Empleado: el resumen ya pasó por la lista blanca (employeeQueryResult) y aquí se vuelve a quitar
+    // toda clave del dueño (costo, margen, proveedor, compras, caja, deudas) por si una consulta nueva trae algo más.
+    const forModel = r.error ? { error: r.error } : { tipo: r.tipo, resumen: role === 'owner' ? r.resumen : stripOwnerKeys(r.resumen) };
+    if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: redactText(JSON.stringify(forModel)).slice(0, 2000) });
   }
   let reply = cleanText(result.content, 1200);
   if (role !== 'owner') reply = redactOwnerData(reply); // mismo filtro que el texto en partes (Bot 5)
