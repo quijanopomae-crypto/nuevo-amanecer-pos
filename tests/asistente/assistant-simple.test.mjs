@@ -76,7 +76,7 @@ test('tarjeta de cambio: dos botones, «Confirmar» y «Cancelar»; botones ráp
 });
 
 test('empleado: sin botones ni opciones de dueño (ni foto de factura, ni tarjetas de cambio)', () => {
-  assert.match(UI, /if \(photoBtn\) photoBtn\.hidden = !isOwnerAccess\(\);/);
+  assert.match(UI, /if \(photoBtn\) photoBtn\.hidden = !canPhoto\(\);/); assert.match(UI, /function canPhoto\(\) \{ return isOwnerAccess\(\) && !\(access && access\.vision === false\); \}/);
   const emp = UI.slice(UI.indexOf('function chipsHtml()'), UI.indexOf('function chipsHtml()') + 1200).split('\n').slice(2, 4).join('\n');
   assert.ok(!/data-photo|Leer factura|Ventas de hoy|valorizado/.test(emp), emp);
   const lvl = { role: 'empleado', level: 'consultas_documentos', isOwner: () => false };

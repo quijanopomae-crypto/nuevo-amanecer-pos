@@ -214,3 +214,14 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - Tras una presentación del dueño sin línea en blanco, «Para vender, el precio es S/ 2.50» también se tapa (tapa de más, no fuga).
 - Un chat nuevo reinicia el número de par: un par viejo (menos de 24 h) puede repetirse o mezclarse con otro chat. No es fuga: siempre es texto del mismo empleado en el mismo aparato.
 - Leyenda después de la tabla, «El precio\nes», más de 20 caracteres en el renglón siguiente y «Precios:» genérico (ya anotadas antes).
+
+## Celular (Bot 4/3/5 sobre 66f1ecb5), sin cambios en el servidor
+
+- **Foto con `vision:false`**: si el ping dice que el proveedor en uso no lee fotos, no se muestran el botón de foto ni el chip «Leer factura», tampoco al dueño. El aviso «Leer fotos no está disponible por ahora.» de `send()` queda de respaldo. Si `vision` cambia, el panel se vuelve a pintar.
+- **Proveedor en uso desde el inicio**: arriba de la lista sale «En uso: <proveedor> · <modelo>» con lo que ya trae `GET /auth/assistant/provider` (`current`, también cuando viene del servidor: «(del servidor)»). Sin proveedor listo: «En uso: ninguno todavía…» o «Falta poner una clave en el servidor». A menos de 768 px la lista deja 96 px abajo para que la burbuja no tape el último «Usar».
+- **Tablas en la respuesta**: una línea «| … |» seguida de «|---|» se dibuja como tabla. Se trabaja sobre el texto que YA llegó filtrado (el servidor tapó los costos): solo se le da forma, nunca se agrega ni se recupera nada.
+  - Solo `createElement` + `textContent`; nunca `innerHTML`; ningún texto del modelo va en atributos (solo `scope="col"` y `aria-hidden="true"` fijos). `<img onerror>` o `<script>` en una celda se ven como texto.
+  - En partes: cada fila se dibuja al cerrar su línea; el estado se guarda y no se relee el mensaje. Solo espera una línea que empieza con «|» (hasta su salto) y la cabecera (hasta ver si sigue «|---|»). El resto del texto sale enseguida, como antes.
+  - A 480 px o menos, cada fila es una ficha «Columna: valor». «[dato del dueño]» va en un span que no se parte.
+  - El texto final del servidor reemplaza al pintado solo si cambió (se compara con el texto crudo recibido).
+  - Las respuestas tienen un tope de 1200 caracteres (unas 30 filas). La prueba de 480 filas mide el peor caso.

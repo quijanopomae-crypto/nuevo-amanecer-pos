@@ -375,3 +375,24 @@ body.dark .na-asst-msg .na-asst-incomplete{color:#cbd5e1} /* Bot 4: contraste 4,
 .na-asst-prov-c{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff}.na-asst-prov-c p{flex-basis:100%;margin:0;font-size:14px}
 body.dark .na-asst-prov-r{border-color:#334155}body.dark .na-asst-prov-r small.ok{color:#86efac}body.dark .na-asst-prov-r small.off{color:#fcd34d}body.dark .na-asst-prov-r small.st{color:#cbd5e1}
 body.dark .na-asst-prov-t{background:#0f172a;border-color:#334155;color:#e2e8f0}body.dark .na-asst-prov-c{background:#0f172a;border-color:#1e3a8a}body.dark .na-asst-prov-r em{color:#93c5fd}
+/* Bot 4 sobre 66f1ecb5: proveedor en uso desde el inicio; a 360 la burbuja (64 px + 16) no tapa el último «Usar» */
+.na-asst-prov-cur{margin:6px 0 8px;font-size:15px;font-weight:700;color:#0f172a}body.dark .na-asst-prov-cur{color:#e2e8f0}
+@media (max-width:767px){.na-asst-prov-l{padding-bottom:96px}}
+/* Tablas en la respuesta (texto ya filtrado; solo createElement/textContent). «[dato del dueño]» nunca se parte. */
+.na-asst-tbl{overflow-x:auto;margin:6px 0;white-space:normal;-webkit-overflow-scrolling:touch}
+.na-asst-tbl table{border-collapse:collapse;min-width:100%;font-size:15px;line-height:1.35}
+.na-asst-tbl th,.na-asst-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
+.na-asst-tbl th{font-weight:800;background:#f1f5f9}
+.na-asst-tl{display:none}.na-asst-mask{white-space:nowrap}
+body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.dark .na-asst-tbl th{background:#163023}
+@media (max-width:480px){
+  .na-asst-tbl{overflow-x:visible}
+  .na-asst-tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .na-asst-tbl table,.na-asst-tbl tbody,.na-asst-tbl tr,.na-asst-tbl td{display:block;min-width:0}
+  .na-asst-tbl tr{border:1px solid #e2e8f0;border-radius:12px;padding:6px 10px;margin:8px 0}
+  .na-asst-tbl td{display:flex;gap:8px;padding:4px 0;border:0;font-size:16px}
+  .na-asst-tl{display:block;flex:0 0 42%;font-weight:800;overflow-wrap:break-word}.na-asst-tl::after{content:":"}
+  .na-asst-tv{flex:1;min-width:0;overflow-wrap:break-word}
+  body.dark .na-asst-tbl tr{border-color:#1f3b2b}
+}
+.na-asst-msg.a:has(.na-asst-tbl){max-width:100%}

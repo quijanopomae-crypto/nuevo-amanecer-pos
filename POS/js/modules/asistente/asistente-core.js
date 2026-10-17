@@ -233,6 +233,81 @@
       paints: function () { return paints; }
     };
   }
+  // Respuesta con tablas (Bot 4/3/5): el texto YA viene filtrado por el servidor (costos tapados); aquí solo se le da forma, nunca se agrega nada.
+  // Solo createElement + textContent (nunca innerHTML ni texto del modelo en atributos). En partes: cada fila se dibuja al cerrar su línea,
+  // el estado se guarda (no se relee el mensaje entero). Una línea que empieza con «|» espera hasta su salto; la cabecera espera además la
+  // línea siguiente (si es «|---|» es tabla; si no, vuelve como texto). El resto del texto se pinta enseguida, como antes.
+  var MASK_LABEL = '[dato del dueño]';
+  var TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$|^\s*\|\s*:?-{3,}:?\s*\|\s*$/;
+  function tableCells(line) {
+    var t = line.trim(); if (t.charAt(0) === '|') t = t.slice(1); if (t.charAt(t.length - 1) === '|' && t.charAt(t.length - 2) !== '\\') t = t.slice(0, -1);
+    var out = [], cur = '';
+    for (var i = 0; i < t.length; i++) { var c = t.charAt(i); if (c === '\\' && t.charAt(i + 1) === '|') { cur += '|'; i++; } else if (c === '|') { out.push(cur); cur = ''; } else cur += c; }
+    out.push(cur);
+    return out.map(function (x) { return x.trim().replace(/^(\*\*|__)(.*)\1$/, '$2'); });
+  }
+  function createReplyRenderer(doc, append) {
+    var raw = '', line = '', mode = 'start', liveText = null, head = null, table = null, tbody = null, labels = null, rows = 0;
+    // texto suelto: se va sumando al mismo nodo de texto mientras no aparezca una tabla
+    function text(t) { if (!t) return; if (liveText) liveText.data += t; else { liveText = doc.createTextNode(t); append(liveText); } }
+    function cellInto(cellEl, value) { // «[dato del dueño]» en un span que no se parte
+      var parts = String(value).split(MASK_LABEL);
+      for (var i = 0; i < parts.length; i++) {
+        if (parts[i]) cellEl.appendChild(doc.createTextNode(parts[i]));
+        if (i < parts.length - 1) { var m = doc.createElement('span'); m.className = 'na-asst-mask'; m.textContent = MASK_LABEL; cellEl.appendChild(m); }
+      }
+    }
+    function startTable(hdrLine) {
+      liveText = null; labels = tableCells(hdrLine); rows = 0;
+      var wrap = doc.createElement('div'); wrap.className = 'na-asst-tbl';
+      table = doc.createElement('table'); var thead = doc.createElement('thead'), tr = doc.createElement('tr');
+      labels.forEach(function (h) { var th = doc.createElement('th'); th.setAttribute('scope', 'col'); cellInto(th, h); tr.appendChild(th); });
+      thead.appendChild(tr); table.appendChild(thead); tbody = doc.createElement('tbody'); table.appendChild(tbody); wrap.appendChild(table); append(wrap);
+    }
+    function addRow(l) {
+      var cells = tableCells(l), tr = doc.createElement('tr'), n = Math.max(cells.length, labels.length);
+      for (var i = 0; i < n; i++) {
+        var td = doc.createElement('td');
+        if (labels[i]) { var lab = doc.createElement('span'); lab.className = 'na-asst-tl'; lab.setAttribute('aria-hidden', 'true'); lab.textContent = labels[i]; td.appendChild(lab); }
+        var v = doc.createElement('span'); v.className = 'na-asst-tv'; cellInto(v, cells[i] == null ? '' : cells[i]); td.appendChild(v); tr.appendChild(td);
+      }
+      tbody.appendChild(tr); rows++;
+    }
+    function endTable() { table = tbody = labels = null; }
+    function isPipe(l) { return /^\s*\|/.test(l); }
+    // una línea COMPLETA (con su salto, si lo tiene)
+    function full(l, nl) {
+      if (table) { if (isPipe(l) && !TABLE_SEP_RE.test(l)) { addRow(l); return; } if (isPipe(l)) return; endTable(); }
+      if (head != null) { var h = head; head = null; if (TABLE_SEP_RE.test(l)) { startTable(h); return; } text(h + '\n'); }
+      if (isPipe(l) && nl) { head = l; return; } // ¿cabecera? espera la línea siguiente
+      text(l + (nl ? '\n' : ''));
+    }
+    return {
+      push: function (t) {
+        t = String(t || ''); if (!t) return; raw += t; var i = 0;
+        while (i < t.length) {
+          var k = t.indexOf('\n', i);
+          if (k < 0) { // trozo de línea sin salto
+            var piece = t.slice(i);
+            if (mode === 'text') { text(piece); line = ''; break; } // ya se sabe que es texto: sale enseguida
+            line += piece; var fc = (/\S/.exec(line) || [''])[0];
+            // espera solo si puede ser fila («|») o la línea «---|---» que sigue a una cabecera; si no, es texto y sale ya
+            if (fc && fc !== '|' && !(head != null && (fc === '-' || fc === ':'))) {
+              if (table) endTable(); if (head != null) { text(head + '\n'); head = null; }
+              mode = 'text'; text(line); line = '';
+            }
+            break;
+          }
+          var l = (mode === 'text' ? '' : line) + t.slice(i, k);
+          if (mode === 'text') text(t.slice(i, k) + '\n'); else full(l, true);
+          line = ''; mode = 'start'; i = k + 1;
+        }
+      },
+      finish: function () { if (line) { if (head != null || table) full(line, false); else text(line); line = ''; } if (head != null) { text(head); head = null; } endTable(); mode = 'start'; },
+      raw: function () { return raw; },
+      rows: function () { return rows; }
+    };
+  }
   // Pide el chat en partes. Si el navegador o el servidor no lo soportan, vuelve el JSON de siempre (kind:'json').
   // Resultado en partes: { kind:'stream', final, error, cut, timeout:'first'|'idle'|'max'|null, text } — las tarjetas SOLO salen de final.
   async function streamChat(fetchImpl, url, init, o) {
@@ -431,7 +506,7 @@
     return Math.max(0, over);
   }
 
-  var api = { STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

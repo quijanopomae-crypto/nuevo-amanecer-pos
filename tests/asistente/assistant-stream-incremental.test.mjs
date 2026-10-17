@@ -537,3 +537,14 @@ test('20) propiedad: cortar entre espacios no cambia lo tapado (RUC, DNI, clave,
     for (const role of ['owner', EMP]) { const mode = rnd(), size = () => (mode < 0.3 ? 1 : mode < 0.6 ? 1 + Math.floor(rnd() * 6) : 1 + Math.floor(rnd() * 60));
       assert.equal(stream(t, role, size).text, full(t, role), role + ' ' + JSON.stringify(t)); } }
 });
+test('20) Bot 5: una etiqueta de clave/pin/token, RUC, DNI o data: que espera su valor no suelta nada durante una racha de espacios (trozos de 1); el valor queda tapado', () => {
+  const sp = (n) => ' '.repeat(n);
+  const CASES = [['RUC:', sp(500) + '20123456789', /20123456789|23456/], ['RUC N°', sp(300) + '\n' + sp(200) + '20123456789', /20123456789/], ['DNI:', sp(500) + '12345678', /12345678/],
+    ['DNI', '\n\n\n' + sp(400) + '12345678', /12345678/], ['clave', sp(500) + 'abc123', /abc123/], ['clave es', sp(500) + 'abc123', /abc123/], ['clave', sp(200) + 'es' + sp(300) + 'abc123', /abc123/],
+    ['token =', sp(400) + 'sk-999999', /sk-999999/], ['pin:', '\n' + sp(450) + '4321', /4321/], ['data:image/png;base64,', sp(400) + 'QUJDREVGR0hJSktMTU5P' + sp(300) + 'QQ==', /QUJD|QQ==/]];
+  for (const [label, rest, secret] of CASES) for (const role of ['owner', EMP]) {
+    const t = label + rest, red = redactFor(role); let o = ''; const em = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red);
+    let i = 0; for (; i < t.length; i++) { em.push(t[i]); const pendingWs = i >= label.length && !/\S/.test(t.slice(label.length, i + 1).replace(/\bes\b/, '')); if (pendingWs) assert.ok(o.length <= label.length, role + ' ' + label + ': soltó ' + o.length + ' caracteres con la etiqueta esperando'); }
+    em.flush(); assert.ok(!secret.test(o), role + ' ' + label + ' -> ' + o); assert.equal(o, red(t), role + ' ' + label + ': igual al texto entero');
+  }
+});

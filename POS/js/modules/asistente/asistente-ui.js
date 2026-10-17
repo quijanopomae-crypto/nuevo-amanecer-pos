@@ -20,6 +20,8 @@
   var access = null;
   function isAdmin() { return !adminOff && !!access && (access.role === 'owner' || access.level === 'consultas' || access.level === 'consultas_documentos'); }
   function isOwnerAccess() { return isAdmin() && access.role === 'owner'; }
+  // Foto: solo dueño y solo si el proveedor en uso lee fotos (ping vision:false = sin botón ni chip; Bot 4).
+  function canPhoto() { return isOwnerAccess() && !(access && access.vision === false); }
   function pageId() { var a = doc.querySelector('.page.active'); return a ? a.id : null; }
   function allowedHere() { return isAdmin() && ADMIN_PAGES.indexOf(pageId()) >= 0; }
 
@@ -357,7 +359,9 @@
   function follow(stick) { if (stick) scrollEnd(); else showNew(); }
   // Lector de pantalla: la respuesta se anuncia UNA vez, completa, al final (la lista de mensajes no es aria-live: no lee trozo por trozo).
   function announce(t) { if (!liveEl) return; liveEl.textContent = ''; var v = String(t || ''); setTimeout(function () { if (liveEl) liveEl.textContent = v; }, 30); }
-  function addMsg(kind, text, img) { var m = el('div', 'na-asst-msg ' + kind); m.textContent = text; if (img) { var i = el('img'); i.src = img; i.alt = 'Foto enviada'; m.appendChild(i); } msgsEl.appendChild(m); scrollEnd(); return m; }
+  function addMsg(kind, text, img) { var m = el('div', 'na-asst-msg ' + kind); if (kind === 'a') paintReply(m, text); else m.textContent = text; if (img) { var i = el('img'); i.src = img; i.alt = 'Foto enviada'; m.appendChild(i); } msgsEl.appendChild(m); scrollEnd(); return m; }
+  // Respuesta del asistente: tablas «| … |» con «|---|» como tabla (a 480 px o menos, una ficha por fila). Solo createElement/textContent.
+  function paintReply(m, t) { m.textContent = ''; var r = C.createReplyRenderer(doc, function (n) { m.appendChild(n); }); r.push(String(t == null ? '' : t)); r.finish(); m._md = r; }
   function soles(n) { return C.soles(n); }
   // Nombre del cliente en la tarjeta: solo en documentos de UN cliente (estado de cuenta), con su etiqueta. En la lista de precios, nunca.
   var CUSTOMER_DOCS = ['estado_cuenta'];
@@ -550,7 +554,7 @@
     var lab = el('div', 'na-asst-incomplete'); lab.textContent = 'Respuesta incompleta';
     var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Reintentar';
     b.onclick = function () { if (busy) return; b.disabled = true; var u = m.previousElementSibling; m.remove(); if (u && u.classList.contains('na-asst-msg') && u.classList.contains('u')) u.remove(); send(t, img); };
-    var stick = atBottom(), said = m.textContent; m.removeAttribute('aria-busy'); m.appendChild(lab); m.appendChild(b); follow(stick); announce(said + ' (Respuesta incompleta)'); return m;
+    var stick = atBottom(), said = m._md ? m._md.raw() : m.textContent; m.removeAttribute('aria-busy'); m.appendChild(lab); m.appendChild(b); follow(stick); announce(said + ' (Respuesta incompleta)'); return m;
   }
   // ¿El navegador puede leer la respuesta en partes? Si no, el chat de siempre (una sola respuesta JSON).
   function canStream() { return typeof root.ReadableStream === 'function' && typeof root.TextDecoder === 'function' && typeof root.AbortController === 'function' && root.NA_ASISTENTE_NO_STREAM !== true; }
@@ -573,11 +577,11 @@
     if (streaming) body.stream = true;
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
-    function ensureBubble() { if (!bubble) { bubble = thinking; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
-    function writeText(t) { var b = ensureBubble(); b.insertBefore(doc.createTextNode(t), dots.parentNode === b ? dots : null); }
+    function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
+    function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { b.insertBefore(n, dots.parentNode === b ? dots : null); }); b._md.push(t); } // fila por fila, sin releer
     function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); }
     // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
-    function backToThinking() { painter.reset(); if (!bubble) return; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
+    function backToThinking() { painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
     // Aviso del servidor mientras busca datos (antes de cualquier texto): «Buscando en su inventario…» en la misma burbuja.
     function searching() { if (bubble || panelEl !== mine || !thinking.firstChild || thinking.firstChild.nodeType !== 3) return; thinking.firstChild.data = 'Buscando en su inventario'; thinking.classList.add('na-asst-searching'); }
     try {
@@ -591,6 +595,7 @@
         if (st.kind === 'json') { d = st.data || {}; if (!st.ok) { d.error = d.error || 'HTTP_' + st.status; d.status = st.status; } }
         else {
           painter.finish(); // lo que quedaba en la tanda se pinta: nada se pierde
+          if (bubble && bubble._md) bubble._md.finish(); // la última línea (cabecera o fila sin salto) también
           doneBubble();
           if (st.final) d = st.final;
           else if (st.text && bubble && (!st.error || /^upstream_/.test(String(st.error.error || '')))) { incomplete(bubble, text, image); setState('error', 2600); return; }
@@ -612,7 +617,7 @@
       // Si es el mismo texto no se toca (nada se mueve). Las tarjetas van DEBAJO del texto terminado: lo ya leído no se desplaza;
       // si la persona estaba abajo se baja, pero nunca más allá del inicio de la respuesta (si la tarjeta no entra, sale «Ver nuevo»).
       var stick = atBottom();
-      if (bubble) { bubble.removeAttribute('aria-busy'); if (bubble.textContent.trim() !== d.reply) bubble.textContent = d.reply; } else bubble = addMsg('a', d.reply);
+      if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply); } else bubble = addMsg('a', d.reply);
       announce(d.reply);
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
       (d.denied || []).forEach(addDenied);
@@ -651,7 +656,7 @@
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button><button type="button" data-photo>Leer factura (foto)</button><button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }
@@ -693,10 +698,10 @@
   // Si el nivel cambió con la app abierta: saludo y chips nuevos.
   var shownFor = null;
   function syncPanelForAccess() {
-    var key = access ? access.role + ':' + access.level : '';
+    var key = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (!panelEl || shownFor === key) return; shownFor = key;
     // Al empleado no se le muestran opciones de dueño: sin botón de foto (leer factura es del dueño).
-    if (photoBtn) photoBtn.hidden = !isOwnerAccess();
+    if (photoBtn) photoBtn.hidden = !canPhoto(); // y sin lectura de fotos (vision:false), tampoco al dueño; el aviso de send() queda de respaldo
     var ch = panelEl.querySelector('.na-asst-chips'); if (ch) ch.innerHTML = chipsHtml();
     var sm = panelEl.querySelector('.na-asst-head-t small'); if (sm) sm.textContent = isOwnerAccess() ? 'Gestión · dueño · prueba aislada' : 'Consultas · empleado · prueba aislada';
   }
@@ -740,7 +745,7 @@
     var BOX = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg>';
     var emp = mode === 'emp', docs = emp && access.level === 'consultas_documentos';
     // 4.º dato: texto corto para el celular de 380-699 px, donde los 3 atajos van en UNA fila sin cortarse (alto fijo de 272 px).
-    var chips = mode === 'owner' ? [['Qué me falta reponer', '¿Qué me falta reponer?', null, 'Por reponer'], ['Leer factura', null, 'photo'], ['Inventario valorizado', 'Imprime el inventario valorizado', null, 'Inventario']]
+    var chips = mode === 'owner' ? [['Qué me falta reponer', '¿Qué me falta reponer?', null, 'Por reponer'], ['Leer factura', null, 'photo'], ['Inventario valorizado', 'Imprime el inventario valorizado', null, 'Inventario']].filter(function (c) { return c[2] !== 'photo' || canPhoto(); })
       : docs ? [['Qué falta reponer', '¿Qué falta reponer?'], ['Lista de precios', 'Imprime la lista de precios'], ['Lista de pedido', 'Arma la lista de pedido para el proveedor']]
       : [['Qué falta reponer', '¿Qué falta reponer?'], ['Cómo se hace algo', '¿Cómo registro una compra?']];
     var vis = emp ? '' : '<div class="na-asst-hero-v" aria-hidden="true"><span class="h-glow"></span><span class="h-ring back"></span><span class="h-bb">' + charHtml() + '</span><span class="h-ring front"></span>' +
@@ -782,13 +787,17 @@
   var PROVIDER_PATH = '/auth/assistant/provider';
   function decorateProvider(host) {
     var box = el('div', 'na-asst-prov'); box.hidden = true;
-    box.innerHTML = '<h4>Asistente: proveedor de IA</h4><p class="na-asst-acc-n">Las claves se ponen en el servidor, nunca aquí. Solo se puede elegir un proveedor que ya tenga clave.</p><div class="na-asst-prov-l" role="list"></div>';
+    box.innerHTML = '<h4>Asistente: proveedor de IA</h4><p class="na-asst-acc-n">Las claves se ponen en el servidor, nunca aquí. Solo se puede elegir un proveedor que ya tenga clave.</p><p class="na-asst-prov-cur" role="status"></p><div class="na-asst-prov-l" role="list"></div>';
     host.appendChild(box);
     var list = box.querySelector('.na-asst-prov-l'), data = null;
     function find(id) { for (var i = 0; data && i < data.providers.length; i++) if (data.providers[i].id === id) return data.providers[i]; return null; }
     function paint(d) {
       if (!d || !d.providers) { box.hidden = true; return; } // 403 o 404: sin bloque
       data = d; box.hidden = false;
+      // «En uso» desde el inicio (Bot 4): lo que el servidor ya resolvió (elección del dueño o la del servidor). Sin proveedor listo, se dice.
+      var curEl = box.querySelector('.na-asst-prov-cur'), anyOk = d.providers.some(function (p) { return p.connected; });
+      if (curEl) curEl.textContent = d.current ? 'En uso: ' + (d.current.label || d.current.provider) + (d.current.model ? ' · ' + d.current.model : '') + (d.current.source === 'env' ? ' (del servidor)' : '')
+        : anyOk ? 'En uso: ninguno todavía. Se elige con «Usar» en un proveedor conectado.' : 'En uso: ninguno. Falta poner una clave en el servidor.';
       list.innerHTML = d.providers.map(function (p) {
         var models = p.models || [], cur = p.current && d.current ? d.current.model : null;
         return '<div class="na-asst-prov-r" role="listitem" data-prov="' + C.esc(p.id) + '"><div><strong>' + C.esc(p.label) + (p.current ? ' <em>En uso</em>' : '') + '</strong>' +
@@ -1004,8 +1013,8 @@
     fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0]; fileEl.value = ''; if (!f) return;
       compress(f).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }).catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); };
     panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) fileEl.click(); else send(b.dataset.q); });
-    shownFor = access ? access.role + ':' + access.level : '';
-    if (photoBtn) photoBtn.hidden = !isOwnerAccess(); // empleado: sin opciones de dueño
+    shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
+    if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón
     rootEl.addEventListener('pointerdown', wake, { passive: true }); panelEl.addEventListener('pointerdown', wake, { passive: true });
     try { bubbleIO = new IntersectionObserver(function (es) { offscreen = !es[0].isIntersecting; applyPause(); }); bubbleIO.observe(rootEl.querySelector('.na-asst-bubble')); } catch (_) {}
     applyQuality(); place(); applyPause(); setState(root.navigator.onLine === false ? 'offline' : 'listo');
