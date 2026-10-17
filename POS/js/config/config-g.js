@@ -202,7 +202,15 @@
   // así un push no puede tomar una revisión vieja de la caché y pisar la configuración buena del servidor.
   var confirmed = {}, pulled = false;
   // Guardado que no llegó al servidor (GET fallido): base con la que se compara cuando vuelva la conexión.
+  // Se guarda en el aparato para que recargar o cerrar la app no pierda el cambio pendiente del dueño.
+  var PENDING_KEY = 'na_pos_settings_pending_v1';
   var pendingBase = null;
+  try { pendingBase = JSON.parse(root.localStorage.getItem(PENDING_KEY) || 'null'); } catch (_) { pendingBase = null; }
+  if (!pendingBase || typeof pendingBase !== 'object') pendingBase = null;
+  function setPending(value) {
+    pendingBase = value;
+    try { if (value) root.localStorage.setItem(PENDING_KEY, JSON.stringify(value)); else root.localStorage.removeItem(PENDING_KEY); } catch (_) {}
+  }
   var baseSave = null;
   /* global appConfig */
   function cfg() { try { return typeof appConfig !== 'undefined' ? appConfig : null; } catch (_) { return null; } }
@@ -248,8 +256,7 @@
     // Si el GET del arranque falló, base = lo que tenía este aparato (su copia del servidor). Se envían solo
     // las claves que el dueño cambió frente a base; las demás nunca se envían.
     var base = null;
-    if (!pulled) { base = pendingBase || copy(server); if (!(await fetchSettings())) { pendingBase = base; return { ok: false, reason: 'not_synced', failed: [] }; } }
-    pendingBase = null;
+    if (!pulled || pendingBase) { base = pendingBase || copy(server); if (!(await fetchSettings())) { setPending(base); return { ok: false, reason: 'not_synced', failed: [] }; } }
     var failed = [], conflicts = [], untouched = [];
     for (var k in SHARED) {
       var value = SHARED[k].get(c), now = confirmed[k];
@@ -269,6 +276,9 @@
         if (e && e.message === 'revision_conflict') conflicts.push(k); else failed.push(k);
       }
     }
+    // Terminado (enviado o en conflicto): se borra lo pendiente. Si un POST falló por red, queda pendiente con la
+    // copia del servidor como base, para que un pull posterior no pise ese cambio en silencio.
+    setPending(failed.length ? copy(server) : null);
     if (conflicts.length) await fetchSettings();
     // Se aplica lo del servidor solo en claves en conflicto o que el dueño no tocó; nunca se pisa un cambio pendiente.
     if (conflicts.length || untouched.length) applyServer(conflicts.concat(untouched));

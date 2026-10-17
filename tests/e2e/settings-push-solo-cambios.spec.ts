@@ -320,3 +320,57 @@ test('(j) conflict from Configuración v9: exact label «No se guardó: otro equ
   expect(mock.posts).toHaveLength(1);
   expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
 });
+
+// GET fallido -> el dueño cambia IGV en Configuración v9 -> recarga la app con el GET ya funcionando.
+async function changeIgvOfflineThenReload(page: Page, mock: Mock, serverChange?: (local: Record<string, unknown>) => Setting[]) {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await boot(page, mock);
+  const local = await localSettings(page);
+  const cache = asServer(local);
+  mock.settings = cache;
+  mock.getFails = true;
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await boot(page, mock, cache);
+  await openConfig(page, 'prod', 'igv');
+  await clickSwitch(page, 'igvActive');
+  await expect(page.locator('#na9Saved')).toHaveText('No se guardó en el servidor: revisa internet');
+  expect(await page.evaluate(() => localStorage.getItem('na_pos_settings_pending_v1'))).not.toBeNull();
+  expect(mock.posts).toEqual([]);
+  const ownerFlags = (await localSettings(page))['pos.flags'];
+  if (serverChange) mock.settings = serverChange(local);
+  mock.getFails = false;
+  await page.reload();
+  await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'owner' && (window as any).NA_ROLES.confirmed && !!(window as any).NA_CONFIG_G);
+  return { local, ownerFlags };
+}
+const pendingKey = (page: Page) => page.evaluate(() => localStorage.getItem('na_pos_settings_pending_v1'));
+
+test('(k) GET failed, owner changed IGV and reloaded: with GET OK, exactly 1 POST pos.flags and IGV keeps the owner value', async ({ page }) => {
+  const mock = newMock();
+  const { ownerFlags } = await changeIgvOfflineThenReload(page, mock);
+  await expect.poll(() => mock.posts.length).toBe(1);
+  expect(mock.posts[0]).toMatchObject({ key: 'pos.flags', expected_revision: 3, value: ownerFlags });
+  await expect.poll(() => pendingKey(page)).toBeNull();
+  expect((await localSettings(page))['pos.flags']).toEqual(ownerFlags);
+  await navigate(page);
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  expect(mock.posts).toHaveLength(1);
+  expect((await localSettings(page))['pos.flags']).toEqual(ownerFlags);
+});
+
+test('(l) GET failed, owner changed IGV and reloaded, but the server changed pos.flags: 0 POST, server wins, exact notice, pending cleared', async ({ page }) => {
+  const mock = newMock();
+  let serverFlags: Record<string, unknown> = {};
+  await changeIgvOfflineThenReload(page, mock, local => {
+    const flags = local['pos.flags'] as Record<string, unknown>;
+    serverFlags = { ...flags, margenActive: !flags.margenActive };
+    return asServer(local).map(item => item.key === 'pos.flags' ? { ...item, value: serverFlags, revision: 6 } : item);
+  });
+  await expect.poll(() => pendingKey(page)).toBeNull();
+  await expect(page.locator('#gToast')).toHaveText(CONFLICT);
+  expect(await page.locator('#gToast').textContent()).toBe(CONFLICT);
+  expect(mock.posts).toEqual([]);
+  expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
+  await navigate(page);
+  expect(mock.posts).toEqual([]);
+});
