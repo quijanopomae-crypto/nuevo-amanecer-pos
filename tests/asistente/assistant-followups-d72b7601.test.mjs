@@ -40,7 +40,7 @@ const PIN = [
   ['contraseña del año 2024', '2024', 'normal'], ['La clave del negocio en 2024 fue el arroz.', '2024', 'normal'], ['Producto clave de la semana 2500 unidades', '2500', 'normal'],
   ['La clave para vender más es tener 1500 unidades.', '1500', 'tapa'] /* (Bot 2 sobre 5646a4c9, a propósito: unidad tras «es» no suelta) */, ['Cambié la clave de la caja en 2024 y anda bien.', '2024', 'normal'], ['El token de la sesión del 2026 venció', '2026', 'normal'],
   ['Mi clave para el año 2025: vender más', '2025', 'normal'], ['la clave de este mes son 3000 soles', '3000', 'normal'], ['clave del producto Arroz Costeño 5kg código 77501234', '77501234', 'normal'],
-  ['La clave del pedido: Arroz 2024', 'Arroz', 'normal'], ['clave de la venta S/ 1250', '1250', 'secreto'], ['clave del precio de venta S/ 1250', '1250', 'normal'], ['clave de la caja chica: 2500 soles', '2500', 'tapa'] /* (Bot 2 sobre 5646a4c9, a propósito: unidad tras «:» no suelta) */, ['Producto clave de la semana: Galleta Soda 6x4', 'Soda', 'normal'],
+  ['La clave del pedido: Arroz 2024', 'Arroz', 'normal'], ['clave de la venta S/ 1250', '1250', 'secreto'], ['clave del precio de venta S/ 1250', '1250', 'tapa'] /* (Bots 2/5 sobre 6e0b3c5d, regla final: entero tras clave, tapado) */, ['clave de la caja chica: 2500 soles', '2500', 'tapa'] /* (Bot 2 sobre 5646a4c9, a propósito: unidad tras «:» no suelta) */, ['Producto clave de la semana: Galleta Soda 6x4', 'Soda', 'normal'],
   ['El producto clave es Leche Gloria 400g', 'Gloria', 'normal'],
   // tapados de más ACEPTADOS (un pin nunca es una cantidad; Bot 5 los dejó como INFO)
   ['pin 4321 unidades', '4321', 'tapa'], ['El pin de la impresora 1234 no funciona', '1234', 'tapa'], ['La clave del éxito: 5000 ventas', '5000', 'tapa'], ['La clave del negocio está en el arroz 5x2025', '5x2025', 'tapa']
@@ -66,7 +66,7 @@ test('1) PIN numérico (Bot 5 pin-d72b): secretos tapados en las 4 vías, normal
   // un número detrás de «código»/«EAN» no es PIN (el dueño ve el código)
   assert.ok(sees(VIAS.own('clave del producto Arroz código 77501234'), '77501234'));
   // (Bot 2 sobre 3ee80c18) S/ o $ ya no sueltan el número solos: hace falta precio/costo/monto en medio (o decimales, que nunca entran)
-  assert.ok(!sees(VIAS.own('pin de cobro S/ 1250'), '1250')); assert.ok(sees(VIAS.own('clave del costo S/ 1250'), '1250')); assert.ok(!sees(VIAS.own('pin de cobro S/ 12.50'), '12.50')); // (Bot 5 sobre 5646a4c9, a propósito) tras «pin» un monto con decimales tampoco se ve
+  assert.ok(!sees(VIAS.own('pin de cobro S/ 1250'), '1250')); assert.ok(!sees(VIAS.own('clave del costo S/ 1250'), '1250')); /* (Bots 2/5 sobre 6e0b3c5d, regla final: entero tras clave, tapado) */ assert.ok(!sees(VIAS.own('pin de cobro S/ 12.50'), '12.50')); // (Bot 5 sobre 5646a4c9, a propósito) tras «pin» un monto con decimales tampoco se ve
   assert.ok(!sees(VIAS.own('clave de cobro S/ 12.50'), '12.50')); assert.ok(sees(VIAS.own('clave del costo S/ 12.50'), '12.50')); // (Bot 2 sobre 5646a4c9) decimal tras clave: solo con precio/costo/monto
 });
 
