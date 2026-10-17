@@ -365,7 +365,7 @@
   function announce(t) { if (!liveEl) return; liveEl.textContent = ''; var v = String(t || ''); setTimeout(function () { if (liveEl) liveEl.textContent = v; }, 30); }
   function addMsg(kind, text, img) { var m = el('div', 'na-asst-msg ' + kind); if (kind === 'a') paintReply(m, text); else m.textContent = text; if (img) { var i = el('img'); i.src = img; i.alt = 'Foto enviada'; m.appendChild(i); } msgsEl.appendChild(m); scrollEnd(); return m; }
   // Respuesta del asistente: tablas «| … |» con «|---|» como tabla (a 480 px o menos, una ficha por fila). Solo createElement/textContent.
-  function paintReply(m, t, opts) { m.textContent = ''; var r = C.createReplyRenderer(doc, function (n) { m.appendChild(n); }, opts); r.push(String(t == null ? '' : t)); r.finish(); m._md = r; }
+  function paintReply(m, t, opts) { m.textContent = ''; if (m.classList) m.classList.remove('na-asst-wide'); var r = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') m.classList.add('na-asst-wide'); m.appendChild(n); }, opts); r.push(String(t == null ? '' : t)); r.finish(); m._md = r; }
   // Aviso de corte (Bots 4/5): SOLO si el servidor lo marcó (final.cut === true). El aviso es la última línea que puso el servidor; el resto se
   // pinta igual que siempre. Nunca se busca el texto del aviso: un «aviso» escrito por el modelo, sin la marca, sale como texto normal.
   function paintCut(m, t, opts) { t = String(t == null ? '' : t); var k = t.lastIndexOf('\n'); paintReply(m, k < 0 ? '' : t.slice(0, k).replace(/\n+$/, ''), opts);
@@ -588,7 +588,7 @@
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
     function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
-    function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
+    function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') b.classList.add('na-asst-wide'); b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
     function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); }
     // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
     function backToThinking() { painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
@@ -755,8 +755,8 @@
     var DOC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M7 3h7l4 4v14H7zM10 12h5M10 16h5"/></svg>';
     var BOX = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/></svg>';
     var emp = mode === 'emp', docs = emp && access.level === 'consultas_documentos';
-    // 4.º dato: texto corto para el celular de 380-699 px, donde los 3 atajos van en UNA fila sin cortarse (alto fijo de 272 px).
-    var chips = mode === 'owner' ? [['Qué me falta reponer', '¿Qué me falta reponer?', null, 'Por reponer'], ['Leer factura', null, 'photo'], ['Inventario valorizado', 'Imprime el inventario valorizado', null, 'Inventario']].filter(function (c) { return c[2] !== 'photo' || canPhoto(); })
+    // 4.º dato: texto corto para el celular de menos de 700 px (también 360, Bot 4 sobre 25ffde10), donde los 3 atajos van en UNA fila sin cortarse (alto fijo de 272 px).
+    var chips = mode === 'owner' ? [['Qué me falta reponer', '¿Qué me falta reponer?', null, 'Por reponer'], ['Leer factura', null, 'photo', 'Factura'], ['Inventario valorizado', 'Imprime el inventario valorizado', null, 'Inventario']].filter(function (c) { return c[2] !== 'photo' || canPhoto(); })
       : docs ? [['Qué falta reponer', '¿Qué falta reponer?'], ['Lista de precios', 'Imprime la lista de precios'], ['Lista de pedido', 'Arma la lista de pedido para el proveedor']]
       : [['Qué falta reponer', '¿Qué falta reponer?'], ['Cómo se hace algo', '¿Cómo registro una compra?']];
     var vis = emp ? '' : '<div class="na-asst-hero-v" aria-hidden="true"><span class="h-glow"></span><span class="h-ring back"></span><span class="h-bb">' + charHtml() + '</span><span class="h-ring front"></span>' +

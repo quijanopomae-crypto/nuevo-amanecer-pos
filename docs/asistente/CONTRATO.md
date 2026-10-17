@@ -239,7 +239,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - **Marca de corte firmada**: el SERVIDOR marca el par que él mismo cortó (`cut: true` en el turno del asistente). La marca va DENTRO de la firma HMAC del par: solo se agrega `"cut"` a lo firmado cuando es true, así que los pares sin corte firman igual que antes. Si el aparato agrega `cut:true` a un par sin corte, o se lo quita a uno cortado, la firma no verifica y el par se descarta entero. El celular guarda `cut` tal cual con el turno.
 - **Nunca por el texto**: `cutPrime(reply, cut)` ya no mira si la respuesta termina con el aviso. Sin la marca firmada devuelve false. Una respuesta del modelo que trae el aviso no prepara nada.
 - **Solo un sí/no**: de la parte cortada pasa solo «había contexto del dueño abierto». Cuenta como sí: una presentación sin negar, la ventana de una palabra del dueño, una lista o tabla presentada por el dueño, o una tabla con columna del dueño. Nunca pasa el estado de una tabla de venta, de una zona negada ni de columnas.
-- **Superconjunto por construcción**: con el sí, el filtro corre exactamente igual que sin contexto (mismo estado, mismas decisiones). Además tapa todo monto que dejaría ver, mientras dure: hasta la fila `|---|` de una tabla NUEVA (desde ahí deciden sus columnas: una tabla de venta nueva se ve) o hasta el 2.º párrafo de la continuación.
+- **Superconjunto por construcción**: con el sí, el filtro corre exactamente igual que sin contexto (mismo estado, mismas decisiones). Además la continuación arranca con la tabla pegajosa abierta (como si viniera de una presentación del dueño): toda fila `| … |` se tapa hasta el final, salvo que se suelte con las reglas de la regla pegajosa (ver «Seguimiento sobre 25ffde10»). Solo puede tapar más.
 - **Diferencial**: 455 casos × 17 contextos, los 16 de Bot 5 más «sí» forzado, tratando también los avisos forjados como marcados (el peor caso): 0 destapes, 822 más estrictos, el contexto nunca sale, partes = entero. 30 000 textos al azar más el corpus de 710 frases, sí contra no: 0 destapes. Hay una prueba en el repo.
 
 ### Tope de 1200 (Bot 5)
@@ -250,7 +250,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 ### Tabla del dueño con una línea en medio (Bot 5)
 
-- UNA línea, en blanco o de texto, justo después de `|---|` ya no corta la tabla, ni en la capa de columnas ni en la de presentación. Ejemplo: «Te paso los costos:\n| Producto | Precio |\n|---|---|\n\n| Producto 0 | S/ 1.80 |» se tapa. Una tabla de venta con esa línea se sigue viendo.
+- Reemplazada por la **regla pegajosa** (ver «Seguimiento sobre 25ffde10»): una línea en blanco o de texto después de `|---|` no cambia nada; las filas `| … |` que siguen se tapan hasta el final del mensaje.
 
 ### Tapado de más (Bot 2 sobre 66f1ecb5)
 
@@ -280,13 +280,11 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 - Un párrafo neutro corta la presentación del dueño y la ventana de 60 solo si NO termina en «:» y tiene 8 palabras o más, o si lo sigue un título de venta. «Te paso los costos:\n\nSon de esta semana.\n\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |» se tapa.
 - De los 9 casos de Bot 2, vuelve a taparse **c3.parrafosAtras** («El costo lo vemos luego.\n\nVale.\n\n| … |» y su variante con «Aquí va otro párrafo sin montos.»). Los otros 8 se siguen viendo.
-- La misma regla para el tapado forzado de «sigue»: ya no para en el 2.º párrafo. Para solo en una cabecera `|---|` nueva o en un párrafo neutro de 8 palabras o más sin «:». «Siguen:\n\n| Galleta | S/ 1.80 |» se tapa.
+- El tapado de «sigue» ya no usa esta regla: sigue la regla pegajosa (ver «Seguimiento sobre 25ffde10»).
 
 ### Tabla del dueño con huecos (Bot 5, FALLA en f3375c09)
 
-- La tabla del dueño (capa de columnas y capa de presentación) aguanta cualquier cantidad de líneas en blanco y de líneas cortas de texto, entre `|---|` y las filas y en medio. Termina solo con un título de venta (una línea que EMPIEZA con «Precio(s)», «PVP» o «Lista de precios») o con una cabecera `|---|` nueva. Desde el seguimiento de a6d1d76e un párrafo neutro largo ya NO la termina (ver abajo).
-- Se tapan: 2 líneas en blanco antes de la fila, «zz\nyy» antes de la fila, y una línea en blanco en medio antes de «| Producto 1 | S/ 1.81 |». La tabla de venta con huecos se sigue viendo.
-- Retención sin cambios: igual a la base en la sonda de retención (máx. 184).
+- Reemplazada por la **regla pegajosa** (ver «Seguimiento sobre 25ffde10»): ni las líneas en blanco, ni el texto, ni un título de venta cierran una tabla del dueño. Los casos de Bot 5 («zz\nyy», 2 líneas en blanco, línea en blanco en medio) se siguen tapando y siguen en las pruebas.
 
 ### Corte de 1200: nunca parte un número (Bots 2/4/5, invariante)
 
@@ -306,7 +304,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 ### Espacios largos tras una etiqueta (Bot 3)
 
-- Mientras una etiqueta RUC, DNI, clave, pin, token, api key o «data:» espera su valor, una racha de espacios o saltos de más de 160 se junta en UN espacio. Vale para dueño y empleado, en el texto entero (al inicio de `redactText`) y en partes. Es la misma función, así que el resultado es idéntico.
+- Mientras una etiqueta RUC, DNI, clave, pin, token, api key o «data:» espera su valor, una racha de espacios o saltos de más de 160 se junta en UN espacio. Vale para dueño y empleado (desde 25ffde10 el dueño ve el número de DNI/RUC; la racha se junta igual), en el texto entero (al inicio de `redactText`) y en partes. Es la misma función, así que el resultado es idéntico.
 - Cambia la forma visible con clave o pin: «clave<500 espacios>1234» ahora sale «clave [oculto]». El valor sigue tapado.
 - La retención baja de 515–565 a 31 como mucho (medida sin contar lo descartado). Las 22 sondas de etiquetas pendientes pasan.
 
@@ -334,14 +332,8 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 ### Tabla del dueño abierta y párrafo neutro (Bot 5, 3 fugas, también en f3375c09)
 
-- Un párrafo neutro largo (8+ palabras, sin «:» al final) sigue cortando la PRESENTACIÓN del dueño antes de que empiece una tabla, pero ya no cierra una tabla del dueño que ya está abierta (cabecera vista). La deja dormida.
-- Mientras está dormida, el texto suelto se trata como texto normal («Arroz S/ 4.20» tras el párrafo se ve). Una fila `| … |` vuelve a ser de esa tabla y se tapa igual que antes (columnas del dueño; con presentación del dueño, todo salvo las columnas de venta).
-- Termina con: una cabecera nueva + `|---|` (sus columnas deciden), un título de venta (línea que empieza con «Precio(s)», «PVP» o «Lista de precios»), o, en la capa de columnas, una fila con otra cantidad de columnas después del párrafo.
-- Se tapan las 3 de Bot 5: «Te paso los costos:\n| Producto | Precio |\n|---|---|\n\nAquí van los productos que pediste hace un rato.\n| Producto 0 | S/ 1.80 |», la nota de 8+ palabras entre la fila 0 y la 1, y «Otra cosa: el local abre a las ocho de la mañana todos los días.» entre líneas en blanco. También la tabla con columna «Costo» sin presentación.
-- Las tablas de venta (PVP, P. venta, Venta) con párrafos largos en medio se siguen viendo. En una tabla del dueño con columna PVP, el PVP se ve y el costo se tapa.
-- «sigue»: si la continuación ya trae filas `| … |` (tapadas por el contexto) y luego un párrafo largo, las filas `| … |` que siguen se siguen tapando, hasta una cabecera `|---|` nueva o un título de venta. Solo puede tapar más: el estado del filtro no cambia, solo se tapan montos que se verían (superconjunto por construcción). Si la parte cortada termina después del párrafo con la tabla dormida, el sí/no de «sigue» dice que hay contexto.
-- Diferencial de «sigue» de Bot 5 (455 casos × 23): 0 destapes. Al azar 2 × 20 000: 0 destapes, partes = entero. Sonda de retención igual que la base.
-- **INFO**: en la capa de presentación, una fila `| … |` con otra cantidad de columnas después del párrafo también se tapa (se decide al empezar la fila, sin esperar la línea entera). Tapa de más, nunca de menos.
+- Reemplazada por la **regla pegajosa** (ver «Seguimiento sobre 25ffde10»). Ya no existe la tabla «dormida» ni el cierre por título de venta o por otra cantidad de columnas. Las 3 fugas de Bot 5, la tabla con columna «Costo» sin presentación y «Compras de clientes: S/ 30» (se ve) siguen en las pruebas.
+- Diferencial de «sigue» de Bot 5 en esta ronda (455 casos × 23): 0 destapes. Al azar 2 × 20 000: 0 destapes, partes = entero.
 
 ### Corte de 1200: tampoco parte fechas, horas ni documentos (Bot 2, Bot 5 INFO)
 
@@ -352,8 +344,57 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 ### Celular (Bot 4)
 
-- Las filas que siguen a una tabla de la burbuja después de un párrafo (el servidor las sigue tratando como de esa tabla) se dibujan como filas, con la cabecera ya pintada de esa tabla (texto ya filtrado), solo con `createElement` y `textContent`. Nunca salen como texto con «|». Vale también para la última fila sin salto de línea. Con otra cantidad de columnas siguen saliendo como texto.
+- Las filas que siguen a una tabla de la burbuja después de un párrafo (el servidor las sigue tratando como de esa tabla) se dibujan como filas, con la cabecera ya pintada de esa tabla (texto ya filtrado), solo con `createElement` y `textContent`. Nunca salen como texto con «|». Vale también para la última fila sin salto de línea. Desde 25ffde10 también las de otra cantidad de columnas salen como filas (ver abajo).
 
 ### Pruebas
 
-- `tests/asistente/assistant-followups-a6d1d76e.test.mjs`: las 3 fugas (entero y en partes de 1, 2, 3, 7, 13 y 47), fin de la tabla dormida, tablas de venta visibles, variante «sigue» (entero, partes y ruta con `capReply` + `cutPrime`), «Compras de clientes», corte con fechas/horas/documentos (casos fijos y propiedad al azar con ambos roles, partes = final) y el renderer del celular.
+- `tests/asistente/assistant-followups-a6d1d76e.test.mjs`: las 3 fugas (entero y en partes de 1, 2, 3, 7, 13 y 47), tablas de venta visibles, variante «sigue» (entero, partes y ruta con `capReply` + `cutPrime`), «Compras de clientes», corte con fechas/horas/documentos (casos fijos y propiedad al azar con ambos roles, partes = final) y el renderer del celular.
+
+## Seguimiento sobre 25ffde10 (Bots 5, 4, 3 y 2)
+
+### Regla pegajosa de tablas (empleado, Bot 5)
+
+Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con huecos» y «Tabla del dueño abierta y párrafo neutro».
+
+- En una respuesta al EMPLEADO, cuando se abre una tabla del dueño (cabecera con una columna del dueño, como «Costo», o cualquier tabla bajo una presentación del dueño, como «Te paso los costos:»), desde ahí se tapan los montos de TODA línea que traiga «|», hasta el final del mensaje. No importan las líneas en blanco, los párrafos largos, los títulos ni la cantidad de columnas.
+- Se suelta SOLO con una cabecera nueva + `|---|`:
+  - si la tabla pegajosa vino de una COLUMNA del dueño: cualquier cabecera nueva sin columna del dueño la suelta;
+  - si vino de una PRESENTACIÓN del dueño: una cabecera neutra NO la suelta. La suelta una cabecera con columnas de venta explícitas (PVP, P. venta, Venta) o un título de venta (línea que empieza con «Precio(s)», «PVP» o «Lista de precios») seguido de una cabecera nueva + `|---|` sin columna del dueño.
+  - Una cabecera con dígitos (por ejemplo un monto disfrazado de cabecera) no suelta nada y tapa todos los montos de sus filas.
+- Columna de venta: el monto de una celda PVP / P. venta / Venta se ve solo si la fila tiene la misma cantidad de columnas que la cabecera y la celda cae en esa columna (se cuentan las columnas sin las celdas vacías de los bordes). Si no, se tapa la fila entera. «| PVP | S/ 2.50 |» (clave-valor de 2 columnas) se ve.
+- La fila se tapa en cuanto aparece su «|», sin esperar más texto (sin retenciones nuevas). Las partes dan lo mismo que el texto entero; los topes de retención (20 / 160+24 / ~177) y el corte que no parte números no cambian. El dueño ve todo igual que antes.
+- «sigue»: `cutPrime` dice si la parte cortada terminó con contexto del dueño (también con la tabla pegajosa abierta). La continuación arranca pegajosa: solo puede tapar más.
+- Ya no existen la tabla «dormida», el cierre por título de venta solo, ni el cierre por otra cantidad de columnas.
+
+### Celular (Bot 4)
+
+- Las filas tapadas, también las de otra cantidad de columnas, se dibujan como filas de la tabla (fichas a 480 px o menos): las cortas se completan, las largas juntan las celdas de más con « · ».
+- Si todos los montos de una tabla están tapados, va UNA nota corta debajo («Montos ocultos para empleado») y los tapados se ven compactos («•••»). Solo `createElement` y `textContent`.
+- Dos o más filas seguidas sin cabecera y con la misma cantidad de columnas se dibujan como una tabla sin etiquetas (sin `thead`). Una sola fila suelta queda como texto.
+- La tabla se crea con su primera fila: una cabecera seguida de un párrafo no deja una tabla vacía.
+- «S/», «US$» y «PEN» se unen a su monto con un espacio que no se parte, solo en pantalla.
+- La burbuja con tabla lleva la clase `na-asst-wide` (puesta desde JS) en lugar de la regla `:has`.
+- Inicio a 360 px: atajos con texto corto en una fila («Factura» para leer factura) y `#naAsstHero` de 321 a 272 px. Nada fuera de la tarjeta del asistente cambia.
+
+### Velocidad y corte (Bot 3)
+
+- Etapa de espacios: un filtro previo (el carácter justo antes de la racha) decide si vale la pena probar `WS_KW_TAIL`. Mismo resultado (3000 casos al azar contra 25ffde10: 0 diferencias). La etapa sigue corriendo para el dueño (PIN, clave, token siguen tapados tras espacios largos).
+- «[texto largo omitido]» (solo empleado) sale en cuanto la racha pasa de 160 caracteres, no al terminar la racha.
+- El corte de 1200 nunca parte una salida de la redacción («DNI ****2345», «RUC *******5237»): se trata como una etiqueta. Tampoco separa un número de su unidad corta (unid., und., kg, g, L, ml, cajas, paq.). Al soltar en partes, si el número cae justo en el tope, se espera su posible unidad antes de cortar (lo pintado = la respuesta final).
+
+### Comprobantes y DNI/RUC (Bots 4, 5 y 2)
+
+- Excepción a la regla del DNI, solo para la serie de un comprobante o guía: `\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b` («F001-00012345», «B001-00000123», «E001-12345678», «T001-00012345», «0001-00012345») queda intacta. «2024-12345678», «DNI-12345678», «DNI 12345678» siguen tapados para el empleado. La regla del DNI no cambia: «Doc:x12345678» (letra pegada a los dígitos) se veía antes y se sigue viendo (INFO).
+- **Dueño**: la respuesta al dueño ya NO tapa DNI ni RUC (números de 8 y 11 dígitos, «RUC 20100055237», «Código interno 12345678»). Sigue tapado para el dueño: PIN, clave, contraseña, token, api key, «data:» (base64), correo y teléfono. El empleado sigue con todo el filtro de DNI/RUC.
+- Lo que va AL modelo (mensaje, historial y resultados de herramientas) sigue pasando por `redactText` completo, también para el dueño. Así el modelo no recibe DNI/RUC; el cambio es solo de la salida al dueño.
+
+### Línea siguiente con costo (Bot 2, regresión desde f3375c09)
+
+- El monto al final de una línea se tapa si la línea SIGUIENTE empieza (tras «(», «-», espacios, «mi», «es el», «de») con costo, margen, ganancia o utilidad: «Galleta S/ 1.80\ncosto unitario», «es el costo», «de costo», «(mi costo)», «margen», «(costo por unidad)», «ganancia S/ 0.70».
+- También si la línea siguiente es corta (termina en 40 caracteres o menos y con 5 palabras o menos) y trae una de esas palabras («el costo», «Ese es el margen»). Se decide con lo que llegó: pasados 40 caracteres o al empezar la 6.ª palabra ya no es corta.
+- «El costo lo ve el dueño.» (6 palabras, no empieza con la palabra) no tapa. En un ítem de lista o una fila con tabulador o «|», la palabra del dueño sigue tapando solo su ítem (Bot 2 b).
+- La retención de una línea normal con monto no cambia (medido igual que 25ffde10: 38, 31, 31 y 18 caracteres de la línea siguiente).
+
+### Pruebas
+
+- `tests/asistente/assistant-followups-25ffde10.test.mjs`: cada caso de la regla pegajosa (entero y en partes de 1, 2, 3, 7, 13 y 47, y la variante «sigue»), las dos reglas para soltar, columna de venta, casos de a6d1d76e y «Compras de clientes: S/ 30» (se ve), tapado inmediato al llegar «|», celular (filas, nota, tabla sin cabecera, tabla perezosa, espacio que no se parte, clase `na-asst-wide`), etapa de espacios, «[texto largo omitido]» temprano, corte con DNI/RUC y unidades, comprobantes y DNI/RUC del dueño, y la línea siguiente con costo (los 7 casos de Bot 2, el contraejemplo, ítems de lista y la retención).

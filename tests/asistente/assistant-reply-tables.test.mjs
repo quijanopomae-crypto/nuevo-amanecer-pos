@@ -41,7 +41,7 @@ test('tabla: «| … |» con «|---|» sale como tabla; texto antes y después i
   assert.equal(host.childNodes[0].data, 'Aquí va la lista:\n'); assert.equal(host.childNodes[2].data, 'Listo.');
   const tb = tbl.childNodes[0].childNodes[1]; assert.equal(tb.tagName, 'TBODY'); assert.equal(tb.childNodes.length, 2);
   const td = tb.childNodes[0].childNodes[2]; assert.equal(td.childNodes[0].className, 'na-asst-tl'); assert.equal(td.childNodes[0].textContent, 'PVP'); assert.equal(td.childNodes[0].attrs['aria-hidden'], 'true');
-  assert.equal(td.childNodes[1].textContent, 'S/ 2.50');
+  assert.equal(td.childNodes[1].textContent, 'S/\u00a02.50', '«S/» unido a su monto con espacio que no se parte (solo en pantalla, Bot 4 sobre 25ffde10)');
   assert.equal(tbl.childNodes[0].childNodes[0].childNodes[0].childNodes.map((th) => th.textContent).join('|'), 'Producto|Costo|PVP');
 });
 test('tabla: sin «|---|» no es tabla (queda texto tal cual); «a | b» en medio de una frase tampoco', () => {
@@ -76,7 +76,7 @@ test('seguridad (Bot 5): <img onerror> y <script> en celdas solo como texto; nad
   // el código del renderer no usa innerHTML/insertAdjacentHTML/outerHTML
   const src = CORE.slice(CORE.indexOf('function createReplyRenderer'), CORE.indexOf('// Pide el chat en partes.'));
   assert.ok(src.length > 500 && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(src));
-  assert.match(UI, /function paintReply\(m, t, opts\) \{ m\.textContent = ''; var r = C\.createReplyRenderer\(doc,/);
+  assert.match(UI, /function paintReply\(m, t, opts\) \{ m\.textContent = ''; if \(m\.classList\) m\.classList\.remove\('na-asst-wide'\); var r = C\.createReplyRenderer\(doc,/);
 });
 test('el renderer trabaja DESPUÉS del filtro: el costo original no está en el DOM ni en atributos; «[dato del dueño]» en un span que no se parte', () => {
   const src = 'Te paso costo y precio:\n| Producto | Costo | PVP |\n|---|---|---|\n| Galleta | S/ 7.77 | S/ 2.50 |\n| Arroz | 3.21 | S/ 4.20 |\n';
@@ -89,7 +89,7 @@ test('el renderer trabaja DESPUÉS del filtro: el costo original no está en el 
     assert.ok(!/7\.77|3\.21/.test(all), all);
     const masks = []; walk(host, (k) => { if (k.className === 'na-asst-mask') masks.push(k.textContent); });
     assert.deepEqual(masks, ['[dato del dueño]', '[dato del dueño]']);
-    assert.ok(all.includes('S/ 2.50') && all.includes('S/ 4.20'));
+    assert.ok(all.includes('S/\u00a02.50') && all.includes('S/\u00a04.20'));
   }
   assert.match(CSS, /\.na-asst-mask\{white-space:nowrap\}/);
 });

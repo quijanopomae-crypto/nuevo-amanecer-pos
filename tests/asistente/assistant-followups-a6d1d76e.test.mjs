@@ -33,13 +33,15 @@ test('Bot 5, 3 fugas: un párrafo neutro de 8+ palabras dentro de la tabla del d
     const f = same(t); assert.ok(!/1\.8[012]/.test(f), JSON.stringify(f)); }
 });
 
-test('la tabla dormida termina con título de venta, «Lista de precios», cabecera nueva |---| o (sin presentación) otras columnas; texto suelto se ve', () => {
+// (25ffde10 → regla fija de Bot 5) un título de venta, «Lista de precios» u otra cantidad de columnas YA NO sueltan la tabla del dueño: solo
+// una cabecera nueva |---| (de venta explícita, o tras un título de venta, si vino de una presentación). Ver assistant-followups-25ffde10.
+test('la tabla del dueño sigue hasta el final: se suelta solo con cabecera nueva |---| de venta; texto suelto se ve', () => {
   const A = H + '| Producto 0 | S/ 1.80 |\n\n' + LONG + '\n\n';
   assert.match(same(A + 'Arroz S/ 4.20'), /4\.20/, 'texto suelto tras el párrafo: se ve');
   assert.match(same(A + 'Precios de venta:\n| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'), /4\.20/, 'título de venta');
-  assert.match(same(A + 'Lista de precios\n| Arroz | S/ 4.20 |'), /4\.20/, '«Lista de precios»');
+  assert.doesNotMatch(same(A + 'Lista de precios\n| Arroz | S/ 4.20 |'), /4\.20/, '«Lista de precios» sin cabecera nueva: sigue tapado (regla fija)');
   assert.match(same(A + '| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'), /4\.20/, 'cabecera nueva |---| de venta');
-  assert.match(same('| Producto | Costo |\n|---|---|\n| A | S/ 1.80 |\n\n' + LONG + '\n\n| Arroz | S/ 4.20 | 3 u |'), /4\.20/, 'otra cantidad de columnas: tabla nueva');
+  assert.doesNotMatch(same('| Producto | Costo |\n|---|---|\n| A | S/ 1.80 |\n\n' + LONG + '\n\n| Arroz | S/ 4.20 | 3 u |'), /4\.20/, 'otra cantidad de columnas: sigue tapado (regla fija)');
   // tabla de venta (PVP) con párrafos largos: sigue a la vista; tabla del dueño con columna PVP: PVP visible, costo tapado
   assert.match(same('Precios de venta:\n| Producto | PVP |\n|---|---|\n| A | S/ 4.10 |\n\n' + LONG + '\n\n| B | S/ 4.30 |'), /4\.10[\s\S]*4\.30/);
   const mix = same('Te paso los costos:\n| Producto | Costo | PVP |\n|---|---|---|\n| A | S/ 1.80 | S/ 2.50 |\n\n' + LONG + '\n| B | S/ 1.90 | S/ 2.60 |');
@@ -113,7 +115,8 @@ test('celular (Bot 4): filas tras un párrafo se dibujan como filas con la cabec
     assert.ok(txt(tables[1]).includes('Producto 1') && txt(tables[1]).includes('[dato del dueño]'));
     assert.ok(f.kids.some((k) => k.nodeType === 3 && k.data.includes('Esta nota')), 'el párrafo queda como texto');
   }
-  // otra cantidad de columnas tras la tabla: texto, como antes
+  // (Bot 4 sobre 25ffde10) otra cantidad de columnas tras la tabla: también fila (las celdas que sobran se juntan en la última), nunca texto con «|»
   const f = fake(); const r = C.createReplyRenderer(f.doc, (n) => f.kids.push(n)); r.push('| A | B |\n|---|---|\n| 1 | 2 |\n\nNota.\n| x | y | z |\n'); r.finish();
-  assert.equal(f.kids.filter((k) => k.className === 'na-asst-tbl').length, 1);
+  assert.equal(f.kids.filter((k) => k.className === 'na-asst-tbl').length, 2);
+  assert.ok(f.kids.filter((k) => k.nodeType === 3).every((k) => !k.data.includes('|')));
 });

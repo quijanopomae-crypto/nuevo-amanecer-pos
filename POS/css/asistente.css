@@ -352,8 +352,10 @@ body.dark .na-asst-quitar:disabled{border-color:#475569;color:#cbd5e1;background
 /* ---- Revisión Bot 4 sobre 1b87710d ---- */
 /* Celular 380-699: alto fijo 272 px (valor probado por Bot 4) con los 3 atajos en UNA fila, textos cortos y sin cortes. */
 #naAsstHero .h-chip .hs{display:none}
-@media (min-width:380px) and (max-width:699px){#naAsstHero .h-chips{flex-wrap:nowrap;max-width:none}#naAsstHero .h-chip{padding:8px 12px}
+/* (Bot 4 sobre 25ffde10) también a 360: texto corto y una sola fila (tarjeta de 272 px como a 390) */
+@media (max-width:699px){#naAsstHero .h-chips{flex-wrap:nowrap;max-width:none}#naAsstHero .h-chip{padding:8px 12px}
   #naAsstHero .h-chip .hl{display:none}#naAsstHero .h-chip .hs{display:inline}#naAsstHero.na-asst-hero{padding-bottom:15px}}
+@media (max-width:379px){#naAsstHero .h-chips{gap:6px}#naAsstHero .h-chip{padding:8px 10px}}
 /* Tarjeta hecha: ya no muestra «Vence en». */
 .na-asst-card[data-st="done"] .meta{display:none}
 
@@ -385,6 +387,9 @@ body.dark .na-asst-prov-t{background:#0f172a;border-color:#334155;color:#e2e8f0}
 .na-asst-tbl th,.na-asst-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
 .na-asst-tbl th{font-weight:800;background:#f1f5f9;color:#0f172a}
 .na-asst-tl{display:none}.na-asst-mask{white-space:nowrap}
+/* (Bot 4 sobre 25ffde10) todos los montos de la tabla tapados: máscara corta (el texto sigue en el DOM) y una sola nota bajo la tabla */
+.na-asst-allmask .na-asst-mask{font-size:0;letter-spacing:0}.na-asst-allmask .na-asst-mask::after{content:'•••';font-size:15px;color:#64748b;letter-spacing:1px}
+.na-asst-tnote{font-size:12px;color:#475569;margin:-2px 0 6px}.na-asst-tnote.na-asst-off{display:none}body.dark .na-asst-tnote{color:#a7c4b3}body.dark .na-asst-allmask .na-asst-mask::after{color:#a7c4b3}
 body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.dark .na-asst-tbl th{background:#163023;color:#e5f3ea}
 @media (max-width:480px){
   .na-asst-tbl{overflow-x:visible}
@@ -396,4 +401,4 @@ body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.da
   .na-asst-tv{flex:1;min-width:0;overflow-wrap:anywhere}
   body.dark .na-asst-tbl tr{border-color:#1f3b2b}
 }
-.na-asst-msg.a:has(.na-asst-tbl){max-width:100%}
+.na-asst-msg.a.na-asst-wide{max-width:100%} /* clase puesta desde JS al pintar la 1.ª tabla (antes :has) */

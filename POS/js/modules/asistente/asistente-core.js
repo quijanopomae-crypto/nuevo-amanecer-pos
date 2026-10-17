@@ -237,7 +237,10 @@
   // Solo createElement + textContent (nunca innerHTML ni texto del modelo en atributos). En partes: cada fila se dibuja al cerrar su línea,
   // el estado se guarda (no se relee el mensaje entero). Una línea que empieza con «|» espera hasta su salto; la cabecera espera además la
   // línea siguiente (si es «|---|» es tabla; si no, vuelve como texto). El resto del texto se pinta enseguida, como antes.
-  var MASK_LABEL = '[dato del dueño]';
+  var MASK_LABEL = '[dato del dueño]', MASK_NOTE = 'Montos ocultos para empleado';
+  var CUR_SP_RE = /(S\/\.?|US\$|PEN)[ \t](?=-?\d)/g;
+  function nbsp(v) { return v.replace(CUR_SP_RE, '$1\u00a0'); }
+  var AMOUNT_RE = /(?:S\/\.?|PEN|US\$|\$)\s?-?\d|\d[.,]\d{1,2}(?!\d)|\d\s?%/i; // monto visible en una celda (para la nota)
   var TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$|^\s*\|\s*:?-{3,}:?\s*\|\s*$/;
   function tableCells(line) {
     var t = line.trim(); if (t.charAt(0) === '|') t = t.slice(1); if (t.charAt(t.length - 1) === '|' && t.charAt(t.length - 2) !== '\\') t = t.slice(0, -1);
@@ -250,42 +253,65 @@
   // servidor), nunca de otros datos. Solo sirve para filas sueltas al inicio de la continuación («sigue»), con el mismo número de columnas.
   function createReplyRenderer(doc, append, opts) {
     var raw = '', line = '', mode = 'start', liveText = null, head = null, table = null, tbody = null, labels = null, rows = 0, lastLabels = null, tables = 0;
+    var wrap = null, tblEl = null, note = null, nMask = 0, nAmt = 0; // (Bot 4 sobre 25ffde10) montos tapados / visibles de la tabla actual
     var reuse = opts && Array.isArray(opts.labels) && opts.labels.length > 1 ? opts.labels.map(function (x) { return String(x); }) : null;
     // texto suelto: se va sumando al mismo nodo de texto mientras no aparezca una tabla
-    function text(t) { if (!t) return; if (liveText) liveText.data += t; else { liveText = doc.createTextNode(t); append(liveText); } }
+    // (Bot 4 sobre 25ffde10) solo en pantalla: «S/», «US$», «PEN» y su monto van unidos con un espacio que no se parte (la respuesta no cambia).
+    // En partes se arregla solo la cola del nodo (los últimos 6 caracteres + lo nuevo): igual que hacerlo sobre el texto entero.
+    function text(t) { if (!t) return; if (liveText) { var d = liveText.data, k = Math.max(0, d.length - 6); liveText.data = d.slice(0, k) + nbsp(d.slice(k) + t); } else { liveText = doc.createTextNode(nbsp(t)); append(liveText); } }
     function cellInto(cellEl, value) { // «[dato del dueño]» en un span que no se parte
       var parts = String(value).split(MASK_LABEL);
       for (var i = 0; i < parts.length; i++) {
-        if (parts[i]) cellEl.appendChild(doc.createTextNode(parts[i]));
+        if (parts[i]) cellEl.appendChild(doc.createTextNode(nbsp(parts[i])));
         if (i < parts.length - 1) { var m = doc.createElement('span'); m.className = 'na-asst-mask'; m.textContent = MASK_LABEL; cellEl.appendChild(m); }
       }
     }
+    // (Bot 4/3 sobre 25ffde10) la tabla se crea con su PRIMERA fila: una cabecera seguida de un párrafo ya no deja una tabla vacía en pantalla.
+    // Sin etiquetas (filas sueltas sin cabecera) no lleva thead.
     function startTable(hdrLine) {
       liveText = null; labels = Array.isArray(hdrLine) ? hdrLine.slice() : tableCells(hdrLine); rows = 0; lastLabels = labels.slice(); tables++;
-      var wrap = doc.createElement('div'); wrap.className = 'na-asst-tbl';
-      table = doc.createElement('table'); var thead = doc.createElement('thead'), tr = doc.createElement('tr');
-      labels.forEach(function (h) { var th = doc.createElement('th'); th.setAttribute('scope', 'col'); cellInto(th, h); tr.appendChild(th); });
-      thead.appendChild(tr); table.appendChild(thead); tbody = doc.createElement('tbody'); table.appendChild(tbody); wrap.appendChild(table); append(wrap);
+      table = true; wrap = tblEl = tbody = note = null; nMask = 0; nAmt = 0;
     }
+    function buildTable() {
+      liveText = null; wrap = doc.createElement('div'); wrap.className = 'na-asst-tbl'; tblEl = doc.createElement('table');
+      if (labels.some(function (h) { return h !== ''; })) { var thead = doc.createElement('thead'), tr = doc.createElement('tr');
+        labels.forEach(function (h) { var th = doc.createElement('th'); th.setAttribute('scope', 'col'); cellInto(th, h); tr.appendChild(th); }); thead.appendChild(tr); tblEl.appendChild(thead); }
+      tbody = doc.createElement('tbody'); tblEl.appendChild(tbody); wrap.appendChild(tblEl); append(wrap);
+    }
+    // (Bot 4 sobre 25ffde10) una fila con OTRA cantidad de columnas (la tabla del dueño sigue abierta en el servidor hasta el final) se dibuja
+    // igual como fila: faltan celdas, quedan vacías; sobran, se juntan en la última con « · ». Nunca texto con «|».
+    // Si TODOS los montos de la tabla están tapados: las máscaras se ven cortas («•••», por CSS; el texto sigue siendo «[dato del dueño]»)
+    // y va UNA nota bajo la tabla («Montos ocultos para empleado»). Si aparece un monto visible, vuelve a la vista normal.
+    function fitCells(cells) { var n = labels.length; if (n < 2 || cells.length <= n) return cells; var c = cells.slice(0, n - 1); c.push(cells.slice(n - 1).filter(function (x) { return x !== ''; }).join(' · ')); return c; }
+    function countCell(v) { v = String(v); if (v.indexOf(MASK_LABEL) >= 0) nMask++; if (AMOUNT_RE.test(v.split(MASK_LABEL).join(' '))) nAmt++; }
+    function updateNote() { if (!wrap) return; var all = nMask > 0 && nAmt === 0;
+      if (all && !note) { note = doc.createElement('div'); note.textContent = MASK_NOTE; if (wrap.parentNode && wrap.parentNode.insertBefore) wrap.parentNode.insertBefore(note, wrap.nextSibling || null); else append(note); }
+      if (note) note.className = all ? 'na-asst-tnote' : 'na-asst-tnote na-asst-off'; // se apaga (no se borra) si aparece un monto visible
+      tblEl.className = all ? 'na-asst-allmask' : ''; }
     function addRow(l) {
-      var cells = tableCells(l), tr = doc.createElement('tr'), n = Math.max(cells.length, labels.length);
-      for (var i = 0; i < n; i++) {
+      if (!tbody) buildTable();
+      var cells = fitCells(tableCells(l)), tr = doc.createElement('tr'), n = Math.max(cells.length, labels.length);
+      for (var i = 0; i < n; i++) { countCell(cells[i] == null ? '' : cells[i]);
         var td = doc.createElement('td');
         if (labels[i]) { var lab = doc.createElement('span'); lab.className = 'na-asst-tl'; lab.setAttribute('aria-hidden', 'true'); lab.textContent = labels[i]; td.appendChild(lab); }
         var v = doc.createElement('span'); v.className = 'na-asst-tv'; cellInto(v, cells[i] == null ? '' : cells[i]); td.appendChild(v); tr.appendChild(td);
       }
-      tbody.appendChild(tr); rows++;
+      tbody.appendChild(tr); rows++; updateNote();
     }
-    function endTable() { table = tbody = labels = null; }
+    function endTable() { table = tbody = labels = null; if (note) liveText = null; wrap = tblEl = note = null; }
     function isPipe(l) { return /^\s*\|/.test(l); }
     // fila suelta al inicio de la continuación: usa la cabecera anterior (solo antes de la primera tabla de esta burbuja y si cuadran las columnas).
     // (Bot 4 sobre a6d1d76e) Fila suelta DESPUÉS de una tabla de esta burbuja (p. ej. tras un párrafo: el servidor la sigue tratando como de esa
     // tabla): se dibuja como fila con la cabecera ya pintada (texto filtrado), si cuadran las columnas; nunca como texto con «|».
-    function reused(h) { var lab = tables ? lastLabels : reuse; if (!lab || TABLE_SEP_RE.test(h) || tableCells(h).length !== lab.length) return false; startTable(lab); addRow(h); return true; }
+    // (Bot 4 sobre 25ffde10) también con otra cantidad de columnas (fitCells): el servidor ya tapó sus montos.
+    function reused(h) { var lab = tables ? lastLabels : reuse; if (!lab || TABLE_SEP_RE.test(h) || tableCells(h).length < 2) return false; startTable(lab); addRow(h); return true; }
     // una línea COMPLETA (con su salto, si lo tiene)
     function full(l, nl) {
       if (table) { if (isPipe(l) && !TABLE_SEP_RE.test(l)) { addRow(l); return; } if (isPipe(l)) return; endTable(); }
-      if (head != null) { var h = head; head = null; if (TABLE_SEP_RE.test(l)) { startTable(h); return; } if (reused(h)) return full(l, nl); text(h + '\n'); }
+      if (head != null) { var h = head; head = null; if (TABLE_SEP_RE.test(l)) { startTable(h); return; } if (reused(h)) return full(l, nl);
+        // (Bot 4 sobre 25ffde10) 2+ filas seguidas sin cabecera con las mismas columnas: tabla sin etiquetas (tarjetas a 480), nunca texto con «|»
+        var hc = tableCells(h).length; if (hc >= 2 && isPipe(l) && !TABLE_SEP_RE.test(l) && tableCells(l).length === hc) { startTable(tableCells(h).map(function () { return ''; })); addRow(h); addRow(l); return; }
+        text(h + '\n'); }
       if (isPipe(l) && nl) { head = l; return; } // ¿cabecera? espera la línea siguiente
       text(l + (nl ? '\n' : ''));
     }
@@ -514,7 +540,7 @@
     return Math.max(0, over);
   }
 
-  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

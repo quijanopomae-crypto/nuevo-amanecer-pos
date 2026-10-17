@@ -79,9 +79,9 @@ test('hueco desde el primer pintado: <head> reserva el mismo alto que el hueco r
   const loader = fs.readFileSync(new URL('../../POS/js/modules/asistente/asistente-loader.js', import.meta.url), 'utf8');
   const head = html.slice(0, html.indexOf('</head>'));
   assert.match(head, /localStorage\.getItem\('na_asistente_proto'\)==='1'&&localStorage\.getItem\('na_asistente_acc'\)==='owner'/);
-  // 321+4+16+12 (<380), 272+4+16+12 (380-699, Bot 4), 364+4+18+12, 280+4+18+12 (alto real de la tarjeta por tramo)
-  for (const [px, q] of [[353, ''], [304, '@media (min-width:380px) and (max-width:699px)'], [398, '@media (min-width:700px)'], [314, '@media (min-width:1100px)']]) assert.ok(head.includes((q ? q + '{' : '') + 'html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:' + px + 'px}'), String(px));
-  assert.match(loader, /height:321px;margin:4px 0 16px/); assert.match(loader, /@media \(min-width:380px\) and \(max-width:699px\)\{#naAsstHero\{height:272px\}\}@media \(min-width:700px\)\{#naAsstHero\{height:364px;margin:4px 0 18px\}\}@media \(min-width:1100px\)\{#naAsstHero\{height:280px\}\}/);
+  // 272+4+16+12 (<380, Bot 4 sobre 25ffde10: texto corto también a 360), 272+4+16+12 (380-699, Bot 4), 364+4+18+12, 280+4+18+12 (alto real de la tarjeta por tramo)
+  for (const [px, q] of [[304, ''], [304, '@media (min-width:380px) and (max-width:699px)'], [398, '@media (min-width:700px)'], [314, '@media (min-width:1100px)']]) assert.ok(head.includes((q ? q + '{' : '') + 'html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:' + px + 'px}'), String(px));
+  assert.match(loader, /height:272px;margin:4px 0 16px/); assert.match(loader, /@media \(min-width:380px\) and \(max-width:699px\)\{#naAsstHero\{height:272px\}\}@media \(min-width:700px\)\{#naAsstHero\{height:364px;margin:4px 0 18px\}\}@media \(min-width:1100px\)\{#naAsstHero\{height:280px\}\}/);
   assert.match(loader, /classList\.remove\('na-asst-pre'\)/, 'el hueco real reemplaza al margen');
   assert.match(loader, /function release\(\)[^\n]*classList\.remove\('na-asst-owner', 'na-asst-pre'\)/, 'al liberar se quita todo');
   assert.equal((html.match(/asistente-loader\.js" defer/g) || []).length, 1);
@@ -162,6 +162,6 @@ test('revisión Bot 4 sobre 1b87710d: relleno del contenedor que se desplaza, pa
   // 5) textos: singular/plural, tarjeta hecha sin «Vence en»; sin PIN en la tarjeta (pedido del dueño: un toque de la sesión dueño)
   assert.match(ui, /' Te queda 1 intento\.'/); assert.match(css, /\.na-asst-card\[data-st="done"\] \.meta\{display:none\}/);
   assert.ok(!/pinBox|na-asst-pin/.test(ui)); assert.ok(!/\.na-asst-pin/.test(css));
-  // 6) 380-699: atajos en una fila con texto corto
-  assert.match(css, /@media \(min-width:380px\) and \(max-width:699px\)\{#naAsstHero \.h-chips\{flex-wrap:nowrap/);
+  // 6) menos de 700 (también 360): atajos en una fila con texto corto
+  assert.match(css, /@media \(max-width:699px\)\{#naAsstHero \.h-chips\{flex-wrap:nowrap/); assert.match(css, /@media \(max-width:379px\)\{#naAsstHero \.h-chips\{gap:6px\}#naAsstHero \.h-chip\{padding:8px 10px\}\}/);
 });

@@ -545,13 +545,13 @@ test('20) Bot 5: una etiqueta de clave/pin/token, RUC, DNI o data: que espera su
   for (const [label, rest, secret] of CASES) for (const role of ['owner', EMP]) {
     const t = label + rest, red = redactFor(role); let o = ''; const em = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red);
     let i = 0; for (; i < t.length; i++) { em.push(t[i]); const pendingWs = i >= label.length && !/\S/.test(t.slice(label.length, i + 1).replace(/\bes\b/, '')); if (pendingWs) assert.ok(o.length <= label.length, role + ' ' + label + ': soltó ' + o.length + ' caracteres con la etiqueta esperando'); }
-    em.flush(); assert.ok(!secret.test(o), role + ' ' + label + ' -> ' + o); assert.equal(o, red(t), role + ' ' + label + ': igual al texto entero');
+    em.flush(); assert.ok(role === 'owner' && /^(?:RUC|DNI)/.test(label) ? secret.test(o) : !secret.test(o), role + ' ' + label + ' -> ' + o); // el dueño ve DNI/RUC (Bot 2 sobre 25ffde10) assert.equal(o, red(t), role + ' ' + label + ': igual al texto entero');
   }
 });
 test('20) Bot 3: un tramo de solo espacios no pasa por redactText (mismo resultado); con una etiqueta esperando su valor no se suelta', () => {
   const SRCF = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant.js', import.meta.url), 'utf8');
-  assert.match(SRCF, /out\(WS_ONLY\.test\(piece\) \? piece : redactText\(piece\)\)/); assert.match(SRCF, /const WS_ONLY = \/\^\\s\+\$\/;/);
+  assert.match(SRCF, /out\(WS_ONLY\.test\(piece\) \? piece : red\(piece\)\)/); assert.match(SRCF, /const WS_ONLY = \/\^\\s\+\$\/;/);
   for (const t of [' '.repeat(3300), 'Paracetamol caja S/ 1.80\n' + ' '.repeat(3300) + 'listo', 'RUC:' + ' '.repeat(3300) + '20123456789', 'clave' + '\n'.repeat(5) + ' '.repeat(3000) + 'abc123'])
     for (const role of ['owner', EMP]) { const red = redactFor(role); let o = ''; const em = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red); for (const ch of t) em.push(ch); em.flush();
-      assert.equal(o, red(t)); assert.ok(!/20123456789|abc123/.test(o)); }
+      assert.equal(o, red(t)); assert.ok(!/abc123/.test(o)); if (role !== 'owner') assert.ok(!/20123456789/.test(o)); }
 });
