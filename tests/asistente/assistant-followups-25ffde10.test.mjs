@@ -109,9 +109,9 @@ test('Bot 3: la fila se tapa apenas llega su «|» y el monto; no espera el fin 
 });
 
 test('«sigue»: corte con la regla fija activa → cutPrime sí; la continuación sigue tapando (superconjunto) hasta la cabecera que suelta', () => {
-  for (const t of [T3.trimEnd(), CI + LONG, T3 + '| Galleta | S/ 1.80 |', CI + 'Precios:']) assert.equal(cutPrime(red(t), true), true, JSON.stringify(t.slice(-30)));
+  for (const t of [T3.trimEnd(), CI + LONG, T3 + '| Galleta | S/ 1.80 |', CI + 'Precios:']) assert.ok(['intro', 'col'].includes(cutPrime(red(t), true)), JSON.stringify(t.slice(-30)));
   const rows = (a, b) => Array.from({ length: b - a }, (_, i) => '| Producto número ' + (a + i) + ' | S/ 1.' + String(a + i).padStart(2, '0') + ' | S/ 2.' + String(a + i).padStart(2, '0') + ' |\n').join('');
-  const cut = capReply(red('| Producto | Costo | PVP |\n|---|---|---|\n' + rows(0, 30) + '\n' + LONG + '\n')); assert.ok(cut.endsWith(CUT_NOTICE)); assert.equal(cutPrime(cut, true), true);
+  const cut = capReply(red('| Producto | Costo | PVP |\n|---|---|---|\n' + rows(0, 30) + '\n' + LONG + '\n')); assert.ok(cut.endsWith(CUT_NOTICE)); assert.ok(['intro', 'col'].includes(cutPrime(cut, true)));
   for (const cont of ['| Galleta | S/ 1.80 |', '| Galleta | S/ 1.80 | S/ 2.50 | x |', 'Galleta | S/ 1.80', LONG + '\n\nPrecios:\n| B | S/ 1.81 |', 'Lista de precios\n| B | S/ 1.81 |',
     LONG + '\n\n| Producto | Precio |\n|---|---|\n| B | S/ 1.81 |', 'Galleta\tS/ 1.80']) {
     const p = primed(cont), u = red(cont); hides(p, ['1.80', '1.81']);
@@ -219,8 +219,8 @@ test('Bots 4/5/2: series de comprobante y guía intactas en ambos roles; «2024-
     assert.equal(redactText(t), t, 'también en lo que va al modelo'); }
   // la excepción es SOLO la serie: un año u otro número de 4 + guion sigue siendo DNI para el empleado
   for (const t of ['2024-12345678', '1234-12345678', 'DNI-12345678', 'DNI 12345678', 'Doc: 12345678', 'X001-12345678', 'f001-12345678']) assert.match(same(t, EMP), /DNI \*{4}5678/, t);
-  // INFO: «Doc:x12345678» (letra pegada a los dígitos, sin límite de palabra) ya se veía en 25ffde10 y antes; la regla del DNI no cambia
-  assert.equal(same('Doc:x12345678', EMP), 'Doc:x12345678');
+  // (Bot 5 sobre 6280deae, antes INFO) letra o «_» pegados a los dígitos: (?<![0-9]) en vez de \b, ahora se tapan para el empleado
+  for (const t of ['Doc:x12345678', 'Doc:A12345678', 'ref_12345678']) assert.match(same(t, EMP), /DNI \*{4}5678$/, t);
   assert.match(same('RUC 20100055237', EMP), /RUC \*{7}5237/);
   // dueño (Bot 2, ev/dueno-comprobantes.json): sin DNI/RUC tapados; PIN, clave, token y data: siguen tapados
   const doc = 'Compra registrada\n| Comprobante | Proveedor | RUC | Total |\n|---|---|---|---|\n| F001-00012345 | Alicorp SAC | 20100055237 | S/ 229.40 |\n| B001-00000123 | Gloria SA | RUC 20100190797 | S/ 58.10 |\nCódigo interno 12345678\nDNI del cliente 44556677';
@@ -270,7 +270,8 @@ test('Bot 4/3: la tabla se crea con su primera fila (cabecera + párrafo no deja
 });
 
 test('Bot 2 (regresión desde f3375c09): la línea siguiente que EMPIEZA con costo/margen/ganancia/utilidad, o es corta y la trae, tapa el monto de arriba; «El costo lo ve el dueño.» no', () => {
-  for (const nx of ['costo unitario', 'es el costo', 'de costo', '(mi costo)', 'margen', '(costo por unidad)', 'ganancia S/ 0.70', 'utilidad', 'el costo', 'Ese es el margen']) {
+  // (Bot 2/3 sobre 6280deae) «ganancia S/ 0.70» trae SU monto en sus primeros 20 caracteres: tapa el 0.70 y suelta el de arriba (ver la prueba de 6280deae)
+  for (const nx of ['costo unitario', 'es el costo', 'de costo', '(mi costo)', 'margen', '(costo por unidad)', 'utilidad', 'el costo', 'Ese es el margen']) {
     const t = 'Galleta S/ 1.80\n' + nx; const f = same(t); assert.ok(!f.includes('1.80') && f.startsWith('Galleta [dato del dueño]\n'), JSON.stringify(f));
     assert.ok(!f.includes('0.70')); assert.equal(same(t + '\nGracias.'), f + '\nGracias.'); assert.equal(same(t, 'owner'), t); }
   for (const t of ['Galleta S/ 1.80\nEl costo lo ve el dueño.', 'Arroz S/ 4.20\nEl costo lo ve el dueño.', 'Galleta S/ 1.80\nCosteño de la sierra', 'Galleta S/ 1.80\nLeche S/ 3.80',

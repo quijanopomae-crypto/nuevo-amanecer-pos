@@ -37,7 +37,7 @@ for (const n of [1, 5, 47, 100]) {
 }
 test('«sigue» (filtro del empleado): tras una parte cortada con presentación del dueño, las filas que siguen se tapan; tras una parte solo de venta, se ven', () => {
   const part1 = capReply(filtered(OWNER_TABLE, EMP)), prime = cutPrime(part1, true);
-  assert.equal(prime, true, 'solo un sí/no: había contexto del dueño'); assert.equal(cutPrime(part1), false, 'sin la marca firmada del servidor, nada');
+  assert.equal(prime, 'intro', 'sí/no con origen (Bot 5 sobre 6280deae): había presentación del dueño → intro'); assert.equal(cutPrime(part1), false, 'sin la marca firmada del servidor, nada');
   const cont = '| Arroz | S/ 1.80 |\n| Leche | S/ 2.20 |\nEso es todo.';
   assert.ok(!/1\.80|2\.20/.test(redactOwnerData(cont, prime)), redactOwnerData(cont, prime));
   assert.ok(/1\.80/.test(redactOwnerData(cont)), 'sin contexto se vería (por eso el contexto)');

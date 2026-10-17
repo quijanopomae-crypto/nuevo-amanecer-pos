@@ -238,7 +238,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 - **Marca de corte firmada**: el SERVIDOR marca el par que él mismo cortó (`cut: true` en el turno del asistente). La marca va DENTRO de la firma HMAC del par: solo se agrega `"cut"` a lo firmado cuando es true, así que los pares sin corte firman igual que antes. Si el aparato agrega `cut:true` a un par sin corte, o se lo quita a uno cortado, la firma no verifica y el par se descarta entero. El celular guarda `cut` tal cual con el turno.
 - **Nunca por el texto**: `cutPrime(reply, cut)` ya no mira si la respuesta termina con el aviso. Sin la marca firmada devuelve false. Una respuesta del modelo que trae el aviso no prepara nada.
-- **Solo un sí/no**: de la parte cortada pasa solo «había contexto del dueño abierto». Cuenta como sí: una presentación sin negar, la ventana de una palabra del dueño, una lista o tabla presentada por el dueño, o una tabla con columna del dueño. Nunca pasa el estado de una tabla de venta, de una zona negada ni de columnas.
+- **Solo un sí/no** (desde 6280deae: sí/no + origen `'col'`/`'intro'`, ver «Seguimiento sobre 6280deae»): de la parte cortada pasa solo «había contexto del dueño abierto». Cuenta como sí: una presentación sin negar, la ventana de una palabra del dueño, una lista o tabla presentada por el dueño, o una tabla con columna del dueño. Nunca pasa el estado de una tabla de venta, de una zona negada ni de columnas.
 - **Superconjunto por construcción**: con el sí, el filtro corre exactamente igual que sin contexto (mismo estado, mismas decisiones). Además la continuación arranca con la tabla pegajosa abierta (como si viniera de una presentación del dueño): toda fila `| … |` se tapa hasta el final, salvo que se suelte con las reglas de la regla pegajosa (ver «Seguimiento sobre 25ffde10»). Solo puede tapar más.
 - **Diferencial**: 455 casos × 17 contextos, los 16 de Bot 5 más «sí» forzado, tratando también los avisos forjados como marcados (el peor caso): 0 destapes, 822 más estrictos, el contexto nunca sale, partes = entero. 30 000 textos al azar más el corpus de 710 frases, sí contra no: 0 destapes. Hay una prueba en el repo.
 
@@ -384,7 +384,7 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 
 ### Comprobantes y DNI/RUC (Bots 4, 5 y 2)
 
-- Excepción a la regla del DNI, solo para la serie de un comprobante o guía: `\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b` («F001-00012345», «B001-00000123», «E001-12345678», «T001-00012345», «0001-00012345») queda intacta. «2024-12345678», «DNI-12345678», «DNI 12345678» siguen tapados para el empleado. La regla del DNI no cambia: «Doc:x12345678» (letra pegada a los dígitos) se veía antes y se sigue viendo (INFO).
+- Excepción a la regla del DNI, solo para la serie de un comprobante o guía: `\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b` («F001-00012345», «B001-00000123», «E001-12345678», «T001-00012345», «0001-00012345») queda intacta. «2024-12345678», «DNI-12345678», «DNI 12345678» siguen tapados para el empleado. Desde el seguimiento sobre 6280deae, delante del número va `(?<![0-9])` en vez de `\b` (DNI y RUC): «Doc:x12345678», «Doc:A12345678», «ref_12345678» también se tapan para el empleado y en lo que va al modelo.
 - **Dueño**: la respuesta al dueño ya NO tapa DNI ni RUC (números de 8 y 11 dígitos, «RUC 20100055237», «Código interno 12345678»). Sigue tapado para el dueño: PIN, clave, contraseña, token, api key, «data:» (base64), correo y teléfono. El empleado sigue con todo el filtro de DNI/RUC.
 - Lo que va AL modelo (mensaje, historial y resultados de herramientas) sigue pasando por `redactText` completo, también para el dueño. Así el modelo no recibe DNI/RUC; el cambio es solo de la salida al dueño.
 
@@ -398,3 +398,70 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 ### Pruebas
 
 - `tests/asistente/assistant-followups-25ffde10.test.mjs`: cada caso de la regla pegajosa (entero y en partes de 1, 2, 3, 7, 13 y 47, y la variante «sigue»), las dos reglas para soltar, columna de venta, casos de a6d1d76e y «Compras de clientes: S/ 30» (se ve), tapado inmediato al llegar «|», celular (filas, nota, tabla sin cabecera, tabla perezosa, espacio que no se parte, clase `na-asst-wide`), etapa de espacios, «[texto largo omitido]» temprano, corte con DNI/RUC y unidades, comprobantes y DNI/RUC del dueño, y la línea siguiente con costo (los 7 casos de Bot 2, el contraejemplo, ítems de lista y la retención).
+
+## Seguimiento sobre 6280deae (Bot 5 FALLA; límites de Bots 3 y 5)
+
+### 1. Línea siguiente tras un ítem de lista o una fila
+
+- Ítem (`-`, `*`, `•`, `1.`, `1)`, `a)`) o fila (`|` o tabulador) sin presentación del dueño: la línea siguiente tapa el monto de ESE ítem/fila (solo ese, no la lista) si, quitando su viñeta, numeración, `|`, tabuladores, sangría y «(», «mi», «es el», «de» delante, EMPIEZA con costo, margen, ganancia o utilidad. «- Galleta S/ 1.80\ncosto unitario», «1. Galleta S/ 1.80\n(mi costo)», «• Galleta S/ 1.80\nganancia S/ 0.70», «| Galleta | S/ 1.80 |\ncosto unitario», «Galleta\tS/ 1.80\nutilidad», «- Galleta S/ 1.80\n- costo unitario», «| Galleta | S/ 1.80 |\n| costo unitario | |» se tapan.
+- Límites (Bots 3/5): se decide con a lo sumo ~20 caracteres de esa línea (o su salto). En ítems y filas NO se usa la prueba de línea corta (40 caracteres / 5 palabras): «- Galleta S/ 1.80\nel costo» y «… \nEse es el margen» tras un ítem se ven (INFO). Las líneas de texto siguen con la regla de siempre.
+- Línea siguiente con SU monto (D', límite de Bot 3; vale para texto, ítems y filas): se mira la misma ventana (~20 caracteres tras quitar viñeta/`|`/tab/sangría, o hasta el salto). Si empieza con la palabra del dueño y NO aparece un monto en esa ventana, tapa el monto de arriba. Si aparece un monto en la ventana, se tapa SOLO ese monto y el de arriba se suelta: «Arroz S/ 4.20\nEl costo es S/ 1.80.», «- Galleta S/ 1.80\n- costo S/ 1.20», «Galleta S/ 1.80\nganancia S/ 0.70», «| Galleta | S/ 1.80 |\n| costo unitario | S/ 1.20 |» dejan ver el de arriba. «Galleta S/ 1.80\ncosto unitario de la casa: S/ 1.20» (monto pasado los 20) tapa los dos. Prueba de propiedad: ningún monto con la etiqueta del dueño delante se ve nunca.
+- Tabla de VENTA (cabecera + `|---|` con PVP / P. venta / Venta / Precio de venta / Precio y sin columna del dueño): sus filas no miran la línea siguiente. Una fila cuya PRIMERA celda empieza con costo, margen, ganancia o utilidad tapa sus montos y abre la regla fija (origen «col», todo monto tapado) hasta una cabecera nueva sin columna del dueño. «| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |\n| costo unitario | S/ 1.20 |\n| Arroz | S/ 4.20 |» deja ver 1.80 y tapa 1.20 y 4.20.
+- Retención por fila (empleado, trozos de 1, 120 filas/ítems; caracteres que llegan tras el monto hasta que sale), igual antes y después: tabla de venta y tabla neutra 27 (nombres con números) / 21 (nombres con letras); lista «- » 33 / 55; lista «1. » 25 / 24.
+
+### 2. Punto al final de la línea del monto
+
+- «Galleta S/ 1.80.\ncosto unitario» y «La galleta sale S/ 1.80.\nel costo.»: el «.» final (con espacios detrás) ya no corta; se mira la línea siguiente igual que sin punto. Una línea de texto con punto final espera ahora lo mismo que una sin punto (medido: 22 → 31 con números, 26 → 58 con letras; sin punto: 29 / 56). Topes de siempre (160) y decisión corta (40 / 5) sin cambios.
+
+### 3. «sigue» con origen
+
+- `cutPrime(reply, cut)` devuelve `false`, `'col'` o `'intro'`. `'col'` solo si lo único abierto al final de la parte cortada es la regla fija de una tabla con columna del dueño (o la abierta por una fila «costo…» en una tabla de venta); cualquier otra cosa abierta (presentación, ventana de una palabra del dueño, lista) da `'intro'`.
+- El origen sale SOLO del texto firmado (el `raw` del par, dentro del HMAC, con `cut:true` firmado): el aparato no lo manda. Un campo agregado (`cut_src`, `src`…) se ignora; cambiar `cut` rompe la firma (par descartado, como antes). En el filtro, todo valor que no sea exactamente `'col'` (true, 'COL', objetos…) cuenta como `'intro'`.
+- Con `'col'`, una cabecera nueva sin columna del dueño («| Producto | Monto |» + `|---|`) suelta la regla fija, como en la parte cortada. Nada más cambia: las columnas de venta de una cabecera nueva CON columna del dueño se leen como con `'intro'` («Precio» junto a «Costo» sigue tapado). La continuación nunca destapa respecto de sin contexto.
+
+### 4. DNI / RUC
+
+- `(?<![0-9])` en vez de `\b` delante del DNI (8 dígitos) y del RUC (11): «Doc:x12345678», «Doc:A12345678», «ref_12345678», «cod_20123456789» se tapan para el empleado y en lo que va al modelo. La etapa en partes usa el mismo límite para «RUC»/«DNI» esperando su número («costoRUC N° 20123456789»). La excepción de comprobantes `\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b` no cambia. El dueño sigue viendo DNI/RUC exactos.
+
+### 5. INFO hechos
+
+- «data image/png;base64,…» sin «:» (también con «=», «es», «era», «de» y espacios/saltos) → «[imagen omitida]», dueño y empleado, entero y en partes.
+- «La clave del wifi Zq9xK2mPw7» → «La clave del wifi [oculto]»: tras clave/contraseña/pin/token/password/api key + una palabra de enlace (del, de, la, el, los, mi, tu, su, para, en, que…), se tapa el valor (letras y dígitos mezclados, 6+ caracteres) dentro de las 4 palabras siguientes. Sin ese valor, como siempre (se tapa lo que sigue a la etiqueta). En partes se espera hasta esas 4 palabras.
+
+### Pruebas
+
+- `tests/asistente/assistant-followups-6280deae.test.mjs`: los mínimos de Bot 5 y sus variantes (ítems, filas, tab, viñetas, letra, sin bordes, punto final), límites de ítems, D' (línea siguiente con su monto, más prueba de propiedad), tabla de venta con fila «costo…», retención de 120 filas/ítems, origen de «sigue» (unitario, alterado → intro, ruta firmada con campo agregado), DNI/RUC con letra o «_», «data» sin «:» y «clave del wifi». Todo entero y en partes de 1, 2, 3, 7, 13 y 47.
+
+## Seguimiento sobre 6280deae: Bot 2 (lo que va al modelo, tarjeta de compra, historial)
+
+### A / A' / A''. Lo que va AL MODELO para el DUEÑO
+
+- El filtro de entrada lo decide el rol de la sesión del servidor (`resolveRole`), nunca un campo del aparato ni del modelo. Para el dueño (`redactModelOwner`, mensaje, historial y nombres del contexto):
+  - RUC de empresa (empieza con 20, 15 o 17) va exacto. RUC 10 (persona natural) sigue tapado para los dos roles.
+  - 8 dígitos junto a «código», «cód.», «EAN», «barra(s)» (misma línea, pocas palabras), en una columna de tabla con esa cabecera o tras una serie de comprobante van exactos. 8 dígitos sueltos o junto a «DNI» siguen tapados.
+  - PIN, clave, token, correo, teléfono, tarjeta y data: igual que siempre.
+- Empleado, o cualquier rol que no sea exactamente `owner`: sin cambios (`redactText`, todo tapado).
+- El celular del dueño hace lo mismo al armar el contexto (`redactOwnerContext`); el servidor vuelve a filtrar igual.
+
+### B / B'. Tarjeta de compra
+
+- Proveedor y documento pasan por el filtro del dueño. Si al campo le queda una máscara («***», «[… oculto]», «[dato …]»), se deja VACÍO (nunca se guarda la máscara) y su nombre va en `completar: ['proveedor'|'documento']`.
+- La excepción sale del rol de la sesión del servidor. Si el empleado fuerza `preparar_compra` (aunque mande owner/rol en los argumentos), la tarjeta se descarta (`forbidden_role`), sin campos en la respuesta. Una compra firmada presentada desde una sesión de empleado no se confirma (≥400).
+
+### B''. Celular: dato que falta
+
+- Cada nombre de `completar` sale como un campo con borde de alerta (#b91c1c claro / #f87171 nocturno) y el texto «Complete este dato» (#991b1b sobre #fff, #fecaca sobre #10241a; contraste ≥ 4,5), con `aria-invalid` y `aria-describedby`.
+- El foco va al primero. «Confirmar» queda apagado con «Complete N dato(s)» hasta llenarlos; una máscara escrita no cuenta.
+- Se arma solo con createElement/textContent. Lo escrito queda fuera de la propuesta firmada (propiedad no enumerable, el hash de la tarjeta no cambia) y lo usa «Nueva compra»; nunca se escribe una máscara.
+
+### C. Historial firmado
+
+- El par firmado del dueño guarda el RUC de empresa exacto. El HMAC no cambia: la clase de rol va dentro de la firma, así que un par del dueño presentado por un empleado se descarta.
+
+### INFO. Corte del dueño
+
+- La parte del dueño (tope 1200) nunca termina en «RUC», «RUC N°», «RUC:» o «DNI» con el número en la parte siguiente: el corte retrocede antes de la etiqueta (entero = partes).
+
+### Pruebas
+
+- `assistant-followups-6280deae.test.mjs`: A (función, parseChatBody, sanitizeContext, ruta con el pedido al modelo capturado, dueño contra empleado), B (campos vacíos y `completar`), B' (empleado forzando la tarjeta y confirmando), B'' (DOM falso: foco, aviso, Confirmar, máscara escrita, contraste, cableado), C (par del dueño reusado por un empleado), D' y el corte.
