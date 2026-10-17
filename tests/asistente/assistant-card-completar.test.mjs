@@ -94,13 +94,19 @@ test('celular (Bot 2 A / Bot 4): campo con la parte exacta de inicio; 422 fields
   assert.deepEqual(C.fillValues(p), { documento: 'F001-00012345' }); assert.ok(!JSON.stringify(p).includes('00012345'), 'manual fuera de la propuesta firmada');
   // el servidor rechaza: la puerta deja la tarjeta pendiente y pasa los nombres
   const owner = { role: 'owner', isOwner: () => true }; let sent = null;
-  const g = C.createGate({ roles: () => owner, online: () => true, productos: () => [], confirm: async (pp) => { sent = C.fillValues(pp); return { ok: false, error: 'fields_required', fields: ['documento', 'lineas'] }; } });
+  const g = C.createGate({ roles: () => owner, online: () => true, productos: () => [], confirm: async (pp) => { sent = C.fillValues(pp); return { ok: false, error: 'fields_required', fields: ['documento'] }; } });
   const key = g.add(p); const r = await g.execute(key, { confirmed: true });
-  assert.equal(r.ok, false); assert.equal(r.code, 'fields_required'); assert.deepEqual(r.fields, ['documento', 'lineas']); assert.equal(g.state(key) || 'pending', 'pending'); assert.deepEqual(sent, { documento: 'F001-00012345' });
-  const v = C.confirmFailureView(r); assert.equal(v.kind, 'fields'); assert.equal(v.button, 'Confirmar'); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
+  assert.equal(r.ok, false); assert.equal(r.code, 'fields_required'); assert.deepEqual(r.fields, ['documento']); assert.equal(g.state(key) || 'pending', 'pending'); assert.deepEqual(sent, { documento: 'F001-00012345' });
+  const v = C.confirmFailureView(r, { editable: need.names, type: 'compra' }); assert.equal(v.kind, 'fields'); assert.equal(v.button, 'Confirmar'); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
   const hint = d.parentNode.children[2]; const rest = need.flag(v.fields);
-  assert.deepEqual(rest, ['lineas']); assert.equal(hint.hidden, false); assert.equal(hint.textContent, 'Complete este dato'); assert.equal(d.getAttribute('aria-invalid'), 'true'); assert.equal(fakeDoc.focused, d);
+  assert.deepEqual(rest, []); assert.equal(hint.hidden, false); assert.equal(hint.textContent, 'Complete este dato'); assert.equal(d.getAttribute('aria-invalid'), 'true'); assert.equal(fakeDoc.focused, d);
   assert.equal(d.value, 'F001-00012345', 'lo escrito queda'); assert.equal(need.state.documento, 'F001-00012345');
+  // (Bot 4 sobre 58200f60) tras el 422, «Confirmar» sigue apagado hasta que el campo marcado CAMBIE (el mismo valor no cuenta)
+  assert.equal(need.missing(), 1, 'apagado tras el 422'); d.fire('input'); assert.equal(need.missing(), 1, 'sin cambio: sigue apagado'); assert.equal(hint.hidden, false);
+  d.value = 'F001-00012346'; d.fire('input'); assert.equal(need.missing(), 0, 'cambió: se enciende'); assert.equal(hint.hidden, true);
+  // un 422 que nombra un campo que la tarjeta no deja escribir (lineas) → bloqueado: aviso claro y solo «Cancelar»
+  const vb = C.confirmFailureView({ ok: false, code: 'fields_required', fields: ['documento', 'lineas'] }, { editable: need.names, type: 'compra' });
+  assert.equal(vb.kind, 'blocked'); assert.equal(vb.button, null); assert.equal(vb.again, false); assert.equal(vb.cancelOnly, true); assert.equal(vb.msg, 'No se puede confirmar esta compra desde el asistente. Ábrala en Nueva compra.');
   assert.equal(C.confirmFailureView({ ok: false, code: 'fields_required', fields: ['documento'] }).msg, 'Complete los datos marcados y vuelva a confirmar.');
   // cableado: confirmRemote manda fill; la tarjeta marca los campos y deja el aviso con textContent; nada de innerHTML en lo nuevo
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8'), CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8');
@@ -139,18 +145,20 @@ test('pantalla (Bot 4): borde de alerta en Nocturno gana a theme-dark.css (contr
   const lum = (h) => { const v = h.match(/\w\w/g).map((x) => parseInt(x, 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
   const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
   for (const bg of ['#10241a', '#07130c']) { assert.ok(ratio(m[1], bg) >= 3, m[1] + ' sobre ' + bg); assert.ok(ratio('#4ade80', bg) >= 3); }
-  // serie con guion que no corta (U+2011) solo al pintar; el texto del mensaje no cambia
-  const doc = { createElement: (t) => ({ tagName: t, children: [], attrs: {}, appendChild(c) { this.children.push(c); return c; }, setAttribute(k, v) { this.attrs[k] = v; }, set textContent(v) { this._t = v; }, get textContent() { return this._t || this.children.map((c) => c.data || c.textContent || '').join(''); } }),
-    createTextNode: (d) => ({ data: d }) };
+  // (Bot 2 sobre 58200f60) la serie va entera en una span nowrap con el guion ASCII «-»: el texto de la burbuja (lo que se copia) es el original,
+  // sin U+2011, en trozos de 1/2/3/7/47 (y entero)
   const CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8');
-  assert.match(CORE, /var DOC_HY_RE = \/\\b\(\[FBET\]\[A-Z0-9\]\{3\}\|0\\d\{3\}\)-\(\?=\\d\)\/g;/); assert.match(CORE, /\.replace\(DOC_HY_RE, '\$1\\u2011'\)/);
+  assert.ok(!/\\u2011|\u2011/.test(CORE), 'sin U+2011 en el núcleo'); assert.match(CORE, /var DOC_CODE_RE = \/\\b\(\?:\[FBET\]\[A-Z0-9\]\{3\}\|0\\d\{3\}\)-\\d\{1,8\}\\b\/g;/);
+  assert.match(CSS, /\.na-asst-code\{white-space:nowrap;overflow-wrap:normal;word-break:keep-all;display:inline-block;max-width:100%;overflow-x:auto/);
   class N { constructor(tag) { this.tagName = tag.toUpperCase(); this.childNodes = []; this.attrs = {}; this.className = ''; }
     appendChild(k) { this.childNodes.push(k); k.parentNode = this; return k; } insertBefore(k) { this.childNodes.push(k); k.parentNode = this; return k; } get nextSibling() { return null; }
     setAttribute(a, v) { this.attrs[a] = String(v); } get textContent() { return this.childNodes.map((k) => (k.nodeType === 3 ? k.data : k.textContent)).join(''); }
     set textContent(v) { this.childNodes = v ? [{ nodeType: 3, data: String(v) }] : []; } set innerHTML(_) { throw new Error('innerHTML usado'); } }
   const d2 = { createElement: (t) => new N(t), createTextNode: (t) => ({ nodeType: 3, data: String(t) }) };
+  const spans = (n, out = []) => { for (const k of n.childNodes || []) { if (k.className === 'na-asst-code') out.push(k); if (k.childNodes) spans(k, out); } return out; };
   const txt = 'Factura B001-00000123 y guía T001-00012345, serie 0001-00012345; fecha 2024-12345 y F001 suelto.';
   for (const step of [1, 2, 3, 7, 47, 999]) { const host = new N('div'); const r = C.createReplyRenderer(d2, (n) => host.appendChild(n)); for (let i = 0; i < txt.length; i += step) r.push(txt.slice(i, i + step)); r.finish();
-    const out = host.textContent; assert.equal(out, txt.replace(/(B001|T001|0001)-/g, '$1\u2011'), 'trozos de ' + step + ': ' + out); }
-  void doc;
+    const out = host.textContent; assert.equal(out, txt, 'trozos de ' + step + ': ' + out); assert.ok(out.includes('B001-00000123') && !out.includes('\u2011'));
+    assert.deepEqual(spans(host).map((x) => x.textContent), ['B001-00000123', 'T001-00012345', '0001-00012345'], 'trozos de ' + step);
+    for (const sp of spans(host)) { assert.equal(sp.tagName, 'SPAN'); assert.equal(sp.childNodes.length, 1, 'una sola span por serie'); } }
 });

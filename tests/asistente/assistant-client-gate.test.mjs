@@ -324,7 +324,7 @@ test('pantalla de la tarjeta: «Pedir de nuevo», sin PIN ni cabecera de aprobac
   const fs = await import('node:fs');
   const ui = fs.readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   assert.match(ui, /data-again hidden>Pedir de nuevo</);
-  assert.match(ui, /C\.confirmFailureView\(r\)/);
+  assert.match(ui, /C\.confirmFailureView\(r, \{ editable: need \? need\.names : \[\], type: p\.type \}\)/);
   assert.ok(!/approvals|pinEl|verifyOwnerPin/.test(ui), 'la tarjeta no pide PIN');
   const cr = ui.slice(ui.indexOf('async function confirmRemote'), ui.indexOf('// ---------- Funciones existentes del POS'));
   assert.ok(cr.length > 100 && !/x-owner-approval/.test(cr), 'confirm no manda aprobación (Configuración sí la usa, con PIN)');
