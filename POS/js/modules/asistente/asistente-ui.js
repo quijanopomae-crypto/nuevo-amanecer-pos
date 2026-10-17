@@ -605,7 +605,9 @@
       if (!d.ok && ACCESS_LOST[d.error]) { accessLost(d.error); return; }
       if (!d.ok && d.error === 'forbidden_document') { levelLowered(); errMsg('forbidden_document'); setState('error', 2600); return; }
       if (!d.ok) { errMsg(d.error, null, [text, image]); setState('error', 2600); return; }
-      history.push({ role: 'user', content: body.text || 'Foto' }, { role: 'assistant', content: d.reply });
+      // Turnos firmados por el servidor (texto exacto + firma). Sin firma, el servidor los descarta en un aparato de empleado.
+      if (Array.isArray(d.turns) && d.turns.length === 2) history.push({ role: 'user', content: d.turns[0].content, sig: d.turns[0].sig }, { role: 'assistant', content: d.turns[1].content, sig: d.turns[1].sig });
+      else history.push({ role: 'user', content: body.text || 'Foto' }, { role: 'assistant', content: d.reply });
       // El texto definitivo del servidor reemplaza al que se fue pintando (puede cambiar si una tarjeta se quitó). Tarjetas: SOLO de final.
       // Si es el mismo texto no se toca (nada se mueve). Las tarjetas van DEBAJO del texto terminado: lo ya leído no se desplaza;
       // si la persona estaba abajo se baja, pero nunca más allá del inicio de la respuesta (si la tarjeta no entra, sale «Ver nuevo»).
@@ -668,6 +670,7 @@
     lastPing = Date.now();
     var hadUi = !!rootEl, offNow = false;
     // Corto (3 s) y sin bloquear nada: con mala señal se corta (timeout del pedido) y queda lo que ya había.
+    var prevRole = access ? access.role : null;
     pinging = post('/auth/assistant/chat', { ping: true }, null, PING_TIMEOUT_MS).then(function (d) {
       if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level, vision: d.vision !== false }; adminOff = false; }
       else if (d && (d.status === 403 || d.status === 401 || d.status === 404)) { access = null; offNow = d.error === 'assistant_off' && d.reason !== 'sin_rol'; }
@@ -677,6 +680,9 @@
       return access;
     }, function () { lastPing = 0; return access; }).then(function (a) {
       pinging = null;
+      // Cambió el rol (dueño -> empleado o al revés) o se cerró la sesión: fuera la charla anterior (historial y mensajes en pantalla).
+      // La charla vive solo en memoria (no hay copia en localStorage/sessionStorage); se arma de nuevo vacía.
+      if (prevRole && (!access || access.role !== prevRole) && (rootEl || panelEl || history.length)) dropUi();
       if (isAdmin()) { if (!doc.querySelector('.na-asst-root')) mount(); else syncPanelForAccess(); }
       else if (rootEl || panelEl) { dropUi(); if (hadUi && offNow) posNotice(OFF_NOTICE); } // ya no tiene asistente: fuera la UI (no solo oculta)
       renderHero(); if (rootEl) applyPause(); decorateConfig(); decorateRegister();

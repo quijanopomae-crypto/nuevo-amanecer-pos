@@ -122,6 +122,7 @@ const SALE_STOP = '(?<!(?:\\bsin|\\bno|\\bni)\\s+(?:es\\s+(?:el\\s+)?)?)(?:pvp' 
   '|(?<!(?:proveedor|nos)\\s+)se\\s+vende\\s+a' + NOT_LETTER + '|(?:lo\\s+)?vendemos\\s+a' + NOT_LETTER + '|vendo\\s+a' + NOT_LETTER + ')';
 const STOP_Y = new RegExp('(?:' + SALE_STOP + ')', 'iy');
 const OWNER_WORD_Y = new RegExp(OWNER_WORD, 'iy'), BUY_WORD_Y = new RegExp(BUY_WORD, 'iy');
+const ARTICLE_RE = /^(?:el|la|los|las|lo|un|una|unos|unas|tu|tus|su|sus|mi|mis|nuestr[oa]s?|vuestr[oa]s?|este|esta|estos|estas|ese|esa|esos|esas|del|al)$/i;
 const OWNER_MODIFIER = /^(?:brut[oa]s?|net[oa]s?|total(?:es)?|unitari[oa]s?|mensual(?:es)?|anual(?:es)?|real(?:es)?|estimad[oa]s?)$/i;
 // Palabra del dueño NEGADA («No tengo el costo», «No sé el costo», «sin dato de costo», «desconozco el margen»): zona negada por el resto
 // de esa frase Y la frase/línea siguiente (Bot 5: «No sé el costo.\nEra S/ 1.80» se tapa). En la zona TODO monto se tapa salvo detrás de una
@@ -150,15 +151,20 @@ const SALE_CELL_RE = /^\s*(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?ve
 const isSaleCell = (c) => SALE_CELL_RE.test(String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 // Encabezado de venta en una tabla con presentación del dueño (Bot 5 sobre 1c17310c): acepta «PVP (S/)», «Precio de venta S/», «P. venta (S/)»,
 // «**Venta**»…; nunca si nombra al dueño («Costo de venta», «Venta (costo)», «P. venta / costo»). «Precio» solo: venta SOLO si otra columna
-// del encabezado es del dueño (Costo, P. compra) o, sin columna del dueño, si la presentación fue negada; si no, se tapa (a prueba de fallas).
+// «Precio» solo: venta, SALVO que la misma tabla tenga una columna del dueño (Costo, P. compra): ahí se tapa (pedido del 17-10, a prueba de fallas).
 const SALE_HDR_RE = /^(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?venta|venta|precio)$/;
 const normCell = (c) => String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function saleHeader(text, ownerCol, neg) {
   const t = normCell(text).replace(/\(?\s*(?:s\/\.?|soles|pen)\s*\)?/g, ' ').replace(/[()[\]:*_#]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t || OWNER_HEADER_RE.test(t) || !SALE_HDR_RE.test(t)) return false;
-  return t === 'precio' ? !!(ownerCol || neg) : true;
+  return t === 'precio' ? !ownerCol : true;
 }
 const LIST_NUM_Y = /\d{1,3}[.)][ \t]/y;
+// Solo para PRESENTAR una tabla o lista (Bot 2 sobre 1c17310c): «Resumen de compras:», «Compras de hoy:», «Factura/Boleta del proveedor».
+// En el texto normal «compras» y «proveedor» NO son palabras del dueño.
+const INTRO_WORD_Y = new RegExp('(?:compras?|proveedor(?:es)?)' + NOT_LETTER, 'iy');
+// Título propio de precios tras una línea en blanco («Precios de hoy:», «Precios:», «Lista de precios»): corta la presentación del dueño.
+const SALE_TITLE_Y = new RegExp('(?:precios?|pvp)' + NOT_LETTER, 'iy');
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
   if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
@@ -198,9 +204,9 @@ function createAmountLayer(out) {
   // palabra del dueño (negada o no), la tabla o lista que empieza en la línea siguiente tapa sus montos (tabla: salvo columnas de venta; lista:
   // salvo ítems con etiqueta de venta). Se decide con los primeros caracteres de la línea (| , tabulador antes de un monto, -, *, •, «1.», «1)»):
   // NO se retiene nada extra; si la línea no es tabla ni lista, sigue como texto normal.
-  let sent = { has: false, owner: false, neg: false }, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
-  const endSentence = () => { if (sent.has) { ring.push(sent); if (ring.length > 3) ring.shift(); } sent = { has: false, owner: false, neg: false }; };
-  const introOn = () => ring.some((x) => x.owner) || sent.owner;
+  let sent = { has: false, owner: false, neg: false, intro: false }, lineOwner = false, lineSale = false, lastBlank = false, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
+  const endSentence = () => { if (sent.has) { ring.push(sent); if (ring.length > 3) ring.shift(); } sent = { has: false, owner: false, neg: false, intro: false }; };
+  const introOn = () => ring.some((x) => x.owner || x.intro) || sent.owner || sent.intro;
   const introNeg = () => ring.some((x) => x.neg) || sent.neg;
   // texto de una celda de encabezado: solo si es corta (<= 48); una más larga no cuenta como venta (igual en partes y entero)
   const cellText = (from, to) => (to - from <= 48 && from >= base ? buf.slice(from - base, to - base) : '');
@@ -238,22 +244,28 @@ function createAmountLayer(out) {
   // Monto sin palabra del dueño delante (Bot 3): espera hasta que termine la frase (. ; ! ? salto de línea). Si en la frase aparece
   // una palabra del dueño, se tapa; si aparece una etiqueta de venta o termina la frase, sale. Tope OWNER_RETRO caracteres: si se llega
   // al tope sin terminar la frase, se tapa (a prueba de fallas).
-  let memo = { e: -1, i: 0, nl: 0 }; // sigue donde quedó la vez anterior (lo ya mirado no cambia)
+  // Monto al FINAL de una línea (Bot 2: «Precio S/ 1.80\n(lo que pagué)»): mira además los primeros 20 caracteres con texto de la línea
+  // siguiente (o hasta su salto), dentro del tope; si ahí empieza una frase del dueño se tapa, si no sale enseguida (velocidad, Bot 3).
+  // eol: aún solo espacios tras el monto; peek: caracteres con texto que quedan por mirar en la línea siguiente.
+  let memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; // sigue donde quedó la vez anterior (lo ya mirado no cambia)
   // sale: monto con etiqueta de venta (zona negada, celda de tabla, lista): termina también en el fin de la celda (cell) y no lo tapa una
   // frase del dueño que mira hacia ADELANTE y viene tras «y» («Precio S/ 2.50 y lo traje a S/ 1.80»: «lo traje a» es del 1.80), ni otro monto.
   const retro = (e, final, nlMax = 0, cell = false, sale = false) => {
-    let nl = memo.e === e ? memo.nl : nlMax;
-    for (let i = memo.e === e ? memo.i : e; ; i++) {
+    const same = memo.e === e; let nl = same ? memo.nl : nlMax, eol = same ? memo.eol : true, peek = same ? memo.peek : -1;
+    for (let i = same ? memo.i : e; ; i++) {
       if (i >= e + OWNER_RETRO) return true;
-      if (i >= end()) { memo = { e, i, nl }; return final ? false : NEED; }
+      if (i >= end()) { memo = { e, i, nl, eol, peek }; return final ? false : NEED; }
       const c = ch(i);
       if (cell && (c === '|' || c === '\t')) return false;
-      if (c === '\n' && nl > 0) { nl--; continue; }
+      if (c === '\n' && nl > 0) { nl--; eol = false; continue; }
+      if (c === '\n' && eol && peek < 0) { eol = false; peek = 20; continue; }
+      // el presupuesto se descuenta al TERMINAR el carácter (si se espera más texto, al volver no se descuenta dos veces)
+      const nb = c !== ' ' && c !== '\t' && c !== '\r' && c !== '\n'; if (nb) { eol = false; if (peek === 0) return false; }
       if (c === ';' || c === '!' || c === '?' || c === '\n') return false;
       if (sale && amountStart(i) && sticky(AMOUNT_Y, i)) return false;
-      if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i, nl }; return NEED; } if (!isDigit(n)) return false; continue; }
+      if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i, nl, eol, peek }; return NEED; } if (!isDigit(n)) return false; if (peek > 0) peek--; continue; }
       if (isLetter(c) && !isLetter(ch(i - 1))) {
-        if (!final && end() < wordNeed(i)) { memo = { e, i, nl }; return NEED; }
+        if (!final && end() < wordNeed(i)) { memo = { e, i, nl, eol, peek }; return NEED; }
         const ow = sticky(OWNER_WORD_Y, i), bw = ow ? 0 : sticky(BUY_WORD_Y, i);
         if ((ow && !nameWord(i)) || bw) {
           if (sale && /(?:^|[^a-záéíóúñü])y\s+$/i.test(buf.slice(e - base, i - base)) && (bw || /\sa$/i.test(buf.slice(i - base, i + ow - base)))) return false;
@@ -262,6 +274,7 @@ function createAmountLayer(out) {
         if (sticky(STOP_Y, i)) return false;
         const ab = sticky(ABBR_Y, i); if (ab) i += ab - 1;
       }
+      if (nb && peek > 0) peek--;
     }
   };
   // Parte de un nombre propio (Bot 2: «Distribuidora Inversiones Lima»): con mayúscula y detrás de otra palabra con mayúscula, en la
@@ -270,7 +283,10 @@ function createAmountLayer(out) {
     let e = i; while (isLetter(ch(e))) e++; let n = e; while (ch(n) === ' ') n++; let ne = n; while (isLetter(ch(ne))) ne++;
     if (n > e && OWNER_MODIFIER.test(buf.slice(n - base, ne - base))) return false; // «Margen Bruto», «Ganancia Neta»: siguen siendo del dueño
     let j = i; if (ch(j - 1) !== ' ') return false; j--; while (ch(j - 1) === ' ') j--;
-    let w = j; while (isLetter(ch(w - 1))) w--; const f = ch(w); return w < j && !!f && f !== f.toLowerCase(); };
+    let w = j; while (isLetter(ch(w - 1))) w--; const f = ch(w);
+    // «El Margen», «Tu Inversión», «La Ganancia»: detrás de un artículo o posesivo NO es nombre propio (Bot 2)
+    if (w < j && ARTICLE_RE.test(buf.slice(w - base, j - base))) return false;
+    return w < j && !!f && f !== f.toLowerCase(); };
   const run = (final) => {
     for (;;) {
       if (ctx && k > ctx.limit && !ctx.seg) ctx = null; // la ventana de una palabra del dueño dura 60 caracteres Y hasta el fin de su frase
@@ -297,13 +313,15 @@ function createAmountLayer(out) {
         if (!final && end() < wordNeed(k)) break;
         let n;
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
-        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k }; sent.owner = true; if (neg) sent.neg = true;
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k }; sent.owner = true; lineOwner = true; if (neg) sent.neg = true;
           ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n, at: k }; pass(k + n); continue; }
-        if ((n = sticky(BUY_WORD_Y, k))) { sent.owner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k))) { sent.owner = true; lineOwner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
         // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
         if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true, at: k }; pass(k + n); continue; }
         if (negZone && !(ctx && !ctx.sale && !ctx.neg) && (n = negPrice(k))) { ctx = { limit: k + n, sale: true, at: k, np: true }; pass(k + n); continue; } // el monto va justo detrás
+        if (sticky(INTRO_WORD_Y, k)) sent.intro = true; // solo cuenta como presentación de tabla/lista
+        if (sticky(SALE_TITLE_Y, k)) lineSale = true;
         if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
         if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
       }
@@ -359,7 +377,11 @@ function createAmountLayer(out) {
               tbl.sale = new Set(tbl.hdr.map((h, i) => (saleHeader(h || '', oc, tbl.neg) ? i : -1)).filter((i) => i >= 0)); }
             tbl.row++; tbl.cell = 0; tbl.from = k + 1; }
         } else if (lineDelim) { mode = null; ring = []; } // una fila de tabla no es presentación (su «Costo» lo ven las columnas)
-        else if (mode !== 'list' && !blank) mode = introOn() ? 'pend' : null; // línea de texto: ¿presenta algo del dueño?
+        else if (mode !== 'list' && !blank) {
+          if (lastBlank && lineSale && !lineOwner) { ring = []; if (ctx && !ctx.sale) ctx = null; } // «\n\nPrecios de hoy:» corta la presentación y la ventana del dueño (Bot 2/4/5)
+          mode = introOn() ? 'pend' : null; // línea de texto: ¿presenta algo del dueño?
+        }
+        if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false;
         lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false;
       }
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
@@ -377,8 +399,8 @@ function createAmountLayer(out) {
     if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
-  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0, nl: 0 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
-    sent = { has: false, owner: false, neg: false }; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
+  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
+    sent = { has: false, owner: false, neg: false, intro: false }; lineOwner = false; lineSale = false; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
   return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }
@@ -947,6 +969,22 @@ const TYPE_TOOL = Object.freeze({ compra: 'preparar_compra', precio: 'proponer_c
 const enc = new TextEncoder();
 function b64url(bytes) { let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function fromB64url(s) { const bin = atob(String(s).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(bin, (c) => c.charCodeAt(0)); }
+// Historial firmado (pedido del 17-10): el servidor firma cada turno que devuelve (HMAC con ASSISTANT_CONFIRM_SECRET sobre versión, clase de
+// sesión owner/empleado, aparato/sesión, rol del turno y texto exacto). En un pedido de EMPLEADO solo se usan pares (persona, respuesta)
+// firmados como empleado para ESE aparato; un turno sin firma, con firma de dueño o de otro aparato se descarta con su par (falla cerrado).
+const TURN_V = 't1';
+export async function signTurn(secret, cls, principal, role, content) { return hmac(secret, JSON.stringify([TURN_V, cls, String(principal ?? ''), role, String(content ?? '')])); }
+function sameStr(a, b) { if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
+export async function verifiedEmployeeHistory(history, secret, principal) {
+  if (!secret) return [];
+  const ok = async (m) => !!(m && m.sig && typeof m.raw === 'string' && sameStr(m.sig, await signTurn(secret, 'empleado', principal, m.role, m.raw)));
+  const out = [];
+  for (let i = 0; i < history.length; i++) {
+    const u = history[i], a = history[i + 1];
+    if (u && u.role === 'user' && a && a.role === 'assistant') { if ((await ok(u)) && (await ok(a))) out.push(u, a); i++; }
+  }
+  return out;
+}
 async function hmac(secret, data) {
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return b64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(data))));
@@ -1104,8 +1142,9 @@ export function parseChatBody(body) {
   }
   if (!text && !image) return { error: 'empty_message' };
   const history = (Array.isArray(body.history) ? body.history : []).slice(-ASSISTANT_LIMITS.maxHistory)
+    .map((m) => (m && typeof m === 'object' ? { ...m, raw: typeof m.content === 'string' ? m.content : null, sig: typeof m.sig === 'string' ? m.sig.slice(0, 128) : null } : m))
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-    .map((m) => ({ role: m.role, content: cleanText(m.content, ASSISTANT_LIMITS.maxMessageChars) })).filter((m) => m.content);
+    .map((m) => ({ role: m.role, content: cleanText(m.content, ASSISTANT_LIMITS.maxMessageChars), raw: m.raw, sig: m.sig })).filter((m) => m.content);
   return { text, image, history, context: body.context, stream: body.stream === true };
 }
 
@@ -1203,6 +1242,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (!configured) return json({ error: 'assistant_not_configured', message: 'asistente no configurado' }, 503);
   if (role !== 'owner' && body && body.image != null) return json(IMAGE_OWNER_ONLY, 403); // respaldo: nunca llega a parseChatBody
   const parsed = parseChatBody(body);
+  const turnSecret = env.ASSISTANT_CONFIRM_SECRET && String(env.ASSISTANT_CONFIRM_SECRET).length >= 16 ? env.ASSISTANT_CONFIRM_SECRET : null;
+  if (!parsed.error && role !== 'owner') parsed.history = await verifiedEmployeeHistory(parsed.history || [], turnSecret, auth?.principalId);
   if (parsed.error) return json({ error: parsed.error }, parsed.error === 'image_too_large' ? 413 : 400);
   // Foto con un modelo que no lee fotos: «no disponible», sin cupo y sin llamar al proveedor.
   if (parsed.image && cfg.ok && !cfg.vision) return json(IMAGE_UNSUPPORTED, 422); // respaldo (el corte de arriba ya no deja llegar aquí)
@@ -1334,7 +1375,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos.
   await (deps.audit || auditWrite)(deps.db, [...proposals.map((p) => ({ device_id: auth.principalId, role, tool: AUDIT_TOOL[p.type] || TYPE_TOOL[p.type] || p.type, type: p.type, outcome: 'proposed', card_id: p.id })),
     ...dropped.map((d) => ({ device_id: auth.principalId, role, tool: d.tool, outcome: 'dropped:' + d.dropped }))]);
-  return json({ ok: true, mode, role, server_now: now, reply, proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
+  // Turnos firmados para el historial del aparato (el celular los guarda tal cual y los devuelve con su firma).
+  const cls = role === 'owner' ? 'owner' : 'empleado', userTurn = parsed.text || 'Foto';
+  const turns = secret ? [{ role: 'user', content: userTurn, sig: await signTurn(secret, cls, auth?.principalId, 'user', userTurn) }, { role: 'assistant', content: reply, sig: await signTurn(secret, cls, auth?.principalId, 'assistant', reply) }] : [];
+  return json({ ok: true, mode, role, server_now: now, reply, turns, proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
     payload_bytes: bytes, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 

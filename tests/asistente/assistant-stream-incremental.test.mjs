@@ -317,8 +317,6 @@ const T15_MASK = [
   ['No sé el costo.\nAquí la lista:\n| Producto | Monto |\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
   ['Te paso costo y precio:\n| Producto | Costo | PVP |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.20']],
   ['Lo que pagué por cada uno:\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |\n| Azúcar | S/ 2.90 |', ['1.80', '3.10', '2.90']],
-  // CAMBIO (Bot 5 sobre 1c17310c): se miran hasta 3 frases antes de la tabla y «Precio» solo no es venta sin columna del dueño ni negación
-  ['El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
   // «Precio S/» en la zona negada espera el fin de su frase (y un salto de línea): dueño detrás lo tapa
   ['No sé el costo.\nPrecio S/ 1.80 (lo que pagué)', ['1.80']], ['No sé el costo.\nPrecio: S/ 1.80, lo que me costó', ['1.80']],
   ['No sé el costo.\nPrecio S/ 1.80\n(lo que pagué)', ['1.80']], ['No sé el costo. El precio es S/ 1.80, lo que me costó', ['1.80']],
@@ -329,6 +327,8 @@ const T15_SHOW = [
   ['El costo no lo tengo, pero esta es la lista:\n| Producto | P. venta |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 |', ['1.80', '3.10']],
   ['Te paso los costos:\n| Producto | Venta | Precio venta | Precio de venta |\n| Galleta | S/ 2.00 | S/ 2.10 | S/ 2.20 |', ['2.00', '2.10', '2.20']],
   ['El costo es alto este mes.\n\nOtra cosa. Aquí la lista de precios:\n| Producto | PVP |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
+  // 17-10: una línea en blanco + título propio de precios corta la presentación del dueño (vuelve a verse, como en 1c17310c)
+  ['El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
   ['| Costo | S/ 1.80 |\n| PVP | S/ 2.50 |', ['PVP', '2.50']], ['| Producto | Costo |\n|---|---|\n| Galleta | S/ 1.20 |\n| x | PVP |', ['PVP']],
   ['No sé el costo.\nPrecio S/ 2.50\nGracias', ['2.50']], ['No sé el costo. Precio: S/ 2.50. Lo que pagué no lo sé.', ['2.50']],
   ['Pagamos con Yape y salió bien, PVP S/ 2.50', ['2.50']], ['El cliente pagó S/ 2.50', ['2.50']],
@@ -353,16 +353,18 @@ const T16_MASK = [
   ['me salió a S/ 1.80', ['1.80']], ['nos salieron a S/ 1.80 cada una', ['1.80']], ['te salió a S/ 1.80', ['1.80']], ['lo compraste a S/ 1.80', ['1.80']], ['las trajimos a S/ 1.80', ['1.80']],
   ['No sé el costo.\nPrecio S/ 1.80\n\n(lo que pagué)', ['1.80']], ['No sé el costo.\nPrecio S/ 1.80\n(lo que pagué)', ['1.80']],
   ['Te paso los costos:\n| Producto | Costo de venta | Venta (costo) | P. venta / costo |\n|---|---|---|---|\n| Galleta | S/ 1.80 | S/ 1.90 | S/ 2.00 |', ['1.80', '1.90', '2.00']],
-  ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
   // listas tras una presentación del dueño (Bot 5)
   ['Te paso los costos:\n- Galleta: S/ 1.80\n- Arroz: S/ 3.10', ['1.80', '3.10']], ['Lo que pagué:\n1. Galleta S/ 1.80\n2. Arroz S/ 3.10', ['1.80', '3.10']],
   ['Te paso los costos:\n1) Galleta S/ 1.80\n2) Arroz S/ 3.10', ['1.80', '3.10']], ['Te paso los costos:\n* Galleta S/ 1.80\n• Arroz S/ 3.10', ['1.80', '3.10']],
   ['Te paso los costos:\n\n- Galleta: S/ 1.80\n\n- Arroz: S/ 3.10', ['1.80', '3.10']], ['Te paso los costos:\n- PVP: S/ 2.50 (lo que pagué)', ['2.50']],
-  ['Costos de compra\nGalleta\tS/ 1.80\nArroz\tS/ 3.10', ['1.80', '3.10']]];
+  ['Costos de compra\nGalleta\tS/ 1.80\nArroz\tS/ 3.10', ['1.80', '3.10']],
+  // 17-10: con una columna del dueño en la misma tabla, «Precio» solo se tapa (antes se veía)
+  ['Te paso costo y precio:\n| Producto | Costo | Precio |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.20', '1.80']]];
 const T16_SHOW = [
   ['No sé el costo. Precio S/ 2.50 y lo traje a S/ 1.80', ['2.50']], ['te sale a S/ 2.50', ['2.50']], ['El cliente pagó S/ 2.50', ['2.50']],
   ['Te paso los costos:\n| Producto | PVP (S/) | Precio de venta S/ | P. venta (S/) | **Venta** |\n|---|---|---|---|---|\n| Galleta | S/ 1.80 | S/ 1.90 | S/ 2.00 | S/ 2.10 |', ['1.80', '1.90', '2.00', '2.10']],
-  ['Te paso costo y precio:\n| Producto | Costo | Precio |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.80']],
+  // 17-10: «Precio» solo es venta salvo que la misma tabla tenga una columna del dueño
+  ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
   ['No tengo el costo, esta es la lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
   ['Lista de hoy:\n- Galleta: S/ 1.80\n- Arroz: S/ 3.10', ['1.80', '3.10']], ['Te paso los costos:\n- Galleta: S/ 1.80\n- PVP: S/ 2.50', ['2.50']],
   ['Te paso los costos:\n- Galleta: S/ 1.80\n- Precio de venta S/ 2.60', ['2.60']], ['Te paso los costos:\n- Galleta: S/ 1.80\n\nListo, el precio de venta es S/ 5.00', ['5.00']],
@@ -396,4 +398,38 @@ test('16) retención: una presentación del dueño ya no retiene la línea sigui
 test('16) lista de 480 filas sin presentación del dueño: 0 nombres tapados, montos de venta visibles', () => {
   const t = 'Lista de precios:\n' + Array.from({ length: 480 }, (_, i) => '- Arroz Costeño ' + i + ': S/ 2.50\n').join('');
   const w = redactOwnerData(t); assert.equal(w, t); assert.equal(streamBig(t, EMP, 5).text, t);
+});
+
+// ---------- 17. Bot 2 sobre 1c17310c: monto al final de línea + dueño en la línea siguiente; títulos de compras/proveedor; «El Margen» ----------
+const T17_MASK = [
+  // entrada exacta de Bot 2, sin y con negación delante
+  ['Precio S/ 1.80\n(lo que pagué)', ['1.80']], ['No sé el costo.\nPrecio S/ 1.80\n(lo que pagué)', ['1.80']], ['Precio S/ 1.80\nEso es lo que pagué', ['1.80']],
+  ['Galleta S/ 1.80  \n   (me costó eso)', ['1.80']], ['Galleta S/ 1.80\nlo compré a ese precio', ['1.80']],
+  // títulos que presentan compras/proveedor antes de tabla o lista (barras, tabuladores, viñetas)
+  ['Resumen de compras:\n| Producto | Cantidad | Total |\n|---|---|---|\n| Arroz | 10 | S/ 18.00 |\n| Azúcar | 12 | S/ 21.60 |', ['18.00', '21.60']],
+  ['Factura del proveedor\n| Producto | Cant. | Importe |\n|---|---|---|\n| Arroz | 10 | S/ 18.00 |', ['18.00']], ['Factura del proveedor\nProducto\tImporte\nArroz\tS/ 18.00', ['18.00']],
+  ['Boleta del proveedor\n* Arroz S/ 18.00', ['18.00']], ['Compras de hoy:\n- Arroz S/ 18.00\n- Azúcar S/ 21.60', ['18.00', '21.60']],
+  ['Resumen de compras de hoy.\nDetalle:\n| Producto | Total |\n| Arroz | S/ 18.00 |', ['18.00']], ['Proveedores:\n1. Arroz S/ 18.00', ['18.00']],
+  // mayúscula tras artículo o posesivo
+  ['El Margen es S/ 0.70', ['0.70']], ['Tu Inversión es S/ 300.00', ['300.00']], ['La Ganancia: S/ 3.00', ['3.00']], ['Nuestra Utilidad fue S/ 50.00', ['50.00']],
+  ['Te paso los costos.\nAquí va:\n| Producto | Monto |\n| Galleta | S/ 1.80 |', ['1.80']]];
+const T17_SHOW = [
+  ['Precio S/ 1.80\nGracias por tu compra, vuelve pronto.', ['1.80']], ['Galleta S/ 1.80\nArroz S/ 2.50\nAzúcar S/ 3.10', ['1.80', '2.50', '3.10']],
+  ['Las compras de hoy fueron buenas, el arroz se vende a S/ 2.50', ['2.50']], ['El proveedor llegó tarde. Arroz a S/ 2.50', ['2.50']], ['Compré pan. Arroz S/ 2.50', []],
+  ['Distribuidora Inversiones Lima vende Arroz a S/ 2.50', ['2.50']], ['Arroz Costeño a S/ 2.50', ['2.50']],
+  ['El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos.\n\nPrecios de hoy:\n- Galleta S/ 1.80', ['1.80']],
+  ['El costo subió.\n\nLista de precios\n- Galleta S/ 1.80', ['1.80']], ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']]];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('17) trozos de ' + n + ': monto al final de línea con dueño en los primeros 20 caracteres de la siguiente; títulos de compras/proveedor; «El Margen»; título de precios corta la presentación', () => {
+    for (const [t, hide] of T17_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, vs] of T17_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+  });
+}
+test('17) retención: lista de 480 líneas de precios (un monto por línea) sin nada tapado y con poca retención; dueño en la línea siguiente espera a lo más ~20 caracteres', () => {
+  const list = 'Lista de precios:\n' + Array.from({ length: 480 }, (_, i) => 'Producto ' + i + ' S/ 1.80\n').join('');
+  assert.equal(redactOwnerData(list), list); assert.equal(streamBig(list, EMP, 5).text, list);
+  const h = held(list); assert.ok(h.max <= 45, 'retiene ' + h.max);
+  const plain = Array.from({ length: 480 }, (_, i) => 'Galleta ' + i + ': S/ 1.80\n').join(''); assert.equal(redactOwnerData(plain), plain); assert.ok(held(plain).max <= 45);
+  // monto al final de línea: 20 caracteres con texto de la siguiente + lo que hace falta para decidir una frase que empieza ahí («lo que pagué», hasta 36)
+  const eol = 'Precio S/ 1.80\n' + FILL(4000); const he = held(eol); assert.ok(he.max <= 80, 'monto al final de línea: ' + he.max); assert.ok(he.last <= 40);
 });
