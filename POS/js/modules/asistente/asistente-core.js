@@ -178,7 +178,7 @@
     return { ok: true };
   }
 
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]; }); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '\x26amp;', '<': '\x26lt;', '>': '\x26gt;', '"': '\x26quot;', "'": '\x26#39;' }[c]; }); } // \x26 = «&» (mismo texto; así una herramienta que decodifica entidades no puede romperlo)
   function soles(n) { return n == null || !isFinite(n) ? '-' : 'S/ ' + Number(n).toFixed(2); }
 
   // ---------- Documentos internos (solo lectura, armados en el aparato con datos que el POS ya tiene) ----------
