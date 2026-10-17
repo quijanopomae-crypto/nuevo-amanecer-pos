@@ -519,10 +519,58 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 
 - Nocturno: `body.dark input.na-asst-need:not(...)×4` (y `.ok`) gana a `theme-dark.css` (`body.dark input:not(...)×4`): borde #f87171 (alerta) / #4ade80 (listo), contraste ≥ 3 sobre #10241a y #07130c (antes salía gris, 1.57).
 - Los 0/1 de la mascota (`.na-asst-bits`) llevan `aria-hidden="true"`.
-- Al pintar (solo en pantalla) la serie de un comprobante usa un guion que no corta (U+2011): «B001‑00000123» no se parte a 360. El texto del mensaje, el historial y la tarjeta no cambian (la tarjeta de compra usa sus propios campos).
+- ~~Serie con U+2011~~ (reemplazado sobre 58200f60, ver abajo: la serie va en una span nowrap con el guion ASCII).
 
 ### Pruebas
 
 - `assistant-followups-84a49517.test.mjs` (ampliación): 12 cantidades × 6 formas × 3 finales; ganancia/margen/utilidad × 13 formas; 10 comienzos nuevos × 9 formas y 6 visibles; tabla de venta con 7 primeras celdas; claves en los dos roles; tapa de más aceptado. Todo entero y en partes de 1, 2, 3, 7, 13 y 47.
-- `assistant-card-completar.test.mjs`: parte exacta en la tarjeta; servidor: 422 sin `manual` / vacío / con máscara / no texto / incompleto; 400 con claves fuera de `completar` (precio, cantidad, producto, product_id, lineas, completar, fecha), `manual` no objeto, o sin `completar`; 403 sesión de empleado; 409 si lo escrito va dentro de la propuesta; 200 con `manual` y valores en la propuesta aplicada; respuesta perdida + reintento → `already_confirmed`; máscara en proveedor/documento/título/filas y en otra tarjeta; celular (parte exacta de inicio, `manual` fuera de la propuesta, puerta pendiente con `fields`, aviso junto al campo, foco, lo escrito queda, «Guardando…», corte a medias + reintento con lo escrito en «Nueva compra», sin texto técnico); Nocturno (especificidad y contraste), `aria-hidden` de la mascota y serie con U+2011 en trozos de 1/2/3/7/47.
+- `assistant-card-completar.test.mjs`: parte exacta en la tarjeta; servidor: 422 sin `manual` / vacío / con máscara / no texto / incompleto; 400 con claves fuera de `completar` (precio, cantidad, producto, product_id, lineas, completar, fecha), `manual` no objeto, o sin `completar`; 403 sesión de empleado; 409 si lo escrito va dentro de la propuesta; 200 con `manual` y valores en la propuesta aplicada; respuesta perdida + reintento → `already_confirmed`; máscara en proveedor/documento/título/filas y en otra tarjeta; celular (parte exacta de inicio, `manual` fuera de la propuesta, puerta pendiente con `fields`, aviso junto al campo, foco, lo escrito queda, «Guardando…», corte a medias + reintento con lo escrito en «Nueva compra», sin texto técnico); Nocturno (especificidad y contraste), `aria-hidden` de la mascota y serie en span nowrap con «-» ASCII (sin U+2011) en trozos de 1/2/3/7/47.
 - `assistant-followups-6280deae.test.mjs`: D' con ganancia/margen ahora tapa los dos; «1. Arroz S/ 4.20\n2. Margen 30%» tapa el 4.20; «la clave del pin es 1234» tapa solo el valor; tarjeta B con la parte exacta.
+
+## Ampliación sobre 58200f60 (Bot 2 serie copiable; Bots 3/5 reenvío del confirm; Bot 5 ev-58200f60; Bot 4 tarjeta)
+
+### Serie de comprobante en pantalla (Bot 2, Bots 4/5)
+
+- El guion de la serie sigue siendo el ASCII «-» en el texto del DOM: copiar y pegar da el texto original (ya no hay U+2011 en ningún lado).
+- Cada serie (`\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b`, la misma regla de siempre) va entera en `<span class="na-asst-code">`, armada SOLO con `createElement` + `textContent` (`codeSpan` / `appendCoded`; nunca `innerHTML` ni plantillas: el texto viene del modelo). Etiquetas dentro o alrededor salen como texto; no se crea ningún otro elemento.
+- En partes: una serie que llega cortada entre trozos queda como texto hasta saber dónde termina (carácter siguiente o final de la respuesta) y recién ahí pasa a su span. Nunca dos spans para una serie, nunca otro guion. 9 dígitos (`F001-123456789`), `xB001-12`, `B001-12a` y fechas (`2024-12345`) no llevan span.
+- También en celdas de tabla, en las tarjetas de tabla (≤ 480 px) y en la nota proveedor · documento · fecha de la tarjeta de compra (`data-docnote`, se llena con `appendCoded`).
+- CSS: `.na-asst-code{white-space:nowrap;overflow-wrap:normal;word-break:keep-all;display:inline-block;max-width:100%;overflow-x:auto}`: el `overflow-wrap:anywhere` de la burbuja no corta dentro; una serie más ancha que la burbuja se desplaza dentro de su caja, nunca desborda. En tarjeta de tabla la celda con serie (`.na-asst-tvc`) baja bajo su etiqueta si no cabe al lado (`td{flex-wrap:wrap}`).
+- Chrome real (proxy muerto, 0 salidas): 360/375/412, claro y Nocturno, texto/tabla, partes de 1/3/47: cada serie en 1 renglón, dentro de la burbuja, sin desplazar; la burbuja sin desborde; la serie gigante (60 px) desplaza dentro de su caja.
+
+### Reenvío del confirm tras una respuesta perdida (Bots 3/5)
+
+- Al marcar la tarjeta usada se guardan, en el MISMO registro del almacén de uso (`pos_settings`, clave `internal:asst:u:<n>`, sin migración): `s` = hash de la sesión dueño que confirmó (sesión del POS; si no hay, credencial; si no, aparato) y `rh` = hash de propuesta firmada + operation_id + lo escrito (normalizado) + filas aceptadas/quitadas. Ni la sesión ni lo escrito quedan en claro.
+- Reenvío de ESA sesión con los mismos datos → 200 `{ ok, already_confirmed:true, replay:true, operation_id, proposal }` con la MISMA propuesta aplicada: el dueño abre «Nueva compra» llena igual (respuesta cortada a medias + reintento probado de punta a punta).
+- Otra sesión (mismo aparato), otro «manual», otras filas, sin «manual» o un registro viejo sin hashes → 409 `{ error:'already_confirmed', already_confirmed:true, operation_id }`, sin propuesta ni lo escrito. Otro aparato → 403 `other_device` (como antes). Empleado → 403.
+- Dos envíos a la vez: el que pierde la escritura condicional sigue la misma regla (misma sesión → reenvío; otra → 409).
+- Celular: 409 `already_confirmed` → nota corta «Esta compra ya se confirmó en otro aparato.» («Este cambio…» en otras tarjetas), sin abrir «Nueva compra» ni texto técnico.
+
+### Filtro del empleado (Bot 5, FALLAS 1 y 2)
+
+- Línea de TEXTO siguiente: además de los comienzos de antes, se quita «ese/esa/este/esta/es» (+ «es») (+ «el/la»), «mi», «de», «(», «-»: «Galleta S/ 1.80\nEsa es la utilidad: S/ 0.70», «Ese es el margen: S/ 0.70», «Esa es la ganancia S/ 0.70» tapan el 1.80. Un «El/La» suelto no cuenta («El costo lo ve el dueño.» se ve). Ganancia/margen/utilidad nunca sueltan el de arriba.
+- Tabla de VENTA con tabuladores (1.ª línea con tabulador, sin dígitos, sin columna del dueño y con PVP / P. venta / Venta / Precio de venta / Precio): sus filas no miran la línea siguiente; una fila cuya 1.ª celda (tras «(», «mi», «-», «1.», «esa es la»…) empieza con costo/margen/ganancia/utilidad tapa su monto y abre la regla fija (origen «col»): todas las filas con tabulador de abajo se tapan (`Arroz\tS/ 1.21`), igual que con «|».
+
+### Máscaras y tarjeta (Bot 5, FALLA menor 3 y 4)
+
+- `MASK_LEFT_RE` (servidor) y `MASK_LEFT` (celular): además `[*∗＊•●·]{2,}` pegado a dígitos, `[∗＊•●·]{3,}`, `…\d`, `\bx{3,}\d`, `(oculto)`/`(omitido)`. «**negrita**» no es máscara. Cuentan en «manual» (422), en los campos de la propuesta (completar) y en el celular.
+- `cardPrefix`: la parte exacta nunca conserva una máscara (`F001-**345678 [oculto]` → `F001-`) ni una etiqueta pegada con guion, «(» o «/» (`F001-DNI`, `F001-RUC`, `F001-DNI ****5678` → `F001-`; `Ana (RUC ****` → `Ana`). `F001-0001` queda exacto.
+- /confirm no revisa `lineas[].nombre` de una línea CON `product_id` («Nueva compra» toma el producto de la base por su id): «Leche 12345678» → «Leche DNI ****5678» ya se puede confirmar. Una línea sin `product_id` y los demás campos de la línea sí se revisan.
+
+### PIN numérico (Bot 5, INFO; propuesta aceptada)
+
+- Un valor de 4-8 dígitos cuenta como PIN por palabra de enlace solo tras «pin», «clave» o «contraseña», a lo sumo 2 palabras después del enlace (más «es/era» o «:»/«=»), sin unidad detrás (unidades, und, uds, kg, g, gr, l, lt, ml, soles, S/, %, paquetes, cajas, bolsas) y sin «en/del/de/desde/hasta/por/al/a/para/y/o/año/el/la» justo antes. Valor con letras y dígitos (6+): hasta 5 palabras tras el enlace (Bot 5, casos-5820 F-clave: «La clave del wifi de la tienda: Zq9xK2mPw7» se tapa; antes 3). Dueño, empleado y lo que va al modelo; en partes, la espera de la etiqueta (`PIN_LINK_END`) cubre las mismas 5 palabras.
+- «clave de producto 4521», «El pin de la caja: 4321», «El pin de la caja es 4321» → tapados; «Producto clave de la semana 2500 unidades», «La clave del negocio en 2024…», «El token de la sesión del 2026 venció» → se ven.
+
+### Tarjeta en el celular (Bot 4)
+
+- Tras un 422 `fields_required`, el campo marcado conserva lo escrito pero no vuelve a contar como lleno: «Confirmar» sigue apagado hasta que ESE campo cambie.
+- 422 sin nada que arreglar en la tarjeta (un campo que no es de la tarjeta, p. ej. `lineas`, o fuera del límite sin filas para quitar) → kind `blocked`: «No se puede confirmar esta compra desde el asistente. Ábrala en Nueva compra.» (en ajuste, el mensaje del servidor) y solo «Cancelar» (Confirmar y «Pedir de nuevo» ocultos).
+- 403 `forbidden_role` al confirmar: manda el rol del servidor; no se mira el rol guardado en el aparato ni se reintenta. La tarjeta sale de la pantalla y la propuesta y lo escrito salen de la memoria (`gate.forget`, `wipeManual`); queda solo «Esta sesión ya no es de Admin. Vuelva a entrar como Admin y pida la compra de nuevo.» con «Cerrar».
+
+### Pruebas
+
+- `assistant-code-span-replay.test.mjs`: span de la serie en texto, tabla y tarjeta en trozos de 1/2/3/7/47 y entero; XSS (etiquetas alrededor/dentro: texto, 0 elementos fuera de la span, sin atributos); reenvío misma sesión (200, misma propuesta, hashes sin datos en claro), respuesta cortada + reintento de punta a punta («Nueva compra» llena), otra sesión / otro manual / otras filas / registro viejo → 409 sin propuesta, empleado 403, otro aparato 403, carrera; nota del celular.
+- `assistant-followups-58200f60.test.mjs`: sondas de Bot 5 (línea de texto, tabla de venta con tabuladores, máscaras no ASCII en manual/propuesta/celular, prefijo, «Leche 12345678», PIN numérico en dueño/empleado/modelo y en partes), Bot 4 (Confirmar apagado tras 422 hasta cambiar el campo; 422 bloqueado con solo «Cancelar»), `cardPrefix` F001-DNI/F001-RUC/F001-0001, 403 `forbidden_role` (fuera de la memoria, sin reintento, igual con cualquier rol guardado).
+- `assistant-card-completar.test.mjs`: la prueba de la serie ahora pide «-» ASCII, sin U+2011 y una span nowrap por serie en trozos de 1/2/3/7/47.
+
