@@ -207,6 +207,9 @@
   var pendingBase = null;
   try { pendingBase = JSON.parse(root.localStorage.getItem(PENDING_KEY) || 'null'); } catch (_) { pendingBase = null; }
   if (!pendingBase || typeof pendingBase !== 'object') pendingBase = null;
+  // appReady: la app ya cargó su configuración local (loadAppState corre después de loadAllData). Antes de eso
+  // appConfig tiene los valores por defecto y no sirve para comparar un guardado pendiente.
+  var appReady = false, waitingPending = false;
   function setPending(value) {
     pendingBase = value;
     try { if (value) root.localStorage.setItem(PENDING_KEY, JSON.stringify(value)); else root.localStorage.removeItem(PENDING_KEY); } catch (_) {}
@@ -241,7 +244,10 @@
     if (!cloud() || !R()) return false;
     // Un cambio del dueño que no se pudo guardar nunca se descarta en silencio: se completa ese guardado
     // (se envía si el servidor no tocó la clave; si la tocó, gana el servidor y se avisa).
-    if (pendingBase && R().isOwner && R().isOwner()) { await pushSettings(); return true; }
+    if (pendingBase && R().isOwner && R().isOwner()) {
+      if (!appReady) { waitingPending = true; return false; } // se completa al terminar loadAppState
+      await pushSettings(); return true;
+    }
     await fetchSettings();
     var owner = R().isOwner && R().isOwner();
     // El dueño solo recibe del servidor lo que ya existe allí; nunca pierde lo que aún no subió.
@@ -366,8 +372,19 @@
     }
   }
 
+  function wrapLoadAppState() {
+    if (typeof root.loadAppState !== 'function' || root.loadAppState.__naG) return;
+    var baseLoad = root.loadAppState;
+    root.loadAppState = function () {
+      var out = baseLoad.apply(this, arguments);
+      appReady = true;
+      if (waitingPending) { waitingPending = false; setTimeout(function () { pullSettings(); }, 0); }
+      return out;
+    };
+    root.loadAppState.__naG = true;
+  }
   function install() {
-    sidebar(); wrapReset(); wrapSettings(); wrapDiscounts();
+    sidebar(); wrapReset(); wrapSettings(); wrapDiscounts(); wrapLoadAppState();
     if (typeof root.renderCfgContent === 'function' && !root.renderCfgContent.__naG) {
       var base = root.renderCfgContent;
       root.renderCfgContent = function (cat) { if (render(cat)) return; var r = base.apply(this, arguments); try { afterBase(cat); } catch (_) {} return r; };
