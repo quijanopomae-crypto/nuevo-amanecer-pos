@@ -97,8 +97,11 @@ test('(b) a real change in Configuración sends exactly one POST with that key a
   await page.evaluate(() => (window as any).goPage('pageConfig'));
   await page.locator('#naCfgV9 [data-top="prod"]').click();
   await page.locator('#naCfgV9 [data-tab="igv"]').click();
+  // El checkbox real está oculto detrás del interruptor: se hace clic en el interruptor visible, como el usuario.
   const toggle = page.locator('#naCfgV9 input[data-na9="igvActive"]');
-  await toggle.setChecked(!before, { force: true });
+  await expect(toggle).toBeChecked({ checked: before });
+  await page.locator('#naCfgV9 label.na9-sw:has(input[data-na9="igvActive"])').click();
+  await expect(toggle).toBeChecked({ checked: !before });
   await expect(page.locator('#na9Saved')).toHaveText('Guardado ✓');
   expect(mock.posts).toHaveLength(1);
   expect(mock.posts[0].key).toBe('pos.flags');
