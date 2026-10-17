@@ -319,6 +319,9 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - **Aviso de corte**: la respuesta (JSON y evento final en partes) lleva `cut: true|false`, puesto por el servidor. El celular pinta la última línea como nota (`.na-asst-note`) SOLO si `d.cut === true`. Nunca busca el texto del aviso: un aviso escrito por el modelo sale como texto normal.
 - **Cabecera reusada**: en la respuesta que sigue a una cortada, las filas sueltas del inicio (con el mismo número de columnas) usan la cabecera de la última tabla de la burbuja anterior. Esa cabecera sale solo de lo que esa burbuja ya pintó (texto ya filtrado por el servidor), nunca de otros datos. No se reusa después de una tabla propia de la burbuja.
 - **360 px**: las burbujas llevan `overflow-wrap:anywhere`, así que un token largo sin espacios no desborda a lo ancho.
+- **Cabecera de tabla (Bot 4, 1)**: `th` con color #0f172a, y #e5f3ea en modo oscuro.
+- **«Ver nuevo ↓» y la nota de corte (Bot 4, 3)**: si la nota está a la vista, aunque sea en parte, el botón no aparece al terminar la respuesta. Si estaba visible, se esconde en cuanto la nota entra a la vista al desplazar. Así nunca la tapa.
+- Opcional no hecho: etiquetas más cortas en los atajos del dueño a 360 px. La tarjeta de Inicio tiene alto fijo en 380-699, y no se probó a 360 en un navegador.
 
 ### Cambios en el corpus (723 frases, empleado, contra f3375c09)
 

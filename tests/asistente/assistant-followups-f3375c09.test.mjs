@@ -119,3 +119,14 @@ test('celular: aviso como nota SOLO con final.cut === true (nunca por el texto);
   // un aviso escrito por el modelo sale como texto normal (el renderer nunca crea notas)
   const fk = run('Hola.\n\n' + CUT_NOTICE); assert.ok(fk.kids.every((k) => k.nodeType === 3), 'texto plano');
 });
+
+test('celular (Bot 4, 1 y 3): cabecera de tabla legible en claro y oscuro; «Ver nuevo ↓» nunca tapa la nota de corte', () => {
+  assert.match(CSS, /\.na-asst-tbl th\{[^}]*color:#0f172a/); assert.match(CSS, /body\.dark \.na-asst-tbl th\{[^}]*color:#e5f3ea/);
+  assert.match(UI, /function showNew\(\) \{ if \(!newBtn \|\| !msgsEl \|\| noteSeen\(\)\) return;/, 'con la nota a la vista no se muestra');
+  assert.match(UI, /if \(!newBtn\.hidden && \(atBottom\(\) \|\| noteSeen\(\)\)\) newBtn\.hidden = true;/, 'al llegar la nota a la vista se esconde');
+  assert.match(UI, /m\.appendChild\(n\); cutNote = n; \}/, 'la nota que se mira es la que pintó paintCut (solo con final.cut === true)');
+  // noteSeen con rectángulos de mentira: a la vista (aunque sea en parte) -> true; debajo de lo visible -> false
+  const src = UI.match(/function noteSeen\(\) \{[^\n]*/)[0];
+  const f = (top, bottom) => new Function('cutNote', 'msgsEl', src + '; return noteSeen();')({ isConnected: true, getBoundingClientRect: () => ({ top, bottom }) }, { getBoundingClientRect: () => ({ top: 100, bottom: 600 }) });
+  assert.equal(f(560, 590), true); assert.equal(f(590, 620), true); assert.equal(f(610, 640), false); assert.equal(f(40, 90), false);
+});

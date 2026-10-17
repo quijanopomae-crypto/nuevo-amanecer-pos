@@ -383,9 +383,9 @@ body.dark .na-asst-prov-t{background:#0f172a;border-color:#334155;color:#e2e8f0}
 .na-asst-tbl{overflow-x:auto;margin:6px 0;white-space:normal;-webkit-overflow-scrolling:touch}
 .na-asst-tbl table{border-collapse:collapse;min-width:100%;font-size:15px;line-height:1.35}
 .na-asst-tbl th,.na-asst-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
-.na-asst-tbl th{font-weight:800;background:#f1f5f9}
+.na-asst-tbl th{font-weight:800;background:#f1f5f9;color:#0f172a}
 .na-asst-tl{display:none}.na-asst-mask{white-space:nowrap}
-body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.dark .na-asst-tbl th{background:#163023}
+body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.dark .na-asst-tbl th{background:#163023;color:#e5f3ea}
 @media (max-width:480px){
   .na-asst-tbl{overflow-x:visible}
   .na-asst-tbl thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

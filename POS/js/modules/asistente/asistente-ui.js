@@ -11,6 +11,7 @@
   'use strict';
   var doc = root.document, C = root.NA_ASISTENTE_CORE;
   if (!doc || !C || root.NA_ASISTENTE) return;
+  var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
   var history = [], state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   var clockOffset = 0;
@@ -356,7 +357,9 @@
   function scrollEnd() { msgsEl.scrollTop = msgsEl.scrollHeight; if (newBtn) newBtn.hidden = true; }
   // Respuesta en partes (Bot 4): solo se baja sola si la persona ya estaba abajo; si subió a leer, queda donde está y sale «Ver nuevo».
   function atBottom() { return !msgsEl || msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight <= 24; }
-  function showNew() { if (!newBtn || !msgsEl) return; msgsEl.appendChild(newBtn); newBtn.hidden = false; } // siempre al final de la lista (sticky abajo)
+  // ¿la nota de corte está a la vista en la lista? Entonces «Ver nuevo ↓» (sticky abajo) no se muestra: la taparía.
+  function noteSeen() { if (!cutNote || !msgsEl || !cutNote.isConnected) return false; var r = cutNote.getBoundingClientRect(), m = msgsEl.getBoundingClientRect(); return r.bottom > m.top && r.top < m.bottom; }
+  function showNew() { if (!newBtn || !msgsEl || noteSeen()) return; msgsEl.appendChild(newBtn); newBtn.hidden = false; } // siempre al final de la lista (sticky abajo)
   function follow(stick) { if (stick) scrollEnd(); else showNew(); }
   // Lector de pantalla: la respuesta se anuncia UNA vez, completa, al final (la lista de mensajes no es aria-live: no lee trozo por trozo).
   function announce(t) { if (!liveEl) return; liveEl.textContent = ''; var v = String(t || ''); setTimeout(function () { if (liveEl) liveEl.textContent = v; }, 30); }
@@ -366,7 +369,7 @@
   // Aviso de corte (Bots 4/5): SOLO si el servidor lo marcó (final.cut === true). El aviso es la última línea que puso el servidor; el resto se
   // pinta igual que siempre. Nunca se busca el texto del aviso: un «aviso» escrito por el modelo, sin la marca, sale como texto normal.
   function paintCut(m, t, opts) { t = String(t == null ? '' : t); var k = t.lastIndexOf('\n'); paintReply(m, k < 0 ? '' : t.slice(0, k).replace(/\n+$/, ''), opts);
-    var n = el('p', 'na-asst-note'); n.textContent = k < 0 ? t : t.slice(k + 1); m.appendChild(n); }
+    var n = el('p', 'na-asst-note'); n.textContent = k < 0 ? t : t.slice(k + 1); m.appendChild(n); cutNote = n; }
   function soles(n) { return C.soles(n); }
   // Nombre del cliente en la tarjeta: solo en documentos de UN cliente (estado de cuenta), con su etiqueta. En la lista de precios, nunca.
   var CUSTOMER_DOCS = ['estado_cuenta'];
@@ -524,7 +527,7 @@
     if (bubbleIO) { try { bubbleIO.disconnect(); } catch (_) {} bubbleIO = null; }
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
-    history.length = 0; lastCut = null; shownFor = null; busy = false; offscreen = false;
+    history.length = 0; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
   }
   function accessLost(code) {
     access = null; adminOff = true; noRole = false;
@@ -580,7 +583,7 @@
     if (image) body.image = image;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
-    var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null;
+    var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null; cutNote = null;
     if (streaming) body.stream = true;
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
@@ -1010,7 +1013,7 @@
     doc.body.appendChild(rootEl); doc.body.appendChild(panelEl);
     msgsEl = panelEl.querySelector('.na-asst-msgs'); liveEl = panelEl.querySelector('.na-asst-live');
     newBtn = el('button', 'na-asst-new'); newBtn.type = 'button'; newBtn.textContent = 'Ver nuevo ↓'; newBtn.hidden = true; newBtn.onclick = scrollEnd; msgsEl.appendChild(newBtn);
-    msgsEl.addEventListener('scroll', function () { if (!newBtn.hidden && atBottom()) newBtn.hidden = true; }, { passive: true });
+    msgsEl.addEventListener('scroll', function () { if (!newBtn.hidden && (atBottom() || noteSeen())) newBtn.hidden = true; }, { passive: true });
     inputEl = panelEl.querySelector('textarea'); sendBtn = panelEl.querySelector('.na-asst-send');
     photoBtn = panelEl.querySelector('.na-asst-photo'); fileEl = panelEl.querySelector('input[type=file]'); offEl = panelEl.querySelector('.na-asst-offline');
     rootEl.querySelector('.na-asst-bubble').onclick = openPanel;
