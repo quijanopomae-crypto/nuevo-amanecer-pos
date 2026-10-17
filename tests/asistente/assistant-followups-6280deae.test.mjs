@@ -133,7 +133,7 @@ test('3) ruta: «sigue» tras una tabla con columna del dueño suelta con «| Pr
 
 // ---------- 4) DNI / RUC con (?<![0-9]) ----------
 test('4) letra o «_» pegados al número: tapados para el empleado y para el modelo; el dueño ve exacto; comprobantes intactos', () => {
-  for (const [t, want] of [['Doc:x12345678', 'Doc:xDNI ****5678'], ['Doc:A12345678', 'Doc:ADNI ****5678'], ['ref_12345678', 'ref_DNI ****5678'], ['cod_20123456789', 'cod_RUC *******6789'], ['idA20123456789', 'idARUC *******6789']]) {
+  for (const [t, want] of [['Doc:x12345678', 'Doc:xDNI ****5678'], ['Doc:A12345678', 'Doc:ADNI ****5678'], ['ref_12345678', 'ref_código ****5678'], ['cod_20123456789', 'cod_RUC *******6789'], ['idA20123456789', 'idARUC *******6789']]) {
     const s = 'Dato ' + t + ' listo.'; assert.equal(same(s), 'Dato ' + want + ' listo.'); assert.equal(redactText(s), 'Dato ' + want + ' listo.', 'al modelo'); assert.equal(same(s, 'owner'), s); }
   for (const r of ['F001-00012345', 'B001-00000123', 'E001-12345678', 'T001-00012345', '0001-00012345', 'FA01-12345678', 'Doc:F001-12345678']) { const s = 'Comprobante ' + r + ' listo.'; assert.equal(same(s), s); assert.equal(same(s, 'owner'), s); }
   for (const t of ['2024-12345678', 'DNI-12345678', 'X001-12345678', '123456789012']) { const s = 'Dato ' + t + ' listo.'; hides(same(s), ['12345678']); }
@@ -187,7 +187,7 @@ test("A) redactModelOwner: RUC 20/15/17 exacto, RUC 10 tapado, 8 dígitos con c�
   assert.ok(pb.text.includes('20100055237') && !pb.text.includes('10456789012') && pb.history[0].content.includes('20100190797') && !pb.history[0].content.includes('44556677'));
   for (const r of [undefined, null, 'empleado:consultas', 'OWNER', 'admin']) { const q = parseChatBody({ text: MODEL_TXT }, r); assert.ok(!q.text.includes('20100055237') && !q.text.includes('12345678'), String(r)); }
   const ctx = sanitizeContext({ products: [{ id: 'P1', nombre: 'Galleta cód. 12345678 prov RUC 20100055237 lote 87654321', precio: 1, stock: 1 }] }, 'owner');
-  assert.equal(ctx.products[0].nombre, 'Galleta cód. 12345678 prov RUC 20100055237 lote DNI ****4321');
+  assert.equal(ctx.products[0].nombre, 'Galleta cód. 12345678 prov RUC 20100055237 lote código ****4321');
   assert.ok(!/12345678|20100055237/.test(sanitizeContext({ products: [{ id: 'P1', nombre: 'Galleta cód. 12345678 prov RUC 20100055237', precio: 1, stock: 1 }] }, 'empleado:consultas').products[0].nombre));
 });
 const SECRET2 = 'secreto-de-prueba-1234567890';

@@ -353,7 +353,7 @@ test('inyección con role/pin al dueño: mensaje neutro, sin «solo el dueño»'
 test('redacción sin etiqueta doble: «RUC RUC» y «DNI DNI» no aparecen', () => {
   const t = redactText('Proveedor RUC 20123456789, cliente DNI: 45678912 y otro 87654321');
   assert.ok(!/RUC\s+RUC/.test(t) && !/DNI\s+DNI/.test(t), t);
-  assert.match(t, /RUC \*{7}6789/); assert.match(t, /DNI \*{4}8912/); assert.match(t, /DNI \*{4}4321/);
+  assert.match(t, /RUC \*{7}6789/); assert.match(t, /DNI \*{4}8912/); assert.match(t, /código \*{4}4321/); // (Bot 4 sobre 39ccd25c) sin DNI delante: etiqueta neutra
 });
 
 test('reenvío tardío de una tarjeta YA usada: mismo operation_id aunque pasaron los 5 min; sin usar y vencida = 410', async () => {

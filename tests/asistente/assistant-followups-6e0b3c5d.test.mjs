@@ -106,7 +106,7 @@ test('6) 8 dígitos junto a código/EAN/barras o en columna «Código»: el empl
   assert.equal(e('El código de barras del arroz es 77501234.'), 'El código de barras del arroz es código ****1234.');
   assert.equal(e('Código 77501234'), 'Código ****1234'); assert.equal(e('barras: 77501234'), 'barras: ****1234'); assert.equal(e('Arroz 5kg (EAN-8 77501234)'), 'Arroz 5kg (EAN-8 ****1234)');
   assert.equal(e('| Producto | Código |\n|---|---|\n| Arroz | 77501234 |'), '| Producto | Código |\n|---|---|\n| Arroz | código ****1234 |');
-  assert.equal(e('DNI 12345678'), 'DNI ****5678'); assert.equal(e('Escanee 12345678'), 'Escanee DNI ****5678'); assert.equal(e('el cliente con DNI: 12345678'), 'el cliente con DNI ****5678');
+  assert.equal(e('DNI 12345678'), 'DNI ****5678'); assert.equal(e('Escanee 12345678'), 'Escanee código ****5678'); // (Bot 4 sobre 39ccd25c) sin DNI delante: neutra assert.equal(e('el cliente con DNI: 12345678'), 'el cliente con DNI ****5678');
   assert.equal(A.redactModelOwner('Código 77501234'), 'Código 77501234', 'el dueño sigue viendo su código'); assert.equal(A.redactOwnerText('Código 77501234'), 'Código 77501234');
   assert.ok(A.MASK_LEFT_RE.test('código ****1234') && A.MASK_LEFT_RE.test('****1234'), 'sigue contando como tapado en una tarjeta');
   for (const t of ['| Producto | Código |\n|---|---|\n| Arroz Costeño | 77501234 |\n| Azúcar Rubia | 77505678 |\nlisto', 'El código de barras del arroz es 77501234 y el del azúcar 77505678.']) for (const s of [1, 2, 3, 5, 7, 13]) assert.equal(emit(EMP, t, steps(t, s)).o, A.capReply(e(t)), s + ' ' + t);
