@@ -48,7 +48,8 @@ test('Bot 4: la burbuja también mira la última celda visible de las tablas (TO
   assert.match(lc, /seen < 2/, 'solo las 2 últimas filas visibles de cada tabla');
   assert.match(lc, /x0 = br\.left - 8, x1 = br\.right \+ 8/, 'en la franja horizontal de la burbuja');
   assert.match(lc, /pinned\(cell, pg\)/, 'sin celdas fijas'); assert.match(lc, /visibility === 'hidden'/);
-  assert.match(UI, /function lastRow\(pg, br\) \{ var a = lastTappable\(pg, br\), b = lastCell\(pg, br\); return !a \? b : !b \? a : \(b\.r\.bottom > a\.r\.bottom \? b : a\); \}/);
+  assert.match(UI, /function lowest\(a, b\) \{ return !a \? b : !b \? a : \(b\.r\.bottom > a\.r\.bottom \? b : a\); \}/);
+  assert.match(UI, /function lastRow\(pg, br\) \{ return lowest\(lowest\(lastTappable\(pg, br\), lastCell\(pg, br\)\), lastNote\(pg, br\)\); \}/, 'también el último párrafo con texto (Bot 4)');
   const pp = UI.slice(UI.indexOf('  function padPage(bottom) {'), UI.indexOf('  function padPage(bottom) {') + 900);
   assert.match(pp, /var last = lastRow\(pg, br\);/);
 });

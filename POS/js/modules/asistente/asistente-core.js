@@ -197,7 +197,12 @@
   // ---------- Respuesta en partes (chat) ----------
   // Tiempos (Bot 3): primer trozo ~10 s (si no llega nada, «Reintentar»); después, 30 s contados desde el ÚLTIMO trozo, no desde el inicio.
   // Los avisos «status» (el servidor está buscando datos) también cuentan como trozo. Tope total: 90 s por respuesta, pase lo que pase.
-  var STREAM = { firstMs: 10000, idleMs: 30000, maxMs: 90000, paintMs: 100 };
+  // Foto en 3G lento (Bot 3): el reloj del primer trozo y el tope total suman el tiempo de SUBIR el cuerpo (uploadBps bytes/s, como
+  // mucho uploadMaxMs), así los 10 s cuentan desde que la foto terminó de subir y el servidor la leyó, no desde que se tocó Enviar.
+  // paintBatch: lo que llega de golpe se pinta en tandas de ~48 caracteres (cortadas en espacio), no en un bloque grande.
+  var STREAM = { firstMs: 10000, idleMs: 30000, maxMs: 90000, paintMs: 100, uploadBps: 12000, uploadMaxMs: 120000, paintBatch: 48 };
+  function uploadMs(body) { var n = typeof body === 'string' ? body.length : body && typeof body.byteLength === 'number' ? body.byteLength : body && typeof body.size === 'number' ? body.size : 0;
+    return Math.min(STREAM.uploadMaxMs, Math.ceil(n / STREAM.uploadBps * 1000)); }
   // Lee «event: x / data: {...}» separados por línea en blanco. Un bloque a medias espera al siguiente trozo; un data roto se ignora.
   function createSseParser(onEvent) {
     var buf = '';
@@ -215,10 +220,15 @@
     o = o || {}; var min = o.minMs == null ? STREAM.paintMs : o.minMs, now = o.now || function () { return Date.now(); };
     var sched = o.schedule || function (cb, wait) { setTimeout(function () { if (typeof requestAnimationFrame === 'function') requestAnimationFrame(cb); else cb(); }, wait); };
     var pending = '', last = -Infinity, armed = false, paints = 0, gen = 0;
-    function flush(g) { if (g !== undefined && g !== gen) return; armed = false; if (!pending) return; var t = pending; pending = ''; last = now(); paints++; write(t); }
+    var batch = o.batch == null ? STREAM.paintBatch : o.batch;
+    // Una tanda: todo si es poco; si llegó mucho de golpe, ~batch caracteres (o un cuarto, si se va quedando atrás) y el resto después.
+    function take(all) { if (all || !batch || pending.length <= batch * 1.5) return pending.length;
+      var n = Math.max(batch, Math.ceil(pending.length / 4)), sp = pending.lastIndexOf(' ', n); return sp > batch / 2 ? sp + 1 : n; }
+    function flush(g, all) { if (g !== undefined && g !== gen) return; armed = false; if (!pending) return; var n = take(all), t = pending.slice(0, n); pending = pending.slice(n); last = now(); paints++; write(t);
+      if (pending && !all) { armed = true; var g2 = gen; sched(function () { flush(g2); }, min); } }
     return {
       push: function (t) { if (!t) return; pending += t; if (armed) return; armed = true; var g = gen; sched(function () { flush(g); }, Math.max(0, min - (now() - last))); },
-      finish: function () { flush(); },
+      finish: function () { flush(undefined, true); },
       reset: function () { gen++; pending = ''; armed = false; },
       paints: function () { return paints; }
     };
@@ -226,7 +236,7 @@
   // Pide el chat en partes. Si el navegador o el servidor no lo soportan, vuelve el JSON de siempre (kind:'json').
   // Resultado en partes: { kind:'stream', final, error, cut, timeout:'first'|'idle'|'max'|null, text } — las tarjetas SOLO salen de final.
   async function streamChat(fetchImpl, url, init, o) {
-    o = o || {}; var firstMs = o.firstMs || STREAM.firstMs, idleMs = o.idleMs || STREAM.idleMs, maxMs = o.maxMs || STREAM.maxMs;
+    o = o || {}; var up = uploadMs(init && init.body), firstMs = (o.firstMs || STREAM.firstMs) + up, idleMs = o.idleMs || STREAM.idleMs, maxMs = (o.maxMs || STREAM.maxMs) + up;
     var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, timer = null, timedOut = null, text = '', reader = null, giveUp = null, capTimer = null;
     var opts = Object.assign({}, init || {}); if (ctl) opts.signal = ctl.signal;
     var res = { kind: 'stream', final: null, error: null, cut: false, timeout: null, text: '' };
@@ -420,7 +430,7 @@
     return Math.max(0, over);
   }
 
-  var api = { STREAM: STREAM, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

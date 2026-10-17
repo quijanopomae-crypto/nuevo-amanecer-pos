@@ -133,11 +133,15 @@ test('2) empleado en partes de punta a punta: ni texto ni final llevan montos de
   const jb = await j.json(); for (const l of LEAKS) assert.ok(!jb.reply.includes(l), 'JSON: salió ' + l);
 });
 
-test('2) el freno del empleado solo actúa donde hay una palabra del dueño: lo demás sale con la cola de siempre', () => {
-  assert.equal(ownerHold('Hay 40 unidades de arroz en la tienda y está bien.'), Infinity);
-  const t = 'Hay 40 unidades. El costo'; assert.equal(ownerHold(t), t.indexOf('costo'));
-  const plain = 'x'.repeat(200), out = []; const e = createTextEmitter((d) => out.push(d.t), 1200, redactFor('empleado:consultas'), ownerHold);
-  e.push(plain); assert.equal(out.join('').length, 200 - STREAM_HOLDBACK);
+test('2) sin freno de 160 ni cola fija (Bot 3): lo que no es monto sale enseguida, también con una palabra del dueño antes', () => {
+  // empleado: después de cada palabra solo queda esperando la última palabra (y un monto mientras se decide)
+  const lag = (role, txt) => { const out = []; const e = createTextEmitter((d) => out.push(d.t), 1200, redactFor(role)); let pushed = 0, worst = 0;
+    for (const w of txt.split(/(?<=\s)/)) { e.push(w); pushed += w.length; if (out.length) worst = Math.max(worst, pushed - out.join('').length); } e.flush(); return { worst, all: out.join('') }; };
+  const plain = 'Hay arroz en la tienda y está bien de stock, no hace falta pedir hoy, gracias por preguntar y que tengas buen día. ';
+  assert.ok(lag('empleado:consultas', plain).worst <= 12, 'texto sin montos: solo la última palabra espera');
+  const kw = 'El costo de ese producto lo ve el dueño desde su teléfono, tú puedes ver el stock y el precio de venta en Inventario. ';
+  const k = lag('empleado:consultas', kw); assert.ok(k.worst <= 14, 'con «costo» delante el texto sigue saliendo: ' + k.worst); assert.equal(k.all, kw);
+  assert.equal(ownerHold('Hay 40 unidades de arroz en la tienda y está bien.'), Infinity, 'compatibilidad');
 });
 
 // ---------- data: con espacios ----------
@@ -178,7 +182,7 @@ test('2b) la distancia de 60 caracteres no cruza el punto ni el salto de línea;
   assert.equal(redactOwnerData('El costo\n40 unidades'), 'El costo\n40 unidades');
   assert.equal(redactOwnerData('Compramos ayer 3 cajas. Tengo costumbre de 5 cajas.'), 'Compramos ayer 3 cajas. Tengo costumbre de 5 cajas.');
   assert.equal(redactOwnerData('| Producto | Precio | Stock |\n| Arroz | 9.00 | 40 |'), '| Producto | Precio | Stock |\n| Arroz | 9.00 | 40 |');
-  assert.match(redactOwnerData('el costo de este producto que compramos ayer en la feria es S/ 7.77'), /^el \[dato del dueño\]$/);
+  assert.equal(redactOwnerData('el costo de este producto que compramos ayer en la feria es S/ 7.77'), 'el costo de este producto que compramos ayer en la feria es [dato del dueño]', 'solo el monto se tapa');
 });
 
 test('2b) primeras palabras de respuestas cortas del empleado: igual que antes y que el dueño (mismos trozos en el mismo momento)', () => {
@@ -186,36 +190,40 @@ test('2b) primeras palabras de respuestas cortas del empleado: igual que antes y
   const steps = (role) => { const out = []; const e = createTextEmitter((d) => out.push(d.t), 1200, redactFor(role), role === 'owner' ? null : ownerHold);
     const marks = []; for (const w of short.join('').split(/(?<=\s)/)) { e.push(w); marks.push(out.join('').length); } e.flush(); return { marks, all: out.join('') }; };
   const o = steps('owner'), e = steps('empleado:consultas');
-  assert.deepEqual(e.marks, o.marks, 'el texto sale palabra a palabra igual que el del dueño'); assert.equal(e.all, o.all);
-  // el primer texto sale apenas hay más de STREAM_HOLDBACK caracteres (la cola de siempre, sin freno extra)
-  const words = short.join('').split(/(?<=\s)/); let len = 0; const firstIdx = e.marks.findIndex((x) => x > 0);
-  for (let k = 0; k <= firstIdx; k++) len += words[k].length;
-  assert.equal(e.marks[firstIdx], len - STREAM_HOLDBACK);
+  assert.equal(e.all, o.all);
+  // el empleado va casi a la par del dueño: solo espera un número mientras se decide si es monto (unos 16 caracteres más)
+  const words = short.join('').split(/(?<=\s)/); let pushed = 0;
+  words.forEach((w, i) => { pushed += w.length; if (o.marks[i]) assert.ok(o.marks[i] - e.marks[i] <= 24 && pushed - o.marks[i] <= 14, i + ': ' + o.marks[i] + ' / ' + e.marks[i]); });
+  // lo primero que sale nunca es un trozo suelto de menos de 20 caracteres (Bot 4: nada de «El » solo)
+  const firstIdx = e.marks.findIndex((x) => x > 0); assert.ok(e.marks[firstIdx] >= 20 && o.marks[o.marks.findIndex((x) => x > 0)] >= 20);
 });
 
 // ---------- (2) el celular borra lo pintado con reset antes del mensaje simple ----------
 test('celular: con «text {reset:true}» se borra lo ya pintado («Claro, te preparo…») antes de mostrar la frase simple; nada vuelve a aparecer', async () => {
   const UI = (await import('node:fs')).readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   const pick = (re) => { const m = UI.match(re); assert.ok(m, String(re)); return m[0]; };
-  const ensure = pick(/function ensureBubble\(\) \{[^\n]*/), searching = pick(/function searching\(\) \{[^\n]*/);
+  const ensure = [/function ensureBubble\(\) \{[^\n]*/, /function writeText\(t\) \{[^\n]*/, /function doneBubble\(\) \{[^\n]*/, /function backToThinking\(\) \{[^\n]*/].map(pick).join('\n'), searching = pick(/function searching\(\) \{[^\n]*/);
   const painterSt = pick(/painter = C\.createTextPainter\(function \(t\) \{[^\n]*\n/);
   const streamSt = pick(/var st = await C\.streamChat\(root\.fetch\.bind\(root\), q\.url, q\.init, \{[\s\S]*?onStatus: searching \}\);/).replace('root.fetch.bind(root), q.url, q.init', 'fetchImpl, "u", {}');
   // burbuja de mentira: solo lo que usan esas líneas del celular
-  const node = () => ({ text: '', kids: [], get textContent() { return this.kids.map((k) => k.data).join(''); }, set textContent(v) { this.kids = v ? [{ data: v, nodeType: 3 }] : []; },
-    get firstChild() { return this.kids[0] || null; }, appendChild(k) { this.kids.push(k); }, classList: { add() {}, remove() {} }, setAttribute() {}, removeAttribute() {} });
-  const thinking = node(); thinking.textContent = 'Pensando';
+  const node = () => ({ text: '', kids: [], get textContent() { return this.kids.map((k) => k.data || '').join(''); }, set textContent(v) { this.kids.forEach((k) => { if (k.kids) k.parentNode = null; }); this.kids = v ? [{ data: v, nodeType: 3 }] : []; },
+    get firstChild() { return this.kids[0] || null; }, appendChild(k) { if (k.kids) k.parentNode = this; this.kids.push(k); },
+    insertBefore(k, ref) { const i = ref ? this.kids.indexOf(ref) : -1; if (i < 0) this.kids.push(k); else this.kids.splice(i, 0, k); },
+    removeChild(k) { this.kids = this.kids.filter((x) => x !== k); k.parentNode = null; }, classList: { add() {}, remove() {} }, setAttribute() {}, removeAttribute() {} });
+  const thinking = node(); thinking.textContent = 'Pensando'; const dots = node(); thinking.appendChild(dots);
   const seen = [];
-  const run = new Function('C', 'doc', 'thinking', 'fetchImpl', 'seen', 'panel',
+  const run = new Function('C', 'doc', 'thinking', 'fetchImpl', 'seen', 'panel', 'dots',
     'var bubble = null, painter = null, panelEl = panel, mine = panel; function setState(){} function wake(){} function atBottom(){ return true; } function follow(){}\n' +
     ensure + '\n' + searching + '\n' + painterSt + 'return (async function () { ' + streamSt + ' painter.finish(); return { st: st, bubble: bubble }; })();');
   const evs = [['open', { ok: true }], ['text', { t: 'Claro, te preparo el inventario con ' }], ['wait', 160], ['text', { t: 'costos para imprimir' }], ['text', { reset: true }], ['wait', 160],
     ['error', { error: 'forbidden_document', status: 403, message: 'Ese documento es solo para el dueño. Puedes pedir la lista de precios o la lista de pedido.' }]];
   const fetchImpl = async () => new Response(new ReadableStream({ async start(c) { for (const [e, d] of evs) { if (e === 'wait') { await sleep(d); seen.push(thinking.textContent); continue; }
     c.enqueue(enc.encode('event: ' + e + '\ndata: ' + JSON.stringify(d) + '\n\n')); } c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
-  const out = await run(C, { createTextNode: (t) => ({ data: t, nodeType: 3 }) }, thinking, fetchImpl, seen, {});
+  const out = await run(C, { createTextNode: (t) => ({ data: t, nodeType: 3 }) }, thinking, fetchImpl, seen, {}, dots);
   assert.equal(seen[0], 'Claro, te preparo el inventario con ', 'primero se pintó el texto');
-  assert.equal(seen[1], '', 'el reset lo borró (también lo que esperaba su tanda)');
-  assert.equal(out.bubble.textContent, '', 'al terminar no queda nada pintado');
+  assert.equal(dots.parentNode, thinking, 'los puntitos siguen mientras llega (Bot 4)');
+  assert.equal(seen[1], 'Pensando', 'el reset lo borró (también lo que esperaba su tanda) y vuelve a «Pensando» con puntitos, no una burbuja vacía (Bot 4)');
+  assert.equal(out.bubble, null); assert.equal(thinking.textContent, 'Pensando', 'al terminar no queda nada del texto borrado'); assert.equal(dots.parentNode, thinking);
   assert.equal(out.st.error.error, 'forbidden_document');
   // después: la burbuja vacía se quita y sale SOLO la frase simple (sin tarjeta)
   const sendFn = UI.slice(UI.indexOf('  async function send(text, image) {'), UI.indexOf('  // Comprime en el aparato'));

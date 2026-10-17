@@ -163,7 +163,7 @@ test('Bot 4: se baja sola solo si la persona estaba abajo; si no, «Ver nuevo».
   const sendFn = UI.slice(UI.indexOf('  async function send(text, image) {'), UI.indexOf('  // Comprime en el aparato'));
   assert.match(UI, /function atBottom\(\) \{[^\n]*scrollHeight - msgsEl\.scrollTop - msgsEl\.clientHeight <= 24/);
   assert.match(UI, /function follow\(stick\) \{ if \(stick\) scrollEnd\(\); else showNew\(\); \}/);
-  assert.match(sendFn, /C\.createTextPainter\(function \(t\) \{ if \(panelEl !== mine\) return; var stick = atBottom\(\); ensureBubble\(\)\.appendChild\(doc\.createTextNode\(t\)\); follow\(stick\);/, 'mira ANTES de pintar');
+  assert.match(sendFn, /C\.createTextPainter\(function \(t\) \{ if \(panelEl !== mine\) return; var stick = atBottom\(\); writeText\(t\); follow\(stick\);/, 'mira ANTES de pintar');
   assert.match(UI, /newBtn\.textContent = 'Ver nuevo ↓'/); assert.match(CSS, /\.na-asst-new\{position:sticky;bottom:4px/); assert.match(CSS, /\.na-asst-new\[hidden\]\{display:none\}/);
   const addCard = UI.slice(UI.indexOf('  function addCard(p, prompt) {'), UI.indexOf('  function addDenied('));
   assert.ok(!/scrollEnd\(\)/.test(addCard), 'la tarjeta no salta la vista');

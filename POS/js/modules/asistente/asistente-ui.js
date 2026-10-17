@@ -161,8 +161,21 @@
     }
     return best;
   }
-  // Lo más bajo entre la última opción tocable y la última celda de tabla.
-  function lastRow(pg, br) { var a = lastTappable(pg, br), b = lastCell(pg, br); return !a ? b : !b ? a : (b.r.bottom > a.r.bottom ? b : a); }
+  // Último párrafo con texto (Bot 4: la nota de Reporte de deuda, el aviso «sin movimientos» de Kardex) en la franja de la burbuja.
+  // Barato: solo los últimos LAST_N párrafos de la página.
+  function lastNote(pg, br) {
+    var ps = pg.querySelectorAll('p'), best = null, x0 = br.left - 8, x1 = br.right + 8;
+    for (var i = ps.length - 1, k = 0; i >= 0 && k < LAST_N; i--) { var n = ps[i]; if (rootEl.contains(n)) continue; k++;
+      if (!n.textContent || !n.textContent.trim()) continue;
+      var r = n.getBoundingClientRect(); if (!(r.width > 0 && r.height > 0) || r.right < x0 || r.left > x1) continue;
+      if (best && r.bottom <= best.r.bottom) continue;
+      if (getComputedStyle(n).visibility === 'hidden' || pinned(n, pg)) continue;
+      best = { el: n, r: r }; }
+    return best;
+  }
+  // Lo más bajo entre la última opción tocable, la última celda de tabla y el último párrafo con texto.
+  function lowest(a, b) { return !a ? b : !b ? a : (b.r.bottom > a.r.bottom ? b : a); }
+  function lastRow(pg, br) { return lowest(lowest(lastTappable(pg, br), lastCell(pg, br)), lastNote(pg, br)); }
   // Contenedor que desplaza a `n`: el primer padre con scroll dentro de la página (incluida la página), o el documento.
   function scrollerOf(n, pg) { for (var e = n.parentElement; e && e !== doc.body && e !== doc.documentElement; e = e.parentElement) { if (scrollable(e)) return e; if (e === pg) break; } return null; }
   function padTo(e, px) { var cur = parseFloat(getComputedStyle(e).paddingBottom) || 0; if (px <= cur + 0.5) return;
@@ -545,6 +558,8 @@
     if (busy) return;
     text = String(text || '').trim(); if (!text && !image) return;
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
+    // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
+    if (image && access && access.role !== 'owner') { addMsg('u', text || 'Foto'); errMsg('image_owner_only'); setState('error', 2600); return; }
     var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; // menos desplazamiento tras el primer mensaje
     addMsg('u', text || 'Foto', image); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState(image ? 'concentrado' : 'pensando');
     var thinking = addMsg('a', image ? 'Concentrado, leyendo la foto' : 'Pensando'); thinking.classList.add('na-asst-thinking');
@@ -555,20 +570,26 @@
     var bubble = null, painter = null, streaming = canStream();
     if (streaming) body.stream = true;
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
-    function ensureBubble() { if (!bubble) { bubble = thinking; thinking.classList.remove('na-asst-thinking'); thinking.textContent = ''; bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
+    // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
+    function ensureBubble() { if (!bubble) { bubble = thinking; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
+    function writeText(t) { var b = ensureBubble(); b.insertBefore(doc.createTextNode(t), dots.parentNode === b ? dots : null); }
+    function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); }
+    // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
+    function backToThinking() { painter.reset(); if (!bubble) return; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
     // Aviso del servidor mientras busca datos (antes de cualquier texto): «Buscando en su inventario…» en la misma burbuja.
     function searching() { if (bubble || panelEl !== mine || !thinking.firstChild || thinking.firstChild.nodeType !== 3) return; thinking.firstChild.data = 'Buscando en su inventario'; thinking.classList.add('na-asst-searching'); }
     try {
       var mine = panelEl, d;
       if (streaming) {
         var q = reqInit('/auth/assistant/chat', body);
-        painter = C.createTextPainter(function (t) { if (panelEl !== mine) return; var stick = atBottom(); ensureBubble().appendChild(doc.createTextNode(t)); follow(stick); wake(); });
-        var st = await C.streamChat(root.fetch.bind(root), q.url, q.init, { onText: function (t) { painter.push(t); }, onReset: function () { painter.reset(); if (bubble) bubble.textContent = ''; },
+        painter = C.createTextPainter(function (t) { if (panelEl !== mine) return; var stick = atBottom(); writeText(t); follow(stick); wake(); });
+        var st = await C.streamChat(root.fetch.bind(root), q.url, q.init, { onText: function (t) { painter.push(t); }, onReset: backToThinking,
           onStatus: searching });
         if (panelEl !== mine) return; // la UI se quitó mientras tanto
         if (st.kind === 'json') { d = st.data || {}; if (!st.ok) { d.error = d.error || 'HTTP_' + st.status; d.status = st.status; } }
         else {
           painter.finish(); // lo que quedaba en la tanda se pinta: nada se pierde
+          doneBubble();
           if (st.final) d = st.final;
           else if (st.text && bubble && (!st.error || /^upstream_/.test(String(st.error.error || '')))) { incomplete(bubble, text, image); setState('error', 2600); return; }
           else if (st.error) d = { ok: false, error: st.error.error || 'upstream_error', status: st.error.status };

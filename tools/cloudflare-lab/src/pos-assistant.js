@@ -70,7 +70,9 @@ const PATTERNS = [
   // Espacios después de la coma o entre trozos del base64 (líneas cortadas) también se tapan: tramos de 16+ caracteres y el final con «=».
   [/\bdata:[^\s,]{0,120},\s*[A-Za-z0-9+/=%._~-]*(?:\s+[A-Za-z0-9+/]{16,}={0,2})*(?:\s+[A-Za-z0-9+/]{1,15}={1,2}(?![A-Za-z0-9+/=]))?/gi, '[imagen omitida]'],
   [/\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\b(\s*(?:es|era|de|:|=)?\s*)[^\s,.;]{3,}/gi, '$1$2[oculto]'],
-  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[correo oculto]'],
+  // Bot 3: acotado (parte local 1-64, etiquetas de dominio 1-63, hasta 8, final 2-24) y sin cuantificadores anidados sin tope: lineal
+  // también con 50 KB de dígitos o letras seguidas (antes ~1,9 s).
+  [/[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,8}[A-Za-z]{2,24}/g, '[correo oculto]'],
   [/\b(?:RUC\s*(?:N[°º.]?\s*)?[:#-]?\s*)?(?:10|15|17|20)\d{5}(\d{4})\b/gi, 'RUC *******$1'], // sin «RUC RUC»
   [/(?:\+?51[\s-]?)?\b9\d{2}[\s-]?\d{3}[\s-]?\d{3}\b/g, '[teléfono oculto]'],
   [/\b(?:DNI\s*[:#-]?\s*)?\d{4}(\d{4})\b/gi, 'DNI ****$1']
@@ -80,21 +82,27 @@ export function redactText(value) {
   for (const [re, label] of PATTERNS) out = out.replace(re, label);
   return out;
 }
-// Bot 5: para un EMPLEADO, además se tapan datos del dueño con monto o porcentaje: costo / costó / costaron / costo unitario / precio de
-// proveedor / precio de compra / margen / ganancia / utilidad / «lo compré a», «compramos a» / cost, cost is. Entre la palabra y el monto
-// puede haber hasta 60 caracteres de la misma frase (sin cruzar punto ni salto de línea). Tablas (markdown con | o separadas por
-// tabulador): si el encabezado de una columna es de costo, proveedor, margen, ganancia o utilidad, sus celdas se tapan.
-// En partes: desde una de esas palabras el texto espera hasta tener OWNER_HOLD (160) caracteres detrás, más que la coincidencia más
-// larga; lo que empieza con el monto mide menos de 48 (la cola de siempre). Nunca sale a medias, corte donde sea.
-// Sin esas palabras el empleado recibe igual que antes, y el dueño no pasa por aquí (lo ve todo, a la misma velocidad).
+// Bot 5 + sala: para un EMPLEADO se tapa SOLO EL MONTO de un dato del dueño (la palabra queda: «El costo es [dato del dueño]»).
+// Lectura de izquierda a derecha con un estado chico: una palabra del dueño (costo, costó, costaron, cto., c. unit, precio de compra,
+// precio (al) proveedor, el proveedor (nos) lo vende, margen, ganancia, utilidad, inversión, invertí, ganamos… / «compré a», «lo
+// compré a», «compramos a» con el monto después de «a», «por» o «en») abre una ventana de 60 caracteres (40 para «compré»). El primer
+// MONTO dentro de la ventana se tapa. Cierran la ventana: fin de frase (. ; ! ? salto de línea, no el punto de «aprox.», «unid.», «c/u.»),
+// «pero/aunque/sino/mientras» y las etiquetas de VENTA: «precio de venta», «P. venta», «PVP», «se vende a», «(lo) vendemos a», «vendo a»
+// (no después de proveedor/nos). «precio» solo NO es etiqueta de venta («costo, precio S/ 1.80» se tapa).
+// Monto: con S/, PEN o $; o con decimales; o seguido de soles/sol/PEN/%/por ciento. Cantidad (se salta): número + unidad o «x12».
+// Monto ANTES de la palabra («S/ 1.80 es el costo», «S/ 1.80 de costo»): el monto (y lo que sigue) espera hasta el fin de la frase;
+// si en la frase aparece una palabra del dueño se tapa; con etiqueta de venta o fin de frase sale; a los 160 caracteres sin fin de
+// frase se tapa (a prueba de fallas). Después de una etiqueta de venta, el monto que sigue es precio de venta y sale enseguida.
+// Palabras enteras con límites que entienden acentos («Costeño», «Costa», «Margarina», «Ganadero» no cuentan) y una palabra con
+// mayúscula detrás de otra con mayúscula es parte de un nombre («Distribuidora Inversiones Lima»), salvo costo/precio de compra.
+// Tablas (markdown con | o tabulador): si el encabezado de una columna es de costo, proveedor, margen, ganancia o utilidad, sus celdas
+// se tapan; la fila espera entera solo mientras esa tabla sigue.
+// El mismo lector sirve para el texto entero (reply) y para las partes: lo que no es monto sale enseguida; solo espera un monto (o algo
+// que puede serlo al final) mientras se decide. Sin palabras del dueño cerca, el monto sale apenas se ve que no sigue una.
 const NOT_LETTER = '(?![a-záéíóúñ])';
-// Frases compuestas del dueño como UNA sola pieza (así una palabra de corte dentro de ellas nunca las parte): «costo de venta»,
-// «precio de compra», «precio (al) proveedor», «el proveedor (nos) lo vende», «nos (lo) vende», «proveedor vende».
 const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:lo|la|los|las)\\s+)?venden?|nos\\s+(?:(?:lo|la|los|las)\\s+)?venden?)';
 const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron))' + NOT_LETTER;
 const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó)' + NOT_LETTER;
-// Monto (Bot 5): con S/ o PEN (o $) delante; o un número con decimales; o seguido de soles/sol/PEN/%. Un entero solo NO es monto.
-// Cantidad (se salta): número seguido de una unidad (unidades, caja, docena, kg, paquete, u, und…) o «x12».
 const UNIT = '(?:unidad(?:es)?|unid|unds?|uds?|u|cajas?|cjs?|docenas?|kg|kilos?|g|gr|gramos?|paquetes?|pqts?|piezas?|pzas?|frascos?|sobres?|bl[íi]sters?|tabletas?|pastillas?|bolsas?|litros?|lts?|l|ml|botellas?|latas?|packs?|cientos?)' + NOT_LETTER;
 const NUM = '(?:\\d{1,3}(?:[.,]\\d{3})+|\\d{1,6})(?:[.,]\\d{1,2})?(?!\\d)';
 const CUR_TAIL = '(?:\\s?(?:soles|sol|pen)' + NOT_LETTER + ')?';
@@ -102,85 +110,146 @@ const AMOUNT_Y = new RegExp('(?:(?:S\\/\\.?|PEN|US\\$|\\$)\\s?-?' + NUM + CUR_TA
   '|-?(?:\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d{1,2})?|\\d{1,6}[.,]\\d{1,2})(?!\\d)(?!\\s?' + UNIT + ')(?:\\s?(?:soles|sol|pen|%|por\\s?ciento)' + NOT_LETTER + ')?' +
   '|-?\\d{1,6}\\s?(?:soles|sol|pen|%|por\\s?ciento)' + NOT_LETTER + ')', 'iy');
 const QTY_Y = new RegExp('(?:\\d{1,4}(?:[.,]\\d{1,3})?\\s?' + UNIT + '|x\\s?\\d{1,4}(?!\\d))', 'iy');
-// Abreviaturas con punto que NO cierran la frase (aprox., unid., c/u., kg.…).
-const ABBR_Y = /(?:aprox|approx|aprx|unid|unds?|uds?|u|c\/u|pzas?|kg|grs?|g|ml|lts?|cjs?|cja|ej|etc|prom|aprox|sr|sra|dr|nro|n[°º])\./iy;
-// Entre la palabra y el monto no puede haber un cambio de idea («pero», «aunque», «sino», «mientras») ni un precio de VENTA de verdad:
-// «precio de venta», «P. venta», «PVP», «precio» suelto (no «precio de compra/proveedor»), «se vende» (no «el proveedor se lo vende»),
-// «vendemos», «vendo». Así «El costo no lo tengo, pero el precio de venta es S/ 2.50» deja ver el precio de venta, y las frases del
-// dueño de arriba (con «venta», «vende» o «precio» adentro) se reconocen enteras antes de mirar el corte.
-const SALE_STOP = '(?:pero|aunque|sino|mientras|pvp|vendemos|vendo)' + NOT_LETTER + '|p\\.?\\s?venta|precio(?!\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra))|(?<!(?:proveedor|nos)\\s+)se\\s+vende';
+const ABBR_Y = /(?:aprox|approx|aprx|unid|unds?|uds?|u|c\/u|pzas?|kg|grs?|g|ml|lts?|cjs?|cja|ej|etc|prom|sr|sra|dr|nro|n[°º])\./iy;
+const SALE_STOP = '(?:pero|aunque|sino|mientras|pvp)' + NOT_LETTER + '|p\\.?\\s?venta' + NOT_LETTER + '|precio\\s+de\\s+venta' + NOT_LETTER +
+  '|(?<!(?:proveedor|nos)\\s+)se\\s+vende\\s+a' + NOT_LETTER + '|(?:lo\\s+)?vendemos\\s+a' + NOT_LETTER + '|vendo\\s+a' + NOT_LETTER;
 const STOP_Y = new RegExp('(?:' + SALE_STOP + ')', 'iy');
+const OWNER_WORD_Y = new RegExp(OWNER_WORD, 'iy'), BUY_WORD_Y = new RegExp(BUY_WORD, 'iy');
+const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
+// Palabras con las que puede empezar una frase de varias palabras: para decidirlas se esperan hasta 36 caracteres.
+const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pero|aunque|sino|mientras|pvp)$/i;
 const isLetter = (c) => !!c && /[a-záéíóúñü]/i.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
-const at = (re, t, k) => { re.lastIndex = k; const m = re.exec(t); return m ? m[0].length : 0; };
-// Busca, desde el final de la palabra del dueño, el primer MONTO dentro de `maxGap` caracteres de la misma frase. Lineal (sin regex con
-// huecos que retroceden): se saltan cantidades, enteros sueltos y abreviaturas; un corte de venta, «.», «;», «!», «?» o salto de línea
-// termina la búsqueda. Devuelve el final del monto o -1. `lead`: el monto debe venir después de «a», «por» o «en» (compré a …).
-function amountEnd(t, p, maxGap, lead) {
-  const limit = Math.min(t.length, p + maxGap);
-  for (let k = p; k <= limit && k < t.length;) {
-    const c = t[k], wordStart = !isLetter(t[k - 1]);
-    if (wordStart && isLetter(c) && at(STOP_Y, t, k)) return -1;
-    if (isDigit(c) || c === 'S' || c === 's' || c === 'P' || c === 'p' || c === '$' || c === 'U' || c === '-') {
-      if (!isDigit(t[k - 1]) && !isLetter(t[k - 1])) {
-        const q = isDigit(c) ? at(QTY_Y, t, k) : 0; if (q) { k += q; continue; }
-        const a = at(AMOUNT_Y, t, k);
-        if (a) { if (lead && !/(?:^|[^a-záéíóúñ])(?:a|por|en)\s+$/i.test(t.slice(Math.max(0, k - 6), k))) return -1; return k + a; }
-      }
-      if (isDigit(c)) { while (k < t.length && isDigit(t[k])) k++; continue; } // entero suelto (cantidad, número de lote…): se salta
-    }
-    if (wordStart && isLetter(c)) { const ab = at(ABBR_Y, t, k); if (ab) { k += ab; continue; } }
-    if (c === 'x' || c === 'X') { const q = at(QTY_Y, t, k); if (q && wordStart) { k += q; continue; } }
-    if (c === '.' || c === ';' || c === '!' || c === '?' || c === '\n') return -1;
-    k++;
-  }
-  return -1;
-}
-function maskAfterWords(text, wordRe, maxGap, lead) {
-  let out = '', i = 0, m; wordRe.lastIndex = 0;
-  while ((m = wordRe.exec(text))) {
-    const end = amountEnd(text, m.index + m[0].length, maxGap, lead);
-    if (end < 0) continue;
-    out += text.slice(i, m.index) + OWNER_DATA_LABEL; i = end; wordRe.lastIndex = end;
-  }
-  return out + text.slice(i);
-}
-const OWNER_WORD_G = new RegExp('\\b' + OWNER_WORD, 'gi'), BUY_WORD_G = new RegExp('\\b' + BUY_WORD, 'gi');
-const OWNER_DATA = [
-  // primero las que empiezan con el monto (cortas, menos de 48 caracteres); después «compré a … monto» y «palabra … monto» (amountEnd)
-  new RegExp('(?:(?:S\\/\\.?|PEN)\\s?\\d{1,6}(?:[.,]\\d{1,2})?|\\d{1,6}[.,]\\d{1,2})(?:\\s?soles)?\\s+(?:de\\s+|en\\s+)?' + OWNER_WORD, 'gi'),
-  new RegExp('\\d{1,3}(?:[.,]\\d{1,2})?\\s?(?:%|por\\s?ciento)\\s+(?:de\\s+|en\\s+)?' + OWNER_WORD, 'gi')
-];
 export const OWNER_DATA_LABEL = '[dato del dueño]';
-// Encabezados del dueño, también abreviados: Costo, Costo unit., C. unit, Cto., P. compra, P.compra, P compra, Pr. compra, Prec. compra,
-// Precio de compra, Proveedor, Margen, Ganancia, Utilidad, Cost. Sin acentos ni mayúsculas. «Precio», «P. venta», «P. unit» quedan visibles.
+export const OWNER_RETRO = 160;
 const OWNER_HEADER_RE = /cost|\bcto\b|invers|\bc\s*\.?\s*unit|\bp(?:r|rec|recio)?\s*\.?\s*(?:de\s*)?compra|proveedor|\bprov\b|margen|ganancia|utilidad/;
 const OWNER_HEADER = { test: (c) => OWNER_HEADER_RE.test(String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')) };
-// Tabla: una línea con | (o tabulador) y 2+ celdas cuyo encabezado nombra un dato del dueño; las filas siguientes de esa tabla llevan la
-// celda tapada (la fila separadora --- queda). Una celda a medio llegar ya sale tapada: lo de antes de la celda no cambia.
-function redactOwnerTables(text) {
-  const lines = text.split('\n'); let cols = null, sep = null;
-  for (let k = 0; k < lines.length; k++) {
-    const l = lines[k], d = l.includes('|') ? '|' : l.includes('\t') ? '\t' : null;
-    if (!d || d !== (sep || d)) { cols = null; sep = null; if (!d) continue; }
-    const cells = l.split(d);
-    if (!cols) { const idx = cells.map((c, n) => (OWNER_HEADER.test(c) ? n : -1)).filter((n) => n >= 0); if (idx.length && cells.filter((c) => c.trim()).length >= 2) { cols = idx; sep = d; } continue; }
-    let changed = false;
-    for (const n of cols) { if (n < cells.length && cells[n].trim() && !/^\s*:?-{2,}:?\s*$/.test(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
-    if (changed) lines[k] = cells.join(d);
-  }
-  return lines.join('\n');
+function tableLine(full, st) { // una línea completa de tabla (la fila separadora --- queda)
+  const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
+  if (!d || d !== (st.sep || d)) { st.cols = null; st.sep = null; if (!d) return null; }
+  const cells = full.split(d);
+  if (!st.cols) { const idx = cells.map((c, n) => (OWNER_HEADER.test(c) ? n : -1)).filter((n) => n >= 0); if (idx.length && cells.filter((c) => c.trim()).length >= 2) { st.cols = idx; st.sep = d; } return null; }
+  let changed = false;
+  for (const n of st.cols) { if (n < cells.length && cells[n].trim() && !/^\s*:?-{2,}:?\s*$/.test(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
+  return changed ? cells.join(d) : null;
 }
+function createTableLayer(out) {
+  const st = { cols: null, sep: null }; let line = '', holding = false;
+  return {
+    push(txt) { const s = txt;
+      for (let i = 0; i < s.length;) {
+        if (!line && !holding && st.cols) holding = true; // empieza una fila de una tabla del dueño: espera la línea entera
+        const nl = s.indexOf('\n', i), piece = nl < 0 ? s.slice(i) : s.slice(i, nl + 1);
+        line += nl < 0 ? piece : piece.slice(0, -1); i += piece.length;
+        if (nl < 0) { if (!holding) out(piece); break; }
+        if (holding) { const r = tableLine(line, st); out((r ?? line) + '\n'); holding = false; } else { tableLine(line, st); out(piece); }
+        line = '';
+      }
+    },
+    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; }
+  };
+}
+// Montos y palabras del dueño, en partes. out(texto). Lo único que espera es un monto (o lo que puede serlo) mientras se decide.
+function createAmountLayer(out) {
+  let buf = '', base = 0, k = 0, rel = 0, ctx = null;
+  const ch = (i) => (i >= base ? buf[i - base] : undefined);
+  const end = () => base + buf.length;
+  const sticky = (re, i) => { re.lastIndex = i - base; const m = re.exec(buf); return m ? m[0].length : 0; };
+  const pass = (to) => { if (to > rel) { out(buf.slice(rel - base, to - base)); rel = to; } k = to; };
+  const mask = (to) => { out(OWNER_DATA_LABEL); rel = to; k = to; };
+  const NEED = -1;
+  // ¿cuánto texto hace falta para decidir la palabra que empieza en i?
+  const wordNeed = (i) => { let e = i; while (e < end() && isLetter(ch(e))) e++; if (e >= end()) return e + 1;
+    return PHRASE_START.test(buf.slice(i - base, e - base)) ? i + 36 : e + 2; };
+  const leadOk = (i) => /(?:^|[^a-záéíóúñ])(?:a|por|en)\s+$/i.test(buf.slice(Math.max(0, i - 6 - base), i - base));
+  const amountStart = (i) => { const c = ch(i), p = ch(i - 1); if (isDigit(p) || isLetter(p)) return false;
+    if (isDigit(c) || c === '$') return true;
+    const n1 = ch(i + 1), n2 = ch(i + 2);
+    if (c === '-') return n1 === undefined || isDigit(n1);
+    if (c === 'S' || c === 's') return n1 === undefined || n1 === '/';
+    if (c === 'P' || c === 'p') return n1 === undefined || ((n1 === 'E' || n1 === 'e') && (n2 === undefined || n2 === 'N' || n2 === 'n'));
+    if (c === 'U' || c === 'u') return n1 === undefined || ((n1 === 'S' || n1 === 's') && (n2 === undefined || n2 === '$'));
+    return false; };
+  // un número espera solo hasta tenerlo entero y 16 caracteres más (unidad, soles, %, «por ciento»)
+  const numNeed = (i) => { let e = i + sticky(NUM_HEAD_Y, i); while (e < end() && /[\d.,]/.test(ch(e))) e++; return e >= end() ? e + 1 : e + 16; };
+  // Monto sin palabra del dueño delante (Bot 3): espera hasta que termine la frase (. ; ! ? salto de línea). Si en la frase aparece
+  // una palabra del dueño, se tapa; si aparece una etiqueta de venta o termina la frase, sale. Tope OWNER_RETRO caracteres: si se llega
+  // al tope sin terminar la frase, se tapa (a prueba de fallas).
+  let memo = { e: -1, i: 0 }; // sigue donde quedó la vez anterior (lo ya mirado no cambia)
+  const retro = (e, final) => {
+    for (let i = memo.e === e ? memo.i : e; ; i++) {
+      if (i >= e + OWNER_RETRO) return true;
+      if (i >= end()) { memo = { e, i }; return final ? false : NEED; }
+      const c = ch(i);
+      if (c === ';' || c === '!' || c === '?' || c === '\n') return false;
+      if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i }; return NEED; } if (!isDigit(n)) return false; continue; }
+      if (isLetter(c) && !isLetter(ch(i - 1))) {
+        if (!final && end() < wordNeed(i)) { memo = { e, i }; return NEED; }
+        if ((sticky(OWNER_WORD_Y, i) && !nameWord(i)) || sticky(BUY_WORD_Y, i)) return true;
+        if (sticky(STOP_Y, i)) return false;
+        const ab = sticky(ABBR_Y, i); if (ab) i += ab - 1;
+      }
+    }
+  };
+  // Parte de un nombre propio (Bot 2: «Distribuidora Inversiones Lima»): con mayúscula y detrás de otra palabra con mayúscula, en la
+  // misma frase. No vale para costo/cto/c. unit/precio de compra/proveedor (esas siempre cuentan).
+  const nameWord = (i) => { const c = ch(i); if (c !== c.toUpperCase() || /^(?:c|p)/i.test(c)) return false;
+    let j = i; if (ch(j - 1) !== ' ') return false; j--; while (ch(j - 1) === ' ') j--;
+    let w = j; while (isLetter(ch(w - 1))) w--; const f = ch(w); return w < j && !!f && f !== f.toLowerCase(); };
+  const run = (final) => {
+    for (;;) {
+      if (ctx && k > ctx.limit) ctx = null;
+      if (k >= end()) break;
+      const c = ch(k), p = ch(k - 1);
+      if (isLetter(c) && !isLetter(p)) {
+        if (!final && end() < wordNeed(k)) break;
+        let n;
+        // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { limit: Math.max(ctx.limit, k + n + 40), lead: ctx.lead } : { limit: k + n + 40, lead: true }; pass(k + n); continue; }
+        // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
+        if ((n = sticky(STOP_Y, k))) { ctx = /^(?:pero|aunque|sino|mientras)/i.test(buf.slice(k - base, k - base + 8)) ? null : { limit: k + n + 60, sale: true }; pass(k + n); continue; }
+        if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
+        if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
+      }
+      if (amountStart(k)) {
+        if (!final && end() < numNeed(k)) break;
+        let n = isDigit(c) ? sticky(QTY_Y, k) : 0;
+        if (n) { pass(k + n); continue; }
+        n = sticky(AMOUNT_Y, k);
+        if (n) {
+          if (!final && end() < k + n + 16) break;
+          const e = k + n;
+          if (ctx && ctx.sale) { ctx = null; pass(e); continue; }
+          if (ctx && (!ctx.lead || leadOk(k))) { ctx = null; mask(e); continue; }
+          const r = retro(e, final); if (r === NEED) break;
+          ctx = null; if (r) mask(e); else pass(e);
+          continue;
+        }
+      }
+      if (isDigit(c)) { let e = k; while (e < end() && isDigit(ch(e))) e++; pass(e); continue; }
+      if (c === '.' || c === ';' || c === '!' || c === '?' || c === '\n') { ctx = null; pass(k + 1); continue; }
+      pass(k + 1);
+    }
+    if (final) { pass(end()); return; }
+    // Sale ya lo que seguro no es monto (hasta el próximo posible monto), aunque la palabra de antes siga sin decidirse.
+    let j = Math.max(k, rel); while (j < end() && !amountStart(j)) j++;
+    if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
+    const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
+  };
+  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; memo = { e: -1, i: 0 }; } };
+}
+function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
+  return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }
 export function redactOwnerData(value) {
-  let out = redactOwnerTables(String(value ?? ''));
-  for (const re of OWNER_DATA) out = out.replace(re, OWNER_DATA_LABEL);
-  out = maskAfterWords(out, BUY_WORD_G, 40, true);
-  return maskAfterWords(out, OWNER_WORD_G, 60, false);
+  let out = ''; const p = createOwnerPipeline((s) => { out += s; }); p.push(String(value ?? '')); p.flush(); return out;
 }
+// Compatibilidad (pruebas viejas): ya no se usa para el texto en partes.
 export const OWNER_HOLD = 160;
 const OWNER_WORD_RE = new RegExp('\\b(?:' + OWNER_WORD + '|' + BUY_WORD + ')', 'i');
 export function ownerHold(red) { const from = Math.max(0, red.length - OWNER_HOLD), m = OWNER_WORD_RE.exec(red.slice(from)); return m ? from + m.index : Infinity; }
-export function redactFor(role) { return role === 'owner' ? redactText : (v) => redactOwnerData(redactText(v)); }
+const redactEmployee = (v) => redactOwnerData(redactText(v));
+export function redactFor(role) { return role === 'owner' ? redactText : redactEmployee; }
 function cleanText(value, max) {
   return redactText(String(value ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).slice(0, max).trim();
 }
@@ -542,8 +611,10 @@ export function buildDeepSeekRequest({ role, ctx, history, text, image }) {
 }
 
 export function payloadBytes(body) { return new TextEncoder().encode(JSON.stringify(body)).length; }
-export async function callDeepSeek(body, env, fetchImpl, timeoutMs) {
-  const controller = new AbortController();
+// Señal de afuera (Bot 3): si el celular se va, se pasa el tope de 90 s o vence un tiempo, el pedido a DeepSeek se corta (deja de recibir).
+function linkAbort(controller, outer) { if (!outer) return; if (outer.aborted) controller.abort(); else outer.addEventListener('abort', () => controller.abort(), { once: true }); }
+export async function callDeepSeek(body, env, fetchImpl, timeoutMs, outer) {
+  const controller = new AbortController(); linkAbort(controller, outer);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const base = String(env.DEEPSEEK_BASE_URL || DEEPSEEK_BASE_URL).replace(/\/+$/, '');
@@ -562,8 +633,9 @@ export async function callDeepSeek(body, env, fetchImpl, timeoutMs) {
 // Igual que callDeepSeek pero con stream:true: cada trozo de texto va a onText en cuanto llega; las llamadas a herramientas se juntan
 // aquí y recién al final se devuelven (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs).
 // Si se corta a mitad: { error, partial:true } y lo ya recibido queda en content.
-export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, onTool, guard) {
-  const controller = new AbortController(); let timer = null;
+export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, onTool, guard, outer) {
+  const controller = new AbortController(); let timer = null; let reader = null; linkAbort(controller, outer);
+  controller.signal.addEventListener('abort', () => { try { if (reader) reader.cancel().catch(() => {}); } catch { /* ya cortado */ } }, { once: true });
   const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), idleMs); };
   let content = '', usage = null, forbidden = null; const calls = [];
   try {
@@ -573,7 +645,7 @@ export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, o
       headers: { authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'content-type': 'application/json', accept: 'text/event-stream' }, body: JSON.stringify({ ...body, stream: true }) });
     if (!res.ok) return { error: res.status === 429 ? 'upstream_busy' : 'upstream_error', status: res.status };
     if (!res.body || typeof res.body.getReader !== 'function') return { error: 'upstream_error' };
-    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '', done = false;
+    reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '', done = false;
     const line = (l) => {
       if (!l.startsWith('data:')) return; const d = l.slice(5).trim(); if (!d) return;
       if (d === '[DONE]') { done = true; return; }
@@ -596,6 +668,7 @@ export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, o
       let k; while (!forbidden && (k = buf.indexOf('\n')) >= 0) { line(buf.slice(0, k).replace(/\r$/, '')); buf = buf.slice(k + 1); }
       if (forbidden) { try { reader.cancel().catch(() => {}); } catch { /* ya cortado */ } controller.abort(); return { forbidden, content, calls: [], usage }; }
     }
+    if (controller.signal.aborted && !forbidden) return { error: 'upstream_timeout', partial: !!content, content }; // tiempo, tope o celular ido
     if (buf) line(buf.trim());
     if (forbidden) return { forbidden, content, calls: [], usage };
     // Sin [DONE] ni finish_reason: el corte fue a mitad (lo recibido queda, las herramientas a medias NO se usan).
@@ -608,28 +681,129 @@ export async function callDeepSeekStream(body, env, fetchImpl, idleMs, onText, o
 
 // Canal SSE hacia el celular (sin Durable Objects: un TransformStream por pedido, plan gratis de Workers).
 // Eventos: open (enseguida), text {t} o {reset:true}, final {…el mismo cuerpo de siempre…}, error {error, status}.
+// signal: se activa si el celular corta la conexión (la lectura se cancela) para cortar también el pedido a DeepSeek.
 export function createSseChannel() {
-  const ts = new TransformStream(), w = ts.writable.getWriter(), enc = new TextEncoder();
+  const ts = new TransformStream(), w = ts.writable.getWriter(), enc = new TextEncoder(), gone = new AbortController();
   let open = false, closed = false, resolveOpen; const opened = new Promise((r) => { resolveOpen = r; });
+  w.closed.catch(() => gone.abort());
   const ch = {
-    readable: ts.readable, opened, isOpen: () => open,
-    send(ev, data) { if (closed) return; w.write(enc.encode('event: ' + ev + '\ndata: ' + JSON.stringify(data) + '\n\n')).catch(() => {}); },
+    readable: ts.readable, opened, isOpen: () => open, signal: gone.signal,
+    send(ev, data) { if (closed) return; w.write(enc.encode('event: ' + ev + '\ndata: ' + JSON.stringify(data) + '\n\n')).catch(() => gone.abort()); },
     open() { if (open) return; open = true; ch.send('open', { ok: true }); resolveOpen(); },
     close() { if (closed) return; closed = true; w.close().catch(() => {}); }
   };
   return ch;
 }
-// Texto que va saliendo, ya sin datos sensibles: se guarda una cola de 48 caracteres para que un DNI, teléfono o «data:» que todavía
-// está llegando no salga a medias sin tapar. El texto definitivo igual llega en «final» (reply) y reemplaza al que se fue pintando.
+// ---------- Filtro en partes, incremental (Bot 3) ----------
+// Antes cada trozo volvía a filtrar TODO el texto acumulado (4000 caracteres en trozos de 5: 20-40 ms, y segundos con números largos).
+// Ahora cada parte se filtra una sola vez y la salida en partes es EXACTAMENTE la del filtro del texto entero (prueba de propiedad con
+// cortes al azar en assistant-stream-incremental.test.mjs).
+//  - Datos sensibles (redactText, dueño y empleado): el texto se corta entre un espacio y una letra, salvo con un «data:» abierto, una
+//    palabra de clave (pin, clave, token, api key…) esperando su valor o un «RUC  N°» partido. Teléfono, DNI, RUC y correo nunca cruzan
+//    un espacio seguido de letra. Solo espera la última palabra.
+//  - Datos del dueño (solo empleado): el lector de montos de arriba (createOwnerPipeline), que es el mismo para el texto entero.
+const WS = /\s/;
+const isWs = (c) => !!c && WS.test(c);
+const ASCII_WORD = /[A-Za-z0-9_]/;
+const CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, CTRL_CHAR = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+const PIN_KW_END = /(?:^|[^A-Za-z0-9_])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)$/i;
+const PIN_TOKEN_END = /(?:es|era|de|:|=)$/i;
+function skipWsBack(t, i) { while (i > 0 && isWs(t[i - 1])) i--; return i; }
+// ¿Hay una palabra de clave antes de h esperando su valor? (espacios, opcional «es/era/de/:/=», espacios)
+function pinOpen(t, h) {
+  let i = skipWsBack(t, h); const a = t.slice(Math.max(0, i - 20), i);
+  if (PIN_KW_END.test(a)) return true;
+  const m = PIN_TOKEN_END.exec(a); if (!m) return false;
+  i = skipWsBack(t, i - m[0].length);
+  return PIN_KW_END.test(t.slice(Math.max(0, i - 20), i));
+}
+// «api key» con espacio: no se corta entre «api» y «key».
+function apiOpen(t, h) { return (t[h] === 'k' || t[h] === 'K') && /(?:^|[^A-Za-z0-9_])api$/i.test(t.slice(Math.max(0, skipWsBack(t, h) - 4), skipWsBack(t, h))); }
+function rucOpen(t, h) { return (t[h] === 'N' || t[h] === 'n') && /(?:^|[^A-Za-z0-9_])RUC$/i.test(t.slice(Math.max(0, skipWsBack(t, h) - 4), skipWsBack(t, h))); }
+const DATA_B64 = /[A-Za-z0-9+/=%._~-]/;
+// Etapa 1: datos sensibles. Los cortes válidos dependen solo del texto hasta el corte, así que cada posición se mira una vez.
+function createTextStage(out) {
+  let pend = '', off = 0, seen = 0, best = 0; const data = []; // data: {at (absoluto), phase 0|1|2 (2=roto), n, pos}
+  const dataOpen = (h) => { // conservador: desde el último «data:» antes de h, ¿podría seguir siendo el mismo dato?
+    for (let j = data.length - 1; j >= 0; j--) {
+      const d = data[j]; if (d.at + 5 > off + h) continue;
+      while (d.phase < 2 && d.pos < off + h) {
+        const c = pend[d.pos - off];
+        if (d.phase === 0) { if (c === ',') d.phase = 1; else if (isWs(c) || ++d.n > 120) d.phase = 2; } else if (!isWs(c) && !DATA_B64.test(c)) d.phase = 2;
+        d.pos++;
+      }
+      return d.phase < 2;
+    }
+    return false;
+  };
+  const scan = () => {
+    const from = Math.max(0, seen - 4), low = pend.slice(from).toLowerCase(); let k = -1;
+    while ((k = low.indexOf('data:', k + 1)) >= 0) { const at = off + from + k; if (!data.length || data[data.length - 1].at < at) data.push({ at, phase: 0, n: 0, pos: at + 5 }); }
+    for (let h = Math.max(1, seen); h < pend.length; h++) {
+      if (!isWs(pend[h - 1]) || !isLetter(pend[h])) continue;
+      if (pinOpen(pend, h) || rucOpen(pend, h) || apiOpen(pend, h) || dataOpen(h)) continue;
+      best = h;
+    }
+    seen = Math.max(seen, pend.length - 1 < 1 ? 0 : pend.length - 1);
+  };
+  return {
+    push(str) {
+      pend += str; scan();
+      if (best > 0) { out(redactText(pend.slice(0, best))); pend = pend.slice(best); off += best; seen -= best; best = 0;
+        while (data.length && data[0].phase === 2 && data[0].pos <= off) data.shift(); }
+    },
+    flush() { if (pend) out(redactText(pend)); pend = ''; off = 0; seen = 0; best = 0; data.length = 0; }
+  };
+}
+export const FIRST_TEXT_MIN = 20, TEXT_BATCH = 48;
+// Texto que va saliendo, ya sin datos sensibles. redactText (dueño) y redactFor(rol) van por el camino incremental; otro filtro
+// cualquiera usa el camino viejo (vuelve a filtrar todo con una cola de STREAM_HOLDBACK). Tope: max caracteres en total.
+// Lo primero que sale tiene al menos FIRST_TEXT_MIN caracteres (nunca un «El » suelto) y lo liberado de una vez se manda en tandas
+// de ~TEXT_BATCH caracteres cortadas en espacios. El texto definitivo igual llega en «final» (reply).
 export const STREAM_HOLDBACK = 48;
 export function createTextEmitter(send, max = 1200, redact = redactText, hold = null) {
+  const stages = redact === redactText ? 1 : redact === redactEmployee ? 2 : 0;
+  if (!stages) return legacyTextEmitter(send, max, redact, hold);
+  let sent = 0, ready = '', prevCtrl = false, s1, s2;
+  const deliver = (final) => {
+    if (sent >= max) { ready = ''; return; }
+    if (!sent && !final && ready.length < FIRST_TEXT_MIN) return;
+    let room = max - sent;
+    while (ready && room > 0) {
+      let n = Math.min(ready.length, room);
+      if (n > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); n = sp > 8 ? sp + 1 : TEXT_BATCH; }
+      send({ t: ready.slice(0, n) }); sent += n; room -= n; ready = ready.slice(n);
+    }
+    if (room <= 0) ready = '';
+  };
+  const init = () => {
+    sent = 0; ready = ''; prevCtrl = false;
+    s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; }) : null;
+    s1 = createTextStage((x) => { if (s2) s2.push(x); else ready += x; });
+  };
+  init();
+  return {
+    push(d) {
+      const raw = String(d || ''); if (!raw) return;
+      let c = raw.replace(CTRL_RE, ' '); if (prevCtrl && CTRL_CHAR.test(raw[0])) c = c.slice(1);
+      prevCtrl = CTRL_CHAR.test(raw[raw.length - 1]);
+      if (sent >= max) return;
+      s1.push(c); deliver(false);
+    },
+    flush() { s1.flush(); if (s2) s2.flush(); deliver(true); },
+    reset() { if (sent) send({ reset: true }); init(); },
+    drop() { const keep = sent; init(); sent = keep; }, // lo que quedaba sin salir no sale
+    sent: () => sent
+  };
+}
+function legacyTextEmitter(send, max, redact, hold) {
   let acc = '', sent = 0;
-  const clean = () => redact(acc.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).slice(0, max);
+  const clean = () => redact(acc.replace(CTRL_RE, ' ')).slice(0, max);
   return {
     push(d) { acc += String(d || ''); const red = clean(); const safe = Math.min(red.length - STREAM_HOLDBACK, max, hold ? hold(red) : Infinity); if (safe > sent) { send({ t: red.slice(sent, safe) }); sent = safe; } },
     flush() { const red = clean(); if (red.length > sent) { send({ t: red.slice(sent) }); sent = red.length; } },
     reset() { if (sent) send({ reset: true }); acc = ''; sent = 0; },
-    drop() { acc = acc.slice(0, sent); }, // lo que quedaba en la cola no sale
+    drop() { acc = acc.slice(0, sent); },
     sent: () => sent
   };
 }
@@ -639,6 +813,7 @@ const FORBIDDEN_DOCUMENT = Object.freeze({ error: 'forbidden_document', message:
 // Sale enseguida y luego cada STATUS_EVERY_MS mientras no haya texto; cada aviso es un trozo, así el reloj de 30 s del celular vuelve a cero.
 // Sin texto todavía = sent() en 0 (también después de un reset). Con texto ya pintado no se manda nada.
 export const STATUS_EVERY_MS = 8000;
+export const SERVER_MAX_MS = 90000;
 export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
   let iv = null, last = 0;
   const tick = (throttle) => { if (!sse || !emit || emit.sent()) return; const t = Date.now(); if (throttle && t - last < 1000) return; last = t; sse.send('status', { s: 'buscando' }); };
@@ -882,9 +1057,9 @@ export async function assistantChatRoute(request, env, auth, json, deps = {}) {
   };
   const core = chatCore(request, env, auth, jr, { ...deps, sse: ch }, ctx);
   await Promise.race([core.catch(() => null), ch.opened]);
-  if (!ch.isOpen()) { const res = await core; await auditRej(); return res; }
+  if (!ch.isOpen()) { const res = await core; if (ctx.stopCap) ctx.stopCap(); await auditRej(); return res; }
   // Canal abierto: el resto sigue mientras el celular lee; se cierra recién después de anotar la bitácora.
-  const done = core.catch(() => { jr({ error: 'upstream_error' }, 502); }).then(auditRej).catch(() => {}).finally(() => { if (ctx.beat) ctx.beat.stop(); ch.close(); });
+  const done = core.catch(() => { jr({ error: 'upstream_error' }, 502); }).then(auditRej).catch(() => {}).finally(() => { if (ctx.beat) ctx.beat.stop(); if (ctx.stopCap) ctx.stopCap(); ch.close(); });
   if (typeof deps.waitUntil === 'function') deps.waitUntil(done);
   return new Response(ch.readable, { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 }
@@ -934,6 +1109,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const red = redactFor(role), guard = employeeToolGuard(role);
   const emit = sse ? createTextEmitter((d) => sse.send('text', d), 1200, red, role === 'owner' ? null : ownerHold) : null;
   const beat = createStatusBeat(sse, emit, deps.statusEveryMs); ctxOut.beat = beat; // se para al cerrar el canal (assistantChatRoute)
+  // Tope del servidor (Bot 3): 90 s desde que el cuerpo (y la foto) ya se leyó; también corta si el celular se fue.
+  const up = new AbortController(); if (deps.sse && deps.sse.signal) linkAbort(up, deps.sse.signal);
+  const cap = setTimeout(() => up.abort(), deps.maxStreamMs ?? SERVER_MAX_MS); ctxOut.stopCap = () => clearTimeout(cap);
   if (sse) sse.open();
   let result, req = null; const bytes = [];
   if (mode === 'mock') {
@@ -942,12 +1120,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const bad = guard ? (result.calls || []).map((c) => guard({ name: c.name, arguments: typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments || {}) })).find(Boolean) : null;
     if (bad) result = { forbidden: bad, content: '', calls: [] };
     // Demostración también en partes: palabra por palabra con una pausa corta (deps.mockChunkMs).
-    else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { emit.push(w); await sleep(deps.mockChunkMs ?? 25); } emit.flush(); }
+    else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } emit.flush(); }
   } else {
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image });
     bytes.push(payloadBytes(req));
-    result = emit ? await callDeepSeekStream(req, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard)
-      : await callDeepSeek(req, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs);
+    result = emit ? await callDeepSeekStream(req, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
+      : await callDeepSeek(req, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     if (emit && !result.error && !result.forbidden) emit.flush();
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}) }, ERR_STATUS[result.error] || 502);
   }
@@ -1017,8 +1195,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       bytes.push(payloadBytes(req2));
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
       if (emit) { emit.reset(); beat.start(); beat.tick(); }
-      const second = emit ? await callDeepSeekStream(req2, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t))
-        : await callDeepSeek(req2, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs);
+      const second = emit ? await callDeepSeekStream(req2, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
+        : await callDeepSeek(req2, env, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       if (emit && !second.error) emit.flush();
       if (!second.error && second.content) reply = role !== 'owner' ? redactOwnerData(cleanText(second.content, 1200)) : cleanText(second.content, 1200);
     }

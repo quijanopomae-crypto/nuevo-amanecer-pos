@@ -117,3 +117,11 @@ Importante: DeepSeek procesa los datos en servidores en China. Por eso el protot
 - Vista mientras llega: se baja sola solo si la persona estaba abajo («Ver nuevo ↓» si no), mascota «hablando», el lector anuncia la respuesta una vez al final.
 - Empleado: los resultados de consultas pasan por una lista blanca antes de cualquier trozo y antes del modelo (sin costos ni márgenes).
 - Empleado y documentos del dueño: herramientas recortadas, 403 JSON antes del canal si lo pide claro y corte a mitad si el modelo igual lo intenta. Montos de costo, margen o ganancia tapados en cada trozo.
+
+### Rendimiento y regla de montos (Bot 3, sala y Bots 2/4 sobre c97c41ca, 17-10)
+- Correo acotado y lineal (50 KB adversarios ~12-18 ms; antes ~1,9 s). Filtro en partes incremental con salida idéntica al texto entero (prueba de propiedad con cortes al azar).
+- Empleado: se tapa solo el monto; el texto sale enseguida. El monto antes de la palabra espera hasta el fin de la frase (tope 160, luego se tapa). Etiquetas de venta acotadas. Nombres como «Arroz Costeño» o «Distribuidora Inversiones Lima» se ven.
+- CPU (4000 caracteres en trozos de 5): dueño 1-4 ms, empleado 3-7 ms (antes 20-42 ms y 3,3 s con dígitos). Primera letra a los 25 caracteres en los dos roles; peor caso del empleado (monto al inicio, línea sin punto) 205 caracteres.
+- Pedido a DeepSeek abortado si el celular se va o pasa el tope de 90 s del servidor. Relojes del celular con tiempo de subida de la foto. Foto de empleado rechazada antes de subir.
+- Bot 4: puntitos mientras llega, «Pensando» tras un reset, tandas de ~48 caracteres al pintar, contraste del aviso en modo oscuro, sin «unid..», último párrafo con texto cuenta para el espacio de abajo.
+- Pendiente: medirlo con DeepSeek real; el tiempo de inactividad del dueño sigue esperando su decisión.
