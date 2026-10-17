@@ -560,6 +560,8 @@
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
     if (image && access && access.role !== 'owner') { addMsg('u', text || 'Foto'); errMsg('image_owner_only'); setState('error', 2600); return; }
+    // Bot 3: el modelo en uso no lee fotos (lo dice el ping): se avisa al instante, SIN subirla (el servidor igual responde 422 sin leerla).
+    if (image && access && access.vision === false) { addMsg('u', text || 'Foto'); errMsg('image_unsupported'); setState('error', 2600); return; }
     var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; // menos desplazamiento tras el primer mensaje
     addMsg('u', text || 'Foto', image); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState(image ? 'concentrado' : 'pensando');
     var thinking = addMsg('a', image ? 'Concentrado, leyendo la foto' : 'Pensando'); thinking.classList.add('na-asst-thinking');
@@ -581,7 +583,7 @@
     try {
       var mine = panelEl, d;
       if (streaming) {
-        var q = reqInit('/auth/assistant/chat', body);
+        var q = reqInit('/auth/assistant/chat' + (image ? '?image=1' : ''), body); // ?image=1: el servidor decide sin leer la foto
         painter = C.createTextPainter(function (t) { if (panelEl !== mine) return; var stick = atBottom(); writeText(t); follow(stick); wake(); });
         var st = await C.streamChat(root.fetch.bind(root), q.url, q.init, { onText: function (t) { painter.push(t); }, onReset: backToThinking,
           onStatus: searching });
@@ -595,7 +597,7 @@
           else if (st.error) d = { ok: false, error: st.error.error || 'upstream_error', status: st.error.status };
           else { if (bubble) bubble.remove(); else thinking.remove(); errMsg(root.navigator.onLine === false ? 'offline' : st.timeout ? 'timeout' : 'network', null, [text, image]); setState('error', 2600); return; }
         }
-      } else { d = await post('/auth/assistant/chat', body, null, C.TIMEOUTS.chat); if (panelEl !== mine) return; }
+      } else { d = await post('/auth/assistant/chat' + (image ? '?image=1' : ''), body, null, C.TIMEOUTS.chat); if (panelEl !== mine) return; }
       if (!d.ok && bubble) { bubble.remove(); bubble = null; }
       if (!bubble) thinking.remove(); wake(); // llegó respuesta: si estaba en pausa, despierta
       if (typeof d.server_now === 'number') clockOffset = d.server_now - Date.now(); // la cuenta regresiva usa la hora del servidor
@@ -667,7 +669,7 @@
     var hadUi = !!rootEl, offNow = false;
     // Corto (3 s) y sin bloquear nada: con mala señal se corta (timeout del pedido) y queda lo que ya había.
     pinging = post('/auth/assistant/chat', { ping: true }, null, PING_TIMEOUT_MS).then(function (d) {
-      if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level }; adminOff = false; }
+      if (d && d.ok) { access = { role: d.role === 'owner' ? 'owner' : 'empleado', level: d.level, vision: d.vision !== false }; adminOff = false; }
       else if (d && (d.status === 403 || d.status === 401 || d.status === 404)) { access = null; offNow = d.error === 'assistant_off' && d.reason !== 'sin_rol'; }
       else lastPing = 0; // sin respuesta clara: se puede volver a preguntar al reconectar
       noRole = !!(d && d.reason === 'sin_rol'); if (d && 'owner_bootstrap' in d) bootstrapOn = !!d.owner_bootstrap; // solo viene en el 403 sin_rol

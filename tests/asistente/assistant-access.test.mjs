@@ -46,21 +46,21 @@ test('apagado por defecto: el empleado recibe 403 assistant_off en chat, ping y 
   const { chat, call } = await setup(t);
   const r = await chat('tok-emp', 'qué falta reponer'); assert.equal(r.status, 403); assert.equal(r.body.error, 'assistant_off');
   const ping = await call('tok-emp', '/auth/assistant/chat', { ping: true }); assert.equal(ping.status, 403);
-  const own = await call('tok-dueno', '/auth/assistant/chat', { ping: true }); assert.deepEqual(await own.json(), { ok: true, enabled: true, role: 'owner', level: 'dueno' });
+  const own = await call('tok-dueno', '/auth/assistant/chat', { ping: true }); assert.deepEqual(await own.json(), { ok: true, enabled: true, role: 'owner', level: 'dueno', vision: true });
   const conf = await call('tok-emp', '/auth/assistant/confirm', { token: 'x', proposal: {} }); assert.equal(conf.status, 403); assert.equal((await conf.json()).error, 'assistant_off');
 });
 
 // Bots 3 y 5 (50b6716b): el ping del re-chequeo devuelve SOLO si este aparato tiene asistente y su nivel. Nada del dueño ni de otros aparatos.
 test('ping: la respuesta trae solo los campos de nivel (ok, enabled, role, level), para dueño y empleado; nada del dueño ni de la configuración', async (t) => {
   const { call, level } = await setup(t);
-  assert.deepEqual([...PING_FIELDS], ['ok', 'enabled', 'role', 'level']);
+  assert.deepEqual([...PING_FIELDS], ['ok', 'enabled', 'role', 'level', 'vision']); // vision (Bot 3): solo si el modelo en uso lee fotos
   assert.equal((await level('session:emp', 'consultas_documentos')).status, 200);
-  for (const [tok, want] of [['tok-dueno', { role: 'owner', level: 'dueno' }], ['tok-emp', { role: 'empleado', level: 'consultas_documentos' }]]) {
+  for (const [tok, want] of [['tok-dueno', { role: 'owner', level: 'dueno', vision: true }], ['tok-emp', { role: 'empleado', level: 'consultas_documentos', vision: false }]]) {
     const r = await call(tok, '/auth/assistant/chat', { ping: true }); assert.equal(r.status, 200);
     const raw = await r.text(), body = JSON.parse(raw);
     assert.deepEqual(Object.keys(body).sort(), [...PING_FIELDS].sort(), raw); assert.deepEqual(body, { ok: true, enabled: true, ...want });
     assert.ok(!/session:|dueno-|device|owner_bootstrap|configured|server_now|pin|token|approval/i.test(raw.replace('"level":"dueno"', '')), raw);
-    assert.ok(raw.length < 90, 'chico: ' + raw.length + ' bytes');
+    assert.ok(raw.length < 105, 'chico (con vision): ' + raw.length + ' bytes');
   }
   assert.deepEqual(Object.keys(pingBody('empleado:consultas')), [...PING_FIELDS]);
 });

@@ -200,7 +200,7 @@ test('celular: vuelta al JSON si el servidor responde JSON (puertas) o el navega
   assert.equal(j.kind, 'json'); assert.equal(j.status, 403); assert.equal(j.data.error, 'image_owner_only');
   assert.match(UI, /function canStream\(\) \{ return typeof root\.ReadableStream === 'function' && typeof root\.TextDecoder === 'function' && typeof root\.AbortController === 'function'/);
   assert.match(UI, /if \(streaming\) body\.stream = true;/);
-  assert.match(UI, /\} else \{ d = await post\('\/auth\/assistant\/chat', body, null, C\.TIMEOUTS\.chat\);/);
+  assert.match(UI, /\} else \{ d = await post\('\/auth\/assistant\/chat' \+ \(image \? '\?image=1' : ''\), body, null, C\.TIMEOUTS\.chat\);/);
   // sin cabeceras nuevas (CORS del Worker sin cambios; las fotos del dueño siguen igual)
   const w = readFileSync(new URL('../../tools/cloudflare-lab/src/worker.js', import.meta.url), 'utf8');
   assert.match(w, /'authorization, content-type, x-activation-secret, x-session-token, x-owner-approval'/);

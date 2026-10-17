@@ -814,8 +814,9 @@ export function employeeQueryResult(r) {
 // authorizeSession trata "sin fila de rol" como dueño. Para el asistente eso NO basta: solo es dueño
 // quien tiene pos_role='owner' explícito. Sin fila, sin tabla o con error: empleado (falla cerrado).
 // 403 cuando el asistente no está disponible para este aparato.
-export const PING_FIELDS = Object.freeze(['ok', 'enabled', 'role', 'level']);
-export function pingBody(role) { return { ok: true, enabled: true, role: role === 'owner' ? 'owner' : 'empleado', level: accessLevel(role) }; }
+export const PING_FIELDS = Object.freeze(['ok', 'enabled', 'role', 'level', 'vision']);
+// vision: ¿el modelo en uso lee fotos? (Bot 3) Solo el dueño puede mandar fotos: para un empleado siempre false. Sin nombre de proveedor ni modelo.
+export function pingBody(role, vision = false) { return { ok: true, enabled: true, role: role === 'owner' ? 'owner' : 'empleado', level: accessLevel(role), vision: role === 'owner' && !!vision }; }
 function offBody(role) { return role === 'empleado:off' || role === 'empleado' || role === 'sin_rol' ? { error: 'assistant_off', message: 'El dueño no activó el asistente en este aparato.' } : { error: 'admin_only', message: 'El asistente es solo para el dueño.' }; }
 export async function assistantRole(db, auth) {
   if (auth?.posRole !== 'owner') return 'empleado';
@@ -999,6 +1000,11 @@ export function parseChatBody(body) {
 // Nunca se guarda el texto del mensaje, la foto, el PIN ni secretos: solo aparato, rol y motivo.
 // Foto de un aparato que no es del dueño: 403 con código propio (no forbidden_role, que en el celular quitaría todo el asistente).
 export const EMPLOYEE_MAX_BODY_BYTES = 64_000;
+// Dueño con un modelo que NO lee fotos: un pedido sin foto es chico; más de esto es una foto y se corta con 422 sin leer el resto (Bot 3).
+export const NO_VISION_MAX_BODY_BYTES = 256_000;
+// El celular avisa que manda foto con ?image=1 en la URL (sin cabecera nueva: CORS del Worker igual); también vale x-assistant-image: 1.
+function declaresImage(request) { let q = false; try { q = new URL(request.url).searchParams.get('image') === '1'; } catch { /* sin URL */ }
+  return q || request.headers.get('x-assistant-image') === '1' || /^(multipart\/|image\/)/i.test(String(request.headers.get('content-type') || '')); }
 export const IMAGE_OWNER_ONLY = Object.freeze({ error: 'image_owner_only', message: 'Eso solo lo puede hacer el dueño.' });
 export const IMAGE_UNSUPPORTED = Object.freeze({ error: 'image_unsupported', message: 'Leer fotos no está disponible por ahora.' });
 // Lee el cuerpo con tope: null si pasa el tope (se corta la lectura, no se baja el resto), undefined si falla la lectura.
@@ -1053,10 +1059,21 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const len = Number(request.headers.get('content-length') || 0);
   // Foto solo del dueño (Bot 5): a un empleado se le corta con 403 ANTES de leer o interpretar la foto, sin cupo y sin DeepSeek.
   // Barato: cabecera/tipo, tamaño declarado, lectura con tope (64 KB, nunca la foto entera) y búsqueda del campo antes de JSON.parse.
+  // Proveedor ANTES de leer el cuerpo (Bot 3): solo de la config del Worker (más la elección guardada del dueño entre los que tienen clave).
+  const store0 = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null);
+  const cfg = resolveProvider(env, await readProviderChoice(store0));
+  const demo = String(env.ASSISTANT_DEMO || '') === '1';
+  const vision = cfg.ok ? !!cfg.vision : demo; // la demostración «lee» fotos como antes
   let raw;
-  if (role !== 'owner') {
+  if (role === 'owner' && cfg.ok && !cfg.vision) {
+    // Modelo sin fotos: foto declarada o cuerpo grande -> 422 sin leer la foto; sin tamaño declarado, se lee con tope y se corta.
+    if (declaresImage(request) || len > NO_VISION_MAX_BODY_BYTES) return json(IMAGE_UNSUPPORTED, 422);
+    raw = await readBounded(request, NO_VISION_MAX_BODY_BYTES);
+    if (raw === undefined) return json({ error: 'bad_request' }, 400);
+    if (raw === null || hasImageField(raw)) return json(IMAGE_UNSUPPORTED, 422);
+  } else if (role !== 'owner') {
     const ct = String(request.headers.get('content-type') || '');
-    if (request.headers.get('x-assistant-image') === '1' || /^(multipart\/|image\/)/i.test(ct) || len > EMPLOYEE_MAX_BODY_BYTES) return json(IMAGE_OWNER_ONLY, 403);
+    if (declaresImage(request) || /^(multipart\/|image\/)/i.test(ct) || len > EMPLOYEE_MAX_BODY_BYTES) return json(IMAGE_OWNER_ONLY, 403);
     raw = await readBounded(request, EMPLOYEE_MAX_BODY_BYTES);
     if (raw === undefined) return json({ error: 'bad_request' }, 400);
     if (raw === null || hasImageField(raw)) return json(IMAGE_OWNER_ONLY, 403);
@@ -1065,19 +1082,16 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   let body; try { body = JSON.parse(raw); } catch { return json({ error: 'bad_request' }, 400); }
   // Comprobación para la tarjeta de Inicio y la burbuja: no llama a DeepSeek ni gasta cupo. El servidor dice rol y nivel.
   // Rol y sin_rol se revisan ANTES de la clave: en un Worker sin clave el registro del dueño igual se ve. El ping no llama al modelo.
-  // Proveedor: solo de la config del Worker (más la elección guardada del dueño entre los que tienen clave). Nada del celular.
-  const store0 = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null);
-  const cfg = body && body.ping === true ? null : resolveProvider(env, await readProviderChoice(store0));
-  const configured = !!(cfg && cfg.ok) || String(env.ASSISTANT_DEMO || '') === '1';
+  const configured = cfg.ok || demo;
   // Respuesta MÍNIMA (Bots 3 y 5): solo si este aparato tiene asistente y con qué nivel. Nada del dueño, de otros aparatos ni de la configuración.
-  if (body && body.ping === true) return json(pingBody(role));
+  if (body && body.ping === true) return json(pingBody(role, vision));
   // Falla cerrado: sin clave no hay chat ni tarjetas, salvo modo demostración explícito (ASSISTANT_DEMO=1, solo prototipo local y pruebas).
   if (!configured) return json({ error: 'assistant_not_configured', message: 'asistente no configurado' }, 503);
   if (role !== 'owner' && body && body.image != null) return json(IMAGE_OWNER_ONLY, 403); // respaldo: nunca llega a parseChatBody
   const parsed = parseChatBody(body);
   if (parsed.error) return json({ error: parsed.error }, parsed.error === 'image_too_large' ? 413 : 400);
   // Foto con un modelo que no lee fotos: «no disponible», sin cupo y sin llamar al proveedor.
-  if (parsed.image && cfg && cfg.ok && !cfg.vision) return json(IMAGE_UNSUPPORTED, 422);
+  if (parsed.image && cfg.ok && !cfg.vision) return json(IMAGE_UNSUPPORTED, 422); // respaldo (el corte de arriba ya no deja llegar aquí)
   const ctx = sanitizeContext(parsed.context, role);
   // Documento del dueño pedido con todas las letras por un empleado: 403 en JSON antes de abrir el canal, sin cupo ni DeepSeek (Bot 5).
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
@@ -1086,7 +1100,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const quota = await reserveUsage(store, { ...auth, posRole: role }, env, (deps.now || Date.now)(), !!parsed.image);
   if (!quota.ok) return json({ error: quota.reason, retry_after_s: quota.retryAfter || null }, quota.reason === 'busy' ? 503 : 429);
 
-  const mode = cfg && cfg.ok ? cfg.id : 'mock'; // 'deepseek', 'anthropic', … o 'mock' (demostración)
+  const mode = cfg.ok ? cfg.id : 'mock'; // 'deepseek', 'anthropic', … o 'mock' (demostración)
   const now = (deps.now || Date.now)();
   // Todas las puertas pasaron: recién aquí se abre el canal en partes (si el celular lo pidió y la ruta lo permite).
   const sse = parsed.stream && deps.sse ? deps.sse : null;

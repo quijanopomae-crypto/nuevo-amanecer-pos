@@ -21,7 +21,7 @@ const jsonR = (d, s = 200) => new Response(JSON.stringify(d), { status: s, heade
 // Respuesta en partes de mentira. hang: no termina nunca (para probar el corte); cancel queda anotado.
 function sseRes(chunks, { gap = 0, hang = false, status = 200 } = {}) {
   const st = { cancelled: false }; let i = 0;
-  const body = new ReadableStream({ async pull(c) { if (i < chunks.length) { if (gap) await sleep(gap); c.enqueue(enc.encode(chunks[i++])); return; } if (hang) { await new Promise(() => {}); } c.close(); }, cancel() { st.cancelled = true; } });
+  const body = new ReadableStream({ async pull(c) { if (i < chunks.length) { if (gap) await sleep(gap); c.enqueue(enc.encode(chunks[i++])); return; } if (hang) { await new Promise(() => {}); } c.close(); }, cancel() { st.cancelled = true; } }, { highWaterMark: 0 });
   const r = new Response(body, { status, headers: { 'content-type': 'text/event-stream' } }); r._st = st; return r;
 }
 function stub(make) {
@@ -306,4 +306,60 @@ test('celular: el bloque solo se arma para el dueño, sin campos de clave ni URL
   const PERM = readFileSync(new URL('../../POS/js/config/pos-permissions.js', import.meta.url), 'utf8');
   assert.match(PERM, /'\/auth\/assistant\/provider', methods: \['GET'\], roles: owner/);
   const CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8'); assert.match(CORE, /image_unsupported: \['Leer fotos no está disponible por ahora\.'\]/);
+});
+
+// ---------- Bot 3 P2: foto con un modelo sin fotos se corta ANTES de leer el cuerpo; el ping dice si hay fotos ----------
+// Pedido de mentira que cuenta lo que el servidor leyó del cuerpo (1,32 MB, como la foto de Bot 3).
+function countingReq({ query = '', headers = {}, bytes = 1_320_000, chunk = 16_384, body } = {}) {
+  const st = { read: 0, cancelled: false, textCalled: false };
+  const payload = enc.encode(body ?? JSON.stringify({ text: 'lee', image: 'data:image/jpeg;base64,' + 'A'.repeat(Math.max(0, bytes - 60)) }));
+  let off = 0;
+  const stream = new ReadableStream({ pull(c) { if (off >= payload.length) { c.close(); return; } const v = payload.slice(off, off + chunk); off += v.length; st.read += v.length; c.enqueue(v); }, cancel() { st.cancelled = true; } }, { highWaterMark: 0 });
+  const h = new Headers({ 'content-type': 'application/json', ...headers });
+  const req = { method: 'POST', url: 'https://w.test/auth/assistant/chat' + query, headers: h, body: stream, text: async () => { st.textCalled = true; return new TextDecoder().decode(payload); } };
+  return { req, st };
+}
+async function chatRaw(req, { env, role = 'owner', fetch, store }) {
+  return assistantChatRoute(req, { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, ...env }, { principalId: 'session:x', posRole: role === 'owner' ? 'owner' : 'empleado' }, jsonR,
+    { store: store || createMemoryUsageStore(), resolveRole: async () => role, fetch, reader: { products: async () => [] }, audit: async () => {} });
+}
+test('Bot 3: modelo sin fotos + foto declarada (?image=1, x-assistant-image o tamaño declarado) -> 422 sin leer NADA del cuerpo, sin cupo ni llamada', async () => {
+  for (const opt of [{ query: '?image=1' }, { headers: { 'x-assistant-image': '1' } }, { headers: { 'content-length': '1320000' } }, { headers: { 'content-type': 'image/jpeg' } }]) {
+    const { req, st } = countingReq(opt); const f = stub(() => jsonR(JSONS.openai)); const store = createMemoryUsageStore();
+    const r = await chatRaw(req, { env: ENV_OF('groq'), fetch: f, store });
+    assert.equal(r.status, 422, JSON.stringify(opt)); const b = await r.json(); assert.equal(b.error, 'image_unsupported'); assert.equal(b.message, 'Leer fotos no está disponible por ahora.');
+    assert.equal(st.read, 0, 'no se leyó el cuerpo: ' + JSON.stringify(opt)); assert.equal(st.textCalled, false); assert.equal(f.calls.length, 0); assert.equal(store._map.size, 0);
+  }
+});
+test('Bot 3: sin aviso ni tamaño, el servidor lee como mucho ~256 KB, corta la lectura y responde 422 (nunca los 1,32 MB)', async () => {
+  const { req, st } = countingReq(); const f = stub(() => jsonR(JSONS.openai));
+  const r = await chatRaw(req, { env: ENV_OF('groq'), fetch: f });
+  assert.equal(r.status, 422); assert.ok(st.read <= 256_000 + 16_384, 'leído ' + st.read); assert.equal(st.cancelled, true); assert.equal(st.textCalled, false); assert.equal(f.calls.length, 0);
+  // foto chica sin aviso: se lee (es chica) y el campo image la delata
+  const small = countingReq({ bytes: 20_000 }); const r2 = await chatRaw(small.req, { env: ENV_OF('groq'), fetch: f }); assert.equal(r2.status, 422); assert.equal(f.calls.length, 0);
+});
+test('Bot 3: sin foto, el modelo sin fotos sigue respondiendo; con un modelo que lee fotos, ?image=1 sube y llega al proveedor', async () => {
+  const t = countingReq({ body: JSON.stringify({ text: 'hola' }) }); const f = stub(() => jsonR(JSONS.openai));
+  const r = await chatRaw(t.req, { env: ENV_OF('groq'), fetch: f }); assert.equal(r.status, 200); assert.ok(f.calls.length >= 1); assert.ok(!JSON.stringify(f.calls[0].body).includes('image_url'));
+  const g = stub(() => jsonR(JSONS.gemini)); const p = countingReq({ query: '?image=1', bytes: 300_000 });
+  const r2 = await chatRaw(p.req, { env: ENV_OF('gemini'), fetch: g }); assert.equal(r2.status, 200); assert.ok(g.calls[0].body.contents.at(-1).parts.some((x) => x.inlineData));
+  // el empleado sigue con su 403 (antes de leer)
+  const e = countingReq({ query: '?image=1' }); const r3 = await chatRaw(e.req, { env: ENV_OF('gemini'), role: 'empleado:consultas', fetch: g }); assert.equal(r3.status, 403); assert.equal(e.st.read, 0);
+});
+test('Bot 3: el ping dice si el modelo en uso lee fotos (vision), sin nombre de proveedor ni modelo; empleado siempre false', async () => {
+  const ping = async (env, role = 'owner') => { const r = await chat({ ping: true }, { env, role }); assert.equal(r.status, 200); return r.json(); };
+  assert.equal((await ping(ENV_OF('groq'))).vision, false); assert.equal((await ping(ENV_OF('gemini'))).vision, true);
+  assert.equal((await ping(ENV_OF('groq', { AI_VISION: '1' }))).vision, true); assert.equal((await ping(ENV_OF('gemini'), 'empleado:consultas')).vision, false);
+  assert.equal((await ping({ ASSISTANT_DEMO: '1' })).vision, true, 'demostración como antes'); assert.equal((await ping({})).vision, false, 'sin proveedor');
+  const b = await ping(ENV_OF('anthropic')); assert.deepEqual(Object.keys(b), ['ok', 'enabled', 'role', 'level', 'vision']); assert.ok(!/anthropic|claude|groq|gemini/i.test(JSON.stringify(b)));
+});
+test('Bot 3: el celular no sube la foto si el ping dijo vision:false (frase simple) y avisa ?image=1 cuando sí la manda', async () => {
+  const { readFileSync } = await import('node:fs');
+  const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
+  const sendFn = UI.slice(UI.indexOf('  async function send(text, image) {'), UI.indexOf('  // Comprime en el aparato'));
+  const a = sendFn.indexOf("if (image && access && access.vision === false) { addMsg('u', text || 'Foto'); errMsg('image_unsupported'); setState('error', 2600); return; }");
+  assert.ok(a > 0 && a < sendFn.indexOf('reqInit(') && a < sendFn.indexOf('busy = true') && a < sendFn.indexOf('body.image = image'), 'antes de armar o mandar el pedido');
+  assert.match(sendFn, /reqInit\('\/auth\/assistant\/chat' \+ \(image \? '\?image=1' : ''\), body\)/); assert.match(sendFn, /post\('\/auth\/assistant\/chat' \+ \(image \? '\?image=1' : ''\), body/);
+  assert.match(UI, /access = \{ role: d\.role === 'owner' \? 'owner' : 'empleado', level: d\.level, vision: d\.vision !== false \}/);
+  const f = C.friendlyError('image_unsupported'); assert.equal(f.msg, 'Leer fotos no está disponible por ahora.'); assert.equal(f.retry, false);
 });
