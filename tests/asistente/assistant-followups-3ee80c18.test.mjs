@@ -160,15 +160,21 @@ test('A) dinero tras pin/clave/contraseña: S/, $, PEN ya no sueltan el número 
     ['clave de la caja: código 4321', '4321'], ['el pin es código 4321', '4321']];
   for (const [t, v] of MASK) { for (const [via, f] of Object.entries(vias)) assert.ok(!has(f(t), v), via + ' ' + JSON.stringify(t) + ' → ' + f(t));
     for (const role of [EMP, 'owner']) for (const step of [1, 3, 7]) { const s = stream(role, t, step); assert.ok(!has(s.seen, v), role + '/' + step + ' ' + t); assert.equal(s.o, A.capReply(A.redactFor(role)(t))); } }
-  for (const [t, v] of [['clave del precio: S/ 4521', '4521'], ['la clave del costo es S/ 1250', '1250'], ['pin del precio S/ 4321', '4321'], ['clave del monto PEN 3000', '3000'], ['clave S/ 43.21', '43.21'], ['Factura F001-00012345 total S/ 4521.00', '4521.00']])
+  for (const [t, v] of [['clave del precio: S/ 4521', '4521'], ['la clave del costo es S/ 1250', '1250'], ['clave del monto PEN 3000', '3000'], ['clave del precio S/ 43.21', '43.21'], ['Factura F001-00012345 total S/ 4521.00', '4521.00']])
     for (const f of [A.redactOwnerText, A.redactModelOwner]) assert.ok(has(f(t), v), JSON.stringify(t) + ' → ' + f(t));
+  // (Bot 2 sobre 5646a4c9, a propósito) «clave S/ 43.21» ya NO se ve: un decimal tras clave/contraseña solo se ve con precio/costo/monto
+  for (const f of [A.redactOwnerText, A.redactModelOwner]) assert.ok(!has(f('clave S/ 43.21'), '43.21'));
+  // (Bot 5 sobre 5646a4c9, a propósito) «pin del precio S/ 4321» ya NO se ve: tras «pin» ninguna excepción de dinero (ver assistant-followups-5646a4c9)
+  for (const f of [A.redactOwnerText, A.redactModelOwner]) assert.ok(!has(f('pin del precio S/ 4321'), '4321'));
   // códigos del dueño sin pin/clave: exactos
   for (const t of ['código 12345678', 'EAN 7751234567890', 'cód. 4521', 'cód. 4521 Arroz']) { assert.equal(A.redactOwnerText(t), t); assert.equal(A.redactModelOwner(t), t); }
 });
 
 test('B) menos tapado de más: paquetes/cajas/bolsas/docenas/sacos/botellas y año tras «del año/el año/en» (solo clave/contraseña); el 4321 que sigue se tapa', () => {
-  const SHOW = [['La clave de este mes: vender 3000 paquetes', '3000'], ['la clave es comprar 2000 cajas', '2000'], ['clave del mes 1500 bolsas', '1500'], ['la clave es pedir 1200 docenas', '1200'],
-    ['la clave es tener 4000 sacos', '4000'], ['clave del verano 2500 botellas', '2500'], ['clave del día 1000 paquete', '1000'], ['clave del año 2024', '2024'], ['la clave del éxito en 2024 fue el arroz', '2024'],
+  // (Bot 2 sobre 5646a4c9, a propósito) con «:» o es/era entre la etiqueta y el número la unidad ya no suelta: «La clave de este mes: vender 3000 paquetes»,
+  // «la clave es comprar 2000 cajas», «la clave es pedir 1200 docenas», «la clave es tener 4000 sacos» se tapan (ver assistant-followups-5646a4c9)
+  for (const t of ['La clave de este mes: vender 3000 paquetes', 'la clave es comprar 2000 cajas', 'la clave es pedir 1200 docenas', 'la clave es tener 4000 sacos']) assert.ok(!/\d{4}/.test(A.redactOwnerText(t)), t);
+  const SHOW = [['clave del mes 1500 bolsas', '1500'], ['clave del verano 2500 botellas', '2500'], ['clave del día 1000 paquete', '1000'], ['clave del año 2024', '2024'], ['la clave del éxito en 2024 fue el arroz', '2024'],
     ['Cambié la clave de la caja en 2024', '2024'], ['contraseña del año 2024', '2024'], ['Mi clave para el año 2025: vender más', '2025']];
   for (const [t, v] of SHOW) for (const f of [A.redactOwnerText, A.redactModelOwner, A.redactFor(EMP)]) assert.ok(has(f(t), v), JSON.stringify(t) + ' → ' + f(t));
   for (const [t, v] of SHOW) for (const step of [1, 3, 7]) assert.equal(stream('owner', t, step).o, A.capReply(A.redactOwnerText(t)));

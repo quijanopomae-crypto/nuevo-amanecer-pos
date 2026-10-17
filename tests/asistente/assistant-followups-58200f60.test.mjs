@@ -92,7 +92,9 @@ test('5) PIN numérico: a lo sumo 2 palabras tras el enlace, sin unidad ni «en/
   const shown = [['Producto clave de la semana 2500 unidades', '2500'], ['El token de la sesión del 2026 venció', '2026'],
     ['clave de la caja 4521 kg', '4521'], ['La clave de la promo 2500 soles', '2500'], ['clave de la oferta 1500 S/ menos', '1500'], ['clave del mes 30%', '30']];
   // (decisión final sobre d72b7601 se tapaban; Bot 2 sobre 3ee80c18: año tras «en»/«del año» y «paquetes» como unidad) ahora se ven otra vez
-  for (const [t, v] of [['Cambié la clave de la caja en 2024', '2024'], ['La clave del negocio en 2024 fue el arroz.', '2024'], ['La clave de este mes: vender 3000 paquetes.', '3000']]) assert.ok(own(t).includes(v), t);
+  for (const [t, v] of [['Cambié la clave de la caja en 2024', '2024'], ['La clave del negocio en 2024 fue el arroz.', '2024']]) assert.ok(own(t).includes(v), t);
+  // (Bot 2 sobre 5646a4c9, a propósito) unidad tras «:» ya no suelta el número
+  assert.ok(!own('La clave de este mes: vender 3000 paquetes.').includes('3000'));
   for (const f of [A.redactText, own, emp]) {
     for (const t of masked) { const o = f(t); assert.match(o, /\[oculto\]/, t + ' → ' + o); assert.ok(!/4521|4321|98765432|1234|Zq9xK2mPw7|Ab12Cd34Ef/.test(o), t + ' → ' + o); }
     for (const [t, v] of shown) { const o = f(t); assert.ok(o.includes(v), t + ' → ' + o); }
