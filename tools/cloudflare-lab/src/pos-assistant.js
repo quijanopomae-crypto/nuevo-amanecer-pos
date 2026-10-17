@@ -70,7 +70,7 @@ const PATTERNS = [
   // Bot 5: un «data:» (foto pegada como texto, base64) nunca va a DeepSeek dentro del mensaje: se cambia por un aviso corto. Va primero para que
   // sus dígitos no parezcan DNI o teléfono. La foto real va aparte (campo image, solo dueño).
   // Espacios después de la coma o entre trozos del base64 (líneas cortadas) también se tapan: tramos de 16+ caracteres y el final con «=».
-  [/\bdata:[^\s,]{0,120},\s*[A-Za-z0-9+/=%._~-]*(?:\s+[A-Za-z0-9+/]{16,}={0,2})*(?:\s+[A-Za-z0-9+/]{1,15}={1,2}(?![A-Za-z0-9+/=]))?/gi, '[imagen omitida]'],
+  [/\bdata:(?:\s+(?=[a-z]+\/[a-z0-9.+-]+[;,]))?[^\s,]{0,120},\s*[A-Za-z0-9+/=%._~-]*(?:\s+[A-Za-z0-9+/]{16,}={0,2})*(?:\s+[A-Za-z0-9+/]{1,15}={1,2}(?![A-Za-z0-9+/=]))?/gi, '[imagen omitida]'],
   [/\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\b(\s*(?:es|era|de|:|=)?\s*)[^\s,.;]{3,}/gi, '$1$2[oculto]'],
   // Bot 3: acotado (parte local 1-64, etiquetas de dominio 1-63, hasta 8, final 2-24) y sin cuantificadores anidados sin tope: lineal
   // también con 50 KB de dígitos o letras seguidas (antes ~1,9 s).
@@ -79,8 +79,35 @@ const PATTERNS = [
   [/(?:\+?51[\s-]?)?\b9\d{2}[\s-]?\d{3}[\s-]?\d{3}\b/g, '[teléfono oculto]'],
   [/\b(?:DNI\s*[:#-]?\s*)?\d{4}(\d{4})\b/gi, 'DNI ****$1']
 ];
+// (Bot 3 sobre f3375c09) Mientras una etiqueta espera su valor (RUC, RUC N°, DNI, pin, clave, contraseña, password, token, api key,
+// data:), una racha de más de 160 espacios/saltos se junta en UN espacio: igual en el texto entero (aquí, antes de los patrones) y en
+// partes (createWsStage antes de la etapa 1, la misma función). Así la etapa 1 ya no retiene la racha entera y el valor sigue tapado.
+const WS_RUN_MAX = 160;
+const WS_KW_TAIL = /(?:^|[^A-Za-z0-9_])(?:RUC(?:\s*N[°ºo]\.?)?|DNI|pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key|data)\s*(?:[:=]|es|era|de)?$/i;
+function createWsStage(out) {
+  let tail = '', ws = '', pend = false, drop = false, seen = false; // seen: esta racha ya se miró (sin etiqueta delante)
+  return {
+    push(str) { let o = '', from = 0;
+      for (let i = 0; i < str.length; i++) { const c = str[i];
+        if (/\s/.test(c)) {
+          if (drop) { o += str.slice(from, i); from = i + 1; continue; }
+          if (!pend && !seen) { const t = (tail + o.slice(-40) + str.slice(Math.max(from, i - 40), i)).slice(-40); pend = WS_KW_TAIL.test(t); seen = true; }
+          if (!pend) continue;
+          o += str.slice(from, i); from = i + 1; ws += c;
+          if (ws.length > WS_RUN_MAX) { o += ' '; ws = ''; drop = true; }
+        } else {
+          if (ws) { o += ws; ws = ''; }
+          drop = false; pend = false; seen = false;
+        }
+      }
+      o += str.slice(from); if (o) { tail = (tail + o).slice(-40); out(o); }
+    },
+    flush() { if (ws) { out(ws); } tail = ''; ws = ''; pend = false; drop = false; seen = false; }
+  };
+}
+function collapseWs(v) { if (!/\s{161}/.test(v)) return v; let o = ''; const st = createWsStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 export function redactText(value) {
-  let out = String(value ?? '');
+  let out = collapseWs(String(value ?? ''));
   for (const [re, label] of PATTERNS) out = out.replace(re, label);
   return out;
 }
@@ -176,17 +203,25 @@ const T_COMPRAS_Y = new RegExp('compras' + NOT_LETTER, 'iy');
 const T_COMPRA_Y = new RegExp('compras?' + NOT_LETTER, 'iy');
 const T_BUY_Y = new RegExp('(?:proveedor(?:es|a|as)?|costos?)' + NOT_LETTER, 'iy');
 const T_CLIENT_Y = /clientes?(?![a-záéíóúñ])/iy;
+const T_CLIENT_ACT_Y = /clientes?\s+(?:ya\s+)?(?:pag[oó]|compr[oó]|pagaron|compraron)(?![a-záéíóúñ])/iy;
 const T_NEG_Y = new RegExp('(?:no|ni|sin|desconozco|desconocemos|desconocid[oa]s?)' + NOT_LETTER, 'iy');
 export const LONG_TITLE_MAX = 120;
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
-  // (Bot 5) UNA línea (en blanco o de texto) justo después de la separadora |---| no corta la tabla: «|---|\n\n| Producto 0 | S/ 1.80 |» sigue siendo la misma
-  if (!d && st.afterSep && !st.gap) { st.gap = true; return null; }
-  st.afterSep = false;
-  if (!d || (st.sep && d !== st.sep)) { st.gap = false; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
+  // (Bot 5 sobre f3375c09) Una tabla «|» con columna del dueño sigue abierta tras líneas en blanco y líneas de texto cortas (entre |---| y
+  // las filas o en medio). Termina solo con un párrafo neutro (8+ palabras que no termina en «:»), un título de venta o una cabecera nueva |---|.
+  if (!d && st.cols && st.sep === '|') {
+    const t = full.trim();
+    if (!t) { if (st.gw >= 8 && st.gl !== ':') tableReset(st); else st.gw = 0; return null; } // fin de párrafo
+    if (SALE_LINE_RE.test(normCell(t)) && !OWNER_HEADER_RE.test(normCell(t))) { tableReset(st); return null; }
+    st.gw = (st.gw || 0) + (t.match(/[a-záéíóúñü0-9]+/gi) || []).length; st.gl = t[t.length - 1]; return null;
+  }
+  if (d && st.gw != null) { if (st.gw >= 8 && st.gl !== ':') tableReset(st); st.gw = null; st.gl = ''; }
+  if (!d || (st.sep && d !== st.sep)) { st.gw = null; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
   const cells = full.split(d); st.sep = d; st.rows = (st.rows || 0) + 1;
   const isSep = d === '|' && cells.some((c) => c.trim()) && cells.every((c) => !c.trim() || SEP_CELL.test(c));
-  if (isSep) { if (!st.cols && st.prev && st.rows === st.prevRow + 1) st.cols = headerCols(st.prev); st.prev = null; st.afterSep = true; return null; }
+  // separadora: la fila de arriba es la cabecera. Una cabecera NUEVA (tabla ya con columnas) manda: sus columnas deciden desde aquí.
+  if (isSep) { if (st.prev && st.rows === st.prevRow + 1 && (!st.cols || st.rows > 2)) st.cols = headerCols(st.prev); st.prev = null; return null; }
   if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1; return null; }
   st.prev = cells; st.prevRow = st.rows;
   if (!st.cols) return null;
@@ -194,12 +229,15 @@ function tableLine(full, st) {
   for (const n of st.cols) { if (n < cells.length && cells[n].trim() && !isSaleCell(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
   return changed ? cells.join(d) : null;
 }
+const SALE_LINE_RE = /^(?:[#*_\s]*)(?:precios?|pvp|lista\s+de\s+precios)(?![a-z])/;
+function tableReset(st) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.gw = null; st.gl = ''; }
 function createTableLayer(out) {
   const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0 }; let line = '', holding = false;
   return {
     push(txt) { const s = txt;
       for (let i = 0; i < s.length;) {
-        if (!line && !holding && st.cols) holding = true; // empieza una fila de una tabla del dueño: espera la línea entera
+        // empieza una fila de una tabla del dueño: espera la línea entera (en una tabla en pausa, solo si la línea empieza con «|» o espacio)
+        if (!line && !holding && st.cols && i < s.length && (st.gw == null || s[i] === '|' || s[i] === ' ' || s[i] === '\t')) holding = true;
         const nl = s.indexOf('\n', i), piece = nl < 0 ? s.slice(i) : s.slice(i, nl + 1);
         line += nl < 0 ? piece : piece.slice(0, -1); i += piece.length;
         if (nl < 0) { if (!holding) out(piece); break; }
@@ -207,7 +245,7 @@ function createTableLayer(out) {
         line = '';
       }
     },
-    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.afterSep = false; st.gap = false; },
+    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.gw = null; st.gl = ''; },
     ownerActive: () => !!st.cols // «sigue»: la parte cortada termina dentro de una tabla con columna del dueño
   };
 }
@@ -222,12 +260,13 @@ function createAmountLayer(out0) {
   // palabra del dueño (negada o no), la tabla o lista que empieza en la línea siguiente tapa sus montos (tabla: salvo columnas de venta; lista:
   // salvo ítems con etiqueta de venta). Se decide con los primeros caracteres de la línea (| , tabulador antes de un monto, -, *, •, «1.», «1)»):
   // NO se retiene nada extra; si la línea no es tabla ni lista, sigue como texto normal.
-  let forced = false, lineDash = false, para = 0, paraAt = 0, paraPrev = 0, lineItem = false, lineIntro = false, lineLast = '', pendColon = false, lineTitle = false, lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
+  let forced = false, lineDash = false, lWords = 0, pWords = 0, pWordAt = -1, pOwn = false, pLast = '', breakAt = -1, para = 0, paraAt = 0, paraPrev = 0, lineItem = false, lineIntro = false, lineLast = '', pendColon = false, lineTitle = false, lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
   let sent = { has: false, owner: false, neg: false, intro: false }, lineOwner = false, lineSale = false, lastBlank = false, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
   // (Bot 2 sobre 66f1ecb5) cada frase recuerda su párrafo (para), si era un ítem de lista (item) y su línea (ln):
   // (d) la presentación solo alcanza su párrafo o el inmediatamente anterior; (b) la palabra del dueño dentro de un ítem tapa solo ese ítem.
   const endSentence = () => { if (sent.has) { sent.para = para; sent.item = lineItem; sent.ln = lineBegin; ring.push(sent); if (ring.length > 3) ring.shift(); } sent = { has: false, owner: false, neg: false, intro: false }; };
-  const introOn = () => ring.some((x) => (x.owner || x.intro) && !x.item && x.para >= para - 1) || ((sent.owner || sent.intro) && !lineItem);
+  // (d, afinado) solo un párrafo NEUTRO que corta (8+ palabras y no termina en «:») entre la presentación y aquí la apaga (breakAt)
+  const introOn = () => ring.some((x) => (x.owner || x.intro) && !x.item && x.para > breakAt) || ((sent.owner || sent.intro) && !lineItem);
   // negada solo si ninguna frase de la presentación nombra al dueño sin negación («El costo no lo tengo, pero esta es la lista:»)
   const introNeg = () => !(ring.some((x) => x.pos || x.intro) || sent.pos || sent.intro);
   // texto de una celda de encabezado: solo si es corta (<= 48); una más larga no cuenta como venta (igual en partes y entero)
@@ -237,6 +276,8 @@ function createAmountLayer(out0) {
   const sticky = (re, i) => { re.lastIndex = i - base; const m = re.exec(buf); return m ? m[0].length : 0; };
   const pass = (to) => { if (to > rel) { out(buf.slice(rel - base, to - base)); rel = to; } k = to; };
   const mask = (to) => { out(OWNER_DATA_LABEL); rel = to; k = to; };
+  // «el cliente compró» (Bot 2/5): la compra es del cliente, no del dueño
+  const clientBuy = (i) => /(?:^|[^a-záéíóúñü])(?:el|los|la|las|un|una)\s+clientes?\s+(?:ya\s+)?$/i.test(buf.slice(Math.max(base, i - 20) - base, i - base));
   const passAmt = (to) => (forced ? mask(to) : pass(to)); // monto que se vería: con contexto de «sigue» (forced) se tapa
   const NEED = -1;
   // ¿cuánto texto hace falta para decidir la palabra que empieza en i?
@@ -298,7 +339,7 @@ function createAmountLayer(out0) {
       if (c === '.') { const n = ch(i + 1); if (n === undefined && !final) { memo = { e, i, nl, eol, peek }; return NEED; } if (!isDigit(n)) return false; if (peek > 0) peek--; continue; }
       if (isLetter(c) && !isLetter(ch(i - 1))) {
         if (!final && end() < wordNeed(i)) { memo = { e, i, nl, eol, peek }; return NEED; }
-        const ow = sticky(OWNER_WORD_Y, i), bw = ow ? 0 : sticky(BUY_WORD_Y, i);
+        const ow = sticky(OWNER_WORD_Y, i); let bw = ow ? 0 : sticky(BUY_WORD_Y, i); if (bw && clientBuy(i)) bw = 0;
         // (a, Bot 2) en la línea SIGUIENTE solo cuentan frases de compra («lo que pagué», «me costó», «(costo)», «costo:» + monto, «a costo»,
         // «de compra», «lo compré a»…), no «costo» suelto ni margen/ganancia: «Arroz S/ 4.20\nEl costo lo ve el dueño.» deja ver el 4.20
         if (ow && peek >= 0 && !nameWord(i)) { const pb = peekBuy(i, ow, final); if (pb === NEED) { memo = { e, i, nl, eol, peek }; return NEED; } if (!pb) { i += ow - 1; if (peek > 0) peek = Math.max(0, peek - ow); continue; } }
@@ -344,11 +385,15 @@ function createAmountLayer(out0) {
         if (isLetter(c) && (mode === 'pend' || mode === 'list') && !final && end() < k + 3) break;
         // viñeta con o sin espacio («- Galleta», «-Galleta»), «1.», «1)», «a)»
         const isList = ((c === '-' || c === '*' || c === '•') && (ch(k + 1) === ' ' || ch(k + 1) === '\t' || isLetter(ch(k + 1)))) || (isDigit(c) && sticky(LIST_NUM_Y, k) > 0) || (isLetter(c) && !isLetter(ch(k + 1)) && sticky(LIST_LETTER_Y, k) > 0);
-        if (lastBlank) { para++; paraPrev = paraAt; paraAt = lineBegin; if (para >= 2) forced = false; // una línea con texto tras una línea en blanco: párrafo nuevo
-          if (ctx && !ctx.sale && ctx.at < paraPrev) ctx = null; } // (d) tampoco la ventana de 60 de una palabra del dueño pasa un párrafo neutro
+        if (lastBlank) { // una línea con texto tras una línea en blanco: párrafo nuevo. ¿El que terminó es un párrafo neutro que corta?
+          // Corta solo si no nombra al dueño, tiene 8+ palabras y NO termina en «:» («Son de esta semana.» o «Siguen:» no cortan).
+          if (para > 0 || paraAt < lineBegin) { if (!pOwn && pWords >= 8 && pLast !== ':') { breakAt = para; forced = false; if (ctx && !ctx.sale && ctx.at < lineBegin) ctx = null; } }
+          para++; paraPrev = paraAt; paraAt = lineBegin; pWords = 0; pOwn = false; pLast = ''; }
         lineItem = isList;
         if (mode === 'pend' && !introOn()) mode = null; // (d) un párrafo neutro en medio corta la presentación
-        if (mode === 'table' && tbl.d === '|' && c !== '|' && !(tbl.row === 2 && tbl.sepSeen && !tbl.gap)) { mode = null; tbl = null; ring = []; }
+        // (Bot 5 sobre f3375c09) tabla «|» presentada por el dueño: líneas en blanco y de texto cortas la dejan en pausa (tbl.gw), no la cierran
+        if (mode === 'table' && tbl.d === '|' && c !== '|') { if (tbl.gw == null) { tbl.gw = 0; tbl.gl = ''; } }
+        else if (mode === 'table' && tbl.d === '|' && tbl.gw != null) { if (tbl.gw >= 8 && tbl.gl !== ':') { mode = null; tbl = null; ring = []; } else { tbl.gw = null; tbl.gl = ''; } }
         if (mode === 'list' && !isList) { mode = null; ring = []; }
         if (mode === 'pend') {
           if (c === '|' || c === '\t') { mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
@@ -369,20 +414,27 @@ function createAmountLayer(out0) {
         || ((lineIntro || (lineOwner && sent.pos)) && k - lineBegin <= 40 && (buf.slice(Math.max(lineBegin, base) - base, k - base).match(/[a-záéíóúñü0-9]+/gi) || []).length <= 5))) lineTitle = true;
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
+        if (k > pWordAt) { pWordAt = k; pWords++; lWords++; }
         let n;
         if (k - lineBegin < LONG_TITLE_MAX) { // marcas del título de la línea (idempotente: se puede volver a pasar por la misma palabra)
           if (lt.w < 0) lt.w = k;
           if (lt.w === k && sticky(T_COMPRAS_Y, k)) lt.compras = true;
+          if (lt.w === k && sticky(SALE_TITLE_Y, k)) lt.sale0 = true; // la línea EMPIEZA con «Precio(s)»/«PVP»: título de venta
           if (sticky(T_BUY_Y, k) || (sticky(T_COMPRA_Y, k) && /(?:^|[^a-záéíóúñü])de\s+$/i.test(buf.slice(Math.max(base, k - 12) - base, k - base)))) lt.buy = true;
           if (sticky(T_NEG_Y, k)) lt.neg = true;
-          if (sticky(T_CLIENT_Y, k)) lt.cli = true;
+          // «cliente» anula SOLO con «del cliente», «de los clientes» o «el cliente pagó/compró»; «para el cliente» NO (sigue siendo del dueño)
+          if (sticky(T_CLIENT_Y, k)) { const pre = buf.slice(Math.max(base, k - 10) - base, k - base);
+            if (/(?:^|[^a-záéíóúñü])(?:del|de\s+l[oa]s)\s+$/i.test(pre)) lt.cli = true;
+            else if (/(?:^|[^a-záéíóúñü])(?:el|los|la|las)\s+$/i.test(pre) && !/(?:^|[^a-záéíóúñü])para\s+(?:el|los|la|las)\s+$/i.test(buf.slice(Math.max(base, k - 16) - base, k - base))) {
+              if (!final && end() < k + 24) break;
+              if (sticky(T_CLIENT_ACT_Y, k)) lt.cli = true; } }
         }
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
         // negación DETRÁS de la palabra del dueño («El costo no lo tengo, pero esta es la lista:»): se mira hacia atrás al llegar al verbo, sin retener nada
         if (sent.pos && sent.pe != null && k - sent.pe <= 24 && (n = sticky(NEG_AFTER_Y, k)) && postNeg(k, n)) { sent.pos--; sent.pe = null; }
         if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k }; sent.owner = true; lineOwner = true; if (neg) sent.neg = true; else { sent.pos = (sent.pos || 0) + 1; sent.pe = k + n; }
           ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n, at: k }; pass(k + n); continue; }
-        if ((n = sticky(BUY_WORD_Y, k))) { sent.owner = true; sent.pos = (sent.pos || 0) + 1; sent.pe = k + n; lineOwner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k)) && !clientBuy(k)) { sent.owner = true; sent.pos = (sent.pos || 0) + 1; sent.pe = k + n; lineOwner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
         // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
         if (sticky(SALE_TITLE_Y, k)) lineSale = true; // antes de la etiqueta de venta: «PVP» solo en su línea también es título
@@ -441,17 +493,22 @@ function createAmountLayer(out0) {
       if (c === '|' || c === '\t') lineDelim = true;
       if (c === '-') lineDash = true;
       if (c === '\n') {
+        if (lineOwner || lineIntro || sent.owner || sent.intro) pOwn = true; if (lineHas) pLast = lineLast;
         if (forced && lineDelim && lineDash && row.sep && lineHas) forced = false; // fila |---| de una tabla nueva: desde aquí deciden sus columnas
         // (c) «Compras del cliente:» presenta solo por «compras»: con «cliente» no presenta la lista/tabla de abajo
         if (lt.cli && !lt.buy && !(lineOwner && sent.pos)) { sent.intro = false; ring.forEach((x) => { if (x.ln === lineBegin) x.intro = false; }); }
         endSentence();
         const blank = !lineHas;
         if (mode === 'table') {
-          if (!lineDelim && tbl.d === '|' && tbl.row === 2 && tbl.sepSeen && !tbl.gap) tbl.gap = true; // (Bot 5) UNA línea (en blanco o de texto) justo tras |---| no corta la tabla
-          else if (!lineDelim) { mode = null; tbl = null; ring = []; } // fin de una tabla con tabuladores (o línea en blanco)
+          if (!lineDelim && tbl.d === '|') { // pausa: termina con un párrafo neutro (8+ palabras, sin «:» al final) o un título de venta
+            if (tbl.gw == null) { tbl.gw = 0; tbl.gl = ''; }
+            if (blank) { if (tbl.gw >= 8 && tbl.gl !== ':') { mode = null; tbl = null; ring = []; } else tbl.gw = 0; }
+            else if (lt.sale0 && !lineOwner && !lineIntro) { mode = null; tbl = null; ring = []; }
+            else { tbl.gw += lWords; tbl.gl = lineLast; }
+          } else if (!lineDelim) { mode = null; tbl = null; ring = []; } // fin de una tabla con tabuladores (o línea en blanco)
+          else if (tbl.row >= 2 && row.sep && lineHas && lineDash) { mode = null; tbl = null; ring = []; } // cabecera NUEVA |---|: deciden sus columnas
           else { if (tbl.row === 0 && !tbl.headerless) { tbl.hdr[tbl.cell] = cellText(tbl.from, k); const oc = tbl.hdr.some((h) => OWNER_HEADER.test(h || ''));
               tbl.sale = new Set(tbl.hdr.map((h, i) => (saleHeader(h || '', oc, tbl.neg) ? i : -1)).filter((i) => i >= 0)); }
-            if (tbl.row === 1 && row.sep && lineHas) tbl.sepSeen = true;
             tbl.row++; tbl.cell = 0; tbl.from = k + 1; }
         } else if (mode === 'lines') { if (blank) { mode = null; ring = []; pendColon = false; } } // ítems sin viñeta: siguen hasta una línea en blanco
         else if (lineDelim) { mode = null; ring = []; } // una fila de tabla no es presentación (su «Costo» lo ven las columnas)
@@ -462,7 +519,7 @@ function createAmountLayer(out0) {
           pendColon = mode === 'pend' && lineLast === ':' && !introNeg();
         }
         if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
-        lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false; lineItem = false; lineDash = false;
+        lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false; lineItem = false; lineDash = false; lWords = 0;
       }
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
         // se suelta al cerrar la primera celda con texto de la fila nueva (el monto de esa celda sigue tapado)
@@ -488,7 +545,7 @@ function createAmountLayer(out0) {
     seedOwner() { forced = true; },
     ownerActive() { run(true); return (mode !== null && !(mode === 'table' && tbl && tbl.neg)) || (!!ctx && !ctx.sale && !ctx.neg) || (introOn() && !introNeg()); },
     flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
-    forced = false; lineDash = false; sent = { has: false, owner: false, neg: false, intro: false }; para = 0; paraAt = 0; paraPrev = 0; lineItem = false; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
+    forced = false; lineDash = false; lWords = 0; pWords = 0; pWordAt = -1; pOwn = false; pLast = ''; breakAt = -1; sent = { has: false, owner: false, neg: false, intro: false }; para = 0; paraAt = 0; paraPrev = 0; lineItem = false; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 // ownerCtx (booleano, de cutPrime): la continuación arranca con una presentación del dueño. Sin él, igual que siempre.
 function createOwnerPipeline(out, ownerCtx = false) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
@@ -507,7 +564,43 @@ const OWNER_WORD_RE = new RegExp('\\b(?:' + OWNER_WORD + '|' + BUY_WORD + ')', '
 export const HISTORY_OMITTED = '[mensaje anterior omitido]';
 const OWNER_HISTORY_RE = new RegExp('(?<![a-záéíóúñü])(?:' + OWNER_WORD + '|' + BUY_WORD + '|proveedor(?:es)?|supplier|precio\\s+de\\s+compra)', 'i');
 export function ownerHold(red) { const from = Math.max(0, red.length - OWNER_HOLD), m = OWNER_WORD_RE.exec(red.slice(from)); return m ? from + m.index : Infinity; }
-const redactEmployee = (v) => redactOwnerData(redactText(v));
+// (Bot 3/2 sobre f3375c09) SOLO EMPLEADO: una racha de más de LONG_RUN_MAX caracteres sin espacio (enlace, base64, texto pegado) se cambia
+// por «[texto largo omitido]» y lo demás sigue saliendo (antes se retenía toda la racha hasta el final). La misma etapa incremental sirve
+// para el texto entero y para las partes: igual por construcción. Una racha que trae «data:» o «;base64,» en sus primeros 161 caracteres
+// sigue igual (redactText la cambia por «[imagen omitida]»). Una etiqueta al comienzo de la racha (RUC, DNI, clave, pin, token…) se
+// conserva: el valor que viene después sigue tapado. Dentro va un separador (U+2028, espacio para redactText) que al final se cambia
+// por la etiqueta. Dueño: sin cambios (enlaces y códigos largos intactos).
+export const LONG_RUN_MAX = 160, LONG_RUN_LABEL = '[texto largo omitido]';
+const LONG_SEP = '\u2028', LONG_SEP_RE = /\u2028/g;
+const LONG_KEEP_RE = /data:|;base64,/i;
+const LONG_KW_RE = /^(?:RUC|DNI|pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)(?:\s*(?:N[°ºo]\.?|:|=))?/i;
+function createLongRunStage(out) {
+  let run = '', lead = '', drop = false, keep = false;
+  return {
+    push(str) { let o = '';
+      for (let i = 0; i < str.length; i++) { let c = str[i]; if (c === '\u2028' || c === '\u2029') c = '\n';
+        if (/\s/.test(c)) { if (run) { o += run; run = ''; } lead = ''; drop = false; keep = false; o += c; continue; }
+        if (drop) continue;
+        if (keep) { o += c; continue; }
+        // la 1.ª letra de la racha sale enseguida (la etapa 1 necesita ver «espacio + letra» para cortar: sin esto el empleado
+        // esperaría una palabra más); si la racha resulta larga, queda esa letra + la etiqueta
+        if (!run && !lead) { lead = c; o += c; continue; }
+        run += c;
+        if (lead.length + run.length > LONG_RUN_MAX) {
+          const all = lead + run;
+          if (LONG_KEEP_RE.test(all)) { keep = true; o += run; run = ''; }
+          else { const m = LONG_KW_RE.exec(all); o += (m ? m[0].slice(1) : '') + LONG_SEP; run = ''; drop = true; }
+        }
+      }
+      if (o) out(o);
+    },
+    flush() { if (run) out(run); run = ''; lead = ''; drop = false; keep = false; }
+  };
+}
+function longRuns(v) { let o = ''; const st = createLongRunStage((x) => { o += x; }); st.push(String(v ?? '')); st.flush(); return o; }
+const longLabel = (v) => v.replace(LONG_SEP_RE, LONG_RUN_LABEL);
+export function redactEmployeeText(v) { return longLabel(redactText(longRuns(v))); } // etapa de datos sensibles del empleado
+const redactEmployee = (v) => redactOwnerData(redactEmployeeText(v));
 export function redactFor(role) { return role === 'owner' ? redactText : redactEmployee; }
 function cleanText(value, max) {
   return redactText(String(value ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).slice(0, max).trim();
@@ -933,7 +1026,8 @@ function createTextStage(out) {
       const d = data[j]; if (d.at + 5 > off + h) continue;
       while (d.phase < 2 && d.pos < off + h) {
         const c = pend[d.pos - off];
-        if (d.phase === 0) { if (c === ',') d.phase = 1; else if (isWs(c) || ++d.n > 120) d.phase = 2; } else if (!isWs(c) && !DATA_B64.test(c)) d.phase = 2;
+        // (Bot 5) espacios o saltos justo tras «data:» (antes de «image/png;…») lo dejan abierto
+        if (d.phase === 0) { if (c === ',') d.phase = 1; else if (isWs(c)) { if (d.n > 0) d.phase = 2; } else if (++d.n > 120) d.phase = 2; } else if (!isWs(c) && !DATA_B64.test(c)) d.phase = 2;
         d.pos++;
       }
       return d.phase < 2;
@@ -980,18 +1074,35 @@ export const STREAM_HOLDBACK = 48;
 // en el último espacio; si tampoco, en el tope. Luego una línea en blanco y el aviso. El aviso va DESPUÉS del filtro: no destapa nada.
 export const REPLY_MAX = 1200, CUT_ZONE = 160;
 export const CUT_NOTICE = 'Respuesta cortada por largo. Escriba "sigue" para ver el resto, o pida el documento.';
-// (Bot 5) El corte nunca parte una etiqueta («[dato del dueño]», «[oculto]», «[imagen omitida]» llevan espacios) ni deja «S/ » sin su
-// número: retrocede hasta antes de la etiqueta o la moneda (a lo más CUT_SLACK más; lo pintado espera CUT_ZONE + CUT_SLACK).
+// Corte seguro (Bots 2/4/5, invariante): el corte NUNCA parte un número (dígitos con «,» «.», con o sin moneda: «S/ 1,250.40», «S/1,250»,
+// «US$2», «PEN 3») ni una etiqueta («[dato del dueño]», «[oculto]», «[imagen omitida]» llevan espacios), ni deja «S/ » sin su número.
+// Retrocede hasta antes de la moneda / el comienzo del número / el «[» aunque pase CUT_SLACK. Lo pintado usa la misma regla al soltar
+// (open: lo que sigue aún no llegó), así nunca soltó algo que el corte después quiera sacar.
 export const CUT_SLACK = 24;
-const CUT_CUR_RE = /((?:S\/\.?|US\$|\$)[ \t]*|(?<![A-Za-z0-9])PEN[ \t]*)$/;
+const CUT_TOK_RE = /(?:S\/\.?|US\$|\$|PEN)[ \t]*(?:\d[\d.,]*)?|\d[\d.,]*/gi;
+function cutSafe(s, n, open) {
+  for (let guard = 0; guard < 8; guard++) {
+    const before = n;
+    const ob = s.lastIndexOf('[', n - 1); // etiqueta abierta
+    if (ob >= 0 && n - ob <= 20 && /^\[[a-záéíóúñ]/i.test(s.slice(ob, ob + 2))) { const cb = s.indexOf(']', ob); if (cb < 0 || cb >= n) n = ob; }
+    let a = n; while (a > 0 && /[\d.,]/.test(s[a - 1])) a--;
+    let b = a, sp = 0; while (b > 0 && (s[b - 1] === ' ' || s[b - 1] === '\t') && sp < 40) { b--; sp++; }
+    const m = /(?:S\/\.?|US\$|\$|PEN)$/i.exec(s.slice(Math.max(0, b - 4), b)); const start = m ? b - m[0].length : a;
+    CUT_TOK_RE.lastIndex = start; let t, hit = -1;
+    const txt = s; while ((t = CUT_TOK_RE.exec(txt)) && t.index <= n) { const e = t.index + t[0].length;
+      if (t.index < n && (n < e || (e === n && ((open && n >= s.length) || !/\d/.test(t[0]))))) { hit = t.index; break; }
+      if (t[0] === '') CUT_TOK_RE.lastIndex++; }
+    if (hit >= 0) n = hit;
+    else if (open && n >= s.length) { const pm = /(?:S|US?|PE?)$/i.exec(s.slice(Math.max(0, n - 2), n)); if (pm) n -= pm[0].length; } // «S» de «S/», «U»/«US» de «US$»…
+    if (n === before) return n;
+  }
+  return n;
+}
 function cutKeep(p, max) { // p: los primeros max caracteres (o más) del texto; cuánto queda antes del aviso
   const w = p.slice(0, max), nl = w.lastIndexOf('\n'); let keep;
   if (nl >= max - CUT_ZONE) keep = nl + 1; else { const sp = w.lastIndexOf(' '); keep = sp >= max - CUT_ZONE ? sp + 1 : max; }
-  const lo = Math.max(0, max - CUT_ZONE - CUT_SLACK);
-  const ob = p.lastIndexOf('[', keep - 1);
-  if (ob >= lo && keep - ob <= 20 && /^\[[a-záéíóúñ]/i.test(p.slice(ob, ob + 2))) { const cb = p.indexOf(']', ob); if (cb < 0 || cb >= keep) keep = ob; }
-  while (keep > lo && /[\d.,]/.test(p[keep - 1] || '') && /\d/.test(p[keep] || '')) keep--; // corte duro (sin espacios): nunca un monto a medias
-  const m = CUT_CUR_RE.exec(p.slice(lo, keep)); if (m) keep = Math.max(lo, keep - m[1].length);
+  const k2 = cutSafe(p, keep, false);
+  if (k2 < keep) { const nl2 = p.lastIndexOf('\n', k2 - 1); keep = nl2 >= 0 && nl2 + 1 >= max - CUT_ZONE - CUT_SLACK ? nl2 + 1 : k2; } // si retrocede, mejor en un salto de línea cercano
   return keep; }
 const cutTail = (kept) => (kept.endsWith('\n') ? '\n' : '\n\n') + CUT_NOTICE;
 export function capReply(text, max = REPLY_MAX) { const t = String(text ?? ''); if (t.length <= max) return t; const kept = t.slice(0, cutKeep(t, max)); return kept + cutTail(kept); }
@@ -1007,24 +1118,27 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
-  let sent = 0, ready = '', prevCtrl = false, s1, s2, cut = false;
+  let sent = 0, ready = '', prevCtrl = false, s0, sw, s1, s2, cut = false, lastNl = false;
   const batches = (n) => { while (n > 0) { let m = n; if (m > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); m = sp > 8 && sp < n ? sp + 1 : Math.min(TEXT_BATCH, n); }
-    send({ t: ready.slice(0, m) }); sent += m; n -= m; ready = ready.slice(m); } };
+    send({ t: ready.slice(0, m) }); lastNl = ready[m - 1] === '\n'; sent += m; n -= m; ready = ready.slice(m); } };
   const deliver = (final) => {
     if (cut) { ready = ''; return; }
     if (sent + ready.length > max) { // se pasa: corte en línea/espacio y aviso
       const keep = cutKeep(ready, max - sent); // sent <= max - CUT_ZONE - CUT_SLACK: el mismo corte que capReply
-      const kept = ready.slice(0, keep); const endsNl = kept ? kept.endsWith('\n') : true; // sent > 0 aquí (max >= CUT_ZONE)
+      const kept = ready.slice(0, keep); const endsNl = kept ? kept.endsWith('\n') : lastNl; // lo último ya enviado (o nada: como capReply)
       batches(keep); send({ t: (endsNl ? '\n' : '\n\n') + CUT_NOTICE }); cut = true; ready = ''; return;
     }
     if (!sent && !final && ready.length < FIRST_TEXT_MIN) return;
-    const n = final ? ready.length : Math.min(ready.length, Math.max(0, max - CUT_ZONE - CUT_SLACK - sent));
+    let n = final ? ready.length : Math.min(ready.length, Math.max(0, max - CUT_ZONE - CUT_SLACK - sent));
+    if (!final && n > 0) n = cutSafe(ready, n, true); // nunca soltar un número / etiqueta a medias (el corte no podría volver atrás)
     batches(n);
   };
   const init = () => {
-    sent = 0; ready = ''; prevCtrl = false; cut = false;
+    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false;
     s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; }, prime) : null;
-    s1 = createTextStage((x) => { if (s2) s2.push(x); else ready += x; });
+    s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else ready += x; });
+    sw = createWsStage((x) => s1.push(x)); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
+    s0 = s2 ? createLongRunStage((x) => sw.push(x)) : null; // solo empleado: racha larga sin espacios
   };
   init();
   return {
@@ -1033,9 +1147,9 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
       let c = raw.replace(CTRL_RE, ' '); if (prevCtrl && CTRL_CHAR.test(raw[0])) c = c.slice(1);
       prevCtrl = CTRL_CHAR.test(raw[raw.length - 1]);
       if (cut) return;
-      s1.push(c); deliver(false);
+      if (s0) s0.push(c); else sw.push(c); deliver(false);
     },
-    flush() { s1.flush(); if (s2) s2.flush(); deliver(true); },
+    flush() { if (s0) s0.flush(); sw.flush(); s1.flush(); if (s2) s2.flush(); deliver(true); },
     reset() { if (sent) send({ reset: true }); init(); },
     drop() { const keep = sent; init(); sent = keep; }, // lo que quedaba sin salir no sale
     sent: () => sent
@@ -1505,7 +1619,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // mismo filtro que el texto en partes (Bot 5) y DESPUÉS el tope con aviso (Bot 2), igual que lo pintado
   // capped: la respuesta que el SERVIDOR cortó (si reply sigue siendo esa al firmar, el par lleva cut:true)
   let capped = null;
-  const finalText = (c) => { const f = role !== 'owner' ? redactOwnerData(cleanText(c, Infinity), prime) : cleanText(c, Infinity); const r = capReply(f); capped = r !== f ? r : null; return r; };
+  const empText = (c) => redactEmployeeText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
+  const finalText = (c) => { const f = role !== 'owner' ? redactOwnerData(empText(c), prime) : cleanText(c, Infinity); const r = capReply(f); capped = r !== f ? r : null; return r; };
   let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
@@ -1545,7 +1660,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  return json({ ok: true, mode, role, server_now: now, reply, turns, proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
+  return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, turns, proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
     payload_bytes: bytes, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 

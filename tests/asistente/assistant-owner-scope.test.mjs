@@ -15,9 +15,13 @@ const VISIBLE = [
   ...BUL.map(([a, b]) => ['Precios de hoy:\n' + a + 'Arroz: costo S/ 1.80\n' + b + 'Leche: S/ 3.80', ['3.80'], ['1.80']]),
   ['Leche Gloria\tS/ 3.70\ncosto\tS/ 1.80\nLeche Gloria\tS/ 3.80', ['3.70', '3.80'], ['1.80']],
   ['Leche Gloria\tS/ 3.70\nNo sé el costo\tS/ 1.80\nLeche Gloria\tS/ 3.80', ['3.70', '3.80'], ['1.80']],
-  ['El costo lo vemos luego.\n\nAquí va otro párrafo sin montos.\n\n| Producto | Precio S/ |\n|---|---|\n| Galleta | S/ 2.50 |', ['2.50'], []],
-  ['El costo es este.\n\nOtro párrafo.\n\n- Arroz S/ 1.80', ['1.80'], []],
-  ['El costo es este.\n\nOtro párrafo.\n\nArroz S/ 1.80', ['1.80'], []],
+  // (d, afinado): solo un párrafo neutro de 8+ palabras que no termina en «:» corta (o un título de venta)
+  ['El costo lo vemos luego.\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\n| Producto | Precio S/ |\n|---|---|\n| Galleta | S/ 2.50 |', ['2.50'], []],
+  ['El costo es este.\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\n- Arroz S/ 1.80', ['1.80'], []],
+  ['El costo es este.\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 1.80', ['1.80'], []],
+  ['Te paso los costos:\n\nPrecios de hoy:\n- Galleta S/ 1.80', ['1.80'], []],
+  ['Compras del cliente: S/ 30', ['30'], []], ['Compras de los clientes: S/ 30', ['30'], []], ['El cliente pagó sus compras: S/ 30', ['30'], []],
+  ['El cliente compró sus cosas: S/ 30', ['30'], []], ['S/ 30 es lo que el cliente compró', ['30'], []],
   ['Compras del cliente:\n- Galleta S/ 2.50\n- Leche S/ 3.80', ['2.50', '3.80'], []],
   ['Compras del cliente:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 2.50 |', ['2.50'], []],
 ];
@@ -27,6 +31,11 @@ const MASKED = [
   'Te paso los costos:\n- Arroz S/ 1.80\n- Leche S/ 3.80', 'Costos de hoy:\n- Arroz S/ 1.80\n- Leche S/ 3.80', 'Esto es lo que pagué.\n- Arroz S/ 1.80\n- Leche S/ 3.80',
   'El costo es este.\n\n- Arroz S/ 1.80', 'Costo del arroz:\n\nS/ 1.80', 'Compras del cliente:\n- Galleta costo S/ 2.50', 'Compras del cliente:\n- Galleta S/ 2.50 (lo que pagué)',
   'Compras de hoy:\n- Galleta S/ 2.50', 'Costo del pedido del cliente: S/ 1.80',
+  // vuelven a taparse con la regla afinada (párrafo neutro corto o que termina en «:» no corta): se prefiere tapar
+  'El costo lo vemos luego.\n\nAquí va otro párrafo sin montos.\n\n| Producto | Precio S/ |\n|---|---|\n| Galleta | S/ 2.50 |', 'El costo es este.\n\nOtro párrafo.\n\n- Arroz S/ 1.80',
+  'Te paso los costos:\n\nSon de esta semana.\n\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', 'Te paso los costos:\n\nEstos son los que anoté ayer en la tienda central de Lima:\n\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |',
+  // «para el cliente» NO es la excepción
+  'Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10', 'Compras para el cliente:\n- Galleta S/ 1.80\n- Arroz S/ 3.10', 'Compras para los clientes: Galleta S/ 1.80', 'El cliente me dijo que lo compró a S/ 1.80',
 ];
 test('Bot 2 (a)–(d): los casos tapados de más ahora se ven; lo del dueño en el mismo ítem/fila sigue tapado', () => {
   for (const [t, vis, hid] of VISIBLE) { const o = red(t); for (const a of vis) assert.ok(o.includes(a), JSON.stringify(t) + ' → ' + JSON.stringify(o)); for (const a of hid) assert.ok(!o.includes(a), JSON.stringify(o)); }

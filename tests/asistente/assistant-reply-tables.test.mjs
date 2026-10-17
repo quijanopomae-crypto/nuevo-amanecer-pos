@@ -76,7 +76,7 @@ test('seguridad (Bot 5): <img onerror> y <script> en celdas solo como texto; nad
   // el código del renderer no usa innerHTML/insertAdjacentHTML/outerHTML
   const src = CORE.slice(CORE.indexOf('function createReplyRenderer'), CORE.indexOf('// Pide el chat en partes.'));
   assert.ok(src.length > 500 && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(src));
-  assert.match(UI, /function paintReply\(m, t\) \{ m\.textContent = ''; var r = C\.createReplyRenderer\(doc,/);
+  assert.match(UI, /function paintReply\(m, t, opts\) \{ m\.textContent = ''; var r = C\.createReplyRenderer\(doc,/);
 });
 test('el renderer trabaja DESPUÉS del filtro: el costo original no está en el DOM ni en atributos; «[dato del dueño]» en un span que no se parte', () => {
   const src = 'Te paso costo y precio:\n| Producto | Costo | PVP |\n|---|---|---|\n| Galleta | S/ 7.77 | S/ 2.50 |\n| Arroz | 3.21 | S/ 4.20 |\n';

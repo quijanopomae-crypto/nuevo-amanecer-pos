@@ -263,7 +263,66 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 ### Queda como INFO (sin arreglar, a propósito)
 
 - **factura**: los montos de una factura de compra (eco de la foto, lista o tabla «De tu factura:», «Según la factura…») se siguen viendo para el empleado. Es el mismo INFO de antes. El empleado no puede leer facturas: la foto es solo del dueño.
-- **Soltar los espacios mientras una etiqueta espera su valor (Bot 3, opcional)**: no se hizo, porque el texto visible no queda igual. Con RUC, DNI y «data:», la redacción del texto entero se traga los espacios («RUC:<500 espacios>20123456789» → «RUC *******6789», «DNI ****5678», «[imagen omitida]»), así que soltarlos antes cambia la forma. Con clave o pin haría falta un estado nuevo sin la palabra en el mismo tramo, con riesgo de soltar el valor. La retención de esas rachas sigue igual (515–565).
-- Texto sin ningún espacio: la etapa de datos sensibles retiene todo hasta el final (1547 en la sonda de Bot 5). Sin fuga.
+- **Soltar los espacios mientras una etiqueta espera su valor (Bot 3, opcional)**: (reemplazado más abajo, «Espacios largos tras una etiqueta») no se hizo, porque el texto visible no queda igual. Con RUC, DNI y «data:», la redacción del texto entero se traga los espacios («RUC:<500 espacios>20123456789» → «RUC *******6789», «DNI ****5678», «[imagen omitida]»), así que soltarlos antes cambia la forma. Con clave o pin haría falta un estado nuevo sin la palabra en el mismo tramo, con riesgo de soltar el valor. La retención de esas rachas sigue igual (515–565).
+- Texto sin ningún espacio: la etapa de datos sensibles retiene todo hasta el final (1547 en la sonda de Bot 5). Sin fuga. (Para el empleado ya no: ver «[texto largo omitido]» más abajo. El dueño sigue igual.)
 - Un par cortado de una charla anterior (<24 h) se puede repetir y vuelve a preparar el filtro. Ahora solo tapa más.
-- «Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10» y los límites ya conocidos (más de 20 caracteres en la línea siguiente, «Precios:», títulos de más de 120 caracteres o sin «:»).
+- ~~«Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10»~~ (ya se tapa, ver abajo) y los límites ya conocidos (más de 20 caracteres en la línea siguiente, «Precios:», títulos de más de 120 caracteres o sin «:»).
+
+## Servidor y celular sobre f3375c09 (Bots 2, 3, 4 y 5)
+
+### «cliente» acotado (Bot 2)
+
+- La excepción de «cliente» vale solo para «del cliente», «de los/las clientes» y «el/los cliente(s) (ya) pagó/compró/pagaron/compraron». «Compras del cliente: S/ 30» se ve.
+- «para el cliente» NO es excepción: «Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10» se tapa, también como presentación de lista. «Compras de clientes: S/ 30» (sin artículo) ahora se tapa: se prefiere tapar.
+- «el cliente compró/pagó» ya no cuenta como palabra de compra del dueño en la ventana («Compras que el cliente compró…»).
+
+### Párrafo neutro (Bot 2, regla refinada)
+
+- Un párrafo neutro corta la presentación del dueño y la ventana de 60 solo si NO termina en «:» y tiene 8 palabras o más, o si lo sigue un título de venta. «Te paso los costos:\n\nSon de esta semana.\n\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |» se tapa.
+- De los 9 casos de Bot 2, vuelve a taparse **c3.parrafosAtras** («El costo lo vemos luego.\n\nVale.\n\n| … |» y su variante con «Aquí va otro párrafo sin montos.»). Los otros 8 se siguen viendo.
+- La misma regla para el tapado forzado de «sigue»: ya no para en el 2.º párrafo. Para solo en una cabecera `|---|` nueva o en un párrafo neutro de 8 palabras o más sin «:». «Siguen:\n\n| Galleta | S/ 1.80 |» se tapa.
+
+### Tabla del dueño con huecos (Bot 5, FALLA en f3375c09)
+
+- La tabla del dueño (capa de columnas y capa de presentación) aguanta cualquier cantidad de líneas en blanco y de líneas cortas de texto, entre `|---|` y las filas y en medio. Termina solo con la regla del párrafo neutro, con un título de venta (una línea que EMPIEZA con «Precio(s)», «PVP» o «Lista de precios») o con una cabecera `|---|` nueva.
+- Se tapan: 2 líneas en blanco antes de la fila, «zz\nyy» antes de la fila, y una línea en blanco en medio antes de «| Producto 1 | S/ 1.81 |». La tabla de venta con huecos se sigue viendo.
+- Retención sin cambios: igual a la base en la sonda de retención (máx. 184).
+
+### Corte de 1200: nunca parte un número (Bots 2/4/5, invariante)
+
+- El corte nunca parte un número, con o sin moneda o separadores («S/ 1,250.40», «S/1,250», «aS/2», «US$2», «1,250 unid.», «12.5 kg»). Retrocede hasta antes de la moneda o del inicio del número, aunque pase de `CUT_SLACK`, y prefiere un salto de línea cercano.
+- Hay una prueba de propiedad en el repo: textos al azar con montos cerca de 1200. Cada número de lo que queda aparece entero en el texto completo en la misma posición. Partes = final. En la base de pruebas: 3 × 2000 textos, 0 malos.
+- Si lo que queda es vacío (por ejemplo, 4000 dígitos seguidos), lo pintado lleva el mismo aviso que `capReply`.
+
+### «[texto largo omitido]» (Bot 3/2, solo empleado)
+
+- En los turnos del EMPLEADO, una racha de más de 160 caracteres sin espacio (URL, base64, texto pegado) se cambia por «[texto largo omitido]» y lo demás sigue en partes. Se hace igual en el texto entero y en partes (partes = entero).
+- Se deja el primer carácter de la racha («h[texto largo omitido]»): así la etapa de datos sensibles puede soltar hasta ahí sin esperar.
+- Las imágenes «data:…;base64,» siguen saliendo como «[imagen omitida]».
+- El dueño (texto y documentos) ve los enlaces y códigos largos enteros.
+- Una etiqueta pendiente (RUC, DNI, clave, pin, token, api key) sigue pendiente después del tramo quitado: «RUC:» + 300 caracteres basura + « 20123456789» sale tapado.
+- En el celular sale como texto normal, sin estilo especial.
+- **INFO (Bot 4)**: idea para después, un campo del servidor que marque el tramo quitado y que el celular lo muestre como nota. No se hizo.
+
+### Espacios largos tras una etiqueta (Bot 3)
+
+- Mientras una etiqueta RUC, DNI, clave, pin, token, api key o «data:» espera su valor, una racha de espacios o saltos de más de 160 se junta en UN espacio. Vale para dueño y empleado, en el texto entero (al inicio de `redactText`) y en partes. Es la misma función, así que el resultado es idéntico.
+- Cambia la forma visible con clave o pin: «clave<500 espacios>1234» ahora sale «clave [oculto]». El valor sigue tapado.
+- La retención baja de 515–565 a 31 como mucho (medida sin contar lo descartado). Las 22 sondas de etiquetas pendientes pasan.
+
+### «data:» con espacios (Bot 5)
+
+- «data:» + espacios o saltos + «image/png;base64,…» → «[imagen omitida]», entero y en partes.
+
+### Celular (Bots 4/5/3)
+
+- **Aviso de corte**: la respuesta (JSON y evento final en partes) lleva `cut: true|false`, puesto por el servidor. El celular pinta la última línea como nota (`.na-asst-note`) SOLO si `d.cut === true`. Nunca busca el texto del aviso: un aviso escrito por el modelo sale como texto normal.
+- **Cabecera reusada**: en la respuesta que sigue a una cortada, las filas sueltas del inicio (con el mismo número de columnas) usan la cabecera de la última tabla de la burbuja anterior. Esa cabecera sale solo de lo que esa burbuja ya pintó (texto ya filtrado por el servidor), nunca de otros datos. No se reusa después de una tabla propia de la burbuja.
+- **360 px**: las burbujas llevan `overflow-wrap:anywhere`, así que un token largo sin espacios no desborda a lo ancho.
+
+### Cambios en el corpus (723 frases, empleado, contra f3375c09)
+
+- Cambian 10 frases, ninguna por la regla de costos:
+  - 5 se tapan más: «Compras para el cliente…» ×2, «Compras de clientes: S/ 30», y c3.parrafosAtras ×2.
+  - 4 solo cambian de forma: rachas largas → «[texto largo omitido]», espacios largos tras clave/PIN → uno.
+  - 1 se ve: «No sé el costo.\nPrecio S/ 2.50 y <300 «a»> fin.». Antes se tapaba solo por la retención de la racha larga. Ahora da lo mismo que la frase corta equivalente «…Precio S/ 2.50 y a fin.», que ya se veía (precio con el costo negado).

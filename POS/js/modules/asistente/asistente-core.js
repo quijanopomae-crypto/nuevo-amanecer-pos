@@ -246,8 +246,11 @@
     out.push(cur);
     return out.map(function (x) { return x.trim().replace(/^(\*\*|__)(.*)\1$/, '$2'); });
   }
-  function createReplyRenderer(doc, append) {
-    var raw = '', line = '', mode = 'start', liveText = null, head = null, table = null, tbody = null, labels = null, rows = 0;
+  // opts.labels (Bot 4/5): cabecera de la tabla de la burbuja ANTERIOR (cortada), tomada de lo que esa burbuja ya pintó (texto filtrado por el
+  // servidor), nunca de otros datos. Solo sirve para filas sueltas al inicio de la continuación («sigue»), con el mismo número de columnas.
+  function createReplyRenderer(doc, append, opts) {
+    var raw = '', line = '', mode = 'start', liveText = null, head = null, table = null, tbody = null, labels = null, rows = 0, lastLabels = null, tables = 0;
+    var reuse = opts && Array.isArray(opts.labels) && opts.labels.length > 1 ? opts.labels.map(function (x) { return String(x); }) : null;
     // texto suelto: se va sumando al mismo nodo de texto mientras no aparezca una tabla
     function text(t) { if (!t) return; if (liveText) liveText.data += t; else { liveText = doc.createTextNode(t); append(liveText); } }
     function cellInto(cellEl, value) { // «[dato del dueño]» en un span que no se parte
@@ -258,7 +261,7 @@
       }
     }
     function startTable(hdrLine) {
-      liveText = null; labels = tableCells(hdrLine); rows = 0;
+      liveText = null; labels = Array.isArray(hdrLine) ? hdrLine.slice() : tableCells(hdrLine); rows = 0; lastLabels = labels.slice(); tables++;
       var wrap = doc.createElement('div'); wrap.className = 'na-asst-tbl';
       table = doc.createElement('table'); var thead = doc.createElement('thead'), tr = doc.createElement('tr');
       labels.forEach(function (h) { var th = doc.createElement('th'); th.setAttribute('scope', 'col'); cellInto(th, h); tr.appendChild(th); });
@@ -275,10 +278,12 @@
     }
     function endTable() { table = tbody = labels = null; }
     function isPipe(l) { return /^\s*\|/.test(l); }
+    // fila suelta al inicio de la continuación: usa la cabecera anterior (solo antes de la primera tabla de esta burbuja y si cuadran las columnas)
+    function reused(h) { if (!reuse || tables || TABLE_SEP_RE.test(h) || tableCells(h).length !== reuse.length) return false; startTable(reuse); addRow(h); return true; }
     // una línea COMPLETA (con su salto, si lo tiene)
     function full(l, nl) {
       if (table) { if (isPipe(l) && !TABLE_SEP_RE.test(l)) { addRow(l); return; } if (isPipe(l)) return; endTable(); }
-      if (head != null) { var h = head; head = null; if (TABLE_SEP_RE.test(l)) { startTable(h); return; } text(h + '\n'); }
+      if (head != null) { var h = head; head = null; if (TABLE_SEP_RE.test(l)) { startTable(h); return; } if (reused(h)) return full(l, nl); text(h + '\n'); }
       if (isPipe(l) && nl) { head = l; return; } // ¿cabecera? espera la línea siguiente
       text(l + (nl ? '\n' : ''));
     }
@@ -293,7 +298,7 @@
             line += piece; var fc = (/\S/.exec(line) || [''])[0];
             // espera solo si puede ser fila («|») o la línea «---|---» que sigue a una cabecera; si no, es texto y sale ya
             if (fc && fc !== '|' && !(head != null && (fc === '-' || fc === ':'))) {
-              if (table) endTable(); if (head != null) { text(head + '\n'); head = null; }
+              if (table) endTable(); if (head != null) { var h0 = head; head = null; if (reused(h0)) endTable(); else text(h0 + '\n'); }
               mode = 'text'; text(line); line = '';
             }
             break;
@@ -303,8 +308,9 @@
           line = ''; mode = 'start'; i = k + 1;
         }
       },
-      finish: function () { if (line) { if (head != null || table) full(line, false); else text(line); line = ''; } if (head != null) { text(head); head = null; } endTable(); mode = 'start'; },
+      finish: function () { if (line) { if (head != null || table) full(line, false); else text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); mode = 'start'; },
       raw: function () { return raw; },
+      labels: function () { return lastLabels ? lastLabels.slice() : null; }, // cabecera de la última tabla pintada (para la continuación)
       rows: function () { return rows; }
     };
   }

@@ -11,6 +11,7 @@
   'use strict';
   var doc = root.document, C = root.NA_ASISTENTE_CORE;
   if (!doc || !C || root.NA_ASISTENTE) return;
+  var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
   var history = [], state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -361,7 +362,11 @@
   function announce(t) { if (!liveEl) return; liveEl.textContent = ''; var v = String(t || ''); setTimeout(function () { if (liveEl) liveEl.textContent = v; }, 30); }
   function addMsg(kind, text, img) { var m = el('div', 'na-asst-msg ' + kind); if (kind === 'a') paintReply(m, text); else m.textContent = text; if (img) { var i = el('img'); i.src = img; i.alt = 'Foto enviada'; m.appendChild(i); } msgsEl.appendChild(m); scrollEnd(); return m; }
   // Respuesta del asistente: tablas «| … |» con «|---|» como tabla (a 480 px o menos, una ficha por fila). Solo createElement/textContent.
-  function paintReply(m, t) { m.textContent = ''; var r = C.createReplyRenderer(doc, function (n) { m.appendChild(n); }); r.push(String(t == null ? '' : t)); r.finish(); m._md = r; }
+  function paintReply(m, t, opts) { m.textContent = ''; var r = C.createReplyRenderer(doc, function (n) { m.appendChild(n); }, opts); r.push(String(t == null ? '' : t)); r.finish(); m._md = r; }
+  // Aviso de corte (Bots 4/5): SOLO si el servidor lo marcó (final.cut === true). El aviso es la última línea que puso el servidor; el resto se
+  // pinta igual que siempre. Nunca se busca el texto del aviso: un «aviso» escrito por el modelo, sin la marca, sale como texto normal.
+  function paintCut(m, t, opts) { t = String(t == null ? '' : t); var k = t.lastIndexOf('\n'); paintReply(m, k < 0 ? '' : t.slice(0, k).replace(/\n+$/, ''), opts);
+    var n = el('p', 'na-asst-note'); n.textContent = k < 0 ? t : t.slice(k + 1); m.appendChild(n); }
   function soles(n) { return C.soles(n); }
   // Nombre del cliente en la tarjeta: solo en documentos de UN cliente (estado de cuenta), con su etiqueta. En la lista de precios, nunca.
   var CUSTOMER_DOCS = ['estado_cuenta'];
@@ -519,7 +524,7 @@
     if (bubbleIO) { try { bubbleIO.disconnect(); } catch (_) {} bubbleIO = null; }
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
-    history.length = 0; shownFor = null; busy = false; offscreen = false;
+    history.length = 0; lastCut = null; shownFor = null; busy = false; offscreen = false;
   }
   function accessLost(code) {
     access = null; adminOff = true; noRole = false;
@@ -574,11 +579,13 @@
     var body = { text: C.redactText(text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
     if (image) body.image = image;
     var bubble = null, painter = null, streaming = canStream();
+    // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
+    var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null;
     if (streaming) body.stream = true;
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
     function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
-    function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { b.insertBefore(n, dots.parentNode === b ? dots : null); }); b._md.push(t); } // fila por fila, sin releer
+    function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
     function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); }
     // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
     function backToThinking() { painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
@@ -617,7 +624,8 @@
       // Si es el mismo texto no se toca (nada se mueve). Las tarjetas van DEBAJO del texto terminado: lo ya leído no se desplaza;
       // si la persona estaba abajo se baja, pero nunca más allá del inicio de la respuesta (si la tarjeta no entra, sale «Ver nuevo»).
       var stick = atBottom();
-      if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply); } else bubble = addMsg('a', d.reply);
+      if (d.cut === true) { if (bubble) bubble.removeAttribute('aria-busy'); else bubble = addMsg('a', ''); paintCut(bubble, d.reply, mdOpts); lastCut = bubble; }
+      else if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply, mdOpts); } else { bubble = addMsg('a', ''); paintReply(bubble, d.reply, mdOpts); }
       announce(d.reply);
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
       (d.denied || []).forEach(addDenied);

@@ -213,7 +213,7 @@ test('celular: con «text {reset:true}» se borra lo ya pintado («Claro, te pre
   const thinking = node(); thinking.textContent = 'Pensando'; const dots = node(); thinking.appendChild(dots);
   const seen = [];
   const run = new Function('C', 'doc', 'thinking', 'fetchImpl', 'seen', 'panel', 'dots',
-    'var bubble = null, painter = null, panelEl = panel, mine = panel; function setState(){} function wake(){} function atBottom(){ return true; } function follow(){}\n' +
+    'var bubble = null, painter = null, mdOpts = null, panelEl = panel, mine = panel; function setState(){} function wake(){} function atBottom(){ return true; } function follow(){}\n' +
     ensure + '\n' + searching + '\n' + painterSt + 'return (async function () { ' + streamSt + ' painter.finish(); return { st: st, bubble: bubble }; })();');
   const evs = [['open', { ok: true }], ['text', { t: 'Claro, te preparo el inventario con ' }], ['wait', 160], ['text', { t: 'costos para imprimir' }], ['text', { reset: true }], ['wait', 160],
     ['error', { error: 'forbidden_document', status: 403, message: 'Ese documento es solo para el dueño. Puedes pedir la lista de precios o la lista de pedido.' }]];

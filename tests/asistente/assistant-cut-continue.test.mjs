@@ -101,7 +101,9 @@ test('«sigue» (Bot 5): cutPrime es un sí/no; tabla de venta, zona negada o av
   assert.equal(cutPrime(capReply(filtered(OWNER_TABLE, EMP))), false, 'sin la marca del servidor no hay contexto aunque termine con el aviso');
   const sale = '| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'; assert.equal(filtered(sale, EMP, true), sale, 'tabla nueva de venta tras el contexto: se ve');
   assert.ok(!/1\.80/.test(filtered('| Arroz | S/ 1.80 |\n| Leche | S/ 2.20 |', EMP, true)), 'filas sueltas de la tabla cortada: tapadas');
-  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nOtro tema.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del dueño] |\n\nOtro tema.\n\nArroz S/ 4.20', 'el contexto dura la continuación y el párrafo siguiente');
+  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nOtro tema.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del dueño] |\n\nOtro tema.\n\nArroz [dato del dueño]', 'un párrafo corto no corta el contexto');
+  assert.equal(filtered('Siguen:\n\n| Galleta | S/ 1.80 |', EMP, true), 'Siguen:\n\n| Galleta | [dato del dueño] |', 'un párrafo que termina en «:» tampoco');
+  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del dueño] |\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 4.20', 'un párrafo neutro de 8+ palabras sí');
 });
 test('ruta (Bot 5): cut:true lo pone el servidor dentro de la firma; un aviso escrito por el modelo no marca; agregar cut:true a mano invalida el par', async () => {
   const forged = '| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |\n\n' + CUT_NOTICE;
@@ -136,4 +138,11 @@ test('tabla del dueño (Bot 5): una línea en blanco (o de texto) entre |---| y 
     for (const n of [1, 3, 7]) assert.equal(emit(t, EMP, n, 1e9), f);
   }
   const sale = 'Precios de venta:\n| Producto | PVP |\n|---|---|\n\n| Arroz | S/ 4.20 |'; assert.match(filtered(sale, EMP), /4\.20/, 'tabla de venta: se sigue viendo');
+});
+
+test('redactText (Bot 5): «data:» + espacios o saltos + «image/png;base64,…» → [imagen omitida]; en partes = entero', () => {
+  for (const t of ['data:\n  image/png;base64,QUJDREVGR0hJSktMTU5P', 'data:    image/png;base64,QUJDREVGR0hJSktMTU5P más', 'data:\n\nimage/jpeg;base64,' + 'QUJD'.repeat(40)]) {
+    const r = redactText(t); assert.ok(r.startsWith('[imagen omitida]') && !/QUJD/.test(r), r);
+    for (const role of ['owner', EMP]) for (const n of [1, 3, 7]) assert.equal(emit(t, role, n, 1e9), filtered(t, role)); }
+  for (const t of ['data: hola, qué tal', 'Los data: de hoy, bien']) assert.equal(redactText(t), t, 'texto normal con «data:» no cambia');
 });
