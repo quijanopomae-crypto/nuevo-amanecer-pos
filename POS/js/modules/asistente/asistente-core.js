@@ -35,7 +35,10 @@
   // (Bot 5 sobre 3ee80c18) igual que el servidor: NFC; fuera \p{Cf} (dirección U+202A-202E/U+2066-2069, U+00AD, U+2061, etiquetas U+E0000-E007F…),
   // U+FE00-FE0F, U+034F y las marcas combinantes que no van pegadas a una letra; NFC otra vez. «José» (acento combinante) sigue válido.
   var MANUAL_FMT = /[\p{Cf}\uFE00-\uFE0F\u034F\u{E0000}-\u{E007F}]/gu, MANUAL_LOOSE_MARK = /(^|[^\p{L}\p{M}])\p{M}+/gu;
-  function normManual(v) { return String(v == null ? '' : v).normalize('NFC').replace(MANUAL_FMT, '').replace(MANUAL_LOOSE_MARK, '$1').normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-').trim(); }
+  // (Bot 4 sobre 5646a4c9) inputClean = normManual sin el recorte de los extremos: es lo que se deja VISIBLE en el campo mientras se escribe,
+  // así lo que se ve es lo que se manda (normManual(x) === inputClean(x).trim()).
+  function inputClean(v) { return String(v == null ? '' : v).normalize('NFC').replace(MANUAL_FMT, '').replace(MANUAL_LOOSE_MARK, '$1').normalize('NFC').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/[\u2010-\u2015]/g, '-'); }
+  function normManual(v) { return inputClean(v).trim(); }
   // (Bot 2 sobre 3ee80c18) igual que el servidor: ∙ ✱ ⁎ en el relleno; revisiones sobre una copia NFKC (se guarda NFC); documento: «x x 6789»;
   // proveedor: «*6789» (asterisco pegado a dígitos al inicio de una palabra).
   // (Bot 5 sobre 5646a4c9) igual que el servidor: ⁕ ⁑ ⁂ ✲-✽ ❉-❋ ⚹ ⊛ ٭ ﹡ en el relleno y pegados a dígitos
@@ -58,16 +61,29 @@
       var hint = doc.createElement('span'); hint.className = 'na-asst-need-t'; hint.textContent = 'Complete este dato'; hint.id = 'naNeed' + n + (++needSeq);
       inp.setAttribute('aria-describedby', hint.id);
       // (Bot 2 sobre 84a49517) la parte exacta que trajo el servidor («F001-») va de inicio; cuenta solo cuando se le agrega lo que falta
-      var pre = p[n] && typeof p[n] === 'string' && !maskLeft(p[n]) ? String(p[n]).slice(0, NEED_MAX[n]) : '';
+      // (Bot 4 sobre 5646a4c9) el inicio que trae la propuesta también sin caracteres de formato (lo que se ve = lo que se manda)
+      var pre0 = p[n] && typeof p[n] === 'string' ? inputClean(p[n]) : '', pre = pre0 && !maskLeft(pre0) ? pre0.slice(0, NEED_MAX[n]) : '';
       if (pre) inp.value = pre;
       hints[n] = hint; byName[n] = inp;
-      inp.addEventListener('input', function () {
+      // (Bot 4 sobre 5646a4c9) el CAMPO muestra lo limpio: si inputClean cambia lo escrito/pegado (U+202E, U+00AD, U+200B…), se reescribe el valor
+      // y el cursor/selección retrocede lo quitado antes de él (pegar deja el cursor al final de lo pegado). Durante una composición (IME,
+      // teclado con acentos) no se toca; se limpia en compositionend. Solo si cambia: escribir normal no mueve nada.
+      var composing = false;
+      function cleanField() { var raw = String(inp.value == null ? '' : inp.value), c = inputClean(raw); if (c === raw) return false;
+        var s0 = inp.selectionStart, e0 = inp.selectionEnd, at = function (k) { return typeof k === 'number' ? Math.min(c.length, inputClean(raw.slice(0, k)).length) : null; };
+        var s1 = at(s0), e1 = at(e0); inp.value = c;
+        if (s1 != null && typeof inp.setSelectionRange === 'function') { try { inp.setSelectionRange(s1, e1 == null ? s1 : Math.max(s1, e1)); } catch (_) {} }
+        return true; }
+      function sync() {
         var v = normManual(inp.value).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre); state[n] = ok ? v : '';
         if (stale[n] != null && v !== stale[n]) delete stale[n]; // (Bot 4 sobre 58200f60) tras un 422 cuenta recién cuando cambia
         ok = ok && stale[n] == null;
         hint.textContent = 'Complete este dato';
-        inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); inp.className = ok ? 'na-asst-need ok' : 'na-asst-need'; hint.hidden = ok;
-        if (onChange) onChange(); });
+        inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); setCls(inp, 'ok', ok); hint.hidden = ok; // (Bot 4) classList: na-asst-ltr se queda
+        if (onChange) onChange(); }
+      inp.addEventListener('compositionstart', function () { composing = true; });
+      inp.addEventListener('compositionend', function () { composing = false; cleanField(); sync(); });
+      inp.addEventListener('input', function (ev) { if (!composing && !(ev && ev.isComposing)) cleanField(); sync(); }); // pegar/soltar también llega aquí (insertFromPaste/Drop)
       lab.appendChild(t); lab.appendChild(inp); lab.appendChild(hint); box.appendChild(lab); inputs.push(inp);
     });
     // (Bot 4 sobre 84a49517) el servidor rechazó (422 fields_required): aviso junto a cada campo nombrado, foco en el primero; lo escrito queda.
@@ -76,7 +92,7 @@
       var other = [], first = null;
       (Array.isArray(fields) ? fields : []).forEach(function (n) {
         var inp = byName[n], hint = hints[n]; if (!inp) { other.push(String(n)); return; }
-        hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); inp.className = 'na-asst-need'; if (!first) first = inp;
+        hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); setCls(inp, 'ok', false); if (!first) first = inp;
         // (Bot 4 sobre 58200f60) lo escrito queda, pero el campo no vuelve a contar como lleno (ni «Confirmar» se enciende) hasta que cambie
         stale[n] = normManual(inp.value).slice(0, NEED_MAX[n]).trim(); });
       if (first) { try { first.focus({ preventScroll: false }); } catch (_) {} }
@@ -86,6 +102,9 @@
     return { el: box, state: state, names: names.slice(), first: inputs[0], inputs: inputs, flag: flag, values: values, missing: function () { return names.filter(function (n) { return !state[n] || stale[n] != null; }).length; } };
   }
   var needSeq = 0;
+  // (Bot 4 sobre 5646a4c9) poner/quitar una clase sin pisar las demás (na-asst-need, na-asst-ltr de ltrIsolate)
+  function setCls(el, k, on) { if (el.classList && typeof el.classList.toggle === 'function') { el.classList.toggle(k, !!on); return; }
+    var a = String(el.className || '').split(/\s+/).filter(function (x) { return x && x !== k; }); if (on) a.push(k); el.className = a.join(' '); }
   // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
   // (Bot 5 sobre 5646a4c9) el valor de la propuesta también sin caracteres de formato (igual que fmtClean del servidor): «U+202E 1234-100F» se
   // muestra y se escribe en «Nueva compra» como «1234-100F» (dir=ltr no deshace un U+202E de adentro)
@@ -708,7 +727,7 @@
     return Math.max(0, over);
   }
 
-  var api = { fmtClean: fmtClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
