@@ -46,7 +46,7 @@ test('1) límites (Bots 3/5): en ítems/filas NO se usa la regla de línea corta
 });
 test('1) Bot 2 b sigue: la palabra del dueño DENTRO de un ítem/fila hermano con SU monto tapa solo ese ítem; listas y tablas de precios se ven', () => {
   for (const [t, vis, hid] of [['- Arroz S/ 4.20\n- costo S/ 1.80', ['4.20'], ['1.80']], ['Leche Gloria\tS/ 3.70\ncosto\tS/ 1.80\nLeche Gloria\tS/ 3.80', ['3.70', '3.80'], ['1.80']],
-    ['| Galleta | S/ 2.50 |\n| costo unitario | S/ 1.20 |', ['2.50'], ['1.20']], ['1. Arroz S/ 4.20\n2. Margen 30%\n3. Leche S/ 3.80', ['4.20', '3.80'], ['30%']],
+    ['| Galleta | S/ 2.50 |\n| costo unitario | S/ 1.20 |', ['2.50'], ['1.20']], ['1. Arroz S/ 4.20\n2. Margen 30%\n3. Leche S/ 3.80', ['3.80'], ['4.20', '30%']] /* 84a49517: margen nunca suelta el de arriba */,
     ['- Galleta S/ 2.50\n- Arroz S/ 4.20\n- Leche S/ 3.80', ['2.50', '4.20', '3.80'], []], ['| A | S/ 2.50 |\n| B | S/ 4.20 |', ['2.50', '4.20'], []],
     ['- Galleta S/ 2.50\n- El costo lo ve el dueño.', [], ['2.50']], ['- Galleta S/ 2.50\n- Costeño 1 kg S/ 4.20', ['2.50', '4.20'], []], ['- Galleta S/ 2.50\n- Margarina S/ 3.10', ['2.50', '3.10'], []],
     ['| Arroz | S/ 4.20 |\n| Costa Rica café | S/ 9.90 |', ['4.20', '9.90'], []], ['- Galleta S/ 2.50\n- de la casa S/ 3.00', ['2.50', '3.00'], []], ['- Galleta S/ 2.50\n- mixto S/ 3.00', ['2.50', '3.00'], []]]) {
@@ -150,15 +150,15 @@ test('5) «data image/png;base64,…» sin «:» → [imagen omitida] (dueño y 
     assert.equal(same('Mi contraseña de caja es Ab12cd34 ok', role), 'Mi contraseña de caja es [oculto] ok');
     assert.equal(same('el token para la api Tk9a8b7c6 listo', role), 'el token para la api [oculto] listo');
     // sin valor mezclado en 4 palabras: como siempre (se tapa lo que sigue a la etiqueta)
-    assert.equal(same('la clave del pin es 1234', role), 'la clave [oculto] pin es [oculto]');
+    assert.equal(same('la clave del pin es 1234', role), 'la clave del pin es [oculto]'); // 84a49517: \d{4,8} vale como valor
     assert.equal(same('clave: abc', role), 'clave: [oculto]'); assert.equal(same('token abcdefghijklmnop fin.', role), 'token [oculto] fin.'); }
 });
 
 // ---------- D') línea siguiente con SU monto (ventana de ~20 caracteres, Bots 2/3) ----------
-test("D') la línea siguiente con palabra del dueño y SU monto en sus primeros 20 caracteres tapa solo ese monto y suelta el de arriba; sin monto tapa el de arriba", () => {
-  for (const [t, vis, hid] of [['Arroz S/ 4.20\nEl costo es S/ 1.80.', ['4.20'], ['1.80']], ['Galleta S/ 1.80\nganancia S/ 0.70', ['1.80'], ['0.70']], ['Galleta S/ 1.80\ncosto: S/ 1.20', ['1.80'], ['1.20']],
-    ['- Galleta S/ 1.80\n- costo S/ 1.20', ['1.80'], ['1.20']], ['• Galleta S/ 1.80\nganancia S/ 0.70', ['1.80'], ['0.70']], ['| Galleta | S/ 1.80 |\n| costo unitario | S/ 1.20 |', ['1.80'], ['1.20']],
-    ['Galleta S/ 1.80.\nmargen 30%', ['1.80'], ['30%']],
+test("D') (desde 84a49517 solo «costo» + monto con moneda) la línea siguiente con palabra del dueño y SU monto en sus primeros 20 caracteres tapa solo ese monto y suelta el de arriba; sin monto tapa el de arriba", () => {
+  for (const [t, vis, hid] of [['Arroz S/ 4.20\nEl costo es S/ 1.80.', ['4.20'], ['1.80']], ['Galleta S/ 1.80\nganancia S/ 0.70', [], ['1.80', '0.70']], ['Galleta S/ 1.80\ncosto: S/ 1.20', ['1.80'], ['1.20']],
+    ['- Galleta S/ 1.80\n- costo S/ 1.20', ['1.80'], ['1.20']], ['• Galleta S/ 1.80\nganancia S/ 0.70', [], ['1.80', '0.70']], ['| Galleta | S/ 1.80 |\n| costo unitario | S/ 1.20 |', ['1.80'], ['1.20']],
+    ['Galleta S/ 1.80.\nmargen 30%', [], ['1.80', '30%']], // 84a49517: margen/ganancia/utilidad nunca sueltan; % sin moneda no es monto propio
     ['Galleta S/ 1.80\ncosto unitario', [], ['1.80']], ['Galleta S/ 1.80\n(mi costo)', [], ['1.80']], ['Galleta S/ 1.80\nEse es el margen', [], ['1.80']],
     ['Galleta S/ 1.80\ncosto unitario de la casa: S/ 1.20', [], ['1.80', '1.20']], ['- Galleta S/ 1.80\n- costo unitario del proveedor S/ 1.20', [], ['1.80', '1.20']]]) {
     const f = same(t); shows(f, vis); hides(f, hid); }
@@ -216,13 +216,15 @@ const LINEAS = [{ nombre: 'Galleta', cantidad: 3, costo_unitario: 1.2 }];
 test("B) tarjeta de compra del dueño: RUC de empresa y comprobante exactos; RUC 10, DNI suelto o clave → campo VACÍO + completar (nunca la máscara)", async () => {
   const ok = toProposal({ name: 'preparar_compra', arguments: { proveedor: 'Alicorp SAC RUC 20100055237', documento: 'F001-00012345 cód. 12345678', lineas: LINEAS } }, 'owner', { products: [] }, 1);
   assert.equal(ok.proveedor, 'Alicorp SAC RUC 20100055237'); assert.equal(ok.documento, 'F001-00012345 cód. 12345678'); assert.equal(ok.completar, undefined);
+  // (desde 84a49517, Bot 2) el campo conserva la parte EXACTA antes de la máscara, sin la etiqueta suelta («RUC», «DNI», «clave:»)
+  const PREFIX = { 'Bodega Juan RUC 10456789012': 'Bodega Juan', 'pedido 12345678': 'pedido', 'Juan DNI 45678912': 'Juan', 'clave: Zq9xK2 F001-1': '', 'Alicorp RUC *******5237': 'Alicorp', 'DNI ****5678': '', 'Prov [dato del dueño]': 'Prov' };
   for (const [prov, docu, miss] of [['Bodega Juan RUC 10456789012', 'F001-00012345', ['proveedor']], ['Alicorp SAC', 'pedido 12345678', ['documento']], ['Juan DNI 45678912', 'clave: Zq9xK2 F001-1', ['proveedor', 'documento']],
     ['Alicorp RUC *******5237', 'DNI ****5678', ['proveedor', 'documento']], ['Prov [dato del dueño]', 'F001-2', ['proveedor']]]) {
     const p = toProposal({ name: 'preparar_compra', arguments: { proveedor: prov, documento: docu, lineas: LINEAS } }, 'owner', { products: [] }, 1);
-    assert.deepEqual(p.completar, miss, prov + ' / ' + docu); for (const n of miss) assert.equal(p[n], '');
+    assert.deepEqual(p.completar, miss, prov + ' / ' + docu); for (const n of miss) assert.equal(p[n], PREFIX[n === 'proveedor' ? prov : docu]);
     assert.ok(!/\*{3}|\[(?:dato|oculto)/.test(JSON.stringify(p)), 'nunca una máscara en la tarjeta: ' + JSON.stringify(p)); }
   const cap = []; const r = await (await routeCap({ text: 'arma la compra' }, 'owner', TOOL({ proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345', lineas: LINEAS }), cap)).json();
-  assert.equal(r.proposals[0].proveedor, ''); assert.deepEqual(r.proposals[0].completar, ['proveedor']); assert.equal(r.proposals[0].documento, 'F001-00012345');
+  assert.equal(r.proposals[0].proveedor, 'Bodega Juan'); assert.deepEqual(r.proposals[0].completar, ['proveedor']); assert.equal(r.proposals[0].documento, 'F001-00012345');
 });
 test("B') empleado que fuerza una tarjeta de compra: se descarta (forbidden_role), sin campos ni RUC en la respuesta, y no puede confirmar una compra", async () => {
   const p = toProposal({ name: 'preparar_compra', arguments: { proveedor: 'Alicorp RUC 20100055237', documento: 'F001-00012345 cód. 12345678', lineas: LINEAS } }, 'empleado:consultas_documentos', { products: [] }, 1);
@@ -248,13 +250,13 @@ function fakeDoc() {
 }
 test("B'') celular: campo vacío con borde de alerta y «Complete este dato», foco en el primero, Confirmar apagado hasta llenarlo; nunca una máscara; solo createElement/textContent", () => {
   const doc = fakeDoc(); let changes = 0;
-  const p = { type: 'compra', proveedor: '', documento: 'F001-00012345', completar: ['proveedor', 'documento', 'otro'] };
+  const p = { type: 'compra', proveedor: '', documento: 'F001-', completar: ['proveedor', 'documento', 'otro'] };
   const need = C.needFields(doc, p, () => changes++); assert.ok(need); assert.equal(need.inputs.length, 2); assert.equal(need.missing(), 2);
   const [a, b] = need.inputs; assert.equal(a.className, 'na-asst-need'); assert.equal(a.getAttribute('aria-invalid'), 'true');
   const hint = a.parentNode.children[2]; assert.equal(hint.textContent, 'Complete este dato'); assert.equal(a.getAttribute('aria-describedby'), hint.id); assert.equal(need.first, a);
   a.value = 'RUC *******9012'; a.fire('input'); assert.equal(need.missing(), 2, 'una máscara no cuenta como dato');
   a.value = 'Bodega Juan RUC 10456789012'; a.fire('input'); assert.equal(need.missing(), 1); assert.equal(a.className, 'na-asst-need ok'); assert.equal(hint.hidden, true); assert.equal(a.getAttribute('aria-invalid'), 'false');
-  b.value = '  '; b.fire('input'); assert.equal(need.missing(), 1); b.value = 'F001-00012345'; b.fire('input'); assert.equal(need.missing(), 0); assert.equal(changes, 4);
+  assert.equal(b.value, 'F001-', 'parte exacta de inicio'); b.fire('input'); assert.equal(need.missing(), 1, 'solo la parte exacta no cuenta'); b.value = 'F001-00012345'; b.fire('input'); assert.equal(need.missing(), 0); assert.equal(changes, 4);
   Object.defineProperty(p, '_manual', { value: need.state, enumerable: false });
   assert.equal(C.purchaseValue(p, 'proveedor'), 'Bodega Juan RUC 10456789012'); assert.ok(!JSON.stringify(p).includes('Bodega'), 'lo escrito no entra a la propuesta firmada');
   assert.equal(C.purchaseValue({ proveedor: 'Alicorp RUC *******5237' }, 'proveedor'), ''); assert.equal(C.purchaseValue({ proveedor: 'Alicorp SAC' }, 'proveedor'), 'Alicorp SAC');

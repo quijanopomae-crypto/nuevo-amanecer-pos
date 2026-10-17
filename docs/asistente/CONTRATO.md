@@ -478,3 +478,36 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 
 - `tests/asistente/assistant-followups-84a49517.test.mjs`: 9 formas de ítem/fila × 19 comienzos («el costo», «Ese es el margen», «este es el costo», «(el costo)», «- el costo», «| el costo | |», «2. Ese es el margen»…) × 4 finales, tapados para el empleado e intactos para el dueño; hermanos de lista y tabla; el contraejemplo de texto «El costo lo ve el dueño.» visible; comienzos sin palabra del dueño visibles; D'; retención de 120 filas/ítems. Todo entero y en partes de 1, 2, 3, 7, 13 y 47.
 - `assistant-followups-6280deae.test.mjs`: el límite «el costo / Ese es el margen tras un ítem se ve (INFO)» pasa a tapar, y «- Galleta S/ 2.50\n- El costo lo ve el dueño.» pasa a tapar el 2.50.
+
+## Ampliación sobre 84a49517 (Bot 5: cantidades, ganancia/margen/utilidad, comienzos, «(mi costo)», claves; Bot 2 A/B; Bot 4)
+
+### Línea siguiente (empleado)
+
+- **Monto propio = solo con moneda (Bot 5, 1).** La regla D' suelta el monto de arriba solo si en la ventana (~20 caracteres) de la línea siguiente aparece un monto CON moneda (`S/`, `S/.`, `PEN`, `US$`, `$`). Un decimal suelto o un `%` no cuenta: «Arroz S/ 45.00\ncosto por 12.5 kg», «costo al 15%», «margen 30%», «costo 1,5 kg», «costo por caja de 12.5», «costo del pack 2.5», «(costo, 1.5 kg)» tapan el 45.00, en texto, listas, filas y tab.
+- **Ganancia, margen y utilidad nunca sueltan (Bot 5, 2).** Aunque traigan su propio monto, tapan el de arriba y el suyo: «• Galleta S/ 1.80\nganancia S/ 0.70», «Galleta S/ 1.80\nmargen S/ 0.70», «Galleta S/ 1.80.\nmargen 30%» tapan los dos. D' vale solo si la línea siguiente (tras quitar lo de delante) empieza con «costo»: «Arroz S/ 4.20\nEl costo es S/ 1.80.» y «- Galleta S/ 1.80\n- costo S/ 1.20» dejan ver el de arriba. «precio de compra» en la línea siguiente sigue tapando el de arriba (la mirada de frases de compra; más estricto).
+- **Comienzos (Bot 5, 3).** Tras un ítem, fila o tab se quitan del comienzo, repetidas: «mi», «de», «el», «la», «es», «ese», «esa», «este», «esta» (cubre «ese es el», «esta es la», «es el»). «- Galleta S/ 1.80\nla ganancia», «… \nEsa es la utilidad», «… \nes costo» tapan; «- La leche S/ 3.00», «- Esa marca», «- Es nuevo», «- Lavavajilla», «- Estofado» se ven.
+- **Tapa de más aceptado:** «- Galleta S/ 2.50\n- Utilidades varias S/ 4.00» tapa los dos (utilidad nunca suelta; ante la duda se tapa), y «| Producto | Monto |\n|---|---|\n| Galleta | S/ 2.50 |\nEl margen lo ve el dueño.» (casos-1c17 titulo-leyenda) tapa el 2.50 tras una fila.
+- **Tabla de venta (Bot 5, 4).** La 1.ª celda de una fila pasa por la misma limpieza de comienzo antes de mirar costo/margen/ganancia/utilidad: «| (mi costo) | S/ 1.20 |», «| mi costo |», «| el costo |», «| la ganancia |», «| Este es el margen |» tapan esa fila y abren la regla fija (las filas siguientes también, «| Arroz | S/ 1.21 |» tapado). «| (mi favorito) | S/ 1.20 |» se ve.
+- Retención por fila (`b5fix/hold.mjs` y la prueba de 120 filas): igual que 84a49517 (27/21, 33/55, 25/24, 29/56, 31/58; lista con nombres «Es…/El…» 61, tabla neutra 21).
+
+### Claves (los dos roles, Bot 5, 5)
+
+- Tras pin/clave/contraseña/password/token/api key + una palabra de enlace (del, de, la, el, mi, para, en, que…) y hasta 3 palabras más (4 en total), se acepta `:` o `=` antes del valor, y el valor puede ser mezclado (6+ letras y dígitos) **o 4-8 dígitos** (para todas esas etiquetas; un número de 4-8 dígitos tras una etiqueta de clave es secreto): «La clave del wifi: Zq9xK2mPw7» → «La clave del wifi: [oculto]», «El pin para la caja 4321» → «El pin para la caja [oculto]», «La contraseña de mi correo es Zq9xK2mPw7» → «… es [oculto]», «la clave del pin es 1234» → «la clave del pin es [oculto]». La etapa en partes espera igual (hasta 4 palabras y el `:`/`=`). Con la clave en la 5.ª palabra o sin dígitos sigue como INFO.
+
+### Tarjeta de compra (Bot 2 A)
+
+- Un campo (proveedor, documento) con máscara ya no queda vacío: conserva la parte EXACTA antes de la primera máscara, sin una etiqueta suelta al final («RUC», «RUC N°:», «DNI», «pin:», «clave»): «F001-12345678 pedido DNI ****4321» → «F001-12345678 pedido», «Bodega Juan RUC *******9012» → «Bodega Juan», «DNI ****5678» → «». Sigue en `completar`; la máscara nunca se guarda.
+- Celular: el campo «Complete este dato» empieza con esa parte exacta; cuenta como dato solo cuando se le agrega algo (la parte exacta sola, una máscara o espacios no cuentan).
+
+### Confirm exige los datos (Bot 2 B, Bot 4)
+
+- El aparato manda lo escrito en `body.fill` (`{ proveedor?, documento? }`), FUERA de la propuesta firmada (el hash y sus reglas no cambian: meter lo escrito dentro de la propuesta da 409 `proposal_changed`).
+- El servidor rechaza con **422 `fields_required`** y `fields: [...]` (nada se crea, la tarjeta NO se marca usada, queda en la bitácora como `rejected:fields_required`) si: un nombre de `completar` no trae en `fill` un texto no vacío y sin máscara (tope 120/80, sin caracteres de control); o cualquier campo de texto de la propuesta (cualquier tipo de tarjeta, hasta 4 niveles: título, nombres de filas…) trae una máscara. Lo escrito va exacto (no pasa por el filtro: no va al modelo, solo a «Nueva compra» del dueño).
+- Con todo completo: 200 y la propuesta aplicada lleva los valores escritos (también en el reenvío `already_confirmed`).
+- Celular: con ese 422 la tarjeta sigue pendiente y editable; cada campo nombrado muestra «Complete este dato» (aria-invalid, foco en el primero) y conserva lo escrito; el aviso general va en la línea de estado con textContent («Complete los datos marcados y vuelva a confirmar.», o «Esta propuesta trae un dato tapado…» si el campo no es de la tarjeta, con «Pedir de nuevo»). Nunca texto técnico ni pantalla en blanco. Solo createElement/textContent.
+
+### Pruebas
+
+- `assistant-followups-84a49517.test.mjs` (ampliación): 12 cantidades × 6 formas × 3 finales; ganancia/margen/utilidad × 13 formas; 10 comienzos nuevos × 9 formas y 6 visibles; tabla de venta con 7 primeras celdas; claves en los dos roles; tapa de más aceptado. Todo entero y en partes de 1, 2, 3, 7, 13 y 47.
+- `assistant-card-completar.test.mjs`: parte exacta en la tarjeta; servidor 422 sin fill / fill vacío, con máscara, no texto o incompleto; 200 con fill y valores en la propuesta aplicada; reenvío; hash (409); máscara en proveedor/documento/título/filas y en otra tarjeta; celular (parte exacta de inicio, fillValues fuera de la propuesta, puerta pendiente con `fields`, aviso junto al campo, foco, lo escrito queda, sin texto técnico, cableado).
+- `assistant-followups-6280deae.test.mjs`: D' con ganancia/margen ahora tapa los dos; «1. Arroz S/ 4.20\n2. Margen 30%» tapa el 4.20; «la clave del pin es 1234» tapa solo el valor; tarjeta B con la parte exacta.
