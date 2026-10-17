@@ -5,7 +5,8 @@ import { test, expect, type Page } from '@playwright/test';
 test.use({ timezoneId: 'UTC', serviceWorkers: 'block' });
 
 type Setting = { key: string; value: unknown; revision: number };
-type Mock = { settings: Setting[]; getFails: boolean; conflict: null | { revision: number; then: Setting[] }; gets: number; posts: { key: string; value: unknown; expected_revision: unknown }[]; revision: number };
+type Mock = { settings: Setting[]; getFails: boolean; conflict: null | { revision: number; then: Setting[] }; gets: number; posts: { key: string; value: unknown; expected_revision: unknown }[]; revision: number; me?: { role: string; device: string } };
+const OWNER_DEVICE = 'settings-test-device', EMPLOYEE_DEVICE = 'settings-test-cashier';
 
 const KEYS = ['pos.business', 'pos.flags', 'pos.credit', 'pos.lots', 'pos.ticket'];
 
@@ -20,7 +21,7 @@ async function boot(page: Page, mock: Mock, cache?: Setting[]) {
     const request = route.request(), url = new URL(request.url());
     if (url.hostname !== 'permissions.test') return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
     const json = (status: number, body: unknown) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-    if (url.pathname === '/auth/me') return json(200, { pos_role: 'owner', owner_pin_set: true, roles_ready: true, device_id: 'settings-test-device' });
+    if (url.pathname === '/auth/me') { const me = mock.me || { role: 'owner', device: OWNER_DEVICE }; return json(200, { pos_role: me.role, owner_pin_set: true, roles_ready: true, device_id: me.device }); }
     if (url.pathname === '/settings' && request.method() === 'GET') {
       mock.gets++;
       return mock.getFails ? json(500, { error: 'boom' }) : json(200, { settings: mock.settings });
@@ -44,7 +45,14 @@ async function boot(page: Page, mock: Mock, cache?: Setting[]) {
     else localStorage.removeItem('na_pos_settings_cache_v1');
   }, cache);
   await page.reload();
-  await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'owner' && (window as any).NA_ROLES.confirmed && !!(window as any).NA_CONFIG_G);
+  await waitRole(page, mock.me?.role || 'owner');
+}
+const waitRole = (page: Page, role: string) => page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed && !!(window as any).NA_CONFIG_G, role);
+// Otro usuario (u otra vez el mismo) inicia sesión en este mismo aparato: misma app y mismo localStorage, otra sesión.
+async function relogin(page: Page, mock: Mock, role: string, device: string) {
+  mock.me = { role, device };
+  await page.reload();
+  await waitRole(page, role);
 }
 
 // Misma proyección que SHARED[k].get en POS/js/config/config-g.js.
@@ -321,8 +329,8 @@ test('(j) conflict from Configuración v9: exact label «No se guardó: otro equ
   expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
 });
 
-// GET fallido -> el dueño cambia IGV en Configuración v9 -> recarga la app con el GET ya funcionando.
-async function changeIgvOfflineThenReload(page: Page, mock: Mock, serverChange?: (local: Record<string, unknown>) => Setting[]) {
+// GET fallido -> el dueño cambia IGV en Configuración v9 (queda pendiente).
+async function changeIgvOffline(page: Page, mock: Mock) {
   await page.setViewportSize({ width: 1366, height: 900 });
   await boot(page, mock);
   const local = await localSettings(page);
@@ -337,10 +345,15 @@ async function changeIgvOfflineThenReload(page: Page, mock: Mock, serverChange?:
   expect(await page.evaluate(() => localStorage.getItem('na_pos_settings_pending_v1'))).not.toBeNull();
   expect(mock.posts).toEqual([]);
   const ownerFlags = (await localSettings(page))['pos.flags'];
+  return { local, ownerFlags };
+}
+// ... y recarga la app con el GET ya funcionando.
+async function changeIgvOfflineThenReload(page: Page, mock: Mock, serverChange?: (local: Record<string, unknown>) => Setting[]) {
+  const { local, ownerFlags } = await changeIgvOffline(page, mock);
   if (serverChange) mock.settings = serverChange(local);
   mock.getFails = false;
   await page.reload();
-  await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'owner' && (window as any).NA_ROLES.confirmed && !!(window as any).NA_CONFIG_G);
+  await waitRole(page, 'owner');
   return { local, ownerFlags };
 }
 const pendingKey = (page: Page) => page.evaluate(() => localStorage.getItem('na_pos_settings_pending_v1'));
@@ -372,5 +385,90 @@ test('(l) GET failed, owner changed IGV and reloaded, but the server changed pos
   expect(mock.posts).toEqual([]);
   expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
   await navigate(page);
+  expect(mock.posts).toEqual([]);
+});
+
+// Pendiente del dueño -> en el mismo aparato inicia sesión el cajero con el GET funcionando.
+async function pendingThenEmployee(page: Page, mock: Mock) {
+  const { local, ownerFlags } = await changeIgvOffline(page, mock);
+  const serverFlags = local['pos.flags'];
+  expect(ownerFlags).not.toEqual(serverFlags);
+  mock.getFails = false;
+  const gets = mock.gets;
+  await relogin(page, mock, 'empleado', EMPLOYEE_DEVICE);
+  await expect.poll(() => mock.gets).toBeGreaterThan(gets);
+  return { ownerFlags, serverFlags };
+}
+
+test('(m) owner leaves a pending change, cashier logs in on the same device with GET OK: 0 POST, cashier sees the server IGV, pending kept with the owner id', async ({ page }) => {
+  const mock = newMock();
+  const { ownerFlags, serverFlags } = await pendingThenEmployee(page, mock);
+  // El IGV cambia los precios de Venta: el cajero ve el del servidor, no el del dueño sin confirmar.
+  await expect.poll(async () => (await localSettings(page))['pos.flags']).toEqual(serverFlags);
+  await navigate(page);
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  expect(await page.evaluate(() => (window as any).NA_CONFIG_G.flush())).toMatchObject({ ok: false, reason: 'owner_only' });
+  expect(mock.posts).toEqual([]);
+  expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
+  const stored = JSON.parse((await pendingKey(page)) || 'null');
+  expect(stored).toMatchObject({ user: OWNER_DEVICE });
+  expect(stored.values['pos.flags']).toEqual(ownerFlags);
+});
+
+test('(n) after the cashier, the owner logs in again: exactly 1 POST of pos.flags with the owner value and the pending key is cleared', async ({ page }) => {
+  const mock = newMock();
+  const { ownerFlags } = await pendingThenEmployee(page, mock);
+  await expect.poll(async () => (await localSettings(page))['pos.flags']).not.toEqual(ownerFlags);
+  expect(mock.posts).toEqual([]);
+  await relogin(page, mock, 'owner', OWNER_DEVICE);
+  await expect.poll(() => mock.posts.length).toBe(1);
+  expect(mock.posts[0]).toMatchObject({ key: 'pos.flags', expected_revision: 3, value: ownerFlags });
+  await expect.poll(() => pendingKey(page)).toBeNull();
+  expect((await localSettings(page))['pos.flags']).toEqual(ownerFlags);
+  await navigate(page);
+  expect(mock.posts).toHaveLength(1);
+});
+
+test('(o) legacy pending entry without user id: discarded without sending (0 POST) and the key is cleared', async ({ page }) => {
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  mock.settings = asServer(local);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await boot(page, mock, mock.settings);
+  // Formato antiguo: solo la base (= servidor), sin usuario; el IGV local distinto de la base antes se habría enviado.
+  await page.evaluate(async local => {
+    const w = window as any, c = w.eval('appConfig');
+    c.igvActive = !c.igvActive;
+    await w.saveAppState();
+    const base = Object.fromEntries(Object.entries(local).map(([k, v]) => [k, { value: v, revision: 3 }]));
+    localStorage.setItem('na_pos_settings_pending_v1', JSON.stringify(base));
+  }, local);
+  await page.reload();
+  await waitRole(page, 'owner');
+  await expect.poll(() => pendingKey(page)).toBeNull();
+  await navigate(page);
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  expect(mock.posts).toEqual([]);
+  expect((await localSettings(page))['pos.flags']).toEqual(local['pos.flags']);
+});
+
+test('(p) loadAllData fails (loadAppState never runs): settings sync is not deferred forever, the cashier still gets the server IGV', async ({ page }) => {
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  const flags = { ...(local['pos.flags'] as Record<string, unknown>) };
+  flags.igvActive = !flags.igvActive;
+  mock.settings = asServer({ ...local, 'pos.flags': flags });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  // La primera asignación de loadAllData (la de la app) se reemplaza por una que falla.
+  await page.addInitScript(() => {
+    let current: any, first = true;
+    Object.defineProperty(window, 'loadAllData', { configurable: true, get: () => current,
+      set: value => { current = first ? async () => { throw new Error('synthetic-load-failure'); } : value; first = false; } });
+  });
+  mock.me = { role: 'empleado', device: EMPLOYEE_DEVICE };
+  await boot(page, mock);
+  await expect.poll(async () => (await localSettings(page))['pos.flags']).toEqual(flags);
   expect(mock.posts).toEqual([]);
 });

@@ -203,17 +203,40 @@
   var confirmed = {}, pulled = false;
   // Guardado que no llegó al servidor (GET fallido): base con la que se compara cuando vuelva la conexión.
   // Se guarda en el aparato para que recargar o cerrar la app no pierda el cambio pendiente del dueño.
+  // Formato: { user, base, values }. user = sesión del dueño que hizo el cambio (NA_ROLES.deviceId, el device_id
+  // que devuelve /auth/me); values = sus valores sin subir. Solo esa sesión lo envía: si en este aparato entra otro
+  // usuario (p. ej. el cajero), no se envía ni se borra. Una entrada antigua sin usuario se descarta sin enviar.
   var PENDING_KEY = 'na_pos_settings_pending_v1';
-  var pendingBase = null;
-  try { pendingBase = JSON.parse(root.localStorage.getItem(PENDING_KEY) || 'null'); } catch (_) { pendingBase = null; }
-  if (!pendingBase || typeof pendingBase !== 'object') pendingBase = null;
+  var pendingBase = null, pendingUser = null, pendingValues = null;
+  try {
+    var stored = JSON.parse(root.localStorage.getItem(PENDING_KEY) || 'null');
+    if (stored && typeof stored === 'object' && typeof stored.user === 'string' && stored.user && stored.base && typeof stored.base === 'object') {
+      pendingBase = stored.base; pendingUser = stored.user; pendingValues = stored.values && typeof stored.values === 'object' ? stored.values : null;
+    } else if (stored) root.localStorage.removeItem(PENDING_KEY);
+  } catch (_) { try { root.localStorage.removeItem(PENDING_KEY); } catch (__) {} }
   // appReady: la app ya cargó su configuración local (loadAppState corre después de loadAllData). Antes de eso
   // appConfig tiene los valores por defecto y no sirve para comparar un guardado pendiente.
   var appReady = false, waitingPending = false, deferredApply = false;
+  // value = base; se guarda con la sesión actual y los valores locales de ese momento.
   function setPending(value) {
-    pendingBase = value;
-    try { if (value) root.localStorage.setItem(PENDING_KEY, JSON.stringify(value)); else root.localStorage.removeItem(PENDING_KEY); } catch (_) {}
+    var c = cfg();
+    pendingBase = value || null;
+    pendingUser = value ? String((R() && R().deviceId) || '') : null;
+    pendingValues = null;
+    if (value && c) { pendingValues = {}; Object.keys(SHARED).forEach(function (k) { pendingValues[k] = copy(SHARED[k].get(c)); }); }
+    try { if (value) root.localStorage.setItem(PENDING_KEY, JSON.stringify({ user: pendingUser, base: pendingBase, values: pendingValues })); else root.localStorage.removeItem(PENDING_KEY); } catch (_) {}
   }
+  // El pendiente es de la sesión confirmada actual (mismo usuario que lo dejó).
+  function pendingMine() { return !!(pendingBase && pendingUser && R() && R().confirmed && R().deviceId && String(R().deviceId) === pendingUser); }
+  // Claves que el dueño cambió en el pendiente (frente a base).
+  function pendingChanged(k) {
+    if (!pendingBase) return false;
+    if (!pendingBase[k]) return true;
+    return pendingValues && pendingValues[k] !== undefined ? !same(pendingValues[k], pendingBase[k].value) : false;
+  }
+  // El filtro del pendiente solo protege mientras el rol no está confirmado o la sesión es la del dueño que lo dejó.
+  // Con otro usuario confirmado (cajero u otra sesión) gana el servidor en todas las claves.
+  function guardPending() { return !!pendingBase && (!R() || !R().confirmed || pendingMine()); }
   var baseSave = null;
   /* global appConfig */
   function cfg() { try { return typeof appConfig !== 'undefined' ? appConfig : null; } catch (_) { return null; } }
@@ -227,7 +250,8 @@
     if (!appReady) { deferredApply = true; return false; }
     // Sin claves explícitas y con un guardado pendiente, no se tocan las claves que el dueño cambió: al arrancar,
     // antes de confirmar el rol, el aparato se trata como solo lectura y la copia del servidor pisaría ese cambio.
-    var list = keys || Object.keys(SHARED).filter(function (k) { return !pendingBase || (pendingBase[k] && same(SHARED[k].get(c), pendingBase[k].value)); });
+    var guard = !keys && guardPending();
+    var list = keys || Object.keys(SHARED).filter(function (k) { return !guard || (!pendingChanged(k) && pendingBase[k] && same(SHARED[k].get(c), pendingBase[k].value)); });
     list.forEach(function (k) { if (!SHARED[k] || !server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
     // baseSave es el saveAppState original (sin envolver): guarda en el aparato y no envía nada al servidor.
     if (changed) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
@@ -250,7 +274,7 @@
     if (!cloud() || !R()) return false;
     // Un cambio del dueño que no se pudo guardar nunca se descarta en silencio: se completa ese guardado
     // (se envía si el servidor no tocó la clave; si la tocó, gana el servidor y se avisa).
-    if (pendingBase && R().isOwner && R().isOwner()) {
+    if (pendingMine() && R().isOwner && R().isOwner()) {
       if (!appReady) { waitingPending = true; return false; } // se completa al terminar loadAppState
       await pushSettings(); return true;
     }
@@ -267,8 +291,14 @@
     var c = cfg(); if (!c || !cloud() || !R() || !R().isOwner()) return { ok: false, reason: 'owner_only' };
     // Si el GET del arranque falló, base = lo que tenía este aparato (su copia del servidor). Se envían solo
     // las claves que el dueño cambió frente a base; las demás nunca se envían.
-    var base = null;
-    if (!pulled || pendingBase) { base = pendingBase || copy(server); if (!(await fetchSettings())) { setPending(base); return { ok: false, reason: 'not_synced', failed: [] }; } }
+    var base = null, mine = pendingMine();
+    // El pendiente de esta sesión vuelve a los valores que el dueño dejó (otro usuario pudo cargar los del servidor).
+    if (mine && pendingValues) {
+      var restored = false;
+      Object.keys(SHARED).forEach(function (k) { if (pendingChanged(k) && pendingValues[k] !== undefined && !same(SHARED[k].get(c), pendingValues[k])) { SHARED[k].set(c, copy(pendingValues[k])); restored = true; } });
+      if (restored) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
+    }
+    if (!pulled || mine) { base = mine ? pendingBase : copy(server); if (!(await fetchSettings())) { setPending(base); return { ok: false, reason: 'not_synced', failed: [] }; } }
     var failed = [], conflicts = [], untouched = [];
     for (var k in SHARED) {
       var value = SHARED[k].get(c), now = confirmed[k];
@@ -290,7 +320,8 @@
     }
     // Terminado (enviado o en conflicto): se borra lo pendiente. Si un POST falló por red, queda pendiente con la
     // copia del servidor como base, para que un pull posterior no pise ese cambio en silencio.
-    setPending(failed.length ? copy(server) : null);
+    // El pendiente de otro usuario no se borra aquí: lo envía su propia sesión.
+    if (failed.length) setPending(copy(server)); else if (!pendingBase || mine) setPending(null);
     if (conflicts.length) await fetchSettings();
     // Se aplica lo del servidor solo en claves en conflicto o que el dueño no tocó; nunca se pisa un cambio pendiente.
     if (conflicts.length || untouched.length) applyServer(conflicts.concat(untouched));
@@ -378,14 +409,30 @@
     }
   }
 
+  function markReady() {
+    if (appReady) return; appReady = true;
+    if (deferredApply) { deferredApply = false; setTimeout(function () { try { applyServer(); } catch (_) {} }, 0); }
+    if (waitingPending) { waitingPending = false; setTimeout(function () { pullSettings(); }, 0); }
+  }
+  // Si loadAllData falla, loadAppState nunca corre: sin esto la sincronización quedaría esperando para siempre.
+  var loadSettled = false;
+  function wrapLoadAllData() {
+    if (typeof root.loadAllData !== 'function' || root.loadAllData.__naG) return;
+    var baseLoadAll = root.loadAllData;
+    root.loadAllData = function () {
+      var p; try { p = Promise.resolve(baseLoadAll.apply(this, arguments)); } catch (e) { p = Promise.reject(e); }
+      p.then(function () { loadSettled = true; }, function () { loadSettled = true; setTimeout(function () { if (cfg()) markReady(); }, 0); });
+      return p;
+    };
+    root.loadAllData.__naG = true;
+  }
+  wrapLoadAllData();
   function wrapLoadAppState() {
     if (typeof root.loadAppState !== 'function' || root.loadAppState.__naG) return;
     var baseLoad = root.loadAppState;
     root.loadAppState = function () {
       var out = baseLoad.apply(this, arguments);
-      appReady = true;
-      if (deferredApply) { deferredApply = false; setTimeout(function () { try { applyServer(); } catch (_) {} }, 0); }
-      if (waitingPending) { waitingPending = false; setTimeout(function () { pullSettings(); }, 0); }
+      markReady();
       return out;
     };
     root.loadAppState.__naG = true;
@@ -408,6 +455,9 @@
   if (cloud()) setTimeout(function () { try { if (!R() || !R().isOwner()) applyServer(); } catch (_) {} }, 0);
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', install); else install();
   root.addEventListener('load', install);
+  // Respaldo: en 'load', si appConfig existe y la carga ya terminó (o no se pudo envolver), se marca lista.
+  // Mientras loadAllData sigue leyendo IndexedDB no se marca: appConfig todavía tendría los valores por defecto.
+  root.addEventListener('load', function () { if (!appReady && cfg() && (loadSettled || !(root.loadAllData && root.loadAllData.__naG))) setTimeout(function () { if (!appReady && cfg()) markReady(); }, 0); });
   // Configuración v9 (PC/tablet): guardar ya y esperar al servidor para mostrar «Guardado ✓».
   async function flush() {
     try { if (baseSave) await baseSave(); else if (typeof root.saveAppState === 'function') await root.saveAppState(); } catch (_) {}
