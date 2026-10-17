@@ -201,3 +201,16 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
   - pares repetidos o fuera de orden (solo valen números crecientes);
   - pares con más de 24 h, o con hora más de 5 min en el futuro.
   El número del par nuevo sigue al último par válido. El cliente guarda `n` e `iat` tal como llegan.
+
+## Bot 5 y Bot 3 sobre a82a747f
+
+- **Título largo en la misma línea**: además del título corto (hasta 5 palabras y 40 caracteres), cuenta como título del dueño sin importar las palabras, hasta 120 caracteres antes de «:», si EMPIEZA con «Compras» («Compras de hoy en la tienda: Galleta S/ 1.80») o nombra «proveedor», «de compra» o «costo» sin negación en la línea («Compras de hoy del proveedor Lima Norte: Galleta S/ 1.80»). Todo monto que sigue en esa línea se tapa, salvo con etiqueta de venta.
+- **«cliente» no es título**: si lo que va antes de «:» dice «cliente», ni el título corto ni el largo cuentan. «Las compras del cliente: S/ 30» y «El cliente pagó sus compras: S/ 30» se ven.
+- **Sin espera extra**: el título se marca palabra por palabra mientras pasa la línea; no se retiene nada esperando el «:». Si no llega «:», el monto lo decide la regla normal (500 caracteres que empiezan con «Compras», sin «:», monto en 30 o 130: retención máx. 175-179, igual que antes).
+- **Rachas de espacios (Bot 3)**: las líneas en blanco hechas de espacios ya no se retienen enteras en la etapa de datos sensibles (se corta también entre dos espacios, salvo si «clave», «RUC», «DNI» o una foto «data:» esperan su valor). Así cuentan dentro del tope de 160: 30 líneas de 10 espacios tras un monto retenían 355, ahora 180-184.
+
+### Queda como INFO (sin arreglar, a propósito)
+
+- Tras una presentación del dueño sin línea en blanco, «Para vender, el precio es S/ 2.50» también se tapa (tapa de más, no fuga).
+- Un chat nuevo reinicia el número de par: un par viejo (menos de 24 h) puede repetirse o mezclarse con otro chat. No es fuga: siempre es texto del mismo empleado en el mismo aparato.
+- Leyenda después de la tabla, «El precio\nes», más de 20 caracteres en el renglón siguiente y «Precios:» genérico (ya anotadas antes).

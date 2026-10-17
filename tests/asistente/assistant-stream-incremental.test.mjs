@@ -496,3 +496,40 @@ test('19) siguen los ajustes anteriores: «Precio» solo tras presentación sin 
   assert.match(SRC, /if \(hmacKeyCache\.secret !== secret\) hmacKeyCache = \{ secret, key: crypto\.subtle\.importKey\(/);
   assert.match(SRC, /const numNeed = \(i\) => \{ let e; if \(nm\.i === i\) e = nm\.e;/);
 });
+
+// ---------- 20. Bot 5 sobre a82a747f: título largo con «Compras» / proveedor / de compra / costo; «cliente» no cuenta. Bot 3: rachas de espacios ----------
+const T20_MASK = [
+  ['Compras de hoy en la tienda: Galleta S/ 1.80', ['1.80']], ['Compras de hoy del proveedor Lima Norte: Galleta S/ 1.80', ['1.80']],
+  ['Compras de hoy en la tienda central de la avenida: Galleta S/ 1.80, Arroz S/ 3.10', ['1.80', '3.10']], ['**Compras** de hoy en la tienda: Galleta S/ 1.80', ['1.80']],
+  ['Lo que nos trajo hoy el proveedor de la avenida: Galleta S/ 1.80', ['1.80']], ['Estos son los precios de compra de la semana pasada: Galleta S/ 1.80', ['1.80']],
+  ['Lo que anoto de la tienda central sobre el costo de hoy: Galleta S/ 1.80', ['1.80']],
+  ['Compras ' + 'de la tienda '.repeat(8) + 'hoy: Galleta S/ 1.80', ['1.80']]];
+const T20_SHOW = [
+  ['Las compras del cliente: S/ 30', ['30']], ['El cliente pagó sus compras: S/ 30', ['30']], ['Compras del cliente Juan en la tienda: S/ 30', ['30']],
+  ['Compras de hoy en la tienda: Galleta S/ 1.80, PVP S/ 2.50', ['2.50']], ['Estos son los precios de venta de la semana pasada en tienda: Galleta S/ 1.80', ['1.80']],
+  ['Las compras de hoy fueron buenas: arroz a S/ 2.50', ['2.50']], ['Compras de hoy ' + 'en la tienda '.repeat(10) + 'central: Galleta S/ 1.80', ['1.80']],
+  ['Hoy no sé nada del proveedor de la avenida central: Galleta S/ 1.80', ['1.80']]];
+for (const n of [1, 2, 5, 47, 48, 49, 100]) {
+  test('20) trozos de ' + n + ': título largo que empieza con «Compras» o nombra proveedor / de compra / costo tapa (hasta 120 caracteres); con «cliente» no cuenta; igual al texto entero', () => {
+    for (const [t, hide] of T20_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, vs] of T20_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+  });
+}
+test('20) retención: el título largo no retiene la línea esperando el «:»; una racha de líneas de espacios cuenta dentro del tope de 160', () => {
+  for (const t of ['Compras de hoy en la tienda: Galleta S/ 1.80', 'Compras de hoy del proveedor Lima Norte: Galleta S/ 1.80', 'Las compras del cliente: S/ 30', 'El cliente pagó sus compras: S/ 30']) assert.ok(held(t).max <= 40, t + ' ' + held(t).max);
+  // 500 caracteres que empiezan con «Compras», sin «:», monto en 30 o en 130: lo decide la regla normal (tope de su frase), nada más
+  const base = 'Compras de hoy en la tienda y ' + FILL(600);
+  for (const at of [30, 130]) { const t = (base.slice(0, at) + 'S/ 1.80 ' + base.slice(at)).slice(0, 500); const h = held(t); assert.ok(h.max <= OWNER_RETRO + 30, at + ': ' + h.max); assert.equal(stream(t, EMP, 5).text, full(t, EMP)); }
+  // Bot 3: 30 líneas de 10 espacios tras un monto al final de línea retenían 355; ahora a lo más el tope
+  for (const [l, sp] of [[2, 19], [5, 10], [10, 15], [30, 10], [100, 40]]) { const t = 'Paracetamol caja S/ 1.80\n' + (' '.repeat(sp) + '\n').repeat(l) + FILL(300); const h = held(t);
+    assert.ok(h.max <= OWNER_RETRO + 30, l + 'x' + sp + ': ' + h.max); assert.equal(stream(t, EMP, 5).text, full(t, EMP)); assert.equal(stream(t, 'owner', 5).text, full(t, 'owner')); }
+});
+test('20) propiedad: cortar entre espacios no cambia lo tapado (RUC, DNI, clave, foto, teléfono y montos separados por rachas de espacios)', () => {
+  let seed = 4242; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648); const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const P = ['RUC', 'RUC N°', 'DNI:', 'DNI', 'clave', 'clave es', 'api key', 'data:image/png;base64,', 'QUJDREVGR0hJSktMTU5P', 'QQ==', '20123456789', '12345678', '987', '654', '321', '+51', 'abc123',
+    'S/ 1.80', 'costo', 'precio de venta', 'Compras de hoy', 'proveedor', 'cliente', ':', '.', 'Galleta', '(lo que pagué)'];
+  const W = [' ', '  ', '\n', ' \n ', '          \n', '\t', '\n\n', ' '.repeat(30)];
+  for (let i = 0; i < 1200; i++) { let t = ''; const n = 2 + Math.floor(rnd() * 14); for (let j = 0; j < n; j++) t += pick(P) + pick(W);
+    for (const role of ['owner', EMP]) { const mode = rnd(), size = () => (mode < 0.3 ? 1 : mode < 0.6 ? 1 + Math.floor(rnd() * 6) : 1 + Math.floor(rnd() * 60));
+      assert.equal(stream(t, role, size).text, full(t, role), role + ' ' + JSON.stringify(t)); } }
+});

@@ -169,6 +169,15 @@ const INTRO_WORD_Y = new RegExp('(?:compras?|proveedor(?:es)?)' + NOT_LETTER, 'i
 // Título propio de precios tras una línea en blanco («Precios de hoy:», «Precios:», «Lista de precios»): corta la presentación del dueño.
 const NEG_AFTER_Y = new RegExp('(?:tengo|tenemos|s[eé]|sabemos|conozco|conocemos|desconozco|desconocemos)' + NOT_LETTER, 'iy');
 const SALE_TITLE_Y = new RegExp('(?:precios?|pvp)' + NOT_LETTER, 'iy');
+// Título largo en la misma línea (Bot 5 sobre a82a747f): sin importar las palabras (tope 120 caracteres antes del «:») si EMPIEZA con «Compras»
+// o nombra proveedor / de compra / costo sin negar. Con «cliente» no cuenta («Las compras del cliente: S/ 30»). Se marca palabra por palabra
+// mientras pasa la línea: no se retiene nada esperando el «:».
+const T_COMPRAS_Y = new RegExp('compras' + NOT_LETTER, 'iy');
+const T_COMPRA_Y = new RegExp('compras?' + NOT_LETTER, 'iy');
+const T_BUY_Y = new RegExp('(?:proveedor(?:es|a|as)?|costos?)' + NOT_LETTER, 'iy');
+const T_CLIENT_Y = /clientes?(?![a-záéíóúñ])/iy;
+const T_NEG_Y = new RegExp('(?:no|ni|sin|desconozco|desconocemos|desconocid[oa]s?)' + NOT_LETTER, 'iy');
+export const LONG_TITLE_MAX = 120;
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
   if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
@@ -208,7 +217,7 @@ function createAmountLayer(out) {
   // palabra del dueño (negada o no), la tabla o lista que empieza en la línea siguiente tapa sus montos (tabla: salvo columnas de venta; lista:
   // salvo ítems con etiqueta de venta). Se decide con los primeros caracteres de la línea (| , tabulador antes de un monto, -, *, •, «1.», «1)»):
   // NO se retiene nada extra; si la línea no es tabla ni lista, sigue como texto normal.
-  let lineIntro = false, lineLast = '', pendColon = false, lineTitle = false;
+  let lineIntro = false, lineLast = '', pendColon = false, lineTitle = false, lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
   let sent = { has: false, owner: false, neg: false, intro: false }, lineOwner = false, lineSale = false, lastBlank = false, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
   const endSentence = () => { if (sent.has) { ring.push(sent); if (ring.length > 3) ring.shift(); } sent = { has: false, owner: false, neg: false, intro: false }; };
   const introOn = () => ring.some((x) => x.owner || x.intro) || sent.owner || sent.intro;
@@ -328,10 +337,19 @@ function createAmountLayer(out) {
       if (c !== ' ' && c !== '\t' && c !== '\r' && c !== '\n') { lineHas = true; lineLast = c; }
       // Título corto en la misma línea («Compras de hoy: Galleta S/ 1.80», «Los precios de compra: Galleta S/ 1.80, Arroz S/ 3.10»): hasta 5 palabras
       // y 40 caracteres antes del «:», con compras/proveedor o palabra del dueño sin negar. Todo monto que sigue en ESA línea se tapa, salvo con etiqueta de venta.
-      if (c === ':' && !lineTitle && (lineIntro || (lineOwner && sent.pos)) && !lineDelim && mode !== 'table' && k - lineBegin <= 40 && (buf.slice(Math.max(lineBegin, base) - base, k - base).match(/[a-záéíóúñü0-9]+/gi) || []).length <= 5) lineTitle = true;
+      // Título largo (Bot 5 sobre a82a747f): empieza con «Compras» o nombra proveedor / de compra / costo sin negar, hasta 120 caracteres. Con «cliente» ninguno cuenta.
+      if (c === ':' && !lineTitle && !lt.cli && !lineDelim && mode !== 'table' && ((k - lineBegin <= LONG_TITLE_MAX && (lt.compras || (lt.buy && !lt.neg)))
+        || ((lineIntro || (lineOwner && sent.pos)) && k - lineBegin <= 40 && (buf.slice(Math.max(lineBegin, base) - base, k - base).match(/[a-záéíóúñü0-9]+/gi) || []).length <= 5))) lineTitle = true;
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
         let n;
+        if (k - lineBegin < LONG_TITLE_MAX) { // marcas del título de la línea (idempotente: se puede volver a pasar por la misma palabra)
+          if (lt.w < 0) lt.w = k;
+          if (lt.w === k && sticky(T_COMPRAS_Y, k)) lt.compras = true;
+          if (sticky(T_BUY_Y, k) || (sticky(T_COMPRA_Y, k) && /(?:^|[^a-záéíóúñü])de\s+$/i.test(buf.slice(Math.max(base, k - 12) - base, k - base)))) lt.buy = true;
+          if (sticky(T_NEG_Y, k)) lt.neg = true;
+          if (sticky(T_CLIENT_Y, k)) lt.cli = true;
+        }
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
         // negación DETRÁS de la palabra del dueño («El costo no lo tengo, pero esta es la lista:»): se mira hacia atrás al llegar al verbo, sin retener nada
         if (sent.pos && sent.pe != null && k - sent.pe <= 24 && (n = sticky(NEG_AFTER_Y, k)) && postNeg(k, n)) { sent.pos--; sent.pe = null; }
@@ -410,7 +428,7 @@ function createAmountLayer(out) {
           mode = introOn() ? 'pend' : null; // línea de texto: ¿presenta algo del dueño?
           pendColon = mode === 'pend' && lineLast === ':' && !introNeg();
         }
-        if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; lineTitle = false;
+        if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
         lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false;
       }
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
@@ -429,7 +447,7 @@ function createAmountLayer(out) {
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
   return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
-    sent = { has: false, owner: false, neg: false, intro: false }; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
+    sent = { has: false, owner: false, neg: false, intro: false }; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
   return { push(str) { tables.push(str); }, flush() { tables.flush(); amounts.flush(); } }; }
@@ -855,11 +873,13 @@ function pinOpen(t, h) {
 }
 // «api key» con espacio: no se corta entre «api» y «key».
 function apiOpen(t, h) { return (t[h] === 'k' || t[h] === 'K') && /(?:^|[^A-Za-z0-9_])api$/i.test(t.slice(Math.max(0, skipWsBack(t, h) - 4), skipWsBack(t, h))); }
+// «RUC», «RUC N°», «DNI:» seguidos de espacios: el número puede venir después de la racha (redactText lo une con su etiqueta).
+function idOpen(t, h) { const i = skipWsBack(t, h); return /(?:^|[^A-Za-z0-9_])(?:RUC|DNI)(?:\s*N[°º.]?)?\s*[:#-]?$/i.test(t.slice(Math.max(0, i - 16), i)); }
 function rucOpen(t, h) { return (t[h] === 'N' || t[h] === 'n') && /(?:^|[^A-Za-z0-9_])RUC$/i.test(t.slice(Math.max(0, skipWsBack(t, h) - 4), skipWsBack(t, h))); }
 const DATA_B64 = /[A-Za-z0-9+/=%._~-]/;
 // Etapa 1: datos sensibles. Los cortes válidos dependen solo del texto hasta el corte, así que cada posición se mira una vez.
 function createTextStage(out) {
-  let pend = '', off = 0, seen = 0, best = 0; const data = []; // data: {at (absoluto), phase 0|1|2 (2=roto), n, pos}
+  let pend = '', off = 0, seen = 0, best = 0, wsm = { at: -1, open: false }; const data = []; // data: {at (absoluto), phase 0|1|2 (2=roto), n, pos}
   const dataOpen = (h) => { // conservador: desde el último «data:» antes de h, ¿podría seguir siendo el mismo dato?
     for (let j = data.length - 1; j >= 0; j--) {
       const d = data[j]; if (d.at + 5 > off + h) continue;
@@ -876,7 +896,15 @@ function createTextStage(out) {
     const from = Math.max(0, seen - 4), low = pend.slice(from).toLowerCase(); let k = -1;
     while ((k = low.indexOf('data:', k + 1)) >= 0) { const at = off + from + k; if (!data.length || data[data.length - 1].at < at) data.push({ at, phase: 0, n: 0, pos: at + 5 }); }
     for (let h = Math.max(1, seen); h < pend.length; h++) {
-      if (!isWs(pend[h - 1]) || !isLetter(pend[h])) continue;
+      // corte antes de una letra, o ENTRE dos espacios (Bot 3: una racha de líneas en blanco hechas de espacios ya no se retiene entera
+      // aquí; así cuenta dentro del tope de 160 de la etapa 2). Entre espacios no se corta si «RUC»/«DNI» espera su número.
+      if (!isWs(pend[h - 1])) continue;
+      if (isWs(pend[h])) { // dentro de la racha la respuesta de clave/RUC/DNI no cambia: se mira una vez por racha (lineal)
+        if (wsm.at !== off + h - 1) wsm.open = pinOpen(pend, h) || idOpen(pend, h);
+        wsm.at = off + h; if (wsm.open || dataOpen(h)) continue;
+        best = h; continue;
+      }
+      if (!isLetter(pend[h])) continue;
       if (pinOpen(pend, h) || rucOpen(pend, h) || apiOpen(pend, h) || dataOpen(h)) continue;
       best = h;
     }
@@ -888,7 +916,7 @@ function createTextStage(out) {
       if (best > 0) { out(redactText(pend.slice(0, best))); pend = pend.slice(best); off += best; seen -= best; best = 0;
         while (data.length && data[0].phase === 2 && data[0].pos <= off) data.shift(); }
     },
-    flush() { if (pend) out(redactText(pend)); pend = ''; off = 0; seen = 0; best = 0; data.length = 0; }
+    flush() { if (pend) out(redactText(pend)); pend = ''; off = 0; seen = 0; best = 0; wsm = { at: -1, open: false }; data.length = 0; }
   };
 }
 export const FIRST_TEXT_MIN = 20, TEXT_BATCH = 48;
