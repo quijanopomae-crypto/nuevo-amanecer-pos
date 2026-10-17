@@ -209,20 +209,23 @@ export const LONG_TITLE_MAX = 120;
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
   // (Bot 5 sobre f3375c09) Una tabla «|» con columna del dueño sigue abierta tras líneas en blanco y líneas de texto cortas (entre |---| y
-  // las filas o en medio). Termina solo con un párrafo neutro (8+ palabras que no termina en «:»), un título de venta o una cabecera nueva |---|.
+  // las filas o en medio). (Bot 5 sobre a6d1d76e) Un párrafo neutro (8+ palabras que no termina en «:») ya NO la cierra: la deja dormida
+  // (st.dorm). Las filas «|» que siguen con la MISMA cantidad de columnas siguen siendo de esta tabla; termina con un título de venta
+  // («Precio(s)», «PVP», «Lista de precios»), una cabecera nueva |---| o, tras el párrafo, una fila con otra cantidad de columnas.
   if (!d && st.cols && st.sep === '|') {
     const t = full.trim();
-    if (!t) { if (st.gw >= 8 && st.gl !== ':') tableReset(st); else st.gw = 0; return null; } // fin de párrafo
+    if (!t) { if (st.gw >= 8 && st.gl !== ':') st.dorm = true; st.gw = 0; return null; } // fin de párrafo
     if (SALE_LINE_RE.test(normCell(t)) && !OWNER_HEADER_RE.test(normCell(t))) { tableReset(st); return null; }
     st.gw = (st.gw || 0) + (t.match(/[a-záéíóúñü0-9]+/gi) || []).length; st.gl = t[t.length - 1]; return null;
   }
-  if (d && st.gw != null) { if (st.gw >= 8 && st.gl !== ':') tableReset(st); st.gw = null; st.gl = ''; }
+  if (d && st.gw != null) { if (st.gw >= 8 && st.gl !== ':') st.dorm = true; st.gw = null; st.gl = ''; }
+  if (d && st.dorm) { st.dorm = false; if (d !== '|' || colCount(full.split(d)) !== st.ncols) tableReset(st); } // dormida: solo sigue con las mismas columnas
   if (!d || (st.sep && d !== st.sep)) { st.gw = null; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
   const cells = full.split(d); st.sep = d; st.rows = (st.rows || 0) + 1;
   const isSep = d === '|' && cells.some((c) => c.trim()) && cells.every((c) => !c.trim() || SEP_CELL.test(c));
   // separadora: la fila de arriba es la cabecera. Una cabecera NUEVA (tabla ya con columnas) manda: sus columnas deciden desde aquí.
-  if (isSep) { if (st.prev && st.rows === st.prevRow + 1 && (!st.cols || st.rows > 2)) st.cols = headerCols(st.prev); st.prev = null; return null; }
-  if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1; return null; }
+  if (isSep) { if (st.prev && st.rows === st.prevRow + 1 && (!st.cols || st.rows > 2)) { st.cols = headerCols(st.prev); st.ncols = colCount(st.prev); } st.prev = null; return null; }
+  if (st.rows === 1) { st.cols = headerCols(cells); st.ncols = colCount(cells); st.prev = cells; st.prevRow = 1; return null; }
   st.prev = cells; st.prevRow = st.rows;
   if (!st.cols) return null;
   let changed = false; // en una columna del dueño se tapa la celda; una celda que es solo una etiqueta de venta («PVP») queda
@@ -230,7 +233,9 @@ function tableLine(full, st) {
   return changed ? cells.join(d) : null;
 }
 const SALE_LINE_RE = /^(?:[#*_\s]*)(?:precios?|pvp|lista\s+de\s+precios)(?![a-z])/;
-function tableReset(st) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.gw = null; st.gl = ''; }
+function tableReset(st) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.gw = null; st.gl = ''; st.dorm = false; st.ncols = 0; }
+// columnas de una fila partida por «|» (sin las vacías de los bordes): «| A | B |» y «A | B» son 2
+function colCount(cells) { let n = cells.length; if (n > 1 && !cells[n - 1].trim()) n--; if (n > 1 && !cells[0].trim()) n--; return n; }
 function createTableLayer(out) {
   const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0 }; let line = '', holding = false;
   return {
@@ -245,7 +250,7 @@ function createTableLayer(out) {
         line = '';
       }
     },
-    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; st.gw = null; st.gl = ''; },
+    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; tableReset(st); },
     ownerActive: () => !!st.cols // «sigue»: la parte cortada termina dentro de una tabla con columna del dueño
   };
 }
@@ -260,7 +265,10 @@ function createAmountLayer(out0) {
   // palabra del dueño (negada o no), la tabla o lista que empieza en la línea siguiente tapa sus montos (tabla: salvo columnas de venta; lista:
   // salvo ítems con etiqueta de venta). Se decide con los primeros caracteres de la línea (| , tabulador antes de un monto, -, *, •, «1.», «1)»):
   // NO se retiene nada extra; si la línea no es tabla ni lista, sigue como texto normal.
-  let forced = false, lineDash = false, lWords = 0, pWords = 0, pWordAt = -1, pOwn = false, pLast = '', breakAt = -1, para = 0, paraAt = 0, paraPrev = 0, lineItem = false, lineIntro = false, lineLast = '', pendColon = false, lineTitle = false, lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
+  let forced = false, lineDash = false, lWords = 0, pWords = 0, pWordAt = -1, pOwn = false, pLast = '', breakAt = -1, para = 0, paraAt = 0, paraPrev = 0, lineItem = false, lineIntro = false, lineLast = '', pendColon = false, lineTitle = false, lt = { w: -1, compras: false, buy: false, neg: false, cli: false, lp: false };
+  // (Bot 5 sobre a6d1d76e) dorm: tabla del dueño (con presentación) dormida tras un párrafo neutro largo; la próxima fila «|» la retoma.
+  // fRow/fDorm/fLine: lo mismo para «sigue» (forced): si la continuación ya tenía filas «|», tras el párrafo largo las filas «|» siguen tapadas.
+  let dorm = null, fRow = false, fDorm = false, fLine = false;
   let sent = { has: false, owner: false, neg: false, intro: false }, lineOwner = false, lineSale = false, lastBlank = false, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
   // (Bot 2 sobre 66f1ecb5) cada frase recuerda su párrafo (para), si era un ítem de lista (item) y su línea (ln):
   // (d) la presentación solo alcanza su párrafo o el inmediatamente anterior; (b) la palabra del dueño dentro de un ítem tapa solo ese ítem.
@@ -278,7 +286,7 @@ function createAmountLayer(out0) {
   const mask = (to) => { out(OWNER_DATA_LABEL); rel = to; k = to; };
   // «el cliente compró» (Bot 2/5): la compra es del cliente, no del dueño
   const clientBuy = (i) => /(?:^|[^a-záéíóúñü])(?:el|los|la|las|un|una)\s+clientes?\s+(?:ya\s+)?$/i.test(buf.slice(Math.max(base, i - 20) - base, i - base));
-  const passAmt = (to) => (forced ? mask(to) : pass(to)); // monto que se vería: con contexto de «sigue» (forced) se tapa
+  const passAmt = (to) => (forced || fLine ? mask(to) : pass(to)); // monto que se vería: con contexto de «sigue» (forced) se tapa
   const NEED = -1;
   // ¿cuánto texto hace falta para decidir la palabra que empieza en i?
   const wordNeed = (i) => { let e = i; while (e < end() && isLetter(ch(e))) e++; if (e >= end()) return e + 1;
@@ -387,16 +395,18 @@ function createAmountLayer(out0) {
         const isList = ((c === '-' || c === '*' || c === '•') && (ch(k + 1) === ' ' || ch(k + 1) === '\t' || isLetter(ch(k + 1)))) || (isDigit(c) && sticky(LIST_NUM_Y, k) > 0) || (isLetter(c) && !isLetter(ch(k + 1)) && sticky(LIST_LETTER_Y, k) > 0);
         if (lastBlank) { // una línea con texto tras una línea en blanco: párrafo nuevo. ¿El que terminó es un párrafo neutro que corta?
           // Corta solo si no nombra al dueño, tiene 8+ palabras y NO termina en «:» («Son de esta semana.» o «Siguen:» no cortan).
-          if (para > 0 || paraAt < lineBegin) { if (!pOwn && pWords >= 8 && pLast !== ':') { breakAt = para; forced = false; if (ctx && !ctx.sale && ctx.at < lineBegin) ctx = null; } }
+          if (para > 0 || paraAt < lineBegin) { if (!pOwn && pWords >= 8 && pLast !== ':') { breakAt = para; if (forced && fRow) fDorm = true; forced = false; if (ctx && !ctx.sale && ctx.at < lineBegin) ctx = null; } }
           para++; paraPrev = paraAt; paraAt = lineBegin; pWords = 0; pOwn = false; pLast = ''; }
         lineItem = isList;
         if (mode === 'pend' && !introOn()) mode = null; // (d) un párrafo neutro en medio corta la presentación
         // (Bot 5 sobre f3375c09) tabla «|» presentada por el dueño: líneas en blanco y de texto cortas la dejan en pausa (tbl.gw), no la cierran
         if (mode === 'table' && tbl.d === '|' && c !== '|') { if (tbl.gw == null) { tbl.gw = 0; tbl.gl = ''; } }
-        else if (mode === 'table' && tbl.d === '|' && tbl.gw != null) { if (tbl.gw >= 8 && tbl.gl !== ':') { mode = null; tbl = null; ring = []; } else { tbl.gw = null; tbl.gl = ''; } }
+        else if (mode === 'table' && tbl.d === '|' && tbl.gw != null) { if (tbl.gw >= 8 && tbl.gl !== ':') ring = []; tbl.gw = null; tbl.gl = ''; } // párrafo largo y fila «|»: sigue la tabla
         if (mode === 'list' && !isList) { mode = null; ring = []; }
+        if (dorm && c === '|' && mode === null) { mode = 'table'; tbl = dorm; dorm = null; tbl.cell = 0; tbl.from = lineBegin; tbl.gw = null; tbl.gl = ''; } // retoma la tabla dormida
+        if (fDorm && c === '|') fLine = true;
         if (mode === 'pend') {
-          if (c === '|' || c === '\t') { mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
+          if (c === '|' || c === '\t') { dorm = null; mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
           else if (isList) mode = 'list';
           else mode = 'pendTab'; // puede ser una tabla con tabuladores: lo dice un tabulador antes de cualquier monto
         }
@@ -420,11 +430,12 @@ function createAmountLayer(out0) {
           if (lt.w < 0) lt.w = k;
           if (lt.w === k && sticky(T_COMPRAS_Y, k)) lt.compras = true;
           if (lt.w === k && sticky(SALE_TITLE_Y, k)) lt.sale0 = true; // la línea EMPIEZA con «Precio(s)»/«PVP»: título de venta
+          else if (lt.w >= base && lt.w < k && k - lt.w <= 12 && sticky(SALE_TITLE_Y, k) && /^lista\s+de\s+$/i.test(buf.slice(lt.w - base, k - base))) lt.lp = true; // «Lista de precios»
           if (sticky(T_BUY_Y, k) || (sticky(T_COMPRA_Y, k) && /(?:^|[^a-záéíóúñü])de\s+$/i.test(buf.slice(Math.max(base, k - 12) - base, k - base)))) lt.buy = true;
           if (sticky(T_NEG_Y, k)) lt.neg = true;
           // «cliente» anula SOLO con «del cliente», «de los clientes» o «el cliente pagó/compró»; «para el cliente» NO (sigue siendo del dueño)
           if (sticky(T_CLIENT_Y, k)) { const pre = buf.slice(Math.max(base, k - 10) - base, k - base);
-            if (/(?:^|[^a-záéíóúñü])(?:del|de\s+l[oa]s)\s+$/i.test(pre)) lt.cli = true;
+            if (/(?:^|[^a-záéíóúñü])(?:del|de(?:\s+l[oa]s)?)\s+$/i.test(pre)) lt.cli = true; // «de clientes» (Bot 5): igual que «de los clientes»
             else if (/(?:^|[^a-záéíóúñü])(?:el|los|la|las)\s+$/i.test(pre) && !/(?:^|[^a-záéíóúñü])para\s+(?:el|los|la|las)\s+$/i.test(buf.slice(Math.max(base, k - 16) - base, k - base))) {
               if (!final && end() < k + 24) break;
               if (sticky(T_CLIENT_ACT_Y, k)) lt.cli = true; } }
@@ -488,13 +499,17 @@ function createAmountLayer(out0) {
         if (negZone && c !== ';' && !sameEnd(k) && --negZone.left <= 0) negZone = null;
       }
       if (c === '.' || c === '!' || c === '?') { const nx = ch(k + 1); if (c === '.' && nx === undefined && !final) break; if (!(c === '.' && isDigit(nx))) endSentence(); }
-      if ((c === '|' || c === '\t') && mode === 'pendTab' && !lineAmt) { mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
+      if ((c === '|' || c === '\t') && mode === 'pendTab' && !lineAmt) { dorm = null; mode = 'table'; tbl = { d: c, row: 0, cell: 0, from: lineBegin, hdr: [], sale: null, headerless: false, neg: introNeg() }; }
       if ((c === '|' || c === '\t') && mode === 'table') { if (tbl.row === 0 && !tbl.headerless) tbl.hdr[tbl.cell] = cellText(tbl.from, k); tbl.cell++; tbl.from = k + 1; }
       if (c === '|' || c === '\t') lineDelim = true;
       if (c === '-') lineDash = true;
       if (c === '\n') {
         if (lineOwner || lineIntro || sent.owner || sent.intro) pOwn = true; if (lineHas) pLast = lineLast;
-        if (forced && lineDelim && lineDash && row.sep && lineHas) forced = false; // fila |---| de una tabla nueva: desde aquí deciden sus columnas
+        if (forced && lineDelim && lineDash && row.sep && lineHas) { forced = false; fRow = false; } // fila |---| de una tabla nueva: desde aquí deciden sus columnas
+        else if (forced && lineDelim && lineHas && !row.sep) fRow = true; // la continuación ya trae filas «|»
+        if (fLine && lineDelim && lineDash && row.sep && lineHas) fDorm = false; // tabla nueva: deciden sus columnas
+        if ((dorm || fDorm) && !lineDelim && lineHas && (lt.sale0 || lt.lp) && !lineOwner && !lineIntro) { dorm = null; fDorm = false; } // título de venta: termina
+        fLine = false;
         // (c) «Compras del cliente:» presenta solo por «compras»: con «cliente» no presenta la lista/tabla de abajo
         if (lt.cli && !lt.buy && !(lineOwner && sent.pos)) { sent.intro = false; ring.forEach((x) => { if (x.ln === lineBegin) x.intro = false; }); }
         endSentence();
@@ -502,8 +517,8 @@ function createAmountLayer(out0) {
         if (mode === 'table') {
           if (!lineDelim && tbl.d === '|') { // pausa: termina con un párrafo neutro (8+ palabras, sin «:» al final) o un título de venta
             if (tbl.gw == null) { tbl.gw = 0; tbl.gl = ''; }
-            if (blank) { if (tbl.gw >= 8 && tbl.gl !== ':') { mode = null; tbl = null; ring = []; } else tbl.gw = 0; }
-            else if (lt.sale0 && !lineOwner && !lineIntro) { mode = null; tbl = null; ring = []; }
+            if (blank) { if (tbl.gw >= 8 && tbl.gl !== ':') { dorm = tbl; mode = null; tbl = null; ring = []; } else tbl.gw = 0; } // párrafo largo: dormida, no cerrada
+            else if ((lt.sale0 || lt.lp) && !lineOwner && !lineIntro) { mode = null; tbl = null; ring = []; }
             else { tbl.gw += lWords; tbl.gl = lineLast; }
           } else if (!lineDelim) { mode = null; tbl = null; ring = []; } // fin de una tabla con tabuladores (o línea en blanco)
           else if (tbl.row >= 2 && row.sep && lineHas && lineDash) { mode = null; tbl = null; ring = []; } // cabecera NUEVA |---|: deciden sus columnas
@@ -518,7 +533,7 @@ function createAmountLayer(out0) {
           mode = introOn() ? 'pend' : null; // línea de texto: ¿presenta algo del dueño?
           pendColon = mode === 'pend' && lineLast === ':' && !introNeg();
         }
-        if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false };
+        if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false, lp: false };
         lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false; lineItem = false; lineDash = false; lWords = 0;
       }
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
@@ -543,9 +558,9 @@ function createAmountLayer(out0) {
     // (mismo estado, mismas decisiones) y además tapa todo monto que dejaría ver, mientras dure: hasta una tabla NUEVA (su fila |---|: desde
     // ahí deciden sus columnas) o hasta el 2.º párrafo de la continuación. Así lo tapado con contexto siempre contiene lo tapado sin él.
     seedOwner() { forced = true; },
-    ownerActive() { run(true); return (mode !== null && !(mode === 'table' && tbl && tbl.neg)) || (!!ctx && !ctx.sale && !ctx.neg) || (introOn() && !introNeg()); },
+    ownerActive() { run(true); return !!dorm || fDorm || (mode !== null && !(mode === 'table' && tbl && tbl.neg)) || (!!ctx && !ctx.sale && !ctx.neg) || (introOn() && !introNeg()); },
     flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
-    forced = false; lineDash = false; lWords = 0; pWords = 0; pWordAt = -1; pOwn = false; pLast = ''; breakAt = -1; sent = { has: false, owner: false, neg: false, intro: false }; para = 0; paraAt = 0; paraPrev = 0; lineItem = false; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
+    forced = false; dorm = null; fRow = false; fDorm = false; fLine = false; lineDash = false; lWords = 0; pWords = 0; pWordAt = -1; pOwn = false; pLast = ''; breakAt = -1; sent = { has: false, owner: false, neg: false, intro: false }; para = 0; paraAt = 0; paraPrev = 0; lineItem = false; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false, lp: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 // ownerCtx (booleano, de cutPrime): la continuación arranca con una presentación del dueño. Sin él, igual que siempre.
 function createOwnerPipeline(out, ownerCtx = false) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
@@ -1080,7 +1095,25 @@ export const CUT_NOTICE = 'Respuesta cortada por largo. Escriba "sigue" para ver
 // (open: lo que sigue aún no llegó), así nunca soltó algo que el corte después quiera sacar.
 export const CUT_SLACK = 24;
 const CUT_TOK_RE = /(?:S\/\.?|US\$|\$|PEN)[ \t]*(?:\d[\d.,]*)?|\d[\d.,]*/gi;
-function cutSafe(s, n, open) {
+// (Bot 2/5 sobre a6d1d76e) Tampoco parte fechas, horas ni números de documento: una racha de letras/dígitos unidos por / : - . (y «%»)
+// que trae un dígito («17/10/2026», «12:30», «3/4», «F001-00012345», «B002-123», «10%») es UNA pieza de hasta CUT_JOIN_MAX caracteres.
+// Si la racha es más larga (un enlace, texto pegado), queda entero su núcleo de dígitos unidos («aaaa3/4aaaa» no se corta en «3/»).
+// Si la racha llega al final de lo que ya hay (open), aún puede seguir: se espera.
+export const CUT_JOIN_MAX = 40;
+const JOIN_CH = /[A-Za-z0-9\/:.\-%]/, CORE_CH = /[0-9\/:.\-%]/;
+function joinStart(s, n, open) {
+  if (n <= 0 || !JOIN_CH.test(s[n - 1])) return n;
+  const atEnd = n >= s.length; if (atEnd && !open) return n; if (!atEnd && !JOIN_CH.test(s[n])) return n;
+  let a = n; while (a > 0 && JOIN_CH.test(s[a - 1]) && n - a <= CUT_JOIN_MAX) a--;
+  let e = n; while (e < s.length && JOIN_CH.test(s[e]) && e - a <= CUT_JOIN_MAX) e++;
+  if (e - a <= CUT_JOIN_MAX) return /\d/.test(s.slice(a, e)) || (open && e >= s.length) ? a : n;
+  // racha larga: solo el núcleo de dígitos unidos alrededor del corte
+  if (!CORE_CH.test(s[n - 1]) || (!atEnd && !CORE_CH.test(s[n]))) return n;
+  a = n; while (a > 0 && CORE_CH.test(s[a - 1]) && n - a <= CUT_JOIN_MAX) a--;
+  e = n; while (e < s.length && CORE_CH.test(s[e]) && e - a <= CUT_JOIN_MAX) e++;
+  return e - a <= CUT_JOIN_MAX && (/\d/.test(s.slice(a, e)) || (open && e >= s.length)) ? a : n;
+}
+function cutSafe(s, n, open, near = true) {
   for (let guard = 0; guard < 8; guard++) {
     const before = n;
     const ob = s.lastIndexOf('[', n - 1); // etiqueta abierta
@@ -1094,6 +1127,7 @@ function cutSafe(s, n, open) {
       if (t[0] === '') CUT_TOK_RE.lastIndex++; }
     if (hit >= 0) n = hit;
     else if (open && n >= s.length) { const pm = /(?:S|US?|PE?)$/i.exec(s.slice(Math.max(0, n - 2), n)); if (pm) n -= pm[0].length; } // «S» de «S/», «U»/«US» de «US$»…
+    if (!open || near) n = joinStart(s, n, open); // fecha / hora / documento entero (al soltar: solo cerca del tope, donde el corte puede caer)
     if (n === before) return n;
   }
   return n;
@@ -1130,7 +1164,7 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
     }
     if (!sent && !final && ready.length < FIRST_TEXT_MIN) return;
     let n = final ? ready.length : Math.min(ready.length, Math.max(0, max - CUT_ZONE - CUT_SLACK - sent));
-    if (!final && n > 0) n = cutSafe(ready, n, true); // nunca soltar un número / etiqueta a medias (el corte no podría volver atrás)
+    if (!final && n > 0) n = cutSafe(ready, n, true, sent + n >= max - CUT_ZONE - CUT_SLACK - CUT_JOIN_MAX - 1); // nunca soltar un número / etiqueta a medias (el corte no podría volver atrás)
     batches(n);
   };
   const init = () => {

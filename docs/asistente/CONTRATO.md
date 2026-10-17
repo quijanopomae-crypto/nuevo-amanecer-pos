@@ -273,7 +273,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 ### «cliente» acotado (Bot 2)
 
 - La excepción de «cliente» vale solo para «del cliente», «de los/las clientes» y «el/los cliente(s) (ya) pagó/compró/pagaron/compraron». «Compras del cliente: S/ 30» se ve.
-- «para el cliente» NO es excepción: «Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10» se tapa, también como presentación de lista. «Compras de clientes: S/ 30» (sin artículo) ahora se tapa: se prefiere tapar.
+- «para el cliente» NO es excepción: «Compras para el cliente: Galleta S/ 1.80, Arroz S/ 3.10» se tapa, también como presentación de lista. «Compras de clientes: S/ 30» (sin artículo) vuelve a verse desde el seguimiento de a6d1d76e: «de clientes» cuenta como «de los clientes», solo si el título cuenta únicamente por «compras» («Costo de clientes: S/ 30» y «Compras para clientes: S/ 30» se tapan).
 - «el cliente compró/pagó» ya no cuenta como palabra de compra del dueño en la ventana («Compras que el cliente compró…»).
 
 ### Párrafo neutro (Bot 2, regla refinada)
@@ -284,7 +284,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 
 ### Tabla del dueño con huecos (Bot 5, FALLA en f3375c09)
 
-- La tabla del dueño (capa de columnas y capa de presentación) aguanta cualquier cantidad de líneas en blanco y de líneas cortas de texto, entre `|---|` y las filas y en medio. Termina solo con la regla del párrafo neutro, con un título de venta (una línea que EMPIEZA con «Precio(s)», «PVP» o «Lista de precios») o con una cabecera `|---|` nueva.
+- La tabla del dueño (capa de columnas y capa de presentación) aguanta cualquier cantidad de líneas en blanco y de líneas cortas de texto, entre `|---|` y las filas y en medio. Termina solo con un título de venta (una línea que EMPIEZA con «Precio(s)», «PVP» o «Lista de precios») o con una cabecera `|---|` nueva. Desde el seguimiento de a6d1d76e un párrafo neutro largo ya NO la termina (ver abajo).
 - Se tapan: 2 líneas en blanco antes de la fila, «zz\nyy» antes de la fila, y una línea en blanco en medio antes de «| Producto 1 | S/ 1.81 |». La tabla de venta con huecos se sigue viendo.
 - Retención sin cambios: igual a la base en la sonda de retención (máx. 184).
 
@@ -317,7 +317,7 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 ### Celular (Bots 4/5/3)
 
 - **Aviso de corte**: la respuesta (JSON y evento final en partes) lleva `cut: true|false`, puesto por el servidor. El celular pinta la última línea como nota (`.na-asst-note`) SOLO si `d.cut === true`. Nunca busca el texto del aviso: un aviso escrito por el modelo sale como texto normal.
-- **Cabecera reusada**: en la respuesta que sigue a una cortada, las filas sueltas del inicio (con el mismo número de columnas) usan la cabecera de la última tabla de la burbuja anterior. Esa cabecera sale solo de lo que esa burbuja ya pintó (texto ya filtrado por el servidor), nunca de otros datos. No se reusa después de una tabla propia de la burbuja.
+- **Cabecera reusada**: en la respuesta que sigue a una cortada, las filas sueltas del inicio (con el mismo número de columnas) usan la cabecera de la última tabla de la burbuja anterior. Esa cabecera sale solo de lo que esa burbuja ya pintó (texto ya filtrado por el servidor), nunca de otros datos. Después de una tabla propia de la burbuja, una fila suelta con el mismo número de columnas usa la cabecera de ESA tabla (ver seguimiento de a6d1d76e).
 - **360 px**: las burbujas llevan `overflow-wrap:anywhere`, así que un token largo sin espacios no desborda a lo ancho.
 - **Cabecera de tabla (Bot 4, 1)**: `th` con color #0f172a, y #e5f3ea en modo oscuro.
 - **«Ver nuevo ↓» y la nota de corte (Bot 4, 3)**: si la nota está a la vista, aunque sea en parte, el botón no aparece al terminar la respuesta. Si estaba visible, se esconde en cuanto la nota entra a la vista al desplazar. Así nunca la tapa.
@@ -329,3 +329,31 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
   - 5 se tapan más: «Compras para el cliente…» ×2, «Compras de clientes: S/ 30», y c3.parrafosAtras ×2.
   - 4 solo cambian de forma: rachas largas → «[texto largo omitido]», espacios largos tras clave/PIN → uno.
   - 1 se ve: «No sé el costo.\nPrecio S/ 2.50 y <300 «a»> fin.». Antes se tapaba solo por la retención de la racha larga. Ahora da lo mismo que la frase corta equivalente «…Precio S/ 2.50 y a fin.», que ya se veía (precio con el costo negado).
+
+## Seguimiento sobre a6d1d76e (Bots 5/2/4)
+
+### Tabla del dueño abierta y párrafo neutro (Bot 5, 3 fugas, también en f3375c09)
+
+- Un párrafo neutro largo (8+ palabras, sin «:» al final) sigue cortando la PRESENTACIÓN del dueño antes de que empiece una tabla, pero ya no cierra una tabla del dueño que ya está abierta (cabecera vista). La deja dormida.
+- Mientras está dormida, el texto suelto se trata como texto normal («Arroz S/ 4.20» tras el párrafo se ve). Una fila `| … |` vuelve a ser de esa tabla y se tapa igual que antes (columnas del dueño; con presentación del dueño, todo salvo las columnas de venta).
+- Termina con: una cabecera nueva + `|---|` (sus columnas deciden), un título de venta (línea que empieza con «Precio(s)», «PVP» o «Lista de precios»), o, en la capa de columnas, una fila con otra cantidad de columnas después del párrafo.
+- Se tapan las 3 de Bot 5: «Te paso los costos:\n| Producto | Precio |\n|---|---|\n\nAquí van los productos que pediste hace un rato.\n| Producto 0 | S/ 1.80 |», la nota de 8+ palabras entre la fila 0 y la 1, y «Otra cosa: el local abre a las ocho de la mañana todos los días.» entre líneas en blanco. También la tabla con columna «Costo» sin presentación.
+- Las tablas de venta (PVP, P. venta, Venta) con párrafos largos en medio se siguen viendo. En una tabla del dueño con columna PVP, el PVP se ve y el costo se tapa.
+- «sigue»: si la continuación ya trae filas `| … |` (tapadas por el contexto) y luego un párrafo largo, las filas `| … |` que siguen se siguen tapando, hasta una cabecera `|---|` nueva o un título de venta. Solo puede tapar más: el estado del filtro no cambia, solo se tapan montos que se verían (superconjunto por construcción). Si la parte cortada termina después del párrafo con la tabla dormida, el sí/no de «sigue» dice que hay contexto.
+- Diferencial de «sigue» de Bot 5 (455 casos × 23): 0 destapes. Al azar 2 × 20 000: 0 destapes, partes = entero. Sonda de retención igual que la base.
+- **INFO**: en la capa de presentación, una fila `| … |` con otra cantidad de columnas después del párrafo también se tapa (se decide al empezar la fila, sin esperar la línea entera). Tapa de más, nunca de menos.
+
+### Corte de 1200: tampoco parte fechas, horas ni documentos (Bot 2, Bot 5 INFO)
+
+- Una racha de letras y dígitos unidos por «/», «:», «-», «.» (y «%») que trae un dígito es una sola pieza de hasta 40 caracteres (`CUT_JOIN_MAX`): «17/10/2026», «12:30», «3/4», «F001-00012345», «B002-123», «2026-10-17», «10%». El corte retrocede hasta antes de la pieza.
+- Si la racha es más larga (un enlace, texto pegado), se corta como antes, pero su núcleo de dígitos unidos queda entero («aaaa3/4aaaa» no se corta en «3/»).
+- Al soltar en partes, cerca del tope (los últimos 41 caracteres antes de donde puede caer el corte) se espera a que termine la racha. Así lo pintado es igual a la respuesta final. Lejos del tope no cambia nada.
+- Siguen igual las garantías de antes: ningún monto partido, ninguna etiqueta partida, nunca «S/ » suelto. Sonda de Bot 5 (`corte-numeros`, 7524 casos): 0 malos (antes 12: «3/», «12:», «10» de «10%»). Sonda del tope: igual que la base.
+
+### Celular (Bot 4)
+
+- Las filas que siguen a una tabla de la burbuja después de un párrafo (el servidor las sigue tratando como de esa tabla) se dibujan como filas, con la cabecera ya pintada de esa tabla (texto ya filtrado), solo con `createElement` y `textContent`. Nunca salen como texto con «|». Vale también para la última fila sin salto de línea. Con otra cantidad de columnas siguen saliendo como texto.
+
+### Pruebas
+
+- `tests/asistente/assistant-followups-a6d1d76e.test.mjs`: las 3 fugas (entero y en partes de 1, 2, 3, 7, 13 y 47), fin de la tabla dormida, tablas de venta visibles, variante «sigue» (entero, partes y ruta con `capReply` + `cutPrime`), «Compras de clientes», corte con fechas/horas/documentos (casos fijos y propiedad al azar con ambos roles, partes = final) y el renderer del celular.

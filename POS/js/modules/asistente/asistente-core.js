@@ -278,8 +278,10 @@
     }
     function endTable() { table = tbody = labels = null; }
     function isPipe(l) { return /^\s*\|/.test(l); }
-    // fila suelta al inicio de la continuación: usa la cabecera anterior (solo antes de la primera tabla de esta burbuja y si cuadran las columnas)
-    function reused(h) { if (!reuse || tables || TABLE_SEP_RE.test(h) || tableCells(h).length !== reuse.length) return false; startTable(reuse); addRow(h); return true; }
+    // fila suelta al inicio de la continuación: usa la cabecera anterior (solo antes de la primera tabla de esta burbuja y si cuadran las columnas).
+    // (Bot 4 sobre a6d1d76e) Fila suelta DESPUÉS de una tabla de esta burbuja (p. ej. tras un párrafo: el servidor la sigue tratando como de esa
+    // tabla): se dibuja como fila con la cabecera ya pintada (texto filtrado), si cuadran las columnas; nunca como texto con «|».
+    function reused(h) { var lab = tables ? lastLabels : reuse; if (!lab || TABLE_SEP_RE.test(h) || tableCells(h).length !== lab.length) return false; startTable(lab); addRow(h); return true; }
     // una línea COMPLETA (con su salto, si lo tiene)
     function full(l, nl) {
       if (table) { if (isPipe(l) && !TABLE_SEP_RE.test(l)) { addRow(l); return; } if (isPipe(l)) return; endTable(); }
@@ -308,7 +310,7 @@
           line = ''; mode = 'start'; i = k + 1;
         }
       },
-      finish: function () { if (line) { if (head != null || table) full(line, false); else text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); mode = 'start'; },
+      finish: function () { if (line) { if (head != null || table) full(line, false); else if (!(isPipe(line) && reused(line))) text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); mode = 'start'; },
       raw: function () { return raw; },
       labels: function () { return lastLabels ? lastLabels.slice() : null; }, // cabecera de la última tabla pintada (para la continuación)
       rows: function () { return rows; }
