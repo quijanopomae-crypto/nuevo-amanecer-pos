@@ -702,3 +702,44 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
 - **Clases (menor 1c)**: el estado lleno/vacío/422 cambia solo la clase `ok` con `classList.toggle`; `na-asst-need` y `na-asst-ltr` (de `ltrIsolate`) se quedan.
 - **U+00AD en la propuesta (1d)**: confirmado que `fmtClean` de c16a407d ya lo quita en el servidor (`cardField`, línea, fecha) y en el celular (`purchaseValue`, `appendCoded`): «F001-000-U+00AD/12345» → «F001-000-/12345».
 - Pruebas: `assistant-followups-c16a407d.test.mjs` (U+202E/U+00AD/ZWSP/U+2066/etiquetas escritos y pegados, cursor en medio, selección, composición, clases en ciclos lleno → vacío → 422, U+00AD en la propuesta y en el inicio del campo).
+
+## Ampliación sobre 6e0b3c5d (Bot 5 ev-6e0b3c5d, Bot 4 INFORME 6e0b3c5d, Bot 3 c16a407d, Bot 2 INFORME c16a407d)
+
+### Clave entre comillas (Bot 5, 1)
+- `PIN_QUOTE_RE` / `pinQuote`: pin/clave/contraseña/password (+ enlace y hasta 4 palabras) + `:`/`=` o `es`/`era`/`fue` (o nada) + texto entre comillas de 1 a 40 caracteres → se tapa TODO lo de adentro, con o sin palabra de credencial: «la clave del wifi es "[oculto]"». Comillas: " ' « » “ ” ‘ ’ ‹ › „. Igual en las 4 vías (empleado, dueño, modelo-empleado, modelo-dueño) y en partes (`PIN_QUOTE_OPEN` retiene mientras la comilla abierta tras una etiqueta no se cierra).
+
+### Miles (Bot 5, 2)
+- `PIN_DEC_SRC`: decimales y también miles como UNA pieza: «4.321», «12.345», «1.234.567», «4,321» y con espacio (normal, U+00A0, U+202F) «4 321». Misma regla que los decimales (abajo). Tras «pin» nunca hay excepción.
+
+### Dinero tras clave/contraseña: regla final (Bot 2, pasos 1 y 4)
+- Tras clave/contraseña, una palabra de precio (precio/costo/efectivo/monto/total/vuelto) **justo antes del monto** (solo moneda o ≤ 2 palabras que no son de enlace en medio) **o justo antes de «clave»** («precio clave S/ 4.50», «costo clave 4.50 soles») suelta el monto SOLO si tiene céntimos («4321.00», «1.234,50», «12.50»). Sin moneda también («clave del monto 99.90»).
+- Enteros: SIEMPRE tapados, con o sin precio/costo/monto y con o sin moneda («clave del precio: S/ 4521», «la clave del costo es S/ 1250», «La clave para vender es el precio S/ 2500» → tapados).
+- «clave costo S/ 4321» tapa el número, nunca la palabra de precio. «clave 4,321» y «la clave de la caja es 43.210» tapados.
+- Tras «pin»: ninguna excepción (ni dinero, ni unidad, ni código, ni año).
+- En partes, tras una palabra de precio no se corta si lo que sigue es (o puede ser aún) pin/clave/contraseña/password, tampoco dentro de los espacios que siguen (`priceKwNext`).
+
+### Unidad (Bot 2, pasos 1 y 3)
+- La unidad deja ver el número solo si: no hay sustantivo de credencial en la etiqueta (`PIN_CRED_WORD`: caja, local, wifi…; «la clave de la caja 4321 unidades» → tapado), hay al menos una palabra que no es de enlace entre la etiqueta y el número («clave 2.5 kg», «clave 43.21 kg», «clave 12.50 soles», «contraseña 3,75 litros» → tapados; «clave del arroz 1.5 kg» se ve) y no hay «:», «=» ni es/era/fue/será (ser) en medio.
+
+### «negocio», artículo, año, código (Bot 5)
+- «la clave del negocio es Gatito», «…es: el perro» → tapados (`pinAlpha` acepta artículo el/la/los/las/lo tras es/era si la etiqueta es fuerte: password, contraseña o un sustantivo de credencial). «negocio» es credencial DÉBIL: tapa solo con «:»/«=» o con el valor en mayúscula; «la clave del negocio es la atención» sigue visible.
+- Año: «la clave, del año 2024» → tapado (con una coma entre la etiqueta y el año no hay excepción de año). «Cambié la clave de la caja en 2019» sigue visible (decisión del dueño pendiente).
+- Código: «clave del artículo es código 4321» → tapado (con «:», «=» o ser en medio no hay excepción de código).
+
+### Etiqueta neutra para 8 dígitos (Bots 4/5)
+- Para el empleado, 8 dígitos junto a «código/cód./EAN/barra(s)» o en una columna «Código» de una tabla se tapan como «código ****1234» (o «****1234» si la etiqueta de código va justo delante); con «DNI» delante o sin ese contexto, «DNI ****1234» como siempre (`idMask`). En partes mira lo ya soltado (`redactTextCtx`, hasta 8000 caracteres); el corte no parte «código ****1234» (`cutSafe`). El dueño sigue viendo sus números.
+
+### Streaming (Bot 5, 3; Bot 3, A/B)
+- En partes = texto entero en TODOS los cortes (prueba de todos los cortes de una pieza, todos los pares en textos cortos y pasos 1/2/3/5/7/11), también con «clave 43.21 kg» y «costo clave 4.50 soles».
+- `PIN_NUM_TAIL` también con decimales/miles y consciente de la unidad: decide solo la palabra que sigue al número; si está a medias y puede ser el comienzo de una unidad, espera (`'wait'` + `doRecheck`).
+- Etiqueta repetida sin punto («pin pin pin…», «la contraseña es perrito, el pin 4321 …»): ya no se retiene todo el texto. Un corte que solo frenó `pinOpen` se prueba cuando tiene `SHIELD_M` (72) caracteres detrás, cada `SHIELD_EVERY` (8): vale solo si filtrar A y el resto por separado da EXACTAMENTE lo mismo que todo junto, ahora y con las continuaciones que podrían colgarse de una etiqueta de A (`SHIELD_PROBES`: número, decimal, «es Valor», «: Valor», valor con letras y dígitos, entre comillas, un «[oculto]» que viene; también desde el último espacio, por la palabra a medias). Las pruebas se omiten cuando desde el fin de la última etiqueta de A ya hay ≥ 72 caracteres y > 10 palabras (ninguna regla de etiqueta llega tan lejos). Retención medida (8000 caracteres, trozos de 1 y 5): 88-122 caracteres; costo lineal (exponente 0,96-1,01 a 12/25/50/100 KB).
+- Filtro previo (`PIN_GATE`): si el texto no tiene pin/clave/contrase/password/token/api (sin distinguir mayúsculas), las reglas de PIN no se prueban (`PIN_GATED`). Solo se mira `pinOpen` si una etiqueta empezó en los últimos 170 caracteres.
+
+### Campo de la tarjeta (Bot 4, Bot 3 C)
+- Pegar/soltar (y un reemplazo del corrector con caracteres de control): se limpia en `beforeinput` (`insertFromPaste`, `insertFromDrop`, `insertReplacementText`): `preventDefault` + `document.execCommand('insertText', false, limpio)`, que deja entera la pila de deshacer de Chrome (Ctrl+Z quita lo pegado; rehacer no concatena). `setRangeText` solo si execCommand no está o devuelve false. Saltos de línea → espacio. El recorte a `NEED_MAX` va DESPUÉS de limpiar y cuenta lo que ya hay (menos la selección). Lo pegado sin nada que limpiar ni recortar lo inserta el navegador. Pegar 100 KB: se limpia solo lo que puede caber (0,5 ms en Chrome).
+- Escribir normal sigue por `input` (solo reescribe si cambia); el `input` que sigue a un pegado ya limpiado no hace nada; durante una composición no se toca nada. `maxLength` = 2 × `NEED_MAX` para el camino de respaldo (autocompletar, teclados o arrastres sin `beforeinput`): se limpia y luego se recorta.
+- «Confirmar» se enciende solo si `inputClean(valor) === valor` y el valor cabe en `NEED_MAX` (nunca con U+202E crudo a la vista, p. ej. una composición que termina sin `compositionend`). Al salir del campo (`blur`): `composing = false`, se limpia y se recalcula.
+
+### Expectativas cambiadas a propósito (enmascarar ante la duda)
+- Tapados ahora: «clave 2.5 kg» (antes visible), «clave de la caja 4521 kg», «clave del precio: S/ 4521», «la clave del costo es S/ 1250», «clave del monto PEN 3000», «clave del costo S/ 1250», «La clave para vender es el precio S/ 2500», «La clave fue vender 1.200 unidades», «La clave para la caja chica son 1200 soles», «la clave de la promo es 2x1 hasta 1.500 piezas». «Codigo del cliente: 12345678» → «código ****5678» (sigue tapado).
+- Pruebas actualizadas: `assistant-followups-3ee80c18`, `-5646a4c9`, `-58200f60`, `-d72b7601`. Nuevas: `assistant-followups-6e0b3c5d.test.mjs` (13 pruebas; todas fallan contra 6e0b3c5d).
