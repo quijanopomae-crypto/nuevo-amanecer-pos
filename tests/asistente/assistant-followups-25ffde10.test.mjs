@@ -218,7 +218,8 @@ test('Bots 4/5/2: series de comprobante y guía intactas en ambos roles; «2024-
     const t = 'Comprobante ' + r + ' del 17/10/2026.'; assert.equal(same(t, role), t, role + ' ' + r);
     assert.equal(redactText(t), t, 'también en lo que va al modelo'); }
   // la excepción es SOLO la serie: un año u otro número de 4 + guion sigue siendo DNI para el empleado
-  for (const t of ['DNI-12345678', 'DNI 12345678', 'Doc: 12345678']) assert.match(same(t, EMP), /DNI \*{4}5678/, t);
+  for (const t of ['DNI-12345678', 'DNI 12345678']) assert.match(same(t, EMP), /DNI \*{4}5678/, t);
+  assert.equal(same('Doc: 12345678', EMP), 'Doc: ****5678', '(Bot 5 sobre 36f6ae51) sin repetir la etiqueta tras «Doc:»');
   // (Bot 4 sobre 39ccd25c) sin DNI/documento/doc/identidad delante: tapado con etiqueta neutra «código ****»
   for (const t of ['2024-12345678', '1234-12345678', 'X001-12345678', 'f001-12345678']) assert.match(same(t, EMP), /código \*{4}5678/, t);
   // (Bot 5 sobre 6280deae, antes INFO) letra o «_» pegados a los dígitos: (?<![0-9]) en vez de \b, ahora se tapan para el empleado

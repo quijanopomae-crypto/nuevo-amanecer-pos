@@ -92,11 +92,15 @@
         if (onChange) onChange(); }
       // (Bot 5 sobre 39ccd25c) valor cambiado SIN evento (script, extensión): al pulsar «Confirmar» se vuelve a mirar; si cambió se limpia A LA
       // VISTA, se recalcula y ese toque no manda nada (lo que se ve = lo que se mandaría en el siguiente)
-      checks.push(function () { var raw = String(inp.value == null ? '' : inp.value); if (raw === lastRaw) return false; if (!composing) cleanField(); sync(); return true; });
+      // (Bot 5 sobre 36f6ae51) con el foco en el campo, el toque con el mouse saca el foco ANTES del clic y el blur ya recalculaba: el primer toque
+      // mandaba. Ahora, si el blur encuentra un valor cambiado sin evento (scriptDirty), el primer toque de «Confirmar» que sigue tampoco manda.
+      // Se borra con una entrada real (input/composición) o con ese toque. Sin temporizador.
+      var scriptDirty = false;
+      checks.push(function () { var raw = String(inp.value == null ? '' : inp.value), d = scriptDirty; scriptDirty = false; if (raw === lastRaw && !d) return false; if (!composing) cleanField(); sync(); return true; });
       inp.addEventListener('compositionstart', function () { composing = true; });
-      inp.addEventListener('compositionend', function () { composing = false; cleanField(); sync(); });
+      inp.addEventListener('compositionend', function () { composing = false; scriptDirty = false; cleanField(); sync(); });
       // (Bots 4/5 sobre 6e0b3c5d) composición que termina sin compositionend: al salir del campo se suelta y se limpia
-      inp.addEventListener('blur', function () { composing = false; cleanField(); sync(); });
+      inp.addEventListener('blur', function () { composing = false; if (String(inp.value == null ? '' : inp.value) !== (lastRaw === null ? (pre || '') : lastRaw)) scriptDirty = true; cleanField(); sync(); });
       // (Bot 4 sobre 6e0b3c5d) pegar/soltar (y un reemplazo del corrector con caracteres de control): se limpia ANTES de entrar, con
       // execCommand('insertText'), que deja la pila de deshacer del navegador entera (Ctrl+Z quita lo pegado; rehacer no concatena). El recorte a
       // NEED_MAX va DESPUÉS de limpiar. Si execCommand no está o devuelve false, setRangeText (no guarda deshacer, pero lo visible = lo limpio).
@@ -124,7 +128,7 @@
       });
       // respaldo (autocompletar, teclados o arrastres que no pasan por beforeinput): si lo que entró trae caracteres de formato, se reescribe;
       // tras un pegado ya limpiado arriba no hace nada. sync() sigue exigiendo inputClean(v) === v para encender «Confirmar».
-      inp.addEventListener('input', function (ev) { if (handled) { handled = false; sync(); return; } if (!composing && !(ev && ev.isComposing)) cleanField(); sync(); });
+      inp.addEventListener('input', function (ev) { scriptDirty = false; if (handled) { handled = false; sync(); return; } if (!composing && !(ev && ev.isComposing)) cleanField(); sync(); });
       lab.appendChild(t); lab.appendChild(inp); lab.appendChild(hint); box.appendChild(lab); inputs.push(inp);
     });
     // (Bot 4 sobre 84a49517) el servidor rechazó (422 fields_required): aviso junto a cada campo nombrado, foco en el primero; lo escrito queda.

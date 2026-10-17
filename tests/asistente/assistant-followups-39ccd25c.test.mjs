@@ -95,7 +95,7 @@ test('4) dinero: la regla de 39ccd25c no cambia (céntimos + palabra de precio);
 test('5) 8 dígitos sin DNI/documento/doc/identidad delante: «código ****1234» (Bot 4 sobre 39ccd25c); con DNI, «DNI ****»', () => {
   const e = A.redactFor(EMP);
   assert.equal(e('Escanee 77501234'), 'Escanee código ****1234'); assert.equal(A.redactModelOwner('Escanee 77501234'), 'Escanee código ****1234'); assert.equal(A.redactOwnerText('Escanee 77501234'), 'Escanee 77501234');
-  for (const [t, want] of [['DNI 12345678', 'DNI ****5678'], ['el cliente con DNI: 12345678', 'el cliente con DNI ****5678'], ['documento 12345678', 'documento DNI ****5678'], ['Doc: 12345678', 'Doc: DNI ****5678'], ['identidad 12345678', 'identidad DNI ****5678'],
+  for (const [t, want] of [['DNI 12345678', 'DNI ****5678'], ['el cliente con DNI: 12345678', 'el cliente con DNI ****5678'], ['documento 12345678', 'documento ****5678'], ['Doc: 12345678', 'Doc: ****5678'], ['identidad 12345678', 'identidad ****5678'], // (Bot 5 sobre 36f6ae51) sin repetir la etiqueta
     ['otro 87654321', 'otro código ****4321'], ['| Cliente | DNI |\n|---|---|\n| Ana | 12345678 |', '| Cliente | DNI |\n|---|---|\n| Ana | DNI ****5678 |']]) assert.equal(e(t), want, t);
   assert.equal(A.cardPrefix('F001-12345678 pedido código ****4321'), 'F001-12345678 pedido', 'la etiqueta neutra no queda suelta en la tarjeta');
   for (const t of ['Escanee 77501234 y luego DNI 12345678 del cliente', '| Cliente | DNI |\n|---|---|\n| Ana | 12345678 |\n| Luis | 87654321 |\nfin']) for (const s of [1, 2, 3, 5, 7, 13]) assert.equal(emit(A.redactFor(EMP), A.ownerHold, t, steps(t, s)).o, A.capReply(e(t)), s + ' ' + t);
