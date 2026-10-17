@@ -359,12 +359,13 @@ const T16_MASK = [
   ['Te paso los costos:\n\n- Galleta: S/ 1.80\n\n- Arroz: S/ 3.10', ['1.80', '3.10']], ['Te paso los costos:\n- PVP: S/ 2.50 (lo que pagué)', ['2.50']],
   ['Costos de compra\nGalleta\tS/ 1.80\nArroz\tS/ 3.10', ['1.80', '3.10']],
   // 17-10: con una columna del dueño en la misma tabla, «Precio» solo se tapa (antes se veía)
-  ['Te paso costo y precio:\n| Producto | Costo | Precio |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.20', '1.80']]];
+  ['Te paso costo y precio:\n| Producto | Costo | Precio |\n|---|---|---|\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.20', '1.80']],
+  // 17-10 (2): presentación del dueño sin negar justo antes: «Precio» solo se tapa
+  ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']]];
 const T16_SHOW = [
   ['No sé el costo. Precio S/ 2.50 y lo traje a S/ 1.80', ['2.50']], ['te sale a S/ 2.50', ['2.50']], ['El cliente pagó S/ 2.50', ['2.50']],
   ['Te paso los costos:\n| Producto | PVP (S/) | Precio de venta S/ | P. venta (S/) | **Venta** |\n|---|---|---|---|---|\n| Galleta | S/ 1.80 | S/ 1.90 | S/ 2.00 | S/ 2.10 |', ['1.80', '1.90', '2.00', '2.10']],
-  // 17-10: «Precio» solo es venta salvo que la misma tabla tenga una columna del dueño
-  ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
+  // 17-10: «Precio» solo es venta tras presentación negada (sin columna del dueño)
   ['No tengo el costo, esta es la lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']],
   ['Lista de hoy:\n- Galleta: S/ 1.80\n- Arroz: S/ 3.10', ['1.80', '3.10']], ['Te paso los costos:\n- Galleta: S/ 1.80\n- PVP: S/ 2.50', ['2.50']],
   ['Te paso los costos:\n- Galleta: S/ 1.80\n- Precio de venta S/ 2.60', ['2.60']], ['Te paso los costos:\n- Galleta: S/ 1.80\n\nListo, el precio de venta es S/ 5.00', ['5.00']],
@@ -418,7 +419,7 @@ const T17_SHOW = [
   ['Las compras de hoy fueron buenas, el arroz se vende a S/ 2.50', ['2.50']], ['El proveedor llegó tarde. Arroz a S/ 2.50', ['2.50']], ['Compré pan. Arroz S/ 2.50', []],
   ['Distribuidora Inversiones Lima vende Arroz a S/ 2.50', ['2.50']], ['Arroz Costeño a S/ 2.50', ['2.50']],
   ['El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos.\n\nPrecios de hoy:\n- Galleta S/ 1.80', ['1.80']],
-  ['El costo subió.\n\nLista de precios\n- Galleta S/ 1.80', ['1.80']], ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']]];
+  ['El costo subió.\n\nLista de precios\n- Galleta S/ 1.80', ['1.80']]];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('17) trozos de ' + n + ': monto al final de línea con dueño en los primeros 20 caracteres de la siguiente; títulos de compras/proveedor; «El Margen»; título de precios corta la presentación', () => {
     for (const [t, hide] of T17_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
@@ -433,3 +434,24 @@ test('17) retención: lista de 480 líneas de precios (un monto por línea) sin 
   // monto al final de línea: 20 caracteres con texto de la siguiente + lo que hace falta para decidir una frase que empieza ahí («lo que pagué», hasta 36)
   const eol = 'Precio S/ 1.80\n' + FILL(4000); const he = held(eol); assert.ok(he.max <= 80, 'monto al final de línea: ' + he.max); assert.ok(he.last <= 40);
 });
+
+// ---------- 18. «Precio» solo tras presentación del dueño sin negar; solo un título de VENTA tras línea en blanco corta la presentación ----------
+const T18_MASK = [
+  ['Te paso los costos:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos:\nProducto\tPrecio\nGalleta\tS/ 1.80', ['1.80']],
+  ['Te paso los costos.\n\nDetalle:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos.\n\nAquí va:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Te paso los costos.\n\nResumen:\n- Galleta S/ 1.80', ['1.80']], ['No sé el costo de todo. Te paso los costos:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Resumen de compras:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos, no se olviden:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['El costo no lo tengo. Te paso los costos:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos que tengo:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['El costo no lo tengo, pero esta es la lista:\n| Producto | Costo | Precio |\n| Galleta | S/ 1.20 | S/ 1.80 |', ['1.20', '1.80']]];
+const T18_SHOW = [
+  ['El costo subió.\n\nPrecios de hoy:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos.\n\nPrecios:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Te paso los costos.\n\nLista de precios\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['Te paso los costos.\n\nPVP\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Te paso los costos.\n\nPrecios de venta:\n- Galleta S/ 1.80', ['1.80']],
+  ['El costo no lo tengo, pero esta es la lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']], ['No tengo el costo, esta es la lista:\nProducto\tPrecio\nGalleta\tS/ 1.80', ['1.80']],
+  ['Aquí va la lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |', ['1.80']], ['El costo no lo sé, esta es la lista:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']], ['El costo lo desconozco. Lista:\n| Producto | Precio |\n| Galleta | S/ 1.80 |', ['1.80']],
+  ['Te paso los costos:\n| Producto | PVP | Precio de venta | P. venta | Venta |\n| Galleta | S/ 1.80 | S/ 1.90 | S/ 2.00 | S/ 2.10 |', ['1.80', '1.90', '2.00', '2.10']]];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('18) trozos de ' + n + ': «Precio» solo se tapa tras presentación del dueño sin negar; un título neutro tras línea en blanco no corta, uno de venta sí', () => {
+    for (const [t, hide] of T18_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, vs] of T18_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+  });
+}

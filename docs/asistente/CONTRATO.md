@@ -177,3 +177,12 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - **Título de precios corta la presentación**: una línea en blanco y luego un título propio («Precios de hoy:», «Precios:», «Lista de precios») corta la presentación del dueño anterior. Una columna «Precio» sola es de venta (visible), salvo que la MISMA tabla tenga una columna del dueño.
 - **Historial firmado**: el servidor ya no cree las marcas de rol que manda el cliente. Cada respuesta trae `turns` firmados con HMAC (ASSISTANT_CONFIRM_SECRET, sobre versión, clase, dispositivo/sesión, rol y texto). En pedidos de empleado solo vuelven al modelo los pares (usuario, asistente) firmados como empleado para ese mismo dispositivo. Los turnos sin firma, firmados como dueño, de otro dispositivo o alterados se descartan junto con su respuesta. Sin secreto, no viaja historial de empleado. Como segunda capa, los turnos con palabras del dueño se siguen cambiando por «[mensaje anterior omitido]».
 - **Cliente**: el chat vive solo en memoria. Al cambiar de rol (dueño→empleado) o al cerrar sesión se borran el historial y la interfaz.
+
+## Ajuste sobre 43a80dbc: «Precio» solo
+
+- Si una presentación del dueño SIN negar va justo antes de la tabla, una columna «Precio» sola se tapa: el modelo puede llamar «Precio» al costo. Solo las etiquetas de venta explícitas (PVP, P. venta, Precio de venta, Venta…) siguen visibles.
+- «Precio» solo queda visible cuando: no hay presentación del dueño; la presentación está cortada por una línea en blanco más un título de VENTA («Precios de hoy:», «Precios:», «Lista de precios», «PVP», «Precios de venta»); o la presentación está negada y la tabla no tiene columna del dueño.
+- La negación vale antes de la palabra («No tengo el costo, …») y también detrás, en la misma frase y a menos de 24 caracteres («El costo no lo tengo, pero esta es la lista:», «El costo no lo sé», «lo desconozco»). Si en la misma presentación hay otra frase del dueño sin negar, la presentación cuenta como NO negada.
+- Un título neutro tras la línea en blanco («Detalle:», «Aquí va:», «Resumen:») NO corta la presentación.
+- En las listas no cambia nada: un ítem con «Precio» solo bajo una presentación del dueño sigue tapado.
+- Velocidad (Bot 3): la llave HMAC se importa una vez por secreto, y mientras se espera el mismo monto no se relee su cabeza. No se aflojó ningún tapado.

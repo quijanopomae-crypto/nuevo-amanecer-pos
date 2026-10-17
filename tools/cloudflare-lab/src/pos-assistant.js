@@ -151,19 +151,22 @@ const SALE_CELL_RE = /^\s*(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?ve
 const isSaleCell = (c) => SALE_CELL_RE.test(String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
 // Encabezado de venta en una tabla con presentación del dueño (Bot 5 sobre 1c17310c): acepta «PVP (S/)», «Precio de venta S/», «P. venta (S/)»,
 // «**Venta**»…; nunca si nombra al dueño («Costo de venta», «Venta (costo)», «P. venta / costo»). «Precio» solo: venta SOLO si otra columna
-// «Precio» solo: venta, SALVO que la misma tabla tenga una columna del dueño (Costo, P. compra): ahí se tapa (pedido del 17-10, a prueba de fallas).
+// «Precio» solo tras una presentación del dueño NO negada: se tapa (el modelo puede llamar «Precio» al costo). Visible si la presentación está negada
+// y la tabla no tiene columna del dueño; sin presentación (o cortada por línea en blanco + título de venta) la tabla no entra aquí.
 const SALE_HDR_RE = /^(?:pvp|p\s*\.?\s*(?:de\s+)?venta|precio\s+(?:de\s+)?venta|venta|precio)$/;
 const normCell = (c) => String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function saleHeader(text, ownerCol, neg) {
   const t = normCell(text).replace(/\(?\s*(?:s\/\.?|soles|pen)\s*\)?/g, ' ').replace(/[()[\]:*_#]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t || OWNER_HEADER_RE.test(t) || !SALE_HDR_RE.test(t)) return false;
-  return t === 'precio' ? !ownerCol : true;
+  // solo se llama con presentación del dueño delante (sin cortar): «Precio» solo es venta si esa presentación está negada y la tabla no tiene columna del dueño
+  return t === 'precio' ? !ownerCol && !!neg : true;
 }
 const LIST_NUM_Y = /\d{1,3}[.)][ \t]/y;
 // Solo para PRESENTAR una tabla o lista (Bot 2 sobre 1c17310c): «Resumen de compras:», «Compras de hoy:», «Factura/Boleta del proveedor».
 // En el texto normal «compras» y «proveedor» NO son palabras del dueño.
 const INTRO_WORD_Y = new RegExp('(?:compras?|proveedor(?:es)?)' + NOT_LETTER, 'iy');
 // Título propio de precios tras una línea en blanco («Precios de hoy:», «Precios:», «Lista de precios»): corta la presentación del dueño.
+const NEG_AFTER_Y = new RegExp('(?:tengo|tenemos|s[eé]|sabemos|conozco|conocemos|desconozco|desconocemos)' + NOT_LETTER, 'iy');
 const SALE_TITLE_Y = new RegExp('(?:precios?|pvp)' + NOT_LETTER, 'iy');
 function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
@@ -207,7 +210,8 @@ function createAmountLayer(out) {
   let sent = { has: false, owner: false, neg: false, intro: false }, lineOwner = false, lineSale = false, lastBlank = false, ring = [], mode = null, lineStart = true, lineBegin = 0, lineDelim = false, lineAmt = false, lineHas = false, tbl = null;
   const endSentence = () => { if (sent.has) { ring.push(sent); if (ring.length > 3) ring.shift(); } sent = { has: false, owner: false, neg: false, intro: false }; };
   const introOn = () => ring.some((x) => x.owner || x.intro) || sent.owner || sent.intro;
-  const introNeg = () => ring.some((x) => x.neg) || sent.neg;
+  // negada solo si ninguna frase de la presentación nombra al dueño sin negación («El costo no lo tengo, pero esta es la lista:»)
+  const introNeg = () => !(ring.some((x) => x.pos || x.intro) || sent.pos || sent.intro);
   // texto de una celda de encabezado: solo si es corta (<= 48); una más larga no cuenta como venta (igual en partes y entero)
   const cellText = (from, to) => (to - from <= 48 && from >= base ? buf.slice(from - base, to - base) : '');
   const ch = (i) => (i >= base ? buf[i - base] : undefined);
@@ -229,6 +233,9 @@ function createAmountLayer(out) {
   const sameEnd = (i) => { let j = i - 1; while (j >= Math.max(0, i - 32) && (ch(j) === ' ' || ch(j) === '\t' || ch(j) === '\r')) j--; const p = j >= 0 ? ch(j) : undefined; return p === '.' || p === '!' || p === '?' || p === '\n'; };
   // ¿empieza frase o línea en i? (solo espacios desde el último . ! ? o salto de línea, o el comienzo del texto)
   const sentStart = (i) => { let j = i - 1; while (j >= Math.max(0, i - 32) && (ch(j) === ' ' || ch(j) === '\t' || ch(j) === '\r')) j--; if (j < 0) return true; const p = ch(j); return p === '.' || p === '!' || p === '?' || p === '\n'; };
+  const postNeg = (i, n) => { if (/[.!?\n;]/.test(buf.slice(sent.pe - base, i - base))) return false; const w = buf.slice(i - base, i + n - base).toLowerCase();
+    if (w.startsWith('descono')) return true; const b = buf.slice(Math.max(base, i - 12) - base, i - base);
+    return w[0] === 's' && w[1] !== 'é' && w[1] !== 'É' ? /(?:^|[^a-záéíóúñ])no\s+(?:lo|la|los|las)\s+$/i.test(b) : /(?:^|[^a-záéíóúñ])no\s+(?:(?:lo|la|los|las)\s+)?$/i.test(b); };
   const negPrice = (i) => { NEG_PRICE_Y.lastIndex = i - base; const m = NEG_PRICE_Y.exec(buf); return m && (m[1] === undefined || sentStart(i)) ? m[0].length : 0; };
   const leadOk = (i) => /(?:^|[^a-záéíóúñ])(?:a|por|en)\s+$/i.test(buf.slice(Math.max(0, i - 6 - base), i - base));
   const amountStart = (i) => { const c = ch(i), p = ch(i - 1); if (isDigit(p) || isLetter(p)) return false;
@@ -240,7 +247,11 @@ function createAmountLayer(out) {
     if (c === 'U' || c === 'u') return n1 === undefined || ((n1 === 'S' || n1 === 's') && (n2 === undefined || n2 === '$'));
     return false; };
   // un número espera solo hasta tenerlo entero y 16 caracteres más (unidad, soles, %, «por ciento»)
-  const numNeed = (i) => { let e = i + sticky(NUM_HEAD_Y, i); while (e < end() && /[\d.,]/.test(ch(e))) e++; return e >= end() ? e + 1 : e + 16; };
+  // (Bot 3) mientras se espera el mismo monto no se vuelve a leer desde el inicio: la cabeza («S/ », «US$ -», máx. 5) se guarda cuando ya hay
+  // 6+ caracteres detrás, y los dígitos siguen desde donde quedaron. El resultado es el mismo que leerlo todo de nuevo.
+  let nm = { i: -1, e: 0 };
+  const numNeed = (i) => { let e; if (nm.i === i) e = nm.e; else { e = i + sticky(NUM_HEAD_Y, i); if (end() - i > 6) nm = { i, e }; }
+    while (e < end() && /[\d.,]/.test(ch(e))) e++; if (nm.i === i) nm.e = e; return e >= end() ? e + 1 : e + 16; };
   // Monto sin palabra del dueño delante (Bot 3): espera hasta que termine la frase (. ; ! ? salto de línea). Si en la frase aparece
   // una palabra del dueño, se tapa; si aparece una etiqueta de venta o termina la frase, sale. Tope OWNER_RETRO caracteres: si se llega
   // al tope sin terminar la frase, se tapa (a prueba de fallas).
@@ -313,15 +324,17 @@ function createAmountLayer(out) {
         if (!final && end() < wordNeed(k)) break;
         let n;
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
-        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k }; sent.owner = true; lineOwner = true; if (neg) sent.neg = true;
+        // negación DETRÁS de la palabra del dueño («El costo no lo tengo, pero esta es la lista:»): se mira hacia atrás al llegar al verbo, sin retener nada
+        if (sent.pos && sent.pe != null && k - sent.pe <= 24 && (n = sticky(NEG_AFTER_Y, k)) && postNeg(k, n)) { sent.pos--; sent.pe = null; }
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { if (row.cells === 0) row.fo = true; const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base)); if (neg) negZone = { left: 2, at: k }; sent.owner = true; lineOwner = true; if (neg) sent.neg = true; else { sent.pos = (sent.pos || 0) + 1; sent.pe = k + n; }
           ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n, at: k }; pass(k + n); continue; }
-        if ((n = sticky(BUY_WORD_Y, k))) { sent.owner = true; lineOwner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k))) { sent.owner = true; sent.pos = (sent.pos || 0) + 1; sent.pe = k + n; lineOwner = true; ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40), at: k } : { limit: k + n + 40, lead: true, at: k }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
         // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
+        if (sticky(SALE_TITLE_Y, k)) lineSale = true; // antes de la etiqueta de venta: «PVP» solo en su línea también es título
         if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true, at: k }; pass(k + n); continue; }
         if (negZone && !(ctx && !ctx.sale && !ctx.neg) && (n = negPrice(k))) { ctx = { limit: k + n, sale: true, at: k, np: true }; pass(k + n); continue; } // el monto va justo detrás
         if (sticky(INTRO_WORD_Y, k)) sent.intro = true; // solo cuenta como presentación de tabla/lista
-        if (sticky(SALE_TITLE_Y, k)) lineSale = true;
         if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
         if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
       }
@@ -399,7 +412,7 @@ function createAmountLayer(out) {
     if (j > rel) { out(buf.slice(rel - base, j - base)); rel = j; }
     const keep = Math.min(k, rel) - 64; if (keep > base) { buf = buf.slice(keep - base); base = keep; }
   };
-  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
+  return { push(str) { buf += str; run(false); }, flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
     sent = { has: false, owner: false, neg: false, intro: false }; lineOwner = false; lineSale = false; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 function createOwnerPipeline(out) { const amounts = createAmountLayer(out), tables = createTableLayer((x) => amounts.push(x));
@@ -985,8 +998,11 @@ export async function verifiedEmployeeHistory(history, secret, principal) {
   }
   return out;
 }
+// (Bot 3) la llave HMAC se importa una vez por secreto, no en cada turno firmado o verificado
+let hmacKeyCache = { secret: null, key: null };
 async function hmac(secret, data) {
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  if (hmacKeyCache.secret !== secret) hmacKeyCache = { secret, key: crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']) };
+  const key = await hmacKeyCache.key;
   return b64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(data))));
 }
 function sameText(a, b) { a = String(a); b = String(b); if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
