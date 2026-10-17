@@ -743,3 +743,58 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
 ### Expectativas cambiadas a propósito (enmascarar ante la duda)
 - Tapados ahora: «clave 2.5 kg» (antes visible), «clave de la caja 4521 kg», «clave del precio: S/ 4521», «la clave del costo es S/ 1250», «clave del monto PEN 3000», «clave del costo S/ 1250», «La clave para vender es el precio S/ 2500», «La clave fue vender 1.200 unidades», «La clave para la caja chica son 1200 soles», «la clave de la promo es 2x1 hasta 1.500 piezas». «Codigo del cliente: 12345678» → «código ****5678» (sigue tapado).
 - Pruebas actualizadas: `assistant-followups-3ee80c18`, `-5646a4c9`, `-58200f60`, `-d72b7601`. Nuevas: `assistant-followups-6e0b3c5d.test.mjs` (13 pruebas; todas fallan contra 6e0b3c5d).
+
+## Ampliación sobre 39ccd25c (Bot 2 INFORME 39ccd25c, Bot 5 ev-39ccd25c, Bot 3 asistente-39ccd25c, Bot 4)
+
+### Valor entre comillas o envoltorios (Bot 2 FALLA, Bot 5 1)
+- Tras una etiqueta de credencial (pin/clave/contraseña/password + enlace y hasta 4 palabras + «:»/«=»/es/era/fue + artículo), una comilla de
+  cualquier tipo (" ' « » “ ” ‘ ’ ‹ › „ ‚, también sin cerrar o de otro tipo) o un envoltorio (`**` `__` `_` `` ` `` ```` ``` ```` `(` `[` `~~`) abre una
+  ventana de 40 caracteres. Cerrado dentro de la ventana: se tapa lo de dentro y se conserva el envoltorio («"[oculto]"», «**[oculto]**»).
+- Sin cerrar: se tapa desde la primera palabra hasta lo primero que llegue entre `.` `;` `!` `?` (seguido de espacio o fin), salto de línea o 40
+  caracteres. Nunca hasta el final del texto. «la clave es «perro azul» → «la clave es «[oculto]».
+- Envoltorios sin comilla siguen la regla de pinAlpha (palabra fuerte o «negocio» con «:»/mayúscula; artículo solo con «:» o palabra fuerte).
+- Un monto envuelto («**S/ 4.50**», «`12.50`», «**4.50 soles**») decide la regla de dinero igual que sin envoltorio (ver abajo).
+- La regla general de la etiqueta no vuelve a tapar un valor ya tapado dentro de su envoltorio (si no, el resultado dependía de lo que venía
+  después y el texto en partes no podía soltarse).
+- Mismo criterio en las 4 vías (empleado, dueño, modelo empleado, modelo dueño). redactModelOwner usa ahora el camino incremental (antes el de
+  retención legada, que daba diferencias en «clave» + espacios).
+
+### Palabra de enlace sola (Bot 4, INFO)
+- «del», «para», «que», «en»… solos tras la etiqueta nunca se tapan: «La clave del negocio en 2024 fue el arroz» queda igual (antes «La clave
+  [oculto] negocio»; solo se tapaba esa palabra y lo que seguía quedaba igual a la vista). El valor real sí: «la clave para Tortuga22» → «la clave
+  para [oculto]», «clave de tortuga» → «clave de [oculto]».
+
+### Espacios (Bot 5)
+- Una racha de más de 160 espacios tras la etiqueta se junta en uno antes de las reglas del PIN (regla ya existente): «clave» + 200 espacios +
+  «4321» → «clave [oculto]». La ventana de la etiqueta NO se suelta por los espacios.
+
+### Dinero (decisión final: sin cambios)
+- La regla de 39ccd25c queda igual. «la clave es precio S/ 43.21» → «la clave es [oculto] S/ 43.21» (el monto sigue visible, como en 39ccd25c). De los 12 montos del dueño de Bot 2, 9 visibles (igual que
+  39ccd25c), también envueltos en `**` y `` ` ``.
+
+### Etiqueta neutra para 8 dígitos (Bot 4)
+- 8 dígitos sin DNI/documento/doc/identidad delante → «código ****1234» (también «Escanee 77501234» → «Escanee código ****1234» en las vías de empleado y del modelo). Con
+  DNI/documento/doc/identidad delante o bajo una columna así → «DNI ****1234».
+
+### Streaming
+- Cada etiqueta o comilla abre su propia ventana; el texto en partes es igual al texto entero en todos los cortes (4 vías, 492 740 cortes, 0
+  diferencias). Retención con la etiqueta o la comilla repetida: ≤ ~130 caracteres (máx. medido 132), también con 100 KB. Se prueban hasta 3
+  cortes candidatos (SHIELD_TRIES) para no quedar en fase con un patrón que se repite. Los puntitos de «escribiendo» siguen visibles mientras se
+  retiene texto (doneBubble solo al terminar el flujo).
+
+### Campo de la tarjeta (Bots 4/5)
+- Campo lleno = como maxlength nativo: escribir no inserta nada y el valor queda igual; lo que no cabe se quita de lo recién escrito (antes del
+  cursor), no del final. Sin contador N/80 (opcional, no hecho).
+- Valor puesto por script sin evento: al tocar «Confirmar» se revisa (recheck); si cambió, se limpia a la vista y ese toque no manda nada (lo visible
+  = lo enviado).
+
+### Confirmar con señal débil (Bot 3, 7a)
+- Cada intento arma su propio límite (12 s) ANTES de llamar a fetch y lo quita solo en finally. Además un reloj de pared (Date.now) revisa el límite
+  cada segundo y al volver la pantalla o la red (visibilitychange, focus, pageshow, online): si el navegador demora el temporizador largo, el intento
+  se corta igual. 2 intentos, 600 ms entre ellos; «Reconectando…» a ~12,6 s, «Sin conexión» a ~24,6 s.
+
+### Pruebas
+- Nuevas: `assistant-followups-39ccd25c.test.mjs` (11) y `assistant-confirm-timeout-39ccd25c.test.mjs` (5, reloj falso; incluye 40 corridas
+  simuladas de 7a). Contra 39ccd25c fallan 14 de 16 (pasan 3b, costo lineal, y 7, puntitos, que ya estaban bien).
+- Actualizadas (etiqueta «código»): `assistant-followups-25ffde10`, `-6280deae`, `-6e0b3c5d`, `assistant-worker`. `assistant-live-access`: el patrón
+  del doble toque admite la revisión síncrona de campos.

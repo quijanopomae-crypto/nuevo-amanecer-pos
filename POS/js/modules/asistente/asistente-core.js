@@ -52,7 +52,7 @@
   function needFields(doc, p, onChange) {
     var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
     if (!names.length) return null;
-    var state = {}, stale = {}, inputs = [], hints = {}, byName = {}, box = doc.createElement('div'); box.className = 'na-asst-need-box';
+    var state = {}, stale = {}, inputs = [], hints = {}, byName = {}, checks = [], box = doc.createElement('div'); box.className = 'na-asst-need-box';
     names.forEach(function (n, i) {
       var lab = doc.createElement('label'); lab.className = 'na-asst-need-l';
       var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = NEED_LABEL[n];
@@ -69,20 +69,30 @@
       // y el cursor/selección retrocede lo quitado antes de él (pegar deja el cursor al final de lo pegado). Durante una composición (IME,
       // teclado con acentos) no se toca; se limpia en compositionend. Solo si cambia: escribir normal no mueve nada.
       var composing = false;
-      function cleanField() { var raw = String(inp.value == null ? '' : inp.value), c = inputClean(raw).slice(0, NEED_MAX[n]); if (c === raw) return false;
-        var s0 = inp.selectionStart, e0 = inp.selectionEnd, at = function (k) { return typeof k === 'number' ? Math.min(c.length, inputClean(raw.slice(0, k)).length) : null; };
-        var s1 = at(s0), e1 = at(e0); inp.value = c;
+      function cleanField() { var raw = String(inp.value == null ? '' : inp.value), c0 = inputClean(raw), max = NEED_MAX[n], c = c0;
+        var s0 = inp.selectionStart, e0 = inp.selectionEnd, at = function (k) { return typeof k === 'number' ? Math.min(c0.length, inputClean(raw.slice(0, k)).length) : null; };
+        var s1 = at(s0), e1 = at(e0);
+        // (Bot 4 sobre 39ccd25c) como maxlength nativo: lo que no cabe se quita de lo RECIÉN escrito (justo antes del cursor); el resto del campo
+        // queda igual (antes se recortaba el final: escribir en medio de un campo lleno borraba el último carácter sin avisar)
+        if (c0.length > max) { var cut = c0.length - max;
+          if (e1 != null && e1 >= cut) { c = c0.slice(0, e1 - cut) + c0.slice(e1); e1 -= cut; s1 = Math.min(s1, e1); } else { c = c0.slice(0, max); if (s1 != null) { s1 = Math.min(s1, max); e1 = e1 == null ? null : Math.min(e1, max); } } }
+        if (c === raw) return false;
+        inp.value = c;
         if (s1 != null && typeof inp.setSelectionRange === 'function') { try { inp.setSelectionRange(s1, e1 == null ? s1 : Math.max(s1, e1)); } catch (_) {} }
         return true; }
+      var lastRaw = null;
       function sync() {
         // (Bots 4/5 sobre 6e0b3c5d) mientras el campo MUESTRA algo distinto de lo que se mandaría (composición abierta o colgada sin compositionend,
         // con U+202E crudo a la vista), no cuenta: «Confirmar» apagado hasta que lo visible sea lo limpio
-        var raw = String(inp.value == null ? '' : inp.value), v = normManual(raw).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre) && inputClean(raw) === raw && raw.length <= NEED_MAX[n]; state[n] = ok ? v : '';
+        var raw = String(inp.value == null ? '' : inp.value); lastRaw = raw; var v = normManual(raw).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre) && inputClean(raw) === raw && raw.length <= NEED_MAX[n]; state[n] = ok ? v : '';
         if (stale[n] != null && v !== stale[n]) delete stale[n]; // (Bot 4 sobre 58200f60) tras un 422 cuenta recién cuando cambia
         ok = ok && stale[n] == null;
         hint.textContent = 'Complete este dato';
         inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); setCls(inp, 'ok', ok); hint.hidden = ok; // (Bot 4) classList: na-asst-ltr se queda
         if (onChange) onChange(); }
+      // (Bot 5 sobre 39ccd25c) valor cambiado SIN evento (script, extensión): al pulsar «Confirmar» se vuelve a mirar; si cambió se limpia A LA
+      // VISTA, se recalcula y ese toque no manda nada (lo que se ve = lo que se mandaría en el siguiente)
+      checks.push(function () { var raw = String(inp.value == null ? '' : inp.value); if (raw === lastRaw) return false; if (!composing) cleanField(); sync(); return true; });
       inp.addEventListener('compositionstart', function () { composing = true; });
       inp.addEventListener('compositionend', function () { composing = false; cleanField(); sync(); });
       // (Bots 4/5 sobre 6e0b3c5d) composición que termina sin compositionend: al salir del campo se suelta y se limpia
@@ -93,7 +103,11 @@
       // Escribir normal sigue por 'input' (solo se reescribe si cambia); durante una composición no se toca nada.
       var handled = false;
       inp.addEventListener('beforeinput', function (ev) {
-        var t = ev && ev.inputType; if (composing || (ev && ev.isComposing) || (t !== 'insertFromPaste' && t !== 'insertFromDrop' && t !== 'insertReplacementText')) return;
+        var t = ev && ev.inputType;
+        // (Bot 4 sobre 39ccd25c) campo lleno: escribir no inserta nada y el valor queda igual (como maxlength nativo)
+        if (t === 'insertText' && !composing && !(ev && ev.isComposing) && ev.data) { var cv = String(inp.value == null ? '' : inp.value), a = typeof inp.selectionStart === 'number' ? inp.selectionStart : cv.length, b = typeof inp.selectionEnd === 'number' ? inp.selectionEnd : a;
+          if (cv.length - (b - a) >= NEED_MAX[n] && typeof ev.preventDefault === 'function') ev.preventDefault(); return; }
+        if (composing || (ev && ev.isComposing) || (t !== 'insertFromPaste' && t !== 'insertFromDrop' && t !== 'insertReplacementText')) return;
         var dt = ev.dataTransfer, raw = ev.data != null ? String(ev.data) : (dt && typeof dt.getData === 'function' ? String(dt.getData('text/plain') || '') : null);
         if (raw == null) return;
         var cur = String(inp.value == null ? '' : inp.value), s0 = typeof inp.selectionStart === 'number' ? inp.selectionStart : cur.length, e0 = typeof inp.selectionEnd === 'number' ? inp.selectionEnd : s0;
@@ -125,8 +139,9 @@
       if (first) { try { first.focus({ preventScroll: false }); } catch (_) {} }
       return other;
     }
+    function recheck() { var changed = false; checks.forEach(function (f) { if (f()) changed = true; }); return changed; }
     function values() { var o = {}; names.forEach(function (n) { if (state[n]) o[n] = state[n]; }); return o; }
-    return { el: box, state: state, names: names.slice(), first: inputs[0], inputs: inputs, flag: flag, values: values, missing: function () { return names.filter(function (n) { return !state[n] || stale[n] != null; }).length; } };
+    return { el: box, state: state, names: names.slice(), first: inputs[0], inputs: inputs, flag: flag, values: values, recheck: recheck, missing: function () { return names.filter(function (n) { return !state[n] || stale[n] != null; }).length; } };
   }
   var needSeq = 0;
   // (Bot 4 sobre 5646a4c9) poner/quitar una clase sin pisar las demás (na-asst-need, na-asst-ltr de ltrIsolate)
@@ -310,16 +325,28 @@
   // 4) recién entonces llama a las funciones existentes del POS. Un doble toque comparte la misma promesa.
   // Pedido con límite de tiempo (solo para el asistente; no cambia NA_ROLES.api del resto del POS).
   // Si no responde en ms, se aborta y lanza un error con timeout=true.
+  // (Bot 3 sobre 39ccd25c, 7a) cada intento arma SU propio límite ANTES de llamar a fetch y lo quita solo en finally. Además del temporizador,
+  // un reloj de pared (Date.now) revisa el límite cada segundo y al volver la pantalla/la red (visibilitychange, focus, pageshow, online):
+  // si el navegador demoró el temporizador largo (pestaña en segundo plano, ahorro de batería), el intento se corta igual al pasar ms.
+  var REQ_WAKE = ['visibilitychange', 'focus', 'pageshow', 'online'];
   async function request(fetchImpl, url, init, ms) {
-    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, timer = null, timedOut = false;
+    var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, timer = null, tick = null, timedOut = false, fire = null;
+    var t0 = Date.now(), ev = root && typeof root.addEventListener === 'function' && typeof root.removeEventListener === 'function' ? root : null;
     var opts = Object.assign({}, init || {}); if (ctl) opts.signal = ctl.signal;
-    var guard = new Promise(function (_, reject) { timer = setTimeout(function () { timedOut = true; if (ctl) ctl.abort(); var e = new Error('timeout'); e.timeout = true; reject(e); }, ms); });
+    var guard = new Promise(function (_, reject) {
+      fire = function () { if (timedOut) return; timedOut = true; if (ctl) { try { ctl.abort(); } catch (_) {} } var e = new Error('timeout'); e.timeout = true; reject(e); };
+      timer = setTimeout(fire, ms);
+      tick = setInterval(function () { if (Date.now() - t0 >= ms) fire(); }, Math.max(50, Math.min(1000, ms)));
+    });
+    guard.catch(function () {});
+    function wake() { if (Date.now() - t0 >= ms) fire(); }
+    if (ev) REQ_WAKE.forEach(function (n) { try { ev.addEventListener(n, wake); } catch (_) {} });
     try {
       var r = await Promise.race([fetchImpl(url, opts), guard]);
       var data = {}; try { data = await Promise.race([r.json(), guard]); } catch (e) { if (e && e.timeout) throw e; data = {}; }
       return { status: r.status, ok: !!r.ok, data: data || {} };
     } catch (e) { if (timedOut || (e && e.name === 'AbortError')) { var t = new Error('timeout'); t.timeout = true; throw t; } throw e; }
-    finally { clearTimeout(timer); }
+    finally { clearTimeout(timer); clearInterval(tick); if (ev) REQ_WAKE.forEach(function (n) { try { ev.removeEventListener(n, wake); } catch (_) {} }); }
   }
   // ---------- Respuesta en partes (chat) ----------
   // Tiempos (Bot 3): primer trozo ~10 s (si no llega nada, «Reintentar»); después, 30 s contados desde el ÚLTIMO trozo, no desde el inicio.

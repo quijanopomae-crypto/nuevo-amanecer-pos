@@ -525,6 +525,7 @@
     if (left && p.needsConfirm) { tick(); timer = setInterval(function () { if (c.dataset.st !== 'pending') { clearInterval(timer); return; } tick(); }, 1000); }
     if (ok) ok.onclick = async function () {
       if (c.dataset.st !== 'pending') return;
+      if (need && need.recheck && need.recheck()) { syncOk(); return; } // (Bot 5 sobre 39ccd25c) un campo cambiado sin evento: se limpia a la vista y no se manda
       ok.disabled = true; no.disabled = true; ok.textContent = gate.locked && gate.locked(key) ? C.RECONNECT_MSG : 'Guardando…'; setState('concentrado');
       lockFields(true); // (Bots 3/4/5 sobre d72b7601) nada se edita mientras se confirma ni después de un corte
       if (again) again.disabled = true;
