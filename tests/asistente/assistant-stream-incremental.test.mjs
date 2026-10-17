@@ -229,3 +229,38 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     for (const t of BODEGA_OK) { assert.equal(redactOwnerData(t), t, t); assert.equal(stream(t, EMP, n).text, t, n + ': ' + t); }
   });
 }
+
+// ---------- 12. Bot 5 sobre f6061e85 ----------
+const NAMES = ['Arroz Costeño 5 kg', 'Galletas Costa', 'Margarina Primor', 'Leche Gloria', 'Azúcar rubia', 'Aceite Primor'];
+const rows = (n) => Array.from({ length: n }, (_, i) => '| ' + (i < 2 ? NAMES[i] : NAMES[i % NAMES.length] + ' ' + i) + ' | S/ ' + (1 + (i % 9)) + '.50 |').join('\n');
+const LIST_WITH_HEAD = '| Producto | Precio |\n|---|---|\n' + rows(480);
+const LIST_NO_HEAD = rows(480);
+const LIST_TAB = 'Producto\tPrecio\n' + Array.from({ length: 480 }, (_, i) => (i < 2 ? NAMES[i] : NAMES[i % 6] + ' ' + i) + '\tS/ 2.50').join('\n');
+// Sin el tope de 1200 del chat: la lista entera pasa por el mismo filtro (el texto en partes y el texto completo).
+function streamBig(text, role, n) { const out = []; const e = createTextEmitter((d) => out.push(d), 1e6, redactFor(role)); const marks = [];
+  for (let i = 0; i < text.length; i += n) { e.push(text.slice(i, i + n)); marks.push([i + n, out.filter((d) => d.t).map((d) => d.t).join('').length]); }
+  e.flush(); return { text: out.filter((d) => d.t).map((d) => d.t).join(''), marks }; }
+const OWNER_TABLE = '| Producto | Costo | P. compra | Inversión | Precio |\n|---|---|---|---|---|\n| Arroz Costeño | 3.00 | 3.10 | 300 | S/ 4.20 |\n| Galletas Costa | 1.00 | 1.10 | 50 | S/ 1.50 |';
+const B5_MASK = ['costo, se vende a S/ 1.80', 'costo PVP S/ 1.80', 'Costo: PVP S/ 1.80', 'el costo, precio de venta S/ 1.80',
+  'No tengo el costo exacto, pero fue S/ 1.80', 'No sé el costo de hoy; ayer fue S/ 1.80', 'No hay costo registrado, S/ 1.80', 'El costo. S/ 1.80',
+  'El costo de este producto, que es el arroz extra superior de la marca que siempre traemos de Lima, es S/ 1.80',
+  'Me costó, según la boleta del proveedor que vino el martes en la tarde con todo el pedido, S/ 1.80 la unidad'];
+const B5_SHOW = ['El costo no lo tengo, pero el precio de venta es S/ 2.50', 'No tengo el costo. Hay 24 unidades a S/ 2.50', 'No sé el costo.\nEl precio es S/ 2.50',
+  'Desconozco el margen. El precio es S/ 2.50.', 'Sin dato de costo.\nPrecio S/ 2.50', 'El costo es S/ 1.80. Se vende a S/ 2.50', 'costo S/ 1.80, PVP S/ 2.50'];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('12) trozos de ' + n + ': lista de 480 filas con «Arroz Costeño»/«Galletas Costa» intacta (con y sin encabezado, tabulador); columnas Costo, P. compra, Inversión tapadas', () => {
+    for (const t of [LIST_WITH_HEAD, LIST_NO_HEAD, LIST_TAB]) { assert.equal(redactOwnerData(t), t); assert.equal(streamBig(t, EMP, n).text, t, n + ': lista'); }
+    const want = redactOwnerData(OWNER_TABLE);
+    assert.ok(!/3\.00|3\.10|\b300\b|1\.00|1\.10|\| 50 \|/.test(want) && want.includes('S/ 4.20') && want.includes('Arroz Costeño') && want.includes('Galletas Costa'), want);
+    assert.equal(stream(OWNER_TABLE, EMP, n).text, want);
+  });
+  test('12) trozos de ' + n + ': etiqueta de venta pegada a la palabra del dueño no deja ver; negación cierra al fin de frase (no con «;»); monto a >60 en la misma frase se tapa', () => {
+    for (const t of B5_MASK) { const w = redactOwnerData(t); assert.ok(!w.includes('1.80') && w.includes('[dato del dueño]'), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
+    for (const t of B5_SHOW) { const w = redactOwnerData(t); assert.ok(w.includes('2.50'), t + ' -> ' + w); assert.ok(!w.includes('1.80'), t); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
+  });
+}
+test('12) la lista de 480 filas sale rápido y en partes (no espera la tabla entera)', () => {
+  const t0 = performance.now(); const s = streamBig(LIST_WITH_HEAD, EMP, 48); const ms = performance.now() - t0;
+  assert.equal(s.text, LIST_WITH_HEAD); assert.ok(ms < 2000, ms.toFixed(0) + ' ms');
+  const firstAt = s.marks.find(([, out]) => out > 0)[0]; assert.ok(firstAt < 200, 'primer trozo a los ' + firstAt);
+});

@@ -123,6 +123,9 @@ const SALE_STOP = '(?<!(?:\\bsin|\\bno|\\bni)\\s+(?:es\\s+(?:el\\s+)?)?)(?:pvp' 
 const STOP_Y = new RegExp('(?:' + SALE_STOP + ')', 'iy');
 const OWNER_WORD_Y = new RegExp(OWNER_WORD, 'iy'), BUY_WORD_Y = new RegExp(BUY_WORD, 'iy');
 const OWNER_MODIFIER = /^(?:brut[oa]s?|net[oa]s?|total(?:es)?|unitari[oa]s?|mensual(?:es)?|anual(?:es)?|real(?:es)?|estimad[oa]s?)$/i;
+// Palabra del dueño NEGADA («No tengo el costo», «No sé el costo», «sin dato de costo», «desconozco el margen»): la ventana se cierra al
+// terminar la frase (. ! ? salto de línea; el «;» no la cierra). Dentro de la misma frase el monto se sigue tapando.
+const NEG_BEFORE = /(?:^|[^a-záéíóúñ])(?:no\s+(?:lo\s+|la\s+|los\s+|las\s+)?(?:tengo|tenemos|s[eé]|sabemos|hay|conozco|conocemos)|sin\s+datos?|desconozco|desconocemos)(?:\s+(?:el|la|los|las|de|del|un|una|su|mi|ese|esa|este|esta|dato|datos))*\s+$/i;
 const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
 // Palabras con las que puede empezar una frase de varias palabras: para decidirlas se esperan hasta 36 caracteres.
 const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|me|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
@@ -130,19 +133,28 @@ const isLetter = (c) => !!c && /[a-záéíóúñü]/i.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
 export const OWNER_DATA_LABEL = '[dato del dueño]';
 export const OWNER_RETRO = 160;
-const OWNER_HEADER_RE = /cost|\bcto\b|invers|\bc\s*\.?\s*unit|\bp(?:r|rec|recio)?\s*\.?\s*(?:de\s*)?compra|proveedor|\bprov\b|margen|ganancia|utilidad/;
+// Palabra entera (sin tildes): «Arroz Costeño», «Galletas Costa» no son encabezados (Bot 5, lista de 480 filas).
+const OWNER_HEADER_RE = /\b(?:costos?|cost|cto|c\s*\.?\s*unit|p(?:r|rec|recio)?\s*\.?\s*(?:de\s*)?compra|proveedor(?:es)?|prov|margen(?:es)?|ganancias?|utilidad(?:es)?|inversion(?:es)?|invertido)\b/;
 const OWNER_HEADER = { test: (c) => OWNER_HEADER_RE.test(String(c).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')) };
-function tableLine(full, st) { // una línea completa de tabla (la fila separadora --- queda)
+// Una línea completa de tabla. Solo la fila de ENCABEZADO decide las columnas del dueño: la primera fila de la tabla, o la fila justo
+// antes de la separadora |---| (Bot 5: una fila de datos con «Costo» en el nombre ya no vuelve encabezado al resto).
+const SEP_CELL = /^\s*:?-{2,}:?\s*$/;
+function headerCols(cells) { const idx = cells.map((c, n) => (OWNER_HEADER.test(c) ? n : -1)).filter((n) => n >= 0); return idx.length && cells.filter((c) => c.trim()).length >= 2 ? idx : null; }
+function tableLine(full, st) {
   const d = full.includes('|') ? '|' : full.includes('\t') ? '\t' : null;
-  if (!d || d !== (st.sep || d)) { st.cols = null; st.sep = null; if (!d) return null; }
-  const cells = full.split(d);
-  if (!st.cols) { const idx = cells.map((c, n) => (OWNER_HEADER.test(c) ? n : -1)).filter((n) => n >= 0); if (idx.length && cells.filter((c) => c.trim()).length >= 2) { st.cols = idx; st.sep = d; } return null; }
+  if (!d || (st.sep && d !== st.sep)) { st.cols = null; st.sep = null; st.rows = 0; st.prev = null; if (!d) return null; }
+  const cells = full.split(d); st.sep = d; st.rows = (st.rows || 0) + 1;
+  const isSep = d === '|' && cells.some((c) => c.trim()) && cells.every((c) => !c.trim() || SEP_CELL.test(c));
+  if (isSep) { if (!st.cols && st.prev && st.rows === st.prevRow + 1) st.cols = headerCols(st.prev); st.prev = null; return null; }
+  if (st.rows === 1) { st.cols = headerCols(cells); st.prev = cells; st.prevRow = 1; return null; }
+  st.prev = cells; st.prevRow = st.rows;
+  if (!st.cols) return null;
   let changed = false;
-  for (const n of st.cols) { if (n < cells.length && cells[n].trim() && !/^\s*:?-{2,}:?\s*$/.test(cells[n])) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
+  for (const n of st.cols) { if (n < cells.length && cells[n].trim()) { cells[n] = (d === '|' ? ' ' : '') + OWNER_DATA_LABEL + (d === '|' ? ' ' : ''); changed = true; } }
   return changed ? cells.join(d) : null;
 }
 function createTableLayer(out) {
-  const st = { cols: null, sep: null }; let line = '', holding = false;
+  const st = { cols: null, sep: null, rows: 0, prev: null, prevRow: 0 }; let line = '', holding = false;
   return {
     push(txt) { const s = txt;
       for (let i = 0; i < s.length;) {
@@ -154,7 +166,7 @@ function createTableLayer(out) {
         line = '';
       }
     },
-    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; }
+    flush() { if (holding) { const r = tableLine(line, st); out(r ?? line); } holding = false; line = ''; st.cols = null; st.sep = null; st.rows = 0; st.prev = null; st.prevRow = 0; }
   };
 }
 // Montos y palabras del dueño, en partes. out(texto). Lo único que espera es un monto (o lo que puede serlo) mientras se decide.
@@ -169,6 +181,12 @@ function createAmountLayer(out) {
   // ¿cuánto texto hace falta para decidir la palabra que empieza en i?
   const wordNeed = (i) => { let e = i; while (e < end() && isLetter(ch(e))) e++; if (e >= end()) return e + 1;
     return PHRASE_START.test(buf.slice(i - base, e - base)) ? i + 36 : e + 2; };
+  // Etiqueta de venta «pegada» a la palabra del dueño: hasta 3 palabras entre medio, en la misma frase (sin . ! ? ni salto de línea)
+  // y sin negación («Costo desconocido, P. venta S/ 2.50» sí deja ver).
+  const nearOwner = (i) => { if (!ctx || ctx.sale || ctx.neg || ctx.we == null || i - ctx.we > 60) return false;
+    const gap = buf.slice(ctx.we - base, i - base);
+    if (/[!?\n]|\.(?!\d)/.test(gap) || /(?:^|[^a-záéíóúñü])(?:no|ni|sin|desconocid[oa]s?|pendientes?)(?![a-záéíóúñü])/i.test(gap)) return false;
+    return (gap.match(/[a-záéíóúñü0-9]+/gi) || []).length <= 3; };
   const leadOk = (i) => /(?:^|[^a-záéíóúñ])(?:a|por|en)\s+$/i.test(buf.slice(Math.max(0, i - 6 - base), i - base));
   const amountStart = (i) => { const c = ch(i), p = ch(i - 1); if (isDigit(p) || isLetter(p)) return false;
     if (isDigit(c) || c === '$') return true;
@@ -208,17 +226,19 @@ function createAmountLayer(out) {
     let w = j; while (isLetter(ch(w - 1))) w--; const f = ch(w); return w < j && !!f && f !== f.toLowerCase(); };
   const run = (final) => {
     for (;;) {
-      if (ctx && k > ctx.limit) ctx = null;
+      if (ctx && k > ctx.limit && !ctx.seg) ctx = null; // la ventana de una palabra del dueño dura 60 caracteres Y hasta el fin de su frase
       if (k >= end()) break;
       const c = ch(k), p = ch(k - 1);
       if (isLetter(c) && !isLetter(p)) {
         if (!final && end() < wordNeed(k)) break;
         let n;
         // otra palabra del dueño dentro de la ventana la alarga; «compré» dentro de la ventana de «costo» no pide la «a» delante
-        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false }; pass(k + n); continue; }
-        if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { limit: Math.max(ctx.limit, k + n + 40), lead: ctx.lead } : { limit: k + n + 40, lead: true }; pass(k + n); continue; }
+        if ((n = sticky(OWNER_WORD_Y, k)) && !nameWord(k)) { const neg = NEG_BEFORE.test(buf.slice(Math.max(0, k - 48) - base, k - base));
+          ctx = { limit: Math.max(ctx && !ctx.sale ? ctx.limit : 0, k + n + 60), lead: false, seg: true, neg, we: k + n }; pass(k + n); continue; }
+        if ((n = sticky(BUY_WORD_Y, k))) { ctx = ctx && !ctx.sale ? { ...ctx, limit: Math.max(ctx.limit, k + n + 40) } : { limit: k + n + 40, lead: true }; pass(k + n); continue; }
         // etiqueta de venta: el próximo monto (dentro de 60) es el precio de venta y sale tal cual
-        if ((n = sticky(STOP_Y, k))) { ctx = { limit: k + n + 60, sale: true }; pass(k + n); continue; }
+        // salvo pegada a una palabra del dueño (hasta 3 palabras entre medio, sin monto): «costo, se vende a S/ 1.80», «costo PVP S/ 1.80» se tapan
+        if ((n = sticky(STOP_Y, k))) { if (!nearOwner(k)) ctx = { limit: k + n + 60, sale: true }; pass(k + n); continue; }
         if ((n = sticky(ABBR_Y, k))) { pass(k + n); continue; }
         if ((c === 'x' || c === 'X') && (n = sticky(QTY_Y, k))) { pass(k + n); continue; }
       }
@@ -238,7 +258,12 @@ function createAmountLayer(out) {
         }
       }
       if (isDigit(c)) { let e = k; while (e < end() && isDigit(ch(e))) e++; pass(e); continue; }
-      pass(k + 1); // la puntuación ya no cierra la ventana (Bot 2: «El costo. S/ 1.80», «Margen\n30%»)
+      // La puntuación no cierra la ventana de 60 (Bot 2: «El costo. S/ 1.80», «Margen\n30%»); sí termina «su frase» (seg) y cierra una negada.
+      if (ctx && (ctx.seg || ctx.neg) && (c === '.' || c === ';' || c === '!' || c === '?' || c === '\n')) {
+        if (c === '.') { const nx = ch(k + 1); if (nx === undefined && !final) break; if (isDigit(nx)) { pass(k + 1); continue; } }
+        if (ctx.neg && c !== ';') ctx = null; else ctx.seg = false;
+      }
+      pass(k + 1);
     }
     if (final) { pass(end()); return; }
     // Sale ya lo que seguro no es monto (hasta el próximo posible monto), aunque la palabra de antes siga sin decidirse.

@@ -220,9 +220,9 @@ test('falla cerrado: sin proveedor, sin clave o con URL mala -> 503 sin llamar; 
 
 // ---------- Bloque de Configuración: dueño, empleado, sin sesión ----------
 const OWNER_ENV = { ASSISTANT_ENABLED: '1', AI_PROVIDER: 'deepseek', DEEPSEEK_API_KEY: KEY, ANTHROPIC_API_KEY: KEY + 'a', GEMINI_API_KEY: KEY + 'g' };
-async function route(method, sub, body, { role = 'owner', store, fetch, env = OWNER_ENV, auth = { principalId: 'dev-owner', posRole: 'owner' }, noResolve = false } = {}) {
+async function route(method, sub, body, { role = 'owner', store, fetch, env = OWNER_ENV, auth = { principalId: 'dev-owner', posRole: 'owner' }, noResolve = false, now } = {}) {
   const r = await providerRoute(new Request('https://w.test' + PROVIDER_PATH + sub, { method, headers: { 'content-type': 'application/json' }, body: method === 'GET' ? undefined : JSON.stringify(body) }),
-    env, auth, jsonR, { store: store || createMemoryUsageStore(), ...(noResolve ? {} : { resolveRole: async () => role }), fetch: fetch || stub(() => jsonR(JSONS.openai)) });
+    env, auth, jsonR, { store: store || createMemoryUsageStore(), ...(noResolve ? {} : { resolveRole: async () => role }), fetch: fetch || stub(() => jsonR(JSONS.openai)), ...(now ? { now: () => now } : {}) });
   return { status: r.status, body: await r.json() };
 }
 test('dueño: ve la lista con Conectado / Falta clave (nunca la clave), prueba con una llamada chica y cambia con Confirmar (sin PIN)', async () => {
@@ -238,13 +238,21 @@ test('dueño: ve la lista con Conectado / Falta clave (nunca la clave), prueba c
   assert.equal(bad.body.ok, false); assert.ok(!JSON.stringify(bad.body).includes(KEY));
   const denied = await route('POST', '/test', { provider: 'gemini' }, { store, fetch: stub(() => jsonR({}, 401)) }); assert.equal(denied.body.message, 'La clave no fue aceptada.');
   const miss = await route('POST', '/test', { provider: 'openai' }, { store }); assert.equal(miss.status, 409); assert.equal(miss.body.status, 'Falta clave');
-  // Cambiar: sin Confirmar no; sin clave no; modelo fuera de la lista no; URL/clave del cuerpo se ignoran
-  assert.equal((await route('POST', '/select', { provider: 'anthropic' }, { store })).body.error, 'confirm_required');
-  assert.equal((await route('POST', '/select', { provider: 'openai', confirm: true }, { store })).status, 409);
-  assert.equal((await route('POST', '/select', { provider: 'nadie', confirm: true }, { store })).status, 400);
-  assert.equal((await route('POST', '/select', { provider: 'anthropic', model: 'modelo-inventado', confirm: true }, { store })).body.error, 'unknown_model');
-  const sel = await route('POST', '/select', { provider: 'anthropic', confirm: true, base_url: 'https://evil.example', api_key: 'sk-cliente', key: 'x' }, { store });
+  // Cambiar en dos pasos: «Usar» arma la tarjeta con operation_id del servidor; «Confirmar» la gasta UNA vez.
+  assert.equal((await route('POST', '/select', { provider: 'openai' }, { store })).status, 409, 'sin clave no se arma tarjeta');
+  assert.equal((await route('POST', '/select', { provider: 'nadie' }, { store })).status, 400);
+  assert.equal((await route('POST', '/select', { provider: 'anthropic', model: 'modelo-inventado' }, { store })).body.error, 'unknown_model');
+  assert.equal((await route('POST', '/select', { provider: 'anthropic', confirm: true }, { store })).body.error, 'operation_id_required', 'confirm:true solo ya no cambia nada');
+  assert.equal((await route('POST', '/select', { operation_id: 'PRV-inventado', confirm: true }, { store })).body.error, 'bad_operation');
+  const card = await route('POST', '/select', { provider: 'anthropic', base_url: 'https://evil.example', api_key: 'sk-cliente', key: 'x' }, { store });
+  assert.equal(card.status, 200); assert.equal(card.body.confirm_required, true); assert.match(card.body.operation_id, /^PRV-/); assert.equal(card.body.expires_in_s, 300);
+  assert.equal((await chat({ text: 'hola' }, { env: OWNER_ENV, fetch: stub(() => jsonR(JSONS.openai)), store }).then((r) => r.json())).mode, 'deepseek', 'armar la tarjeta no cambia nada');
+  assert.equal((await route('POST', '/select', { operation_id: card.body.operation_id, confirm: true }, { store, auth: { principalId: 'otro-dueno', posRole: 'owner' } })).body.error, 'bad_operation', 'otro aparato no la usa');
+  assert.equal((await route('POST', '/select', { operation_id: card.body.operation_id, provider: 'gemini', confirm: true }, { store })).body.error, 'bad_operation', 'no se cambia el proveedor en el Confirmar');
+  const sel = await route('POST', '/select', { operation_id: card.body.operation_id, confirm: true }, { store });
   assert.equal(sel.status, 200); assert.equal(sel.body.current.provider, 'anthropic');
+  const again = await route('POST', '/select', { operation_id: card.body.operation_id, confirm: true }, { store });
+  assert.equal(again.status, 409); assert.equal(again.body.error, 'already_confirmed', 'repetido: rechazado');
   const saved = (await store.get(PROVIDER_CHOICE_KEY)).value; assert.deepEqual(Object.keys(saved).sort(), ['at', 'model', 'provider']); assert.equal(saved.provider, 'anthropic'); assert.ok(!JSON.stringify(saved).includes('evil') && !JSON.stringify(saved).includes('sk-'));
   // El chat usa lo elegido (misma tienda de ajustes)
   const f = stub(() => jsonR({ content: [{ type: 'text', text: 'Listo, hola.' }], usage: { input_tokens: 1, output_tokens: 1 } }));
@@ -254,6 +262,29 @@ test('dueño: ve la lista con Conectado / Falta clave (nunca la clave), prueba c
   const f2 = stub(() => jsonR(JSONS.openai)); const r2 = await chat({ text: 'hola' }, { env: noA, fetch: f2, store }); assert.equal((await r2.json()).mode, 'deepseek');
   // tope de pruebas
   let last; for (let i = 0; i < 8; i++) last = await route('POST', '/test', { provider: 'anthropic' }, { store, fetch: okF }); assert.equal(last.status, 429);
+});
+test('Usar: la tarjeta vence a los 5 minutos (410) y no se puede usar después; dos Confirmar a la vez = un solo cambio', async () => {
+  const store = createMemoryUsageStore(), t0 = Date.parse('2026-10-17T10:00:00Z');
+  const card = await route('POST', '/select', { provider: 'gemini' }, { store, now: t0 });
+  const late = await route('POST', '/select', { operation_id: card.body.operation_id, confirm: true }, { store, now: t0 + 5 * 60 * 1000 + 1 });
+  assert.equal(late.status, 410); assert.equal(late.body.error, 'confirm_expired');
+  assert.equal((await store.get(PROVIDER_CHOICE_KEY)).value.provider, undefined, 'nada guardado');
+  const card2 = await route('POST', '/select', { provider: 'gemini' }, { store, now: t0 });
+  const ok = await route('POST', '/select', { operation_id: card2.body.operation_id, confirm: true }, { store, now: t0 + 4 * 60 * 1000 }); assert.equal(ok.status, 200);
+  const replayLater = await route('POST', '/select', { operation_id: card2.body.operation_id, confirm: true }, { store, now: t0 + 10 * 60 * 1000 }); assert.equal(replayLater.status, 409);
+  // una tarjeta nueva reemplaza a la anterior
+  const a = await route('POST', '/select', { provider: 'anthropic' }, { store, now: t0 }), b = await route('POST', '/select', { provider: 'gemini' }, { store, now: t0 });
+  assert.equal((await route('POST', '/select', { operation_id: a.body.operation_id, confirm: true }, { store, now: t0 })).body.error, 'bad_operation');
+  const both = await Promise.all([route('POST', '/select', { operation_id: b.body.operation_id, confirm: true }, { store, now: t0 }), route('POST', '/select', { operation_id: b.body.operation_id, confirm: true }, { store, now: t0 })]);
+  assert.deepEqual(both.map((x) => x.status).sort(), [200, 409]);
+});
+test('Probar: el tope de 6 por minuto es por aparato dueño, no global; si no se puede contar, no se prueba', async () => {
+  const store = createMemoryUsageStore(), f = stub(() => jsonR(JSONS.openai)), A = { principalId: 'dueno-1', posRole: 'owner' }, B = { principalId: 'dueno-2', posRole: 'owner' };
+  for (let i = 0; i < 6; i++) assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: A })).status, 200);
+  assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: A })).status, 429);
+  assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: B })).status, 200, 'otro aparato dueño sigue pudiendo');
+  const stuck = { get: store.get, put: async () => false }; const g = stub(() => jsonR(JSONS.openai));
+  const r = await route('POST', '/test', { provider: 'deepseek' }, { store: stuck, fetch: g, auth: { principalId: 'dueno-3', posRole: 'owner' } }); assert.equal(r.status, 503); assert.equal(g.calls.length, 0);
 });
 test('empleado y sin sesión: 403 en todo el bloque, sin llamar al proveedor ni guardar nada', async () => {
   for (const opt of [{ role: 'empleado:consultas' }, { role: 'empleado:consultas_documentos' }, { role: 'sin_rol' }, { role: 'empleado:off' }, { noResolve: true, auth: null }, { noResolve: true, auth: { principalId: 'x', posRole: 'owner' } }]) {

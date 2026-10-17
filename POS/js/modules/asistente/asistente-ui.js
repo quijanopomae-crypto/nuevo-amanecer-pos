@@ -789,11 +789,11 @@
             '<button type="button" class="na-asst-prov-t" data-act="test">Probar</button>' + (p.current && models.length < 2 ? '' : '<button type="button" class="na-asst-ok" data-act="use">Usar</button>') + '</div>' : '') + '</div>';
       }).join('');
     }
-    function confirmCard(row, p, model) {
+    function confirmCard(row, p, model, op) {
       var old = box.querySelector('.na-asst-prov-c'); if (old) old.remove();
       var c = el('div', 'na-asst-prov-c'); c.setAttribute('role', 'group'); c.setAttribute('aria-label', 'Confirmar cambio de proveedor');
       c.innerHTML = '<p>¿Usar <strong>' + C.esc(p.label) + '</strong>' + (model ? ' (' + C.esc(model) + ')' : '') + ' en el asistente? Aplica desde la próxima pregunta, en todos los aparatos.</p>' +
-        '<button type="button" class="na-asst-ok" data-act="confirm" data-model="' + C.esc(model || '') + '">Confirmar</button><button type="button" class="na-asst-no" data-act="cancel">Cancelar</button>';
+        '<button type="button" class="na-asst-ok" data-act="confirm" data-op="' + C.esc(op) + '">Confirmar</button><button type="button" class="na-asst-no" data-act="cancel">Cancelar</button>';
       row.appendChild(c); c.querySelector('[data-act=confirm]').focus();
     }
     box.onclick = function (e) {
@@ -804,13 +804,21 @@
         b.disabled = true; st.textContent = 'Probando…';
         post(PROVIDER_PATH + '/test', { provider: p.id, model: model }, null, 15000).then(function (r) { st.textContent = r && r.message ? r.message : r && r.error === 'rate_limited' ? 'Espera un minuto y prueba otra vez.' : 'No se pudo probar.'; },
           function () { st.textContent = 'No se pudo probar. Revisa internet.'; }).then(function () { b.disabled = false; });
-      } else if (act === 'use') confirmCard(row, p, model);
+      } else if (act === 'use') {
+        // El servidor arma la tarjeta: operation_id de un solo uso que vence en 5 minutos.
+        b.disabled = true; st.textContent = '';
+        post(PROVIDER_PATH + '/select', { provider: p.id, model: model }, null, 15000).then(function (r) {
+          b.disabled = false; if (r && r.ok && r.operation_id) confirmCard(row, p, r.model || model, r.operation_id);
+          else st.textContent = r && r.error === 'provider_not_ready' ? 'Falta la clave en el servidor.' : 'No se pudo preparar el cambio.';
+        }, function () { b.disabled = false; st.textContent = 'No se pudo preparar el cambio. Revisa internet.'; });
+      }
       else if (act === 'cancel') { var c = row.querySelector('.na-asst-prov-c'); if (c) c.remove(); }
       else if (act === 'confirm') {
         b.disabled = true;
-        post(PROVIDER_PATH + '/select', { provider: p.id, model: b.dataset.model || null, confirm: true }, null, 15000).then(function (r) {
+        post(PROVIDER_PATH + '/select', { operation_id: b.dataset.op, confirm: true }, null, 15000).then(function (r) {
           if (r && r.ok) { paint(r); var s2 = list.querySelector('[data-prov="' + p.id + '"] .st'); if (s2) s2.textContent = 'Listo. El asistente usa ' + p.label + '.'; return; }
-          st.textContent = r && r.error === 'provider_not_ready' ? 'Falta la clave en el servidor.' : 'No se pudo cambiar.'; b.disabled = false;
+          var c = row.querySelector('.na-asst-prov-c'); if (c) c.remove();
+          st.textContent = r && r.error === 'provider_not_ready' ? 'Falta la clave en el servidor.' : r && r.error === 'confirm_expired' ? 'La tarjeta venció. Toca «Usar» otra vez.' : r && r.error === 'already_confirmed' ? 'Ese cambio ya se hizo.' : 'No se pudo cambiar.';
         }, function () { st.textContent = 'No se pudo cambiar. Revisa internet.'; b.disabled = false; });
       }
     };
