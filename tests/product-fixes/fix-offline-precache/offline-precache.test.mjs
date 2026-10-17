@@ -155,3 +155,72 @@ test('local mode (no cloud) is still the owner device even without NA_PERMISSION
     assert.notEqual(h.root.goPage(id), false, id);
   }
 });
+
+// --- Revisión Bot 4 / Bot 5: menú sin rol confirmado y caminos que no pasan por goPage ---------------
+const configCss = readFileSync('POS/css/config-e2.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const dashboardJs = readFileSync('POS/js/canon-desktop-dashboard.js', 'utf8');
+const menuJs = readFileSync('POS/js/navigation/menu-navigation.js', 'utf8');
+function policy() {
+  const ctx = vm.createContext({ globalThis: {} });
+  vm.runInContext(permsSource, ctx);
+  return vm.runInContext('globalThis.NA_PERMISSIONS', ctx);
+}
+function menuTargets() {
+  const ids = new Set();
+  for (const source of [index, dashboardJs]) {
+    for (const m of source.matchAll(/data-menu-target="(page[A-Za-z]+)"/g)) ids.add(m[1]);
+    for (const m of source.matchAll(/goPage\(\s*\\?['"](page[A-Za-z]+)\\?['"]\s*\)/g)) ids.add(m[1]);
+    for (const m of source.matchAll(/\[\s*'(page[A-Za-z]+)'\s*,\s*'[^']+'\s*,/g)) ids.add(m[1]);
+  }
+  return [...ids];
+}
+function hiddenWhenUnconfirmed(selector) {
+  for (const [, selectors, body] of configCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!/visibility\s*:\s*hidden\s*!important|display\s*:\s*none\s*!important/.test(body)) continue;
+    if (selectors.split(',').map((s) => s.trim().replace(/\s+/g, ' ')).includes(`html.na-role-unconfirmed ${selector}`)) return true;
+  }
+  return false;
+}
+
+test('every owner-only menu target is hidden while the role is unconfirmed (PC sidebar, cards, links)', () => {
+  const perms = policy();
+  const owner = menuTargets().filter((id) => id !== 'pageMenu' && !perms.canAccessScreen('empleado', id));
+  assert.ok(owner.includes('pageGastos') && owner.includes('pageConfig'), owner.join(','));
+  for (const id of owner) {
+    for (const selector of [`[data-menu-target="${id}"]`, `[onclick*="${id}"]`]) {
+      assert.ok(hiddenWhenUnconfirmed(selector), `falta html.na-role-unconfirmed ${selector} en config-e2.css`);
+    }
+  }
+  assert.ok(hiddenWhenUnconfirmed('#pageVentas [onclick*="reportes"]'), 'Ventas › Reportes');
+  for (const id of menuTargets().filter((id) => perms.canAccessScreen('empleado', id))) {
+    assert.equal(hiddenWhenUnconfirmed(`[data-menu-target="${id}"]`), false, `${id} must stay visible`);
+  }
+});
+
+test('the phone navigation (mobileSafeNavigate) asks the same permission check as goPage', () => {
+  const body = menuJs.slice(menuJs.indexOf('function mobileSafeNavigate('), menuJs.indexOf('root.NA_MOBILE_SAFE_NAV_ACTIVE = true;'));
+  assert.match(body, /NA_ROLES\.blockScreen\(pageId\)\) return false;/);
+});
+
+for (const permissions of [false, true]) {
+  for (const cachedRole of ['empleado', 'owner']) {
+    test(`unconfirmed ${cachedRole}, table ${permissions ? 'loaded' : 'missing'}: goPage, blockScreen and hash/direct activation never open an owner page`, async () => {
+      const h = harness({ cachedRole, permissions });
+      await flush();
+      for (const id of OWNER) {
+        h.root.goPage('pagePOS');
+        assert.doesNotThrow(() => assert.equal(h.root.goPage(id), false), id);
+        assert.deepEqual(h.active(), ['pagePOS'], id);
+        assert.equal(h.root.NA_ROLES.blockScreen(id), true, id);
+        assert.ok(h.overlays.length > 0, `${id}: notice shown`);
+        h.overlays.length = 0;
+        // Enlace directo o #hash: cualquier camino que active la página la deja cerrada en la siguiente revisión.
+        h.pages.forEach((p) => p.classList.remove('active'));
+        h.pages.find((p) => p.id === id).classList.add('active');
+        assert.doesNotThrow(() => h.listeners.hashchange.forEach((fn) => fn()));
+        assert.deepEqual(h.active().filter((x) => x === id), [], id);
+      }
+      for (const id of EMPLOYEE) assert.equal(h.root.NA_ROLES.blockScreen(id), false, id);
+    });
+  }
+}

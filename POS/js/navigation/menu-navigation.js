@@ -136,6 +136,8 @@
 
   function mobileSafeNavigate(pageId) {
     if (!allowed[pageId]) return false;
+    // Mismo permiso que goPage: sin rol confirmado una pantalla del dueño no se abre.
+    try { if (root.NA_ROLES && typeof root.NA_ROLES.blockScreen === 'function' && root.NA_ROLES.blockScreen(pageId)) return false; } catch (_) { if (pageId !== 'pagePOS' && pageId !== 'pageMenu') return false; }
     var target = document.getElementById(pageId);
     if (!target) return false;
 

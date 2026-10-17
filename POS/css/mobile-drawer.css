@@ -26,4 +26,6 @@
   body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-chevron {color:var(--na-dk-muted)}
   body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link:active {background:var(--na-dk-surface-2)}
   body.dark .na-mobile-drawer.na-drawer-v2 .na-mobile-drawer-link[aria-current='page'] {background:rgba(94,234,212,.12);color:#5eead4}
+  /* Franja «Sin conexión» (canonical-status-banner, arriba y por encima del cajón): el cajón empieza debajo de ella. */
+  body.na-sb-on .na-mobile-drawer.na-drawer-v2 {top:var(--na-sb-h,28px);height:calc(100dvh - var(--na-sb-h,28px))}
 }

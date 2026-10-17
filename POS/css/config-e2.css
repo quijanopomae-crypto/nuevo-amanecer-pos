@@ -100,3 +100,19 @@ html.na-role-empleado [data-page="pageGastos"],
 html.na-role-empleado [data-menu-target="pageGastos"],
 html.na-role-empleado [onclick*="pageGastos"],
 html.na-role-empleado #pageVentas [onclick*="reportes"] { display:none!important; }
+/* Sin rol confirmado (sin internet o comprobando): tampoco se ven las entradas de pantallas del dueño.
+   Igual que Configuración arriba: conservan su espacio para que el menú no se mueva al confirmar. */
+html.na-role-unconfirmed [data-page="pageGastos"],
+html.na-role-unconfirmed [data-menu-target="pageGastos"],
+html.na-role-unconfirmed [onclick*="pageGastos"],
+html.na-role-unconfirmed #pageVentas [onclick*="reportes"] { visibility:hidden!important; pointer-events:none!important; }
+/* Aviso «Confirmando permisos…» (sin conexión): contraste AA (>= 4.5) en los 5 temas y en Nocturno. */
+.na-offline-cfg .na-pin-actions .na-role-retry{background:#087f71;border-color:#087f71;color:#fff}
+@media(min-width:701px){
+html[data-na-theme=naranja] .na-offline-cfg .na-pin-actions .na-role-retry{background:#c2410c;border-color:#c2410c}
+html[data-na-theme=azul] .na-offline-cfg .na-pin-actions .na-role-retry{background:#1d4ed8;border-color:#1d4ed8}
+html[data-na-theme=celeste] .na-offline-cfg .na-pin-actions .na-role-retry{background:#0369a1;border-color:#0369a1}
+html[data-na-theme=simple] .na-offline-cfg .na-pin-actions .na-role-retry{background:#374151;border-color:#374151}
+}
+body.dark .na-offline-cfg .na-pin-actions .na-role-retry{background:#087f71;border-color:#087f71;color:#fff}
+body.dark .na-offline-cfg .na-pin-actions .na-offline-back{color:#e2e8f0;background:#1e293b;border-color:#475569}

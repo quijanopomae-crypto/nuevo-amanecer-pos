@@ -148,7 +148,9 @@
   root.NA_ROLES = {
     get role() { return state.role; }, get pinSet() { return state.pinSet; }, get label() { return state.label; }, get deviceId() { return state.deviceId; },
     isOwner: canConfigure, canConfigure: canConfigure, get confirmed() { return state.confirmed; }, refresh: refresh, api: api, askPin: askPin, approve: approve, beforeCommand: beforeCommand,
-    message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice()
+    message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice(),
+    // Para caminos que activan pantallas sin goPage (menú del celular): true = bloqueada y avisada.
+    blockScreen: function (id) { if (!forbidden(id)) return false; noPermission(); return true; }
   };
 
   // Configuración solo para el dueño, por cualquier camino de navegación.
