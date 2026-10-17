@@ -67,6 +67,8 @@ const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 // ---------- Datos sensibles ----------
 const PIN_LINK = '(?:del?|la|las|el|los|lo|mi|mis|tu|tus|su|sus|nuestra|nuestro|para|en|que)';
+const PIN_NO_UNIT = '(?!\\s*(?:(?:unidades|unidad|unid|und|uds|u|kg|kilos?|g|gr|gramos|l|lt|litros?|ml|soles|sol|paquetes|cajas|bolsas)(?![a-zñ])|S\\/|%))';
+const PIN_STOP_BEFORE = /(?:^|\s)(?:en|del|desde|hasta|por|al|a|para|y|o|año|años|de|el|la)\s+$/i;
 const PATTERNS = [
   // Bot 5: un «data:» (foto pegada como texto, base64) nunca va a DeepSeek dentro del mensaje: se cambia por un aviso corto. Va primero para que
   // sus dígitos no parezcan DNI o teléfono. La foto real va aparte (campo image, solo dueño).
@@ -77,8 +79,14 @@ const PATTERNS = [
   // (Bot 5 sobre 6280deae, INFO) «La clave del wifi Zq9xK2mPw7»: si tras clave/contraseña/pin/token viene una palabra de enlace (del, de, la, el,
   // mi, para…), se tapa el VALOR (letras y dígitos mezclados, 6+ caracteres) dentro de las 4 palabras siguientes, no la palabra de enlace.
   // Si no hay tal valor, como siempre: se tapa lo que sigue a la etiqueta.
-  [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,3}?(?:\\s*[:=]\\s*|\\s+))(?:(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}|\\d{4,8}(?![\\d]))|(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
-    (m, kw, a, b) => kw + (a ?? b) + '[oculto]'],
+  // (Bot 5 sobre 58200f60) PIN SOLO NUMÉRICO (4-8 dígitos) por palabra de enlace: solo tras pin / clave / contraseña, a lo sumo 2 palabras después
+  // del enlace (más «es»/«era» o «:»/«=»), sin una unidad detrás (unidades, und, kg, g, l, soles, S/, %…) y sin que la palabra justo antes sea
+  // «en», «del», «desde», «por»… (un año o una cantidad: «la clave del negocio en 2024»). «clave de producto 4521», «El pin de la caja: 4321» y
+  // «El pin de la caja es 4321» se tapan; «Producto clave de la semana 2500 unidades» no. El valor con letras y dígitos: hasta 5 palabras tras el enlace («La clave del wifi de la tienda: Zq9xK2mPw7»).
+  [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}?(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
+    + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,2}?(?:\\s+(?:es|era))?(?:\\s*[:=]\\s*|\\s+))\\d{4,8}(?!\\d)' + PIN_NO_UNIT
+    + '|(\\s*(?:es|era|de|:|=)?\\s*)[^\\s,.;]{3,})', 'gi'),
+    (m, kw, a, n, b) => (n != null && !/[:=]/.test(n) && PIN_STOP_BEFORE.test(n) ? m : kw + (a ?? n ?? b) + '[oculto]')],
   // Bot 3: acotado (parte local 1-64, etiquetas de dominio 1-63, hasta 8, final 2-24) y sin cuantificadores anidados sin tope: lineal
   // también con 50 KB de dígitos o letras seguidas (antes ~1,9 s).
   [/[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,8}[A-Za-z]{2,24}/g, '[correo oculto]'],
@@ -168,7 +176,9 @@ export function redactModelOwner(value) {
   return out;
 }
 // ¿Quedó algo tapado? («****», «[dato del dueño]», «[oculto]», «[imagen omitida]», «[correo oculto]»…): en una tarjeta ese campo va VACÍO
-export const MASK_LEFT_RE = /\*{3,}|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]/i;
+// (Bot 5 sobre 58200f60) también máscaras no ASCII: «∗∗∗∗6789», «＊＊6789», «••••6789», «●●●●6789», «**6789», «…6789», «xxxx6789», «(oculto)».
+// «**» solo cuenta pegado a dígitos (un «**negrita**» no es máscara).
+export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·]{3,}|…\s?\d|\bx{3,}\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
   let out = collapseWs(String(value ?? ''));
@@ -348,7 +358,7 @@ function createAmountLayer(out0) {
   // sin regla fija). Sus filas no miran la línea siguiente; una fila cuya PRIMERA celda empieza con costo/margen/ganancia/utilidad tapa sus
   // montos y abre la regla fija (origen «col», todo monto tapado) para el resto de la tabla, como una columna del dueño.
   let saleTbl = null;
-  let stk = null, lnLead = false, lnBars = 0, lnTab = false, lnCellHas = false, lnFirstEmpty = false, lnCells = [], lnCellFrom = 0, dlNext = -1, dlPrev = null, rs = { e: -1, i: 0, bars: 0, last: '' };
+  let stk = null, lnLead = false, lnBars = 0, lnTab = false, lnTabN = 0, lnCellHas = false, lnFirstEmpty = false, lnCells = [], lnCellFrom = 0, dlNext = -1, dlPrev = null, rs = { e: -1, i: 0, bars: 0, last: '' };
   // seeded: regla fija sembrada por «sigue» con origen «col»: suelta como «col» pero las columnas de venta se leen como «intro» (más estricto)
   const saleSet = (h, oc) => { const strict = stk.src === 'intro' || !!stk.seeded; return new Set(h.map((x, i) => (saleHeader(x || '', oc && strict, strict ? stk.neg : true) ? i : -1)).filter((i) => i >= 0)); };
   // cabecera de la tabla sticky (la suya o una nueva): h = celdas normalizadas, hb = comienzo de su línea
@@ -475,6 +485,9 @@ function createAmountLayer(out0) {
   // «El costo lo ve el dueño.» (6 palabras) no tapa: «el» solo cuenta en la línea corta, no como comienzo.
   // No vale si la línea del monto es un ítem de lista o una fila (ahí la palabra del dueño tapa solo su ítem, Bot 2 b). Si no decide, sigue la mirada de siempre (frases de compra, 20 caracteres).
   const NEXT_START_RE = /^(?:[(\-\s]|(?:mi|es\s+el|de)\s+)*(?:costos?|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?)(?=[^a-záéíóúñü\d_])/i;
+  // (Bot 5 sobre 58200f60) línea de TEXTO: también «Esa es la utilidad: S/ 0.70», «Ese es el margen: S/ 0.70», «Este costo…», «Es el costo…»
+  // (demostrativo o «es» delante; un «El»/«La» suelto NO: «El costo lo ve el dueño.» se sigue viendo). Margen/ganancia/utilidad nunca sueltan (ownAmt).
+  const PLAIN_PRE_RE = /^(?:[(\-\s]|(?:mi|de)\s+|(?:ese|esa|este|esta|es)\s+(?:es\s+)?(?:(?:el|la)\s+)?)*/i;
   const NEXT_HAS_RE = /(?:^|[^a-záéíóúñü\d_])(?:costos?|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?)(?![a-záéíóúñü\d_])/i;
   // (Bot 5 sobre 6280deae, límites de Bots 3/5) ÍTEM de lista o FILA (| o tabulador): la línea siguiente, sin su viñeta, numeración, «|»,
   // tabuladores, sangría ni «(», «mi», «de», «el», «es el», «ese es el», «este es el» delante (Bot 5 sobre 84a49517: «- Galleta S/ 1.80\nel costo»),
@@ -510,7 +523,8 @@ function createAmountLayer(out0) {
   const nextOwner = (e, j, final, nx) => {
     if (nx === 'item' || nx === 'row' || /[|\t]/.test(buf.slice(e - base, j - base))) return itemNext(j, final);
     const w = buf.slice(j - base, Math.min(end(), j + 42) - base); const nl = w.indexOf('\n'); const line = nl >= 0 ? w.slice(0, nl) : w;
-    const done = nl >= 0 || final; if (NEXT_START_RE.test(done ? line + '\n' : line)) return ownAmt(j, final);
+    const done = nl >= 0 || final, tl = done ? line + '\n' : line;
+    if (NEXT_START_RE.test(tl) || ITEM_OWN_RE.test(tl.slice(PLAIN_PRE_RE.exec(tl)[0].length))) return ownAmt(j, final);
     const long = line.length > 40 || line.trim().split(/\s+/).length > 5;
     if (long) return false; if (!done) return NEED;
     return NEXT_HAS_RE.test(line) ? ownAmt(j, final) : false;
@@ -666,7 +680,10 @@ function createAmountLayer(out0) {
       if (c === '|') { if (saleTbl && !stk && mode !== 'table' && lnBars === (lnLead ? 1 : 0) && firstOwn(buf.slice(Math.max(lnCellFrom, base, k - 40) - base, k - base))) {
           stk = { src: 'col', n: -1, sale: new Set(), hl: saleTbl.hl, neg: false, title: false, oc: true }; saleTbl = null; } // fila «| costo unitario | S/ 1.20 |» en una tabla de venta
         lnCells.push(cellText(lnCellFrom, k)); lnCellFrom = k + 1; lnBars++; if (lnBars === (lnLead ? 2 : 1)) lnFirstEmpty = !lnCellHas; lnCellHas = false; }
-      else if (c === '\t' && lineHas) lnTab = true;
+      else if (c === '\t') { // (Bot 5 sobre 58200f60) tabla de VENTA con tabuladores: 1.ª celda «(mi costo)», «costo unitario», «Margen»… abre la regla fija
+        if (saleTbl && saleTbl.tab && !stk && mode !== 'table' && !lnTabN && lineHas && firstOwn(buf.slice(Math.max(lineBegin, base, k - 40) - base, k - base))) {
+          stk = { src: 'col', n: -1, sale: new Set(), hl: saleTbl.hl, neg: false, title: false, oc: true }; saleTbl = null; }
+        lnTabN++; if (lineHas) lnTab = true; }
       if ((c === '|' || c === '\t') && mode === 'table') { if (tbl.row === 0 && !tbl.headerless) tbl.hdr[tbl.cell] = cellText(tbl.from, k); tbl.cell++; tbl.from = k + 1; }
       if (c === '|' || c === '\t') lineDelim = true;
       if (c === '-') lineDash = true;
@@ -679,6 +696,10 @@ function createAmountLayer(out0) {
           if (row.sep && lineDash && lineHas) { if (dlPrev && contig) { stkHeader(dlPrev.h, dlPrev.b); const h = dlPrev.h;
               saleTbl = !stk && mode !== 'table' && !headerCols(h) && !h.some((x) => /\d/.test(x) || String(x).includes(OWNER_DATA_LABEL)) && h.some((x) => saleHeader(x || '', false, true)) ? { hl: dlPrev.b } : null; } dlPrev = null; }
           else { if ((!contig && !stk) || (stk && stk.hl === lineBegin)) stkHeader(h, lineBegin); dlPrev = { h, b: lineBegin }; } // una fila sola nunca suelta
+          dlNext = k + 1; }
+        else if (lnTabN > 0 && lineHas && !stk && mode !== 'table' && (saleTbl ? saleTbl.tab : dlNext !== lineBegin)) { // filas con tabuladores
+          if (!saleTbl) { const h = buf.slice(Math.max(lineBegin, base) - base, k - base).split('\t').map((x) => x.trim()).filter((x, i, a) => x || (i > 0 && i < a.length - 1));
+            saleTbl = h.length >= 2 && !headerCols(h) && !h.some((x) => /\d/.test(x) || x.includes(OWNER_DATA_LABEL)) && h.some((x) => saleHeader(x || '', false, true)) ? { hl: lineBegin, tab: true } : null; }
           dlNext = k + 1; }
         else if (saleTbl = null, stk && lineHas && !lineDelim) stk.title = (lt.sale0 || lt.lp) && !lineOwner && !lineIntro;
         // (c) «Compras del cliente:» presenta solo por «compras»: con «cliente» no presenta la lista/tabla de abajo
@@ -701,7 +722,7 @@ function createAmountLayer(out0) {
         }
         if (mode !== 'table' || !lineDelim) lastBlank = blank; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false, lp: false };
         lineStart = true; lineBegin = k + 1; lineDelim = false; lineAmt = false; lineHas = false; lineItem = false; lineDash = false; lWords = 0;
-        lnLead = false; lnBars = 0; lnTab = false; lnCellHas = false; lnFirstEmpty = false; lnCells = []; lnCellFrom = k + 1;
+        lnLead = false; lnBars = 0; lnTab = false; lnTabN = 0; lnCellHas = false; lnFirstEmpty = false; lnCells = []; lnCellFrom = k + 1;
       }
       if (c === '|' || c === '\t') { const filled = row.has; if (filled) row.cells++; row.has = false;
         // se suelta al cerrar la primera celda con texto de la fila nueva (el monto de esa celda sigue tapado)
@@ -733,7 +754,7 @@ function createAmountLayer(out0) {
     // 'col' SOLO si lo único abierto es la regla fija de una columna del dueño; si hay presentación, ventana o lista abierta: 'intro'
     ownerSrc() { return stk && stk.src === 'col' && !this.otherCtx() ? 'col' : 'intro'; },
     flush() { run(true); buf = ''; base = 0; k = 0; rel = 0; ctx = null; negZone = null; nm = { i: -1, e: 0 }; memo = { e: -1, i: 0, nl: 0, eol: true, peek: -1 }; row = { cells: 0, has: false, from: null, n: 0, sep: true, fo: false };
-    forced = false; stk = null; saleTbl = null; lnLead = false; lnBars = 0; lnTab = false; lnCellHas = false; lnFirstEmpty = false; lnCells = []; lnCellFrom = 0; dlNext = -1; dlPrev = null; rs = { e: -1, i: 0, bars: 0, last: '' }; lineDash = false; lWords = 0; pWords = 0; pWordAt = -1; pOwn = false; pLast = ''; breakAt = -1; sent = { has: false, owner: false, neg: false, intro: false }; para = 0; paraAt = 0; paraPrev = 0; lineItem = false; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false, lp: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
+    forced = false; stk = null; saleTbl = null; lnLead = false; lnBars = 0; lnTab = false; lnTabN = 0; lnCellHas = false; lnFirstEmpty = false; lnCells = []; lnCellFrom = 0; dlNext = -1; dlPrev = null; rs = { e: -1, i: 0, bars: 0, last: '' }; lineDash = false; lWords = 0; pWords = 0; pWordAt = -1; pOwn = false; pLast = ''; breakAt = -1; sent = { has: false, owner: false, neg: false, intro: false }; para = 0; paraAt = 0; paraPrev = 0; lineItem = false; lineOwner = false; lineSale = false; lineIntro = false; lineLast = ''; pendColon = false; lineTitle = false; lt = { w: -1, compras: false, buy: false, neg: false, cli: false, lp: false }; lastBlank = false; ring = []; mode = null; lineStart = true; lineBegin = 0; lineDelim = false; lineAmt = false; lineHas = false; tbl = null; } };
 }
 // ownerCtx (de cutPrime): false = sin contexto (igual que siempre); 'col' = regla fija de columna del dueño; true, 'intro' o CUALQUIER otro
 // valor verdadero (desconocido o alterado) = 'intro' (lo más estricto).
@@ -804,9 +825,10 @@ function cleanFor(role, value, max) {
 // campo de la tarjeta de compra (proveedor, documento): con algo tapado se avisa (completar) y nunca se guarda la máscara.
 // (Bot 2 sobre 84a49517) se conserva la parte EXACTA antes de la primera máscara («F001-» de «F001-[…]»), sin una etiqueta suelta al final
 // («RUC», «DNI N°:»); el dueño completa solo lo que falta (el celular la pone de inicio en el campo).
-const CARD_LABEL_TAIL = /(?:^|\s)(?:RUC|DNI|pin|clave|contrase(?:ñ|n)a|token)(?:\s*N[°º.]?)?\s*[:#=-]?\s*$/i;
-export function cardPrefix(v) { const m = MASK_LEFT_RE.exec(v); if (!m) return v; let pre = v.slice(0, m.index); let prev;
-  do { prev = pre; pre = pre.replace(CARD_LABEL_TAIL, ''); } while (pre !== prev); return pre.replace(/\s+$/, '').replace(/^\s+/, '').slice(0, 120); }
+// (Bot 5 sobre 58200f60) también la etiqueta pegada con guion, «(» o «/»: «F001-DNI ****5678» → «F001-», «Ana (RUC ****» → «Ana».
+const CARD_LABEL_TAIL = /(?<=^|[\s\-(/])(?:RUC|DNI|pin|clave|contrase(?:ñ|n)a|token)(?:\s*N[°º.]?)?\s*[:#=-]?\s*$/i;
+export function cardPrefix(v) { v = String(v ?? ''); const m = MASK_LEFT_RE.exec(v); if (!m && !CARD_LABEL_TAIL.test(v)) return v; let pre = m ? v.slice(0, m.index) : v; let prev;
+  do { prev = pre; pre = pre.replace(CARD_LABEL_TAIL, '').replace(/[\s(\[/:#=]+$/, ''); } while (pre !== prev); return pre.replace(/^\s+/, '').slice(0, 120); }
 function cardField(role, value, max, name, missing) { const v = cleanFor(role, value, max); if (v && MASK_LEFT_RE.test(v)) { missing.push(name); return cardPrefix(v); } return v; }
 // (Bots 2 / 4 / 5 sobre 84a49517) confirm: lo escrito por el dueño en «Complete este dato» llega en body.manual ({ campo: valor }), FUERA de la
 // propuesta firmada (que no cambia nunca por /confirm: su hash sigue igual). El servidor lo acepta solo si: la sesión es del dueño (rol del
@@ -824,7 +846,10 @@ function fillCheck(p, manual) {
   const out = {}, fields = [];
   for (const n of names) { const v = typeof m[n] === 'string' ? m[n].replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ').trim().slice(0, FILL_MAX[n]).trim() : ''; if (!v || MASK_LEFT_RE.test(v)) fields.push(n); else out[n] = v; }
   const masked = (x, d = 0) => (typeof x === 'string' ? MASK_LEFT_RE.test(x) : d < 4 && x && typeof x === 'object' ? Object.values(x).some((y) => masked(y, d + 1)) : false);
-  for (const [k, v] of Object.entries(p)) if (k !== 'completar' && k !== 'confirm_token' && !fields.includes(k) && masked(v)) fields.push(k);
+  // (Bot 5 sobre 58200f60) el nombre de una línea CON product_id no se revisa: «Nueva compra» toma el producto de la base por su id («Leche 12345678»
+  // llega como «Leche DNI ****5678» y la tarjeta no se podía confirmar nunca). Una línea sin product_id sí se revisa (ese nombre iría tal cual).
+  const lineMasked = (l) => (l && typeof l === 'object' && !Array.isArray(l) ? Object.entries(l).some(([lk, lv]) => !(lk === 'nombre' && l.product_id) && masked(lv, 1)) : masked(l, 1));
+  for (const [k, v] of Object.entries(p)) if (k !== 'completar' && k !== 'confirm_token' && !fields.includes(k) && (k === 'lineas' && Array.isArray(v) ? v.some(lineMasked) : masked(v))) fields.push(k);
   return fields.length ? { status: 422, error: 'fields_required', fields, out } : { fields, out };
 }
 function money(v) { const n = Math.round(Number(v) * 100) / 100; return Number.isFinite(n) && n >= 0 && n < 100000 ? n : null; }
@@ -1227,8 +1252,8 @@ const isWs = (c) => !!c && WS.test(c);
 const ASCII_WORD = /[A-Za-z0-9_]/;
 const CTRL_RE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, CTRL_CHAR = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 const PIN_KW_END = /(?:^|[^A-Za-z0-9_])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key|data)$/i;
-// «clave del wifi …»: hasta 4 palabras tras la etiqueta y una palabra de enlace, el valor puede venir más adelante (ver PATTERNS)
-const PIN_LINK_END = new RegExp('(?:^|[^A-Za-z0-9_])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,3}\\s*[:=]?$', 'i');
+// «clave del wifi de la tienda …»: hasta 5 palabras tras la etiqueta y una palabra de enlace, el valor puede venir más adelante (ver PATTERNS)
+const PIN_LINK_END = new RegExp('(?:^|[^A-Za-z0-9_])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}\\s*[:=]?$', 'i');
 const PIN_TOKEN_END = /(?:es|era|de|:|=)$/i;
 function skipWsBack(t, i) { while (i > 0 && isWs(t[i - 1])) i--; return i; }
 // ¿Hay una palabra de clave antes de h esperando su valor? (espacios, opcional «es/era/de/:/=», espacios)
@@ -1528,6 +1553,15 @@ async function hmac(secret, data) {
 }
 function sameText(a, b) { a = String(a); b = String(b); if (a.length !== b.length) return false; let x = 0; for (let i = 0; i < a.length; i++) x |= a.charCodeAt(i) ^ b.charCodeAt(i); return x === 0; }
 function stable(v) { return Array.isArray(v) ? '[' + v.map(stable).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}' : JSON.stringify(v ?? null); }
+// Sesión que confirmó (hash; nunca el id en claro en el almacén): la sesión del POS; si la autenticación no trae una, la credencial; si
+// tampoco, el aparato (el token ya va atado al aparato).
+async function sessionHash(auth) { return (await sha256Hex('s:' + String(auth?.sessionId || auth?.credentialHash || auth?.principalId || ''))).slice(0, 32); }
+// Hash del reenvío: propuesta firmada + lo escrito (normalizado) + filas aceptadas/quitadas (compra).
+async function replayHash(tok, manual, review, proposal) {
+  const ints = (a) => (Array.isArray(a) ? a : []).filter((i) => Number.isInteger(i) && i >= 0 && i < (proposal?.lineas?.length || 0));
+  const rv = review ? { a: [...new Set(ints(review.accept))].sort((x, y) => x - y), d: [...new Set(ints(review.drop))].sort((x, y) => x - y) } : null;
+  return (await sha256Hex(stable({ h: tok.h, op: tok.op, m: manual || {}, r: rv }))).slice(0, 48);
+}
 export function proposalHash(p) { const { confirm_token, ...rest } = p || {}; return sha256Hex(stable(rest)); }
 function randomHex(n) { const b = new Uint8Array(n); crypto.getRandomValues(b); return [...b].map((x) => x.toString(16).padStart(2, '0')).join(''); }
 
@@ -1602,9 +1636,23 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   if (!store) return json({ error: 'usage_store_missing' }, 500);
   const usedKey = USAGE_PREFIX + 'u:' + tok.n;
   // Ya usada se revisa ANTES que vencida: un reenvío tardío (corte de señal) recibe el mismo operation_id, no 410.
-  const withDrops = (drop) => (tok.t === 'compra' && Array.isArray(drop) && drop.length ? { ...body.proposal, lineas: body.proposal.lineas.filter((_, i) => !drop.includes(i)), quitadas: drop } : body.proposal);
+  // (Bots 3 / 5 sobre 58200f60) reenvío tras una respuesta perdida: al marcar la tarjeta usada se guardan, en el MISMO registro de uso
+  // (almacén existente, sin migración), el hash de la sesión dueño que confirmó y el hash de propuesta + lo escrito + filas revisadas.
+  // Reenvío de ESA sesión con los mismos datos → 200 con la MISMA propuesta aplicada (el dueño abre «Nueva compra» igual).
+  // Otra sesión, datos distintos o un registro viejo sin esos hashes → 409 already_confirmed, sin la propuesta ni lo escrito.
+  const sess = await sessionHash(auth);
+  const replay = async (v) => {
+    const rf = fillCheck(body.proposal, body.manual); const rv = body.review && typeof body.review === 'object' ? body.review : {};
+    if (!rf.error && v?.s && v?.rh && sameText(v.s, sess) && sameText(v.rh, await replayHash(tok, rf.out, tok.t === 'compra' ? (rv.op === tok.op ? rv : {}) : null, body.proposal))) {
+      const m = Object.keys(rf.out).length ? rf.out : {};
+      const drop = Array.isArray(v.drop) ? v.drop : [];
+      const applied = tok.t === 'compra' ? { ...body.proposal, ...m, lineas: body.proposal.lineas.filter((_, i) => !drop.includes(i)), aceptadas: Array.isArray(v.acc) ? v.acc : [], quitadas: drop } : { ...body.proposal, ...m };
+      return json({ ok: true, already_confirmed: true, replay: true, operation_id: v.op, type: tok.t, role, proposal: applied });
+    }
+    return json({ error: 'already_confirmed', already_confirmed: true, operation_id: v?.op || tok.op }, 409);
+  };
   const used = await store.get(usedKey);
-  if (used.value?.op) return json({ ok: true, already_confirmed: true, operation_id: used.value.op, type: tok.t, proposal: { ...withDrops(used.value.drop), ...(used.value.manual && typeof used.value.manual === 'object' ? used.value.manual : {}) } });
+  if (used.value?.op) return replay(used.value);
   if (!(tok.exp > now)) return json({ error: 'confirm_expired' }, 410);
   const fc = fillCheck(body.proposal, body.manual);
   if (fc.error) return json({ error: fc.error, fields: fc.fields, operation_id: tok.op }, fc.status);
@@ -1658,9 +1706,12 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   const w = await store.get(devKey); const wv = w.value.min === minute ? { ...w.value } : { min: minute, n: 0 };
   if (wv.n >= capFrom(env, 'ASSISTANT_CONFIRMS_PER_MINUTE', ASSISTANT_LIMITS.confirmsPerMinute)) return json({ error: 'rate_limited', retry_after_s: 60 - Math.floor((now % 60000) / 1000) }, 429);
   wv.n++;
-  if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(Object.keys(fc.out).length ? { manual: fc.out } : {}) }, used.revision))) {
+  const rvUsed = tok.t === 'compra' ? { accept: applied.aceptadas || [], drop: applied.quitadas || [] } : null;
+  if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(tok.t === 'compra' ? { acc: applied.aceptadas || [] } : {}),
+    s: sess, rh: await replayHash(tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
+    // dos envíos a la vez: el que perdió la escritura sigue la misma regla que un reenvío
     const again = await store.get(usedKey);
-    return json({ ok: true, already_confirmed: true, operation_id: again.value?.op || tok.op, type: tok.t, proposal: withDrops(again.value?.drop) });
+    return replay(again.value || { op: tok.op });
   }
   await store.put(devKey, wv, w.revision);
   await (deps.audit || auditWrite)(deps.db, [{ device_id: auth.principalId, role, tool: TYPE_TOOL[tok.t] || tok.t, type: tok.t, outcome: 'confirmed', card_id: tok.pid, operation_id: tok.op }]);

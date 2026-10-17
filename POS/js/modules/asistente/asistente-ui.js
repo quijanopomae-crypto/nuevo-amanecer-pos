@@ -419,7 +419,8 @@
     var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». La compra no cambia el costo del producto: usa las tarjetas «Actualizar costo».',
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
-    var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note">' + E([p.proveedor, p.documento, p.fecha].filter(Boolean).join(' · ')) + '</div>' : '';
+    // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
+    var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note" data-docnote></div>' : '';
     return '<h4>' + E(p.title) + '<span class="pill">Solo dueño</span></h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
       '<div class="meta"><span>Vence en <b data-left>5:00</b></span><span>Se usa una sola vez</span></div>' +
       '<div class="res" aria-live="polite"></div>' +
@@ -435,6 +436,7 @@
   function addCard(p, prompt) {
     var key = gate.add(p); if (!key) return;
     var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
+    var dn = c.querySelector('[data-docnote]'); if (dn) C.appendCoded(doc, dn, [p.proveedor, p.documento, p.fecha].filter(Boolean).map(String).join(' · '));
     var res = c.querySelector('.res');
     var go = c.querySelector('[data-go]'); if (go) go.onclick = function () { gate.execute(key, { confirmed: true }).then(function () { closePanel(); }); };
     // Documento local (solo lectura): se puede abrir varias veces, sin servidor ni PIN.
@@ -505,6 +507,7 @@
       // Sin PIN: un toque. El botón queda apagado al instante (un doble toque no dispara otro), la puerta reusa el pedido en curso y el
       // servidor marca la tarjeta usada una sola vez (el segundo envío recibe already_confirmed con el mismo operation_id).
       gate.execute(key, { confirmed: true, review: review() }).then(function (r) {
+        if (r && r.code === 'forbidden_role') { roleLost(c, key, p, need); return; } // (Bots 4/5 sobre 58200f60) ver roleLost
         if (r && ACCESS_LOST[r.code]) { accessLost(r.code); return; } // 403 de permiso al confirmar: igual que en el chat
         if (!c.isConnected) return;
         wake();
@@ -513,8 +516,10 @@
         if (c.dataset.st !== 'pending') ok.textContent = { done: 'Hecho', denied: 'No disponible', cancelled: 'Cancelada', expired: 'Venció' }[c.dataset.st] || 'Confirmar';
         if (r.ok) { if (again) again.hidden = true; setState('feliz', 2600); setTimeout(closePanel, 1400); return; }
         setState('error', 2600);
-        var f = C.confirmFailureView(r) || { kind: 'other', rows: [], button: 'Confirmar', again: true };
+        var f = C.confirmFailureView(r, { editable: need ? need.names : [], type: p.type }) || { kind: 'other', rows: [], button: 'Confirmar', again: true };
         c.dataset.fail = f.kind;
+        // (Bot 4 sobre 58200f60) nada que arreglar en la tarjeta: aviso claro y solo «Cancelar» (ningún botón que no lleve a ningún lado)
+        if (f.kind === 'blocked') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (again) again.hidden = true; no.hidden = false; no.disabled = false; no.textContent = 'Cancelar'; return; }
         if (f.kind === 'review' || f.kind === 'limit') markRows(f.rows, f.kind === 'limit');
         if (f.kind === 'fields') { var rest = need ? need.flag(f.fields) : f.fields; res.textContent = rest.length || !need ? f.msg : 'Complete los datos marcados y vuelva a confirmar.'; }
         if (again) { again.hidden = !f.again; again.disabled = false; }
@@ -537,6 +542,19 @@
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
     history.length = 0; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
+  }
+  // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
+  // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
+  // olvidó; aquí se vacían los campos y la referencia de la tarjeta). Queda solo el aviso con «Cerrar». Solo createElement/textContent.
+  function roleLost(c, key, p, need) {
+    try { gate.forget(key); } catch (_) {}
+    if (need && need.state) Object.keys(need.state).forEach(function (k) { delete need.state[k]; });
+    if (need && need.inputs) need.inputs.forEach(function (i) { i.value = ''; });
+    C.wipeManual(p);
+    if (c) { c._naKey = null; if (c.remove) c.remove(); }
+    var m = el('div', 'na-asst-msg sys na-asst-rolelost'), t = el('div'); t.textContent = C.ROLE_LOST_MSG; m.appendChild(t);
+    var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Cerrar'; b.onclick = function () { m.remove(); closePanel(); }; m.appendChild(b);
+    if (msgsEl) { msgsEl.appendChild(m); scrollEnd(); } announce(C.ROLE_LOST_MSG);
   }
   function accessLost(code) {
     access = null; adminOff = true; noRole = false;

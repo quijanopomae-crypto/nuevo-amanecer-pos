@@ -25,13 +25,14 @@
   // (Bot 2 sobre 6280deae) Tarjeta de compra: un campo que el servidor dejó vacío (tenía algo tapado) se completa a mano. Borde de alerta,
   // «Complete este dato», foco en el primero y «Confirmar» apagado hasta llenarlos. Solo createElement / textContent. Lo escrito queda en
   // state (fuera de la propuesta firmada) y lo usa fillPurchase; nunca se escribe una máscara.
-  var MASK_LEFT = /\*{3,}|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]/i;
+  // (Bot 5 sobre 58200f60) igual que MASK_LEFT_RE del servidor: también «∗∗∗∗6789», «••••6789», «**6789», «…6789», «xxxx6789», «(oculto)»
+  var MASK_LEFT = /\*{3,}|[*∗＊•●·]{2,}(?=[\s-]?\d)|[∗＊•●·]{3,}|…\s?\d|\bx{3,}\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
   function maskLeft(v) { return MASK_LEFT.test(String(v == null ? '' : v)); }
   var NEED_LABEL = { proveedor: 'Proveedor', documento: 'Documento' }, NEED_MAX = { proveedor: 120, documento: 80 };
   function needFields(doc, p, onChange) {
     var names = p && p.type === 'compra' && Array.isArray(p.completar) ? p.completar.filter(function (n, i, a) { return NEED_LABEL[n] && a.indexOf(n) === i; }) : [];
     if (!names.length) return null;
-    var state = {}, inputs = [], hints = {}, byName = {}, box = doc.createElement('div'); box.className = 'na-asst-need-box';
+    var state = {}, stale = {}, inputs = [], hints = {}, byName = {}, box = doc.createElement('div'); box.className = 'na-asst-need-box';
     names.forEach(function (n, i) {
       var lab = doc.createElement('label'); lab.className = 'na-asst-need-l';
       var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = NEED_LABEL[n];
@@ -45,6 +46,8 @@
       hints[n] = hint; byName[n] = inp;
       inp.addEventListener('input', function () {
         var v = String(inp.value == null ? '' : inp.value).trim(), ok = !!v && !maskLeft(v) && v !== pre.trim(); state[n] = ok ? v : '';
+        if (stale[n] != null && v !== stale[n]) delete stale[n]; // (Bot 4 sobre 58200f60) tras un 422 cuenta recién cuando cambia
+        ok = ok && stale[n] == null;
         hint.textContent = 'Complete este dato';
         inp.setAttribute('aria-invalid', ok ? 'false' : 'true'); inp.className = ok ? 'na-asst-need ok' : 'na-asst-need'; hint.hidden = ok;
         if (onChange) onChange(); });
@@ -56,12 +59,14 @@
       var other = [], first = null;
       (Array.isArray(fields) ? fields : []).forEach(function (n) {
         var inp = byName[n], hint = hints[n]; if (!inp) { other.push(String(n)); return; }
-        hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); inp.className = 'na-asst-need'; if (!first) first = inp; });
+        hint.hidden = false; hint.textContent = text || 'Complete este dato'; inp.setAttribute('aria-invalid', 'true'); inp.className = 'na-asst-need'; if (!first) first = inp;
+        // (Bot 4 sobre 58200f60) lo escrito queda, pero el campo no vuelve a contar como lleno (ni «Confirmar» se enciende) hasta que cambie
+        stale[n] = String(inp.value == null ? '' : inp.value).trim(); });
       if (first) { try { first.focus({ preventScroll: false }); } catch (_) {} }
       return other;
     }
     function values() { var o = {}; names.forEach(function (n) { if (state[n]) o[n] = state[n]; }); return o; }
-    return { el: box, state: state, first: inputs[0], inputs: inputs, flag: flag, values: values, missing: function () { return names.filter(function (n) { return !state[n]; }).length; } };
+    return { el: box, state: state, names: names.slice(), first: inputs[0], inputs: inputs, flag: flag, values: values, missing: function () { return names.filter(function (n) { return !state[n] || stale[n] != null; }).length; } };
   }
   var needSeq = 0;
   // valor para «Nueva compra»: lo escrito a mano, o el de la tarjeta si no trae máscara; nunca una máscara
@@ -295,9 +300,19 @@
   // línea siguiente (si es «|---|» es tabla; si no, vuelve como texto). El resto del texto se pinta enseguida, como antes.
   var MASK_LABEL = '[dato del dueño]', MASK_NOTE = 'Montos ocultos para empleado';
   var CUR_SP_RE = /(S\/\.?|US\$|PEN)[ \t](?=-?\d)/g;
-  // (Bot 4 sobre 84a49517) solo al pintar: la serie de un comprobante («B001-00000123») no se parte en el guion a 360 (guion que no corta, U+2011)
-  var DOC_HY_RE = /\b([FBET][A-Z0-9]{3}|0\d{3})-(?=\d)/g;
-  function nbsp(v) { return v.replace(CUR_SP_RE, '$1\u00a0').replace(DOC_HY_RE, '$1\u2011'); }
+  // (Bot 4 sobre 84a49517 / Bot 2 sobre 58200f60) solo al pintar: la serie de un comprobante («B001-00000123») no se parte en el guion a 360.
+  // El guion sigue siendo el ASCII «-» (copiar y pegar da el mismo texto): la serie va entera en un <span class="na-asst-code"> (nowrap por CSS),
+  // armado SOLO con createElement + textContent (el texto viene del modelo: nunca innerHTML ni plantillas).
+  var DOC_CODE_RE = /\b(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}\b/g;
+  function nbsp(v) { return v.replace(CUR_SP_RE, '$1\u00a0'); }
+  function codeSpan(doc, v) { var s = doc.createElement('span'); s.className = 'na-asst-code'; s.textContent = v; return s; }
+  // Texto ya completo (celdas, tarjetas): trozos de texto + una span por serie.
+  function appendCoded(doc, parent, v) {
+    v = String(v); var re = new RegExp(DOC_CODE_RE.source, 'g'), m, at = 0, n = 0;
+    while ((m = re.exec(v))) { if (m.index > at) parent.appendChild(doc.createTextNode(v.slice(at, m.index))); parent.appendChild(codeSpan(doc, m[0])); at = m.index + m[0].length; n++; }
+    if (at < v.length) parent.appendChild(doc.createTextNode(v.slice(at)));
+    return n;
+  }
   var AMOUNT_RE = /(?:S\/\.?|PEN|US\$|\$)\s?-?\d|\d[.,]\d{1,2}(?!\d)|\d\s?%/i; // monto visible en una celda (para la nota)
   var TABLE_SEP_RE = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$|^\s*\|\s*:?-{3,}:?\s*\|\s*$/;
   function tableCells(line) {
@@ -310,28 +325,37 @@
   // opts.labels (Bot 4/5): cabecera de la tabla de la burbuja ANTERIOR (cortada), tomada de lo que esa burbuja ya pintó (texto filtrado por el
   // servidor), nunca de otros datos. Solo sirve para filas sueltas al inicio de la continuación («sigue»), con el mismo número de columnas.
   function createReplyRenderer(doc, append, opts) {
-    var raw = '', line = '', mode = 'start', liveText = null, head = null, table = null, tbody = null, labels = null, rows = 0, lastLabels = null, tables = 0;
+    var raw = '', line = '', mode = 'start', liveText = null, liveScan = 0, head = null, table = null, tbody = null, labels = null, rows = 0, lastLabels = null, tables = 0;
     var wrap = null, tblEl = null, note = null, nMask = 0, nAmt = 0; // (Bot 4 sobre 25ffde10) montos tapados / visibles de la tabla actual
     var reuse = opts && Array.isArray(opts.labels) && opts.labels.length > 1 ? opts.labels.map(function (x) { return String(x); }) : null;
     // texto suelto: se va sumando al mismo nodo de texto mientras no aparezca una tabla
     // (Bot 4 sobre 25ffde10) solo en pantalla: «S/», «US$», «PEN» y su monto van unidos con un espacio que no se parte (la respuesta no cambia).
     // En partes se arregla solo la cola del nodo (los últimos 6 caracteres + lo nuevo): igual que hacerlo sobre el texto entero.
-    function text(t) { if (!t) return; if (liveText) { var d = liveText.data, k = Math.max(0, d.length - 6); liveText.data = d.slice(0, k) + nbsp(d.slice(k) + t); } else { liveText = doc.createTextNode(nbsp(t)); append(liveText); } }
+    // Series en partes: una serie que llega cortada entre trozos queda como texto hasta saber dónde termina (el carácter siguiente o el final);
+    // recién ahí se separa en su span. Así una serie nunca se parte en dos spans ni lleva otro guion.
+    function codes(fin) {
+      if (!liveText) return; var d = liveText.data, re = new RegExp(DOC_CODE_RE.source, 'g'), m; re.lastIndex = Math.max(0, liveScan);
+      while ((m = re.exec(d))) { var end = m.index + m[0].length; if (end === d.length && !fin) break; // puede seguir creciendo: espera
+        var node = liveText; node.data = d.slice(0, m.index); append(codeSpan(doc, m[0])); liveText = doc.createTextNode(d.slice(end)); append(liveText); d = liveText.data; re.lastIndex = 0; liveScan = 0; }
+      liveScan = Math.max(0, d.length - 14); }
+    function closeText() { codes(true); liveText = null; liveScan = 0; }
+    function text(t) { if (!t) return; if (liveText) { var d = liveText.data, k = Math.max(0, d.length - 6); liveText.data = d.slice(0, k) + nbsp(d.slice(k) + t); } else { liveText = doc.createTextNode(nbsp(t)); liveScan = 0; append(liveText); } codes(false); }
     function cellInto(cellEl, value) { // «[dato del dueño]» en un span que no se parte
-      var parts = String(value).split(MASK_LABEL);
+      var parts = String(value).split(MASK_LABEL), codes = 0;
       for (var i = 0; i < parts.length; i++) {
-        if (parts[i]) cellEl.appendChild(doc.createTextNode(nbsp(parts[i])));
+        if (parts[i]) codes += appendCoded(doc, cellEl, nbsp(parts[i]));
         if (i < parts.length - 1) { var m = doc.createElement('span'); m.className = 'na-asst-mask'; m.textContent = MASK_LABEL; cellEl.appendChild(m); }
       }
+      return codes;
     }
     // (Bot 4/3 sobre 25ffde10) la tabla se crea con su PRIMERA fila: una cabecera seguida de un párrafo ya no deja una tabla vacía en pantalla.
     // Sin etiquetas (filas sueltas sin cabecera) no lleva thead.
     function startTable(hdrLine) {
-      liveText = null; labels = Array.isArray(hdrLine) ? hdrLine.slice() : tableCells(hdrLine); rows = 0; lastLabels = labels.slice(); tables++;
+      closeText(); labels = Array.isArray(hdrLine) ? hdrLine.slice() : tableCells(hdrLine); rows = 0; lastLabels = labels.slice(); tables++;
       table = true; wrap = tblEl = tbody = note = null; nMask = 0; nAmt = 0;
     }
     function buildTable() {
-      liveText = null; wrap = doc.createElement('div'); wrap.className = 'na-asst-tbl'; tblEl = doc.createElement('table');
+      closeText(); wrap = doc.createElement('div'); wrap.className = 'na-asst-tbl'; tblEl = doc.createElement('table');
       if (labels.some(function (h) { return h !== ''; })) { var thead = doc.createElement('thead'), tr = doc.createElement('tr');
         labels.forEach(function (h) { var th = doc.createElement('th'); th.setAttribute('scope', 'col'); cellInto(th, h); tr.appendChild(th); }); thead.appendChild(tr); tblEl.appendChild(thead); }
       tbody = doc.createElement('tbody'); tblEl.appendChild(tbody); wrap.appendChild(tblEl); append(wrap);
@@ -352,11 +376,11 @@
       for (var i = 0; i < n; i++) { countCell(cells[i] == null ? '' : cells[i]);
         var td = doc.createElement('td');
         if (labels[i]) { var lab = doc.createElement('span'); lab.className = 'na-asst-tl'; lab.setAttribute('aria-hidden', 'true'); lab.textContent = labels[i]; td.appendChild(lab); }
-        var v = doc.createElement('span'); v.className = 'na-asst-tv'; cellInto(v, cells[i] == null ? '' : cells[i]); td.appendChild(v); tr.appendChild(td);
+        var v = doc.createElement('span'); v.className = 'na-asst-tv'; if (cellInto(v, cells[i] == null ? '' : cells[i])) v.className = 'na-asst-tv na-asst-tvc'; td.appendChild(v); tr.appendChild(td);
       }
       tbody.appendChild(tr); rows++; updateNote();
     }
-    function endTable() { table = tbody = labels = null; if (note) liveText = null; wrap = tblEl = note = null; }
+    function endTable() { table = tbody = labels = null; if (note) closeText(); wrap = tblEl = note = null; }
     function isPipe(l) { return /^\s*\|/.test(l); }
     // fila suelta al inicio de la continuación: usa la cabecera anterior (solo antes de la primera tabla de esta burbuja y si cuadran las columnas).
     // (Bot 4 sobre a6d1d76e) Fila suelta DESPUÉS de una tabla de esta burbuja (p. ej. tras un párrafo: el servidor la sigue tratando como de esa
@@ -394,7 +418,7 @@
           line = ''; mode = 'start'; i = k + 1;
         }
       },
-      finish: function () { if (line) { if (head != null || table) full(line, false); else if (!(isPipe(line) && reused(line))) text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); mode = 'start'; },
+      finish: function () { if (line) { if (head != null || table) full(line, false); else if (!(isPipe(line) && reused(line))) text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); closeText(); mode = 'start'; },
       raw: function () { return raw; },
       labels: function () { return lastLabels ? lastLabels.slice() : null; }, // cabecera de la última tabla pintada (para la continuación)
       rows: function () { return rows; }
@@ -472,7 +496,8 @@
     empty_after_review: ['Quitaste todas las filas. Pide la compra de nuevo.'], other_device: ['Esta propuesta es de otro aparato. Pídela aquí otra vez.'],
     image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
     image_too_large: ['La foto es muy grande. Toma otra más cerca.'], bad_image: ['No pude leer esa foto. Toma otra con más luz.'],
-    not_found: ['El asistente no está disponible por ahora.'], HTTP_404: ['El asistente no está disponible por ahora.'], bad_request: [MSG.again, true], bad_token: [MSG.changed]
+    not_found: ['El asistente no está disponible por ahora.'], HTTP_404: ['El asistente no está disponible por ahora.'], bad_request: [MSG.again, true], bad_token: [MSG.changed],
+    already_confirmed: ['Esta compra ya se confirmó en otro aparato.'] // (Bots 3/5 sobre 58200f60) 409: otra sesión o datos distintos
   };
   // ¿El texto trae algo que parece código? (palabra_con_guion_bajo, «HTTP», «error 403», «Error:»). Entonces no se muestra tal cual.
   function looksTechnical(t) { return /[a-z0-9]+_[a-z0-9_]+|\berror\b|HTTP|\b(error|status|code)\b\s*:?\s*\d{3}\b|^\s*[45]\d\d\b|undefined|null|NaN|Exception|TypeError/i.test(String(t || '')); }
@@ -491,14 +516,20 @@
   //  - 422 review_required: filas en rojo «Revisa este dato»; se reenvía la MISMA tarjeta (un toque, sin PIN).
   //  - 429: «Espera un momento y vuelve a intentar» + «Volver a intentar» (misma tarjeta).
   //  - Siempre: «Pedir de nuevo» = propuesta NUEVA (token y operation_id nuevos).
-  function confirmFailureView(r) {
+  // (Bot 4 sobre 58200f60) opts.editable: campos que esta tarjeta deja escribir; opts.type: tipo de tarjeta. Un 422 sin nada que se pueda
+  // arreglar en la tarjeta (un campo que no es de la tarjeta, o fuera del límite sin filas para quitar) → kind 'blocked': aviso claro y solo «Cancelar».
+  var BLOCKED_MSG = { compra: 'No se puede confirmar esta compra desde el asistente. Ábrala en Nueva compra.' };
+  function confirmFailureView(r, opts) {
     if (!r || r.ok) return null;
-    var code = r.code || (r.retry ? 'network' : 'error');
+    var code = r.code || (r.retry ? 'network' : 'error'), editable = opts && Array.isArray(opts.editable) ? opts.editable : ['proveedor', 'documento'], type = (opts && opts.type) || 'compra';
+    var blocked = function (msg) { return { kind: 'blocked', rows: [], fields: [], button: null, again: false, cancelOnly: true, msg: msg || BLOCKED_MSG[type] || 'No se puede confirmar este cambio desde el asistente. Hágalo desde su pantalla.' }; };
     if (code === 'review_required') return { kind: 'review', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: 'Revisa este dato en las filas marcadas y vuelve a confirmar.' };
     if (code === 'fields_required') { var fl = (Array.isArray(r.fields) ? r.fields : []).filter(function (n) { return typeof n === 'string' && n.length <= 40; });
-      var own = fl.every(function (n) { return n === 'proveedor' || n === 'documento'; });
-      return { kind: 'fields', rows: [], fields: fl, button: 'Confirmar', again: true, msg: own ? 'Complete los datos marcados y vuelva a confirmar.' : 'Esta propuesta trae un dato tapado. Complete los datos marcados o toque «Pedir de nuevo».' }; }
+      var own = fl.every(function (n) { return editable.indexOf(n) >= 0; }); if (!fl.length || !own) return blocked();
+      return { kind: 'fields', rows: [], fields: fl, button: 'Confirmar', again: true, msg: 'Complete los datos marcados y vuelva a confirmar.' }; }
+    if (code === 'over_limit' && !(r.rows || []).some(function (n) { return Number.isInteger(n) && n >= 0; })) return blocked(type === 'compra' ? null : (r.msg && !looksTechnical(r.msg) ? r.msg : null));
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
+    if (code === 'already_confirmed') return { kind: 'elsewhere', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : FRIENDLY.already_confirmed[0] };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
     if (code === 'network') return { kind: 'network', rows: [], button: 'Reintentar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : friendlyError('network').msg };
     return { kind: 'other', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : friendlyError(code).msg };
@@ -535,8 +566,12 @@
     }
   };
   function precheck(p, d) { var f = PRECHECK[p && p.type]; try { return f ? f(p, d) : null; } catch (_) { return 'No se pudo revisar la tarjeta en este aparato.'; } }
+  var ROLE_LOST_MSG = 'Esta sesión ya no es de Admin. Vuelva a entrar como Admin y pida la compra de nuevo.';
+  // borra lo escrito a mano (sin dejar copia) y suelta la propuesta
+  function wipeManual(p) { var m = p && p._manual; if (m && typeof m === 'object') Object.keys(m).forEach(function (k) { m[k] = ''; delete m[k]; }); if (p) { try { delete p._manual; } catch (_) {} } }
   function createGate(deps) {
     var items = Object.create(null);
+    function forget(it) { if (!it) return; wipeManual(it.p); wipeManual(it.applied); delete items[it.key]; it.state = 'forgotten'; it.p = null; it.applied = null; it.review = null; }
     async function run(it) {
       var perm = canExecute(deps.roles(), it.p);
       if (!perm.ok) { it.state = 'denied'; return perm; }
@@ -547,6 +582,11 @@
         var c;
         // sin respuesta (corte o tiempo): la tarjeta sigue editable; confirmar no crea registros, así que reintentar es seguro (Bot 3)
         try { c = await deps.confirm(it.p, it.review || null); } catch (e) { it.state = 'pending'; return { ok: false, retry: true, code: 'network', msg: 'No se pudo confirmar: no llegó respuesta. Revise los datos y toque «Reintentar».' }; }
+        // (Bots 3/5 sobre 58200f60) 409 already_confirmed: la tarjeta la usó otra sesión (u otros datos). Nota corta, sin error crudo ni propuesta.
+        // (Bots 4/5 sobre 58200f60) 403 forbidden_role al confirmar: manda el rol del SERVIDOR (no se mira el rol guardado en el aparato).
+        // La propuesta y lo escrito a mano salen de la memoria del celular (la tarjeta sale de la pantalla en la UI); sin reintento automático.
+        if (c && !c.ok && c.error === 'forbidden_role') { forget(it); return { ok: false, code: 'forbidden_role', dropped: true, msg: ROLE_LOST_MSG }; }
+        if (c && !c.ok && c.error === 'already_confirmed') { it.state = 'denied'; return { ok: false, code: 'already_confirmed', msg: it.p.type === 'compra' ? FRIENDLY.already_confirmed[0] : 'Este cambio ya se confirmó en otro aparato.' }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
           return { ok: false, code: (c && c.error) || 'error', rows: c && Array.isArray(c.rows) ? c.rows : null, fields: c && Array.isArray(c.fields) ? c.fields : null, retry_after_s: c && c.retry_after_s || null, msg: friendlyError((c && c.error) || 'error', c && ['over_limit', 'sin_control_stock', 'stock_check_unavailable', 'product_missing'].indexOf(c.error) >= 0 ? c.message : null).msg }; }
         it.operationId = c.operation_id;
@@ -577,6 +617,8 @@
       state: function (id) { return items[id] ? items[id].state : null; },
       operationId: function (id) { return items[id] ? items[id].operationId : null; },
       cancel: function (id) { if (items[id] && items[id].state === 'pending') items[id].state = 'cancelled'; },
+      forget: function (id) { forget(items[id]); },
+      size: function () { return Object.keys(items).length; },
       execute: function (id, opts) {
         var it = items[id];
         if (!it) return Promise.resolve({ ok: false, msg: 'Propuesta no encontrada.' });
@@ -604,7 +646,7 @@
     return Math.max(0, over);
   }
 
-  var api = { createReplyRenderer: createReplyRenderer, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

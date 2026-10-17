@@ -395,6 +395,10 @@ body.dark .na-asst-prov-t{background:#0f172a;border-color:#334155;color:#e2e8f0}
 .na-asst-tbl th,.na-asst-tbl td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}
 .na-asst-tbl th{font-weight:800;background:#f1f5f9;color:#0f172a}
 .na-asst-tl{display:none}.na-asst-mask{white-space:nowrap}
+/* (Bot 2 sobre 58200f60) serie de comprobante («B001-00000123») entera: el guion es el ASCII «-» (copiar/pegar igual) y no se parte dentro
+   de la span (nowrap gana a overflow-wrap:anywhere de la burbuja). Si una serie sola fuera más ancha que la burbuja, se desplaza dentro
+   de su caja (max-width:100%) en vez de desbordar. */
+.na-asst-code{white-space:nowrap;overflow-wrap:normal;word-break:keep-all;display:inline-block;max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:bottom}
 /* (Bot 4 sobre 25ffde10) todos los montos de la tabla tapados: máscara corta (el texto sigue en el DOM) y una sola nota bajo la tabla */
 .na-asst-allmask .na-asst-mask{font-size:0;letter-spacing:0}.na-asst-allmask .na-asst-mask::after{content:'•••';font-size:15px;color:#64748b;letter-spacing:1px}
 .na-asst-tnote{font-size:12px;color:#475569;margin:-2px 0 6px}.na-asst-tnote.na-asst-off{display:none}body.dark .na-asst-tnote{color:#a7c4b3}body.dark .na-asst-allmask .na-asst-mask::after{color:#a7c4b3}
@@ -407,6 +411,8 @@ body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.da
   .na-asst-tbl td{display:flex;gap:8px;padding:4px 0;border:0;font-size:16px}
   .na-asst-tl{display:block;flex:0 0 42%;font-weight:800;overflow-wrap:break-word}.na-asst-tl::after{content:":"}
   .na-asst-tv{flex:1;min-width:0;overflow-wrap:anywhere}
+  /* (Bot 2 sobre 58200f60) celda con serie de comprobante: si no cabe junto a la etiqueta, el valor baja a su propia línea (la serie no se corta) */
+  .na-asst-tbl td{flex-wrap:wrap}.na-asst-tv.na-asst-tvc{flex:1 1 auto}
   body.dark .na-asst-tbl tr{border-color:#1f3b2b}
 }
 .na-asst-msg.a.na-asst-wide{max-width:100%} /* clase puesta desde JS al pintar la 1.ª tabla (antes :has) */
