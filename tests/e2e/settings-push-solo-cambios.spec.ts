@@ -325,7 +325,8 @@ test('(h) every SHARED key has a Configuración v9 control that sends exactly on
     // Antes de cambiar la clave siguiente se espera la confirmación de ESTE guardado: la respuesta de su POST y
     // «Guardado ✓» de este mismo cambio. Así el guardado automático no puede juntar dos cambios en un flush.
     const answered = page.waitForResponse(response => response.request().method() === 'POST'
-      && new URL(response.url()).pathname === '/settings' && response.request().postDataJSON()?.key === key);
+      && new URL(response.url()).pathname === '/settings' && response.request().postDataJSON()?.key === key, { timeout: 10_000 })
+      .catch(error => { throw new Error(`(h) no llegó la respuesta de un POST /settings con key «${key}» (¿cambio juntado con otro o cuerpo con otro formato?). POST vistos: ${JSON.stringify(mock.posts.map(post => post.key))}. ${error.message}`); });
     // El indicador solo se oculta con una clase y conserva el texto anterior: se vacía para que «Guardado ✓»
     // venga de este cambio y no del anterior.
     await page.evaluate(() => { const el = document.getElementById('na9Saved'); if (el) el.textContent = ''; });
@@ -334,6 +335,10 @@ test('(h) every SHARED key has a Configuración v9 control that sends exactly on
     await expect(page.locator('#na9Saved')).toHaveText('Guardado ✓');
     expect(mock.posts.map(post => post.key)).toEqual(keys.slice(0, index + 1));
   }
+  // Un POST duplicado tardío del guardado automático (espera 500 ms) después de la ÚLTIMA clave solo se ve si se deja
+  // pasar ese tiempo. No se usa page.clock: instalado a mitad de la prueba no controla los setTimeout que la app ya
+  // programó con el reloj real. Por eso se espera 800 ms, solo aquí, una vez.
+  await page.waitForTimeout(800);
   // Un POST por clave, en orden, y ninguno más.
   expect(mock.posts.map(post => post.key)).toEqual(keys);
 });
