@@ -24,7 +24,7 @@ const VIAS = { emp: A.redactFor(EMP), own: A.redactFor('owner'), mEmp: A.redactT
 const sees = (t, v) => new RegExp('(^|[^\\w])' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w])').test(t);
 const emitN = (t, n, role) => { const red = A.redactFor(role); let o = ''; const e = A.createTextEmitter((d) => { if (d.reset) o = ''; else o += d.t || ''; }, 1e9, red, role === 'owner' ? null : A.ownerHold); for (let i = 0; i < t.length; i += n) e.push(t.slice(i, i + n)); e.flush(); return o; };
 
-// [texto, valor, 'secreto' (tapado en las 4 vías) | 'normal' (el dueño lo ve) | 'tapa' (tapado aceptado)]
+// [texto, valor, 'secreto' (tapado en las 4 vías) | 'normal' (el dueño lo ve) | 'tapa' (tapado aceptado: decisión final, sin palabras de corte → los años tras la etiqueta también se tapan)]
 const PIN = [
   ['El pin de la caja es 4321', '4321', 'secreto'], ['clave del wifi del local 12345678', '12345678', 'secreto'], ['pin por favor 4321', '4321', 'secreto'], ['la clave en el cuaderno: 4321', '4321', 'secreto'],
   ['El pin para la caja 4321 fin.', '4321', 'secreto'], ['El pin de la caja: 4321', '4321', 'secreto'], ['clave de producto 4521', '4521', 'secreto'], ['El pin de mi tarjeta es 98765432', '98765432', 'secreto'],
@@ -33,10 +33,13 @@ const PIN = [
   ['La clave de la caja: es 4321', '4321', 'secreto'], ['pin de la caja = 4321', '4321', 'secreto'], ['El pin de la caja cambió a 4321', '4321', 'secreto'], ['clave para abrir 4321', '4321', 'secreto'],
   ['contraseña del wifi y el pin 4321', '4321', 'secreto'], ['pin de la caja 4321 unidades', '4321', 'secreto'], ['La clave del wifi de la tienda: Zq9xK2mPw7', 'Zq9xK2mPw7', 'secreto'], ['La clave del wifi de la tienda nueva: Zq9xK2mPw7', 'Zq9xK2mPw7', 'secreto'],
   ['La contraseña de mi correo es Zq9xK2mPw7', 'Zq9xK2mPw7', 'secreto'], ['clave del wifi del local de la esquina Zq9xK2mPw7', 'Zq9xK2mPw7', 'secreto'],
-  ['pin, por favor, 4321', '4321', 'secreto'], ['El PIN de la caja: era 4321', '4321', 'secreto'], ['La contraseña del sistema cambió a 87654321', '87654321', 'secreto'], ['clave de acceso de la puerta trasera: es 2580', '2580', 'secreto'],
-  ['contraseña del año 2024', '2024', 'normal'], ['La clave del negocio en 2024 fue el arroz.', '2024', 'normal'], ['Producto clave de la semana 2500 unidades', '2500', 'normal'],
-  ['La clave para vender más es tener 1500 unidades.', '1500', 'normal'], ['Cambié la clave de la caja en 2024 y anda bien.', '2024', 'normal'], ['El token de la sesión del 2026 venció', '2026', 'normal'],
-  ['Mi clave para el año 2025: vender más', '2025', 'normal'], ['la clave de este mes son 3000 soles', '3000', 'normal'], ['clave del producto Arroz Costeño 5kg código 77501234', '77501234', 'normal'],
+  ['pin, por favor, 4321', '4321', 'secreto'],
+  // (Bot 2 sobre d72b7601) regresión frente a 58200f60: sin palabras de corte
+  ['la clave de la caja fuerte 4321', '4321', 'secreto'], ['la clave de la caja fuerte: 4321', '4321', 'secreto'], ['la clave de la caja chica 4321', '4321', 'secreto'], ['clave de la caja en 2024 era 4321', '4321', 'secreto'],
+  ['la contraseña de la caja fuerte es 87654321', '87654321', 'secreto'], ['El pin de la caja es 1111 y la clave del wifi 2222', '2222', 'secreto'], ['El pin de la caja es 1111 y la clave del wifi 2222', '1111', 'secreto'], ['El PIN de la caja: era 4321', '4321', 'secreto'], ['La contraseña del sistema cambió a 87654321', '87654321', 'secreto'], ['clave de acceso de la puerta trasera: es 2580', '2580', 'secreto'],
+  ['contraseña del año 2024', '2024', 'tapa'], ['La clave del negocio en 2024 fue el arroz.', '2024', 'tapa'], ['Producto clave de la semana 2500 unidades', '2500', 'normal'],
+  ['La clave para vender más es tener 1500 unidades.', '1500', 'normal'], ['Cambié la clave de la caja en 2024 y anda bien.', '2024', 'tapa'], ['El token de la sesión del 2026 venció', '2026', 'normal'],
+  ['Mi clave para el año 2025: vender más', '2025', 'tapa'], ['la clave de este mes son 3000 soles', '3000', 'normal'], ['clave del producto Arroz Costeño 5kg código 77501234', '77501234', 'normal'],
   ['La clave del pedido: Arroz 2024', 'Arroz', 'normal'], ['clave de la venta S/ 1250', '1250', 'normal'], ['clave de la caja chica: 2500 soles', '2500', 'normal'], ['Producto clave de la semana: Galleta Soda 6x4', 'Soda', 'normal'],
   ['El producto clave es Leche Gloria 400g', 'Gloria', 'normal'],
   // tapados de más ACEPTADOS (un pin nunca es una cantidad; Bot 5 los dejó como INFO)
@@ -57,6 +60,11 @@ test('1) PIN numérico (Bot 5 pin-d72b): secretos tapados en las 4 vías, normal
   assert.equal(VIAS.own('clave del wifi del local 12345678'), 'clave del wifi del local [oculto]');
   // las palabras no cruzan el fin de frase
   assert.equal(VIAS.own('Cambié el pin. Tengo 4321 cajas.'), 'Cambié el pin. Tengo 4321 cajas.');
+  // ventana: más de 60 caracteres o más de 5 palabras (sin contar las de enlace) → ya no es PIN
+  assert.ok(sees(VIAS.own('La clave del éxito según los expertos más conocidos del rubro comercial es 4321'), '4321'));
+  assert.ok(sees(VIAS.own('pin ' + 'x'.repeat(60) + ' 4321'), '4321')); assert.ok(!sees(VIAS.own('pin ' + 'x'.repeat(50) + ' 4321'), '4321'));
+  // un número detrás de «código»/«EAN» no es PIN (el dueño ve el código)
+  assert.ok(sees(VIAS.own('clave del producto Arroz código 77501234'), '77501234'));
   // un número detrás de S/ o $ nunca es PIN
   assert.ok(sees(VIAS.own('pin de cobro S/ 1250'), '1250'));
 });

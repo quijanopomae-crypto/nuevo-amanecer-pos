@@ -63,7 +63,9 @@ test('3) máscaras no ASCII: cuentan en «manual», en la propuesta y en el celu
   const send = async (prop, manual) => { const token = await A.issueConfirmToken(prop, 'owner', AUTH, SECRET, Date.now());
     const r = await A.assistantConfirmRoute(new Request('https://w.test/auth/assistant/confirm', { method: 'POST', body: JSON.stringify({ token, proposal: prop, manual }) }), { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET }, AUTH, jsonR,
       { store, resolveRole: async () => 'owner', reader, audit: async () => {} }); return { status: r.status, body: await r.json() }; };
-  for (const m of masks) { const r = await send(p, { proveedor: m, documento: 'F001-00012345' }); assert.equal(r.status, 422, m); assert.deepEqual(r.body.fields, ['proveedor']); }
+  // (decisión final sobre d72b7601) «XX6789» y las demás máscaras de MASK_LEFT_RE cuentan solo en documento/RUC; en el proveedor, solo tiras de
+  // relleno, «[oculto]/(oculto)» o vacío. Por eso las máscaras con x/X o «…» se prueban en el documento.
+  for (const m of masks) { const doc = /x|…/i.test(m); const r = await send(p, doc ? { proveedor: 'Juan Pérez', documento: m } : { proveedor: m, documento: 'F001-00012345' }); assert.equal(r.status, 422, m); assert.deepEqual(r.body.fields, [doc ? 'documento' : 'proveedor'], m); }
   assert.equal([...store._map.values()].filter((x) => x.value.op).length, 0, 'ningún rechazo marcó la tarjeta');
   assert.equal((await send(p, { proveedor: 'Juan Pérez', documento: 'F001-00012345' })).status, 200);
 });
@@ -87,8 +89,10 @@ test('4) /confirm: el nombre de una línea con product_id no se revisa («Leche 
 test('5) PIN numérico: a lo sumo 2 palabras tras el enlace, sin unidad ni «en/del…» justo antes; con letras, igual que antes; dueño, empleado y modelo', () => {
   const masked = ['clave de producto 4521', 'El pin de la caja: 4321', 'El pin de la caja es 4321', 'El pin para la caja 4321', 'la contraseña de mi caja 98765432', 'la clave del pin es 1234', 'pin: 4321', 'El pin de la caja = 4321',
     'La clave del wifi: Zq9xK2mPw7', 'La clave del wifi Zq9xK2mPw7', 'El token de la api: Ab12Cd34Ef', 'La clave del wifi de la tienda: Zq9xK2mPw7', 'La clave del wifi de la tienda Zq9xK2mPw7'];
-  const shown = [['Producto clave de la semana 2500 unidades', '2500'], ['Cambié la clave de la caja en 2024', '2024'], ['La clave del negocio en 2024 fue el arroz.', '2024'], ['El token de la sesión del 2026 venció', '2026'],
-    ['clave de la caja 4521 kg', '4521'], ['La clave de la promo 2500 soles', '2500'], ['clave de la oferta 1500 S/ menos', '1500'], ['clave del mes 30%', '30'], ['La clave de este mes: vender 3000 paquetes.', '3000']];
+  const shown = [['Producto clave de la semana 2500 unidades', '2500'], ['El token de la sesión del 2026 venció', '2026'],
+    ['clave de la caja 4521 kg', '4521'], ['La clave de la promo 2500 soles', '2500'], ['clave de la oferta 1500 S/ menos', '1500'], ['clave del mes 30%', '30']];
+  // (decisión final sobre d72b7601: sin palabras de corte, 5 palabras / 60 caracteres) estos ahora se tapan; tapado aceptado
+  for (const [t, v] of [['Cambié la clave de la caja en 2024', '2024'], ['La clave del negocio en 2024 fue el arroz.', '2024'], ['La clave de este mes: vender 3000 paquetes.', '3000']]) assert.ok(!own(t).includes(v), t);
   for (const f of [A.redactText, own, emp]) {
     for (const t of masked) { const o = f(t); assert.match(o, /\[oculto\]/, t + ' → ' + o); assert.ok(!/4521|4321|98765432|1234|Zq9xK2mPw7|Ab12Cd34Ef/.test(o), t + ' → ' + o); }
     for (const [t, v] of shown) { const o = f(t); assert.ok(o.includes(v), t + ' → ' + o); }

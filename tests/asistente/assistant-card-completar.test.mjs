@@ -111,26 +111,27 @@ test('celular (Bot 2 A / Bot 4): campo con la parte exacta de inicio; 422 fields
   // cableado: confirmRemote manda fill; la tarjeta marca los campos y deja el aviso con textContent; nada de innerHTML en lo nuevo
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8'), CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8');
   assert.match(UI, /var manual = C\.fillValues \? C\.fillValues\(p\) : null; if \(manual\) body\.manual = manual;/);
-  assert.match(UI, /ok\.textContent = 'Guardando…'/); assert.match(UI, /class="na-asst-bits" aria-hidden="true"/);
+  assert.match(UI, /ok\.textContent = gate\.locked && gate\.locked\(key\) \? C\.RECONNECT_MSG : 'Guardando…'/); assert.match(UI, /class="na-asst-bits" aria-hidden="true"/);
   assert.match(UI, /if \(f\.kind === 'fields'\) \{ var rest = need \? need\.flag\(f\.fields\) : f\.fields; res\.textContent = /);
   const fn = CORE.slice(CORE.indexOf('function needFields'), CORE.indexOf('var needSeq')); assert.ok(/function flag/.test(fn) && !/innerHTML|insertAdjacentHTML/.test(fn));
   assert.match(CORE, /fields_required: \['Complete los datos marcados y vuelva a confirmar\.'\]/);
 });
 
-test('celular (Bot 4): lo escrito llega a «Nueva compra» con la propuesta que devuelve /confirm (respuesta simulada); sin respuesta → aviso corto y editable', async () => {
+test('celular (Bot 4): lo escrito llega a «Nueva compra» con la propuesta que devuelve /confirm (respuesta simulada); sin respuesta → «Sin conexión. Toque Reintentar», mismo cuerpo, sin editar (d72b7601)', async () => {
   const owner = { role: 'owner', isOwner: () => true };
   const p = { id: 'c2', type: 'compra', needsConfirm: true, confirm_token: 't', proveedor: 'Bodega Juan', documento: 'F001-', completar: ['proveedor', 'documento'], lineas: [{ nombre: 'Galleta', cantidad: 1, costo_unitario: 1 }] };
   Object.defineProperty(p, '_manual', { value: { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' }, enumerable: false });
   let filled = null, calls = 0, sentBody = null;
   const deps = { roles: () => owner, online: () => true, productos: () => [],
-    confirm: async (pp) => { calls++; sentBody = { manual: C.fillValues(pp), proposal: JSON.parse(JSON.stringify(pp)) };
-      if (calls === 1) { const e = new Error('cortada'); e.timeout = true; throw e; } // respuesta cortada a medias
+    confirm: async (pp, rv, o) => { calls++; if (calls === 2) assert.equal(o && o.body, sentBody, '«Reintentar» reenvía el MISMO cuerpo (d72b7601)');
+      sentBody = o && o.body ? o.body : { manual: C.fillValues(pp), proposal: JSON.parse(JSON.stringify(pp)) };
+      if (calls === 1) { const e = new Error('cortada'); e.timeout = true; e.sentBody = sentBody; throw e; } // respuesta cortada a medias (confirmRemote adjunta el cuerpo)
       return { ok: true, operation_id: 'AST-1', type: 'compra', proposal: { ...sentBody.proposal } }; }, // servidor viejo: sin los valores escritos
     openPurchase: () => ({ querySelector: () => null }), fillPurchase: (w, ap) => { filled = { proveedor: C.purchaseValue(ap, 'proveedor'), documento: C.purchaseValue(ap, 'documento') }; return true; },
     navigate: () => {} };
   const g = C.createGate(deps); const key = g.add(p);
   const r1 = await g.execute(key, { confirmed: true }); assert.equal(r1.ok, false); assert.equal(g.state(key) || 'pending', 'pending');
-  const v = C.confirmFailureView(r1); assert.equal(v.kind, 'network'); assert.equal(v.button, 'Reintentar'); assert.match(v.msg, /No se pudo confirmar/); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
+  const v = C.confirmFailureView(r1); assert.equal(v.kind, 'network'); assert.equal(v.button, 'Reintentar'); assert.equal(v.msg, 'Sin conexión. Toque Reintentar'); assert.equal(r1.locked, true); assert.equal(g.locked(key), true); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
   assert.deepEqual(sentBody.manual, { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' }); assert.equal(sentBody.proposal.proveedor, 'Bodega Juan', 'la propuesta enviada es la firmada');
   await g.execute(key, { confirmed: true });
   assert.ok(filled, 'se abrió Nueva compra'); assert.deepEqual(filled, { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345' });

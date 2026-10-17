@@ -22,7 +22,7 @@ class N { constructor(tag) { this.tagName = tag.toUpperCase(); this.childNodes =
   set innerHTML(_) { throw new Error('innerHTML usado'); } set outerHTML(_) { throw new Error('outerHTML usado'); } insertAdjacentHTML() { throw new Error('insertAdjacentHTML usado'); } }
 const D = { createElement: (t) => new N(t), createTextNode: (t) => ({ nodeType: 3, data: String(t) }) };
 const walk = (n, f) => { for (const k of n.childNodes || []) { f(k); if (k.childNodes) walk(k, f); } };
-const codeSpans = (n) => { const o = []; walk(n, (k) => { if (k.className === 'na-asst-code') o.push(k); }); return o; };
+const codeSpans = (n) => { const o = []; walk(n, (k) => { if (typeof k.className === 'string' && k.className.split(' ')[0] === 'na-asst-code') o.push(k); }); return o; };
 function paint(txt, step, opts) { created = []; const host = new N('div'); created = []; const r = C.createReplyRenderer(D, (n) => host.appendChild(n), opts);
   for (let i = 0; i < txt.length; i += step) r.push(txt.slice(i, i + step)); r.finish(); return host; }
 const STEPS = [1, 2, 3, 7, 47, 9999];
@@ -48,7 +48,12 @@ test('tablas y tarjetas: la serie en la celda (con etiqueta de tarjeta y con má
     const h = paint(txt, step); const sp = codeSpans(h);
     assert.deepEqual(sp.map((x) => x.textContent), ['B001-00000123', 'F001-7', 'T001-00012345', 'E001-5'], 'trozos de ' + step);
     let tds = 0; walk(h, (k) => { if (k.tagName === 'TD') tds++; }); assert.equal(tds, 6);
-    for (const s of sp.slice(0, 3)) { assert.equal(s.parentNode.className, 'na-asst-tv na-asst-tvc', 'dentro del valor de la celda (tarjeta a 480; tvc: puede bajar bajo la etiqueta)'); }
+    for (const s of sp.slice(0, 3)) { assert.equal(s.parentNode.className, 'na-asst-tv na-asst-tvc', 'dentro del valor de la celda (tarjeta a 480; tvc: puede bajar bajo la etiqueta)');
+      // (Bots 3/4 sobre d72b7601) en la celda: serie+guion, <wbr>, número; cada parte nowrap (CSS); nunca entre dígitos
+      assert.equal(s.className, 'na-asst-code na-asst-cc'); assert.deepEqual(s.childNodes.map((k) => k.tagName + '.' + k.className), ['SPAN.na-asst-cs', 'WBR.', 'SPAN.na-asst-cn']);
+      assert.match(s.childNodes[0].textContent, /^[A-Z0-9]{4}-$/); assert.match(s.childNodes[2].textContent, /^\d+$/); assert.equal(s.childNodes[1].childNodes.length, 0); }
+    // en la burbuja (texto fuera de la tabla) la serie va entera, sin wbr
+    assert.equal(sp[3].className, 'na-asst-code'); assert.equal(sp[3].childNodes.length, 1); assert.equal(sp[3].childNodes[0].nodeType, 3);
     let plain = 0; walk(h, (k) => { if (k.className === 'na-asst-tv') plain++; }); assert.equal(plain, 4, 'celdas sin serie: sin tvc');
     assert.ok(!h.textContent.includes('\u2011'));
   }
@@ -78,7 +83,8 @@ test('XSS (Bot 5): etiquetas alrededor/dentro de una serie salen como texto; 0 e
   // en una celda también
   const h = paint('| Doc | X |\n|---|---|\n| <b>B001-1</b><img src=x onerror=alert(1)> | <script>T001-2</script> |\n', 3);
   assert.deepEqual(codeSpans(h).map((x) => x.textContent), ['B001-1', 'T001-2']);
-  const odd = created.filter((x) => !['DIV', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN'].includes(x.tagName)); assert.deepEqual(odd, []);
+  const odd = created.filter((x) => !['DIV', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN', 'WBR'].includes(x.tagName)); assert.deepEqual(odd, []);
+  assert.ok(created.filter((x) => x.tagName === 'WBR').every((w) => w.parentNode && w.parentNode.className === 'na-asst-code na-asst-cc' && !Object.keys(w.attrs).length), 'wbr solo dentro de la serie de una celda');
   const CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8');
   const fn = CORE.slice(CORE.indexOf('function codeSpan'), CORE.indexOf('var AMOUNT_RE'));
   assert.ok(fn.includes("doc.createElement('span')") && fn.includes('.textContent = v') && !/innerHTML|insertAdjacentHTML|outerHTML|`/.test(fn));
@@ -120,16 +126,21 @@ test('reenvío de la MISMA sesión con los mismos datos → 200 con la misma pro
   assert.deepEqual(filled, { ...GOOD, n: 2 }); assert.equal(opened, 1);
 });
 
-test('otra sesión, otros datos, registro viejo → 409 already_confirmed SIN propuesta ni lo escrito; empleado → 403', async () => {
+test('otra sesión o registro viejo → 409 already_confirmed SIN propuesta ni lo escrito; misma sesión con otros datos → 409 already_confirmed_same_session con la propuesta firmada y SIN lo escrito (d72b7601); empleado → 403', async () => {
   const p = card(), store = createMemoryUsageStore(), token = await issueConfirmToken(p, 'owner', OWNER, SECRET, Date.now());
   const first = await send(token, p, { manual: GOOD }, store); assert.equal(first.status, 200);
   const no = (r, why) => { assert.equal(r.status, 409, why + ' ' + JSON.stringify(r.body)); assert.equal(r.body.error, 'already_confirmed'); assert.equal(r.body.already_confirmed, true);
     assert.ok(!r.body.ok && !r.body.proposal, why); assert.ok(!JSON.stringify(r.body).includes('Bodega') && !JSON.stringify(r.body).includes('87654321'), why); };
   no(await send(token, p, { manual: GOOD }, store, { ...OWNER, sessionId: 'S-2', credentialHash: 'h2' }), 'otra sesión del mismo aparato');
-  no(await send(token, p, { manual: { ...GOOD, documento: 'F001-00099999' } }, store), 'otro documento');
-  no(await send(token, p, { manual: { proveedor: GOOD.proveedor } }, store), 'falta un campo');
-  no(await send(token, p, {}, store), 'sin manual');
-  no(await send(token, p, { manual: GOOD, review: { op: first.body.operation_id, drop: [1] } }, store), 'otra fila quitada');
+  // (Bots 3/4/5 sobre d72b7601) mismo aparato y misma sesión dueño, otros datos: la propuesta FIRMADA (sin lo escrito), nunca el «manual» guardado
+  const same = (r, sent, why) => { assert.equal(r.status, 409, why + ' ' + JSON.stringify(r.body)); assert.equal(r.body.error, 'already_confirmed_same_session'); assert.equal(r.body.already_confirmed, true);
+    assert.equal(r.body.operation_id, first.body.operation_id); assert.ok(!r.body.ok && !r.body.replay && !('manual' in r.body), why);
+    const { confirm_token, ...signed } = p; assert.deepEqual({ ...r.body.proposal, aceptadas: undefined, quitadas: undefined }, { ...signed, aceptadas: undefined, quitadas: undefined }, why);
+    const js = JSON.stringify(r.body); for (const x of ['10456789012', ...(sent ? Object.values(sent) : [])]) assert.ok(!js.includes(x), why + ': ' + x); };
+  same(await send(token, p, { manual: { ...GOOD, documento: 'F001-00099999' } }, store), { d: 'F001-00099999' }, 'otro documento');
+  same(await send(token, p, { manual: { proveedor: GOOD.proveedor } }, store), null, 'falta un campo');
+  same(await send(token, p, {}, store), null, 'sin manual');
+  same(await send(token, p, { manual: GOOD, review: { op: first.body.operation_id, drop: [1] } }, store), null, 'otra fila quitada');
   // un «review» con otro operation_id se ignora (como en la 1.ª vez): sigue siendo el mismo reenvío
   assert.equal((await send(token, p, { manual: GOOD, review: { op: 'AST-otro', drop: [1] } }, store)).status, 200);
   const emp = await send(token, p, { manual: GOOD }, store, OWNER, 'empleado:consultas_documentos'); assert.equal(emp.status, 403); assert.ok(!emp.body.proposal);
@@ -150,16 +161,16 @@ test('dos envíos a la vez: misma sesión → uno nuevo y otro reenvío con la m
   else { assert.equal(rep.length, 1); assert.deepEqual(rep[0].body.proposal, fresh[0].body.proposal); assert.equal(rej.length, 1); }
 });
 
-test('celular: 409 already_confirmed → nota corta «Esta compra ya se confirmó en otro aparato.», sin abrir «Nueva compra» ni texto técnico', async () => {
+test('celular: 409 already_confirmed (otra sesión) → nota corta «Esta compra ya se confirmó en otra sesión.», sin abrir «Nueva compra» ni texto técnico', async () => {
   const owner = { role: 'owner', isOwner: () => true }; let opened = 0;
   const p = { id: 'c9', type: 'compra', needsConfirm: true, confirm_token: 't', proveedor: 'A', documento: 'F001-1', lineas: [{ nombre: 'G', cantidad: 1, costo_unitario: 1 }] };
   const g = C.createGate({ roles: () => owner, online: () => true, productos: () => [], confirm: async () => ({ ok: false, error: 'already_confirmed' }), openPurchase: () => { opened++; return null; }, fillPurchase: () => true, navigate: () => {} });
   const key = g.add(p); const r = await g.execute(key, { confirmed: true });
-  assert.equal(r.ok, false); assert.equal(r.code, 'already_confirmed'); assert.equal(r.msg, 'Esta compra ya se confirmó en otro aparato.'); assert.equal(opened, 0); assert.equal(g.state(key), 'denied');
-  const v = C.confirmFailureView(r); assert.equal(v.kind, 'elsewhere'); assert.equal(v.msg, 'Esta compra ya se confirmó en otro aparato.'); assert.equal(v.again, true); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
+  assert.equal(r.ok, false); assert.equal(r.code, 'already_confirmed'); assert.equal(r.msg, 'Esta compra ya se confirmó en otra sesión.'); assert.equal(opened, 0); assert.equal(g.state(key), 'denied');
+  const v = C.confirmFailureView(r); assert.equal(v.kind, 'elsewhere'); assert.equal(v.msg, 'Esta compra ya se confirmó en otra sesión.'); assert.equal(v.again, true); assert.doesNotMatch(v.msg, /_|HTTP|error|\d{3}/);
   // otra tarjeta (no compra): mismo aviso con «cambio»
   const g2 = C.createGate({ roles: () => owner, online: () => true, productos: () => [{ id: 'P1', nombre: 'X' }], stockMoveReady: () => null, confirm: async () => ({ ok: false, error: 'already_confirmed' }) });
   const k2 = g2.add({ id: 'a9', type: 'ajuste', needsConfirm: true, confirm_token: 't', product_id: 'P1', cantidad: 1 }); const r2 = await g2.execute(k2, { confirmed: true });
-  assert.equal(r2.msg, 'Este cambio ya se confirmó en otro aparato.');
-  assert.equal(C.friendlyError('already_confirmed').msg, 'Esta compra ya se confirmó en otro aparato.');
+  assert.equal(r2.msg, 'Este cambio ya se confirmó en otra sesión.');
+  assert.equal(C.friendlyError('already_confirmed').msg, 'Esta compra ya se confirmó en otra sesión.');
 });
