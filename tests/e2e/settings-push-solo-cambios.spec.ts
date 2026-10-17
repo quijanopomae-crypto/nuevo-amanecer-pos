@@ -173,6 +173,7 @@ test('(d) revision_conflict: one POST, then a fresh GET, no retry with local val
   expect(result).toMatchObject({ ok: false, reason: 'revision_conflict', conflicts: ['pos.flags'] });
   // Aviso visible con el sistema de avisos existente (no «Revisa internet»).
   await expect(page.locator('#gToast')).toHaveText(CONFLICT);
+  expect(await page.locator('#gToast').textContent()).toBe(CONFLICT);
   await expect(page.locator('#gToast')).toHaveClass(/show/);
   expect(mock.posts).toHaveLength(1);
   expect(mock.posts[0]).toMatchObject({ key: 'pos.flags', expected_revision: 3 });
@@ -253,6 +254,7 @@ test('(g) a change saved while GET failed loses against a server change to the s
   expect(mock.posts).toEqual([]);
   expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
   await expect(page.locator('#gToast')).toHaveText(CONFLICT);
+  expect(await page.locator('#gToast').textContent()).toBe(CONFLICT);
 });
 
 test('(h) every SHARED key has a Configuración v9 control that sends exactly one POST with that key', async ({ page }) => {
@@ -295,4 +297,26 @@ test('(i) «No se guardó en el servidor» disappears after a later successful s
   await expect(failure).toHaveCount(0);
   // El cambio pendiente de IGV y el del ticket llegan, una vez cada uno.
   expect(mock.posts.map(post => post.key).sort()).toEqual(['pos.flags', 'pos.ticket']);
+});
+
+test('(j) conflict from Configuración v9: exact label «No se guardó: otro equipo cambió la configuración» and exact toast', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  mock.settings = asServer(local);
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  const flags = local['pos.flags'] as Record<string, unknown>;
+  const serverFlags = { ...flags, margenActive: !flags.margenActive };
+  mock.conflict = { revision: 4, then: asServer({ ...local, 'pos.flags': serverFlags }).map(s => s.key === 'pos.flags' ? { ...s, revision: 4 } : s) };
+  await openConfig(page, 'prod', 'igv');
+  await clickSwitch(page, 'igvActive');
+  await expect.poll(() => mock.posts.length).toBe(1);
+  // Textos exactos (texto completo, no subcadena).
+  await expect(page.locator('#na9Saved')).toHaveText('No se guardó: otro equipo cambió la configuración');
+  expect(await page.locator('#na9Saved').textContent()).toBe('No se guardó: otro equipo cambió la configuración');
+  await expect(page.locator('#gToast')).toHaveText(CONFLICT);
+  expect(await page.locator('#gToast').textContent()).toBe(CONFLICT);
+  expect(mock.posts).toHaveLength(1);
+  expect((await localSettings(page))['pos.flags']).toEqual(serverFlags);
 });
