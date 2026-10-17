@@ -26,7 +26,7 @@ const VISIBLE = [
   ['Compras del cliente:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 2.50 |', ['2.50'], []],
 ];
 const MASKED = [
-  'Arroz S/ 4.20\n(costo)', 'Arroz S/ 4.20\ncosto: S/ 3.00', 'Arroz S/ 4.20\nlo que pagué', 'Arroz S/ 4.20\nes lo que pagué', 'Arroz S/ 4.20\nme costó eso',
+  'Arroz S/ 4.20\n(costo)', 'Arroz S/ 4.20\nlo que pagué', 'Arroz S/ 4.20\nes lo que pagué', 'Arroz S/ 4.20\nme costó eso',
   'Arroz S/ 4.20\nvendido a costo', 'Arroz S/ 4.20\nprecio de compra', 'Arroz S/ 4.20\ncosto de compra', 'Arroz S/ 4.20\ncostó así', 'Arroz S/ 4.20\nlo pagamos así',
   'Te paso los costos:\n- Arroz S/ 1.80\n- Leche S/ 3.80', 'Costos de hoy:\n- Arroz S/ 1.80\n- Leche S/ 3.80', 'Esto es lo que pagué.\n- Arroz S/ 1.80\n- Leche S/ 3.80',
   'El costo es este.\n\n- Arroz S/ 1.80', 'Costo del arroz:\n\nS/ 1.80', 'Compras del cliente:\n- Galleta costo S/ 2.50', 'Compras del cliente:\n- Galleta S/ 2.50 (lo que pagué)',

@@ -75,7 +75,8 @@ test('foto: se envía como image_url en el mensaje del usuario', async () => {
   const last = cap[0].body.messages.at(-1);
   assert.equal(last.role, 'user'); assert.equal(last.content[1].type, 'image_url'); assert.equal(last.content[1].image_url.url, img);
   assert.equal(body.proposals[0].type, 'compra'); assert.equal(body.proposals[0].lineas[0].product_id, 'P2');
-  assert.ok(!body.proposals[0].proveedor.includes('20123456789'));
+  // (Bot 2 sobre 6280deae) tarjeta del DUEÑO: el RUC de empresa (20…) queda exacto (público en SUNAT); un RUC 10 o un DNI suelto dejan el campo vacío
+  assert.equal(body.proposals[0].proveedor, 'Dist SAC RUC 20123456789'); assert.equal(body.proposals[0].completar, undefined);
   const bad = await chat({ image: 'data:text/html;base64,AAAA' });
   assert.equal(bad.status, 400); assert.equal(bad.body.error, 'bad_image');
 });

@@ -60,10 +60,10 @@ test('«sigue» (Bot 5): la continuación con filas, párrafo largo y más filas
   assert.equal(primed('| Producto 5 | S/ 1.85 |\n\n' + LONG + '\n\nArroz S/ 4.20').endsWith('Arroz S/ 4.20'), true);
   // la parte cortada termina tras el párrafo largo (tabla dormida): el sí/no de «sigue» dice que hay contexto del dueño
   for (const t of [REPROS[1].slice(0, REPROS[1].lastIndexOf('|', REPROS[1].length - 2) - 14), H + '| P0 | S/ 1.80 |\n\n' + LONG, '| Producto | Costo |\n|---|---|\n| A | S/ 1.80 |\n\n' + LONG])
-    assert.equal(cutPrime(red(t), true), true, JSON.stringify(t.slice(-40)));
+    assert.ok(['intro', 'col'].includes(cutPrime(red(t), true)), JSON.stringify(t.slice(-40)));
   // con la ruta completa: la respuesta cortada + «sigue» con la continuación
   const rows = (a, b) => Array.from({ length: b - a }, (_, i) => '| Producto número ' + (a + i) + ' | S/ 1.' + String(a + i).padStart(2, '0') + ' |\n').join('');
-  const cut = capReply(red(H + rows(0, 40) + '\n' + LONG + '\n')); assert.ok(cut.endsWith(CUT_NOTICE)); assert.equal(cutPrime(cut, true), true);
+  const cut = capReply(red(H + rows(0, 40) + '\n' + LONG + '\n')); assert.ok(cut.endsWith(CUT_NOTICE)); assert.ok(['intro', 'col'].includes(cutPrime(cut, true)));
   const next = primed(rows(40, 42) + '\n' + LONG + '\n' + rows(42, 45)); assert.ok(!/1\.4\d/.test(next), next);
 });
 
