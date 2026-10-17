@@ -56,7 +56,7 @@
     names.forEach(function (n, i) {
       var lab = doc.createElement('label'); lab.className = 'na-asst-need-l';
       var t = doc.createElement('span'); t.className = 'na-asst-need-n'; t.textContent = NEED_LABEL[n];
-      var inp = doc.createElement('input'); inp.type = 'text'; inp.className = 'na-asst-need'; inp.maxLength = NEED_MAX[n];
+      var inp = doc.createElement('input'); inp.type = 'text'; inp.className = 'na-asst-need'; inp.maxLength = NEED_MAX[n] * 2; // (Bot 3 sobre 6e0b3c5d) holgura: lo pegado con caracteres de formato se limpia ANTES de recortar a NEED_MAX (cleanField)
       inp.setAttribute('data-need', n); inp.setAttribute('aria-invalid', 'true'); inp.setAttribute('autocomplete', 'off');
       var hint = doc.createElement('span'); hint.className = 'na-asst-need-t'; hint.textContent = 'Complete este dato'; hint.id = 'naNeed' + n + (++needSeq);
       inp.setAttribute('aria-describedby', hint.id);
@@ -69,13 +69,15 @@
       // y el cursor/selección retrocede lo quitado antes de él (pegar deja el cursor al final de lo pegado). Durante una composición (IME,
       // teclado con acentos) no se toca; se limpia en compositionend. Solo si cambia: escribir normal no mueve nada.
       var composing = false;
-      function cleanField() { var raw = String(inp.value == null ? '' : inp.value), c = inputClean(raw); if (c === raw) return false;
+      function cleanField() { var raw = String(inp.value == null ? '' : inp.value), c = inputClean(raw).slice(0, NEED_MAX[n]); if (c === raw) return false;
         var s0 = inp.selectionStart, e0 = inp.selectionEnd, at = function (k) { return typeof k === 'number' ? Math.min(c.length, inputClean(raw.slice(0, k)).length) : null; };
         var s1 = at(s0), e1 = at(e0); inp.value = c;
         if (s1 != null && typeof inp.setSelectionRange === 'function') { try { inp.setSelectionRange(s1, e1 == null ? s1 : Math.max(s1, e1)); } catch (_) {} }
         return true; }
       function sync() {
-        var v = normManual(inp.value).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre); state[n] = ok ? v : '';
+        // (Bots 4/5 sobre 6e0b3c5d) mientras el campo MUESTRA algo distinto de lo que se mandaría (composición abierta o colgada sin compositionend,
+        // con U+202E crudo a la vista), no cuenta: «Confirmar» apagado hasta que lo visible sea lo limpio
+        var raw = String(inp.value == null ? '' : inp.value), v = normManual(raw).slice(0, NEED_MAX[n]).trim(), ok = !manualBad(n, v) && v !== normManual(pre) && inputClean(raw) === raw && raw.length <= NEED_MAX[n]; state[n] = ok ? v : '';
         if (stale[n] != null && v !== stale[n]) delete stale[n]; // (Bot 4 sobre 58200f60) tras un 422 cuenta recién cuando cambia
         ok = ok && stale[n] == null;
         hint.textContent = 'Complete este dato';
@@ -83,7 +85,32 @@
         if (onChange) onChange(); }
       inp.addEventListener('compositionstart', function () { composing = true; });
       inp.addEventListener('compositionend', function () { composing = false; cleanField(); sync(); });
-      inp.addEventListener('input', function (ev) { if (!composing && !(ev && ev.isComposing)) cleanField(); sync(); }); // pegar/soltar también llega aquí (insertFromPaste/Drop)
+      // (Bots 4/5 sobre 6e0b3c5d) composición que termina sin compositionend: al salir del campo se suelta y se limpia
+      inp.addEventListener('blur', function () { composing = false; cleanField(); sync(); });
+      // (Bot 4 sobre 6e0b3c5d) pegar/soltar (y un reemplazo del corrector con caracteres de control): se limpia ANTES de entrar, con
+      // execCommand('insertText'), que deja la pila de deshacer del navegador entera (Ctrl+Z quita lo pegado; rehacer no concatena). El recorte a
+      // NEED_MAX va DESPUÉS de limpiar. Si execCommand no está o devuelve false, setRangeText (no guarda deshacer, pero lo visible = lo limpio).
+      // Escribir normal sigue por 'input' (solo se reescribe si cambia); durante una composición no se toca nada.
+      var handled = false;
+      inp.addEventListener('beforeinput', function (ev) {
+        var t = ev && ev.inputType; if (composing || (ev && ev.isComposing) || (t !== 'insertFromPaste' && t !== 'insertFromDrop' && t !== 'insertReplacementText')) return;
+        var dt = ev.dataTransfer, raw = ev.data != null ? String(ev.data) : (dt && typeof dt.getData === 'function' ? String(dt.getData('text/plain') || '') : null);
+        if (raw == null) return;
+        var cur = String(inp.value == null ? '' : inp.value), s0 = typeof inp.selectionStart === 'number' ? inp.selectionStart : cur.length, e0 = typeof inp.selectionEnd === 'number' ? inp.selectionEnd : s0;
+        var room = Math.max(0, NEED_MAX[n] - (cur.length - (e0 - s0))), lim = room * 8 + 32, src = raw.length > lim ? raw.slice(0, lim) : raw;
+        var c = inputClean(src.replace(/\r\n?|\n/g, ' ')); if (c.length < room && src !== raw) c = inputClean(raw.replace(/\r\n?|\n/g, ' ')); // (CPU) 100 KB pegados: se limpia solo lo que puede caber
+        if (c.length > room) c = c.slice(0, room);
+        if (c === raw) return; // nada que limpiar ni recortar: lo hace el navegador
+        if (t === 'insertReplacementText' && inputClean(raw) === raw && c.length === raw.length) return;
+        ev.preventDefault(); var d = inp.ownerDocument || doc, ok = false;
+        if (c && d && typeof d.execCommand === 'function') { handled = true; try { ok = d.execCommand('insertText', false, c); } catch (_) { ok = false; } if (!ok) handled = false; }
+        if (!ok && c && typeof inp.setRangeText === 'function') { inp.setRangeText(c, s0, e0, 'end'); ok = true; }
+        if (!c && s0 !== e0 && typeof inp.setRangeText === 'function') inp.setRangeText('', s0, e0, 'end');
+        sync();
+      });
+      // respaldo (autocompletar, teclados o arrastres que no pasan por beforeinput): si lo que entró trae caracteres de formato, se reescribe;
+      // tras un pegado ya limpiado arriba no hace nada. sync() sigue exigiendo inputClean(v) === v para encender «Confirmar».
+      inp.addEventListener('input', function (ev) { if (handled) { handled = false; sync(); return; } if (!composing && !(ev && ev.isComposing)) cleanField(); sync(); });
       lab.appendChild(t); lab.appendChild(inp); lab.appendChild(hint); box.appendChild(lab); inputs.push(inp);
     });
     // (Bot 4 sobre 84a49517) el servidor rechazó (422 fields_required): aviso junto a cada campo nombrado, foco en el primero; lo escrito queda.
@@ -151,7 +178,7 @@
     return { ok: true };
   }
 
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]; }); }
   function soles(n) { return n == null || !isFinite(n) ? '-' : 'S/ ' + Number(n).toFixed(2); }
 
   // ---------- Documentos internos (solo lectura, armados en el aparato con datos que el POS ya tiene) ----------
