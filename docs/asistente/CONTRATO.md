@@ -542,9 +542,10 @@ Reemplaza «Tabla del dueño con una línea en medio», «Tabla del dueño con h
 
 - Al marcar la tarjeta usada se guardan, en el MISMO registro del almacén de uso (`pos_settings`, clave `internal:asst:u:<n>`, sin migración): `s` = hash de la sesión dueño que confirmó (sesión del POS; si no hay, credencial; si no, aparato) y `rh` = hash de propuesta firmada + operation_id + lo escrito (normalizado) + filas aceptadas/quitadas. Ni la sesión ni lo escrito quedan en claro.
 - Reenvío de ESA sesión con los mismos datos → 200 `{ ok, already_confirmed:true, replay:true, operation_id, proposal }` con la MISMA propuesta aplicada: el dueño abre «Nueva compra» llena igual (respuesta cortada a medias + reintento probado de punta a punta).
-- Otra sesión (mismo aparato), otro «manual», otras filas, sin «manual» o un registro viejo sin hashes → 409 `{ error:'already_confirmed', already_confirmed:true, operation_id }`, sin propuesta ni lo escrito. Otro aparato → 403 `other_device` (como antes). Empleado → 403.
+- MISMA sesión dueño en el mismo aparato con otro «manual» u otras filas (corrigió algo tras un corte) → 409 `{ error:'already_confirmed_same_session', already_confirmed:true, operation_id, type, role, proposal }` con la propuesta FIRMADA (filas aceptadas/quitadas del registro) y SIN lo escrito (solo se guarda su hash; lo escrito lo conserva el celular).
+- Otra sesión dueño (mismo aparato), sin «manual» cuando hacía falta o un registro viejo sin hashes / con el sha256 viejo → 409 `{ error:'already_confirmed', already_confirmed:true, operation_id }`, sin propuesta ni lo escrito. Otro aparato → 403 `{ error:'other_device' }` (`confirmed:true` solo si la tarjeta ya se usó), sin propuesta ni operation_id. Empleado → 403 en todos los casos.
 - Dos envíos a la vez: el que pierde la escritura condicional sigue la misma regla (misma sesión → reenvío; otra → 409).
-- Celular: 409 `already_confirmed` → nota corta «Esta compra ya se confirmó en otro aparato.» («Este cambio…» en otras tarjetas), sin abrir «Nueva compra» ni texto técnico.
+- Celular: 409 `already_confirmed_same_session` (propuesta con el mismo id y tipo) → abre «Nueva compra» con la propuesta firmada + lo que ESTE celular mandó (`sentBody.manual`) y la nota «Esta compra ya se confirmó. Corrija los datos en Nueva compra.»; 409 `already_confirmed` → nota corta «Esta compra ya se confirmó en otra sesión.» («Este cambio ya se confirmó en otra sesión.» en otras tarjetas), sin abrir «Nueva compra» ni texto técnico; «Ya se confirmó en otro aparato.» SOLO con 403 `other_device` + `confirmed:true` (sin `confirmed`: «Esta propuesta es de otro aparato. Pídela aquí otra vez.»).
 
 ### Filtro del empleado (Bot 5, FALLAS 1 y 2)
 
@@ -582,7 +583,7 @@ Reemplaza «PIN numérico (Bot 5, INFO; propuesta aceptada)» de la ampliación 
 ### PIN numérico (decisión final; reemplaza FALLA 1 y la regla de 58200f60)
 
 - **Misma regla para «pin», «clave» y «contraseña»** (`pinNumber`): se tapa cada tramo de 4-8 dígitos que esté a lo sumo a **60 caracteres** y a **5 palabras** de la etiqueta. No cuentan como palabra las de enlace (de, del, la, las, el, los, lo, mi, mis, tu, tus, su, sus, nuestra, nuestro, para, en, que) ni «es/era/fue/son/a»; «:», «=», «: es», «: era» se aceptan. Sin palabras de corte. No cruza «.», «;», «!», «?» ni salto de línea. Si hay varias etiquetas, cuenta la más cercana antes del número.
-- **Excepciones**: (1) una unidad clara pegada detrás (unidades, unidad, unid, und, uds, kg, kilos, g, gr, gramos, l, lt, litros, ml, soles, sol, S/, %), solo tras «clave»/«contraseña»: un pin nunca es una cantidad, así que «pin de la caja 4321 unidades» (caso de Bot 5) sigue tapado; (2) un número justo detrás de «S/», «$», «US$» o «PEN»; (3) un número justo detrás de «código», «cód.», «EAN» o «barras» (el dueño ve su código de producto).
+- **Excepciones**: (1) una unidad clara pegada detrás (unidades, unidad, unid, und, uds, kg, kilos, g, gr, gramos, l, lt, litros, ml, soles, sol, S/, %), solo tras «clave»/«contraseña»: un pin nunca es una cantidad, así que «pin de la caja 4321 unidades» (caso de Bot 5) sigue tapado; (2) un número justo detrás de «S/», «$», «US$» o «PEN»; (3) un número justo detrás de «código», «cód.», «EAN» o «barras» (el dueño ve su código de producto). **Cambiado sobre 3ee80c18** (ver abajo): (3) nunca tras «pin»; (3) tras clave/contraseña solo con «producto»/«artículo» en medio.
 - Se tapan: «la clave de la caja fuerte 4321», «…caja fuerte: 4321», «la clave de la caja chica 4321», «clave de la caja en 2024 era 4321» (el 2024 y el 4321), «pin por favor 4321», «El pin del local nuevo de la esquina es 4321», «clave de producto 4521». Se ven: «Producto clave de la semana 2500 unidades», «clave de la caja chica: 2500 soles», «clave de la venta S/ 1250».
 - Tapados de más aceptados (sin palabras de corte): «Cambié la clave de la caja en 2024», «La clave del negocio en 2024 fue el arroz», «contraseña del año 2024», «Mi clave para el año 2025», «La clave de este mes: vender 3000 paquetes», «pin 4321 unidades», «El pin de la impresora 1234 no funciona», «La clave del éxito: 5000 ventas».
 - Va antes de la regla de la etiqueta; la regla general (que tapa la palabra que sigue a la etiqueta) no actúa si ya hay un «[oculto]» en los 60 caracteres siguientes, así «pin por favor 4321» queda «pin por favor [oculto]» y no «pin [oculto] favor [oculto]».
@@ -629,3 +630,43 @@ Reemplaza «PIN numérico (Bot 5, INFO; propuesta aceptada)» de la ampliación 
 - `assistant-followups-58200f60.test.mjs`: la revisión estática de `roleLost` acepta `refreshAccess` (rol del servidor) y `wipeCard(c)`; las máscaras con x/X o «…» del caso 3 se prueban en el documento.
 - `assistant-normalize-d72b7601.test.mjs`: normalización igual en servidor y celular (U+2011/U+2010/U+2014, ZWSP, BOM, NBSP, U+202F, U+2007), rechazos («■■■■», «××××», «XX6789», solo invisibles, «▪▪▪▪», «____6789»…), «Ferretería XXL SAC» y «Distribuidora XX» pasan, 422 con el campo y valor normalizado en la respuesta, «Complete este dato» en la tarjeta, nombre del catálogo, texto del 403 igual al de CONTRATO.md, selector de 14 px.
 - `assistant-reconnect-d72b7601.test.mjs`: `confirmRemote` con un solo reintento automático y el MISMO cuerpo («Reconectando…» por `onRetry`), error con el cuerpo enviado, «Reintentar» con `opts.body` idéntico byte a byte aunque cambie lo escrito, 4xx sin reintento; puerta bloqueada tras corte o 5xx («Sin conexión. Toque Reintentar», cuerpo guardado aunque cambien campos o filas) y desbloqueada tras 4xx real o 200; 409 `already_confirmed_same_session` → «Nueva compra» con lo que mandó el celular y la nota exacta (propuesta ajena → nada); «Ya se confirmó en otro aparato.» solo con 403 `other_device` + `confirmed`; servidor: `confirmed:true` solo si la tarjeta ya se usó, empleado 403; tarjeta: bloqueo antes de mandar, «Reconectando…», «Reintentar» y edición solo tras 200 o 4xx real.
+
+## Ampliación sobre 3ee80c18 (Bot 5 ev-3ee80c18)
+
+### PIN numérico: excepción de código (FALLA 1)
+
+- La excepción (3) «número justo detrás de código/cód./EAN/barras» **nunca** vale tras «pin». Tras «clave»/«contraseña» vale **solo** si entre la etiqueta y el número aparece «producto(s)» o «artículo(s)», sin importar cuántos dígitos tenga el número (`PIN_NUM_PROD`).
+- **Dinero (Bot 2)**: tras pin/clave/contraseña, «S/», «$», «US$» o «PEN» delante ya NO sueltan el número solos; lo sueltan solo si entre la etiqueta y el número aparece «precio», «costo» o «monto» (`PIN_NUM_AMOUNT`). Un monto con decimales («S/ 43.21», «S/ 4521.00») nunca entra en la regla. Se tapan «clave de la caja S/ 4321», «pin de cobro S/ 1250», «clave de la venta S/ 1250»; se ven «clave del precio: S/ 4521», «la clave del costo es S/ 1250».
+- **Unidades (Bot 2)**: además paquete, caja, bolsa, docena, saco, botella y sus plurales, solo tras clave/contraseña (tras «pin» nunca): «La clave de este mes: vender 3000 paquetes» se ve.
+- **Año (Bot 2)**: tras clave/contraseña (tras «pin» nunca), un 19xx/20xx justo detrás de «del año», «el año» o «en» se ve («clave del año 2024», «la clave del éxito en 2024 fue el arroz»); la revisión sigue con los números que vienen después: «clave de la caja en 2024 era 4321» → «clave de la caja en 2024 era [oculto]».
+- Corpus PIN (19493 textos, 4 vías) contra 3ee80c18: 9 textos con más tapado por vía (las fugas de código y dinero) y 12 con menos (solo años y «paquetes»; ningún secreto real destapado).
+- Cosmético (sin fuga): cuando el número se ve, la regla de la etiqueta sigue tapando la palabra que sigue a la etiqueta («La clave [oculto] negocio en 2024 fue el arroz»), como antes con «Clave: [oculto] 2000 unidades».
+- Regla de la etiqueta: no tapa la palabra que sigue si ya hay un «[oculto]» en los 62 caracteres siguientes, SALVO que ese «[oculto]» sea de otra etiqueta (un valor con dígito y luego pin/clave/contraseña/password/token/api key en medio): «api key sk-123456, la clave 4321» dejaba la api key a la vista en el texto entero.
+- El punto de la abreviatura «cód.»/«cod.» no cuenta como fin de frase (ni en `pinNumber`, ni en `PIN_NUM_WAIT` en partes, ni en la regla de la etiqueta): «pin cód. 4321» → «pin cód. [oculto]».
+- Se tapan (empleado, dueño, modelo y en partes de 1/3/7): «pin código 4321», «clave: código 4321», «contraseña cod 4321», «pin del EAN 4321», «pin cód. 4321», «PIN EAN-13 4321», «pin códigos 4321», «clave código: 4321», «el pin es el código 4321», «la clave de la caja es código 4321», «clave de barras 4321», «contraseña del código 4321», «pin de acceso código 4321», «la clave del wifi: cod 98765432», «clave del wifi código 12345678», «contraseña del local cod 12345678».
+- El dueño ve: «clave del producto Arroz código 77501234», «clave del producto código 77501234». Tapado de más aceptado: «clave de barras del arroz 77501234» (sin «producto»).
+- Sin «pin/clave/contraseña» no cambia nada («código de acceso 4321», «el código de la caja fuerte es 4321»): lo decide el dueño.
+
+### Lo escrito a mano: formato y marcas (FALLA menor 2)
+
+- `normManual` (servidor y celular, misma función): primero NFC («José» con acento combinante queda «José», válido); fuera todo `\p{Cf}` (dirección U+202A-202E y U+2066-2069, U+00AD, U+2061-2064, U+200E/F, etiquetas U+E0000-E007F…), selectores de variante U+FE00-FE0F, U+034F y toda marca combinante (`\p{M}`) que no vaya pegada a una letra (tras dígitos o símbolos de relleno: U+20DD, U+0301…); NFC otra vez; después lo de siempre (invisibles, control, espacios, guiones) y las mismas reglas de rechazo.
+- «U+202E 1234-100F» se guarda «1234-100F» (ya no se ve como «F001-4321»); «*◌́*6789», «•⃝•6789», «*­*­*6789», «*⁡*6789», «*️*6789», «*͏*6789», «*󠀠*6789» → 422 en proveedor y documento.
+
+### Lo escrito a mano: NFKC y relleno (Bot 2)
+
+- `manualBad` revisa el valor NFC guardado Y una copia NFKC (malo si cualquiera falla): «＿＿＿＿6789», «＃＃＃＃6789», «＊6789» se rechazan; se guarda el NFC tal cual. Relleno también ∙ (U+2219), ✱ (U+2731), ⁎ (U+204E).
+- Documento/RUC: también X separadas por espacio o guion («x x 6789», «X-X-6789», «F001-x x 6789»), no dentro de una palabra («Taxi x 6789» pasa).
+- Todos los campos (proveedor incluido): «*» o «∗» pegado a dígitos al inicio de una palabra («*6789», «Bodega *6789»). «Promo 2*1 SAC» pasa. «XX6789» en proveedor sigue aceptado (regla XX solo documento/RUC).
+
+### Documento / RUC de izquierda a derecha (Bot 4, FALLA)
+
+- `asistente-ui.js` (sin tocar el núcleo de compras ni el core): en la tarjeta, proveedor (lleva el RUC) y documento van cada uno en su span con `dir="ltr"`, clase `na-asst-ltr` (`direction:ltr;unicode-bidi:isolate` en asistente.css) y el mismo estilo en línea; igual los campos de «Complete este dato» y, en «Nueva compra», `#naPurSupplier` y `#naPurDoc` al prellenar (`fillPurchase`). «U+202E 1234-100F» llega normalizado como «1234-100F» y además aislado.
+
+### Celular: lo que entra a «Nueva compra» tras un 200 (INFO)
+
+- Tras un 200 con propuesta, el `_manual` que sigue a la propuesta aplicada es `sentBody.manual` (el cuerpo que se mandó), no lo escrito en vivo en los campos. Sin cuerpo guardado (puerta usada sin `confirmRemote`), lo escrito como antes.
+
+### Pruebas
+
+- Expectativas cambiadas a propósito: `assistant-followups-d72b7601` («pin de cobro S/ 1250» y «clave de la venta S/ 1250» ahora tapados; años tras «en»/«del año» ahora visibles), `assistant-followups-58200f60` (años y «paquetes» visibles), `assistant-code-span-replay` (proveedor y documento en spans aislados).
+- `assistant-followups-3ee80c18.test.mjs`: frases de PIN con código/EAN/barras de Bot 5 y Bot 2 (y las 3 de la sala) en las 4 vías y en partes de 1/3/7; dinero, unidades y año (Bot 2); otra etiqueta antes del «[oculto]»; NFKC, ∙ ✱ ⁎, «x x 6789», «*6789» en servidor y celular y en /confirm; `dir="ltr"` + isolate en la tarjeta y en «Nueva compra» con «U+202E 1234-100F»; «clave del producto Arroz código 77501234» visible al dueño; formato y marcas en servidor y celular (igualdad y 422), «José» combinante válido, bidi fuera; 200 usa `sentBody.manual`; esta sección de CONTRATO.md.
