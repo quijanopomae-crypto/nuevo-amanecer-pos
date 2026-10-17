@@ -222,7 +222,10 @@
   // keys: solo esas claves (por defecto, todas las que hay en la copia del servidor).
   function applyServer(keys) {
     var c = cfg(); if (!c) return false; var changed = false;
-    (keys || Object.keys(SHARED)).forEach(function (k) { if (!SHARED[k] || !server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
+    // Sin claves explícitas y con un guardado pendiente, no se tocan las claves que el dueño cambió: al arrancar,
+    // antes de confirmar el rol, el aparato se trata como solo lectura y la copia del servidor pisaría ese cambio.
+    var list = keys || Object.keys(SHARED).filter(function (k) { return !pendingBase || (pendingBase[k] && same(SHARED[k].get(c), pendingBase[k].value)); });
+    list.forEach(function (k) { if (!SHARED[k] || !server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
     // baseSave es el saveAppState original (sin envolver): guarda en el aparato y no envía nada al servidor.
     if (changed) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
     return changed;
