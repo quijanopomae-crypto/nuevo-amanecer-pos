@@ -183,17 +183,25 @@
 
   // Negocio, POS y Ticket: el servidor (/settings) es la fuente. Solo el dueño confirmado guarda;
   // los demás aparatos usan una copia local de solo lectura que se vuelve a tomar del servidor.
+  // pos.credit y pos.ticket se REEMPLAZAN con el valor del servidor (no se fusionan): un campo viejo que solo tiene
+  // este aparato no debe sobrevivir al GET y subir en el próximo guardado real. Ninguno de sus campos es de este
+  // aparato: el ticket completo (ancho, letra, pie, formatos, compartir) y la política de crédito ya se guardan como
+  // ajuste del negocio. Lo de «este aparato» (apariencia, lector, venta libre, cajeros, impresora) está fuera de SHARED.
+  // La base es la de la app (_naDefaults, inline-02.js), nunca el objeto local viejo: si al valor del servidor le falta
+  // una clave, queda la de fábrica en vez de perderse.
+  /* global _naDefaults */
+  function appDefaults(name) { try { return typeof _naDefaults !== 'undefined' && _naDefaults && _naDefaults[name] ? JSON.parse(JSON.stringify(_naDefaults[name])) : {}; } catch (_) { return {}; } }
   var SHARED = {
     'pos.business': { get: function (c) { var b = c.business || {}; return { nombre: b.nombre || '', ruc: b.ruc || '', direccion: b.direccion || '', telefono: b.telefono || '' }; },
       set: function (c, v) { c.business = Object.assign(c.business || {}, v); } },
     'pos.flags': { get: function (c) { return { igvActive: !!c.igvActive, margenActive: !!c.margenActive, stockAlertActive: !!c.stockAlertActive, printAuto: !!c.printAuto, mayoristaActive: !!c.mayoristaActive, alertsEnabled: c.alertsEnabled !== false, stockMin: c.stockMin }; },
       set: function (c, v) { Object.keys(v || {}).forEach(function (k) { c[k] = v[k]; }); } },
     // Línea de crédito inicial, reglas y días para pagar (30 por defecto): una sola política para todos los aparatos.
-    'pos.credit': { get: function (c) { return Object.assign({}, c.creditPolicy || {}); }, set: function (c, v) { c.creditPolicy = Object.assign(c.creditPolicy || {}, v); } },
+    'pos.credit': { get: function (c) { return Object.assign({}, c.creditPolicy || {}); }, set: function (c, v) { c.creditPolicy = Object.assign(appDefaults('creditPolicy'), v); } },
     // Interruptor «Permitir vender lotes vencidos»: el servidor lo exige en ventas en línea.
     'pos.lots': { get: function () { try { return { allowExpiredLots: root._naGetSecurityPath('rules.allowExpiredLots') === true }; } catch (_) { return { allowExpiredLots: false }; } },
       set: function (c, v) { try { root._naSetSecurityPath('rules.allowExpiredLots', !!(v && v.allowExpiredLots)); root._naSaveSecurity(); } catch (_) {} } },
-    'pos.ticket': { get: function (c) { return Object.assign({}, c.ticket || {}); }, set: function (c, v) { c.ticket = Object.assign(c.ticket || {}, v); } }
+    'pos.ticket': { get: function (c) { return Object.assign({}, c.ticket || {}); }, set: function (c, v) { c.ticket = Object.assign(appDefaults('ticket'), v); } }
   };
   var CACHE_KEY = 'na_pos_settings_cache_v1';
   var server = {}; // key -> { value, revision }: copia local (puede venir de la caché) para aplicar en solo lectura.

@@ -124,7 +124,7 @@ test('(a) owner opens a report and other pages: 0 POST /settings even if the ser
   expect(mock.posts).toEqual([]);
 });
 
-test('(a2) stale local config (old IGV, extra ticket field) differs from the server, owner with GET OK opens reports: 0 POST and the server state is unchanged', async ({ page }) => {
+test('(a2) stale local config (old IGV, extra ticket field) differs from the server, owner with GET OK opens reports: 0 POST, server unchanged; the stale field is gone and a later IGV-only save sends only pos.flags', async ({ page }) => {
   const mock = newMock();
   await boot(page, mock);
   const local = await localSettings(page);
@@ -144,7 +144,7 @@ test('(a2) stale local config (old IGV, extra ticket field) differs from the ser
   });
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   await boot(page, mock, serverState);
-  expect(await page.evaluate(() => (window as any).eval('appConfig').ticket.mensajeAntiguo)).toBe('Texto viejo de este aparato');
+  const serverTicket = serverState.find(item => item.key === 'pos.ticket')!.value;
   // Misma navegación que (a). El config-g.js anterior subía aquí pos.ticket con el campo viejo (y pisaba el servidor).
   await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
   await page.evaluate(() => (window as any).goPage('pageClienteHistorial'));
@@ -154,6 +154,19 @@ test('(a2) stale local config (old IGV, extra ticket field) differs from the ser
   expect(mock.posts).toEqual([]);
   expect(JSON.stringify(mock.settings)).toBe(before);
   expect((await localSettings(page))['pos.flags']).toEqual(flags);
+  // Después del GET el ticket local es exactamente el del servidor: el campo viejo no sobrevive (se reemplaza, no se fusiona).
+  expect((await localSettings(page))['pos.ticket']).toEqual(serverTicket);
+  expect(await page.evaluate(() => 'mensajeAntiguo' in ((window as any).eval('appConfig').ticket || {}))).toBe(false);
+  // Guardado real del dueño que solo cambia IGV: exactamente 1 POST, solo pos.flags (antes también subía pos.ticket con el campo viejo).
+  await page.setViewportSize({ width: 1366, height: 900 });
+  const answered = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/settings');
+  await openConfig(page, 'prod', 'igv');
+  await clickSwitch(page, 'igvActive');
+  expect((await answered).status()).toBe(200);
+  await expect(page.locator('#na9Saved')).toHaveText('Guardado ✓');
+  expect(mock.posts.map(post => post.key)).toEqual(['pos.flags']);
+  expect(mock.posts[0]).toMatchObject({ expected_revision: 3, value: { ...flags, igvActive: !flags.igvActive } });
+  expect(serverValue(mock, 'pos.ticket')).toEqual(serverTicket);
 });
 
 test('(b) a real change in Configuración sends exactly one POST with that key and the confirmed revision', async ({ page }) => {
