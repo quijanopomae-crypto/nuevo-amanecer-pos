@@ -23,10 +23,15 @@ function stream(text, role, sizes) { // sizes: número fijo o función que da el
 const full = (text, role) => redactFor(role)(clean(text)).slice(0, 1200);
 
 // ---------- 1. correo ----------
-test('1) correo: 50 KB de dígitos, letras o «@» seguidos se revisan en menos de 25 ms (antes ~1,9 s); los correos normales se tapan', () => {
+// Estable con la máquina cargada: 7 corridas por caso; la MÁS RÁPIDA debe bajar de 25 ms (lo que cuesta de verdad, sin picos de carga)
+// y la mediana de 80 ms. La versión vieja (cuadrática) tardaba ~1,9 s: falla igual con holgura.
+test('1) correo: 50 KB de dígitos, letras o «@» seguidos: la corrida más rápida de 7 baja de 25 ms y la mediana de 80 ms (antes ~1,9 s); los correos normales se tapan', () => {
   for (const t of ['7'.repeat(50000), 'b'.repeat(50000), ('a'.repeat(70) + '@').repeat(700), 'x@' + 'a'.repeat(50000), 'x@' + 'a.'.repeat(25000)]) {
-    redactText(t); const t0 = performance.now(); redactText(t); const ms = performance.now() - t0;
-    assert.ok(ms < 25, t.slice(0, 12) + '…: ' + ms.toFixed(1) + ' ms');
+    redactText(t); const runs = [];
+    for (let i = 0; i < 7; i++) { const t0 = performance.now(); redactText(t); runs.push(performance.now() - t0); }
+    runs.sort((a, b) => a - b);
+    assert.ok(runs[0] < 25, t.slice(0, 12) + '…: más rápida ' + runs[0].toFixed(1) + ' ms');
+    assert.ok(runs[3] < 80, t.slice(0, 12) + '…: mediana ' + runs[3].toFixed(1) + ' ms');
   }
   assert.equal(redactText('Escribe a juan.perez+1@gmail.com o a ventas@botica-na.com.pe hoy'), 'Escribe a [correo oculto] o a [correo oculto] hoy');
 });
@@ -206,5 +211,21 @@ for (const n of [1, 2, 5, 47, 48, 49, 100]) {
     // solo una etiqueta de venta explícita deja ver el monto
     for (const t of ['El costo no lo tengo, pero el precio de venta es S/ 2.50', 'El costo es S/ 1.80. Se vende a S/ 2.50', 'costo S/ 1.80, PVP S/ 2.50', 'costo S/ 1.80; lo vendemos a S/ 2.50'])
       assert.ok(stream(t, EMP, n).text.includes('2.50'), t);
+  });
+}
+
+// ---------- 11. Frases de bodega del dueño (17-10) ----------
+const BODEGA = ['Lo que pagué fue S/ 1.80 por unidad.', 'Pagué S/ 1.80 la caja.', 'Me salió a S/ 1.80 cada una.', 'me salio a S/ 1.80', 'Me sale a S/ 1.80 con el proveedor.',
+  'Me costó S/ 1.80.', 'Nos costó S/ 18.00 el paquete.', 'Lo compré a S/ 1.80.', 'Lo traje a S/ 1.80 de Lima.', 'Mi costo es S/ 1.80.', 'lo que pague: S/ 1.80',
+  'S/ 1.80, que es lo que me costó la caja.', 'S/ 1.80, que es lo que pagué.', 'S/ 1.80 me salió a mí.', 'Pagué. S/ 1.80'];
+const BODEGA_OK = ['El cliente pagó S/ 2.50 en efectivo.', 'Pagó con Yape S/ 10.', 'El cliente pagó con Yape S/ 10 y se fue.', 'Que pague S/ 2.50 en caja.', 'Me sale aquí S/ 2.50 de precio de venta.',
+  'Hay 12 en stock a S/ 2.50.', 'Lo traje ayer, está a S/ 2.50 de precio de venta.'];
+for (const n of [1, 2, 47, 48, 49, 100]) {
+  test('11) trozos de ' + n + ': «lo que pagué», «pagué», «me salió/sale a», «me/nos costó», «lo compré a», «lo traje a», «mi costo» (también con el monto antes) se tapan; «el cliente pagó», «pagó con Yape» se ven', () => {
+    for (const t of BODEGA) {
+      const want = redactOwnerData(t); assert.ok(!/1\.80|18\.00/.test(want) && want.includes('[dato del dueño]'), t + ' -> ' + want);
+      assert.equal(stream(t, EMP, n).text, want, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t);
+    }
+    for (const t of BODEGA_OK) { assert.equal(redactOwnerData(t), t, t); assert.equal(stream(t, EMP, n).text, t, n + ': ' + t); }
   });
 }

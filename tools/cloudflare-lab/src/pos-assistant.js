@@ -104,7 +104,10 @@ export function redactText(value) {
 // que puede serlo al final) mientras se decide. Sin palabras del dueño cerca, el monto sale apenas se ve que no sigue una.
 const NOT_LETTER = '(?![a-záéíóúñ])';
 const SUPPLIER_SELL = '(?:(?:el\\s+)?proveedor\\s+(?:nos\\s+)?(?:(?:se\\s+)?(?:lo|la|los|las)\\s+)?venden?|nos\\s+(?:(?:lo|la|los|las)\\s+)?venden?)';
-const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron))' + NOT_LETTER;
+const OWNER_WORD = '(?:' + SUPPLIER_SELL + '|cost(?:o|os|ó|aron|aba|aban|s)?(?:\\s+(?:unitario|unit\\.?|por\\s+unidad|de\\s+compra|de\\s+ventas?))?|cto\\.?(?:\\s?unit\\.?)?|c\\.?\\s?unit\\.?|precio\\s+(?:de(?:l)?\\s+|al\\s+)?(?:proveedor|compra)|(?:p|pr|prec)\\.?\\s?(?:de\\s+)?compra|m[áa]rgen(?:es)?|ganancias?|gan(?:aste|amos|é|ó|aron)|utilidad(?:es)?|inversi(?:ó|o)n(?:es)?|invert(?:í|i|imos|iste|ió|io|ieron)' +
+  // Frases de bodega del dueño (17-10): «lo que pagué», «pagué», «me salió a», «me sale a», «lo traje a». «me costó», «nos costó», «mi costo» ya entran por «costó»/«costo»;
+  // «lo compré a» por BUY_WORD. «pagó» (el cliente pagó, pagó con Yape) NO es palabra del dueño; «pague» sin tilde solo dentro de «lo que pague».
+  '|lo\\s+que\\s+pagu[eé]|pagué|me\\s+(?:sali[óo]|sale)\\s+a|lo\\s+traje\\s+a)' + NOT_LETTER;
 const BUY_WORD = '(?:(?:lo|la|los|las)\\s+)?compr(?:é|e|amos|aron|ó)' + NOT_LETTER;
 const UNIT = '(?:unidad(?:es)?|unid|unds?|uds?|u|cajas?|cjs?|docenas?|kg|kilos?|g|gr|gramos?|paquetes?|pqts?|piezas?|pzas?|frascos?|sobres?|bl[íi]sters?|tabletas?|pastillas?|bolsas?|litros?|lts?|l|ml|botellas?|latas?|packs?|cientos?)' + NOT_LETTER;
 const NUM = '(?:\\d{1,3}(?:[.,]\\d{3})+|\\d{1,6})(?:[.,]\\d{1,2})?(?!\\d)';
@@ -122,7 +125,7 @@ const OWNER_WORD_Y = new RegExp(OWNER_WORD, 'iy'), BUY_WORD_Y = new RegExp(BUY_W
 const OWNER_MODIFIER = /^(?:brut[oa]s?|net[oa]s?|total(?:es)?|unitari[oa]s?|mensual(?:es)?|anual(?:es)?|real(?:es)?|estimad[oa]s?)$/i;
 const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
 // Palabras con las que puede empezar una frase de varias palabras: para decidirlas se esperan hasta 36 caracteres.
-const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
+const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|me|precio|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
 const isLetter = (c) => !!c && /[a-záéíóúñü]/i.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
 export const OWNER_DATA_LABEL = '[dato del dueño]';
