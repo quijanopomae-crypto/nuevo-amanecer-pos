@@ -309,12 +309,20 @@ test('(h) every SHARED key has a Configuración v9 control that sends exactly on
   expect(keys.filter(key => !V9_CONTROL[key])).toEqual([]);
   expect(keys.length).toBeGreaterThan(0);
   for (const [index, key] of keys.entries()) {
+    // Antes de cambiar la clave siguiente se espera la confirmación de ESTE guardado: la respuesta de su POST y
+    // «Guardado ✓» de este mismo cambio. Así el guardado automático no puede juntar dos cambios en un flush.
+    const answered = page.waitForResponse(response => response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/settings' && response.request().postDataJSON()?.key === key);
+    // El indicador solo se oculta con una clase y conserva el texto anterior: se vacía para que «Guardado ✓»
+    // venga de este cambio y no del anterior.
+    await page.evaluate(() => { const el = document.getElementById('na9Saved'); if (el) el.textContent = ''; });
     await V9_CONTROL[key](page);
-    await expect.poll(() => mock.posts.length, { message: `POST de ${key}` }).toBe(index + 1);
+    expect((await answered).status(), `POST de ${key}`).toBe(200);
     await expect(page.locator('#na9Saved')).toHaveText('Guardado ✓');
-    await page.waitForTimeout(800); // el guardado automático espera 500 ms: no debe salir un segundo POST
     expect(mock.posts.map(post => post.key)).toEqual(keys.slice(0, index + 1));
   }
+  // Un POST por clave, en orden, y ninguno más.
+  expect(mock.posts.map(post => post.key)).toEqual(keys);
 });
 
 test('(i) «No se guardó en el servidor» disappears after a later successful save', async ({ page }) => {
