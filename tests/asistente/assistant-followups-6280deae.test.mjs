@@ -40,15 +40,15 @@ test('1) ítem/fila × línea siguiente que EMPIEZA con una palabra del dueño (
   // la frase con punto final: igual (y la regla corta de texto sigue para las líneas sin viñeta)
   for (const nx of [...NX_START, 'el costo', 'Ese es el margen']) { const f = same('La galleta sale S/ 1.80.\n' + nx + '.\n'); hides(f, ['1.80']); }
 });
-test('1) límites (Bots 3/5): en ítems/filas NO se usa la regla de línea corta (40/5); «el costo» o «Ese es el margen» tras un ítem no tapan (INFO); en texto sí', () => {
-  for (const [, pre] of PRE) for (const nx of ['el costo', 'Ese es el margen']) { const f = same(pre + '\n' + nx + '\n'); shows(f, ['1.80']); }
+test('1) límites (Bots 3/5): en ítems/filas NO se usa la regla de línea corta (40/5); desde 84a49517 «el costo» o «Ese es el margen» tras un ítem tapan por el comienzo («el», «ese es el»); en texto también', () => {
+  for (const [, pre] of PRE) for (const nx of ['el costo', 'Ese es el margen']) { const f = same(pre + '\n' + nx + '\n'); hides(f, ['1.80']); }
   for (const nx of ['el costo', 'Ese es el margen']) hides(same('Galleta S/ 1.80\n' + nx + '\n'), ['1.80']);
 });
 test('1) Bot 2 b sigue: la palabra del dueño DENTRO de un ítem/fila hermano con SU monto tapa solo ese ítem; listas y tablas de precios se ven', () => {
   for (const [t, vis, hid] of [['- Arroz S/ 4.20\n- costo S/ 1.80', ['4.20'], ['1.80']], ['Leche Gloria\tS/ 3.70\ncosto\tS/ 1.80\nLeche Gloria\tS/ 3.80', ['3.70', '3.80'], ['1.80']],
     ['| Galleta | S/ 2.50 |\n| costo unitario | S/ 1.20 |', ['2.50'], ['1.20']], ['1. Arroz S/ 4.20\n2. Margen 30%\n3. Leche S/ 3.80', ['4.20', '3.80'], ['30%']],
     ['- Galleta S/ 2.50\n- Arroz S/ 4.20\n- Leche S/ 3.80', ['2.50', '4.20', '3.80'], []], ['| A | S/ 2.50 |\n| B | S/ 4.20 |', ['2.50', '4.20'], []],
-    ['- Galleta S/ 2.50\n- El costo lo ve el dueño.', ['2.50'], []], ['- Galleta S/ 2.50\n- Costeño 1 kg S/ 4.20', ['2.50', '4.20'], []], ['- Galleta S/ 2.50\n- Margarina S/ 3.10', ['2.50', '3.10'], []],
+    ['- Galleta S/ 2.50\n- El costo lo ve el dueño.', [], ['2.50']], ['- Galleta S/ 2.50\n- Costeño 1 kg S/ 4.20', ['2.50', '4.20'], []], ['- Galleta S/ 2.50\n- Margarina S/ 3.10', ['2.50', '3.10'], []],
     ['| Arroz | S/ 4.20 |\n| Costa Rica café | S/ 9.90 |', ['4.20', '9.90'], []], ['- Galleta S/ 2.50\n- de la casa S/ 3.00', ['2.50', '3.00'], []], ['- Galleta S/ 2.50\n- mixto S/ 3.00', ['2.50', '3.00'], []]]) {
     const f = same(t); shows(f, vis); hides(f, hid); }
 });

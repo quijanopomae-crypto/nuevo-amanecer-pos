@@ -472,22 +472,24 @@ function createAmountLayer(out0) {
   const NEXT_START_RE = /^(?:[(\-\s]|(?:mi|es\s+el|de)\s+)*(?:costos?|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?)(?=[^a-záéíóúñü\d_])/i;
   const NEXT_HAS_RE = /(?:^|[^a-záéíóúñü\d_])(?:costos?|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?)(?![a-záéíóúñü\d_])/i;
   // (Bot 5 sobre 6280deae, límites de Bots 3/5) ÍTEM de lista o FILA (| o tabulador): la línea siguiente, sin su viñeta, numeración, «|»,
-  // tabuladores, sangría ni «(», «mi», «es el», «de» delante, tapa el monto del ítem/fila de ARRIBA (solo ese) si EMPIEZA con costo/margen/
-  // ganancia/utilidad. Se decide con a lo sumo ~20 caracteres de esa línea (o su salto): sin la prueba de línea corta (40/5), así las tablas y
+  // tabuladores, sangría ni «(», «mi», «de», «el», «es el», «ese es el», «este es el» delante (Bot 5 sobre 84a49517: «- Galleta S/ 1.80\nel costo»),
+  // tapa el monto del ítem/fila de ARRIBA (solo ese) si EMPIEZA con costo/margen/ganancia/utilidad. Las líneas de texto (sin viñeta) siguen con su regla:
+  // «Galleta S/ 2.50\nEl costo lo ve el dueño.» se ve. Se decide con a lo sumo ~20 caracteres de esa línea (o su salto): sin la prueba de línea corta (40/5), así las tablas y
   // listas de precios no esperan una fila entera.
-  const ITEM_PRE_RE = /^(?:[\s(\-*•|]|\d{1,3}[.)](?=\s)|[a-z]\)(?=\s)|(?:mi|es\s+el|de)\s+)*/i;
+  const ITEM_PRE_RE = /^(?:[\s(\-*•|]|\d{1,3}[.)](?=\s)|[a-z]\)(?=\s)|(?:mi|(?:ese|este)\s+es\s+el|es\s+el|el|de)\s+)*/i;
   const ITEM_OWN_RE = /^(?:costos?|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?)(?=[^a-záéíóúñü\d_])/i;
   const ITEM_SIB_RE = /^[ \t]*(?:[-*•|]|\d{1,3}[.)]\s|[a-z]\)\s)/i;
   const ITEM_AMT_RE = /(?:S\/|PEN|US\$|\$)\s?-?\d|(?<![\d.,])\d{1,6}[.,]\d{1,2}(?!\d)|\d\s?%/i;
-  const ITEM_CAND = ['costos', 'margenes', 'márgenes', 'ganancias', 'utilidades', 'mi', 'es', 'de'];
+  // (Bot 5 sobre 84a49517) candidatos a medio llegar: palabra del dueño o comienzo «mi », «de », «el », «es el », «ese es el », «este es el »
+  const ITEM_CAND = ['costos', 'margenes', 'márgenes', 'ganancias', 'utilidades', 'mi ', 'de ', 'el ', 'es el ', 'ese es el ', 'este es el '];
   const itemNext = (j, final) => {
     const w = buf.slice(j - base, Math.min(end(), j + 42) - base), nl = w.indexOf('\n'), line = nl >= 0 ? w.slice(0, nl) : w, done = nl >= 0 || final;
     const t = done ? line + '\n' : line, rest = t.slice(ITEM_PRE_RE.exec(t)[0].length);
     if (ITEM_OWN_RE.test(rest)) return ownAmt(j, final);
     if (done || line.length >= 42 || rest.length > 20) return false;
-    if (/^(?:\d{1,3}[.)]?|[a-z]\)?|es(?:\s+e?l?)?)$/i.test(rest)) return NEED; // numeración o «es el» a medias
-    const m = /^[a-záéíóúñü]*/i.exec(rest)[0].toLowerCase();
-    return m.length === rest.length && ITEM_CAND.some((x) => x.startsWith(m)) ? NEED : false; };
+    if (/^(?:\d{1,3}[.)]?|[a-z]\)?)$/i.test(rest)) return NEED; // numeración a medias
+    const m = rest.toLowerCase().replace(/\s+/g, ' '); // «ese es e», «el», «márg»…: todavía puede empezar con la palabra del dueño
+    return /^[a-záéíóúñü ]*$/.test(m) && ITEM_CAND.some((x) => x.startsWith(m)) ? NEED : false; };
   // (Bot 2 / Bot 3 sobre 6280deae) la línea siguiente con palabra del dueño ¿trae SU monto en sus primeros ~20 caracteres (o antes de su salto)?
   // Sí («El costo es S/ 1.80», «costo: S/ 1.20», «ganancia S/ 0.70», «- costo S/ 1.80», «| costo | S/ 1.20 |»): la palabra es de ESE monto (lo tapa
   // su propia ventana) y el de arriba sale. No («costo unitario», «(mi costo)», «Ese es el margen»): se tapa el de arriba.
