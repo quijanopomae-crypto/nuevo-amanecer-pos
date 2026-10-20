@@ -49,11 +49,17 @@ test('long names and VARIOS stay bounded while quantity and selected customer re
   cart=[]; posRender(); posAdd('LONG');
   cart.push({id:'GENERIC:DENSITY',canonicalGenericId:'GENERIC:DENSITY',_lineKey:'GENERIC:DENSITY',ventaLibre:true,name:'VARIOS DE PRUEBA',precio:13.5,qty:1,unitsPerQty:1,icon:'📦'});posUpdateCart();
  `));
- const row=page.locator('.cart-item').first();
- expect(await row.evaluate(el=>el.getBoundingClientRect().height)).toBeLessThanOrEqual(78);
- expect(await row.locator('.ci-name').evaluate(el=>getComputedStyle(el).webkitLineClamp)).toBe('2');
+ // Fila identificada por su contenido (no por posición): posUpdateCart() reemplaza todas las filas.
+ const row=page.locator('.cart-item').filter({hasText:'PRODUCTO CON NOMBRE EXTREMADAMENTE LARGO'});
+ // Medir con reintentos (web-first) en vez de una lectura única justo después del eval.
+ await expect(row.locator('.ci-name')).toContainText('PRODUCTO CON NOMBRE EXTREMADAMENTE LARGO');
+ await expect(row.locator('.ci-name')).toHaveCSS('-webkit-line-clamp','2');
+ await expect.poll(()=>row.evaluate(el=>el.isConnected?el.getBoundingClientRect().height:Infinity),{message:'la fila con nombre largo no se infla'}).toBeLessThanOrEqual(78);
  await expect(page.locator('.cart-item-flag.free')).toHaveText('VARIOS');
+ await expect(row.locator('.qty-num')).toHaveText('1');
  await row.locator('[data-na-cart-action="increase"]').click();
+ // Primero el estado (cart) y luego el DOM re-renderizado, ambos con reintentos.
+ await expect.poll(()=>page.evaluate(()=>(window as any).eval("cart.find(i=>i.id==='LONG')?.qty"))).toBe(2);
  await expect(row.locator('.qty-num')).toHaveText('2');
  await expect(row.locator('.cart-line-unit')).toHaveText('2 unidades');
  await page.locator('#posCustomerButton').click();

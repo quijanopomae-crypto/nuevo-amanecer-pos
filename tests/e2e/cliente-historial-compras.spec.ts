@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { expectAllFit, expectFits } from './helpers/fits';
 
 // Mismo rolePage/seed de Rotación ABC; solo backend ficticio y datos sintéticos.
 async function rolePage(page: Page, role: 'owner' | 'empleado') {
@@ -59,15 +60,7 @@ async function readState(page: Page) {
     quarantine:localStorage.getItem('na_canonical_sale_outbox_v1_quarantine')})`));
 }
 async function noOverflow(page: Page) {
-  expect(await page.locator('#pageClienteHistorial').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  expect(await page.locator('#pageClienteHistorial').evaluate(node => {
-    const box = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('h1,h2,input,select,button,tbody th,tbody td,.ch-summary-card')].every(child => {
-      const rect = child.getBoundingClientRect();
-      return rect.left >= box.left - 1 && rect.right <= box.right + 1 && child.scrollWidth <= child.clientWidth + 1;
-    });
-  })).toBe(true);
+  await expectAllFit(page.locator('#pageClienteHistorial'), 'h1,h2,input,select,button,tbody th,tbody td,.ch-summary-card');
 }
 async function contrastRatio(locator: Locator) {
   return locator.evaluate(node => {
@@ -132,29 +125,17 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
       const dates = sales.locator('tbody th .ch-date');
       await expect(dates).toHaveCount(5);
       for (const date of await dates.all()) {
-        const result = await date.evaluate(cell => {
-          // El Range mide solo la fecha, sin la etiqueta ::before de la tarjeta.
-          const range = document.createRange();
-          range.selectNodeContents(cell);
-          const lines = [...range.getClientRects()];
-          const card = cell.closest('tr')!.getBoundingClientRect();
-          return {
-            lineCount: lines.length,
-            fits: lines.every(rect => rect.width > 0 && rect.left >= card.left - 1 && rect.right <= card.right + 1
-              && rect.top >= card.top - 1 && rect.bottom <= card.bottom + 1)
-          };
-        });
-        expect(result.lineCount, await date.textContent() || 'Fecha').toBe(1);
-        expect(result.fits, await date.textContent() || 'Fecha').toBe(true);
+        // text: mide solo la fecha (Range), sin la etiqueta ::before de la tarjeta.
+        await expectFits(date, { within: 'tr', text: true, singleLine: true }, `${await date.textContent() || 'Fecha'} en una línea dentro de su tarjeta`);
       }
     }
     await noOverflow(page);
     const refresh = screen.getByRole('button', { name: 'Actualizar reporte' });
     await refresh.scrollIntoViewIfNeeded();
-    expect(await refresh.evaluate(button => {
+    await expect.poll(() => refresh.evaluate(button => {
       const r = button.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!hit && (hit === button || button.contains(hit));
-    })).toBe(true);
+    }), { message: 'Actualizar reporte no queda tapado' }).toBe(true);
     await refresh.click();
     await expect(summary.nth(0)).toContainText('S/ 42.00');
     await search.fill('00000002');
