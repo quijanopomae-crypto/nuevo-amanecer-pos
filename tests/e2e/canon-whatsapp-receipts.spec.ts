@@ -120,13 +120,6 @@ test.describe('Android: choose WhatsApp or WhatsApp Business',()=>{
     await page.locator('#naReceiptSend').click();await page.waitForFunction(()=>(window as any).__shares.length===1);
     expect(await page.evaluate(()=>(window as any).__shares[0])).toBe('application/pdf');
   });
-  test('settings screen exposes the same choice',async({page})=>{
-    await boot(page);
-    await page.evaluate(()=>{const h=document.createElement('div');h.id='cfgHost';h.innerHTML=(window as any).NAReceiptUI.settingsHtml();document.body.append(h);});
-    await expect(page.locator('#cfgReceiptApp')).toBeEnabled();
-    await page.locator('#cfgReceiptApp').selectOption('business');
-    await expect.poll(()=>page.evaluate(()=>(window as any).NAReceiptShare.settings().app)).toBe('business');
-  });
 });
 const IPHONE_UA='Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 async function expectWaMe(page:Page){
@@ -155,7 +148,8 @@ test('with no saved configuration the receipt defaults to image via the share me
   await expect(page.locator('#naReceiptDownloadHint')).toBeHidden();
   expect(await page.evaluate(()=>(window as any).__opened.length)).toBe(0);
 });
-test('each user can choose their own default format in Configuración → Ticket',async({page})=>{
+// Prueba del componente aislado (settingsHtml). El panel real en Configuración v9 lo cubre config-v9-whatsapp-settings.spec.ts.
+test('settings panel component: the chosen default format is used by the sale dialog',async({page})=>{
   await boot(page);
   await page.evaluate(()=>{const h=document.createElement('div');h.id='cfgHost';h.innerHTML=(window as any).NAReceiptUI.settingsHtml();document.body.append(h);});
   await expect(page.locator('#cfgReceiptFormat')).toHaveValue('image');

@@ -96,18 +96,37 @@ test('send URL: intent only on Android with an explicit app; wa.me everywhere el
   assert.throws(()=>a.sendUrl('123','x','business',ANDROID));
   assert.throws(()=>a.sendUrl('987654321','x','evil',ANDROID));
 });
-test('WhatsApp app setting defaults to auto, persists, is preserved and rejects invalid values',()=>{
-  const config={ticket:{shareFormat:'image'}};
-  const a=api({appConfig:config});
+function memoryStorage(seed={}){const data={...seed};return{data,getItem:k=>Object.prototype.hasOwnProperty.call(data,k)?data[k]:null,setItem:(k,v)=>{data[k]=String(v);},removeItem:k=>{delete data[k];}};}
+test('WhatsApp app setting is per device: localStorage, never pos.ticket; legacy pos.ticket.shareApp is a read-only fallback',()=>{
+  const config={ticket:{shareFormat:'image'}},localStorage=memoryStorage();
+  const a=api({appConfig:config,localStorage});
+  assert.equal(a.appStorageKey,'na_pos_share_app_v1');
   assert.equal(a.settings().app,'auto');
   a.setSettings({format:'text',ask:true,app:'business'});
-  assert.equal(config.ticket.shareApp,'business');
-  assert.equal(api({appConfig:JSON.parse(JSON.stringify(config))}).settings().app,'business');
+  assert.equal(config.ticket.shareApp,undefined,'shareApp must not be written to pos.ticket');
+  assert.equal(localStorage.data.na_pos_share_app_v1,'business');
+  assert.equal(config.ticket.shareFormat,'text','format stays shared in pos.ticket');
+  // Recarga: mismo aparato, configuración del servidor sin shareApp.
+  assert.equal(api({appConfig:JSON.parse(JSON.stringify(config)),localStorage}).settings().app,'business');
   a.setSettings({format:'pdf',ask:false});
-  assert.equal(a.settings().app,'business','omitting app keeps the saved choice');
-  assert.equal(api({appConfig:{ticket:{shareApp:'bogus'}}}).settings().app,'auto');
+  assert.equal(a.settings().app,'business','omitting app keeps the device choice');
+  a.setApp('whatsapp');
+  assert.equal(localStorage.data.na_pos_share_app_v1,'whatsapp');
+  assert.equal(config.ticket.shareApp,undefined);
+  assert.throws(()=>a.setApp('bogus'));
   assert.throws(()=>a.setSettings({format:'text',ask:true,app:'bogus'}));
-  assert.equal(a.settings().app,'business');
+  assert.equal(a.settings().app,'whatsapp');
+});
+test('legacy pos.ticket.shareApp migrates as fallback without background writes and never overrides the device choice',()=>{
+  const fresh=memoryStorage();
+  const legacy=api({appConfig:{ticket:{shareApp:'business'}},localStorage:fresh});
+  assert.equal(legacy.settings().app,'business','old value is not lost');
+  assert.deepEqual(fresh.data,{},'reading the fallback does not write localStorage');
+  const chosen=memoryStorage({na_pos_share_app_v1:'whatsapp'});
+  // Un pull de settings del servidor que trae pos.ticket.shareApp no pisa la elección del aparato.
+  assert.equal(api({appConfig:{ticket:{shareApp:'business'}},localStorage:chosen}).settings().app,'whatsapp');
+  assert.equal(api({appConfig:{ticket:{shareApp:'bogus'}},localStorage:memoryStorage()}).settings().app,'auto');
+  assert.equal(api({appConfig:{ticket:{}},localStorage:memoryStorage({na_pos_share_app_v1:'evil'})}).settings().app,'auto');
 });
 test('settings persist through reload and reject invalid format',()=>{
   const config={ticket:{}};
