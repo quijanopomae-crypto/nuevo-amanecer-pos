@@ -1,0 +1,7 @@
+{
+  "schema": "nuevo-amanecer.prod-product-images-trigger/v1",
+  "batch_id": "001",
+  "authorized_by_owner": true,
+  "confirmation": "APPLY_CANON_PRODUCT_IMAGES_BATCH_001",
+  "expected_base_head": "REPLACE_WITH_VERIFIED_IMPLEMENTATION_MERGE_SHA"
+}
