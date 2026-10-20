@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { contrastOf, rect, overlaps, noHorizontalOverflow } from './helpers/css-contrast';
+import { expectAllFit } from './helpers/fits';
 
 // Pulido CSS/texto de Configuración: panel WhatsApp (Ticket y comprobantes), «Preguntar» deshabilitado,
 // avisos de guardado (#na9Saved y #gToast) y «Reseteo» en el menú interno. Solo se mide: nunca se abre Reseteo.
@@ -80,6 +81,8 @@ for (const width of WIDTHS) for (const dark of [false, true]) {
       return { text: ctx.measureText(text).width, room: s.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - arrow };
     });
     expect(fit.text, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    // Panel sin desbordes: ni el documento ni sus filas, selects y textos salen del ancho (helpers/fits.ts, #830).
+    await expectAllFit(page.locator('#naCfgV9 .na9-wa .cfg-panel'), '.cfg-setting, select, label, .cfg-panel-title');
     // 2) Formato y «Abrir con» terminan en el mismo borde derecho (y cada select dentro de su fila).
     const f = await rect(page, '#cfgReceiptFormat'), a = await rect(page, '#cfgReceiptApp');
     expect(Math.abs(f.right - a.right), JSON.stringify({ f, a })).toBeLessThanOrEqual(1);

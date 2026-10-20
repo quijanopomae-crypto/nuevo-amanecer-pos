@@ -161,3 +161,34 @@ test('cajero: formato y «Preguntar» deshabilitados; «Abrir con» usable y loc
   await page.waitForTimeout(1500);
   expect(server.posts.filter(p => p.key === 'pos.ticket')).toEqual([]);
 });
+
+// Permiso (no CSS): sharedEditable() falla cerrado. Si NA_ROLES no está o lanza un error, Formato y «Preguntar»
+// quedan deshabilitados y no se envía nada; el dueño sigue editando vía NA_ROLES.isOwner().
+for (const broken of ['ausente', 'isOwner lanza', 'getter lanza'] as const) {
+  test(`NA_ROLES ${broken}: Formato y «Preguntar» deshabilitados, 0 POST`, async ({ page }) => {
+    const server: Server = { posts: [], settings: {} };
+    await page.setViewportSize({ width: 390, height: 900 });
+    await cloudPage(page, 'owner', server);
+    await settle(server, page);
+    // Control: con NA_ROLES sano el dueño puede editar.
+    expect(await page.evaluate(() => { const h = document.createElement('div'); h.innerHTML = (window as any).NAReceiptUI.settingsHtml(); return (h.querySelector('#cfgReceiptFormat') as HTMLSelectElement).disabled; })).toBe(false);
+    await page.evaluate(kind => {
+      const w = window as any;
+      if (kind === 'ausente') { delete w.NA_ROLES; w.NA_ROLES = undefined; }
+      else if (kind === 'isOwner lanza') w.NA_ROLES = { ...w.NA_ROLES, isOwner() { throw new Error('roles rotos'); } };
+      else Object.defineProperty(w, 'NA_ROLES', { configurable: true, get() { throw new Error('roles rotos'); } });
+    }, broken);
+    server.posts.length = 0;
+    await page.evaluate(() => { const h = document.createElement('div'); h.id = 'cfgHost'; h.innerHTML = (window as any).NAReceiptUI.settingsHtml(); document.body.prepend(h); });
+    await expect(page.locator('#cfgHost #naReceiptSettings')).toHaveClass(/is-readonly/);
+    await expect(page.locator('#cfgHost #cfgReceiptFormat')).toBeDisabled();
+    await expect(page.locator('#cfgHost #cfgReceiptAsk')).toBeDisabled();
+    await expect(page.locator('#cfgHost #cfgReceiptApp')).toBeEnabled(); // «Abrir con» es de este aparato
+    // Aunque se fuerce el cambio y se llame al guardado, no se guarda ni se envía nada.
+    const before = await page.evaluate(() => (window as any).NAReceiptShare.settings());
+    await page.evaluate(async () => { (document.querySelector('#cfgHost #cfgReceiptFormat') as HTMLSelectElement).value = 'pdf'; (document.querySelector('#cfgHost #cfgReceiptAsk') as HTMLInputElement).checked = false; await (window as any).NAReceiptUI.changeSettings(); });
+    await page.waitForTimeout(2000);
+    expect(server.posts).toEqual([]);
+    expect(await page.evaluate(() => (window as any).NAReceiptShare.settings())).toEqual(before);
+  });
+}
