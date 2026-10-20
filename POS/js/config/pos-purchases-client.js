@@ -11,7 +11,8 @@
   function cloud() { try { return !!(root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()); } catch (_) { return false; } }
   function toast(m, k) { try { root.toast(m, k || 'error'); } catch (_) {} }
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function ownerAllowed() { try { return !!root.NA_PERMISSIONS.canDo(root.NA_ROLES.role, 'purchases.costs.view'); } catch (_) { return false; } }
+  // Costos y proveedor: dueño confirmado (NA_ROLES.isOwner) y permiso purchases.costs.view. Un rol en caché sin confirmar ya no basta.
+  function ownerAllowed() { try { var R = root.NA_ROLES; return !!(R && typeof R.isOwner === 'function' && R.isOwner() === true && root.NA_PERMISSIONS.canDo(R.role, 'purchases.costs.view')); } catch (_) { return false; } }
   function money(c) { var n = Number(c || 0) / 100; try { return root.fmt(n); } catch (_) { return 'S/ ' + n.toFixed(2); } }
   function products() { try { return Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   var ERR = {

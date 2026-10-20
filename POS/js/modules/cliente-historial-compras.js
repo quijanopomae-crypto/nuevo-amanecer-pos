@@ -203,12 +203,19 @@
       return [product.name, product.quantity.toLocaleString('es-PE', { maximumFractionDigits: 3 }), money(product.amount)];
     }), [1, 2]);
   }
-  function ownerAllowed() {
-    var roles = root.NA_ROLES, permissions = root.NA_PERMISSIONS;
-    return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() && permissions &&
-      typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID) &&
-      typeof permissions.featureLocked === 'function' && !permissions.featureLocked(FEATURE_ID));
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  // No es una regla de rol: confirma que la tabla de permisos cargó (falla cerrada sin ella).
+  function policyReady() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
+  }
+  // Interruptor de función: se conserva para que el dueño no vea la función si se vuelve a bloquear.
+  function featureUnlocked() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.featureLocked === 'function' && !permissions.featureLocked(FEATURE_ID)); } catch (_) { return false; }
+  }
+  function ownerAllowed() { return isOwner() && policyReady() && featureUnlocked(); }
   function render() {
     var page = root.document && root.document.getElementById(PAGE_ID);
     if (!page) return false;
