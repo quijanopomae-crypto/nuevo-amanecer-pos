@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner authorized (standing permission to merge+deploy after team OKs; 2026-10-16 Lima; asistente 2 code OK, asistente 3 spec OK, asistente 4 LOCAL OK: #809 93a3cd4d 36/36, #815 cdd1d054 e2e 485/487 with 2 flaky passing 3/3; CI green on both heads) deploy of base 63d13220d8b0312c78518cdf5cff769d5a6738a4: #809 reporte-productos-vencer (touches pos-permissions.js, merge c45f39f4) + #815 historial cliente vendedor sin id y guard CSV (merge 63d13220). No schema changes. Rollback to 57f3054c (worker 57, Cloudflare version d6d2b8be, currently live). Web NOT deployed (pending asistente 5 live check).",
-  "target_commit": "63d13220d8b0312c78518cdf5cff769d5a6738a4",
-  "rollback_ref": "57f3054c62d15278bfd79600e27d7876fba80698",
+  "authorization_context": "Owner explicitly authorized in DM (2026-10-20 Lima: «Sí, publica el servidor de #834») after asistente 2 code OK, asistente 3 spec OK, asistente 4 LOCAL OK on eba82a5e. Deploy of base e1c08429aad02e6a5868a4ff46847c78b81fa0fe: #834 expected_revision 409 always includes revision (merge e1c08429). No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39517616865 (R2 recovery-drills/2026-10-20T23-51-00Z-f88b2b8c…sql, 2533735 bytes). Rollback to 63d13220 (worker 58). Web not changed.",
+  "target_commit": "e1c08429aad02e6a5868a4ff46847c78b81fa0fe",
+  "rollback_ref": "63d13220d8b0312c78518cdf5cff769d5a6738a4",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 58,
-  "optimization": "REPORTE_PRODUCTOS_VENCER_809_HISTORIAL_815"
+  "attempt": 59,
+  "optimization": "EXPECTED_REVISION_409_834"
 }
