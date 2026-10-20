@@ -113,6 +113,56 @@ test('owner lists and revokes devices (PIN when set); settings revisioned; expir
   assert.equal((await call(f, '/auth/pair', null, { code: 'AAAAA-AAAAA' })).status, 401);
 });
 
+test('/settings expected_revision: match saves and returns new revision; mismatch is 409 with current revision; omitted keeps last-write', async t => {
+  const f = await setup(t);
+  const save = body => call(f, '/settings', 'owner-token', body);
+  const stored = () => ({ ...f.sql("SELECT value_json, revision FROM pos_settings WHERE key='pos.flags'") });
+  // Clave nueva: expected_revision 0 coincide.
+  let r = await save({ key: 'pos.flags', value: { a: 1 }, expected_revision: 0 });
+  assert.deepEqual([r.status, r.body.status, r.body.revision], [200, 'saved', 1]);
+  r = await save({ key: 'pos.flags', value: { a: 2 }, expected_revision: 1 });
+  assert.deepEqual([r.status, r.body.revision], [200, 2]);
+  // Revisión vieja o adelantada: 409 con la revisión actual y sin escribir.
+  for (const stale of [0, 1, 5]) {
+    r = await save({ key: 'pos.flags', value: { a: 'pisado' }, expected_revision: stale });
+    assert.equal(r.status, 409);
+    assert.deepEqual(r.body, { error: 'revision_conflict', revision: 2 });
+  }
+  assert.deepEqual(stored(), { value_json: '{"a":2}', revision: 2 });
+  // Clave inexistente con expected_revision > 0: 409 con revision 0.
+  r = await save({ key: 'negocio', value: {}, expected_revision: 3 });
+  assert.deepEqual([r.status, r.body], [409, { error: 'revision_conflict', revision: 0 }]);
+  // Reintento con la revisión 2 que devolvieron los 409 de `pos.flags` (hoy config-g.js vuelve a pedir GET /settings; esto prueba que el servidor lo acepta).
+  r = await save({ key: 'pos.flags', value: { a: 3 }, expected_revision: 2 });
+  assert.deepEqual([r.status, r.body.revision], [200, 3]);
+  // Sin expected_revision (o null): comportamiento anterior, guarda sobre la revisión actual.
+  r = await save({ key: 'pos.flags', value: { a: 4 } });
+  assert.deepEqual([r.status, r.body.revision], [200, 4]);
+  r = await save({ key: 'pos.flags', value: { a: 5 }, expected_revision: null });
+  assert.deepEqual([r.status, r.body.revision], [200, 5]);
+  r = await save({ key: 'nuevo.sin.rev', value: true });
+  assert.deepEqual([r.status, r.body.revision], [200, 1]);
+  assert.deepEqual(stored(), { value_json: '{"a":5}', revision: 5 });
+});
+
+test('/settings expected_revision: concurrent write between read and CAS returns 409 with the latest revision', async t => {
+  const f = await setup(t);
+  assert.equal((await call(f, '/settings', 'owner-token', { key: 'pos.flags', value: { a: 1 } })).body.revision, 1);
+  // Simula otro aparato que guarda justo antes del UPDATE condicional (dos veces: revision 1 -> 3).
+  const binding = f.env.nuevo_amanecer_lab, prepare = binding.prepare.bind(binding);
+  let raced = false;
+  binding.prepare = sql => {
+    if (!raced && /^\s*INSERT INTO pos_settings/.test(sql)) { raced = true; f.exec("UPDATE pos_settings SET revision=revision+2, value_json='{\"otro\":true}' WHERE key='pos.flags'"); }
+    return prepare(sql);
+  };
+  t.after(() => { binding.prepare = prepare; });
+  const r = await call(f, '/settings', 'owner-token', { key: 'pos.flags', value: { a: 2 }, expected_revision: 1 });
+  assert.ok(raced);
+  assert.equal(r.status, 409);
+  assert.deepEqual(r.body, { error: 'revision_conflict', revision: 3 });
+  assert.deepEqual({ ...f.sql("SELECT value_json, revision FROM pos_settings WHERE key='pos.flags'") }, { value_json: '{"otro":true}', revision: 3 });
+});
+
 const reviews = read('0025_pos_reviews_pin_failures.sql');
 
 test('0025: PIN failures lock only the failing device; global cap 20 in 15 min', async t => {
