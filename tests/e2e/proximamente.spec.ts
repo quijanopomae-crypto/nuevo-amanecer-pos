@@ -157,10 +157,16 @@ for (const [width, columns] of [[1366, 3], [768, 2], [390, 1]]) {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner');
     await page.evaluate(() => window.goPage('pageProximamente'));
-    await expect(page.locator('.na-prox-section-grid').first()).toBeVisible();
-    const count = await page.locator('.na-prox-section-grid').first().evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length);
-    expect(count).toBe(columns);
-    expect(await page.locator('#pageProximamente').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    const grid = page.locator('.na-prox-section-grid').first();
+    await expect(grid).toBeVisible();
+    // Al activar la página, cada cambio de clase (p. ej. na-enter-fade) vuelve a
+    // renderizar y reemplaza la grilla: una lectura única puede caer sobre un nodo
+    // ya desconectado, cuyo estilo computado es '' (= "1 columna"). Se reintenta
+    // sobre el nodo vivo hasta que el layout se estabiliza.
+    await expect.poll(() => grid.evaluate(node => node.isConnected
+      ? getComputedStyle(node).gridTemplateColumns.split(' ').filter(Boolean).length
+      : 0), { message: `.na-prox-section-grid debe tener ${columns} columnas a ${width}px` }).toBe(columns);
+    await expect.poll(() => page.locator('#pageProximamente').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await page.locator('.na-prox-section[data-module="Caja"] > .na-prox-summary').click();
     await expect(page.locator('.na-prox-section[data-module="Caja"] .na-prox-card').first()).toBeHidden();
   });

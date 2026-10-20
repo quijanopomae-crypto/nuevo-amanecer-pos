@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectAllFit, expectFits, expectStylesheetApplied } from './helpers/fits';
+import { settlePersistence } from './helpers/persistence';
 
 test.use({ timezoneId: 'UTC' });
 
@@ -47,32 +49,31 @@ async function seed(page: Page, firstSalePrice = 10) {
   }, firstSalePrice);
 }
 async function readState(page: Page) {
+  // El guardado de arranque (saveAllData) puede seguir en _naPersistChain y
+  // reescribir na_snapshot_v9.updatedAt después de leer "antes".
+  await settlePersistence(page);
   return page.evaluate(() => {
     const state = (window as any).eval('JSON.stringify({productos,ventas,clientes,creditos,cajMovs})');
     const storage = Object.fromEntries(Object.keys(localStorage).sort().map(key => [key, localStorage.getItem(key)]));
     return { state, storage };
   });
 }
+// Guard: no medir layout hasta que clientes-frecuencia.css esté cargada y aplicada.
+async function frequencyStyles(page: Page) {
+  await expectStylesheetApplied(page, 'css/clientes-frecuencia.css', page.locator('#pageClientesFrecuencia'), '--cf-bg');
+}
 async function noOverflow(page: Page) {
-  expect(await page.locator('#pageClientesFrecuencia').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  expect(await page.locator('#pageClientesFrecuencia').evaluate(node => {
-    const box = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('h1,select,input,button,tbody th,tbody td,.cf-badge,.cf-summary-card')].every(child => {
-      const rect = child.getBoundingClientRect();
-      return rect.left >= box.left - 1 && rect.right <= box.right + 1 && child.scrollWidth <= child.clientWidth + 1;
-    });
-  })).toBe(true);
+  await frequencyStyles(page);
+  await expectAllFit(page.locator('#pageClientesFrecuencia'), 'h1,select,input,button,tbody th,tbody td,.cf-badge,.cf-summary-card');
   const select = page.locator('#pageClientesFrecuencia [data-cf-period]');
-  const [needed, actual] = await select.evaluate(node => {
+  await expect.poll(() => select.evaluate(node => {
     const clone = node.cloneNode(true) as HTMLSelectElement;
     clone.style.width = 'max-content'; clone.style.position = 'absolute'; clone.style.visibility = 'hidden';
     node.parentElement!.appendChild(clone);
-    const result = [clone.getBoundingClientRect().width, node.getBoundingClientRect().width];
+    const needed = clone.getBoundingClientRect().width, actual = node.getBoundingClientRect().width;
     clone.remove();
-    return result;
-  });
-  expect(actual + 0.5).toBeGreaterThanOrEqual(needed);
+    return actual + 0.5 >= needed;
+  }), { message: 'el select de período muestra su opción completa' }).toBe(true);
 }
 
 for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
@@ -134,10 +135,10 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     await noOverflow(page);
     const refresh = screen.getByRole('button', { name: 'Actualizar reporte' });
     await refresh.scrollIntoViewIfNeeded();
-    expect(await refresh.evaluate(button => {
+    await expect.poll(() => refresh.evaluate(button => {
       const r = button.getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!hit && (hit === button || button.contains(hit));
-    })).toBe(true);
+    }), { message: 'Actualizar reporte no queda tapado' }).toBe(true);
     await refresh.click();
     expect(await readState(page)).toEqual(before);
     expect(writes).toEqual([]);
@@ -164,6 +165,7 @@ for (const width of [650, 1000]) {
     await page.locator('#pageProximamente [data-feature-id="clientes-frecuencia"]').click();
     const screen = page.locator('#pageClientesFrecuencia');
     await expect(screen).toBeVisible();
+    await frequencyStyles(page);
     const tables = screen.locator('table');
     expect(await tables.count()).toBeGreaterThan(0);
     for (const table of await tables.all()) {
@@ -190,6 +192,7 @@ async function openFrequency(page: Page, width: number, dark = false, firstSaleP
   await page.locator('#pageProximamente [data-feature-id="clientes-frecuencia"]').click();
   const screen = page.locator('#pageClientesFrecuencia');
   await expect(screen.locator('.cf-table')).toBeVisible();
+  await frequencyStyles(page);
   return screen;
 }
 // The other six purchases add S/ 60.00 to the first sale within the 90-day period.
@@ -208,18 +211,9 @@ for (const { width, price, total } of kpiCases) for (const dark of [false, true]
     await expect(values).toHaveCount(4);
     for (const value of await values.all()) {
       await expect(value).toBeVisible();
-      await expect.poll(() => value.evaluate(strong => {
-        const range = document.createRange();
-        range.selectNodeContents(strong);
-        const rect = strong.getBoundingClientRect();
-        const card = strong.closest('.cf-summary-card')!.getBoundingClientRect();
-        return {
-          oneLine: range.getClientRects().length === 1,
-          fits: strong.scrollWidth <= strong.clientWidth + 1,
-          insideCard: rect.left >= card.left - 1 && rect.right <= card.right + 1 &&
-            rect.top >= card.top - 1 && rect.bottom <= card.bottom + 1,
-        };
-      }), { message: `KPI ${await value.textContent()} at ${width}px must fit its card on one line` }).toEqual({ oneLine: true, fits: true, insideCard: true });
+      const message = `KPI ${await value.textContent()} at ${width}px must fit its card on one line`;
+      await expectFits(value, { within: '.cf-summary-card' }, message);
+      await expectFits(value, { within: '.cf-summary-card', text: true, singleLine: true }, message);
     }
   });
 }
