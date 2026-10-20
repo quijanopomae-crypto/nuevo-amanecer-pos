@@ -196,7 +196,7 @@ test('receipt format defaults to image (share menu) when nothing is saved; users
 test('UI copy: Abrir con, Abrir WhatsApp, phone error and download hint',()=>{
   const src=readFileSync(path,'utf8'),ui=readFileSync('POS/js/modules/ticket/share-receipt-ui.js','utf8');
   for(const t of ["'Abrir con'","'Automático (la app que tenga el celular)'","'Abrir WhatsApp'","Escribe el número del cliente, por ejemplo 987 654 321","Úsalo si WhatsApp no abre"])assert.ok(src.includes(t),t);
-  assert.ok(ui.includes('Abrir con (solo texto, solo Android)')&&ui.includes('Automático (la app que tenga el celular)'));
+  assert.ok(ui.includes('Abrir con (solo texto, solo Android)')&&ui.includes("opt('auto','Automático',s.app)"));
   assert.ok(!src.includes('Enviar por WhatsApp')&&!src.includes('Enviar desde'));
   assert.throws(()=>api().textUrl('123','x'),/Escribe el número del cliente, por ejemplo 987 654 321/);
 });
