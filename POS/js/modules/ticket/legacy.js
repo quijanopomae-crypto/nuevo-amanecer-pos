@@ -38,7 +38,9 @@ function _naBuildThermalTicket(v,fromDom=true){
   if(showOperation){const op=_naTkOperation(v);if(op)pushField(labels.operation,op);}
   pushField(labels.date,_naTkFormatDate(v?.fecha||obtenerHoy()));
   pushField(labels.time,v?.hora||nowT());
-  pushField(labels.cashier,(globalThis.NA_RECORD_CASHIER?.get?.([v?.sale_id,v?.id,v?.operation_id,v?.operation])?.nombre)||v?.cajeroNombre||v?.cajero||b.cajero||'');
+  {const rc=globalThis.NA_RECORD_CASHIER?.get?.([v?.sale_id,v?.id,v?.operation_id,v?.operation]),name=rc?.nombre||v?.cajeroNombre||v?.cajero||b.cajero||'',id=rc?.nombre?rc.id:(v?.cajeroNombre||v?.cajero)?v?.cajeroId:(typeof appConfig!=='undefined'?appConfig?.activeCashierId:undefined);
+  // Dos cajeros con el mismo nombre: « · CAJ-002» (NA_SELLER_LABELS). Un nombre único se imprime igual.
+  pushField(labels.cashier,name+(globalThis.NA_SELLER_LABELS?.cashierIdSuffix?.(id,name)||''));}
   lines.push('');if(showSep)lines.push(dash);
   const total=totalV(v||{items:[]}),items=v?.items||[];
   if(width>=24){

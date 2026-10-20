@@ -111,7 +111,12 @@
       // Preferir la etiqueta de una venta que trae id.
       if (!known || (!known.hasId && seller.hasId)) sellers.set(seller.value, seller);
     });
-    return Array.from(sellers.values()).map(function (item) { return { value: item.value, label: item.label }; }).sort(function (a, b) { return a.label.localeCompare(b.label, 'es') || a.value.localeCompare(b.value); });
+    // Dos vendedores distintos con el mismo nombre: sufijo con su id (NA_SELLER_LABELS), igual que en Reportes.
+    var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.cashiers === 'function' ? root.NA_SELLER_LABELS.cashiers() : null;
+    return Array.from(sellers.values()).map(function (item) {
+      var id = item.value.indexOf('id:') === 0 ? item.value.slice(3) : '';
+      return { value: item.value, label: labels && id ? item.label + labels.suffix(id, item.label) : item.label };
+    }).sort(function (a, b) { return a.label.localeCompare(b.label, 'es') || a.value.localeCompare(b.value); });
   }
   function filterSales(sales, selectedId, options) {
     options = options || {};

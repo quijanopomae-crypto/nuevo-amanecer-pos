@@ -291,7 +291,8 @@ for (const width of [390, 768, 1366]) {
       const before = await readState(page);
       const expected = count === 1 ? [{ value: '', label: 'Todos' }, { value: 'id:v1', label: 'Luis' }] : [
         { value: '', label: 'Todos' },
-        ...(count === 2 ? [{ value: 'id:v1', label: 'Luis' }, { value: 'id:v2', label: 'Luis' }] : []),
+        // Dos vendedores con el mismo nombre: sufijo con su id (NA_SELLER_LABELS).
+        ...(count === 2 ? [{ value: 'id:v1', label: 'Luis · v1' }, { value: 'id:v2', label: 'Luis · v2' }] : []),
         { value: 'name:luis', label: 'Luis (sin id)' }
       ];
       expect(await seller.locator('option').evaluateAll(nodes => nodes.map(node => ({
