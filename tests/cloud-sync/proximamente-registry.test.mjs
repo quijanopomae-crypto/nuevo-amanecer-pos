@@ -155,7 +155,8 @@ function renderHarness(rows, locks, config = false) {
     document: doc,
     MutationObserver: function (callback) { this.observe = function (node) { observations.push({ node, callback }); }; },
     goPage: id => navigated.push(id),
-    NA_ROLES: { canConfigure: () => true },
+    // Como el NA_ROLES real: isOwner y canConfigure son la misma regla.
+    NA_ROLES: { canConfigure: () => true, isOwner() { return this.canConfigure(); } },
     NA_PROXIMAMENTE_REGISTRY: rows,
     NA_PERMISSIONS: { featureLocked: id => locks[id] !== false }
   });

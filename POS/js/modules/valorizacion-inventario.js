@@ -79,11 +79,15 @@
     return { rows: rows, totals: totals, untrackedProducts: untrackedProducts };
   }
 
-  function ownerAllowed() {
-    return !!(root.NA_ROLES && typeof root.NA_ROLES.isOwner === 'function' && root.NA_ROLES.isOwner()
-      && root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function'
-      && root.NA_PERMISSIONS.canAccessScreen('owner', 'pageValorizacion'));
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  // No es una regla de rol: confirma que la tabla de permisos cargó (falla cerrada sin ella).
+  function policyReady() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', 'pageValorizacion')); } catch (_) { return false; }
+  }
+  function ownerAllowed() { return isOwner() && policyReady(); }
   function memoryOptions() {
     // _naCategoryLabel -> _naAllCategories -> _naCustomCategories MUTATES appConfig.
     // Build labels directly from the same catalogs, without calling that chain.
