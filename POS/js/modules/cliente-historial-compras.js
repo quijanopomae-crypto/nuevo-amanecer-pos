@@ -104,6 +104,16 @@
         selected && text(sale.clienteId != null ? sale.clienteId : sale.customer_id) === selected;
     });
   }
+  // Select cerrado angosto (768/900 px): con sufijo y nombre largo se acorta el NOMBRE, nunca el id, para que se vea
+  // « · a1b2c». La etiqueta completa queda en el title; el valor y el filtro no cambian.
+  // 10 caracteres: «María Fer… · a1b2c» (~122 px) entra en el texto visible del select a 768 px (~125 px sin la flecha).
+  var SELLER_NAME_MAX = 10;
+  function sellerOptionText(label) {
+    var at = label.lastIndexOf(' · '), name = at > 0 ? label.slice(0, at) : '', chars = Array.from(name);
+    var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.cashiers === 'function' ? root.NA_SELLER_LABELS.cashiers() : null;
+    if (!labels || chars.length <= SELLER_NAME_MAX || !labels.collides(name)) return label;
+    return chars.slice(0, SELLER_NAME_MAX - 1).join('').replace(/\s+$/, '') + '…' + label.slice(at);
+  }
   function sellerOptions(sales, selectedId) {
     var sellers = new Map(), list = customerSales(sales, selectedId), ids = sellerIds(list);
     list.forEach(function (sale) {
@@ -267,7 +277,8 @@
     if (seller) {
       var selectedSeller = seller.value, sellers = sellerOptions(sales, selected);
       seller.innerHTML = '<option value="">Todos</option>' + sellers.map(function (item) {
-        return '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.label) + '</option>';
+        var shown = sellerOptionText(item.label), title = shown !== item.label ? ' title="' + escapeHtml(item.label) + '"' : '';
+        return '<option value="' + escapeHtml(item.value) + '"' + title + '>' + escapeHtml(shown) + '</option>';
       }).join('');
       seller.value = sellers.some(function (item) { return item.value === selectedSeller; }) ? selectedSeller : '';
     }

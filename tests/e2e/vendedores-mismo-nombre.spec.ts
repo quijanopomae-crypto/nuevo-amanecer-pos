@@ -173,6 +173,43 @@ test('Historial del cliente: el filtro Vendedor muestra dos «Ana» distintas y 
   await expect(screen.locator('[data-ch-table="sales"] tbody tr')).toHaveCount(1);
 });
 
+// Select «Vendedor» angosto (768/900 px): con dos «María Fernanda Quispe» de ids largos, el texto visible acorta el
+// NOMBRE (nunca el id) para que el sufijo se vea dentro del select cerrado; la etiqueta completa queda en el title.
+for (const width of [768, 900]) test(`${width}px: Historial del cliente, nombre largo repetido: el sufijo cabe en el select cerrado y cada una filtra`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await ownerPage(page); await seed(page);
+  const IDS = ['a1b2c3d4-0000-4000-8000-000000000001', 'a1b2d5e6-0000-4000-8000-000000000002'];
+  await page.evaluate(ids => (0, eval)(`
+    ventas.push(...${JSON.stringify(ids)}.map((id,i)=>({id:'V-vmn-mf'+i,fecha:NALimaTime.today(),hora:'11:0'+i,hora24:'11:0'+i,timestamp:new Date(NALimaTime.today()+'T11:0'+i+':00-05:00').toISOString(),total:4+i,metodo:'efectivo',clienteId:'vmn-c1',cajeroId:id,cajeroNombre:'María Fernanda Quispe',items:[{id:9101,name:'PRODUCTO VMN',precio:4+i,qty:1,costo:1}]})));
+  `), IDS);
+  await page.evaluate(() => (window as any).goPage('pageProximamente'));
+  await page.locator('#pageProximamente [data-feature-id="cliente-historial-compras"]').click();
+  const screen = page.locator('#pageClienteHistorial');
+  await screen.getByRole('searchbox', { name: 'Buscar por nombre o DNI' }).fill('00000011');
+  await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('vmn-c1');
+  const seller = screen.getByRole('combobox', { name: 'Vendedor' });
+  await expect.poll(() => seller.locator('option').count()).toBe(6);
+  for (const [id, short] of [[IDS[0], 'a1b2c'], [IDS[1], 'a1b2d']]) {
+    await seller.selectOption('id:' + id);
+    const shown = await seller.evaluate((select: HTMLSelectElement) => {
+      const option = select.selectedOptions[0], cs = getComputedStyle(select), ctx = document.createElement('canvas').getContext('2d')!;
+      ctx.font = cs.font;
+      // Texto visible = caja de contenido menos la flecha nativa del select (~20 px en Chromium: a 768 px se ve
+      // «María Fernanda Qu», 124 px, de 145 px de contenido).
+      const room = select.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 20;
+      return { text: option.text, title: option.title, value: option.value, textWidth: ctx.measureText(option.text).width, room };
+    });
+    expect(shown.value).toBe('id:' + id);
+    expect(shown.text).toBe(`María Fer… · ${short}`);
+    expect(shown.title).toBe(`María Fernanda Quispe · ${short}`);
+    expect(shown.textWidth, `«${shown.text}» cabe en ${shown.room}px`).toBeLessThanOrEqual(shown.room);
+    await expect(screen.locator('[data-ch-table="sales"] tbody tr')).toHaveCount(1);
+  }
+  // Nombres cortos repetidos y únicos: igual que antes, sin title.
+  const others = await seller.locator('option').evaluateAll(nodes => nodes.filter(n => !(n as HTMLOptionElement).value.startsWith('id:a1b2')).map(n => [n.textContent, (n as HTMLOptionElement).title]));
+  expect(others).toEqual([['Todos', ''], ['Ana · CAJ-001', ''], ['Ana · CAJ-002', ''], ['Luis', '']]);
+});
+
 test('Arqueo: dos usuarios «Rosa» de la nube se distinguen por su id; «Dueño» único sin sufijo', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await ownerPage(page);
