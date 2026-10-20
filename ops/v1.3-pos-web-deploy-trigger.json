@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 174: #823 ajustes: solo se envían al servidor las claves que cambiaste (merge 3fe057c3). Solo web, sin cambios de Worker. Rollback: build e7497da5 (en vivo antes, incluye WhatsApp #816/#826/#827).",
-  "retry_attempt": 174,
-  "retry_reason": "Deploy de base 3fe057c33ce502f3537a2f859e7be4c95c78698c (incluye #823 merge 3fe057c33ce502f3537a2f859e7be4c95c78698c). Rollback: build e7497da5 (base e7497da5090acb2ec9d113b409c49f08c2f50a12, desplegado por workflow_dispatch el 2026-10-17).",
-  "requested_at_utc": "2026-10-20T19:56:32Z",
-  "approved_base": "3fe057c33ce502f3537a2f859e7be4c95c78698c"
+  "note": "Web 175: #828 panel WhatsApp en Config v9 → Ticket y comprobantes (shareApp por aparato) + #829 abono «gracias por tu pago» (merge 80bf13f4). Solo web, sin cambios de Worker. Rollback: web 174 (build 34f4e46e).",
+  "retry_attempt": 175,
+  "retry_reason": "Deploy de base 80bf13f425ae0e56969d5f5cbbe2058c8d6502fc (incluye #828 merge 0c5fbf09 y #829 merge 80bf13f4). Rollback: web 174 (build 34f4e46e, base 34f4e46ed5c013dfcdbf03e7c79d77548db76710).",
+  "requested_at_utc": "2026-10-20T20:19:46Z",
+  "approved_base": "80bf13f425ae0e56969d5f5cbbe2058c8d6502fc"
 }
