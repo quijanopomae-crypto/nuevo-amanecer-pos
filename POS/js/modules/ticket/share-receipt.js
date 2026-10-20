@@ -9,9 +9,17 @@
   let active=null,version=0,busy=false,returnFocus=null;
   const copy=value=>JSON.parse(JSON.stringify(value));
   function config(){try{if(typeof appConfig!=='undefined')return appConfig;}catch(_){}return root.appConfig||{};}
-  function settings(){const t=config().ticket||{};return{format:FORMATS.includes(t.shareFormat)?t.shareFormat:'image',ask:t.shareAsk!==false,app:APPS.includes(t.shareApp)?t.shareApp:'auto'};}
-  // `app` es opcional: si no se indica se conserva el valor guardado.
-  function setSettings(value){if(!FORMATS.includes(value.format))throw new Error('Formato inválido');if(value.app!==undefined&&!APPS.includes(value.app))throw new Error('Aplicación inválida');const c=config();c.ticket=c.ticket||{};c.ticket.shareFormat=value.format;c.ticket.shareAsk=value.ask!==false;if(value.app!==undefined)c.ticket.shareApp=value.app;}
+  // 'Abrir con' es de cada aparato (localStorage), no del negocio: nunca viaja en pos.ticket.
+  // Si este aparato aún no eligió, se usa el valor viejo de pos.ticket.shareApp (#826) para no perderlo;
+  // leerlo no escribe nada (sin escrituras de fondo). Formato y «Preguntar» siguen en pos.ticket.
+  const APP_KEY='na_pos_share_app_v1';
+  function storage(){try{return root.localStorage||null;}catch(_){return null;}}
+  function localApp(){try{const v=storage()?.getItem(APP_KEY);return APPS.includes(v)?v:null;}catch(_){return null;}}
+  function app(){const local=localApp();if(local)return local;const legacy=(config().ticket||{}).shareApp;return APPS.includes(legacy)?legacy:'auto';}
+  function setApp(value){if(!APPS.includes(value))throw new Error('Aplicación inválida');const s=storage();if(!s)throw new Error('Sin almacenamiento local');s.setItem(APP_KEY,value);}
+  function settings(){const t=config().ticket||{};return{format:FORMATS.includes(t.shareFormat)?t.shareFormat:'image',ask:t.shareAsk!==false,app:app()};}
+  // `app` es opcional y se guarda solo en este aparato; formato y «Preguntar» van a pos.ticket.
+  function setSettings(value){if(!FORMATS.includes(value.format))throw new Error('Formato inválido');if(value.app!==undefined&&!APPS.includes(value.app))throw new Error('Aplicación inválida');const c=config();c.ticket=c.ticket||{};c.ticket.shareFormat=value.format;c.ticket.shareAsk=value.ask!==false;if(value.app!==undefined)setApp(value.app);}
   function userAgent(){try{return String(root.navigator?.userAgent||'');}catch(_){return'';}}
   function isAndroid(ua=userAgent()){return/\bAndroid\b/i.test(String(ua||''));}
   function normalizePhone(value){
@@ -268,7 +276,7 @@
     overlay.addEventListener('keydown',e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){const focusable=Array.from(modal.querySelectorAll('button,input,select,summary')).filter(n=>!n.disabled&&!n.hidden);const first=focusable[0],last=focusable[focusable.length-1];if(e.shiftKey&&root.document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&root.document.activeElement===last){e.preventDefault();first.focus();}}});return overlay;
   }
   // Selector 'Abrir con': solo aplica al texto. En Android elige la app; en iOS/escritorio
-  // queda deshabilitado (siempre wa.me). La elección es persistente (ticket.shareApp).
+  // queda deshabilitado (siempre wa.me). La elección es de este aparato (na_pos_share_app_v1).
   function syncApp(format){
     const row=root.document.querySelector('#naReceiptShare .na-receipt-app'),select=root.document.getElementById('naReceiptApp'),note=root.document.getElementById('naReceiptAppNote');if(!row||!select)return;
     const android=isAndroid();row.hidden=format!=='text';select.value=settings().app;select.disabled=!android;
@@ -276,8 +284,8 @@
   }
   async function changeApp(){
     const select=root.document.getElementById('naReceiptApp'),previous=settings();if(select.disabled)return;
-    try{setSettings({...previous,app:select.value});}catch(_){select.value=previous.app;return;}
-    try{if(typeof root.guardarConfig==='function'&&await root.guardarConfig()!==true)throw new Error('Configuración no guardada');}catch(_){setSettings(previous);select.value=previous.app;notice('No se guardó la preferencia de aplicación');return;}
+    // Solo este aparato: no llama a guardarConfig (no hay POST de pos.ticket) y sirve también al cajero.
+    try{setApp(select.value);}catch(_){select.value=previous.app;notice('No se guardó la preferencia de aplicación');return;}
     if(active)statusFor('text');
   }
   function statusFor(format){
@@ -376,5 +384,5 @@
     wrapped._naAccountSummary=true;root._naBuildThermalTicket=wrapped;return true;
   }
   installPrintedAccountSummary();
-  root.NAReceiptShare=Object.freeze({formatAsOf:nowLabel,placeLabel,accountSummary:(input)=>{const data=copy(input);return accountSummary(data,data.sale||{},data.credit||{});},accountLines,ticketExtrasForSale,installPrintedAccountSummary,onPayments,installTicketButton,settings,setSettings,isAndroid,intentUrl,sendUrl,normalizePhone,textUrl,whatsappText,build,pdf,fileFor,open,close,onSale,onPayment,onStoredPayment:(cr,pay)=>safely({kind:'payment',credit:cr,payment:pay,sale:sales().find(s=>String(s.id)===String(cr.ventaId)),customer:customerFor(cr.cliId||cr.clienteId)}),onCredit:cr=>safely({kind:'credit',credit:cr,customer:customerFor(cr.cliId||cr.clienteId),fresh:true}),shareSale,shareCredit,sharePayment});
+  root.NAReceiptShare=Object.freeze({formatAsOf:nowLabel,placeLabel,accountSummary:(input)=>{const data=copy(input);return accountSummary(data,data.sale||{},data.credit||{});},accountLines,ticketExtrasForSale,installPrintedAccountSummary,onPayments,installTicketButton,settings,setSettings,setApp,appStorageKey:APP_KEY,isAndroid,intentUrl,sendUrl,normalizePhone,textUrl,whatsappText,build,pdf,fileFor,open,close,onSale,onPayment,onStoredPayment:(cr,pay)=>safely({kind:'payment',credit:cr,payment:pay,sale:sales().find(s=>String(s.id)===String(cr.ventaId)),customer:customerFor(cr.cliId||cr.clienteId)}),onCredit:cr=>safely({kind:'credit',credit:cr,customer:customerFor(cr.cliId||cr.clienteId),fresh:true}),shareSale,shareCredit,sharePayment});
 })(globalThis);

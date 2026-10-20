@@ -345,7 +345,15 @@
     return note('<b>Solo formatos de impresión.</b> Boleta y Factura no son comprobantes electrónicos SUNAT; la app no emite comprobantes fiscales.', 'warn')
       + '<div class="na9-tkbar"><div class="na9-seg">' + ['ticket', 'boleta', 'factura'].map(function (x) { return '<button type="button" class="' + (x === ty ? 'on' : '') + '" data-act="tkty" data-t="' + x + '">' + TN[x] + '</button>'; }).join('') + '</div>'
       + '<div class="na9-stabs">' + [['enc', 'Datos y textos'], ['campos', 'Qué se muestra'], ['papel', 'Papel e impresión']].map(function (x) { return '<button type="button" class="' + (x[0] === sb ? 'on' : '') + '" data-act="tksub" data-t="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>'
-      + '<div class="na9-split"><div>' + L + '</div><div><div class="na9-pvh">Vista previa: ' + TN[ty] + '</div><div class="na9-pvbox"><pre class="na9-ticket" id="na9Tk">' + esc(previewText(ty)) + '</pre></div></div></div>';
+      + '<div class="na9-split"><div>' + L + '</div><div><div class="na9-pvh">Vista previa: ' + TN[ty] + '</div><div class="na9-pvbox"><pre class="na9-ticket" id="na9Tk">' + esc(previewText(ty)) + '</pre></div></div></div>'
+      + waPanel();
+  }
+  // Envío por WhatsApp: el mismo panel de la vista vieja (NAReceiptUI.settingsHtml) y sus mismos guardados
+  // (formato y «Preguntar» en pos.ticket con guardarConfig; «Abrir con» solo en este aparato).
+  function waPanel() {
+    var ui = root.NAReceiptUI; if (!ui || typeof ui.settingsHtml !== 'function') return '';
+    var html = ''; try { html = ui.settingsHtml({ canEdit: canEdit() }); } catch (_) { return ''; }
+    return html ? '<div class="na9-wa" data-na9-wa="1">' + html + '</div>' : '';
   }
   function aparBody() {
     var d = ap(), z = zoom(), zn = 'Personalizado';
