@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { expectAllFit } from './helpers/fits';
+import { settlePersistence } from './helpers/persistence';
 
 // Página integrada, roles reales simulados y réplica sintética sin backend real.
 async function rolePage(page: Page, role: 'owner' | 'empleado') {
@@ -51,18 +53,18 @@ async function readState(page: Page) {
 }
 async function noOverflow(page: Page) {
   const screen = page.locator('#pageReporteArqueo');
-  expect(await screen.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-  expect(await screen.evaluate(node => {
+  // Con reintentos: el reporte puede volver a pintarse justo después de las aserciones de texto.
+  await expectAllFit(screen, 'h1,p,label,input,button');
+  // .ra-table-wrap puede desplazarse por dentro (tabla ancha), pero su caja no sale de la pantalla.
+  await expect.poll(() => screen.evaluate(node => {
     const box = node.getBoundingClientRect();
-    return [...node.querySelectorAll<HTMLElement>('h1,p,label,input,button,.ra-table-wrap')].every(child => {
-      const rect = child.getBoundingClientRect();
-      return rect.left >= box.left - 1 && rect.right <= box.right + 1 &&
-        (child.classList.contains('ra-table-wrap') || child.scrollWidth <= child.clientWidth + 1);
+    return [...node.querySelectorAll<HTMLElement>('.ra-table-wrap')].every(wrap => {
+      const rect = wrap.getBoundingClientRect();
+      return rect.left >= box.left - 1 && rect.right <= box.right + 1;
     });
-  })).toBe(true);
-  expect(await screen.locator('.ra-table').evaluate(table => [...table.querySelectorAll<HTMLElement>('th,td')]
-    .every(cell => cell.scrollWidth <= cell.clientWidth + 1))).toBe(true);
+  }), { message: '.ra-table-wrap dentro de la pantalla' }).toBe(true);
+  await expect.poll(() => screen.locator('.ra-table').evaluate(table => [...table.querySelectorAll<HTMLElement>('th,td')]
+    .every(cell => cell.scrollWidth <= cell.clientWidth + 1)), { message: 'celdas sin recorte' }).toBe(true);
 }
 
 for (const width of [390, 768, 1366]) test(`arqueo ${width}px: las 6 columnas y cada total del pie alineado bajo su columna; sin contar fuera de los totales`, async ({ page }) => {
@@ -94,6 +96,8 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
   test(`owner arqueo ${width}px ${dark ? 'dark' : 'light'}: local rows, totals, guarded CSV, no writes`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner'); const dates = await seed(page);
+    // El arranque guarda el snapshot varias veces; esperar a que esa cola termine antes de fotografiar el estado.
+    await settlePersistence(page);
     const before = await readState(page);
     // goPage (menu-navigation persistVisiblePage) guarda el estado de la app en cada cambio de página
     // (na_snapshot_v9[_session] / na_local_config_v1, solo cambia updatedAt). No es del reporte: se excluyen esas claves
@@ -132,10 +136,10 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     await expect(screen.locator('tbody td').first()).toHaveCSS('color', dark ? 'rgb(248, 250, 252)' : 'rgb(15, 23, 42)');
     await expect(screen.locator('tfoot')).toHaveCSS('background-color', dark ? 'rgb(15, 23, 42)' : 'rgb(248, 250, 252)');
     const exportButton = screen.locator('[data-ra-export]');
-    expect(await exportButton.evaluate(button => {
+    await expect.poll(() => exportButton.evaluate(button => {
       const rect = button.getBoundingClientRect(); const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
       return !!hit && (button === hit || button.contains(hit));
-    })).toBe(true);
+    }), { message: 'Exportar CSV no queda tapado' }).toBe(true);
     // Fechas inclusivas: ambos cierres de hoy, incluso el de 23:30 cuyo UTC es mañana.
     await screen.locator('[data-ra-desde]').fill(dates.today);
     await expect(screen.locator('tbody tr')).toHaveCount(2);
