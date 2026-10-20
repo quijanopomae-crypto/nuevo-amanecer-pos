@@ -6,6 +6,7 @@ import { expectAllFit } from './helpers/fits';
 const products = [
   { id: 101, name: 'Producto de prueba 101', sku: 'T-101', unidad: 'unidad', stock: 5, costo: 6 },
   { id: 202, name: 'Producto de prueba 202', sku: 'T-202', unidad: 'unidad', stock: 3, costo: 4 },
+  { id: 303, name: 'Producto de prueba 303', sku: 'T-303', unidad: 'unidad', stock: 1, costo: 2 },
 ];
 const purchases = [
   { purchase_id: 'PUR-t1', status: 'aplicada', created_at: '2026-10-14T02:00:00Z', supplier: 'Proveedor de prueba A', total_cost_cents: 4550,
@@ -51,7 +52,7 @@ async function open(page: Page, dark: boolean) {
       (window as any).goPage('pageHistorialCompras');
     }, products);
     return page.locator('[data-hc-products] button').evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.productId).join(','));
-  }, { timeout: 30_000 }).toBe('101,202');
+  }, { timeout: 30_000 }).toBe('101,202,303');
   await expect(page.locator('#pageHistorialCompras')).toHaveClass(/\bactive\b/);
 }
 
@@ -80,13 +81,17 @@ for (const width of [390, 768, 900, 1280]) for (const dark of [false, true]) {
     const [shellLeft, shellRight] = await edges(page, '#pageHistorialCompras .hc-shell');
     expect(shellRight - shellLeft).toBeGreaterThanOrEqual(Math.min(1100, innerRight - innerLeft) - 1);
 
-    // Con 2 productos la grilla no cambia: 1 columna en teléfono, 2 hasta 999 px, 3 desde 1000 px.
+    // Con 3 productos la grilla no cambia: 1 columna en teléfono, 2 hasta 999 px, 3 desde 1000 px.
     const cols = width < 600 ? 1 : width < 1000 ? 2 : 3;
     const cards = page.locator('[data-hc-products] button');
     const [listLeft, listRight] = await contentEdges(page, '#pageHistorialCompras .hc-products');
     const listWidth = listRight - listLeft;
     const firstCard = await cards.nth(0).boundingBox();
     expect(Math.abs(firstCard!.width - (listWidth - 8 * (cols - 1)) / cols)).toBeLessThanOrEqual(2);
+    // El tope de columnas se mantiene: el tercer producto baja de fila salvo con 3 columnas (≥1000 px).
+    const thirdCard = await cards.nth(2).boundingBox();
+    if (cols < 3) expect(thirdCard!.y, 'tercer producto en otra fila').toBeGreaterThan(firstCard!.y + 1);
+    else expect(Math.abs(thirdCard!.y - firstCard!.y), 'tres productos en una fila').toBeLessThanOrEqual(1);
 
     // Un solo resultado de búsqueda: a 390/768/900 debe llenar la fila (antes dejaba vacía la mitad derecha).
     await page.locator('[data-hc-search]').fill('T-101');
