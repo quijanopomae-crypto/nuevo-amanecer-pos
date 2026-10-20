@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { expectAllFit } from './helpers/fits';
 import { settlePersistence } from './helpers/persistence';
 
@@ -312,14 +312,13 @@ test('Venta e Inicio quedan igual que sin la hoja del historial', async ({ page 
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 1366, height: 900 });
   await setup(page);
-  mkdirSync('/workspace/artifacts/historial-precios', { recursive: true });
   for (const id of ['pageMenu', 'pagePOS'] as const) {
     await page.evaluate(target => target === 'pageMenu' ? (window as any).goMenu() : (window as any).NA_MENU_NAVIGATION.navigate(target), id);
     await expect(page.locator('#' + id)).toHaveClass(/\bactive\b/);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     expect(await page.locator(`#${id} #pPriceHistory`).count()).toBe(0);
     await page.evaluate(() => {
-      for (const nodeId of ['saveStatus', 'gToast']) {
+      for (const nodeId of ['saveStatus', 'gToast', 'localStatus']) {
         const node = document.getElementById(nodeId);
         if (node) node.style.visibility = 'hidden';
       }
@@ -347,8 +346,8 @@ test('Venta e Inicio quedan igual que sin la hoja del historial', async ({ page 
     expect(geometry.withFeature).toEqual(geometry.baseline);
     const after = await page.screenshot({ animations: 'disabled' });
     const sideAfter = sideVisible ? await side.screenshot({ animations: 'disabled' }) : null;
-    writeFileSync(`/workspace/artifacts/historial-precios/${id}-con-historial.png`, before);
-    writeFileSync(`/workspace/artifacts/historial-precios/${id}-base.png`, after);
+    writeFileSync(test.info().outputPath(`${id}-con-historial.png`), before);
+    writeFileSync(test.info().outputPath(`${id}-base.png`), after);
     expect(await samePixels(page, before, after)).toBe(true);
     if (sideBefore && sideAfter) expect(await samePixels(page, sideBefore, sideAfter)).toBe(true);
     await page.evaluate(() => {
