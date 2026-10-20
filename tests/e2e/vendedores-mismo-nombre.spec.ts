@@ -101,6 +101,62 @@ test('ticket y caja: la «Ana» del comprobante y del turno abierto lleva su id;
     .toEqual([expect.stringContaining('AbrióLuisCerró'), expect.stringContaining('AbrióAna · CAJ-001Cerró')]);
 });
 
+// Comprobante compartido (WhatsApp texto/imagen/PDF, CANON_WHATSAPP_RECEIPTS): sale del mismo generador que el ticket
+// impreso pero NO lleva sufijo; debe ser idéntico al de la base (página sin seller-labels.js).
+const SHARED_IDS = ['V-vmn-a1', 'V-vmn-a2', 'V-vmn-l1'];
+async function sharedReceipts(page: Page) {
+  return page.evaluate(async ids => {
+    const w = window as any, list = (0, eval)('ventas') as any[], out: Record<string, any> = {};
+    for (const id of ids) {
+      // Copia fija de la venta sembrada: la app normaliza «hora24» en segundo plano y no debe volver inestable la comparación.
+      const seeded = list.find(v => v.id === id), sale = { ...JSON.parse(JSON.stringify(seeded)), hora: '10:00', hora24: '10:00' }, receipt = w.NAReceiptShare.build({ kind: 'sale', sale, customer: { nombre: 'Cliente vmn', tel: '987654321' } });
+      const pdf = await w.NAReceiptShare.fileFor(receipt, 'pdf'), bytes = new Uint8Array(await pdf.arrayBuffer());
+      out[id] = { lines: receipt.lines, text: receipt.text, whatsapp: w.NAReceiptShare.whatsappText(receipt), pdf: Array.from(bytes).join(',') };
+    }
+    return out;
+  }, SHARED_IDS);
+}
+test('comprobante compartido: sin sufijo e idéntico a la base; el ticket impreso de la misma venta sí lo lleva', async ({ browser }) => {
+  const run = async (withoutLabels: boolean) => {
+    const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+    await page.clock.setFixedTime(new Date('2026-10-20T15:00:00-05:00'));
+    await localPage(page, { withoutLabels }); await seed(page);
+    const shared = await sharedReceipts(page);
+    const printed = await page.evaluate(() => { (0, eval)(`tkCurrentVenta=ventas.find(v=>v.id==='V-vmn-a1')`); return ((window as any)._naCrearTicketTexto() as string).split('\n').filter(l => /Cajero/i.test(l)).map(l => l.replace(/\s+/g, ' ').trim()); });
+    await page.close(); return { shared, printed };
+  };
+  const head = await run(false), base = await run(true);
+  for (const id of SHARED_IDS) {
+    const cashier = head.shared[id].lines.filter((l: string) => /Cajero/i.test(l)).map((l: string) => l.replace(/\s+/g, ' ').trim());
+    expect(cashier, id).toEqual([id === 'V-vmn-l1' ? 'Cajero: Luis' : 'Cajero: Ana']);
+    expect(head.shared[id].whatsapp, id).not.toContain(' · ');
+    expect(head.shared[id], `${id}: igual a la base`).toEqual(base.shared[id]);
+  }
+  expect(head.printed).toEqual([expect.stringMatching(/Cajero: Ana\W+CAJ-001$/)]);
+  expect(base.printed).toEqual(['Cajero: Ana']);
+});
+
+test('venta antigua sin nombre ni id: el ticket cae al cajero activo sin sufijo (generador de zonas y legacy)', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await localPage(page); await seed(page);
+  const cashierLines = await page.evaluate(async () => {
+    const src = await (await fetch('/js/modules/ticket/legacy.js')).text();
+    const start = src.indexOf('function _naBuildThermalTicket('), end = src.indexOf('\nfunction _baseRenderTicketPreview');
+    (0, eval)(src.slice(start, end).replace('function _naBuildThermalTicket(', 'function _vmnLegacyBuild('));
+    const w = window as any, pick = (text: string) => text.split('\n').filter(l => /Cajero/i.test(l)).map(l => l.replace(/\s+/g, ' ').trim());
+    const old = { id: 'V-vmn-old', fecha: w.NALimaTime.today(), hora: '09:00', metodo: 'efectivo', items: [{ name: 'PRODUCTO VMN', precio: 5, qty: 1 }] };
+    const a1 = (0, eval)('ventas').find((v: any) => v.id === 'V-vmn-a1');
+    return {
+      zonesOld: pick(w._naBuildThermalTicket(old, false).text), legacyOld: pick(w._vmnLegacyBuild(old, false).text),
+      legacyPrinted: pick(w._vmnLegacyBuild(a1, false).text), legacyShared: pick(w._vmnLegacyBuild({ ...a1, _naReceiptContext: { kind: 'sale' } }, false).text),
+    };
+  });
+  expect(cashierLines.zonesOld).toEqual(['Cajero: Ana']);
+  expect(cashierLines.legacyOld).toEqual(['Cajero: Ana']);
+  expect(cashierLines.legacyPrinted).toEqual([expect.stringMatching(/Cajero: Ana\W+CAJ-001$/)]);
+  expect(cashierLines.legacyShared).toEqual(['Cajero: Ana']);
+});
+
 test('Historial del cliente: el filtro Vendedor muestra dos «Ana» distintas y cada una filtra sus ventas', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await ownerPage(page); await seed(page);
