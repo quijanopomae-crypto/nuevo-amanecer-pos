@@ -55,6 +55,11 @@ test('WhatsApp message greets the customer and keeps the ticket monospaced',()=>
   assert.equal(named,'Hola María Pérez, gracias por tu compra.\n\n```\n2 Arroz S/ 14.00\nTOTAL S/ 14.00\n```');
   assert.match(a.whatsappText({customerName:'Sin cliente',text:'x'}),/^Gracias por tu compra\./);
   assert.match(a.whatsappText({customerName:'Consumidor final',text:'x'}),/^Gracias por tu compra\./);
+  // Abono: el saludo agradece el pago, no una compra; venta y crédito siguen igual.
+  assert.match(a.whatsappText({kind:'payment',customerName:'María Pérez',text:'x'}),/^Hola María Pérez, gracias por tu pago\.\n/);
+  assert.match(a.whatsappText({kind:'payment',customerName:'Sin cliente',text:'x'}),/^Gracias por tu pago\./);
+  assert.match(a.whatsappText({kind:'credit',customerName:'María Pérez',text:'x'}),/gracias por tu compra\./);
+  assert.match(a.whatsappText({kind:'sale',customerName:'María Pérez',text:'x'}),/gracias por tu compra\./);
   assert.equal(a.whatsappText({customerName:'Ana',text:'a```b'}).includes("a'''b"),true);
   const url=a.textUrl('987654321',named);
   assert.equal(new URL(url).searchParams.get('text'),named);

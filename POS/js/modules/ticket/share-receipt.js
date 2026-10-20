@@ -44,7 +44,9 @@
   // Mensaje de WhatsApp: saludo corto + comprobante en monoespaciado (```), para que las columnas
   // del ticket no se desalineen con la fuente proporcional de WhatsApp. Solo presentacion.
   function whatsappText(receipt){
-    const name=String(receipt.customerName||'').trim(),greet=name&&name!=='Sin cliente'&&!GENERIC_CUSTOMER.test(name)?'Hola '+name+', gracias por tu compra.':'Gracias por tu compra.';
+    // Un abono es un pago, no una compra: el saludo lo dice así.
+    const what=receipt.kind==='payment'?'pago':'compra';
+    const name=String(receipt.customerName||'').trim(),greet=name&&name!=='Sin cliente'&&!GENERIC_CUSTOMER.test(name)?'Hola '+name+', gracias por tu '+what+'.':'Gracias por tu '+what+'.';
     return greet+'\n\n```\n'+String(receipt.text).replace(/```/g,"'''")+'\n```';
   }
   function money(value){return'S/ '+Number(value).toFixed(2);}
