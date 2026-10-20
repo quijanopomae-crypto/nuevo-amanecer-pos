@@ -90,7 +90,7 @@
   function settingsHtml(options){const s=root.NAReceiptShare.settings(),android=root.NAReceiptShare.isAndroid(),editable=options&&options.canEdit!==undefined?!!options.canEdit:sharedEditable(),off=editable?'':' disabled aria-disabled="true"';
     const opt=(value,label,current)=>'<option value="'+value+'"'+(current===value?' selected':'')+'>'+label+'</option>';
     return '<div class="cfg-panel na-receipt-settings'+(editable?'':' is-readonly')+'" id="naReceiptSettings"><div class="cfg-panel-title">Compartir comprobantes por WhatsApp</div>'
-      +(editable?'':'<small class="na-receipt-settings-note">Formato y «Preguntar» los cambia solo el admin. «Abrir con» es de este aparato.</small>')
+      +(editable?'':'<small class="na-receipt-settings-note">Formato y «Preguntar» los cambia solo el dueño. «Abrir con» es de este aparato.</small>')
       +'<div class="cfg-setting-list">'
       +'<div class="cfg-setting"><label class="cfg-setting-title" for="cfgReceiptFormat">Formato predeterminado</label><select id="cfgReceiptFormat" class="cfg-input"'+off+' onchange="NAReceiptUI.changeSettings()">'+opt('image','Imagen PNG',s.format)+opt('text','Texto',s.format)+opt('pdf','PDF',s.format)+'</select></div>'
       +'<div class="cfg-setting"><label class="cfg-setting-title" for="cfgReceiptApp">Abrir con (solo texto, solo Android) · este aparato</label><select id="cfgReceiptApp" class="cfg-input"'+(android?'':' disabled')+' onchange="NAReceiptUI.changeApp()">'+opt('auto','Automático (la app que tenga el celular)',s.app)+opt('whatsapp','WhatsApp',s.app)+opt('business','WhatsApp Business',s.app)+'</select>'+(android?'':'<small>Solo disponible en Android; aquí se usa wa.me.</small>')+'</div>'
