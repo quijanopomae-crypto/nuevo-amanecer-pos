@@ -39,6 +39,7 @@
     if (meta && meta.supplier) body.supplier = String(meta.supplier).slice(0, 120);
     if (meta && meta.documentRef) body.document_ref = String(meta.documentRef).slice(0, 80);
     var out = await R.api('/auth/purchases', body, 'POST', headers);
+    try { if (root.NA_PRICE_HISTORY) root.NA_PRICE_HISTORY.recordPurchase(operationId, lines, out); } catch (_) {}
     try { await api.refresh(); } catch (_) {}
     try { if (typeof root.invRender === 'function') root.invRender(); } catch (_) {}
     return out;

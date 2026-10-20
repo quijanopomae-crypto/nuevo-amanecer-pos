@@ -96,6 +96,7 @@
     <link rel="stylesheet" href="css/ventas-stock.css">
     <link rel="stylesheet" href="css/reporte-arqueo.css">
     <link rel="stylesheet" href="css/historial-compras.css">
+    <link rel="stylesheet" href="css/price-history.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
@@ -895,6 +896,8 @@
             <div class="fg"><div class="fl">Unidades por caja (precio mayorista)</div><input class="fi" id="pUnidCaja" type="number" inputmode="numeric" placeholder="24" min="1"></div>
         </div>
 
+        <div id="pPriceHistory" hidden></div>
+
         </div></details><details class="inv-form-section"><summary>Inventario</summary><div class="inv-section-body">
         <div id="pInventoryFields">
             <div class="prod-unified-grid2">
@@ -1309,6 +1312,8 @@
 <script src="js/sync/canonical-sale-view.js"></script>
 <script src="js/sync/canonical-credit-payment-bridge.js"></script>
 <script src="js/sync/canonical-payment-annul-bridge.js"></script>
+<script src="js/products/price-history.js"></script>
+<script src="js/products/price-history-ui.js"></script>
 <script src="js/sync/canonical-product-bridge.js"></script>
 <script src="js/sync/canonical-customer-bridge.js"></script>
 <script src="js/sync/canonical-customer-credit-policy-bridge.js"></script>

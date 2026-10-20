@@ -1,0 +1,34 @@
+/* Historial dentro de la ficha. No pinta Venta ni Inicio. */
+#pPriceHistory {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  color: var(--dark, #172033);
+  min-width: 0;
+}
+#pPriceHistory[hidden] { display: none !important; }
+#pPriceHistory .na-ph-title { margin: 0 0 6px; font-size: 13px; font-weight: 800; }
+#pPriceHistory .na-ph-empty { margin: 0; font-size: 12px; line-height: 1.45; color: var(--slate, #64748b); }
+#pPriceHistory .na-ph-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+#pPriceHistory li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--bg, #fff);
+}
+#pPriceHistory time,
+#pPriceHistory small { font-size: 11px; line-height: 1.35; color: var(--slate, #64748b); }
+#pPriceHistory span { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
