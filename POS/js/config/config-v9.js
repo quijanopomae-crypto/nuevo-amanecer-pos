@@ -76,7 +76,7 @@
     saveTimer = setTimeout(async function () {
       try {
         var g = root.NA_CONFIG_G;
-        if (shared && g && typeof g.flush === 'function') { var r = await g.flush(); if (r && r.ok === false) { if (onFail) try { onFail(r); } catch (_) {} badge(r.reason === 'owner_only' ? 'No se guardó: solo el dueño puede cambiar este ajuste' : 'No se guardó en el servidor: revisa internet', 'err'); return; } }
+        if (shared && g && typeof g.flush === 'function') { var r = await g.flush(); if (r && r.ok === false) { if (onFail && r.reason !== 'revision_conflict') try { onFail(r); } catch (_) {} badge(r.reason === 'owner_only' ? 'No se guardó: solo el dueño puede cambiar este ajuste' : r.reason === 'revision_conflict' ? 'No se guardó: otro equipo cambió la configuración' : 'No se guardó en el servidor: revisa internet', 'err'); if (r.reason === 'revision_conflict') render(); return; } }
         else if (typeof root.saveAppState === 'function') await root.saveAppState();
         badge(shared ? 'Guardado ✓' : 'Guardado ✓ (este aparato)');
       } catch (_) { if (onFail) try { onFail(null); } catch (__) {} badge('No se pudo guardar', 'err'); }
