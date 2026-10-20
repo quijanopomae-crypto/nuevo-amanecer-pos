@@ -132,7 +132,7 @@ test('/settings expected_revision: match saves and returns new revision; mismatc
   // Clave inexistente con expected_revision > 0: 409 con revision 0.
   r = await save({ key: 'negocio', value: {}, expected_revision: 3 });
   assert.deepEqual([r.status, r.body], [409, { error: 'revision_conflict', revision: 0 }]);
-  // El cliente usa la revisión del 409 para reintentar.
+  // Reintento con la revisión 2 que devolvieron los 409 de `pos.flags` (hoy config-g.js vuelve a pedir GET /settings; esto prueba que el servidor lo acepta).
   r = await save({ key: 'pos.flags', value: { a: 3 }, expected_revision: 2 });
   assert.deepEqual([r.status, r.body.revision], [200, 3]);
   // Sin expected_revision (o null): comportamiento anterior, guarda sobre la revisión actual.
