@@ -175,11 +175,15 @@ test('Historial del cliente: el filtro Vendedor muestra dos «Ana» distintas y 
 
 // Select «Vendedor» angosto (768/900 px): con dos «María Fernanda Quispe» de ids largos, el texto visible acorta el
 // NOMBRE (nunca el id) para que el sufijo se vea dentro del select cerrado; la etiqueta completa queda en el title.
-for (const width of [768, 900]) test(`${width}px: Historial del cliente, nombre largo repetido: el sufijo cabe en el select cerrado y cada una filtra`, async ({ page }) => {
+// Sin Intl.Segmenter (navegadores viejos): el corte cae a Array.from y el filtro funciona igual.
+for (const [width, noSegmenter] of [[768, false], [900, false], [768, true]] as const) test(`${width}px${noSegmenter ? ' sin Intl.Segmenter' : ''}: Historial del cliente, nombre largo repetido: el sufijo cabe en el select cerrado y cada una filtra`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
+  if (noSegmenter) await page.addInitScript(() => { delete (Intl as any).Segmenter; });
   await ownerPage(page); await seed(page);
+  expect(await page.evaluate(() => typeof (Intl as any).Segmenter)).toBe(noSegmenter ? 'undefined' : 'function');
   const IDS = ['a1b2c3d4-0000-4000-8000-000000000001', 'a1b2d5e6-0000-4000-8000-000000000002'];
   await page.evaluate(ids => (0, eval)(`
+    ventas.push({id:'V-vmn-mfx',fecha:NALimaTime.today(),hora:'11:05',hora24:'11:05',timestamp:new Date(NALimaTime.today()+'T11:05:00-05:00').toISOString(),total:9,metodo:'efectivo',clienteId:'vmn-c1',cajeroNombre:'María Fernanda Quispe',items:[{id:9101,name:'PRODUCTO VMN',precio:9,qty:1,costo:1}]});
     ventas.push(...${JSON.stringify(ids)}.map((id,i)=>({id:'V-vmn-mf'+i,fecha:NALimaTime.today(),hora:'11:0'+i,hora24:'11:0'+i,timestamp:new Date(NALimaTime.today()+'T11:0'+i+':00-05:00').toISOString(),total:4+i,metodo:'efectivo',clienteId:'vmn-c1',cajeroId:id,cajeroNombre:'María Fernanda Quispe',items:[{id:9101,name:'PRODUCTO VMN',precio:4+i,qty:1,costo:1}]})));
   `), IDS);
   await page.evaluate(() => (window as any).goPage('pageProximamente'));
@@ -188,9 +192,10 @@ for (const width of [768, 900]) test(`${width}px: Historial del cliente, nombre 
   await screen.getByRole('searchbox', { name: 'Buscar por nombre o DNI' }).fill('00000011');
   await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('vmn-c1');
   const seller = screen.getByRole('combobox', { name: 'Vendedor' });
-  await expect.poll(() => seller.locator('option').count()).toBe(6);
-  for (const [id, short] of [[IDS[0], 'a1b2c'], [IDS[1], 'a1b2d']]) {
-    await seller.selectOption('id:' + id);
+  await expect.poll(() => seller.locator('option').count()).toBe(7);
+  // Dos ids largos y una venta antigua solo con el nombre: « (sin id)» también se conserva entero.
+  for (const [value, short] of [['id:' + IDS[0], ' · a1b2c'], ['id:' + IDS[1], ' · a1b2d'], ['name:maría fernanda quispe', ' (sin id)']]) {
+    await seller.selectOption(value);
     const shown = await seller.evaluate((select: HTMLSelectElement) => {
       const option = select.selectedOptions[0], cs = getComputedStyle(select), ctx = document.createElement('canvas').getContext('2d')!;
       ctx.font = cs.font;
@@ -199,14 +204,21 @@ for (const width of [768, 900]) test(`${width}px: Historial del cliente, nombre 
       const room = select.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 20;
       return { text: option.text, title: option.title, value: option.value, textWidth: ctx.measureText(option.text).width, room };
     });
-    expect(shown.value).toBe('id:' + id);
-    expect(shown.text).toBe(`María Fer… · ${short}`);
-    expect(shown.title).toBe(`María Fernanda Quispe · ${short}`);
+    expect(shown.value).toBe(value);
+    expect(shown.text).toBe(`María Fer…${short}`);
+    expect(shown.title).toBe(`María Fernanda Quispe${short}`);
     expect(shown.textWidth, `«${shown.text}» cabe en ${shown.room}px`).toBeLessThanOrEqual(shown.room);
     await expect(screen.locator('[data-ch-table="sales"] tbody tr')).toHaveCount(1);
+    // El title de la opción no se ve con el select cerrado: el select mismo lleva la etiqueta completa.
+    await expect(seller).toHaveAttribute('title', `María Fernanda Quispe${short}`);
+  }
+  // Todos y una opción sin acortar: el select no tiene title (igual que antes).
+  for (const value of ['', 'id:CAJ-001']) {
+    await seller.selectOption(value);
+    await expect.poll(() => seller.evaluate(select => select.hasAttribute('title')), `sin title con «${value || 'Todos'}»`).toBe(false);
   }
   // Nombres cortos repetidos y únicos: igual que antes, sin title.
-  const others = await seller.locator('option').evaluateAll(nodes => nodes.filter(n => !(n as HTMLOptionElement).value.startsWith('id:a1b2')).map(n => [n.textContent, (n as HTMLOptionElement).title]));
+  const others = await seller.locator('option').evaluateAll(nodes => nodes.filter(n => !/^(id:a1b2|name:maría)/.test((n as HTMLOptionElement).value)).map(n => [n.textContent, (n as HTMLOptionElement).title]));
   expect(others).toEqual([['Todos', ''], ['Ana · CAJ-001', ''], ['Ana · CAJ-002', ''], ['Luis', '']]);
 });
 

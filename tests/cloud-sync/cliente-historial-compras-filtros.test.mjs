@@ -328,3 +328,43 @@ test('choosing Personalizado keeps the dates, focuses Desde and stays until a da
   assert.equal(s.nodes['[data-ch-period]'].value, '30');
   assert.equal(s.nodes['[data-ch-from]'].value, p30.from);
 });
+
+// Texto visible del filtro «Vendedor» (select angosto): acorta el NOMBRE de un nombre repetido y largo, nunca el sufijo.
+const labelsSource = readFileSync('POS/js/core/seller-labels.js', 'utf8');
+function sellerTexts(sales, setup) {
+  const ctx = vm.createContext({ ventas: sales });
+  if (setup) vm.runInContext(setup, ctx);
+  vm.runInContext(labelsSource, ctx);
+  vm.runInContext(source, ctx);
+  const opts = ctx.NA_CLIENTE_HISTORIAL.sellerOptions(sales, 'c1');
+  return plain(opts.map((item, i) => [item.value, ctx.NA_CLIENTE_HISTORIAL.sellerOptionTexts(opts)[i]]));
+}
+const ID_C = 'a1b2c3d4-0000-4000-8000-000000000001', ID_D = 'a1b2d5e6-0000-4000-8000-000000000002';
+
+test('Vendedor: nombre en NFD se acorta por grafema y en NFC; igual sin Intl.Segmenter o si falla', () => {
+  const nfd = 'María Fernanda Quispe'.normalize('NFD');
+  assert.notEqual(nfd, 'María Fernanda Quispe');
+  const sales = [sale({ id: 's1', cajeroId: ID_C, cajeroNombre: nfd }), sale({ id: 's2', cajeroId: ID_D, cajeroNombre: nfd }), sale({ id: 's3', cajeroId: 'v9', cajeroNombre: 'Luis' })];
+  const expected = { ['id:' + ID_C]: 'María Fer… · a1b2c', ['id:' + ID_D]: 'María Fer… · a1b2d', 'id:v9': 'Luis' };
+  assert.deepEqual(Object.fromEntries(sellerTexts(sales)), expected);
+  assert.deepEqual(Object.fromEntries(sellerTexts(sales, 'delete Intl.Segmenter;')), expected);
+  assert.deepEqual(Object.fromEntries(sellerTexts(sales, 'Intl.Segmenter = function () { throw new Error("roto"); };')), expected);
+});
+
+test('Vendedor: si dos opciones distintas quedarían iguales al acortar, se muestran completas', () => {
+  const ID_C2 = 'a1b2c999-0000-4000-8000-000000000003', ID_D2 = 'a1b2d999-0000-4000-8000-000000000004';
+  const sales = [
+    sale({ id: 's1', cajeroId: ID_C, cajeroNombre: 'María Fernanda Quispe' }), sale({ id: 's2', cajeroId: ID_D, cajeroNombre: 'María Fernanda Quispe' }),
+    sale({ id: 's3', cajeroId: ID_C2, cajeroNombre: 'María Ferreyra López' }), sale({ id: 's4', cajeroId: ID_D2, cajeroNombre: 'María Ferreyra López' }),
+    sale({ id: 's5', cajeroId: 'v7', cajeroNombre: 'Rosario Elena Paredes' }), sale({ id: 's6', cajeroId: 'v8', cajeroNombre: 'Rosario Elena Paredes' })
+  ];
+  const texts = Object.fromEntries(sellerTexts(sales));
+  assert.equal(texts['id:' + ID_C], 'María Fernanda Quispe · a1b2c');
+  assert.equal(texts['id:' + ID_D], 'María Fernanda Quispe · a1b2d');
+  assert.equal(texts['id:' + ID_C2], 'María Ferreyra López · a1b2c');
+  assert.equal(texts['id:' + ID_D2], 'María Ferreyra López · a1b2d');
+  // Las que no chocan se siguen acortando.
+  assert.equal(texts['id:v7'], 'Rosario E… · v7');
+  assert.equal(texts['id:v8'], 'Rosario E… · v8');
+  assert.equal(new Set(Object.values(texts)).size, Object.keys(texts).length);
+});

@@ -104,15 +104,45 @@
         selected && text(sale.clienteId != null ? sale.clienteId : sale.customer_id) === selected;
     });
   }
-  // Select cerrado angosto (768/900 px): con sufijo y nombre largo se acorta el NOMBRE, nunca el id, para que se vea
-  // « · a1b2c». La etiqueta completa queda en el title; el valor y el filtro no cambian.
+  // Select cerrado angosto (768/900 px): con sufijo (« · a1b2c» o « (sin id)») de un nombre repetido y largo, se acorta
+  // el NOMBRE, nunca el sufijo, para que se vea. La etiqueta completa queda en el title; el valor y el filtro no cambian.
   // 10 caracteres: «María Fer… · a1b2c» (~122 px) entra en el texto visible del select a 768 px (~125 px sin la flecha).
   var SELLER_NAME_MAX = 10;
+  // Corta por grafema (letra + tilde combinada = un carácter) sobre el nombre en NFC; sin Intl.Segmenter, Array.from.
+  function graphemes(value) {
+    var nfc = String(value).normalize('NFC');
+    try {
+      if (typeof Intl !== 'undefined' && Intl && typeof Intl.Segmenter === 'function') {
+        return Array.from(new Intl.Segmenter('es', { granularity: 'grapheme' }).segment(nfc), function (part) { return part.segment; });
+      }
+    } catch (_) {}
+    return Array.from(nfc);
+  }
   function sellerOptionText(label) {
-    var at = label.lastIndexOf(' · '), name = at > 0 ? label.slice(0, at) : '', chars = Array.from(name);
+    var noId = / \(sin id\)$/.test(label), at = noId ? label.length - ' (sin id)'.length : label.lastIndexOf(' · ');
+    var name = at > 0 ? label.slice(0, at) : '', chars = graphemes(name);
     var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.cashiers === 'function' ? root.NA_SELLER_LABELS.cashiers() : null;
     if (!labels || chars.length <= SELLER_NAME_MAX || !labels.collides(name)) return label;
     return chars.slice(0, SELLER_NAME_MAX - 1).join('').replace(/\s+$/, '') + '…' + label.slice(at);
+  }
+  // Texto visible de cada opción. Si dos opciones distintas quedarían iguales al acortar, esas se muestran completas.
+  function sellerOptionTexts(items) {
+    var shown = (Array.isArray(items) ? items : []).map(function (item) { return sellerOptionText(item.label); });
+    for (var pass = 0; pass < 3; pass++) {
+      var count = {}, changed = false;
+      shown.forEach(function (value) { count[value] = (count[value] || 0) + 1; });
+      shown = shown.map(function (value, i) {
+        if (count[value] > 1 && value !== items[i].label) { changed = true; return items[i].label; }
+        return value;
+      });
+      if (!changed) break;
+    }
+    return shown;
+  }
+  // El title de una <option> no se ve con el select cerrado: el select lleva el de la opción elegida; sin él, ninguno.
+  function syncSellerTitle(seller) {
+    var option = seller && seller.selectedOptions ? seller.selectedOptions[0] : null;
+    if (option && option.title) seller.title = option.title; else if (seller && typeof seller.removeAttribute === 'function') seller.removeAttribute('title');
   }
   function sellerOptions(sales, selectedId) {
     var sellers = new Map(), list = customerSales(sales, selectedId), ids = sellerIds(list);
@@ -238,7 +268,7 @@
     content.replaceChildren();
     if (!allowed) {
       if (select) select.replaceChildren();
-      if (seller) seller.replaceChildren();
+      if (seller) { seller.replaceChildren(); syncSellerTitle(seller); }
       if (search) search.value = '';
       status.textContent = 'Sin permiso. Pídele acceso al dueño.'; return false;
     }
@@ -275,12 +305,13 @@
     status.textContent = (dates.from || dates.to ? 'Desde ' + (dates.from ? dateLabel(dates.from) : 'sin límite') + ' · Hasta ' + (dates.to ? dateLabel(dates.to) : 'sin límite') : 'Todo el historial') + ' · hora de Lima · ventas cargadas en este dispositivo';
     var sales = typeof ventas !== 'undefined' ? ventas : root.ventas;
     if (seller) {
-      var selectedSeller = seller.value, sellers = sellerOptions(sales, selected);
-      seller.innerHTML = '<option value="">Todos</option>' + sellers.map(function (item) {
-        var shown = sellerOptionText(item.label), title = shown !== item.label ? ' title="' + escapeHtml(item.label) + '"' : '';
+      var selectedSeller = seller.value, sellers = sellerOptions(sales, selected), texts = sellerOptionTexts(sellers);
+      seller.innerHTML = '<option value="">Todos</option>' + sellers.map(function (item, i) {
+        var shown = texts[i], title = shown !== item.label ? ' title="' + escapeHtml(item.label) + '"' : '';
         return '<option value="' + escapeHtml(item.value) + '"' + title + '>' + escapeHtml(shown) + '</option>';
       }).join('');
       seller.value = sellers.some(function (item) { return item.value === selectedSeller; }) ? selectedSeller : '';
+      syncSellerTitle(seller);
     }
     var customer = matches.find(function (item) { return item.id === selected; });
     if (dates.invalid) { status.textContent = '«Desde» no puede ser posterior a «Hasta». Corrige el rango de fechas.'; return true; }
@@ -307,6 +338,8 @@
         else { page.dataset.chCustomPeriod = '1'; if (from && typeof from.focus === 'function') from.focus(); }
       } else if (event && event.target && event.target.matches && event.target.matches('[data-ch-from], [data-ch-to]')) {
         delete page.dataset.chCustomPeriod;
+      } else if (event && event.target && event.target.matches && event.target.matches('[data-ch-seller]')) {
+        syncSellerTitle(event.target);
       }
       update();
     });
@@ -333,7 +366,7 @@
   }
   root.NA_CLIENTE_HISTORIAL = Object.freeze({ limaDay: limaDay, periodRange: periodRange, searchCustomers: searchCustomers,
     dateRange: dateRange, sellerIds: sellerIds, periodDates: periodDates, periodFor: periodFor, exportAllowed: exportAllowed,
-    exportCsv: function () { var page = root.document && root.document.getElementById(PAGE_ID); return !!(page && page.__naClienteHistorialExport && page.__naClienteHistorialExport()); }, saleSeller: saleSeller, sellerOptions: sellerOptions, filterSales: filterSales, csvCell: csvCell, toCsv: toCsv,
+    exportCsv: function () { var page = root.document && root.document.getElementById(PAGE_ID); return !!(page && page.__naClienteHistorialExport && page.__naClienteHistorialExport()); }, saleSeller: saleSeller, sellerOptions: sellerOptions, sellerOptionTexts: sellerOptionTexts, filterSales: filterSales, csvCell: csvCell, toCsv: toCsv,
     buildReport: buildReport, escapeHtml: escapeHtml, reportHtml: reportHtml, ownerAllowed: ownerAllowed, render: render, init: init });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
