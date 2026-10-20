@@ -244,7 +244,7 @@
   function pendingChanged(k) {
     if (!pendingBase) return false;
     if (!pendingBase[k]) return true;
-    return pendingValues && pendingValues[k] !== undefined ? !same(pendingValues[k], pendingBase[k].value) : false;
+    return pendingValues && pendingValues[k] !== undefined ? !sameKey(k, pendingValues[k], pendingBase[k].value) : false;
   }
   // El filtro del pendiente solo protege mientras el rol no está confirmado o la sesión es la del dueño que lo dejó.
   // Con otro usuario confirmado (cajero u otra sesión) gana el servidor en todas las claves.
@@ -253,7 +253,18 @@
   var baseSave = null;
   /* global appConfig */
   function cfg() { try { return typeof appConfig !== 'undefined' ? appConfig : null; } catch (_) { return null; } }
-  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  // Igualdad profunda que no depende del orden de las claves (mismas reglas que JSON: sin undefined ni funciones).
+  function stable(v) {
+    if (v === null || typeof v !== 'object') return v === undefined ? 'undefined' : JSON.stringify(v);
+    if (Array.isArray(v)) return '[' + v.map(function (x) { return x === undefined || typeof x === 'function' ? 'null' : stable(x); }).join(',') + ']';
+    return '{' + Object.keys(v).sort().filter(function (k) { return v[k] !== undefined && typeof v[k] !== 'function'; }).map(function (k) { return JSON.stringify(k) + ':' + stable(v[k]); }).join(',') + '}';
+  }
+  function same(a, b) { return stable(a) === stable(b); }
+  // pos.ticket y pos.credit se comparan sobre los valores de fábrica, igual que los aplica set(): a un valor del
+  // servidor que no trae una clave de _naDefaults no se le cuenta esa clave como cambio.
+  var DEFAULTS_OF = { 'pos.ticket': 'ticket', 'pos.credit': 'creditPolicy' };
+  function norm(k, v) { return DEFAULTS_OF[k] && v && typeof v === 'object' && !Array.isArray(v) ? Object.assign(appDefaults(DEFAULTS_OF[k]), v) : v; }
+  function sameKey(k, a, b) { return same(norm(k, a), norm(k, b)); }
   function copy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
   // keys: solo esas claves (por defecto, todas las que hay en la copia del servidor).
   function applyServer(keys) {
@@ -264,8 +275,8 @@
     // Sin claves explícitas y con un guardado pendiente, no se tocan las claves que el dueño cambió: al arrancar,
     // antes de confirmar el rol, el aparato se trata como solo lectura y la copia del servidor pisaría ese cambio.
     var guard = !keys && guardPending();
-    var list = keys || Object.keys(SHARED).filter(function (k) { return !guard || (!pendingChanged(k) && pendingBase[k] && same(SHARED[k].get(c), pendingBase[k].value)); });
-    list.forEach(function (k) { if (!SHARED[k] || !server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!same(before, SHARED[k].get(c))) changed = true; });
+    var list = keys || Object.keys(SHARED).filter(function (k) { return !guard || (!pendingChanged(k) && pendingBase[k] && sameKey(k, SHARED[k].get(c), pendingBase[k].value)); });
+    list.forEach(function (k) { if (!SHARED[k] || !server[k]) return; var before = SHARED[k].get(c); SHARED[k].set(c, server[k].value); if (!sameKey(k, before, SHARED[k].get(c))) changed = true; });
     // baseSave es el saveAppState original (sin envolver): guarda en el aparato y no envía nada al servidor.
     if (changed) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
     return changed;
@@ -308,7 +319,7 @@
     // El pendiente de esta sesión vuelve a los valores que el dueño dejó (otro usuario pudo cargar los del servidor).
     if (mine && pendingValues) {
       var restored = false;
-      Object.keys(SHARED).forEach(function (k) { if (pendingChanged(k) && pendingValues[k] !== undefined && !same(SHARED[k].get(c), pendingValues[k])) { SHARED[k].set(c, copy(pendingValues[k])); restored = true; } });
+      Object.keys(SHARED).forEach(function (k) { if (pendingChanged(k) && pendingValues[k] !== undefined && !sameKey(k, SHARED[k].get(c), pendingValues[k])) { SHARED[k].set(c, copy(pendingValues[k])); restored = true; } });
       if (restored) { try { root._naApplyConfigUI(); } catch (_) {} try { baseSave && baseSave(); } catch (_) {} }
     }
     if (!pulled || mine) { base = mine ? pendingBase : copy(server); if (!(await fetchSettings())) { setPending(base); return { ok: false, reason: 'not_synced', failed: [] }; } }
@@ -317,11 +328,11 @@
       var value = SHARED[k].get(c), now = confirmed[k];
       if (base) {
         var had = base[k];
-        if (had && same(had.value, value)) { if (now && !same(now.value, had.value)) untouched.push(k); continue; } // el dueño no la tocó
+        if (had && sameKey(k, had.value, value)) { if (now && !sameKey(k, now.value, had.value)) untouched.push(k); continue; } // el dueño no la tocó
         // El dueño la cambió. Si el servidor también cambió desde base (o tiene un valor que este aparato no vio), gana el servidor.
-        if (now ? !(had && same(now.value, had.value)) && !same(now.value, value) : false) { conflicts.push(k); continue; }
+        if (now ? !(had && sameKey(k, now.value, had.value)) && !sameKey(k, now.value, value) : false) { conflicts.push(k); continue; }
       }
-      if (now && same(now.value, value)) continue;
+      if (now && sameKey(k, now.value, value)) continue;
       try {
         var res = await R().api('/settings', { key: k, value: value, expected_revision: now ? now.revision : 0 });
         confirmed[k] = { value: copy(value), revision: res.revision };

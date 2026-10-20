@@ -169,6 +169,40 @@ test('(a2) stale local config (old IGV, extra ticket field) differs from the ser
   expect(serverValue(mock, 'pos.ticket')).toEqual(serverTicket);
 });
 
+test('(a3) server ticket lacks a _naDefaults key and ticket/credit keys come in another order: after the GET, an IGV-only save sends exactly 1 POST (pos.flags)', async ({ page }) => {
+  const mock = newMock();
+  await boot(page, mock);
+  const local = await localSettings(page);
+  const defaultsTicket: Record<string, unknown> = await page.evaluate(() => (window as any).eval('_naDefaults').ticket);
+  const dropped = Object.keys(defaultsTicket)[0];
+  const localTicket = local['pos.ticket'] as Record<string, unknown>;
+  expect(localTicket).toHaveProperty(dropped);
+  // Al ticket del servidor le falta una clave de fábrica y sus claves (y las de crédito) vienen en orden inverso.
+  const reversed = (value: Record<string, unknown>, without?: string) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== without).reverse());
+  const serverTicket = reversed(localTicket, dropped);
+  const serverCredit = reversed(local['pos.credit'] as Record<string, unknown>);
+  const serverState = asServer({ ...local, 'pos.ticket': serverTicket, 'pos.credit': serverCredit });
+  mock.settings = serverState;
+  const before = JSON.stringify(serverState);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await boot(page, mock, serverState);
+  await page.evaluate(() => (window as any).NA_CONFIG_G.pullSettings());
+  // El aparato toma el ticket del servidor sobre los valores de fábrica: la clave que falta queda con su valor de fábrica.
+  expect((await localSettings(page))['pos.ticket']).toEqual({ ...serverTicket, [dropped]: defaultsTicket[dropped] });
+  expect(mock.posts).toEqual([]);
+  // Guardado real del dueño que solo cambia IGV.
+  await page.setViewportSize({ width: 1366, height: 900 });
+  const answered = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/settings', { timeout: 10_000 })
+    .catch(error => { throw new Error(`(a3) no llegó la respuesta del POST de pos.flags. POST vistos: ${JSON.stringify(mock.posts.map(post => post.key))}. ${error.message}`); });
+  await openConfig(page, 'prod', 'igv');
+  await clickSwitch(page, 'igvActive');
+  expect((await answered).status()).toBe(200);
+  await expect(page.locator('#na9Saved')).toHaveText('Guardado ✓');
+  expect(mock.posts.map(post => post.key)).toEqual(['pos.flags']);
+  // pos.ticket y pos.credit no se enviaron: el servidor los conserva tal cual (sin la clave, en su orden).
+  expect(JSON.stringify(mock.settings.filter(item => item.key !== 'pos.flags'))).toBe(JSON.stringify(JSON.parse(before).filter((item: Setting) => item.key !== 'pos.flags')));
+});
+
 test('(b) a real change in Configuración sends exactly one POST with that key and the confirmed revision', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   const mock = newMock();
