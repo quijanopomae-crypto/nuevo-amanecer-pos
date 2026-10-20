@@ -30,5 +30,5 @@
   background: var(--bg, #fff);
 }
 #pPriceHistory time,
-#pPriceHistory small { font-size: 11px; line-height: 1.35; color: var(--slate, #64748b); }
+#pPriceHistory small { font-size: 11px; line-height: 1.35; color: var(--slate, #64748b); overflow-wrap: anywhere; }
 #pPriceHistory span { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }

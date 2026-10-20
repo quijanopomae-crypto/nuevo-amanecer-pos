@@ -1,12 +1,12 @@
 /* Vista de solo lectura del historial, dentro de la ficha del producto. */
 (function (root) {
   'use strict';
-  function lima(value) {
+  function localWhen(value) {
     var ms = Date.parse(value);
     if (!Number.isFinite(ms)) return 'Fecha no registrada';
-    var d = new Date(ms - 5 * 60 * 60 * 1000);
+    var d = new Date(ms);
     function pad(n) { return String(n).padStart(2, '0'); }
-    return pad(d.getUTCDate()) + '/' + pad(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear() + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
   function productId() {
     try { if (typeof invEditId !== 'undefined') return invEditId; }
@@ -49,11 +49,11 @@
       var item = doc.createElement('li');
       var when = doc.createElement('time');
       when.dateTime = row.at;
-      when.textContent = lima(row.at);
+      when.textContent = localWhen(row.at);
       var change = doc.createElement('span');
       change.textContent = api.labels.type[row.type] + ': ' + api.money(row.before) + ' → ' + api.money(row.after);
       var meta = doc.createElement('small');
-      meta.textContent = (row.user || 'Usuario') + ' · ' + (api.labels.origin[row.origin] || row.origin);
+      meta.textContent = (row.user || 'Usuario') + (row.userId ? ' · ' + row.userId : '') + ' · ' + (api.labels.origin[row.origin] || row.origin);
       item.append(when, change, meta);
       list.appendChild(item);
     });

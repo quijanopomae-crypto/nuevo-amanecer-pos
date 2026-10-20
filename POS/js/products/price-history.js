@@ -1,12 +1,13 @@
 /* Historial de cambios de precio por producto.
    Clave propia: no altera productos, ventas ni tickets.
-   El costo solo se entrega a quien puede ver costos de Compras. */
+   El costo solo lo ve el dueño confirmado (NA_ROLES.isOwner), igual que Compras. */
 (function (root) {
   'use strict';
   var KEY = 'na_price_history_v1';
   var TYPES = { venta: 'Venta', mayorista: 'Mayorista', costo: 'Costo' };
   var ORIGINS = { ficha: 'Ficha del producto', importacion: 'Importación', compra: 'Compra' };
   var FIELDS = ['venta', 'mayorista', 'costo'];
+  var entrySeq = 0;
 
   function read() {
     try {
@@ -15,8 +16,42 @@
       return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
     } catch (_) { return {}; }
   }
+  function isQuota(err) {
+    if (!err) return false;
+    var name = String(err.name || '');
+    return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22 || err.code === 1014;
+  }
+  function oldestId(data) {
+    var best = null, bestAt = null;
+    Object.keys(data).forEach(function (id) {
+      var list = data[id];
+      if (!Array.isArray(list) || !list.length) return;
+      var row = list[list.length - 1];
+      var at = row && row.at ? String(row.at) : '';
+      if (best == null || at < bestAt) { best = id; bestAt = at; }
+    });
+    return best;
+  }
+  function warnQuota() {
+    try {
+      if (typeof root.toast === 'function') root.toast('El historial de precios se recortó: el almacenamiento del aparato está lleno.', 'warning');
+    } catch (_) {}
+  }
   function write(data) {
-    root.localStorage.setItem(KEY, JSON.stringify(data));
+    var warned = false;
+    for (;;) {
+      try {
+        root.localStorage.setItem(KEY, JSON.stringify(data));
+        return;
+      } catch (err) {
+        if (!isQuota(err)) return;
+        if (!warned) { warned = true; warnQuota(); }
+        var id = oldestId(data);
+        if (!id) return;
+        data[id].pop();
+        if (!data[id].length) delete data[id];
+      }
+    }
   }
   function cents(value) {
     if (value === null || value === undefined || value === '') return null;
@@ -25,16 +60,36 @@
     return Math.round(n * 100);
   }
   function soles(value) { return value == null ? null : value / 100; }
-  function actor(explicit) {
-    if (explicit) return String(explicit).slice(0, 80);
+  function text(value, max) {
+    var out = String(value == null ? '' : value).trim();
+    return out ? out.slice(0, max || 80) : '';
+  }
+  function cashierName() {
+    try { if (typeof cajEstado !== 'undefined' && cajEstado && cajEstado.cajero) return text(cajEstado.cajero); } catch (_) {}
+    return '';
+  }
+  function cashierId() {
+    try { if (typeof appConfig !== 'undefined' && appConfig && appConfig.activeCashierId) return text(appConfig.activeCashierId); } catch (_) {}
+    try { if (typeof cajEstado !== 'undefined' && cajEstado && cajEstado.cajeroId) return text(cajEstado.cajeroId); } catch (_) {}
+    return '';
+  }
+  function actor(explicitName, explicitId) {
+    var name = text(explicitName);
+    var id = text(explicitId);
     try {
       var roles = root.NA_ROLES;
-      if (roles && roles.label) return String(roles.label).slice(0, 80);
-      if (root.cajEstado && root.cajEstado.cajero) return String(root.cajEstado.cajero).slice(0, 80);
-      if (roles && roles.role === 'empleado') return 'Empleado';
-      if (roles && roles.role === 'owner') return 'Dueño';
+      if (!name) {
+        if (roles && roles.label) name = text(roles.label);
+        else name = cashierName();
+        if (!name && roles && roles.role === 'empleado') name = 'Empleado';
+        else if (!name && roles && roles.role === 'owner') name = 'Dueño';
+      }
+      if (!id) {
+        if (roles && roles.deviceId) id = text(roles.deviceId);
+        else id = cashierId();
+      }
     } catch (_) {}
-    return 'Usuario';
+    return { name: name || 'Usuario', id: id || null };
   }
   function stamp(at) {
     var ms = at ? Date.parse(at) : Date.now();
@@ -59,16 +114,19 @@
     var list = Array.isArray(data[productId]) ? data[productId].slice() : [];
     var added = [];
     var at = stamp(opts.at);
-    var user = actor(opts.user);
+    var who = actor(opts.user, opts.userId);
     FIELDS.forEach(function (key) {
       if (opts.partial && !Object.prototype.hasOwnProperty.call(opts.after, key)) return;
       var before = cents(opts.before[key]);
       var after = cents(opts.after[key]);
       if (before === after) return;
+      var seq = ++entrySeq;
       var entry = {
-        id: productId + ':' + at + ':' + key + ':' + (opts.ref || 'change'),
+        id: productId + ':' + at + ':' + key + ':' + (opts.ref || 'change') + ':' + seq,
+        seq: seq,
         at: at,
-        user: user,
+        user: who.name,
+        userId: who.id,
         type: key,
         before: soles(before),
         after: soles(after),
@@ -119,7 +177,7 @@
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
       if (!row || row.type !== type) continue;
-      if (!best || String(row.at) > String(best.at)) best = row;
+      if (!best || String(row.at) > String(best.at) || (String(row.at) === String(best.at) && (Number(row.seq) || 0) > (Number(best.seq) || 0))) best = row;
     }
     return best ? best.after : undefined;
   }
@@ -156,10 +214,10 @@
     });
     return added;
   }
-  function canSeeCost(role) {
+  function canSeeCost() {
     try {
-      var who = role || (root.NA_ROLES && root.NA_ROLES.role);
-      return !!root.NA_PERMISSIONS.canDo(who, 'purchases.costs.view');
+      var roles = root.NA_ROLES;
+      return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner());
     } catch (_) { return false; }
   }
   function list(productId, options) {
@@ -167,12 +225,13 @@
     if (!Array.isArray(rows)) return [];
     var seeCost = options && Object.prototype.hasOwnProperty.call(options, 'includeCost')
       ? !!options.includeCost
-      : canSeeCost(options && options.role);
-    return rows.filter(function (row) { return row && (seeCost || row.type !== 'costo'); }).map(function (row) {
-      return { id: row.id, at: row.at, user: row.user, type: row.type, before: row.before, after: row.after, origin: row.origin };
-    }).sort(function (a, b) {
+      : canSeeCost();
+    return rows.filter(function (row) { return row && (seeCost || row.type !== 'costo'); }).sort(function (a, b) {
       var delta = (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0);
-      return delta || String(b.id).localeCompare(String(a.id));
+      if (delta) return delta;
+      return (Number(b.seq) || 0) - (Number(a.seq) || 0);
+    }).map(function (row) {
+      return { id: row.id, at: row.at, user: row.user, userId: row.userId || null, type: row.type, before: row.before, after: row.after, origin: row.origin };
     });
   }
   function money(value) {
