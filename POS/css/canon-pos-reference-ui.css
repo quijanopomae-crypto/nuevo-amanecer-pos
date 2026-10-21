@@ -287,7 +287,7 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
     line-height:1.1;
   }
   body:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main>span:first-child{
-    font-size:clamp(9px,1vw,12px);
+    font-size:clamp(11px,1.4vw,19px);
     font-weight:900;
     text-transform:uppercase;
     white-space:nowrap;
