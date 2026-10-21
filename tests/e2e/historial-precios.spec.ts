@@ -171,7 +171,7 @@ test('la importación anota el origen importación', async ({ page }) => {
   expect(await page.evaluate(() => (0, eval)('ventas').find((row: { id: string }) => row.id === 'V-HIST-1').items[0].precio)).toBe(4.5);
 });
 
-test('la compra anota el origen compra sin cambiar el costo del producto ni la venta', async ({ page }) => {
+test('la compra anota el origen compra; sin revisión de producto en la réplica no se actualiza el costo ni la venta', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await setup(page);
   await page.evaluate(() => {
