@@ -234,3 +234,27 @@ test('registry entry is unlocked (not pending) with the new page; navigation den
   }
   assert.doesNotMatch(source, /fetch\s*\(|XMLHttpRequest|sendBeacon|\.setItem\s*\(|indexedDB|\.innerHTML\s*=|\b(?:POST|PUT|PATCH|DELETE)\b/);
 });
+
+// ---- Misión 4: tramos, filtro por lote y aviso del dueño ----
+test('tramos vencido / 30 / 60 / 90 y resumen en español', () => {
+  assert.deepEqual([-1, 0, 30, 31, 60, 61, 90].map(api.bucketOf), ['vencido', '30', '30', '60', '60', '90', '90']);
+  const report = api.buildReport(products, { days: 90, now });
+  assert.deepEqual(plain(report.counts), { vencido: 2, '30': 3, '60': 2, '90': 2 });
+  assert.equal(api.summaryLabel(report.counts), 'Vencidos: 2 · Hasta 30 días: 3 · 31 a 60 días: 2 · 61 a 90 días: 2');
+});
+
+test('filtro por lote: contiene, sin mayúsculas ni tildes; el CSV indica el lote', () => {
+  const report = api.buildReport(products, { days: 90, now, lot: ' DAY6 ' });
+  assert.deepEqual(ids(report), ['day60', 'day61']);
+  assert.equal(report.lot, 'DAY6');
+  assert.equal(api.buildReport([{ id: 'x', name: 'X', lots: [lot('LOTE-ÑU', '2026-10-20')] }], { now, lot: 'lote-nu' }).rows.length, 1);
+  assert.match(api.toCsv(report).split('\r\n')[0], /lote contiene «DAY6»$/);
+  assert.equal(api.buildReport(products, { now, lot: '' }).rows.length, 5);
+});
+
+test('aviso del dueño: vencidos y por vencer en 30 días con el día de Lima', () => {
+  assert.deepEqual(plain(api.alertSummary(products, now)), { today: '2026-10-15', expired: 2, soon: 3 });
+  const h = harness({ productos: products });
+  h.ctx.NA_ROLES = { isOwner() { throw new Error('rol roto'); } };
+  assert.equal(h.api.showAlert(), false, 'si NA_ROLES falla, no hay aviso');
+});
