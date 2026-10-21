@@ -90,3 +90,23 @@ test('TOTAL uses same responsive font-size as the currency amount on PC/tablet',
   assert.match(css, /--na-pos-summary-height:44px/);
   assert.match(css, /--na-pos-summary-height:36px/);
 });
+
+test('cart-only thousands formatter is deterministic and never changes raw monetary values', () => {
+  const from = core.indexOf('const _naPosMoneyNumberFormat =');
+  const to = core.indexOf('// Seguridad: tarjetas y carrito', from);
+  assert.ok(from >= 0 && to > from, 'isolated formatting utility is defined in POS renderer');
+  const snippet = core.slice(from, to);
+  const format = value => runInNewContext(snippet + '\n_naPosDisplayMoney(input)', {
+    input: value, _naNumber: v => Number(v) || 0, Intl,
+  });
+  for (const [value, expected] of [
+    [0, 'S/ 0.00'], [4, 'S/ 4.00'], [1000, 'S/ 1,000.00'],
+    [111110, 'S/ 111,110.00'], [11250.5, 'S/ 11,250.50'],
+    [-1110.25, 'S/ -1,110.25'],
+  ]) assert.equal(format(value), expected);
+  assert.match(core, /\['posIgv',_naPosDisplayMoney\(parts\.totalIGV\)\]/);
+  assert.match(core, /_naPosDisplayMoney\(_naNumber\(item\.precio\)\*_naNumber\(item\.qty\)\)/);
+  assert.match(core, /const parts=_naTaxBreakdownForSaleItems\(cart,!!appConfig\.igvActive\)/);
+  assert.doesNotMatch(core, /parseFloat\(document\.getElementById\('posTotal'\)/);
+  assert.match(ticket, /function _naTkMoney\(value,showCurrency=true\)/);
+});
