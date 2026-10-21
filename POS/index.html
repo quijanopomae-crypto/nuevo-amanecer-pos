@@ -99,6 +99,7 @@
     <link rel="stylesheet" href="css/price-history.css">
     <link rel="stylesheet" href="css/etiquetas-precios.css">
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
+    <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
@@ -436,6 +437,22 @@
     <p class="etq-note etq-cap" data-etq-cap role="status" hidden></p>
     <div class="etq-preview-wrap"><div class="etq-sheet etq-format-mediana" data-etq-sheet></div></div>
     <button class="etq-print" type="button" data-etq-print disabled>Imprimir</button>
+  </div>
+</div>
+
+<div class="page" id="pageSugerenciaCompra" aria-labelledby="sugerenciaCompraTitle">
+  <div class="sc-shell">
+    <header>
+      <h1 id="sugerenciaCompraTitle">Sugerencia de compra</h1>
+      <p class="sc-description">Qué pedir a cada proveedor según el stock mínimo y lo vendido en los últimos 30 días. Ajusta las cantidades antes de exportar o imprimir; no cambia productos ni stock.</p>
+    </header>
+    <div class="sc-controls" data-sc-controls hidden>
+      <button type="button" data-sc-recalc>Recalcular</button>
+      <button type="button" data-sc-export>Exportar CSV</button>
+      <button type="button" data-sc-print>Imprimir</button>
+    </div>
+    <p class="sc-status" data-sc-status role="status" aria-live="polite"></p>
+    <div data-sc-content></div>
   </div>
 </div>
 
@@ -1394,6 +1411,7 @@
 <script src="js/inventory/historial-compras.js"></script>
 <script src="js/modules/etiquetas-precios.js"></script>
 <script src="js/modules/productos-sin-movimiento.js"></script>
+<script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
