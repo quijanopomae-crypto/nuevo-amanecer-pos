@@ -186,3 +186,123 @@ test('fecha de Lima con el aparato en otra zona horaria (TZ) y sin Intl', async 
     assert.deepEqual(out.fallback, expected, `${TZ} sin Intl`);
   }
 });
+
+// ---- Impresión sin «afterprint» (algunos móviles): al salir de Etiquetas o al volver a la pestaña se limpia ----
+// DOM mínimo de prueba (solo lo que usa el módulo); MutationObserver se dispara al cambiar la clase.
+function fakeDom({ printing = false } = {}) {
+  const observers = [];
+  class ClassList { constructor(el) { this.el = el; this.set = new Set(); }
+    add(...c) { c.forEach(x => this.set.add(x)); this.fire(); } remove(...c) { c.forEach(x => this.set.delete(x)); this.fire(); }
+    contains(c) { return this.set.has(c); } fire() { observers.filter(o => o.el === this.el).forEach(o => o.cb([])); } }
+  class El {
+    constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.parentElement = null; this.attrs = {}; this.classList = new ClassList(this); this.listeners = {}; this._html = ''; }
+    get parentNode() { return this.parentElement; }
+    appendChild(c) { c.parentElement = this; this.children.push(c); return c; }
+    removeChild(c) { this.children = this.children.filter(x => x !== c); c.parentElement = null; return c; }
+    setAttribute(k, v) { this.attrs[k] = String(v); } getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    hasAttribute(k) { return k in this.attrs; } removeAttribute(k) { delete this.attrs[k]; }
+    set textContent(v) { this.children = []; this._text = v; } get textContent() { return this._text || ''; }
+    set innerHTML(v) { this._html = v; } get innerHTML() { return this._html; }
+    set className(v) { this.classList.set = new Set(String(v).split(/\s+/).filter(Boolean)); } get className() { return [...this.classList.set].join(' '); }
+    matches(sel) { const m = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(sel); return !!m && this.hasAttribute(m[1]) && (m[2] === undefined || this.attrs[m[1]] === m[2]); }
+    closest(sel) { let e = this; while (e) { if (e.matches && e.matches(sel)) return e; e = e.parentElement; } return null; }
+    querySelector(sel) { for (const c of this.children) { if (c.matches(sel)) return c; const r = c.querySelector(sel); if (r) return r; } return null; }
+    querySelectorAll(sel) { const out = []; const walk = e => e.children.forEach(c => { if (c.matches(sel)) out.push(c); walk(c); }); walk(this); return out; }
+    addEventListener(t, f) { (this.listeners[t] ||= []).push(f); } removeEventListener(t, f) { this.listeners[t] = (this.listeners[t] || []).filter(x => x !== f); }
+    dispatch(t, ev = {}) { let e = this; ev.target ||= this; while (e) { (e.listeners[t] || []).slice().forEach(f => f(ev)); e = e.parentElement; } }
+  }
+  const html = new El('html'), head = html.appendChild(new El('head')), body = html.appendChild(new El('body'));
+  const header = body.appendChild(new El('header')); const main = body.appendChild(new El('main'));
+  const other = main.appendChild(new El('div')); other.id = 'pageInventario';
+  const page = main.appendChild(new El('div')); page.id = 'pageEtiquetasPrecios'; page.classList.add('page', 'active');
+  const shell = page.appendChild(new El('div')); const controls = shell.appendChild(new El('div'));
+  const printBtn = controls.appendChild(new El('button')); printBtn.setAttribute('data-etq-print', '');
+  controls.appendChild(new El('ul')).setAttribute('data-etq-selected', '');
+  const wrap = shell.appendChild(new El('div')); wrap.appendChild(new El('div')).setAttribute('data-etq-sheet', '');
+  const docListeners = {};
+  const document = { readyState: 'complete', visibilityState: 'visible', documentElement: html, head, body,
+    createElement: t => new El(t), getElementById: id => { const f = e => e.id === id ? e : e.children.map(f).find(Boolean); return f(html) || null; },
+    addEventListener: (t, f) => (docListeners[t] ||= []).push(f) };
+  const winListeners = {}, state = { printing, prints: 0 };
+  const win = { document, productos: [],
+    MutationObserver: class { constructor(cb) { this.cb = cb; } observe(el) { observers.push({ el, cb: this.cb }); } },
+    matchMedia: q => ({ matches: q === 'print' && state.printing }),
+    print: () => { state.prints++; }, confirm: () => true,
+    addEventListener: (t, f) => (winListeners[t] ||= []).push(f), removeEventListener: (t, f) => { winListeners[t] = (winListeners[t] || []).filter(x => x !== f); } };
+  const ctx = vm.createContext(win); win.window = win;
+  vm.runInContext(readFileSync('POS/js/modules/etiquetas-precios.js', 'utf8'), ctx);
+  const marks = () => { const out = []; const walk = e => { if (e.hasAttribute('data-etq-print-hide') || e.hasAttribute('data-etq-print-path')) out.push(e); e.children.forEach(walk); }; walk(html); return out.length; };
+  return { win, document, body, html, head, page, other, printBtn, state, marks,
+    printing: () => body.classList.contains('etq-printing') || html.classList.contains('etq-printing-root') || head.children.some(c => c.hasAttribute('data-etq-page-style')),
+    clickPrint: () => page.dispatch('click', { target: printBtn }),
+    afterprint: () => (winListeners.afterprint || []).slice().forEach(f => f({})),
+    visible: () => { document.visibilityState = 'visible'; (docListeners.visibilitychange || []).forEach(f => f({})); } };
+}
+
+test('impresión sin «afterprint»: al salir de Etiquetas se quitan clase, estilo y marcas', () => {
+  const d = fakeDom();
+  d.clickPrint();
+  assert.equal(d.state.prints, 1);
+  assert.ok(d.printing() && d.marks() > 0, 'durante la impresión: clase, estilo y marcas');
+  assert.equal(d.other.hasAttribute('data-etq-print-hide'), true);
+  d.page.classList.remove('active'); // goPage a otra pantalla, sin «afterprint»
+  assert.equal(d.printing(), false, 'sin clase ni estilo de impresión');
+  assert.equal(d.marks(), 0, 'sin marcas');
+});
+
+test('impresión sin «afterprint»: al volver a la pestaña se limpia; con el medio «print» activo, no', () => {
+  const d = fakeDom({ printing: true });
+  d.clickPrint();
+  d.visible();
+  d.page.classList.remove('active');
+  assert.ok(d.printing() && d.marks() > 0, 'impresión en curso: no se toca');
+  d.page.classList.add('active');
+  d.state.printing = false;
+  d.visible();
+  assert.equal(d.printing(), false);
+  assert.equal(d.marks(), 0);
+});
+
+test('«afterprint» sigue siendo el camino principal y una segunda impresión no deja restos', () => {
+  const d = fakeDom();
+  d.clickPrint(); d.afterprint();
+  assert.equal(d.printing(), false); assert.equal(d.marks(), 0);
+  d.clickPrint(); d.clickPrint();
+  assert.equal(d.head.children.filter(c => c.hasAttribute('data-etq-page-style')).length, 1);
+  d.afterprint();
+  assert.equal(d.printing(), false); assert.equal(d.marks(), 0);
+});
+
+test('precio con «S/.» (forma peruana) y «+» inicial', () => {
+  for (const [raw, n] of [['S/.4.50', 4.5], ['S/. 4.50', 4.5], ['s/.  12', 12], ['S/.1,234.50', 1234.5], ['+5', 5], ['+ 5.20', 5.2], ['S/. +3', 3]]) {
+    assert.equal(E.parsePrice(raw), n, raw);
+    assert.equal(E.hasPrice({ precio: raw }), true, raw);
+  }
+  assert.equal(E.formatPrice('S/. 4.50'), 'S/ 4.50');
+  assert.equal(E.parsePrice('1,234'), 1.234, 'una sola coma sigue siendo decimal (lo decide el dueño)');
+  for (const raw of ['+-5', '++5', '+', 'S/.', 'S/..5x']) assert.equal(E.hasPrice({ precio: raw }), false, raw);
+});
+
+test('producto borrado del catálogo: aviso visible, «Sin precio» y entra en la confirmación', () => {
+  const gone = E.missingProduct({ id: 7, name: 'Leche vieja', barcode: 'LECHE-1', precio: 9.9 });
+  const html = E.sheetHtml([gone], 'chica', new Date('2026-10-21T15:00:00Z'));
+  assert.match(html, /data-etq-missing>Producto ya no está en el catálogo</);
+  assert.match(html, /Sin precio/);
+  assert.doesNotMatch(html, /9\.90/, 'no sale el precio viejo');
+
+  const d = fakeDom();
+  d.win.productos = [{ id: 7, name: 'Leche vieja', barcode: 'LECHE-1', precio: 9.9 }];
+  const add = d.page.appendChild(d.document.createElement('button')); add.setAttribute('data-etq-add', '7');
+  d.page.dispatch('click', { target: add });
+  const sheet = d.page.querySelector('[data-etq-sheet]');
+  assert.match(sheet.innerHTML, /S\/ 9\.90/);
+  d.win.productos = []; // se borró del catálogo
+  let asked = ''; d.win.confirm = m => { asked = String(m); return false; };
+  d.clickPrint();
+  assert.match(asked, /1 producto ya no está en el catálogo/);
+  assert.match(asked, /Sin precio/);
+  assert.equal(d.state.prints, 0, 'sin confirmar no imprime');
+  assert.match(sheet.innerHTML, /Producto ya no está en el catálogo/);
+  assert.doesNotMatch(sheet.innerHTML, /9\.90/);
+  assert.ok(d.page.querySelector('[data-etq-missing-warn="7"]'), 'aviso en la lista');
+});

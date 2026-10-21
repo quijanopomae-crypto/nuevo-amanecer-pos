@@ -24,6 +24,10 @@ async function ownerPage(page: Page) {
   });
   await page.reload();
   await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'owner' && (window as any).NA_ROLES.confirmed && !!(window as any).NA_ETIQUETAS_PRECIOS);
+  // El arranque normaliza el catálogo (_naNormalizeData pone sku PROD-n a los que no tienen código) y enseguida llena
+  // #invCat (renderCategorySelects). Se espera a eso antes de cargar los productos de prueba: si no, la normalización
+  // tardía les daba código a los «sin código» (5 barras en vez de 3).
+  await page.waitForFunction(() => (document.querySelectorAll('#invCat option').length > 0));
   await page.evaluate(items => { (0, eval)('productos = ' + JSON.stringify(items)); }, products);
   return { errors, writes };
 }

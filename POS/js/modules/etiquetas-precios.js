@@ -68,9 +68,13 @@
   // Precio guardado como número (lo normal) o como texto: «4.50», «4,50», «S/ 4.50», «1,234.50», «1.234,50».
   // Con punto y coma, el último es el decimal. Una sola coma es decimal («3,456» = 3.456, como antes);
   // varias comas en grupos de 3 («1,234,567») o varios puntos («1.234.567») son miles.
+  // Producto que se agregó y luego se borró del catálogo: no se imprime con el precio viejo (sale «Sin precio» con aviso).
+  var MISSING_NOTICE = 'Producto ya no está en el catálogo', MISSING_FLAG = '__etqMissing';
+  function missingProduct(p) { var c = {}; Object.keys(p || {}).forEach(function (k) { c[k] = p[k]; }); c.precio = null; c.price = null; c[MISSING_FLAG] = true; return c; }
   function parsePrice(v) {
     if (typeof v === 'number') return v;
-    var s = text(v).replace(/^\s*S\/\s*/i, '').replace(/\s+/g, '');
+    // «S/», «S/.» (forma peruana común) y un «+» inicial: «S/.4.50», «S/. 4.50», «+5».
+    var s = text(v).replace(/^\s*S\/\.?\s*/i, '').replace(/\s+/g, '').replace(/^\+(?=[\d.,])/, '');
     if (!/^-?[\d.,]+$/.test(s)) return NaN;
     var dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
     if (dot >= 0 && comma >= 0) s = dot > comma ? s.replace(/,/g, '') : s.replace(/\./g, '').replace(',', '.');
@@ -125,10 +129,11 @@
   }
   function labelHtml(product, date) {
     var code = productCode(product), svg = code ? code128Svg(code) : '';
-    var priced = hasPrice(product);
+    var priced = hasPrice(product), gone = !!(product && product[MISSING_FLAG]);
     return '<div class="etq-label' + (svg ? '' : ' etq-no-bars') + (priced ? '' : ' etq-no-price') + '" data-etq-label>' +
       '<div class="etq-name">' + escapeHtml(truncateName(productName(product))) + '</div>' +
       '<div class="etq-price"' + (priced ? '' : ' data-etq-noprice') + '>' + escapeHtml(productPrice(product)) + '</div>' +
+      (gone ? '<div class="etq-warn" data-etq-missing>' + escapeHtml(MISSING_NOTICE) + '</div>' : '') +
       svg + (code && !svg ? '<div class="etq-warn" data-etq-warn>' + escapeHtml(INVALID_NOTICE) + '</div>' : '') +
       '<div class="etq-meta"><span class="etq-code">' + escapeHtml(code || 'Sin código') + '</span><span class="etq-date">' + escapeHtml(formatDate(date)) + '</span></div>' +
       '</div>';
@@ -151,15 +156,15 @@
     return labels.map(function (p) { return labelHtml(p, date); }).join('');
   }
 
-  var api = { MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, parsePrice: parsePrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
+  var api = { MISSING_NOTICE: MISSING_NOTICE, missingProduct: missingProduct, MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, parsePrice: parsePrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
   root.NA_ETIQUETAS_PRECIOS = api;
 
   var doc = root.document; if (!doc || !doc.getElementById) return;
   var selected = [], format = 'mediana', wired = false;
   function catalog() { try { return typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   function page() { return doc.getElementById('pageEtiquetasPrecios'); }
-  // Producto actual del catálogo por id (precio/nombre al día); si ya no está, el que se eligió.
-  function current(item) { var id = productKey(item.product), p = catalog().find(function (x) { return productKey(x) === id; }); return p || item.product; }
+  // Producto actual del catálogo por id (precio/nombre al día); si ya no está, el que se eligió, sin precio y con aviso.
+  function current(item) { var id = productKey(item.product), p = catalog().find(function (x) { return productKey(x) === id; }); return p || missingProduct(item.product); }
   function currentSelection() { return selected.map(function (item) { return { product: current(item), qty: item.qty }; }); }
   function q(sel) { var p = page(); return p && p.querySelector(sel); }
   function renderMatches() {
@@ -184,7 +189,8 @@
       label.appendChild(qty);
       var rm = doc.createElement('button'); rm.type = 'button'; rm.className = 'etq-remove'; rm.textContent = 'Quitar'; rm.setAttribute('data-etq-remove', productKey(item.product));
       li.appendChild(name); li.appendChild(label); li.appendChild(rm);
-      if (!hasPrice(item.product)) { var w = doc.createElement('p'); w.className = 'etq-item-warn'; w.setAttribute('data-etq-noprice-warn', productKey(item.product)); w.setAttribute('role', 'alert'); w.textContent = NO_PRICE_NOTICE; li.appendChild(w); }
+      var gone = !!item.product[MISSING_FLAG];
+      if (gone || !hasPrice(item.product)) { var w = doc.createElement('p'); w.className = 'etq-item-warn'; w.setAttribute(gone ? 'data-etq-missing-warn' : 'data-etq-noprice-warn', productKey(item.product)); w.setAttribute('role', 'alert'); w.textContent = gone ? MISSING_NOTICE + '. Sus etiquetas saldrán como «Sin precio».' : NO_PRICE_NOTICE; li.appendChild(w); }
       list.appendChild(li);
     });
     var empty = q('[data-etq-empty]'); if (empty) empty.hidden = selected.length > 0;
@@ -248,6 +254,14 @@
     root.addEventListener('afterprint', done);
     if (typeof root.print === 'function') root.print(); else done();
   }
+  // Respaldo si «afterprint» nunca llega (algunos móviles): sin esto la clase y las marcas quedaban y un window.print()
+  // posterior (ticket, reporte) salía en blanco. Solo al salir de Etiquetas o al volver a la pestaña, nunca con el
+  // medio «print» activo (impresión en curso).
+  function cleanStalePrint() {
+    if (!endPrint) return;
+    try { if (typeof root.matchMedia === 'function' && root.matchMedia('print').matches) return; } catch (_) {}
+    endPrint();
+  }
   function wire() {
     var p = page(); if (!p || wired) return; wired = true;
     var fmt = p.querySelector('[data-etq-format]');
@@ -264,8 +278,11 @@
       if (e.target.closest('[data-etq-print]')) {
         // Con los precios actuales del catálogo.
         renderSelected();
-        var missing = currentSelection().filter(function (s) { return !hasPrice(s.product); }).length;
-        if (missing && typeof root.confirm === 'function' && !root.confirm(missing + (missing === 1 ? ' producto no tiene' : ' productos no tienen') + ' precio. Sus etiquetas saldrán como «Sin precio». ¿Imprimir igual?')) return;
+        var sel = currentSelection(), gone = sel.filter(function (s) { return s.product[MISSING_FLAG]; }).length;
+        var missing = sel.filter(function (s) { return !s.product[MISSING_FLAG] && !hasPrice(s.product); }).length, msg = [];
+        if (gone) msg.push(gone + (gone === 1 ? ' producto ya no está' : ' productos ya no están') + ' en el catálogo.');
+        if (missing) msg.push(missing + (missing === 1 ? ' producto no tiene' : ' productos no tienen') + ' precio.');
+        if (msg.length && typeof root.confirm === 'function' && !root.confirm(msg.join(' ') + ' Sus etiquetas saldrán como «Sin precio». ¿Imprimir igual?')) return;
         printSheet();
       }
     });
@@ -273,7 +290,8 @@
   }
   function start() {
     var p = page(); if (!p) return; wire();
-    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } }).observe(p, { attributes: true, attributeFilter: ['class'] });
+    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } else cleanStalePrint(); }).observe(p, { attributes: true, attributeFilter: ['class'] });
   }
+  doc.addEventListener('visibilitychange', function () { if (doc.visibilityState === 'visible') cleanStalePrint(); });
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(typeof window !== 'undefined' ? window : globalThis);

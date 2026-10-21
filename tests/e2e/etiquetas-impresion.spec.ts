@@ -23,6 +23,10 @@ async function open(page: Page, dark: boolean) {
   });
   await page.reload();
   await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'owner' && (window as any).NA_ROLES.confirmed && !!(window as any).NA_ETIQUETAS_PRECIOS);
+  // El arranque normaliza el catálogo (_naNormalizeData pone sku PROD-n a los que no tienen código) y enseguida llena
+  // #invCat (renderCategorySelects). Se espera a eso antes de cargar los productos de prueba: si no, la normalización
+  // tardía les daba código a los «sin código» (5 barras en vez de 3).
+  await page.waitForFunction(() => (document.querySelectorAll('#invCat option').length > 0));
   await page.evaluate(items => { (0, eval)('productos = ' + JSON.stringify(items)); }, products);
   await page.evaluate(d => document.body.classList.toggle('dark', d), dark);
   await page.evaluate(() => (window as any).goPage('pageEtiquetasPrecios'));
@@ -281,4 +285,61 @@ test.describe('fecha de Lima con el aparato en UTC', () => {
     expect(pdf.length).toBeGreaterThan(5000);
     expect(errors).toEqual([]);
   });
+});
+
+// Si «afterprint» nunca llega (algunos móviles), salir de Etiquetas o volver a la pestaña limpia la impresión:
+// si no, un window.print() posterior (ticket, reporte) salía en blanco.
+test('impresión sin «afterprint»: salir de Etiquetas o volver a la pestaña deja la app imprimible', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { root, errors } = await open(page, false);
+  await pick(root, 'arroz', 990201);
+  await page.evaluate(() => { window.print = () => {}; window.confirm = () => true; });
+  const leftovers = () => page.evaluate(() => ({
+    body: document.body.classList.contains('etq-printing'), html: document.documentElement.classList.contains('etq-printing-root'),
+    style: document.querySelectorAll('style[data-etq-page-style]').length, marks: document.querySelectorAll('[data-etq-print-hide], [data-etq-print-path]').length }));
+  const clean = { body: false, html: false, style: 0, marks: 0 };
+  // 1) Salir de la pantalla sin «afterprint».
+  await root.locator('[data-etq-print]').click();
+  expect((await leftovers()).marks).toBeGreaterThan(0);
+  await page.evaluate(() => (window as any).goPage('pagePOS'));
+  await expect.poll(leftovers).toEqual(clean);
+  // Un window.print() de la app ya no sale en blanco: en medio «print» la Venta ocupa lugar.
+  await page.emulateMedia({ media: 'print' });
+  expect(await page.locator('#pagePOS').evaluate(el => el.getClientRects().length > 0 && el.getBoundingClientRect().height > 50)).toBe(true);
+  await page.emulateMedia({ media: 'screen' });
+  // 2) Volver a la pestaña (visibilitychange → visible) estando aún en Etiquetas.
+  await page.evaluate(() => (window as any).goPage('pageEtiquetasPrecios'));
+  await root.locator('[data-etq-print]').click();
+  expect((await leftovers()).body).toBe(true);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(leftovers).toEqual(clean);
+  expect(errors).toEqual([]);
+});
+
+// Producto agregado y luego borrado del catálogo: aviso visible y entra en la confirmación; nunca el precio viejo.
+test('producto borrado del catálogo: aviso en la vista previa y en la lista, confirmación antes de imprimir', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { root, errors } = await open(page, false);
+  await pick(root, 'arroz', 990201);
+  await pick(root, 'azucar', 990203);
+  await page.evaluate(() => { (0, eval)('productos = productos.filter(p => p.id !== 990201)'); (window as any).__asked = []; (window as any).__printed = 0;
+    window.confirm = (m?: string) => { (window as any).__asked.push(String(m)); return false; }; window.print = () => { (window as any).__printed++; }; });
+  await root.locator('[data-etq-print]').click();
+  const asked = await page.evaluate(() => (window as any).__asked);
+  expect(asked).toHaveLength(1);
+  expect(asked[0]).toContain('1 producto ya no está en el catálogo');
+  expect(await page.evaluate(() => (window as any).__printed), 'sin confirmar no imprime').toBe(0);
+  const gone = root.locator('[data-etq-sheet] [data-etq-label]').filter({ has: page.locator('[data-etq-missing]') });
+  await expect(gone).toHaveCount(1);
+  await expect(gone.locator('[data-etq-missing]')).toBeVisible();
+  await expect(gone.locator('[data-etq-missing]')).toHaveText('Producto ya no está en el catálogo');
+  await expect(gone.locator('.etq-price')).toHaveText('Sin precio');
+  await expect(root.locator('[data-etq-missing-warn="990201"]')).toBeVisible();
+  await expect(root.locator('[data-etq-sheet] .etq-price').filter({ hasText: 'S/ 4.50' })).toHaveCount(0);
+  // Confirmando, imprime (como «Sin precio»).
+  await page.evaluate(() => { window.confirm = () => true; });
+  await root.locator('[data-etq-print]').click();
+  expect(await page.evaluate(() => (window as any).__printed)).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  expect(errors).toEqual([]);
 });
