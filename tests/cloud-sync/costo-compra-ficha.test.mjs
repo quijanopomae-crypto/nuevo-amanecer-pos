@@ -185,3 +185,63 @@ test('CANON: el historial queda como «Compra» con ref (recordPurchase) y la ac
   assert.deepEqual(plain(all.map(e => [e.type, e.origin, e.ref, e.after]).sort()), [['costo', 'compra', 'PUR-7:1:costo', 4.2], ['costo', 'compra', 'PUR-7:2:costo', 4.5], ['costo', 'compra', 'PUR-7:3:costo', 0.7]]);
   assert.ok(!all.some(e => e.origin === 'ficha'));
 });
+
+// Servidor sintético con concurrencia optimista igual que a6-products.js (409 stale_product).
+function twoDevices({ bEdits = 1 } = {}) {
+  const server = { product_id: 'p1', metadata_revision: 3, name: 'Aceite', sku: 'A-1', barcode: null, alternate_codes_json: '[]', category: null, brand: null,
+    description: null, icon: null, cost_cents: 400, price_cents: 600, box_price_cents: null, units_per_box: null, stock_min_quantity: 0, expiry_date: null, image: 'img://keep' };
+  let replica = { ...server }, pending = null, edits = 0;
+  const deviceBChangesPrice = () => { server.price_cents += 100; server.metadata_revision++; };
+  const client = { enabled: () => true,
+    snapshot: () => ({ products: [replica], inventoryMovements: [] }),
+    // B cambia el precio justo después de que A refresca (A queda con revisión vieja).
+    refresh: async () => { replica = { ...server }; if (edits < bEdits) { edits++; deviceBChangesPrice(); } },
+    pendingSnapshot: () => pending,
+    discardRejectedProduct: async () => { if (pending && pending.last_error === 'stale_product') { pending = null; return true; } return false; },
+    updateProduct: async b => {
+      pending = { command: 'product.update', last_status: 409, last_error: null };
+      if (b.expected_metadata_revision !== server.metadata_revision) { pending.last_error = 'stale_product'; throw new Error('stale_product'); }
+      Object.assign(server, { name: b.name, price_cents: b.price_cents, cost_cents: b.cost_cents, metadata_revision: server.metadata_revision + 1 }); pending = null; return { ok: true };
+    } };
+  const warnings = [];
+  const ctx = context({ NA_ROLES: { isOwner: () => true }, localStorage: store(), NuevoAmanecerCanonical: client, toast: (m, k) => warnings.push([m, k]) });
+  return { ctx, server, warnings };
+}
+const one = [{ line: 1, product_id: 'p1', quantity: 2, unit_cost_cents: 450 }];
+
+test('Worker: product.update rechaza una revisión vieja (409 stale_product) y nuestro payload la envía', () => {
+  const products = read('tools/cloudflare-lab/src/a6-products.js');
+  assert.match(products, /if \(Number\(state\.metadata_revision\)!==body\.expected_metadata_revision\)\s*return json\(\{error:'stale_product'/);
+  assert.match(products, /if \(Number\(fresh\.metadata_revision\)!==body\.expected_metadata_revision\)\s*return json\(\{error:'stale_product'/);
+  assert.equal(api.updatePayload({ product_id: 'x', metadata_revision: 9, name: 'n', price_cents: 1 }, 1).expected_metadata_revision, 9);
+  assert.match(read('tools/cloudflare-lab/src/pos-purchases.js'), /INSERT INTO pos_purchases\(purchase_id,[\s\S]*?\.bind\(b\.operation_id,/, 'el Worker guarda la compra con purchase_id = operation_id');
+});
+
+test('dos aparatos: B cambia el precio, la actualización vieja de A se rechaza sin pisar nada y se reintenta una vez con los datos de B', async () => {
+  const { ctx, server } = twoDevices({ bEdits: 1 });
+  const r = await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-2', one, { applied: [{ line: 1 }] });
+  assert.equal(r.updated.length, 1);
+  assert.equal(server.price_cents, 700, 'se conserva el precio de B');
+  assert.equal(server.cost_cents, 450);
+  assert.equal(server.image, 'img://keep');
+});
+
+test('dos aparatos: si vuelve a quedar vieja tras el reintento, no se pisa nada y se avisa', async () => {
+  const { ctx, server, warnings } = twoDevices({ bEdits: 5 });
+  const r = await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-3', one, { applied: [{ line: 1 }] });
+  assert.deepEqual(plain(r.failed), [{ product_id: 'p1', error: 'stale_product' }]);
+  assert.equal(server.cost_cents, 400, 'el costo no cambió');
+  assert.equal(server.price_cents, 800, 'solo quedaron los cambios de B');
+  assert.equal(warnings.length, 1); assert.match(warnings[0][0], /no se actualizó el costo/);
+});
+
+test('promedio: la compra recién registrada no se cuenta dos veces si /auth/purchases ya la trae (por purchase_id u operation_id)', async () => {
+  for (const shape of [{ purchase_id: 'PUR-9' }, { purchase_id: 'srv-123', operation_id: 'PUR-9' }]) {
+    const listed = { ...shape, status: 'aplicada', created_at: '2026-10-20T10:00:00Z', lines: [{ line_number: 1, product_id: 'p1', quantity: 10, unit_cost_cents: 500 }] };
+    const ctx = context({ NA_ROLES: { isOwner: () => true, api: async () => ({ purchases: [listed, { purchase_id: 'PUR-1', status: 'aplicada', created_at: '2026-10-01T10:00:00Z', lines: [{ line_number: 1, product_id: 'p1', quantity: 10, unit_cost_cents: 300 }] }] }) },
+      NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: [], inventoryMovements: [] }) } });
+    const extra = { purchase_id: 'PUR-9', status: 'aplicada', created_at: '2026-10-20T10:00:00Z', lines: [{ line_number: 1, product_id: 'p1', quantity: 10, unit_cost_cents: 500 }] };
+    const s = await ctx.NA_COSTO_COMPRA_FICHA.summaryFor('p1', extra);
+    assert.equal(s.weightedUnitCostCents, 400, JSON.stringify(shape));
+  }
+});

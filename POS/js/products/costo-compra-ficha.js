@@ -40,7 +40,8 @@
     if (canon() && typeof h.readPurchases === 'function') {
       try { var r = await h.readPurchases(); purchases = (r && Array.isArray(r.purchases)) ? r.purchases : []; } catch (_) { purchases = []; }
     }
-    if (extra && extra.purchase_id && !purchases.some(function (p) { return p && String(p.purchase_id) === String(extra.purchase_id); })) purchases = purchases.concat([extra]);
+    // El Worker guarda la compra con purchase_id = operation_id (pos-purchases.js); también se compara operation_id por si acaso.
+    if (extra && extra.purchase_id && !purchases.some(function (p) { return p && (String(p.purchase_id) === String(extra.purchase_id) || String(p.operation_id) === String(extra.purchase_id)); })) purchases = purchases.concat([extra]);
     var built = h.buildHistory(purchases, canonMoves().concat(localMoves()), id);
     var s = built.summary || {};
     return { lastPurchase: lastCosted(built.rows), weightedUnitCostCents: s.weightedUnitCostCents == null ? null : s.weightedUnitCostCents };
@@ -128,6 +129,35 @@
       units_per_box: keep(raw.units_per_box), stock_min_quantity: raw.stock_min_quantity == null ? 0 : raw.stock_min_quantity, expiry_date: keep(raw.expiry_date) };
   }
   function notify(msg, kind) { try { if (typeof root.toast === 'function') root.toast(msg, kind || 'info'); } catch (_) {} }
+  function productRaw(client, id) {
+    var snap = client.snapshot();
+    return (snap && Array.isArray(snap.products) ? snap.products : []).find(function (p) { return String(p.product_id) === id; }) || null;
+  }
+  // Concurrencia optimista: el Worker rechaza con 409 stale_product si expected_metadata_revision no es la
+  // del servidor (a6-products.js). Se refresca la réplica justo antes de armar el payload; si otro aparato
+  // cambió el producto entre medio, se descarta el rechazo, se refresca y se reintenta UNA vez con sus datos.
+  async function updateOne(client, id, last, current) {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try { if (typeof client.refresh === 'function') await client.refresh(); } catch (_) {}
+      var raw = productRaw(client, id);
+      if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'metadata_revision')) return { status: 'skipped' };
+      var cents = await targetCents(id, last, current);
+      if (Number(raw.cost_cents) === cents) return { status: 'skipped' };
+      try {
+        await client.updateProduct(updatePayload(raw, cents));
+        try { if (typeof client.refresh === 'function') await client.refresh(); } catch (_) {}
+        return { status: 'updated', row: { product_id: id, before_cents: raw.cost_cents == null ? null : Number(raw.cost_cents), after_cents: cents } };
+      } catch (e) {
+        var pending = null; try { pending = typeof client.pendingSnapshot === 'function' ? client.pendingSnapshot() : null; } catch (_) {}
+        var stale = String(e && e.message || '').indexOf('stale_product') >= 0 || !!(pending && pending.command === 'product.update' && pending.last_error === 'stale_product');
+        var dropped = false;
+        if (pending && pending.command === 'product.update' && pending.last_error) { try { dropped = typeof client.discardRejectedProduct === 'function' && await client.discardRejectedProduct(); } catch (_) {} }
+        if (stale && attempt === 0 && (dropped || !pending)) continue;
+        return { status: 'failed', error: stale ? 'stale_product' : String(e && e.message || e) };
+      }
+    }
+    return { status: 'failed', error: 'stale_product' };
+  }
   // CANON: tras la compra confirmada por /auth/purchases, el dueño actualiza el costo con product.update
   // (ruta solo dueño en el Worker). El historial ya lo registró recordPurchase (origen «Compra»).
   async function afterCanonPurchase(operationId, lines, result) {
@@ -144,15 +174,10 @@
       lines: (Array.isArray(lines) ? lines : []).filter(function (l) { return l && applied[String(l.line)]; }).map(function (l) { return { line_number: Number(l.line), product_id: String(l.product_id), quantity: Number(l.quantity), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents) }; }) };
     for (var [id, last] of costs) {
       if (!isOwner()) { report.skipped.push('not_owner'); break; }
-      try {
-        var snap = client.snapshot(), raw = (snap && Array.isArray(snap.products) ? snap.products : []).find(function (p) { return String(p.product_id) === id; });
-        if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'metadata_revision')) { report.skipped.push(id); continue; }
-        var cents = await targetCents(id, last, current);
-        if (Number(raw.cost_cents) === cents) { report.skipped.push(id); continue; }
-        await client.updateProduct(updatePayload(raw, cents));
-        report.updated.push({ product_id: id, before_cents: raw.cost_cents == null ? null : Number(raw.cost_cents), after_cents: cents });
-        try { if (typeof client.refresh === 'function') await client.refresh(); } catch (_) {}
-      } catch (e) { report.failed.push({ product_id: id, error: String(e && e.message || e) }); break; } // una pendiente bloquea las demás: parar
+      var outcome = await updateOne(client, id, last, current);
+      if (outcome.status === 'updated') report.updated.push(outcome.row);
+      else if (outcome.status === 'skipped') report.skipped.push(id);
+      else { report.failed.push({ product_id: id, error: outcome.error }); break; } // una pendiente bloquea las demás: parar
     }
     if (report.failed.length) notify('Compra registrada, pero no se actualizó el costo de ' + report.failed.length + ' producto(s). Revísalo en la ficha.', 'warning');
     return report;
