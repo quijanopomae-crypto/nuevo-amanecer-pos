@@ -65,8 +65,25 @@
   function escapeHtml(v) {
     return text(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // Precio guardado como número (lo normal) o como texto: «4.50», «4,50», «S/ 4.50», «1,234.50», «1.234,50».
+  // Con punto y coma, el último es el decimal. Una sola coma es decimal («3,456» = 3.456, como antes);
+  // varias comas en grupos de 3 («1,234,567») o varios puntos («1.234.567») son miles.
+  // Producto que se agregó y luego se borró del catálogo: no se imprime con el precio viejo (sale «Sin precio» con aviso).
+  var MISSING_NOTICE = 'Producto ya no está en el catálogo', MISSING_FLAG = '__etqMissing';
+  function missingProduct(p) { var c = {}; Object.keys(p || {}).forEach(function (k) { c[k] = p[k]; }); c.precio = null; c.price = null; c[MISSING_FLAG] = true; return c; }
+  function parsePrice(v) {
+    if (typeof v === 'number') return v;
+    // «S/», «S/.» (forma peruana común) y un «+» inicial: «S/.4.50», «S/. 4.50», «+5».
+    var s = text(v).replace(/^\s*S\/\.?\s*/i, '').replace(/\s+/g, '').replace(/^\+(?=[\d.,])/, '');
+    if (!/^-?[\d.,]+$/.test(s)) return NaN;
+    var dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+    if (dot >= 0 && comma >= 0) s = dot > comma ? s.replace(/,/g, '') : s.replace(/\./g, '').replace(',', '.');
+    else if (comma >= 0) s = s.split(',').length === 2 ? s.replace(',', '.') : (/^-?\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : 'x');
+    else if ((s.match(/\./g) || []).length > 1) s = /^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : 'x';
+    return Number(s);
+  }
   function formatPrice(v) {
-    var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.'));
+    var n = parsePrice(v);
     if (!isFinite(n) || n < 0) n = 0;
     return 'S/ ' + (Math.round(n * 100) / 100).toFixed(2);
   }
@@ -81,7 +98,7 @@
   function rawPrice(p) { return p && p.precio != null && p.precio !== '' ? p.precio : p && p.price; }
   function hasPrice(p) {
     var v = rawPrice(p); if (v == null || v === '') return false;
-    var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.'));
+    var n = parsePrice(v);
     return isFinite(n) && Math.round(n * 100) > 0;
   }
   // Nunca devuelve «S/ 0.00» para un producto sin precio válido: devuelve «Sin precio».
@@ -112,10 +129,11 @@
   }
   function labelHtml(product, date) {
     var code = productCode(product), svg = code ? code128Svg(code) : '';
-    var priced = hasPrice(product);
+    var priced = hasPrice(product), gone = !!(product && product[MISSING_FLAG]);
     return '<div class="etq-label' + (svg ? '' : ' etq-no-bars') + (priced ? '' : ' etq-no-price') + '" data-etq-label>' +
       '<div class="etq-name">' + escapeHtml(truncateName(productName(product))) + '</div>' +
       '<div class="etq-price"' + (priced ? '' : ' data-etq-noprice') + '>' + escapeHtml(productPrice(product)) + '</div>' +
+      (gone ? '<div class="etq-warn" data-etq-missing title="' + escapeHtml(MISSING_NOTICE) + '">' + escapeHtml(MISSING_NOTICE) + '</div>' : '') +
       svg + (code && !svg ? '<div class="etq-warn" data-etq-warn>' + escapeHtml(INVALID_NOTICE) + '</div>' : '') +
       '<div class="etq-meta"><span class="etq-code">' + escapeHtml(code || 'Sin código') + '</span><span class="etq-date">' + escapeHtml(formatDate(date)) + '</span></div>' +
       '</div>';
@@ -138,13 +156,17 @@
     return labels.map(function (p) { return labelHtml(p, date); }).join('');
   }
 
-  var api = { MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
+  var api = { MISSING_NOTICE: MISSING_NOTICE, missingProduct: missingProduct, MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, parsePrice: parsePrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
   root.NA_ETIQUETAS_PRECIOS = api;
 
   var doc = root.document; if (!doc || !doc.getElementById) return;
   var selected = [], format = 'mediana', wired = false;
   function catalog() { try { return typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   function page() { return doc.getElementById('pageEtiquetasPrecios'); }
+  // Producto actual del catálogo por id (precio/nombre al día); si ya no está, el que se eligió, sin precio y con aviso.
+  // Catálogo vacío (recarga o sincronización en curso): no se marca nada como borrado, se usa lo que se eligió.
+  function current(item) { var cat = catalog(), id = productKey(item.product), p = cat.find(function (x) { return productKey(x) === id; }); return p || (cat.length ? missingProduct(item.product) : item.product); }
+  function currentSelection() { return selected.map(function (item) { return { product: current(item), qty: item.qty }; }); }
   function q(sel) { var p = page(); return p && p.querySelector(sel); }
   function renderMatches() {
     var box = q('[data-etq-matches]'), input = q('[data-etq-search]'); if (!box || !input) return;
@@ -160,7 +182,7 @@
   function renderSelected() {
     var list = q('[data-etq-selected]'); if (!list) return;
     list.textContent = '';
-    selected.forEach(function (item) {
+    currentSelection().forEach(function (item) {
       var li = doc.createElement('li'); li.className = 'etq-item'; li.setAttribute('data-etq-item', productKey(item.product));
       var name = doc.createElement('span'); name.className = 'etq-item-name'; name.textContent = productName(item.product);
       var label = doc.createElement('label'); label.className = 'etq-qty'; label.textContent = 'Cantidad ';
@@ -168,7 +190,8 @@
       label.appendChild(qty);
       var rm = doc.createElement('button'); rm.type = 'button'; rm.className = 'etq-remove'; rm.textContent = 'Quitar'; rm.setAttribute('data-etq-remove', productKey(item.product));
       li.appendChild(name); li.appendChild(label); li.appendChild(rm);
-      if (!hasPrice(item.product)) { var w = doc.createElement('p'); w.className = 'etq-item-warn'; w.setAttribute('data-etq-noprice-warn', productKey(item.product)); w.setAttribute('role', 'alert'); w.textContent = NO_PRICE_NOTICE; li.appendChild(w); }
+      var gone = !!item.product[MISSING_FLAG];
+      if (gone || !hasPrice(item.product)) { var w = doc.createElement('p'); w.className = 'etq-item-warn'; w.setAttribute(gone ? 'data-etq-missing-warn' : 'data-etq-noprice-warn', productKey(item.product)); w.setAttribute('role', 'alert'); w.textContent = gone ? MISSING_NOTICE + '. Sus etiquetas saldrán como «Sin precio».' : NO_PRICE_NOTICE; li.appendChild(w); }
       list.appendChild(li);
     });
     var empty = q('[data-etq-empty]'); if (empty) empty.hidden = selected.length > 0;
@@ -176,7 +199,7 @@
   }
   function renderPreview() {
     var sheet = q('[data-etq-sheet]'), count = q('[data-etq-count]'), print = q('[data-etq-print]'); if (!sheet) return;
-    var plan = labelPlan(selected), total = plan.total;
+    var plan = labelPlan(currentSelection()), total = plan.total;
     sheet.className = 'etq-sheet etq-format-' + format;
     // HTML armado solo con escapeHtml (labelHtml); ningún dato entra sin escapar.
     sheet.innerHTML = sheetHtml(plan.labels, format, new Date());
@@ -195,6 +218,53 @@
     renderSelected();
     if (input && typeof input.focus === 'function') input.focus();
   }
+  // Impresión: fuera de la hoja nada ocupa lugar en el diseño. Con visibility:hidden el resto de la app seguía midiendo
+  // (p. ej. 279 px) y Chromium encogía la etiqueta de rollo al ~66 %. Se marca cada hermano de la hoja y de sus
+  // ancestros (display:none al imprimir) y los ancestros quedan sin relleno, borde ni ancho propio.
+  var endPrint = null, ownPrint = false;
+  function isolate(sheet) {
+    var marked = [], node = sheet;
+    while (node && node !== doc.body && node.parentElement) {
+      var parent = node.parentElement;
+      Array.prototype.forEach.call(parent.children, function (sib) {
+        if (sib !== node && !sib.hasAttribute('data-etq-print-hide')) { sib.setAttribute('data-etq-print-hide', ''); marked.push(sib); }
+      });
+      if (parent !== doc.body) { parent.setAttribute('data-etq-print-path', ''); marked.push(parent); }
+      node = parent;
+    }
+    return function () { marked.forEach(function (el) { el.removeAttribute('data-etq-print-hide'); el.removeAttribute('data-etq-print-path'); }); };
+  }
+  function printSheet() {
+    if (endPrint) endPrint();
+    var sheet = q('[data-etq-sheet]'); if (!sheet) return;
+    var restore = isolate(sheet);
+    doc.documentElement.classList.add('etq-printing-root');
+    doc.body.classList.add('etq-printing');
+    var style = doc.createElement('style'); style.setAttribute('data-etq-page-style', format); style.textContent = pageCss(format); doc.head.appendChild(style);
+    var done = function () {
+      if (endPrint !== done) return; endPrint = null; ownPrint = false;
+      restore();
+      doc.documentElement.classList.remove('etq-printing-root');
+      doc.body.classList.remove('etq-printing');
+      if (style.parentNode) style.parentNode.removeChild(style);
+      root.removeEventListener('afterprint', done);
+    };
+    // Solo «afterprint» cierra la impresión. No se usa matchMedia('print'): su «change» puede llegar mientras Chromium
+    // todavía arma las páginas y las dejaba en blanco. Si «afterprint» no llegara, la siguiente impresión limpia antes.
+    endPrint = done;
+    root.addEventListener('afterprint', done);
+    // Marca que la impresión que viene es de Etiquetas: su «beforeprint» no debe limpiar la hoja.
+    ownPrint = true;
+    if (typeof root.print === 'function') root.print(); else done();
+  }
+  // Respaldo si «afterprint» nunca llega (algunos móviles): sin esto la clase y las marcas quedaban y un window.print()
+  // posterior (ticket, reporte) salía en blanco. Solo al salir de Etiquetas o al volver a la pestaña, nunca con el
+  // medio «print» activo (impresión en curso).
+  function cleanStalePrint() {
+    if (!endPrint) return;
+    try { if (typeof root.matchMedia === 'function' && root.matchMedia('print').matches) return; } catch (_) {}
+    endPrint();
+  }
   function wire() {
     var p = page(); if (!p || wired) return; wired = true;
     var fmt = p.querySelector('[data-etq-format]');
@@ -209,20 +279,32 @@
       var a = e.target.closest('[data-etq-add]'); if (a) { add(a.getAttribute('data-etq-add')); return; }
       var r = e.target.closest('[data-etq-remove]'); if (r) { selected = selected.filter(function (s) { return productKey(s.product) !== r.getAttribute('data-etq-remove'); }); renderSelected(); return; }
       if (e.target.closest('[data-etq-print]')) {
-        var missing = selected.filter(function (s) { return !hasPrice(s.product); }).length;
-        if (missing && typeof root.confirm === 'function' && !root.confirm(missing + (missing === 1 ? ' producto no tiene' : ' productos no tienen') + ' precio. Sus etiquetas saldrán como «Sin precio». ¿Imprimir igual?')) return;
-        doc.body.classList.add('etq-printing');
-        var style = doc.createElement('style'); style.setAttribute('data-etq-page-style', format); style.textContent = pageCss(format); doc.head.appendChild(style);
-        var done = function () { doc.body.classList.remove('etq-printing'); if (style.parentNode) style.parentNode.removeChild(style); root.removeEventListener('afterprint', done); };
-        root.addEventListener('afterprint', done);
-        if (typeof root.print === 'function') root.print();
+        // Con los precios actuales del catálogo.
+        renderSelected();
+        var sel = currentSelection(), gone = sel.filter(function (s) { return s.product[MISSING_FLAG]; }).length;
+        var missing = sel.filter(function (s) { return !s.product[MISSING_FLAG] && !hasPrice(s.product); }).length, msg = [];
+        if (gone) msg.push(gone + (gone === 1 ? ' producto ya no está' : ' productos ya no están') + ' en el catálogo.');
+        if (missing) msg.push(missing + (missing === 1 ? ' producto no tiene' : ' productos no tienen') + ' precio.');
+        if (msg.length && typeof root.confirm === 'function' && !root.confirm(msg.join(' ') + ' Sus etiquetas saldrán como «Sin precio». ¿Imprimir igual?')) return;
+        printSheet();
       }
     });
     renderSelected();
   }
   function start() {
     var p = page(); if (!p) return; wire();
-    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) renderMatches(); }).observe(p, { attributes: true, attributeFilter: ['class'] });
+    // Al salir de Etiquetas también se olvida «ownPrint»: si print() nunca disparó «beforeprint» (algunos móviles), quedaba
+    // en true y el siguiente Ctrl+P de otra pantalla se tomaba como propio y no limpiaba.
+    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } else { ownPrint = false; cleanStalePrint(); } }).observe(p, { attributes: true, attributeFilter: ['class'] });
   }
+  // Último respaldo: si quedaron marcas (sin «afterprint» y la limpieza cayó durante la impresión) y otra pantalla
+  // imprime (Ctrl+P en Venta, ticket, reporte), se limpian antes de que el navegador arme las páginas.
+  // Solo es propia si Etiquetas sigue a la vista: con otra pantalla activa, un «ownPrint» viejo no evita la limpieza.
+  root.addEventListener('beforeprint', function () {
+    var p = page(), mine = ownPrint && !!p && p.classList.contains('active');
+    ownPrint = false;
+    if (!mine && endPrint) endPrint();
+  });
+  doc.addEventListener('visibilitychange', function () { if (doc.visibilityState === 'visible') cleanStalePrint(); });
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(typeof window !== 'undefined' ? window : globalThis);
