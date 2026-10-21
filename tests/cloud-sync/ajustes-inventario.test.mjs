@@ -224,7 +224,8 @@ test('otros códigos: mapeados en español; desconocidos conservan el código; u
   const busy = rejectingCanon('HTTP_503', 503, { discardable: false });
   const r3 = await ownerCtx({ NuevoAmanecerCanonical: busy.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
   assert.equal(r3.pending, true);
-  assert.match(r3.message, /quedó pendiente en CANON \(HTTP_503\)\. No lo registres de nuevo/);
+  assert.equal(r3.retry, true);
+  assert.match(r3.message, /CANON no respondió \(HTTP_503\)\. El ajuste quedó PENDIENTE: no se perdió y se reintentará la MISMA operación, sin duplicar/);
   assert.notEqual(busy.state.journal, null);
 });
 
@@ -345,4 +346,75 @@ test('el ajuste envía su propio operation_id (UUID)', async () => {
     adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} } });
   assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 })).ok, true);
   assert.match(sent[0].operation_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+});
+
+// Seguimiento #856: red caída, tiempo de espera, pendiente ajena, ACK perdido, hex y aviso de «Salida».
+function transportCanon(mode) {
+  // Como canonical-client: un fallo de transporte guarda la entrada PENDING (sin last_error) y lanza CANONICAL_FINANCIAL_PENDING.
+  const state = { journal: null, sent: 0, discards: 0 };
+  const client = { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', unit: 'unidad', stock: 10 }], inventoryMovements: [] }), refresh: async () => {},
+    adjustInventory: async b => {
+      if (state.journal) throw new Error('CANONICAL_FINANCIAL_PENDING'); // ranura ocupada: no se envía nada
+      state.sent++; state.journal = { state: 'PENDING', command: 'inventory.adjust', payload: b };
+      if (mode === 'timeout') state.journal.last_error = 'TIMEOUT';
+      throw new Error('CANONICAL_FINANCIAL_PENDING');
+    },
+    pendingSnapshot: () => state.journal && { ...state.journal },
+    discardRejectedInventory: async () => { state.discards++; return false; } };
+  return { state, client };
+}
+
+test('red caída y tiempo de espera: el ajuste queda pendiente y se avisa que se reintentará (sin descartar)', async () => {
+  for (const mode of ['down', 'timeout']) {
+    const { state, client } = transportCanon(mode);
+    const res = await ownerCtx({ NuevoAmanecerCanonical: client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+    assert.equal(res.ok, false, mode); assert.equal(res.retry, true, mode); assert.equal(res.pending, true, mode);
+    assert.match(res.message, /se reintentará la MISMA operación, sin duplicar/, mode);
+    assert.doesNotMatch(res.message, /puede ser este ajuste/);
+    if (mode === 'timeout') assert.match(res.message, /\(TIMEOUT\)/);
+    assert.equal(state.discards, 0); assert.notEqual(state.journal, null);
+  }
+});
+
+test('ACK perdido: volver a pulsar Registrar no duplica (no se envía otra operación) y avisa del reintento', async () => {
+  const { state, client } = transportCanon('down');
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: client });
+  const first = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  const op = state.journal.payload.operation_id;
+  assert.equal(first.retry, true);
+  const again = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  assert.equal(again.ok, false);
+  assert.equal(state.sent, 1, 'una sola operación enviada');
+  assert.equal(state.journal.payload.operation_id, op, 'se conserva la MISMA operación');
+  assert.equal(again.code, 'CANONICAL_FINANCIAL_PENDING');
+});
+
+test('pendiente de otra pantalla: no dice «puede ser este ajuste», no envía ni descarta', async () => {
+  const { state, client } = transportCanon('down');
+  state.journal = { state: 'PENDING', command: 'inventory.adjust', payload: { operation_id: 'otra-op', product_id: 'x' }, last_error: 'HTTP_503', last_status: 503 };
+  const res = await ownerCtx({ NuevoAmanecerCanonical: client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  assert.equal(res.ok, false); assert.equal(res.retry, undefined);
+  assert.equal(res.message, 'Hay otra operación de CANON pendiente de confirmar. No se registró el ajuste; espera a que se confirme o se resuelva y vuelve a intentarlo.');
+  assert.doesNotMatch(res.message, /puede ser este ajuste/);
+  assert.equal(state.sent, 0); assert.equal(state.discards, 0); assert.equal(state.journal.payload.operation_id, 'otra-op');
+});
+
+test('cantidad: solo decimales estrictos; «0x10», «1e3», «+2», « Infinity» se rechazan', async () => {
+  for (const raw of ['0x10', '0X1A', '1e3', '+2', '-2', 'Infinity', '0b11', '0o7', '2.', '.5', '1,2,3', '2 5', ' ']) {
+    assert.ok(Number.isNaN(api.parseQuantity(raw)), raw);
+    assert.equal(api.quantityError({ unit: 'unidad', stock: 100 }, 'merma', raw), 'Ingresa una cantidad válida mayor que 0.', raw);
+  }
+  assert.equal(api.parseQuantity('12'), 12); assert.equal(api.parseQuantity(' 2,5 '), 2.5); assert.equal(api.parseQuantity('0.125'), 0.125);
+  const sent = [];
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', unit: 'unidad', stock: 50 }], inventoryMovements: [] }),
+    adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} } });
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: '0x10' })).ok, false);
+  assert.equal(sent.length, 0);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: '16' })).ok, true);
+  assert.equal(sent[0].quantity, 16);
+});
+
+test('lotes vencidos: el mensaje aclara que una «Salida» no aparece como «Vencido» en el reporte', () => {
+  const msg = api.canonMessage('expired_lots_confirmation_required');
+  assert.match(msg, /Una salida hecha con «Salida» no aparece como «Vencido» en el reporte de Ajustes\./);
 });

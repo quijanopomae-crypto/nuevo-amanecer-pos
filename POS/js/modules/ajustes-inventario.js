@@ -71,9 +71,16 @@
   }
   function fmtQty(v) { return Number(v).toLocaleString('es-PE', { maximumFractionDigits: 3 }); }
   // Devuelve '' si la cantidad es válida, o el mensaje en español.
+  // Cantidad: número tal cual; texto solo decimal estricto («12», «2.5», «2,5»). Rechaza hex («0x10»),
+  // exponentes («1e3»), signos, «Infinity» y vacío (Number() los aceptaría).
+  var DECIMAL = /^\d+(?:[.,]\d+)?$/;
+  function parseQuantity(quantity) {
+    if (typeof quantity === 'number') return quantity;
+    var raw = String(quantity == null ? '' : quantity).trim();
+    return DECIMAL.test(raw) ? Number(raw.replace(',', '.')) : NaN;
+  }
   function quantityError(product, type, quantity, direction) {
-    var q = typeof quantity === 'number' ? quantity : Number(String(quantity == null ? '' : quantity).replace(',', '.'));
-    if (typeof quantity === 'string' && !text(quantity)) q = NaN;
+    var q = parseQuantity(quantity);
     if (!Number.isFinite(q) || q <= 0) return 'Ingresa una cantidad válida mayor que 0.';
     if (q > MAX_QTY) return 'La cantidad no puede superar ' + fmtQty(MAX_QTY) + ' por ajuste.';
     if (!allowsFraction(product) && !Number.isInteger(q)) return 'Este producto se mueve en unidades enteras. Para decimales (ej. 2.5) el producto debe venderse por kilogramo, gramo o litro.';
@@ -151,7 +158,7 @@
     return { nombre: 'Dueño', id: '' };
   }
   // Mensajes en español para los códigos que puede devolver un ajuste en CANON (en vez del código crudo).
-  var EXPIRED_ONLY_MESSAGE = 'Este producto solo tiene stock en lotes vencidos y este ajuste no puede descontarlos. Registra la salida desde Inventario con el botón «Salida» del producto: pide el PIN del dueño para usar lotes vencidos (requiere «Permitir vender lotes vencidos» activo en Configuración). No se modificó el stock.';
+  var EXPIRED_ONLY_MESSAGE = 'Este producto solo tiene stock en lotes vencidos y este ajuste no puede descontarlos. Registra la salida desde Inventario con el botón «Salida» del producto: pide el PIN del dueño para usar lotes vencidos (requiere «Permitir vender lotes vencidos» activo en Configuración). Una salida hecha con «Salida» no aparece como «Vencido» en el reporte de Ajustes. No se modificó el stock.';
   var CANON_MESSAGES = {
     expired_lots_confirmation_required: EXPIRED_ONLY_MESSAGE,
     EXPIRED_LOTS_CONFIRMATION_REQUIRED: EXPIRED_ONLY_MESSAGE,
@@ -164,7 +171,7 @@
     product_not_found: 'CANON no encontró este producto. No se modificó el stock.',
     product_inventory_disabled: 'Este producto no controla inventario en CANON. No se modificó el stock.',
     invalid_lot_state: 'Los lotes de este producto en CANON no cuadran con su stock. No se modificó el stock; revisa los lotes en Inventario.',
-    CANONICAL_FINANCIAL_PENDING: 'Hay una operación de CANON pendiente de confirmar (puede ser este ajuste). No lo registres de nuevo hasta que se confirme o se resuelva.'
+    CANONICAL_FINANCIAL_PENDING: 'Hay otra operación de CANON pendiente de confirmar. No se registró el ajuste; espera a que se confirme o se resuelva y vuelve a intentarlo.'
   };
   function canonMessage(code) {
     code = text(code);
@@ -177,8 +184,19 @@
   function newOperationId() {
     try { return root.crypto && typeof root.crypto.randomUUID === 'function' ? root.crypto.randomUUID() : ''; } catch (_) { return ''; }
   }
+  // Igual que Movimientos de Inventario: sin respuesta definitiva se conserva la MISMA operación y se reintenta.
+  function retryMessage(code) {
+    return 'CANON no respondió' + (code ? ' (' + code + ')' : '') + '. El ajuste quedó PENDIENTE: no se perdió y se reintentará la MISMA operación, sin duplicar, cuando vuelva la conexión. No lo registres de nuevo.';
+  }
   async function canonFailure(c, error, operationId) {
     var code = text(error && error.message);
+    if (code === 'CANONICAL_FINANCIAL_PENDING') {
+      // Sin red, tiempo de espera o ACK perdido: la entrada pendiente es la de ESTE ajuste (mismo operation_id).
+      var own = null;
+      try { own = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
+      if (operationId && own && own.payload && own.payload.operation_id === operationId) return { ok: false, code: code, pending: true, retry: true, message: retryMessage(text(own.last_error || own.last_status)) };
+      return { ok: false, code: code, message: canonMessage(code) };
+    }
     if (/^CANONICAL_FINANCIAL_REJECTED_\d+$/.test(code)) {
       var pending = null;
       try { pending = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
@@ -192,7 +210,11 @@
         var discarded = false;
         try { discarded = typeof c.discardRejectedInventory === 'function' && (await c.discardRejectedInventory()) === true; } catch (_) {}
         // No es un rechazo definitivo (p. ej. 5xx): el ajuste sigue pendiente en el diario de CANON.
-        if (!discarded) return { ok: false, code: code, pending: true, message: 'El ajuste quedó pendiente en CANON (' + code + '). No lo registres de nuevo hasta que se confirme o se resuelva.' };
+        if (!discarded) {
+          var st = Number(pending.last_status);
+          if (!st || st === 429 || st >= 500) return { ok: false, code: code, pending: true, retry: true, message: retryMessage(code) };
+          return { ok: false, code: code, pending: true, message: 'CANON rechazó el ajuste (' + code + ') y quedó pendiente sin descartar. Revísalo desde Inventario antes de registrar otro.' };
+        }
       }
     }
     return { ok: false, code: code, message: canonMessage(code) };
@@ -206,7 +228,7 @@
     if (!product) return { ok: false, message: 'Producto no encontrado.' };
     var qtyError = quantityError(product, input.type, input.quantity, input.direction);
     if (qtyError) return { ok: false, invalidQuantity: true, message: qtyError };
-    var step = plan(input.type, input.quantity, input.direction);
+    var step = plan(input.type, parseQuantity(input.quantity), input.direction);
     if (!step) return { ok: false, message: 'Revisa el tipo y la cantidad.' };
     // Guardia antes de enviar (CANON o local): nunca se manda un ajuste Rotura/Vencido sin poder elegir lote.
     if (lotBlocked(input.type, product)) return { ok: false, blocked: 'LOTS_REQUIRE_LOT_SELECTION', message: LOT_BLOCK_MESSAGE };
@@ -336,7 +358,7 @@
     try {
       var dir = p.querySelector('[data-aj-direction]');
       var res = await register({ productId: p.querySelector('[data-aj-product]').value, type: p.querySelector('[data-aj-type]').value,
-        quantity: Number(String(p.querySelector('[data-aj-qty]').value).replace(',', '.')), direction: dir ? dir.value : 'restar', note: p.querySelector('[data-aj-note]').value });
+        quantity: String(p.querySelector('[data-aj-qty]').value), direction: dir ? dir.value : 'restar', note: p.querySelector('[data-aj-note]').value });
       if (msg) { msg.textContent = res.ok ? 'Ajuste registrado.' : res.message; msg.setAttribute('data-aj-ok', String(!!res.ok)); }
       if (res.ok) { p.querySelector('[data-aj-qty]').value = ''; syncQuantity(p); p.querySelector('[data-aj-note]').value = ''; ['invRender', 'posRender', 'updateDashboard'].forEach(function (n) { try { if (typeof root[n] === 'function') root[n](); } catch (_) {} }); render(); }
     } finally { busy = false; if (btn) btn.disabled = false; }
@@ -353,7 +375,7 @@
     root.addEventListener('na:canonical-updated', update);
     update();
   }
-  root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, isType: isType, canonMessage: canonMessage, MAX_QTY: MAX_QTY, MAX_CORRECTION_UP: MAX_CORRECTION_UP, quantityError: quantityError, hasLots: hasLots, lotBlocked: lotBlocked, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
+  root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, isType: isType, canonMessage: canonMessage, MAX_QTY: MAX_QTY, parseQuantity: parseQuantity, MAX_CORRECTION_UP: MAX_CORRECTION_UP, quantityError: quantityError, hasLots: hasLots, lotBlocked: lotBlocked, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
