@@ -1,3 +1,4 @@
+import { operationLedgers, foreignOperationRead, crossLedgerConflict } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex,stableStringify } from './a5-import-core.js';
 import { phoneConflict,validCustomerDocument } from './a6-customers.js';
@@ -26,6 +27,10 @@ export async function setCanonicalCustomerContact(request,env,auth,json){
   const hash=await sha256Hex(stableStringify(b));
   const previous=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_contacts WHERE operation_id=?1').bind(b.operation_id).first();
   if(previous)return previous.request_hash===hash?json({...JSON.parse(previous.result_json),status:'already_processed',idempotent:true}):json({error:'operation_id_conflict'},409);
+  // Atomicity: the 0020 namespace trigger on canonical_customer_contacts (all ledgers but expense revisions).
+  const ledgers=await operationLedgers(db);
+  const foreign=await foreignOperationRead(db,b.operation_id,ledgers,['canonical_customer_contacts']).first();
+  if(foreign)return json(crossLedgerConflict(b.operation_id,foreign),409);
   const customer=await db.prepare('SELECT customer_id FROM canonical_customer_registry WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
   if(!customer)return json({error:'customer_not_found'},409);
   // P1-4: a WhatsApp number belongs to one customer (effective phones, self excluded).
@@ -46,6 +51,8 @@ export async function setCanonicalCustomerContact(request,env,auth,json){
     if(!await authority(db,auth,b))return json({error:'stale_authority'},409);
     const replay=await db.prepare('SELECT request_hash,result_json FROM canonical_customer_contacts WHERE operation_id=?1').bind(b.operation_id).first();
     if(replay)return replay.request_hash===hash?json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true}):json({error:'operation_id_conflict'},409);
+    const crossed=await foreignOperationRead(db,b.operation_id,ledgers,['canonical_customer_contacts']).first();
+    if(crossed)return json(crossLedgerConflict(b.operation_id,crossed),409);
     const current=await db.prepare('SELECT COALESCE(MAX(revision),0) revision FROM canonical_customer_contacts WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
     if(Number(current.revision)!==b.expected_contact_revision)return json({error:'stale_contact'},409);
     const raced=identity&&b.document?await documentOwner(db,b.promotion_id,b.document,b.customer_id):null;
