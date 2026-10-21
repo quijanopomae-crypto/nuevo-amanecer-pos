@@ -53,7 +53,7 @@ test('reporte: une local y CANON, ignora movimientos normales, fecha de Lima', (
   assert.equal(csv[1], 'Leche,Vencido,-3,Luis · C-2,lote L1'.replace(/^/, '20/10/2026 22:30,'));
 });
 
-function ownerCtx(extra) { return context({ NA_ROLES: { isOwner: () => true }, NA_PERMISSIONS: PERMISSIONS, ...extra }); }
+function ownerCtx(extra) { return context({ NA_ROLES: { isOwner: () => true }, NA_PERMISSIONS: PERMISSIONS, crypto: globalThis.crypto, ...extra }); }
 
 test('modo local: pasa por applyInventoryMovement (nunca escribe stock), guarda y revierte si no persiste', async () => {
   const calls = [];
@@ -315,4 +315,34 @@ test('salidas no superan el stock; una Corrección que suma no pasa de stock + M
     applyInventoryMovement(o) { calls.push(o); return { ok: true, movement: o }; }, saveAllData: async () => ({ persisted: true }), _naWasPersisted: r => !!r?.persisted });
   for (const quantity of [1e12, 0.001, NaN, Infinity, 6]) assert.equal((await local.NA_AJUSTES_INVENTARIO.register({ productId: 3, type: 'merma', quantity })).ok, false, String(quantity));
   assert.equal(calls.length, 0);
+});
+
+test('rechazo: solo se descarta la entrada del diario con el operation_id de ESTE ajuste', async () => {
+  // Coincide: el operation_id enviado (UUID) es el del diario → se descarta.
+  const ok = rejectingCanon('expired_lots_confirmation_required', 409);
+  const r1 = await ownerCtx({ NuevoAmanecerCanonical: ok.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
+  assert.match(r1.message, /^Este producto solo tiene stock en lotes vencidos/);
+  assert.equal(ok.state.discards, 1);
+  // No coincide: el diario tiene otra operación (p. ej. un movimiento de Inventario) → no se descarta.
+  const other = rejectingCanon('stale_stock', 409);
+  const adjust = other.client.adjustInventory;
+  other.client.adjustInventory = async b => { try { await adjust(b); } catch (e) { other.state.journal.payload = { ...b, operation_id: '00000000-0000-4000-8000-000000000000' }; throw e; } };
+  const r2 = await ownerCtx({ NuevoAmanecerCanonical: other.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
+  assert.equal(r2.ok, false);
+  assert.equal(other.state.discards, 0, 'no descarta una operación ajena');
+  assert.notEqual(other.state.journal, null);
+  assert.equal(r2.pending, true);
+  assert.match(r2.message, /no es este ajuste \(stale_stock\)\. No se descartó/);
+  // Sin operation_id propio (sin crypto.randomUUID) tampoco se descarta.
+  const nocrypto = rejectingCanon('stale_stock', 409);
+  const r3 = await context({ NA_ROLES: { isOwner: () => true }, NA_PERMISSIONS: PERMISSIONS, NuevoAmanecerCanonical: nocrypto.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
+  assert.equal(r3.ok, false); assert.equal(nocrypto.state.discards, 0);
+});
+
+test('el ajuste envía su propio operation_id (UUID)', async () => {
+  const sent = [];
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', stock: 4 }], inventoryMovements: [] }),
+    adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} } });
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 })).ok, true);
+  assert.match(sent[0].operation_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 });
