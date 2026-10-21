@@ -23,8 +23,8 @@ const ACTIVE_MIGRATIONS = [
   '0033_canonical_expense_server_received_at.sql',
 ];
 
-export async function activeCanon(t, { migrations = [] } = {}) {
-  const f = await a6Fixture(t);
+export async function activeCanon(t, { migrations = [], rows } = {}) {
+  const f = await a6Fixture(t, rows ? { rows } : undefined);
   await response(await f.freeze(), 201);
   await response(await f.promote(), 201);
   // Test-only transition; production activation remains separately gated.

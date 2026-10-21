@@ -4,6 +4,7 @@ import { getDatabase } from './database-binding.js';
 import { rememberLotSchema, lotsReady } from './stock-lots.js';
 import { A6_FIELD_MAP, A6_MAPPING_VERSION, A6_POLICY, A6_SCHEMA_VERSION, a6PolicyHash, mapStagingRow } from './a6-mapping.js';
 import { buildManifest, sha256Hex, stableStringify } from './a5-import-core.js';
+import { canDo } from './pos-permissions.js';
 
 const HASH = /^[0-9a-f]{64}$/;
 const PROMOTE_FIELDS = ['operation_id','promotion_id','import_id','expected_source_hash','expected_manifest_hash','expected_transform_version','expected_staging_revision','mapping_version','schema_version','policy_hash','expected_control_revision'];
@@ -63,7 +64,10 @@ export async function handleA6(request, url, env, helpers) {
     if (request.method !== 'GET') return helpers.json({ error:'method_not_allowed' },405,{ allow:'GET, OPTIONS' });
     const access = await authorizeCanonicalRead(request,env,helpers); if (access.denied) return access.denied;
     // Business expenses are owner-only; employees get them omitted from the bulk snapshot.
-    return canonicalRead(url,getDatabase(env),helpers.json,access.role === 'empleado' ? { omitExpenses:true } : {});
+    // T-46: purchase cost and supplier/invoice are owner-only too (same rule as /auth/purchases,
+    // purchases.costs.view). Owner output is untouched (no option => identical bytes).
+    const restricted = access.role != null && !canDo(access.role, 'purchases.costs.view');
+    return canonicalRead(url,getDatabase(env),helpers.json,access.role === 'empleado' || restricted ? { omitExpenses:access.role === 'empleado', redactCosts:restricted } : {});
   }
 
   const localDenied = a6LocalDenied(url, env, helpers.json);
@@ -451,6 +455,16 @@ async function rollback(body,deviceId,credentialHash,manifest,db,json){
   return json(result,201);
 }
 
+// T-46: what a role without purchases.costs.view must never receive from canonical reads.
+const PRODUCT_COST_FIELDS=['cost_cents'];
+export function redactCanonicalItem(sqlName,item){
+  if(sqlName==='products'){for(const field of PRODUCT_COST_FIELDS)delete item[field];return item;}
+  // Purchase entries carry supplier and invoice in the reason ('Compra <proveedor> <comprobante> <id>, línea N: +q').
+  if(sqlName==='inventory_movements'&&typeof item.reason==='string'&&/^Compra\b/.test(item.reason)){
+    const tail=/, (línea \d+: .*)$/.exec(item.reason);item.reason=tail?'Compra, '+tail[1]:'Compra';
+  }
+  return item;
+}
 export async function canonicalRead(url,db,json,options={}){
   const type=url.pathname.slice('/read/canonical/'.length);if(!READ_TABLES.has(type)&&type!=='status'&&type!=='snapshot')return json({error:'not_found'},404);
   // Subrequest budget: with Turso every statement is one external fetch, so the
@@ -477,6 +491,7 @@ export async function canonicalRead(url,db,json,options={}){
     delete item.read_key;
     // Preserve the imported read shape; only LIVE entries carry ledger metadata.
     if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
+    if(options.redactCosts)redactCanonicalItem(sqlName,item);
   }
   return json({...readMeta(before),items:selected,next_cursor:source.length>page.limit?encodeCursor({promotion_id:before.active_promotion_id,authority_epoch:Number(before.authority_epoch),revision:Number(before.revision),...(before.mode==='ACTIVE'?{financial_revision:before.financial_revision}:{}),key:lastKey}):null,limit:page.limit});
 }
@@ -488,6 +503,8 @@ async function loadCollectionRows(db,type,before,page,schema=null){
     // statement (no extra subrequest). Stock columns always come from the base row.
     const cols=(alias)=>TABLES.products.map(column=>column==='product_id'?`${alias}.product_id`
       :column==='legacy_alternate_code'?`CASE WHEN r.product_id IS NULL THEN ${alias}.legacy_alternate_code ELSE NULL END AS legacy_alternate_code`
+      // B2 (#886): mismo criterio que REVISION_COST_SQL (a6-products.js); una revisión cost_kept_null no aporta costo.
+      :column==='cost_cents'?`CASE WHEN r.product_id IS NULL OR json_extract(r.result_json,'$.cost_kept_null')=1 THEN ${alias}.cost_cents ELSE r.cost_cents END AS cost_cents`
       :PRODUCT_REVISION_FIELDS.includes(column)?`CASE WHEN r.product_id IS NULL THEN ${alias}.${column} ELSE r.${column} END AS ${column}`
       :`${alias}.${column}`).join(',');
     const latest=`LEFT JOIN canonical_product_revisions r ON r.promotion_id=?1 AND r.product_id=%A.product_id
@@ -762,6 +779,7 @@ async function canonicalSnapshot(db,json,before,plan,options={}){
       for(const item of selected){
         delete item.read_key;
         if(sqlName==='credit_payments'&&item.provenance==='IMPORT')for(const field of ['provenance','operation_id','credit_provenance','credit_delta_cents','cash_delta_cents','session_id','reason','compensates_operation_id'])delete item[field];
+        if(options.redactCosts)redactCanonicalItem(sqlName,item);
       }
       items.push(...selected);
       const mid=await plan.current();

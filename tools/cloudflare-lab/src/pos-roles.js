@@ -110,6 +110,10 @@ export async function flagReview(db, flag) {
 }
 // Venta de un aparato empleado por debajo del precio del catálogo: nunca se rechaza (las ventas
 // sin internet no se pierden); queda «descuento por autorizar» para el dueño.
+// Capacidades del Worker que la web consulta en /auth/me (aditivo). product_update_absent_cost:
+// product.update acepta cost_cents ausente y conserva el costo actual (B2, #886).
+export const WORKER_CAPABILITIES = Object.freeze({ product_update_absent_cost: true });
+
 export async function flagSaleDiscount(db, deviceId, saleId) {
   if (!saleId || (await posRoleFor(db, deviceId)) !== 'empleado') return false;
   // Precio vigente = última revisión (product.update) o el del producto importado / creado en vivo.
@@ -212,8 +216,8 @@ export async function handleRoles(request, url, env, { json, authorizeSession, g
       try {
         pinSet = !!(await pinRow(db));
         label = (await db.prepare('SELECT label FROM pos_device_roles WHERE device_id=?1').bind(auth.principalId).first())?.label ?? null;
-      } catch (e) { if (!missingTable(e)) throw e; return json({ pos_role: role, owner_pin_set: false, roles_ready: false, device_id: auth.principalId }); }
-      return json({ pos_role: role, owner_pin_set: pinSet, roles_ready: true, device_id: auth.principalId, label });
+      } catch (e) { if (!missingTable(e)) throw e; return json({ pos_role: role, owner_pin_set: false, roles_ready: false, device_id: auth.principalId, capabilities: WORKER_CAPABILITIES }); }
+      return json({ pos_role: role, owner_pin_set: pinSet, roles_ready: true, device_id: auth.principalId, label, capabilities: WORKER_CAPABILITIES });
     }
     if (path === '/settings' && request.method === 'GET') {
       const rows = (await db.prepare('SELECT key,value_json,revision,updated_at FROM pos_settings WHERE key NOT LIKE \'internal:%\' ORDER BY key').all()).results || [];
