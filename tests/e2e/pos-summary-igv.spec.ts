@@ -229,3 +229,28 @@ test.describe('TOTAL del teléfono conserva su diseño anterior', () => {
     await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
   });
 });
+
+for (const width of [768, 1366]) {
+  test(`POS muestra separadores de miles en ${width}px sin modificar cálculos ni desbordar el Total`, async ({ page }) => {
+    await prepare(page, width);
+    await page.evaluate(() => window.eval('cart[0].precio=111110; posUpdateCart(); posRender()'));
+    const total = page.locator('#posTotal');
+    await expect(total).toHaveText('S/ 111,110.00');
+    await expect(page.locator('#pagePOS .ci-sub')).toContainText('S/ 111,110.00');
+    await expect(page.locator('[data-product-id="SUMMARY-A"] .p-price-badge')).toContainText('S/ 111,110.00');
+    for (const enabled of [false, true]) {
+      await setIgVisible(page, enabled);
+      await expect(total).toHaveText('S/ 111,110.00');
+      const layout = await page.evaluate(() => {
+        const bar = document.querySelector('#pagePOS .cart-totals')!.getBoundingClientRect();
+        const main = document.querySelector('#pagePOS .total-main')!.getBoundingClientRect();
+        const label = document.querySelector('#pagePOS .total-main>span:first-child')!.getBoundingClientRect();
+        const amount = document.querySelector('#posTotal')!.getBoundingClientRect();
+        return { height: bar.height, within: label.left >= main.left - 1 && amount.right <= main.right + 1 };
+      });
+      expect(layout).toMatchObject({ height: 44, within: true });
+    }
+    const raw = await page.evaluate(() => window.eval('({precio:cart[0].precio, total:_naTaxBreakdownForSaleItems(cart, !!appConfig.igvActive).totalVenta})'));
+    expect(raw).toMatchObject({ precio: 111110, total: 111110 });
+  });
+}
