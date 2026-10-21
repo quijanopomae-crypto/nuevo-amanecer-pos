@@ -23,6 +23,11 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', dark: boolean) {
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed && !!(window as any).NA_SUGERENCIA_COMPRA, role);
+  await seedM6(page, dark);
+  return { errors, writes };
+}
+
+async function seedM6(page: Page, dark: boolean) {
   await page.evaluate(dark => {
     const w = window as any;
     document.body.classList.toggle('dark', dark);
@@ -33,7 +38,6 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', dark: boolean) {
       { id: 'm6-3', name: 'Sobrado', stock: 99, stockMin: 5, costo: 1, precio: 2, activo: true }
     ]) + '; ventas = ' + JSON.stringify([{ id: 'v1', fecha: ago(2), items: [{ id: 'm6-1', qty: 4, precio: 5 }] }]));
   }, dark);
-  return { errors, writes };
 }
 
 async function contrast(el: any) {
@@ -120,4 +124,74 @@ test('el empleado no ve la sugerencia', async ({ page }) => {
   expect(await page.evaluate(() => { const a = (window as any).NA_SUGERENCIA_COMPRA; return { r: a.render(), e: a.exportCsv(), p: a.printPlan() }; })).toEqual({ r: false, e: false, p: false });
   await expect(page.locator(`${screenId} [data-sc-content]`)).toBeEmpty();
   await expect(page.locator(`${screenId} [data-sc-status]`)).toContainText('Sin permiso');
+});
+
+// Revisión #855: lo editado en «A pedir» no se pierde al volver a renderizar (na:role, clase active,
+// salir y volver a la pantalla, Recalcular); «Usar sugeridos» vuelve a la sugerencia.
+test('las cantidades editadas sobreviven a na:role, al cambio de clase y a salir y volver', async ({ page }) => {
+  const { errors, writes } = await rolePage(page, 'owner', false);
+  // La carga inicial (loadAllData: IndexedDB + normalización) es asíncrona; se espera a que termine y se
+  // vuelven a sembrar los datos sintéticos para que no los reemplace a mitad de la prueba.
+  await page.waitForLoadState('networkidle');
+  await seedM6(page, false);
+  const screen = page.locator(screenId);
+  await page.evaluate(() => (window as any).goPage('pageSugerenciaCompra'));
+  await expect(screen).toHaveClass(/\bactive\b/);
+  const arroz = screen.locator('[data-sc-row="id:m6-1"] [data-sc-qty]');
+  const azucar = screen.locator('[data-sc-row="id:m6-2"] [data-sc-qty]');
+  const reset = screen.locator('[data-sc-reset]');
+  const totals = screen.locator('[data-sc-totals]');
+  await expect(arroz).toHaveValue('7');
+  await expect(reset).toBeDisabled();
+
+  await arroz.fill('12');
+  await arroz.blur();
+  await screen.locator('[data-sc-row="id:m6-2"] [data-sc-remove]').click();
+  const edited = '1 producto · 12 unidades · costo estimado S/ 36.00';
+  await expect(totals).toHaveText(edited);
+  await expect(reset).toBeEnabled();
+
+  const expectEdited = async (why: string) => {
+    await expect(arroz, why).toHaveValue('12');
+    await expect(azucar, why).toHaveValue('0');
+    await expect(screen.locator('[data-sc-row="id:m6-2"]'), why).toHaveAttribute('data-sc-zero', '');
+    await expect(totals, why).toHaveText(edited);
+    await expect(reset, why).toBeEnabled();
+  };
+
+  // 1) Evento de rol (render(true) desde el listener de na:role); se marca el DOM para probar que se redibujó.
+  await arroz.evaluate(el => { (el as any).__old = true; });
+  await page.evaluate(() => window.dispatchEvent(new Event('na:role')));
+  await expect.poll(() => arroz.evaluate(el => !!(el as any).__old)).toBe(false);
+  await expectEdited('tras na:role');
+
+  // 2) La pantalla deja de estar activa y vuelve (MutationObserver de clase).
+  await arroz.evaluate(el => { (el as any).__old = true; });
+  await screen.evaluate(el => { el.classList.remove('active'); });
+  await screen.evaluate(el => { el.classList.add('active'); });
+  await expect.poll(() => arroz.evaluate(el => !!(el as any).__old)).toBe(false);
+  await expectEdited('tras alternar la clase active');
+
+  // 3) Salir a otra pantalla y volver.
+  await page.evaluate(() => (window as any).goPage('pageProximamente'));
+  await expect(screen).not.toHaveClass(/\bactive\b/);
+  await page.evaluate(() => (window as any).goPage('pageSugerenciaCompra'));
+  await expect(screen).toHaveClass(/\bactive\b/);
+  await expectEdited('tras salir y volver');
+
+  // 4) Recalcular conserva lo editado.
+  await screen.locator('[data-sc-recalc]').click();
+  await expectEdited('tras Recalcular');
+
+  // 5) Usar sugeridos descarta lo editado y también tras otro render.
+  await reset.click();
+  await expect(arroz).toHaveValue('7');
+  await expect(azucar).toHaveValue('3');
+  await expect(totals).toHaveText('2 productos · 10 unidades · costo estimado S/ 27.00');
+  await expect(reset).toBeDisabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('na:role')));
+  await expect(arroz).toHaveValue('7');
+
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
 });

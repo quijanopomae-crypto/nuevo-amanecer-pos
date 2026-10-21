@@ -110,3 +110,29 @@ test('el empleado no ve el reporte ni el valor', async ({ page }) => {
   await expect(page.locator(`${screenId} [data-psm-content]`)).toBeEmpty();
   await expect(page.locator(`${screenId} [data-psm-status]`)).toContainText('Sin permiso');
 });
+
+// Revisión #854: sin stock (0 o negativo) no es stock inmovilizado; «Incluir sin stock» lo muestra.
+test('por defecto excluye stock ≤ 0; «Incluir sin stock» lo muestra', async ({ page }) => {
+  const { errors, writes } = await rolePage(page, 'owner', false);
+  await page.waitForLoadState('networkidle'); // loadAllData (IndexedDB) termina antes de sembrar
+  await page.evaluate(() => (window as any).eval('productos = ' + JSON.stringify([
+    { id: 'm5-3', name: 'Nunca vendido', stock: 10, costo: 0, precio: 3, activo: true },
+    { id: 'm5-0', name: 'Agotado', stock: 0, costo: 1, precio: 2, activo: true },
+    { id: 'm5-n', name: 'Stock negativo', stock: -3, costo: 1, precio: 2, activo: true }
+  ]) + '; ventas = []'));
+  await page.evaluate(() => (window as any).goPage('pageProductosSinMovimiento'));
+  const screen = page.locator(screenId);
+  const check = screen.locator('[data-psm-no-stock]');
+  await expect(check).not.toBeChecked();
+  await expect(screen.locator('[data-psm-row="id:m5-3"]')).toHaveCount(1);
+  await expect(screen.locator('[data-psm-row="id:m5-0"]')).toHaveCount(0);
+  await expect(screen.locator('[data-psm-row="id:m5-n"]')).toHaveCount(0);
+  await check.check();
+  await expect(screen.locator('[data-psm-row="id:m5-0"]')).toHaveCount(1);
+  await expect(screen.locator('[data-psm-row="id:m5-n"]')).toHaveCount(1);
+  await check.uncheck();
+  await expect(screen.locator('[data-psm-row="id:m5-0"]')).toHaveCount(0);
+  await expect(screen.locator('[data-psm-row="id:m5-n"]')).toHaveCount(0);
+  expect(writes).toEqual([]);
+  expect(errors).toEqual([]);
+});
