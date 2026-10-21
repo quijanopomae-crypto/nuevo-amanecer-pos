@@ -163,6 +163,8 @@ const PRECACHE_URLS = [
   './js/modules/client-credit-accounts-v2.js',
   './css/clientes-reporte-deuda.css',
   './js/modules/clientes-reporte-deuda.js',
+  './css/clientes-deudores-caja.css',
+  './js/modules/clientes-deudores-caja.js',
   './js/compat/legacy-globals.js',
   './js/app.js',
   './js/canon-pos-reference-ui.js',
