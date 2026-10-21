@@ -10,7 +10,7 @@ import { TursoD1Adapter } from '../../cloudflare-lab/src/turso-d1-adapter.js';
 import { healthy, encryptBackup } from './turso-customer-contacts-maintenance.mjs';
 
 export const migrationPath='infra/database/migrations/0034_price_history.sql';
-export const migrationHash='f3ac2755d1054f68dc97782056df2fe57ff61f8ed5d5d8b22592909d402d1153';
+export const migrationHash='9ae36d254d6f093c9d2c221db207a5f1bc15ce2e114968357f0ae12cb26a6520';
 export const backupPath='/tmp/turso-migration-0034-backup.json';
 export function migrationUnits(source){
   if(createHash('sha256').update(source).digest('hex')!==migrationHash)throw new Error('migration 0034 hash mismatch');

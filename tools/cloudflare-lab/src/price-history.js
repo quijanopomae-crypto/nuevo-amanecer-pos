@@ -55,7 +55,8 @@ async function validPurchaseRef(db, v) {
 }
 
 async function ready(db) { return !!(await db.prepare("SELECT 1 ok FROM sqlite_master WHERE type='table' AND name='price_history'").first()); }
-function roleOf(auth) { return auth.posRole === 'empleado' ? 'empleado' : 'owner'; }
+// Falla cerrado: solo 'owner' explícito es dueño; vacío, desconocido o ausente = empleado.
+export function roleOf(auth) { return auth && auth.posRole === 'owner' ? 'owner' : 'empleado'; }
 const visible = seeCost => " AND (review_status IS NULL OR review_status='approved')" + (seeCost ? '' : " AND field<>'costo'");
 const limitOf = (v, def, max) => { const n = Number(v); return Number.isSafeInteger(n) && n >= 1 ? Math.min(n, max) : def; };
 
@@ -78,7 +79,7 @@ async function batch(request, db, auth, json) {
         String(auth.principalId || 'unknown'), receivedAt, v.legacy_id, review).first();
     if (inserted) { results.push({ change_id: v.change_id, status: 'inserted', ...(review ? { review: 'pending' } : {}) }); continue; }
     let existing = await db.prepare('SELECT * FROM price_history WHERE change_id=?1').bind(v.change_id).first();
-    if (!existing && v.ref) existing = await db.prepare('SELECT * FROM price_history WHERE ref=?1 AND field=?2').bind(v.ref, v.field).first();
+    if (!existing && v.ref) existing = await db.prepare("SELECT * FROM price_history WHERE ref=?1 AND field=?2 AND (review_status IS NULL OR review_status='approved')").bind(v.ref, v.field).first();
     results.push({ change_id: v.change_id, status: existing && same(existing, v) ? 'duplicate' : 'conflict' });
   }
   return json({ results });
@@ -124,6 +125,11 @@ export async function priceHistoryRoute(request, env, auth, json) {
     let b; try { b = await request.json(); } catch { return json({ error: 'invalid_json' }, 400); }
     if (!b || typeof b.change_id !== 'string' || !CHANGE_ID.test(b.change_id) || !['approved', 'rejected'].includes(b.decision)) return json({ error: 'invalid_review' }, 400);
     // Solo pending -> approved|rejected (una vez). Nunca cambia el costo del producto.
+    // Aprobar una pendiente cuya (ref, field) ya tiene el registro real: 409, no se duplica.
+    if (b.decision === 'approved') {
+      const taken = await db.prepare("SELECT 1 ok FROM price_history p JOIN price_history q ON q.ref=p.ref AND q.field=p.field AND q.change_id<>p.change_id AND (q.review_status IS NULL OR q.review_status='approved') WHERE p.change_id=?1 AND p.review_status='pending' AND p.ref IS NOT NULL").bind(b.change_id).first();
+      if (taken) return json({ error: 'ref_already_recorded' }, 409);
+    }
     const done = await db.prepare("UPDATE price_history SET review_status=?2 WHERE change_id=?1 AND review_status='pending' RETURNING change_id,review_status").bind(b.change_id, b.decision).first();
     if (done) return json({ change_id: done.change_id, review_status: done.review_status });
     const row = await db.prepare('SELECT review_status FROM price_history WHERE change_id=?1').bind(b.change_id).first();

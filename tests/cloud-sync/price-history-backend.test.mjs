@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { activeCanon } from './canon-browser-harness.mjs';
+import { roleOf, priceHistoryRoute } from '../../tools/cloudflare-lab/src/price-history.js';
 
 const read = n => readFileSync(new URL('../../infra/database/migrations/' + n, import.meta.url), 'utf8');
 const H = token => ({ authorization: 'Bearer ' + token, 'content-type': 'application/json' });
@@ -118,4 +119,34 @@ test('paginación por changed_at/change_id y changes por received_at', async t =
 test('sin migración 0034: 503 schema_not_ready (la web sigue solo local)', async t => {
   const f = await setup(t, { schema: false });
   assert.deepEqual([(await batch(f, 'owner-token', [e('z')])).status], [503]);
+});
+
+test('rol falla cerrado: solo posRole=owner es dueño; vacío/desconocido/ausente = empleado (sin costo)', async t => {
+  assert.equal(roleOf({ posRole: 'owner' }), 'owner');
+  for (const a of [{ posRole: '' }, { posRole: 'unknown' }, { posRole: 'Owner' }, {}, null, undefined]) assert.equal(roleOf(a), 'empleado', JSON.stringify(a));
+  const f = await setup(t);
+  await batch(f, 'owner-token', [e('v'), e('c', { field: 'costo', before_cents: 300, after_cents: 321 })]);
+  const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } });
+  for (const posRole of ['', 'unknown', undefined]) {
+    const r = await priceHistoryRoute(new Request('http://localhost/auth/price-history?product_id=00003'), f.env, { posRole, principalId: 'x' }, json);
+    const body = await r.json();
+    assert.deepEqual(body.rows.map(x => x.field), ['venta'], 'rol ' + String(posRole) + ' no ve costo');
+    const q = await priceHistoryRoute(new Request('http://localhost/auth/price-history/reviews'), f.env, { posRole, principalId: 'x' }, json);
+    assert.equal(q.status, 403);
+  }
+});
+
+test('costo falso de empleado (pendiente) sobre una ref de compra no bloquea el registro real del dueño', async t => {
+  const f = await setup(t);
+  const fake = await batch(f, 'emp-token', [e('fake', { field: 'costo', origin: 'compra', ref: 'PUR-55:1', before_cents: 300, after_cents: 1 })]);
+  assert.deepEqual([fake.body.results[0].status, fake.body.results[0].review], ['inserted', 'pending']);
+  const real = await batch(f, 'owner-token', [e('real', { field: 'costo', origin: 'compra', ref: 'PUR-55:1', before_cents: 300, after_cents: 340 })]);
+  assert.equal(real.body.results[0].status, 'inserted');
+  const own = await call(f, '/auth/price-history?product_id=00003', 'owner-token');
+  assert.deepEqual(own.body.rows.map(x => [x.change_id, x.after_cents]), [['ph1:real', 340]]);
+  const again = await batch(f, 'owner-token', [e('real2', { field: 'costo', origin: 'compra', ref: 'PUR-55:1', before_cents: 300, after_cents: 340 })]);
+  assert.equal(again.body.results[0].status, 'duplicate', 'la ref real sigue siendo única');
+  const ap = await call(f, '/auth/price-history/review', 'owner-token', { change_id: 'ph1:fake', decision: 'approved' });
+  assert.deepEqual([ap.status, ap.body.error], [409, 'ref_already_recorded']);
+  assert.equal((await call(f, '/auth/price-history/review', 'owner-token', { change_id: 'ph1:fake', decision: 'rejected' })).status, 200);
 });

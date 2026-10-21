@@ -276,3 +276,80 @@ test.describe('fecha en hora de Lima aunque el navegador esté en otra zona', ()
     await expect(page.locator('#pPriceHistory time')).toHaveText('20/10/2026 13:30');
   });
 });
+
+test('el historial no se desborda a 390, 768 ni 1366, en claro y en nocturno', async ({ page }) => {
+  test.setTimeout(60_000);
+  await setup(page);
+  await page.evaluate(id => {
+    const api = (window as any).NA_PRICE_HISTORY;
+    api.recordDiff({
+      productId: id, origin: 'ficha', user: 'Ana Dueña del puesto de abarrotes con nombre bien largo',
+      userId: 'hist-owner-device-identifier-largo', at: '2026-10-20T18:30:00.000Z',
+      before: { venta: 4.5, mayorista: null, costo: 2 }, after: { venta: 5.5, mayorista: 48, costo: 2.4 }
+    });
+    api.recordDiff({
+      productId: id, origin: 'importacion', user: 'Ana Dueña', userId: 'hist-owner-1', at: '2026-10-19T12:00:00.000Z',
+      partial: true, before: { venta: 4 }, after: { venta: 4.5 }
+    });
+  }, PRODUCT_ID);
+  await openForm(page);
+  for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
+    await page.setViewportSize({ width, height: width === 768 ? 1024 : 900 });
+    await page.evaluate(night => (window as any).NA_THEME.setMode(night ? 'noche' : 'claro'), dark);
+    if (dark) await expect(page.locator('body')).toHaveClass(/\bdark\b/);
+    else await expect(page.locator('body')).not.toHaveClass(/\bdark\b/);
+    await expect(page.locator('#pPriceHistory li').first()).toBeVisible();
+    await expectAllFit(page.locator('#mProd .modal'), '#pPriceHistory, #pPriceHistory *');
+  }
+});
+
+test('Venta e Inicio quedan igual que sin la hoja del historial', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await setup(page);
+  for (const id of ['pageMenu', 'pagePOS'] as const) {
+    await page.evaluate(target => target === 'pageMenu' ? (window as any).goMenu() : (window as any).NA_MENU_NAVIGATION.navigate(target), id);
+    await expect(page.locator('#' + id)).toHaveClass(/\bactive\b/);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(await page.locator(`#${id} #pPriceHistory`).count()).toBe(0);
+    await page.evaluate(() => {
+      for (const nodeId of ['saveStatus', 'gToast', 'localStatus']) {
+        const node = document.getElementById(nodeId);
+        if (node) node.style.visibility = 'hidden';
+      }
+    });
+    const side = page.locator('#posSidebar');
+    const sideVisible = await side.isVisible();
+    const before = await page.screenshot({ animations: 'disabled' });
+    const sideBefore = sideVisible ? await side.screenshot({ animations: 'disabled' }) : null;
+    const geometry = await page.evaluate(pageId => {
+      const root = document.getElementById(pageId);
+      const side = document.getElementById('posSidebar');
+      const sheet = [...document.styleSheets].find(item => item.href?.endsWith('/css/price-history.css'));
+      if (!root || !sheet) throw new Error('Falta la pantalla o price-history.css');
+      const measure = () => [...root.querySelectorAll(':scope > *, .pos-body > *, .home-shell > *'), ...(side ? [...side.querySelectorAll(':scope > *')] : [])].map(node => {
+        const rect = node.getBoundingClientRect();
+        const css = getComputedStyle(node);
+        return [node.className, Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), Math.round(rect.height), css.display, css.gridTemplateColumns];
+      });
+      const withFeature = measure();
+      sheet.disabled = true;
+      const baseline = measure();
+      return { withFeature, baseline };
+    }, id);
+    expect(geometry.withFeature.length).toBeGreaterThan(3);
+    expect(geometry.withFeature).toEqual(geometry.baseline);
+    const after = await page.screenshot({ animations: 'disabled' });
+    const sideAfter = sideVisible ? await side.screenshot({ animations: 'disabled' }) : null;
+    writeFileSync(test.info().outputPath(`${id}-con-historial.png`), before);
+    writeFileSync(test.info().outputPath(`${id}-base.png`), after);
+    expect(await samePixels(page, before, after)).toBe(true);
+    if (sideBefore && sideAfter) expect(await samePixels(page, sideBefore, sideAfter)).toBe(true);
+    await page.evaluate(() => {
+      const sheet = [...document.styleSheets].find(item => item.href?.endsWith('/css/price-history.css'));
+      if (sheet) sheet.disabled = false;
+    });
+  }
+  const sideText = await page.locator('#posSidebar').innerText();
+  expect(sideText).not.toContain('Historial de precios');
+});

@@ -19,4 +19,5 @@ CREATE TABLE IF NOT EXISTS price_history (
 );
 CREATE INDEX IF NOT EXISTS price_history_product ON price_history(product_id, changed_at DESC);
 CREATE INDEX IF NOT EXISTS price_history_received ON price_history(received_at, change_id);
-CREATE UNIQUE INDEX IF NOT EXISTS price_history_ref ON price_history(ref, field) WHERE ref IS NOT NULL;
+-- Una fila pendiente (o rechazada) de un empleado no ocupa la (ref, field): el registro real del dueño entra igual.
+CREATE UNIQUE INDEX IF NOT EXISTS price_history_ref ON price_history(ref, field) WHERE ref IS NOT NULL AND (review_status IS NULL OR review_status = 'approved');
