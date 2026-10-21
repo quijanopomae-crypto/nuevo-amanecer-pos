@@ -99,3 +99,14 @@ test('formato real del POS: una venta por caja cuenta como movimiento; anulada n
   assert.deepEqual(keys(api.buildReport(real, prods, { days: 30, now })), ['id:1700000000002']);
   assert.equal(api.buildReport(real, prods, { days: 30, now }).rows[0].lastSale, '', 'la venta anulada no cuenta como última venta');
 });
+
+test('ajustes de inventario (merma/corrección, Misión 7) no cuentan como venta ni movimiento de venta', () => {
+  const adj = t => 'ajuste:v1:' + JSON.stringify({ t, u: { n: 'Ana · "C" | 1', i: 'C-1' }, n: 'x' });
+  const movements = [
+    { id: 'a1', productId: 4, type: 'SALIDA', delta: -3, reason: adj('merma'), source: 'ADJUSTMENT', timestamp: day(1) },
+    { id: 'a2', productId: 4, type: 'ENTRADA', delta: 2, reason: adj('correccion'), source: 'ADJUSTMENT', timestamp: day(1) }
+  ];
+  const ctx = context({ inventoryMovements: movements });
+  assert.deepEqual(keys(ctx.NA_PRODUCTOS_SIN_MOVIMIENTO.buildReport(sales, products, { days: 30, now, movements })), ['id:4', 'id:2', 'id:3', 'id:6']);
+  assert.doesNotMatch(source, /inventoryMovements/, 'solo lee ventas');
+});
