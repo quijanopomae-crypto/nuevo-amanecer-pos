@@ -210,7 +210,11 @@
   // con credenciales solo lo que lleve la huella actual. Registros sin huella: ocultos (falla cerrada).
   function visible(record) { var fp = currentFp(); return !fp || !!(record && record.identity_fp === fp); }
   function visibleRecords(list) { return (Array.isArray(list) ? list : []).filter(visible); }
+  // Antes de tocar el almacenamiento (síncrono, también en onConfirmed): canonical-client.js descarta la memoria,
+  // la base/sellos y lo parcial de la identidad anterior, y toda lectura o escritura suya en vuelo queda anulada.
+  function resetCanonical() { try { var c = root.NuevoAmanecerCanonical; if (c && typeof c.resetForIdentityChange === 'function') c.resetForIdentityChange(); } catch (_) {} }
   function purge(reason) {
+    resetCanonical();
     var out = [], entry = { reason: reason, at: Date.now(), removed: out };
     state.purges.push(entry);
     purgeStorageSync(out);
@@ -302,7 +306,7 @@
       try {
         var c = root.NuevoAmanecerCanonical;
         // Lectura COMPLETA forzada: descarta lo parcial/afterCommit, la base y los sellos de la identidad anterior.
-        var read = c && (typeof c.refreshFull === 'function' ? function () { return c.refreshFull({ identityChanged: true }); } : typeof c.refresh === 'function' ? function () { return c.refresh(); } : null);
+        var read = c && (typeof c.refreshFull === 'function' ? function () { return c.refreshFull({ identityChanged: true, repurge: function () { return purge('confirmed-inflight-settled'); } }); } : typeof c.refresh === 'function' ? function () { return c.refresh(); } : null);
         if (read) read().then(function () { state.memoryFilter = false; }, function () {});
       } catch (_) {}
     });

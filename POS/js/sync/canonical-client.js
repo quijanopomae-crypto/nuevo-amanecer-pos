@@ -408,6 +408,7 @@
   // Cambio de identidad o de rol (cache-identity-guard.js): cada lectura en curso compara esta generación antes de
   // publicar o persistir, así nada leído con la identidad anterior llega a la nueva.
   var identityGeneration = 0;
+  function identityStillCurrent(generation) { return function () { return generation === identityGeneration; }; }
   // The replica last published from a complete (or targeted) authority read.
   function authorityBase(requireCurrent) {
     var base = publishedReplica;
@@ -809,7 +810,10 @@
       var stampStale = cacheValidatedAt === null || Date.now() - cacheValidatedAt > FULL_REVALIDATE_MS / 2 ||
         cache.remote_validated_context !== incoming.remote_validated_context || cache.remote_validated_build !== incoming.remote_validated_build;
       sameIdentity(); publishReplica(incoming, 'remote');
-      if ((!same || stampStale) && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming);
+      // stillCurrent: la escritura en cola (inline-02.js) vuelve a comprobar la identidad al momento de escribir.
+      if ((!same || stampStale) && typeof root._naWriteCanonicalReplica === 'function') await root._naWriteCanonicalReplica(incoming, identityStillCurrent(identityAtStart));
+      // La escritura se esperó: si la identidad cambió entretanto, esta lectura no deja nada «current».
+      sameIdentity();
       replicaState.validation = 'current'; notifyReplicaUpdate(); return snapshot();
     })();
     try { return await loading; } catch (error) {
@@ -847,8 +851,11 @@
   async function refreshFull(options) {
     if (options && options.identityChanged) resetForIdentityChange();
     forceFullRead = true;
-    // Una lectura en curso empezó antes: con identidad nueva falla en sameIdentity(); en todo caso se espera.
-    if (loading) { try { await loading; } catch (_) {} }
+    // Una lectura en curso empezó antes: con identidad nueva falla en sameIdentity(); en todo caso se espera, y si
+    // había una, options.repurge (el guardián) vuelve a depurar lo persistido por si una escritura suya aterrizó tarde.
+    var inflight = loading;
+    if (inflight) { try { await inflight; } catch (_) {} }
+    if (inflight && options && typeof options.repurge === 'function') { try { await options.repurge(); } catch (_) {} }
     forceFullRead = true; afterCommit = null;
     try { return await refresh(); } catch (error) { forceFullRead = true; throw error; }
   }
@@ -1642,7 +1649,7 @@
     if (typeof root._naWriteCanonicalReplica === 'function') {
       try {
         var projectedReplica = replicaOf(data);
-        Promise.resolve(root._naWriteCanonicalReplica(projectedReplica)).catch(function () {});
+        Promise.resolve(root._naWriteCanonicalReplica(projectedReplica, identityStillCurrent(identityGeneration))).catch(function () {});
       } catch (_) {}
     }
     return true;
@@ -1774,7 +1781,7 @@
     unchanged();
     // A retry must also fail before POST when storage has become unwritable.
     durableJournal(record);
-    var response, result, baseRevision = authorityBaseRevision();
+    var response, result, baseRevision = authorityBaseRevision(), identityAtSend = identityGeneration;
     try {
       var payment = record.command === 'payment.create' || record.command === 'payment.batch' ||
         ['cash.close','adjustment.create','expense.create','compensation.create'].includes(record.command);
@@ -1806,8 +1813,13 @@
         ((record.command !== 'sale.create' || result.status === 'created') && (result.promotion_id !== expected.promotion_id || result.authority_epoch !== expected.authority_epoch))) fail('CANONICAL_FINANCIAL_PENDING');
     // One atomic storage replacement both saves the receipt and clears PENDING.
     var confirmed = Object.assign({}, record, { state: 'CONFIRMED', receipt: copy(result) });
+    // La identidad cambió mientras el comando viajaba: el recibo (p. ej. cierre de caja del dueño con esperado,
+    // contado y diferencia) no se proyecta en memoria ni deja la réplica lista; el diario lo guarda sin montos de caja.
+    var identityMoved = identityAtSend !== identityGeneration;
+    if (identityMoved) { dropFields([confirmed.receipt], CLOSE_FIELD); dropFields(confirmed.receipt.receipts, CLOSE_FIELD); }
     durableJournal(confirmed);
     closeOnlyReady = false;
+    if (identityMoved) { ready = false; saleOnlyReady = false; forceFullRead = true; afterCommit = null; return copy(confirmed.receipt); }
     rememberCommit(record.command, record.payload, baseRevision, response.status === 201 && result.status === 'created');
     // The receipt is now durable. Publish only the exact affected payment so the
     // UI can update immediately while the full canonical reconciliation stays
@@ -2344,7 +2356,10 @@
   async function startPOS() {
     if (!enabled()) return null;
     warm();
+    var identityAtStart = identityGeneration;
     var cached = await localReplica();
+    // Cambio de identidad durante la lectura de la caché: esa réplica no se publica (la relectura completa decide).
+    if (cached && identityAtStart !== identityGeneration) return refresh();
     if (cached) {
       publishReplica(cached, 'cache');
       // Start the revalidation (its requests leave now) before rendering the cached view.
@@ -2364,7 +2379,7 @@
   }
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleOnlyReady = false; closeOnlyReady = false; } });
   root.addEventListener('offline', function () { ready = false; saleOnlyReady = false; closeOnlyReady = false; });
-  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, refreshFull: refreshFull, prepareCommand: prepareCommand, snapshot: snapshot,
+  root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, refreshFull: refreshFull, resetForIdentityChange: resetForIdentityChange, prepareCommand: prepareCommand, snapshot: snapshot,
     pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, resumePaymentBatch: resumePaymentBatch, releaseRejectedCashClose: releaseRejectedCashClose, releaseUncommittedCashClose: releaseUncommittedCashClose, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale, releaseRejectedSaleJournal: releaseRejectedSaleJournal, releaseRejectedFinancial: releaseRejectedFinancial, settleStrandedFinancial: settleStrandedFinancial,
     createProduct: createProduct, updateProduct: updateProduct, createCustomer: createCustomer, setCustomerContact: setCustomerContact, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense, updateExpense: function(input){return createCommand('expense.update',input);}, voidExpense: function(input){return createCommand('expense.void',input);},
     renderCredits: renderCredits, startPOS: startPOS, commandContext: function () { return commonPayload(); }, warm: warm, legacySnapshot: legacySnapshot, sourceState: sourceState, ping: ping, readProgress: function () { return copy(readProgress); } });

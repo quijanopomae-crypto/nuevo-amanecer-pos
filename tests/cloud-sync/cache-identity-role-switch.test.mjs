@@ -21,7 +21,7 @@ const replicaOf = (ls) => { const raw = ls.getItem('na_snapshot_v9'); return raw
 function replicaGlobals(ls) {
   return {
     _naReadCanonicalReplica: async () => replicaOf(ls),
-    _naWriteCanonicalReplica: async (value) => { const snap = JSON.parse(ls.getItem('na_snapshot_v9') || '{}'); snap.canonicalReplica = JSON.parse(JSON.stringify(value)); ls.setItem('na_snapshot_v9', JSON.stringify(snap)); return true; },
+    _naWriteCanonicalReplica: async (value, stillCurrent) => { if (typeof stillCurrent === 'function' && !stillCurrent()) return { ok: false, skipped: 'identity-changed' }; const snap = JSON.parse(ls.getItem('na_snapshot_v9') || '{}'); snap.canonicalReplica = JSON.parse(JSON.stringify(value)); ls.setItem('na_snapshot_v9', JSON.stringify(snap)); return true; },
   };
 }
 const setRole = (f, deviceId, role) => {
@@ -32,6 +32,8 @@ const setRole = (f, deviceId, role) => {
 async function tab(f, { token, deviceId, role, ls = storage(), onFetch, extra = {}, reload = false }) {
   ls.setItem('na_cloud_sync_credentials', JSON.stringify({ endpoint: 'http://localhost', token }));
   ls.setItem('na_cache_identity_v1', JSON.stringify({ v: 1, fp: fingerprint(token), role, device_id: 'session:' + deviceId }));
+  // Como pos-roles-client.js: el último rol confirmado por /auth/me queda en na_pos_role_v1 (el guardián lo compara, F1).
+  ls.setItem('na_pos_role_v1', JSON.stringify({ role }));
   setRole(f, deviceId, role);
   let captured = null;
   const globals = { ...replicaGlobals(ls), NA_ROLES: { confirmed: true, deviceId: 'session:' + deviceId, role }, __capture: (ctx) => { captured = ctx; }, ...extra };
@@ -42,6 +44,8 @@ async function tab(f, { token, deviceId, role, ls = storage(), onFetch, extra = 
 // /auth/me confirma otro rol: lo que hace pos-roles-client.js (NA_ROLES + evento na:role).
 async function switchRole(f, t, deviceId, role) {
   setRole(f, deviceId, role);
+  // pos-roles-client.js persiste el rol nuevo y luego emite na:role.
+  t.ls.setItem('na_pos_role_v1', JSON.stringify({ role }));
   t.context.NA_ROLES = { confirmed: true, deviceId: 'session:' + deviceId, role };
   t.context.dispatchEvent(new t.context.CustomEvent('na:role'));
 }
