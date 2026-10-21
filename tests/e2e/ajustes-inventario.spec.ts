@@ -127,6 +127,16 @@ for (const width of [390, 768, 1280]) {
     expect(await disabled()).toEqual(['rotura', 'vencido']);
     await expect(type).toHaveValue('merma');
     await expect(type.locator('option[value="vencido"]')).toHaveText('Vencido (no disponible con lotes)');
+    // Las opciones desactivadas se ven en gris, distinto de las habilitadas, en claro y en oscuro.
+    for (const [dark, expected] of [[false, 'rgb(100, 116, 139)'], [true, 'rgb(148, 163, 184)']] as const) {
+      await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
+      const colors = await type.evaluate((s: HTMLSelectElement) => Object.fromEntries([...s.options].map(o => [o.value, getComputedStyle(o).color])));
+      expect(colors.rotura, dark ? 'oscuro' : 'claro').toBe(expected);
+      expect(colors.vencido).toBe(expected);
+      expect(colors.merma).not.toBe(expected);
+      expect(colors.correccion).not.toBe(expected);
+    }
+    await page.evaluate(() => document.body.classList.remove('dark'));
     await expect(note).toBeVisible();
     await expect(note).toContainText('Este producto tiene lotes');
     await expect(note).toContainText('Se habilitarán cuando el servidor permita elegir el lote');
@@ -174,3 +184,57 @@ for (const width of [390, 768, 1280]) {
     await expect(note).toBeHidden();
   });
 }
+
+test('CANON: una Merma rechazada por lotes vencidos muestra el mensaje en español, no el código crudo', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await rolePage(page, 'owner');
+  await openCard(page);
+  await page.evaluate(() => {
+    const w = window as any;
+    const products = [{ product_id: 'c-exp', name: 'Leche solo vencida', stock: 2, lots: [{ lot_id: 'L-V', lot_code: 'L-V', expiry_date: '2026-10-01', received_at: '2026-09-01T00:00:00Z', quantity: 2 }] }];
+    let journal: any = null;
+    w.NuevoAmanecerCanonical = { ...(w.NuevoAmanecerCanonical || {}), enabled: () => true, snapshot: () => ({ products, inventoryMovements: [] }), refresh: async () => {},
+      adjustInventory: async (b: any) => { journal = { state: 'PENDING', command: 'inventory.adjust', payload: b, last_error: 'expired_lots_confirmation_required', last_status: 409 }; throw new Error('CANONICAL_FINANCIAL_REJECTED_409'); },
+      pendingSnapshot: () => journal, discardRejectedInventory: async () => { journal = null; w.__ajDiscarded = true; return true; } };
+    w.NA_AJUSTES_INVENTARIO.render();
+  });
+  const screen = page.locator('#pageAjustesInventario'), msg = screen.locator('[data-aj-message]');
+  await screen.locator('[data-aj-product]').selectOption('c-exp');
+  await expect(screen.locator('[data-aj-type]')).toHaveValue('merma');
+  await screen.locator('[data-aj-qty]').fill('1');
+  await screen.locator('[data-aj-submit]').click();
+  await expect(msg).toContainText('Este producto solo tiene stock en lotes vencidos');
+  await expect(msg).toContainText('botón «Salida»');
+  await expect(msg).toHaveAttribute('data-aj-ok', 'false');
+  await expect(msg).not.toContainText('EXPIRED');
+  await expect(msg).not.toContainText('CANONICAL_FINANCIAL');
+  expect(await page.evaluate(() => (window as any).__ajDiscarded)).toBe(true);
+});
+
+test('cantidad: el campo valida en vivo (enteros, stock, tope) y register() rechaza lo mismo', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await rolePage(page, 'owner');
+  await seed(page);
+  await openCard(page);
+  const screen = page.locator('#pageAjustesInventario'), qty = screen.locator('[data-aj-qty]'), err = screen.locator('[data-aj-qty-error]');
+  await screen.locator('[data-aj-product]').selectOption('aj-1');
+  await screen.locator('[data-aj-type]').selectOption('merma');
+  await expect(qty).toHaveAttribute('step', '1');
+  await expect(qty).toHaveAttribute('max', '1000000');
+  for (const [value, text] of [['0.5', 'unidades enteras'], ['11', 'más que el stock actual (10)'], ['0', 'mayor que 0'], ['1000000000000', 'no puede superar']]) {
+    await qty.fill(value);
+    await expect(err).toBeVisible();
+    await expect(err).toContainText(text);
+    await expect(qty).toHaveAttribute('aria-invalid', 'true');
+  }
+  await qty.fill('0.5');
+  await screen.locator('[data-aj-submit]').click();
+  await expect(screen.locator('[data-aj-message]')).toContainText('unidades enteras');
+  expect(await page.evaluate(() => (window as any).eval('productos.find(x=>x.id==="aj-1").stock'))).toBe(10);
+  await qty.fill('2');
+  await expect(err).toBeHidden();
+  await expect(qty).not.toHaveAttribute('aria-invalid', 'true');
+  await screen.locator('[data-aj-submit]').click();
+  await expect(screen.locator('[data-aj-message]')).toHaveText('Ajuste registrado.');
+  expect(await page.evaluate(() => (window as any).eval('productos.find(x=>x.id==="aj-1").stock'))).toBe(8);
+});

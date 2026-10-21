@@ -173,3 +173,146 @@ test('modo local: Rotura/Vencido con lotes tampoco llaman a applyInventoryMoveme
   assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 9, type: 'merma', quantity: 1 })).ok, true);
   assert.equal(calls.length, 1);
 });
+
+// Mensajes en español en vez de códigos crudos de CANON.
+function rejectingCanon(lastError, lastStatus, { discardable = true } = {}) {
+  const state = { journal: null, discards: 0, sent: 0 };
+  const products = [{ product_id: 'p-exp', name: 'Leche', stock: 2, lots: [{ lot_id: 'L-V', lot_code: 'L-V', expiry_date: '2026-10-01', received_at: '2026-09-01T00:00:00Z', quantity: 2 }] }];
+  const client = { enabled: () => true, snapshot: () => ({ products, inventoryMovements: [] }), refresh: async () => {},
+    // Igual que canonical-client: el rechazo deja el comando PENDING en el diario y lanza CANONICAL_FINANCIAL_REJECTED_<status>.
+    adjustInventory: async b => { state.sent++; state.journal = { state: 'PENDING', command: 'inventory.adjust', payload: b, last_error: lastError, last_status: lastStatus }; throw new Error('CANONICAL_FINANCIAL_REJECTED_' + lastStatus); },
+    pendingSnapshot: () => state.journal && { ...state.journal },
+    discardRejectedInventory: async () => { state.discards++; if (!discardable) return false; state.journal = null; return true; } };
+  return { state, client };
+}
+
+test('Merma con stock solo en lotes vencidos: mensaje claro en español, sin el código crudo, y se libera el diario', async () => {
+  const { state, client } = rejectingCanon('expired_lots_confirmation_required', 409);
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: client });
+  const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
+  assert.equal(res.ok, false);
+  assert.equal(state.sent, 1);
+  assert.equal(res.code, 'expired_lots_confirmation_required');
+  assert.match(res.message, /^Este producto solo tiene stock en lotes vencidos/);
+  assert.match(res.message, /Inventario con el botón «Salida»/);
+  assert.match(res.message, /PIN del dueño/);
+  assert.match(res.message, /No se modificó el stock\.$/);
+  assert.doesNotMatch(res.message, /EXPIRED_LOTS|expired_lots|CANONICAL_FINANCIAL|REJECTED/);
+  assert.equal(state.discards, 1);
+  assert.equal(state.journal, null, 'el rechazo definitivo no deja el diario bloqueado');
+});
+
+test('otros códigos: mapeados en español; desconocidos conservan el código; un 5xx queda pendiente', async () => {
+  const m = api.canonMessage;
+  assert.match(m('INSUFFICIENT_PROJECTED_STOCK'), /ventas que aún se están enviando a CANON/);
+  assert.match(m('LOT_STOCK_RESERVED_BY_PENDING_SALE'), /lotes reservados por ventas pendientes/);
+  assert.match(m('INSUFFICIENT_CANONICAL_STOCK'), /No hay suficiente stock en CANON/);
+  assert.match(m('insufficient_stock'), /No hay suficiente stock en CANON/);
+  assert.match(m('stale_stock'), /El stock cambió en CANON/);
+  assert.match(m('CANONICAL_FINANCIAL_PENDING'), /pendiente de confirmar/);
+  assert.equal(m('ALGO_RARO'), 'CANON no registró el ajuste (ALGO_RARO).');
+  assert.equal(m('constructor'), 'CANON no registró el ajuste (constructor).', 'no usa claves heredadas');
+  // Error previo al envío (validación del cliente): se traduce directo.
+  const pre = ownerCtx({ NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', stock: 1 }], inventoryMovements: [] }),
+    adjustInventory: async () => { throw new Error('INSUFFICIENT_PROJECTED_STOCK'); } } });
+  assert.match((await pre.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 })).message, /ventas que aún se están enviando/);
+  // Rechazo definitivo con otro código del Worker.
+  const st = rejectingCanon('stale_stock', 409);
+  const r2 = await ownerCtx({ NuevoAmanecerCanonical: st.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'correccion', direction: 'sumar', quantity: 1 });
+  assert.match(r2.message, /El stock cambió en CANON/); assert.equal(st.state.journal, null);
+  // 5xx: no es definitivo; el diario sigue pendiente y no se dice «no se modificó».
+  const busy = rejectingCanon('HTTP_503', 503, { discardable: false });
+  const r3 = await ownerCtx({ NuevoAmanecerCanonical: busy.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
+  assert.equal(r3.pending, true);
+  assert.match(r3.message, /quedó pendiente en CANON \(HTTP_503\)\. No lo registres de nuevo/);
+  assert.notEqual(busy.state.journal, null);
+});
+
+test('tipos: rechaza claves heredadas (constructor, toString, __proto__, hasOwnProperty)', async () => {
+  for (const t of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+    assert.equal(api.isType(t), false, t);
+    assert.throws(() => api.encodeReason(t, { nombre: 'Ana', id: '1' }, ''), /TIPO_INVALIDO/, t);
+    assert.equal(api.plan(t, 1), null, t);
+    assert.equal(api.parseReason('ajuste:v1:' + JSON.stringify({ t, u: { n: 'Ana', i: '1' }, n: '' })), null, t);
+    assert.equal(api.lotBlocked(t, { lots: [{ quantity: 1 }] }), false, t);
+  }
+  for (const t of Object.keys(api.TYPES)) assert.equal(api.isType(t), true, t);
+  const sent = [];
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', stock: 4 }], inventoryMovements: [] }),
+    adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} } });
+  for (const t of ['constructor', 'toString']) assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: t, quantity: 1 })).ok, false, t);
+  assert.equal(sent.length, 0);
+  // El reporte ignora movimientos con tipo heredado.
+  assert.equal(api.collect([{ id: 'x', productId: 1, delta: -1, reason: 'ajuste:v1:{"t":"constructor","u":{"n":"a","i":""},"n":""}', timestamp: '2026-10-21T10:00:00Z' }], [], []).length, 0);
+});
+
+// Validación de cantidad en register() (no solo en el campo).
+function qtyCtx(products) {
+  const sent = [], calls = [];
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products, inventoryMovements: [] }),
+    adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} },
+    applyInventoryMovement(o) { calls.push(o); return { ok: true, movement: o }; } });
+  return { ctx, sent, calls };
+}
+const unitProduct = { product_id: 'u-1', name: 'Galleta', unit: 'unidad', stock: 50 };
+const kiloProduct = { product_id: 'k-1', name: 'Arroz a granel', unit: 'kilogramo', stock: 20 };
+
+test('cantidad 1e12: se rechaza por superar MAX_QTY, sin enviar', async () => {
+  const { ctx, sent } = qtyCtx([unitProduct]);
+  assert.equal(api.MAX_QTY, 1000000);
+  for (const direction of ['sumar', 'restar']) {
+    const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'correccion', direction, quantity: 1e12 });
+    assert.equal(res.ok, false); assert.equal(res.invalidQuantity, true);
+    assert.match(res.message, /no puede superar 1[\s.,\u00a0\u202f]?000[\s.,\u00a0\u202f]?000 por ajuste/);
+  }
+  assert.equal(sent.length, 0);
+});
+
+test('cantidad 0.001 en un producto por unidad: se rechaza (solo enteros); en kilogramo se acepta', async () => {
+  const { ctx, sent } = qtyCtx([unitProduct, kiloProduct]);
+  const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity: 0.001 });
+  assert.equal(res.ok, false); assert.equal(res.invalidQuantity, true);
+  assert.match(res.message, /unidades enteras/);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity: 2.5 })).ok, false);
+  assert.equal(sent.length, 0);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'k-1', type: 'merma', quantity: 0.001 })).ok, true);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'k-1', type: 'merma', quantity: 0.0005 })).message, 'Usa como máximo 3 decimales.');
+  assert.deepEqual(sent.map(b => b.quantity), [0.001]);
+});
+
+test('cantidad NaN: mensaje en español, sin enviar', async () => {
+  const { ctx, sent } = qtyCtx([unitProduct]);
+  for (const quantity of [NaN, 'abc', '']) {
+    const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity });
+    assert.equal(res.ok, false, String(quantity)); assert.equal(res.message, 'Ingresa una cantidad válida mayor que 0.');
+  }
+  assert.equal(sent.length, 0);
+});
+
+test('cantidad Infinity (y ≤ 0): mensaje en español, sin enviar', async () => {
+  const { ctx, sent } = qtyCtx([unitProduct]);
+  for (const quantity of [Infinity, -Infinity, 0, -3]) {
+    const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity });
+    assert.equal(res.ok, false, String(quantity)); assert.equal(res.message, 'Ingresa una cantidad válida mayor que 0.');
+  }
+  assert.equal(sent.length, 0);
+});
+
+test('salidas no superan el stock; una Corrección que suma no pasa de stock + MAX_CORRECTION_UP; también en modo local', async () => {
+  const { ctx, sent } = qtyCtx([unitProduct]);
+  const over = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity: 51 });
+  assert.equal(over.ok, false); assert.match(over.message, /más que el stock actual \(50\)/);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'correccion', direction: 'restar', quantity: 51 })).ok, false);
+  assert.equal(api.MAX_CORRECTION_UP, 10000);
+  const up = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'correccion', direction: 'sumar', quantity: 10001 });
+  assert.equal(up.ok, false); assert.match(up.message, /no puede sumar más de 10[\s.,\u00a0\u202f]?000 sobre el stock actual \(50\)/);
+  assert.equal(sent.length, 0);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity: 50 })).ok, true);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'correccion', direction: 'sumar', quantity: 10000 })).ok, true);
+  // Modo local: misma validación antes de applyInventoryMovement.
+  const calls = [];
+  const local = ownerCtx({ productos: [{ id: 3, name: 'Pan', unidad: 'unidad', stock: 5 }], inventoryMovements: [],
+    applyInventoryMovement(o) { calls.push(o); return { ok: true, movement: o }; }, saveAllData: async () => ({ persisted: true }), _naWasPersisted: r => !!r?.persisted });
+  for (const quantity of [1e12, 0.001, NaN, Infinity, 6]) assert.equal((await local.NA_AJUSTES_INVENTARIO.register({ productId: 3, type: 'merma', quantity })).ok, false, String(quantity));
+  assert.equal(calls.length, 0);
+});
