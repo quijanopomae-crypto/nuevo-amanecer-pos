@@ -74,6 +74,8 @@
   // del usuario anterior usando el mismo helper que la app (/app/js/sync/cache-identity-guard.js).
   // Separado de clearSession a propósito. Si no carga, la app purga igual al arrancar.
   function purgePreviousIdentityCache() {
+    // El aviso «aparato desconectado» (pos-roles-client.js:74) es de la sesión anterior, no de la recién guardada.
+    try { localStorage.removeItem('na_device_revoked_v1'); } catch {}
     return new Promise((resolve) => {
       const timer = setTimeout(resolve, 3000);
       const done = () => { clearTimeout(timer); resolve(); };
