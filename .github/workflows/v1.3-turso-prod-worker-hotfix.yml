@@ -88,6 +88,34 @@ jobs:
         working-directory: tools/cloudflare-lab
         run: npx wrangler deploy --dry-run --config ../cloudflare-prod/wrangler.turso-prod.jsonc
 
+      - name: Create consistent encrypted logical Turso backup
+        env:
+          TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+          TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TURSO_PROD_DATABASE_URL"
+          test "${#TURSO_PROD_AUTH_TOKEN}" -ge 32
+          echo "::add-mask::$TURSO_PROD_DATABASE_URL"
+          echo "::add-mask::$TURSO_PROD_AUTH_TOKEN"
+          # Same read-only snapshot + encryption as canon-migration-0033 (writes /tmp/turso-migration-0033-backup.json).
+          node tools/cloudflare-prod/scripts/turso-expense-server-received-maintenance.mjs backup
+
+      - name: Store and verify backup in private remote R2
+        working-directory: tools/cloudflare-lab
+        env:
+          R2_BUCKET: nuevo-amanecer-prod-v2-backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEY="v1.3-turso-worker-hotfix/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --remote --file=/tmp/turso-migration-0033-backup.json
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --remote --file=/tmp/turso-migration-0033-backup-check.json
+          test "$(sha256sum /tmp/turso-migration-0033-backup.json | awk '{print $1}')" = "$(sha256sum /tmp/turso-migration-0033-backup-check.json | awk '{print $1}')"
+          echo "PRE_DEPLOY_BACKUP_KEY=$KEY" >> "$GITHUB_ENV"
+          echo "PRE_DEPLOY_BACKUP_SHA256=$(sha256sum /tmp/turso-migration-0033-backup.json | awk '{print $1}')" >> "$GITHUB_ENV"
+
       - name: Verify production health before hotfix
         shell: bash
         run: |
@@ -186,4 +214,5 @@ jobs:
             echo "- Schema/data migrations: NONE"
             echo "- Live sale during deploy: NONE"
             echo "- Production health: PASS"
+            echo "- Pre-deploy Turso backup: $PRE_DEPLOY_BACKUP_KEY (sha256 $PRE_DEPLOY_BACKUP_SHA256)"
           } >> "$GITHUB_STEP_SUMMARY"
