@@ -191,6 +191,12 @@ for (const width of [768, 1366]) {
       await setIgVisible(page, enabled);
       await expect(main).toHaveCSS('flex-direction', 'row');
       await expect(label).toHaveCSS('text-transform', 'uppercase');
+      // La etiqueta TOTAL debe tener exactamente el mismo tamaño que S/ 4.50.
+      const fonts = await page.evaluate(() => ({
+        label: getComputedStyle(document.querySelector('#pagePOS .total-main>span:first-child')!).fontSize,
+        amount: getComputedStyle(document.getElementById('posTotal')!).fontSize,
+      }));
+      expect(fonts.label).toBe(fonts.amount);
       await expect(label).toHaveText('Total');
       await expect(money).toHaveText('S/ 4.50');
       const bounds = await page.evaluate(() => {
