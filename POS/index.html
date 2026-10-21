@@ -97,6 +97,7 @@
     <link rel="stylesheet" href="css/reporte-arqueo.css">
     <link rel="stylesheet" href="css/historial-compras.css">
     <link rel="stylesheet" href="css/price-history.css">
+    <link rel="stylesheet" href="css/etiquetas-precios.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
@@ -411,6 +412,28 @@
       <button class="hc-retry" type="button" data-hc-retry hidden>Volver a intentar</button>
       <section data-hc-result aria-live="polite" aria-label="Historial y resumen del producto"></section>
     </section>
+  </div>
+</div>
+
+<div class="page" id="pageEtiquetasPrecios">
+  <div class="etq-shell">
+    <h1>Etiquetas e impresión de precios</h1>
+    <p class="etq-note">Solo lectura · No cambia productos, stock ni ventas</p>
+    <label class="etq-field" for="etqSearch">Buscar producto (nombre o código)</label>
+    <input class="etq-search" id="etqSearch" type="search" autocomplete="off" placeholder="Nombre o código" data-etq-search>
+    <div class="etq-matches" data-etq-matches aria-live="polite"></div>
+    <h2>Productos elegidos</h2>
+    <p class="etq-note" data-etq-empty>Aún no eliges productos.</p>
+    <ul class="etq-selected" data-etq-selected></ul>
+    <label class="etq-field" for="etqFormat">Formato</label>
+    <select id="etqFormat" data-etq-format>
+      <option value="chica">Chica (38 × 25 mm)</option>
+      <option value="mediana" selected>Mediana (50 × 30 mm)</option>
+      <option value="a4">A4 · 24 por hoja (3 × 8)</option>
+    </select>
+    <h2>Vista previa · <span data-etq-count>0 etiquetas</span></h2>
+    <div class="etq-preview-wrap"><div class="etq-sheet etq-format-mediana" data-etq-sheet></div></div>
+    <button class="etq-print" type="button" data-etq-print disabled>Imprimir</button>
   </div>
 </div>
 
@@ -1341,6 +1364,7 @@
 <script src="js/modules/ventas-stock.js"></script>
 <script src="js/modules/reporte-arqueo.js"></script>
 <script src="js/inventory/historial-compras.js"></script>
+<script src="js/modules/etiquetas-precios.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
