@@ -335,7 +335,7 @@ async function createCanonicalSaleFast(body, env, auth, json) {
   const lotEffects=[];
   const payloadHash = await sha256Hex(stableStringify(body));
   // The stock-lots schema read (when it runs) carries the ledger list of THIS request.
-  // Otherwise operationLedgers answers from the per-isolate cache only when all 13
+  // Otherwise operationLedgers answers from the per-isolate cache only when all 14
   // ledgers exist; with any ledger missing it re-reads sqlite_master (never stale).
   const { ready: lotSchema, ledgerTables } = await lotsSchema(db);
   const ledgers = await operationLedgers(db, ledgerTables);
