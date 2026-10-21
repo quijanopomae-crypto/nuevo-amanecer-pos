@@ -9,8 +9,10 @@
   var NO_SUPPLIER = 'Sin proveedor registrado';
   function text(v) { return String(v == null ? '' : v).trim(); }
   function num(v) { var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.')); return Number.isFinite(n) ? n : null; }
+  // En las ventas del POS, item.id y item.productoId son el id del PRODUCTO (la línea se distingue por
+  // ventaModo, no por id). Se prefiere productoId por claridad.
   function key(item) {
-    var id = item.id != null ? item.id : item.productoId;
+    var id = item.productoId != null && text(item.productoId) ? item.productoId : item.id;
     if (id != null && text(id)) return 'id:' + text(id);
     return text(item.sku) ? 'sku:' + text(item.sku) : '';
   }
@@ -24,6 +26,9 @@
         if (!item || typeof item !== 'object') return;
         var k = key(item), q = num(item.qty != null ? item.qty : item.cantidad);
         if (!k || q === null || q <= 0) return;
+        // Venta por caja: qty son cajas y unitsPerQty el factor (unidCaja), igual que _naUnitsSold del POS.
+        var factor = Math.floor(num(item.unitsPerQty) || 1); if (factor < 1) factor = 1;
+        q = q * factor;
         out.set(k, (out.get(k) || 0) + q);
       });
     });

@@ -84,3 +84,19 @@ test('solo lectura y assets: sin red, almacenamiento ni innerHTML', () => {
   assert.match(html, /id="pageSugerenciaCompra"/);
   for (const a of ['css/sugerencia-compra.css', 'js/modules/sugerencia-compra.js']) { assert.ok(html.includes(a)); assert.ok(sw.includes("'./" + a + "'")); }
 });
+
+// Ventas con el formato real del POS (inline-02: saleItems de procesarVenta).
+const posItem = (product, qty, extra = {}) => ({ id: product.id, productoId: product.id, sku: product.sku || '', name: product.name, nombre: product.name, qty, cantidad: qty, precio: 5, precioUnitario: 5, subtotal: 5 * qty, unitsPerQty: 1, ventaModo: 'unidad', modo: 'minorista', ...extra });
+test('formato real del POS: venta por caja multiplica por unitsPerQty; id = productoId; anuladas fuera', () => {
+  const caja = { id: 1700000000001, name: 'Galleta caja', stock: 10, stockMin: 6, costo: 1, proveedor: 'Prov A' };
+  const realSales = [
+    { id: 'V-1', fecha: ago(5), timestamp: ago(5), items: [posItem(caja, 2, { unitsPerQty: 12, ventaModo: 'caja', modo: 'mayorista', precio: 50 }), posItem(caja, 3)] },
+    { id: 'V-2', fecha: ago(4), anulada: true, items: [posItem(caja, 100)] }
+  ];
+  const row = api.buildSuggestion(realSales, [caja], { now }).groups[0].rows[0];
+  assert.equal(row.sold30, 27, '2 cajas × 12 + 3 unidades');
+  assert.equal(row.suggested, 6 + 27 - 10);
+  // Línea con id distinto del productoId (defensivo): manda productoId.
+  const odd = [{ fecha: ago(1), items: [{ id: 'LINEA-9', productoId: caja.id, qty: 4 }] }];
+  assert.equal(api.buildSuggestion(odd, [{ ...caja, stock: 0 }], { now }).groups[0].rows[0].sold30, 4);
+});
