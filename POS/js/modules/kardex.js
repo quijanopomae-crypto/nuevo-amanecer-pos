@@ -74,6 +74,8 @@
     return ms == null ? null : { timestamp: ms, day: record.fecha || limaDay(ms) };
   }
   function movementKind(move) {
+    // Ajustes con motivo (Misión 7): ENTRADA/SALIDA con motivo 'ajuste:v1:'; nunca son compra ni venta.
+    if (typeof move.reason === 'string' && move.reason.indexOf('ajuste:v1:') === 0) return 'Ajuste';
     var kind = text(move.movement_type || move.type).toUpperCase();
     if (kind === 'SALE_REVERSAL' || kind === 'ANULACION' || /^anulacion de venta\s/.test(normalized(move.reason))) return 'Anulación';
     if (kind === 'SALE' || kind === 'VENTA') return 'Venta';
