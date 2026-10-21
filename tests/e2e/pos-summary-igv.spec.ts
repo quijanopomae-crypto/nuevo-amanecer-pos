@@ -142,7 +142,8 @@ for (const width of [768, 1366]) {
     await prepare(page, width);
     const head = page.locator('#cartDrawer .cart-head');
     const title = head.locator('.cart-head-title');
-    await expect(title).toHaveText('Venta actual');
+    // La etiqueta MAYORISTA permanece en el DOM aunque esté oculta.
+    await expect(title).toContainText('Venta actual');
     await expect(page.locator('#posClear')).toBeVisible();
     await expect(page.locator('#btnCartMenu')).toBeVisible();
 
