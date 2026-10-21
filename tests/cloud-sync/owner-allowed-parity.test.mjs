@@ -22,7 +22,9 @@ const COPIES = [
   { file: 'POS/js/modules/kardex.js', page: 'pageKardex', policy: true, exported: 'NA_KARDEX' },
   { file: 'POS/js/modules/cliente-historial-compras.js', page: 'pageClienteHistorial', feature: 'cliente-historial-compras', policy: true, featureSwitch: true, exported: 'NA_CLIENTE_HISTORIAL' },
   // #833: el costo del historial de precios lo ve solo el dueño confirmado (misma regla, otro nombre).
-  { file: 'POS/js/products/price-history.js', fn: 'canSeeCost' }
+  { file: 'POS/js/products/price-history.js', fn: 'canSeeCost' },
+  // #858: el costo de última compra en la ficha y su actualización al comprar, solo dueño confirmado.
+  { file: 'POS/js/products/costo-compra-ficha.js', fn: 'isOwner' }
 ];
 const OWNER_COPIES = COPIES.filter(c => !c.fn);
 
@@ -93,17 +95,20 @@ const ROLE_SCENARIOS = [
   ['modo local sin credenciales', {}, true]
 ];
 
-test('las 12 copias de ownerAllowed y canSeeCost (#833) son alias de NA_ROLES.isOwner (sin depender del rol en caché)', () => {
-  const found = [], cost = [];
+test('las 12 copias de ownerAllowed, canSeeCost (#833) e isOwner (#858) son alias de NA_ROLES.isOwner (sin depender del rol en caché)', () => {
+  const found = [], cost = [], products = [];
   const walk = dir => readdirSync(new URL('../../' + dir, import.meta.url)).forEach(name => {
     const path = dir + '/' + name;
     if (statSync(new URL('../../' + path, import.meta.url)).isDirectory()) walk(path);
     else if (name.endsWith('.js') && /function ownerAllowed\(\)|const ownerAllowed = /.test(read(path))) found.push(path);
     if (name.endsWith('.js') && /function canSeeCost\(\)|const canSeeCost = /.test(read(path))) cost.push(path);
+    // Fichas de producto: toda puerta propia isOwner() que muestra costos debe estar registrada aquí.
+    if (path.startsWith('POS/js/products/') && name.endsWith('.js') && /function isOwner\(\)/.test(read(path))) products.push(path);
   });
   walk('POS/js');
   assert.deepEqual(found.sort(), OWNER_COPIES.map(c => c.file).sort());
   assert.deepEqual(cost.sort(), COPIES.filter(c => c.fn === 'canSeeCost').map(c => c.file).sort());
+  assert.deepEqual(products.sort(), COPIES.filter(c => c.fn === 'isOwner').map(c => c.file).sort());
   for (const { file, fn } of COPIES) {
     const block = ownerBlock(read(file), fn);
     assert.match(block, /isOwner(\?\.)?\(\) === true/, file + ' isOwner() === true');
