@@ -38,6 +38,9 @@
     if (!value || typeof value !== 'object') return false;
     var hit = false; Object.keys(value).forEach(function (k) { if (CLOSE_FIELDS.test(k)) { delete value[k]; hit = true; } }); return hit;
   }
+  // cash_sessions canónicas: además, la caja ABIERTA lleva expected_withheld (sin monto) para que openSession()
+  // de canonical-client.js la acepte: el esperado incluye los gastos en efectivo, así que nunca se conserva.
+  function stripSessions(list) { var hit = stripClose(list || []); (list || []).forEach(function (s) { if (s && s.status === 'OPEN' && s.expected_withheld !== true) { s.expected_withheld = true; hit = true; } }); return hit; }
   function filterCashMoves(list) { if (!Array.isArray(list)) return false; var n = list.length; for (var i = list.length - 1; i >= 0; i--) if (restrictedCashMove(list[i])) list.splice(i, 1); return list.length !== n; }
   // financial_events: se conservan los cobros de crédito y sus anulaciones (las necesitan los saldos de crédito,
   // canonical-ui-adapter.js compensationsByTarget). Se quitan ajustes y compensaciones de dinero (decisión D3).
@@ -77,11 +80,11 @@
     if (!r || typeof r !== 'object' || Array.isArray(r) || r.schema_version !== REPLICA_SCHEMA || !Array.isArray(r.products)) { delete snap.canonicalReplica; return true; }
     if (r.identity_scrubbed_at && !r.remote_validated_at) {
       // Ya depurada y sin relectura desde entonces: solo verificar que no volvieron datos restringidos.
-      var again = strip(r.products) | strip(r.sale_items || []) | stripClose(r.cash_sessions || []) | filterFinancial(r.financial_events);
+      var again = strip(r.products) | strip(r.sale_items || []) | stripSessions(r.cash_sessions) | filterFinancial(r.financial_events);
       if ((r.expenses || []).length || (r.inventory_movements || []).length) { r.expenses = []; r.inventory_movements = []; again = 1; }
       return !!again;
     }
-    strip(r.products); strip(r.sale_items || []); stripClose(r.cash_sessions || []); filterFinancial(r.financial_events);
+    strip(r.products); strip(r.sale_items || []); stripSessions(r.cash_sessions); filterFinancial(r.financial_events);
     r.expenses = []; r.inventory_movements = [];
     delete r.remote_validated_at; delete r.remote_validated_context; delete r.remote_validated_build;
     r.digests = {}; r.canonical_digest = null;
@@ -298,7 +301,9 @@
       writeTag(fp, role, r.deviceId, 'confirmed');
       try {
         var c = root.NuevoAmanecerCanonical;
-        if (c && typeof c.refresh === 'function') c.refresh().then(function () { state.memoryFilter = false; }, function () {});
+        // Lectura COMPLETA forzada: descarta lo parcial/afterCommit, la base y los sellos de la identidad anterior.
+        var read = c && (typeof c.refreshFull === 'function' ? function () { return c.refreshFull({ identityChanged: true }); } : typeof c.refresh === 'function' ? function () { return c.refresh(); } : null);
+        if (read) read().then(function () { state.memoryFilter = false; }, function () {});
       } catch (_) {}
     });
   }
