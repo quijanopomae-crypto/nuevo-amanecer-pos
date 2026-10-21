@@ -25,14 +25,21 @@ for(const count of [0,1,2,6]) {
    const box=(selector:string)=>document.querySelector(selector)!.getBoundingClientRect();
    const items=Array.from(document.querySelectorAll('.cart-item')).map(el=>el.getBoundingClientRect());
    const head=box('.cart-head'),footer=box('.cart-footer'),pay=box('#btnPagar');
-   return {head:head.height,footer:footer.height,pay:pay.height,total:box('.total-main').height,totalFont:getComputedStyle(document.querySelector('.total-main')!).fontSize,secondary:box('.cart-secondary-actions button').height,rows:items.map(r=>r.height),
+   return {head:head.height,footer:footer.height,pay:pay.height,total:box('.total-main').height,totalFont:getComputedStyle(document.querySelector('.total-main')!).fontSize,
+    totalValueFont:getComputedStyle(document.querySelector('.total-main>span:last-child')!).fontSize,
+    summaryColumns:getComputedStyle(document.querySelector('.cart-totals')!).gridTemplateColumns.trim().split(/\s+/).length,
+    secondary:box('.cart-secondary-actions button').height,rows:items.map(r=>r.height),
     lastBottom:items.at(-1)?.bottom,footerTop:footer.top,quantity:document.querySelector('.qty-btn')?.getBoundingClientRect().height};
   });
   expect(metrics.head).toBeLessThanOrEqual(60);
   expect(metrics.footer).toBeLessThanOrEqual(180);
   expect(metrics.pay).toBe(52);
   expect(metrics.total).toBe(44);
-  expect(metrics.totalFont).toBe('26px');
+  // Nuevo diseño autorizado: el valor sigue destacado y la barra conserva su altura.
+  // Tres columnas visibles para subtotal, IGV y total; sin quitar garantías del pie.
+  expect(metrics.totalFont).toBe('13px');
+  expect(metrics.totalValueFont).toBe('19px');
+  expect(metrics.summaryColumns).toBe(3);
   expect(metrics.secondary).toBe(36);
   for(const height of metrics.rows)expect(height).toBeLessThanOrEqual(64);
   if(count){expect(metrics.quantity).toBe(26);expect(metrics.lastBottom).toBeLessThan(metrics.footerTop);}
