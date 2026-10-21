@@ -100,7 +100,7 @@
     'producto-activo-venta': true,
     'precio-min-max': true,
     'cajas-multiples': true,
-    'reporte-productos-vencer': true,
+    'reporte-productos-vencer': false,
     'cierre-remoto-cajas': true,
     'dashboard-tesoreria': true,
     'producto-servicio': true,

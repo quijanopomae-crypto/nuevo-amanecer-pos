@@ -168,7 +168,7 @@ test('owner export reads the active horizon and creates only a download; permiss
     assert.equal(tag, 'a');
     return { click() { clicked++; }, remove() { removed++; } };
   };
-  h.ctx.document.getElementById = () => ({ querySelector: () => h.horizon, appendChild() {} });
+  h.ctx.document.getElementById = () => ({ querySelector: selector => selector === '[data-rpv-horizon]' ? h.horizon : null, appendChild() {} });
   h.ctx.Blob = class { constructor(parts, options) { this.parts = parts; this.options = options; } };
   h.ctx.URL = { createObjectURL(blob) { blobs.push(blob); return 'blob:synthetic'; }, revokeObjectURL(url) { revoked.push(url); } };
   h.ctx.setTimeout = fn => fn();
@@ -179,7 +179,7 @@ test('owner export reads the active horizon and creates only a download; permiss
   assert.match(blobs[0].parts[0], /^\uFEFFFiltro: próximos 90 días/);
   assert.ok(blobs[0].parts[0].includes("\r\n'=Producto,export,"));
   assert.equal(blobs[0].options.type, 'text/csv;charset=utf-8');
-  h.ctx.NA_PERMISSIONS = PERMISSIONS;
+  h.ctx.NA_PERMISSIONS = { ...PERMISSIONS, featureLocked: () => true };
   assert.equal(h.api.exportCsv(), false);
   assert.equal(blobs.length, 1);
 });
@@ -187,11 +187,13 @@ test('owner export reads the active horizon and creates only a download; permiss
 test('owner/permission guard fails closed and locked default denies both rendering and CSV before state reads', () => {
   assert.deepEqual(Array.from(PERMISSIONS.SCREENS.pageReporteProductosVencer), ['owner']);
   assert.deepEqual(Array.from(PERMISSIONS.FEATURE_ROLES['reporte-productos-vencer']), ['owner']);
-  assert.equal(PERMISSIONS.FEATURE_LOCKS['reporte-productos-vencer'], true);
-  assert.equal(PERMISSIONS.featureLocked('reporte-productos-vencer'), true);
+  // Misión 4: desbloqueada en Próximamente; el rol dueño sigue siendo obligatorio.
+  assert.equal(PERMISSIONS.FEATURE_LOCKS['reporte-productos-vencer'], false);
+  assert.equal(PERMISSIONS.featureLocked('reporte-productos-vencer'), false);
   for (const role of ['empleado', 'unknown', '', null]) assert.equal(PERMISSIONS.canAccessScreen(role, 'pageReporteProductosVencer'), false);
   for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) assert.deepEqual(Array.from(PERMISSIONS.routeRoles('/features/reporte-productos-vencer', method)), ['owner']);
-  for (const extra of [{ NA_PERMISSIONS: PERMISSIONS }, { NA_ROLES: undefined }, { NA_PERMISSIONS: undefined },
+  const locked = { ...PERMISSIONS, featureLocked: id => id === 'reporte-productos-vencer' ? true : PERMISSIONS.featureLocked(id) };
+  for (const extra of [{ NA_PERMISSIONS: locked }, { NA_ROLES: undefined }, { NA_PERMISSIONS: undefined },
     { NA_ROLES: { role: 'owner', confirmed: false } }, { NA_ROLES: { isOwner: () => false } },
     { NA_PERMISSIONS: { ...unlocked, canAccessScreen: () => false } }]) {
     const h = harness(extra);
@@ -204,12 +206,12 @@ test('owner/permission guard fails closed and locked default denies both renderi
   }
 });
 
-test('registry stays pending with the new page; navigation denies employees without adding drawer items; assets precache', () => {
+test('registry entry is unlocked (not pending) with the new page; navigation denies employees without adding drawer items; assets precache', () => {
   const ctx = context();
   vm.runInContext(read('POS/js/modules/proximamente-registry.js'), ctx);
   const entry = ctx.NA_PROXIMAMENTE_REGISTRY.find(f => f.id === 'reporte-productos-vencer');
   assert.equal(entry.page, 'pageReporteProductosVencer');
-  assert.equal(entry.pending, true);
+  assert.equal(entry.pending, undefined);
   const navigation = read('POS/js/navigation/menu-navigation.js');
   const c = vm.createContext({ document: { readyState: 'loading', addEventListener() {} }, innerWidth: 390 });
   c.window = c;
