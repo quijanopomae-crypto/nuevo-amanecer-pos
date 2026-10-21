@@ -59,6 +59,7 @@
     var value = pick(summary, mode), input = doc().getElementById('pCosto');
     if (value == null || !input) return false;
     input.value = value.toFixed(2);
+    try { if (root.NA_DECIMAL) root.NA_DECIMAL.forget(input); } catch (_) {} // costo propuesto: ya no es el guardado
     try { if (typeof calcMargen === 'function') calcMargen(); } catch (_) {} // eslint-disable-line no-undef
     var msg = doc().querySelector('#' + BOX_ID + ' [data-ccf-msg]');
     if (msg) msg.textContent = 'Costo propuesto: S/ ' + value.toFixed(2) + (mode === 'promedio' ? ' (promedio)' : ' (última compra)') + '. Pulsa Guardar para aplicarlo; quedará en el historial de precios.';

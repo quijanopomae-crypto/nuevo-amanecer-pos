@@ -125,7 +125,7 @@
     edit: function(expense) {
       if(!owner()||!enabled()||busy||expense.voided)return;
       resetAndOpen();editing=expense;modalMode(true);
-      [['gasDesc',expense.desc],['gasCat',expense.cat],['gasNota',expense.nota],['gasFecha',expense.fecha],['gasMonto',root.NA_DECIMAL?root.NA_DECIMAL.display(expense.monto):expense.monto],['gasMetodo',expense.metodo]].forEach(function(pair){var field=root.document.getElementById(pair[0]);if(field)field.value=pair[1]||'';});
+      [['gasDesc',expense.desc],['gasCat',expense.cat],['gasNota',expense.nota],['gasFecha',expense.fecha],['gasMonto',expense.monto],['gasMetodo',expense.metodo]].forEach(function(pair){var field=root.document.getElementById(pair[0]);if(!field)return;if(pair[0]==='gasMonto'&&root.NA_DECIMAL)root.NA_DECIMAL.fill(field,pair[1]==null?'':pair[1]);else field.value=pair[1]||'';});
       if(typeof root._naDateDisplayHelp==='function')root._naDateDisplayHelp();
       ['gasMonto','gasMetodo'].forEach(function(id){var field=root.document.getElementById(id);if(field){field.readOnly=true;field.disabled=true;}});
     },

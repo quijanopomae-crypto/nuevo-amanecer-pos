@@ -5,9 +5,11 @@ import { test, expect, type Page } from '@playwright/test';
 // («1,000.00»); una coma con 1 o 2 dígitos es decimal («4,50»). Datos sintéticos, sin servidor real.
 test.use({ locale: 'es-PE' });
 
-async function typeInto(page: Page, selector: string, text: string) {
+async function typeInto(page: Page, selector: string, text: string, how: 'click' | 'focus' = 'click') {
   const field = page.locator(selector);
-  await field.click();
+  // Tras escribir en el campo de producto (datalist), Firefox deja abierta la lista nativa y un clic de
+  // Playwright puede quedarse colgado; ahí se entra al campo con el foco (como con Tab), no con el ratón.
+  if (how === 'focus') await field.focus(); else await field.click();
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.press('Delete');
   await page.keyboard.type(text);
@@ -67,8 +69,8 @@ for (const [typed, cents] of [['4,50', 450], ['4,5', 450], [',50', 50], ['4.50',
     await expect(dialog.locator('.na-pur-cost')).toHaveAttribute('type', 'text');
     await expect(dialog.locator('.na-pur-cost')).toHaveAttribute('inputmode', 'decimal');
     await typeInto(page, '#naPurchaseDialog .na-pur-prod', 'Aceite 1L');
-    await typeInto(page, '#naPurchaseDialog .na-pur-qty', '2');
-    await typeInto(page, '#naPurchaseDialog .na-pur-cost', typed);
+    await typeInto(page, '#naPurchaseDialog .na-pur-qty', '2', 'focus');
+    await typeInto(page, '#naPurchaseDialog .na-pur-cost', typed, 'focus');
     await expect(dialog.locator('.na-pur-total')).toContainText('S/ ' + (cents * 2 / 100).toFixed(2));
     await dialog.locator('.na-pur-ok').click();
     await expect(dialog).toHaveCount(0);
@@ -85,8 +87,8 @@ test('Compras: cantidad «2,5» tecleada se envía como 2.5', async ({ page }) =
   await ownerCanon(page);
   await page.evaluate(() => (window as any).NA_PURCHASES.open());
   await typeInto(page, '#naPurchaseDialog .na-pur-prod', 'Aceite 1L');
-  await typeInto(page, '#naPurchaseDialog .na-pur-qty', '2,5');
-  await typeInto(page, '#naPurchaseDialog .na-pur-cost', '4,00');
+  await typeInto(page, '#naPurchaseDialog .na-pur-qty', '2,5', 'focus');
+  await typeInto(page, '#naPurchaseDialog .na-pur-cost', '4,00', 'focus');
   await expect(page.locator('#naPurchaseDialog .na-pur-total')).toContainText('S/ 10.00');
   await page.locator('#naPurchaseDialog .na-pur-ok').click();
   await expect(page.locator('#naPurchaseDialog')).toHaveCount(0);
@@ -94,18 +96,18 @@ test('Compras: cantidad «2,5» tecleada se envía como 2.5', async ({ page }) =
 });
 
 for (const [field, typed, message] of [
-  ['cost', '1.234,50', /Línea 1, costo: «1\.234,50» usa punto para los miles/],
-  ['cost', '1,2345', /Línea 1, costo: «1,2345»: después de una sola coma van 1 o 2 decimales/],
-  ['cost', '1e2', /Línea 1, costo: no se aceptan exponentes/],
-  ['cost', '+2', /Línea 1, costo: no se aceptan signos/],
-  ['qty', '1e2', /Línea 1, cantidad: no se aceptan exponentes/],
+  ['cost', '1.234,50', /Línea 1, costo: Formato europeo no válido/],
+  ['cost', '1,2345', /Línea 1, costo: Tras la coma: 1-2 decimales o 3 dígitos/],
+  ['cost', '1e2', /Línea 1, costo: Sin exponentes/],
+  ['cost', '+2', /Línea 1, costo: Sin signos/],
+  ['qty', '1e2', /Línea 1, cantidad: Sin exponentes/],
 ] as const) {
   test(`Compras: ${field} «${typed}» se rechaza con aviso y no se envía nada`, async ({ page }) => {
     await ownerCanon(page);
     await page.evaluate(() => (window as any).NA_PURCHASES.open());
     await typeInto(page, '#naPurchaseDialog .na-pur-prod', 'Aceite 1L');
-    await typeInto(page, '#naPurchaseDialog .na-pur-qty', field === 'qty' ? typed : '2');
-    await typeInto(page, '#naPurchaseDialog .na-pur-cost', field === 'cost' ? typed : '4,50');
+    await typeInto(page, '#naPurchaseDialog .na-pur-qty', field === 'qty' ? typed : '2', 'focus');
+    await typeInto(page, '#naPurchaseDialog .na-pur-cost', field === 'cost' ? typed : '4,50', 'focus');
     await page.locator('#naPurchaseDialog .na-pur-ok').click();
     await expect(page.locator('#naPurchaseDialog .na-pur-err')).toHaveText(message);
     await expect(page.locator(`#naPurchaseDialog .na-pur-${field}`)).toHaveAttribute('aria-invalid', 'true');
@@ -128,7 +130,7 @@ test('Ficha de producto (local): «4,50» / «6,50» se guardan como 4.5 / 6.5; 
   await typeInto(page, '#pCosto', '1.234,50');
   await typeInto(page, '#pPrecio', '6,50');
   await page.locator('#mProd .mbtn-ok').click();
-  await expect(page.locator('#gToast')).toContainText('Costo: «1.234,50» usa punto para los miles');
+  await expect(page.locator('#gToast')).toContainText('Costo: Formato europeo no válido');
   await expect(page.locator('#pCosto')).toHaveAttribute('aria-invalid', 'true');
   expect(await ev(page, 'productos[0].costo')).toBe(3);
   await typeInto(page, '#pCosto', '4,50');
@@ -139,7 +141,7 @@ test('Ficha de producto (local): «4,50» / «6,50» se guardan como 4.5 / 6.5; 
   expect(await ev(page, 'productos[0].precio')).toBe(6.5);
 });
 
-test('Editar producto guardado con 3.3333 / 6.300000000000001 / 80.30000000000001: se muestra 3.33 / 6.30 / 80.30 y Guardar funciona sin tocar nada', async ({ page }) => {
+test('Editar producto guardado con 3.3333 / 6.300000000000001 / 80.30000000000001: se muestra 3.33 / 6.30 / 80.30; sin tocar guarda el original (3.3333) y al teclear «3.33» guarda 3.33', async ({ page }) => {
   await localPage(page);
   await ev(page, `productos=[{id:'pe-1',name:'Queso',nombre:'Queso',sku:'PE-01',stock:5,stockMin:1,costo:3.3333,precio:6.300000000000001,precioCaja:80.30000000000001,unidCaja:12,factorCompra:24,controlInventario:true,unidad:'unidad',cat:'abarrotes',marca:'Sin marca'}];`);
   await page.evaluate(() => (window as any).editProd('pe-1'));
@@ -152,10 +154,34 @@ test('Editar producto guardado con 3.3333 / 6.300000000000001 / 80.3000000000000
   for (const id of ['#pCosto', '#pPrecio', '#pPrecioCaja']) { await page.locator(id).click(); await page.keyboard.press('Tab'); }
   await expect(page.locator('#mProd [aria-invalid="true"]')).toHaveCount(0);
   await page.locator('#mProd .mbtn-ok').click();
-  await expect.poll(() => ev(page, 'productos[0].costo')).toBe(3.33);
-  expect(await ev(page, 'productos[0].precio')).toBe(6.3);
-  expect(await ev(page, 'productos[0].precioCaja')).toBe(80.3);
   await expect(page.locator('#mProd')).not.toHaveClass(/open/);
+  // Sin tocar los campos se guarda el valor ORIGINAL, no el redondeado que se mostró.
+  expect(await ev(page, 'productos[0].costo')).toBe(3.3333);
+  expect(await ev(page, 'productos[0].precio')).toBe(6.300000000000001);
+  expect(await ev(page, 'productos[0].precioCaja')).toBe(80.30000000000001);
+  expect(await ev(page, 'productos[0].factorCompra')).toBe(24);
+  // Al teclear «3.33» (aunque sea el mismo texto mostrado) se guarda 3.33.
+  await page.waitForTimeout(400); // termina la animación de cierre
+  await page.evaluate(() => (window as any).editProd('pe-1'));
+  await page.evaluate(() => { document.querySelectorAll('#mProd details').forEach(d => ((d as HTMLDetailsElement).open = true)); });
+  await expect(page.locator('#pCosto')).toBeVisible();
+  await expect(page.locator('#pCosto')).toHaveValue('3.33');
+  await typeInto(page, '#pCosto', '3.33');
+  await page.locator('#mProd .mbtn-ok').click();
+  await expect.poll(() => ev(page, 'productos[0].costo')).toBe(3.33);
+  expect(await ev(page, 'productos[0].precio')).toBe(6.300000000000001);
+});
+
+test('Venta libre y línea manual prellenadas: sin tocar conservan el original; al teclear vale lo tecleado', async ({ page }) => {
+  await localPage(page);
+  await page.evaluate(() => (window as any).abrirVentaLibre({ precio: 3.3333, cantidad: 1 }));
+  await expect(page.locator('#vlPrecio')).toHaveValue('3.33');
+  expect(await page.evaluate(() => (window as any).NA_DECIMAL.value('vlPrecio'))).toBe(3.3333);
+  await typeInto(page, '#vlPrecio', '3.33');
+  expect(await page.evaluate(() => (window as any).NA_DECIMAL.value('vlPrecio'))).toBe(3.33);
+  await page.evaluate(() => { document.getElementById('mVentaLibre')?.classList.remove('open'); (window as any).NA_DECIMAL.fill('lineaManualMonto', 1234.5678); });
+  await expect(page.locator('#lineaManualMonto')).toHaveValue('1,234.57');
+  expect(await page.evaluate(() => (window as any).NA_DECIMAL.value('lineaManualMonto'))).toBe(1234.5678);
 });
 
 test('Política de crédito guardada con decimales largos se muestra con 2 decimales y no avisa', async ({ page }) => {
@@ -175,7 +201,7 @@ test('Gastos (local): «4,50» se guarda 4.5; «1e2» avisa y no guarda', async 
   await typeInto(page, '#gasMonto', '1e2');
   const before = await ev<number>(page, 'gastos.length');
   await page.locator('#mGasto .mbtn-ok').click();
-  await expect(page.locator('#gToast')).toContainText('Monto: no se aceptan exponentes');
+  await expect(page.locator('#gToast')).toContainText('Monto: Sin exponentes');
   expect(await ev(page, 'gastos.length')).toBe(before);
   await typeInto(page, '#gasMonto', '4,50');
   await page.locator('#mGasto .mbtn-ok').click();
@@ -198,7 +224,7 @@ test('Caja (local): fondo «100,50», ingreso «4,50»; en el cierre «1e2» avi
   await page.evaluate(() => (window as any).prepCierre());
   await typeInto(page, '#cajContado', '1e2');
   await page.locator('#mCierre .mbtn-ok').click();
-  await expect(page.locator('#gToast')).toContainText('Efectivo contado: no se aceptan exponentes');
+  await expect(page.locator('#gToast')).toContainText('Efectivo contado: Sin exponentes');
   expect(await ev(page, 'cajEstado.cerrada')).not.toBe(true);
   await typeInto(page, '#cajContado', '105,00');
   await expect(page.locator('#difLbl')).toContainText('Cuadra');
@@ -221,7 +247,7 @@ test('Abono (local): «1,50» se registra como 1.5; «1.234,50» avisa y no cobr
   await expect(page.locator('#pagoMonto')).toHaveAttribute('type', 'text');
   await typeInto(page, '#pagoMonto', '1.234,50');
   await page.evaluate(() => (window as any).confirmarPago());
-  await expect(page.locator('#gToast')).toContainText('Monto del abono: «1.234,50» usa punto para los miles');
+  await expect(page.locator('#gToast')).toContainText('Monto del abono: Formato europeo no válido');
   expect(await ev(page, 'creditos[0].pagado')).toBe(0);
   await typeInto(page, '#pagoMonto', '1,50');
   await expect(page.locator('#abonoSaldo')).toContainText('18.50');
@@ -239,7 +265,7 @@ test('Nuevo crédito y nuevo cliente (local): «1e2» en el monto avisa; línea 
   await typeInto(page, '#crMonto', '1e2');
   const before = await ev<number>(page, 'creditos.length');
   await page.evaluate(() => (window as any).guardarCred());
-  await expect(page.locator('#gToast')).toContainText('Monto: no se aceptan exponentes');
+  await expect(page.locator('#gToast')).toContainText('Monto: Sin exponentes');
   expect(await ev(page, 'creditos.length')).toBe(before);
   expect(await page.evaluate(() => (window as any).NA_DECIMAL.value('crMonto'))).toBeNaN();
   await typeInto(page, '#crMonto', '4,50');
@@ -259,7 +285,7 @@ test('Movimiento de inventario y venta libre: «1e2» avisa; venta libre «4,50�
   await expect(page.locator('#mMovCant')).toHaveAttribute('inputmode', 'decimal');
   await typeInto(page, '#mMovCant', '1e2');
   await page.evaluate(() => (window as any).guardarMovInv());
-  await expect(page.locator('#gToast')).toContainText('Cantidad: no se aceptan exponentes');
+  await expect(page.locator('#gToast')).toContainText('Cantidad: Sin exponentes');
   expect(await ev(page, 'productos[0].stock')).toBe(5);
   await typeInto(page, '#mMovCant', '3');
   await page.evaluate(() => (window as any).guardarMovInv());
@@ -272,7 +298,7 @@ test('Movimiento de inventario y venta libre: «1e2» avisa; venta libre «4,50�
   await typeInto(page, '#vlCantidad', '2,5');
   const cart = await ev<number>(page, 'cart.length');
   await page.evaluate(() => (window as any).confirmarVentaLibre());
-  await expect(page.locator('#gToast')).toContainText('Cantidad: «2,5» no es un número entero');
+  await expect(page.locator('#gToast')).toContainText('Cantidad: Debe ser entero');
   expect(await ev(page, 'cart.length')).toBe(cart);
 });
 
@@ -285,10 +311,10 @@ test('Política de crédito: «4,50» en línea inicial = 4.5; «4,5» días avi
   await expect.poll(() => ev(page, 'appConfig.creditPolicy.initialLine')).toBe(4.5);
   const days = await ev(page, 'appConfig.creditPolicy.dueDays');
   await page.evaluate(() => (window as any).creditPolicySetNumber('dueDays', '4,5'));
-  await expect(page.locator('#gToast')).toContainText('«4,5» no es un número entero');
+  await expect(page.locator('#gToast')).toContainText('Debe ser entero');
   expect(await ev(page, 'appConfig.creditPolicy.dueDays')).toBe(days);
   await page.evaluate(() => (window as any).creditPolicySetNumber('minPurchases', '1e2'));
-  await expect(page.locator('#gToast')).toContainText('no se aceptan exponentes');
+  await expect(page.locator('#gToast')).toContainText('Sin exponentes');
 });
 
 test('Cobrar: mMontoRec, mMixedCash y lineaManualMonto son de texto; Venta (total) e Inicio sin campos nuevos', async ({ page }) => {
@@ -314,7 +340,7 @@ test('Cobrar efectivo: «1,000» da vuelto 990.50 y al salir muestra «1,000.00�
   await page.keyboard.press('Tab');
   await expect(page.locator('#mMontoRec')).toHaveValue('1,000.00');
   await typeInto(page, '#mMontoRec', '1e2');
-  await expect(page.locator('#mPaymentHint')).toContainText('Efectivo recibido: no se aceptan exponentes');
+  await expect(page.locator('#mPaymentHint')).toContainText('Efectivo recibido: Sin exponentes');
   await expect(page.locator('#mBtnConf')).toHaveAttribute('data-valid', 'false');
   await expect(page.locator('#mBtnConf')).toHaveText('Revisar datos');
   const sales = await ev<number>(page, 'ventas.length');
@@ -322,7 +348,7 @@ test('Cobrar efectivo: «1,000» da vuelto 990.50 y al salir muestra «1,000.00�
   expect(await ev(page, 'ventas.length')).toBe(sales);
   await page.keyboard.press('Tab');
   await expect(page.locator('#mMontoRec')).toHaveAttribute('aria-invalid', 'true');
-  await expect(page.locator('#mMontoRecNaDecimalMsg')).toContainText('no se aceptan exponentes');
+  await expect(page.locator('#mMontoRecNaDecimalMsg')).toContainText('Sin exponentes');
   await typeInto(page, '#mMontoRec', '20');
   await expect(page.locator('#mMontoRecNaDecimalMsg')).toHaveCount(0);
   await expect(page.locator('#mCambio')).toHaveText('S/ 10.50');
@@ -343,7 +369,7 @@ test('Cobrar mixto: efectivo «4,50» = 4.50 (digital 5.00); «1.000,50» avisa'
   expect(await ev(page, '_naMixedPaymentData().cash')).toBe(4.5);
   expect(await ev(page, '_naMixedPaymentData().digital')).toBe(5);
   await typeInto(page, '#mMixedCash', '1.000,50');
-  await expect(page.locator('#mPaymentHint')).toContainText('Efectivo recibido: «1.000,50» usa punto para los miles');
+  await expect(page.locator('#mPaymentHint')).toContainText('Efectivo recibido: Formato europeo no válido');
 });
 
 test('Línea manual de crédito: «1,500» se muestra «1,500.00» al salir; «1,23,456» avisa', async ({ page }) => {
@@ -356,7 +382,7 @@ test('Línea manual de crédito: «1,500» se muestra «1,500.00» al salir; «1
   expect(await page.evaluate(() => (window as any).NA_DECIMAL.value('lineaManualMonto'))).toBe(1500);
   await typeInto(page, '#lineaManualMonto', '1,23,456');
   await page.keyboard.press('Tab');
-  await expect(page.locator('#lineaManualMontoNaDecimalMsg')).toContainText('coma de miles mal ubicada');
+  await expect(page.locator('#lineaManualMontoNaDecimalMsg')).toContainText('Coma de miles mal ubicada');
 });
 
 // Especificación final del dueño, campo por campo con teclado real (Gastos como campo de prueba; Compras arriba).
@@ -366,9 +392,9 @@ const ACCEPT: [string, number, string][] = [
   ['1.000', 1, '1.00'], ['2.', 2, '2.00'], ['1,000.', 1000, '1,000.00'], ['450', 450, '450.00'], ['4.50', 4.5, '4.50'], ['1000', 1000, '1,000.00'],
 ];
 const REJECT: [string, RegExp][] = [
-  ['1,2345', /1 o 2 decimales/], ['1,0000', /1 o 2 decimales/], ['12,3456', /1 o 2 decimales/], ['1,23,456', /coma de miles mal ubicada/],
-  ['12,34,56', /coma de miles mal ubicada/], ['1.000,50', /usa punto para los miles/], ['1e2', /no se aceptan exponentes/],
-  ['+2', /no se aceptan signos/], ['-2', /no se aceptan signos/], ['4.505', /más de 2 decimales/], ['0x10', /no es un número válido/], ['abc', /no es un número válido/], ['2,', /termina en coma/],
+  ['1,2345', /1-2 decimales o 3 dígitos/], ['1,0000', /1-2 decimales o 3 dígitos/], ['12,3456', /1-2 decimales o 3 dígitos/], ['1,23,456', /Coma de miles mal ubicada/],
+  ['12,34,56', /Coma de miles mal ubicada/], ['1.000,50', /Formato europeo no válido/], ['1e2', /Sin exponentes/],
+  ['+2', /Sin signos/], ['-2', /Sin signos/], ['4.505', /Máximo 2 decimales/], ['0x10', /Número no válido/], ['abc', /Número no válido/], ['2,', /Termina en coma/],
 ];
 test('Formato del dueño: cada entrada válida tecleada se lee bien y al salir se muestra con miles y 2 decimales; re-editar no cambia el valor', async ({ page }) => {
   await localPage(page);
@@ -431,7 +457,7 @@ test('Gasto con CANON (bridge): «4,50» tecleado envía amount_cents 450; «1.2
   await typeInto(page, '#gasDesc', 'Agua sintética');
   await typeInto(page, '#gasMonto', '1.234,50');
   await page.locator('#mGasto .mbtn-ok').click();
-  await expect(page.locator('#gToast')).toContainText('Monto: «1.234,50» usa punto para los miles');
+  await expect(page.locator('#gToast')).toContainText('Monto: Formato europeo no válido');
   expect(await page.evaluate(() => (window as any).__expenses.length)).toBe(0);
   await typeInto(page, '#gasMonto', '4,50');
   await page.locator('#mGasto .mbtn-ok').click();
@@ -451,8 +477,34 @@ test('Cobro múltiple (ficha del cliente): «4,50» tecleado reparte 4.50; «1e2
   await expect(amount).toHaveAttribute('inputmode', 'decimal');
   await typeInto(page, '#naV2BatchAmount', '1e2');
   await page.locator('.na-v2-batch-auto').click();
-  await expect(page.locator('#gToast')).toContainText('Monto total: no se aceptan exponentes');
+  await expect(page.locator('#gToast')).toContainText('Monto total: Sin exponentes');
   await typeInto(page, '#naV2BatchAmount', '4,50');
+  await expect(page.locator('#naV2BatchAmountNaDecimalMsg')).toHaveCount(0); // el aviso se quitó y la pantalla ya no se mueve
+  await expect(page.locator('#naV2BatchAmount')).toHaveValue('4,50');
   await page.locator('.na-v2-batch-auto').click();
   await expect(page.locator('#naV2BatchSummary')).toContainText('4.50');
+});
+
+test('Lotes de un ingreso: «Cantidad física» «4,5» se lee 4.5 (antes 45); «1e2» avisa', async ({ page }) => {
+  await localPage(page);
+  await ev(page, `productos=[{id:'lt-1',name:'Leche',nombre:'Leche',sku:'LT-01',stock:5,stockMin:1,costo:1,precio:2,controlInventario:true,unidad:'unidad',cat:'abarrotes',marca:'Sin marca',icon:'📦'}];`);
+  await page.evaluate(() => (window as any).abrirMovInv('lt-1', 'entrada'));
+  await page.evaluate(() => { document.getElementById('naMovementLots')!.hidden = false; });
+  await page.locator('#naMovementLotsEnabled').check();
+  const qty = page.locator('#naMovementLotsRows .na-lot-qty').first();
+  await expect(qty).toHaveAttribute('type', 'text');
+  await expect(qty).toHaveAttribute('inputmode', 'decimal');
+  await expect(qty).toHaveAttribute('data-na-decimal', 'qty');
+  await typeInto(page, '#naMovementLotsRows .na-lot-code', 'L-01');
+  await page.locator('#naMovementLotsRows .na-lot-expiry').fill('2099-12-31'); // fecha: no es un monto
+  await typeInto(page, '#mMovCant', '5');
+  await typeInto(page, '#naMovementLotsRows .na-lot-qty', '4,5');
+  const product = { product_id: 'lt-1', name: 'Leche', unit: 'unidad', lots_json: '[]', current_stock_quantity: 5 };
+  const read = await page.evaluate(p => { try { return { ok: (window as any).NA_STOCK_LOTS_UI.readMovementLots(p) }; } catch (e: any) { return { error: String(e.message) }; } }, product);
+  expect(JSON.stringify(read)).toContain('4.5');
+  expect(JSON.stringify(read)).not.toContain('45');
+  await typeInto(page, '#naMovementLotsRows .na-lot-qty', '1e2');
+  const bad = await page.evaluate(p => { try { (window as any).NA_STOCK_LOTS_UI.readMovementLots(p); return ''; } catch (e: any) { return String(e.message); } }, product);
+  expect(bad).toMatch(/^Lote 1, cantidad física: Sin exponentes/);
+  await expect(qty).toHaveAttribute('aria-invalid', 'true');
 });

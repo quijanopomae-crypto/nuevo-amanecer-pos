@@ -124,6 +124,6 @@ test('compra manual (CANON, dueño): costo y margen cambian sin abrir la ficha; 
   expect(hist.filter((e: any) => e.type === 'costo')).toEqual([expect.objectContaining({ before: 4, after: 5, origin: 'compra', ref: expect.stringMatching(/:1:costo$/) })]);
   // Al abrir la ficha después, el margen ya refleja el costo nuevo.
   await page.evaluate(() => (window as any).editProd('cc-1'));
-  await expect(page.locator('#pCosto')).toHaveValue('5');
+  await expect(page.locator('#pCosto')).toHaveValue('5.00'); // NA_DECIMAL.display: 2 decimales al editar
   await expect(page.locator('#mgVal')).toHaveText('20.0%');
 });

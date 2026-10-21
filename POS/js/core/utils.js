@@ -102,8 +102,8 @@ function _naInicioCashText(state) {
   var COMMA_DECIMAL = /^(?:\d+,\d{1,2}|0?,\d+)$/;
   var DECIMAL = /^(?:\d+(?:\.\d*)?|\.\d+|[1-9]\d{0,2}(?:,\d{3})+(?:\.\d*)?|\d+,\d{1,2}|0?,\d+)$/;
   var INTEGER = /^(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)$/;
-  var EXAMPLE = 'Usa punto para los decimales y, si quieres, coma para los miles (por ejemplo 4.50 o 1,000.00).';
-  var EXAMPLE_INT = 'Escribe un número entero, sin decimales (por ejemplo 3 o 1,000).';
+  var EXAMPLE = 'Ej.: 4.50 o 1,000.00';
+  var EXAMPLE_INT = 'Ej.: 3 o 1,000';
 
   function text(raw) { return raw == null ? '' : String(raw).trim(); }
   function isInt(opts) { return !!(opts && opts.integer); }
@@ -158,19 +158,20 @@ function _naInicioCashText(state) {
     return format(n, kind === 'int' && !Number.isInteger(n) ? 'qty' : kind);
   }
 
+  // Mensajes cortos (caben debajo del campo en 390 px). «4,50» se acepta, así que no se exige punto decimal.
   function reason(s, opts) {
     var hint = isInt(opts) ? EXAMPLE_INT : EXAMPLE, digits = /^[\d.,]+$/.test(s);
-    if (/[eE]/.test(s) && /\d/.test(s)) return 'no se aceptan exponentes («' + s + '»). ' + hint;
-    if (/^[+-]/.test(s)) return 'no se aceptan signos («' + s + '»). ' + hint;
-    if (isInt(opts) && DECIMAL.test(s)) return '«' + s + '» no es un número entero. ' + hint;
+    if (/[eE]/.test(s) && /\d/.test(s)) return 'Sin exponentes. ' + hint;
+    if (/^[+-]/.test(s)) return 'Sin signos. ' + hint;
+    if (isInt(opts) && DECIMAL.test(s)) return 'Debe ser entero. ' + hint;
     var norm = normalize(s, opts);
-    if (norm != null && decimals(norm) > 2) return '«' + s + '» tiene más de 2 decimales. Escribe como mucho 2 (por ejemplo 4.50).';
-    if (/^[\d.,]*\d,$/.test(s)) return '«' + s + '» termina en coma. Escribe los decimales (por ejemplo 2,50 o 2.50) o quita la coma.';
-    if (/^\d*,\d{4,}$/.test(s)) return '«' + s + '»: después de una sola coma van 1 o 2 decimales (4,50) o exactamente 3 dígitos de miles (1,000).';
-    if (digits && /\.\d*,/.test(s)) return '«' + s + '» usa punto para los miles. Usa coma para los miles y punto para los decimales: 1,000.50.';
-    if (digits && /,/.test(s)) return '«' + s + '» tiene la coma de miles mal ubicada. La coma de miles va cada 3 dígitos (1,000.50); para decimales usa punto (4.50).';
-    if (digits) return '«' + s + '» tiene más de un punto decimal. ' + hint;
-    return '«' + s + '» no es un número válido. ' + hint;
+    if (norm != null && decimals(norm) > 2) return 'Máximo 2 decimales. Ej.: 4.50';
+    if (/^[\d.,]*\d,$/.test(s)) return 'Termina en coma. Ej.: 2,50 o 2';
+    if (/^\d*,\d{4,}$/.test(s)) return 'Tras la coma: 1-2 decimales o 3 dígitos. Ej.: 4,50 o 1,000';
+    if (digits && /\.\d*,/.test(s)) return 'Formato europeo no válido. Ej.: 1,000.50';
+    if (digits && /,/.test(s)) return 'Coma de miles mal ubicada. Ej.: 1,000.50';
+    if (digits) return 'Más de un punto. Ej.: 4.50';
+    return 'Número no válido. ' + hint;
   }
 
   // { empty, ok, value, message }. message va en español y sin el nombre del campo.
@@ -197,9 +198,41 @@ function _naInicioCashText(state) {
 
   // Valor de un campo: vacío → emptyValue (NaN si no se indica); inválido → NaN.
   function value(ref, emptyValue, opts) {
-    var node = el(ref), r = check(node ? node.value : '', optsOf(node, opts));
+    var node = el(ref), original = untouched(node);
+    if (original !== null) return original;
+    var r = check(node ? node.value : '', optsOf(node, opts));
     if (r.empty) return arguments.length > 1 ? emptyValue : NaN;
     return r.value;
+  }
+
+  // Llena un campo al editar con el valor GUARDADO: se muestra display(original) («3.33») y, mientras el
+  // usuario no escriba en él, value() devuelve el original exacto (3.3333), así guardar sin tocar no lo cambia.
+  // Cualquier tecleo (evento input) suelta el original: escribir «3.33» guarda 3.33.
+  var ORIGINAL = 'data-na-original', SHOWN = 'data-na-shown';
+  function fill(ref, stored, kind) {
+    var node = el(ref);
+    if (!node) return '';
+    var shown = display(stored, kind || kindOf(node));
+    node.value = shown;
+    var n = typeof stored === 'number' ? stored : Number(String(stored == null ? '' : stored).trim());
+    try {
+      if (shown !== '' && Number.isFinite(n)) { node.setAttribute(ORIGINAL, String(n)); node.setAttribute(SHOWN, shown); }
+      else forget(node);
+    } catch (_) {}
+    return shown;
+  }
+  function forget(node) {
+    try { if (node && node.removeAttribute) { node.removeAttribute(ORIGINAL); node.removeAttribute(SHOWN); } } catch (_) {}
+  }
+  // Original guardado si el campo sigue mostrando exactamente lo que puso fill(); si no, null.
+  function untouched(node) {
+    try {
+      if (!node || !node.getAttribute) return null;
+      var raw = node.getAttribute(ORIGINAL), shown = node.getAttribute(SHOWN);
+      if (raw == null || shown == null || node.value !== shown) return null;
+      var n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    } catch (_) { return null; }
   }
 
   // Mensaje junto al campo (debajo). Solo existe mientras el campo es inválido; sin error no ocupa espacio.
@@ -275,6 +308,7 @@ function _naInicioCashText(state) {
     // el error aparece al salir del campo o al intentar guardar.
     doc.addEventListener('input', function (ev) {
       var t = own(ev);
+      if (t) forget(t); // el usuario escribió: desde ahora vale lo tecleado
       if (!t || t.getAttribute('aria-invalid') !== 'true') return;
       var r = check(t.value, optsOf(t));
       if (r.ok || r.empty) mark(t);
@@ -295,11 +329,12 @@ function _naInicioCashText(state) {
       var st = doc.createElement('style');
       st.id = 'naDecimalStyle';
       st.textContent = 'input[data-na-decimal][aria-invalid="true"]{border-color:#dc2626 !important;outline-color:#dc2626}' +
-        '.na-decimal-msg{color:#b91c1c;font-size:12px;line-height:1.35;margin-top:4px}body.dark .na-decimal-msg{color:#fca5a5}';
+        '.na-decimal-msg{color:#b91c1c;font-size:12px;line-height:1.35;margin-top:4px}body.dark .na-decimal-msg{color:#fca5a5}' +
+        '.frow .fg .na-decimal-msg,.pay-mixed-grid .na-decimal-msg{font-size:11px;line-height:1.3}';
       (doc.head || doc.documentElement).appendChild(st);
     } catch (_) {}
   }
 
-  root.NA_DECIMAL = Object.freeze({ PATTERN: DECIMAL, INTEGER: INTEGER, parse: parse, toCents: toCents, check: check, value: value, mark: mark, validate: validate, format: format, display: display, reformat: reformat, GROUPED: GROUPED });
+  root.NA_DECIMAL = Object.freeze({ PATTERN: DECIMAL, INTEGER: INTEGER, parse: parse, toCents: toCents, check: check, value: value, mark: mark, validate: validate, format: format, display: display, fill: fill, forget: forget, untouched: untouched, reformat: reformat, GROUPED: GROUPED });
   install();
 })(typeof window !== 'undefined' ? window : globalThis);

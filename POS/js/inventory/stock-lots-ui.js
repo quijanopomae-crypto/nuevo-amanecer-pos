@@ -51,19 +51,26 @@
   }
   function labeledInput(row,label,type,cls){
     var wrap=el('label',label),input=el('input');input.type=type;input.className=cls;
-    if(type==='number'){input.min='0';input.step='any';input.inputMode='decimal';}else if(type==='text')input.maxLength=120;
+    if(type==='qty'){input.type='text';input.inputMode='decimal';input.autocomplete='off';input.spellcheck=false;input.setAttribute('data-na-decimal','qty');} // «4,5» = 4.5 (type=number de Chrome daba 45)
+    else if(type==='number'){input.min='0';input.step='any';input.inputMode='decimal';}else if(type==='text')input.maxLength=120;
     wrap.appendChild(input);row.appendChild(wrap);return input;
   }
   function addReceiptRow(list){
     var row=el('div',undefined,'na-lot-input-row');
-    labeledInput(row,'Código de lote','text','na-lot-code');labeledInput(row,'Vencimiento','date','na-lot-expiry');labeledInput(row,'Cantidad física','number','na-lot-qty');
+    labeledInput(row,'Código de lote','text','na-lot-code');labeledInput(row,'Vencimiento','date','na-lot-expiry');labeledInput(row,'Cantidad física','qty','na-lot-qty');
     var remove=button('Quitar',function(){row.remove();});remove.setAttribute('aria-label','Quitar lote');row.appendChild(remove);list.appendChild(row);
   }
   function readMovementLots(product){
     var enabled=doc.getElementById('naMovementLotsEnabled');if(!enabled||!enabled.checked)return undefined;
     var list=doc.getElementById('naMovementLotsRows'),rows=[];
-    Array.prototype.forEach.call(list.querySelectorAll('.na-lot-input-row'),function(row){
-      rows.push({lot_code:row.querySelector('.na-lot-code').value,expiry_date:row.querySelector('.na-lot-expiry').value,quantity:Number(row.querySelector('.na-lot-qty').value)});
+    var D=root.NA_DECIMAL;
+    Array.prototype.forEach.call(list.querySelectorAll('.na-lot-input-row'),function(row,index){
+      var qtyInput=row.querySelector('.na-lot-qty'),quantity;
+      if(D){var check=D.check(qtyInput.value,{qty:true});D.mark(qtyInput,{qty:true});
+        if(!check.empty&&!check.ok){try{qtyInput.focus();}catch(_){}throw new Error('Lote '+(index+1)+', cantidad física: '+check.message);}
+        quantity=check.ok?check.value:NaN;}
+      else quantity=Number(String(qtyInput.value).replace(',','.'));
+      rows.push({lot_code:row.querySelector('.na-lot-code').value,expiry_date:row.querySelector('.na-lot-expiry').value,quantity:quantity});
     });
     if(!rows.length)throw new Error('Agrega al menos un lote');
     var typed=String(doc.getElementById('mMovCant').value);

@@ -240,7 +240,7 @@
       notify('Completa precio mayorista y unidades por caja, o deja ambos vacíos', 'error');
       return null;
     }
-    var boxPriceCents = hasBoxPrice ? moneyCents(decimal().parse(boxPriceRaw), false) : null;
+    var boxPriceCents = hasBoxPrice ? moneyCents(decimal().value('pPrecioCaja', NaN), false) : null;
     var boxUnits = hasBoxUnits ? number(boxUnitsRaw, NaN) : null;
     if (hasBoxPrice && (boxPriceCents === null || !Number.isFinite(boxUnits) || boxUnits <= 0)) {
       notify('Precio mayorista o unidades por caja inválidos', 'error');

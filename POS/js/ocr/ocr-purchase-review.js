@@ -51,6 +51,15 @@
     return isFinite(number) && number > 0 ? number : null;
   }
 
+  // Costo que se aplica = el que se MUESTRA (2 decimales): si el OCR leyó 1.2345 y la pantalla dice 1.23,
+  // se aplica 1.23. Aquí no se conserva el original oculto (a diferencia de las fichas que se editan).
+  function shownCost(value) {
+    var n = finitePositive(value);
+    if (n === null) return null;
+    var r = Math.round(n * 100) / 100;
+    return r > 0 ? r : null;
+  }
+
   function rowState(proposal) {
     return {
       originalProposal: proposal,
@@ -109,7 +118,7 @@
       var errors = [];
       if (!row || !registry[row.productId]) errors.push('PRODUCTO_REQUERIDO');
       if (finitePositive(row && row.quantity, QTY) === null) errors.push('CANTIDAD_INVALIDA');
-      if (finitePositive(row && row.unitCost) === null) errors.push('COSTO_INVALIDO');
+      if (shownCost(row && row.unitCost) === null) errors.push('COSTO_INVALIDO');
       if (row && row.originalProposal && row.originalProposal.status !== 'MATCHED_SAFE'
           && !row.humanProductSelected) errors.push('SELECCION_HUMANA_REQUERIDA');
       if (row) row.validationErrors = errors;
@@ -142,7 +151,7 @@
         return { ok: false, errors: errors.slice() };
       }
       row.quantity = finitePositive(row.quantity, QTY);
-      row.unitCost = finitePositive(row.unitCost);
+      row.unitCost = shownCost(row.unitCost);
       row.decision = 'CONFIRMED';
       render();
       return { ok: true, errors: [] };

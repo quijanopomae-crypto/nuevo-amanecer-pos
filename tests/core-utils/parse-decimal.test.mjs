@@ -46,14 +46,19 @@ test('cantidades (qty) admiten más decimales con punto; mismas reglas de coma',
 test('check devuelve mensajes claros en español', () => {
   assert.deepEqual({ ...D.check('') }, { empty: true, ok: false, value: NaN, message: '' });
   assert.deepEqual({ ...D.check('4,50') }, { empty: false, ok: true, value: 4.5, message: '' });
-  assert.match(D.check('1.000,50').message, /usa punto para los miles.*1,000\.50/);
-  assert.match(D.check('1,23,456').message, /coma de miles mal ubicada/);
-  assert.match(D.check('1,2345').message, /1 o 2 decimales.*3 dígitos de miles/);
-  assert.match(D.check('4.505').message, /más de 2 decimales/);
-  assert.match(D.check('2,').message, /termina en coma/);
-  assert.match(D.check('1e2').message, /no se aceptan exponentes/);
-  assert.match(D.check('+2').message, /no se aceptan signos/);
-  assert.match(D.check('0x10').message, /«0x10» no es un número válido/);
+  assert.match(D.check('1.000,50').message, /^Formato europeo no válido\. Ej\.: 1,000\.50$/);
+  assert.match(D.check('1,23,456').message, /^Coma de miles mal ubicada/);
+  assert.match(D.check('1,2345').message, /^Tras la coma: 1-2 decimales o 3 dígitos/);
+  assert.match(D.check('4.505').message, /^Máximo 2 decimales/);
+  assert.match(D.check('2,').message, /^Termina en coma/);
+  assert.match(D.check('1e2').message, /^Sin exponentes/);
+  assert.match(D.check('+2').message, /^Sin signos/);
+  for (const raw of ['0x10', 'abc', '1,2345', '1.000,50', '4.505', '2,', '1e2']) {
+    const m = D.check(raw).message;
+    assert.ok(m.length <= 60, `mensaje corto (${m.length}): ${m}`);
+    assert.doesNotMatch(m, /Usa punto para los decimales/);
+  }
+  assert.match(D.check('0x10').message, /^Número no válido\. Ej\.: 4\.50 o 1,000\.00$/);
 });
 
 test('formato al salir del campo: miles con coma y 2 decimales; re-editar «1,000.00» vuelve a 1000', () => {
@@ -78,6 +83,28 @@ test('display: valores guardados listos para editar (2 decimales; nunca bloquean
   assert.equal(D.display(2.375, 'qty'), '2.375');
 });
 
+test('fill: al editar muestra display(original); sin tocar, value() devuelve el original exacto; al escribir, lo tecleado', () => {
+  const make = () => ({ value: '', attrs: {}, setAttribute(k, x) { this.attrs[k] = String(x); }, getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; },
+    removeAttribute(k) { delete this.attrs[k]; }, hasAttribute(k) { return k in this.attrs; }, setCustomValidity() {} });
+  const els = { c: make(), e: make() };
+  const N = load({ document: { getElementById: (id) => els[id] || null } }).NA_DECIMAL;
+  assert.equal(N.fill('c', 3.3333), '3.33');
+  assert.equal(els.c.value, '3.33');
+  assert.equal(N.value('c'), 3.3333, 'sin tocar: original');
+  assert.equal(N.value('c', 0), 3.3333);
+  els.c.value = '3.34';
+  assert.equal(N.value('c'), 3.34, 'cambiado: lo escrito');
+  els.c.value = '3.33';
+  assert.equal(N.value('c'), 3.3333, 'mismo texto sin evento input: sigue siendo el original');
+  N.forget(els.c);
+  assert.equal(N.value('c'), 3.33, 'tras escribir (forget): lo tecleado');
+  assert.equal(N.fill('e', ''), '');
+  assert.ok(Number.isNaN(N.value('e')));
+  assert.equal(N.untouched(els.e), null);
+  assert.equal(N.fill('e', 0.1 + 0.2), '0.30');
+  assert.equal(N.value('e'), 0.30000000000000004);
+});
+
 test('el redondeo a céntimos sigue siendo Math.round(monto * 100)', () => {
   for (const [raw, c] of [['4,50', 450], ['4,5', 450], [',50', 50], ['0,01', 1], ['19,99', 1999], ['1,000.50', 100050], ['1234,5', 123450], ['0,500', 50]])
     assert.equal(Math.round(D.parse(raw) * 100), c, raw);
@@ -99,7 +126,7 @@ test('value, validate y mark sobre campos (DOM mínimo)', () => {
   assert.equal(toasts.length, 0);
   assert.equal(N.validate([['a', 'Costo'], ['c', 'Monto']]), false);
   assert.equal(toasts.length, 1);
-  assert.match(toasts[0][0], /^Monto: no se aceptan exponentes/);
+  assert.match(toasts[0][0], /^Monto: Sin exponentes/);
   assert.equal(toasts[0][1], 'error');
   assert.equal(els.c.attrs['aria-invalid'], 'true');
   assert.ok(els.c.validity.length > 0 && els.c.focused);
@@ -121,8 +148,8 @@ test('enteros: dígitos o miles con coma («1,000»); «4,50» y «4.50» se rec
   assert.equal(D.parse('1,000', I), 1000);
   for (const raw of ['4,50', '4.50', '1e2', '+2', '-2', '0x10', '1.234', '1,00', '01,000', ''])
     assert.ok(Number.isNaN(D.parse(raw, I)), raw);
-  assert.match(D.check('4,50', I).message, /«4,50» no es un número entero/);
-  assert.match(D.check('1e2', I).message, /no se aceptan exponentes.*número entero/);
+  assert.match(D.check('4,50', I).message, /^Debe ser entero\. Ej\.: 3 o 1,000$/);
+  assert.match(D.check('1e2', I).message, /^Sin exponentes\. Ej\.: 3 o 1,000$/);
 });
 
 test('toCents: Math.round(monto*100) con entero seguro; inválido → NaN', () => {

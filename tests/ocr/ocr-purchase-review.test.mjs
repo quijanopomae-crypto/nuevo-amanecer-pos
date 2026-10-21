@@ -262,3 +262,12 @@ test('U20 no inventario ni persistencia', () => {
   controller.getReviewedPurchaseProposals();
   assert.deepEqual(calls, { inventory: 0, persistence: 0, storage: 0 });
 });
+
+test('U-montos: el costo aplicado es el que se muestra (1.2345 → 1.23), no el original oculto', () => {
+  const { controller } = createReview([proposal('MATCHED_SAFE', { unitCost: 1.2345 })]);
+  assert.equal(controller.confirm(0).ok, true);
+  assert.equal(controller.getReviewedPurchaseProposals()[0].unitCost, 1.23);
+  const tiny = createReview([proposal('MATCHED_SAFE', { unitCost: 0.004 })]).controller.confirm(0);
+  assert.equal(tiny.ok, false);
+  assert.ok(tiny.errors.includes('COSTO_INVALIDO'), 'un costo que se mostraría 0.00 no se aplica');
+});

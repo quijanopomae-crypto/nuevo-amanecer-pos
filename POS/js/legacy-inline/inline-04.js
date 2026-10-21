@@ -53,7 +53,7 @@ function abrirLineaCreditoManual(clientId){
   const e=_naEvaluateClientCredit(clientId);
   if(!e.exists){toast('No se encontró el cliente','error');return;}
   _naManualCreditClientId=e.client.id;
-  document.getElementById('lineaManualMonto').value=globalThis.NA_DECIMAL?globalThis.NA_DECIMAL.display(e.manualActive?e.manualLine:e.automaticLine):String(e.manualActive?e.manualLine:e.automaticLine);
+  if(globalThis.NA_DECIMAL)globalThis.NA_DECIMAL.fill('lineaManualMonto',e.manualActive?e.manualLine:e.automaticLine);else document.getElementById('lineaManualMonto').value=String(e.manualActive?e.manualLine:e.automaticLine);
   const summary=document.getElementById('lineaManualResumen');
   if(summary)summary.innerHTML=`<div class="cms-head"><div><div class="cms-title">${_naEsc(e.client.nombre)}</div><div class="cms-sub">Automática ${fmt(e.automaticLine)} · Ganancia real ${fmt(e.realizedProfit)} · Deuda ${fmt(e.history.debt)}</div></div>${_naCreditBadge(e)}</div>`;
   const autoBtn=document.getElementById('btnLineaAutomatica');
