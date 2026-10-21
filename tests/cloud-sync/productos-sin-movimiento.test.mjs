@@ -87,3 +87,15 @@ test('solo lectura: sin red, almacenamiento ni innerHTML; precache y página pre
   assert.match(html, /id="pageProductosSinMovimiento"/);
   for (const a of ['css/productos-sin-movimiento.css', 'js/modules/productos-sin-movimiento.js']) { assert.ok(html.includes(a)); assert.ok(sw.includes("'./" + a + "'")); }
 });
+
+// Formato real del POS (saleItems de procesarVenta): id = productoId = id del producto; caja con unitsPerQty.
+test('formato real del POS: una venta por caja cuenta como movimiento; anulada no', () => {
+  const item = (id, extra = {}) => ({ id, productoId: id, sku: '', name: 'X', nombre: 'X', qty: 1, cantidad: 1, precio: 50, precioUnitario: 50, subtotal: 50, unitsPerQty: 1, ventaModo: 'unidad', modo: 'minorista', ...extra });
+  const prods = [{ id: 1700000000001, name: 'Caja vendida', stock: 5 }, { id: 1700000000002, name: 'Solo anulada', stock: 5 }];
+  const real = [
+    { id: 'V-1', fecha: day(3), timestamp: day(3), items: [item(1700000000001, { qty: 2, unitsPerQty: 12, ventaModo: 'caja', modo: 'mayorista' })] },
+    { id: 'V-2', fecha: day(2), anulada: true, items: [item(1700000000002)] }
+  ];
+  assert.deepEqual(keys(api.buildReport(real, prods, { days: 30, now })), ['id:1700000000002']);
+  assert.equal(api.buildReport(real, prods, { days: 30, now }).rows[0].lastSale, '', 'la venta anulada no cuenta como última venta');
+});
