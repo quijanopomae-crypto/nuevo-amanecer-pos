@@ -107,3 +107,51 @@ test('código con caracteres fuera de Code 128: solo texto y aviso visible', () 
   assert.match(html, /data-etq-warn>sin barras: código con caracteres no válidos</);
   assert.doesNotMatch(E.labelHtml({ id: 5, name: 'Galleta', precio: 2 }), /data-etq-warn/, 'sin código no muestra el aviso');
 });
+
+// ---- Misión 1: impresión, sin precio, tope y hora de Lima ----
+test('@page: A4 sin margen y rollo con el tamaño exacto de la etiqueta', () => {
+  assert.equal(E.pageCss('a4'), '@page { size: A4; margin: 0; }');
+  assert.equal(E.pageCss('chica'), '@page { size: 38mm 25mm; margin: 0; }');
+  assert.equal(E.pageCss('mediana'), '@page { size: 50mm 30mm; margin: 0; }');
+  assert.equal(E.pageCss('otro'), '@page { size: 50mm 30mm; margin: 0; }');
+  // 3 × 70 mm = 210 mm y 8 × 37 mm = 296 mm: entra en A4 (210 × 297) sin margen.
+  assert.ok(3 * E.FORMATS.a4.width <= 210 && 8 * E.FORMATS.a4.height <= 297);
+});
+
+test('A4: un grid por cada 24 etiquetas', () => {
+  const p = { id: 1, name: 'X', precio: 1 };
+  const html = E.sheetHtml(Array(50).fill(p), 'a4', new Date());
+  const pages = html.split('data-etq-a4-page').length - 1;
+  assert.equal(pages, 3);
+  const first = html.split('<div class="etq-a4-page" data-etq-a4-page>')[1];
+  assert.equal(first.split('data-etq-label').length - 1, 24);
+  assert.doesNotMatch(E.sheetHtml(Array(5).fill(p), 'chica', new Date()), /etq-a4-page/);
+});
+
+test('sin precio: nunca «S/ 0.00» sin aviso', () => {
+  for (const p of [{ precio: 0 }, {}, { precio: '' , price: '' }, { precio: 'abc' }, { precio: -3 }, { precio: 0.004 }]) {
+    assert.equal(E.hasPrice(p), false, JSON.stringify(p));
+    assert.equal(E.productPrice(p), 'Sin precio');
+    const html = E.labelHtml({ id: 1, name: 'A', ...p });
+    assert.doesNotMatch(html, /S\/ 0\.00/);
+    assert.match(html, /etq-no-price/);
+    assert.match(html, /data-etq-noprice>Sin precio</);
+  }
+  assert.equal(E.hasPrice({ precio: '', price: 2 }), true);
+  assert.doesNotMatch(E.labelHtml({ id: 2, name: 'B', precio: 3 }), /etq-no-price|data-etq-noprice/);
+});
+
+test('tope total de etiquetas en la vista previa', () => {
+  const p = { id: 1 };
+  const plan = E.labelPlan([{ product: p, qty: 100 }, { product: p, qty: 100 }, { product: p, qty: 100 }]);
+  assert.equal(E.MAX_TOTAL, 240);
+  assert.equal(plan.total, 240); assert.equal(plan.requested, 300); assert.equal(plan.truncated, true);
+  const small = E.labelPlan([{ product: p, qty: 3 }]);
+  assert.equal(small.total, 3); assert.equal(small.truncated, false);
+});
+
+test('fecha en hora de Lima, no en la del aparato', () => {
+  assert.equal(E.formatDate(new Date('2026-10-21T03:00:00Z')), '20/10/2026');
+  assert.equal(E.formatDate(new Date('2026-10-21T05:00:00Z')), '21/10/2026');
+  assert.equal(E.formatDate(new Date('2027-01-01T04:59:00Z')), '31/12/2026');
+});
