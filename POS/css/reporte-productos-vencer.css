@@ -63,7 +63,7 @@
 /* Misión 4: resumen por tramos y aviso flotante del dueño (fuera de Inicio, no cambia su diseño). */
 #pageReporteProductosVencer .rpv-summary { font-weight: 700; color: var(--rpv-text); overflow-wrap: anywhere; }
 #pageReporteProductosVencer input::placeholder { color: var(--rpv-muted); opacity: 1; }
-.rpv-alert { position: fixed; top: 12px; right: 12px; z-index: 9000; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: min(420px, calc(100vw - 24px)); padding: 10px 12px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #78350f; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 14px; line-height: 1.4; }
+.rpv-alert { position: fixed; top: 72px; right: 12px; z-index: 9000; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: min(420px, calc(100vw - 24px)); padding: 10px 12px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #78350f; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 14px; line-height: 1.4; }
 .rpv-alert .rpv-alert-text { flex: 1 1 200px; margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .rpv-alert button { min-height: 40px; padding: 6px 12px; border-radius: 8px; border: 1px solid #b45309; background: #fff; color: #78350f; font: inherit; font-weight: 700; cursor: pointer; }
 .rpv-alert .rpv-alert-view { background: #92400e; border-color: #92400e; color: #fff; }

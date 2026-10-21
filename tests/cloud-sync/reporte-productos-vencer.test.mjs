@@ -232,7 +232,10 @@ test('registry entry is unlocked (not pending) with the new page; navigation den
   for (const asset of ['css/reporte-productos-vencer.css', 'js/modules/reporte-productos-vencer.js']) {
     assert.ok(html.includes(asset)); assert.ok(sw.includes("'./" + asset + "'"));
   }
-  assert.doesNotMatch(source, /fetch\s*\(|XMLHttpRequest|sendBeacon|\.setItem\s*\(|indexedDB|\.innerHTML\s*=|\b(?:POST|PUT|PATCH|DELETE)\b/);
+  // Única escritura permitida: la marca de sesión del aviso cerrado (sessionStorage, sin datos).
+  assert.deepEqual(source.match(/\.setItem\s*\([^)]*\)/g), [".setItem(ALERT_SESSION_KEY, '1')"]);
+  assert.match(source, /root\.sessionStorage\.setItem\(ALERT_SESSION_KEY, '1'\)/);
+  assert.doesNotMatch(source, /fetch\s*\(|XMLHttpRequest|sendBeacon|localStorage|indexedDB|\.innerHTML\s*=|\b(?:POST|PUT|PATCH|DELETE)\b/);
 });
 
 // ---- Misión 4: tramos, filtro por lote y aviso del dueño ----

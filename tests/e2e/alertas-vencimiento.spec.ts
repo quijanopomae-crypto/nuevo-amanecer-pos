@@ -127,3 +127,37 @@ test('Cerrar oculta el aviso; si NA_ROLES falla, el aviso se oculta', async ({ p
   await page.evaluate(() => { (window as any).NA_ROLES.isOwner = () => { throw new Error('rol roto'); }; (window as any).NA_REPORTE_PRODUCTOS_VENCER.showAlert(); });
   await expect(alert).toHaveCount(0);
 });
+
+test('a 390px el aviso no aparece en Venta ni tapa la barra inferior; cerrado no vuelve en la sesión', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await rolePage(page, 'owner', false);
+  const alert = page.locator('#naRpvAlert');
+  await expect(alert).toBeVisible();
+  // No se superpone con elementos fijos de la parte inferior (barra inferior / botones).
+  const overlap = await alert.evaluate(a => {
+    const r = a.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLElement>('body *')].filter(el => el !== a && !a.contains(el) && el.offsetParent !== null || getComputedStyle(el).position === 'fixed')
+      .filter(el => el !== a && !a.contains(el) && ['fixed', 'sticky'].includes(getComputedStyle(el).position))
+      .filter(el => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.top > window.innerHeight / 2 && !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); })
+      .map(el => el.id || el.className);
+  });
+  expect(overlap).toEqual([]);
+  // En Venta (pagePOS) el aviso se quita y no tapa el botón de cobrar.
+  await page.evaluate(() => (window as any).goPage('pagePOS'));
+  await expect(page.locator('#pagePOS')).toHaveClass(/\bactive\b/);
+  await expect(alert).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).NA_REPORTE_PRODUCTOS_VENCER.showAlert())).toBe(false);
+  await expect(alert).toHaveCount(0);
+  // Al salir de Venta vuelve a mostrarse.
+  await page.evaluate(() => (window as any).goPage('pageMenu'));
+  await expect(alert).toBeVisible();
+  // Cerrar: no vuelve en la misma sesión, ni tras recargar.
+  await alert.locator('[data-rpv-alert-close]').click();
+  await expect(alert).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event('na:canonical-updated')));
+  await page.reload();
+  await page.waitForFunction(() => !!(window as any).NA_REPORTE_PRODUCTOS_VENCER && (window as any).NA_ROLES?.confirmed);
+  await page.waitForTimeout(1800);
+  expect(await page.evaluate(() => (window as any).NA_REPORTE_PRODUCTOS_VENCER.showAlert())).toBe(false);
+  await expect(alert).toHaveCount(0);
+});

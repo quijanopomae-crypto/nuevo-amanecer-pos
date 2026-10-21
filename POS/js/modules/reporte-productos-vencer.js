@@ -147,17 +147,27 @@
     finally { link.remove(); root.setTimeout(function () { root.URL.revokeObjectURL(url); }, 1000); }
     return true;
   }
-  // Aviso del dueño: tarjeta flotante propia (no cambia el diseño de Inicio). Al cerrarla no vuelve
-  // a salir ese día de Lima en esta sesión (en memoria: el módulo no escribe almacenamiento).
-  var ALERT_ID = 'naRpvAlert', dismissedDay = null;
+  // Aviso del dueño: tarjeta flotante propia (no cambia el diseño de Inicio). Nunca se muestra en Venta
+  // (pagePOS), para no tapar el botón de cobrar ni la barra inferior. Al cerrarla no vuelve en la sesión:
+  // única escritura del módulo, una marca en sessionStorage (sin datos de productos ni lotes).
+  var ALERT_ID = 'naRpvAlert', ALERT_SESSION_KEY = 'na_rpv_alert_closed_v1', VENTA_PAGE = 'pagePOS', dismissedMemory = false;
+  function alertDismissed() {
+    if (dismissedMemory) return true;
+    try { return !!(root.sessionStorage && root.sessionStorage.getItem(ALERT_SESSION_KEY) === '1'); } catch (_) { return false; }
+  }
+  function rememberDismiss() {
+    dismissedMemory = true;
+    try { if (root.sessionStorage) root.sessionStorage.setItem(ALERT_SESSION_KEY, '1'); } catch (_) {}
+  }
+  function inVenta() { var v = root.document && root.document.getElementById(VENTA_PAGE); return !!(v && v.classList && v.classList.contains('active')); }
   function removeAlert() { var old = root.document && root.document.getElementById(ALERT_ID); if (old) old.remove(); }
   function showAlert() {
     var doc = root.document; if (!doc || !doc.body) return false;
     // Solo el dueño (NA_ROLES.isOwner() en try/catch) y con la función habilitada; si algo falla, se oculta.
-    if (!available()) { removeAlert(); return false; }
+    if (!available() || alertDismissed() || inVenta()) { removeAlert(); return false; }
     var info;
     try { info = alertSummary(currentProducts()); } catch (_) { removeAlert(); return false; }
-    if ((!info.expired && !info.soon) || dismissedDay === info.today) { removeAlert(); return false; }
+    if ((!info.expired && !info.soon) || alertDismissed() || inVenta()) { removeAlert(); return false; }
     removeAlert();
     var box = element('div', 'rpv-alert'); box.id = ALERT_ID; box.setAttribute('role', 'status'); box.setAttribute('data-rpv-alert', '');
     var parts = [];
@@ -166,7 +176,7 @@
     box.appendChild(element('p', 'rpv-alert-text', '⏳ ' + parts.join(' · ') + ' (' + dateLabel(info.today) + ', hora de Lima)'));
     var view = element('button', 'rpv-alert-view', 'Ver reporte'); view.type = 'button'; view.setAttribute('data-rpv-alert-view', '');
     var close = element('button', 'rpv-alert-close', 'Cerrar'); close.type = 'button'; close.setAttribute('data-rpv-alert-close', ''); close.setAttribute('aria-label', 'Cerrar aviso de vencimientos');
-    function dismiss() { dismissedDay = info.today; removeAlert(); }
+    function dismiss() { rememberDismiss(); removeAlert(); }
     view.addEventListener('click', function () { dismiss(); if (typeof root.goPage === 'function') root.goPage(PAGE_ID); });
     close.addEventListener('click', dismiss);
     box.appendChild(view); box.appendChild(close); doc.body.appendChild(box);
@@ -186,6 +196,8 @@
     root.addEventListener('na:canonical-updated', showAlert);
     page.addEventListener('input', function (e) { if (e.target && e.target.matches && e.target.matches('[data-rpv-lot]')) update(); });
     root.setTimeout(showAlert, 1500);
+    var venta = root.document.getElementById(VENTA_PAGE);
+    if (venta && typeof root.MutationObserver === 'function') new root.MutationObserver(showAlert).observe(venta, { attributes: true, attributeFilter: ['class'] });
     ['na:canonical-updated', 'na:canonical-sale-projection', 'na:canonical-sale-receipt', 'focus'].forEach(function (event) { root.addEventListener(event, update); });
     update();
   }
