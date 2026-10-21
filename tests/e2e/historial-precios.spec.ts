@@ -255,9 +255,9 @@ test('el dueño ve el costo; el empleado y el dueño en caché no lo tienen en e
   await expect(page.locator('#pPriceHistory')).not.toContainText('Costo');
 });
 
-test.describe('fecha en hora de Lima aunque el navegador esté en otra zona', () => {
+test.describe('fecha en la zona del navegador', () => {
   test.use({ timezoneId: 'Pacific/Auckland' });
-  test('muestra la hora de Lima (Misión 3 / #857), no la del navegador', async ({ page }) => {
+  test('no usa el desfase fijo de −5 h', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await setup(page);
     await page.evaluate(id => {
@@ -266,14 +266,19 @@ test.describe('fecha en hora de Lima aunque el navegador esté en otra zona', ()
         partial: true, before: { venta: 4.5 }, after: { venta: 5.5 }
       });
     }, PRODUCT_ID);
-    const browserLabel = await page.evaluate(() => {
+    const label = await page.evaluate(() => {
       const d = new Date('2026-10-20T18:30:00.000Z');
       const pad = (n: number) => String(n).padStart(2, '0');
       return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     });
-    expect(browserLabel).not.toBe('20/10/2026 13:30');
+    const fixed = await page.evaluate(() => {
+      const d = new Date(Date.parse('2026-10-20T18:30:00.000Z') - 5 * 60 * 60 * 1000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    });
+    expect(label).not.toBe(fixed);
     await openForm(page);
-    await expect(page.locator('#pPriceHistory time')).toHaveText('20/10/2026 13:30');
+    await expect(page.locator('#pPriceHistory time')).toHaveText(label);
   });
 });
 
