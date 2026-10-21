@@ -42,11 +42,11 @@ test('fresh credit sale pending sync: debt is accurate while the technical state
   const r = ctx.NAReceiptShare.build({ kind: 'sale', sale: V094, customer: DALILA, fresh: true, pendingSync: true, due: '2026-10-25' });
   const b = block(r.text);
   assert.match(r.text, /Saldo pendiente: S\/ 102\.50/);
-  assert.match(b, /Deuda anterior: S\/ 1251\.40/);
+  assert.match(b, /Deuda anterior: S\/ 1,251\.40/);
   assert.match(b, /Esta venta: S\/ 102\.50/);
-  assert.match(b, /Deuda total: S\/ 1353\.90/);
+  assert.match(b, /Deuda total: S\/ 1,353\.90/);
   assert.match(b, /Créditos abiertos: 91\b/);
-  assert.match(b, /Línea de crédito: S\/ 1500\.00/);
+  assert.match(b, /Línea de crédito: S\/ 1,500\.00/);
   assert.match(b, /Línea disponible: S\/ 146\.10/);
   assert.doesNotMatch(r.text, /pendiente de sincronizar|guardado local|puerto sungaro\)/i);
   assert.equal(ctx.NAReceiptShare.accountSummary({kind:'sale',sale:V094,customer:DALILA,pendingSync:true}).thisPending,true,'pending sync state still exists internally');
@@ -62,9 +62,9 @@ test('after sync the same sale is counted once (no double counting with the repl
   ctx.ventas = [V094];
   const r = ctx.NAReceiptShare.build({ kind: 'sale', sale: V094, credit: synced.at(-1), customer: DALILA, fresh: false });
   const b = block(r.text);
-  assert.match(b, /Deuda anterior: S\/ 1251\.40/);
+  assert.match(b, /Deuda anterior: S\/ 1,251\.40/);
   assert.match(b, /Esta venta: S\/ 102\.50/);
-  assert.match(b, /Deuda total: S\/ 1353\.90/);
+  assert.match(b, /Deuda total: S\/ 1,353\.90/);
   assert.match(b, /Créditos abiertos: 91\b/);
   assert.doesNotMatch(b, /pendiente de sincronizar/);
 });
@@ -95,7 +95,7 @@ test('no block for cash sales, generic customer, or a customer without id; no li
   assert.doesNotMatch(anonymous.text, /ESTADO DE CUENTA/);
   const noLine = realTicket({ clientes: [{ ...DALILA, lineaCreditoManualActiva: false }], creditos: previousCredits() });
   const t = noLine.NAReceiptShare.build({ kind: 'sale', sale: V094, customer: { ...DALILA, lineaCreditoManualActiva: false }, fresh: true, pendingSync: true }).text;
-  assert.match(t, /Deuda total: S\/ 1353\.90/);
+  assert.match(t, /Deuda total: S\/ 1,353\.90/);
   assert.doesNotMatch(t, /Línea/);
 });
 
@@ -112,8 +112,8 @@ test('printed ticket (Ver ticket / imprimir / ESC-POS) gets the same block once,
   const printed = ctx._naBuildThermalTicket(V094, false);
   const b = block(printed.text);
   assert.equal((printed.text.match(/ESTADO DE CUENTA DEL CLIENTE/g) || []).length, 1);
-  assert.match(b, /Deuda anterior: S\/ 1251\.40/);
-  assert.match(b, /Deuda total: S\/ 1353\.90/);
+  assert.match(b, /Deuda anterior: S\/ 1,251\.40/);
+  assert.match(b, /Deuda total: S\/ 1,353\.90/);
   assert.match(b, /Creditos abiertos: 91\b/);
   assert.match(b, /Linea disponible: S\/ 146\.10/);
   assert.ok(printed.lines.every(l => /^[\x20-\x7E]*$/.test(l)), 'printer lines are ASCII');

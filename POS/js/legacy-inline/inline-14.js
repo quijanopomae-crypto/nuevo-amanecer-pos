@@ -1,8 +1,8 @@
 
 // Formato exclusivo de PRESENTACIÓN de precios POS. No modifica fmt global,
 // valores numéricos almacenados, cobro, tickets ni payloads de sincronización.
-const _naPosMoneyNumberFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
-function _naPosDisplayMoney(value){ return 'S/ ' + _naPosMoneyNumberFormat.format(_naNumber(value)); }
+// Miles sobre toFixed(2): mismos dígitos y redondeo que fmt(), solo agrega comas.
+function _naPosDisplayMoney(value){ const s=_naNumber(value).toFixed(2); return 'S/ ' + s.replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
 // Seguridad: tarjetas y carrito del POS usan data-* y fuentes de imagen validadas por un resolver único.
 function _naSecProductVisibleInPos(product){
