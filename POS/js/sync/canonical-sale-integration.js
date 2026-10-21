@@ -232,13 +232,27 @@
       if (still) notify('Venta ' + saleId + ' guardada, falta confirmar con el servidor' + (why ? ' (' + why + ')' : '') + '. Se confirmará sola; no la cobres de nuevo.', 'warning');
     } catch (_) {}
   }
+  // Fuera de la cola no significa confirmada: tras un 409 operation_id_conflict o un cambio de rol la venta
+  // pasa a «Ventas en revisión». Solo se dice «confirmada» si el servidor la confirmó (no está en revisión).
+  function reviewEntry(outbox, saleId) {
+    try {
+      if (typeof outbox.quarantine !== 'function') return null;
+      return (outbox.quarantine().entries || []).filter(function (e) { return e && e.status === 'QUARANTINED' && e.intent && e.intent.sale_id === saleId; }).pop() || null;
+    } catch (_) { return null; }
+  }
+  function notifySettled(outbox, saleId) {
+    var held = reviewEntry(outbox, saleId);
+    if (!held) { notify('Venta ' + saleId + ' confirmada', 'success'); return; }
+    var why = ''; try { why = typeof outbox.reasonText === 'function' ? outbox.reasonText(held.reason, held) : ''; } catch (_) { why = ''; }
+    notify('Venta ' + saleId + ' quedó en revisión' + (why ? ': ' + why : '') + '. Revísala en Caja; no la cobres de nuevo.', 'warning');
+  }
   function syncOutboxInBackground(outbox, saleId) {
     if (!outbox || typeof outbox.sync !== 'function') return;
     var run = function () {
       Promise.resolve().then(function () { return outbox.sync(); }).then(function (r) {
         var offline = root.navigator && root.navigator.onLine === false;
         if (r && /^(WAITING|BLOCKED_)/.test(String(r.status || ''))) warnIfUnconfirmed(outbox, saleId, offline || /OFFLINE|Failed to fetch|NetworkError|AUTHORITY_UNAVAILABLE|TIMEOUT/i.test(String(r.reason || '')) ? 'sin conexión' : /5\d\d|internal|storage/i.test(String(r.reason || '')) ? 'el servidor respondió con un error' : '');
-        else if (saleId && !offline) { try { if (!(outbox.snapshot().intents || []).some(function (x) { return x && x.sale_id === saleId; })) notify('Venta ' + saleId + ' confirmada', 'success'); } catch (_) {} }
+        else if (saleId && !offline) { try { if (!(outbox.snapshot().intents || []).some(function (x) { return x && x.sale_id === saleId; })) notifySettled(outbox, saleId); } catch (_) {} }
       }).catch(function (error) {
         warnIfUnconfirmed(outbox, saleId, root.navigator && root.navigator.onLine === false ? 'sin conexión' : 'el servidor respondió con un error');
         if (root.console && typeof root.console.warn === 'function')

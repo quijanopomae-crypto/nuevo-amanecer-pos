@@ -272,7 +272,7 @@
       var after = pendingRecord();
       // T-10: sesión vencida: el abono se conserva tal cual y se envía al volver a entrar; sin bucle.
       if (after && after.last_error && after.auth_failed_identity !== undefined) {
-        showNet('rejected', 'Sesión vencida: vuelve a iniciar sesión. El abono queda guardado en este equipo y se enviará solo; no lo cobres de nuevo.');
+        showNet('rejected', 'Sesión vencida: vuelve a iniciar sesión. El abono queda guardado en este equipo y se enviará solo al volver a entrar con el mismo rol (dueño o empleado); no lo cobres de nuevo.');
         return;
       }
       if (after && after.last_error) {

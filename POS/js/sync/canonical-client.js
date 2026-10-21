@@ -167,52 +167,118 @@
   function identityHistory() {
     try { var v = JSON.parse(root.localStorage.getItem(IDENTITY_KEY) || 'null'); return v && v.version === 1 && Array.isArray(v.history) ? v : null; } catch (_) { return null; }
   }
-  // Historial de identidades vistas en este aparato. Se crea la primera vez que corre este código (o al
-  // activar/vincular con activate.js) y crece cada vez que cambia el token guardado.
-  function noteIdentity(key) {
+  // SPEC-891: lo único estable y validado por el servidor es el ROL de /auth/me (el principal cambia en cada
+  // activación, la etiqueta la escribe el dueño y el cajero lo manda el cliente). «Mismo usuario» = mismo rol
+  // en el mismo navegador.
+  function userKeyOf(role) { return role === 'owner' || role === 'empleado' ? role : null; }
+  function roleOfUser(user) { return user === 'owner' || user === 'empleado' ? user : null; }
+  // Último rol guardado en este aparato por pos-roles-client (na_pos_role_v1): rastro para lo antiguo.
+  function cachedUser() {
+    try { var c = JSON.parse(root.localStorage.getItem('na_pos_role_v1') || 'null'); return c ? userKeyOf(c.role) : null; } catch (_) { return null; }
+  }
+  // Historial de identidades de este aparato. La PRIMERA vez que corre este código (o activate.js) se anota
+  // `first`: la sesión activa en ese momento y el último rol guardado. Lo pendiente sin sello (de antes de
+  // la actualización) lo adopta esa identidad. Cada sesión anota su usuario estable cuando /auth/me lo confirma.
+  function noteIdentity(key, user) {
     var h = identityHistory(), at = new Date().toISOString();
-    if (h && h.current === key) return h;
-    var next = h ? copy(h) : { version: 1, history: [] };
-    next.current = key; next.history = next.history.concat([{ key: key, since: at }]).slice(-20);
-    try { root.localStorage.setItem(IDENTITY_KEY, JSON.stringify(next)); } catch (_) {}
+    var next = h ? copy(h) : { version: 1, history: [], first: { at: at, key: key, user: cachedUser() } };
+    var changed = !h;
+    if (next.current !== key) { next.current = key; next.history = next.history.concat([{ key: key, since: at }]).slice(-20); changed = true; }
+    if (user) {
+      var entry = next.history.filter(function (x) { return x.key === key; }).pop();
+      if (entry && entry.user !== user) { entry.user = user; changed = true; }
+    }
+    if (changed) try { root.localStorage.setItem(IDENTITY_KEY, JSON.stringify(next)); } catch (_) {}
     return next;
+  }
+  function userOfKey(key) {
+    var h = identityHistory(); if (!h || !key) return null;
+    var entry = h.history.filter(function (x) { return x.key === key && x.user; }).pop();
+    return entry ? entry.user : null;
   }
   function sessionIdentity() {
     var saved;
     try { saved = JSON.parse(root.localStorage.getItem(CREDENTIALS_KEY) || 'null'); } catch (_) { return null; }
     if (!saved || typeof saved !== 'object' || typeof saved.token !== 'string' || !saved.token) return null;
     var key = 'sid:' + identityHash(String(saved.endpoint || '').replace(/\/+$/, '') + '\n' + saved.token);
-    noteIdentity(key);
     var roles = root.NA_ROLES, confirmed = !!(roles && roles.confirmed);
-    var who = { key: key, principal: null, role: null };
-    try { if (confirmed && roles.sessionPrincipal) who.principal = String(roles.sessionPrincipal); if (confirmed && roles.role) who.role = String(roles.role); } catch (_) {}
+    // El rol confirmado tiene que ser el de ESTE token (otra pestaña pudo guardar otra sesión).
+    try { if (confirmed && typeof roles.confirmedFor === 'function' && !roles.confirmedFor(saved.token)) confirmed = false; } catch (_) { confirmed = false; }
+    // roles=false: no hay sistema de roles cargado (nada puede confirmar el rol): se compara solo la sesión.
+    var who = { key: key, user: null, principal: null, role: null, roles: !!roles };
+    try {
+      if (confirmed && roles.sessionPrincipal) who.principal = String(roles.sessionPrincipal);
+      if (confirmed && roles.role) { who.role = String(roles.role); who.user = userKeyOf(who.role); }
+    } catch (_) {}
+    noteIdentity(key, who.user);
+    // Sin confirmar (p. ej. sin red), la sesión actual conserva el usuario que /auth/me ya le confirmó antes.
+    if (!who.user) who.user = userOfKey(key);
     return who;
   }
-  // Regla para lo pendiente SIN identidad (guardado por una versión anterior): solo se considera de la
-  // sesión actual si este aparato tuvo UNA sola identidad desde antes de que se creara. Si no se puede
-  // saber (no hay historial, hubo cambio, o falta la fecha), queda en revisión; nunca se borra.
-  function identityTrustsLegacy(createdAt) {
-    var who = sessionIdentity(), h = identityHistory(), t = Date.parse(createdAt || '');
-    if (!who || !h || h.history.length !== 1 || h.history[0].key !== who.key || h.current !== who.key || !Number.isFinite(t)) return false;
-    var since = Date.parse(h.history[0].since || '');
-    return Number.isFinite(since) && since <= t;
+  // ¿Hubo en este aparato algún usuario distinto de `user`?
+  function otherUserSeen(user) {
+    var h = identityHistory(); if (!h) return false;
+    return h.history.some(function (x) { return x.user && x.user !== user; }) || !!(h.first && h.first.user && h.first.user !== user);
   }
+  // Mismo aparato (todo esto vive en su localStorage) + mismo ROL => 'same' (se envía solo, con el token
+  // nuevo y el cuerpo idéntico). Otro rol => 'other' (revisión). Sin poder confirmar el rol actual todavía =>
+  // 'wait' (no se envía ni se aparta). Sin rastro del rol que lo creó: 'same' solo si en este aparato nunca
+  // hubo otro rol.
+  function identityVerdict(stamped, stampedUser, who) {
+    if (!who) return 'same';
+    if (stamped === who.key) return 'same';
+    var origin = stampedUser || userOfKey(stamped);
+    if (!who.user) return who.roles === false ? 'other' : 'wait';
+    if (origin) return origin === who.user ? 'same' : 'other';
+    return otherUserSeen(who.user) ? 'other' : 'same';
+  }
+  // Comandos que solo el dueño puede hacer sin aprobación: un rastro del rol de quien los guardó.
+  var OWNER_ONLY_COMMANDS = ['expense.update', 'expense.void'], OWNER_GATED_COMMANDS = ['inventory.adjust', 'adjustment.create', 'compensation.create', 'product.update', 'customer.credit-policy.set'];
+  function inferredRole(hint) {
+    if (!hint || !hint.command) return null;
+    if (OWNER_ONLY_COMMANDS.includes(hint.command)) return 'owner';
+    if (OWNER_GATED_COMMANDS.includes(hint.command) && !(typeof hint.owner_approval === 'string' && hint.owner_approval)) return 'owner';
+    return null;
+  }
+  // Lo pendiente SIN sello (guardado antes de esta versión). Lo adopta la identidad activa la primera vez
+  // que corrió este código (`first`), salvo que un rastro (rol inferible del propio registro, o el último rol
+  // guardado al actualizar) indique OTRO usuario: entonces queda en revisión, visible y sin borrarse.
+  function legacyVerdict(hint, who) {
+    if (!who) return 'same';
+    var h = identityHistory(), first = h && h.first;
+    if (!first) { noteIdentity(who.key, who.user); h = identityHistory(); first = h && h.first; }
+    var origin = (first && (userOfKey(first.key) || first.user)) || null, role = inferredRole(hint);
+    if (origin && role && roleOfUser(origin) !== role) return 'other';
+    var current = who.user;
+    if (!current) {
+      if (first && first.key === who.key) {
+        // Misma sesión que al actualizar y aún sin confirmar: basta con que ningún rastro contradiga.
+        return role && origin && roleOfUser(origin) !== role ? 'other' : role && !origin ? (who.roles === false ? 'other' : 'wait') : 'same';
+      }
+      return who.roles === false ? 'other' : 'wait';
+    }
+    if (role && roleOfUser(current) !== role) return 'other';
+    if (origin) return origin === current ? 'same' : 'other';
+    if (first && first.key === who.key) return 'same';
+    return otherUserSeen(current) ? 'other' : 'same';
+  }
+  function identityTrustsLegacy(createdAt, hint) { var who = sessionIdentity(); return legacyVerdict(hint || null, who) === 'same'; }
   function ownerConfirmed() {
     var roles = root.NA_ROLES;
     try { return !!(roles && roles.confirmed && typeof roles.isOwner === 'function' && roles.isOwner()); } catch (_) { return false; }
   }
-  // Misma sesión = misma huella de token, o la misma sesión confirmada por /auth/me (el token de una
-  // sesión puede cambiar sin cambiar de sesión). 'wait' = huella distinta y aún no se confirmó la sesión.
-  function identityVerdict(stamped, stampedPrincipal, who) {
-    if (!who) return 'same';
-    if (stamped === who.key) return 'same';
-    if (stampedPrincipal) { if (!who.principal) return 'wait'; return stampedPrincipal === who.principal ? 'same' : 'other'; }
-    return 'other';
+  // Veredicto único para cualquier cola: stamp = {key,user} o null (antiguo); hint = {command, owner_approval}.
+  function identityCheck(stamp, hint, who) {
+    if (who === undefined) who = sessionIdentity();
+    if (stamp && stamp.key) return identityVerdict(stamp.key, stamp.user || null, who);
+    return legacyVerdict(hint || null, who);
   }
   function recordIdentityMatches(record, who) {
     if (!who) return true; // sin sesión guardada no se envía nada (sessionCredentials falla antes)
-    if (typeof record.identity === 'string' && record.identity) return identityVerdict(record.identity, record.identity_principal || null, who) === 'same';
-    return identityTrustsLegacy(record.payload && record.payload.created_at);
+    return recordVerdict(record, who) === 'same';
+  }
+  function recordVerdict(record, who) {
+    return identityCheck(record.identity ? { key: record.identity, user: record.identity_user || null } : null, record, who);
   }
   // 401/403 de sesión (vencida, revocada, solo lectura): no es un rechazo del comando.
   var AUTH_ERRORS = ['unauthorized', 'session_revoked', 'read_only_session'];
@@ -253,7 +319,7 @@
     try {
       var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
       if (runtime && typeof runtime.notify === 'function') runtime.notify('«' + (COMMAND_LABELS[record.command] || record.command) +
-        '» quedó en revisión: lo registró otra sesión de este aparato y no se envía con la sesión actual. El dueño debe revisarlo.', 'error');
+        '» quedó en revisión: lo registró otro rol (dueño/empleado) en este aparato y no se envía con la sesión actual. El dueño debe revisarlo.', 'error');
     } catch (_) {}
   }
   // T-03/T-47: un abono o lote de abonos que el Worker rechaza con 409 operation_id_conflict NO se da por
@@ -275,11 +341,11 @@
     if (at < 0) return null;
     return { index: at, operation_id: list[at].operation_id, credit_id: list[at].credit_id, amount_cents: list[at].amount_cents };
   }
-  function holdForConflict(record) {
+  function holdForConflict(record, reason) {
     var held = readHeld(), op = record.payload && record.payload.operation_id;
     if (!held.entries.some(function (e) { return e.status === 'HELD' && e.record && e.record.payload && e.record.payload.operation_id === op; })) {
       var detail = record.last_conflict_detail || {};
-      held.entries.push({ status: 'HELD', reason: 'operation_id_conflict', record: copy(record), conflict: detail.conflict || null, ledger: detail.ledger || null,
+      held.entries.push({ status: 'HELD', reason: reason || 'operation_id_conflict', record: copy(record), conflict: detail.conflict || null, ledger: detail.ledger || null,
         conflict_child: record.last_conflict_child || null, held_at: new Date().toISOString() });
     }
     writeHeld(held);
@@ -299,7 +365,8 @@
     return true;
   }
   var HELD_LEDGER_TEXT = { inventory: 'un movimiento de inventario', sales: 'una venta', sale: 'una venta', financial: 'un abono o movimiento de caja',
-    payments: 'un abono', expenses: 'un gasto', expense: 'un gasto', products: 'un producto', customers: 'un cliente' };
+    payments: 'un abono', expenses: 'un gasto', expense: 'un gasto', products: 'un producto', customers: 'un cliente', expense_revision: 'una edición de gasto', control: 'una operación de control del dueño', credit_accounts: 'una cuenta de crédito' };
+  function ledgerText(ledger) { return HELD_LEDGER_TEXT[ledger] || 'otro registro (' + String(ledger) + ')'; }
   function heldMoney(cents) { return 'S/ ' + (Number(cents || 0) / 100).toFixed(2); }
   // Texto para la lista/aviso existentes (sin cambiar diseño): qué se apartó, por qué y, si se sabe, qué abono chocó.
   function describeHeld(entry) {
@@ -307,17 +374,20 @@
     var r = entry.record, label = COMMAND_LABELS[r.command] || r.command, what;
     if (r.command === 'payment.batch' && r.payload && Array.isArray(r.payload.payments)) {
       var list = r.payload.payments, total = list.reduce(function (s, p) { return s + Number(p.amount_cents || 0); }, 0);
-      what = 'Cobro múltiple de ' + list.length + ' abono' + (list.length === 1 ? '' : 's') + ' (' + heldMoney(total) + ')';
+      var part = r.batch_part && r.batch_part.count > 1 ? r.batch_part : null;
+      what = (part ? 'Parte ' + (part.index + 1) + ' de ' + part.count + ' del cobro múltiple: ' : 'Cobro múltiple de ') + list.length + ' abono' + (list.length === 1 ? '' : 's') + ' (' + heldMoney(total) + ')';
     } else if (r.command === 'payment.create' && r.payload) what = 'Abono de ' + heldMoney(r.payload.amount_cents);
     else what = '«' + label + '»';
-    if (entry.reason !== 'operation_id_conflict') return what + ' en revisión: lo registró otra sesión de este aparato; el dueño debe revisarlo.';
-    var ledger = entry.ledger ? (HELD_LEDGER_TEXT[entry.ledger] || 'otro registro (' + String(entry.ledger) + ')') : (entry.conflict === 'cross_ledger' ? 'otro tipo de registro' : null);
+    if (entry.reason === 'forbidden_role') return what + ' en revisión: CANON no lo aceptó con el rol de la sesión actual. No se aplicó y no se borró; el dueño debe revisarlo.';
+    if (entry.reason !== 'operation_id_conflict') return what + ' en revisión: lo registró otro rol (dueño/empleado) en este aparato; el dueño debe revisarlo.';
+    var ledger = entry.ledger ? ledgerText(entry.ledger) : (entry.conflict === 'cross_ledger' ? 'otro tipo de registro' : null);
     var text = what + ' en revisión: CANON no lo registró porque su identificador de operación ya existe' + (ledger ? ' en ' + ledger : '') + '.';
     if (r.command === 'payment.batch') {
       var c = entry.conflict_child;
       text += c ? ' Chocó el abono ' + (c.index + 1) + ' de ' + r.payload.payments.length + ' (crédito ' + String(c.credit_id) + ', ' + heldMoney(c.amount_cents) + ').'
         : ' Chocó el lote completo.';
-      text += ' Ningún abono de este cobro se aplicó.';
+      var split = r.batch_part && r.batch_part.count > 1;
+      text += split ? ' Ningún abono de esta parte se aplicó' + (r.batch_part.index > 0 ? '; las partes anteriores sí quedaron registradas.' : '; las partes siguientes no se enviaron.') : ' Ningún abono de este cobro se aplicó.';
     } else text += ' El abono no se aplicó.';
     return text + ' No lo cobres de nuevo sin revisar.';
   }
@@ -1880,8 +1950,9 @@
     if (!session) fail('CANONICAL_COMMERCE_CLOSED');
     // T-47: nunca con el token de otra sesión. Antes de cualquier petición (ni siquiera el GET de estado).
     var who = sessionIdentity();
-    if (record.identity && identityVerdict(record.identity, record.identity_principal || null, who) === 'wait') fail('CANONICAL_IDENTITY_UNCONFIRMED');
-    if (!recordIdentityMatches(record, who)) {
+    var verdict = who ? recordVerdict(record, who) : 'same';
+    if (verdict === 'wait') fail('CANONICAL_IDENTITY_UNCONFIRMED');
+    if (verdict !== 'same') {
       // Las ventas las aparta la cola de ventas (con copia en su lista de revisión); el resto se aparta aquí.
       if (record.command !== 'sale.create') holdForIdentity(record, who);
       fail('CANONICAL_IDENTITY_CHANGED');
@@ -1948,13 +2019,11 @@
       var child = result && result.error === 'operation_id_conflict' ? conflictChild(record, result) : null;
       if (child) rejected.last_conflict_child = child; else delete rejected.last_conflict_child;
       if (authFailure(response.status, result)) rejected.auth_failed_identity = who ? who.key : null; else delete rejected.auth_failed_identity;
-      if (response.status === 403 && result && result.error === 'forbidden_role') {
-        root.localStorage.removeItem(JOURNAL);
-        if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
-      } else {
-        durableJournal(rejected);
-        if (response.status === 409 && result && result.error === 'operation_id_conflict' && CONFLICT_HOLD_COMMANDS.includes(record.command)) holdForConflict(rejected);
-      }
+      // SPEC-891: un 403 (p. ej. forbidden_role) NUNCA borra: un comando queda en revisión visible; una venta
+      // la conserva la cola de ventas (rechazo de sistema, sigue en cola).
+      durableJournal(rejected);
+      if (response.status === 403 && result && result.error === 'forbidden_role' && record.command !== 'sale.create') holdForConflict(rejected, 'forbidden_role');
+      else if (response.status === 409 && result && result.error === 'operation_id_conflict' && CONFLICT_HOLD_COMMANDS.includes(record.command)) holdForConflict(rejected);
       fail('CANONICAL_FINANCIAL_REJECTED_' + response.status);
     }
     if (!result || !(response.status === 201 && result.status === 'created' && result.idempotent === false || response.status === 200 && result.status === 'already_processed' && result.idempotent === true) ||
@@ -2000,9 +2069,31 @@
     if (durableIntent) await prepareCommand('sale.create');
     return createCommand('sale.create', sale, durableIntent);
   }
+  // C1: una operación (no venta) que quedó con 401/403 de sesión se reenvía SOLA, con el MISMO cuerpo, en
+  // cuanto hay otra sesión guardada del MISMO rol. Se llama con el candado de escritura tomado.
+  function expiredFor(record, who) { return !!record && record.auth_failed_identity !== undefined && !!who && who.key === record.auth_failed_identity; }
+  async function resendAfterLoginLocked() {
+    var existing = journal();
+    if (!existing || existing.state !== 'PENDING' || existing.command === 'sale.create' || existing.auth_failed_identity === undefined) return false;
+    var who = sessionIdentity();
+    if (!who || expiredFor(existing, who) || recordVerdict(existing, who) !== 'same') return false;
+    var next = copy(existing);
+    delete next.last_error; delete next.last_status; delete next.auth_failed_identity; delete next.auth_preflight;
+    durableJournal(next);
+    await sendPending(next, false);
+    return true;
+  }
+  var resendingAfterLogin = null;
+  function resendAfterLogin() {
+    if (resendingAfterLogin) return resendingAfterLogin;
+    resendingAfterLogin = withWriterLock(resendAfterLoginLocked).catch(function () { return false; })
+      .then(function (v) { resendingAfterLogin = null; try { notifyReplicaUpdate(); } catch (_) {} return v; });
+    return resendingAfterLogin;
+  }
   async function createCommand(command, input, skipStatus) {
     return withWriterLock(async function () {
       var existing = journal();
+      if (existing && existing.state === 'PENDING' && existing.auth_failed_identity !== undefined && await resendAfterLoginLocked().catch(function () { return false; })) existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
       assertAction(command);
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
@@ -2040,6 +2131,7 @@
 
     return withWriterLock(async function () {
       var existing = journal();
+      if (existing && existing.state === 'PENDING' && existing.auth_failed_identity !== undefined && await resendAfterLoginLocked().catch(function () { return false; })) existing = journal();
       if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
       assertAction('payment.create');
       if (!sessionCredentials(binding)) fail('CANONICAL_COMMERCE_CLOSED');
@@ -2084,7 +2176,9 @@
           route: '/commands/payment.batch',
           payload: batchPayload,
           receipt_ids: {},
-          batch_credit_provenance: provenances
+          batch_credit_provenance: provenances,
+          // Lotes de más de 20 se parten: el aviso de revisión dice qué parte es (las anteriores sí se aplicaron).
+          batch_part: { index: offset / CHUNK, count: Math.ceil(childPayloads.length / CHUNK) }
         };
         if (!validPayload('payment.batch', record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
         stampIdentity(record);
@@ -2169,6 +2263,7 @@
       // sendPending lo aparta si la sesión actual es otra.
       if (typeof saved.identity === 'string' && saved.identity) record.identity = saved.identity;
       if (typeof saved.identity_principal === 'string' && saved.identity_principal) record.identity_principal = saved.identity_principal;
+      if (typeof saved.identity_user === 'string' && saved.identity_user) record.identity_user = saved.identity_user;
       durableJournal(record);
       return sendPending(record);
     });
@@ -2352,7 +2447,14 @@
       return true;
     });
   }
-  function stampIdentity(record) { var who = sessionIdentity(); if (who) { record.identity = who.key; if (who.principal) record.identity_principal = who.principal; } return record; }
+  // Sello: huella de la sesión + usuario estable (si ya se conoce) + principal (solo auditoría).
+  function applyIdentity(record, who) {
+    record.identity = who.key;
+    if (who.user) record.identity_user = who.user; else delete record.identity_user;
+    if (who.principal) record.identity_principal = who.principal; else delete record.identity_principal;
+    return record;
+  }
+  function stampIdentity(record) { var who = sessionIdentity(); if (who) applyIdentity(record, who); return record; }
   // T-47: la cola de ventas ya guardó la venta completa (con este journal) en su lista de revisión
   // porque la sesión actual NO es la que la capturó. Se libera el journal aunque no tenga error: si
   // ya se había registrado, el reenvío aprobado con el MISMO operation_id responde already_processed.
@@ -2380,7 +2482,7 @@
       if (!who) fail('SESSION_NOT_AVAILABLE');
       var record = copy(saved);
       delete record.last_error; delete record.last_status; delete record.last_conflict; delete record.auth_failed_identity; delete record.auth_preflight;
-      record.identity = who.key; if (who.principal) record.identity_principal = who.principal; else delete record.identity_device;
+      applyIdentity(record, who);
       durableJournal(record);
       journal();
       return copy(record);
@@ -2402,7 +2504,7 @@
       if (!who) fail('SESSION_NOT_AVAILABLE');
       var next = copy(entry.record);
       delete next.last_error; delete next.last_status; delete next.last_conflict; delete next.auth_failed_identity; delete next.auth_preflight; delete next.last_conflict_detail; delete next.last_conflict_child;
-      next.identity = who.key; if (who.principal) next.identity_principal = who.principal; else delete next.identity_principal;
+      applyIdentity(next, who);
       durableJournal(next);
       entry.status = 'APPROVED'; entry.approved_at = new Date().toISOString(); entry.approved_identity = who.key;
       entry.approved_by = meta && meta.by != null ? String(meta.by) : (who.principal || null);
@@ -2594,8 +2696,19 @@
   }
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleOnlyReady = false; closeOnlyReady = false; } });
   root.addEventListener('offline', function () { ready = false; saleOnlyReady = false; closeOnlyReady = false; });
+  // C2: la primera vez que corre esta versión se anota la identidad activa (adopta lo pendiente antiguo).
+  try { sessionIdentity(); } catch (_) {}
+  // C1: al volver a entrar (credencial nueva o rol confirmado) lo que quedó con sesión vencida sale solo.
+  function maybeResendAfterLogin() {
+    try { var r = journal(); if (r && r.state === 'PENDING' && r.command !== 'sale.create' && r.auth_failed_identity !== undefined) resendAfterLogin(); } catch (_) {}
+  }
+  if (root.addEventListener) {
+    root.addEventListener('na:role', maybeResendAfterLogin);
+    root.addEventListener('storage', function (event) { if (!event || event.key === CREDENTIALS_KEY) maybeResendAfterLogin(); });
+    root.addEventListener('online', function () { if (root.setTimeout) root.setTimeout(maybeResendAfterLogin, 1000); });
+  }
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, resumePaymentBatch: resumePaymentBatch, releaseRejectedCashClose: releaseRejectedCashClose, releaseUncommittedCashClose: releaseUncommittedCashClose, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale, releaseRejectedSaleJournal: releaseRejectedSaleJournal, releaseIdentityHeldSaleJournal: releaseIdentityHeldSaleJournal, adoptSaleJournal: adoptSaleJournal, sessionIdentity: sessionIdentity, identityVerdict: identityVerdict, identityTrustsLegacy: identityTrustsLegacy, heldOperations: heldOperations, describeHeld: describeHeld, approveHeldOperation: approveHeldOperation, receiptPayloadSnapshot: receiptPayloadSnapshot, releaseRejectedFinancial: releaseRejectedFinancial, settleStrandedFinancial: settleStrandedFinancial,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, resumePaymentBatch: resumePaymentBatch, releaseRejectedCashClose: releaseRejectedCashClose, releaseUncommittedCashClose: releaseUncommittedCashClose, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale, releaseRejectedSaleJournal: releaseRejectedSaleJournal, releaseIdentityHeldSaleJournal: releaseIdentityHeldSaleJournal, adoptSaleJournal: adoptSaleJournal, ledgerText: ledgerText, identityUpgradeAt: function () { var h = identityHistory(); return h && h.first ? h.first.at : null; }, resendAfterLogin: resendAfterLogin, sessionIdentity: sessionIdentity, identityVerdict: identityVerdict, identityTrustsLegacy: identityTrustsLegacy, identityCheck: function (stamp, hint) { return identityCheck(stamp, hint); }, heldOperations: heldOperations, describeHeld: describeHeld, approveHeldOperation: approveHeldOperation, receiptPayloadSnapshot: receiptPayloadSnapshot, releaseRejectedFinancial: releaseRejectedFinancial, settleStrandedFinancial: settleStrandedFinancial,
     createProduct: createProduct, updateProduct: updateProduct, createCustomer: createCustomer, setCustomerContact: setCustomerContact, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense, updateExpense: function(input){return createCommand('expense.update',input);}, voidExpense: function(input){return createCommand('expense.void',input);},
     renderCredits: renderCredits, startPOS: startPOS, commandContext: function () { return commonPayload(); }, warm: warm, legacySnapshot: legacySnapshot, sourceState: sourceState, ping: ping, readProgress: function () { return copy(readProgress); } });
 })(globalThis);

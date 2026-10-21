@@ -2,7 +2,7 @@
 // - Una venta o un abono guardados por una sesión NUNCA salen con el token de otra sesión (dueño ↔ empleado):
 //   quedan en revisión (visibles, sin borrarse, sin efecto local doble) y solo el dueño los aprueba;
 //   al aprobar se reenvía el MISMO contenido / el MISMO cuerpo (mismo operation_id).
-// - Lo antiguo sin identidad solo se envía si el aparato tuvo una sola identidad desde antes; si no, revisión.
+// - Lo antiguo sin identidad lo adopta la sesión activa al primer arranque (salvo rastro de otro rol); si no, revisión.
 // - Un 401 de la propia sesión en la verificación previa avisa «Sesión vencida», no reintenta en bucle,
 //   no archiva el abono y, al volver a entrar, todo se envía una sola vez.
 // - Un 409 operation_id_conflict / el mismo id con otro contenido nunca se da por confirmado.
@@ -81,7 +81,7 @@ test('T-47 control: la misma sesión envía su venta normalmente (sin revisión)
   assert.equal(quarantined(A).length, 0);
 });
 
-test('T-47 legado: venta sin identidad y sin historial → revisión (no se envía ni se borra); con UNA identidad desde antes → se envía', async t => {
+test('T-47/C2 legado: lo de antes de la actualización lo adopta la sesión activa al primer arranque y se envía; lo sin sello que aparece después de otra sesión queda en revisión', async t => {
   const f = await activeCanon(t), ls = storage();
   const A = await device(f, { token: 'tok-a', deviceId: 'pos-a', localStorage: ls, scripts });
   const outbox = A.context.NuevoAmanecerCanonicalSaleOutbox;
@@ -90,23 +90,18 @@ test('T-47 legado: venta sin identidad y sin historial → revisión (no se env�
   ls.removeItem('na_canonical_sale_outbox_v1_identity'); ls.removeItem('na_session_identity_v1');
   const B = await device(f, { token: 'tok-a', localStorage: ls, scripts });
   const ob = B.context.NuevoAmanecerCanonicalSaleOutbox;
-  await ob.sync();
-  assert.equal(salesByOp(f, one.operation_id), 0);
-  assert.equal(quarantined(B)[0].reason, 'identity_unverified');
-  // Aparato con una sola identidad registrada desde ANTES de la venta: se envía.
+  assert.equal((await ob.sync()).status, 'DRAINED');
+  assert.equal(salesByOp(f, one.operation_id), 1, 'adoptada por la sesión activa al actualizar (sin fechas falsas)');
+  assert.equal(quarantined(B).length, 0);
+  assert.ok(JSON.parse(ls.getItem('na_session_identity_v1')).first, 'se anota la identidad del primer arranque');
+  // Un registro sin sello que aparece cuando ya hay OTRA sesión (sin poder confirmar su rol): revisión.
   const two = plain(await ob.enqueue(saleInput(B, 'id-legacy-2')));
-  const key = B.api.sessionIdentity().key;
   ls.removeItem('na_canonical_sale_outbox_v1_identity');
-  ls.setItem('na_session_identity_v1', JSON.stringify({ version: 1, current: key, history: [{ key, since: '2020-01-01T00:00:00.000Z' }] }));
-  await ob.sync();
-  assert.equal(salesByOp(f, two.operation_id), 1);
-  // Con historial de DOS identidades no se puede probar: revisión.
-  const three = plain(await ob.enqueue(saleInput(B, 'id-legacy-3')));
-  ls.removeItem('na_canonical_sale_outbox_v1_identity');
-  ls.setItem('na_session_identity_v1', JSON.stringify({ version: 1, current: key, history: [{ key: 'sid:otro', since: '2020-01-01T00:00:00.000Z' }, { key, since: '2020-01-02T00:00:00.000Z' }] }));
-  await ob.sync();
-  assert.equal(salesByOp(f, three.operation_id), 0);
-  assert.deepEqual(quarantined(B).map(e => e.intent.operation_id).sort(), [one.operation_id, three.operation_id].sort());
+  f.addDevice('pos-b', 'writer', 'active', 'tok-b'); relogin(ls, 'tok-b');
+  const C = await device(f, { token: 'tok-b', localStorage: ls, scripts });
+  await C.context.NuevoAmanecerCanonicalSaleOutbox.sync();
+  assert.equal(salesByOp(f, two.operation_id), 0, 'no sale con el token de otra sesión');
+  assert.deepEqual(quarantined(C).map(e => [e.intent.operation_id, e.reason]), [[two.operation_id, 'identity_unverified']]);
 });
 
 test('T-06/T-47 abono: el abono pendiente de pos-a no sale con el token de pos-b; se aparta (sin borrar); aprobado se reenvía con el MISMO cuerpo', async t => {

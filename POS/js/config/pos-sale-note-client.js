@@ -60,12 +60,12 @@
   // Las de otra sesión (o antiguas sin identidad, si no se puede probar que es la misma) se quedan en la
   // cola sin enviarse ni borrarse (se siguen viendo en este aparato).
   function who() { var c = root.NuevoAmanecerCanonical; try { return c && typeof c.sessionIdentity === 'function' ? c.sessionIdentity() : null; } catch (_) { return null; } }
-  function stampNote(item) { var w = who(); if (w) { item.identity = w.key; if (w.principal) item.identity_principal = w.principal; } return item; }
+  function stampNote(item) { var w = who(); if (w) { item.identity = w.key; if (w.user) item.identity_user = w.user; if (w.principal) item.identity_principal = w.principal; } return item; }
+  // Mismo aparato y mismo rol => se envía sola; otro rol (o sin poder confirmarlo aún) => se queda.
   function mine(item) {
     var c = root.NuevoAmanecerCanonical, w = who();
-    if (!w || !c || typeof c.identityVerdict !== 'function') return true;
-    if (item.identity) return c.identityVerdict(item.identity, item.identity_principal || null, w) === 'same';
-    try { return typeof c.identityTrustsLegacy === 'function' && c.identityTrustsLegacy(item.at); } catch (_) { return false; }
+    if (!w || !c || typeof c.identityCheck !== 'function') return true;
+    try { return c.identityCheck(item.identity ? { key: item.identity, user: item.identity_user || null } : null, { command: 'sale-note' }) === 'same'; } catch (_) { return false; }
   }
   async function flush() {
     if (busy || !cloud() || root.navigator.onLine === false || !root.NA_ROLES) return;
