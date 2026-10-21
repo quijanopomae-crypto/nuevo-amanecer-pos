@@ -87,3 +87,26 @@ test('teléfono 390px mantiene subtotal y estructura anterior cuando se oculta I
   expect(mobile.wrapper).not.toBe(mobile.total);
   await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
 });
+
+test.describe('teléfono táctil real sin cambios en el resumen', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test('conserva los controles móviles existentes con IGV visible y oculto', async ({ page }) => {
+    await prepare(page, 390);
+    await expect(page.locator('body')).toHaveClass(/na-pos-phone-device/);
+    const mobileLayout = await page.evaluate(() => ({
+      display: getComputedStyle(document.querySelector('#pagePOS .cart-totals')!).display,
+      button: getComputedStyle(document.querySelector('#pagePOS #btnPagar')!).display,
+      actions: getComputedStyle(document.querySelector('#pagePOS .cart-secondary-actions')!).display,
+    }));
+    expect(mobileLayout).toMatchObject({ display: 'flex', actions: 'none' });
+    expect(mobileLayout.button).not.toBe('none');
+    await setIgVisible(page, false);
+    await expect(page.locator('#pagePOS .total-row').first()).toBeHidden();
+    await expect(page.locator('#pagePOS .total-row').nth(1)).toBeHidden();
+    await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
+    await expect(page.locator('#posProductCount')).toContainText('1');
+    await expect(page.locator('#pagePOS')).toHaveClass(/na-pos-summary-igv-hidden/);
+    expect(await page.locator('#pagePOS .cart-totals').evaluate(el => getComputedStyle(el).display)).toBe('flex');
+  });
+});
