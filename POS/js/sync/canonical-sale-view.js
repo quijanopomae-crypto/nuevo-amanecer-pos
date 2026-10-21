@@ -246,11 +246,26 @@
   // responde sale_id_conflict, el outbox renumera la misma operación
   // (canonical-sale-outbox.js renumberHead), así que se imprime «PROVISIONAL»
   // y la referencia corta del operation_id, que no cambia.
+  // Por qué no hubo ticket pendiente: 'error' (intención ilegible),
+  // 'quarantine' (pasó a «Ventas en revisión») o 'gone' (ya no está en la cola).
+  var pendingTicketMiss = null;
+  function inQuarantine(outbox, key) {
+    try {
+      var q = outbox && typeof outbox.quarantine === 'function' ? outbox.quarantine() : null;
+      return !!(q && Array.isArray(q.entries) && q.entries.some(function (entry) { return entry && entry.status === 'QUARANTINED' && entry.intent && String(entry.intent.operation_id || '') === key; }));
+    } catch (_) { return false; }
+  }
   function pendingTicketSale(operationId) {
+    pendingTicketMiss = null;
+    var found = pendingTicketSaleUnsafe(operationId);
+    if (!found && !pendingTicketMiss) pendingTicketMiss = inQuarantine(root.NuevoAmanecerCanonicalSaleOutbox, String(operationId || '')) ? 'quarantine' : 'gone';
+    return found;
+  }
+  function pendingTicketSaleUnsafe(operationId) {
     var canonical = root.NuevoAmanecerCanonical, outbox = root.NuevoAmanecerCanonicalSaleOutbox;
     if (!operationId || !enabled(canonical) || !outbox || typeof outbox.snapshot !== 'function') return null;
     var key = String(operationId), intent = null;
-    try { intent = (outbox.snapshot().intents || []).find(function (row) { return row && String(row.operation_id || '') === key; }) || null; } catch (_) { intent = null; }
+    try { intent = (outbox.snapshot().intents || []).find(function (row) { return row && String(row.operation_id || '') === key; }) || null; } catch (_) { intent = null; pendingTicketMiss = 'error'; }
     if (!intent || confirmedOperationIds().has(key)) return null;
     try {
       var base = canonical.snapshot();
@@ -258,7 +273,10 @@
     } catch (_) {}
     var legacy = null;
     try { legacy = canonical.legacySnapshot(); } catch (_) { legacy = null; }
-    var sale = confirmedLegacySale({ payload: copy(intent) }, legacy || {});
+    var sale;
+    // Intención dañada: no se abre un ticket a medias; quien llama avisa.
+    try { sale = confirmedLegacySale({ payload: copy(intent) }, legacy || {}); } catch (_) { sale = null; }
+    if (!sale) { pendingTicketMiss = 'error'; return null; }
     sale.id = 'PROVISIONAL';
     sale.provisionalSaleId = intent.sale_id;
     sale.status = 'PENDING_SYNC';
@@ -345,7 +363,7 @@
   }
   function lastView() { return copy(last); }
 
-  var api = Object.freeze({ VERSION: VERSION, rebuild: rebuild, lastView: lastView, pendingTicketSale: pendingTicketSale });
+  var api = Object.freeze({ VERSION: VERSION, rebuild: rebuild, lastView: lastView, pendingTicketSale: pendingTicketSale, pendingTicketMiss: function () { return pendingTicketMiss; } });
   root.NuevoAmanecerCanonicalSaleView = api;
 
   if (typeof root.addEventListener === 'function') {
