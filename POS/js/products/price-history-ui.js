@@ -1,20 +1,12 @@
 /* Vista de solo lectura del historial, dentro de la ficha del producto. */
 (function (root) {
   'use strict';
-  // Siempre en hora de Lima (los datos se guardan en UTC), aunque el aparato tenga otra zona.
   function localWhen(value) {
     var ms = Date.parse(value);
     if (!Number.isFinite(ms)) return 'Fecha no registrada';
-    try {
-      var parts = {};
-      new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
-        .formatToParts(new Date(ms)).forEach(function (p) { parts[p.type] = p.value; });
-      return parts.day + '/' + parts.month + '/' + parts.year + ' ' + parts.hour + ':' + parts.minute;
-    } catch (_) {
-      var d = new Date(ms - 5 * 3600 * 1000);
-      function pad(n) { return String(n).padStart(2, '0'); }
-      return pad(d.getUTCDate()) + '/' + pad(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear() + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
-    }
+    var d = new Date(ms);
+    function pad(n) { return String(n).padStart(2, '0'); }
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
   function productId() {
     try { if (typeof invEditId !== 'undefined') return invEditId; }
@@ -72,11 +64,10 @@
     if (!modal || typeof root.MutationObserver !== 'function') return;
     new root.MutationObserver(render).observe(modal, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', render);
-    root.addEventListener('na:price-history-cloud', render);
     render();
   }
   if (!root.document) return;
   if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', boot);
   else boot();
-  root.NA_PRICE_HISTORY_UI = Object.freeze({ render: render, when: localWhen });
+  root.NA_PRICE_HISTORY_UI = Object.freeze({ render: render });
 })(typeof globalThis !== 'undefined' ? globalThis : window);

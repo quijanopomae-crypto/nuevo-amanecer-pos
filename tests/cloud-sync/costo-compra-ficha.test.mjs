@@ -246,14 +246,6 @@ test('promedio: la compra recién registrada no se cuenta dos veces si /auth/pur
   }
 });
 
-test('Fase 2 (a): si el Worker ya actualizó el costo (cost_source=server) el aparato no manda otro product.update', async () => {
-  const { ctx, server } = twoDevices({ bEdits: 0 });
-  const before = JSON.stringify(server);
-  const r = await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-S', one, { applied: [{ line: 1 }], cost_source: 'server' });
-  assert.equal(JSON.stringify([r.updated.length, r.skipped]), JSON.stringify([0, ['server']]));
-  assert.equal(JSON.stringify(server), before);
-});
-
 // ---- Seguimiento de la revisión de #858 ----
 test('costo 0 (regalo), negativo o no finito nunca pone el costo del producto en 0: la línea se omite', async () => {
   const bad = [0, -50, 0.4, NaN, Infinity, -Infinity, 'abc', ''];

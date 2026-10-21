@@ -8,7 +8,6 @@ import { adjustCanonicalInventory } from './a6-inventory.js';
 import { posRoleFor, verifyOwnerPin } from './pos-roles.js';
 import { canDo } from './pos-permissions.js';
 import { lotsCore, lotsReady } from './stock-lots.js';
-import { applyPurchaseCosts, redactCostUpdates, serverHandledAll } from './pos-purchase-cost.js';
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const PID = v => typeof v === 'string' && v.length > 0 && v.length <= 160 && !/[\x00-\x1f\x7f]/.test(v);
@@ -173,18 +172,6 @@ export async function purchasesRoute(request, env, auth, json) {
   await db.prepare("UPDATE pos_purchases SET status='aplicada',completed_at=?2 WHERE purchase_id=?1 AND status='en_curso'").bind(b.operation_id, at).run();
   const done = { status: 'applied', purchase_id: b.operation_id, supplier, document_ref: doc, total_cost_cents: purchaseTotal(), applied, skipped };
   const viewer = auth.posRole === 'empleado' ? 'empleado' : await posRoleFor(db, auth.principalId);
-  // Fase 2 (a): compra de empleado aprobada con PIN del dueño (ownerGate ya lo validó) -> costo en el servidor.
-  // El dueño no entra aquí: su aparato lo hace (#858). cost_source='server' avisa al cliente que no repita.
-  if (viewer !== 'owner') {
-    // Se incluyen las líneas 'ALREADY_APPLIED' a propósito: su stock entró con el mismo operation_id
-    // '<compra>:<línea>' (ruta vieja por línea o un intento anterior de ESTA compra), así que son parte de la
-    // compra aprobada. No hay doble actualización: la revisión usa el id determinista '<compra>:costo:<línea>'.
-    try {
-      const updates = await applyPurchaseCosts(db, env, auth, b, applied.map(a => a.line).concat(skipped.map(s => s.line)), json);
-      done.cost_updates = redactCostUpdates(updates, canDo(viewer, 'purchases.costs.view'));
-      if (serverHandledAll(updates)) done.cost_source = 'server';
-    } catch { done.cost_updates = [{ status: 'failed', error: 'cost_update_error' }]; }
-  }
   if (!canDo(viewer, 'purchases.costs.view')) { delete done.supplier; delete done.total_cost_cents; }
   return json(done, 201);
 }

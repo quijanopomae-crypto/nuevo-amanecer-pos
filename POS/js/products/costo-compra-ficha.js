@@ -173,8 +173,6 @@
     var report = { updated: [], skipped: [], failed: [] };
     if (!isOwner()) { report.skipped.push('not_owner'); return report; }
     if (!result || result.idempotent) { report.skipped.push('replay'); return report; }
-    // Fase 2 (a): si el Worker ya actualizó el costo (compra de empleado con PIN), el aparato no lo repite.
-    if (result.cost_source === 'server') { report.skipped.push('server'); return report; }
     var applied = {};
     (result.applied || []).forEach(function (r) { var n = r && (r.line != null ? r.line : r.line_number); if (n != null) applied[String(n)] = true; });
     var client = canon();
