@@ -63,11 +63,28 @@
 /* Misión 4: resumen por tramos y aviso flotante del dueño (fuera de Inicio, no cambia su diseño). */
 #pageReporteProductosVencer .rpv-summary { font-weight: 700; color: var(--rpv-text); overflow-wrap: anywhere; }
 #pageReporteProductosVencer input::placeholder { color: var(--rpv-muted); opacity: 1; }
-.rpv-alert { position: fixed; top: 72px; right: 12px; z-index: 9000; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: min(420px, calc(100vw - 24px)); padding: 10px 12px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #78350f; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 14px; line-height: 1.4; }
+/* Aviso abajo, sin tapar las tarjetas de Inicio; z-index 150: debajo de los modales (.modal-overlay 200),
+   del menú lateral (overlay 1990, cajón 2000) y de los toasts/actualización (400/420). */
+.rpv-alert { position: fixed; top: auto; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 150; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 420px; margin: 0 auto; padding: 10px 12px; border: 1px solid #f59e0b; border-radius: 12px; background: #fffbeb; color: #78350f; box-shadow: 0 6px 20px rgba(0,0,0,.18); font-size: 14px; line-height: 1.4; }
 .rpv-alert .rpv-alert-text { flex: 1 1 200px; margin: 0; font-weight: 700; overflow-wrap: anywhere; }
 .rpv-alert button { min-height: 40px; padding: 6px 12px; border-radius: 8px; border: 1px solid #b45309; background: #fff; color: #78350f; font: inherit; font-weight: 700; cursor: pointer; }
 .rpv-alert .rpv-alert-view { background: #92400e; border-color: #92400e; color: #fff; }
 body.dark .rpv-alert { background: #1e293b; color: #fde68a; border-color: #f59e0b; }
 body.dark .rpv-alert button { background: #0f172a; color: #fde68a; border-color: #fbbf24; }
 body.dark .rpv-alert .rpv-alert-view { background: #fbbf24; color: #1e293b; border-color: #fbbf24; }
+/* Tablet/PC: Inicio tiene la barra lateral de navegación; el aviso ocupa el espacio libre de esa barra
+   (encima de «Configuración»), fuera de las tarjetas y del contenido. Con poca altura va abajo a la derecha. */
+@media (max-width: 767px) {
+  .rpv-alert { padding: 8px 10px; font-size: 13px; }
+  .rpv-alert .rpv-alert-text { flex-basis: 100%; }
+  .rpv-alert button { flex: 1 1 0; min-height: 40px; padding: 4px 10px; }
+}
+@media (min-width: 768px) {
+  .rpv-alert { left: auto; right: 16px; bottom: 16px; width: min(380px, calc(100vw - 252px)); margin: 0; }
+}
+@media (min-width: 768px) and (min-height: 640px) {
+  .rpv-alert { left: 12px; right: auto; bottom: 72px; width: 196px; max-width: 196px; padding: 10px; font-size: 13px; }
+  .rpv-alert .rpv-alert-text { flex-basis: 100%; }
+  .rpv-alert button { flex: 1 1 auto; min-height: 36px; padding: 4px 8px; }
+}
 @media print { .rpv-alert { display: none !important; } }

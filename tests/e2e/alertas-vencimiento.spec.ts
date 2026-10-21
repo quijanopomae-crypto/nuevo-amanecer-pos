@@ -136,8 +136,10 @@ test('a 390px el aviso no aparece en Venta ni tapa la barra inferior; cerrado no
   // No se superpone con elementos fijos de la parte inferior (barra inferior / botones).
   const overlap = await alert.evaluate(a => {
     const r = a.getBoundingClientRect();
-    return [...document.querySelectorAll<HTMLElement>('body *')].filter(el => el !== a && !a.contains(el) && el.offsetParent !== null || getComputedStyle(el).position === 'fixed')
-      .filter(el => el !== a && !a.contains(el) && ['fixed', 'sticky'].includes(getComputedStyle(el).position))
+    // Solo elementos que se ven: se descartan los de modales cerrados (opacity 0) u ocultos.
+    const seen = (el: Element | null): boolean => { for (let n = el; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return false; } return true; };
+    return [...document.querySelectorAll<HTMLElement>('body *')].filter(el => el !== a && !a.contains(el) && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed'))
+      .filter(el => el !== a && !a.contains(el) && ['fixed', 'sticky'].includes(getComputedStyle(el).position) && seen(el))
       .filter(el => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.top > window.innerHeight / 2 && !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); })
       .map(el => el.id || el.className);
   });
@@ -164,3 +166,64 @@ test('a 390px el aviso no aparece en Venta ni tapa la barra inferior; cerrado no
   expect(await page.evaluate(() => (window as any).NA_REPORTE_PRODUCTOS_VENCER.showAlert())).toBe(false);
   await expect(alert).toHaveCount(0);
 });
+
+// Bloqueante de la revisión: el aviso no tapa Inicio y queda debajo del menú lateral y de los modales.
+const intersects = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+async function noticeHits(page: Page) {
+  // elementFromPoint en el centro y cerca de las esquinas del aviso: true si el aviso es lo que se ve encima.
+  return page.locator('#naRpvAlert').evaluate(a => {
+    const r = a.getBoundingClientRect();
+    const pts = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 6, r.top + 6], [r.right - 6, r.top + 6], [r.left + 6, r.bottom - 6], [r.right - 6, r.bottom - 6]];
+    return pts.map(([x, y]) => { const el = document.elementFromPoint(x, y); return !!(el && el.closest('#naRpvAlert')); });
+  });
+}
+for (const [width, height] of [[390, 844], [768, 900], [1280, 900]]) {
+  test(`a ${width}px el aviso no tapa Inicio y queda debajo del menú lateral y de los modales`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const errors = await rolePage(page, 'owner', false);
+    const alert = page.locator('#naRpvAlert');
+    await expect(alert).toBeVisible();
+    await expect(page.locator('#pageMenu')).toHaveClass(/\bactive\b/);
+    const box = (await alert.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    // No se cruza con las tarjetas de Inicio («Ventas hoy», «En caja», …) ni con el resto del contenido visible.
+    const cards = page.locator('#pageMenu .qs-card');
+    expect(await cards.count()).toBeGreaterThanOrEqual(2);
+    const content = page.locator('#pageMenu :is(.qs-card, .menu-side-link, .menu-desktop-heading, .menu-desktop-sections > *, #naMobileWelcome, #naMobileActivity)');
+    const overlapped: string[] = [];
+    for (let i = 0; i < await content.count(); i++) {
+      const el = content.nth(i), b = await el.boundingBox();
+      if (b && b.width > 0 && b.height > 0 && intersects(box, b)) overlapped.push(await el.evaluate(n => (n.id || n.className) + ': ' + (n.textContent || '').trim().slice(0, 30)));
+    }
+    expect(overlapped).toEqual([]);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+
+    // Con un modal abierto, el modal queda encima del aviso.
+    await page.evaluate(() => (window as any).abrirModalGasto());
+    await expect(page.locator('#mGasto')).toHaveClass(/\bopen\b/);
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+    await page.evaluate(() => document.getElementById('mGasto')!.classList.remove('open'));
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+
+    if (width < 768) {
+      // Con el menú lateral abierto, el cajón (y su fondo) quedan encima del aviso.
+      await page.locator('#naMobileMenuToggle').click();
+      await expect(page.locator('#naMobileDrawer')).toHaveClass(/\bis-open\b/);
+      await page.waitForTimeout(400);
+      expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+    } else {
+      // Tablet/PC: la barra lateral está siempre visible; el aviso no tapa ninguno de sus enlaces.
+      await expect(page.locator('#pageMenu .menu-side-link').first()).toBeVisible();
+      expect(overlapped.filter(o => o.includes('menu-side-link'))).toEqual([]);
+    }
+    const z = await alert.evaluate(el => Number(getComputedStyle(el).zIndex));
+    expect(z).toBeLessThan(200);
+    expect(errors).toEqual([]);
+  });
+}
