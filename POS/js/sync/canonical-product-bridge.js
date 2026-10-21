@@ -13,7 +13,7 @@
     catch (_) { return false; }
   }
 
-  // Montos escritos a mano: NA_DECIMAL (js/core/parse-decimal.js, cargado antes en index.html) acepta «4,50».
+  // Montos escritos a mano: NA_DECIMAL (js/core/utils.js, cargado antes en index.html) acepta «4,50» y «1,000.00».
   // Sin él (solo sandboxes de prueba que no cargan ese archivo) se conserva la lectura anterior con Number().
   function decimal() {
     return root.NA_DECIMAL || { validate: function () { return true; }, parse: Number, value: function (id, emptyValue) {

@@ -18,7 +18,7 @@
     try { return !!(client && typeof client.enabled === 'function' && client.enabled()); }
     catch (_) { return false; }
   }
-  // Montos escritos a mano: NA_DECIMAL (js/core/parse-decimal.js, cargado antes en index.html) acepta «4,50».
+  // Montos escritos a mano: NA_DECIMAL (js/core/utils.js, cargado antes en index.html) acepta «4,50» y «1,000.00».
   // Sin él (solo sandboxes de prueba que no cargan ese archivo) se conserva la lectura anterior con Number().
   function decimal() {
     return root.NA_DECIMAL || { validate: function () { return true; }, parse: Number, value: function (id, emptyValue) {
@@ -125,7 +125,7 @@
     edit: function(expense) {
       if(!owner()||!enabled()||busy||expense.voided)return;
       resetAndOpen();editing=expense;modalMode(true);
-      [['gasDesc',expense.desc],['gasCat',expense.cat],['gasNota',expense.nota],['gasFecha',expense.fecha],['gasMonto',expense.monto],['gasMetodo',expense.metodo]].forEach(function(pair){var field=root.document.getElementById(pair[0]);if(field)field.value=pair[1]||'';});
+      [['gasDesc',expense.desc],['gasCat',expense.cat],['gasNota',expense.nota],['gasFecha',expense.fecha],['gasMonto',root.NA_DECIMAL?root.NA_DECIMAL.display(expense.monto):expense.monto],['gasMetodo',expense.metodo]].forEach(function(pair){var field=root.document.getElementById(pair[0]);if(field)field.value=pair[1]||'';});
       if(typeof root._naDateDisplayHelp==='function')root._naDateDisplayHelp();
       ['gasMonto','gasMetodo'].forEach(function(id){var field=root.document.getElementById(id);if(field){field.readOnly=true;field.disabled=true;}});
     },

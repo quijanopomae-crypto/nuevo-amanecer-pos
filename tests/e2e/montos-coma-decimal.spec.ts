@@ -139,6 +139,34 @@ test('Ficha de producto (local): «4,50» / «6,50» se guardan como 4.5 / 6.5; 
   expect(await ev(page, 'productos[0].precio')).toBe(6.5);
 });
 
+test('Editar producto guardado con 3.3333 / 6.300000000000001 / 80.30000000000001: se muestra 3.33 / 6.30 / 80.30 y Guardar funciona sin tocar nada', async ({ page }) => {
+  await localPage(page);
+  await ev(page, `productos=[{id:'pe-1',name:'Queso',nombre:'Queso',sku:'PE-01',stock:5,stockMin:1,costo:3.3333,precio:6.300000000000001,precioCaja:80.30000000000001,unidCaja:12,factorCompra:24,controlInventario:true,unidad:'unidad',cat:'abarrotes',marca:'Sin marca'}];`);
+  await page.evaluate(() => (window as any).editProd('pe-1'));
+  await page.evaluate(() => { document.querySelectorAll('#mProd details').forEach(d => ((d as HTMLDetailsElement).open = true)); });
+  await expect(page.locator('#pCosto')).toHaveValue('3.33');
+  await expect(page.locator('#pPrecio')).toHaveValue('6.30');
+  await expect(page.locator('#pPrecioCaja')).toHaveValue('80.30');
+  await expect(page.locator('#pFactorCompra')).toHaveValue('24');
+  // Entrar y salir de los campos sin cambiar nada tampoco los marca.
+  for (const id of ['#pCosto', '#pPrecio', '#pPrecioCaja']) { await page.locator(id).click(); await page.keyboard.press('Tab'); }
+  await expect(page.locator('#mProd [aria-invalid="true"]')).toHaveCount(0);
+  await page.locator('#mProd .mbtn-ok').click();
+  await expect.poll(() => ev(page, 'productos[0].costo')).toBe(3.33);
+  expect(await ev(page, 'productos[0].precio')).toBe(6.3);
+  expect(await ev(page, 'productos[0].precioCaja')).toBe(80.3);
+  await expect(page.locator('#mProd')).not.toHaveClass(/open/);
+});
+
+test('Política de crédito guardada con decimales largos se muestra con 2 decimales y no avisa', async ({ page }) => {
+  await localPage(page);
+  await ev(page, `appConfig.creditPolicy={..._naCreditPolicy(),initialLine:3.3333,minPurchases:1000,minProfit:0.1+0.2,dueDays:30};`);
+  const html = await ev<string>(page, '_naCreditPolicyConfigHtml()');
+  const values = await page.evaluate(h => { const d = document.createElement('div'); d.innerHTML = h; return Object.fromEntries([...d.querySelectorAll('.credit-policy-input[onchange*="creditPolicySetNumber"]')].map(i => [String(i.getAttribute('onchange')).match(/'(\w+)'/)![1], (i as HTMLInputElement).value])); }, html);
+  expect(values).toMatchObject({ initialLine: '3.33', minPurchases: '1,000.00', minProfit: '0.30', dueDays: '30' });
+  for (const v of Object.values(values)) expect(await page.evaluate(x => (window as any).NA_DECIMAL.check(x).ok, v), v).toBe(true);
+});
+
 test('Gastos (local): «4,50» se guarda 4.5; «1e2» avisa y no guarda', async ({ page }) => {
   await localPage(page);
   await page.evaluate(() => (window as any).abrirModalGasto());
@@ -335,12 +363,12 @@ test('Línea manual de crédito: «1,500» se muestra «1,500.00» al salir; «1
 const ACCEPT: [string, number, string][] = [
   ['1,000', 1000, '1,000.00'], ['4,500', 4500, '4,500.00'], ['1,000,000', 1000000, '1,000,000.00'], ['1,000.50', 1000.5, '1,000.50'],
   ['4,50', 4.5, '4.50'], ['1,5', 1.5, '1.50'], ['1,00', 1, '1.00'], ['0,500', 0.5, '0.50'], [',500', 0.5, '0.50'], [',50', 0.5, '0.50'],
-  ['1.000', 1, '1.00'], ['450', 450, '450.00'], ['4.50', 4.5, '4.50'], ['1000', 1000, '1,000.00'],
+  ['1.000', 1, '1.00'], ['2.', 2, '2.00'], ['1,000.', 1000, '1,000.00'], ['450', 450, '450.00'], ['4.50', 4.5, '4.50'], ['1000', 1000, '1,000.00'],
 ];
 const REJECT: [string, RegExp][] = [
   ['1,2345', /1 o 2 decimales/], ['1,0000', /1 o 2 decimales/], ['12,3456', /1 o 2 decimales/], ['1,23,456', /coma de miles mal ubicada/],
   ['12,34,56', /coma de miles mal ubicada/], ['1.000,50', /usa punto para los miles/], ['1e2', /no se aceptan exponentes/],
-  ['+2', /no se aceptan signos/], ['-2', /no se aceptan signos/], ['4.505', /más de 2 decimales/], ['0x10', /no es un número válido/], ['abc', /no es un número válido/],
+  ['+2', /no se aceptan signos/], ['-2', /no se aceptan signos/], ['4.505', /más de 2 decimales/], ['0x10', /no es un número válido/], ['abc', /no es un número válido/], ['2,', /termina en coma/],
 ];
 test('Formato del dueño: cada entrada válida tecleada se lee bien y al salir se muestra con miles y 2 decimales; re-editar no cambia el valor', async ({ page }) => {
   await localPage(page);

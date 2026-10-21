@@ -199,7 +199,7 @@
       var costLabel = appendText(doc, card, 'label', 'ocr-review-field', 'Costo unitario');
       var cost = doc.createElement('input');
       decimalField(cost);
-      cost.value = text(row.unitCost);
+      cost.value = typeof row.unitCost === 'number' && root && root.NA_DECIMAL ? root.NA_DECIMAL.display(row.unitCost) : text(row.unitCost);
       setData(cost, 'field', 'unitCost');
       setData(cost, 'index', index);
       costLabel.appendChild(cost);

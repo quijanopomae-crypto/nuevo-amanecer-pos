@@ -11,7 +11,7 @@ const D = load().NA_DECIMAL;
 // Formato decidido por el dueño: coma para miles y punto para decimales («1,000.00»).
 test('acepta punto decimal, coma de miles bien agrupada y coma decimal de 1 o 2 dígitos', () => {
   for (const [raw, n] of [
-    ['450', 450], ['4.50', 4.5], ['4', 4], ['0', 0], ['.5', 0.5], ['1.000', 1], ['4.500', 4.5], ['  12.25  ', 12.25],
+    ['450', 450], ['4.50', 4.5], ['4', 4], ['0', 0], ['.5', 0.5], ['1.000', 1], ['4.500', 4.5], ['2.', 2], ['1,000.', 1000], ['  12.25  ', 12.25],
     ['1,000', 1000], ['4,500', 4500], ['1,000,000', 1000000], ['1,000.50', 1000.5], ['1,000.00', 1000], ['12,345,678.9', 12345678.9],
     ['4,50', 4.5], ['1,5', 1.5], ['1,00', 1], ['0,01', 0.01], ['1234,50', 1234.5],
     ['0,500', 0.5], [',500', 0.5], [',50', 0.5], [',5', 0.5], ['0,5', 0.5],
@@ -26,7 +26,7 @@ test('una coma seguida de exactamente 3 dígitos es de miles; de 1 o 2, decimal 
 
 test('rechaza agrupación inválida, europeo, más de 2 decimales, signos, exponentes y basura', () => {
   for (const raw of ['1,2345', '1,0000', '1,23,456', '12,34,56', '1.000,50', '1.234,50', '12,3456', '4.505', '1,000.505', '01,000', '0,000,000', '1234,567',
-    '1e2', '1E2', '1.5E+3', '+2', '-2', '0x10', '1.234.567', '4,5,0', '4.', '4,', '.', ',', '4 50', 'abc', 'Infinity', 'NaN', '٤', '4,50 S/', 'S/ 4,50'])
+    '1e2', '1E2', '1.5E+3', '+2', '-2', '0x10', '1.234.567', '4,5,0', '2,', '4,', '1,000,', '.', ',', '4 50', 'abc', 'Infinity', 'NaN', '٤', '4,50 S/', 'S/ 4,50'])
     assert.ok(Number.isNaN(D.parse(raw)), raw);
   assert.ok(Number.isNaN(D.parse('')));
   assert.ok(Number.isNaN(D.parse(null)));
@@ -50,6 +50,7 @@ test('check devuelve mensajes claros en español', () => {
   assert.match(D.check('1,23,456').message, /coma de miles mal ubicada/);
   assert.match(D.check('1,2345').message, /1 o 2 decimales.*3 dígitos de miles/);
   assert.match(D.check('4.505').message, /más de 2 decimales/);
+  assert.match(D.check('2,').message, /termina en coma/);
   assert.match(D.check('1e2').message, /no se aceptan exponentes/);
   assert.match(D.check('+2').message, /no se aceptan signos/);
   assert.match(D.check('0x10').message, /«0x10» no es un número válido/);
@@ -61,6 +62,20 @@ test('formato al salir del campo: miles con coma y 2 decimales; re-editar «1,00
   assert.equal(D.format(1000, 'int'), '1,000');
   assert.equal(D.format(2.375, 'qty'), '2.375');
   for (const raw of ['1000', '1,000', '1,000.00', '450', '1.000', '0,500', '4,50']) assert.equal(D.parse(D.format(D.parse(raw))), D.parse(raw), raw);
+});
+
+test('display: valores guardados listos para editar (2 decimales; nunca bloquean Guardar si no se tocan)', () => {
+  for (const [stored, shown] of [[3.3333, '3.33'], [0.30000000000000004, '0.30'], [0.1 + 0.2, '0.30'], [1234.5, '1,234.50'], [4, '4.00'], ['4.5', '4.50'], [0, '0.00']]) {
+    assert.equal(D.display(stored), shown, String(stored));
+    assert.ok(D.check(D.display(stored)).ok, String(stored));
+  }
+  assert.equal(D.display(null), '');
+  assert.equal(D.display(''), '');
+  assert.equal(D.display(30, 'int'), '30');
+  assert.equal(D.display(1000, 'int'), '1,000');
+  assert.equal(D.display(7.5, 'int'), '7.5', 'un entero antiguo con decimales no se redondea a escondidas');
+  assert.equal(D.display(24, 'qty'), '24');
+  assert.equal(D.display(2.375, 'qty'), '2.375');
 });
 
 test('el redondeo a céntimos sigue siendo Math.round(monto * 100)', () => {

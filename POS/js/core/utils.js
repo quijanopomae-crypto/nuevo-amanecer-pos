@@ -81,7 +81,7 @@ function _naInicioCashText(state) {
    Un <input type="number"> de Chrome descarta la coma: «4,50» llegaba como 450. Esos campos ahora son
    type="text" con inputmode="decimal" (o "numeric" para enteros) y se leen solo con este parser.
    Formato del negocio (decidido por el dueño): coma para miles y punto para decimales, «1,000.00».
-   - punto decimal: «450», «4.50», «.5», «1.000» (= 1.00);
+   - punto decimal: «450», «4.50», «.5», «1.000» (= 1.00) y punto final «2.» (= 2.00); «2,» se rechaza;
    - coma de miles solo con agrupación válida: primer grupo de 1 a 3 dígitos sin 0 inicial y cada grupo
      siguiente de EXACTAMENTE 3 dígitos, con «.dd» opcional: «1,000», «4,500», «1,000,000», «1,000.50»;
    - una sola coma seguida de 1 o 2 dígitos es decimal: «4,50» = 4.50, «1,5» = 1.50, «1,00» = 1.00;
@@ -97,10 +97,10 @@ function _naInicioCashText(state) {
    toCents mantiene el redondeo de hoy: Math.round(monto * 100), y exige un entero seguro. */
 (function (root) {
   'use strict';
-  var PLAIN = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
-  var GROUPED = /^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?$/;
+  var PLAIN = /^(?:\d+(?:\.\d*)?|\.\d+)$/;
+  var GROUPED = /^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d*)?$/;
   var COMMA_DECIMAL = /^(?:\d+,\d{1,2}|0?,\d+)$/;
-  var DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+|[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?|\d+,\d{1,2}|0?,\d+)$/;
+  var DECIMAL = /^(?:\d+(?:\.\d*)?|\.\d+|[1-9]\d{0,2}(?:,\d{3})+(?:\.\d*)?|\d+,\d{1,2}|0?,\d+)$/;
   var INTEGER = /^(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)$/;
   var EXAMPLE = 'Usa punto para los decimales y, si quieres, coma para los miles (por ejemplo 4.50 o 1,000.00).';
   var EXAMPLE_INT = 'Escribe un número entero, sin decimales (por ejemplo 3 o 1,000).';
@@ -147,6 +147,17 @@ function _naInicioCashText(state) {
     return group(fixed[0]) + '.' + fixed[1];
   }
 
+  // Valor GUARDADO (número del producto, de la política…) listo para poner en un campo al editar:
+  // montos redondeados a 2 decimales con miles («3.3333» → «3.33», 0.30000000000000004 → «0.30»), para que
+  // un campo que el usuario no tocó nunca bloquee Guardar. Vacío/null/no numérico → ''.
+  function display(stored, kind) {
+    if (stored == null || stored === '') return '';
+    var n = typeof stored === 'number' ? stored : Number(String(stored).trim());
+    if (!Number.isFinite(n)) return String(stored);
+    // Un entero guardado con decimales (dato antiguo) se muestra tal cual, sin redondear a escondidas.
+    return format(n, kind === 'int' && !Number.isInteger(n) ? 'qty' : kind);
+  }
+
   function reason(s, opts) {
     var hint = isInt(opts) ? EXAMPLE_INT : EXAMPLE, digits = /^[\d.,]+$/.test(s);
     if (/[eE]/.test(s) && /\d/.test(s)) return 'no se aceptan exponentes («' + s + '»). ' + hint;
@@ -154,6 +165,7 @@ function _naInicioCashText(state) {
     if (isInt(opts) && DECIMAL.test(s)) return '«' + s + '» no es un número entero. ' + hint;
     var norm = normalize(s, opts);
     if (norm != null && decimals(norm) > 2) return '«' + s + '» tiene más de 2 decimales. Escribe como mucho 2 (por ejemplo 4.50).';
+    if (/^[\d.,]*\d,$/.test(s)) return '«' + s + '» termina en coma. Escribe los decimales (por ejemplo 2,50 o 2.50) o quita la coma.';
     if (/^\d*,\d{4,}$/.test(s)) return '«' + s + '»: después de una sola coma van 1 o 2 decimales (4,50) o exactamente 3 dígitos de miles (1,000).';
     if (digits && /\.\d*,/.test(s)) return '«' + s + '» usa punto para los miles. Usa coma para los miles y punto para los decimales: 1,000.50.';
     if (digits && /,/.test(s)) return '«' + s + '» tiene la coma de miles mal ubicada. La coma de miles va cada 3 dígitos (1,000.50); para decimales usa punto (4.50).';
@@ -288,6 +300,6 @@ function _naInicioCashText(state) {
     } catch (_) {}
   }
 
-  root.NA_DECIMAL = Object.freeze({ PATTERN: DECIMAL, INTEGER: INTEGER, parse: parse, toCents: toCents, check: check, value: value, mark: mark, validate: validate, format: format, reformat: reformat, GROUPED: GROUPED });
+  root.NA_DECIMAL = Object.freeze({ PATTERN: DECIMAL, INTEGER: INTEGER, parse: parse, toCents: toCents, check: check, value: value, mark: mark, validate: validate, format: format, display: display, reformat: reformat, GROUPED: GROUPED });
   install();
 })(typeof window !== 'undefined' ? window : globalThis);
