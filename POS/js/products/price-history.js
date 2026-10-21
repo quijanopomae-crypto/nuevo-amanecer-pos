@@ -120,6 +120,8 @@
       var before = cents(opts.before[key]);
       var after = cents(opts.after[key]);
       if (before === after) return;
+      // Mayorista: 0 y vacío son «sin precio»; pasar de S/ 0.00 a vacío (o al revés) no es un cambio.
+      if (key === 'mayorista' && !before && !after) return;
       var seq = ++entrySeq;
       var entry = {
         id: productId + ':' + at + ':' + key + ':' + (opts.ref || 'change') + ':' + seq,
@@ -217,7 +219,7 @@
   function canSeeCost() {
     try {
       var roles = root.NA_ROLES;
-      return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner());
+      return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true);
     } catch (_) { return false; }
   }
   function list(productId, options) {
