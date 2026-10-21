@@ -98,6 +98,7 @@
     <link rel="stylesheet" href="css/historial-compras.css">
     <link rel="stylesheet" href="css/price-history.css">
     <link rel="stylesheet" href="css/etiquetas-precios.css">
+    <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
@@ -434,6 +435,28 @@
     <h2>Vista previa · <span data-etq-count>0 etiquetas</span></h2>
     <div class="etq-preview-wrap"><div class="etq-sheet etq-format-mediana" data-etq-sheet></div></div>
     <button class="etq-print" type="button" data-etq-print disabled>Imprimir</button>
+  </div>
+</div>
+
+<div class="page" id="pageProductosSinMovimiento" aria-labelledby="productosSinMovimientoTitle">
+  <div class="psm-shell">
+    <header>
+      <h1 id="productosSinMovimientoTitle">Productos sin movimiento</h1>
+      <p class="psm-description">Productos activos sin ventas en el período, con su stock actual. Solo lectura.</p>
+    </header>
+    <div class="psm-controls" data-psm-controls hidden>
+      <label>Período
+        <select data-psm-period aria-label="Período">
+          <option value="30" selected>Últimos 30 días</option>
+          <option value="60">Últimos 60 días</option>
+          <option value="90">Últimos 90 días</option>
+        </select>
+      </label>
+      <button type="button" data-psm-refresh>Actualizar reporte</button>
+      <button type="button" data-psm-export>Exportar CSV</button>
+    </div>
+    <p class="psm-status" data-psm-status role="status" aria-live="polite"></p>
+    <div data-psm-content></div>
   </div>
 </div>
 
@@ -1365,6 +1388,7 @@
 <script src="js/modules/reporte-arqueo.js"></script>
 <script src="js/inventory/historial-compras.js"></script>
 <script src="js/modules/etiquetas-precios.js"></script>
+<script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
