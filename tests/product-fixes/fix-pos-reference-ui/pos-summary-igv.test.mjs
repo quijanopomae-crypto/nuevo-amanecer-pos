@@ -66,3 +66,16 @@ test('same-height green bar has 3 columns for IGV and 2 for counter; phone exclu
   assert.match(html, /id="posTotal"/);
   assert.match(css, /body:not\(\.na-pos-phone-device\) #pagePOS\.na-pos-summary-igv-hidden/);
 });
+
+test('TOTAL uppercase and amount share one horizontal row in PC/tablet only', () => {
+  const block = css.match(/body:not\(\.na-pos-phone-device\) #pagePOS \.cart-totals>\.total-main\{([^}]+)\}/);
+  assert.ok(block, 'PC/tablet total row selector exists');
+  assert.match(block[1], /flex-direction:row;/);
+  assert.match(block[1], /align-items:center;/);
+  assert.match(block[1], /justify-content:center;/);
+  assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:first-child\{[^}]*text-transform:uppercase;/);
+  assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:last-child\{font-size:clamp\(14px,1\.6vw,19px\)/);
+  assert.match(css, /--na-pos-summary-height:44px/);
+  assert.match(css, /--na-pos-summary-height:36px/);
+  assert.match(html, /<div class="total-main"><span>Total<\/span><span id="posTotal">/);
+});
