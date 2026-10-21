@@ -100,6 +100,7 @@
     <link rel="stylesheet" href="css/etiquetas-precios.css">
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
+    <link rel="stylesheet" href="css/ajustes-inventario.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
     <script>
       // The mobile enhancement must never leave a usable home permanently hidden.
@@ -453,6 +454,52 @@
     </div>
     <p class="sc-status" data-sc-status role="status" aria-live="polite"></p>
     <div data-sc-content></div>
+  </div>
+</div>
+
+<div class="page" id="pageAjustesInventario" aria-labelledby="ajustesInventarioTitle">
+  <div class="aj-shell">
+    <header>
+      <h1 id="ajustesInventarioTitle">Ajustes de inventario</h1>
+      <p class="aj-description">Registra mermas, roturas, vencidos y correcciones de stock con motivo, usuario y nota. No cambia ventas ni pagos.</p>
+    </header>
+    <p class="aj-status" data-aj-status role="status" aria-live="polite"></p>
+    <div data-aj-main hidden>
+      <form class="aj-form" data-aj-form novalidate>
+        <label class="aj-wide">Buscar producto
+          <input type="search" data-aj-search autocomplete="off" placeholder="Nombre o código">
+        </label>
+        <label class="aj-wide">Producto
+          <select data-aj-product required></select>
+        </label>
+        <label>Tipo
+          <select data-aj-type>
+            <option value="merma">Merma</option>
+            <option value="rotura">Rotura</option>
+            <option value="vencido">Vencido</option>
+            <option value="correccion">Corrección</option>
+          </select>
+        </label>
+        <p class="aj-lot-note aj-wide" data-aj-lot-note role="note" hidden></p>
+        <label data-aj-direction-wrap hidden>Corrección
+          <select data-aj-direction>
+            <option value="restar">Restar stock</option>
+            <option value="sumar">Sumar stock</option>
+          </select>
+        </label>
+        <label>Cantidad
+          <input type="number" data-aj-qty min="0" step="any" inputmode="decimal" required>
+        </label>
+        <label class="aj-wide">Nota
+          <textarea data-aj-note maxlength="300" placeholder="Detalle del ajuste (opcional)"></textarea>
+        </label>
+        <button type="submit" class="aj-submit aj-wide" data-aj-submit>Registrar ajuste</button>
+        <p class="aj-message aj-wide" data-aj-message role="status" aria-live="polite"></p>
+      </form>
+      <h2>Reporte de ajustes (solo dueño)</h2>
+      <button type="button" data-aj-export>Exportar CSV</button>
+      <div data-aj-report></div>
+    </div>
   </div>
 </div>
 
@@ -1412,6 +1459,7 @@
 <script src="js/modules/etiquetas-precios.js"></script>
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
+<script src="js/modules/ajustes-inventario.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>

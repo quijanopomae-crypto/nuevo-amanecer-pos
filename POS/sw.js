@@ -43,6 +43,8 @@ const PRECACHE_URLS = [
   './js/modules/productos-sin-movimiento.js',
   './css/sugerencia-compra.css',
   './js/modules/sugerencia-compra.js',
+  './css/ajustes-inventario.css',
+  './js/modules/ajustes-inventario.js',
   './css/layout.css',
   './css/components.css',
   './css/responsive.css',
