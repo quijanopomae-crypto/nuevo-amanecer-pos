@@ -134,3 +134,151 @@ for (const dark of [false, true]) {
     });
   }
 }
+
+// Tamaño real impreso (#852): en rollo, nada fuera de la etiqueta puede ensanchar la página, o Chromium encoge todo
+// para que entre (antes la etiqueta salía al ~66 %). Se mide con el medio «print» y una ventana del ancho de la hoja,
+// y se revisa el PDF (tamaño de hoja y cantidad de páginas).
+const MM = 96 / 25.4;
+function pdfInfo(pdf: Buffer) {
+  const s = pdf.toString('latin1');
+  const pages = (s.match(/\/Type\s*\/Page[^s]/g) || []).length;
+  const boxes = (s.match(/\/MediaBox\s*\[[^\]]*\]/g) || []).map(b => b.replace(/^\/MediaBox\s*\[\s*|\s*\]$/g, '').split(/\s+/).map(Number));
+  const sizes = boxes.map(b => JSON.stringify([Math.round((b[2] - b[0]) / 72 * 25.4), Math.round((b[3] - b[1]) / 72 * 25.4)]));
+  return { pages, sizesMm: Array.from(new Set(sizes)).map(x => JSON.parse(x)) };
+}
+// Barras del código en la página 1 del PDF, medidas en tinta (mm) rasterizando con pdftoppm (si está instalado).
+function pdfBarsMm(pdfPath: string, cropMm: number): { width: number; height: number } | null {
+  const { execFileSync } = require('child_process'), fs = require('fs');
+  const DPI = 300, out = pdfPath.replace(/\.pdf$/, '-p1');
+  try { execFileSync('pdftoppm', ['-r', String(DPI), '-gray', '-f', '1', '-l', '1', '-singlefile', pdfPath, out]); } catch { return null; }
+  const d: Buffer = fs.readFileSync(out + '.pgm'); fs.unlinkSync(out + '.pgm');
+  const m = /^P5\s+(\d+)\s+(\d+)\s+\d+\s/.exec(d.toString('latin1', 0, 40))!; const FW = +m[1], H = +m[2], all = d.subarray(m[0].length);
+  // Solo la primera etiqueta (en A4, la primera columna).
+  const W = Math.min(FW, Math.round(cropMm / 25.4 * DPI)), px = Buffer.alloc(W * H);
+  for (let y = 0; y < H; y++) all.copy(px, y * W, y * FW, y * FW + W);
+  // Barras = el tramo más largo de filas casi iguales con muchas transiciones (el texto cambia fila a fila).
+  const rows = Array.from({ length: H }, (_, y) => { let t = 0, first = -1, last = -1, bits = '';
+    for (let x = 0; x < W; x++) { const black = px[y * W + x] < 128; bits += black ? '1' : '0'; if (black) { if (first < 0) first = x; last = x; } if (x && black !== (px[y * W + x - 1] < 128)) t++; }
+    return { t, first, last, bits }; });
+  const same = (a: string, b: string) => { let d = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && ++d > 8) return false; return true; };
+  let best = { from: 0, to: -1 }, from = -1;
+  for (let y = 0; y <= H; y++) {
+    const ok = y < H && rows[y].t >= 40 && (from < 0 || same(rows[y].bits, rows[from].bits));
+    if (ok && from < 0) from = y;
+    if (!ok && from >= 0) { if (y - 1 - from > best.to - best.from) best = { from, to: y - 1 }; from = y < H && rows[y].t >= 40 ? y : -1; }
+  }
+  let minX = W, maxX = -1; const minY = best.from, maxY = best.to;
+  for (let y = minY; y <= maxY; y++) { minX = Math.min(minX, rows[y].first); maxX = Math.max(maxX, rows[y].last); }
+  const mm = (p: number) => p / DPI * 25.4;
+  return maxY < 0 ? { width: 0, height: 0 } : { width: mm(maxX - minX + 1), height: mm(maxY - minY + 1) };
+}
+for (const dark of [false, true]) for (const [fmt, w, h] of [['chica', 38, 25], ['mediana', 50, 30], ['a4', 210, 297]] as const) {
+  test(`tamaño impreso real: ${fmt} ${w}×${h} mm, tema ${dark ? 'oscuro' : 'claro'}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const { root, errors } = await open(page, dark);
+    await pick(root, 'arroz', 990201);
+    await pick(root, 'azucar', 990203);
+    const counts = fmt === 'a4' ? [20, 5] : [2, 1];
+    for (const [i, id] of [990201, 990203].entries()) { await root.locator(`[data-etq-qty="${id}"]`).fill(String(counts[i])); await root.locator(`[data-etq-qty="${id}"]`).blur(); }
+    const total = counts[0] + counts[1];
+    await root.locator('[data-etq-format]').selectOption(fmt);
+    await page.evaluate(() => { window.print = () => {}; window.confirm = () => true; });
+    await root.locator('[data-etq-print]').click();
+    // Barras a tamaño real (revisión visual #852, Arroz de prueba): chica 29.6×8, mediana 39.9×8, A4 57.1×8 mm.
+    const barsW = ({ chica: 29.6, mediana: 39.9, a4: 57.1 } as const)[fmt];
+    // PDF primero, como el diálogo real: ventana normal y medio «print» lo pone page.pdf. (Con emulateMedia('print')
+    // o una ventana del tamaño de la etiqueta, Chromium dejaba en blanco las páginas de rollo del PDF.)
+    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+    const pdfPath = testInfo.outputPath(`${fmt}-${dark ? 'oscuro' : 'claro'}.pdf`);
+    require('fs').writeFileSync(pdfPath, pdf);
+    // En el PDF mismo: con el encogido de Chromium la chica daba 19.6×5.3 mm (×0.665) y la mediana 26.6×5.3 (×0.667).
+    const ink = pdfBarsMm(pdfPath, fmt === 'a4' ? 70 : w);
+    if (ink) {
+      expect(Math.abs(ink.width - barsW), `barras en el PDF ${ink.width.toFixed(2)}×${ink.height.toFixed(2)} mm ≈ ${barsW}×8`).toBeLessThanOrEqual(0.4);
+      expect(Math.abs(ink.height - 8), `alto de barras en el PDF ${ink.height.toFixed(2)} mm`).toBeLessThanOrEqual(0.3);
+    } else testInfo.annotations.push({ type: 'info', description: 'pdftoppm no disponible: se omite la medida en tinta del PDF' });
+    const info = pdfInfo(pdf);
+    expect(info.sizesMm).toEqual([[w, h]]);
+    expect(info.pages).toBe(fmt === 'a4' ? 2 : total);
+    // page.pdf dispara «afterprint»: la impresión se limpia sola.
+    expect(await page.evaluate(() => document.querySelectorAll('style[data-etq-page-style], [data-etq-print-hide], [data-etq-print-path]').length), 'limpio tras page.pdf').toBe(0);
+    // Diseño en medio «print» con la ventana del ancho de la hoja (se vuelve a pedir la impresión).
+    await root.locator('[data-etq-print]').click();
+    await page.emulateMedia({ media: 'print' });
+    await page.setViewportSize({ width: Math.round(w * MM), height: Math.round(h * MM) });
+    const layout = await page.evaluate(() => {
+      const label = document.querySelector('[data-etq-sheet] [data-etq-label]') as HTMLElement, r = label.getBoundingClientRect();
+      // Borde derecho más lejano de todo lo que ocupa lugar en el diseño (también lo invisible): es lo que encoge el PDF.
+      const laidOut = [...document.querySelectorAll('body *')].filter(e => (e as HTMLElement).getClientRects().length > 0);
+      const widest = laidOut.map(e => [e.id || e.tagName, Math.round(e.getBoundingClientRect().right)] as const).sort((a, b) => b[1] - a[1])[0];
+      const rects = [...label.querySelectorAll('svg.etq-bars rect')].map(e => e.getBoundingClientRect());
+      const bars = { width: Math.max(...rects.map(b => b.right)) - Math.min(...rects.map(b => b.left)), height: Math.max(...rects.map(b => b.bottom)) - Math.min(...rects.map(b => b.top)) };
+      return { bars, scrollWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth, widest, left: r.left, top: r.top, width: r.width, height: r.height,
+        visibleOutside: [...document.body.querySelectorAll('*')].filter(e => !e.closest('[data-etq-sheet]') && !e.contains(label) && (e as HTMLElement).getClientRects().length > 0).map(e => e.id || e.className || e.tagName).slice(0, 5) };
+    });
+    const pageWidth = Math.round(w * MM);
+    expect(layout.scrollWidth, 'nada ensancha la página').toBeLessThanOrEqual(pageWidth + 1);
+    expect(layout.bodyWidth).toBeLessThanOrEqual(pageWidth + 1);
+    expect(layout.widest[1], `elemento más ancho: ${layout.widest.join(' → ')} px`).toBeLessThanOrEqual(pageWidth + 1);
+    expect(layout.visibleOutside, 'fuera de la hoja no queda nada en el diseño').toEqual([]);
+    expect(Math.abs(layout.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(layout.top)).toBeLessThanOrEqual(1);
+    const [lw, lh] = fmt === 'a4' ? [70, 37] : [w, h];
+    expect(Math.abs(layout.width - lw * MM), `ancho ${layout.width}px ≈ ${lw} mm`).toBeLessThanOrEqual(1.5);
+    expect(Math.abs(layout.height - lh * MM), `alto ${layout.height}px ≈ ${lh} mm`).toBeLessThanOrEqual(1.5);
+    expect(Math.abs(layout.bars.width / MM - barsW), `barras ${(layout.bars.width / MM).toFixed(2)} mm ≈ ${barsW} mm`).toBeLessThanOrEqual(0.4);
+    expect(Math.abs(layout.bars.height / MM - 8), `alto barras ${(layout.bars.height / MM).toFixed(2)} mm`).toBeLessThanOrEqual(0.3);
+    await page.emulateMedia({ media: 'screen' });
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await expect(page.locator('style[data-etq-page-style]')).toHaveCount(0);
+    expect(await page.evaluate(() => document.querySelectorAll('[data-etq-print-hide], [data-etq-print-path]').length), 'sin marcas tras imprimir').toBe(0);
+    expect(errors).toEqual([]);
+  });
+}
+
+// #852: la etiqueta usa el producto ACTUAL del catálogo (por id), no la copia de cuando se agregó.
+test('precio actualizado en el catálogo: la vista previa y la impresión muestran el nuevo', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { root, errors } = await open(page, false);
+  await pick(root, 'arroz', 990201);
+  const price = root.locator('[data-etq-sheet] [data-etq-label] .etq-price').first();
+  await expect(price).toHaveText('S/ 4.50');
+  // Recarga del catálogo (nuevo arreglo, objetos nuevos) con otro precio y otro nombre.
+  await page.evaluate(items => { (0, eval)('productos = ' + JSON.stringify(items)); },
+    products.map(p => p.id === 990201 ? { ...p, precio: 5.75, name: 'Arroz impresion extra' } : p));
+  await page.evaluate(() => (window as any).goPage('pagePOS'));
+  await page.evaluate(() => (window as any).goPage('pageEtiquetasPrecios'));
+  await expect(price).toHaveText('S/ 5.75');
+  await expect(root.locator('[data-etq-sheet] .etq-name').first()).toHaveText('Arroz impresion extra');
+  // Sin volver a entrar: imprimir usa el precio del catálogo en ese momento.
+  await page.evaluate(() => { (0, eval)('productos.find(p => p.id === 990201).precio = 6.2'); window.print = () => {}; window.confirm = () => true; });
+  await root.locator('[data-etq-print]').click();
+  await expect(price).toHaveText('S/ 6.20');
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  // Pasa a no tener precio: aviso y confirmación al imprimir.
+  await page.evaluate(() => { (0, eval)('productos.find(p => p.id === 990201).precio = 0'); (window as any).__asked = ''; window.confirm = (m?: string) => { (window as any).__asked = String(m); return false; }; });
+  await root.locator('[data-etq-print]').click();
+  expect(await page.evaluate(() => (window as any).__asked)).toContain('Sin precio');
+  await expect(price).toHaveText('Sin precio');
+  await expect(root.locator('[data-etq-noprice-warn="990201"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+// Aparato en UTC a las 22:00 de Lima (03:00 UTC del día siguiente): la etiqueta lleva la fecha de Lima, no la del aparato.
+test.describe('fecha de Lima con el aparato en UTC', () => {
+  test.use({ timezoneId: 'UTC' });
+  test('la etiqueta impresa muestra 20/10/2026 aunque el aparato ya esté en el 21', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-21T03:00:00Z'));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const { root, errors } = await open(page, false);
+    expect(await page.evaluate(() => new Date().getDate()), 'el aparato (UTC) ya está en el 21').toBe(21);
+    await pick(root, 'arroz', 990201);
+    await expect(root.locator('[data-etq-sheet] .etq-date').first()).toHaveText('20/10/2026');
+    await page.evaluate(() => { window.print = () => {}; window.confirm = () => true; });
+    await root.locator('[data-etq-print]').click();
+    await expect(root.locator('[data-etq-sheet] .etq-date').first()).toHaveText('20/10/2026');
+    const pdf = await page.pdf({ preferCSSPageSize: true, printBackground: true });
+    expect(pdf.length).toBeGreaterThan(5000);
+    expect(errors).toEqual([]);
+  });
+});

@@ -155,3 +155,34 @@ test('fecha en hora de Lima, no en la del aparato', () => {
   assert.equal(E.formatDate(new Date('2026-10-21T05:00:00Z')), '21/10/2026');
   assert.equal(E.formatDate(new Date('2027-01-01T04:59:00Z')), '31/12/2026');
 });
+
+test('precio como texto: separador de miles y decimal, sin «Sin precio» falso', () => {
+  const cases = [['1,234.50', 1234.5], ['1.234,50', 1234.5], ['S/ 1,234.50', 1234.5], ['s/4.50', 4.5], ['4,50', 4.5], ['3,456', 3.456], ['1,234,567', 1234567], ['1.234.567', 1234567], [' 12.5 ', 12.5], [7, 7]];
+  for (const [raw, n] of cases) {
+    assert.equal(E.parsePrice(raw), n, String(raw));
+    assert.equal(E.hasPrice({ precio: raw }), true, String(raw));
+  }
+  assert.equal(E.formatPrice('1,234.50'), 'S/ 1234.50');
+  assert.equal(E.productPrice({ precio: '1.234,50' }), 'S/ 1234.50');
+  for (const raw of ['abc', '1,2,3', '1.2.3', '1,23,456', '--1', '', '0,00', '0.004', '-5']) assert.equal(E.hasPrice({ precio: raw }), false, String(raw));
+});
+
+// La fecha no depende de la zona del aparato: el mismo instante da la fecha de Lima con TZ=UTC, Tokio, Kiritimati
+// (UTC+14) o Los Ángeles. También sin soporte de zonas en Intl (respaldo fijo UTC−5).
+test('fecha de Lima con el aparato en otra zona horaria (TZ) y sin Intl', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const script = `
+    const vm = require('node:vm'), fs = require('node:fs');
+    const run = (ctx) => { vm.createContext(ctx); vm.runInContext(fs.readFileSync('POS/js/modules/etiquetas-precios.js', 'utf8'), ctx); return ctx.NA_ETIQUETAS_PRECIOS; };
+    const instants = ['2026-10-21T03:00:00Z', '2026-10-21T05:00:00Z', '2027-01-01T04:59:00Z', '2026-10-21T23:30:00Z'];
+    const noIntl = { Intl: { DateTimeFormat: function () { throw new RangeError('sin zonas'); } } };
+    const fmt = E => instants.map(i => E.formatDate(new Date(i)));
+    process.stdout.write(JSON.stringify({ local: new Date('2026-10-21T03:00:00Z').getDate(), intl: fmt(run({})), fallback: fmt(run(noIntl)) }));`;
+  const expected = ['20/10/2026', '21/10/2026', '31/12/2026', '21/10/2026'];
+  for (const TZ of ['UTC', 'Asia/Tokyo', 'Pacific/Kiritimati', 'America/Los_Angeles']) {
+    const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { env: { ...process.env, TZ }, encoding: 'utf8' }));
+    if (TZ !== 'America/Los_Angeles') assert.equal(out.local, 21, `${TZ}: el aparato ve otro día`);
+    assert.deepEqual(out.intl, expected, `${TZ} con Intl`);
+    assert.deepEqual(out.fallback, expected, `${TZ} sin Intl`);
+  }
+});

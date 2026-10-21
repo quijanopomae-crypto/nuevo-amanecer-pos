@@ -65,8 +65,21 @@
   function escapeHtml(v) {
     return text(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // Precio guardado como número (lo normal) o como texto: «4.50», «4,50», «S/ 4.50», «1,234.50», «1.234,50».
+  // Con punto y coma, el último es el decimal. Una sola coma es decimal («3,456» = 3.456, como antes);
+  // varias comas en grupos de 3 («1,234,567») o varios puntos («1.234.567») son miles.
+  function parsePrice(v) {
+    if (typeof v === 'number') return v;
+    var s = text(v).replace(/^\s*S\/\s*/i, '').replace(/\s+/g, '');
+    if (!/^-?[\d.,]+$/.test(s)) return NaN;
+    var dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+    if (dot >= 0 && comma >= 0) s = dot > comma ? s.replace(/,/g, '') : s.replace(/\./g, '').replace(',', '.');
+    else if (comma >= 0) s = s.split(',').length === 2 ? s.replace(',', '.') : (/^-?\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : 'x');
+    else if ((s.match(/\./g) || []).length > 1) s = /^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : 'x';
+    return Number(s);
+  }
   function formatPrice(v) {
-    var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.'));
+    var n = parsePrice(v);
     if (!isFinite(n) || n < 0) n = 0;
     return 'S/ ' + (Math.round(n * 100) / 100).toFixed(2);
   }
@@ -81,7 +94,7 @@
   function rawPrice(p) { return p && p.precio != null && p.precio !== '' ? p.precio : p && p.price; }
   function hasPrice(p) {
     var v = rawPrice(p); if (v == null || v === '') return false;
-    var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.'));
+    var n = parsePrice(v);
     return isFinite(n) && Math.round(n * 100) > 0;
   }
   // Nunca devuelve «S/ 0.00» para un producto sin precio válido: devuelve «Sin precio».
@@ -138,13 +151,16 @@
     return labels.map(function (p) { return labelHtml(p, date); }).join('');
   }
 
-  var api = { MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
+  var api = { MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, parsePrice: parsePrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
   root.NA_ETIQUETAS_PRECIOS = api;
 
   var doc = root.document; if (!doc || !doc.getElementById) return;
   var selected = [], format = 'mediana', wired = false;
   function catalog() { try { return typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   function page() { return doc.getElementById('pageEtiquetasPrecios'); }
+  // Producto actual del catálogo por id (precio/nombre al día); si ya no está, el que se eligió.
+  function current(item) { var id = productKey(item.product), p = catalog().find(function (x) { return productKey(x) === id; }); return p || item.product; }
+  function currentSelection() { return selected.map(function (item) { return { product: current(item), qty: item.qty }; }); }
   function q(sel) { var p = page(); return p && p.querySelector(sel); }
   function renderMatches() {
     var box = q('[data-etq-matches]'), input = q('[data-etq-search]'); if (!box || !input) return;
@@ -160,7 +176,7 @@
   function renderSelected() {
     var list = q('[data-etq-selected]'); if (!list) return;
     list.textContent = '';
-    selected.forEach(function (item) {
+    currentSelection().forEach(function (item) {
       var li = doc.createElement('li'); li.className = 'etq-item'; li.setAttribute('data-etq-item', productKey(item.product));
       var name = doc.createElement('span'); name.className = 'etq-item-name'; name.textContent = productName(item.product);
       var label = doc.createElement('label'); label.className = 'etq-qty'; label.textContent = 'Cantidad ';
@@ -176,7 +192,7 @@
   }
   function renderPreview() {
     var sheet = q('[data-etq-sheet]'), count = q('[data-etq-count]'), print = q('[data-etq-print]'); if (!sheet) return;
-    var plan = labelPlan(selected), total = plan.total;
+    var plan = labelPlan(currentSelection()), total = plan.total;
     sheet.className = 'etq-sheet etq-format-' + format;
     // HTML armado solo con escapeHtml (labelHtml); ningún dato entra sin escapar.
     sheet.innerHTML = sheetHtml(plan.labels, format, new Date());
@@ -195,6 +211,43 @@
     renderSelected();
     if (input && typeof input.focus === 'function') input.focus();
   }
+  // Impresión: fuera de la hoja nada ocupa lugar en el diseño. Con visibility:hidden el resto de la app seguía midiendo
+  // (p. ej. 279 px) y Chromium encogía la etiqueta de rollo al ~66 %. Se marca cada hermano de la hoja y de sus
+  // ancestros (display:none al imprimir) y los ancestros quedan sin relleno, borde ni ancho propio.
+  var endPrint = null;
+  function isolate(sheet) {
+    var marked = [], node = sheet;
+    while (node && node !== doc.body && node.parentElement) {
+      var parent = node.parentElement;
+      Array.prototype.forEach.call(parent.children, function (sib) {
+        if (sib !== node && !sib.hasAttribute('data-etq-print-hide')) { sib.setAttribute('data-etq-print-hide', ''); marked.push(sib); }
+      });
+      if (parent !== doc.body) { parent.setAttribute('data-etq-print-path', ''); marked.push(parent); }
+      node = parent;
+    }
+    return function () { marked.forEach(function (el) { el.removeAttribute('data-etq-print-hide'); el.removeAttribute('data-etq-print-path'); }); };
+  }
+  function printSheet() {
+    if (endPrint) endPrint();
+    var sheet = q('[data-etq-sheet]'); if (!sheet) return;
+    var restore = isolate(sheet);
+    doc.documentElement.classList.add('etq-printing-root');
+    doc.body.classList.add('etq-printing');
+    var style = doc.createElement('style'); style.setAttribute('data-etq-page-style', format); style.textContent = pageCss(format); doc.head.appendChild(style);
+    var done = function () {
+      if (endPrint !== done) return; endPrint = null;
+      restore();
+      doc.documentElement.classList.remove('etq-printing-root');
+      doc.body.classList.remove('etq-printing');
+      if (style.parentNode) style.parentNode.removeChild(style);
+      root.removeEventListener('afterprint', done);
+    };
+    // Solo «afterprint» cierra la impresión. No se usa matchMedia('print'): su «change» puede llegar mientras Chromium
+    // todavía arma las páginas y las dejaba en blanco. Si «afterprint» no llegara, la siguiente impresión limpia antes.
+    endPrint = done;
+    root.addEventListener('afterprint', done);
+    if (typeof root.print === 'function') root.print(); else done();
+  }
   function wire() {
     var p = page(); if (!p || wired) return; wired = true;
     var fmt = p.querySelector('[data-etq-format]');
@@ -209,20 +262,18 @@
       var a = e.target.closest('[data-etq-add]'); if (a) { add(a.getAttribute('data-etq-add')); return; }
       var r = e.target.closest('[data-etq-remove]'); if (r) { selected = selected.filter(function (s) { return productKey(s.product) !== r.getAttribute('data-etq-remove'); }); renderSelected(); return; }
       if (e.target.closest('[data-etq-print]')) {
-        var missing = selected.filter(function (s) { return !hasPrice(s.product); }).length;
+        // Con los precios actuales del catálogo.
+        renderSelected();
+        var missing = currentSelection().filter(function (s) { return !hasPrice(s.product); }).length;
         if (missing && typeof root.confirm === 'function' && !root.confirm(missing + (missing === 1 ? ' producto no tiene' : ' productos no tienen') + ' precio. Sus etiquetas saldrán como «Sin precio». ¿Imprimir igual?')) return;
-        doc.body.classList.add('etq-printing');
-        var style = doc.createElement('style'); style.setAttribute('data-etq-page-style', format); style.textContent = pageCss(format); doc.head.appendChild(style);
-        var done = function () { doc.body.classList.remove('etq-printing'); if (style.parentNode) style.parentNode.removeChild(style); root.removeEventListener('afterprint', done); };
-        root.addEventListener('afterprint', done);
-        if (typeof root.print === 'function') root.print();
+        printSheet();
       }
     });
     renderSelected();
   }
   function start() {
     var p = page(); if (!p) return; wire();
-    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) renderMatches(); }).observe(p, { attributes: true, attributeFilter: ['class'] });
+    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } }).observe(p, { attributes: true, attributeFilter: ['class'] });
   }
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(typeof window !== 'undefined' ? window : globalThis);

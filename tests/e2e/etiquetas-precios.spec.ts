@@ -87,7 +87,8 @@ for (const width of [390, 768, 1280]) {
     await expect(page.locator('body')).toHaveClass(/\betq-printing\b/);
     await page.emulateMedia({ media: 'print' });
     expect(await labels.first().evaluate(el => getComputedStyle(el).visibility)).toBe('visible');
-    expect(await root.locator('[data-etq-search]').evaluate(el => getComputedStyle(el).visibility)).toBe('hidden');
+    // Al imprimir, el buscador sale del diseño (no solo se oculta): no ensancha la hoja.
+    expect(await root.locator('[data-etq-search]').evaluate(el => el.getClientRects().length)).toBe(0);
     await page.emulateMedia({ media: 'screen' });
 
     expect(await page.evaluate(() => JSON.stringify((window as any).productos)), 'solo lectura').toBe(before);
@@ -95,3 +96,38 @@ for (const width of [390, 768, 1280]) {
     expect(errors).toEqual([]);
   });
 }
+
+// Solo el dueño: un empleado confirmado no llega a Etiquetas (ni por goPage, ni forzando la clase, ni por Próximamente).
+test('empleado: Etiquetas e impresión de precios no se abre ni se ve', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.route('**/*', route => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(url.pathname === '/auth/me' ? { pos_role: 'empleado', owner_pin_set: true, roles_ready: true, device_id: 'etq-empleado' } : {}) });
+    return url.hostname === '127.0.0.1' && !['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.request().method()) ? route.continue() : route.abort();
+  });
+  await page.goto('/index.html');
+  await page.evaluate(() => {
+    localStorage.setItem('na_cloud_sync_credentials', JSON.stringify({ endpoint: 'https://permissions.test', token: 'synthetic-test-only' }));
+    localStorage.setItem('na_pos_role_v1', JSON.stringify({ role: 'empleado' }));
+  });
+  await page.reload();
+  await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'empleado' && (window as any).NA_ROLES.confirmed && !!(window as any).NA_ETIQUETAS_PRECIOS);
+  const screen = page.locator('#pageEtiquetasPrecios');
+  await page.evaluate(() => (window as any).goPage('pageEtiquetasPrecios'));
+  await expect(page.locator('#naNoPermission')).toBeVisible();
+  await expect(page.locator('#naNoPermission')).toContainText('Sin permiso');
+  await expect(screen).not.toHaveClass(/\bactive\b/);
+  await expect(screen).toBeHidden();
+  await page.getByRole('button', { name: 'Volver a la venta', exact: true }).click();
+  // Forzar la clase tampoco la abre.
+  await page.evaluate(() => document.getElementById('pageEtiquetasPrecios')!.classList.add('active'));
+  await expect(page.locator('#naNoPermission')).toBeVisible();
+  await expect(screen).not.toHaveClass(/\bactive\b/);
+  await expect(screen).toBeHidden();
+  await page.getByRole('button', { name: 'Volver a la venta', exact: true }).click();
+  // Próximamente (donde está la tarjeta) es solo del dueño: no se abre y la tarjeta no se ve.
+  await page.evaluate(() => (window as any).goPage('pageProximamente'));
+  await expect(page.locator('#pageProximamente')).not.toHaveClass(/\bactive\b/);
+  await expect(page.locator('[data-feature-id="etiquetas-precios"]')).toBeHidden();
+  await expect(screen).toBeHidden();
+});

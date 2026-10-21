@@ -32,9 +32,12 @@ body.dark #pageEtiquetasPrecios .etq-preview-wrap { background: #0f172a; }
 .etq-warn { font-size: 6pt; line-height: 1.1; color: #b45309; font-weight: 700; }
 .etq-meta { display: flex; justify-content: space-between; gap: 2mm; font-size: 6pt; line-height: 1.1; white-space: nowrap; overflow: hidden; }
 @media print {
-  body.etq-printing * { visibility: hidden !important; }
-  body.etq-printing #pageEtiquetasPrecios .etq-sheet, body.etq-printing #pageEtiquetasPrecios .etq-sheet * { visibility: visible !important; }
-  body.etq-printing #pageEtiquetasPrecios .etq-sheet { position: absolute; left: 0; top: 0; background: #fff; }
+  /* Solo la hoja de etiquetas ocupa lugar: el resto de la app sale del diseño (no solo se oculta). */
+  html.etq-printing-root, body.etq-printing { margin: 0 !important; padding: 0 !important; border: 0 !important; width: auto !important; min-width: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; }
+  body.etq-printing { display: block !important; }
+  body.etq-printing [data-etq-print-hide], body.etq-printing > :not([data-etq-print-path]) { display: none !important; }
+  body.etq-printing [data-etq-print-path] { display: block !important; position: static !important; margin: 0 !important; padding: 0 !important; border: 0 !important; width: auto !important; min-width: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; transform: none !important; background: #fff !important; box-shadow: none !important; }
+  body.etq-printing #pageEtiquetasPrecios .etq-sheet { position: static; margin: 0; background: #fff; }
   body.etq-printing .etq-label { border-color: transparent; }
   .etq-warn { display: none !important; }
 }
