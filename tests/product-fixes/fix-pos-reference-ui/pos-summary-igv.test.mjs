@@ -76,19 +76,22 @@ test('TOTAL uppercase and amount share one horizontal row in PC/tablet only', ()
   assert.match(block[1], /align-items:center;/);
   assert.match(block[1], /justify-content:center;/);
   assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:first-child\{[^}]*text-transform:uppercase;/);
-  assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:last-child\{font-size:clamp\(11px,1\.4vw,19px\)/);
+  assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:last-child\{font-size:clamp\(9px,1\.3vw,19px\)/);
   assert.match(css, /--na-pos-summary-height:44px/);
   assert.match(css, /--na-pos-summary-height:36px/);
   assert.match(html, /<div class="total-main"><span>Total<\/span><span id="posTotal">/);
 });
 
-test('TOTAL uses same responsive font-size as the currency amount on PC/tablet', () => {
+test('TOTAL y monto: mismo tamaño sin IGV; con IGV ambos más chicos (dueño 14:45) para que entre S/ 111,110.00', () => {
   const label = css.match(/body:not\(\.na-pos-phone-device\) #pagePOS \.cart-totals>\.total-main>span:first-child\{([^}]+)\}/);
   const money = css.match(/body:not\(\.na-pos-phone-device\) #pagePOS \.cart-totals>\.total-main>span:last-child\{([^}]+)\}/);
   assert.ok(label && money, 'both selectors must exist under PC/tablet only');
   const font = /font-size:(clamp\([^;]+\));/;
-  assert.equal(label[1].match(font)?.[1], money[1].match(font)?.[1], 'TOTAL and amount must have exactly the same font-size');
+  assert.equal(label[1].match(font)?.[1], 'clamp(7px,.94vw,11.5px)');
+  assert.equal(money[1].match(font)?.[1], 'clamp(9px,1.3vw,19px)');
   assert.match(label[1], /text-transform:uppercase/);
+  // Sin IGV ambos vuelven exactamente al tamaño anterior, compartido.
+  assert.match(css, /#pagePOS\.na-pos-summary-igv-hidden \.cart-totals>\.total-main>span:first-child,\s*body:not\(\.na-pos-phone-device\) #pagePOS\.na-pos-summary-igv-hidden \.cart-totals>\.total-main>span:last-child\{font-size:clamp\(11px,1\.4vw,19px\)\}/);
   assert.match(css, /--na-pos-summary-height:44px/);
   assert.match(css, /--na-pos-summary-height:36px/);
 });
