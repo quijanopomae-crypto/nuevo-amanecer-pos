@@ -12,6 +12,9 @@ body.dark #pageProductosSinMovimiento { --psm-bg: #0f172a; --psm-surface: #1e293
 #pageProductosSinMovimiento label { display: grid; gap: 6px; min-width: 0; font-weight: 700; }
 #pageProductosSinMovimiento :is(select, button) { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--psm-border); border-radius: 10px; font: inherit; color: var(--psm-text); background: var(--psm-surface); }
 #pageProductosSinMovimiento button { cursor: pointer; font-weight: 700; }
+#pageProductosSinMovimiento label.psm-check { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+#pageProductosSinMovimiento .psm-check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: #0d9488; }
+#pageProductosSinMovimiento .psm-check input:focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
 #pageProductosSinMovimiento :is(select, button):focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
 #pageProductosSinMovimiento .psm-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
 #pageProductosSinMovimiento .psm-card, #pageProductosSinMovimiento .psm-empty { padding: 12px 14px; border: 1px solid var(--psm-border); border-radius: 12px; background: var(--psm-surface); min-width: 0; }
@@ -37,5 +40,5 @@ body.dark #pageProductosSinMovimiento { --psm-bg: #0f172a; --psm-surface: #1e293
 }
 @media (min-width: 600px) {
   #pageProductosSinMovimiento { padding: 24px; }
-  #pageProductosSinMovimiento .psm-controls { grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; }
+  #pageProductosSinMovimiento .psm-controls { grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: end; }
 }

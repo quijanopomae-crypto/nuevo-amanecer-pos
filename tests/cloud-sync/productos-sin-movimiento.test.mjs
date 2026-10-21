@@ -110,3 +110,21 @@ test('ajustes de inventario (merma/corrección, Misión 7) no cuentan como venta
   assert.deepEqual(keys(ctx.NA_PRODUCTOS_SIN_MOVIMIENTO.buildReport(sales, products, { days: 30, now, movements })), ['id:4', 'id:2', 'id:3', 'id:6']);
   assert.doesNotMatch(source, /inventoryMovements/, 'solo lee ventas');
 });
+
+test('#854: stock inmovilizado = solo stock > 0 por defecto; «Incluir sin stock» muestra stock ≤ 0', () => {
+  const prods = [
+    { id: 11, name: 'Con stock', stock: 3, costo: 2 },
+    { id: 12, name: 'Stock cero', stock: 0, costo: 2 },
+    { id: 13, name: 'Stock negativo', stock: -4, costo: 2 },
+    { id: 14, name: 'Stock vacío', stock: '', costo: 2 },
+    { id: 15, name: 'Stock decimal', stock: '0,5', costo: 2 }
+  ];
+  const def = api.buildReport([], prods, { now, withValue: true });
+  assert.deepEqual(plain(def.rows.map(r => [r.name, r.stock])), [['Con stock', 3], ['Stock decimal', 0.5]]);
+  assert.equal(def.units, 3.5); assert.equal(def.value, 7);
+  const all = api.buildReport([], prods, { now, withValue: true, includeNoStock: true });
+  assert.deepEqual(plain(all.rows.map(r => r.name)), ['Con stock', 'Stock decimal', 'Stock cero', 'Stock vacío', 'Stock negativo']);
+  assert.equal(all.units, 3.5, 'el stock negativo no resta unidades');
+  assert.equal(all.value, 7, 'el stock ≤ 0 no suma valor');
+  assert.equal(api.toCsv(def).includes('Stock cero'), false);
+});

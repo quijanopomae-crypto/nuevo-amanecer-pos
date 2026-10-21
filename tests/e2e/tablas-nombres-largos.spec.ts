@@ -26,6 +26,7 @@ async function ownerPage(page: Page) {
   await page.reload();
   await page.waitForFunction(() => (window as any).NA_ROLES?.role === 'owner' && (window as any).NA_ROLES.confirmed
     && !!(window as any).NA_SUGERENCIA_COMPRA && !!(window as any).NA_PRODUCTOS_SIN_MOVIMIENTO);
+  await page.waitForLoadState('networkidle'); // loadAllData (IndexedDB) termina antes de sembrar
   await page.evaluate(long => {
     (window as any).eval('productos = ' + JSON.stringify([
       { id: 'nl-1', name: long, sku: 'NL-1', stock: 1, stockMin: 5, costo: 2, precio: 3, proveedor: 'Distribuidora Sol', activo: true },

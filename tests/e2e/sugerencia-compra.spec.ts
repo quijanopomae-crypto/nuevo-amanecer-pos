@@ -23,6 +23,11 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', dark: boolean) {
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed && !!(window as any).NA_SUGERENCIA_COMPRA, role);
+  await seedM6(page, dark);
+  return { errors, writes };
+}
+
+async function seedM6(page: Page, dark: boolean) {
   await page.evaluate(dark => {
     const w = window as any;
     document.body.classList.toggle('dark', dark);
@@ -33,7 +38,6 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', dark: boolean) {
       { id: 'm6-3', name: 'Sobrado', stock: 99, stockMin: 5, costo: 1, precio: 2, activo: true }
     ]) + '; ventas = ' + JSON.stringify([{ id: 'v1', fecha: ago(2), items: [{ id: 'm6-1', qty: 4, precio: 5 }] }]));
   }, dark);
-  return { errors, writes };
 }
 
 async function contrast(el: any) {
@@ -126,6 +130,10 @@ test('el empleado no ve la sugerencia', async ({ page }) => {
 // salir y volver a la pantalla, Recalcular); «Usar sugeridos» vuelve a la sugerencia.
 test('las cantidades editadas sobreviven a na:role, al cambio de clase y a salir y volver', async ({ page }) => {
   const { errors, writes } = await rolePage(page, 'owner', false);
+  // La carga inicial (loadAllData: IndexedDB + normalización) es asíncrona; se espera a que termine y se
+  // vuelven a sembrar los datos sintéticos para que no los reemplace a mitad de la prueba.
+  await page.waitForLoadState('networkidle');
+  await seedM6(page, false);
   const screen = page.locator(screenId);
   await page.evaluate(() => (window as any).goPage('pageSugerenciaCompra'));
   await expect(screen).toHaveClass(/\bactive\b/);
