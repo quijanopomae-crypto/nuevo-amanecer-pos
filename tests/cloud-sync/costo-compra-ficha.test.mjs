@@ -199,7 +199,7 @@ function twoDevices({ bEdits = 1 } = {}) {
     pendingSnapshot: () => pending,
     discardRejectedProduct: async () => { if (pending && pending.last_error === 'stale_product') { pending = null; return true; } return false; },
     updateProduct: async b => {
-      pending = { command: 'product.update', last_status: 409, last_error: null };
+      pending = { command: 'product.update', last_status: 409, last_error: null, payload: { product_id: b.product_id } }; // como el journal real
       if (b.expected_metadata_revision !== server.metadata_revision) { pending.last_error = 'stale_product'; throw new Error('stale_product'); }
       Object.assign(server, { name: b.name, price_cents: b.price_cents, cost_cents: b.cost_cents, metadata_revision: server.metadata_revision + 1 }); pending = null; return { ok: true };
     } };
@@ -252,4 +252,53 @@ test('Fase 2 (a): si el Worker ya actualizó el costo (cost_source=server) el ap
   const r = await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-S', one, { applied: [{ line: 1 }], cost_source: 'server' });
   assert.equal(JSON.stringify([r.updated.length, r.skipped]), JSON.stringify([0, ['server']]));
   assert.equal(JSON.stringify(server), before);
+});
+
+// ---- Seguimiento de la revisión de #858 ----
+test('costo 0 (regalo), negativo o no finito nunca pone el costo del producto en 0: la línea se omite', async () => {
+  const bad = [0, -50, 0.4, NaN, Infinity, -Infinity, 'abc', ''];
+  assert.deepEqual(plain([...api.lineCosts(bad.map((c, i) => ({ line: i + 1, product_id: 'p1', unit_cost_cents: c })))]), [], 'ninguna línea mala cuenta');
+  // Si el regalo es la última línea del mismo producto, gana la línea anterior con costo.
+  assert.deepEqual(plain([...api.lineCosts([{ line: 1, product_id: 'p1', unit_cost_cents: 450 }, { line: 2, product_id: 'p1', unit_cost_cents: 0 }])]), [['p1', 450]]);
+  // CANON: una compra con solo el regalo no envía product.update.
+  let t = canonCtx();
+  let r = await t.ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-G', [{ line: 1, product_id: 'p1', quantity: 1, unit_cost_cents: 0 }], { applied: [{ line: 1 }] });
+  assert.equal(t.sent.length, 0); assert.equal(r.updated.length, 0);
+  t = canonCtx();
+  await t.ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-G', [{ line: 1, product_id: 'p1', quantity: 1, unit_cost_cents: 450 }, { line: 2, product_id: 'p1', quantity: 1, unit_cost_cents: 0 }], { applied: [{ line: 1 }, { line: 2 }] });
+  assert.deepEqual(plain(t.sent.map(x => x.cost_cents)), [450]);
+  // Local: el regalo no toca productos[].costo ni guarda.
+  const productos = [{ id: 'l1', costo: 4 }]; let saves = 0;
+  const ctx = context({ NA_ROLES: { isOwner: () => true }, localStorage: store(), productos, saveAllData: async () => { saves++; return { ok: 1 }; }, _naWasPersisted: x => !!x?.ok });
+  for (const unitCost of [0, '0', -1, Infinity, 'abc']) {
+    r = await ctx.NA_COSTO_COMPRA_FICHA.afterLocalPurchase('OCR-G', { ok: true, applied: [{ sourceIndex: 1, productId: 'l1', quantity: 1, unitCost }] });
+    assert.equal(productos[0].costo, 4, 'costo intacto con ' + String(unitCost)); assert.equal(r.updated.length, 0);
+  }
+  assert.equal(saves, 0);
+});
+
+test('un rechazo pendiente de OTRO producto no se descarta: solo se descarta el del mismo product_id', async () => {
+  const rejected = { command: 'product.update', state: 'PENDING', last_status: 409, last_error: 'stale_product', payload: { product_id: 'p-otro' } };
+  let pending = null, discards = 0;
+  const raw = { product_id: 'p1', metadata_revision: 3, name: 'Aceite', cost_cents: 400, price_cents: 600, stock_min_quantity: 0 };
+  const client = { enabled: () => true, snapshot: () => ({ products: [raw], inventoryMovements: [] }), refresh: async () => {},
+    pendingSnapshot: () => pending,
+    discardRejectedProduct: async () => { discards++; pending = null; return true; }, // el real descarta lo que haya en el journal, sin mirar el producto
+    updateProduct: async () => { pending = rejected; throw new Error('stale_product'); } };
+  const ctx = context({ NA_ROLES: { isOwner: () => true }, localStorage: store(), NuevoAmanecerCanonical: client, toast: () => {} });
+  const r = await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-X', one, { applied: [{ line: 1 }] });
+  assert.equal(discards, 0, 'el rechazo de p-otro sigue en el journal');
+  assert.equal(pending, rejected);
+  assert.deepEqual(plain(r.failed), [{ product_id: 'p1', error: 'stale_product' }]);
+  // El mismo caso con el rechazo de p1 sí se descarta (y se reintenta una vez).
+  rejected.payload.product_id = 'p1';
+  await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-Y', one, { applied: [{ line: 1 }] });
+  assert.equal(discards, 2, 'un descarte por intento, solo del mismo producto');
+});
+
+test('el comentario de cabecera describe la actualización automática (no dice «No guarda nada»)', () => {
+  const header = source.slice(0, source.indexOf('(function (root)'));
+  assert.doesNotMatch(header, /No guarda nada/);
+  assert.match(header, /afterCanonPurchase/); assert.match(header, /afterLocalPurchase/);
+  assert.match(header, /autom[aá]ticamente/); assert.match(header, /product\.update/); assert.match(header, /saveAllData/);
 });

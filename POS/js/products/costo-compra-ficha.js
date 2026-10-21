@@ -1,8 +1,12 @@
 /* Costo de compra en la ficha (Misión 2). Solo dueño confirmado (NA_ROLES.isOwner en try/catch).
- * Propone el costo de la ÚLTIMA compra (o el promedio ponderado si el dueño lo elige), llena pCosto y
- * recalcula el margen. No guarda nada: el dueño pulsa Guardar y la ficha sigue su camino normal
- * (CANON: product.update con cost_cents, ruta solo dueño; local: saveProd), que ya registra el cambio
- * en el historial de precios (origen «Ficha del producto»). No toca ventas, pagos ni stock. */
+ * Dos partes:
+ * 1) En la ficha: el recuadro propone el costo de la ÚLTIMA compra (o el promedio ponderado), llena pCosto
+ *    y recalcula el margen. Esta parte no guarda: el dueño pulsa Guardar y la ficha sigue su camino normal
+ *    (CANON: product.update con cost_cents; local: saveProd), que lo anota como «Ficha del producto».
+ * 2) Al REGISTRAR una compra (afterCanonPurchase / afterLocalPurchase) SÍ guarda automáticamente el nuevo
+ *    costo del producto: en CANON con product.update (ruta solo dueño) y en modo local en productos[].costo
+ *    con saveAllData, anotado como «Compra». Las líneas sin costo, con costo 0 (regalo) o no finito se omiten.
+ * No toca ventas, pagos ni stock. */
 (function (root) {
   'use strict';
   var BOX_ID = 'naCostoCompraFicha';
@@ -103,9 +107,12 @@
   function lineCosts(lines, appliedLines) {
     var out = new Map();
     (Array.isArray(lines) ? lines : []).forEach(function (l) {
-      if (!l || l.unit_cost_cents == null || !(Number(l.unit_cost_cents) >= 0)) return;
+      // Un regalo (costo 0), un costo negativo o no finito nunca reemplaza el costo del producto.
+      if (!l || l.unit_cost_cents == null || l.unit_cost_cents === '') return;
+      var c = Number(l.unit_cost_cents);
+      if (!Number.isFinite(c) || !(Math.round(c) > 0)) return;
       if (appliedLines && !appliedLines[String(l.line)]) return;
-      out.set(String(l.product_id), Math.round(Number(l.unit_cost_cents)));
+      out.set(String(l.product_id), Math.round(c));
     });
     return out;
   }
@@ -142,7 +149,7 @@
       var raw = productRaw(client, id);
       if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'metadata_revision')) return { status: 'skipped' };
       var cents = await targetCents(id, last, current);
-      if (Number(raw.cost_cents) === cents) return { status: 'skipped' };
+      if (!Number.isFinite(cents) || !(cents > 0) || Number(raw.cost_cents) === cents) return { status: 'skipped' };
       try {
         await client.updateProduct(updatePayload(raw, cents));
         try { if (typeof client.refresh === 'function') await client.refresh(); } catch (_) {}
@@ -151,7 +158,9 @@
         var pending = null; try { pending = typeof client.pendingSnapshot === 'function' ? client.pendingSnapshot() : null; } catch (_) {}
         var stale = String(e && e.message || '').indexOf('stale_product') >= 0 || !!(pending && pending.command === 'product.update' && pending.last_error === 'stale_product');
         var dropped = false;
-        if (pending && pending.command === 'product.update' && pending.last_error) { try { dropped = typeof client.discardRejectedProduct === 'function' && await client.discardRejectedProduct(); } catch (_) {} }
+        // Solo se descarta el rechazo de ESTE producto; uno de otro producto queda para que el dueño lo resuelva.
+        var mine = !!(pending && pending.payload && String(pending.payload.product_id) === id);
+        if (pending && pending.command === 'product.update' && pending.last_error && mine) { try { dropped = typeof client.discardRejectedProduct === 'function' && await client.discardRejectedProduct(); } catch (_) {} }
         if (stale && attempt === 0 && (dropped || !pending)) continue;
         return { status: 'failed', error: stale ? 'stale_product' : String(e && e.message || e) };
       }
@@ -195,6 +204,7 @@
     for (var [id, last] of lineCosts(lines)) {
       var p = list.find(function (x) { return x && String(x.id) === id; }); if (!p) continue;
       var cents = await targetCents(id, last), before = p.costo;
+      if (!Number.isFinite(cents) || !(cents > 0)) { report.skipped.push(id); continue; }
       if (Math.round(Number(before) * 100) === cents) { report.skipped.push(id); continue; }
       changes.push({ p: p, before: before, after: cents / 100, line: lines.filter(function (l) { return String(l.product_id) === id; }).pop().line });
     }
