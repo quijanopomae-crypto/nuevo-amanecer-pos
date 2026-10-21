@@ -9,7 +9,7 @@ import { activeCanon, device } from './canon-browser-harness.mjs';
 const PERMS = readFileSync('POS/js/config/pos-permissions.js', 'utf8');
 const AJ = readFileSync('POS/js/modules/ajustes-inventario.js', 'utf8');
 const MIG = ['0014_canonical_live_products.sql', '0015_canonical_inventory_adjust.sql'];
-const RETRY = /El ajuste quedó PENDIENTE: no se perdió y se reintentará la MISMA operación, sin duplicar/;
+const RETRY = /El ajuste quedó pendiente y se reintentará solo, sin duplicar, cuando vuelva la conexión\. No lo registres de nuevo\./;
 const OTHER = 'Hay otra operación de CANON pendiente de confirmar. No se registró el ajuste; espera a que se confirme o se resuelva y vuelve a intentarlo.';
 
 async function tab(f, o) {
@@ -130,3 +130,42 @@ test('pendiente de otra pantalla 503 (mismo producto): no se descarta y no se re
   assert.equal(a.api.pendingSnapshot().payload.operation_id, foreign.payload.operation_id);
   assert.equal(row(f, p.product_id).q, p.q);
 });
+
+// Seguimiento #869 (B1): falla SOLO la lectura de estado previa al POST (red caída, 503, timeout real de 8 s).
+// createCommand ya guardó la entrada PENDING con el operation_id de este ajuste: la pantalla no puede decir
+// «no registró», porque el reintento la aplica después. Se comprueba el aviso y que se aplica UNA sola vez.
+const isStatus = url => url.includes('/read/canonical/status');
+const opsOf = (f, id) => f.sql("SELECT COUNT(*) n FROM canonical_inventory_operations WHERE product_id=? AND reason LIKE 'ajuste:v1:%'", id).n;
+for (const [mode, code] of [['red caída', null], ['503', 'CANONICAL_READ_503'], ['timeout', 'CANONICAL_READ_TIMEOUT']]) {
+  test(`lectura de estado previa al POST falla (${mode}): «quedó pendiente», sin «no registró», y se aplica una sola vez`, { timeout: 40000 }, async t => {
+    const f = await activeCanon(t, { migrations: MIG }); let p = prod(f); let fail = false, statusCalls = 0, posts = 0;
+    const a = await tab(f, { token: 'ta', deviceId: 'da', onFetch: async url => {
+      if (isAdjust(url)) posts++;
+      if (!isStatus(url) || !fail) return null;
+      fail = false; statusCalls++;
+      if (mode === 'red caída') throw new TypeError('Failed to fetch');
+      if (mode === '503') return new Response('{"error":"service_unavailable"}', { status: 503, headers: { 'content-type': 'application/json' } });
+      return new Promise(() => {}); // sin respuesta: vence el plazo real de lectura (8 s)
+    } });
+    a.__pid = p.product_id; p = await seed(f, a, a); fail = true; posts = 0;
+    const res = await a.aj.register({ productId: p.product_id, type: 'merma', quantity: 1 });
+    assert.equal(statusCalls, 1, 'falló exactamente la lectura de estado'); assert.equal(posts, 0, 'no llegó a enviarse el POST');
+    assert.equal(res.ok, false); assert.equal(res.pending, true); assert.equal(res.retry, true); assert.match(res.message, RETRY);
+    assert.doesNotMatch(res.message, /no registró|No se registró|Hay otra operación|Failed to fetch/);
+    if (code) assert.match(res.message, new RegExp('^CANON no respondió \\(' + code + '\\)\\.'));
+    const j = a.api.pendingSnapshot();
+    assert.ok(j); assert.equal(j.payload.operation_id, res.operationId);
+    assert.equal(row(f, p.product_id).q, p.q);
+    // El dueño vuelve a pulsar Registrar: no se envía una segunda operación.
+    const again = await a.aj.register({ productId: p.product_id, type: 'merma', quantity: 1 });
+    assert.equal(again.ok, false); assert.doesNotMatch(again.message, /Hay otra operación/); assert.match(again.message, /^Tu ajuste anterior sigue pendiente/);
+    assert.equal(a.api.pendingSnapshot().payload.operation_id, res.operationId); assert.equal(posts, 0);
+    // El reintento (banner al reconectar) aplica la MISMA operación una sola vez: 20 → 19.
+    const receipt = await a.api.retryPending();
+    assert.equal(receipt.operation_id, res.operationId);
+    assert.equal(a.api.pendingSnapshot(), null);
+    assert.equal(row(f, p.product_id).q, p.q - 1); assert.equal(opsOf(f, p.product_id), 1);
+    await assert.rejects(a.api.retryPending(), /NO_CANONICAL_FINANCIAL_PENDING/);
+    assert.equal(row(f, p.product_id).q, p.q - 1);
+  });
+}

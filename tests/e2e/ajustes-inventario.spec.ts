@@ -219,8 +219,9 @@ test('cantidad: el campo valida en vivo (enteros, stock, tope) y register() rech
   const screen = page.locator('#pageAjustesInventario'), qty = screen.locator('[data-aj-qty]'), err = screen.locator('[data-aj-qty-error]');
   await screen.locator('[data-aj-product]').selectOption('aj-1');
   await screen.locator('[data-aj-type]').selectOption('merma');
-  await expect(qty).toHaveAttribute('step', '1');
-  await expect(qty).toHaveAttribute('max', '1000000');
+  // Campo de texto (no type=number): el navegador no altera lo tecleado; la validación lee el texto crudo.
+  await expect(qty).toHaveAttribute('type', 'text');
+  await expect(qty).toHaveAttribute('inputmode', 'decimal');
   for (const [value, text] of [['0.5', 'unidades enteras'], ['11', 'más que el stock actual (10)'], ['0', 'mayor que 0'], ['1000000000000', 'no puede superar']]) {
     await qty.fill(value);
     await expect(err).toBeVisible();
@@ -238,3 +239,143 @@ test('cantidad: el campo valida en vivo (enteros, stock, tope) y register() rech
   await expect(screen.locator('[data-aj-message]')).toHaveText('Ajuste registrado.');
   expect(await page.evaluate(() => (window as any).eval('productos.find(x=>x.id==="aj-1").stock'))).toBe(8);
 });
+
+// Seguimiento #869 (B2): con type=number el navegador convertía «1,5» en 15 y «0x10» en 010. Se teclea de verdad.
+async function seedUnits(page: Page) {
+  await page.evaluate(() => (window as any).eval(`
+    productos=[{id:'kg-1',name:'Arroz a granel',sku:'KG-01',unit:'kilogramo',stock:10,controlInventario:true},{id:'un-1',name:'Galleta',sku:'UN-01',unit:'unidad',stock:10,controlInventario:true}];
+    inventoryMovements=[]; ventas=[];
+  `));
+}
+const stockOf = (page: Page, id: string) => page.evaluate(id => (window as any).eval(`productos.find(x=>x.id===${JSON.stringify(id)}).stock`), id);
+const adjDeltas = (page: Page, id: string) => page.evaluate(id => (window as any).eval(`JSON.stringify(inventoryMovements.filter(x=>x.productId===${JSON.stringify(id)}&&String(x.reason).startsWith('ajuste:v1:')).map(x=>x.delta))`), id).then(JSON.parse);
+
+test('cantidad tecleada: «1,5»/«2,5»/«.5» en kg valen 1.5/2.5/0.5; en unidad «1,5» se rechaza; «0x10», «+2» y «1e12» se rechazan', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await rolePage(page, 'owner');
+  await seedUnits(page);
+  await openCard(page);
+  const screen = page.locator('#pageAjustesInventario'), qty = screen.locator('[data-aj-qty]'), err = screen.locator('[data-aj-qty-error]'), msg = screen.locator('[data-aj-message]');
+  async function type(value: string) {
+    await qty.fill('');
+    await qty.click();
+    await page.keyboard.type(value);
+    await expect(qty).toHaveValue(value); // el navegador no lo altera (antes «1,5» quedaba en «15»)
+  }
+  await screen.locator('[data-aj-type]').selectOption('merma');
+  // Producto por kilogramo: la coma decimal se respeta.
+  await screen.locator('[data-aj-product]').selectOption('kg-1');
+  // Se mira el delta registrado de cada ajuste (el ledger local trunca el stock fraccionario previo; ver PR).
+  const expected: number[] = [];
+  for (const [typed, delta] of [['1,5', -1.5], ['2,5', -2.5], ['.5', -0.5], [',5', -0.5]] as const) {
+    await type(typed);
+    await expect(err).toBeHidden();
+    await expect(qty).not.toHaveAttribute('aria-invalid', 'true');
+    await screen.locator('[data-aj-submit]').click();
+    expected.push(delta);
+    await expect.poll(() => adjDeltas(page, 'kg-1'), { message: typed }).toEqual(expected);
+    await expect(msg).toHaveText('Ajuste registrado.');
+  }
+  expect(await adjDeltas(page, 'kg-1')).toEqual([-1.5, -2.5, -0.5, -0.5]);
+  const kgBefore = await stockOf(page, 'kg-1');
+  for (const [typed, text] of [['0x10', 'Ingresa una cantidad válida mayor que 0.'], ['+2', 'Ingresa una cantidad válida mayor que 0.'], ['1e12', 'no puede superar 1,000,000 por ajuste']]) {
+    await type(typed);
+    await expect(err).toContainText(text);
+    await expect(qty).toHaveAttribute('aria-invalid', 'true');
+    await screen.locator('[data-aj-submit]').click();
+    await expect(msg).toContainText(text);
+    await expect(msg).toHaveAttribute('data-aj-ok', 'false');
+  }
+  // Los rechazados no cambian stock ni registran movimiento.
+  expect(await stockOf(page, 'kg-1')).toBe(kgBefore);
+  expect(await adjDeltas(page, 'kg-1')).toEqual(expected);
+  // Producto por unidad: «1,5» no es entero; «0x10» y «+2» tampoco valen; «.5» tampoco.
+  await screen.locator('[data-aj-product]').selectOption('un-1');
+  for (const [typed, text] of [['1,5', 'unidades enteras'], ['2,5', 'unidades enteras'], ['.5', 'unidades enteras'], ['0x10', 'mayor que 0'], ['+2', 'mayor que 0']]) {
+    await type(typed);
+    await expect(err).toContainText(text);
+    await screen.locator('[data-aj-submit]').click();
+    await expect(msg).toContainText(text);
+  }
+  expect(await stockOf(page, 'un-1')).toBe(10);
+  expect(await adjDeltas(page, 'un-1')).toEqual([]);
+  await type('2');
+  await screen.locator('[data-aj-submit]').click();
+  await expect(msg).toHaveText('Ajuste registrado.');
+  expect(await stockOf(page, 'un-1')).toBe(8);
+});
+
+for (const width of [390, 1280]) {
+  test(`campo Cantidad (texto) a ${width}px: misma altura y relleno que los demás campos; el error no estira «Tipo»`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await rolePage(page, 'owner');
+    await seedUnits(page);
+    await openCard(page);
+    const screen = page.locator('#pageAjustesInventario');
+    await screen.locator('[data-aj-product]').selectOption('un-1');
+    const box = (sel: string) => screen.locator(sel).evaluate(el => { const s = getComputedStyle(el), r = el.getBoundingClientRect(); return { h: Math.round(r.height), p: [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft, s.borderTopWidth, s.fontSize].join(' ') }; });
+    const qty = await box('[data-aj-qty]'), search = await box('[data-aj-search]'), type = await box('[data-aj-type]');
+    expect(qty.h).toBe(44); expect(type.h).toBe(44);
+    expect(qty).toEqual(search);
+    await screen.locator('[data-aj-qty]').fill('1,5');
+    await expect(screen.locator('[data-aj-qty-error]')).toBeVisible();
+    expect((await box('[data-aj-type]')).h).toBe(44);
+    expect((await box('[data-aj-qty]')).h).toBe(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}
+
+// Seguimiento #869 (B1): si falla la lectura de estado previa al envío, el ajuste queda pendiente en el diario
+// de CANON y se reintentará solo. Aviso ámbar (no rojo) y «Registrar» desactivado mientras siga pendiente.
+for (const width of [390, 1280]) {
+  test(`CANON a ${width}px: ajuste pendiente por fallo de la lectura de estado → aviso ámbar, «Registrar» desactivado hasta que se confirma`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await rolePage(page, 'owner');
+    await openCard(page);
+    await page.evaluate(() => {
+      const w = window as any;
+      const products = [{ product_id: 'c-1', name: 'Pan', unit: 'unidad', stock: 20 }];
+      w.__aj = { journal: null as any, receipt: null as any, sent: 0 };
+      w.NuevoAmanecerCanonical = { ...(w.NuevoAmanecerCanonical || {}), enabled: () => true, snapshot: () => ({ products, inventoryMovements: [] }), refresh: async () => {},
+        // Como canonical-client: guarda la entrada PENDING y falla el GET /read/canonical/status (503).
+        adjustInventory: async (b: any) => { w.__aj.sent++; w.__aj.journal = { state: 'PENDING', command: 'inventory.adjust', payload: b }; throw new Error('CANONICAL_READ_503'); },
+        pendingSnapshot: () => w.__aj.journal && JSON.parse(JSON.stringify(w.__aj.journal)), receiptSnapshot: () => w.__aj.receipt,
+        discardRejectedInventory: async () => false };
+      w.NA_AJUSTES_INVENTARIO.render();
+    });
+    const screen = page.locator('#pageAjustesInventario'), msg = screen.locator('[data-aj-message]'), btn = screen.locator('[data-aj-submit]');
+    await screen.locator('[data-aj-product]').selectOption('c-1');
+    await screen.locator('[data-aj-qty]').fill('1');
+    await btn.click();
+    await expect(msg).toContainText('El ajuste quedó pendiente y se reintentará solo');
+    await expect(msg).toContainText('No lo registres de nuevo.');
+    await expect(msg).not.toContainText('no registró');
+    await expect(msg).toHaveAttribute('data-aj-ok', 'pending');
+    await expect(btn).toBeDisabled();
+    for (const dark of [false, true]) {
+      await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
+      const look = await msg.evaluate(el => {
+        const lum = (c: string) => { const v = (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number).map(x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+        let n: Element | null = el, bg = 'rgb(255,255,255)';
+        while (n) { const b = getComputedStyle(n).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(b)) { bg = b; break; } n = n.parentElement; }
+        const color = getComputedStyle(el).color, a = lum(color), b = lum(bg);
+        return { color, ratio: (Math.max(a, b) + .05) / (Math.min(a, b) + .05) };
+      });
+      // Ámbar del tema (#92400e claro / #fcd34d oscuro), no el rojo de error (#991b1b / #fca5a5).
+      expect(look.color, dark ? 'oscuro' : 'claro').toBe(dark ? 'rgb(252, 211, 77)' : 'rgb(146, 64, 14)');
+      expect(look.ratio, dark ? 'oscuro' : 'claro').toBeGreaterThanOrEqual(4.5);
+    }
+    await page.evaluate(() => document.body.classList.remove('dark'));
+    // Aunque llegue una actualización de CANON, sigue desactivado mientras la entrada propia siga pendiente.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('na:canonical-updated')));
+    await expect(btn).toBeDisabled();
+    await btn.click({ force: true });
+    expect(await page.evaluate(() => (window as any).__aj.sent)).toBe(1);
+    // El reintento (banner al reconectar) la confirma: se libera «Registrar».
+    await page.evaluate(() => { const a = (window as any).__aj; a.receipt = { operation_id: a.journal.payload.operation_id }; a.journal = null; window.dispatchEvent(new CustomEvent('na:canonical-updated')); });
+    await expect(btn).toBeEnabled();
+    await expect(msg).toHaveText('El ajuste pendiente se confirmó en CANON.');
+    await expect(msg).toHaveAttribute('data-aj-ok', 'true');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+}
