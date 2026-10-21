@@ -173,12 +173,21 @@
   // Un rechazo definitivo del Worker llega como CANONICAL_FINANCIAL_REJECTED_<status> y deja el comando en
   // el diario con last_error. Se lee el código real y se libera el diario con discardRejectedInventory (el
   // mismo camino que usa el movimiento de Inventario), para no bloquear las siguientes operaciones.
-  async function canonFailure(c, error) {
+  // operation_id propio (UUID, el mismo formato que genera el cliente) para reconocer nuestra entrada del diario.
+  function newOperationId() {
+    try { return root.crypto && typeof root.crypto.randomUUID === 'function' ? root.crypto.randomUUID() : ''; } catch (_) { return ''; }
+  }
+  async function canonFailure(c, error, operationId) {
     var code = text(error && error.message);
     if (/^CANONICAL_FINANCIAL_REJECTED_\d+$/.test(code)) {
       var pending = null;
       try { pending = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
-      if (pending && pending.command === 'inventory.adjust' && pending.last_error) {
+      // Solo se toca la entrada del diario si es la de ESTE ajuste (mismo operation_id); si no, no se descarta.
+      var mine = !!(operationId && pending && pending.payload && pending.payload.operation_id === operationId);
+      if (pending && pending.command === 'inventory.adjust' && pending.last_error && !mine) {
+        return { ok: false, code: text(pending.last_error), pending: true, message: 'CANON rechazó una operación pendiente que no es este ajuste (' + text(pending.last_error) + '). No se descartó; revísala desde Inventario antes de registrar ajustes.' };
+      }
+      if (mine && pending.command === 'inventory.adjust' && pending.last_error) {
         code = text(pending.last_error);
         var discarded = false;
         try { discarded = typeof c.discardRejectedInventory === 'function' && (await c.discardRejectedInventory()) === true; } catch (_) {}
@@ -205,8 +214,10 @@
     var c = canon();
     if (c) {
       if (typeof c.adjustInventory !== 'function') return { ok: false, message: 'CANON no disponible para ajustes.' };
-      try { await c.adjustInventory({ product_id: productId(product), movement_type: step.movement_type, quantity: step.quantity, reason: reason }); }
-      catch (e) { return canonFailure(c, e); }
+      var operationId = newOperationId(), body = { product_id: productId(product), movement_type: step.movement_type, quantity: step.quantity, reason: reason };
+      if (operationId) body.operation_id = operationId;
+      try { await c.adjustInventory(body); }
+      catch (e) { return canonFailure(c, e, operationId); }
       try { if (typeof c.refresh === 'function') await c.refresh(); } catch (_) {}
       return { ok: true, canonical: true };
     }
