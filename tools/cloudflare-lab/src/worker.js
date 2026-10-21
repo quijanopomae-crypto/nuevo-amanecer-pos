@@ -437,7 +437,8 @@ async function authorizeSession(request, env) {
     session = await db.prepare(sessionSql('')).bind(tokenHash).first();
   }
   // The per-isolate ledger list rides in this read every command already pays (cold isolate: no extra trip).
-  if (session) rememberOperationLedgerColumn(db, session.ledger_tables);
+  // ledgerTables travels with auth: read in this request, so handlers never need a stale list.
+  const ledgerTables = session ? rememberOperationLedgerColumn(db, session.ledger_tables) : null;
   if (!session || !constantTimeEqual(tokenHash, session.credential_hash)) return json({ error: 'unauthorized' }, 401);
   if (session.session_status !== 'active' || session.principal_status !== 'active') return json({ error: 'session_revoked' }, 403);
   if (session.role !== 'writer') return json({ error: 'read_only_session' }, 403);
@@ -445,7 +446,7 @@ async function authorizeSession(request, env) {
   // or interfere with the atomic business/canonical batch that follows.
   const role = session.pos_role === 'empleado' ? 'empleado' : 'owner';
   if (!PERMISSIONS.routeRoles(new URL(request.url).pathname, request.method).includes(role)) return json({ error: 'forbidden_role' }, 403);
-  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, posRole: role };
+  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, posRole: role, ledgerTables };
 }
 
 function randomToken() {

@@ -69,7 +69,7 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
   const token='credit-policy:'+crypto.randomUUID();
   let ledgers=[];
   try{
-    ledgers=await operationLedgers(db);
+    ledgers=await operationLedgers(db,auth?.ledgerTables);
     // Build and execute the mutation inside the same guarded block so an
     // installation that predates migration 0018 still fails closed as 503.
     const statements=[
@@ -115,7 +115,7 @@ export async function setCanonicalCustomerCreditPolicy(request,env,auth,json){
     const stale=await authorityError(db,auth,b);if(stale)return json({error:stale},409);
     if(replay?.request_hash===requestHash)return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
     if(replay)return json({error:'operation_id_conflict',operation_id:b.operation_id},409);
-    const foreign=await foreignOperationRead(db,b.operation_id,ledgers.length?ledgers:await operationLedgers(db),OWN_LEDGER).first();
+    const foreign=await foreignOperationRead(db,b.operation_id,ledgers.length?ledgers:await operationLedgers(db,auth?.ledgerTables),OWN_LEDGER).first();
     if(foreign)return json(crossLedgerConflict(b.operation_id,foreign),409);
     const customer=await db.prepare('SELECT provenance FROM canonical_customer_registry WHERE promotion_id=?1 AND customer_id=?2').bind(b.promotion_id,b.customer_id).first();
     if(!customer)return json({error:'customer_not_found'},409);

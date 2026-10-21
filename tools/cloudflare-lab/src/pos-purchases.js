@@ -133,6 +133,16 @@ export async function purchasesRoute(request, env, auth, json) {
   }
   if (claim && claim.status === 'aplicada') return json({ status: 'already_processed', purchase_id: b.operation_id, idempotent: true }, 200);
   if (!claim) {
+    // Cross-ledger (PR #885): this header has NO operation_id fence, its lines do.
+    // Real state, not a design guarantee: pos_purchases is simply not one of the 13
+    // OPERATION_LEDGER_TABLES. The header moves no stock, cash or kardex by itself;
+    // every effect goes through adjustCanonicalInventory with the derived id
+    // '<purchase>:<line>', which IS fenced (inventory ledger). So the same id can
+    // never apply stock twice. What is NOT guaranteed: the bare id (the app sends
+    // 'PUR-<uuid>', so only a buggy/hostile client collides) may coexist with a
+    // command of that id in another ledger, and other ledgers do not check
+    // pos_purchases either. Same reasoning as pos_sale_annulments (README,
+    // "Excluidas a propósito"); a fence here would ride in this batch (0 trips).
     const assertion='purchase:'+crypto.randomUUID();
     const stmts = [db.prepare(`INSERT INTO pos_purchases(purchase_id,promotion_id,supplier,document_ref,total_cost_cents,line_count,status,principal_id,created_at)
       VALUES(?1,?2,?3,?4,?5,?6,'en_curso',?7,?8) ON CONFLICT DO NOTHING`).bind(b.operation_id, b.promotion_id, supplier, doc, purchaseTotal(), b.lines.length, String(auth.principalId || 'unknown'), b.created_at)];

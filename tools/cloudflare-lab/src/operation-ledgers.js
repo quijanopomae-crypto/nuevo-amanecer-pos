@@ -52,13 +52,19 @@ export function crossLedgerConflict(operationId, row) {
 // 'd1' otherwise. Never keyed by the env/db object (worker-entry.js copies env
 // on every request, so object keys never hit) and never by the D1 binding, so a
 // Turso schema can never be confused with the old D1 one.
-// TTL: all 13 present -> kept for the isolate's life (migrations are additive;
-// a dropped table would make the ledger SQL fail with "no such table" = the
-// write is rejected, never silently accepted). Some missing -> re-probe after
-// 60 s, so a newly migrated ledger is picked up without a deploy.
+// Only a COMPLETE list (all 13 present) is served from the cache, for the
+// isolate's life (migrations are additive; a dropped table makes the ledger SQL
+// fail with "no such table" on the fast sale, or is simply no longer checked on
+// the paths that re-read the list: its rows are gone too).
+// An INCOMPLETE list is never served from the cache (SPEC-885-delta2 O-D2-1): a
+// ledger created after it was read (a new ledger whose migration lands after the
+// deploy, or a long-lived adapter) would otherwise be invisible to the fence and
+// the fast sale could accept a second operation with the same id (fail open).
+// So, while any ledger is missing, operationLedgers uses only a list read in THIS
+// request (`fresh`: the session read or the fast sale's stock-lots probe, both
+// already paid) or re-reads sqlite_master. Production (all 13): 0 extra reads.
 const ledgerCache = new Map();
 const ORDER = new Map(OPERATION_LEDGER_TABLES.map((name, index) => [name, index]));
-const LEDGER_TTL_INCOMPLETE_MS = 60000;
 const LEDGER_LIST_SQL = OPERATION_LEDGER_TABLES.map(name => `'${name}'`).join(',');
 
 export function operationLedgerCacheKey(db) {
@@ -74,26 +80,39 @@ export const OPERATION_LEDGER_COLUMN_SQL =
   `(SELECT group_concat(name) FROM sqlite_master WHERE type='table' AND name IN (${LEDGER_LIST_SQL}))`;
 
 // Remember exactly the ledgers that exist now (no union with older answers).
+// Returns the ordered list. Only a complete list is kept as cacheable.
 export function rememberOperationLedgers(db, names) {
-  if (!db || (typeof db !== 'object' && typeof db !== 'function')) return;
   const tables = OPERATION_LEDGER_TABLES.filter(name => names.has(name));
-  ledgerCache.set(operationLedgerCacheKey(db), { tables,
-    expiresAt: tables.length === OPERATION_LEDGER_TABLES.length ? Infinity : Date.now() + LEDGER_TTL_INCOMPLETE_MS });
+  if (!db || (typeof db !== 'object' && typeof db !== 'function')) return tables;
+  const complete = tables.length === OPERATION_LEDGER_TABLES.length;
+  // An incomplete answer also evicts an older complete one (a ledger was dropped).
+  if (complete) ledgerCache.set(operationLedgerCacheKey(db), { tables, complete });
+  else ledgerCache.delete(operationLedgerCacheKey(db));
+  return tables;
 }
 
 // Same, from the value of OPERATION_LEDGER_COLUMN_SQL (comma-separated names or NULL).
 export function rememberOperationLedgerColumn(db, value) {
-  rememberOperationLedgers(db, new Set(String(value || '').split(',').filter(Boolean)));
+  return rememberOperationLedgers(db, new Set(String(value || '').split(',').filter(Boolean)));
 }
 
-// Existing ledger tables: from the isolate cache when fresh (no round trip),
-// otherwise one sqlite_master read (cold isolate whose command has no probe to fold into).
-export async function operationLedgers(db) {
+// Existing ledger tables. `fresh` = the list folded into a read this same request
+// already did (auth.ledgerTables from authorizeSession, or lotsSchema().ledgerTables);
+// it is never older than the request. Otherwise the isolate cache when all 13
+// are known to exist (no round trip); otherwise one sqlite_master read, every
+// time, so a ledger created a moment ago is fenced on the very next request.
+export async function operationLedgers(db, fresh = null) {
+  if (Array.isArray(fresh)) return fresh;
   const cached = ledgerCache.get(operationLedgerCacheKey(db));
-  if (cached && Date.now() < cached.expiresAt) return cached.tables;
+  if (cached?.complete) return cached.tables;
   const rows = await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${LEDGER_LIST_SQL})`).all();
-  rememberOperationLedgers(db, new Set((rows?.results ?? []).map(row => row.name)));
-  return ledgerCache.get(operationLedgerCacheKey(db)).tables;
+  return rememberOperationLedgers(db, new Set((rows?.results ?? []).map(row => row.name)));
+}
+
+// Test/diagnostic view of the cache entry for `db` (null = next call probes).
+export function cachedOperationLedgers(db) {
+  const cached = ledgerCache.get(operationLedgerCacheKey(db));
+  return cached ? [...cached.tables] : null;
 }
 
 const others = (tables, own) => tables.filter(name => !own.includes(name)).sort((a, b) => ORDER.get(a) - ORDER.get(b));

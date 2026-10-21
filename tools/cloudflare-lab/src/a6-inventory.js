@@ -94,7 +94,7 @@ export async function adjustCanonicalInventory(request,env,auth,json,internalRet
     if(existing.request_hash!==requestHash)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
     return json({...JSON.parse(existing.result_json),status:'already_processed',idempotent:true},200);
   }
-  const ledgers=await operationLedgers(db);
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
   const foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();
   if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
 

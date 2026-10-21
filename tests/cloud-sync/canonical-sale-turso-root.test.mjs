@@ -159,8 +159,15 @@ test('production simple sale commits auth, authority, stock and cash in one Turs
   const receipt=await tab.api.createSale(intent);
   const calls=turso.calls.slice(start);
   assert.equal(receipt.status,'created');
-  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['batch'],
-    'simple production sale must cross Worker→Turso only once');
+  // This fixture's schema lacks most operation ledgers (no 0017-0034). Since delta 3
+  // (SPEC-885-delta2 O-D2-1) an incomplete ledger list is never served from the
+  // isolate cache: the fast sale re-reads it (1 standalone sqlite_master read) so a
+  // ledger created after the last read is still fenced. With all 13 ledgers
+  // (production) that read disappears: operation-ledger-trip-budget and
+  // operation-ledger-missing-ledger pin it at 0.
+  assert.deepEqual(calls.map(call=>call.requests?.[0]?.type),['execute','batch'],
+    'simple production sale: one ledger re-read (partial schema only) + one atomic Turso pipeline');
+  assert.match(calls[0].requests[0].stmt.sql,/^SELECT name FROM sqlite_master WHERE type='table' AND name IN \('sales'/);
   assert.equal(f.sql("SELECT current_stock_quantity n FROM products WHERE product_id='00001'").n,172);
   assert.equal(f.sql('SELECT COUNT(*) n FROM cash_movements').n,1);
   assert.equal(f.sql('SELECT COUNT(*) n FROM canonical_write_guards').n,0);

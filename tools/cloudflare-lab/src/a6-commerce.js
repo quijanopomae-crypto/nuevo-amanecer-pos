@@ -1,7 +1,7 @@
 import { consumeApproval, expiredApprovalRequired, markExpiredApprovalRequired } from './pos-roles.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
-import { lotsCore, lotsReady, rememberLotSchema, productsLots, effectStatements, lotError, saleLotReceipt } from './stock-lots.js';
+import { lotsCore, lotsSchema, rememberLotSchema, productsLots, effectStatements, lotError, saleLotReceipt } from './stock-lots.js';
 import { OPERATION_LEDGER_TABLES, rememberOperationLedgers, operationLedgers, foreignOperationSql, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict } from './operation-ledgers.js';
 
 const METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
@@ -334,10 +334,11 @@ async function createCanonicalSaleFast(body, env, auth, json) {
   const db = getDatabase(env);
   const lotEffects=[];
   const payloadHash = await sha256Hex(stableStringify(body));
-  // lotsReady's schema read (already paid per request) also fills the ledger cache;
-  // after it, operationLedgers is answered from the per-isolate cache.
-  const lotSchema = await lotsReady(db);
-  const ledgers = await operationLedgers(db);
+  // The stock-lots schema read (when it runs) carries the ledger list of THIS request.
+  // Otherwise operationLedgers answers from the per-isolate cache only when all 13
+  // ledgers exist; with any ledger missing it re-reads sqlite_master (never stale).
+  const { ready: lotSchema, ledgerTables } = await lotsSchema(db);
+  const ledgers = await operationLedgers(db, ledgerTables);
   if(lotSchema){
     // Reads are in one pipeline; the existing stock CAS fences this plan in the write batch.
     const reads=body.items.map(item=>db.prepare(`SELECT p.*,COALESCE((SELECT json_group_array(json_object(
@@ -560,7 +561,7 @@ export async function createCanonicalCreditAccount(request, env, auth, json) {
           authority_epoch:normalized.authority_epoch,account_id:replay.account_id,idempotent:true})
       : json({error:'operation_id_conflict',operation_id:normalized.operation_id},409);
   }
-  const ledgers=await operationLedgers(db), OWN_ACCOUNT=['canonical_credit_accounts'];
+  const ledgers=await operationLedgers(db,auth?.ledgerTables), OWN_ACCOUNT=['canonical_credit_accounts'];
   const foreign=await foreignOperationRead(db,normalized.operation_id,ledgers,OWN_ACCOUNT).first();
   if(foreign) return json(crossLedgerConflict(normalized.operation_id,foreign),409);
   if(!await canonicalCustomerExists(db,normalized.promotion_id,normalized.customer_id))
@@ -617,7 +618,7 @@ export async function createCanonicalSale(request, env, auth, json) {
   }
 
   const capabilities = await commerceCapabilities(db);
-  const ledgers = await operationLedgers(db);
+  const ledgers = await operationLedgers(db, auth?.ledgerTables);
   const genericRequested=body.items.some(item=>item.generic_line!==undefined);
   if (genericRequested && !capabilities.genericSales) return json({error:'generic_sale_schema_not_ready'},503);
 

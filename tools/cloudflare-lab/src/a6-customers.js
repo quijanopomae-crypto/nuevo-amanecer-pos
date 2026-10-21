@@ -161,7 +161,7 @@ export async function createCanonicalCustomer(request,env,auth,json){
     return json({...JSON.parse(existing.result_json),status:'already_processed',idempotent:true},200);
   }
   let ledgers,foreign;
-  try{ledgers=await operationLedgers(db);foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();}
+  try{ledgers=await operationLedgers(db,auth?.ledgerTables);foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();}
   catch{return json({error:'canonical_customer_stage_error',stage:'namespace'},500);}
   if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
   let hasCustomerIdConflict;

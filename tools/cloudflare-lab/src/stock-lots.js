@@ -7,15 +7,18 @@ export function rememberLotSchema(db, schema) {
   const ready = schema.has('canonical_stock_lots') && schema.has('canonical_stock_lot_effects');
   schemaCache.set(db, { ready, expiresAt: ready ? Infinity : Date.now() + 60000 });
 }
-export async function lotsReady(db) {
+export async function lotsReady(db) { return (await lotsSchema(db)).ready; }
+// ledgerTables: the operation-ledger list read in THIS call (null when the lot
+// schema came from the cache and nothing was read), for operationLedgers(db, fresh).
+export async function lotsSchema(db) {
   const cached = schemaCache.get(db);
-  if (cached && Date.now() < cached.expiresAt) return cached.ready;
+  if (cached && Date.now() < cached.expiresAt) return { ready: cached.ready, ledgerTables: null };
   // The operation-ledger probe rides in this same read (no extra round trip).
   const row = await db.prepare(`SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('canonical_stock_lots','canonical_stock_lot_effects')) AS n,${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
-  rememberOperationLedgerColumn(db, row?.ledger_tables);
+  const ledgerTables = rememberOperationLedgerColumn(db, row?.ledger_tables);
   const ready = schemaCache.get(db)?.ready === true || Number(row?.n) === 2;
   schemaCache.set(db, { ready, expiresAt: ready ? Infinity : Date.now() + 60000 });
-  return ready;
+  return { ready, ledgerTables };
 }
 export async function productLots(db, promotion, product) {
   return (await db.prepare('SELECT lot_id,lot_code,expiry_date,quantity,received_at FROM canonical_stock_lots WHERE promotion_id=?1 AND product_id=?2 ORDER BY expiry_date,received_at,lot_id').bind(promotion,product).all()).results || [];

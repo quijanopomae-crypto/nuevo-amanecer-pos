@@ -96,7 +96,7 @@ export async function createCanonicalFinancial(command, request, env, auth, json
         c.role !== 'writer' || c.status !== 'active' || c.credential_hash !== auth.credentialHash) return 'stale_authority';
     return null;
   }
-  const ledgers = await operationLedgers(db);
+  const ledgers = await operationLedgers(db,auth?.ledgerTables);
   const OWN = ['canonical_financial_operations'];
   async function replay() {
     const row = await db.prepare('SELECT command,request_hash,result_json FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first();
@@ -269,7 +269,7 @@ export async function createCanonicalPaymentBatch(request, env, auth, json) {
   const operationIds = payments.map(payment => payment.operation_id);
   const creditIds = payments.map(payment => payment.credit_id);
   const method = payments[0].payment_method;
-  const ledgers = await operationLedgers(db);
+  const ledgers = await operationLedgers(db,auth?.ledgerTables);
 
   // Lean read phase: one D1 SELECT returns authority, replay rows, credit
   // baselines and optional cash session as JSON. This replaces four binding

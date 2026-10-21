@@ -80,7 +80,7 @@ export async function createCanonicalExpense(request,env,auth,json) {
   if (existing) return existing;
   const denied = await authorityError(db,body,auth);
   if (denied) return json({error:denied},409);
-  const ledgers = await operationLedgers(db);
+  const ledgers = await operationLedgers(db,auth?.ledgerTables);
   const foreign = await foreignOperationRead(db,body.operation_id,ledgers,OWN_EXPENSE).first();
   if (foreign) return json(crossLedgerConflict(body.operation_id,foreign),409);
 
@@ -233,7 +233,7 @@ export async function reviseCanonicalExpense(command, request, env, auth, json) 
     return json({...await result(row),status:'already_processed',idempotent:true});
   }
   const existing=await replayRevision();if(existing)return existing;
-  const ledgers=await operationLedgers(db);
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
   const foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_REVISION).first();
   if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
   const expense=await db.prepare(`SELECT e.*,COALESCE(r.revision,0) AS revision,r.action,r.expense_date AS revised_expense_date FROM canonical_expenses e

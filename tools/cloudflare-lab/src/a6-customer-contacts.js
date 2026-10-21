@@ -29,7 +29,7 @@ export async function setCanonicalCustomerContact(request,env,auth,json){
   // Own replay and the cross-ledger check share one read (no extra round trip);
   // own-ledger idempotency is answered first. Atomicity: fence in the write batch below
   // (the 0020 trigger misses expense revisions).
-  const ledgers=await operationLedgers(db);
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
   const previous=await db.prepare(`SELECT c.request_hash,c.result_json,x.foreign_ledger FROM (SELECT ${foreignOperationLedgerSql(ledgers,['canonical_customer_contacts'],'?1')} AS foreign_ledger) x
     LEFT JOIN canonical_customer_contacts c ON c.operation_id=?1`).bind(b.operation_id).first();
   if(previous?.request_hash!=null)return previous.request_hash===hash?json({...JSON.parse(previous.result_json),status:'already_processed',idempotent:true}):json({error:'operation_id_conflict'},409);

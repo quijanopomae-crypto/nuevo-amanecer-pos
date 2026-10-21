@@ -146,7 +146,7 @@ export async function createCanonicalProduct(request, env, auth, json) {
     const result=JSON.parse(existing.result_json);
     return json({...result,status:'already_processed',idempotent:true},200);
   }
-  const ledgers=await operationLedgers(db);
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
   const foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_CREATE).first();
   if (foreign) return json(crossLedgerConflict(body.operation_id,foreign),409);
 
@@ -321,7 +321,7 @@ export async function updateCanonicalProduct(request, env, auth, json) {
   const body=checked.value, db=getDatabase(env);
 
   let pre, ledgers;
-  try { ledgers=await operationLedgers(db); pre=await updatePreflight(db,auth,body,ledgers); } catch { return json({error:'canonical_product_stage_error',stage:'preflight'},500); }
+  try { ledgers=await operationLedgers(db,auth?.ledgerTables); pre=await updatePreflight(db,auth,body,ledgers); } catch { return json({error:'canonical_product_stage_error',stage:'preflight'},500); }
   if (!pre || Number(pre.ready)!==1) return json({error:'product_update_schema_not_ready'},503);
   const denied=authorityFrom(pre,auth,body);
   if (denied) return json({error:denied},409);
