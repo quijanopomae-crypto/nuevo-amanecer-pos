@@ -37,10 +37,11 @@ test('real Worker authenticates then returns feature_locked for every locked reg
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
 
-for (const id of ['valorizacion-inventario', 'rotacion-abc', 'clientes-frecuencia', 'kardex', 'reporte-ventas-stock', 'reporte-arqueo', 'historial-compras-producto', 'cliente-historial-compras']) {
+for (const id of ['valorizacion-inventario', 'rotacion-abc', 'clientes-frecuencia', 'kardex', 'reporte-ventas-stock', 'reporte-arqueo', 'historial-compras-producto', 'cliente-historial-compras', 'etiquetas-precios']) {
   test(`${id} is unlocked on client and server; owner-only feature route, no writes`, async t => {
     assert.equal(PERMISSIONS.FEATURE_LOCKS[id], false);
     assert.equal(PERMISSIONS.featureLocked(id), false);
+    assert.deepEqual(Array.from(PERMISSIONS.FEATURE_ROLES[id] || []), ['owner'], 'explicit owner role, also if it is locked again');
     const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
     f.addDevice('unlock-owner', 'writer', 'active', 'unlock-owner-token');
     f.addDevice('unlock-employee', 'writer', 'active', 'unlock-employee-token');
