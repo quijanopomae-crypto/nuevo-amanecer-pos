@@ -79,3 +79,14 @@ test('TOTAL uppercase and amount share one horizontal row in PC/tablet only', ()
   assert.match(css, /--na-pos-summary-height:36px/);
   assert.match(html, /<div class="total-main"><span>Total<\/span><span id="posTotal">/);
 });
+
+test('TOTAL uses same responsive font-size as the currency amount on PC/tablet', () => {
+  const label = css.match(/body:not\(\.na-pos-phone-device\) #pagePOS \.cart-totals>\.total-main>span:first-child\{([^}]+)\}/);
+  const money = css.match(/body:not\(\.na-pos-phone-device\) #pagePOS \.cart-totals>\.total-main>span:last-child\{([^}]+)\}/);
+  assert.ok(label && money, 'both selectors must exist under PC/tablet only');
+  const font = /font-size:(clamp\([^;]+\));/;
+  assert.equal(label[1].match(font)?.[1], money[1].match(font)?.[1], 'TOTAL and amount must have exactly the same font-size');
+  assert.match(label[1], /text-transform:uppercase/);
+  assert.match(css, /--na-pos-summary-height:44px/);
+  assert.match(css, /--na-pos-summary-height:36px/);
+});
