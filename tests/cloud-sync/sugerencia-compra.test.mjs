@@ -100,3 +100,19 @@ test('formato real del POS: venta por caja multiplica por unitsPerQty; id = prod
   const odd = [{ fecha: ago(1), items: [{ id: 'LINEA-9', productoId: caja.id, qty: 4 }] }];
   assert.equal(api.buildSuggestion(odd, [{ ...caja, stock: 0 }], { now }).groups[0].rows[0].sold30, 4);
 });
+
+test('ajustes (Misión 7): una merma no suma a vendidos 30 d ni sube la sugerencia; tampoco es compra/proveedor', () => {
+  const adj = t => 'ajuste:v1:' + JSON.stringify({ t, u: { n: 'Compra «Sol» · "X" | 1', i: 'C-1' }, n: 'compra' });
+  const base = [{ id: 7, name: 'Leche', stock: 3, stockMin: 2, costo: 3 }];
+  const ventas = [{ fecha: ago(2), items: [{ id: 7, productoId: 7, qty: 4, precio: 5 }] }];
+  const mermas = [
+    { movement_id: 'm1', product_id: '7', productId: 7, type: 'SALIDA', delta: -5, quantity: -5, reason: adj('merma'), source: 'ADJUSTMENT', created_at: ago(1), timestamp: ago(1) },
+    { movement_id: 'm2', product_id: '7', productId: 7, type: 'ENTRADA', delta: 1, quantity: 1, reason: adj('correccion'), source: 'ADJUSTMENT', created_at: ago(1), timestamp: ago(1), supplier: 'No es proveedor' }
+  ];
+  const sin = api.buildSuggestion(ventas, base, { now, movements: [] }).groups[0].rows[0];
+  const con = api.buildSuggestion(ventas, base, { now, movements: mermas }).groups;
+  assert.equal(sin.sold30, 4);
+  assert.equal(con[0].rows[0].sold30, 4);
+  assert.equal(con[0].rows[0].suggested, sin.suggested, 'misma sugerencia con el mismo stock');
+  assert.equal(con[0].supplier, api.NO_SUPPLIER);
+});
