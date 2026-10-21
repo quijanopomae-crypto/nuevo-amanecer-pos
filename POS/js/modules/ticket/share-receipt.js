@@ -49,7 +49,7 @@
     const name=String(receipt.customerName||'').trim(),greet=name&&name!=='Sin cliente'&&!GENERIC_CUSTOMER.test(name)?'Hola '+name+', gracias por tu '+what+'.':'Gracias por tu '+what+'.';
     return greet+'\n\n```\n'+String(receipt.text).replace(/```/g,"'''")+'\n```';
   }
-  function money(value){return'S/ '+Number(value).toFixed(2);}
+  function money(value){return'S/ '+Number(value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');}
   function known(value){return value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));}
   function dateFields(timestamp){if(!timestamp)return{fecha:'',hora:''};const d=new Date(timestamp);if(!Number.isFinite(d.getTime()))return{fecha:'',hora:''};const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Lima',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);const part=k=>parts.find(p=>p.type===k).value;return{fecha:part('year')+'-'+part('month')+'-'+part('day'),hora:d.toLocaleTimeString('es-PE',{timeZone:'America/Lima',hour12:true})};}
   function itemsFromCredit(cr){return(Array.isArray(cr.items)?cr.items:[]).map(i=>({...i,name:i.name||i.nombre||'Concepto',qty:Number(i.qty??i.cantidad??1),precio:Number(i.precio??i.precioUnitario??0)}));}
