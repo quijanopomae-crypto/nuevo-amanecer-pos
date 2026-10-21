@@ -334,10 +334,10 @@ test('rechazo: solo se descarta la entrada del diario con el operation_id de EST
   assert.notEqual(other.state.journal, null);
   assert.equal(r2.pending, true);
   assert.match(r2.message, /no es este ajuste \(stale_stock\)\. No se descartó/);
-  // Sin operation_id propio (sin crypto.randomUUID) tampoco se descarta.
+  // Sin crypto el ajuste igual tiene operation_id propio (respaldo): reconoce y descarta SU entrada.
   const nocrypto = rejectingCanon('stale_stock', 409);
   const r3 = await context({ NA_ROLES: { isOwner: () => true }, NA_PERMISSIONS: PERMISSIONS, NuevoAmanecerCanonical: nocrypto.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
-  assert.equal(r3.ok, false); assert.equal(nocrypto.state.discards, 0);
+  assert.equal(r3.ok, false); assert.equal(nocrypto.state.discards, 1);
 });
 
 test('el ajuste envía su propio operation_id (UUID)', async () => {
@@ -417,4 +417,23 @@ test('cantidad: solo decimales estrictos; «0x10», «1e3», «+2», « Infinity
 test('lotes vencidos: el mensaje aclara que una «Salida» no aparece como «Vencido» en el reporte', () => {
   const msg = api.canonMessage('expired_lots_confirmation_required');
   assert.match(msg, /Una salida hecha con «Salida» no aparece como «Vencido» en el reporte de Ajustes\./);
+});
+
+test('operation_id nunca vacío: con randomUUID, solo getRandomValues o sin crypto siempre es un UUID v4 distinto', async () => {
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const variants = [globalThis.crypto, { getRandomValues: a => globalThis.crypto.getRandomValues(a) }, { randomUUID: () => '' , getRandomValues: a => globalThis.crypto.getRandomValues(a) }, undefined];
+  for (const crypto of variants) {
+    const sent = [];
+    const ctx = context({ NA_ROLES: { isOwner: () => true }, NA_PERMISSIONS: PERMISSIONS, crypto, NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', stock: 9 }], inventoryMovements: [] }),
+      adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} } });
+    for (let i = 0; i < 2; i++) assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 })).ok, true);
+    assert.ok(sent.every(b => UUID.test(b.operation_id)), JSON.stringify(sent.map(b => b.operation_id)));
+    assert.notEqual(sent[0].operation_id, sent[1].operation_id);
+  }
+});
+
+test('canonFailure no tapa own(): la variable local se llama snap', () => {
+  const src = readFileSync('POS/js/modules/ajustes-inventario.js', 'utf8');
+  const body = src.slice(src.indexOf('async function canonFailure'), src.indexOf('if (/^CANONICAL_FINANCIAL_REJECTED_'));
+  assert.doesNotMatch(body, /var own\b/); assert.match(body, /var snap = null/);
 });

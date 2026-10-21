@@ -181,8 +181,17 @@
   // el diario con last_error. Se lee el código real y se libera el diario con discardRejectedInventory (el
   // mismo camino que usa el movimiento de Inventario), para no bloquear las siguientes operaciones.
   // operation_id propio (UUID, el mismo formato que genera el cliente) para reconocer nuestra entrada del diario.
+  // Nunca devuelve '': sin randomUUID arma un UUID v4 con crypto.getRandomValues; sin crypto, con hora + Math.random.
   function newOperationId() {
-    try { return root.crypto && typeof root.crypto.randomUUID === 'function' ? root.crypto.randomUUID() : ''; } catch (_) { return ''; }
+    try { if (root.crypto && typeof root.crypto.randomUUID === 'function') { var u = root.crypto.randomUUID(); if (u) return String(u); } } catch (_) {}
+    var b = new Array(16), i;
+    try {
+      if (root.crypto && typeof root.crypto.getRandomValues === 'function') { var a = root.crypto.getRandomValues(new Uint8Array(16)); for (i = 0; i < 16; i++) b[i] = a[i]; }
+      else throw new Error('sin crypto');
+    } catch (_) { var t = Date.now(); for (i = 0; i < 16; i++) b[i] = (Math.floor(Math.random() * 256) ^ (i < 6 ? (t / Math.pow(256, i)) & 255 : 0)) & 255; }
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    var h = b.map(function (x) { return (x + 0x100).toString(16).slice(1); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
   }
   // Igual que Movimientos de Inventario: sin respuesta definitiva se conserva la MISMA operación y se reintenta.
   function retryMessage(code) {
@@ -192,9 +201,9 @@
     var code = text(error && error.message);
     if (code === 'CANONICAL_FINANCIAL_PENDING') {
       // Sin red, tiempo de espera o ACK perdido: la entrada pendiente es la de ESTE ajuste (mismo operation_id).
-      var own = null;
-      try { own = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
-      if (operationId && own && own.payload && own.payload.operation_id === operationId) return { ok: false, code: code, pending: true, retry: true, message: retryMessage(text(own.last_error || own.last_status)) };
+      var snap = null;
+      try { snap = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
+      if (operationId && snap && snap.payload && snap.payload.operation_id === operationId) return { ok: false, code: code, pending: true, retry: true, message: retryMessage(text(snap.last_error || snap.last_status)) };
       return { ok: false, code: code, message: canonMessage(code) };
     }
     if (/^CANONICAL_FINANCIAL_REJECTED_\d+$/.test(code)) {
@@ -237,7 +246,7 @@
     if (c) {
       if (typeof c.adjustInventory !== 'function') return { ok: false, message: 'CANON no disponible para ajustes.' };
       var operationId = newOperationId(), body = { product_id: productId(product), movement_type: step.movement_type, quantity: step.quantity, reason: reason };
-      if (operationId) body.operation_id = operationId;
+      body.operation_id = operationId;
       try { await c.adjustInventory(body); }
       catch (e) { return canonFailure(c, e, operationId); }
       try { if (typeof c.refresh === 'function') await c.refresh(); } catch (_) {}
