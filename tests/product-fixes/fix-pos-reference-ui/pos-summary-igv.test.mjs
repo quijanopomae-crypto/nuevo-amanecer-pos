@@ -74,7 +74,7 @@ test('TOTAL uppercase and amount share one horizontal row in PC/tablet only', ()
   assert.match(block[1], /align-items:center;/);
   assert.match(block[1], /justify-content:center;/);
   assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:first-child\{[^}]*text-transform:uppercase;/);
-  assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:last-child\{font-size:clamp\(14px,1\.6vw,19px\)/);
+  assert.match(css, /#pagePOS \.cart-totals>\.total-main>span:last-child\{font-size:clamp\(11px,1\.4vw,19px\)/);
   assert.match(css, /--na-pos-summary-height:44px/);
   assert.match(css, /--na-pos-summary-height:36px/);
   assert.match(html, /<div class="total-main"><span>Total<\/span><span id="posTotal">/);
