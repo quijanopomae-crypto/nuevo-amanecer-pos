@@ -4,8 +4,10 @@ name: Turso Daily Backup and Restore Verify
 # Worker uses since DB_PROVIDER=turso), verified by restoring it into a throwaway
 # local SQLite on the runner, then stored in the private R2 backup bucket
 # (prefix turso-daily-backup/). Read-only against Turso: no migrations, no deploys.
-# Uses the existing Cloudflare secrets ONLY for that R2 put/get (the token should be
-# scoped to the nuevo-amanecer-prod-v2-backups bucket; owner action).
+# The existing CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets reach ONLY the R2
+# put/get step. That token is shared with ~27 deploy workflows, so it cannot be scoped to
+# the bucket without breaking them; a separate R2-only secret (Object Read & Write on
+# nuevo-amanecer-prod-v2-backups) is recommended as an owner decision (not added here).
 # Public repo: nothing is uploaded as a GitHub artifact, and logs/step summary carry
 # no row counts or money totals (those stay in the encrypted backup and the R2 manifest).
 # The D1 daily backup (tools/cloudflare-backup) and the Owner Backup Recovery Drill

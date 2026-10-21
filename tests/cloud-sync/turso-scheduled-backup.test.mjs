@@ -3,12 +3,13 @@
 process.env.TZ = 'America/Lima';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { activeCanon, device } from './canon-browser-harness.mjs';
-import { backup, verify, decryptBackup, requireBackupKey, publicSummary, REQUIRED_TABLES, KEY_ENV } from '../../tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs';
+import { backup, verify, decryptBackup, requireBackupKey, publicSummary, keyFingerprint, openManifest, REQUIRED_TABLES, KEY_ENV } from '../../tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs';
 import { backup as migrationBackup, backupPath as migrationBackupPath } from '../../tools/cloudflare-prod/scripts/turso-expense-server-received-maintenance.mjs';
 
 const MIGS = readdirSync('infra/database/migrations').filter(n => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
@@ -50,11 +51,19 @@ test('daily backup: dedicated key, restore verify PASS with FK off, per-table di
   const { encPath, manifestPath, manifest } = await backup(d1(f.database), { env, dir });
   const enc = readFileSync(encPath);
   assert.equal(enc.includes('Sintetico'), false, 'backup must be encrypted');
-  assert.equal(JSON.parse(readFileSync(manifestPath, 'utf8')).encryption.key_secret, KEY_ENV);
+  // Manifest in R2 is encrypted too: only format, fingerprint and backup hash in clear.
+  const manifestFile = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  assert.equal(manifestFile.manifest_format, 'nuevo-amanecer-turso-scheduled-backup-manifest-encrypted-v1');
+  assert.equal(manifestFile.key_fingerprint, keyFingerprint(KEY));
+  assert.match(keyFingerprint(KEY), /^[0-9a-f]{16}$/);
+  assert.equal(readFileSync(manifestPath, 'utf8').includes(KEY.slice(0, 12)), false);
+  for (const clear of ['per_table', 'focus', '_cents', 'sales']) assert.equal(readFileSync(manifestPath, 'utf8').includes(clear), false, clear);
+  assert.equal(openManifest(manifestFile, KEY).encryption.key_secret, KEY_ENV);
+  assert.equal(JSON.parse(enc.toString('utf8')).key_fingerprint, keyFingerprint(KEY));
   assert.ok(manifest.tables > 40 && manifest.per_table.sales.rows === 2);
 
   const out = join(dir, 'restored.sqlite');
-  const report = await verify(enc, { secret: KEY, manifest, out });
+  const report = await verify(enc, { secret: KEY, manifest: manifestFile, out });
   assert.deepEqual(report.failures, []);
   assert.equal(report.state, 'TURSO_BACKUP_RESTORE_VERIFY_PASS');
   assert.equal(report.quick_check, 'ok');
@@ -103,7 +112,10 @@ test('failures are loud: missing/short key, key equal to Turso token, wrong key,
   assert.equal(existsSync(join(dir, 'turso-backup.enc.json')), false);
   const { encPath, manifest } = await backup(d1(f.database), { env: { [KEY_ENV]: KEY }, dir });
   const enc = readFileSync(encPath);
-  await assert.rejects(verify(enc, { secret: KEY + 'x' }), /decryption failed/);
+  await assert.rejects(verify(enc, { secret: KEY + 'x' }), /encrypted with a different key/);
+  // Without the fingerprint (e.g. older envelope), a wrong key still fails at GCM authentication.
+  const noFp = JSON.parse(enc.toString('utf8')); delete noFp.key_fingerprint;
+  await assert.rejects(verify(Buffer.from(JSON.stringify(noFp)), { secret: KEY + 'x' }), /decryption failed/);
   const tampered = structuredClone(manifest); tampered.per_table.sales.rows = 3;
   const r = await verify(enc, { secret: KEY, manifest: tampered });
   assert.equal(r.state, 'TURSO_BACKUP_RESTORE_VERIFY_FAIL');
@@ -158,4 +170,32 @@ test('workflows: daily schedule + dispatch, read-only Turso, private R2 only aft
   const firstSecret = wf.indexOf('${{ secrets.');
   assert.ok(wf.indexOf('- name: Require default branch') > 0 && wf.indexOf('- name: Require default branch') < firstSecret);
   assert.doesNotMatch(wf.slice(wf.indexOf('jobs:'), wf.indexOf('steps:')), /secrets\./);
+});
+
+test('key fingerprint: verify refuses a different key with a clear message; CLI prints fingerprint, never the key; size warning has no numbers', async (t) => {
+  const f = await populated(t);
+  const dir = mkdtempSync(join(tmpdir(), 'turso-bk-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const summary = join(dir, 'summary.md');
+  const { encPath, manifestPath, sizeStatus } = await backup(d1(f.database), { env: { [KEY_ENV]: KEY, GITHUB_STEP_SUMMARY: summary }, dir });
+  assert.equal(sizeStatus, 'OK');
+  assert.match(readFileSync(summary, 'utf8'), new RegExp('Backup key fingerprint: ' + keyFingerprint(KEY)));
+  const other = 'rotated-synthetic-key-' + 'r'.repeat(40);
+  await assert.rejects(verify(readFileSync(encPath), { secret: other }), new RegExp('backup was encrypted with a different key: fingerprint ' + keyFingerprint(KEY) + ', provided key ' + keyFingerprint(other)));
+  await assert.rejects(verify(readFileSync(encPath), { secret: other, manifest: JSON.parse(readFileSync(manifestPath, 'utf8')) }), /manifest was encrypted with a different key/);
+  const script = 'tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs';
+  const ok = spawnSync(process.execPath, [script, 'fingerprint', encPath], { env: { ...process.env, [KEY_ENV]: KEY }, encoding: 'utf8' });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.match(ok.stdout, new RegExp('"key_fingerprint":"' + keyFingerprint(KEY) + '"'));
+  assert.match(ok.stdout, /"match":true/);
+  assert.equal(ok.stdout.includes(KEY.slice(0, 12)), false);
+  const bad = spawnSync(process.execPath, [script, 'fingerprint', manifestPath], { env: { ...process.env, [KEY_ENV]: other }, encoding: 'utf8' });
+  assert.equal(bad.status, 1); assert.match(bad.stdout, /"match":false/);
+  // Size warning above threshold: GitHub ::warning:: without byte counts.
+  const lines = []; const log = console.log; console.log = (...a) => lines.push(a.join(' '));
+  try { const r = await backup(d1(f.database), { env: { [KEY_ENV]: KEY, TURSO_BACKUP_WARN_BYTES: '1000' }, dir }); assert.equal(r.sizeStatus, 'NEAR_LIMIT'); }
+  finally { console.log = log; }
+  const warn = lines.find(l => l.startsWith('::warning::'));
+  assert.ok(warn); assert.doesNotMatch(warn, /\d{3,}/);
+  assert.match(lines.find(l => l.includes('TURSO_SCHEDULED_BACKUP_READY')), /"size":"NEAR_LIMIT"/);
 });

@@ -3,8 +3,11 @@
 //
 // Commands:
 //   backup                      read-only snapshot of Turso -> encrypted file + manifest
-//   verify <enc.json> [--manifest <manifest.json>] [--key-env <ENV_NAME>] [--out <restored.sqlite>]
-//                               decrypt in memory, restore into a throwaway SQLite, reconcile
+//   verify <enc.json> [--manifest <manifest.json>] [--key-env <ENV_NAME>] [--out <restored.sqlite>] [--report <file>]
+//                               check key fingerprint, decrypt in memory (backup and manifest),
+//                               restore into a throwaway SQLite, reconcile
+//   fingerprint [<enc.json|manifest.json>] [--key-env <ENV_NAME>]
+//                               print the key fingerprint (never the key) and compare with a file
 //
 // The snapshot is the same one the canon-migration-00NN workflows take (backup() in
 // turso-*-maintenance.mjs): schema + every table from sqlite_master, read in ONE batch
@@ -24,6 +27,16 @@ import { healthy, encryptBackup } from './turso-customer-contacts-maintenance.mj
 export const BACKUP_FORMAT = 'nuevo-amanecer-turso-scheduled-backup-v1';
 export const MANIFEST_FORMAT = 'nuevo-amanecer-turso-scheduled-backup-manifest-v1';
 export const KEY_ENV = 'TURSO_BACKUP_ENCRYPTION_KEY';
+export const ENCRYPTED_MANIFEST_FORMAT = 'nuevo-amanecer-turso-scheduled-backup-manifest-encrypted-v1';
+// Fingerprint = first 16 hex of sha256(domain prefix + NUL + key). Identifies which key opens
+// a backup after rotation; it is not the key and cannot be used to decrypt.
+const FINGERPRINT_DOMAIN = 'nuevo-amanecer-backup-key-fingerprint-v1';
+export function keyFingerprint(secret) {
+  return createHash('sha256').update(FINGERPRINT_DOMAIN + '\0' + secret).digest('hex').slice(0, 16);
+}
+// Warn (no numbers in the log) when the single-batch snapshot gets big. 16 MiB matches the
+// existing D1 backup safety limit; override with TURSO_BACKUP_WARN_BYTES.
+export const DEFAULT_WARN_BYTES = 16 * 1024 * 1024;
 const AAD = 'nuevo-amanecer-contact-backup-v1';
 // Tables the reconciliation must find (sales, cash, receipts, stock, control, catalog, credit).
 export const REQUIRED_TABLES = [
@@ -89,35 +102,64 @@ export async function backup(db, { env = process.env, dir = env.TURSO_BACKUP_DIR
   if (missing.length) throw new Error('required tables missing in source: ' + missing.join(','));
   const summary = summarize(tables);
   const createdAt = now.toISOString();
-  const encrypted = encryptBackup(Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, created_at: createdAt, schema, tables })), secret);
+  const fingerprint = keyFingerprint(secret);
+  const plainBytes = Buffer.from(JSON.stringify({ format: BACKUP_FORMAT, created_at: createdAt, schema, tables }));
+  const warnBytes = Number(env.TURSO_BACKUP_WARN_BYTES) > 0 ? Number(env.TURSO_BACKUP_WARN_BYTES) : DEFAULT_WARN_BYTES;
+  const sizeStatus = plainBytes.length > warnBytes ? 'NEAR_LIMIT' : 'OK';
+  if (sizeStatus === 'NEAR_LIMIT') console.log('::warning::Turso snapshot size is above the warning threshold for the single-batch backup; plan the redesign described in docs/MIGRATION_BACKUP_RESTORE.md (escala).');
+  // Same envelope as encryptBackup, plus the key fingerprint in clear (outside the ciphertext).
+  const withFingerprint = (bytes) => Buffer.from(JSON.stringify({ ...JSON.parse(encryptBackup(bytes, secret).toString('utf8')), key_fingerprint: fingerprint }));
+  const encrypted = withFingerprint(plainBytes);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const encPath = join(dir, 'turso-backup.enc.json');
   const manifestPath = join(dir, 'turso-backup.manifest.json');
   writeFileSync(encPath, encrypted, { mode: 0o600 });
   const manifest = {
     format: MANIFEST_FORMAT, backup_format: BACKUP_FORMAT, created_at: createdAt,
-    encryption: { algorithm: 'aes-256-gcm', key_secret: KEY_ENV },
+    encryption: { algorithm: 'aes-256-gcm', key_secret: KEY_ENV, key_fingerprint: fingerprint },
     encrypted_sha256: createHash('sha256').update(encrypted).digest('hex'), encrypted_size_bytes: encrypted.length,
     tables: names.length, rows: Object.values(tables).reduce((a, r) => a + r.length, 0), schema_objects: schema.length,
     per_table: summary.perTable, focus: summary.focus,
     excluded: ['sqlite_sequence (AUTOINCREMENT counters restart after restore)', "pos_settings internal:img:% / internal:imgrate:% rows"],
   };
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
-  // Log stays count-free (public repo): only state, table count and the encrypted file hash.
-  console.log(JSON.stringify({ state: 'TURSO_SCHEDULED_BACKUP_READY', tables: manifest.tables, sha256: manifest.encrypted_sha256 }));
-  return { encPath, manifestPath, manifest };
+  // The manifest (counts, _cents sums) is encrypted with the same key; only format,
+  // fingerprint and the backup hash stay in clear.
+  const manifestEnvelope = { ...JSON.parse(withFingerprint(Buffer.from(JSON.stringify(manifest))).toString('utf8')),
+    manifest_format: ENCRYPTED_MANIFEST_FORMAT, backup_encrypted_sha256: manifest.encrypted_sha256 };
+  writeFileSync(manifestPath, JSON.stringify(manifestEnvelope) + '\n', { mode: 0o600 });
+  // Log stays count-free (public repo): state, table count, encrypted file hash, key fingerprint, size status.
+  console.log(JSON.stringify({ state: 'TURSO_SCHEDULED_BACKUP_READY', tables: manifest.tables, sha256: manifest.encrypted_sha256, key_fingerprint: fingerprint, size: sizeStatus }));
+  if (env.GITHUB_STEP_SUMMARY) writeFileSync(env.GITHUB_STEP_SUMMARY, `- Backup key fingerprint: ${fingerprint}\n- Snapshot size: ${sizeStatus === 'OK' ? 'OK' : 'NEAR LIMIT'}\n`, { flag: 'a' });
+  return { encPath, manifestPath, manifest, sizeStatus };
 }
 
-export function decryptBackup(encryptedBytes, secret) {
-  const e = JSON.parse(Buffer.from(encryptedBytes).toString('utf8'));
+// Parse without echoing content in errors (Node puts a text fragment in JSON.parse messages).
+function parseJson(text, what) {
+  try { return JSON.parse(text); } catch { throw new Error(what + ' is not valid JSON'); }
+}
+export function checkFingerprint(envelope, secret, what = 'backup') {
+  if (envelope && envelope.key_fingerprint && envelope.key_fingerprint !== keyFingerprint(secret)) {
+    throw new Error(`${what} was encrypted with a different key: fingerprint ${envelope.key_fingerprint}, provided key ${keyFingerprint(secret)}. Use the key whose fingerprint matches (keep old keys after a rotation).`);
+  }
+}
+export function decryptBackup(encryptedBytes, secret, what = 'backup') {
+  const e = parseJson(Buffer.from(encryptedBytes).toString('utf8'), what + ' file');
   if (e.format !== 'nuevo-amanecer-contact-backup-encrypted-v1') throw new Error('unknown encrypted envelope format');
+  checkFingerprint(e, secret, what);
   const key = createHash('sha256').update(AAD + '\0' + secret).digest();
   const d = createDecipheriv('aes-256-gcm', key, Buffer.from(e.iv, 'base64'));
   d.setAAD(Buffer.from(AAD)); d.setAuthTag(Buffer.from(e.tag, 'base64'));
   let plain;
   try { plain = Buffer.concat([d.update(Buffer.from(e.data, 'base64')), d.final()]); }
   catch { throw new Error('decryption failed (wrong key, rotated secret or corrupted file)'); }
-  return JSON.parse(plain.toString('utf8'));
+  return parseJson(plain.toString('utf8'), 'decrypted ' + what);
+}
+// Accepts the encrypted manifest written by backup(), or an already decrypted object (tests).
+export function openManifest(manifest, secret) {
+  if (!manifest) return null;
+  if (manifest.manifest_format === ENCRYPTED_MANIFEST_FORMAT) return decryptBackup(Buffer.from(JSON.stringify(manifest)), secret, 'manifest');
+  if (manifest.format === MANIFEST_FORMAT) return manifest;
+  throw new Error('unknown manifest format');
 }
 
 const q = name => '"' + String(name).replaceAll('"', '""') + '"';
@@ -159,7 +201,8 @@ export async function restoreInto(plain, file = ':memory:') {
   return { db: R, inserted, objects: objs.length, fk_violations: fk.length, quick_check: qc.join('; ') };
 }
 
-export async function verify(encryptedBytes, { secret, manifest = null, out = null } = {}) {
+export async function verify(encryptedBytes, { secret, manifest: manifestInput = null, out = null } = {}) {
+  const manifest = openManifest(manifestInput, secret);
   const plain = decryptBackup(encryptedBytes, secret);
   const failures = [];
   if (!/^nuevo-amanecer-turso-.*backup-v1$/.test(String(plain.format || ''))) failures.push('unexpected backup format');
@@ -170,6 +213,8 @@ export async function verify(encryptedBytes, { secret, manifest = null, out = nu
   if (manifest) {
     const got = createHash('sha256').update(encryptedBytes).digest('hex');
     if (manifest.encrypted_sha256 && manifest.encrypted_sha256 !== got) failures.push('encrypted sha256 differs from manifest');
+    if (manifestInput.backup_encrypted_sha256 && manifestInput.backup_encrypted_sha256 !== got) failures.push('encrypted sha256 differs from manifest envelope');
+    if (manifest.encryption?.key_fingerprint && manifest.encryption.key_fingerprint !== keyFingerprint(secret)) failures.push('manifest key fingerprint differs from provided key');
     for (const name of new Set([...Object.keys(manifest.per_table || {}), ...Object.keys(source.perTable)])) {
       if (JSON.stringify(manifest.per_table?.[name]) !== JSON.stringify(source.perTable[name])) failures.push('decrypted table differs from manifest: ' + name);
     }
@@ -235,7 +280,7 @@ export async function main(argv = process.argv.slice(2)) {
     const keyEnv = arg(argv, '--key-env') || KEY_ENV;
     const secret = requireBackupKey(process.env, keyEnv);
     const manifestPath = arg(argv, '--manifest');
-    const report = await verify(readFileSync(file), { secret, manifest: manifestPath ? JSON.parse(readFileSync(manifestPath, 'utf8')) : null, out: arg(argv, '--out') });
+    const report = await verify(readFileSync(file), { secret, manifest: manifestPath ? parseJson(readFileSync(manifestPath, 'utf8'), 'manifest file') : null, out: arg(argv, '--out') });
     // Full report (per-table counts, sums) only to a file the operator asks for; never to the log.
     const reportPath = arg(argv, '--report');
     if (reportPath) writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
@@ -251,7 +296,23 @@ export async function main(argv = process.argv.slice(2)) {
     if (report.failures.length) process.exitCode = 1;
     return report;
   }
-  throw new Error('unknown command (backup | verify)');
+  if (command === 'fingerprint') {
+    // Owner check: export the key (e.g. `read -rs TURSO_BACKUP_ENCRYPTION_KEY && export TURSO_BACKUP_ENCRYPTION_KEY`)
+    // and compare with "Backup key fingerprint" in the run summary or key_fingerprint in the .enc.json.
+    const keyEnv = arg(argv, '--key-env') || KEY_ENV;
+    const secret = keyEnv === KEY_ENV ? requireBackupKey(process.env, keyEnv) : process.env[keyEnv];
+    if (!secret) throw new Error(keyEnv + ' is not set');
+    console.log(JSON.stringify({ key_env: keyEnv, key_fingerprint: keyFingerprint(secret) }));
+    const file = argv[1] && !argv[1].startsWith('--') ? argv[1] : null;
+    if (file) {
+      const env = parseJson(readFileSync(file, 'utf8'), 'file');
+      const stored = env.key_fingerprint || null;
+      console.log(JSON.stringify({ file_key_fingerprint: stored, match: stored ? stored === keyFingerprint(secret) : null }));
+      if (stored && stored !== keyFingerprint(secret)) process.exitCode = 1;
+    }
+    return;
+  }
+  throw new Error('unknown command (backup | verify | fingerprint)');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try { await main(); } catch (error) { console.error('ERROR: ' + error.message); process.exitCode = 1; }
