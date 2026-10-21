@@ -225,7 +225,7 @@ test('otros códigos: mapeados en español; desconocidos conservan el código; u
   const r3 = await ownerCtx({ NuevoAmanecerCanonical: busy.client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p-exp', type: 'merma', quantity: 1 });
   assert.equal(r3.pending, true);
   assert.equal(r3.retry, true);
-  assert.match(r3.message, /CANON no respondió \(HTTP_503\)\. El ajuste quedó PENDIENTE: no se perdió y se reintentará la MISMA operación, sin duplicar/);
+  assert.match(r3.message, /CANON no respondió \(HTTP_503\)\. El ajuste quedó pendiente y se reintentará solo, sin duplicar/);
   assert.notEqual(busy.state.journal, null);
 });
 
@@ -369,7 +369,7 @@ test('red caída y tiempo de espera: el ajuste queda pendiente y se avisa que se
     const { state, client } = transportCanon(mode);
     const res = await ownerCtx({ NuevoAmanecerCanonical: client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
     assert.equal(res.ok, false, mode); assert.equal(res.retry, true, mode); assert.equal(res.pending, true, mode);
-    assert.match(res.message, /se reintentará la MISMA operación, sin duplicar/, mode);
+    assert.match(res.message, /se reintentará solo, sin duplicar/, mode);
     assert.doesNotMatch(res.message, /puede ser este ajuste/);
     if (mode === 'timeout') assert.match(res.message, /\(TIMEOUT\)/);
     assert.equal(state.discards, 0); assert.notEqual(state.journal, null);
@@ -400,7 +400,7 @@ test('pendiente de otra pantalla: no dice «puede ser este ajuste», no envía n
 });
 
 test('cantidad: solo decimales estrictos; «0x10», «1e3», «+2», « Infinity» se rechazan', async () => {
-  for (const raw of ['0x10', '0X1A', '1e3', '+2', '-2', 'Infinity', '0b11', '0o7', '2.', '.5', '1,2,3', '2 5', ' ']) {
+  for (const raw of ['0x10', '0X1A', '+2', '-2', 'Infinity', '0b11', '0o7', '2.', '.', ',', '1,2,3', '2 5', ' ']) {
     assert.ok(Number.isNaN(api.parseQuantity(raw)), raw);
     assert.equal(api.quantityError({ unit: 'unidad', stock: 100 }, 'merma', raw), 'Ingresa una cantidad válida mayor que 0.', raw);
   }
@@ -432,8 +432,77 @@ test('operation_id nunca vacío: con randomUUID, solo getRandomValues o sin cryp
   }
 });
 
-test('canonFailure no tapa own(): la variable local se llama snap', () => {
+test('canonFailure no tapa own(): ninguna variable local se llama own', () => {
   const src = readFileSync('POS/js/modules/ajustes-inventario.js', 'utf8');
   const body = src.slice(src.indexOf('async function canonFailure'), src.indexOf('if (/^CANONICAL_FINANCIAL_REJECTED_'));
-  assert.doesNotMatch(body, /var own\b/); assert.match(body, /var snap = null/);
+  assert.doesNotMatch(body, /\b(var|let|const) own\b/);
+});
+
+// Seguimiento #869 (B2): el campo es de texto; «.5»/«,5» valen 0.5 y los exponentes avisan del tope.
+test('cantidad «.5» y «,5»: se aceptan como 0.5 (kg) y se rechazan en un producto por unidad', async () => {
+  assert.equal(api.parseQuantity('.5'), 0.5); assert.equal(api.parseQuantity(',5'), 0.5); assert.equal(api.parseQuantity(' ,25 '), 0.25);
+  assert.equal(api.parseQuantity('1,5'), 1.5);
+  for (const raw of ['5.', '.', ',', '..5', ',.5', '.5.']) assert.ok(Number.isNaN(api.parseQuantity(raw)), raw);
+  assert.equal(api.quantityError(kiloProduct, 'merma', '.5'), '');
+  assert.equal(api.quantityError(kiloProduct, 'merma', ',5'), '');
+  assert.match(api.quantityError(unitProduct, 'merma', '.5'), /unidades enteras/);
+  const { ctx, sent } = qtyCtx([unitProduct, kiloProduct]);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'k-1', type: 'merma', quantity: '.5' })).ok, true);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity: '.5' })).ok, false);
+  assert.deepEqual(sent.map(b => b.quantity), [0.5]);
+});
+
+test('cantidad «1e12» (texto): avisa del tope de 1 000 000, no el mensaje genérico; «1e3» pide solo números', async () => {
+  const MAX = /no puede superar 1[\s.,\u00a0\u202f]?000[\s.,\u00a0\u202f]?000 por ajuste/;
+  for (const raw of ['1e12', '1E12', ' 1e7 ', '1e999', '9'.repeat(400)]) {
+    assert.match(api.quantityError(unitProduct, 'merma', raw), MAX, raw.slice(0, 12));
+    assert.match(api.quantityError(kiloProduct, 'correccion', raw, 'sumar'), MAX, raw.slice(0, 12));
+  }
+  for (const raw of ['1e3', '2E1', '1e-3', 'e', '1e']) assert.equal(api.quantityError(unitProduct, 'merma', raw), 'Escribe la cantidad solo con números, sin «e» (ej. 1000).', raw);
+  const { ctx, sent } = qtyCtx([unitProduct]);
+  const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'u-1', type: 'merma', quantity: '1e12' });
+  assert.equal(res.ok, false); assert.equal(res.invalidQuantity, true); assert.match(res.message, MAX);
+  assert.equal(sent.length, 0);
+});
+
+test('mensajes en español para canonical_inventory_conflict y stale_authority (sin el código crudo)', () => {
+  assert.match(api.canonMessage('canonical_inventory_conflict'), /otra operación cambió este producto al mismo tiempo\. No se modificó el stock/);
+  assert.match(api.canonMessage('stale_authority'), /ya no tiene una autorización vigente para escribir en CANON.*No se modificó el stock/);
+  for (const c of ['canonical_inventory_conflict', 'stale_authority']) assert.doesNotMatch(api.canonMessage(c), new RegExp(c));
+});
+
+test('B1: cualquier error con la entrada propia en el diario (lectura de estado caída, 503, timeout) → «quedó pendiente», nunca «no registró»', async () => {
+  for (const err of ['Failed to fetch', 'CANONICAL_READ_503', 'CANONICAL_READ_TIMEOUT', 'STALE_AUTHORITY_BINDING', 'CANONICAL_COMMERCE_CLOSED']) {
+    const state = { journal: null, sent: 0 };
+    const client = { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', unit: 'unidad', stock: 10 }], inventoryMovements: [] }), refresh: async () => {},
+      // Como canonical-client: createCommand guarda la entrada PENDING y la lectura de estado previa al POST falla.
+      adjustInventory: async b => { state.journal = { state: 'PENDING', command: 'inventory.adjust', payload: b }; throw err === 'Failed to fetch' ? new TypeError(err) : new Error(err); },
+      pendingSnapshot: () => state.journal && { ...state.journal }, discardRejectedInventory: async () => { throw new Error('no debe descartar'); } };
+    const res = await ownerCtx({ NuevoAmanecerCanonical: client }).NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+    assert.equal(res.ok, false, err); assert.equal(res.pending, true, err); assert.equal(res.retry, true, err);
+    assert.equal(res.operationId, state.journal.payload.operation_id, err);
+    assert.match(res.message, /El ajuste quedó pendiente y se reintentará solo, sin duplicar, cuando vuelva la conexión\. No lo registres de nuevo\./, err);
+    assert.doesNotMatch(res.message, /no registró|No se registró|Failed to fetch/, err);
+    if (err !== 'Failed to fetch') assert.match(res.message, new RegExp('\\(' + err + '\\)'), err);
+  }
+  // Sin entrada propia en el diario (falló antes de guardarla) sí se puede decir que no se registró.
+  const none = { enabled: () => true, snapshot: () => ({ products: [{ product_id: 'p', name: 'Pan', unit: 'unidad', stock: 10 }], inventoryMovements: [] }),
+    adjustInventory: async () => { throw new Error('CANONICAL_COMMERCE_CLOSED'); }, pendingSnapshot: () => null };
+  const r = await ownerCtx({ NuevoAmanecerCanonical: none }).NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  assert.equal(r.retry, undefined); assert.equal(r.message, 'CANON no registró el ajuste (CANONICAL_COMMERCE_CLOSED).');
+});
+
+test('segundo clic con el ajuste propio aún pendiente: no dice «otra operación», avisa que el anterior sigue pendiente', async () => {
+  const { state, client } = transportCanon('down');
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: client });
+  const first = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  const again = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  assert.doesNotMatch(again.message, /Hay otra operación/);
+  assert.match(again.message, /^Tu ajuste anterior sigue pendiente en CANON y se reintentará solo\./);
+  assert.equal(again.pending, true); assert.equal(again.retry, true); assert.equal(again.operationId, first.operationId);
+  assert.equal(state.sent, 1);
+  // Si el anterior fue rechazado (4xx) y no se descartó, no se promete reintento.
+  state.journal.last_error = 'invalid_json'; state.journal.last_status = 400;
+  const third = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p', type: 'merma', quantity: 1 });
+  assert.equal(third.retry, undefined); assert.match(third.message, /^Tu ajuste anterior fue rechazado por CANON \(invalid_json\)/);
 });

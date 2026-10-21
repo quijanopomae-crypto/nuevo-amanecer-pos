@@ -71,18 +71,24 @@
   }
   function fmtQty(v) { return Number(v).toLocaleString('es-PE', { maximumFractionDigits: 3 }); }
   // Devuelve '' si la cantidad es válida, o el mensaje en español.
-  // Cantidad: número tal cual; texto solo decimal estricto («12», «2.5», «2,5»). Rechaza hex («0x10»),
-  // exponentes («1e3»), signos, «Infinity» y vacío (Number() los aceptaría).
-  var DECIMAL = /^\d+(?:[.,]\d+)?$/;
+  // Cantidad: número tal cual; texto solo decimal estricto («12», «2.5», «2,5», «.5», «,5»). Rechaza hex
+  // («0x10»), exponentes («1e3»), signos, «Infinity» y vacío (Number() los aceptaría). El campo de la
+  // pantalla es de texto (no type=number) para que el navegador no convierta «1,5» en 15.
+  var DECIMAL = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/;
+  var EXPONENT = /^[\d.,]*[eE][+-]?\d*$/;
   function parseQuantity(quantity) {
     if (typeof quantity === 'number') return quantity;
     var raw = String(quantity == null ? '' : quantity).trim();
     return DECIMAL.test(raw) ? Number(raw.replace(',', '.')) : NaN;
   }
   function quantityError(product, type, quantity, direction) {
-    var q = parseQuantity(quantity);
+    var q = parseQuantity(quantity), raw = typeof quantity === 'string' ? quantity.trim() : '';
+    var tooBig = 'La cantidad no puede superar ' + fmtQty(MAX_QTY) + ' por ajuste.';
+    // «1e12» o 400 nueves: se avisa del tope, no con el mensaje genérico.
+    if (EXPONENT.test(raw)) return Number(raw.replace(',', '.')) > MAX_QTY ? tooBig : 'Escribe la cantidad solo con números, sin «e» (ej. 1000).';
+    if (q === Infinity && DECIMAL.test(raw)) return tooBig;
     if (!Number.isFinite(q) || q <= 0) return 'Ingresa una cantidad válida mayor que 0.';
-    if (q > MAX_QTY) return 'La cantidad no puede superar ' + fmtQty(MAX_QTY) + ' por ajuste.';
+    if (q > MAX_QTY) return tooBig;
     if (!allowsFraction(product) && !Number.isInteger(q)) return 'Este producto se mueve en unidades enteras. Para decimales (ej. 2.5) el producto debe venderse por kilogramo, gramo o litro.';
     if (allowsFraction(product) && Math.abs(Math.round(q * 1000) - q * 1000) > 1e-6) return 'Usa como máximo 3 decimales.';
     var stock = currentStock(product), up = type === 'correccion' && direction === 'sumar';
@@ -171,8 +177,11 @@
     product_not_found: 'CANON no encontró este producto. No se modificó el stock.',
     product_inventory_disabled: 'Este producto no controla inventario en CANON. No se modificó el stock.',
     invalid_lot_state: 'Los lotes de este producto en CANON no cuadran con su stock. No se modificó el stock; revisa los lotes en Inventario.',
+    stale_authority: 'Este dispositivo ya no tiene una autorización vigente para escribir en CANON (cambió la caja principal o sus credenciales). No se modificó el stock; vuelve a conectar el dispositivo antes de registrar ajustes.',
+    canonical_inventory_conflict: 'CANON no pudo guardar el ajuste porque otra operación cambió este producto al mismo tiempo. No se modificó el stock; revisa el stock actual y vuelve a intentarlo.',
     CANONICAL_FINANCIAL_PENDING: 'Hay otra operación de CANON pendiente de confirmar. No se registró el ajuste; espera a que se confirme o se resuelva y vuelve a intentarlo.'
   };
+  var PREVIOUS_PENDING_MESSAGE = 'Tu ajuste anterior sigue pendiente en CANON y se reintentará solo. Este nuevo ajuste no se registró: espera a que se confirme el anterior y no lo registres de nuevo.';
   function canonMessage(code) {
     code = text(code);
     return own(CANON_MESSAGES, code) ? CANON_MESSAGES[code] : 'CANON no registró el ajuste (' + code + ').';
@@ -195,22 +204,20 @@
   }
   // Igual que Movimientos de Inventario: sin respuesta definitiva se conserva la MISMA operación y se reintenta.
   function retryMessage(code) {
-    return 'CANON no respondió' + (code ? ' (' + code + ')' : '') + '. El ajuste quedó PENDIENTE: no se perdió y se reintentará la MISMA operación, sin duplicar, cuando vuelva la conexión. No lo registres de nuevo.';
+    // Solo códigos (p. ej. CANONICAL_READ_503); un texto del navegador como «Failed to fetch» no se muestra.
+    code = /^[A-Za-z0-9_]+$/.test(code) ? code : '';
+    return 'CANON no respondió' + (code ? ' (' + code + ')' : '') + '. El ajuste quedó pendiente y se reintentará solo, sin duplicar, cuando vuelva la conexión. No lo registres de nuevo.';
+  }
+  function pendingOf(c) { try { return typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) { return null; } }
+  function pendingRetry(code, operationId, entry) {
+    return { ok: false, code: code, pending: true, retry: true, operationId: operationId, message: retryMessage(text(entry && (entry.last_error || entry.last_status)) || (code === 'CANONICAL_FINANCIAL_PENDING' ? '' : code)) };
   }
   async function canonFailure(c, error, operationId) {
     var code = text(error && error.message);
-    if (code === 'CANONICAL_FINANCIAL_PENDING') {
-      // Sin red, tiempo de espera o ACK perdido: la entrada pendiente es la de ESTE ajuste (mismo operation_id).
-      var snap = null;
-      try { snap = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
-      if (operationId && snap && snap.payload && snap.payload.operation_id === operationId) return { ok: false, code: code, pending: true, retry: true, message: retryMessage(text(snap.last_error || snap.last_status)) };
-      return { ok: false, code: code, message: canonMessage(code) };
-    }
+    // Solo se toca la entrada del diario si es la de ESTE ajuste (mismo operation_id); si no, no se descarta.
+    var pending = pendingOf(c);
+    var mine = !!(operationId && pending && pending.payload && pending.payload.operation_id === operationId);
     if (/^CANONICAL_FINANCIAL_REJECTED_\d+$/.test(code)) {
-      var pending = null;
-      try { pending = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
-      // Solo se toca la entrada del diario si es la de ESTE ajuste (mismo operation_id); si no, no se descarta.
-      var mine = !!(operationId && pending && pending.payload && pending.payload.operation_id === operationId);
       if (pending && pending.command === 'inventory.adjust' && pending.last_error && !mine) {
         return { ok: false, code: text(pending.last_error), pending: true, message: 'CANON rechazó una operación pendiente que no es este ajuste (' + text(pending.last_error) + '). No se descartó; revísala desde Inventario antes de registrar ajustes.' };
       }
@@ -221,9 +228,21 @@
         // No es un rechazo definitivo (p. ej. 5xx): el ajuste sigue pendiente en el diario de CANON.
         if (!discarded) {
           var st = Number(pending.last_status);
-          if (!st || st === 429 || st >= 500) return { ok: false, code: code, pending: true, retry: true, message: retryMessage(code) };
+          if (!st || st === 429 || st >= 500) return pendingRetry(code, operationId, null);
           return { ok: false, code: code, pending: true, message: 'CANON rechazó el ajuste (' + code + ') y quedó pendiente sin descartar. Revísalo desde Inventario antes de registrar otro.' };
         }
+        return { ok: false, code: code, message: canonMessage(code) };
+      }
+    }
+    // Cualquier otro error (red caída, ACK perdido, timeout, 5xx o fallo de la lectura de estado previa al
+    // POST): si el diario conserva la entrada de ESTE ajuste, se reintentará sola. Nunca decir «no registró».
+    if (mine) return pendingRetry(code, operationId, pending);
+    if (code === 'CANONICAL_FINANCIAL_PENDING') {
+      // La entrada pendiente es un ajuste anterior de esta pantalla (otro clic): no es «otra operación».
+      if (pending && pending.command === 'inventory.adjust' && pending.payload && parseReason(pending.payload.reason)) {
+        var last = Number(pending.last_status);
+        if (last && last !== 429 && last < 500) return { ok: false, code: code, pending: true, message: 'Tu ajuste anterior fue rechazado por CANON (' + text(pending.last_error || last) + ') y sigue pendiente sin descartar. Revísalo desde Inventario antes de registrar otro.' };
+        return { ok: false, code: code, pending: true, retry: true, previous: true, operationId: text(pending.payload.operation_id), message: PREVIOUS_PENDING_MESSAGE };
       }
     }
     return { ok: false, code: code, message: canonMessage(code) };
@@ -322,13 +341,11 @@
     return true;
   }
   function syncDirection(p) { syncLots(p); var t = p.querySelector('[data-aj-type]'), d = p.querySelector('[data-aj-direction-wrap]'); if (t && d) d.hidden = t.value !== 'correccion'; syncQuantity(p); }
-  // Validación en vivo de la cantidad: step/max del campo y mensaje en español debajo.
+  // Validación en vivo de la cantidad (texto crudo del campo, type=text) con el mensaje en español debajo.
   function syncQuantity(p) {
     var qty = p.querySelector('[data-aj-qty]'); if (!qty) return '';
     var sel = p.querySelector('[data-aj-product]'), t = p.querySelector('[data-aj-type]'), dir = p.querySelector('[data-aj-direction]');
     var product = sel && sel.value ? products().find(function (x) { return x && productId(x) === String(sel.value); }) : null;
-    qty.step = allowsFraction(product) ? '0.001' : '1';
-    qty.max = String(MAX_QTY);
     var box = p.querySelector('[data-aj-qty-error]');
     if (!box && qty.parentNode) { box = element('span', 'aj-qty-error'); box.setAttribute('data-aj-qty-error', ''); box.setAttribute('role', 'alert'); box.hidden = true; qty.parentNode.appendChild(box); }
     var raw = text(qty.value), msg = product && raw ? quantityError(product, t ? t.value : '', raw, dir ? dir.value : 'restar') : '';
@@ -359,18 +376,46 @@
     try { p.appendChild(link); link.click(); } finally { link.remove(); root.setTimeout(function () { root.URL.revokeObjectURL(url); }, 1000); }
     return true;
   }
-  var busy = false;
+  var busy = false, pendingOp = '', pendingTimer = 0;
+  function setMessage(p, value, state) {
+    var msg = p.querySelector('[data-aj-message]'); if (!msg) return;
+    msg.textContent = value; msg.setAttribute('data-aj-ok', state);
+  }
+  // Mientras el ajuste propio siga pendiente en el diario de CANON, «Registrar» queda desactivado para que no
+  // se registre dos veces. Se vuelve a revisar con cada actualización de CANON y cada pocos segundos.
+  function holdPending(p, operationId) {
+    pendingOp = operationId;
+    var btn = p.querySelector('[data-aj-submit]'); if (btn) btn.disabled = true;
+    if (!pendingTimer && typeof root.setInterval === 'function') pendingTimer = root.setInterval(function () { checkPending(p); }, 3000);
+  }
+  function checkPending(p) {
+    if (!pendingOp) return false;
+    var c = canon(), entry = c ? pendingOf(c) : null;
+    if (entry && entry.payload && entry.payload.operation_id === pendingOp) return true;
+    var done = pendingOp, receipt = null;
+    pendingOp = '';
+    if (pendingTimer) { root.clearInterval(pendingTimer); pendingTimer = 0; }
+    try { receipt = c && typeof c.receiptSnapshot === 'function' ? c.receiptSnapshot() : null; } catch (_) {}
+    var btn = p.querySelector('[data-aj-submit]'); if (btn && !busy) btn.disabled = false;
+    if (receipt && receipt.operation_id === done) setMessage(p, 'El ajuste pendiente se confirmó en CANON.', 'true');
+    else setMessage(p, 'El ajuste pendiente ya no está en espera. Revisa el stock y el reporte antes de registrar otro.', 'pending');
+    render();
+    return false;
+  }
   async function submit(p) {
-    if (busy) return; busy = true;
+    if (busy || (pendingOp && checkPending(p))) return; busy = true;
     var msg = p.querySelector('[data-aj-message]'), btn = p.querySelector('[data-aj-submit]');
     if (btn) btn.disabled = true;
     try {
       var dir = p.querySelector('[data-aj-direction]');
       var res = await register({ productId: p.querySelector('[data-aj-product]').value, type: p.querySelector('[data-aj-type]').value,
         quantity: String(p.querySelector('[data-aj-qty]').value), direction: dir ? dir.value : 'restar', note: p.querySelector('[data-aj-note]').value });
-      if (msg) { msg.textContent = res.ok ? 'Ajuste registrado.' : res.message; msg.setAttribute('data-aj-ok', String(!!res.ok)); }
+      // Pendiente propio: aviso ámbar (no rojo de error) y «Registrar» desactivado hasta que se resuelva.
+      var held = !res.ok && res.pending && res.retry && !!res.operationId;
+      if (msg) setMessage(p, res.ok ? 'Ajuste registrado.' : res.message, res.ok ? 'true' : held ? 'pending' : 'false');
+      if (held) holdPending(p, res.operationId);
       if (res.ok) { p.querySelector('[data-aj-qty]').value = ''; syncQuantity(p); p.querySelector('[data-aj-note]').value = ''; ['invRender', 'posRender', 'updateDashboard'].forEach(function (n) { try { if (typeof root[n] === 'function') root[n](); } catch (_) {} }); render(); }
-    } finally { busy = false; if (btn) btn.disabled = false; }
+    } finally { busy = false; if (btn) btn.disabled = !!pendingOp; }
   }
   function init() {
     var p = page(); if (!p || p.__naAjBound) return; p.__naAjBound = true;
@@ -381,7 +426,7 @@
     p.addEventListener('click', function (e) { if (e.target.closest('[data-aj-export]')) exportCsv(); });
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(p, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', function () { render(); });
-    root.addEventListener('na:canonical-updated', update);
+    root.addEventListener('na:canonical-updated', function () { checkPending(p); update(); });
     update();
   }
   root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, isType: isType, canonMessage: canonMessage, MAX_QTY: MAX_QTY, parseQuantity: parseQuantity, MAX_CORRECTION_UP: MAX_CORRECTION_UP, quantityError: quantityError, hasLots: hasLots, lotBlocked: lotBlocked, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
