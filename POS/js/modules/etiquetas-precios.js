@@ -11,16 +11,35 @@
     mediana: { id: 'mediana', label: 'Mediana (50 × 30 mm)', width: 50, height: 30, sheet: false },
     a4: { id: 'a4', label: 'A4 · 24 por hoja (3 × 8)', width: 70, height: 37, sheet: true, perSheet: 24 }
   };
+  var INVALID_NOTICE = 'sin barras: código con caracteres no válidos';
   var MAX_NAME = 32, MIN_QTY = 1, MAX_QTY = 100;
 
   function text(v) { return v == null ? '' : String(v); }
+  var START_C = 105, CODE_B = 100, CODE_C = 99;
+  function digitRun(s, i) { var n = 0; while (i + n < s.length && s.charCodeAt(i + n) >= 48 && s.charCodeAt(i + n) <= 57) n++; return n; }
+  // Juego B para texto y juego C (pares de dígitos) para tramos numéricos:
+  // empieza en C si el código abre con 4+ dígitos (o es solo dígitos, largo par);
+  // desde B cambia a C con 4+ dígitos al final o 6+ en medio, dejando un dígito impar en B.
   function code128Values(data) {
     var s = text(data); if (!s) return null;
-    var values = [START_B], sum = START_B;
-    for (var i = 0; i < s.length; i++) {
-      var c = s.charCodeAt(i); if (c < 32 || c > 126) return null;
-      var v = c - 32; values.push(v); sum += v * (i + 1);
+    for (var k = 0; k < s.length; k++) { var cc = s.charCodeAt(k); if (cc < 32 || cc > 126) return null; }
+    var values = [], i = 0, set;
+    var lead = digitRun(s, 0);
+    if (lead >= 4 || (lead === s.length && lead >= 2 && lead % 2 === 0)) { set = 'C'; values.push(START_C); } else { set = 'B'; values.push(START_B); }
+    while (i < s.length) {
+      if (set === 'C') {
+        if (digitRun(s, i) >= 2) { values.push(Number(s.substr(i, 2))); i += 2; continue; }
+        values.push(CODE_B); set = 'B'; continue;
+      }
+      var run = digitRun(s, i);
+      if (run >= 4 && (i + run === s.length ? true : run >= 6)) {
+        if (run % 2) { values.push(s.charCodeAt(i) - 32); i++; }
+        values.push(CODE_C); set = 'C'; continue;
+      }
+      values.push(s.charCodeAt(i) - 32); i++;
     }
+    var sum = values[0];
+    for (var j = 1; j < values.length; j++) sum += values[j] * j;
     values.push(sum % 103); values.push(STOP); return values;
   }
   function code128Pattern(data) {
@@ -53,6 +72,7 @@
   function clampQty(v) { var n = Math.floor(Number(v)); if (!isFinite(n)) n = MIN_QTY; return Math.min(MAX_QTY, Math.max(MIN_QTY, n)); }
   function productName(p) { return text(p && (p.name || p.nombre)) || 'Producto'; }
   function productCode(p) { return text(p && (p.barcode || p.codigo || p.sku)).trim(); }
+  function productPrice(p) { return formatPrice(p && p.precio != null ? p.precio : p && p.price); }
   function productKey(p) { return text(p && p.id); }
   function formatDate(d) {
     var x = d instanceof Date ? d : new Date();
@@ -63,8 +83,8 @@
     var code = productCode(product), svg = code ? code128Svg(code) : '';
     return '<div class="etq-label' + (svg ? '' : ' etq-no-bars') + '" data-etq-label>' +
       '<div class="etq-name">' + escapeHtml(truncateName(productName(product))) + '</div>' +
-      '<div class="etq-price">' + escapeHtml(formatPrice(product && product.precio != null ? product.precio : product && product.price)) + '</div>' +
-      svg +
+      '<div class="etq-price">' + escapeHtml(productPrice(product)) + '</div>' +
+      svg + (code && !svg ? '<div class="etq-warn" data-etq-warn>' + escapeHtml(INVALID_NOTICE) + '</div>' : '') +
       '<div class="etq-meta"><span class="etq-code">' + escapeHtml(code || 'Sin código') + '</span><span class="etq-date">' + escapeHtml(formatDate(date)) + '</span></div>' +
       '</div>';
   }
@@ -79,7 +99,7 @@
     });
   }
 
-  var api = { PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
+  var api = { PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
   root.NA_ETIQUETAS_PRECIOS = api;
 
   var doc = root.document; if (!doc || !doc.getElementById) return;
@@ -93,7 +113,7 @@
     var found = searchProducts(catalog(), input.value);
     found.slice(0, 20).forEach(function (p) {
       var b = doc.createElement('button'); b.type = 'button'; b.className = 'etq-match'; b.setAttribute('data-etq-add', productKey(p));
-      b.textContent = productName(p) + (productCode(p) ? ' · ' + productCode(p) : '') + ' · ' + formatPrice(p.precio);
+      b.textContent = productName(p) + (productCode(p) ? ' · ' + productCode(p) : '') + ' · ' + productPrice(p);
       box.appendChild(b);
     });
     if (input.value.trim() && !found.length) { var n = doc.createElement('p'); n.className = 'etq-note'; n.textContent = 'No se encontraron productos.'; box.appendChild(n); }

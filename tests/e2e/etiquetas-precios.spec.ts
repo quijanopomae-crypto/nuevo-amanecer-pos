@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 // Datos sintéticos; sin clientes reales.
 const products = [
   { id: 990101, name: 'Arroz etiqueta prueba', sku: 'ARROZ-01', barcode: 'ARROZ-01', precio: 4.5, costo: 2, stock: 10, activo: true, cat: 'abarrotes', unidad: 'unidad', icon: '📦' },
+  { id: 990103, name: 'Cafe acentos', sku: '', barcode: 'CAFÉ-Ñ1', price: 7.25, costo: 3, stock: 4, activo: true, cat: 'abarrotes', unidad: 'unidad', icon: '📦' },
   { id: 990102, name: 'Galleta sin codigo <b>xss</b>', sku: '', barcode: '', precio: 1.2, costo: 0.5, stock: 5, activo: true, cat: 'abarrotes', unidad: 'unidad', icon: '📦' }
 ];
 
@@ -61,6 +62,19 @@ for (const width of [390, 768, 1280]) {
     const box = await labels.first().boundingBox();
     expect(Math.round(box!.width / 96 * 25.4)).toBe(38);
     await root.locator('[data-etq-format]').selectOption('a4');
+    await expect(labels).toHaveCount(5);
+
+    await search.fill('cafe');
+    await expect(root.locator('[data-etq-add="990103"]')).toContainText('S/ 7.25');
+    await root.locator('[data-etq-add="990103"]').click();
+    await expect(labels).toHaveCount(6);
+    const cafe = root.locator('[data-etq-sheet] [data-etq-label]').filter({ hasText: 'Cafe acentos' });
+    await expect(cafe.locator('svg')).toHaveCount(0);
+    await expect(cafe.locator('.etq-price')).toHaveText('S/ 7.25');
+    await expect(cafe.locator('[data-etq-warn]')).toBeVisible();
+    await expect(cafe.locator('[data-etq-warn]')).toHaveText('sin barras: código con caracteres no válidos');
+    await expect(root.locator('[data-etq-sheet] [data-etq-warn]')).toHaveCount(1);
+    await root.locator('[data-etq-remove="990103"]').click();
     await expect(labels).toHaveCount(5);
 
     const overflow = await root.evaluate(el => el.scrollWidth - el.clientWidth);
