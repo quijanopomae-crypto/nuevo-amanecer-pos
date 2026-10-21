@@ -147,8 +147,8 @@
     finally { link.remove(); root.setTimeout(function () { root.URL.revokeObjectURL(url); }, 1000); }
     return true;
   }
-  // Aviso del dueño: tarjeta flotante propia (no cambia el diseño de Inicio). Nunca se muestra en Venta
-  // (pagePOS), para no tapar el botón de cobrar ni la barra inferior. Al cerrarla no vuelve en la sesión:
+  // Aviso del dueño: tarjeta flotante propia (no cambia el diseño de Inicio). Solo se muestra con Inicio
+  // (pageMenu) activo: nunca en Venta (botón de cobrar, barra inferior) ni sobre botones de otros módulos. Al cerrarla no vuelve en la sesión:
   // única escritura del módulo, una marca en sessionStorage (sin datos de productos ni lotes).
   var ALERT_ID = 'naRpvAlert', ALERT_SESSION_KEY = 'na_rpv_alert_closed_v1', VENTA_PAGE = 'pagePOS', dismissedMemory = false;
   function alertDismissed() {
@@ -159,7 +159,9 @@
     dismissedMemory = true;
     try { if (root.sessionStorage) root.sessionStorage.setItem(ALERT_SESSION_KEY, '1'); } catch (_) {}
   }
-  function inVenta() { var v = root.document && root.document.getElementById(VENTA_PAGE); return !!(v && v.classList && v.classList.contains('active')); }
+  var HOME_PAGE = 'pageMenu';
+  function isActive(id) { var v = root.document && root.document.getElementById(id); return !!(v && v.classList && v.classList.contains('active')); }
+  function inVenta() { return isActive(VENTA_PAGE) || !isActive(HOME_PAGE); }
   function removeAlert() { var old = root.document && root.document.getElementById(ALERT_ID); if (old) old.remove(); }
   function showAlert() {
     var doc = root.document; if (!doc || !doc.body) return false;
@@ -196,8 +198,10 @@
     root.addEventListener('na:canonical-updated', showAlert);
     page.addEventListener('input', function (e) { if (e.target && e.target.matches && e.target.matches('[data-rpv-lot]')) update(); });
     root.setTimeout(showAlert, 1500);
-    var venta = root.document.getElementById(VENTA_PAGE);
-    if (venta && typeof root.MutationObserver === 'function') new root.MutationObserver(showAlert).observe(venta, { attributes: true, attributeFilter: ['class'] });
+    [VENTA_PAGE, HOME_PAGE].forEach(function (id) {
+      var el = root.document.getElementById(id);
+      if (el && typeof root.MutationObserver === 'function') new root.MutationObserver(showAlert).observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
     ['na:canonical-updated', 'na:canonical-sale-projection', 'na:canonical-sale-receipt', 'focus'].forEach(function (event) { root.addEventListener(event, update); });
     update();
   }

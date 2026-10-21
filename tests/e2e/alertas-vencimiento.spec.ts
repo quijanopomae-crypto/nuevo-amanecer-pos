@@ -148,7 +148,10 @@ test('a 390px el aviso no aparece en Venta ni tapa la barra inferior; cerrado no
   await expect(alert).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).NA_REPORTE_PRODUCTOS_VENCER.showAlert())).toBe(false);
   await expect(alert).toHaveCount(0);
-  // Al salir de Venta vuelve a mostrarse.
+  // En otros módulos tampoco aparece (no tapa sus botones, p. ej. «Actualizar» de Valorización).
+  await page.evaluate(() => (window as any).goPage('pageValorizacion'));
+  await expect(alert).toHaveCount(0);
+  // Al volver a Inicio vuelve a mostrarse.
   await page.evaluate(() => (window as any).goPage('pageMenu'));
   await expect(alert).toBeVisible();
   // Cerrar: no vuelve en la misma sesión, ni tras recargar.
