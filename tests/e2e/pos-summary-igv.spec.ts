@@ -136,3 +136,45 @@ test('tablet 768px: importe de S/ 1,000 no invade otra columna ni altera el cál
   await expect(page.locator('#posTotal')).toContainText('1000.00');
   await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
 });
+
+for (const width of [768, 1366]) {
+  test(`cabecera Venta actual a ${width}px: 32px de alto, misma anchura y botones funcionales`, async ({ page }) => {
+    await prepare(page, width);
+    const head = page.locator('#cartDrawer .cart-head');
+    const title = head.locator('.cart-head-title');
+    await expect(title).toHaveText('Venta actual');
+    await expect(page.locator('#posClear')).toBeVisible();
+    await expect(page.locator('#btnCartMenu')).toBeVisible();
+
+    const size = await page.evaluate(() => {
+      const drawer = document.getElementById('cartDrawer')!.getBoundingClientRect();
+      const head = document.querySelector('#cartDrawer .cart-head')!.getBoundingClientRect();
+      const clear = document.getElementById('posClear')!.getBoundingClientRect();
+      const menu = document.getElementById('btnCartMenu')!.getBoundingClientRect();
+      return {
+        height: head.height, widthDifference: Math.abs(drawer.width - head.width),
+        clearHeight: clear.height, menuHeight: menu.height,
+        withinHeader: clear.top >= head.top && clear.bottom <= head.bottom
+          && menu.top >= head.top && menu.bottom <= head.bottom,
+      };
+    });
+    expect(size).toMatchObject({ height: 32, clearHeight: 28, menuHeight: 28, withinHeader: true });
+    expect(size.widthDifference).toBeLessThanOrEqual(1);
+    await page.locator('#btnCartMenu').click();
+    await expect(page.locator('#cartMenuDropdown')).toBeVisible();
+    await page.locator('#btnCartMenu').click();
+    await expect(page.locator('#cartMenuDropdown')).toBeHidden();
+    await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
+  });
+}
+
+test.describe('cabecera del teléfono sin reducción', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  test('conserva su altura original y el carrito táctil', async ({ page }) => {
+    await prepare(page, 390);
+    await expect(page.locator('body')).toHaveClass(/na-pos-phone-device/);
+    const height = await page.locator('#cartDrawer .cart-head').evaluate(el => el.getBoundingClientRect().height);
+    expect(height).toBeGreaterThanOrEqual(42);
+    await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
+  });
+});
