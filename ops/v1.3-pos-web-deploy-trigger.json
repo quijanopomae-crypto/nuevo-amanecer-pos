@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 177: #838 ownerAllowed usa NA_ROLES.isOwner() (merge c81abfe2) + #837 sufijo de vendedor «Nombre · ID» en ticket impreso, filtros y arqueo (merge e5ef5ed3). Solo web (JS cliente), sin cambios de Worker ni pos-permissions.js. Rollback: web 176 (build f88b2b8c).",
+  "note": "Web 177: #833 historial de precios por producto (merge 37da3ca6, toca pos-permissions.js: publicar Worker antes) + #838 ownerAllowed usa NA_ROLES.isOwner() (merge c81abfe2) + #837 sufijo de vendedor «Nombre · ID» (merge e5ef5ed3). Rollback: web 176 (build f88b2b8c).",
   "retry_attempt": 177,
-  "retry_reason": "Deploy de base e5ef5ed389a3035f776d4c98bf2211ba10aba36b (incluye #838 merge c81abfe2 y #837 merge e5ef5ed3). Aprobado por el dueño. Rollback: web 176 (build f88b2b8c).",
+  "retry_reason": "Deploy de base e5ef5ed389a3035f776d4c98bf2211ba10aba36b (incluye #833 merge 37da3ca6, #838 merge c81abfe2 y #837 merge e5ef5ed3), después del Worker con la misma base. Aprobado por el dueño. Rollback: web 176 (build f88b2b8c).",
   "requested_at_utc": "2026-10-21T00:28:40Z",
   "approved_base": "e5ef5ed389a3035f776d4c98bf2211ba10aba36b"
 }
