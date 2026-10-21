@@ -84,7 +84,9 @@ body.dark .rpv-alert .rpv-alert-view { background: #fbbf24; color: #1e293b; bord
 }
 @media (min-width: 768px) and (min-height: 640px) {
   .rpv-alert { left: 12px; right: auto; bottom: 72px; width: 196px; max-width: 196px; padding: 10px; font-size: 13px; }
-  .rpv-alert .rpv-alert-text { flex-basis: 100%; }
+  /* Texto largo: máximo 3 líneas con «…» para que el aviso no crezca sobre «Caja»/«Gastos» de la barra lateral.
+     El texto completo sigue en el DOM. */
+  .rpv-alert .rpv-alert-text { flex-basis: 100%; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; max-height: calc(3 * 1.4em); overflow: hidden; text-overflow: ellipsis; }
   .rpv-alert button { flex: 1 1 auto; min-height: 36px; padding: 4px 8px; }
 }
 /* Poca altura (horizontal o ventana baja, < 640 px de alto): una sola fila compacta de 44 px como máximo

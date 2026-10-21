@@ -311,3 +311,33 @@ test('a 844x390 «Ver» abre el reporte y «×» cierra el aviso', async ({ page
   await alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' }).click();
   await expect(alert).toHaveCount(0);
 });
+
+// Revisión #861: en tablet/PC (≥ 768 de ancho y ≥ 640 de alto) un texto largo no hace crecer el aviso
+// sobre los enlaces de la barra lateral («Gastos», «Configuración»): el texto se recorta a 3 líneas.
+for (const [width, height] of [[768, 640], [900, 700], [1280, 720], [1440, 900]]) {
+  test(`a ${width}x${height} un texto largo no hace que el aviso tape la barra lateral`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const errors = await rolePage(page, 'owner', false);
+    const alert = page.locator('#naRpvAlert');
+    await expect(alert).toBeVisible();
+    const long = '⏳ 128 lotes vencidos · 1.024 lotes vencen en 30 días en Leche entera, Yogur natural, Queso fresco, Mantequilla con sal y Pan de molde integral (21/10/2026, hora de Lima)';
+    await alert.locator('.rpv-alert-text').evaluate((p, t) => { p.textContent = t; }, long);
+    const box = (await alert.boundingBox())!;
+    const links = page.locator('#pageMenu .menu-side-link:visible');
+    expect(await links.count()).toBeGreaterThanOrEqual(8);
+    const hit: string[] = [];
+    for (let i = 0; i < await links.count(); i++) {
+      const b = await links.nth(i).boundingBox();
+      if (b && intersects(box, b)) hit.push((await links.nth(i).innerText()).trim() + ` (${Math.round(b.y)}–${Math.round(b.y + b.height)})`);
+    }
+    test.info().annotations.push({ type: 'rect', description: `${width}x${height} aviso ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}` });
+    expect(hit, `aviso y=${Math.round(box.y)}–${Math.round(box.y + box.height)}`).toEqual([]);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    // El texto completo sigue en el DOM y los botones conservan sus nombres accesibles.
+    await expect(alert.locator('.rpv-alert-text')).toHaveText(long);
+    await expect(alert.getByRole('button', { name: 'Ver reporte' })).toBeVisible();
+    await expect(alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' })).toBeVisible();
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+    expect(errors).toEqual([]);
+  });
+}
