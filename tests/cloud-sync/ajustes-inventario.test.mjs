@@ -105,3 +105,19 @@ test('Kardex clasifica los ajustes como «Ajuste», nunca como compra o venta', 
   const h = historial.NA_HISTORIAL_COMPRAS.buildHistory([], [{ movement_id: 'm1', type: 'ENTRADA', reason, product_id: '5', quantity: 3, created_at: '2026-10-20T10:00:00Z' }], '5');
   assert.equal(h.rows.length, 0, 'un ajuste ENTRADA no es una compra');
 });
+
+test('fallo al guardar: quita solo nuestro movimiento (identidad o id) y conserva los ajenos agregados durante el guardado', async () => {
+  for (const copy of [false, true]) {
+    const products = [{ id: 7, name: 'Arroz', stock: 10 }];
+    const moves = [{ id: 'IM-prev', productId: 7, delta: 1 }];
+    let saves = 0;
+    const ctx = ownerCtx({ productos: products, inventoryMovements: moves,
+      applyInventoryMovement(o) { products[0].stock += o.delta; const m = { id: 'IM-own', ...o }; moves.push(copy ? { ...m } : m); return { ok: true, movement: m }; },
+      saveAllData: async () => { if (saves++ === 0) moves.push({ id: 'IM-other', productId: 7, delta: -1 }); return { persisted: false }; },
+      _naWasPersisted: r => !!r?.persisted, _naGetActiveCashier: () => ({ id: 'C-1', nombre: 'Ana' }) });
+    const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 7, type: 'merma', quantity: 2 });
+    assert.equal(res.ok, false);
+    assert.deepEqual(moves.map(x => x.id), ['IM-prev', 'IM-other'], copy ? 'por id' : 'por identidad');
+    assert.equal(products[0].stock, 10);
+  }
+});

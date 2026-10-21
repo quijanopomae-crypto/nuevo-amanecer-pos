@@ -123,14 +123,18 @@
       return { ok: true, canonical: true };
     }
     if (typeof applyInventoryMovement !== 'function') return { ok: false, message: 'Inventario no disponible.' }; // eslint-disable-line no-undef
-    var moves = localMoves(), length = Array.isArray(moves) ? moves.length : 0, before = product.stock;
+    var before = product.stock;
     var outcome = applyInventoryMovement({ productId: product.id, type: step.movement_type, delta: step.delta, reason: reason, source: 'ADJUSTMENT', referenceId: String(product.id) }); // eslint-disable-line no-undef
     if (!outcome || !outcome.ok) return { ok: false, message: (outcome && outcome.message) || 'Ajuste bloqueado.' };
     try {
       var saved = typeof saveAllData === 'function' ? await saveAllData() : null; // eslint-disable-line no-undef
       if (typeof _naWasPersisted === 'function' && !_naWasPersisted(saved)) throw new Error('NO_PERSISTIDO'); // eslint-disable-line no-undef
     } catch (_) {
-      var m = localMoves(); if (Array.isArray(m)) m.length = Math.min(length, m.length);
+      var m = localMoves(), own = outcome.movement;
+      if (Array.isArray(m) && own) { // quita solo nuestro movimiento (por identidad o id), nunca recorta la lista
+        var at = m.indexOf(own); if (at < 0 && own.id != null) at = m.findIndex(function (x) { return x && x.id === own.id; });
+        if (at >= 0) m.splice(at, 1);
+      }
       product.stock = before;
       try { if (typeof saveAllData === 'function') await saveAllData(); } catch (_) {} // eslint-disable-line no-undef
       return { ok: false, message: 'No se guardó el ajuste; el stock fue restaurado.' };
