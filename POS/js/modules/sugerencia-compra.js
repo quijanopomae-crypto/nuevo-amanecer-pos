@@ -11,6 +11,8 @@
   var NO_SUPPLIER = 'Sin proveedor registrado';
   function text(v) { return String(v == null ? '' : v).trim(); }
   function num(v) { var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.')); return Number.isFinite(n) ? n : null; }
+  // Costo conocido (#892): número finito ≥ 0 o texto con dígitos. Ausente (undefined/null/'') = null; un 0 real es 0.
+  function knownCost(v) { if (typeof v !== 'number' && (typeof v !== 'string' || !/[0-9]/.test(v))) return null; var n = num(v); return n !== null && n >= 0 ? n : null; }
   // En las ventas del POS, item.id y item.productoId son el id del PRODUCTO (la línea se distingue por
   // ventaModo, no por id). Se prefiere productoId por claridad.
   function key(item) {
@@ -66,10 +68,10 @@
       var qty = suggest(min, s, stock);
       if (!qty) return;
       var edited = editedQty(options.edits, k);
-      var supplier = supplierOf(p, options.movements), cost = num(p.costo);
+      var supplier = supplierOf(p, options.movements), cost = knownCost(p.costo);
       if (!groups.has(supplier)) groups.set(supplier, []);
       groups.get(supplier).push({ key: k, name: text(p.name || p.nombre) || 'Producto sin nombre', code: text(p.sku || p.barcode || p.codigo),
-        stock: stock, stockMin: min, sold30: s, suggested: qty, qty: edited === null ? qty : edited, cost: cost !== null && cost > 0 ? cost : null });
+        stock: stock, stockMin: min, sold30: s, suggested: qty, qty: edited === null ? qty : edited, cost: cost });
     });
     var list = Array.from(groups.keys()).sort(function (a, b) { return (a === NO_SUPPLIER) - (b === NO_SUPPLIER) || a.localeCompare(b, 'es'); }).map(function (supplier) {
       return { supplier: supplier, rows: groups.get(supplier).sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); }) };

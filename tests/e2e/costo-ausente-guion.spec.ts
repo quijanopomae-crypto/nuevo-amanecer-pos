@@ -47,12 +47,43 @@ test('empleado: fila de inventario, Costo inv. y Ganancia pot. muestran «—» 
   await expect(row('Arroz sin costo')).not.toContainText('Costo: S/');
   await expect(row('Bolsa costo cero')).toContainText('Costo: S/ 0.00');
   await expect(row('Leche costo normal')).toContainText('Costo: S/ 1.25');
+  // M1: solo algunos sin costo => suma de los conocidos con «*» y el rótulo existente dice «N sin costo»;
+  // para el empleado la Ganancia pot. queda «—».
+  const lbl3 = page.locator('#invS3 + .ss-lbl');
+  await expect(page.locator('#invS3')).toHaveText('S/5*');
+  await expect(lbl3).toHaveText('1 sin costo');
+  await expect(page.locator('#invS5')).toHaveText('—');
+  // Todos sin costo: «—» como antes.
+  await seed(page, [ABSENT]);
   await expect(page.locator('#invS3')).toHaveText('—');
   await expect(page.locator('#invS5')).toHaveText('—');
+  await expect(lbl3).toHaveText('Costo inv.');
   // Solo productos con costo conocido (0 real y normal): cifras normales.
   await seed(page, [ZERO, NORMAL]);
   await expect(page.locator('#invS3')).toHaveText('S/5');
   await expect(page.locator('#invS5')).toHaveText('S/9');
+  await expect(lbl3).toHaveText('Costo inv.');
+});
+
+for (const width of [390, 1280]) test(`dueño ${width}px: algunos sin costo => «S/ X*», «N sin costo» y Ganancia pot. solo con costo conocido, en la misma caja`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await rolePage(page, 'owner');
+  await seed(page, [ZERO, NORMAL]);
+  const box = page.locator('#invS3').locator('xpath=..');
+  const before = await box.boundingBox();
+  const beforeGain = await page.locator('#invS5').locator('xpath=..').boundingBox();
+  await seed(page, [ABSENT, ZERO, NORMAL]);
+  await expect(page.locator('#invS3')).toHaveText('S/5*');
+  await expect(page.locator('#invS3 + .ss-lbl')).toHaveText('1 sin costo');
+  await expect(page.locator('#invS5')).toHaveText('S/9*');
+  const after = await box.boundingBox();
+  const afterGain = await page.locator('#invS5').locator('xpath=..').boundingBox();
+  for (const [a, b] of [[before, after], [beforeGain, afterGain]]) {
+    expect(Math.abs(a!.width - b!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(a!.height - b!.height)).toBeLessThanOrEqual(1);
+  }
+  // Sin desbordes dentro de la caja.
+  expect(await box.evaluate((el: HTMLElement) => [...el.children].every(c => (c as HTMLElement).scrollWidth <= (c as HTMLElement).clientWidth + 1))).toBe(true);
 });
 
 test('ficha: costo ausente queda vacío con «—» y margen «—»; 0 real conserva 0 y normal calcula el margen', async ({ page }) => {
@@ -118,4 +149,29 @@ test('Ventas: sin costo en la venta la Ganancia bruta/neta es «—»; con costo
   await seed(page, [ZERO], [sale('V-CERO', { id: ZERO.id, costo: 0 })]);
   values = await kpis();
   await expect(values.nth(1)).toHaveText('S/ 8.00');
+});
+
+test('Ventas M1 (dueño): venta mixta => Ganancia bruta «S/ X*» con «N sin costo» en el rótulo existente; sin costo completo «—»', async ({ page }) => {
+  await rolePage(page, 'owner');
+  const today = await page.evaluate(() => (0, eval)('obtenerHoy()'));
+  const line = (id: number, name: string, extra: Record<string, unknown>) => ({ id, name, qty: 2, cantidad: 2, precio: 4, subtotal: 8, unitsPerQty: 1, ...extra });
+  const sale = (id: string, items: unknown[]) => ({ id, fecha: today, hora: '10:00', hora24: '10:00:00', timestamp: today + 'T15:00:00.000Z',
+    total: 16, metodo: 'efectivo', estado: 'completada', anulada: false, clienteId: null, items });
+  const kpis = async () => {
+    await page.evaluate(() => { (window as any).NA_MENU_NAVIGATION.navigate('pageVentas'); (window as any).ventasRender(); });
+    const values = page.locator('#ventasKPI .vkpi-val');
+    await expect(values).toHaveCount(4);
+    await expect(values.first()).not.toHaveText('—');
+    return { values, labels: page.locator('#ventasKPI .vkpi-lbl') };
+  };
+  await seed(page, [ABSENT, NORMAL], [sale('V-MIX', [line(ABSENT.id, 'Arroz sin costo', {}), line(NORMAL.id, 'Leche costo normal', { costo: 1.25 })])]);
+  let k = await kpis();
+  await expect(k.values.nth(1)).toHaveText('S/ 5.50*');
+  await expect(k.labels.nth(1)).toHaveText('1 sin costo');
+  await expect(k.values.nth(3)).toHaveText(/\*$/);
+  await expect(k.labels.nth(3)).toHaveText('Ganancia neta');
+  await seed(page, [ABSENT], [sale('V-AUS2', [line(ABSENT.id, 'Arroz sin costo', {})])]);
+  k = await kpis();
+  await expect(k.values.nth(1)).toHaveText('—');
+  await expect(k.labels.nth(1)).toHaveText('Ganancia bruta');
 });
