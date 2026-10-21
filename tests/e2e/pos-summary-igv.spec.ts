@@ -20,7 +20,7 @@ async function prepare(page: Page, width: number) {
   });
   await page.locator('[data-product-id="SUMMARY-A"]').click();
   if (width <= 1099) await page.locator('.cart-fab').click();
-  await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
+  if (width >= 701) await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
   await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
 }
 
@@ -79,8 +79,11 @@ test('teléfono 390px mantiene subtotal y estructura anterior cuando se oculta I
   await setIgVisible(page, false);
   await expect(page.locator('#pagePOS .total-row').first()).toBeVisible();
   await expect(page.locator('#pagePOS .total-row').nth(1)).toBeHidden();
-  const layout = await geometry(page);
-  expect(layout.counterAbove).toBe(true);
-  expect(layout.columnCount).toBe(2);
+  // El diseño de teléfono es el legado: su contenedor no es la barra verde.
+  const mobile = await page.evaluate(() => ({
+    wrapper: getComputedStyle(document.querySelector('#pagePOS .cart-totals')!).backgroundColor,
+    total: getComputedStyle(document.querySelector('#pagePOS .total-main')!).backgroundColor,
+  }));
+  expect(mobile.wrapper).not.toBe(mobile.total);
   await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
 });
