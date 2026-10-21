@@ -18,6 +18,15 @@
     try { return !!(client && typeof client.enabled === 'function' && client.enabled()); }
     catch (_) { return false; }
   }
+  // Montos escritos a mano: NA_DECIMAL (js/core/parse-decimal.js, cargado antes en index.html) acepta «4,50».
+  // Sin él (solo sandboxes de prueba que no cargan ese archivo) se conserva la lectura anterior con Number().
+  function decimal() {
+    return root.NA_DECIMAL || { validate: function () { return true; }, parse: Number, value: function (id, emptyValue) {
+      var node = root.document && root.document.getElementById(id), raw = String(node && node.value != null ? node.value : '').trim();
+      return raw === '' ? (arguments.length > 1 ? emptyValue : NaN) : Number(raw);
+    } };
+  }
+
   function clean(value) { return String(value == null ? '' : value).trim().replace(/\s+/g, ' '); }
   function moneyCents(value) {
     var amount = Number(value);
@@ -140,6 +149,7 @@
   root.guardarGasto = async function () {
     if (!enabled()) return typeof original.guardarGasto === 'function' ? original.guardarGasto.apply(this, arguments) : false;
     if (busy) return false;
+    if (!editing && !decimal().validate([['gasMonto', 'Monto']])) return false;
     if (editing) {
       if(!owner())return false;
       busy=true;
@@ -152,7 +162,7 @@
     if (!authorized()) return false;
 
     var description = clean(root.document.getElementById('gasDesc')?.value);
-    var amountCents = moneyCents(root.document.getElementById('gasMonto')?.value);
+    var amountCents = moneyCents(decimal().value('gasMonto', NaN));
     var method = clean(root.document.getElementById('gasMetodo')?.value);
     var date = clean(root.document.getElementById('gasFecha')?.value) || today();
     var category = clean(root.document.getElementById('gasCat')?.value);

@@ -13,6 +13,15 @@
     catch (_) { return false; }
   }
 
+  // Montos escritos a mano: NA_DECIMAL (js/core/parse-decimal.js, cargado antes en index.html) acepta «4,50».
+  // Sin él (solo sandboxes de prueba que no cargan ese archivo) se conserva la lectura anterior con Number().
+  function decimal() {
+    return root.NA_DECIMAL || { validate: function () { return true; }, parse: Number, value: function (id, emptyValue) {
+      var node = root.document && root.document.getElementById(id), raw = String(node && node.value != null ? node.value : '').trim();
+      return raw === '' ? (arguments.length > 1 ? emptyValue : NaN) : Number(raw);
+    } };
+  }
+
   function clean(value) {
     return String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
   }
@@ -187,6 +196,7 @@
   }
 
   function buildInput() {
+    if (!decimal().validate([['pCosto', 'Costo'], ['pPrecio', 'Precio de venta'], ['pPrecioCaja', 'Precio por caja'], ['pFactorCompra', 'Unidades por presentación']])) return null;
     var name = clean(value('pNombre'));
     var description = clean(value('pDescripcion'));
     var sku = clean(value('pSku')) || ('PROD-' + Date.now());
@@ -194,9 +204,9 @@
     var brand = clean(value('pMarca')) || 'Sin marca';
     var unit = clean(value('pUnidad'));
     var purchaseUnit = clean(value('pUnidadCompra')) || 'unidad';
-    var purchaseFactor = purchaseUnit === 'unidad' ? 1 : number(value('pFactorCompra'), NaN);
-    var costCents = moneyCents(value('pCosto'), true);
-    var priceCents = moneyCents(value('pPrecio'), false);
+    var purchaseFactor = purchaseUnit === 'unidad' ? 1 : decimal().value('pFactorCompra', NaN);
+    var costCents = moneyCents(decimal().value('pCosto', 0), true);
+    var priceCents = moneyCents(decimal().value('pPrecio', NaN), false);
     var controlInventory = checked('pControlInventario');
     var stock = controlInventory ? number(value('pStock'), NaN) : 0;
     var stockMin = controlInventory ? number(value('pStockMin'), 0) : 0;
@@ -230,7 +240,7 @@
       notify('Completa precio mayorista y unidades por caja, o deja ambos vacíos', 'error');
       return null;
     }
-    var boxPriceCents = hasBoxPrice ? moneyCents(boxPriceRaw, false) : null;
+    var boxPriceCents = hasBoxPrice ? moneyCents(decimal().parse(boxPriceRaw), false) : null;
     var boxUnits = hasBoxUnits ? number(boxUnitsRaw, NaN) : null;
     if (hasBoxPrice && (boxPriceCents === null || !Number.isFinite(boxUnits) || boxUnits <= 0)) {
       notify('Precio mayorista o unidades por caja inválidos', 'error');

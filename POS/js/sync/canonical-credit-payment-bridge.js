@@ -18,6 +18,15 @@
     }
   }
 
+  // Montos escritos a mano: NA_DECIMAL (js/core/parse-decimal.js, cargado antes en index.html) acepta «4,50».
+  // Sin él (solo sandboxes de prueba que no cargan ese archivo) se conserva la lectura anterior con Number().
+  function decimal() {
+    return root.NA_DECIMAL || { validate: function () { return true; }, parse: Number, value: function (id, emptyValue) {
+      var node = root.document && root.document.getElementById(id), raw = String(node && node.value != null ? node.value : '').trim();
+      return raw === '' ? (arguments.length > 1 ? emptyValue : NaN) : Number(raw);
+    } };
+  }
+
   function clean(value) {
     return String(value == null ? '' : value).trim().replace(/\s+/g, ' ');
   }
@@ -27,6 +36,11 @@
     if (!Number.isFinite(amount) || amount <= 0) return null;
     var cents = Math.round(amount * 100);
     return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  }
+
+  // Monto del abono escrito a mano: «4,50» = 450 céntimos (NA_DECIMAL); inválido o vacío → null.
+  function typedCents() {
+    return moneyCents(decimal().value('pagoMonto', NaN));
   }
 
   function selectedCreditId() {
@@ -323,7 +337,7 @@
   function matchesPending(pending) {
     try {
       var p = pending && pending.payload; if (!p) return false;
-      var doc = root.document, amount = moneyCents(doc.getElementById('pagoMonto')?.value);
+      var doc = root.document, amount = typedCents();
       var method = clean(doc.getElementById('pagoMetodo')?.value) || 'efectivo', ref = clean(doc.getElementById('pagoOperacion')?.value);
       var cid = selectedCreditId(), pc = String(p.credit_id);
       var sameCredit = cid === pc;
@@ -333,12 +347,12 @@
   }
   function pendingBlockText(pending) {
     var amt = Number(pending && pending.payload && pending.payload.amount_cents) || 0, now = 0;
-    try { now = moneyCents(root.document.getElementById('pagoMonto')?.value) || 0; } catch (_) {}
+    try { now = typedCents() || 0; } catch (_) {}
     return 'Revisando el abono anterior de S/ ' + (amt / 100).toFixed(2) + '. Este abono' + (now ? ' de S/ ' + (now / 100).toFixed(2) : '') + ' NO se registró todavía.';
   }
   function previousSettledNotice(pending) {
     var amt = Number(pending && pending.payload && pending.payload.amount_cents) || 0;
-    var now = 0; try { now = moneyCents(root.document.getElementById('pagoMonto')?.value) || 0; } catch (_) {}
+    var now = 0; try { now = typedCents() || 0; } catch (_) {}
     showNet('done', 'El abono anterior de S/ ' + (amt / 100).toFixed(2) + ' sí se registró.' +
       (now ? ' Este abono de S/ ' + (now / 100).toFixed(2) + ' todavía NO se registró: revisa y toca Confirmar para enviarlo.' : ' Saldo actualizado.'));
     var b = root.document.getElementById('pagoConfirmBtn'); if (b) b.disabled = false;
@@ -352,6 +366,7 @@
   async function confirm() {
     if (!enabled()) return false;
     if (busy) return false;
+    if (!decimal().validate([['pagoMonto', 'Monto del abono']])) return false;
 
     var client = api();
     var pending = pendingRecord();
@@ -359,7 +374,7 @@
     if (pending) {
       if (pending.invalid || !['payment.create','payment.batch'].includes(pending.command)) {
         // Como en el cierre: aviso dentro de la ventana (queda abierta con el monto escrito).
-        var amtTyped = moneyCents(root.document.getElementById('pagoMonto')?.value);
+        var amtTyped = typedCents();
         showNet('rejected', otherPendingText(pending, amtTyped));
         try { var ob = root.NuevoAmanecerCanonicalSaleOutbox; if (ob && ob.sync) ob.sync().catch(function () {}); } catch (_) {}
         return false;
@@ -397,7 +412,7 @@
       }
     }
 
-    var amountCents = moneyCents(root.document.getElementById('pagoMonto')?.value);
+    var amountCents = typedCents();
     var method = clean(root.document.getElementById('pagoMetodo')?.value) || 'efectivo';
     var reference = clean(root.document.getElementById('pagoOperacion')?.value);
     var creditId = selectedCreditId();

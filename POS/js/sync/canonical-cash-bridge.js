@@ -28,6 +28,15 @@
     }
   }
 
+  // Montos escritos a mano: NA_DECIMAL (js/core/parse-decimal.js, cargado antes en index.html) acepta «4,50».
+  // Sin él (solo sandboxes de prueba que no cargan ese archivo) se conserva la lectura anterior con Number().
+  function decimal() {
+    return root.NA_DECIMAL || { validate: function () { return true; }, parse: Number, value: function (id, emptyValue) {
+      var node = root.document && root.document.getElementById(id), raw = String(node && node.value != null ? node.value : '').trim();
+      return raw === '' ? (arguments.length > 1 ? emptyValue : NaN) : Number(raw);
+    } };
+  }
+
   function number(value, fallback) {
     var parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : (fallback === undefined ? 0 : fallback);
@@ -199,6 +208,7 @@
   root.abrirCaja = async function () {
     if (!enabled()) return typeof original.abrirCaja === 'function' ? original.abrirCaja.apply(this, arguments) : false;
     if (openingBusy) return false;
+    if (!decimal().validate([['cajFondo', 'Fondo inicial']])) return false;
     if (!authorizeCash('Confirmar apertura de caja')) return false;
 
     var cashier = selectedCashier();
@@ -208,7 +218,7 @@
     }
     if (!verifyCashierPin(cashier)) return false;
 
-    var openingCents = cents(root.document.getElementById('cajFondo')?.value || 0);
+    var openingCents = cents(decimal().value('cajFondo', 0));
     if (openingCents === null) {
       notify('Ingresa un fondo inicial válido', 'error');
       return false;
@@ -275,6 +285,7 @@
   root.guardarMovCaja = async function () {
     if (!enabled()) return typeof original.guardarMovCaja === 'function' ? original.guardarMovCaja.apply(this, arguments) : undefined;
     if (movementBusy) return false;
+    if (!decimal().validate([['cajMovMonto', 'Monto']])) return false;
     if (!authorizeCash('Guardar movimiento de caja')) return false;
     if (typeof root._naSessionOpen === 'function' && !root._naSessionOpen()) {
       notify('La caja no está abierta', 'error');
@@ -290,7 +301,7 @@
       return false;
     }
 
-    var amountCents = cents(root.document.getElementById('cajMovMonto')?.value);
+    var amountCents = cents(decimal().value('cajMovMonto', 0));
     var description = clean(root.document.getElementById('cajMovDesc')?.value);
     var category = clean(root.document.getElementById('cajMovCat')?.value);
     if (!amountCents || !description) {
@@ -751,12 +762,13 @@
   var cerrarCajaRun = async function () {
     if (!enabled()) return typeof original.cerrarCaja === 'function' ? original.cerrarCaja.apply(this, arguments) : undefined;
     closeStatus('');
+    if (!decimal().validate([['cajContado', 'Efectivo contado']])) return false;
     // Sin cierre pendiente y sin caja abierta en la réplica: se pregunta al servidor antes de nada. Si ya está
     // cerrada se muestra el cierre real (las ventas en cola de esa caja pasan a revisión al sincronizar).
     try { var c0 = api(); if (c0 && typeof c0.snapshot === 'function' && !pendingClose(c0) && !(c0.snapshot().cashSessions || []).some(function (x) { return x.status === 'OPEN'; })) { var q = await quickCloseCheck(true); if (q !== 'OPEN') return q; } } catch (_) {}
     if (!authorizeClose()) return false;
 
-    var countedCents = cents(root.document.getElementById('cajContado')?.value);
+    var countedCents = cents(decimal().value('cajContado', 0));
     if (countedCents === null) {
       notify('Ingresa el efectivo contado', 'error');
       return false;

@@ -373,7 +373,7 @@
       if (creditV2 && creditV2.account) input.credit_account = copy(creditV2.account);
       if (creditV2 && Array.isArray(creditV2.installment_dates) && creditV2.installment_dates.length) input.installment_dates = copy(creditV2.installment_dates);
     }
-    var receiptItems=copy(cart),receiptReceived=method==='efectivo'?Number(root.document.getElementById('mMontoRec')?.value):method==='mixto'?mixed.cash:cart.reduce(function(sum,item){return sum+Number(item.qty)*Number(item.precio);},0);
+    var receiptItems=copy(cart),receiptReceived=method==='efectivo'?(root.NA_DECIMAL?root.NA_DECIMAL.value('mMontoRec',0):Number(root.document.getElementById('mMontoRec')?.value)):method==='mixto'?mixed.cash:cart.reduce(function(sum,item){return sum+Number(item.qty)*Number(item.precio);},0);
     var cashTill = (method === 'efectivo' || method === 'mixto') ? openCanonicalSession() : null;
     if (cashTill) input.session_id = cashTill;
     // Check the same projected catalog used for pending stock, before creating

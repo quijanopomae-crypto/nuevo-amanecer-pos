@@ -1093,8 +1093,9 @@ function labCategorySummary(client, category) {
     '</div>';
   }
 
+  // El monto escrito a mano se lee con NA_DECIMAL (js/core/utils.js): «4,50» = 450 céntimos; «1e2» o «1.234,50» = null.
   function labBatchMoneyCents(value) {
-    var amount = Number(value);
+    var amount = typeof value === 'string' && root.NA_DECIMAL ? root.NA_DECIMAL.parse(value) : Number(value);
     if (!Number.isFinite(amount) || amount <= 0) return null;
     var cents = Math.round(amount * 100);
     return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
@@ -1159,7 +1160,7 @@ function labCategorySummary(client, category) {
     return '<section class="na-v2-batch-pay" aria-label="Cobro múltiple">' +
       '<div class="na-v2-batch-head"><div><span class="na-v2-eyebrow">Cobro múltiple</span><strong>Paga varias deudas en una sola acción</strong></div>' +
         '<button type="button" class="na-v2-batch-selectall" id="naV2BatchToggleAllBtn" onclick="naCanonBatchToggleAll()">Seleccionar todo</button></div>' +
-      '<label class="na-v2-batch-amount"><span>Monto total que está abonando</span><input id="naV2BatchAmount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" oninput="naCanonBatchAmountChanged()"></label>' +
+      '<label class="na-v2-batch-amount"><span>Monto total que está abonando</span><input id="naV2BatchAmount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-na-decimal placeholder="0.00" oninput="naCanonBatchAmountChanged()"></label>' +
       '<div class="na-v2-batch-actions"><button type="button" class="na-v2-batch-auto" onclick="naCanonBatchAutoSelect()">Aplicar automáticamente</button></div>' +
       '<div class="na-v2-batch-method-row"><label><span>Método de pago</span><select id="naV2BatchMethod" onchange="naCanonBatchMethodChanged()">' +
         '<option value="efectivo">Efectivo</option><option value="yape">Yape</option><option value="plin">Plin</option><option value="transferencia">Transferencia</option>' +
@@ -1304,6 +1305,7 @@ function labCategorySummary(client, category) {
     var screen = labScreen();
     if (!screen || !screen.querySelectorAll) return;
     var amountInput = screen.querySelector('#naV2BatchAmount');
+    if (amountInput && root.NA_DECIMAL && !root.NA_DECIMAL.validate([[amountInput, 'Monto total']])) return;
     var amountCents = labBatchMoneyCents(amountInput && amountInput.value);
     if (!amountCents) {
       if (typeof toast === 'function') toast('Primero ingresa el monto total que está abonando','error');
@@ -1413,6 +1415,8 @@ function labCategorySummary(client, category) {
 
   root.naCanonSubmitBatchPayment = async function () {
     if (labBatchSubmitInFlight) return false;
+    var typedAmount = labScreen() && labScreen().querySelector ? labScreen().querySelector('#naV2BatchAmount') : null;
+    if (typedAmount && root.NA_DECIMAL && !root.NA_DECIMAL.validate([[typedAmount, 'Monto total']])) return false;
     var state = labBatchUpdatePreview();
     if (!state || !state.valid) {
       if (typeof toast === 'function') toast('Revisa el monto y las deudas seleccionadas','error');

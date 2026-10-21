@@ -233,7 +233,9 @@ test('P2-2: mixed payment in integer cents (digital = total - cash, cash max 2 d
   // The real legacy helper (inline-02), not a copy.
   const legacy = readFileSync(new URL('../../POS/js/legacy-inline/inline-02.js', import.meta.url), 'utf8');
   const helper = legacy.match(/^function _naMixedPaymentData\(\)\{.*\}$/m)[0];
-  vm.runInContext('function _naNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}function _naClean(v){return String(v==null?\'\':v).trim();}' + helper, tab.context);
+  // El efectivo escrito se lee con el helper real de Cobrar (sin NA_DECIMAL cae en _naNumber).
+  const cobro = legacy.match(/^function _naCobroMonto\(id\)\{.*\}$/m)[0];
+  vm.runInContext('function _naNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}function _naClean(v){return String(v==null?\'\':v).trim();}' + cobro + helper, tab.context);
   vm.runInContext("cart=[{...productos.find(p=>p.id==='00001'),qty:3,precio:0.1}];posPayM='mixto';", tab.context);
   tab.context.document.getElementById('mMixedCash').value = '0.1';
   tab.context.document.getElementById('mMixedDigitalMethod').value = 'yape';

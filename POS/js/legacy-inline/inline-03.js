@@ -4,7 +4,8 @@ let gastoProc=false;
 guardarGasto=async function(){
   if(gastoProc)return;
   if(isModuleLocked('gastos')){toast('El sistema está en modo solo lectura','error');return;}
-  const desc=_naClean(document.getElementById('gasDesc').value),amount=_naNumber(document.getElementById('gasMonto').value);
+  if(!NA_DECIMAL.validate([['gasMonto','Monto']]))return;
+  const desc=_naClean(document.getElementById('gasDesc').value),amount=NA_DECIMAL.value('gasMonto',0)||0;
   if(!desc||amount<=0){toast('Verifica concepto y monto','error');return;}
   const button=document.querySelector('#mGasto .mbtn-ok'),buttonText=button?.textContent||'💾 Registrar';
   gastoProc=true;

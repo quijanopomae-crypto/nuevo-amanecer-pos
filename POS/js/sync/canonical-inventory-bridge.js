@@ -10,6 +10,12 @@
     try{return !!(client&&typeof client.enabled==='function'&&client.enabled());}catch(_){return false;}
   }
   function clean(value){return String(value==null?'':value).trim().replace(/\s+/g,' ');}
+  // Cantidad escrita a mano: NA_DECIMAL (js/core/utils.js, cargado antes en index.html) acepta «2,5».
+  // Sin él (solo sandboxes de prueba que no cargan utils.js) se conserva la lectura anterior.
+  function decimal(){
+    return root.NA_DECIMAL||{validate:function(){return true;},value:function(id,emptyValue){
+      var raw=clean(root.document.getElementById(id)?.value).replace(',','.');return raw===''?emptyValue:Number(raw);}};
+  }
   function notify(message,tone){
     var fn=null;try{if(typeof toast==='function')fn=toast;}catch(_){}
     if(!fn&&typeof root.toast==='function')fn=root.toast;
@@ -115,8 +121,8 @@
     if(userLocked()){notify('Módulo de productos bloqueado','error');return false;}
 
     var ctx=movementContext();
-    var rawQuantity=clean(root.document.getElementById('mMovCant')?.value).replace(',','.');
-    var quantity=rawQuantity===''?NaN:Number(rawQuantity);
+    if(!decimal().validate([['mMovCant','Cantidad']]))return false;
+    var quantity=decimal().value('mMovCant',NaN);
     if(!ctx.productId||!['entrada','salida'].includes(ctx.type)){notify('No se encontró el movimiento de inventario','error');return false;}
     var target=snapshotProduct(ctx.productId);
     if(!validQuantity(quantity,target)){

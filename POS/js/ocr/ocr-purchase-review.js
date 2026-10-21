@@ -11,6 +11,15 @@
     return value === null || value === undefined ? '' : String(value);
   }
 
+  // Campo de texto con teclado decimal: un type=number de Chrome convertía «4,50» en 450.
+  function decimalField(input, kind) {
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    setData(input, 'naDecimal', kind || '');
+  }
+
   function productId(product) {
     return product && product.id !== null && product.id !== undefined ? String(product.id) : '';
   }
@@ -34,8 +43,11 @@
     return registry;
   }
 
-  function finitePositive(value) {
-    var number = typeof value === 'number' ? value : Number(value);
+  // Lo escrito a mano se lee con NA_DECIMAL («4,50» = 4.50; «1e2» o «1.234,50» no valen) cuando está cargado.
+  var QTY = { qty: true };
+  function finitePositive(value, opts) {
+    var decimal = root && root.NA_DECIMAL;
+    var number = typeof value === 'number' ? value : (decimal ? decimal.parse(value, opts) : Number(value));
     return isFinite(number) && number > 0 ? number : null;
   }
 
@@ -96,7 +108,7 @@
       var row = rows[index];
       var errors = [];
       if (!row || !registry[row.productId]) errors.push('PRODUCTO_REQUERIDO');
-      if (finitePositive(row && row.quantity) === null) errors.push('CANTIDAD_INVALIDA');
+      if (finitePositive(row && row.quantity, QTY) === null) errors.push('CANTIDAD_INVALIDA');
       if (finitePositive(row && row.unitCost) === null) errors.push('COSTO_INVALIDO');
       if (row && row.originalProposal && row.originalProposal.status !== 'MATCHED_SAFE'
           && !row.humanProductSelected) errors.push('SELECCION_HUMANA_REQUERIDA');
@@ -129,7 +141,7 @@
         render();
         return { ok: false, errors: errors.slice() };
       }
-      row.quantity = finitePositive(row.quantity);
+      row.quantity = finitePositive(row.quantity, QTY);
       row.unitCost = finitePositive(row.unitCost);
       row.decision = 'CONFIRMED';
       render();
@@ -178,9 +190,7 @@
 
       var quantityLabel = appendText(doc, card, 'label', 'ocr-review-field', 'Cantidad');
       var quantity = doc.createElement('input');
-      quantity.type = 'number';
-      quantity.min = '0.000001';
-      quantity.step = 'any';
+      decimalField(quantity, 'qty');
       quantity.value = text(row.quantity);
       setData(quantity, 'field', 'quantity');
       setData(quantity, 'index', index);
@@ -188,9 +198,7 @@
 
       var costLabel = appendText(doc, card, 'label', 'ocr-review-field', 'Costo unitario');
       var cost = doc.createElement('input');
-      cost.type = 'number';
-      cost.min = '0.000001';
-      cost.step = 'any';
+      decimalField(cost);
       cost.value = text(row.unitCost);
       setData(cost, 'field', 'unitCost');
       setData(cost, 'index', index);

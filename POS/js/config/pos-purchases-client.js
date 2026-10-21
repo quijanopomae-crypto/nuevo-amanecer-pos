@@ -69,20 +69,26 @@
   }
   function lineHtml(i) {
     return '<div class="na-pur-line" data-i="' + i + '"><input class="na-pur-prod" list="naPurProducts" placeholder="Producto" autocomplete="off">' +
-      '<input class="na-pur-qty" type="number" min="0" step="any" inputmode="decimal" placeholder="Cant.">' +
-      '<input class="na-pur-cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Costo S/">' +
+      '<input class="na-pur-qty" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-na-decimal="qty" placeholder="Cant." aria-label="Cantidad">' +
+      '<input class="na-pur-cost" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-na-decimal placeholder="Costo S/" aria-label="Costo unitario (S/)">' +
       '<input class="na-pur-lot" maxlength="120" placeholder="Lote (opcional)" aria-label="Código de lote">' +
       '<input class="na-pur-expiry" type="date" aria-label="Vencimiento del lote">' +
       '<button type="button" class="na-pur-del" aria-label="Quitar línea">✕</button></div>';
   }
+  // Cantidad y costo se leen con NA_DECIMAL: «4,50» = 4.50 (antes un type=number de Chrome lo convertía en 450).
+  // Un número mal escrito («1.234,50», «1e2») no se guarda: queda en «decimals» con un mensaje en español.
   function readLines(w) {
-    var out = [], bad = [], codes = new Set();
+    var out = [], bad = [], decimals = [], codes = new Set(), D = root.NA_DECIMAL;
     [].slice.call(w.querySelectorAll('.na-pur-line')).forEach(function (row, idx) {
-      var label = row.querySelector('.na-pur-prod').value, qty = Number(row.querySelector('.na-pur-qty').value), costRaw = row.querySelector('.na-pur-cost').value;
-      if (!label && !row.querySelector('.na-pur-qty').value) return;
+      var label = row.querySelector('.na-pur-prod').value, qtyEl = row.querySelector('.na-pur-qty'), costEl = row.querySelector('.na-pur-cost');
+      var qtyCheck = D.check(qtyEl.value, { qty: true }), costCheck = D.check(costEl.value);
+      if (!label && qtyCheck.empty) return;
+      if (!qtyCheck.empty && !qtyCheck.ok) { D.mark(qtyEl); bad.push(idx + 1); decimals.push('Línea ' + (idx + 1) + ', cantidad: ' + qtyCheck.message); return; }
+      if (!costCheck.empty && !costCheck.ok) { D.mark(costEl); bad.push(idx + 1); decimals.push('Línea ' + (idx + 1) + ', costo: ' + costCheck.message); return; }
+      var qty = qtyCheck.value;
       var p = productByLabel(label);
       if (!p || !(qty > 0)) { bad.push(idx + 1); return; }
-      var cost = costRaw === '' ? null : Math.round(Number(costRaw) * 100);
+      var cost = costCheck.empty ? null : Math.round(costCheck.value * 100);
       if (cost != null && !(cost >= 0)) { bad.push(idx + 1); return; }
       var entry={ line: out.length + 1, product_id: String(p.id), quantity: qty, unit_cost_cents: cost };
       var code=row.querySelector('.na-pur-lot').value.trim(),expiry=row.querySelector('.na-pur-expiry').value;
@@ -92,7 +98,7 @@
       }
       out.push(entry);
     });
-    return { lines: out, bad: bad };
+    return { lines: out, bad: bad, decimals: decimals };
   }
   function total(w) {
     var r = readLines(w), t = r.lines.reduce(function (s, l) { return s + (l.unit_cost_cents == null ? 0 : l.unit_cost_cents * l.quantity); }, 0);
@@ -203,6 +209,7 @@
       if (!cloud()) { fail('El registro de compras funciona con la nube activa.'); return; }
       if (root.navigator.onLine === false) { fail('Sin conexión: registrar una compra necesita internet. No se guardó nada.'); return; }
       var r = readLines(w);
+      if (r.decimals.length) { fail(r.decimals[0]); return; }
       if (r.bad.length) { fail('Revisa la línea ' + r.bad.join(', ') + ': elige un producto y una cantidad mayor que 0; el lote debe tener vencimiento vigente y código único para ese producto.'); return; }
       if (!r.lines.length) { fail(ERR.invalid_lines); return; }
       busy = true; var btn = this; btn.disabled = true; btn.textContent = 'Registrando…';

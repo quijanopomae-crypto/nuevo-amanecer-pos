@@ -9,7 +9,8 @@ guardarMovInv=async function(){
   }
   if(_naInventoryMoveBusy||isModuleLocked('productos')){if(isModuleLocked('productos'))toast('Módulo de productos bloqueado','error');return;}
   if(!_naF10AuthorizePermission('inventoryMoves','Guardar movimiento de inventario'))return;
-  const quantity=_naInt(document.getElementById('mMovCant')?.value),product=productos.find(item=>String(item.id)===String(invMovId));
+  if(!NA_DECIMAL.validate([['mMovCant','Cantidad']]))return;
+  const quantity=_naInt(NA_DECIMAL.value('mMovCant',0)||0),product=productos.find(item=>String(item.id)===String(invMovId));
   if(!product||!_naTracksStock(product)){toast('El producto no controla inventario','error');return;}
   if(quantity<=0){toast('Ingresa una cantidad válida','error');return;}
   if(invMovT==='salida'&&quantity>product.stock){toast(`Stock insuficiente (${product.stock} disponibles)`,'error');return;}

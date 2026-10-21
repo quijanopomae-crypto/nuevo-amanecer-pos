@@ -87,6 +87,8 @@
   function sw(id, on, opts) { return '<label class="na9-sw"><input type="checkbox" data-na9="' + id + '"' + (on ? ' checked' : '') + (opts || '') + '><span></span></label>'; }
   function row(label, sub, ctl, tag) { return '<div class="na9-row' + (/class="na9-sw"/.test(ctl) ? ' na9-row-sw' : '') + '"><div class="na9-t">' + esc(label) + (tag ? ' <em class="na9-tag">' + esc(tag) + '</em>' : '') + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' + ctl + '</div>'; }
   function num(id, val, min, max, step) { return '<input class="na9-num" type="number" data-na9="' + id + '" value="' + esc(val) + '" min="' + min + '" max="' + max + '" step="' + (step || 1) + '">'; }
+  // Montos y enteros de la política de crédito: texto con teclado numérico; se leen con NA_DECIMAL («4,50» = 4.50).
+  function numText(id, val, integer) { return '<input class="na9-num" type="text" inputmode="' + (integer ? 'numeric' : 'decimal') + '" autocomplete="off" spellcheck="false" data-na-decimal' + (integer ? '="int"' : '') + ' data-na9="' + id + '" value="' + esc(val) + '">'; }
   function txt(label, id, val, extra) { return '<label class="na9-f">' + esc(label) + '<input type="text" data-na9="' + id + '" value="' + esc(val) + '"' + (extra || '') + '></label>'; }
   function sel(label, id, val, opts) { return '<label class="na9-f">' + esc(label) + '<select data-na9="' + id + '">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(val) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>'; }
   function note(html, cls) { return '<div class="na9-note ' + (cls || '') + '">' + html + '</div>'; }
@@ -279,12 +281,12 @@
         var p = cp();
         return row('Ventas a crédito con reglas', p.enabled ? 'Activas: se revisa la línea de cada cliente' : 'Desactivadas', sw('credEnabled', !!p.enabled))
           + '<div class="na9-cols2">'
-          + '<label class="na9-f">Línea de crédito inicial (S/)' + num('cred.initialLine', p.initialLine, 0, 100000, 0.5) + '</label>'
-          + '<label class="na9-f">Días para pagar' + num('cred.dueDays', p.dueDays || 30, 1, 365) + '</label>'
-          + '<label class="na9-f">Compras mínimas (S/)' + num('cred.minPurchases', p.minPurchases, 0, 100000, 50) + '</label>'
-          + '<label class="na9-f">Ganancia real mínima (S/)' + num('cred.minProfit', p.minProfit, 0, 100000, 25) + '</label>'
-          + '<label class="na9-f">% cliente puntual' + num('cred.punctualRate', p.punctualRate, 0, 100) + '</label>'
-          + '<label class="na9-f">% cliente impuntual' + num('cred.lateRate', p.lateRate, 0, 100) + '</label>'
+          + '<label class="na9-f">Línea de crédito inicial (S/)' + numText('cred.initialLine', p.initialLine) + '</label>'
+          + '<label class="na9-f">Días para pagar' + numText('cred.dueDays', p.dueDays || 30, true) + '</label>'
+          + '<label class="na9-f">Compras mínimas (S/)' + numText('cred.minPurchases', p.minPurchases) + '</label>'
+          + '<label class="na9-f">Ganancia real mínima (S/)' + numText('cred.minProfit', p.minProfit) + '</label>'
+          + '<label class="na9-f">% cliente puntual' + numText('cred.punctualRate', p.punctualRate, true) + '</label>'
+          + '<label class="na9-f">% cliente impuntual' + numText('cred.lateRate', p.lateRate, true) + '</label>'
           + '</div>' + note('Se aplica en todos los aparatos. «Días para pagar» propone la fecha de vencimiento al vender a crédito.');
       case 'datos':
         var b = biz();
@@ -465,7 +467,7 @@
     if (k === 'zoom') { setZoom(Number(el.value)); var zv = doc.getElementById('na9Zv'); if (zv) { var zz = Number(el.value), nm = 'Personalizado'; ZP.forEach(function (x) { if (x[1] === zz) nm = x[0]; }); zv.textContent = nm + ' (' + zz + '%)'; } try { doc.querySelectorAll('#naCfgV9 .na9-zp').forEach(function (b) { b.classList.toggle('on', Number(b.dataset.z) === Number(el.value)); }); } catch (_) {} autosave(false); return; }
     if (!guard()) return;
     var c = C(), v = el.type === 'checkbox' ? el.checked : el.value, live = e.type === 'input';
-    if (live && (el.type !== 'text' || k === 'freeShortcut')) return; // números, listas y atajo: al confirmar
+    if (live && (el.type !== 'text' || k === 'freeShortcut' || el.hasAttribute('data-na-decimal'))) return; // números, listas y atajo: al confirmar
     if (/^biz\./.test(k)) { var key = k.slice(4), clean = String(v).trim().slice(0, 120); c.business = c.business || {};
       if (key === 'ruc' || key === 'telefono') { var dg = String(v).replace(/\D/g, '').slice(0, key === 'ruc' ? 11 : 15); if (el.value !== dg) el.value = dg; clean = dg; }
       if (key === 'ruc' && clean && clean.length !== 11) { fieldErr(el, live ? '' : 'El RUC tiene 11 dígitos (van ' + clean.length + ').'); return; }
@@ -474,7 +476,8 @@
     if (/^tk\./.test(k)) { var tk = k.slice(3); c.ticket = c.ticket || {}; c.ticket[tk] = v; refreshPreview(); autosave(true); return; }
     if (/^fmt\./.test(k)) { var fk = k.slice(4), fv = fk === 'serie' ? String(v).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) : v; if (fk === 'serie' && el.value !== fv) el.value = fv; setFmt(st.tkType, fk, fv); refreshPreview(); autosave(true); return; }
     if (/^zone\./.test(k)) { try { var s = root._naF11State(); s.settings[k.slice(5)].enabled = !!v; root._naF11PersistState(s); } catch (_) {} refreshPreview(); autosave(true); return; }
-    if (/^cred\./.test(k)) { call('creditPolicySetNumber', k.slice(5), v); autosave(true); return; }
+    if (/^cred\./.test(k)) { var credCheck = root.NA_DECIMAL ? root.NA_DECIMAL.check(v, { integer: el.getAttribute('data-na-decimal') === 'int' }) : { ok: true };
+      if (!credCheck.ok) { fieldErr(el, credCheck.message || 'Escribe un número.'); return; } fieldErr(el, ''); call('creditPolicySetNumber', k.slice(5), v); autosave(true); return; }
     switch (k) {
       case 'expiredLots': var prevExpired = call('_naGetSecurityPath', 'rules.allowExpiredLots') === true; call('_naSetSecurityPath', 'rules.allowExpiredLots', !!v); call('_naSaveSecurity');
         autosave(true, function () { call('_naSetSecurityPath', 'rules.allowExpiredLots', prevExpired); call('_naSaveSecurity'); el.checked = prevExpired; }); return;

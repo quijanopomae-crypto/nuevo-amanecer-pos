@@ -120,10 +120,12 @@
   // Optional initial credit line. Empty = keep the automatic line (no extra command).
   // Returns undefined when invalid (already notified), null when empty, or integer cents.
   function readCreditLine(){
-    var raw=clean(value('cLinea')).replace(',','.');
-    if(!raw)return null;
-    if(!/^\d+(\.\d{1,2})?$/.test(raw)){notify('Línea de crédito inválida. Usa un monto como 150 o 150.50','error');return undefined;}
-    var cents=Math.round(Number(raw)*100);
+    var typed=clean(value('cLinea'));
+    if(!typed)return null;
+    // Mismo parser estricto que el resto de montos escritos a mano («150,50», «1,000.00»).
+    var D=root.NA_DECIMAL,raw=typed.replace(',','.'),cents;
+    if(D){var check=D.check(typed);if(!check.ok){notify('Línea de crédito: '+check.message,'error');return undefined;}cents=D.toCents(check.value);}
+    else{if(!/^\d+(\.\d{1,2})?$/.test(raw)){notify('Línea de crédito inválida. Usa un monto como 150 o 150.50','error');return undefined;}cents=Math.round(Number(raw)*100);}
     if(!Number.isSafeInteger(cents)||cents<0||cents>100000000){notify('La línea de crédito máxima permitida es S/ 1,000,000','error');return undefined;}
     return cents;
   }

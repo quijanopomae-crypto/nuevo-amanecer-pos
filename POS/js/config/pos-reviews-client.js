@@ -102,7 +102,8 @@
     var wrapped = function () {
       var r = roles();
       if (cloud() && r && r.role !== 'owner' && root.navigator.onLine === false) {
-        var v = Number(String(doc.getElementById('cajContado')?.value || '').replace(',', '.')), exp = expectedCents();
+        if (!root.NA_DECIMAL.validate([['cajContado', 'Efectivo contado']])) return false;
+        var v = root.NA_DECIMAL.value('cajContado', 0), exp = expectedCents();
         if (!Number.isFinite(v) || exp === null || Math.round(v * 100) !== exp) {
           toast('Sin conexión: un cierre con diferencia necesita internet para avisar al dueño. No se guardó nada; conéctate e intenta de nuevo.');
           return false;

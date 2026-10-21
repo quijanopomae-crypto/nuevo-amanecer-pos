@@ -66,7 +66,8 @@
       rows.push({lot_code:row.querySelector('.na-lot-code').value,expiry_date:row.querySelector('.na-lot-expiry').value,quantity:Number(row.querySelector('.na-lot-qty').value)});
     });
     if(!rows.length)throw new Error('Agrega al menos un lote');
-    try{return core.validateReceiptEntry(product,rows,Number(String(doc.getElementById('mMovCant').value).replace(',','.')));}
+    var typed=String(doc.getElementById('mMovCant').value);
+    try{return core.validateReceiptEntry(product,rows,root.NA_DECIMAL?root.NA_DECIMAL.parse(typed,{qty:true}):Number(typed.replace(',','.')));}
     catch(e){throw new Error(e.message==='EXPIRED_LOT_RECEIPT'?'No puedes ingresar un lote con vencimiento pasado.':e.message==='DUPLICATE_LOT_CODE'?'El código de lote ya existe para este producto.':e.message);}
   }
   function movementType(type,reset){

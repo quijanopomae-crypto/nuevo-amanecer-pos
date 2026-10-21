@@ -15,6 +15,7 @@ function harness(){
   }
   let scans=0;let expected=100;
   const context=vm.createContext({document:{getElementById:id=>elements.get(id)},cajEstado:{abierta:true,cerrada:false},cajMovs:[],cajTab:'resumen',cajTotales(){scans++;return {ef:expected,ven:expected,egr:0};},fmt:n=>Number(n).toFixed(2),toast(){},isModuleLocked:()=>false,obtenerHoy:()=>'',_naCajaMovsSesion:()=>[],_naSecCashBanner(){},_naSecCashStats(){},_naSecCashActions(){},_naSecCashMovementList(){},updateDashboard(){}});
+  const utils=readFileSync('POS/js/core/utils.js','utf8');vm.runInContext(utils.slice(utils.indexOf('/* NA_DECIMAL')),context); // solo el parser de campos
   vm.runInContext(cacheDeclaration+'\n'+closingSource+'\n'+renderer,context);
   return {context,elements,scans:()=>scans,setExpected:n=>expected=n};
 }

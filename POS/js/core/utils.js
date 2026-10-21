@@ -76,3 +76,218 @@ function _naInicioCashText(state) {
   }
   return ['Abierta', name, time].filter(Boolean).join(' · ');
 }
+
+/* NA_DECIMAL: montos y cantidades ESCRITOS A MANO en formularios.
+   Un <input type="number"> de Chrome descarta la coma: «4,50» llegaba como 450. Esos campos ahora son
+   type="text" con inputmode="decimal" (o "numeric" para enteros) y se leen solo con este parser.
+   Formato del negocio (decidido por el dueño): coma para miles y punto para decimales, «1,000.00».
+   - punto decimal: «450», «4.50», «.5», «1.000» (= 1.00);
+   - coma de miles solo con agrupación válida: primer grupo de 1 a 3 dígitos sin 0 inicial y cada grupo
+     siguiente de EXACTAMENTE 3 dígitos, con «.dd» opcional: «1,000», «4,500», «1,000,000», «1,000.50»;
+   - una sola coma seguida de 1 o 2 dígitos es decimal: «4,50» = 4.50, «1,5» = 1.50, «1,00» = 1.00;
+   - con 0 inicial o sin nada antes de la coma también es decimal: «0,500» = 0.50, «,500» = 0.50, «,50» = 0.50;
+   - montos: como mucho 2 decimales significativos («4.500» vale, «12,3456» o «4.505» se rechazan);
+     las cantidades (data-na-decimal="qty") admiten más decimales con punto;
+   - entero (data-na-decimal="int"): «3», «1,000»; «4,50» o «4.50» se rechazan en vez de truncar;
+   - rechaza «1,2345», «1,0000», «1,23,456», «12,34,56», «1.000,50» (europeo), exponentes («1e2»),
+     signos («+2», «-2»), hexadecimales («0x10»), espacios internos, letras y cualquier otra cosa;
+   - al salir del campo el monto se muestra con miles y 2 decimales («450» → «450.00», «1000» → «1,000.00»)
+     y volver a editar «1,000.00» se lee otra vez como 1000.00.
+   _naNumber NO cambia: sigue leyendo datos guardados e importaciones (por ejemplo «1.5E+3» de Excel).
+   toCents mantiene el redondeo de hoy: Math.round(monto * 100), y exige un entero seguro. */
+(function (root) {
+  'use strict';
+  var PLAIN = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+  var GROUPED = /^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?$/;
+  var COMMA_DECIMAL = /^(?:\d+,\d{1,2}|0?,\d+)$/;
+  var DECIMAL = /^(?:\d+(?:\.\d+)?|\.\d+|[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?|\d+,\d{1,2}|0?,\d+)$/;
+  var INTEGER = /^(?:\d+|[1-9]\d{0,2}(?:,\d{3})+)$/;
+  var EXAMPLE = 'Usa punto para los decimales y, si quieres, coma para los miles (por ejemplo 4.50 o 1,000.00).';
+  var EXAMPLE_INT = 'Escribe un número entero, sin decimales (por ejemplo 3 o 1,000).';
+
+  function text(raw) { return raw == null ? '' : String(raw).trim(); }
+  function isInt(opts) { return !!(opts && opts.integer); }
+  function isQty(opts) { return !!(opts && opts.qty); }
+
+  // Texto normalizado con punto decimal («1000.5») o null si no cumple el formato.
+  function normalize(s, opts) {
+    if (isInt(opts)) return INTEGER.test(s) ? s.replace(/,/g, '') : null;
+    if (PLAIN.test(s)) return s;
+    if (GROUPED.test(s)) return s.replace(/,/g, '');
+    if (COMMA_DECIMAL.test(s)) return s.replace(',', '.');
+    return null;
+  }
+  // Decimales significativos (sin ceros finales): «4.500» → 1, «12.3456» → 4.
+  function decimals(norm) { var d = norm.split('.')[1] || ''; return d.replace(/0+$/, '').length; }
+
+  // Número o NaN. Vacío también es NaN: cada pantalla decide qué hacer con un campo vacío.
+  function parse(raw, opts) {
+    var norm = normalize(text(raw), opts);
+    if (norm == null || (!isInt(opts) && !isQty(opts) && decimals(norm) > 2)) return NaN;
+    var n = Number(norm);
+    return Number.isFinite(n) && (!isInt(opts) || Number.isSafeInteger(n)) ? n : NaN;
+  }
+
+  // Céntimos enteros (Math.round, como hoy) o NaN.
+  function toCents(raw) {
+    var n = typeof raw === 'number' ? raw : parse(raw);
+    if (!Number.isFinite(n)) return NaN;
+    var c = Math.round(n * 100);
+    return Number.isSafeInteger(c) ? c : NaN;
+  }
+
+  function group(intDigits) { return intDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  // Texto para mostrar: monto «1,000.00»; cantidad «1,000.5»; entero «1,000».
+  function format(n, kind) {
+    if (!Number.isFinite(n)) return '';
+    if (kind === 'int') return group(String(Math.round(n)));
+    if (kind === 'qty') { var q = String(n).split('.'); return /e/i.test(q[0]) ? String(n) : group(q[0]) + (q[1] ? '.' + q[1] : ''); }
+    var fixed = (Math.round(n * 100) / 100).toFixed(2).split('.');
+    return group(fixed[0]) + '.' + fixed[1];
+  }
+
+  function reason(s, opts) {
+    var hint = isInt(opts) ? EXAMPLE_INT : EXAMPLE, digits = /^[\d.,]+$/.test(s);
+    if (/[eE]/.test(s) && /\d/.test(s)) return 'no se aceptan exponentes («' + s + '»). ' + hint;
+    if (/^[+-]/.test(s)) return 'no se aceptan signos («' + s + '»). ' + hint;
+    if (isInt(opts) && DECIMAL.test(s)) return '«' + s + '» no es un número entero. ' + hint;
+    var norm = normalize(s, opts);
+    if (norm != null && decimals(norm) > 2) return '«' + s + '» tiene más de 2 decimales. Escribe como mucho 2 (por ejemplo 4.50).';
+    if (/^\d*,\d{4,}$/.test(s)) return '«' + s + '»: después de una sola coma van 1 o 2 decimales (4,50) o exactamente 3 dígitos de miles (1,000).';
+    if (digits && /\.\d*,/.test(s)) return '«' + s + '» usa punto para los miles. Usa coma para los miles y punto para los decimales: 1,000.50.';
+    if (digits && /,/.test(s)) return '«' + s + '» tiene la coma de miles mal ubicada. La coma de miles va cada 3 dígitos (1,000.50); para decimales usa punto (4.50).';
+    if (digits) return '«' + s + '» tiene más de un punto decimal. ' + hint;
+    return '«' + s + '» no es un número válido. ' + hint;
+  }
+
+  // { empty, ok, value, message }. message va en español y sin el nombre del campo.
+  function check(raw, opts) {
+    var s = text(raw);
+    if (!s) return { empty: true, ok: false, value: NaN, message: '' };
+    var n = parse(s, opts);
+    if (Number.isFinite(n)) return { empty: false, ok: true, value: n, message: '' };
+    return { empty: false, ok: false, value: NaN, message: reason(s, opts) };
+  }
+
+  function el(ref) {
+    if (ref && typeof ref === 'object') return ref;
+    try { return root.document.getElementById(String(ref)); } catch (_) { return null; }
+  }
+  function kindOf(node) {
+    try { var k = node && node.getAttribute ? node.getAttribute('data-na-decimal') : null; return k === 'int' || k === 'qty' ? k : 'money'; } catch (_) { return 'money'; }
+  }
+  function optsOf(node, opts) {
+    if (opts) return opts;
+    var k = kindOf(node);
+    return k === 'int' ? { integer: true } : k === 'qty' ? { qty: true } : null;
+  }
+
+  // Valor de un campo: vacío → emptyValue (NaN si no se indica); inválido → NaN.
+  function value(ref, emptyValue, opts) {
+    var node = el(ref), r = check(node ? node.value : '', optsOf(node, opts));
+    if (r.empty) return arguments.length > 1 ? emptyValue : NaN;
+    return r.value;
+  }
+
+  // Mensaje junto al campo (debajo). Solo existe mientras el campo es inválido; sin error no ocupa espacio.
+  function messageHost(node) {
+    var parent = node.parentNode;
+    try {
+      var d = root.getComputedStyle && parent && parent.nodeType === 1 ? root.getComputedStyle(parent).display : '';
+      if (/flex|grid/.test(d) && !/\bfg\b/.test(parent.className || '')) return parent; // p. ej. «S/ [campo]» en una fila
+    } catch (_) {}
+    return node;
+  }
+  function inlineMessage(node, message) {
+    var doc = root.document, id = node.id ? node.id + 'NaDecimalMsg' : '';
+    var host = messageHost(node), next = host && host.nextSibling;
+    var box = next && next.nodeType === 1 && next.getAttribute && next.getAttribute('data-na-decimal-msg') != null ? next : null;
+    if (!message) { if (box && box.parentNode) box.parentNode.removeChild(box); try { node.removeAttribute('aria-describedby'); } catch (_) {} return; }
+    if (!doc || !host || !host.parentNode) return;
+    if (!box) {
+      box = doc.createElement('div');
+      box.setAttribute('data-na-decimal-msg', '');
+      box.setAttribute('role', 'alert');
+      box.className = 'na-decimal-msg';
+      if (id) box.id = id;
+      host.parentNode.insertBefore(box, host.nextSibling);
+    }
+    box.textContent = message;
+    if (box.id) try { node.setAttribute('aria-describedby', box.id); } catch (_) {}
+  }
+
+  // Marca el campo: borde rojo, mensaje nativo y mensaje en línea debajo. No cambia alto ni relleno del campo.
+  function mark(node, opts) {
+    if (!node) return true;
+    var r = check(node.value, optsOf(node, opts)), bad = !r.empty && !r.ok;
+    try { if (bad) node.setAttribute('aria-invalid', 'true'); else node.removeAttribute('aria-invalid'); } catch (_) {}
+    try { node.setCustomValidity(bad ? r.message : ''); } catch (_) {}
+    try { inlineMessage(node, bad ? r.message : ''); } catch (_) {}
+    return !bad;
+  }
+
+  // Al salir del campo: si es válido se muestra con formato («1,000.00»); si no, se deja como está y se marca.
+  function reformat(node) {
+    if (!node) return;
+    var kind = kindOf(node), r = check(node.value, optsOf(node));
+    if (r.ok) { var shown = format(r.value, kind); if (shown && node.value !== shown) node.value = shown; }
+    mark(node);
+  }
+
+  function notify(message) {
+    try { if (typeof root.toast === 'function') root.toast(message, 'error'); } catch (_) {}
+  }
+
+  // Revisa antes de guardar. fields: [[id|elemento, 'Etiqueta', {integer}?], ...]. Si uno es inválido avisa, enfoca y devuelve false.
+  function validate(fields) {
+    for (var i = 0; i < (fields || []).length; i++) {
+      var pair = fields[i], node = el(pair[0]);
+      if (!node) continue;
+      var opts = optsOf(node, pair[2]), r = check(node.value, opts);
+      mark(node, opts);
+      if (r.empty || r.ok) continue;
+      notify((pair[1] ? pair[1] + ': ' : '') + r.message);
+      try { node.focus(); } catch (_) {}
+      return false;
+    }
+    return true;
+  }
+
+  function install() {
+    var doc = root.document;
+    if (!doc || typeof doc.addEventListener !== 'function' || root.__naDecimalInstalled) return;
+    root.__naDecimalInstalled = true;
+    function own(ev) { var t = ev && ev.target; return t && t.hasAttribute && t.hasAttribute('data-na-decimal') ? t : null; }
+    // Mientras se escribe solo se quita el error (escribir «1,» camino a «1,000» no debe saltar en rojo);
+    // el error aparece al salir del campo o al intentar guardar.
+    doc.addEventListener('input', function (ev) {
+      var t = own(ev);
+      if (!t || t.getAttribute('aria-invalid') !== 'true') return;
+      var r = check(t.value, optsOf(t));
+      if (r.ok || r.empty) mark(t);
+    }, true);
+    // El mensaje en línea empuja hacia abajo lo que está debajo. Si se sale del campo pulsando un botón
+    // (por ejemplo Guardar), se espera a que termine ese clic para no mover el botón bajo el dedo.
+    doc.addEventListener('focusout', function (ev) {
+      var t = own(ev);
+      if (!t) return;
+      var next = ev.relatedTarget, typing = next && next.matches && next.matches('input,select,textarea');
+      if (typing) { reformat(t); return; }
+      var done = false;
+      function later() { if (done) return; done = true; if (doc.activeElement !== t) reformat(t); }
+      doc.addEventListener('click', function () { root.setTimeout(later, 0); }, { capture: true, once: true });
+      root.setTimeout(later, 400);
+    }, true);
+    try {
+      var st = doc.createElement('style');
+      st.id = 'naDecimalStyle';
+      st.textContent = 'input[data-na-decimal][aria-invalid="true"]{border-color:#dc2626 !important;outline-color:#dc2626}' +
+        '.na-decimal-msg{color:#b91c1c;font-size:12px;line-height:1.35;margin-top:4px}body.dark .na-decimal-msg{color:#fca5a5}';
+      (doc.head || doc.documentElement).appendChild(st);
+    } catch (_) {}
+  }
+
+  root.NA_DECIMAL = Object.freeze({ PATTERN: DECIMAL, INTEGER: INTEGER, parse: parse, toCents: toCents, check: check, value: value, mark: mark, validate: validate, format: format, reformat: reformat, GROUPED: GROUPED });
+  install();
+})(typeof window !== 'undefined' ? window : globalThis);
