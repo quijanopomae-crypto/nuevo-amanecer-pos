@@ -279,7 +279,9 @@ async function stagedShellEntry(previousCaches, url) {
 // Obligatorios además de index.html: solo cuentan si están en PRECACHE_URLS (así la lista aplica sola al
 // integrar la rama que añade el archivo). cache-identity-guard.js (PR #884, fix-cache-rol) purga la caché
 // canónica restringida al cambiar de identidad: si falta sin red, otro usuario vería datos del anterior.
-const CRITICAL_SHELL_EXTRA = ['./js/sync/cache-identity-guard.js'];
+// pos-permissions.js define qué ve cada rol: si falta sin red, el menú del dueño podría quedar abierto.
+// theme-state.js no es obligatorio (solo apariencia): hacerlo crítico volvería a colgar celulares viejos.
+const CRITICAL_SHELL_EXTRA = ['./js/sync/cache-identity-guard.js', './js/config/pos-permissions.js'];
 const CRITICAL_SHELL = new Set(['./index.html', ...CRITICAL_SHELL_EXTRA.filter((url) => PRECACHE_URLS.includes(url))]
   .map((url) => new URL(url, self.registration.scope).href));
 const PRECACHE_ITEM_TIMEOUT_MS = 20000;

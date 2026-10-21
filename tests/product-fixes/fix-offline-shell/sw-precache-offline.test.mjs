@@ -141,16 +141,17 @@ test('navegar a /app/ (enlace del lanzador) sin red sirve el shell instalado', a
   assert.equal(await w.dispatchFetch('https://pos.example.test/', { mode: 'navigate' }), null, 'el lanzador / sigue fuera del SW');
 });
 
-test('obligatorios: index.html siempre; cache-identity-guard.js solo cuando está en PRECACHE_URLS (PR #884)', async () => {
+test('obligatorios: index.html y pos-permissions.js siempre; cache-identity-guard.js solo cuando está en PRECACHE_URLS (PR #884)', async () => {
   const critical = (src) => {
     const ctx = vm.createContext({ self: { registration: { scope: 'https://pos.example.test/app/' }, location: new URL('https://pos.example.test/app/'), addEventListener: () => {} }, URL, Set, Map, Promise, setTimeout, clearTimeout, Request, Response, Headers, caches: {}, fetch: () => {} });
     vm.runInContext(src + '\n;globalThis.__critical = [...CRITICAL_SHELL];', ctx);
     return Array.from(ctx.__critical, (u) => new URL(u).pathname).sort();
   };
   const hasGuard = list('PRECACHE_URLS').includes('js/sync/cache-identity-guard.js');
-  assert.deepEqual(critical(sw), hasGuard ? ['/app/index.html', '/app/js/sync/cache-identity-guard.js'] : ['/app/index.html']);
+  assert.deepEqual(critical(sw), hasGuard ? ['/app/index.html', '/app/js/config/pos-permissions.js', '/app/js/sync/cache-identity-guard.js'] : ['/app/index.html', '/app/js/config/pos-permissions.js']);
   const integrated = hasGuard ? sw : sw.replace("  './js/sync/canonical-client.js',\n", "  './js/sync/canonical-client.js',\n  './js/sync/cache-identity-guard.js',\n");
   assert.ok(list('PRECACHE_URLS').includes('js/sync/canonical-client.js'), 'ancla para simular la integración con #884');
-  assert.deepEqual(critical(integrated), ['/app/index.html', '/app/js/sync/cache-identity-guard.js']);
+  assert.deepEqual(critical(integrated), ['/app/index.html', '/app/js/config/pos-permissions.js', '/app/js/sync/cache-identity-guard.js']);
+  assert.ok(!critical(integrated).includes('/app/js/config/theme-state.js'), 'theme-state.js no es obligatorio (celulares viejos)');
   assert.match(sw, /if \(CRITICAL_SHELL\.has\(url\)\) throw error;/);
 });
