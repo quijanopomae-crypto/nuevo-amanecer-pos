@@ -13,7 +13,7 @@
   function H() { return root.NA_PRICE_HISTORY; }
   function roles() { return root.NA_ROLES; }
   function ready() { try { var r = roles(); return !!(r && r.confirmed === true && typeof r.api === 'function' && r.deviceId && H()); } catch (_) { return false; } }
-  function isOwner() { try { var r = roles(); return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
+  function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
   function store() { return root.localStorage; }
   function getJSON(key) { try { var v = store().getItem(key); return v ? JSON.parse(v) : null; } catch (_) { return null; } }
   function setJSON(key, value) { try { store().setItem(key, JSON.stringify(value)); return true; } catch (_) { return false; } }

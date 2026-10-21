@@ -24,7 +24,8 @@ const COPIES = [
   // #833: el costo del historial de precios lo ve solo el dueño confirmado (misma regla, otro nombre).
   { file: 'POS/js/products/price-history.js', fn: 'canSeeCost' },
   // #858: el costo de última compra en la ficha y su actualización al comprar, solo dueño confirmado.
-  { file: 'POS/js/products/costo-compra-ficha.js', fn: 'isOwner' }
+  { file: 'POS/js/products/costo-compra-ficha.js', fn: 'isOwner' },
+  { file: 'POS/js/products/price-history-sync.js', fn: 'isOwner' }
 ];
 const OWNER_COPIES = COPIES.filter(c => !c.fn);
 
