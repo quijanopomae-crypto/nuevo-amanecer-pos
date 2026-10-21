@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { activeCanon } from './canon-browser-harness.mjs';
 import { syntheticRows } from './a6-fixture.mjs';
+import { REVISION_COST_SQL } from '../../tools/cloudflare-lab/src/a6-products.js';
 
 const read = n => readFileSync(new URL('../../infra/database/migrations/' + n, import.meta.url), 'utf8');
 const H = token => ({ authorization: 'Bearer ' + token, 'content-type': 'application/json' });
@@ -46,6 +47,10 @@ async function empUpdate(f, body) {
   assert.equal(ap.status, 201, ap.text);
   return call(f, '/commands/product.update', 'emp-token', body, { 'x-owner-approval': ap.body.approval_id });
 }
+// Costo vigente tal como lo resuelve product.update (productState): última revisión vía REVISION_COST_SQL, si no la base.
+const currentCost = (f, id) => f.sql(`SELECT COALESCE((SELECT ${REVISION_COST_SQL('r')} FROM canonical_product_revisions r WHERE r.product_id=?1 ORDER BY r.revision DESC LIMIT 1),
+  (SELECT cost_cents FROM products WHERE product_id=?1)) AS c`, id).c;
+const snapCost = async (f, id) => (await call(f, '/read/canonical/snapshot', 'owner-token')).body.products.find(p => p.product_id === id).cost_cents;
 const revisionCosts = (f, id) => f.all('SELECT revision,cost_cents,result_json FROM canonical_product_revisions WHERE product_id=? ORDER BY revision', id);
 
 test('sin cost_cents + costo existente: dueño y empleado conservan el costo; no se escribe otro valor de costo', async t => {
@@ -137,4 +142,53 @@ test('/auth/me anuncia capabilities.product_update_absent_cost (aditivo; dueño 
     assert.deepEqual(me.body.capabilities, { product_update_absent_cost: true });
     assert.ok('pos_role' in me.body && 'owner_pin_set' in me.body && 'roles_ready' in me.body && 'device_id' in me.body, 'campos previos intactos');
   }
+});
+
+test('cost_kept_null y luego el dueño fija un costo real: las lecturas muestran ese costo (ni NULL ni 0); sin costo después, se conserva', async t => {
+  const f = await setup(t);
+  const p0 = await ownerView(f, NULL_ID);
+  const k = await call(f, '/commands/product.update', 'owner-token', editOf(f, p0, 'kn-1', { price_cents: p0.price_cents + 1 }));
+  assert.deepEqual([k.status, k.body.cost_kept_null], [201, true], k.text);
+  const p1 = await ownerView(f, NULL_ID);
+  assert.equal(p1.cost_cents, null);
+  const set = await call(f, '/commands/product.update', 'owner-token', editOf(f, { ...p1, cost_cents: 777 }, 'kn-2', {}, { withCost: true }));
+  assert.equal(set.status, 201, set.text);
+  assert.ok(!('cost_kept_null' in set.body));
+  const p2 = await ownerView(f, NULL_ID);
+  assert.equal(p2.cost_cents, 777);
+  assert.equal(await snapCost(f, NULL_ID), 777);
+  assert.equal(currentCost(f, NULL_ID), 777);
+  // Edición sin costo del dueño y del empleado: se conserva 777; el empleado tampoco puede cambiarlo enviándolo.
+  const o = await call(f, '/commands/product.update', 'owner-token', editOf(f, p2, 'kn-3', { name: p2.name + ' (ed)' }));
+  assert.deepEqual([o.status, 'cost_kept_null' in o.body], [201, false], o.text);
+  const p3 = await ownerView(f, NULL_ID);
+  assert.equal((await empUpdate(f, editOf(f, p3, 'kn-4'))).status, 201);
+  const p4 = await ownerView(f, NULL_ID);
+  assert.equal((await empUpdate(f, editOf(f, { ...p4, cost_cents: 5 }, 'kn-5', {}, { withCost: true }))).status, 201);
+  const p5 = await ownerView(f, NULL_ID);
+  assert.deepEqual([p5.cost_cents, p5.metadata_revision, await snapCost(f, NULL_ID), currentCost(f, NULL_ID)], [777, 5, 777, 777]);
+  // Solo la primera revisión lleva el marcador; las posteriores copian el costo real.
+  assert.deepEqual(revisionCosts(f, NULL_ID).map(r => [r.revision, r.cost_cents, JSON.parse(r.result_json).cost_kept_null ?? null]),
+    [[1, 0, true], [2, 777, null], [3, 777, null], [4, 777, null], [5, 777, null]]);
+});
+
+test('ediciones sin costo encadenadas sobre costo NULL: sigue NULL en /read, /snapshot y costo vigente, nunca 0', async t => {
+  const f = await setup(t);
+  for (let i = 1; i <= 4; i++) {
+    const p = await ownerView(f, NULL_ID);
+    const r = i % 2 ? await empUpdate(f, editOf(f, p, `chain-${i}`, { price_cents: p.price_cents + 1 }))
+      : await call(f, '/commands/product.update', 'owner-token', editOf(f, p, `chain-${i}`, { name: `Encadenado ${i}` }));
+    assert.deepEqual([r.status, r.body.cost_kept_null], [201, true], `edición ${i}: ${r.text}`);
+    const after = await ownerView(f, NULL_ID);
+    assert.equal(after.metadata_revision, i);
+    assert.strictEqual(after.cost_cents, null, `/read tras ${i}`);
+    assert.strictEqual(await snapCost(f, NULL_ID), null, `/snapshot tras ${i}`);
+    assert.strictEqual(currentCost(f, NULL_ID), null, `costo vigente tras ${i}`);
+  }
+  // En la tabla, solo 0 de relleno, todos marcados.
+  assert.deepEqual(revisionCosts(f, NULL_ID).map(r => [r.cost_cents, JSON.parse(r.result_json).cost_kept_null]), [[0, true], [0, true], [0, true], [0, true]]);
+  // El empleado tampoco ve 0: su lectura omite cost_cents.
+  const emp = (await call(f, '/read/canonical/products?limit=250', 'emp-token')).body.items.find(p => p.product_id === NULL_ID);
+  assert.ok(!('cost_cents' in emp));
+  assert.equal(emp.name, 'Encadenado 4');
 });

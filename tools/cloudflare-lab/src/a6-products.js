@@ -312,6 +312,11 @@ const CODE_OWNER_SQL=`WITH incoming(code) AS (
 // B2: a revision written without cost over a product whose cost is NULL marks result_json with
 // cost_kept_null. Its cost_cents column (NOT NULL in 0022) holds a placeholder 0 that is never a cost:
 // readers resolve such a revision's cost to NULL (the base cost stays the effective one).
+// REGLA para lectores nuevos: todo código que lea el costo de canonical_product_revisions debe usar
+// REVISION_COST_SQL(alias), nunca la columna cruda cost_cents (r.cost_cents, SELECT cost_cents, r.*), o
+// leería el 0 de relleno como costo real. Única excepción: la lectura de productos en a6-canonical.js
+// (loadCollectionRows), que aplica el mismo marcador en línea. La guarda
+// tests/cloud-sync/product-revision-cost-readers.test.mjs falla si aparece otro lector crudo.
 export const COST_KEPT_NULL='cost_kept_null';
 export const REVISION_COST_SQL=(alias)=>`CASE WHEN json_extract(${alias}.result_json,'$.${COST_KEPT_NULL}')=1 THEN NULL ELSE ${alias}.cost_cents END`;
 
