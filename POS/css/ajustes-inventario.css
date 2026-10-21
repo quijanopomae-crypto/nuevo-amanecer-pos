@@ -17,6 +17,7 @@ body.dark #pageAjustesInventario { --aj-bg: #0f172a; --aj-surface: #1e293b; --aj
 #pageAjustesInventario .aj-submit { background: #0f766e; border-color: #0f766e; color: #fff; }
 #pageAjustesInventario :is(input, select, textarea, button):focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
 #pageAjustesInventario .aj-message { font-weight: 700; overflow-wrap: anywhere; }
+#pageAjustesInventario .aj-lot-note { margin: 0; padding: 8px 12px; border: 1px solid var(--aj-border); border-left: 4px solid #b45309; border-radius: 10px; background: var(--aj-surface); color: var(--aj-text); font-weight: 600; overflow-wrap: anywhere; }
 #pageAjustesInventario .aj-message[data-aj-ok="true"] { color: var(--aj-ok); }
 #pageAjustesInventario .aj-message[data-aj-ok="false"] { color: var(--aj-err); }
 #pageAjustesInventario .aj-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }

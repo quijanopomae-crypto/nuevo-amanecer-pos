@@ -31,6 +31,23 @@
     } catch (_) { return null; }
   }
   function isAdjustment(move) { return !!(move && parseReason(move.reason)); }
+  // Bloqueo provisional: el Worker no permite elegir el lote en una SALIDA (reparte FEFO: primero lotes
+  // vigentes; los vencidos solo con aprobación). Por eso «Rotura» y «Vencido» quedan desactivados en
+  // productos con lotes hasta que el servidor permita elegir el lote. Merma y Corrección siguen igual.
+  var LOT_BLOCKED = { rotura: true, vencido: true };
+  var LOT_BLOCK_MESSAGE = 'Este producto tiene lotes: «Rotura» y «Vencido» están desactivados porque el servidor todavía no permite elegir de qué lote se descuenta (descontaría primero de un lote vigente). Se habilitarán cuando el servidor permita elegir el lote.';
+  // Con lotes = al menos un lote con cantidad > 0 (o datos de lotes ilegibles, por precaución).
+  function hasLots(product) {
+    if (!product) return false;
+    var rows = product.lots;
+    if (!Array.isArray(rows)) {
+      if (product.lots_json === undefined || product.lots_json === null || product.lots_json === '') return false;
+      try { rows = JSON.parse(product.lots_json); } catch (_) { return true; }
+      if (!Array.isArray(rows)) return true;
+    }
+    return rows.some(function (r) { return !!r && !(Number(r.quantity) <= 0); });
+  }
+  function lotBlocked(type, product) { return !!LOT_BLOCKED[type] && hasLots(product); }
   // Merma, rotura y vencido restan; la corrección puede sumar o restar.
   function plan(type, quantity, direction) {
     var q = Number(quantity);
@@ -113,6 +130,8 @@
     if (!step) return { ok: false, message: 'Revisa el tipo y la cantidad.' };
     var product = products().find(function (p) { return p && productId(p) === String(input.productId); });
     if (!product) return { ok: false, message: 'Producto no encontrado.' };
+    // Guardia antes de enviar (CANON o local): nunca se manda un ajuste Rotura/Vencido sin poder elegir lote.
+    if (lotBlocked(input.type, product)) return { ok: false, blocked: 'LOTS_REQUIRE_LOT_SELECTION', message: LOT_BLOCK_MESSAGE };
     var reason = encodeReason(input.type, currentUser(), input.note);
     var c = canon();
     if (c) {
@@ -153,6 +172,7 @@
     products().filter(function (x) { return x && x.activo !== false && x.controlInventario !== false && (!term || (productName(x) + ' ' + (x.sku || '') + ' ' + (x.barcode || '')).toLowerCase().indexOf(term) >= 0); })
       .slice(0, 200).forEach(function (x) { var o = element('option', '', productName(x) + ' · stock ' + (x.stock != null ? x.stock : '—')); o.value = productId(x); sel.appendChild(o); });
     sel.value = current;
+    syncLots(p);
   }
   function renderReport(p) {
     var box = p.querySelector('[data-aj-report]'); if (!box) return;
@@ -190,7 +210,22 @@
     renderProducts(p); renderReport(p); syncDirection(p);
     return true;
   }
-  function syncDirection(p) { var t = p.querySelector('[data-aj-type]'), d = p.querySelector('[data-aj-direction-wrap]'); if (t && d) d.hidden = t.value !== 'correccion'; }
+  function syncDirection(p) { syncLots(p); var t = p.querySelector('[data-aj-type]'), d = p.querySelector('[data-aj-direction-wrap]'); if (t && d) d.hidden = t.value !== 'correccion'; }
+  // Desactiva «Rotura» y «Vencido» si el producto elegido tiene lotes, con la explicación visible.
+  function syncLots(p) {
+    var t = p.querySelector('[data-aj-type]'), sel = p.querySelector('[data-aj-product]'), note = p.querySelector('[data-aj-lot-note]');
+    if (!t) return;
+    var id = sel ? sel.value : '';
+    var product = id ? products().find(function (x) { return x && productId(x) === String(id); }) : null;
+    var locked = hasLots(product);
+    Array.prototype.forEach.call(t.options, function (o) {
+      if (!LOT_BLOCKED[o.value]) return;
+      o.disabled = locked;
+      o.textContent = TYPES[o.value] + (locked ? ' (no disponible con lotes)' : '');
+    });
+    if (locked && LOT_BLOCKED[t.value]) t.value = 'merma';
+    if (note) { note.hidden = !locked; note.textContent = locked ? LOT_BLOCK_MESSAGE : ''; }
+  }
   function exportCsv() {
     if (!available()) return false;
     var p = page(), url = root.URL.createObjectURL(new root.Blob([toCsv(collect(localMoves(), canonicalMoves(), products()))], { type: 'text/csv;charset=utf-8' }));
@@ -215,7 +250,7 @@
     var p = page(); if (!p || p.__naAjBound) return; p.__naAjBound = true;
     function update() { if (p.classList.contains('active')) render(); }
     p.addEventListener('input', function (e) { if (e.target.matches && e.target.matches('[data-aj-search]')) renderProducts(p); });
-    p.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('[data-aj-type]')) syncDirection(p); });
+    p.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('[data-aj-type], [data-aj-product]')) syncDirection(p); });
     p.addEventListener('submit', function (e) { e.preventDefault(); submit(p); });
     p.addEventListener('click', function (e) { if (e.target.closest('[data-aj-export]')) exportCsv(); });
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(p, { attributes: true, attributeFilter: ['class'] });
@@ -223,7 +258,7 @@
     root.addEventListener('na:canonical-updated', update);
     update();
   }
-  root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
+  root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, hasLots: hasLots, lotBlocked: lotBlocked, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();

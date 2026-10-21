@@ -121,3 +121,55 @@ test('fallo al guardar: quita solo nuestro movimiento (identidad o id) y conserv
     assert.equal(products[0].stock, 10);
   }
 });
+
+// Bloqueo provisional: «Rotura» y «Vencido» en productos con lotes (el Worker no permite elegir el lote).
+test('hasLots: solo lotes con cantidad > 0; datos de lotes ilegibles cuentan como lotes', () => {
+  assert.equal(api.hasLots(null), false);
+  assert.equal(api.hasLots({ id: 1 }), false);
+  assert.equal(api.hasLots({ id: 1, lots: [] }), false);
+  assert.equal(api.hasLots({ id: 1, lots: [{ lot_id: 'a', quantity: 0 }] }), false);
+  assert.equal(api.hasLots({ id: 1, lots: [{ lot_id: 'a', quantity: 0 }, { lot_id: 'b', quantity: 2 }] }), true);
+  assert.equal(api.hasLots({ id: 1, lots_json: '[{"lot_id":"a","quantity":3}]' }), true);
+  assert.equal(api.hasLots({ id: 1, lots_json: '[]' }), false);
+  assert.equal(api.hasLots({ id: 1, lots_json: 'no-json' }), true);
+  for (const t of ['rotura', 'vencido']) assert.equal(api.lotBlocked(t, { lots: [{ quantity: 1 }] }), true, t);
+  for (const t of ['merma', 'correccion']) assert.equal(api.lotBlocked(t, { lots: [{ quantity: 1 }] }), false, t);
+  assert.equal(api.lotBlocked('vencido', { lots: [] }), false);
+});
+
+test('CANON: Rotura/Vencido con lotes no se envían; Merma/Corrección y productos sin lotes sí', async () => {
+  const sent = [];
+  const today = '2026-10-21';
+  const snapshotProducts = [
+    { product_id: 'p-lot', name: 'Leche', stock: 8, lots: [{ lot_id: 'L-VENC', lot_code: 'L-VENC', expiry_date: '2026-10-01', received_at: '2026-09-01T00:00:00Z', quantity: 3 }, { lot_id: 'L-OK', lot_code: 'L-OK', expiry_date: '2026-12-01', received_at: '2026-10-01T00:00:00Z', quantity: 5 }] },
+    { product_id: 'p-only-expired', name: 'Yogur', stock: 2, lots: [{ lot_id: 'L-V2', lot_code: 'L-V2', expiry_date: '2026-10-02', received_at: '2026-09-01T00:00:00Z', quantity: 2 }] },
+    { product_id: 'p-plain', name: 'Pan', stock: 4 }
+  ];
+  const ctx = ownerCtx({ NuevoAmanecerCanonical: { enabled: () => true, snapshot: () => ({ products: snapshotProducts, inventoryMovements: [] }),
+    adjustInventory: async b => { sent.push(b); return { ok: true }; }, refresh: async () => {} },
+    applyInventoryMovement() { throw new Error('no debe usarse en CANON'); } });
+  for (const productId of ['p-lot', 'p-only-expired']) for (const type of ['vencido', 'rotura']) {
+    const res = await ctx.NA_AJUSTES_INVENTARIO.register({ productId, type, quantity: 1, note: today });
+    assert.equal(res.ok, false, productId + ' ' + type);
+    assert.equal(res.blocked, 'LOTS_REQUIRE_LOT_SELECTION');
+    assert.match(res.message, /lotes.*Rotura.*Vencido.*desactivados.*Se habilitarán cuando el servidor permita elegir el lote/);
+  }
+  assert.equal(sent.length, 0, 'ningún Rotura/Vencido con lotes llega a adjustInventory');
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p-lot', type: 'merma', quantity: 1 })).ok, true);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p-lot', type: 'correccion', direction: 'restar', quantity: 1 })).ok, true);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p-plain', type: 'vencido', quantity: 1 })).ok, true);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 'p-plain', type: 'rotura', quantity: 1 })).ok, true);
+  assert.deepEqual(sent.map(b => [b.product_id, api.parseReason(b.reason).type]), [['p-lot', 'merma'], ['p-lot', 'correccion'], ['p-plain', 'vencido'], ['p-plain', 'rotura']]);
+});
+
+test('modo local: Rotura/Vencido con lotes tampoco llaman a applyInventoryMovement ni cambian stock', async () => {
+  const calls = [];
+  const products = [{ id: 9, name: 'Queso', stock: 6, lots_json: JSON.stringify([{ lot_id: 'a', lot_code: 'a', expiry_date: '2026-10-01', received_at: '2026-09-01T00:00:00Z', quantity: 6 }]) }];
+  const ctx = ownerCtx({ productos: products, inventoryMovements: [],
+    applyInventoryMovement(o) { calls.push(o); products[0].stock += o.delta; return { ok: true, movement: { id: 'IM-1', ...o } }; },
+    saveAllData: async () => ({ persisted: true }), _naWasPersisted: r => !!r?.persisted });
+  for (const type of ['vencido', 'rotura']) assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 9, type, quantity: 1 })).ok, false);
+  assert.equal(calls.length, 0); assert.equal(products[0].stock, 6);
+  assert.equal((await ctx.NA_AJUSTES_INVENTARIO.register({ productId: 9, type: 'merma', quantity: 1 })).ok, true);
+  assert.equal(calls.length, 1);
+});

@@ -90,3 +90,87 @@ test('empleado no ve ni registra ajustes', async ({ page }) => {
   await expect(page.locator('#pageAjustesInventario [data-aj-main]')).toBeHidden();
   await expect(page.locator('#pageAjustesInventario [data-aj-report] tr')).toHaveCount(0);
 });
+
+// Bloqueo provisional: en CANON el Worker no deja elegir el lote de una SALIDA (descuenta primero lotes
+// vigentes), así que «Rotura» y «Vencido» se desactivan en productos con lotes.
+async function canonWithLots(page: Page) {
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__ajSent = [];
+    const lot = (id: string, expiry: string, quantity: number) => ({ lot_id: id, lot_code: id, expiry_date: expiry, received_at: '2026-09-01T00:00:00Z', quantity });
+    const products = [
+      { product_id: 'c-lot', name: 'Leche con lotes', stock: 8, lots: [lot('L-VENC', '2026-10-01', 3), lot('L-OK', '2099-12-01', 5)] },
+      { product_id: 'c-plain', name: 'Pan sin lotes', stock: 4 }
+    ];
+    w.NuevoAmanecerCanonical = { ...(w.NuevoAmanecerCanonical || {}), enabled: () => true, snapshot: () => ({ products, inventoryMovements: [] }),
+      adjustInventory: async (b: any) => { w.__ajSent.push(b); return { ok: true }; }, refresh: async () => {} };
+    w.NA_AJUSTES_INVENTARIO.render();
+  });
+}
+for (const width of [390, 768, 1280]) {
+  test(`CANON a ${width}px: «Rotura» y «Vencido» desactivados en productos con lotes, con explicación; Merma y Corrección siguen`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await rolePage(page, 'owner');
+    await openCard(page);
+    await canonWithLots(page);
+    const screen = page.locator('#pageAjustesInventario');
+    const type = screen.locator('[data-aj-type]'), note = screen.locator('[data-aj-lot-note]');
+    const disabled = () => type.evaluate((s: HTMLSelectElement) => [...s.options].filter(o => o.disabled).map(o => o.value));
+    await expect(screen.locator('[data-aj-status]')).toContainText('CANON');
+    // Sin lotes: todo habilitado y sin aviso.
+    await screen.locator('[data-aj-product]').selectOption('c-plain');
+    await type.selectOption('vencido');
+    expect(await disabled()).toEqual([]);
+    await expect(note).toBeHidden();
+    // Con lotes: Rotura y Vencido desactivados; la selección pasa a Merma y se explica en español.
+    await screen.locator('[data-aj-product]').selectOption('c-lot');
+    expect(await disabled()).toEqual(['rotura', 'vencido']);
+    await expect(type).toHaveValue('merma');
+    await expect(type.locator('option[value="vencido"]')).toHaveText('Vencido (no disponible con lotes)');
+    await expect(note).toBeVisible();
+    await expect(note).toContainText('Este producto tiene lotes');
+    await expect(note).toContainText('Se habilitarán cuando el servidor permita elegir el lote');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    // Forzar «Vencido» saltándose la interfaz: la guardia de register no envía nada a CANON.
+    await type.evaluate((s: HTMLSelectElement) => { s.value = 'vencido'; });
+    await screen.locator('[data-aj-qty]').fill('1');
+    await screen.locator('[data-aj-submit]').click();
+    await expect(screen.locator('[data-aj-message]')).toContainText('Se habilitarán cuando el servidor permita elegir el lote');
+    await expect(screen.locator('[data-aj-message]')).toHaveAttribute('data-aj-ok', 'false');
+    for (const t of ['rotura', 'vencido']) {
+      const res = await page.evaluate(t => (window as any).NA_AJUSTES_INVENTARIO.register({ productId: 'c-lot', type: t, quantity: 1 }), t);
+      expect(res).toMatchObject({ ok: false, blocked: 'LOTS_REQUIRE_LOT_SELECTION' });
+    }
+    expect(await page.evaluate(() => (window as any).__ajSent.length)).toBe(0);
+    // Merma sí se registra en el producto con lotes.
+    await type.selectOption('merma');
+    await screen.locator('[data-aj-qty]').fill('1');
+    await screen.locator('[data-aj-submit]').click();
+    await expect(screen.locator('[data-aj-message]')).toHaveText('Ajuste registrado.');
+    const sent = await page.evaluate(() => (window as any).__ajSent.map((b: any) => [b.product_id, b.movement_type, b.reason.slice(0, 10)]));
+    expect(sent).toEqual([['c-lot', 'SALIDA', 'ajuste:v1:']]);
+    // Corrección también.
+    await type.selectOption('correccion');
+    await screen.locator('[data-aj-direction]').selectOption('sumar');
+    await screen.locator('[data-aj-qty]').fill('2');
+    await screen.locator('[data-aj-submit]').click();
+    await expect(screen.locator('[data-aj-message]')).toHaveText('Ajuste registrado.');
+    expect(await page.evaluate(() => (window as any).__ajSent.map((b: any) => b.movement_type))).toEqual(['SALIDA', 'ENTRADA']);
+    // Contraste del aviso en claro y oscuro.
+    for (const dark of [false, true]) {
+      await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
+      const ratio = await note.evaluate(el => {
+        const lum = (c: string) => { const v = (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number).map(x => { x /= 255; return x <= .03928 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4; }); return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+        let n: Element | null = el, bg = 'rgb(255,255,255)';
+        while (n) { const b = getComputedStyle(n).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(b)) { bg = b; break; } n = n.parentElement; }
+        const a = lum(getComputedStyle(el).color), b = lum(bg); return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+      });
+      expect(ratio, dark ? 'oscuro' : 'claro').toBeGreaterThanOrEqual(4.5);
+    }
+    // Volver a un producto sin lotes reactiva las opciones.
+    await screen.locator('[data-aj-product]').selectOption('c-plain');
+    expect(await disabled()).toEqual([]);
+    await expect(type.locator('option[value="vencido"]')).toHaveText('Vencido');
+    await expect(note).toBeHidden();
+  });
+}
