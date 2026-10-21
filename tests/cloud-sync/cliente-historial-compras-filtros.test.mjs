@@ -368,3 +368,22 @@ test('Vendedor: si dos opciones distintas quedarían iguales al acortar, se mues
   assert.equal(texts['id:v8'], 'Rosario E… · v8');
   assert.equal(new Set(Object.values(texts)).size, Object.keys(texts).length);
 });
+
+test('Vendedor: con medidor, quita grafemas hasta que entra; sufijo entero y mínimo 1 grafema; sin choque', () => {
+  const ctx = vm.createContext({ ventas: [sale({ id: 's1', cajeroId: ID_C, cajeroNombre: 'María Fernanda Quispe' }), sale({ id: 's2', cajeroId: ID_D, cajeroNombre: 'María Fernanda Quispe' })] });
+  vm.runInContext(labelsSource, ctx); vm.runInContext(source, ctx);
+  const opts = ctx.NA_CLIENTE_HISTORIAL.sellerOptions(ctx.ventas, 'c1'), width = value => Array.from(value).length * 7;
+  for (const room of [500, 140, 100, 20]) {
+    const texts = plain(ctx.NA_CLIENTE_HISTORIAL.sellerOptionTexts(opts, { room, width }));
+    texts.forEach((text, i) => {
+      const suffix = opts[i].label.slice(opts[i].label.lastIndexOf(' · '));
+      if (room === 500) { assert.equal(text, opts[i].label); return; }
+      assert.ok(text.endsWith('…' + suffix), text);
+      const prefix = text.slice(0, -suffix.length - 1);
+      assert.ok(prefix.length >= 1 && 'María Fernanda Quispe'.startsWith(prefix), text);
+      if (room >= 100) assert.ok(width(text) <= room, text + ' cabe en ' + room);
+      else assert.equal(prefix, 'M', 'mínimo 1 grafema');
+    });
+    assert.equal(new Set(texts).size, texts.length);
+  }
+});

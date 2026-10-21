@@ -106,8 +106,8 @@
   }
   // Select cerrado angosto (768/900 px): con sufijo (« · a1b2c» o « (sin id)») de un nombre repetido y largo, se acorta
   // el NOMBRE, nunca el sufijo, para que se vea. La etiqueta completa queda en el title; el valor y el filtro no cambian.
-  // 10 caracteres: «María Fer… · a1b2c» (~122 px) entra en el texto visible del select a 768 px (~125 px sin la flecha).
-  var SELLER_NAME_MAX = 10;
+  // Con el select visible se mide con su fuente real (canvas); si no se puede medir (oculto, sin canvas), 10 grafemas.
+  var SELLER_NAME_MAX = 10, SELLER_ARROW_PX = 20;
   // Corta por grafema (letra + tilde combinada = un carácter) sobre el nombre en NFC; sin Intl.Segmenter, Array.from.
   function graphemes(value) {
     var nfc = String(value).normalize('NFC');
@@ -118,16 +118,35 @@
     } catch (_) {}
     return Array.from(nfc);
   }
-  function sellerOptionText(label) {
+  // Medidor del texto visible del select: ancho interno menos relleno y flecha nativa. null si no se puede medir.
+  function sellerFit(select) {
+    try {
+      var width = select && select.clientWidth, doc = root.document;
+      if (!(width > 0) || !doc || typeof doc.createElement !== 'function' || typeof root.getComputedStyle !== 'function') return null;
+      var cs = root.getComputedStyle(select), ctx = doc.createElement('canvas').getContext('2d');
+      if (!ctx || typeof ctx.measureText !== 'function') return null;
+      ctx.font = cs.font || [cs.fontStyle, cs.fontVariant, cs.fontWeight, cs.fontSize, cs.fontFamily].join(' ');
+      var room = width - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - SELLER_ARROW_PX;
+      var probe = ctx.measureText('María').width;
+      if (!(room > 0) || !(probe > 0) || !isFinite(probe)) return null;
+      return { room: room, width: function (value) { return ctx.measureText(value).width; } };
+    } catch (_) { return null; }
+  }
+  function sellerOptionText(label, fit) {
     var noId = / \(sin id\)$/.test(label), at = noId ? label.length - ' (sin id)'.length : label.lastIndexOf(' · ');
-    var name = at > 0 ? label.slice(0, at) : '', chars = graphemes(name);
+    var name = at > 0 ? label.slice(0, at) : '', chars = graphemes(name), suffix = label.slice(at);
     var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.cashiers === 'function' ? root.NA_SELLER_LABELS.cashiers() : null;
-    if (!labels || chars.length <= SELLER_NAME_MAX || !labels.collides(name)) return label;
-    return chars.slice(0, SELLER_NAME_MAX - 1).join('').replace(/\s+$/, '') + '…' + label.slice(at);
+    if (!labels || !name || !labels.collides(name)) return label;
+    var cut = function (n) { return chars.slice(0, n).join('').replace(/\s+$/, '') + '…' + suffix; };
+    if (!fit) return chars.length <= SELLER_NAME_MAX ? label : cut(SELLER_NAME_MAX - 1);
+    if (fit.width(label) <= fit.room) return label;
+    // Quita grafemas del nombre hasta que «nombre… + sufijo» entre; mínimo 1 grafema.
+    for (var n = chars.length - 1; n > 1; n--) { if (fit.width(cut(n)) <= fit.room) return cut(n); }
+    return cut(1);
   }
   // Texto visible de cada opción. Si dos opciones distintas quedarían iguales al acortar, esas se muestran completas.
-  function sellerOptionTexts(items) {
-    var shown = (Array.isArray(items) ? items : []).map(function (item) { return sellerOptionText(item.label); });
+  function sellerOptionTexts(items, fit) {
+    var shown = (Array.isArray(items) ? items : []).map(function (item) { return sellerOptionText(item.label, fit); });
     for (var pass = 0; pass < 3; pass++) {
       var count = {}, changed = false;
       shown.forEach(function (value) { count[value] = (count[value] || 0) + 1; });
@@ -143,6 +162,18 @@
   function syncSellerTitle(seller) {
     var option = seller && seller.selectedOptions ? seller.selectedOptions[0] : null;
     if (option && option.title) seller.title = option.title; else if (seller && typeof seller.removeAttribute === 'function') seller.removeAttribute('title');
+  }
+  // Recalcula el texto visible de las opciones ya pintadas (cambio de ancho o fuente cargada). Etiqueta = title o texto.
+  function refitSellerOptions(seller) {
+    if (!seller || !seller.options) return;
+    var options = Array.from(seller.options).filter(function (option) { return option.value !== ''; });
+    var items = options.map(function (option) { return { label: option.title || option.textContent }; });
+    var texts = sellerOptionTexts(items, sellerFit(seller));
+    options.forEach(function (option, i) {
+      if (option.textContent !== texts[i]) option.textContent = texts[i];
+      if (texts[i] !== items[i].label) option.title = items[i].label; else option.removeAttribute('title');
+    });
+    syncSellerTitle(seller);
   }
   function sellerOptions(sales, selectedId) {
     var sellers = new Map(), list = customerSales(sales, selectedId), ids = sellerIds(list);
@@ -305,7 +336,7 @@
     status.textContent = (dates.from || dates.to ? 'Desde ' + (dates.from ? dateLabel(dates.from) : 'sin límite') + ' · Hasta ' + (dates.to ? dateLabel(dates.to) : 'sin límite') : 'Todo el historial') + ' · hora de Lima · ventas cargadas en este dispositivo';
     var sales = typeof ventas !== 'undefined' ? ventas : root.ventas;
     if (seller) {
-      var selectedSeller = seller.value, sellers = sellerOptions(sales, selected), texts = sellerOptionTexts(sellers);
+      var selectedSeller = seller.value, sellers = sellerOptions(sales, selected), texts = sellerOptionTexts(sellers, sellerFit(seller));
       seller.innerHTML = '<option value="">Todos</option>' + sellers.map(function (item, i) {
         var shown = texts[i], title = shown !== item.label ? ' title="' + escapeHtml(item.label) + '"' : '';
         return '<option value="' + escapeHtml(item.value) + '"' + title + '>' + escapeHtml(shown) + '</option>';
@@ -344,6 +375,14 @@
       update();
     });
     page.addEventListener('input', function (event) { if (event.target.matches('[data-ch-search]')) update(); });
+    // Ancho del select o fuente web cambian: se vuelve a medir el texto visible del filtro «Vendedor» (sin repintar).
+    var refitTimer = null;
+    function refit() {
+      if (refitTimer) root.clearTimeout(refitTimer);
+      refitTimer = root.setTimeout(function () { refitTimer = null; refitSellerOptions(page.querySelector('[data-ch-seller]')); }, 150);
+    }
+    if (typeof root.addEventListener === 'function') root.addEventListener('resize', refit);
+    try { if (root.document.fonts && typeof root.document.fonts.addEventListener === 'function') root.document.fonts.addEventListener('loadingdone', refit); } catch (_) {}
     var refresh = page.querySelector('[data-ch-refresh]');
     if (refresh) refresh.addEventListener('click', update);
     var exportButton = page.querySelector('[data-ch-export]');

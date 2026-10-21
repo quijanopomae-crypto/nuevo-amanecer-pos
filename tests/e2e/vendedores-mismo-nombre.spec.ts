@@ -176,11 +176,14 @@ test('Historial del cliente: el filtro Vendedor muestra dos «Ana» distintas y 
 // Select «Vendedor» angosto (768/900 px): con dos «María Fernanda Quispe» de ids largos, el texto visible acorta el
 // NOMBRE (nunca el id) para que el sufijo se vea dentro del select cerrado; la etiqueta completa queda en el title.
 // Sin Intl.Segmenter (navegadores viejos): el corte cae a Array.from y el filtro funciona igual.
-for (const [width, noSegmenter] of [[768, false], [900, false], [768, true]] as const) test(`${width}px${noSegmenter ? ' sin Intl.Segmenter' : ''}: Historial del cliente, nombre largo repetido: el sufijo cabe en el select cerrado y cada una filtra`, async ({ page }) => {
+// «fuente ancha»: solo en la prueba, el select a 15 px imita una fuente de CI más ancha (#837: 128 px de 125); el corte
+// se mide con la fuente real, así que igual entra.
+for (const [width, noSegmenter, wideFont] of [[768, false, false], [900, false, false], [768, true, false], [768, false, true]] as const) test(`${width}px${noSegmenter ? ' sin Intl.Segmenter' : ''}${wideFont ? ' fuente ancha' : ''}: Historial del cliente, nombre largo repetido: el sufijo cabe en el select cerrado y cada una filtra`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   if (noSegmenter) await page.addInitScript(() => { delete (Intl as any).Segmenter; });
   await ownerPage(page); await seed(page);
   expect(await page.evaluate(() => typeof (Intl as any).Segmenter)).toBe(noSegmenter ? 'undefined' : 'function');
+  if (wideFont) await page.addStyleTag({ content: '#pageClienteHistorial [data-ch-seller]{font-size:15px}' });
   const IDS = ['a1b2c3d4-0000-4000-8000-000000000001', 'a1b2d5e6-0000-4000-8000-000000000002'];
   await page.evaluate(ids => (0, eval)(`
     ventas.push({id:'V-vmn-mfx',fecha:NALimaTime.today(),hora:'11:05',hora24:'11:05',timestamp:new Date(NALimaTime.today()+'T11:05:00-05:00').toISOString(),total:9,metodo:'efectivo',clienteId:'vmn-c1',cajeroNombre:'María Fernanda Quispe',items:[{id:9101,name:'PRODUCTO VMN',precio:9,qty:1,costo:1}]});
@@ -205,7 +208,11 @@ for (const [width, noSegmenter] of [[768, false], [900, false], [768, true]] as 
       return { text: option.text, title: option.title, value: option.value, textWidth: ctx.measureText(option.text).width, room };
     });
     expect(shown.value).toBe(value);
-    expect(shown.text).toBe(`María Fer…${short}`);
+    // Corte medido con la fuente real (varía por equipo): «<prefijo del nombre>…<sufijo entero>».
+    expect(shown.text.endsWith('…' + short), shown.text).toBe(true);
+    const prefix = shown.text.slice(0, shown.text.length - short.length - 1);
+    expect(prefix.length, shown.text).toBeGreaterThanOrEqual(1);
+    expect('María Fernanda Quispe'.startsWith(prefix), shown.text).toBe(true);
     expect(shown.title).toBe(`María Fernanda Quispe${short}`);
     expect(shown.textWidth, `«${shown.text}» cabe en ${shown.room}px`).toBeLessThanOrEqual(shown.room);
     await expect(screen.locator('[data-ch-table="sales"] tbody tr')).toHaveCount(1);
