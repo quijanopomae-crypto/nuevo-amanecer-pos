@@ -7,7 +7,7 @@
   ['pageGastos', 'pageConfig', 'pageProximamente', 'pageValorizacion', 'pageRotacionAbc', 'pageClientesFrecuencia', 'pageReporteProductosVencer', 'pageKardex', 'pageVentasStock', 'pageReporteArqueo', 'pageHistorialCompras', 'pageClienteHistorial', 'pageEtiquetasPrecios', 'pageProductosSinMovimiento', 'pageSugerenciaCompra', 'pageAjustesInventario', 'ventas:reportes'].forEach(function (id) { SCREENS[id] = owner; });
   var ACTIONS = {};
   ['cash.closes.view', 'purchases.costs.view', 'expense.create', 'expense.update', 'expense.void', 'settings.set', 'product-images.write', 'reports.view', 'devices.manage', 'owner-pin.set', 'pairing-code.create', 'reviews.resolve'].forEach(function (id) { ACTIONS[id] = owner; });
-  ['cash.expense', 'sync.write'].forEach(function (id) { ACTIONS[id] = both; });
+  ['cash.expense', 'sync.write', 'price-history.write'].forEach(function (id) { ACTIONS[id] = both; });
   SCREENS['pageReporteDeuda'] = owner;
   SCREENS['pageCodigosDuplicados'] = owner;
   var SYNC_ENTITIES = {};
@@ -40,6 +40,11 @@
   ['/auth/session','/auth/record-meta','/auth/sale-annulments'].forEach(function (path) { API_ROUTES.push({ path: path, methods: ['GET'], roles: both }); });
   ['/auth/sale-notes','/auth/purchases'].forEach(function (path) { API_ROUTES.push({ path: path, methods: ['GET','POST'], roles: both }); });
   API_ROUTES.push({ path: '/auth/purchases/close-partial', methods: ['POST'], roles: both });
+  // Misión 3 (#857): historial de precios en la nube. El Worker filtra el costo en SQL para quien no es dueño.
+  API_ROUTES.push({ path: '/auth/price-history/batch', methods: ['POST'], roles: both, action: 'price-history.write' });
+  ['/auth/price-history','/auth/price-history/changes'].forEach(function (path) { API_ROUTES.push({ path: path, methods: ['GET'], roles: both }); });
+  API_ROUTES.push({ path: '/auth/price-history/reviews', methods: ['GET'], roles: owner, action: 'reviews.resolve' });
+  API_ROUTES.push({ path: '/auth/price-history/review', methods: ['POST'], roles: owner, action: 'reviews.resolve' });
   API_ROUTES.push({ path: '/sync/operations', methods: ['POST'], roles: both });
   API_ROUTES.push({ path: '/sync/operations/:id', methods: ['GET'], roles: both });
   API_ROUTES.push({ path: '/imports/:id', methods: ['GET'], roles: both });

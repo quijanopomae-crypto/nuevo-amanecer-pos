@@ -135,10 +135,34 @@
         origin: origin
       };
       if (opts.ref) entry.ref = String(opts.ref) + ':' + key;
+      // Misión 3 (#857): clave única por cambio para la nube (ph1:<aparato>:<uuid>). Sin aparato conocido,
+      // la asigna el backfill de forma determinista al iniciar sesión.
+      var cid = newChangeId();
+      if (cid) entry.cid = cid;
       if (remember(list, entry)) added.push(entry);
     });
-    if (added.length) { data[productId] = list; write(data); }
+    if (added.length) { data[productId] = list; write(data); changed(); }
     return added;
+  }
+  var CLOUD_KEY = 'na_price_history_cloud_v1';
+  function deviceTag() {
+    try { var d = root.NA_ROLES && root.NA_ROLES.deviceId; return d ? String(d).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 60) : ''; } catch (_) { return ''; }
+  }
+  function uuid() {
+    try { if (root.crypto && typeof root.crypto.randomUUID === 'function') return root.crypto.randomUUID(); } catch (_) {}
+    return '';
+  }
+  function newChangeId() { var d = deviceTag(), u = uuid(); return d && u ? 'ph1:' + d + ':' + u : ''; }
+  function changed() { try { if (typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') root.dispatchEvent(new root.CustomEvent('na:price-history')); } catch (_) {} }
+  function readCloud() {
+    try { var raw = root.localStorage.getItem(CLOUD_KEY); var d = raw ? JSON.parse(raw) : null; return d && typeof d === 'object' && d.rows && typeof d.rows === 'object' ? d : { cursor: null, rows: {} }; }
+    catch (_) { return { cursor: null, rows: {} }; }
+  }
+  // Fila del servidor (céntimos, UTC) al formato local (soles). ref del servidor no lleva el campo: se agrega para unir.
+  function fromCloud(row) {
+    return { id: row.change_id, cid: row.change_id, at: row.changed_at, user: row.user_name, userId: row.user_id || null, type: row.field,
+      before: row.before_cents == null ? null : row.before_cents / 100, after: row.after_cents == null ? null : row.after_cents / 100,
+      origin: row.origin, ref: row.ref ? String(row.ref) + ':' + row.field : undefined, cloud: true };
   }
   function prices(product) {
     if (!product) return { venta: null, mayorista: null, costo: null };
@@ -222,16 +246,29 @@
       return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true);
     } catch (_) { return false; }
   }
+  // Unión local + nube (#857 §5): clave cid; si falta, ref (con campo). Si coincide, gana la del servidor.
+  function merged(productId) {
+    var local = read()[productId];
+    local = Array.isArray(local) ? local : [];
+    var cloud = readCloud().rows[productId];
+    cloud = Array.isArray(cloud) ? cloud.map(fromCloud) : [];
+    if (!cloud.length) return local;
+    var seen = {};
+    cloud.forEach(function (r) { seen['c:' + r.cid] = true; if (r.ref) seen['r:' + r.ref] = true; });
+    return cloud.concat(local.filter(function (r) { return r && !(r.cid && seen['c:' + r.cid]) && !(r.ref && seen['r:' + r.ref]); }));
+  }
   function list(productId, options) {
-    var rows = read()[String(productId == null ? '' : productId)];
-    if (!Array.isArray(rows)) return [];
+    var rows = merged(String(productId == null ? '' : productId));
+    if (!rows.length) return [];
     var seeCost = options && Object.prototype.hasOwnProperty.call(options, 'includeCost')
       ? !!options.includeCost
       : canSeeCost();
     return rows.filter(function (row) { return row && (seeCost || row.type !== 'costo'); }).sort(function (a, b) {
       var delta = (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0);
       if (delta) return delta;
-      return (Number(b.seq) || 0) - (Number(a.seq) || 0);
+      var seq = (Number(b.seq) || 0) - (Number(a.seq) || 0);
+      if (seq) return seq;
+      return String(b.cid || b.id) < String(a.cid || a.id) ? -1 : String(b.cid || b.id) > String(a.cid || a.id) ? 1 : 0;
     }).map(function (row) {
       return { id: row.id, at: row.at, user: row.user, userId: row.userId || null, type: row.type, before: row.before, after: row.after, origin: row.origin };
     });
@@ -242,6 +279,10 @@
   }
   root.NA_PRICE_HISTORY = Object.freeze({
     KEY: KEY,
+    CLOUD_KEY: CLOUD_KEY,
+    readAll: read,
+    writeAll: write,
+    readCloud: readCloud,
     recordDiff: recordDiff,
     recordCatalogDiff: recordCatalogDiff,
     recordPurchase: recordPurchase,
