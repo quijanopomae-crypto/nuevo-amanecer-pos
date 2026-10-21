@@ -2,8 +2,11 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import worker from '../../tools/cloudflare-lab/src/worker.js';
+import { resetOperationLedgerCache } from '../../tools/cloudflare-lab/src/operation-ledgers.js';
 
 export function workerFixture(token = 'fixture-token', readToken = 'fixture-read-token') {
+  // The ledger cache lives per isolate (one per test process): never mix two fixtures' schemas.
+  resetOperationLedgerCache();
   const database = new DatabaseSync(':memory:');
   database.exec(readFileSync(new URL('../../infra/database/migrations/0001_sync_operations.sql', import.meta.url), 'utf8'));
   database.exec(readFileSync(new URL('../../infra/database/migrations/0002_read_only_indexes.sql', import.meta.url), 'utf8'));

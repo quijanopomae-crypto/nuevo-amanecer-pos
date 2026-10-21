@@ -1,7 +1,8 @@
 import { consumeApproval, expiredApprovalRequired, markExpiredApprovalRequired } from './pos-roles.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
-import { lotsCore, lotsReady, rememberLotSchema, productsLots, effectStatements, lotError, saleLotReceipt } from './stock-lots.js';
+import { lotsCore, lotsSchema, rememberLotSchema, productsLots, effectStatements, lotError, saleLotReceipt } from './stock-lots.js';
+import { OPERATION_LEDGER_TABLES, rememberOperationLedgers, operationLedgers, foreignOperationSql, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict } from './operation-ledgers.js';
 
 const METHODS = new Set(['efectivo', 'yape', 'plin', 'transferencia', 'credito', 'mixto']);
 export const CANONICAL_CLIENT_CONTRACT = 'a6-gate-c-v1';
@@ -22,9 +23,11 @@ async function commerceCapabilities(db) {
       SUM(CASE WHEN type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers') THEN 1 ELSE 0 END) AS live_customer_tables,
       SUM(CASE WHEN type='table' AND name='canonical_customer_credit_policies' THEN 1 ELSE 0 END) AS credit_policy_tables,
       SUM(CASE WHEN type='table' AND name='canonical_reconciliation_credits' THEN 1 ELSE 0 END) AS reconciliation_tables,
-      SUM(CASE WHEN type='table' AND name IN ('canonical_stock_lots','canonical_stock_lot_effects') THEN 1 ELSE 0 END) AS lot_tables
+      SUM(CASE WHEN type='table' AND name IN ('canonical_stock_lots','canonical_stock_lot_effects') THEN 1 ELSE 0 END) AS lot_tables,
+      group_concat(CASE WHEN type='table' AND name IN (${OPERATION_LEDGER_TABLES.map(name=>`'${name}'`).join(',')}) THEN name END) AS ledger_tables
     FROM sqlite_master`).first().then(row => {
       rememberLotSchema(db,new Set(Number(row?.lot_tables)===2?['canonical_stock_lots','canonical_stock_lot_effects']:[]));
+      rememberOperationLedgers(db,new Set(String(row?.ledger_tables||'').split(',').filter(Boolean)));
       return Object.freeze({
       liveProducts:Number(row?.live_product_tables)===3,
       genericSales:Number(row?.generic_sale_tables)===1,
@@ -255,7 +258,7 @@ function fastProductSql() {
   ) ORDER BY source_rank LIMIT 1`;
 }
 
-async function diagnoseFastSaleFailure(db, body, auth, payloadHash, json, lotFailure = null, lotPlans = []) {
+async function diagnoseFastSaleFailure(db, body, auth, payloadHash, json, lotFailure = null, lotPlans = [], ledgers = []) {
   const reads = [
     db.prepare(`SELECT c.*,s.session_id,s.status AS session_status,d.device_id,d.role AS device_role,
       d.status AS device_status,d.credential_hash
@@ -264,8 +267,8 @@ async function diagnoseFastSaleFailure(db, body, auth, payloadHash, json, lotFai
       LEFT JOIN devices d ON d.device_id='session:'||s.session_id
       WHERE c.id=1`).bind(auth.credentialHash),
     db.prepare('SELECT sale_id,payload_hash FROM sales WHERE operation_id=?1').bind(body.operation_id),
-    db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id),
-    db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id),
+    // Any other canonical ledger that already owns this operation_id.
+    foreignOperationRead(db, body.operation_id, ledgers, ['sales']),
   ];
   const productIndexes = body.items.map(item => {
     const index = reads.length;
@@ -310,7 +313,7 @@ async function diagnoseFastSaleFailure(db, body, auth, payloadHash, json, lotFai
       ? json({status:'already_processed',operation_id:body.operation_id,sale_id:existing.sale_id,idempotent:true,...await saleLotReceipt(db,body)})
       : json({error:'operation_id_conflict',operation_id:body.operation_id},409);
   }
-  if (rows[2] || rows[3]) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  if (rows[2]) return json(crossLedgerConflict(body.operation_id,rows[2]),409);
 
   for (let index=0; index<body.items.length; index++) {
     const item=body.items[index], failure=saleStockFailure(rows[productIndexes[index]],item);
@@ -331,7 +334,12 @@ async function createCanonicalSaleFast(body, env, auth, json) {
   const db = getDatabase(env);
   const lotEffects=[];
   const payloadHash = await sha256Hex(stableStringify(body));
-  if(await lotsReady(db)){
+  // The stock-lots schema read (when it runs) carries the ledger list of THIS request.
+  // Otherwise operationLedgers answers from the per-isolate cache only when all 14
+  // ledgers exist; with any ledger missing it re-reads sqlite_master (never stale).
+  const { ready: lotSchema, ledgerTables } = await lotsSchema(db);
+  const ledgers = await operationLedgers(db, ledgerTables);
+  if(lotSchema){
     // Reads are in one pipeline; the existing stock CAS fences this plan in the write batch.
     const reads=body.items.map(item=>db.prepare(`SELECT p.*,COALESCE((SELECT json_group_array(json_object(
       'lot_id',lot_id,'lot_code',lot_code,'expiry_date',expiry_date,'quantity',quantity,'received_at',received_at))
@@ -339,13 +347,13 @@ async function createCanonicalSaleFast(body, env, auth, json) {
       FROM (${fastProductSql()}) p`).bind(body.promotion_id,item.product_id));
     reads.push(db.prepare('SELECT sale_id FROM sales WHERE operation_id=?1').bind(body.operation_id));
     const rows=(await db.batch(reads)).map(firstBatchRow);
-    if(rows.at(-1))return diagnoseFastSaleFailure(db,body,auth,payloadHash,json);
+    if(rows.at(-1))return diagnoseFastSaleFailure(db,body,auth,payloadHash,json,null,[],ledgers);
     for(const [index,item] of body.items.entries()){
-      const p=rows[index],failure=saleStockFailure(p,item);if(failure)return diagnoseFastSaleFailure(db,body,auth,payloadHash,json);
+      const p=rows[index],failure=saleStockFailure(p,item);if(failure)return diagnoseFastSaleFailure(db,body,auth,payloadHash,json,null,[],ledgers);
       if(Number(p.tracks_inventory)===1){
         try{const lots=lotsCore.lots(p),plan=saleLotPlan(p,lots,item,body);
           lotEffects.push({item,lots,...plan});
-        }catch(error){return diagnoseFastSaleFailure(db,body,auth,payloadHash,json,{error:lotError(error),product_id:item.product_id});}
+        }catch(error){return diagnoseFastSaleFailure(db,body,auth,payloadHash,json,{error:lotError(error),product_id:item.product_id},[],ledgers);}
       }
     }
     const gate=await expiredSaleGate(db,auth,body,lotEffects);if(gate)return json(gate,409);
@@ -371,8 +379,7 @@ async function createCanonicalSaleFast(body, env, auth, json) {
       AND c.authority_epoch=?4 AND c.revision=?5 AND c.minimum_client_contract=?6
       AND s.status='active' AND d.role='writer' AND d.status='active' AND d.credential_hash=?7
       AND NOT EXISTS(SELECT 1 FROM sales WHERE operation_id=?1)
-      AND NOT EXISTS(SELECT 1 FROM canonical_financial_operations WHERE operation_id=?1)
-      AND NOT EXISTS(SELECT 1 FROM canonical_product_operations WHERE operation_id=?1)
+      AND NOT ${foreignOperationSql(ledgers, ['sales'], '?1')}
     LIMIT 1`).bind(body.operation_id,token,body.promotion_id,body.authority_epoch,
       body.expected_control_revision,body.client_contract,auth.credentialHash),'guard');
 
@@ -517,7 +524,7 @@ async function createCanonicalSaleFast(body, env, auth, json) {
   try {
     await db.batch(atomic);
   } catch {
-    return diagnoseFastSaleFailure(db,body,auth,payloadHash,json,null,lotEffects);
+    return diagnoseFastSaleFailure(db,body,auth,payloadHash,json,null,lotEffects,ledgers);
   }
   return json({status:'created',operation_id:body.operation_id,sale_id:body.sale_id,
     promotion_id:body.promotion_id,authority_epoch:body.authority_epoch,idempotent:false,
@@ -554,6 +561,9 @@ export async function createCanonicalCreditAccount(request, env, auth, json) {
           authority_epoch:normalized.authority_epoch,account_id:replay.account_id,idempotent:true})
       : json({error:'operation_id_conflict',operation_id:normalized.operation_id},409);
   }
+  const ledgers=await operationLedgers(db,auth?.ledgerTables), OWN_ACCOUNT=['canonical_credit_accounts'];
+  const foreign=await foreignOperationRead(db,normalized.operation_id,ledgers,OWN_ACCOUNT).first();
+  if(foreign) return json(crossLedgerConflict(normalized.operation_id,foreign),409);
   if(!await canonicalCustomerExists(db,normalized.promotion_id,normalized.customer_id))
     return json({error:'customer_not_found'},409);
   const duplicate=await db.prepare('SELECT account_id,name,mode FROM canonical_credit_accounts WHERE promotion_id=?1 AND customer_id=?2 AND (account_id=?3 OR lower(name)=lower(?4))')
@@ -562,13 +572,16 @@ export async function createCanonicalCreditAccount(request, env, auth, json) {
   try {
     const result=await db.prepare(`INSERT INTO canonical_credit_accounts
       (promotion_id,customer_id,account_id,name,mode,operation_id,request_hash,principal_id,credential_hash,created_at)
-      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)`)
+      SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10 WHERE NOT ${foreignOperationSql(ledgers,OWN_ACCOUNT,'?6')}`)
       .bind(normalized.promotion_id,normalized.customer_id,normalized.account_id,normalized.name,normalized.mode,normalized.operation_id,requestHash,principalId,auth.credentialHash,normalized.created_at).run();
     if(result?.meta?.changes!==1) throw new Error('insert_failed');
   } catch {
     const after=await db.prepare('SELECT account_id,request_hash FROM canonical_credit_accounts WHERE operation_id=?1').bind(normalized.operation_id).first();
     if(after?.request_hash===requestHash) return json({status:'already_processed',command:'credit-account.create',operation_id:normalized.operation_id,
       promotion_id:normalized.promotion_id,authority_epoch:normalized.authority_epoch,account_id:after.account_id,idempotent:true});
+    if(after) return json({error:'operation_id_conflict',operation_id:normalized.operation_id},409);
+    const raced=await foreignOperationRead(db,normalized.operation_id,ledgers,OWN_ACCOUNT).first();
+    if(raced) return json(crossLedgerConflict(normalized.operation_id,raced),409);
     return json({error:'credit_account_conflict'},409);
   }
   return json({status:'created',command:'credit-account.create',operation_id:normalized.operation_id,promotion_id:normalized.promotion_id,
@@ -605,6 +618,7 @@ export async function createCanonicalSale(request, env, auth, json) {
   }
 
   const capabilities = await commerceCapabilities(db);
+  const ledgers = await operationLedgers(db, auth?.ledgerTables);
   const genericRequested=body.items.some(item=>item.generic_line!==undefined);
   if (genericRequested && !capabilities.genericSales) return json({error:'generic_sale_schema_not_ready'},503);
 
@@ -614,10 +628,8 @@ export async function createCanonicalSale(request, env, auth, json) {
   readIndex.control=addRead(db.prepare(`SELECT c.*,d.role AS device_role,d.status AS device_status,d.credential_hash
     FROM canonical_control c LEFT JOIN devices d ON d.device_id=?1 WHERE c.id=1`).bind(principalId));
   readIndex.existing=addRead(db.prepare('SELECT sale_id,payload_hash FROM sales WHERE operation_id=?1').bind(body.operation_id));
-  readIndex.financialOperation=addRead(db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id));
-  readIndex.productOperation=capabilities.liveProducts
-    ? addRead(db.prepare('SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1').bind(body.operation_id))
-    : -1;
+  // Cash, payments, expenses, products, inventory, customers, credit, control: one read.
+  readIndex.foreignOperation=addRead(foreignOperationRead(db,body.operation_id,ledgers,['sales']));
 
   for (const item of body.items) {
     if (item.generic_line !== undefined) {
@@ -713,8 +725,8 @@ export async function createCanonicalSale(request, env, auth, json) {
       ? json({status:'already_processed',operation_id:body.operation_id,sale_id:existing.sale_id,idempotent:true,...await saleLotReceipt(db,body)})
       : json({error:'operation_id_conflict',operation_id:body.operation_id},409);
   }
-  if (validation[readIndex.financialOperation]) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
-  if (readIndex.productOperation>=0 && validation[readIndex.productOperation]) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  // Order: own-ledger idempotency above (replay/conflict), then the cross-ledger check, then CAS.
+  if (validation[readIndex.foreignOperation]) return json(crossLedgerConflict(body.operation_id,validation[readIndex.foreignOperation]),409);
 
   const products=[];
   for (let index=0; index<body.items.length; index++) {
@@ -769,6 +781,8 @@ export async function createCanonicalSale(request, env, auth, json) {
   const gate=await expiredSaleGate(db,auth,body,lotPlans);if(gate)return json(gate,409);
   for(const entry of lotPlans)lotEffects.push(...effectStatements(db,{...body,...entry.item,allow_expired_lots:!entry.expired_lots_unconfirmed},entry.allocations,-1,entry.lots,token+':'+entry.index,body.sale_id));
   const statements = [
+    // First in the batch, before this sale writes its own credit account/metadata rows.
+    foreignOperationAssertion(db,`${token}:foreign-operation`,body.operation_id,ledgers,['sales']),
     db.prepare(`INSERT INTO canonical_write_guards(operation_id,commit_token,promotion_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash)
       SELECT ?1,?2,?3,?4,?5,?6,?7,?8 WHERE EXISTS(SELECT 1 FROM canonical_control c JOIN devices d ON d.device_id=?7
       WHERE c.id=1 AND c.mode='ACTIVE' AND c.active_promotion_id=?3 AND c.authority_epoch=?4 AND c.revision=?5
@@ -864,7 +878,8 @@ export async function createCanonicalSale(request, env, auth, json) {
     if(stale)return json({error:stale},409);
     if(replay?.payload_hash===payloadHash)return json({status:'already_processed',operation_id:body.operation_id,sale_id:replay.sale_id,idempotent:true,...await saleLotReceipt(db,body)});
     if(replay)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
-    if(await db.prepare('SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1').bind(body.operation_id).first())return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+    const foreign=await foreignOperationRead(db,body.operation_id,ledgers,['sales']).first();
+    if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
     if(creditLine&&creditLine.mode==='MANUAL'){
       // The batch lost a race on the credit line (another sale or a policy change): report it clearly.
       const now=await db.prepare(`SELECT (SELECT manual_limit_cents FROM canonical_customer_credit_policies WHERE promotion_id=?1 AND customer_id=?2 AND mode='MANUAL') AS limit_cents,

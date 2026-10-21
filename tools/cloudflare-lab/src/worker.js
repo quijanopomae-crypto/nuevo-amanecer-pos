@@ -1,6 +1,7 @@
 import { canDo, PERMISSIONS } from './pos-permissions.js';
 import { setCanonicalCustomerContact } from './a6-customer-contacts.js';
 import { getDatabase } from './database-binding.js';
+import { OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 // Gateway mínimo: POS OUTBOX -> Worker -> D1 sync_operations.
 // Contrato: mismo operation_id + mismo payload_hash = already_processed (idempotente);
 // mismo operation_id + payload_hash distinto = conflict (409), nunca se sobrescribe.
@@ -422,7 +423,8 @@ async function authorizeSession(request, env) {
   const db = getDatabase(env);
   const sessionSql = (roleColumn) =>
     `SELECT s.session_id, s.status AS session_status, d.device_id, d.role,
-            d.status AS principal_status, d.credential_hash${roleColumn}
+            d.status AS principal_status, d.credential_hash${roleColumn},
+            ${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables
        FROM auth_sessions s
        JOIN devices d ON d.device_id = 'session:' || s.session_id
       WHERE s.token_hash = ?1`;
@@ -434,6 +436,9 @@ async function authorizeSession(request, env) {
     if (!/no such table/i.test(String(error?.message || error))) throw error;
     session = await db.prepare(sessionSql('')).bind(tokenHash).first();
   }
+  // The per-isolate ledger list rides in this read every command already pays (cold isolate: no extra trip).
+  // ledgerTables travels with auth: read in this request, so handlers never need a stale list.
+  const ledgerTables = session ? rememberOperationLedgerColumn(db, session.ledger_tables) : null;
   if (!session || !constantTimeEqual(tokenHash, session.credential_hash)) return json({ error: 'unauthorized' }, 401);
   if (session.session_status !== 'active' || session.principal_status !== 'active') return json({ error: 'session_revoked' }, 403);
   if (session.role !== 'writer') return json({ error: 'read_only_session' }, 403);
@@ -441,7 +446,7 @@ async function authorizeSession(request, env) {
   // or interfere with the atomic business/canonical batch that follows.
   const role = session.pos_role === 'empleado' ? 'empleado' : 'owner';
   if (!PERMISSIONS.routeRoles(new URL(request.url).pathname, request.method).includes(role)) return json({ error: 'forbidden_role' }, 403);
-  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, posRole: role };
+  return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, posRole: role, ledgerTables };
 }
 
 function randomToken() {

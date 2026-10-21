@@ -3,6 +3,7 @@ import { sha256Hex, stableStringify } from './a5-import-core.js';
 import { lotsCore, lotsReady, productLots, effectStatements, receiptStatements, annulAllocations, lotError } from './stock-lots.js';
 
 import { consumeApproval } from './pos-roles.js';
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict, OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 
 export const INVENTORY_COMMANDS = new Set(['inventory.adjust']);
 
@@ -47,7 +48,9 @@ function normalize(body){
 }
 
 async function schemaReady(db){
-  const row=await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('canonical_inventory_operations','canonical_manual_inventory_movements')").first();
+  // The operation-ledger probe rides in this existing schema read (no extra round trip).
+  const row=await db.prepare(`SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('canonical_inventory_operations','canonical_manual_inventory_movements')) AS count,${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db,row?.ledger_tables);
   return Number(row?.count)===2;
 }
 
@@ -61,16 +64,7 @@ async function authorityError(db,auth,body){
   return null;
 }
 
-async function operationConflict(db,operationId){
-  const row=await db.prepare(`SELECT operation_id FROM (
-    SELECT operation_id FROM sales WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_expense_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_accounts WHERE operation_id=?1
-  ) LIMIT 1`).bind(operationId).first();
-  return !!row;
-}
+const OWN_LEDGER=['canonical_inventory_operations'];
 
 async function findProduct(db,body){
   let row=await db.prepare(`SELECT product_id,current_stock_quantity,stock_revision,tracks_inventory,'IMPORT' AS provenance
@@ -100,7 +94,9 @@ export async function adjustCanonicalInventory(request,env,auth,json,internalRet
     if(existing.request_hash!==requestHash)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
     return json({...JSON.parse(existing.result_json),status:'already_processed',idempotent:true},200);
   }
-  if(await operationConflict(db,body.operation_id))return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
+  const foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();
+  if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
 
   const product=await findProduct(db,body);
   if(!product)return json({error:'product_not_found',product_id:body.product_id},404);
@@ -139,6 +135,8 @@ export async function adjustCanonicalInventory(request,env,auth,json,internalRet
   const productTable=product.provenance==='LIVE'?'canonical_live_products':'products';
 
   const statements=[
+    // Atomic fence: a sale (or any other ledger) that took this operation_id after the pre-read aborts the batch.
+    foreignOperationAssertion(db,token+':foreign-operation',body.operation_id,ledgers,OWN_LEDGER),
     db.prepare(`INSERT INTO canonical_inventory_operations
       (operation_id,command,request_hash,result_json,promotion_id,product_id,movement_type,quantity,delta,expected_stock_revision,reason,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
       VALUES(?1,'inventory.adjust',?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)`)
@@ -152,7 +150,7 @@ export async function adjustCanonicalInventory(request,env,auth,json,internalRet
       SELECT ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14 WHERE changes()=1`)
       .bind(movementId,body.operation_id,body.promotion_id,body.product_id,product.provenance,body.movement_type,body.quantity,body.delta,before,after,body.expected_stock_revision,body.expected_stock_revision+1,body.reason,body.created_at),
     db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)').bind(token+':movement'),
-    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2)').bind(token+':operation',token+':movement')
+    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2,?3)').bind(token+':operation',token+':movement',token+':foreign-operation')
   ];
   if(lotSchema){
     // Cleanup remains last: asserts participate in the stock/movement transaction.
@@ -168,6 +166,8 @@ export async function adjustCanonicalInventory(request,env,auth,json,internalRet
     const stale=await authorityError(db,auth,body);if(stale)return json({error:stale},409);
     if(replay?.request_hash===requestHash)return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
     if(replay)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+    const raced=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();
+    if(raced)return json(crossLedgerConflict(body.operation_id,raced),409);
     const current=await findProduct(db,body);
     if(current&&Number(current.stock_revision)!==body.expected_stock_revision)return json({error:'stale_stock',product_id:body.product_id},409);
     return json({error:'canonical_inventory_conflict',operation_id:body.operation_id},409);

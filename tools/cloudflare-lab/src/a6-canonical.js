@@ -2,6 +2,7 @@ import { expenseRevisionsAvailable } from './a6-expenses.js';
 import { cashSessionCashierAvailable } from './cash-session-cashier.js';
 import { getDatabase } from './database-binding.js';
 import { rememberLotSchema, lotsReady } from './stock-lots.js';
+import { OPERATION_LEDGER_TABLES, rememberOperationLedgers } from './operation-ledgers.js';
 import { A6_FIELD_MAP, A6_MAPPING_VERSION, A6_POLICY, A6_SCHEMA_VERSION, a6PolicyHash, mapStagingRow } from './a6-mapping.js';
 import { buildManifest, sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -938,7 +939,7 @@ const CUSTOMER_CONTACT_SCHEMA_TABLES=['canonical_customer_contacts'];
 // Identity rows share the contact operation/revision, so the contact ledger term already counts them.
 const CUSTOMER_IDENTITY_SCHEMA_TABLES=['canonical_customer_identities'];
 const PRODUCT_REVISION_SCHEMA_TABLES=['canonical_product_revisions'];
-const READ_PLAN_SCHEMA_TABLES=[...new Set([...CONTROL_SCHEMA_TABLES,...EXPENSE_SCHEMA_TABLES,...PRODUCT_LEDGER_SCHEMA_TABLES,...LIVE_PRODUCT_SCHEMA_TABLES,...INVENTORY_SCHEMA_TABLES,...GENERIC_SALE_SCHEMA_TABLES,...CUSTOMER_SCHEMA_TABLES,...CREDIT_POLICY_SCHEMA_TABLES,...DEBT_RECONCILIATION_SCHEMA_TABLES,...CUSTOMER_CONTACT_SCHEMA_TABLES,...CUSTOMER_IDENTITY_SCHEMA_TABLES,...PRODUCT_REVISION_SCHEMA_TABLES,'canonical_expense_revisions','canonical_stock_lots','canonical_stock_lot_effects'])];
+const READ_PLAN_SCHEMA_TABLES=[...new Set([...CONTROL_SCHEMA_TABLES,...EXPENSE_SCHEMA_TABLES,...PRODUCT_LEDGER_SCHEMA_TABLES,...LIVE_PRODUCT_SCHEMA_TABLES,...INVENTORY_SCHEMA_TABLES,...GENERIC_SALE_SCHEMA_TABLES,...CUSTOMER_SCHEMA_TABLES,...CREDIT_POLICY_SCHEMA_TABLES,...DEBT_RECONCILIATION_SCHEMA_TABLES,...CUSTOMER_CONTACT_SCHEMA_TABLES,...CUSTOMER_IDENTITY_SCHEMA_TABLES,...PRODUCT_REVISION_SCHEMA_TABLES,'canonical_expense_revisions','canonical_stock_lots','canonical_stock_lot_effects',...OPERATION_LEDGER_TABLES])];
 // Same order and conditions as the legacy readControl ledger additions.
 const LEDGER_REVISION_TERMS=[
   [EXPENSE_SCHEMA_TABLES,['canonical_expense_operations']],
@@ -955,7 +956,7 @@ function hasAll(schema,tables){return tables.every((name)=>schema.has(name));}
 async function loadReadSchema(db){
   const rows=await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${READ_PLAN_SCHEMA_TABLES.map((name)=>`'${name}'`).join(',')})`).all();
   const schema=new Set((rows.results??[]).map((row)=>row.name));
-  rememberLotSchema(db,schema);return schema;
+  rememberLotSchema(db,schema);rememberOperationLedgers(db,schema);return schema;
 }
 async function readPlan(db,options={}){
   const legacy={schema:null,current:async()=>{const c=await control(db);return c?.mode==='ACTIVE'?await readControl(db):c;}};

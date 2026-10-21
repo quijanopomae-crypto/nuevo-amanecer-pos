@@ -1,3 +1,4 @@
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, foreignOperationSql, crossLedgerConflict, OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -54,14 +55,8 @@ async function replay(db,body,hash,json,auth) {
   return json({...JSON.parse(row.result_json),status:'already_processed',idempotent:true});
 }
 
-async function namespaceCollision(db,operationId) {
-  const row = await db.prepare(`SELECT
-    EXISTS(SELECT 1 FROM sales WHERE operation_id=?1) AS sale_hit,
-    EXISTS(SELECT 1 FROM canonical_financial_operations WHERE operation_id=?1) AS financial_hit,
-    EXISTS(SELECT 1 FROM canonical_credit_accounts WHERE operation_id=?1) AS account_hit,
-    EXISTS(SELECT 1 FROM canonical_credit_metadata WHERE operation_id=?1) AS metadata_hit`).bind(operationId).first();
-  return !!(row && Object.values(row).some(Number));
-}
+const OWN_EXPENSE=['canonical_expense_operations'];
+const OWN_REVISION=['canonical_expense_revisions'];
 
 export async function employeeCashExpenseAllowed(db, body, auth) {
   if (!body || !id(body.session_id) || body.payment_method !== 'efectivo' || !uint(body.amount_cents) || body.amount_cents === 0) return false;
@@ -85,7 +80,9 @@ export async function createCanonicalExpense(request,env,auth,json) {
   if (existing) return existing;
   const denied = await authorityError(db,body,auth);
   if (denied) return json({error:denied},409);
-  if (await namespaceCollision(db,body.operation_id)) return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  const ledgers = await operationLedgers(db,auth?.ledgerTables);
+  const foreign = await foreignOperationRead(db,body.operation_id,ledgers,OWN_EXPENSE).first();
+  if (foreign) return json(crossLedgerConflict(body.operation_id,foreign),409);
 
   const serverNow = new Date().toISOString();
   const dateError = await expenseDateError(db, body, body.expense_date, true, serverNow);
@@ -123,6 +120,8 @@ export async function createCanonicalExpense(request,env,auth,json) {
       VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)`).bind(token + ':' + label));
   }
 
+  // Atomic cross-ledger fence (cleaned by the LIKE token:% delete below).
+  statements.push(foreignOperationAssertion(db,token + ':foreign-operation',body.operation_id,ledgers,OWN_EXPENSE));
   if (auth.posRole === 'empleado') statements.push(db.prepare(`INSERT INTO canonical_assertions(assertion_id,ok) SELECT ?1,CASE WHEN EXISTS(SELECT 1 FROM canonical_cash_state s JOIN canonical_financial_operations o ON o.operation_id=s.open_operation_id WHERE s.session_id=?2 AND s.status='OPEN' AND o.device_id=?3) THEN 1 ELSE 0 END`).bind(token + ':employee-shift',body.session_id,auth.principalId));
 
   // Recheck date locks inside the batch so a concurrent close cannot slip through.
@@ -159,6 +158,8 @@ export async function createCanonicalExpense(request,env,auth,json) {
   } catch (error) {
     const recovered = await replay(db,body,hash,json,auth);
     if (recovered) return recovered;
+    const raced = await foreignOperationRead(db,body.operation_id,ledgers,OWN_EXPENSE).first();
+    if (raced) return json(crossLedgerConflict(body.operation_id,raced),409);
     const dateError = await expenseDateError(db,body,body.expense_date,true,serverNow);
     if(dateError)return json({error:dateError},409);
     const message = String(error?.message || '');
@@ -195,7 +196,9 @@ export async function expenseDateError(db, expense, date, checkDate = true, serv
 }
 
 export async function expenseRevisionsAvailable(db) {
-  return !!await db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='canonical_expense_revisions'").first();
+  const row=await db.prepare(`SELECT (SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_expense_revisions') AS ok,${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db,row?.ledger_tables);
+  return !!row?.ok;
 }
 
 export async function reviseCanonicalExpense(command, request, env, auth, json) {
@@ -230,6 +233,9 @@ export async function reviseCanonicalExpense(command, request, env, auth, json) 
     return json({...await result(row),status:'already_processed',idempotent:true});
   }
   const existing=await replayRevision();if(existing)return existing;
+  const ledgers=await operationLedgers(db,auth?.ledgerTables);
+  const foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_REVISION).first();
+  if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
   const expense=await db.prepare(`SELECT e.*,COALESCE(r.revision,0) AS revision,r.action,r.expense_date AS revised_expense_date FROM canonical_expenses e
     LEFT JOIN canonical_expense_revisions r ON r.expense_id=e.expense_id AND r.promotion_id=e.promotion_id
       AND r.revision=(SELECT MAX(revision) FROM canonical_expense_revisions WHERE expense_id=e.expense_id AND promotion_id=e.promotion_id)
@@ -243,7 +249,6 @@ export async function reviseCanonicalExpense(command, request, env, auth, json) 
   const dateError=await expenseDateError(db,expense,effectiveDate,editing,serverNow,currentDate);
   if(dateError)return json({error:dateError},409);
   if(!editing&&Number(expense.cash_delta_cents)!==0)return json({error:'cash_expense_void_requires_adjustment'},409);
-  if(await namespaceCollision(db,body.operation_id)||await db.prepare('SELECT 1 FROM canonical_expense_operations WHERE operation_id=?1').bind(body.operation_id).first())return json({error:'operation_id_conflict'},409);
   // CAS and authority are checked again in the same atomic INSERT; unique revision
   // rejects concurrent contenders. Nothing touches the base ledger or cash state.
   const action=editing?'edit':'void';
@@ -252,6 +257,7 @@ export async function reviseCanonicalExpense(command, request, env, auth, json) 
       (operation_id,expense_id,promotion_id,revision,action,concept,category,note,expense_date,request_hash,device_id,created_at)
       SELECT ?1,?2,?3,?4+1,?5,?6,?7,?8,?9,?10,?11,?12
       WHERE COALESCE((SELECT MAX(revision) FROM canonical_expense_revisions WHERE expense_id=?2 AND promotion_id=?3),0)=?4
+        AND NOT ${foreignOperationSql(ledgers,OWN_REVISION,'?1')}
         AND (?18 IS NULL OR NOT EXISTS(SELECT 1 FROM canonical_cash_closures WHERE session_id=?18))
         AND (?18 IS NOT NULL OR NOT EXISTS(SELECT 1 FROM canonical_cash_closures WHERE (date(closed_at,'-5 hours')=?17 AND julianday(closed_at)>=julianday(?19)) OR (?20=1 AND date(closed_at,'-5 hours')=?21 AND julianday(closed_at)<=julianday(?22))))
         AND EXISTS(SELECT 1 FROM canonical_control c JOIN devices d ON d.device_id=?11
@@ -260,7 +266,8 @@ export async function reviseCanonicalExpense(command, request, env, auth, json) 
       RETURNING *`).bind(body.operation_id,body.expense_id,body.promotion_id,body.expected_revision,action,
         editing?body.concept.trim():null,editing?body.category.trim():null,editing?(body.note||null):null,
         editing?body.expense_date:null,hash,auth.principalId,body.created_at,body.authority_epoch,body.expected_control_revision,body.client_contract,auth.credentialHash,currentDate,expense.session_id||null,expense.server_received_at ?? expense.created_at,editing&&effectiveDate!==currentDate?1:0,effectiveDate,serverNow).first();
-    if(!inserted){const denied=await authorityError(db,body,auth);const dateError=denied?null:await expenseDateError(db,expense,effectiveDate,editing,serverNow,currentDate);return json({error:denied||dateError||'stale_expense_revision'},409);}
+    if(!inserted){const raced=await foreignOperationRead(db,body.operation_id,ledgers,OWN_REVISION).first();if(raced)return json(crossLedgerConflict(body.operation_id,raced),409);
+      const denied=await authorityError(db,body,auth);const dateError=denied?null:await expenseDateError(db,expense,effectiveDate,editing,serverNow,currentDate);return json({error:denied||dateError||'stale_expense_revision'},409);}
     return json(await result(inserted),201);
   } catch(error) {
     const recovered=await replayRevision();if(recovered)return recovered;

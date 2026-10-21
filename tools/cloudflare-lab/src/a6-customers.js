@@ -1,3 +1,4 @@
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict, OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -90,7 +91,9 @@ function normalize(body){
 async function schemaReady(db){
   const row=await db.prepare(`SELECT
     (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers')) AS count,
-    (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_customer_contacts') AS contacts`).first();
+    (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_customer_contacts') AS contacts,
+    ${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db,row?.ledger_tables);
   return Number(row?.count)===3?{contacts:Number(row?.contacts)===1}:null;
 }
 
@@ -107,18 +110,7 @@ async function authorityError(db,auth,body){
   return null;
 }
 
-async function operationConflict(db,operationId){
-  const row=await db.prepare(`SELECT operation_id FROM (
-    SELECT operation_id FROM sales WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_financial_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_expense_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_product_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_inventory_operations WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_accounts WHERE operation_id=?1
-    UNION ALL SELECT operation_id FROM canonical_credit_metadata WHERE operation_id=?1
-  ) LIMIT 1`).bind(operationId).first();
-  return !!row;
-}
+const OWN_LEDGER=['canonical_customer_operations'];
 
 async function customerIdConflict(db,body){
   const row=await db.prepare(`SELECT customer_id FROM canonical_customer_registry
@@ -168,11 +160,10 @@ export async function createCanonicalCustomer(request,env,auth,json){
     if(existing.request_hash!==requestHash)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
     return json({...JSON.parse(existing.result_json),status:'already_processed',idempotent:true},200);
   }
-  let hasOperationConflict;
-  try{hasOperationConflict=await operationConflict(db,body.operation_id);}
+  let ledgers,foreign;
+  try{ledgers=await operationLedgers(db,auth?.ledgerTables);foreign=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();}
   catch{return json({error:'canonical_customer_stage_error',stage:'namespace'},500);}
-  if(hasOperationConflict)
-    return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+  if(foreign)return json(crossLedgerConflict(body.operation_id,foreign),409);
   let hasCustomerIdConflict;
   try{hasCustomerIdConflict=await customerIdConflict(db,body);}
   catch{return json({error:'canonical_customer_stage_error',stage:'customer_id'},500);}
@@ -194,6 +185,7 @@ export async function createCanonicalCustomer(request,env,auth,json){
   };
   const token='customer:'+crypto.randomUUID();
   const statements=[
+    foreignOperationAssertion(db,token+':foreign-operation',body.operation_id,ledgers,OWN_LEDGER),
     db.prepare(`INSERT INTO canonical_customer_operations
       (operation_id,command,request_hash,result_json,promotion_id,customer_id,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
       VALUES(?1,'customer.create',?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)`)
@@ -213,8 +205,8 @@ export async function createCanonicalCustomer(request,env,auth,json){
       .bind(body.promotion_id,body.customer_id,body.operation_id,body.name,body.document,body.phone,body.address,String(body.color),body.created_at),
     db.prepare('INSERT INTO canonical_assertions(assertion_id,ok) VALUES(?1,CASE WHEN changes()=1 THEN 1 ELSE 0 END)')
       .bind(token+':customer'),
-    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2,?3)')
-      .bind(token+':operation',token+':registry',token+':customer')
+    db.prepare('DELETE FROM canonical_assertions WHERE assertion_id IN (?1,?2,?3,?4)')
+      .bind(token+':operation',token+':registry',token+':customer',token+':foreign-operation')
   ];
 
   try{await db.batch(statements);}
@@ -226,6 +218,8 @@ export async function createCanonicalCustomer(request,env,auth,json){
       if(replay?.request_hash===requestHash)
         return json({...JSON.parse(replay.result_json),status:'already_processed',idempotent:true},200);
       if(replay)return json({error:'operation_id_conflict',operation_id:body.operation_id},409);
+      const raced=await foreignOperationRead(db,body.operation_id,ledgers,OWN_LEDGER).first();
+      if(raced)return json(crossLedgerConflict(body.operation_id,raced),409);
       const docOwnerAfter=await documentConflict(db,body);
       if(docOwnerAfter)return json({error:'customer_document_conflict',customer_id:docOwnerAfter},409);
       if(await customerIdConflict(db,body))
