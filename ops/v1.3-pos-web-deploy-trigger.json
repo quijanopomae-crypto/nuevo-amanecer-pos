@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 183: publicar CANON commit 0c03715e2c27939c7fbd348840c6c317364fde62 (incluye #868 costo de compras en servidor, #871 historial de precios en la nube, #869, #862, #870, #873; excluye #872). Worker 63 ya publicado (run 39660316073, PASS) y migración 0034 aplicada (run 39659936044). Solo estáticos web. Rollback a Web 182 (1af08e53, run 39643891550).",
-  "retry_attempt": 183,
-  "retry_reason": "Aprobación del dueño 2026-10-21 13:31 Lima («todo esta aprobado»): publicar la web después del Worker 63.",
-  "requested_at_utc": "2026-10-21T19:18:40Z",
-  "approved_base": "0c03715e2c27939c7fbd348840c6c317364fde62"
+  "note": "Web 184: publicar 38a723d1 (revert #871/#868 vía #878 merge dba42e22, ordenado por el dueño «revertir y republicar»). Worker 64 ya publicado (run 39665647690, live check OK asistente 5). Solo estáticos web. Rollback a Web 183 (8ff0df75).",
+  "retry_attempt": 184,
+  "retry_reason": "Dueño 2026-10-21 14:28 Lima: «revertir y republicar». Code OK asistente 2, spec OK asistente 3, LOCAL OK asistente 4 en #878.",
+  "requested_at_utc": "2026-10-21T20:02:00Z",
+  "approved_base": "38a723d1ca67a52397fed9aca229ef9cd35b0590"
 }
