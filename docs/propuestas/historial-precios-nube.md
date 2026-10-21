@@ -104,6 +104,10 @@ con el prefijo `ph1:`.
 ## 7. Costo solo para el dueño (filtro en el servidor)
 
 - Acción nueva o reutilizada: `purchases.costs.view` (ya es solo dueño en `pos-permissions.js`).
+- En **ambos** `GET` la consulta SQL siempre incluye
+  `AND (review_status IS NULL OR review_status = 'approved')`: las filas pendientes o rechazadas nunca
+  aparecen en el historial, **ni siquiera para el dueño**. Solo se ven en la cola de revisión del dueño
+  (Revisiones), que es una consulta aparte con `review_status = 'pending'` y exige `reviews.resolve` (solo dueño).
 - En **ambos** `GET`, si la sesión no tiene `purchases.costs.view`, el Worker **excluye las filas con
   `field = 'costo'`** en la consulta SQL (`AND field <> 'costo'`), no solo oculta columnas. Así el
   costo nunca viaja en claro a un aparato de empleado.
@@ -112,7 +116,7 @@ con el prefijo `ph1:`.
   es decir, si existe en `pos_purchase_lines` una línea `(purchase_id, line_number)` aplicada para ese
   `product_id` y su `unit_cost_cents` coincide con `after_cents`. En cualquier otro caso (ficha, importación,
   backfill o ref inválido) la fila se guarda con `review_status = 'pending'` (columna nueva, `NULL` si no
-  necesita revisión), no aparece en el historial y el dueño la ve en Revisiones para aprobarla o descartarla.
+  necesita revisión), no aparece en el historial (filtro SQL de los `GET`) y el dueño la ve solo en su cola de Revisiones para aprobarla o descartarla.
   El valor **nunca** cambia el costo del producto.
 - La web sigue ocultando el costo con `NA_ROLES.isOwner()` dentro de `try/catch` como segunda barrera.
 
@@ -129,6 +133,7 @@ con el prefijo `ph1:`.
 - Reenvío del mismo lote: 0 filas nuevas (`duplicate`). Mismo `change_id` o `(ref, field)` con otro contenido: `conflict`.
 - Costo de empleado con ref de compra válido: se acepta; sin ref o con ref inválido: queda en revisión del dueño.
 - El backfill corre al iniciar sesión y la función no se activa hasta terminarlo.
+- Una fila `pending` no sale en ningún `GET` del historial (tampoco para el dueño); solo en la cola de revisión.
 - Backfill dos veces (dos pestañas): mismas filas, ningún dato local perdido.
 - Empleado: `GET` no trae filas `costo`; el `POST` de costo se acepta y luego no se lee.
 - Dos aparatos con la misma compra: una sola fila por `(ref, field)`.
