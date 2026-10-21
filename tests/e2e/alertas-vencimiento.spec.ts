@@ -230,7 +230,7 @@ for (const [width, height] of [[390, 844], [768, 900], [1280, 900]]) {
 
 // Revisión #861: con poca altura (horizontal / ventana baja) el aviso es una fila compacta (≤ 48 px)
 // que no tapa las tarjetas de Inicio, «Actividad reciente» ni «Pendientes».
-for (const [width, height, dark] of [[844, 390, false], [915, 412, false], [740, 360, false], [1024, 600, false], [1280, 600, false], [844, 390, true]] as const) {
+for (const [width, height, dark] of [[844, 390, false], [915, 412, false], [740, 360, false], [1024, 600, false], [1280, 600, false], [1440, 600, false], [844, 390, true]] as const) {
   test(`a ${width}x${height}${dark ? ' (oscuro)' : ''} el aviso es una fila compacta y no tapa Inicio`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     const errors = await rolePage(page, 'owner', dark);
