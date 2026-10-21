@@ -55,7 +55,7 @@ test('same-height green bar has 3 columns for IGV and 2 for counter; phone exclu
   assert.match(css, /@media\(min-width:701px\)/);
   assert.match(css, /body:not\(\.na-pos-phone-device\) #pagePOS \.cart-totals\{/);
   assert.match(css, /--na-pos-summary-height:44px/);
-  assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) minmax\(0,1fr\) minmax\(0,1\.3fr\)/);
   assert.match(css, /#pagePOS\.na-pos-summary-igv-hidden \.cart-totals\{\s*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /#pagePOS\.na-pos-summary-igv-hidden \.cart-count-line\{\s*position:static/);
   assert.match(css, /#pagePOS\.na-pos-summary-igv-hidden \.cart-totals>\.total-row\{display:none!important\}/);
