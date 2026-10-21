@@ -7,7 +7,7 @@ const source = readFileSync('POS/js/modules/proximamente.js', 'utf8');
 const registrySource = readFileSync('POS/js/modules/proximamente-registry.js', 'utf8');
 const permissionsSource = readFileSync('POS/js/config/pos-permissions.js', 'utf8');
 const indexHtml = readFileSync('POS/index.html', 'utf8');
-const unlocked = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'sugerencia-compra': 'pageSugerenciaCompra' };
+const unlocked = {'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra'};
 const MODULES = ['Ventas', 'Caja', 'Inventario', 'Clientes', 'Comprobantes', 'Extras'];
 
 function loaded() {
@@ -24,7 +24,7 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
   assert.equal(api.list().length, 0, 'nothing built until load()');
   await api.load();
   const ids = api.list().map(f => f.id);
-  assert.equal(ids.length, 137);
+  assert.equal(ids.length, 138);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(new Set(api.list().map(f => f.name.toLowerCase())).size, ids.length, 'no duplicate titles');
   assert.equal(JSON.stringify(Object.keys(P.FEATURE_LOCKS).sort()), JSON.stringify(ids.slice().sort()), 'every registry id has exactly one server lock entry');
@@ -207,7 +207,7 @@ test('configuration shortcut lives in the owner-only Configuración nav', () => 
   assert.match(v9, /var go = t\.closest\('#na9Nav \[data-go\]'\); if \(go\) \{ if \(canEdit\(\) && typeof root\.goPage === 'function'\) root\.goPage\(go\.dataset\.go\); return; \}/);
 });
 
-const addedIds = ['venta-exitosa-comprobante', 'clonar-venta', 'nota-credito-parcial-compras', 'clientes-dias-credito', 'credito-cuotas', 'reparto-abono-multiples-deudas', 'asistente-virtual', 'lotes-multiples-fefo', 'stock-negativo-configurable', 'app-pedidos-marca-propia', 'cambiar-clave-usuarios', 'conversion-masiva-documentos', 'vendedor-en-venta', 'comentarios-venta', 'despacho-productos', 'vendedor-por-cliente', 'consulta-dni-ruc', 'edicion-masiva-productos', 'marcas-productos', 'subcategorias-atributos', 'produccion-recetas', 'registro-sanitario', 'numero-serie-producto', 'tipos-movimiento-inventario', 'conciliacion-bancaria', 'historial-exportaciones', 'catalogo-reportes', 'importar-proveedores', 'periodo-contable-percepcion', 'desbloquear-usuario', 'detraccion-retencion', 'producto-activo-venta', 'precio-min-max', 'cajas-multiples', 'reporte-productos-vencer', 'cierre-remoto-cajas', 'dashboard-tesoreria', 'producto-servicio', 'catalogo-desde-pos'];
+const addedIds = ['venta-exitosa-comprobante', 'clonar-venta', 'nota-credito-parcial-compras', 'clientes-dias-credito', 'credito-cuotas', 'reparto-abono-multiples-deudas', 'asistente-virtual', 'lotes-multiples-fefo', 'stock-negativo-configurable', 'app-pedidos-marca-propia', 'cambiar-clave-usuarios', 'conversion-masiva-documentos', 'vendedor-en-venta', 'comentarios-venta', 'despacho-productos', 'vendedor-por-cliente', 'consulta-dni-ruc', 'edicion-masiva-productos', 'marcas-productos', 'subcategorias-atributos', 'produccion-recetas', 'registro-sanitario', 'numero-serie-producto', 'tipos-movimiento-inventario', 'conciliacion-bancaria', 'historial-exportaciones', 'catalogo-reportes', 'importar-proveedores', 'periodo-contable-percepcion', 'desbloquear-usuario', 'detraccion-retencion', 'producto-activo-venta', 'precio-min-max', 'cajas-multiples', 'cierre-remoto-cajas', 'dashboard-tesoreria', 'producto-servicio', 'catalogo-desde-pos'];
 test('new candidates stay locked and attendance keeps its owner policy when unlocked', async () => {
   const c = loaded(); await c.NA_PROXIMAMENTE.load();
   for (const id of addedIds) {

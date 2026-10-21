@@ -13,6 +13,12 @@
   };
   var INVALID_NOTICE = 'sin barras: código con caracteres no válidos';
   var MAX_NAME = 32, MIN_QTY = 1, MAX_QTY = 100;
+  // Tope total de etiquetas en la vista previa (y en la impresión): 10 hojas A4.
+  var MAX_TOTAL = 240;
+  var NO_PRICE = 'Sin precio';
+  var NO_PRICE_NOTICE = 'Producto sin precio: la etiqueta saldrá como «Sin precio», no como S/ 0.00. Corrige el precio en Productos antes de imprimir.';
+  // Tamaño de página para imprimir: A4 sin margen (3 × 8) y rollo con una etiqueta por página.
+  var PAGE_SIZES = { chica: '38mm 25mm', mediana: '50mm 30mm', a4: 'A4' };
 
   function text(v) { return v == null ? '' : String(v); }
   var START_C = 105, CODE_B = 100, CODE_C = 99;
@@ -72,18 +78,44 @@
   function clampQty(v) { var n = Math.floor(Number(v)); if (!isFinite(n)) n = MIN_QTY; return Math.min(MAX_QTY, Math.max(MIN_QTY, n)); }
   function productName(p) { return text(p && (p.name || p.nombre)) || 'Producto'; }
   function productCode(p) { return text(p && (p.barcode || p.codigo || p.sku)).trim(); }
-  function productPrice(p) { return formatPrice(p && p.precio != null ? p.precio : p && p.price); }
+  function rawPrice(p) { return p && p.precio != null && p.precio !== '' ? p.precio : p && p.price; }
+  function hasPrice(p) {
+    var v = rawPrice(p); if (v == null || v === '') return false;
+    var n = typeof v === 'number' ? v : Number(text(v).replace(',', '.'));
+    return isFinite(n) && Math.round(n * 100) > 0;
+  }
+  // Nunca devuelve «S/ 0.00» para un producto sin precio válido: devuelve «Sin precio».
+  function productPrice(p) { return hasPrice(p) ? formatPrice(rawPrice(p)) : NO_PRICE; }
+  function pageCss(fmt) { var size = PAGE_SIZES[fmt] || PAGE_SIZES.mediana; return '@page { size: ' + size + '; margin: 0; }'; }
+  // Reparte las etiquetas respetando el tope total; devuelve las páginas A4 de 24 en 24.
+  function labelPlan(items) {
+    var list = [], requested = 0;
+    (Array.isArray(items) ? items : []).forEach(function (it) {
+      var q = clampQty(it && it.qty); requested += q;
+      for (var i = 0; i < q && list.length < MAX_TOTAL; i++) list.push(it.product);
+    });
+    return { labels: list, total: list.length, requested: requested, truncated: requested > list.length };
+  }
+  function chunk(arr, size) { var out = []; for (var i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size)); return out; }
   function productKey(p) { return text(p && p.id); }
+  // Fecha en hora de Lima (America/Lima, UTC−5 sin horario de verano), sin depender del aparato.
   function formatDate(d) {
-    var x = d instanceof Date ? d : new Date();
+    var x = Object.prototype.toString.call(d) === '[object Date]' && isFinite(d.getTime()) ? d : new Date();
+    try {
+      var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(x);
+      var get = function (t) { var f = parts.find(function (p) { return p.type === t; }); return f ? f.value : ''; };
+      if (get('day') && get('month') && get('year')) return get('day') + '/' + get('month') + '/' + get('year');
+    } catch (_) {}
+    var l = new Date(x.getTime() - 5 * 3600000);
     var pad = function (n) { return n < 10 ? '0' + n : String(n); };
-    return pad(x.getDate()) + '/' + pad(x.getMonth() + 1) + '/' + x.getFullYear();
+    return pad(l.getUTCDate()) + '/' + pad(l.getUTCMonth() + 1) + '/' + l.getUTCFullYear();
   }
   function labelHtml(product, date) {
     var code = productCode(product), svg = code ? code128Svg(code) : '';
-    return '<div class="etq-label' + (svg ? '' : ' etq-no-bars') + '" data-etq-label>' +
+    var priced = hasPrice(product);
+    return '<div class="etq-label' + (svg ? '' : ' etq-no-bars') + (priced ? '' : ' etq-no-price') + '" data-etq-label>' +
       '<div class="etq-name">' + escapeHtml(truncateName(productName(product))) + '</div>' +
-      '<div class="etq-price">' + escapeHtml(productPrice(product)) + '</div>' +
+      '<div class="etq-price"' + (priced ? '' : ' data-etq-noprice') + '>' + escapeHtml(productPrice(product)) + '</div>' +
       svg + (code && !svg ? '<div class="etq-warn" data-etq-warn>' + escapeHtml(INVALID_NOTICE) + '</div>' : '') +
       '<div class="etq-meta"><span class="etq-code">' + escapeHtml(code || 'Sin código') + '</span><span class="etq-date">' + escapeHtml(formatDate(date)) + '</span></div>' +
       '</div>';
@@ -99,7 +131,14 @@
     });
   }
 
-  var api = { PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
+  function sheetHtml(labels, fmt, date) {
+    if (fmt === 'a4') return chunk(labels, FORMATS.a4.perSheet).map(function (group) {
+      return '<div class="etq-a4-page" data-etq-a4-page>' + group.map(function (p) { return labelHtml(p, date); }).join('') + '</div>';
+    }).join('');
+    return labels.map(function (p) { return labelHtml(p, date); }).join('');
+  }
+
+  var api = { MAX_TOTAL: MAX_TOTAL, NO_PRICE: NO_PRICE, NO_PRICE_NOTICE: NO_PRICE_NOTICE, PAGE_SIZES: PAGE_SIZES, hasPrice: hasPrice, pageCss: pageCss, labelPlan: labelPlan, sheetHtml: sheetHtml, PATTERNS: PATTERNS, FORMATS: FORMATS, code128Values: code128Values, code128Pattern: code128Pattern, code128Svg: code128Svg, escapeHtml: escapeHtml, formatPrice: formatPrice, productPrice: productPrice, INVALID_NOTICE: INVALID_NOTICE, truncateName: truncateName, clampQty: clampQty, labelHtml: labelHtml, searchProducts: searchProducts, formatDate: formatDate };
   root.NA_ETIQUETAS_PRECIOS = api;
 
   var doc = root.document; if (!doc || !doc.getElementById) return;
@@ -128,24 +167,33 @@
       var qty = doc.createElement('input'); qty.type = 'number'; qty.min = String(MIN_QTY); qty.max = String(MAX_QTY); qty.value = String(item.qty); qty.setAttribute('data-etq-qty', productKey(item.product)); qty.setAttribute('aria-label', 'Cantidad de etiquetas de ' + productName(item.product));
       label.appendChild(qty);
       var rm = doc.createElement('button'); rm.type = 'button'; rm.className = 'etq-remove'; rm.textContent = 'Quitar'; rm.setAttribute('data-etq-remove', productKey(item.product));
-      li.appendChild(name); li.appendChild(label); li.appendChild(rm); list.appendChild(li);
+      li.appendChild(name); li.appendChild(label); li.appendChild(rm);
+      if (!hasPrice(item.product)) { var w = doc.createElement('p'); w.className = 'etq-item-warn'; w.setAttribute('data-etq-noprice-warn', productKey(item.product)); w.setAttribute('role', 'alert'); w.textContent = NO_PRICE_NOTICE; li.appendChild(w); }
+      list.appendChild(li);
     });
     var empty = q('[data-etq-empty]'); if (empty) empty.hidden = selected.length > 0;
     renderPreview();
   }
   function renderPreview() {
     var sheet = q('[data-etq-sheet]'), count = q('[data-etq-count]'), print = q('[data-etq-print]'); if (!sheet) return;
-    var now = new Date(), html = '', total = 0;
-    selected.forEach(function (item) { for (var i = 0; i < item.qty; i++) { html += labelHtml(item.product, now); total++; } });
+    var plan = labelPlan(selected), total = plan.total;
     sheet.className = 'etq-sheet etq-format-' + format;
-    sheet.innerHTML = html;
-    if (count) count.textContent = total === 1 ? '1 etiqueta' : total + ' etiquetas';
+    // HTML armado solo con escapeHtml (labelHtml); ningún dato entra sin escapar.
+    sheet.innerHTML = sheetHtml(plan.labels, format, new Date());
+    if (count) count.textContent = (total === 1 ? '1 etiqueta' : total + ' etiquetas') + (plan.truncated ? ' (máximo)' : '');
+    var cap = q('[data-etq-cap]');
+    if (cap) { cap.hidden = !plan.truncated; cap.textContent = plan.truncated ? 'Pediste ' + plan.requested + ' etiquetas; la vista previa y la impresión llegan como máximo a ' + MAX_TOTAL + '. Imprime en tandas.' : ''; }
     if (print) print.disabled = total === 0;
   }
   function add(id) {
     if (selected.some(function (s) { return productKey(s.product) === id; })) return;
     var p = catalog().find(function (x) { return productKey(x) === id; }); if (!p) return;
-    selected.push({ product: p, qty: 1 }); renderSelected();
+    selected.push({ product: p, qty: 1 });
+    var input = q('[data-etq-search]'), box = q('[data-etq-matches]');
+    if (input) input.value = '';
+    if (box) box.textContent = '';
+    renderSelected();
+    if (input && typeof input.focus === 'function') input.focus();
   }
   function wire() {
     var p = page(); if (!p || wired) return; wired = true;
@@ -161,8 +209,11 @@
       var a = e.target.closest('[data-etq-add]'); if (a) { add(a.getAttribute('data-etq-add')); return; }
       var r = e.target.closest('[data-etq-remove]'); if (r) { selected = selected.filter(function (s) { return productKey(s.product) !== r.getAttribute('data-etq-remove'); }); renderSelected(); return; }
       if (e.target.closest('[data-etq-print]')) {
+        var missing = selected.filter(function (s) { return !hasPrice(s.product); }).length;
+        if (missing && typeof root.confirm === 'function' && !root.confirm(missing + (missing === 1 ? ' producto no tiene' : ' productos no tienen') + ' precio. Sus etiquetas saldrán como «Sin precio». ¿Imprimir igual?')) return;
         doc.body.classList.add('etq-printing');
-        var done = function () { doc.body.classList.remove('etq-printing'); root.removeEventListener('afterprint', done); };
+        var style = doc.createElement('style'); style.setAttribute('data-etq-page-style', format); style.textContent = pageCss(format); doc.head.appendChild(style);
+        var done = function () { doc.body.classList.remove('etq-printing'); if (style.parentNode) style.parentNode.removeChild(style); root.removeEventListener('afterprint', done); };
         root.addEventListener('afterprint', done);
         if (typeof root.print === 'function') root.print();
       }

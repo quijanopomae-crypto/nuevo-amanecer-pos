@@ -34,7 +34,7 @@
     return Number.isFinite(date.getTime()) ? new Date(date.getTime() - 5 * 3600000).toISOString().slice(0, 10) : '';
   }
   function periodRange(days, now) {
-    var count = Number(days) === 90 ? 90 : 30;
+    var count = [30, 60, 90].indexOf(Number(days)) >= 0 ? Number(days) : 30; // 60: Productos sin movimiento (ABC sigue ofreciendo 30/90)
     var to = limaDay(now === undefined ? Date.now() : now);
     if (!to) throw new RangeError('Fecha de referencia inválida');
     var from = new Date(new Date(to + 'T00:00:00Z').getTime() - (count - 1) * DAY_MS);

@@ -168,7 +168,7 @@ test('owner export reads the active horizon and creates only a download; permiss
     assert.equal(tag, 'a');
     return { click() { clicked++; }, remove() { removed++; } };
   };
-  h.ctx.document.getElementById = () => ({ querySelector: () => h.horizon, appendChild() {} });
+  h.ctx.document.getElementById = () => ({ querySelector: selector => selector === '[data-rpv-horizon]' ? h.horizon : null, appendChild() {} });
   h.ctx.Blob = class { constructor(parts, options) { this.parts = parts; this.options = options; } };
   h.ctx.URL = { createObjectURL(blob) { blobs.push(blob); return 'blob:synthetic'; }, revokeObjectURL(url) { revoked.push(url); } };
   h.ctx.setTimeout = fn => fn();
@@ -179,7 +179,7 @@ test('owner export reads the active horizon and creates only a download; permiss
   assert.match(blobs[0].parts[0], /^\uFEFFFiltro: próximos 90 días/);
   assert.ok(blobs[0].parts[0].includes("\r\n'=Producto,export,"));
   assert.equal(blobs[0].options.type, 'text/csv;charset=utf-8');
-  h.ctx.NA_PERMISSIONS = PERMISSIONS;
+  h.ctx.NA_PERMISSIONS = { ...PERMISSIONS, featureLocked: () => true };
   assert.equal(h.api.exportCsv(), false);
   assert.equal(blobs.length, 1);
 });
@@ -187,11 +187,13 @@ test('owner export reads the active horizon and creates only a download; permiss
 test('owner/permission guard fails closed and locked default denies both rendering and CSV before state reads', () => {
   assert.deepEqual(Array.from(PERMISSIONS.SCREENS.pageReporteProductosVencer), ['owner']);
   assert.deepEqual(Array.from(PERMISSIONS.FEATURE_ROLES['reporte-productos-vencer']), ['owner']);
-  assert.equal(PERMISSIONS.FEATURE_LOCKS['reporte-productos-vencer'], true);
-  assert.equal(PERMISSIONS.featureLocked('reporte-productos-vencer'), true);
+  // Misión 4: desbloqueada en Próximamente; el rol dueño sigue siendo obligatorio.
+  assert.equal(PERMISSIONS.FEATURE_LOCKS['reporte-productos-vencer'], false);
+  assert.equal(PERMISSIONS.featureLocked('reporte-productos-vencer'), false);
   for (const role of ['empleado', 'unknown', '', null]) assert.equal(PERMISSIONS.canAccessScreen(role, 'pageReporteProductosVencer'), false);
   for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) assert.deepEqual(Array.from(PERMISSIONS.routeRoles('/features/reporte-productos-vencer', method)), ['owner']);
-  for (const extra of [{ NA_PERMISSIONS: PERMISSIONS }, { NA_ROLES: undefined }, { NA_PERMISSIONS: undefined },
+  const locked = { ...PERMISSIONS, featureLocked: id => id === 'reporte-productos-vencer' ? true : PERMISSIONS.featureLocked(id) };
+  for (const extra of [{ NA_PERMISSIONS: locked }, { NA_ROLES: undefined }, { NA_PERMISSIONS: undefined },
     { NA_ROLES: { role: 'owner', confirmed: false } }, { NA_ROLES: { isOwner: () => false } },
     { NA_PERMISSIONS: { ...unlocked, canAccessScreen: () => false } }]) {
     const h = harness(extra);
@@ -204,12 +206,12 @@ test('owner/permission guard fails closed and locked default denies both renderi
   }
 });
 
-test('registry stays pending with the new page; navigation denies employees without adding drawer items; assets precache', () => {
+test('registry entry is unlocked (not pending) with the new page; navigation denies employees without adding drawer items; assets precache', () => {
   const ctx = context();
   vm.runInContext(read('POS/js/modules/proximamente-registry.js'), ctx);
   const entry = ctx.NA_PROXIMAMENTE_REGISTRY.find(f => f.id === 'reporte-productos-vencer');
   assert.equal(entry.page, 'pageReporteProductosVencer');
-  assert.equal(entry.pending, true);
+  assert.equal(entry.pending, undefined);
   const navigation = read('POS/js/navigation/menu-navigation.js');
   const c = vm.createContext({ document: { readyState: 'loading', addEventListener() {} }, innerWidth: 390 });
   c.window = c;
@@ -230,5 +232,32 @@ test('registry stays pending with the new page; navigation denies employees with
   for (const asset of ['css/reporte-productos-vencer.css', 'js/modules/reporte-productos-vencer.js']) {
     assert.ok(html.includes(asset)); assert.ok(sw.includes("'./" + asset + "'"));
   }
-  assert.doesNotMatch(source, /fetch\s*\(|XMLHttpRequest|sendBeacon|\.setItem\s*\(|indexedDB|\.innerHTML\s*=|\b(?:POST|PUT|PATCH|DELETE)\b/);
+  // Única escritura permitida: la marca de sesión del aviso cerrado (sessionStorage, sin datos).
+  assert.deepEqual(source.match(/\.setItem\s*\([^)]*\)/g), [".setItem(ALERT_SESSION_KEY, '1')"]);
+  assert.match(source, /root\.sessionStorage\.setItem\(ALERT_SESSION_KEY, '1'\)/);
+  assert.doesNotMatch(source, /fetch\s*\(|XMLHttpRequest|sendBeacon|localStorage|indexedDB|\.innerHTML\s*=|\b(?:POST|PUT|PATCH|DELETE)\b/);
+});
+
+// ---- Misión 4: tramos, filtro por lote y aviso del dueño ----
+test('tramos vencido / 30 / 60 / 90 y resumen en español', () => {
+  assert.deepEqual([-1, 0, 30, 31, 60, 61, 90].map(api.bucketOf), ['vencido', '30', '30', '60', '60', '90', '90']);
+  const report = api.buildReport(products, { days: 90, now });
+  assert.deepEqual(plain(report.counts), { vencido: 2, '30': 3, '60': 2, '90': 2 });
+  assert.equal(api.summaryLabel(report.counts), 'Vencidos: 2 · Hasta 30 días: 3 · 31 a 60 días: 2 · 61 a 90 días: 2');
+});
+
+test('filtro por lote: contiene, sin mayúsculas ni tildes; el CSV indica el lote', () => {
+  const report = api.buildReport(products, { days: 90, now, lot: ' DAY6 ' });
+  assert.deepEqual(ids(report), ['day60', 'day61']);
+  assert.equal(report.lot, 'DAY6');
+  assert.equal(api.buildReport([{ id: 'x', name: 'X', lots: [lot('LOTE-ÑU', '2026-10-20')] }], { now, lot: 'lote-nu' }).rows.length, 1);
+  assert.match(api.toCsv(report).split('\r\n')[0], /lote contiene «DAY6»$/);
+  assert.equal(api.buildReport(products, { now, lot: '' }).rows.length, 5);
+});
+
+test('aviso del dueño: vencidos y por vencer en 30 días con el día de Lima', () => {
+  assert.deepEqual(plain(api.alertSummary(products, now)), { today: '2026-10-15', expired: 2, soon: 3 });
+  const h = harness({ productos: products });
+  h.ctx.NA_ROLES = { isOwner() { throw new Error('rol roto'); } };
+  assert.equal(h.api.showAlert(), false, 'si NA_ROLES falla, no hay aviso');
 });
