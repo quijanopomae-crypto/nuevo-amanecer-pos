@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner explicitly authorized in DM (2026-10-20 Lima: «hazlo» to publishing Worker 61 with base 3cbc9a3c) after web 178 (#845). Deploy of base 3cbc9a3c7064a3b42da0894d12dc4201af7e3d62: aligns Worker pos-permissions.js with web 178 (lock etiquetas-precios false, FEATURE_ROLES owner, from #845 merge 4c7a2fc2); also carries #849 (client only). No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39539308981 (R2 recovery-drills/2026-10-21T03-34-39Z-3cbc9a3c…sql, 2533735 bytes). Rollback to e5ef5ed3 (worker 60). Web not changed.",
-  "target_commit": "3cbc9a3c7064a3b42da0894d12dc4201af7e3d62",
-  "rollback_ref": "e5ef5ed389a3035f776d4c98bf2211ba10aba36b",
+  "authorization_context": "Owner explicitly authorized in group chat (2026-10-21 10:32 Lima: «5 si» to publishing) after merging #852 (8ee99a6a), #853 (f5741665), #854 (f1972211), #855 (a71c58d0), #856 (ce83b9e9) and #858 (7a737693). Deploy of base bbe76a6009666438f5da858a63f8f43c7c292662: aligns Worker pos-permissions.js with the merged features (reporte-productos-vencer, productos-sin-movimiento, sugerencia-compra, ajustes-inventario unlocked, owner-only; SCREENS pageProductosSinMovimiento/pageSugerenciaCompra/pageAjustesInventario owner). Web 180 (d92d909b, build f5741665) already ships the reporte-productos-vencer unlock, so the Worker is behind the web until this deploy. No other Worker code changes since worker 61. No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39637861541 (R2 recovery-drills/2026-10-21T16-47-15Z-bbe76a6009666438f5da858a63f8f43c7c292662.sql, 2533735 bytes, sha256 421d4925…). Rollback to e47b734e (worker 61).",
+  "target_commit": "bbe76a6009666438f5da858a63f8f43c7c292662",
+  "rollback_ref": "e47b734ec488bbc07387c8c2ebf89df972c07eeb",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 61,
-  "optimization": "PERMISSIONS_LOCK_SYNC_845"
+  "attempt": 62,
+  "optimization": "PERMISSIONS_LOCK_SYNC_852_858"
 }
