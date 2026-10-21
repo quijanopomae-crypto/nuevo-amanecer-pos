@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 
 const SHORT_VIEWPORT_MEDIA='@media(min-width:1100px) and (max-height:700px)';
+const APPROVED_SUMMARY_MEDIA='@media(min-width:701px)';
 const SHORT_VIEWPORT_COMMENT='/* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */\n';
 
 export function frozenRules(source, scope='') {
@@ -14,6 +15,19 @@ export function frozenRules(source, scope='') {
   for(;depth&&end<source.length;end++){if(source[end]==='{')depth++;if(source[end]==='}')depth--;}
   const body=source.slice(start+1,end-1);cursor=end;
   if(selector===SHORT_VIEWPORT_MEDIA)continue;
+  if(selector===APPROVED_SUMMARY_MEDIA){
+   // Excepción estricta: únicamente elementos del resumen dentro de Venta actual,
+   // excluyendo teléfonos incluso con «Solicitar sitio de escritorio».
+   assert.match(body, /na-pos-summary-igv-hidden/);
+   const selectors=body.split('{').slice(0,-1).map(chunk=>chunk.split('}').pop().trim());
+   assert.ok(selectors.length>10);
+   for(const line of selectors){
+    for(const part of line.split(',').map(x=>x.trim()).filter(Boolean)){
+     assert.match(part, /^body(?:\.dark)?:not\(\.na-pos-phone-device\) #pagePOS(?:\.na-pos-summary-igv-hidden)? \.(?:cart-totals|cart-count-line)(?:[>:][^{}]+)?$/, 'outside current sale summary: '+part);
+    }
+   }
+   continue;
+  }
   if(selector.startsWith('@media'))rows.push(...frozenRules(body,scope+selector+'/'));
   else if(!/^#pagePOS (?:#cartDrawer )?\.(?:cart-(?!fab\b)|ci-|qty-|btn-rm\b|total-|btn-cobro\b)/.test(selector))rows.push(scope+selector+'{'+body+'}');
  }
