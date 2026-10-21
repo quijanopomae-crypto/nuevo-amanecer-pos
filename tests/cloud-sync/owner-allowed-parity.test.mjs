@@ -20,13 +20,16 @@ const COPIES = [
   { file: 'POS/js/modules/valorizacion-inventario.js', page: 'pageValorizacion', policy: true },
   { file: 'POS/js/modules/ventas-stock.js', page: 'pageVentasStock', policy: true, exported: 'NA_VENTAS_STOCK' },
   { file: 'POS/js/modules/kardex.js', page: 'pageKardex', policy: true, exported: 'NA_KARDEX' },
-  { file: 'POS/js/modules/cliente-historial-compras.js', page: 'pageClienteHistorial', feature: 'cliente-historial-compras', policy: true, featureSwitch: true, exported: 'NA_CLIENTE_HISTORIAL' }
+  { file: 'POS/js/modules/cliente-historial-compras.js', page: 'pageClienteHistorial', feature: 'cliente-historial-compras', policy: true, featureSwitch: true, exported: 'NA_CLIENTE_HISTORIAL' },
+  // #833: el costo del historial de precios lo ve solo el dueño confirmado (misma regla, otro nombre).
+  { file: 'POS/js/products/price-history.js', fn: 'canSeeCost' }
 ];
+const OWNER_COPIES = COPIES.filter(c => !c.fn);
 
 // Copia exacta del texto de ownerAllowed (y de sus ayudantes isOwner/policyReady/featureUnlocked) del archivo real.
-function ownerBlock(source) {
-  const def = source.search(/function ownerAllowed\(\)|const ownerAllowed = /);
-  assert.ok(def >= 0, 'ownerAllowed definition');
+function ownerBlock(source, fn = 'ownerAllowed') {
+  const def = source.search(new RegExp('function ' + fn + '\\(\\)|const ' + fn + ' = '));
+  assert.ok(def >= 0, fn + ' definition');
   const helper = source.indexOf('function isOwner()');
   let start = helper >= 0 && helper < def ? helper : def;
   let i = source.indexOf('{', def), depth = 0;
@@ -70,7 +73,7 @@ function gates(ctx) {
   return COPIES.map(copy => ({
     copy,
     allowed: vm.runInContext('(function (root) { var PAGE_ID = ' + JSON.stringify(copy.page || 'pageX') + ', FEATURE_ID = ' + JSON.stringify(copy.feature || 'x') +
-      ';\n' + ownerBlock(read(copy.file)) + '\nreturn ownerAllowed; })(globalThis)', ctx)
+      ';\n' + ownerBlock(read(copy.file), copy.fn) + '\nreturn ' + (copy.fn || 'ownerAllowed') + '; })(globalThis)', ctx)
   }));
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -90,17 +93,20 @@ const ROLE_SCENARIOS = [
   ['modo local sin credenciales', {}, true]
 ];
 
-test('las 12 copias de ownerAllowed son alias de NA_ROLES.isOwner (sin depender del rol en caché)', () => {
-  const found = [];
+test('las 12 copias de ownerAllowed y canSeeCost (#833) son alias de NA_ROLES.isOwner (sin depender del rol en caché)', () => {
+  const found = [], cost = [];
   const walk = dir => readdirSync(new URL('../../' + dir, import.meta.url)).forEach(name => {
     const path = dir + '/' + name;
     if (statSync(new URL('../../' + path, import.meta.url)).isDirectory()) walk(path);
     else if (name.endsWith('.js') && /function ownerAllowed\(\)|const ownerAllowed = /.test(read(path))) found.push(path);
+    if (name.endsWith('.js') && /function canSeeCost\(\)|const canSeeCost = /.test(read(path))) cost.push(path);
   });
   walk('POS/js');
-  assert.deepEqual(found.sort(), COPIES.map(c => c.file).sort());
-  for (const { file } of COPIES) {
-    const block = ownerBlock(read(file));
+  assert.deepEqual(found.sort(), OWNER_COPIES.map(c => c.file).sort());
+  assert.deepEqual(cost.sort(), COPIES.filter(c => c.fn === 'canSeeCost').map(c => c.file).sort());
+  for (const { file, fn } of COPIES) {
+    const block = ownerBlock(read(file), fn);
+    assert.match(block, /isOwner(\?\.)?\(\) === true/, file + ' isOwner() === true');
     assert.match(block, /\.isOwner\b/, file);
     assert.doesNotMatch(block, /canConfigure|role === 'owner'/, file);
     assert.match(block, /try \{/, file + ' falla cerrada');

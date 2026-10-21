@@ -210,3 +210,29 @@ test('si localStorage está lleno, recorta lo más viejo y no lanza', () => {
   context.localStorage.setItem = () => { const err = new Error('quota'); err.name = 'QuotaExceededError'; err.code = 22; throw err; };
   assert.doesNotThrow(() => api.recordDiff({ productId: 'P', origin: 'ficha', at: '2026-10-21T00:00:00.000Z', partial: true, before: { venta: 4 }, after: { venta: 5 } }));
 });
+
+test('mayorista: S/ 0.00 y vacío son «sin precio»; pasar de uno a otro no se registra', () => {
+  const api = load().NA_PRICE_HISTORY;
+  const base = { id: 'P0', precio: 2, costo: 1 };
+  for (const [before, after] of [[0, ''], [0, null], [0, undefined], ['', 0], [null, 0], ['0', ''], [0, '0.00']]) {
+    const added = api.recordCatalogDiff([{ ...base, precioCaja: before }], [{ ...base, precioCaja: after }], 'ficha');
+    assert.deepEqual(plain(added), [], `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
+  }
+  assert.deepEqual(plain(api.list('P0')), []);
+  // Un precio real sigue registrándose, desde y hacia «sin precio».
+  const up = api.recordCatalogDiff([{ ...base, precioCaja: 0 }], [{ ...base, precioCaja: 5 }], 'ficha');
+  assert.deepEqual(plain(up.map(row => [row.type, row.before, row.after])), [['mayorista', 0, 5]]);
+  const down = api.recordCatalogDiff([{ ...base, precioCaja: 5 }], [{ ...base, precioCaja: '' }], 'ficha');
+  assert.deepEqual(plain(down.map(row => [row.type, row.before, row.after])), [['mayorista', 5, null]]);
+  // Solo el mayorista: venta y costo conservan su detección (0 → vacío sí cuenta).
+  const sale = api.recordDiff({ productId: 'P0', origin: 'ficha', before: { venta: 0, mayorista: 0, costo: 0 }, after: { venta: null, mayorista: null, costo: null } });
+  assert.deepEqual(plain(sale.map(row => row.type).sort()), ['costo', 'venta']);
+});
+
+test('canSeeCost: solo isOwner() === true; un valor no booleano o un error fallan cerrado', () => {
+  for (const [isOwner, expected] of [[() => true, true], [() => 'yes', false], [() => 1, false], [() => false, false], [() => { throw new Error('boom'); }, false]]) {
+    const context = load({ NA_ROLES: { role: 'owner', confirmed: true, isOwner } });
+    assert.equal(context.NA_PRICE_HISTORY.canSeeCost(), expected, String(isOwner));
+  }
+  assert.equal(load({ NA_ROLES: undefined }).NA_PRICE_HISTORY.canSeeCost(), false);
+});

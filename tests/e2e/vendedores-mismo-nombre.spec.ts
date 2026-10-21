@@ -229,6 +229,52 @@ for (const [width, noSegmenter, wideFont] of [[768, false, false], [900, false, 
   expect(others).toEqual([['Todos', ''], ['Ana · CAJ-001', ''], ['Ana · CAJ-002', ''], ['Luis', '']]);
 });
 
+// #837: el corte medido se recalcula sin repintar al cambiar el ancho (resize) y al cargar fuentes (loadingdone).
+// Si se quitan esos listeners, el select conserva el texto de la medición anterior y esta prueba falla.
+test('Historial del cliente: el corte del Vendedor se recalcula al cambiar el ancho y al cargar fuentes', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await ownerPage(page); await seed(page);
+  const ID = 'a1b2c3d4-0000-4000-8000-000000000001', FULL = 'María Fernanda Quispe · a1b2c';
+  await page.evaluate(ids => (0, eval)(`
+    ventas.push(...${JSON.stringify(ids)}.map((id,i)=>({id:'V-vmn-rz'+i,fecha:NALimaTime.today(),hora:'11:0'+i,hora24:'11:0'+i,timestamp:new Date(NALimaTime.today()+'T11:0'+i+':00-05:00').toISOString(),total:4+i,metodo:'efectivo',clienteId:'vmn-c1',cajeroId:id,cajeroNombre:'María Fernanda Quispe',items:[{id:9101,name:'PRODUCTO VMN',precio:4+i,qty:1,costo:1}]})));
+  `), [ID, 'a1b2d5e6-0000-4000-8000-000000000002']);
+  await page.evaluate(() => (window as any).goPage('pageProximamente'));
+  await page.locator('#pageProximamente [data-feature-id="cliente-historial-compras"]').click();
+  const screen = page.locator('#pageClienteHistorial');
+  await screen.getByRole('searchbox', { name: 'Buscar por nombre o DNI' }).fill('00000011');
+  await screen.getByRole('combobox', { name: 'Cliente', exact: true }).selectOption('vmn-c1');
+  const seller = screen.getByRole('combobox', { name: 'Vendedor' });
+  await expect.poll(() => seller.locator('option').count()).toBe(6);
+  await seller.selectOption('id:' + ID);
+  // Estado visible del select: texto de la opción elegida, title de opción y select, y si entra en el ancho disponible.
+  const state = () => seller.evaluate((select: HTMLSelectElement) => {
+    const option = select.selectedOptions[0], cs = getComputedStyle(select), ctx = document.createElement('canvas').getContext('2d')!;
+    ctx.font = cs.font;
+    const room = select.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 20;
+    return { text: option.text, optionTitle: option.title, selectTitle: select.getAttribute('title'), fits: ctx.measureText(option.text).width <= room };
+  });
+  // 1280 px: la etiqueta completa entra; sin title.
+  await expect.poll(state).toEqual({ text: FULL, optionTitle: '', selectTitle: null, fits: true });
+  // 768 px (solo resize, sin repintar): nombre cortado, sufijo entero, title con la etiqueta completa.
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect.poll(async () => { const s = await state(); return s.text !== FULL && s.text.endsWith('… · a1b2c') && 'María Fernanda Quispe'.startsWith(s.text.slice(0, -'… · a1b2c'.length)) && s.fits; }, { message: 'cortado al pasar a 768 px' }).toBe(true);
+  expect(await state()).toMatchObject({ optionTitle: FULL, selectTitle: FULL });
+  const at768 = (await state()).text;
+  // Fuente más ancha (solo en la prueba) + evento loadingdone: se vuelve a medir y sigue entrando.
+  await page.addStyleTag({ content: '#pageClienteHistorial [data-ch-seller]{font-size:17px}' });
+  expect((await state()).fits, 'con 17 px el texto anterior ya no entra').toBe(false);
+  await page.evaluate(() => (document as any).fonts.dispatchEvent(new Event('loadingdone')));
+  await expect.poll(async () => { const s = await state(); return s.fits && s.text.endsWith('… · a1b2c') && s.text.length < at768.length; }, { message: 'recalculado al cargar fuentes' }).toBe(true);
+  expect(await state()).toMatchObject({ optionTitle: FULL, selectTitle: FULL });
+  // De vuelta a 1280 px con la fuente normal: etiqueta completa y sin title.
+  await page.evaluate(() => document.querySelectorAll('style').forEach(s => { if (s.textContent?.includes('font-size:17px')) s.remove(); }));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect.poll(state, { message: 'restaurado a 1280 px' }).toEqual({ text: FULL, optionTitle: '', selectTitle: null, fits: true });
+  // El valor y el filtro no cambian.
+  expect(await seller.inputValue()).toBe('id:' + ID);
+  await expect(screen.locator('[data-ch-table="sales"] tbody tr')).toHaveCount(1);
+});
+
 test('Arqueo: dos usuarios «Rosa» de la nube se distinguen por su id; «Dueño» único sin sufijo', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await ownerPage(page);
