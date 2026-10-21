@@ -23,7 +23,7 @@ body.dark #pageEtiquetasPrecios .etq-preview-wrap { background: #0f172a; }
 .etq-label { display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 1.5mm; background: #fff; color: #000; border: 1px solid #d1d5db; font-family: Arial, Helvetica, sans-serif; break-inside: avoid; page-break-inside: avoid; }
 .etq-format-chica .etq-label { width: 38mm; height: 25mm; }
 .etq-format-mediana .etq-label { width: 50mm; height: 30mm; }
-.etq-format-a4 { width: 210mm; max-width: none; gap: 0; display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; }
+.etq-format-a4 { width: 210mm; max-width: none; gap: 0; }
 .etq-format-a4 .etq-label { width: 70mm; height: 37mm; }
 .etq-name { font-size: 8pt; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .etq-price { font-size: 13pt; font-weight: 800; line-height: 1.1; }
@@ -37,5 +37,24 @@ body.dark #pageEtiquetasPrecios .etq-preview-wrap { background: #0f172a; }
   body.etq-printing #pageEtiquetasPrecios .etq-sheet { position: absolute; left: 0; top: 0; background: #fff; }
   body.etq-printing .etq-label { border-color: transparent; }
   .etq-warn { display: none !important; }
-  body.etq-printing .etq-format-a4 .etq-label:nth-child(24n) { break-after: page; page-break-after: always; }
+}
+/* Misión 1: aviso sin precio, tope de vista previa, A4 por hojas y tema oscuro (contraste ≥ 4.5:1). */
+#pageEtiquetasPrecios .etq-item-warn { flex: 1 1 100%; margin: 0; color: #92400e; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+#pageEtiquetasPrecios .etq-cap { color: #92400e; font-weight: 700; }
+.etq-no-price .etq-price { color: #b91c1c; font-size: 11pt; }
+.etq-format-a4 { display: block; }
+.etq-a4-page { width: 210mm; display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; background: #fff; }
+.etq-a4-page + .etq-a4-page { margin-top: 4mm; }
+body.dark #pageEtiquetasPrecios .etq-note { color: #cbd5e1; }
+body.dark #pageEtiquetasPrecios .etq-search, body.dark #pageEtiquetasPrecios select, body.dark #pageEtiquetasPrecios .etq-qty input { background: #1e293b; color: #f1f5f9; border-color: #64748b; }
+body.dark #pageEtiquetasPrecios .etq-search::placeholder { color: #cbd5e1; opacity: 1; }
+body.dark #pageEtiquetasPrecios .etq-match, body.dark #pageEtiquetasPrecios .etq-remove { background: #1e293b; color: #f1f5f9; border-color: #64748b; }
+body.dark #pageEtiquetasPrecios .etq-item { border-color: #475569; }
+body.dark #pageEtiquetasPrecios .etq-item-warn, body.dark #pageEtiquetasPrecios .etq-cap { color: #fcd34d; }
+@media print {
+  body.etq-printing .etq-format-chica, body.etq-printing .etq-format-mediana { display: block; gap: 0; }
+  body.etq-printing .etq-format-chica .etq-label, body.etq-printing .etq-format-mediana .etq-label { break-after: page; page-break-after: always; }
+  body.etq-printing .etq-format-chica .etq-label:last-child, body.etq-printing .etq-format-mediana .etq-label:last-child { break-after: auto; page-break-after: auto; }
+  body.etq-printing .etq-a4-page { height: 296mm; align-content: start; margin: 0; break-after: page; page-break-after: always; }
+  body.etq-printing .etq-a4-page:last-child { break-after: auto; page-break-after: auto; }
 }

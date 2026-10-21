@@ -166,23 +166,23 @@ test('owner CSV contains active horizon, dd/mm/yyyy, expired first and protected
   expect(writes).toEqual([]);
 });
 
-test('default locked card keeps preview pending and direct render/export reveal no lot data', async ({ page }) => {
+test('Misión 4: la tarjeta queda Disponible y abre el reporte; si se vuelve a bloquear, no revela lotes', async ({ page }) => {
   await rolePage(page, 'owner');
   await seed(page, false);
   const before = await state(page);
   await page.evaluate(() => (window as any).goPage('pageProximamente'));
   const card = page.locator('[data-feature-id="reporte-productos-vencer"]');
-  await expect(card.locator('.na-prox-badge')).toContainText('Próximamente');
+  await expect(card.locator('.na-prox-available')).toHaveText('Disponible');
   await card.click();
-  await expect(page.locator('#naProxPreview')).toBeVisible();
-  await expect(page.locator(screenId)).not.toHaveClass(/\bactive\b/);
+  await expect(page.locator(screenId)).toHaveClass(/\bactive\b/);
+  await expect(page.locator(`${screenId} [data-rpv-controls]`)).toBeVisible();
   const result = await page.evaluate(() => {
-    const w = window as any;
-    return { locked: w.NA_PERMISSIONS.FEATURE_LOCKS['reporte-productos-vencer'],
-      page: w.NA_PROXIMAMENTE.get('reporte-productos-vencer').page,
-      rendered: w.NA_REPORTE_PRODUCTOS_VENCER.render(), exported: w.NA_REPORTE_PRODUCTOS_VENCER.exportCsv() };
+    const w = window as any, original = w.NA_PERMISSIONS;
+    const unlocked = { locked: original.FEATURE_LOCKS['reporte-productos-vencer'], page: w.NA_PROXIMAMENTE.get('reporte-productos-vencer').page };
+    w.NA_PERMISSIONS = { ...original, featureLocked: (id: string) => id === 'reporte-productos-vencer' ? true : original.featureLocked(id) };
+    return { ...unlocked, rendered: w.NA_REPORTE_PRODUCTOS_VENCER.render(), exported: w.NA_REPORTE_PRODUCTOS_VENCER.exportCsv() };
   });
-  expect(result).toEqual({ locked: true, page: 'pageReporteProductosVencer', rendered: false, exported: false });
+  expect(result).toEqual({ locked: false, page: 'pageReporteProductosVencer', rendered: false, exported: false });
   await expect(page.locator(`${screenId} [data-rpv-content]`)).toBeEmpty();
   await expect(page.locator(`${screenId} [data-rpv-controls]`)).toBeHidden();
   expect(await state(page)).toEqual(before);

@@ -433,6 +433,7 @@
       <option value="a4">A4 · 24 por hoja (3 × 8)</option>
     </select>
     <h2>Vista previa · <span data-etq-count>0 etiquetas</span></h2>
+    <p class="etq-note etq-cap" data-etq-cap role="status" hidden></p>
     <div class="etq-preview-wrap"><div class="etq-sheet etq-format-mediana" data-etq-sheet></div></div>
     <button class="etq-print" type="button" data-etq-print disabled>Imprimir</button>
   </div>
@@ -637,11 +638,15 @@
           <option value="90">Próximos 90 días</option>
         </select>
       </label>
+      <label>Lote
+        <input type="search" data-rpv-lot autocomplete="off" placeholder="Filtrar por lote" aria-label="Filtrar por lote">
+      </label>
       <button type="button" data-rpv-refresh>Actualizar reporte</button>
       <button type="button" data-rpv-export>Exportar CSV</button>
     </div>
     <p class="rpv-method">Solo consulta: se muestran lotes cargados con stock mayor a cero. Los vencidos siempre se incluyen. El horizonte incluye hoy y su último día, según el calendario de Lima. Stock se expresa en la unidad física de cada producto.</p>
     <p class="rpv-status" data-rpv-status role="status" aria-live="polite"></p>
+    <p class="rpv-summary" data-rpv-summary hidden></p>
     <div data-rpv-content></div>
   </div>
 </div>
