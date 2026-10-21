@@ -503,6 +503,7 @@ async function loadCollectionRows(db,type,before,page,schema=null){
     // statement (no extra subrequest). Stock columns always come from the base row.
     const cols=(alias)=>TABLES.products.map(column=>column==='product_id'?`${alias}.product_id`
       :column==='legacy_alternate_code'?`CASE WHEN r.product_id IS NULL THEN ${alias}.legacy_alternate_code ELSE NULL END AS legacy_alternate_code`
+      :column==='cost_cents'?`CASE WHEN r.product_id IS NULL OR json_extract(r.result_json,'$.cost_kept_null')=1 THEN ${alias}.cost_cents ELSE r.cost_cents END AS cost_cents`
       :PRODUCT_REVISION_FIELDS.includes(column)?`CASE WHEN r.product_id IS NULL THEN ${alias}.${column} ELSE r.${column} END AS ${column}`
       :`${alias}.${column}`).join(',');
     const latest=`LEFT JOIN canonical_product_revisions r ON r.promotion_id=?1 AND r.product_id=%A.product_id
