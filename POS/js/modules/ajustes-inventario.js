@@ -10,10 +10,14 @@
   var PAGE_ID = 'pageAjustesInventario', FEATURE_ID = 'ajustes-inventario';
   var PREFIX = 'ajuste:v1:', MAX_REASON = 500;
   var TYPES = { merma: 'Merma', rotura: 'Rotura', vencido: 'Vencido', correccion: 'Corrección' };
+  var HAS = Object.prototype.hasOwnProperty;
+  // Solo claves propias: rechaza heredadas como 'constructor' o 'toString'.
+  function own(map, key) { return typeof key === 'string' && HAS.call(map, key); }
+  function isType(type) { return own(TYPES, type); }
   function text(v) { return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim(); }
   // Motivo estructurado; recorta la nota para no pasar de 500 caracteres (límite del Worker).
   function encodeReason(type, user, note) {
-    if (!TYPES[type]) throw new Error('TIPO_INVALIDO');
+    if (!isType(type)) throw new Error('TIPO_INVALIDO');
     var u = { n: text(user && user.nombre).slice(0, 100) || 'Sin nombre', i: text(user && user.id).slice(0, 60) };
     var n = text(note).slice(0, 400), out;
     for (;;) {
@@ -26,7 +30,7 @@
     if (typeof reason !== 'string' || reason.indexOf(PREFIX) !== 0) return null;
     try {
       var o = JSON.parse(reason.slice(PREFIX.length));
-      if (!o || typeof o !== 'object' || !TYPES[o.t] || !o.u || typeof o.u !== 'object') return null;
+      if (!o || typeof o !== 'object' || !isType(o.t) || !o.u || typeof o.u !== 'object') return null;
       return { type: o.t, label: TYPES[o.t], user: { nombre: String(o.u.n || ''), id: String(o.u.i || '') }, note: typeof o.n === 'string' ? o.n : '' };
     } catch (_) { return null; }
   }
@@ -47,13 +51,37 @@
     }
     return rows.some(function (r) { return !!r && !(Number(r.quantity) <= 0); });
   }
-  function lotBlocked(type, product) { return !!LOT_BLOCKED[type] && hasLots(product); }
+  function lotBlocked(type, product) { return own(LOT_BLOCKED, type) && hasLots(product); }
   // Merma, rotura y vencido restan; la corrección puede sumar o restar.
   function plan(type, quantity, direction) {
     var q = Number(quantity);
-    if (!TYPES[type] || !Number.isFinite(q) || q <= 0) return null;
+    if (!isType(type) || !Number.isFinite(q) || q <= 0) return null;
     var up = type === 'correccion' && direction === 'sumar';
     return { movement_type: up ? 'ENTRADA' : 'SALIDA', delta: up ? q : -q, quantity: q };
+  }
+  // Validación de cantidad (UI y register). MAX_QTY: tope sano por ajuste; una Corrección que suma no puede
+  // dejar el stock por encima de stock actual + MAX_CORRECTION_UP. Solo los productos por peso/volumen/longitud
+  // (misma regla de unidad que el movimiento de Inventario y CANON) aceptan decimales, hasta 3.
+  var MAX_QTY = 1000000, MAX_CORRECTION_UP = 10000;
+  var FRACTIONAL_UNITS = /^(kilogramos?|kilos?|kgs?|gramos?|grs?|g|litros?|lts?|l|mililitros?|ml|metros?|m)$/i;
+  function allowsFraction(product) { return !!product && FRACTIONAL_UNITS.test(text(product.unit || product.unidad)); }
+  function currentStock(product) {
+    var v = product && (typeof product.current_stock_quantity === 'number' ? product.current_stock_quantity : Number(product.stock));
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  }
+  function fmtQty(v) { return Number(v).toLocaleString('es-PE', { maximumFractionDigits: 3 }); }
+  // Devuelve '' si la cantidad es válida, o el mensaje en español.
+  function quantityError(product, type, quantity, direction) {
+    var q = typeof quantity === 'number' ? quantity : Number(String(quantity == null ? '' : quantity).replace(',', '.'));
+    if (typeof quantity === 'string' && !text(quantity)) q = NaN;
+    if (!Number.isFinite(q) || q <= 0) return 'Ingresa una cantidad válida mayor que 0.';
+    if (q > MAX_QTY) return 'La cantidad no puede superar ' + fmtQty(MAX_QTY) + ' por ajuste.';
+    if (!allowsFraction(product) && !Number.isInteger(q)) return 'Este producto se mueve en unidades enteras. Para decimales (ej. 2.5) el producto debe venderse por kilogramo, gramo o litro.';
+    if (allowsFraction(product) && Math.abs(Math.round(q * 1000) - q * 1000) > 1e-6) return 'Usa como máximo 3 decimales.';
+    var stock = currentStock(product), up = type === 'correccion' && direction === 'sumar';
+    if (stock !== null && !up && q > stock + 1e-9) return 'No puedes descontar más que el stock actual (' + fmtQty(stock) + ').';
+    if (up && q > MAX_CORRECTION_UP) return 'Una corrección no puede sumar más de ' + fmtQty(MAX_CORRECTION_UP) + ' sobre el stock actual' + (stock !== null ? ' (' + fmtQty(stock) + ')' : '') + '.';
+    return '';
   }
   function limaDay(ts) {
     var t = Date.parse(ts); if (!Number.isFinite(t)) return '';
@@ -122,14 +150,55 @@
     try { var a = typeof _naGetActiveCashier === 'function' ? _naGetActiveCashier() : null; if (a && (a.nombre || a.id)) return { nombre: a.nombre, id: a.id }; } catch (_) {} // eslint-disable-line no-undef
     return { nombre: 'Dueño', id: '' };
   }
+  // Mensajes en español para los códigos que puede devolver un ajuste en CANON (en vez del código crudo).
+  var EXPIRED_ONLY_MESSAGE = 'Este producto solo tiene stock en lotes vencidos y este ajuste no puede descontarlos. Registra la salida desde Inventario con el botón «Salida» del producto: pide el PIN del dueño para usar lotes vencidos (requiere «Permitir vender lotes vencidos» activo en Configuración). No se modificó el stock.';
+  var CANON_MESSAGES = {
+    expired_lots_confirmation_required: EXPIRED_ONLY_MESSAGE,
+    EXPIRED_LOTS_CONFIRMATION_REQUIRED: EXPIRED_ONLY_MESSAGE,
+    expired_lot_approval_required: 'No se autorizó la salida de lotes vencidos. No se modificó el stock.',
+    insufficient_stock: 'No hay suficiente stock en CANON para este ajuste. No se modificó el stock.',
+    INSUFFICIENT_CANONICAL_STOCK: 'No hay suficiente stock en CANON para este ajuste. No se modificó el stock.',
+    INSUFFICIENT_PROJECTED_STOCK: 'No se registró el ajuste: parte de ese stock ya está vendido en ventas que aún se están enviando a CANON. Espera a que se sincronicen o registra una cantidad menor.',
+    LOT_STOCK_RESERVED_BY_PENDING_SALE: 'No se registró el ajuste: hay lotes reservados por ventas pendientes de este producto. Espera a que se confirmen antes de retirar stock.',
+    stale_stock: 'El stock cambió en CANON mientras registrabas el ajuste. No se modificó el stock; revisa el stock actual y vuelve a intentarlo.',
+    product_not_found: 'CANON no encontró este producto. No se modificó el stock.',
+    product_inventory_disabled: 'Este producto no controla inventario en CANON. No se modificó el stock.',
+    invalid_lot_state: 'Los lotes de este producto en CANON no cuadran con su stock. No se modificó el stock; revisa los lotes en Inventario.',
+    CANONICAL_FINANCIAL_PENDING: 'Hay una operación de CANON pendiente de confirmar (puede ser este ajuste). No lo registres de nuevo hasta que se confirme o se resuelva.'
+  };
+  function canonMessage(code) {
+    code = text(code);
+    return own(CANON_MESSAGES, code) ? CANON_MESSAGES[code] : 'CANON no registró el ajuste (' + code + ').';
+  }
+  // Un rechazo definitivo del Worker llega como CANONICAL_FINANCIAL_REJECTED_<status> y deja el comando en
+  // el diario con last_error. Se lee el código real y se libera el diario con discardRejectedInventory (el
+  // mismo camino que usa el movimiento de Inventario), para no bloquear las siguientes operaciones.
+  async function canonFailure(c, error) {
+    var code = text(error && error.message);
+    if (/^CANONICAL_FINANCIAL_REJECTED_\d+$/.test(code)) {
+      var pending = null;
+      try { pending = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null; } catch (_) {}
+      if (pending && pending.command === 'inventory.adjust' && pending.last_error) {
+        code = text(pending.last_error);
+        var discarded = false;
+        try { discarded = typeof c.discardRejectedInventory === 'function' && (await c.discardRejectedInventory()) === true; } catch (_) {}
+        // No es un rechazo definitivo (p. ej. 5xx): el ajuste sigue pendiente en el diario de CANON.
+        if (!discarded) return { ok: false, code: code, pending: true, message: 'El ajuste quedó pendiente en CANON (' + code + '). No lo registres de nuevo hasta que se confirme o se resuelva.' };
+      }
+    }
+    return { ok: false, code: code, message: canonMessage(code) };
+  }
   function productId(p) { return String(p.id != null ? p.id : p.product_id); }
   function productName(p) { return String(p.name || p.nombre || 'Producto'); }
   async function register(input) {
     if (!available()) return { ok: false, message: 'Sin permiso.' };
-    var step = plan(input.type, input.quantity, input.direction);
-    if (!step) return { ok: false, message: 'Revisa el tipo y la cantidad.' };
+    if (!isType(input.type)) return { ok: false, message: 'Revisa el tipo y la cantidad.' };
     var product = products().find(function (p) { return p && productId(p) === String(input.productId); });
     if (!product) return { ok: false, message: 'Producto no encontrado.' };
+    var qtyError = quantityError(product, input.type, input.quantity, input.direction);
+    if (qtyError) return { ok: false, invalidQuantity: true, message: qtyError };
+    var step = plan(input.type, input.quantity, input.direction);
+    if (!step) return { ok: false, message: 'Revisa el tipo y la cantidad.' };
     // Guardia antes de enviar (CANON o local): nunca se manda un ajuste Rotura/Vencido sin poder elegir lote.
     if (lotBlocked(input.type, product)) return { ok: false, blocked: 'LOTS_REQUIRE_LOT_SELECTION', message: LOT_BLOCK_MESSAGE };
     var reason = encodeReason(input.type, currentUser(), input.note);
@@ -137,7 +206,7 @@
     if (c) {
       if (typeof c.adjustInventory !== 'function') return { ok: false, message: 'CANON no disponible para ajustes.' };
       try { await c.adjustInventory({ product_id: productId(product), movement_type: step.movement_type, quantity: step.quantity, reason: reason }); }
-      catch (e) { return { ok: false, message: 'CANON no registró el ajuste (' + text(e && e.message) + ').' }; }
+      catch (e) { return canonFailure(c, e); }
       try { if (typeof c.refresh === 'function') await c.refresh(); } catch (_) {}
       return { ok: true, canonical: true };
     }
@@ -210,7 +279,22 @@
     renderProducts(p); renderReport(p); syncDirection(p);
     return true;
   }
-  function syncDirection(p) { syncLots(p); var t = p.querySelector('[data-aj-type]'), d = p.querySelector('[data-aj-direction-wrap]'); if (t && d) d.hidden = t.value !== 'correccion'; }
+  function syncDirection(p) { syncLots(p); var t = p.querySelector('[data-aj-type]'), d = p.querySelector('[data-aj-direction-wrap]'); if (t && d) d.hidden = t.value !== 'correccion'; syncQuantity(p); }
+  // Validación en vivo de la cantidad: step/max del campo y mensaje en español debajo.
+  function syncQuantity(p) {
+    var qty = p.querySelector('[data-aj-qty]'); if (!qty) return '';
+    var sel = p.querySelector('[data-aj-product]'), t = p.querySelector('[data-aj-type]'), dir = p.querySelector('[data-aj-direction]');
+    var product = sel && sel.value ? products().find(function (x) { return x && productId(x) === String(sel.value); }) : null;
+    qty.step = allowsFraction(product) ? '0.001' : '1';
+    qty.max = String(MAX_QTY);
+    var box = p.querySelector('[data-aj-qty-error]');
+    if (!box && qty.parentNode) { box = element('span', 'aj-qty-error'); box.setAttribute('data-aj-qty-error', ''); box.setAttribute('role', 'alert'); box.hidden = true; qty.parentNode.appendChild(box); }
+    var raw = text(qty.value), msg = product && raw ? quantityError(product, t ? t.value : '', raw, dir ? dir.value : 'restar') : '';
+    if (typeof qty.setCustomValidity === 'function') qty.setCustomValidity(msg);
+    if (msg) qty.setAttribute('aria-invalid', 'true'); else qty.removeAttribute('aria-invalid');
+    if (box) { box.textContent = msg; box.hidden = !msg; }
+    return msg;
+  }
   // Desactiva «Rotura» y «Vencido» si el producto elegido tiene lotes, con la explicación visible.
   function syncLots(p) {
     var t = p.querySelector('[data-aj-type]'), sel = p.querySelector('[data-aj-product]'), note = p.querySelector('[data-aj-lot-note]');
@@ -219,11 +303,11 @@
     var product = id ? products().find(function (x) { return x && productId(x) === String(id); }) : null;
     var locked = hasLots(product);
     Array.prototype.forEach.call(t.options, function (o) {
-      if (!LOT_BLOCKED[o.value]) return;
+      if (!own(LOT_BLOCKED, o.value)) return;
       o.disabled = locked;
       o.textContent = TYPES[o.value] + (locked ? ' (no disponible con lotes)' : '');
     });
-    if (locked && LOT_BLOCKED[t.value]) t.value = 'merma';
+    if (locked && own(LOT_BLOCKED, t.value)) t.value = 'merma';
     if (note) { note.hidden = !locked; note.textContent = locked ? LOT_BLOCK_MESSAGE : ''; }
   }
   function exportCsv() {
@@ -243,14 +327,14 @@
       var res = await register({ productId: p.querySelector('[data-aj-product]').value, type: p.querySelector('[data-aj-type]').value,
         quantity: Number(String(p.querySelector('[data-aj-qty]').value).replace(',', '.')), direction: dir ? dir.value : 'restar', note: p.querySelector('[data-aj-note]').value });
       if (msg) { msg.textContent = res.ok ? 'Ajuste registrado.' : res.message; msg.setAttribute('data-aj-ok', String(!!res.ok)); }
-      if (res.ok) { p.querySelector('[data-aj-qty]').value = ''; p.querySelector('[data-aj-note]').value = ''; ['invRender', 'posRender', 'updateDashboard'].forEach(function (n) { try { if (typeof root[n] === 'function') root[n](); } catch (_) {} }); render(); }
+      if (res.ok) { p.querySelector('[data-aj-qty]').value = ''; syncQuantity(p); p.querySelector('[data-aj-note]').value = ''; ['invRender', 'posRender', 'updateDashboard'].forEach(function (n) { try { if (typeof root[n] === 'function') root[n](); } catch (_) {} }); render(); }
     } finally { busy = false; if (btn) btn.disabled = false; }
   }
   function init() {
     var p = page(); if (!p || p.__naAjBound) return; p.__naAjBound = true;
     function update() { if (p.classList.contains('active')) render(); }
-    p.addEventListener('input', function (e) { if (e.target.matches && e.target.matches('[data-aj-search]')) renderProducts(p); });
-    p.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('[data-aj-type], [data-aj-product]')) syncDirection(p); });
+    p.addEventListener('input', function (e) { if (e.target.matches && e.target.matches('[data-aj-search]')) renderProducts(p); if (e.target.matches && e.target.matches('[data-aj-qty]')) syncQuantity(p); });
+    p.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('[data-aj-type], [data-aj-product], [data-aj-direction]')) syncDirection(p); });
     p.addEventListener('submit', function (e) { e.preventDefault(); submit(p); });
     p.addEventListener('click', function (e) { if (e.target.closest('[data-aj-export]')) exportCsv(); });
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(p, { attributes: true, attributeFilter: ['class'] });
@@ -258,7 +342,7 @@
     root.addEventListener('na:canonical-updated', update);
     update();
   }
-  root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, hasLots: hasLots, lotBlocked: lotBlocked, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
+  root.NA_AJUSTES_INVENTARIO = Object.freeze({ PREFIX: PREFIX, TYPES: TYPES, encodeReason: encodeReason, parseReason: parseReason, isAdjustment: isAdjustment, isType: isType, canonMessage: canonMessage, MAX_QTY: MAX_QTY, MAX_CORRECTION_UP: MAX_CORRECTION_UP, quantityError: quantityError, hasLots: hasLots, lotBlocked: lotBlocked, plan: plan, collect: collect, summary: summary, toCsv: toCsv, limaLabel: limaLabel, available: available, register: register, render: render, exportCsv: exportCsv, init: init });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
