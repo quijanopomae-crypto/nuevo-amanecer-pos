@@ -64,5 +64,5 @@ test('same-height green bar has 3 columns for IGV and 2 for counter; phone exclu
   assert.match(html, /id="posSubtotal"/);
   assert.match(html, /id="posIgv"/);
   assert.match(html, /id="posTotal"/);
-  assert.doesNotMatch(css, /@media\(max-width:700px\)[^]*na-pos-summary-igv-hidden/);
+  assert.match(css, /body:not\(\.na-pos-phone-device\) #pagePOS\.na-pos-summary-igv-hidden/);
 });
