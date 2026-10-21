@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 181: #852 etiquetas, #853 vencimientos, #854 productos sin movimiento, #855 sugerencia de compra, #856 ajustes de inventario y #858 costo de compra en la ficha (merges 8ee99a6a, f5741665, f1972211, a71c58d0, ce83b9e9, 7a737693). Incluye también bbe76a60 (TOTAL en mayúsculas, ASISTENTE 5), que llegó a la rama antes del deploy. Después de worker 62 (run 39638250559, permisos alineados). Rollback: Web 180, build f5741665 (run 39628636401).",
-  "retry_attempt": 181,
-  "retry_reason": "Dueño autoriza publicar («5 si», grupo, 2026-10-21 10:32 Lima). Deploy de base 06a12253a8082f2c53ded52452519e7d9fe81a6f después de worker 62. Respaldo D1: run 39637861541. Rollback: Web 180 (build f5741665).",
-  "requested_at_utc": "2026-10-21T16:51:13Z",
-  "approved_base": "06a12253a8082f2c53ded52452519e7d9fe81a6f"
+  "note": "Web 182: publicar únicamente el ajuste visual TOTAL y S/ con el mismo font-size del PR #865, después de que pase CI y se fusione. No hay cambios de cálculo, venta, caja, inventario, backend o datos. Rollback web 181 run #39638550549, build a38f4ea2.",
+  "retry_attempt": 182,
+  "retry_reason": "Propietario reporta TOTAL más pequeño que el importe. Publicación de CSS correcto ya fusionado a CANON, sin afectar móvil ni cuentas. Precondición: validar E2E/Visual/CI y fusionar PR #865. Revertir a web 181 si hay regresión de render.",
+  "requested_at_utc": "2026-10-21T17:19:36Z",
+  "approved_base": "a38f4ea233c5998b8dd26b8b1a413c4b320ad737"
 }
