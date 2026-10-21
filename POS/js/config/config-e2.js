@@ -30,6 +30,9 @@
   function syncIgvRow() {
     var el = doc.getElementById('posIgv'); var row = el && el.closest ? el.closest('.total-row') : null;
     if (row) row.hidden = !showIgvLine();
+    // CANON desktop/tablet: only the visual breakdown changes, never the tax calculation.
+    var page = doc.getElementById('pagePOS');
+    if (page) page.classList.toggle('na-cart-igv-hidden', !showIgvLine());
   }
   // Etapa 2 (G): falla cerrada. Solo el aparato del dueño y con el permiso cargado.
   function canEdit() {
