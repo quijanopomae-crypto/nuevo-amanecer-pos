@@ -214,25 +214,6 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
 #pagePOS .cart-head-title{font-size:21px}
 }
 
-/* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */
-@media(min-width:1100px) and (max-height:700px){
-#pagePOS .cart-totals{padding:0 8px 3px;column-gap:10px}
-#pagePOS .cart-count-line{font-size:11px;padding:1px 0}
-#pagePOS .total-row{font-size:12px;line-height:1.1}
-#pagePOS .total-main{min-height:36px;padding:4px 10px;font-size:22px;line-height:1}
-#pagePOS .cart-secondary-actions{padding:0 8px 4px;gap:5px}
-#pagePOS .cart-secondary-actions button{min-height:32px;padding:4px 5px;font-size:11px;gap:3px}
-#pagePOS .cart-actions{padding:0 8px 2px;gap:6px}
-#pagePOS .btn-cobro{min-height:44px;padding:5px 7px;font-size:16px;gap:6px}
-#pagePOS .pay-action-icon{width:18px;height:18px;flex-basis:18px}
-}
-
-/* Preserve touch comfort without changing the drawer or any frozen surface. */
-@media(pointer:coarse){
-#pagePOS #cartDrawer .qty-btn{width:32px;height:32px}
-#pagePOS #cartDrawer .btn-rm{width:28px;height:32px}
-}
-
 /* Resumen de Venta actual: 44 px, sin duplicar subtotal cuando se oculta IGV.
    El cuerpo de la barra cambia de tres a dos columnas solo en PC/tablet.
    El contador y los IDs comerciales siguen siendo los existentes. */
@@ -328,6 +309,24 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
   body.dark:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main>span,
   body.dark:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-count-line>span{color:#fff!important}
 }
+
+/* Short desktop screens keep the approved tall-layout proportions by compacting only the current-sale footer. */
 @media(min-width:1100px) and (max-height:700px){
-  body:not(.na-pos-phone-device) #pagePOS .cart-totals{--na-pos-summary-height:36px}
+#pagePOS .cart-totals{padding:0 8px 3px;column-gap:10px}
+body:not(.na-pos-phone-device) #pagePOS .cart-totals{--na-pos-summary-height:36px}
+#pagePOS .cart-count-line{font-size:11px;padding:1px 0}
+#pagePOS .total-row{font-size:12px;line-height:1.1}
+#pagePOS .total-main{min-height:36px;padding:4px 10px;font-size:22px;line-height:1}
+#pagePOS .cart-secondary-actions{padding:0 8px 4px;gap:5px}
+#pagePOS .cart-secondary-actions button{min-height:32px;padding:4px 5px;font-size:11px;gap:3px}
+#pagePOS .cart-actions{padding:0 8px 2px;gap:6px}
+#pagePOS .btn-cobro{min-height:44px;padding:5px 7px;font-size:16px;gap:6px}
+#pagePOS .pay-action-icon{width:18px;height:18px;flex-basis:18px}
 }
+
+/* Preserve touch comfort without changing the drawer or any frozen surface. */
+@media(pointer:coarse){
+#pagePOS #cartDrawer .qty-btn{width:32px;height:32px}
+#pagePOS #cartDrawer .btn-rm{width:28px;height:32px}
+}
+
