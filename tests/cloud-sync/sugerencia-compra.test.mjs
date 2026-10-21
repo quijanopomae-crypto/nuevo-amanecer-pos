@@ -116,3 +116,18 @@ test('ajustes (Misión 7): una merma no suma a vendidos 30 d ni sube la sugerenc
   assert.equal(con[0].rows[0].suggested, sin.suggested, 'misma sugerencia con el mismo stock');
   assert.equal(con[0].supplier, api.NO_SUPPLIER);
 });
+
+test('#855: las cantidades editadas (por producto) se reaplican al recalcular; sugerido no cambia', () => {
+  const edits = new Map([['id:1', 12], ['id:3', 0], ['id:99', 5]]);
+  const plan = api.buildSuggestion(sales, products, { now, movements, edits });
+  assert.deepEqual(plain(plan.groups.map(g => g.rows.map(r => [r.key, r.suggested, r.qty]))), [
+    [['id:1', 7, 12]], [['id:2', 15, 15]], [['id:3', 2, 0]]
+  ]);
+  assert.deepEqual(plain(api.totals(plan.groups)), { lines: 2, units: 27, cost: 66, noCost: 0 });
+  // También acepta un objeto y acota la cantidad editada.
+  const obj = api.buildSuggestion(sales, products, { now, movements, edits: { 'id:1': '7.9', 'id:2': -3 } });
+  assert.deepEqual(plain(obj.groups.map(g => g.rows[0].qty)), [7, 0, 2]);
+  // Sin ediciones queda la sugerencia.
+  assert.deepEqual(plain(api.buildSuggestion(sales, products, { now, movements }).groups.map(g => g.rows[0].qty)), [7, 15, 2]);
+  assert.equal(typeof api.resetQuantities, 'function');
+});

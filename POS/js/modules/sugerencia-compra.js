@@ -2,7 +2,9 @@
  * y las ventas de los últimos 30 días (día de Lima). Reutiliza NA_ROTACION_ABC (días de Lima y período)
  * y NA_HISTORIAL_COMPRAS (último proveedor desde los movimientos de compra cargados).
  * Solo dueño (NA_ROLES.isOwner() en try/catch). Editable antes de exportar o imprimir; no escribe
- * productos, stock, compras, almacenamiento ni red. Fórmula: sugerido = ⌈mínimo + vendido 30 días − stock⌉. */
+ * productos, stock, compras, almacenamiento ni red. Fórmula: sugerido = ⌈mínimo + vendido 30 días − stock⌉.
+ * Las cantidades editadas en «A pedir» se guardan solo en memoria (por producto, durante la sesión) y se
+ * reaplican en cada recálculo, al volver a la pantalla o al cambiar de rol; «Usar sugeridos» las descarta. */
 (function (root) {
   'use strict';
   var PAGE_ID = 'pageSugerenciaCompra', FEATURE_ID = 'sugerencia-compra', DAYS = 30, MAX_QTY = 100000;
@@ -47,6 +49,12 @@
     return NO_SUPPLIER;
   }
   function suggest(stockMin, sold, stock) { return Math.max(0, Math.ceil(stockMin + sold - Math.max(0, stock))); }
+  // Cantidad editada por el dueño para la clave del producto (Map u objeto); null si no la editó.
+  function editedQty(edits, k) {
+    if (!edits || typeof edits !== 'object') return null;
+    var v = typeof edits.get === 'function' ? (edits.has(k) ? edits.get(k) : undefined) : (Object.prototype.hasOwnProperty.call(edits, k) ? edits[k] : undefined);
+    return v === undefined || v === null || v === '' ? null : clampQty(v);
+  }
   function buildSuggestion(sales, products, options) {
     options = options || {};
     var range = root.NA_ROTACION_ABC.periodRange(DAYS, options.now);
@@ -57,10 +65,11 @@
       var stock = num(p.stock) || 0, min = Math.max(0, num(p.stockMin) || 0), s = sold.get(k) || 0;
       var qty = suggest(min, s, stock);
       if (!qty) return;
+      var edited = editedQty(options.edits, k);
       var supplier = supplierOf(p, options.movements), cost = num(p.costo);
       if (!groups.has(supplier)) groups.set(supplier, []);
       groups.get(supplier).push({ key: k, name: text(p.name || p.nombre) || 'Producto sin nombre', code: text(p.sku || p.barcode || p.codigo),
-        stock: stock, stockMin: min, sold30: s, suggested: qty, qty: qty, cost: cost !== null && cost > 0 ? cost : null });
+        stock: stock, stockMin: min, sold30: s, suggested: qty, qty: edited === null ? qty : edited, cost: cost !== null && cost > 0 ? cost : null });
     });
     var list = Array.from(groups.keys()).sort(function (a, b) { return (a === NO_SUPPLIER) - (b === NO_SUPPLIER) || a.localeCompare(b, 'es'); }).map(function (supplier) {
       return { supplier: supplier, rows: groups.get(supplier).sort(function (a, b) { return a.name.localeCompare(b.name, 'es'); }) };
@@ -109,6 +118,15 @@
     return node;
   }
   var plan = null;
+  // Cantidades editadas en «A pedir», por clave de producto (id:…/sku:…). Solo en memoria, durante la sesión.
+  var edits = new Map();
+  function setEdited(r) { edits.set(r.key, r.qty); }
+  function hasEdits() { return !!plan && plan.groups.some(function (g) { return g.rows.some(function (r) { return edits.has(r.key); }); }); }
+  function resetQuantities() {
+    edits.clear();
+    if (plan) plan.groups.forEach(function (g) { g.rows.forEach(function (r) { r.qty = r.suggested; }); });
+    return render(false);
+  }
   function currentSales() { return typeof ventas !== 'undefined' ? ventas : root.ventas; } // eslint-disable-line no-undef
   function currentProducts() { return typeof productos !== 'undefined' ? productos : root.productos; } // eslint-disable-line no-undef
   function currentMovements() { try { return typeof inventoryMovements !== 'undefined' ? inventoryMovements : root.inventoryMovements; } catch (_) { return []; } } // eslint-disable-line no-undef
@@ -131,13 +149,14 @@
     });
     var exp = p.querySelector('[data-sc-export]'), pr = p.querySelector('[data-sc-print]');
     if (exp) exp.disabled = !t.lines; if (pr) pr.disabled = !t.lines;
+    var rs = p.querySelector('[data-sc-reset]'); if (rs) rs.disabled = !hasEdits();
   }
   function render(rebuild) {
     var p = page(); if (!p) return false;
     var content = p.querySelector('[data-sc-content]'), status = p.querySelector('[data-sc-status]'), controls = p.querySelector('[data-sc-controls]');
     if (!content || !status) return false;
     if (!available()) return clear(p, 'Sin permiso. Pídele acceso al dueño.');
-    try { if (rebuild || !plan) plan = buildSuggestion(currentSales(), currentProducts(), { movements: currentMovements() }); }
+    try { if (rebuild || !plan) plan = buildSuggestion(currentSales(), currentProducts(), { movements: currentMovements(), edits: edits }); }
     catch (_) { return clear(p, 'No se pudo calcular la sugerencia. Actualiza.'); }
     if (controls) controls.hidden = false;
     content.replaceChildren();
@@ -193,17 +212,18 @@
     p.addEventListener('input', function (e) {
       var t = e.target; if (!t.matches || !t.matches('[data-sc-qty]')) return;
       var r = rowAt(t.getAttribute('data-sc-qty')); if (!r || t.value === '') return;
-      r.qty = clampQty(t.value); var tr = t.closest('tr'); if (tr) tr.toggleAttribute('data-sc-zero', !r.qty); renderTotals(p);
+      r.qty = clampQty(t.value); setEdited(r); var tr = t.closest('tr'); if (tr) tr.toggleAttribute('data-sc-zero', !r.qty); renderTotals(p);
     });
     p.addEventListener('change', function (e) {
       var t = e.target; if (!t.matches || !t.matches('[data-sc-qty]')) return;
       var r = rowAt(t.getAttribute('data-sc-qty')); if (!r) return;
-      r.qty = clampQty(t.value); t.value = String(r.qty); var tr = t.closest('tr'); if (tr) tr.toggleAttribute('data-sc-zero', !r.qty); renderTotals(p);
+      r.qty = clampQty(t.value); setEdited(r); t.value = String(r.qty); var tr = t.closest('tr'); if (tr) tr.toggleAttribute('data-sc-zero', !r.qty); renderTotals(p);
     });
     p.addEventListener('click', function (e) {
       var rm = e.target.closest('[data-sc-remove]');
-      if (rm) { var r = rowAt(rm.getAttribute('data-sc-remove')); if (r) { r.qty = 0; var tr = rm.closest('tr'); var inp = tr && tr.querySelector('[data-sc-qty]'); if (inp) inp.value = '0'; if (tr) tr.setAttribute('data-sc-zero', ''); renderTotals(p); } return; }
+      if (rm) { var r = rowAt(rm.getAttribute('data-sc-remove')); if (r) { r.qty = 0; setEdited(r); var tr = rm.closest('tr'); var inp = tr && tr.querySelector('[data-sc-qty]'); if (inp) inp.value = '0'; if (tr) tr.setAttribute('data-sc-zero', ''); renderTotals(p); } return; }
       if (e.target.closest('[data-sc-recalc]')) { render(true); return; }
+      if (e.target.closest('[data-sc-reset]')) { resetQuantities(); return; }
       if (e.target.closest('[data-sc-export]')) { exportCsv(); return; }
       if (e.target.closest('[data-sc-print]')) printPlan();
     });
@@ -211,7 +231,7 @@
     root.addEventListener('na:role', function () { if (!available()) render(false); else update(); });
     update();
   }
-  root.NA_SUGERENCIA_COMPRA = Object.freeze({ buildSuggestion: buildSuggestion, suggest: suggest, totals: totals, toCsv: toCsv, csvCell: csvCell, clampQty: clampQty, available: available, render: render, exportCsv: exportCsv, printPlan: printPlan, init: init, NO_SUPPLIER: NO_SUPPLIER });
+  root.NA_SUGERENCIA_COMPRA = Object.freeze({ buildSuggestion: buildSuggestion, suggest: suggest, totals: totals, toCsv: toCsv, csvCell: csvCell, clampQty: clampQty, available: available, render: render, resetQuantities: resetQuantities, exportCsv: exportCsv, printPlan: printPlan, init: init, NO_SUPPLIER: NO_SUPPLIER });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
