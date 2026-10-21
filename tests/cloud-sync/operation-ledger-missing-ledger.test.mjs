@@ -5,7 +5,8 @@
 // never 201 with two operations sharing X. turso: the real fast sale with a
 // long-lived adapter (the path that failed open on ef7dc5c8). d1: the same flow
 // on the D1 contract (session path) plus the 'd1' cache key directly.
-// With all 13 ledgers present the list stays cached: 0 standalone probes.
+// With all 14 ledgers present (incl. pos_purchases, delta 3b) the list stays
+// cached: 0 standalone sqlite_master reads.
 // Synthetic data only; in-process SQLite; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -90,7 +91,8 @@ for (const mode of ['d1', 'turso']) {
     crossed(await x.call('inventory.adjust', x.inventory(Y)));
     assert.deepEqual(x.rows(Y), { sales: 0, inventory: 0, revisions: 1 });
 
-    // Now all 13 exist: cached for the isolate's life, the next fast sale pays no probe.
+    // Now all 14 exist (0028 pos_purchases is already in this schema): cached for the
+    // isolate's life, so the next fast sale pays no standalone sqlite_master read.
     assert.deepEqual(cachedOperationLedgers(x.db), [...OPERATION_LEDGER_TABLES]);
     const ok = await x.call('sale.create', x.sale(`ML-ok-${mode}`));
     assert.equal(ok.status, 201, JSON.stringify(ok.body));
