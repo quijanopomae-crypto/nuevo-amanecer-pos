@@ -232,3 +232,85 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
 #pagePOS #cartDrawer .qty-btn{width:32px;height:32px}
 #pagePOS #cartDrawer .btn-rm{width:28px;height:32px}
 }
+
+/* CANON desktop/tablet total summary: same footprint, no changes to mobile drawer. */
+@media (min-width: 701px) {
+  #pagePOS .cart-totals {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
+    column-gap: 0;
+    row-gap: 0;
+    padding-bottom: 5px;
+    border-radius: 7px;
+    background: var(--pos-ref-teal);
+    color: #fff;
+    overflow: hidden;
+  }
+  #pagePOS .cart-count-line {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin: 0;
+    padding: 0 0 4px;
+    background: #fff;
+    color: #526078;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  #pagePOS .total-row {
+    grid-column: auto;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 2px;
+    color: #fff;
+    font-size: 11px;
+    text-align: center;
+  }
+  #pagePOS .total-row span:last-child {font-size: 14px;font-weight: 900;}
+  #pagePOS .total-main {
+    grid-column: 3;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 44px;
+    margin: 0;
+    padding: 4px 2px;
+    border-left: 1px solid rgba(255,255,255,.48);
+    border-radius: 0;
+    background: rgba(0,0,0,.06);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.1;
+  }
+  #pagePOS .total-main #posTotal {font-size: 20px;white-space: nowrap;}
+  #pagePOS .total-row[hidden] {display: none!important;}
+  #pagePOS.na-cart-igv-hidden .cart-totals {grid-template-columns: repeat(2,minmax(0,1fr));}
+  #pagePOS.na-cart-igv-hidden .cart-count-line {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 3px;
+    min-height: 44px;
+    background: transparent;
+    color: #fff;
+    text-align: center;
+    font-size: 12px;
+  }
+  #pagePOS.na-cart-igv-hidden .total-row {display:none!important;}
+  #pagePOS.na-cart-igv-hidden .total-main {grid-column: 2;}
+}
+@media (min-width:701px) and (max-width:1099px) {
+  #pagePOS .total-row {font-size: 10px;}
+  #pagePOS .total-row span:last-child {font-size: 12px;}
+  #pagePOS .total-main #posTotal {font-size: 18px;}
+}
