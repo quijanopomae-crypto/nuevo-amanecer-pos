@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner explicitly authorized in group chat (2026-10-21 10:32 Lima: «5 si» to publishing) after merging #852 (8ee99a6a), #853 (f5741665), #854 (f1972211), #855 (a71c58d0), #856 (ce83b9e9) and #858 (7a737693). Deploy of base bbe76a6009666438f5da858a63f8f43c7c292662: aligns Worker pos-permissions.js with the merged features (reporte-productos-vencer, productos-sin-movimiento, sugerencia-compra, ajustes-inventario unlocked, owner-only; SCREENS pageProductosSinMovimiento/pageSugerenciaCompra/pageAjustesInventario owner). Web 180 (d92d909b, build f5741665) already ships the reporte-productos-vencer unlock, so the Worker is behind the web until this deploy. No other Worker code changes since worker 61. No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39637861541 (R2 recovery-drills/2026-10-21T16-47-15Z-bbe76a6009666438f5da858a63f8f43c7c292662.sql, 2533735 bytes, sha256 421d4925…). Rollback to e47b734e (worker 61).",
-  "target_commit": "bbe76a6009666438f5da858a63f8f43c7c292662",
-  "rollback_ref": "e47b734ec488bbc07387c8c2ebf89df972c07eeb",
+  "authorization_context": "Owner explicitly authorized in chat (2026-10-21 13:31 Lima: «Apruebo publicar el Worker 63 y la web cuando el equipo apruebe todo» / «todo esta aprobado»). Deploy of base c31e048a00ad92bb75ff3402a60a5726a4e9d8c9: includes #868 (56a7cba7, costo de compras de empleados en servidor), #871 (9f2f8f2e, historial de precios en la nube, rutas /auth/price-history*, pos-permissions.js), #869, #862, #870, #873. Excludes #872. Schema already applied separately by canon-migration-0034 run 39659936044 (APPLIED_AND_VERIFIED, R2 backup canon-migration-0034/2026-10-21T19-15-08Z-c31e048a….json); this Worker deploy itself makes no schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39659612179 PASS (R2 recovery-drills/2026-10-21T19-12-56Z-a28c76bc01ce7d5018c55851170896ce175ddaa9.sql). Rollback to 06a12253 (worker 62).",
+  "target_commit": "c31e048a00ad92bb75ff3402a60a5726a4e9d8c9",
+  "rollback_ref": "06a12253a8082f2c53ded52452519e7d9fe81a6f",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 62,
-  "optimization": "PERMISSIONS_LOCK_SYNC_852_858"
+  "attempt": 63,
+  "optimization": "PRICE_HISTORY_PURCHASE_COST_868_871"
 }
