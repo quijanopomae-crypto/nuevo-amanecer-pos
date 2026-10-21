@@ -1,7 +1,8 @@
 /* Productos sin movimiento (id productos-sin-movimiento): productos activos sin ventas en los últimos
  * 30, 60 o 90 días (día de Lima), con stock actual. Reutiliza NA_ROTACION_ABC (mismo cruce de ventas,
  * anuladas excluidas, identidad por id/SKU). Solo lectura: no escribe estado, almacenamiento ni red.
- * El valor de inventario (stock × costo) es solo del dueño: NA_ROLES.isOwner() en try/catch. */
+ * El valor de inventario (stock × costo) es solo del dueño: NA_ROLES.isOwner() en try/catch.
+ * Stock inmovilizado: por defecto solo productos con stock > 0; «Incluir sin stock» muestra también stock ≤ 0. */
 (function (root) {
   'use strict';
   var PAGE_ID = 'pageProductosSinMovimiento', FEATURE_ID = 'productos-sin-movimiento';
@@ -31,7 +32,7 @@
   }
   function buildReport(sales, products, options) {
     options = options || {};
-    var withValue = options.withValue === true;
+    var withValue = options.withValue === true, includeNoStock = options.includeNoStock === true;
     var base = abc().buildReport(sales, products, { days: options.days, now: options.now });
     var noSales = new Set();
     base.groups.forEach(function (group) { group.rows.forEach(function (row) { if (row.noSales) noSales.add(row.key); }); });
@@ -40,7 +41,9 @@
       if (!p || typeof p !== 'object' || p.activo === false) return;
       var key = identityKey(p); if (!key || seen.has(key) || !noSales.has(key)) return;
       seen.add(key);
-      var stock = num(p.stock), row = {
+      var stock = num(p.stock);
+      if (!includeNoStock && !(stock > 0)) return; // sin stock (0, negativo o vacío) no es stock inmovilizado
+      var row = {
         key: key, name: text(p.name != null ? p.name : p.nombre) || 'Producto sin nombre',
         code: text(p.sku || p.barcode || p.codigo), stock: stock === null ? 0 : stock, lastSale: last.get(key) || ''
       };
@@ -92,9 +95,9 @@
   function currentSales() { return typeof ventas !== 'undefined' ? ventas : root.ventas; } // eslint-disable-line no-undef
   function currentProducts() { return typeof productos !== 'undefined' ? productos : root.productos; } // eslint-disable-line no-undef
   function currentReport(page) {
-    var period = page.querySelector('[data-psm-period]');
+    var period = page.querySelector('[data-psm-period]'), noStock = page.querySelector('[data-psm-no-stock]');
     // El valor solo se calcula si el dueño está confirmado en este momento.
-    return buildReport(currentSales(), currentProducts(), { days: period ? period.value : 30, withValue: isOwner() });
+    return buildReport(currentSales(), currentProducts(), { days: period ? period.value : 30, withValue: isOwner(), includeNoStock: !!(noStock && noStock.checked) });
   }
   function element(tag, className, value) {
     var node = root.document.createElement(tag);

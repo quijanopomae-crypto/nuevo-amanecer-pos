@@ -450,6 +450,7 @@
     </header>
     <div class="sc-controls" data-sc-controls hidden>
       <button type="button" data-sc-recalc>Recalcular</button>
+      <button type="button" data-sc-reset disabled>Usar sugeridos</button>
       <button type="button" data-sc-export>Exportar CSV</button>
       <button type="button" data-sc-print>Imprimir</button>
     </div>
@@ -489,7 +490,7 @@
           </select>
         </label>
         <label>Cantidad
-          <input type="number" data-aj-qty min="0" step="any" inputmode="decimal" required>
+          <input type="text" data-aj-qty inputmode="decimal" autocomplete="off" spellcheck="false" required>
         </label>
         <label class="aj-wide">Nota
           <textarea data-aj-note maxlength="300" placeholder="Detalle del ajuste (opcional)"></textarea>
@@ -518,6 +519,7 @@
           <option value="90">Últimos 90 días</option>
         </select>
       </label>
+      <label class="psm-check"><input type="checkbox" data-psm-no-stock> Incluir sin stock</label>
       <button type="button" data-psm-refresh>Actualizar reporte</button>
       <button type="button" data-psm-export>Exportar CSV</button>
     </div>

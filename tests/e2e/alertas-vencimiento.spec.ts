@@ -136,8 +136,10 @@ test('a 390px el aviso no aparece en Venta ni tapa la barra inferior; cerrado no
   // No se superpone con elementos fijos de la parte inferior (barra inferior / botones).
   const overlap = await alert.evaluate(a => {
     const r = a.getBoundingClientRect();
-    return [...document.querySelectorAll<HTMLElement>('body *')].filter(el => el !== a && !a.contains(el) && el.offsetParent !== null || getComputedStyle(el).position === 'fixed')
-      .filter(el => el !== a && !a.contains(el) && ['fixed', 'sticky'].includes(getComputedStyle(el).position))
+    // Solo elementos que se ven: se descartan los de modales cerrados (opacity 0) u ocultos.
+    const seen = (el: Element | null): boolean => { for (let n = el; n; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return false; } return true; };
+    return [...document.querySelectorAll<HTMLElement>('body *')].filter(el => el !== a && !a.contains(el) && (el.offsetParent !== null || getComputedStyle(el).position === 'fixed'))
+      .filter(el => el !== a && !a.contains(el) && ['fixed', 'sticky'].includes(getComputedStyle(el).position) && seen(el))
       .filter(el => { const b = el.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.top > window.innerHeight / 2 && !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); })
       .map(el => el.id || el.className);
   });
@@ -164,3 +166,178 @@ test('a 390px el aviso no aparece en Venta ni tapa la barra inferior; cerrado no
   expect(await page.evaluate(() => (window as any).NA_REPORTE_PRODUCTOS_VENCER.showAlert())).toBe(false);
   await expect(alert).toHaveCount(0);
 });
+
+// Bloqueante de la revisión: el aviso no tapa Inicio y queda debajo del menú lateral y de los modales.
+const intersects = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+async function noticeHits(page: Page) {
+  // elementFromPoint en el centro y cerca de las esquinas del aviso: true si el aviso es lo que se ve encima.
+  return page.locator('#naRpvAlert').evaluate(a => {
+    const r = a.getBoundingClientRect();
+    const pts = [[r.left + r.width / 2, r.top + r.height / 2], [r.left + 6, r.top + 6], [r.right - 6, r.top + 6], [r.left + 6, r.bottom - 6], [r.right - 6, r.bottom - 6]];
+    return pts.map(([x, y]) => { const el = document.elementFromPoint(x, y); return !!(el && el.closest('#naRpvAlert')); });
+  });
+}
+for (const [width, height] of [[390, 844], [768, 900], [1280, 900]]) {
+  test(`a ${width}px el aviso no tapa Inicio y queda debajo del menú lateral y de los modales`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const errors = await rolePage(page, 'owner', false);
+    const alert = page.locator('#naRpvAlert');
+    await expect(alert).toBeVisible();
+    await expect(page.locator('#pageMenu')).toHaveClass(/\bactive\b/);
+    const box = (await alert.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    // No se cruza con las tarjetas de Inicio («Ventas hoy», «En caja», …) ni con el resto del contenido visible.
+    const cards = page.locator('#pageMenu .qs-card');
+    expect(await cards.count()).toBeGreaterThanOrEqual(2);
+    const content = page.locator('#pageMenu :is(.qs-card, .menu-side-link, .menu-desktop-heading, .menu-desktop-sections > *, #naMobileWelcome, #naMobileActivity)');
+    const overlapped: string[] = [];
+    for (let i = 0; i < await content.count(); i++) {
+      const el = content.nth(i), b = await el.boundingBox();
+      if (b && b.width > 0 && b.height > 0 && intersects(box, b)) overlapped.push(await el.evaluate(n => (n.id || n.className) + ': ' + (n.textContent || '').trim().slice(0, 30)));
+    }
+    expect(overlapped).toEqual([]);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+
+    // Con un modal abierto, el modal queda encima del aviso.
+    await page.evaluate(() => (window as any).abrirModalGasto());
+    await expect(page.locator('#mGasto')).toHaveClass(/\bopen\b/);
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+    await page.evaluate(() => document.getElementById('mGasto')!.classList.remove('open'));
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+
+    if (width < 768) {
+      // Con el menú lateral abierto, el cajón (y su fondo) quedan encima del aviso.
+      await page.locator('#naMobileMenuToggle').click();
+      await expect(page.locator('#naMobileDrawer')).toHaveClass(/\bis-open\b/);
+      await page.waitForTimeout(400);
+      expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+    } else {
+      // Tablet/PC: la barra lateral está siempre visible; el aviso no tapa ninguno de sus enlaces.
+      await expect(page.locator('#pageMenu .menu-side-link').first()).toBeVisible();
+      expect(overlapped.filter(o => o.includes('menu-side-link'))).toEqual([]);
+    }
+    const z = await alert.evaluate(el => Number(getComputedStyle(el).zIndex));
+    expect(z).toBeLessThan(200);
+    expect(errors).toEqual([]);
+  });
+}
+
+// Revisión #861: con poca altura (horizontal / ventana baja) el aviso es una fila compacta (≤ 48 px)
+// que no tapa las tarjetas de Inicio, «Actividad reciente» ni «Pendientes».
+for (const [width, height, dark] of [[844, 390, false], [915, 412, false], [740, 360, false], [1024, 600, false], [1280, 600, false], [1440, 600, false], [844, 390, true]] as const) {
+  test(`a ${width}x${height}${dark ? ' (oscuro)' : ''} el aviso es una fila compacta y no tapa Inicio`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const errors = await rolePage(page, 'owner', dark);
+    const alert = page.locator('#naRpvAlert');
+    await expect(alert).toBeVisible();
+    await expect(page.locator('#pageMenu')).toHaveClass(/\bactive\b/);
+    const box = (await alert.boundingBox())!;
+    expect(box.height).toBeLessThanOrEqual(48);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    // Una sola fila: texto con «…», «Ver» y «×» a la misma altura; sin flex-basis 100 %.
+    const layout = await alert.evaluate(a => {
+      const t = a.querySelector('.rpv-alert-text')!, v = a.querySelector('.rpv-alert-view')!, c = a.querySelector('.rpv-alert-close')!;
+      const cs = getComputedStyle(t), mid = (el: Element) => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); };
+      return { basis: cs.flexBasis, ws: cs.whiteSpace, ellipsis: cs.textOverflow, mids: [mid(t), mid(v), mid(c)],
+        labels: [getComputedStyle(v, '::before').content, getComputedStyle(c, '::before').content], z: getComputedStyle(a).zIndex };
+    });
+    expect(layout.basis).not.toBe('100%');
+    expect(layout.ws).toBe('nowrap');
+    expect(layout.ellipsis).toBe('ellipsis');
+    expect(Math.max(...layout.mids) - Math.min(...layout.mids)).toBeLessThanOrEqual(2);
+    expect(layout.labels[0]).toContain('Ver');
+    expect(layout.labels[1]).toContain('×');
+    expect(layout.z).toBe('150');
+    // El texto completo y los nombres accesibles siguen (el «…» es solo visual).
+    await expect(alert).toContainText('1 lote vencido');
+    await expect(alert).toContainText('2 lotes vencen en 30 días');
+    await expect(alert.getByRole('button', { name: 'Ver reporte' })).toBeVisible();
+    await expect(alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' })).toBeVisible();
+    for (const sel of ['.rpv-alert-text', '[data-rpv-alert-view]', '[data-rpv-alert-close]']) expect(await contrast(alert.locator(sel)), sel).toBeGreaterThanOrEqual(4.5);
+
+    // No se cruza con las 4 tarjetas, «Actividad reciente», «Pendientes», la barra lateral ni el encabezado.
+    const cards = page.locator('#pageMenu .qs-card:visible');
+    await expect(cards).toHaveCount(4);
+    const content = page.locator('#pageMenu :is(.qs-card, .menu-data-panel, #naMobileActivity, .menu-side-link, .menu-desktop-heading h1, #menuDesktopDate, .menu-desktop-live), #naMobileMenuToggle, #topBusinessName, #saveStatus');
+    const overlapped: string[] = [];
+    for (let i = 0; i < await content.count(); i++) {
+      const el = content.nth(i), b = await el.boundingBox();
+      if (b && b.width > 0 && b.height > 0 && intersects(box, b)) overlapped.push(await el.evaluate(n => (n.id || n.className) + ': ' + (n.textContent || '').trim().slice(0, 30)));
+    }
+    expect(overlapped).toEqual([]);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+
+    // Modal encima del aviso.
+    await page.evaluate(() => (window as any).abrirModalGasto());
+    await expect(page.locator('#mGasto')).toHaveClass(/\bopen\b/);
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+    await page.evaluate(() => document.getElementById('mGasto')!.classList.remove('open'));
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+    if (width < 768) {
+      await page.locator('#naMobileMenuToggle').click();
+      await expect(page.locator('#naMobileDrawer')).toHaveClass(/\bis-open\b/);
+      await page.waitForTimeout(400);
+      expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+      await page.keyboard.press('Escape');
+    }
+    await page.screenshot({ path: test.info().outputPath(`aviso-${width}x${height}${dark ? '-oscuro' : ''}.png`) });
+    expect(errors).toEqual([]);
+  });
+}
+
+test('a 844x390 «Ver» abre el reporte y «×» cierra el aviso', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await rolePage(page, 'owner', false);
+  const alert = page.locator('#naRpvAlert');
+  await alert.getByRole('button', { name: 'Ver reporte' }).click();
+  await expect(alert).toHaveCount(0);
+  await expect(page.locator(screenId)).toHaveClass(/\bactive\b/);
+  await page.evaluate(() => { sessionStorage.removeItem('na_rpv_alert_closed_v1'); });
+  await page.reload();
+  await page.waitForFunction(() => !!(window as any).NA_REPORTE_PRODUCTOS_VENCER && (window as any).NA_ROLES?.confirmed);
+  await page.evaluate(() => (window as any).goPage('pageMenu'));
+  await expect(alert).toBeVisible();
+  await alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' }).click();
+  await expect(alert).toHaveCount(0);
+});
+
+// Revisión #861: en tablet/PC (≥ 768 de ancho y ≥ 640 de alto) un texto largo no hace crecer el aviso
+// sobre los enlaces de la barra lateral («Gastos», «Configuración»): el texto se recorta a 3 líneas.
+for (const [width, height] of [[768, 640], [900, 700], [1280, 720], [1440, 900]]) {
+  test(`a ${width}x${height} un texto largo no hace que el aviso tape la barra lateral`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const errors = await rolePage(page, 'owner', false);
+    const alert = page.locator('#naRpvAlert');
+    await expect(alert).toBeVisible();
+    const long = '⏳ 128 lotes vencidos · 1.024 lotes vencen en 30 días en Leche entera, Yogur natural, Queso fresco, Mantequilla con sal y Pan de molde integral (21/10/2026, hora de Lima)';
+    await alert.locator('.rpv-alert-text').evaluate((p, t) => { p.textContent = t; }, long);
+    const box = (await alert.boundingBox())!;
+    const links = page.locator('#pageMenu .menu-side-link:visible');
+    expect(await links.count()).toBeGreaterThanOrEqual(8);
+    const hit: string[] = [];
+    for (let i = 0; i < await links.count(); i++) {
+      const b = await links.nth(i).boundingBox();
+      if (b && intersects(box, b)) hit.push((await links.nth(i).innerText()).trim() + ` (${Math.round(b.y)}–${Math.round(b.y + b.height)})`);
+    }
+    test.info().annotations.push({ type: 'rect', description: `${width}x${height} aviso ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}` });
+    expect(hit, `aviso y=${Math.round(box.y)}–${Math.round(box.y + box.height)}`).toEqual([]);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    // El texto completo sigue en el DOM y los botones conservan sus nombres accesibles.
+    await expect(alert.locator('.rpv-alert-text')).toHaveText(long);
+    await expect(alert.getByRole('button', { name: 'Ver reporte' })).toBeVisible();
+    await expect(alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' })).toBeVisible();
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+    expect(errors).toEqual([]);
+  });
+}
