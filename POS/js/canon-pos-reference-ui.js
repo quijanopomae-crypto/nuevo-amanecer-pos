@@ -358,6 +358,13 @@
     countLine.append(productCount, unitCount);
     totals.insertBefore(countLine, totals.firstChild);
 
+    // Presentation only: retain the original count and amount IDs for cart updates.
+    var mainTotal = totals.querySelector('.total-main');
+    if (mainTotal && !mainTotal.querySelector('.na-cart-total-label')) {
+      var label = mainTotal.querySelector('span:not([id])');
+      if (label) label.classList.add('na-cart-total-label');
+    }
+
     var quick = page.querySelector('#btnRapido');
     var pay = page.querySelector('#btnPagar');
     if (quick) {
