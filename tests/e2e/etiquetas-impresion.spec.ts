@@ -112,6 +112,8 @@ for (const dark of [false, true]) {
       await page.emulateMedia({ media: 'print' });
       expect(await pages.nth(0).evaluate(el => getComputedStyle(el).breakAfter)).toBe('page');
       expect(await pages.nth(9).evaluate(el => getComputedStyle(el).breakAfter)).toBe('auto');
+      // 8 × 37 mm = 296 mm: sin altura de 297 mm que por redondeo agregue una hoja en blanco.
+      expect(await pages.nth(0).evaluate(el => Math.round(el.getBoundingClientRect().height / 96 * 25.4))).toBeLessThanOrEqual(296);
       await page.emulateMedia({ media: 'screen' });
       await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
       await expect(page.locator('style[data-etq-page-style]')).toHaveCount(0);

@@ -55,6 +55,6 @@ body.dark #pageEtiquetasPrecios .etq-item-warn, body.dark #pageEtiquetasPrecios 
   body.etq-printing .etq-format-chica, body.etq-printing .etq-format-mediana { display: block; gap: 0; }
   body.etq-printing .etq-format-chica .etq-label, body.etq-printing .etq-format-mediana .etq-label { break-after: page; page-break-after: always; }
   body.etq-printing .etq-format-chica .etq-label:last-child, body.etq-printing .etq-format-mediana .etq-label:last-child { break-after: auto; page-break-after: auto; }
-  body.etq-printing .etq-a4-page { height: 297mm; align-content: start; margin: 0; break-after: page; page-break-after: always; }
+  body.etq-printing .etq-a4-page { height: 296mm; align-content: start; margin: 0; break-after: page; page-break-after: always; }
   body.etq-printing .etq-a4-page:last-child { break-after: auto; page-break-after: auto; }
 }
