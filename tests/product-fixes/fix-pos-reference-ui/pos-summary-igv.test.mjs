@@ -45,9 +45,9 @@ test('IGV visual toggle moves PC/tablet summary state without recalculating sale
   assert.equal(row.hidden, false);
   assert.equal(attrs.has('na-pos-summary-igv-hidden'), false);
 
-  // Sigue habiendo una única actualización comercial; no se cambian los importes.
-  assert.match(core, /\['posSubtotal',fmt\(parts\.subtotal\)\]/);
-  assert.match(core, /\['posTotal',fmt\(parts\.totalVenta\)\]/);
+  // El cálculo comercial sigue intacto; únicamente cambia la salida textual.
+  assert.match(core, /\['posSubtotal',_naPosDisplayMoney\(parts\.subtotal\)\]/);
+  assert.match(core, /\['posTotal',_naPosDisplayMoney\(parts\.totalVenta\)\]/);
   assert.match(ticket, /_naTicketTaxBreakdown\(v\)/);
 });
 
