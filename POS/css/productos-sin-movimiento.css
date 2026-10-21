@@ -19,6 +19,9 @@ body.dark #pageProductosSinMovimiento { --psm-bg: #0f172a; --psm-surface: #1e293
 #pageProductosSinMovimiento .psm-card strong { font-size: 20px; overflow-wrap: anywhere; }
 #pageProductosSinMovimiento .psm-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--psm-surface); border: 1px solid var(--psm-border); border-radius: 12px; }
 #pageProductosSinMovimiento .psm-table :is(th, td) { display: table-cell; padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--psm-border); overflow-wrap: anywhere; color: var(--psm-text); }
+/* base.css pone th { white-space: nowrap }: sin esto un nombre largo se sale de su celda y tapa Stock, Última venta y Valor. */
+#pageProductosSinMovimiento .psm-table :is(th, td) { white-space: normal; }
+#pageProductosSinMovimiento .psm-table .psm-product { overflow-wrap: anywhere; word-break: normal; }
 #pageProductosSinMovimiento .psm-table thead th { font-size: 12px; color: var(--psm-muted); }
 #pageProductosSinMovimiento .psm-table .psm-num { text-align: right; font-variant-numeric: tabular-nums; }
 #pageProductosSinMovimiento .psm-product small { display: block; font-weight: 400; color: var(--psm-muted); }

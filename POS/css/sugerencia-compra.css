@@ -19,6 +19,9 @@ body.dark #pageSugerenciaCompra { --sc-bg: #0f172a; --sc-surface: #1e293b; --sc-
 #pageSugerenciaCompra .sc-empty { padding: 12px 14px; border: 1px solid var(--sc-border); border-radius: 12px; background: var(--sc-surface); }
 #pageSugerenciaCompra .sc-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--sc-surface); }
 #pageSugerenciaCompra .sc-table :is(th, td) { display: table-cell; padding: 8px 6px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--sc-border); overflow-wrap: anywhere; color: var(--sc-text); }
+/* base.css pone th { white-space: nowrap }: sin esto un nombre largo se sale de su celda y tapa las columnas siguientes. */
+#pageSugerenciaCompra .sc-table :is(th, td) { white-space: normal; }
+#pageSugerenciaCompra .sc-table .sc-product { overflow-wrap: anywhere; word-break: normal; }
 #pageSugerenciaCompra .sc-table thead th { font-size: 12px; color: var(--sc-muted); }
 #pageSugerenciaCompra .sc-table thead th:first-child { width: 30%; }
 #pageSugerenciaCompra .sc-table .sc-num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -37,6 +40,7 @@ body.dark #pageSugerenciaCompra { --sc-bg: #0f172a; --sc-surface: #1e293b; --sc-
 @media (min-width: 600px) {
   #pageSugerenciaCompra { padding: 24px; }
   #pageSugerenciaCompra .sc-controls { grid-template-columns: repeat(4, auto); justify-content: start; }
+  #pageSugerenciaCompra .sc-qty { width: 100%; max-width: 96px; }
 }
 @media print {
   body.sc-printing * { visibility: hidden !important; }
