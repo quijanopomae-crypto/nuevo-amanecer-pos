@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 184: publicar 38a723d1 (revert #871/#868 vía #878 merge dba42e22, ordenado por el dueño «revertir y republicar»). Worker 64 ya publicado (run 39665647690, live check OK asistente 5). Solo estáticos web. Rollback a Web 183 (8ff0df75).",
-  "retry_attempt": 184,
-  "retry_reason": "Dueño 2026-10-21 14:28 Lima: «revertir y republicar». Code OK asistente 2, spec OK asistente 3, LOCAL OK asistente 4 en #878.",
-  "requested_at_utc": "2026-10-21T20:02:00Z",
-  "approved_base": "38a723d1ca67a52397fed9aca229ef9cd35b0590"
+  "note": "Web 185: publicar CANON commit 5196cf2cd31026a97ef7d3dde048f1c09d33a148 (PR #872: separadores de miles en resumen, cobro, vuelto y ticket; TOTAL e importe más chicos con IGV visible; ticket 58 mm sin recortar importes). Solo estáticos web: sin Worker, sin migraciones, sin secretos. CI verde en afdf959d (CANON 39675761271, Visual 39675761292, E2E 39675761317). Rollback a Web 184 (ed480383, run 39666806308).",
+  "retry_attempt": 185,
+  "retry_reason": "Aprobación del dueño 2026-10-21 16:31 Lima para publicar #872 (solo web); equipo: ASISTENTE 1, 2, 3 y 5 sobre afdf959d.",
+  "requested_at_utc": "2026-10-21T21:35:03Z",
+  "approved_base": "5196cf2cd31026a97ef7d3dde048f1c09d33a148"
 }
