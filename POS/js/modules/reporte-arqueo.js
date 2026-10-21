@@ -38,14 +38,29 @@
     if ((Date.parse(hasta + 'T00:00:00Z') - Date.parse(desde + 'T00:00:00Z')) / DAY_MS + 1 > 366)
       throw new RangeError('Selecciona un rango de hasta 366 días.');
     var source = Array.isArray(sessions) ? sessions : sessions && sessions.cashSessions;
+    // Mismo nombre, distinta persona: sufijo con el id del usuario. El servidor solo manda nombres;
+    // el id sale de la réplica local por session_id. Sin NA_SELLER_LABELS los nombres quedan igual.
+    var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.sessionUsers === 'function' ? root.NA_SELLER_LABELS : null;
+    var knownIds = labels ? labels.sessionUserIds() : {}, people = [];
     var rows = (Array.isArray(source) ? source : []).filter(function (s) { return s && s.status === 'CLOSED'; }).map(function (s) {
       var closed = lima(s.closed_at), at = closed || lima(s.opened_at);
       if (!at || at.date < desde || at.date > hasta) return null;
+      var ids = knownIds[text(s.session_id)] || {};
+      var person = { opened_by_user_id: text(s.opened_by_user_id).trim() || ids.opened || '', opened_by_name: s.opened_by_name,
+        closed_by_user_id: text(s.closed_by_user_id).trim() || ids.closed || '', closed_by_name: s.closed_by_name };
+      people.push(person);
       return { sessionId: text(s.session_id), fecha: at.date, fechaLabel: dateLabel(at.date), hora: closed ? closed.time : '',
-        openedByName: name(s.opened_by_name), closedByName: name(s.closed_by_name),
+        openedByName: name(s.opened_by_name), closedByName: name(s.closed_by_name), person: person,
         esperado: cents(s.expected_cents), contado: s.counted_cents == null ? null : cents(s.counted_cents),
         diferencia: s.difference_cents == null ? null : cents(s.difference_cents), timestamp: at.ms };
     }).filter(Boolean).sort(function (a, b) { return b.timestamp - a.timestamp || a.sessionId.localeCompare(b.sessionId); });
+    var labeler = labels ? labels.sessionUsers(people) : null;
+    rows.forEach(function (row) {
+      var p = row.person; delete row.person;
+      if (!labeler) return;
+      if (text(p.opened_by_name).trim()) row.openedByName += labeler.suffix(p.opened_by_user_id, p.opened_by_name);
+      if (text(p.closed_by_name).trim()) row.closedByName += labeler.suffix(p.closed_by_user_id, p.closed_by_name);
+    });
     var totals = { count: rows.length, esperado: 0, contado: 0, diferencia: 0, sinContar: 0 };
     rows.forEach(function (row) {
       // Los tres totales suman solo cierres contados: contado − esperado == diferencia.

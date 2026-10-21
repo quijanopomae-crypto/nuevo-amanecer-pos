@@ -104,6 +104,77 @@
         selected && text(sale.clienteId != null ? sale.clienteId : sale.customer_id) === selected;
     });
   }
+  // Select cerrado angosto (768/900 px): con sufijo (« · a1b2c» o « (sin id)») de un nombre repetido y largo, se acorta
+  // el NOMBRE, nunca el sufijo, para que se vea. La etiqueta completa queda en el title; el valor y el filtro no cambian.
+  // Con el select visible se mide con su fuente real (canvas); si no se puede medir (oculto, sin canvas), 10 grafemas.
+  var SELLER_NAME_MAX = 10, SELLER_ARROW_PX = 20;
+  // Corta por grafema (letra + tilde combinada = un carácter) sobre el nombre en NFC; sin Intl.Segmenter, Array.from.
+  function graphemes(value) {
+    var nfc = String(value).normalize('NFC');
+    try {
+      if (typeof Intl !== 'undefined' && Intl && typeof Intl.Segmenter === 'function') {
+        return Array.from(new Intl.Segmenter('es', { granularity: 'grapheme' }).segment(nfc), function (part) { return part.segment; });
+      }
+    } catch (_) {}
+    return Array.from(nfc);
+  }
+  // Medidor del texto visible del select: ancho interno menos relleno y flecha nativa. null si no se puede medir.
+  function sellerFit(select) {
+    try {
+      var width = select && select.clientWidth, doc = root.document;
+      if (!(width > 0) || !doc || typeof doc.createElement !== 'function' || typeof root.getComputedStyle !== 'function') return null;
+      var cs = root.getComputedStyle(select), ctx = doc.createElement('canvas').getContext('2d');
+      if (!ctx || typeof ctx.measureText !== 'function') return null;
+      ctx.font = cs.font || [cs.fontStyle, cs.fontVariant, cs.fontWeight, cs.fontSize, cs.fontFamily].join(' ');
+      var room = width - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - SELLER_ARROW_PX;
+      var probe = ctx.measureText('María').width;
+      if (!(room > 0) || !(probe > 0) || !isFinite(probe)) return null;
+      return { room: room, width: function (value) { return ctx.measureText(value).width; } };
+    } catch (_) { return null; }
+  }
+  function sellerOptionText(label, fit) {
+    var noId = / \(sin id\)$/.test(label), at = noId ? label.length - ' (sin id)'.length : label.lastIndexOf(' · ');
+    var name = at > 0 ? label.slice(0, at) : '', chars = graphemes(name), suffix = label.slice(at);
+    var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.cashiers === 'function' ? root.NA_SELLER_LABELS.cashiers() : null;
+    if (!labels || !name || !labels.collides(name)) return label;
+    var cut = function (n) { return chars.slice(0, n).join('').replace(/\s+$/, '') + '…' + suffix; };
+    if (!fit) return chars.length <= SELLER_NAME_MAX ? label : cut(SELLER_NAME_MAX - 1);
+    if (fit.width(label) <= fit.room) return label;
+    // Quita grafemas del nombre hasta que «nombre… + sufijo» entre; mínimo 1 grafema.
+    for (var n = chars.length - 1; n > 1; n--) { if (fit.width(cut(n)) <= fit.room) return cut(n); }
+    return cut(1);
+  }
+  // Texto visible de cada opción. Si dos opciones distintas quedarían iguales al acortar, esas se muestran completas.
+  function sellerOptionTexts(items, fit) {
+    var shown = (Array.isArray(items) ? items : []).map(function (item) { return sellerOptionText(item.label, fit); });
+    for (var pass = 0; pass < 3; pass++) {
+      var count = {}, changed = false;
+      shown.forEach(function (value) { count[value] = (count[value] || 0) + 1; });
+      shown = shown.map(function (value, i) {
+        if (count[value] > 1 && value !== items[i].label) { changed = true; return items[i].label; }
+        return value;
+      });
+      if (!changed) break;
+    }
+    return shown;
+  }
+  // El title de una <option> no se ve con el select cerrado: el select lleva el de la opción elegida; sin él, ninguno.
+  function syncSellerTitle(seller) {
+    var option = seller && seller.selectedOptions ? seller.selectedOptions[0] : null;
+    if (option && option.title) seller.title = option.title; else if (seller && typeof seller.removeAttribute === 'function') seller.removeAttribute('title');
+  }
+  // Recalcula el texto visible de las opciones ya pintadas (cambio de ancho o fuente cargada). Etiqueta = title o texto.
+  function refitSellerOptions(seller) {
+    if (!seller || !seller.options) return;
+    var options = Array.from(seller.options).filter(function (option) { return option.value !== ''; });
+    var items = options.map(function (option) { return { label: option.title || option.textContent }; });
+    var texts = sellerOptionTexts(items, sellerFit(seller));
+    options.forEach(function (option, i) {
+      if (option.textContent !== texts[i]) option.textContent = texts[i];
+      if (texts[i] !== items[i].label) option.title = items[i].label; else option.removeAttribute('title');
+    });
+    syncSellerTitle(seller);
+  }
   function sellerOptions(sales, selectedId) {
     var sellers = new Map(), list = customerSales(sales, selectedId), ids = sellerIds(list);
     list.forEach(function (sale) {
@@ -111,7 +182,12 @@
       // Preferir la etiqueta de una venta que trae id.
       if (!known || (!known.hasId && seller.hasId)) sellers.set(seller.value, seller);
     });
-    return Array.from(sellers.values()).map(function (item) { return { value: item.value, label: item.label }; }).sort(function (a, b) { return a.label.localeCompare(b.label, 'es') || a.value.localeCompare(b.value); });
+    // Dos vendedores distintos con el mismo nombre: sufijo con su id (NA_SELLER_LABELS), igual que en Reportes.
+    var labels = root.NA_SELLER_LABELS && typeof root.NA_SELLER_LABELS.cashiers === 'function' ? root.NA_SELLER_LABELS.cashiers() : null;
+    return Array.from(sellers.values()).map(function (item) {
+      var id = item.value.indexOf('id:') === 0 ? item.value.slice(3) : '';
+      return { value: item.value, label: labels && id ? item.label + labels.suffix(id, item.label) : item.label };
+    }).sort(function (a, b) { return a.label.localeCompare(b.label, 'es') || a.value.localeCompare(b.value); });
   }
   function filterSales(sales, selectedId, options) {
     options = options || {};
@@ -230,7 +306,7 @@
     content.replaceChildren();
     if (!allowed) {
       if (select) select.replaceChildren();
-      if (seller) seller.replaceChildren();
+      if (seller) { seller.replaceChildren(); syncSellerTitle(seller); }
       if (search) search.value = '';
       status.textContent = 'Sin permiso. Pídele acceso al dueño.'; return false;
     }
@@ -267,11 +343,13 @@
     status.textContent = (dates.from || dates.to ? 'Desde ' + (dates.from ? dateLabel(dates.from) : 'sin límite') + ' · Hasta ' + (dates.to ? dateLabel(dates.to) : 'sin límite') : 'Todo el historial') + ' · hora de Lima · ventas cargadas en este dispositivo';
     var sales = typeof ventas !== 'undefined' ? ventas : root.ventas;
     if (seller) {
-      var selectedSeller = seller.value, sellers = sellerOptions(sales, selected);
-      seller.innerHTML = '<option value="">Todos</option>' + sellers.map(function (item) {
-        return '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.label) + '</option>';
+      var selectedSeller = seller.value, sellers = sellerOptions(sales, selected), texts = sellerOptionTexts(sellers, sellerFit(seller));
+      seller.innerHTML = '<option value="">Todos</option>' + sellers.map(function (item, i) {
+        var shown = texts[i], title = shown !== item.label ? ' title="' + escapeHtml(item.label) + '"' : '';
+        return '<option value="' + escapeHtml(item.value) + '"' + title + '>' + escapeHtml(shown) + '</option>';
       }).join('');
       seller.value = sellers.some(function (item) { return item.value === selectedSeller; }) ? selectedSeller : '';
+      syncSellerTitle(seller);
     }
     var customer = matches.find(function (item) { return item.id === selected; });
     if (dates.invalid) { status.textContent = '«Desde» no puede ser posterior a «Hasta». Corrige el rango de fechas.'; return true; }
@@ -298,10 +376,20 @@
         else { page.dataset.chCustomPeriod = '1'; if (from && typeof from.focus === 'function') from.focus(); }
       } else if (event && event.target && event.target.matches && event.target.matches('[data-ch-from], [data-ch-to]')) {
         delete page.dataset.chCustomPeriod;
+      } else if (event && event.target && event.target.matches && event.target.matches('[data-ch-seller]')) {
+        syncSellerTitle(event.target);
       }
       update();
     });
     page.addEventListener('input', function (event) { if (event.target.matches('[data-ch-search]')) update(); });
+    // Ancho del select o fuente web cambian: se vuelve a medir el texto visible del filtro «Vendedor» (sin repintar).
+    var refitTimer = null;
+    function refit() {
+      if (refitTimer) root.clearTimeout(refitTimer);
+      refitTimer = root.setTimeout(function () { refitTimer = null; refitSellerOptions(page.querySelector('[data-ch-seller]')); }, 150);
+    }
+    if (typeof root.addEventListener === 'function') root.addEventListener('resize', refit);
+    try { if (root.document.fonts && typeof root.document.fonts.addEventListener === 'function') root.document.fonts.addEventListener('loadingdone', refit); } catch (_) {}
     var refresh = page.querySelector('[data-ch-refresh]');
     if (refresh) refresh.addEventListener('click', update);
     var exportButton = page.querySelector('[data-ch-export]');
@@ -324,7 +412,7 @@
   }
   root.NA_CLIENTE_HISTORIAL = Object.freeze({ limaDay: limaDay, periodRange: periodRange, searchCustomers: searchCustomers,
     dateRange: dateRange, sellerIds: sellerIds, periodDates: periodDates, periodFor: periodFor, exportAllowed: exportAllowed,
-    exportCsv: function () { var page = root.document && root.document.getElementById(PAGE_ID); return !!(page && page.__naClienteHistorialExport && page.__naClienteHistorialExport()); }, saleSeller: saleSeller, sellerOptions: sellerOptions, filterSales: filterSales, csvCell: csvCell, toCsv: toCsv,
+    exportCsv: function () { var page = root.document && root.document.getElementById(PAGE_ID); return !!(page && page.__naClienteHistorialExport && page.__naClienteHistorialExport()); }, saleSeller: saleSeller, sellerOptions: sellerOptions, sellerOptionTexts: sellerOptionTexts, filterSales: filterSales, csvCell: csvCell, toCsv: toCsv,
     buildReport: buildReport, escapeHtml: escapeHtml, reportHtml: reportHtml, ownerAllowed: ownerAllowed, render: render, init: init });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });

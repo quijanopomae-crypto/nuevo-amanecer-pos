@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 176: #835 historial de compras a 600-999 px (merge cf1be1da) + #836 detalles de Configuración y sharedEditable falla cerrado (merge bb049156). Solo web, sin cambios de Worker. Rollback: web 175 (build b8260999).",
-  "retry_attempt": 176,
-  "retry_reason": "Deploy de base bb04915602e1a00ffcc885bac192a1b1ced970e0 (incluye #835 merge cf1be1da y #836 merge bb049156). Rollback: web 175 (build b8260999).",
-  "requested_at_utc": "2026-10-20T23:11:20Z",
-  "approved_base": "bb04915602e1a00ffcc885bac192a1b1ced970e0"
+  "note": "Web 177: #833 historial de precios por producto (merge 37da3ca6). Solo web, sin cambios de Worker. Rollback: web 176 (build b4c021d5).",
+  "retry_attempt": 177,
+  "retry_reason": "Deploy de base 37da3ca60cf33fbdc86b7e1c707c8cf4ef0b4b68 (incluye #833 merge 37da3ca6). Rollback: web 176 (build b4c021d5).",
+  "requested_at_utc": "2026-10-21T00:25:26Z",
+  "approved_base": "37da3ca60cf33fbdc86b7e1c707c8cf4ef0b4b68"
 }
