@@ -69,7 +69,7 @@
       const matched = moves.filter(m => r.sessionId != null && m.sessionId != null && String(m.sessionId) === String(r.sessionId));
       const selected = matched.length ? matched : moves.filter(m => m.sessionId == null && m.fecha === date);
       const t = movementTotals(selected), o = lima(r.timestampApertura), c = lima(r.timestampCierre);
-      return { sessionId: r.sessionId || r.id, fecha: date, apertura: r.hora24 || o.time, cierre: r.horaCierre24 || c.time, cierreFecha: r.fechaCierre || c.date, cajero: r.cajeroNombre || r.cajero || '', ventas: selected.length ? t.ventas : null, cobros: selected.length ? t.cobros : null, gastos: selected.length ? t.gastos : null, metodos: t.metodos, salesMethods: t.salesMethods, fondo: cents(r.fondo), esperado: cents(r.esperado), contado: r.contado == null ? null : cents(r.contado), diferencia: r.diferencia == null ? null : cents(r.diferencia), localMissing: !selected.length };
+      return { sessionId: r.sessionId || r.id, fecha: date, apertura: r.hora24 || o.time, cierre: r.horaCierre24 || c.time, cierreFecha: r.fechaCierre || c.date, cajero: r.cajeroNombre || r.cajero || '', cajeroId: r.cajeroId == null ? '' : String(r.cajeroId), ventas: selected.length ? t.ventas : null, cobros: selected.length ? t.cobros : null, gastos: selected.length ? t.gastos : null, metodos: t.metodos, salesMethods: t.salesMethods, fondo: cents(r.fondo), esperado: cents(r.esperado), contado: r.contado == null ? null : cents(r.contado), diferencia: r.diferencia == null ? null : cents(r.diferencia), localMissing: !selected.length };
     });
   }
   const fmtDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d.split('-').reverse().join('/') : d || '';
@@ -154,10 +154,13 @@
     // Sales charts exclude credit collections.
     charts.append(el('p', 'cv-note', 'Ventas por forma de pago, con crédito separado.'));
     const top = Math.max(1, ...methods.map(k => breakdown[k])); methods.forEach(k => { line(charts, labels[k], rows.some(r => r.localMissing) ? '—' : money(breakdown[k])); const track = el('div', 'cv-track'), fill = el('div', k === 'credito' ? 'cv-credit-fill' : ''); fill.style.width = Math.max(0, breakdown[k]) / top * 100 + '%'; track.append(fill); charts.append(track); }); wrap.append(charts);
+    // Mismo nombre, distinta persona: sufijo con el id (NA_SELLER_LABELS); un nombre único se ve igual.
+    const sellerLabels = root.NA_SELLER_LABELS, cashierLabels = sellerLabels ? sellerLabels.cashiers() : null, userLabels = sellerLabels && canonicalEnabled() ? sellerLabels.sessionUsers() : null;
+    const person = (labeler, id, name) => name && labeler ? name + labeler.suffix(id, name) : name;
     rows.forEach(r => {
       const card = el('article', 'cv-card na-cash-hist-card'); card.dataset.sessionId = r.sessionId;
       const toggle = button('', () => { const expanded = toggle.getAttribute('aria-expanded') === 'true'; toggle.setAttribute('aria-expanded', String(!expanded)); detail.hidden = expanded; }, 'cv-close-toggle'); toggle.setAttribute('aria-expanded', 'false');
-      toggle.append(el('strong', '', fmtDate(r.fecha) + ' · ' + r.apertura + ' → ' + (r.cierreFecha && r.cierreFecha !== r.fecha ? fmtDate(r.cierreFecha) + ' ' : '') + r.cierre)); line(toggle, 'Abrió', r.openedByName || r.cajero || 'No registrado'); line(toggle, 'Cerró', r.closedByName || 'No registrado'); line(toggle, 'Total vendido', r.localMissing ? '—' : money(r.ventas));
+      toggle.append(el('strong', '', fmtDate(r.fecha) + ' · ' + r.apertura + ' → ' + (r.cierreFecha && r.cierreFecha !== r.fecha ? fmtDate(r.cierreFecha) + ' ' : '') + r.cierre)); line(toggle, 'Abrió', (r.openedByName ? person(userLabels, r.openedById, r.openedByName) : person(cashierLabels, r.cajeroId, r.cajero)) || 'No registrado'); line(toggle, 'Cerró', person(userLabels, r.closedById, r.closedByName) || 'No registrado'); line(toggle, 'Total vendido', r.localMissing ? '—' : money(r.ventas));
       toggle.append(el('span', 'cv-pill ' + (r.diferencia == null ? '' : r.diferencia === 0 ? 'cv-ok' : 'cv-bad'), 'Diferencia: ' + (r.diferencia == null ? 'No registrada' : money(r.diferencia) + (r.diferencia === 0 ? ' · Cuadrado' : r.diferencia > 0 ? ' · sobrante' : ' · faltante'))));
       const detail = el('div', 'cv-close-detail'); detail.hidden = true;
       const received = el('section', 'cv-detail-block'), credit = el('section', 'cv-detail-block cv-credit-block');

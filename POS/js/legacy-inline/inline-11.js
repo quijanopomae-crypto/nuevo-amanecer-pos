@@ -7,7 +7,8 @@ function _naSecCashButton(className,text,action){
   return button;
 }
 // CANON no guarda quién abrió la caja (canonical_cash_sessions no tiene cajero): no se muestra "Cajero:" vacío.
-function _naSecCashCashierText(){const own=String(cajEstado?.cajeroNombre||cajEstado?.cajero||'').trim();if(own)return own;const sid=cajEstado?.sessionId||cajEstado?.session_id;const rec=sid&&window.NA_RECORD_CASHIER?window.NA_RECORD_CASHIER.get(['caja:'+sid]):null;if(rec&&rec.nombre)return rec.nombre;let opened='';try{const map=sid&&window.NuevoAmanecerCashHistory?.cashierMap?.();opened=String(map?.[String(sid)]?.nombre||'').trim();}catch(_){}return opened||'sin registrar';}
+// Mismo nombre que otro cajero: « · CAJ-002» (NA_SELLER_LABELS, solo si se conoce el id).
+function _naSecCashCashierText(){const tag=(id,name)=>name+(window.NA_SELLER_LABELS?.cashierIdSuffix?.(id,name)||'');const own=String(cajEstado?.cajeroNombre||cajEstado?.cajero||'').trim();if(own)return tag(cajEstado?.cajeroId,own);const sid=cajEstado?.sessionId||cajEstado?.session_id;const rec=sid&&window.NA_RECORD_CASHIER?window.NA_RECORD_CASHIER.get(['caja:'+sid]):null;if(rec&&rec.nombre)return tag(rec.id,rec.nombre);let opened='',openedId='';try{const map=sid&&window.NuevoAmanecerCashHistory?.cashierMap?.();opened=String(map?.[String(sid)]?.nombre||'').trim();openedId=map?.[String(sid)]?.id||'';}catch(_){}return opened?tag(openedId,opened):'sin registrar';}
 // Parte de una venta que quedó a crédito: no es dinero que entra a caja.
 function _naSecCashCreditPart(movement){
   if(!movement||movement.tipo!=='ing')return 0;
