@@ -64,7 +64,39 @@
     status.dataset.state = state;
   }
 
+  // T-47: identidad de la sesión guardada (huella no reversible del token, la misma que calcula
+  // POS/js/sync/canonical-client.js). Lo pendiente del aparato (ventas, journal, notas) queda atado a
+  // la sesión que lo creó; al cambiar de sesión aquí se anota el cambio para que la app no lo envíe
+  // con el token nuevo.
+  const IDENTITY_KEY = 'na_session_identity_v1';
+  function identityHash(text) {
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < text.length; i++) { const ch = text.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return ('00000000' + (h2 >>> 0).toString(16)).slice(-8) + ('00000000' + (h1 >>> 0).toString(16)).slice(-8);
+  }
+  function noteIdentity(endpoint, token) {
+    try {
+      if (typeof token !== 'string' || !token) return;
+      const key = 'sid:' + identityHash(String(endpoint || '').replace(/\/+$/, '') + '\n' + token);
+      let h = null; try { h = JSON.parse(localStorage.getItem(IDENTITY_KEY) || 'null'); } catch { h = null; }
+      if (!h || h.version !== 1 || !Array.isArray(h.history)) h = { version: 1, history: [] };
+      if (h.current === key) return;
+      h.current = key; h.history = h.history.concat([{ key, since: new Date().toISOString() }]).slice(-20);
+      localStorage.setItem(IDENTITY_KEY, JSON.stringify(h));
+    } catch {}
+  }
+  function noteSavedIdentity() {
+    try { const saved = JSON.parse(localStorage.getItem(CREDENTIALS_KEY) || 'null'); if (saved) noteIdentity(saved.endpoint, saved.token); } catch {}
+  }
+
+  // Solo se borra la sesión (vínculo, credencial, rol en caché). Lo pendiente NO se borra:
+  // na_canonical_sale_outbox_v1 (+ _quarantine, _identity), na_canonical_sale_journal,
+  // na_canonical_identity_held_v1, na_sale_note_queue_v1 y na_pos_settings_pending_v1 quedan para
+  // revisarse; la app no los envía con otra sesión (los aparta en «Ventas en revisión»).
   function clearSession() {
+    noteSavedIdentity();
     localStorage.removeItem(BINDING_KEY);
     localStorage.removeItem(CREDENTIALS_KEY);
     localStorage.removeItem('na_pos_role_v1');
@@ -86,8 +118,10 @@
       authority_epoch: authority.authority_epoch,
       revision: authority.revision,
     };
+    noteSavedIdentity();
     localStorage.setItem(BINDING_KEY, JSON.stringify(binding));
     localStorage.setItem(CREDENTIALS_KEY, JSON.stringify({ endpoint: API, token }));
+    noteIdentity(API, token);
   }
 
   async function fetchAuthority(token) {

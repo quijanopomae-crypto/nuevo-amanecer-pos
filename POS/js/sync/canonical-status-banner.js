@@ -39,11 +39,19 @@
     } catch (_) {}
     try {
       var pending = typeof c.pendingSnapshot === 'function' ? c.pendingSnapshot() : null;
-      if (pending && pending.command && pending.command !== 'sale.create') {
+      if (pending && pending.command && pending.auth_failed_identity !== undefined && pending.last_error) {
+        // T-10: sesión vencida: no se promete «reintentando»; se pide volver a entrar (se conserva y se envía después).
+        state.blocked += 1; state.items.push('sesión vencida: vuelve a iniciar sesión (1 operación guardada)');
+      } else if (pending && pending.command && pending.command !== 'sale.create') {
         if (pending.last_error && DEFINITIVE.indexOf(Number(pending.last_status)) !== -1) {
           state.blocked += 1; state.items.push('1 operación rechazada (' + String(pending.command) + ')');
         } else { state.retrying += 1; state.items.push('1 operación pendiente (' + String(pending.command) + ')'); }
       }
+    } catch (_) {}
+    try {
+      // T-47: operaciones de otra sesión apartadas para revisión del dueño (nunca se borran).
+      var heldOps = typeof c.heldOperations === 'function' ? (c.heldOperations().entries || []).filter(function (e) { return e && e.status === 'HELD'; }) : [];
+      if (heldOps.length) { state.blocked += heldOps.length; state.items.push(heldOps.length === 1 ? (typeof c.describeHeld === 'function' && c.describeHeld(heldOps[0]) || '1 operación en revisión (' + String(heldOps[0].record && heldOps[0].record.command) + ')') : heldOps.length + ' operaciones en revisión'); }
     } catch (_) {}
     try {
       var snap = typeof c.snapshot === 'function' ? c.snapshot() : null;

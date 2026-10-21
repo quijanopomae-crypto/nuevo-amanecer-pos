@@ -146,14 +146,20 @@ for (const [status,error] of [[401,'unauthorized'],[403,'session_revoked'],[403,
  });
 }
 
-test('operation_id_conflict for a sale the server already has settles once by remote proof, never duplicated',async t=>{
+// T-03: el 409 operation_id_conflict ya no se da por confirmado en silencio: queda visible en revisión.
+// El cierre de caja lo concilia solo si la venta del servidor tiene el MISMO contenido (número, total, medio).
+test('operation_id_conflict for a sale the server already has: visible in review, reconciled once at close by content proof, never duplicated',async t=>{
  let reject=true;
  const {f,d,outbox,build}=await setup(t,async (url,options,run)=>{if(url.endsWith('/commands/sale.create')&&reject){reject=false;await run();return Response.json({error:'operation_id_conflict'},{status:409});}});
  await outbox.enqueue(build(cash('V-092')));
  const [sale]=outbox.snapshot().intents;
  const out=await outbox.sync();
- assert.equal(out.status,'DRAINED');
- assert.equal(outbox.quarantine().entries.length,0,'proven on server: nothing to review');
+ assert.equal(out.status,'EMPTY','moved to review, not counted as processed');
+ assert.equal(outbox.snapshot().intents.length,0);
+ const q=outbox.quarantine().entries;
+ assert.equal(q.length,1,'kept for review, not deleted');
+ assert.equal(q[0].reason,'operation_id_conflict');
+ assert.equal(q[0].status,'QUARANTINED');
  assert.equal(f.sql('SELECT COUNT(*) n FROM sales WHERE operation_id=?',sale.operation_id).n,1);
  d.el('cajContado').value='1074.50';
  assert.equal(await d.context.cerrarCaja(),true);

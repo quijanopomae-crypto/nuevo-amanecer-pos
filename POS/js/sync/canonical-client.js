@@ -151,6 +151,176 @@
     root.localStorage.setItem(CREDENTIALS_KEY, raw);
     if (root.localStorage.getItem(CREDENTIALS_KEY) !== raw) fail('SESSION_NOT_AVAILABLE');
   }
+  // T-47: identidad de la sesión guardada en este aparato. Las colas pendientes (ventas, journal de
+  // comandos, notas) se marcan con esta identidad al guardarse y solo esa misma sesión las envía. Si el
+  // navegador se vuelve a activar o vincular con otra sesión (dueño ↔ empleado), lo pendiente NO sale
+  // con el token nuevo: queda en revisión para el dueño. La clave es una huella no reversible del
+  // token guardado (nunca el token); la sesión/rol confirmados por /auth/me se guardan solo como dato local.
+  var IDENTITY_KEY = 'na_session_identity_v1';
+  function identityHash(text) {
+    var h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (var i = 0; i < text.length; i++) { var ch = text.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return ('00000000' + (h2 >>> 0).toString(16)).slice(-8) + ('00000000' + (h1 >>> 0).toString(16)).slice(-8);
+  }
+  function identityHistory() {
+    try { var v = JSON.parse(root.localStorage.getItem(IDENTITY_KEY) || 'null'); return v && v.version === 1 && Array.isArray(v.history) ? v : null; } catch (_) { return null; }
+  }
+  // Historial de identidades vistas en este aparato. Se crea la primera vez que corre este código (o al
+  // activar/vincular con activate.js) y crece cada vez que cambia el token guardado.
+  function noteIdentity(key) {
+    var h = identityHistory(), at = new Date().toISOString();
+    if (h && h.current === key) return h;
+    var next = h ? copy(h) : { version: 1, history: [] };
+    next.current = key; next.history = next.history.concat([{ key: key, since: at }]).slice(-20);
+    try { root.localStorage.setItem(IDENTITY_KEY, JSON.stringify(next)); } catch (_) {}
+    return next;
+  }
+  function sessionIdentity() {
+    var saved;
+    try { saved = JSON.parse(root.localStorage.getItem(CREDENTIALS_KEY) || 'null'); } catch (_) { return null; }
+    if (!saved || typeof saved !== 'object' || typeof saved.token !== 'string' || !saved.token) return null;
+    var key = 'sid:' + identityHash(String(saved.endpoint || '').replace(/\/+$/, '') + '\n' + saved.token);
+    noteIdentity(key);
+    var roles = root.NA_ROLES, confirmed = !!(roles && roles.confirmed);
+    var who = { key: key, principal: null, role: null };
+    try { if (confirmed && roles.sessionPrincipal) who.principal = String(roles.sessionPrincipal); if (confirmed && roles.role) who.role = String(roles.role); } catch (_) {}
+    return who;
+  }
+  // Regla para lo pendiente SIN identidad (guardado por una versión anterior): solo se considera de la
+  // sesión actual si este aparato tuvo UNA sola identidad desde antes de que se creara. Si no se puede
+  // saber (no hay historial, hubo cambio, o falta la fecha), queda en revisión; nunca se borra.
+  function identityTrustsLegacy(createdAt) {
+    var who = sessionIdentity(), h = identityHistory(), t = Date.parse(createdAt || '');
+    if (!who || !h || h.history.length !== 1 || h.history[0].key !== who.key || h.current !== who.key || !Number.isFinite(t)) return false;
+    var since = Date.parse(h.history[0].since || '');
+    return Number.isFinite(since) && since <= t;
+  }
+  function ownerConfirmed() {
+    var roles = root.NA_ROLES;
+    try { return !!(roles && roles.confirmed && typeof roles.isOwner === 'function' && roles.isOwner()); } catch (_) { return false; }
+  }
+  // Misma sesión = misma huella de token, o la misma sesión confirmada por /auth/me (el token de una
+  // sesión puede cambiar sin cambiar de sesión). 'wait' = huella distinta y aún no se confirmó la sesión.
+  function identityVerdict(stamped, stampedPrincipal, who) {
+    if (!who) return 'same';
+    if (stamped === who.key) return 'same';
+    if (stampedPrincipal) { if (!who.principal) return 'wait'; return stampedPrincipal === who.principal ? 'same' : 'other'; }
+    return 'other';
+  }
+  function recordIdentityMatches(record, who) {
+    if (!who) return true; // sin sesión guardada no se envía nada (sessionCredentials falla antes)
+    if (typeof record.identity === 'string' && record.identity) return identityVerdict(record.identity, record.identity_principal || null, who) === 'same';
+    return identityTrustsLegacy(record.payload && record.payload.created_at);
+  }
+  // 401/403 de sesión (vencida, revocada, solo lectura): no es un rechazo del comando.
+  var AUTH_ERRORS = ['unauthorized', 'session_revoked', 'read_only_session'];
+  function authFailure(status, body) {
+    var code = body && validId(body.error) ? body.error : null;
+    if (status === 401) return code || 'unauthorized';
+    if (status === 403 && code && AUTH_ERRORS.includes(code)) return code;
+    return null;
+  }
+  // Comandos (no ventas) de otra sesión: se apartan COMPLETOS a una lista durable (nunca se borran) y
+  // se libera el único journal para que el aparato siga funcionando. Las ventas las aparta la cola de
+  // ventas a su lista de revisión (canonical-sale-outbox.js). El dueño los aprueba con
+  // approveHeldOperation(): se reenvía el MISMO registro (mismo operation_id, mismo cuerpo).
+  var HELD_KEY = 'na_canonical_identity_held_v1';
+  function readHeld() {
+    var raw = root.localStorage.getItem(HELD_KEY);
+    if (raw === null) return { version: 1, entries: [] };
+    var v; try { v = JSON.parse(raw); } catch (_) { fail('INVALID_CANONICAL_HELD'); }
+    if (!v || v.version !== 1 || !Array.isArray(v.entries)) fail('INVALID_CANONICAL_HELD');
+    return v;
+  }
+  function writeHeld(v) {
+    var raw = JSON.stringify(v);
+    root.localStorage.setItem(HELD_KEY, raw);
+    if (root.localStorage.getItem(HELD_KEY) !== raw) fail('CANONICAL_STORAGE_NOT_DURABLE');
+  }
+  function holdForIdentity(record, who) {
+    var held = readHeld(), op = record.payload && record.payload.operation_id;
+    if (!held.entries.some(function (e) { return e.status === 'HELD' && e.record && e.record.payload && e.record.payload.operation_id === op; }))
+      held.entries.push({ status: 'HELD', reason: record.identity ? 'identity_changed' : 'identity_unverified', record: copy(record),
+        held_by_identity: who ? who.key : null, held_at: new Date().toISOString() });
+    writeHeld(held);
+    if (root.localStorage.getItem(JOURNAL) === JSON.stringify(record)) {
+      root.localStorage.removeItem(JOURNAL);
+      if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+    }
+    ready = false; saleOnlyReady = false; closeOnlyReady = false;
+    try {
+      var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+      if (runtime && typeof runtime.notify === 'function') runtime.notify('«' + (COMMAND_LABELS[record.command] || record.command) +
+        '» quedó en revisión: lo registró otra sesión de este aparato y no se envía con la sesión actual. El dueño debe revisarlo.', 'error');
+    } catch (_) {}
+  }
+  // T-03/T-47: un abono o lote de abonos que el Worker rechaza con 409 operation_id_conflict NO se da por
+  // confirmado ni se borra: queda apartado (mismo almacén que las retenciones por identidad) con el lote
+  // completo, con qué chocó (conflict/ledger) y, si la respuesta lo identifica, cuál abono hijo chocó.
+  // Mientras esté apartado no cuenta como aplicado (no está en el journal ni en la réplica).
+  var CONFLICT_HOLD_COMMANDS = ['payment.create', 'payment.batch'];
+  function conflictChild(record, result) {
+    var list = record.command === 'payment.batch' && record.payload && Array.isArray(record.payload.payments) ? record.payload.payments : null;
+    if (!list || !result) return null;
+    var at = -1, i;
+    var ids = [result.child_operation_id, result.conflict_operation_id, result.payment_operation_id,
+      result.operation_id !== record.payload.operation_id ? result.operation_id : undefined];
+    for (i = 0; i < ids.length && at < 0; i++) if (typeof ids[i] === 'string' && ids[i]) at = list.findIndex(function (p) { return p.operation_id === ids[i]; });
+    if (at < 0) {
+      var n = [result.child_index, result.payment_index, result.index].find(function (v) { return Number.isSafeInteger(v); });
+      if (n !== undefined && n >= 0 && n < list.length) at = n;
+    }
+    if (at < 0) return null;
+    return { index: at, operation_id: list[at].operation_id, credit_id: list[at].credit_id, amount_cents: list[at].amount_cents };
+  }
+  function holdForConflict(record) {
+    var held = readHeld(), op = record.payload && record.payload.operation_id;
+    if (!held.entries.some(function (e) { return e.status === 'HELD' && e.record && e.record.payload && e.record.payload.operation_id === op; })) {
+      var detail = record.last_conflict_detail || {};
+      held.entries.push({ status: 'HELD', reason: 'operation_id_conflict', record: copy(record), conflict: detail.conflict || null, ledger: detail.ledger || null,
+        conflict_child: record.last_conflict_child || null, held_at: new Date().toISOString() });
+    }
+    writeHeld(held);
+    if (root.localStorage.getItem(JOURNAL) === JSON.stringify(record)) {
+      root.localStorage.removeItem(JOURNAL);
+      if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+    }
+    try {
+      var runtime = root.NuevoAmanecerCanonicalUIAdapter && root.NuevoAmanecerCanonicalUIAdapter.runtime;
+      if (runtime && typeof runtime.notify === 'function') runtime.notify(describeHeld(held.entries[held.entries.length - 1]), 'error');
+    } catch (_) {}
+  }
+  // Diario PENDING con 409 operation_id_conflict (p. ej. guardado por una versión anterior): a revisión.
+  function heldConflict(record) {
+    if (!record || record.last_status !== 409 || record.last_error !== 'operation_id_conflict' || !CONFLICT_HOLD_COMMANDS.includes(record.command)) return false;
+    holdForConflict(record); ready = false; saleOnlyReady = false; closeOnlyReady = false;
+    return true;
+  }
+  var HELD_LEDGER_TEXT = { inventory: 'un movimiento de inventario', sales: 'una venta', sale: 'una venta', financial: 'un abono o movimiento de caja',
+    payments: 'un abono', expenses: 'un gasto', expense: 'un gasto', products: 'un producto', customers: 'un cliente' };
+  function heldMoney(cents) { return 'S/ ' + (Number(cents || 0) / 100).toFixed(2); }
+  // Texto para la lista/aviso existentes (sin cambiar diseño): qué se apartó, por qué y, si se sabe, qué abono chocó.
+  function describeHeld(entry) {
+    if (!entry || !entry.record) return '';
+    var r = entry.record, label = COMMAND_LABELS[r.command] || r.command, what;
+    if (r.command === 'payment.batch' && r.payload && Array.isArray(r.payload.payments)) {
+      var list = r.payload.payments, total = list.reduce(function (s, p) { return s + Number(p.amount_cents || 0); }, 0);
+      what = 'Cobro múltiple de ' + list.length + ' abono' + (list.length === 1 ? '' : 's') + ' (' + heldMoney(total) + ')';
+    } else if (r.command === 'payment.create' && r.payload) what = 'Abono de ' + heldMoney(r.payload.amount_cents);
+    else what = '«' + label + '»';
+    if (entry.reason !== 'operation_id_conflict') return what + ' en revisión: lo registró otra sesión de este aparato; el dueño debe revisarlo.';
+    var ledger = entry.ledger ? (HELD_LEDGER_TEXT[entry.ledger] || 'otro registro (' + String(entry.ledger) + ')') : (entry.conflict === 'cross_ledger' ? 'otro tipo de registro' : null);
+    var text = what + ' en revisión: CANON no lo registró porque su identificador de operación ya existe' + (ledger ? ' en ' + ledger : '') + '.';
+    if (r.command === 'payment.batch') {
+      var c = entry.conflict_child;
+      text += c ? ' Chocó el abono ' + (c.index + 1) + ' de ' + r.payload.payments.length + ' (crédito ' + String(c.credit_id) + ', ' + heldMoney(c.amount_cents) + ').'
+        : ' Chocó el lote completo.';
+      text += ' Ningún abono de este cobro se aplicó.';
+    } else text += ' El abono no se aplicó.';
+    return text + ' No lo cobres de nuevo sin revisar.';
+  }
   function stored(name) {
     var raw = root.localStorage.getItem(name);
     if (raw === null) return null;
@@ -1708,6 +1878,14 @@
     if (!binding || changed || root.navigator.onLine === false) fail('CANONICAL_COMMERCE_CLOSED');
     var expected = record.binding, session = sessionCredentials(record.binding);
     if (!session) fail('CANONICAL_COMMERCE_CLOSED');
+    // T-47: nunca con el token de otra sesión. Antes de cualquier petición (ni siquiera el GET de estado).
+    var who = sessionIdentity();
+    if (record.identity && identityVerdict(record.identity, record.identity_principal || null, who) === 'wait') fail('CANONICAL_IDENTITY_UNCONFIRMED');
+    if (!recordIdentityMatches(record, who)) {
+      // Las ventas las aparta la cola de ventas (con copia en su lista de revisión); el resto se aparta aquí.
+      if (record.command !== 'sale.create') holdForIdentity(record, who);
+      fail('CANONICAL_IDENTITY_CHANGED');
+    }
     assertBinding(expected);
     if (record.payload.promotion_id !== expected.promotion_id || record.payload.authority_epoch !== expected.authority_epoch ||
         record.payload.expected_control_revision !== expected.revision || record.payload.client_contract !== CONTRACT) fail('STALE_AUTHORITY_BINDING');
@@ -1722,7 +1900,15 @@
         headers: { authorization: 'Bearer ' + session.token }
       }, true);
       var statusResponse = statusTransport.response;
-      if (!statusResponse.ok) fail('CANONICAL_READ_' + statusResponse.status);
+      if (!statusResponse.ok) {
+        // T-10: un 401 de la propia sesión llega aquí, antes del POST. Se anota en el journal (sin
+        // tocar el cuerpo) para que la cola avise «Sesión vencida», deje de reintentar en bucle y
+        // reenvíe el MISMO registro una sola vez cuando haya otra credencial guardada.
+        var authCode = authFailure(statusResponse.status, statusTransport.result);
+        if (authCode && root.localStorage.getItem(JOURNAL) === JSON.stringify(record))
+          durableJournal(Object.assign({}, record, { last_error: authCode, last_status: statusResponse.status, auth_failed_identity: who ? who.key : null, auth_preflight: true }));
+        fail('CANONICAL_READ_' + statusResponse.status);
+      }
       var meta = statusTransport.result; verify(meta, expected);
       if (meta.mode !== 'ACTIVE') fail('CANONICAL_COMMERCE_CLOSED');
     }
@@ -1753,10 +1939,22 @@
       });
       var owner = conflictOwner(result);
       if (owner) rejected.last_conflict = owner; else delete rejected.last_conflict;
+      delete rejected.auth_preflight;
+      // T-03: el Worker puede decir con qué chocó el operation_id ({conflict:'cross_ledger', ledger:'inventory'}).
+      var shortId = function (v) { return typeof v === 'string' && /^[a-z0-9_.-]{1,40}$/i.test(v) ? v : null; };
+      if (result && result.error === 'operation_id_conflict' && (shortId(result.conflict) || shortId(result.ledger))) {
+        rejected.last_conflict_detail = { conflict: shortId(result.conflict), ledger: shortId(result.ledger) };
+      } else delete rejected.last_conflict_detail;
+      var child = result && result.error === 'operation_id_conflict' ? conflictChild(record, result) : null;
+      if (child) rejected.last_conflict_child = child; else delete rejected.last_conflict_child;
+      if (authFailure(response.status, result)) rejected.auth_failed_identity = who ? who.key : null; else delete rejected.auth_failed_identity;
       if (response.status === 403 && result && result.error === 'forbidden_role') {
         root.localStorage.removeItem(JOURNAL);
         if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
-      } else durableJournal(rejected);
+      } else {
+        durableJournal(rejected);
+        if (response.status === 409 && result && result.error === 'operation_id_conflict' && CONFLICT_HOLD_COMMANDS.includes(record.command)) holdForConflict(rejected);
+      }
       fail('CANONICAL_FINANCIAL_REJECTED_' + response.status);
     }
     if (!result || !(response.status === 201 && result.status === 'created' && result.idempotent === false || response.status === 200 && result.status === 'already_processed' && result.idempotent === true) ||
@@ -1821,6 +2019,7 @@
         if (target.credit_id != null) record.receipt_ids = { credit_id: target.credit_id, credit_provenance: target.credit_provenance };
       }
       if (!validPayload(command, record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
+      stampIdentity(record);
       // Etapa 2 (G): un aparato empleado pide el PIN del dueño ANTES de guardar la operación;
       // si cancela, no queda nada pendiente. La aprobación se valida en el servidor.
       if (root.NA_ROLES && typeof root.NA_ROLES.beforeCommand === 'function') {
@@ -1888,6 +2087,7 @@
           batch_credit_provenance: provenances
         };
         if (!validPayload('payment.batch', record.payload)) fail('INVALID_CANONICAL_PAYLOAD');
+        stampIdentity(record);
         durableJournal(record);
 
         var batchReceipt;
@@ -1965,6 +2165,10 @@
       if (!saved || saved.command !== 'payment.batch' || !validBinding(saved.binding) || !validPayload('payment.batch', saved.payload)) fail('INVALID_CANONICAL_PAYLOAD');
       var record = { state: 'PENDING', binding: copy(saved.binding), command: 'payment.batch', route: '/commands/payment.batch',
         payload: copy(saved.payload), receipt_ids: {}, batch_credit_provenance: copy(saved.batch_credit_provenance || []) };
+      // T-47: el lote guardado conserva la identidad de quien lo envió (o ninguna, si es antiguo):
+      // sendPending lo aparta si la sesión actual es otra.
+      if (typeof saved.identity === 'string' && saved.identity) record.identity = saved.identity;
+      if (typeof saved.identity_principal === 'string' && saved.identity_principal) record.identity_principal = saved.identity_principal;
       durableJournal(record);
       return sendPending(record);
     });
@@ -1990,6 +2194,8 @@
       if (!record || record.state !== 'PENDING' || record.command === 'sale.create' || !record.payload ||
           (operationId !== undefined && operationId !== null && record.payload.operation_id !== operationId)) return false;
       if (!(record.last_status >= 400 && record.last_status < 500 && record.last_status !== 429) || !record.last_error) return false;
+      // SPEC-885 §5: un abono / lote con 409 operation_id_conflict va a revisión (visible), no al archivo silencioso.
+      if (heldConflict(record)) return true;
       var key = 'na_canonical_rejected_operations', archive = stored(key);
       if (archive === null) archive = [];
       if (!Array.isArray(archive)) fail('INVALID_CANONICAL_REJECTED_ARCHIVE');
@@ -2074,6 +2280,8 @@
       // not create a new payment. Transport/storage uncertainty (5xx/no ACK)
       // must remain pending and can only be replayed with the same operation_id.
       if (![400,409].includes(record.last_status) || !record.last_error) return false;
+      // SPEC-885 §5: el conflicto de identificador nunca se descarta: queda en revisión con el lote completo.
+      if (heldConflict(record)) return true;
       root.localStorage.removeItem(JOURNAL);
       if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
       return true;
@@ -2143,6 +2351,70 @@
       if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
       return true;
     });
+  }
+  function stampIdentity(record) { var who = sessionIdentity(); if (who) { record.identity = who.key; if (who.principal) record.identity_principal = who.principal; } return record; }
+  // T-47: la cola de ventas ya guardó la venta completa (con este journal) en su lista de revisión
+  // porque la sesión actual NO es la que la capturó. Se libera el journal aunque no tenga error: si
+  // ya se había registrado, el reenvío aprobado con el MISMO operation_id responde already_processed.
+  async function releaseIdentityHeldSaleJournal(operationId) {
+    return withWriterLock(function () {
+      var record = journal();
+      if (!record || record.state !== 'PENDING' || record.command !== 'sale.create' || !record.payload || record.payload.operation_id !== operationId) return false;
+      if (recordIdentityMatches(record, sessionIdentity())) return false;
+      root.localStorage.removeItem(JOURNAL);
+      if (root.localStorage.getItem(JOURNAL) !== null) fail('CANONICAL_STORAGE_NOT_DURABLE');
+      ready = false; saleOnlyReady = false; closeOnlyReady = false;
+      return true;
+    });
+  }
+  // Aprobación del dueño de una venta apartada por identidad que YA tenía journal (pudo llegar al
+  // servidor): vuelve el MISMO registro (mismo cuerpo, mismas revisiones) para reenviarlo idéntico;
+  // si ya se había registrado, el servidor contesta already_processed y no aplica nada nuevo.
+  async function adoptSaleJournal(saved) {
+    return withWriterLock(function () {
+      var existing = journal();
+      if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
+      if (!saved || saved.state !== 'PENDING' || saved.command !== 'sale.create' || saved.route !== '/commands/sale.create' ||
+          !validBinding(saved.binding) || !validPayload('sale.create', saved.payload)) fail('INVALID_CANONICAL_JOURNAL');
+      var who = sessionIdentity();
+      if (!who) fail('SESSION_NOT_AVAILABLE');
+      var record = copy(saved);
+      delete record.last_error; delete record.last_status; delete record.last_conflict; delete record.auth_failed_identity; delete record.auth_preflight;
+      record.identity = who.key; if (who.principal) record.identity_principal = who.principal; else delete record.identity_device;
+      durableJournal(record);
+      journal();
+      return copy(record);
+    });
+  }
+  function heldOperations() { try { return copy(readHeld()); } catch (_) { return { version: 1, entries: [] }; } }
+  // Aprobación del dueño (dueño confirmado en esta sesión, o aprobación con su PIN en meta.ownerApproval):
+  // el registro vuelve al journal TAL CUAL (mismo operation_id y mismo cuerpo); solo cambia la identidad
+  // con la que se envía. Nada se borra: la entrada queda como APPROVED con quién, cuándo y de qué sesión venía.
+  async function approveHeldOperation(operationId, meta) {
+    var record = await withWriterLock(function () {
+      if (!ownerConfirmed() && !(meta && typeof meta.ownerApproval === 'string' && meta.ownerApproval)) fail('HELD_NEEDS_OWNER');
+      var held = readHeld();
+      var entry = held.entries.find(function (e) { return e.status === 'HELD' && e.record && e.record.payload && e.record.payload.operation_id === operationId; });
+      if (!entry) fail('HELD_ENTRY_NOT_FOUND');
+      var existing = journal();
+      if (existing && existing.state === 'PENDING') fail('CANONICAL_FINANCIAL_PENDING');
+      var who = sessionIdentity();
+      if (!who) fail('SESSION_NOT_AVAILABLE');
+      var next = copy(entry.record);
+      delete next.last_error; delete next.last_status; delete next.last_conflict; delete next.auth_failed_identity; delete next.auth_preflight; delete next.last_conflict_detail; delete next.last_conflict_child;
+      next.identity = who.key; if (who.principal) next.identity_principal = who.principal; else delete next.identity_principal;
+      durableJournal(next);
+      entry.status = 'APPROVED'; entry.approved_at = new Date().toISOString(); entry.approved_identity = who.key;
+      entry.approved_by = meta && meta.by != null ? String(meta.by) : (who.principal || null);
+      writeHeld(held);
+      return next;
+    });
+    return record;
+  }
+  // Cuerpo del último comando confirmado: la cola de ventas compara el CONTENIDO (no solo los ids).
+  function receiptPayloadSnapshot() {
+    var value = journal();
+    return value && value.state === 'CONFIRMED' && value.command === 'sale.create' ? copy(value.payload) : null;
   }
   // The durable intent and a full copy of this journal were already saved in
   // the sale quarantine. Free the single financial slot for a definitive 4xx
@@ -2323,7 +2595,7 @@
   root.addEventListener('storage', function (event) { if (event.key === KEY || event.key === CREDENTIALS_KEY || event.key === null) { changed = true; ready = false; saleOnlyReady = false; closeOnlyReady = false; } });
   root.addEventListener('offline', function () { ready = false; saleOnlyReady = false; closeOnlyReady = false; });
   root.NuevoAmanecerCanonical = Object.freeze({ CONTRACT: CONTRACT, enabled: enabled, configure: configure, refresh: refresh, prepareCommand: prepareCommand, snapshot: snapshot,
-    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, resumePaymentBatch: resumePaymentBatch, releaseRejectedCashClose: releaseRejectedCashClose, releaseUncommittedCashClose: releaseUncommittedCashClose, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale, releaseRejectedSaleJournal: releaseRejectedSaleJournal, releaseRejectedFinancial: releaseRejectedFinancial, settleStrandedFinancial: settleStrandedFinancial,
+    pendingSnapshot: pendingSnapshot, receiptSnapshot: receiptSnapshot, assertAction: assertAction, createSale: createSale, retryPending: retryPending, resumePaymentBatch: resumePaymentBatch, releaseRejectedCashClose: releaseRejectedCashClose, releaseUncommittedCashClose: releaseUncommittedCashClose, discardRejectedPayment: discardRejectedPayment, discardRejectedProduct: discardRejectedProduct, discardRejectedCustomer: discardRejectedCustomer, discardRejectedCustomerContact: discardRejectedCustomerContact, discardRejectedCustomerCreditPolicy: discardRejectedCustomerCreditPolicy, discardRejectedInventory: discardRejectedInventory, discardRejectedSale: discardRejectedSale, releaseRejectedSaleJournal: releaseRejectedSaleJournal, releaseIdentityHeldSaleJournal: releaseIdentityHeldSaleJournal, adoptSaleJournal: adoptSaleJournal, sessionIdentity: sessionIdentity, identityVerdict: identityVerdict, identityTrustsLegacy: identityTrustsLegacy, heldOperations: heldOperations, describeHeld: describeHeld, approveHeldOperation: approveHeldOperation, receiptPayloadSnapshot: receiptPayloadSnapshot, releaseRejectedFinancial: releaseRejectedFinancial, settleStrandedFinancial: settleStrandedFinancial,
     createProduct: createProduct, updateProduct: updateProduct, createCustomer: createCustomer, setCustomerContact: setCustomerContact, setCustomerCreditPolicy: setCustomerCreditPolicy, adjustInventory: adjustInventory, createCreditAccount: createCreditAccount, createPayment: createPayment, createPaymentBatch: createPaymentBatch, openCash: openCash, closeCash: closeCash, createAdjustment: createAdjustment, createCompensation: createCompensation, createExpense: createExpense, updateExpense: function(input){return createCommand('expense.update',input);}, voidExpense: function(input){return createCommand('expense.void',input);},
     renderCredits: renderCredits, startPOS: startPOS, commandContext: function () { return commonPayload(); }, warm: warm, legacySnapshot: legacySnapshot, sourceState: sourceState, ping: ping, readProgress: function () { return copy(readProgress); } });
 })(globalThis);

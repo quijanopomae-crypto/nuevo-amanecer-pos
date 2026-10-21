@@ -256,11 +256,15 @@ test('4c. sale already in D1 (lost ACK, then operation_id_conflict): reconciled,
  const intent=plain(await outbox.enqueue(build(cashSale('V-085'))));
  await drain(outbox);
  assert.equal(salesByOp(f,intent.operation_id),1);
+ // T-03: un 409 operation_id_conflict ya no se da por confirmado en silencio: queda visible en revisión.
  const q=plain(outbox.quarantine()).entries.filter(e=>e.status==='QUARANTINED');
- assert.equal(q.length,0,'auto-reconciled by remote proof (same sale_id+operation_id): never reaches the quarantine store');
- assert.equal(plain(outbox.quarantine()).entries.filter(e=>e.status==='QUARANTINED'||e.status==='ARCHIVED_NO_CHARGE').length,0);
+ assert.equal(q.length,1,'operation_id_conflict is kept visible for review');
+ assert.equal(q[0].reason,'operation_id_conflict');
+ assert.equal(plain(outbox.quarantine()).entries.filter(e=>e.status==='ARCHIVED_NO_CHARGE').length,0);
  assert.equal(outbox.snapshot().intents.length,0);
+ // El cierre lo concilia por prueba de CONTENIDO en el servidor (mismo número, total y medio).
  assert.equal(await d.context.cerrarCaja(),true,d.el('cajCloseStatus').textContent);
+ assert.equal(plain(outbox.quarantine()).entries.filter(e=>e.status==='CONFIRMED_REMOTE').length,1);
  assert.equal(salesByOp(f,intent.operation_id),1);
  assert.equal(f.sql('SELECT COUNT(*) n FROM sales').n,1);
  assert.equal(f.sql('SELECT expected_cents n FROM canonical_cash_closures').n,107250+200);

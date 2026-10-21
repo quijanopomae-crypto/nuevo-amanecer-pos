@@ -147,6 +147,8 @@
 
   root.NA_ROLES = {
     get role() { return state.role; }, get pinSet() { return state.pinSet; }, get label() { return state.label; }, get deviceId() { return state.deviceId; },
+    // T-47: sesión confirmada por /auth/me en esta carga (null si no está confirmada): marca local de las colas pendientes.
+    get sessionPrincipal() { return state.confirmed ? state.deviceId : null; },
     isOwner: canConfigure, canConfigure: canConfigure, get confirmed() { return state.confirmed; }, refresh: refresh, api: api, askPin: askPin, approve: approve, beforeCommand: beforeCommand,
     message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice()
   };
