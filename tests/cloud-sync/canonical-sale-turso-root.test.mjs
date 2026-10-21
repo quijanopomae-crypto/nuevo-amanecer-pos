@@ -9,7 +9,7 @@ const saleScripts = ['canonical-sale-intent','canonical-sale-outbox','canonical-
 
 const ROOT_MIGRATIONS=['0014_canonical_live_products.sql','0015_canonical_inventory_adjust.sql','0016_canonical_generic_sale_lines.sql','0024_pos_roles_owner_pin.sql'];
 // Production schema: every migration 0014-0034, i.e. all 14 operation ledgers (incl. pos_purchases, 0028).
-const FULL_MIGRATIONS=readdirSync(new URL('../../infra/database/migrations/',import.meta.url)).filter(n=>/^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
+const FULL_MIGRATIONS=readdirSync(new URL('../../infra/database/migrations/',import.meta.url)).filter(n=>/^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
 
 async function fixture(t, options={}, migrations=ROOT_MIGRATIONS) {
   const f=await activeCanon(t,{migrations});

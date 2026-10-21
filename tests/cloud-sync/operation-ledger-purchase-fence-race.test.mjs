@@ -12,7 +12,7 @@ import { readdirSync } from 'node:fs';
 import { activeCanon, device } from './canon-browser-harness.mjs';
 import { tursoSqlite } from './turso-sqlite-protocol.mjs';
 
-const MIGRATIONS = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
+const MIGRATIONS = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
 const PRODUCT = '00001';
 const HEADER_INSERT = /^INSERT INTO pos_purchases\(/;
 

@@ -11,7 +11,7 @@ import { tursoSqlite } from './turso-sqlite-protocol.mjs';
 import { canUseCanonicalSaleFastPath } from '../../tools/cloudflare-lab/src/a6-commerce.js';
 import { OPERATION_LEDGER_TABLES } from '../../tools/cloudflare-lab/src/operation-ledgers.js';
 
-const ALL = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
+const ALL = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
 const PRODUCT = '00001';
 
 async function shop(t, mode) {

@@ -11,7 +11,7 @@ import { activeCanon, device } from './canon-browser-harness.mjs';
 import { tursoSqlite } from './turso-sqlite-protocol.mjs';
 
 // Every migration production has (0014-0034): 0032 adds canonical_expense_revisions, which 0020/0022 do not watch.
-const MIGRATIONS = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
+const MIGRATIONS = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
 const PRODUCT = '00001', CUSTOMER = '000C';
 
 async function fixture(t, mode) {

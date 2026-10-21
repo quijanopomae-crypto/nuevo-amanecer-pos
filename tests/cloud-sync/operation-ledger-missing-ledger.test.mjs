@@ -19,7 +19,7 @@ import { OPERATION_LEDGER_TABLES, operationLedgers, operationLedgerCacheKey, cac
   from '../../tools/cloudflare-lab/src/operation-ledgers.js';
 
 const read = (p) => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
-const ALL = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
+const ALL = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
 const WITHOUT_0032 = ALL.filter((n) => !n.startsWith('0032'));
 const PRODUCT = '00001';
 const LEDGER_PROBE = /^SELECT name FROM sqlite_master WHERE type='table' AND name IN \('sales'/;

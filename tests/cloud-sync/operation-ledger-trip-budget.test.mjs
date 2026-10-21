@@ -24,7 +24,7 @@ const BASE_TRIPS = {
   'customer.contact.set': 7, 'payment.batch': 3,
 };
 const FENCED_IN_BATCH = ['product.update', 'customer.contact.set'];
-const MIGRATIONS = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
+const MIGRATIONS = readdirSync(new URL('../../infra/database/migrations/', import.meta.url)).filter((n) => /^00(1[4-9]|[2-9]\d)_/.test(n)).sort();
 const POS = (name) => readFileSync(new URL('../../POS/js/' + name, import.meta.url), 'utf8');
 const SALE_SCRIPTS = ['canonical-sale-intent', 'canonical-sale-outbox', 'canonical-sale-projection', 'canonical-sale-integration', 'canonical-sale-view'];
 
