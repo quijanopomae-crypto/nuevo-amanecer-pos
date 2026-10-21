@@ -48,6 +48,8 @@
     }
     try { if (root.NA_PRICE_HISTORY) root.NA_PRICE_HISTORY.recordPurchase(operationId, lines, out); } catch (_) {}
     try { await api.refresh(); } catch (_) {}
+    // Misión 2: el dueño actualiza el costo del producto con el de la compra (product.update, solo dueño).
+    try { if (root.NA_COSTO_COMPRA_FICHA && typeof root.NA_COSTO_COMPRA_FICHA.afterCanonPurchase === 'function') await root.NA_COSTO_COMPRA_FICHA.afterCanonPurchase(operationId, lines, out); } catch (_) {}
     try { if (typeof root.invRender === 'function') root.invRender(); } catch (_) {}
     return out;
   }

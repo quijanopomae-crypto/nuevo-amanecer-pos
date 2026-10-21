@@ -9,3 +9,4 @@
 body.dark .ccf-box { background: #1b2430; border-color: #3a4655; color: #e6edf3; }
 body.dark .ccf-btn { background: #2dd4bf; border-color: #2dd4bf; color: #0b1220; }
 body.dark .ccf-btn-alt { background: transparent; color: #5eead4; }
+.ccf-pref { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }

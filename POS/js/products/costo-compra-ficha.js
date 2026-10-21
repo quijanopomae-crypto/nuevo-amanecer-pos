@@ -73,6 +73,9 @@
     var b1 = el('button', 'ccf-btn', 'Usar costo de última compra'); b1.type = 'button'; b1.setAttribute('data-ccf', 'ultima'); b1.disabled = pick(summary, 'ultima') == null;
     var b2 = el('button', 'ccf-btn ccf-btn-alt', 'Usar promedio'); b2.type = 'button'; b2.setAttribute('data-ccf', 'promedio'); b2.disabled = pick(summary, 'promedio') == null;
     actions.appendChild(b1); actions.appendChild(b2); box.appendChild(actions);
+    var pref = el('label', 'ccf-pref'), chk = el('input'); chk.type = 'checkbox'; chk.setAttribute('data-ccf-mode', ''); chk.checked = costMode() === 'promedio';
+    chk.addEventListener('change', function () { setCostMode(chk.checked ? 'promedio' : 'ultima'); });
+    pref.appendChild(chk); pref.appendChild(doc().createTextNode(' Al registrar compras, usar el promedio ponderado (si no, la última compra)')); box.appendChild(pref);
     var msg = el('p', 'ccf-msg'); msg.setAttribute('data-ccf-msg', ''); msg.setAttribute('role', 'status'); box.appendChild(msg);
     box.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-ccf]'); if (b) apply(b.getAttribute('data-ccf'), summary); });
     grid.insertAdjacentElement('afterend', box);
@@ -88,6 +91,99 @@
     }).observe(modal, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', function () { if (!isOwner()) removeBox(); else if (modal.classList.contains('open')) render(); });
   }
-  root.NA_COSTO_COMPRA_FICHA = Object.freeze({ pick: pick, lastCosted: lastCosted, margin: margin, summaryFor: summaryFor, render: render, apply: apply, init: init });
+  // ---- Actualización automática al REGISTRAR una compra (solo dueño) ----
+  // Preferencia del dueño: 'ultima' (por defecto) o 'promedio'.
+  var MODE_KEY = 'na_costo_compra_modo_v1';
+  function costMode() { try { return root.localStorage && root.localStorage.getItem(MODE_KEY) === 'promedio' ? 'promedio' : 'ultima'; } catch (_) { return 'ultima'; } }
+  function setCostMode(mode) { if (!isOwner()) return false; try { root.localStorage.setItem(MODE_KEY, mode === 'promedio' ? 'promedio' : 'ultima'); return true; } catch (_) { return false; } }
+  // Último costo por producto dentro de la compra (si un producto viene en varias líneas, gana la última).
+  function lineCosts(lines, appliedLines) {
+    var out = new Map();
+    (Array.isArray(lines) ? lines : []).forEach(function (l) {
+      if (!l || l.unit_cost_cents == null || !(Number(l.unit_cost_cents) >= 0)) return;
+      if (appliedLines && !appliedLines[String(l.line)]) return;
+      out.set(String(l.product_id), Math.round(Number(l.unit_cost_cents)));
+    });
+    return out;
+  }
+  async function targetCents(id, lastCents) {
+    if (costMode() !== 'promedio') return lastCents;
+    try { var s = await summaryFor(id); return s && s.weightedUnitCostCents != null ? Math.round(s.weightedUnitCostCents) : lastCents; } catch (_) { return lastCents; }
+  }
+  function alternates(raw) {
+    var list = raw.alternate_codes_json;
+    if (typeof list === 'string') { try { list = JSON.parse(list); } catch (_) { list = []; } }
+    list = Array.isArray(list) ? list.map(function (c) { return String(c == null ? '' : c).trim(); }).filter(Boolean) : [];
+    if (raw.legacy_alternate_code) list.push(String(raw.legacy_alternate_code).trim());
+    var seen = new Set([raw.sku, raw.barcode].filter(Boolean).map(function (c) { return String(c).trim().toLowerCase(); }));
+    return list.filter(function (c) { var k = c.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 10);
+  }
+  function updatePayload(raw, costCents) {
+    return { product_id: String(raw.product_id), expected_metadata_revision: Number(raw.metadata_revision) || 0, name: raw.name, sku: raw.sku || null, barcode: raw.barcode || null,
+      alternate_codes: alternates(raw), category: raw.category || null, brand: raw.brand || null, description: raw.description || null, icon: raw.icon || null,
+      cost_cents: costCents, price_cents: raw.price_cents, box_price_cents: raw.box_price_cents == null ? null : raw.box_price_cents,
+      units_per_box: raw.units_per_box == null ? null : raw.units_per_box, stock_min_quantity: raw.stock_min_quantity == null ? 0 : raw.stock_min_quantity, expiry_date: raw.expiry_date || null };
+  }
+  function notify(msg, kind) { try { if (typeof root.toast === 'function') root.toast(msg, kind || 'info'); } catch (_) {} }
+  // CANON: tras la compra confirmada por /auth/purchases, el dueño actualiza el costo con product.update
+  // (ruta solo dueño en el Worker). El historial ya lo registró recordPurchase (origen «Compra»).
+  async function afterCanonPurchase(operationId, lines, result) {
+    var report = { updated: [], skipped: [], failed: [] };
+    if (!isOwner()) { report.skipped.push('not_owner'); return report; }
+    if (!result || result.idempotent) { report.skipped.push('replay'); return report; }
+    var applied = {};
+    (result.applied || []).forEach(function (r) { var n = r && (r.line != null ? r.line : r.line_number); if (n != null) applied[String(n)] = true; });
+    var client = canon();
+    if (!client || typeof client.updateProduct !== 'function' || typeof client.snapshot !== 'function') { report.skipped.push('canon_unavailable'); return report; }
+    var costs = lineCosts(lines, applied);
+    for (var [id, last] of costs) {
+      if (!isOwner()) { report.skipped.push('not_owner'); break; }
+      try {
+        var snap = client.snapshot(), raw = (snap && Array.isArray(snap.products) ? snap.products : []).find(function (p) { return String(p.product_id) === id; });
+        if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'metadata_revision')) { report.skipped.push(id); continue; }
+        var cents = await targetCents(id, last);
+        if (Number(raw.cost_cents) === cents) { report.skipped.push(id); continue; }
+        await client.updateProduct(updatePayload(raw, cents));
+        report.updated.push({ product_id: id, before_cents: raw.cost_cents == null ? null : Number(raw.cost_cents), after_cents: cents });
+        try { if (typeof client.refresh === 'function') await client.refresh(); } catch (_) {}
+      } catch (e) { report.failed.push({ product_id: id, error: String(e && e.message || e) }); break; } // una pendiente bloquea las demás: parar
+    }
+    if (report.failed.length) notify('Compra registrada, pero no se actualizó el costo de ' + report.failed.length + ' producto(s). Revísalo en la ficha.', 'warning');
+    return report;
+  }
+  // Modo local: tras la compra persistida, el dueño actualiza product.costo, guarda y lo anota en el historial.
+  async function afterLocalPurchase(operationId, result) {
+    var report = { updated: [], skipped: [], failed: [] };
+    if (!isOwner()) { report.skipped.push('not_owner'); return report; }
+    if (!result || !result.ok || !Array.isArray(result.applied) || !result.applied.length) { report.skipped.push('nothing'); return report; }
+    var list; try { list = typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { list = []; } // eslint-disable-line no-undef
+    var lines = result.applied.map(function (a) { return { line: a.sourceIndex, product_id: a.productId, unit_cost_cents: a.unitCost == null || a.unitCost === '' ? null : Math.round(Number(a.unitCost) * 100) }; });
+    var changes = [];
+    for (var [id, last] of lineCosts(lines)) {
+      var p = list.find(function (x) { return x && String(x.id) === id; }); if (!p) continue;
+      var cents = await targetCents(id, last), before = p.costo;
+      if (Math.round(Number(before) * 100) === cents) { report.skipped.push(id); continue; }
+      changes.push({ p: p, before: before, after: cents / 100, line: lines.filter(function (l) { return String(l.product_id) === id; }).pop().line });
+    }
+    if (!changes.length) return report;
+    changes.forEach(function (c) { c.p.costo = c.after; });
+    var ok = false;
+    try { var saved = typeof saveAllData === 'function' ? await saveAllData() : null; ok = typeof _naWasPersisted === 'function' ? _naWasPersisted(saved) : !!saved; } catch (_) { ok = false; } // eslint-disable-line no-undef
+    if (!ok) {
+      changes.forEach(function (c) { c.p.costo = c.before; });
+      try { if (typeof saveAllData === 'function') await saveAllData(); } catch (_) {} // eslint-disable-line no-undef
+      changes.forEach(function (c) { report.failed.push({ product_id: String(c.p.id), error: 'NO_PERSISTIDO' }); });
+      notify('Compra aplicada, pero no se pudo guardar el nuevo costo. Revísalo en la ficha.', 'warning');
+      return report;
+    }
+    changes.forEach(function (c) {
+      try { if (root.NA_PRICE_HISTORY) root.NA_PRICE_HISTORY.recordDiff({ productId: c.p.id, origin: 'compra', ref: String(operationId) + ':' + c.line, partial: true, before: { costo: c.before }, after: { costo: c.after } }); } catch (_) {}
+      report.updated.push({ product_id: String(c.p.id), before: c.before, after: c.after });
+    });
+    try { if (typeof root.invRender === 'function') root.invRender(); } catch (_) {}
+    return report;
+  }
+  root.NA_COSTO_COMPRA_FICHA = Object.freeze({ pick: pick, lastCosted: lastCosted, margin: margin, summaryFor: summaryFor, render: render, apply: apply, init: init,
+    costMode: costMode, setCostMode: setCostMode, lineCosts: lineCosts, updatePayload: updatePayload, afterCanonPurchase: afterCanonPurchase, afterLocalPurchase: afterLocalPurchase, MODE_KEY: MODE_KEY });
   if (root.document) { if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init); else init(); }
 })(globalThis);

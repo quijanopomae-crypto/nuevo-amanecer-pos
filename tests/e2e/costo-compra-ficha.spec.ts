@@ -66,3 +66,22 @@ test('empleado no ve el costo de compra en la ficha', async ({ page }) => {
   await expect(page.locator('#naCostoCompraFicha')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).NA_COSTO_COMPRA_FICHA.apply('ultima', { lastPurchase: { unitCostCents: 999 } }))).toBe(false);
 });
+
+for (const role of ['owner', 'empleado'] as const) {
+  test(`al registrar una compra local (${role}) el costo ${role === 'owner' ? 'se actualiza, se guarda y queda en el historial' : 'no cambia'}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await rolePage(page, role);
+    const out = await page.evaluate(async () => {
+      const w = window as any;
+      const r = await w.NA_COSTO_COMPRA_FICHA.afterLocalPurchase('OCR-e2e', { ok: true, applied: [{ sourceIndex: 1, productId: 'cc-1', quantity: 3, unitCost: 4.8 }] });
+      return { r, costo: w.eval('productos[0].costo'), hist: JSON.parse(localStorage.getItem('na_price_history_v1') || '{}')['cc-1'] || [] };
+    });
+    if (role === 'owner') {
+      expect(out.costo).toBe(4.8);
+      expect(out.hist[0]).toMatchObject({ type: 'costo', before: 4, after: 4.8, origin: 'compra', ref: 'OCR-e2e:1:costo' });
+    } else {
+      expect(out.costo).toBe(4);
+      expect(out.hist).toHaveLength(0);
+    }
+  });
+}
