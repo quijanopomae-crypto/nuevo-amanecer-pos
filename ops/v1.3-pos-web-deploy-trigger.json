@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 178: #845 etiquetas e impresión de precios (merge 4c7a2fc2). Solo web, sin cambios de Worker. Rollback: web 177 (build c156e6b9).",
-  "retry_attempt": 178,
-  "retry_reason": "Deploy de base 4c7a2fc2710efb6f3765ae3953e32bd7f0a260ce (incluye #845 merge 4c7a2fc2). Rollback: web 177 (build c156e6b9).",
-  "requested_at_utc": "2026-10-21T02:09:14Z",
-  "approved_base": "4c7a2fc2710efb6f3765ae3953e32bd7f0a260ce"
+  "note": "Web 180: publicar CANON aprobado con PR #846 (IGV visible/oculto y cabecera compacta Venta actual 32px) y PR #852/#853 (etiquetas y vencimientos) ya integrados. Solo Worker web/PWA estático; NO backend, secretos, migraciones ni datos. Rollback: Web 179, build b468cf6ef195a22dc56c713c5803d2156e9ddb4a (run 39609772665).",
+  "retry_attempt": 180,
+  "retry_reason": "Owner autoriza publicar PR #846 en navegador. HEAD CANON f5741665 integra #846/#852/#853 y CI Critical green. Antes del cambio web público servía build b468cf6 (Web 179). Revertir con un nuevo disparador apuntando a versión web previa si falla verificación visual o runtime.",
+  "requested_at_utc": "2026-10-21T15:43:28Z",
+  "approved_base": "f5741665e9ec71c9a46c7be8fb2d6e2da00a651e"
 }

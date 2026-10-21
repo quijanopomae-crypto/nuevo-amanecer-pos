@@ -25,9 +25,27 @@
     });
     var rows = core.report(readable, 'expired', range.today).concat(core.report(readable, range.days, range.today));
     rows = rows.map(function (row) {
-      return Object.assign({}, row, { name: text(row.name) || 'Producto sin nombre', lot_code: text(row.lot_code), expired: row.days < 0 });
+      return Object.assign({}, row, { name: text(row.name) || 'Producto sin nombre', lot_code: text(row.lot_code), expired: row.days < 0, bucket: bucketOf(row.days) });
     });
-    return { range: range, rows: rows, expired: rows.filter(function (row) { return row.expired; }).length };
+    var lot = normalizeLot(options.lot);
+    if (lot) rows = rows.filter(function (row) { return normalizeLot(row.lot_code).indexOf(lot) >= 0; });
+    return { range: range, rows: rows, lot: text(options.lot).trim(), expired: rows.filter(function (row) { return row.expired; }).length, counts: bucketCounts(rows) };
+  }
+  // Tramos: vencido, hasta 30, 31–60 y 61–90 días (día de Lima).
+  function bucketOf(days) { return days < 0 ? 'vencido' : days <= 30 ? '30' : days <= 60 ? '60' : '90'; }
+  function bucketCounts(rows) {
+    var out = { vencido: 0, '30': 0, '60': 0, '90': 0 };
+    rows.forEach(function (row) { out[row.bucket] = (out[row.bucket] || 0) + 1; });
+    return out;
+  }
+  function normalizeLot(value) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+  function summaryLabel(counts) {
+    return 'Vencidos: ' + counts.vencido + ' · Hasta 30 días: ' + counts['30'] + ' · 31 a 60 días: ' + counts['60'] + ' · 61 a 90 días: ' + counts['90'];
+  }
+  // Resumen para el aviso del dueño: vencidos y por vencer en 30 días.
+  function alertSummary(products, now) {
+    var report = buildReport(products, { days: 30, now: now });
+    return { today: report.range.today, expired: report.counts.vencido, soon: report.counts['30'] };
   }
   // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
   function isOwner() {
@@ -55,11 +73,12 @@
   }
   function currentReport(page) {
     var horizon = page.querySelector('[data-rpv-horizon]');
-    return buildReport(currentProducts(), { days: horizon ? horizon.value : 30 });
+    var lot = page.querySelector('[data-rpv-lot]');
+    return buildReport(currentProducts(), { days: horizon ? horizon.value : 30, lot: lot ? lot.value : '' });
   }
   function dateLabel(day) { return root.NA_STOCK_LOTS.displayDate(day); }
-  function filterLabel(range) {
-    return 'Filtro: próximos ' + range.days + ' días (' + dateLabel(range.today) + ' al ' + dateLabel(range.through) + ') + vencidos · día de Lima';
+  function filterLabel(range, lot) {
+    return 'Filtro: próximos ' + range.days + ' días (' + dateLabel(range.today) + ' al ' + dateLabel(range.through) + ') + vencidos · día de Lima' + (lot ? ' · lote contiene «' + lot + '»' : '');
   }
   function csvCell(value) {
     var raw = text(value);
@@ -68,7 +87,7 @@
     return /[",\r\n]/.test(raw) ? '"' + raw.replace(/"/g, '""') + '"' : raw;
   }
   function toCsv(report) {
-    var lines = [[filterLabel(report.range)], ['Producto', 'Lote', 'Fecha vencimiento', 'Días restantes', 'Stock']];
+    var lines = [[filterLabel(report.range, report.lot)], ['Producto', 'Lote', 'Fecha vencimiento', 'Días restantes', 'Stock']];
     report.rows.forEach(function (row) { lines.push([row.name, row.lot_code, dateLabel(row.expiry_date), row.days, row.quantity]); });
     return '\uFEFF' + lines.map(function (line) { return line.map(csvCell).join(','); }).join('\r\n') + '\r\n';
   }
@@ -86,12 +105,15 @@
     var controls = page.querySelector('[data-rpv-controls]'), authorized = available();
     if (controls) controls.hidden = !authorized;
     content.replaceChildren();
+    var hideSummary = page.querySelector('[data-rpv-summary]'); if (hideSummary) { hideSummary.hidden = true; hideSummary.textContent = ''; }
     if (!authorized) { status.textContent = ownerAllowed() ? 'Función en preparación. Disponible cuando el dueño la habilite.' : 'Sin permiso. Pídele acceso al dueño.'; return false; }
     var report;
     try { report = currentReport(page); }
     catch (_) { status.textContent = 'No se pudo leer los lotes cargados. Actualiza el reporte.'; return false; }
-    status.textContent = filterLabel(report.range) + ' · ' + report.rows.length + ' lotes · ' + report.expired + ' vencidos';
-    if (!report.rows.length) { content.appendChild(element('p', 'rpv-empty', 'No hay lotes con stock vencidos o por vencer en este horizonte.')); return true; }
+    status.textContent = filterLabel(report.range, report.lot) + ' · ' + report.rows.length + ' lotes · ' + report.expired + ' vencidos';
+    var summary = page.querySelector('[data-rpv-summary]');
+    if (summary) { summary.hidden = false; summary.textContent = summaryLabel(report.counts); }
+    if (!report.rows.length) { content.appendChild(element('p', 'rpv-empty', report.lot ? 'Ningún lote coincide con «' + report.lot + '» en este horizonte.' : 'No hay lotes con stock vencidos o por vencer en este horizonte.')); return true; }
     var section = element('section', 'rpv-results'), table = element('table', 'rpv-table');
     table.appendChild(element('caption', 'rpv-sr-only', 'Lotes vencidos primero, luego por fecha de vencimiento'));
     var head = element('thead'), headers = element('tr');
@@ -120,9 +142,46 @@
     var report = currentReport(page);
     var url = root.URL.createObjectURL(new root.Blob([toCsv(report)], { type: 'text/csv;charset=utf-8' }));
     var link = element('a'); link.href = url;
-    link.download = 'productos-por-vencer-' + report.range.today + '-' + report.range.days + '-dias.csv';
+    link.download = 'productos-por-vencer-' + report.range.today + '-' + report.range.days + '-dias' + (report.lot ? '-lote' : '') + '.csv';
     try { page.appendChild(link); link.click(); }
     finally { link.remove(); root.setTimeout(function () { root.URL.revokeObjectURL(url); }, 1000); }
+    return true;
+  }
+  // Aviso del dueño: tarjeta flotante propia (no cambia el diseño de Inicio). Solo se muestra con Inicio
+  // (pageMenu) activo: nunca en Venta (botón de cobrar, barra inferior) ni sobre botones de otros módulos. Al cerrarla no vuelve en la sesión:
+  // única escritura del módulo, una marca en sessionStorage (sin datos de productos ni lotes).
+  var ALERT_ID = 'naRpvAlert', ALERT_SESSION_KEY = 'na_rpv_alert_closed_v1', VENTA_PAGE = 'pagePOS', dismissedMemory = false;
+  function alertDismissed() {
+    if (dismissedMemory) return true;
+    try { return !!(root.sessionStorage && root.sessionStorage.getItem(ALERT_SESSION_KEY) === '1'); } catch (_) { return false; }
+  }
+  function rememberDismiss() {
+    dismissedMemory = true;
+    try { if (root.sessionStorage) root.sessionStorage.setItem(ALERT_SESSION_KEY, '1'); } catch (_) {}
+  }
+  var HOME_PAGE = 'pageMenu';
+  function isActive(id) { var v = root.document && root.document.getElementById(id); return !!(v && v.classList && v.classList.contains('active')); }
+  function inVenta() { return isActive(VENTA_PAGE) || !isActive(HOME_PAGE); }
+  function removeAlert() { var old = root.document && root.document.getElementById(ALERT_ID); if (old) old.remove(); }
+  function showAlert() {
+    var doc = root.document; if (!doc || !doc.body) return false;
+    // Solo el dueño (NA_ROLES.isOwner() en try/catch) y con la función habilitada; si algo falla, se oculta.
+    if (!available() || alertDismissed() || inVenta()) { removeAlert(); return false; }
+    var info;
+    try { info = alertSummary(currentProducts()); } catch (_) { removeAlert(); return false; }
+    if ((!info.expired && !info.soon) || alertDismissed() || inVenta()) { removeAlert(); return false; }
+    removeAlert();
+    var box = element('div', 'rpv-alert'); box.id = ALERT_ID; box.setAttribute('role', 'status'); box.setAttribute('data-rpv-alert', '');
+    var parts = [];
+    if (info.expired) parts.push(info.expired === 1 ? '1 lote vencido' : info.expired + ' lotes vencidos');
+    if (info.soon) parts.push(info.soon === 1 ? '1 lote vence en 30 días' : info.soon + ' lotes vencen en 30 días');
+    box.appendChild(element('p', 'rpv-alert-text', '⏳ ' + parts.join(' · ') + ' (' + dateLabel(info.today) + ', hora de Lima)'));
+    var view = element('button', 'rpv-alert-view', 'Ver reporte'); view.type = 'button'; view.setAttribute('data-rpv-alert-view', '');
+    var close = element('button', 'rpv-alert-close', 'Cerrar'); close.type = 'button'; close.setAttribute('data-rpv-alert-close', ''); close.setAttribute('aria-label', 'Cerrar aviso de vencimientos');
+    function dismiss() { rememberDismiss(); removeAlert(); }
+    view.addEventListener('click', function () { dismiss(); if (typeof root.goPage === 'function') root.goPage(PAGE_ID); });
+    close.addEventListener('click', dismiss);
+    box.appendChild(view); box.appendChild(close); doc.body.appendChild(box);
     return true;
   }
   function init() {
@@ -135,12 +194,19 @@
     if (refresh) refresh.addEventListener('click', update);
     if (exportButton) exportButton.addEventListener('click', exportCsv);
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
-    root.addEventListener('na:role', function () { if (!available()) render(); else update(); });
+    root.addEventListener('na:role', function () { if (!available()) render(); else update(); showAlert(); });
+    root.addEventListener('na:canonical-updated', showAlert);
+    page.addEventListener('input', function (e) { if (e.target && e.target.matches && e.target.matches('[data-rpv-lot]')) update(); });
+    root.setTimeout(showAlert, 1500);
+    [VENTA_PAGE, HOME_PAGE].forEach(function (id) {
+      var el = root.document.getElementById(id);
+      if (el && typeof root.MutationObserver === 'function') new root.MutationObserver(showAlert).observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
     ['na:canonical-updated', 'na:canonical-sale-projection', 'na:canonical-sale-receipt', 'focus'].forEach(function (event) { root.addEventListener(event, update); });
     update();
   }
   root.NA_REPORTE_PRODUCTOS_VENCER = Object.freeze({ buildReport: buildReport, horizonRange: horizonRange,
-    toCsv: toCsv, csvCell: csvCell, ownerAllowed: ownerAllowed, render: render, exportCsv: exportCsv, init: init });
+    toCsv: toCsv, csvCell: csvCell, bucketOf: bucketOf, bucketCounts: bucketCounts, summaryLabel: summaryLabel, alertSummary: alertSummary, showAlert: showAlert, ownerAllowed: ownerAllowed, render: render, exportCsv: exportCsv, init: init });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
