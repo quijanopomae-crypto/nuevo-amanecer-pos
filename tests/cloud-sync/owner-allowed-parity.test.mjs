@@ -24,7 +24,9 @@ const COPIES = [
   // #833: el costo del historial de precios lo ve solo el dueño confirmado (misma regla, otro nombre).
   { file: 'POS/js/products/price-history.js', fn: 'canSeeCost' },
   // #858: el costo de última compra en la ficha y su actualización al comprar, solo dueño confirmado.
-  { file: 'POS/js/products/costo-compra-ficha.js', fn: 'isOwner' }
+  { file: 'POS/js/products/costo-compra-ficha.js', fn: 'isOwner' },
+  // #871: el historial de precios en la nube solo baja/conserva costos para el dueño confirmado.
+  { file: 'POS/js/products/price-history-sync.js', fn: 'isOwner' }
 ];
 const OWNER_COPIES = COPIES.filter(c => !c.fn);
 
@@ -34,6 +36,9 @@ function ownerBlock(source, fn = 'ownerAllowed') {
   assert.ok(def >= 0, fn + ' definition');
   const helper = source.indexOf('function isOwner()');
   let start = helper >= 0 && helper < def ? helper : def;
+  // #871: price-history-sync.js lee NA_ROLES con su ayudante roles(); se copia también.
+  const rolesHelper = source.indexOf('function roles()');
+  if (rolesHelper >= 0 && rolesHelper < start) start = rolesHelper;
   let i = source.indexOf('{', def), depth = 0;
   for (; i < source.length; i++) {
     if (source[i] === '{') depth++;
