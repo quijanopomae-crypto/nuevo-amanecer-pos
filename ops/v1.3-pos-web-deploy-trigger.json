@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 182: publicar únicamente el ajuste visual TOTAL y S/ con el mismo font-size del PR #865, después de que pase CI y se fusione. No hay cambios de cálculo, venta, caja, inventario, backend o datos. Rollback web 181 run #39638550549, build a38f4ea2.",
+  "note": "Web 182: publicar CANON commit 1af08e537d5a60c45fe24fa40f6a832aa8c08404 / PR #865: TOTAL mismo tamaño que importe en PC/tablet. Verificados 687 E2E, CANON Critical, Visual Regression. Solo estáticos web, sin backend, secretos, migraciones, caja, ventas ni datos. Rollback a Web 181 (a38f4ea233c5998b8dd26b8b1a413c4b320ad737, run 39638550549).",
   "retry_attempt": 182,
-  "retry_reason": "Propietario reporta TOTAL más pequeño que el importe. Publicación de CSS correcto ya fusionado a CANON, sin afectar móvil ni cuentas. Precondición: validar E2E/Visual/CI y fusionar PR #865. Revertir a web 181 si hay regresión de render.",
-  "requested_at_utc": "2026-10-21T17:19:36Z",
-  "approved_base": "a38f4ea233c5998b8dd26b8b1a413c4b320ad737"
+  "retry_reason": "El usuario confirma que TOTAL aparece pequeño: se igualó font-size CSS de TOTAL e importe. PR #865 fusionado, 687 E2E verdes. Rollback Web181 si el sitio público no refleja el nuevo diseño.",
+  "requested_at_utc": "2026-10-21T17:25:12Z",
+  "approved_base": "1af08e537d5a60c45fe24fa40f6a832aa8c08404"
 }
