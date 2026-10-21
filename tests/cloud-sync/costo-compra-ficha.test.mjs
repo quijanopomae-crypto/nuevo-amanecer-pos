@@ -87,7 +87,7 @@ test('CANON: el dueño actualiza el costo con la ÚLTIMA línea de la compra por
   const { ctx, sent } = canonCtx();
   const r = await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-1', lines, applied);
   assert.deepEqual(plain(r.updated.map(u => [u.product_id, u.before_cents, u.after_cents])), [['p1', 400, 450], ['p2', 50, 70]]);
-  assert.deepEqual(plain(sent[0]), { product_id: 'p1', expected_metadata_revision: 3, name: 'Aceite', sku: 'A-1', barcode: '775', alternate_codes: ['X-1', 'OLD-9'],
+  assert.deepEqual(plain(sent[0]), { product_id: 'p1', expected_metadata_revision: 3, name: 'Aceite', sku: 'A-1', barcode: '775', alternate_codes: ['X-1', 'a-1'],
     category: 'abarrotes', brand: 'Sol', description: null, icon: '🛢️', cost_cents: 450, price_cents: 600, box_price_cents: 6500, units_per_box: 12, stock_min_quantity: 2, expiry_date: null });
 });
 
@@ -106,7 +106,7 @@ test('CANON: solo líneas aplicadas; reenvío idempotente y empleado no actualiz
 test('CANON: promedio solo si el dueño lo eligió; un fallo detiene el resto', async () => {
   let t = canonCtx({ mode: 'promedio' });
   await t.ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-1', lines, applied);
-  assert.equal(t.sent[0].cost_cents, 300, 'promedio ponderado de lo registrado');
+  assert.equal(t.sent[0].cost_cents, 368, 'promedio: 10×3.00 previas + 5×4.20 + 5×4.50 de la compra recién registrada = 3.675');
   t = canonCtx({ fail: true });
   const r = await t.ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-1', lines, applied);
   assert.equal(r.failed.length, 1); assert.equal(r.updated.length, 0);
@@ -139,4 +139,49 @@ test('los flujos de Compras llaman a la actualización después de confirmar la 
   const ocr = read('POS/js/ocr/ocr-purchase-integration.js');
   assert.match(ocr, /if \(!canonicalOn\) \{ try \{ if \(root && root\.NA_COSTO_COMPRA_FICHA[^\n]*afterLocalPurchase\(currentBatch\.operationId, result\)/);
   assert.ok(ocr.indexOf('afterLocalPurchase') > ocr.indexOf('if (!result || !result.ok)'));
+});
+
+test('un ajuste ENTRADA de #856 con costo nunca cuenta como compra (ni última ni promedio)', async () => {
+  const reason = 'ajuste:v1:' + JSON.stringify({ t: 'correccion', u: { n: 'Compra · "Ana" | 1', i: 'C-1' }, n: 'compra mal contada' });
+  const moves = [
+    { id: 'c1', productId: 'p9', type: 'ENTRADA', delta: 4, reason: 'Compra proveedor', unit_cost_cents: 200, timestamp: '2026-10-01T10:00:00Z' },
+    { id: 'a1', productId: 'p9', type: 'ENTRADA', delta: 100, reason, source: 'ADJUSTMENT', unit_cost_cents: 9999, timestamp: '2026-10-20T10:00:00Z' },
+    { operation_id: 'a2', product_id: 'p9', movement_type: 'ENTRADA', quantity: 100, reason, unit_cost_cents: 9999, created_at: '2026-10-21T10:00:00Z' }
+  ];
+  const s = await context({ inventoryMovements: moves }).NA_COSTO_COMPRA_FICHA.summaryFor('p9');
+  assert.equal(s.lastPurchase.unitCostCents, 200);
+  assert.equal(s.weightedUnitCostCents, 200);
+  assert.equal(api.lastCosted([{ unitCostCents: 5, timestamp: 2 }, { unitCostCents: null, timestamp: 9 }]).unitCostCents, 5);
+});
+
+test('product.update: se envían exactamente los campos que el Worker reescribe, idénticos salvo cost_cents', () => {
+  const products = read('tools/cloudflare-lab/src/a6-products.js');
+  const fields = products.match(/const UPDATE_FIELDS = \[([\s\S]*?)\];/)[1].match(/'([a-z_]+)'/g).map(x => x.slice(1, -1));
+  const envelope = ['operation_id', 'promotion_id', 'authority_epoch', 'expected_control_revision', 'client_contract', 'created_at']; // los pone canonical-client
+  const raw = { product_id: 'p1', metadata_revision: 7, name: 'Leche', sku: 'L-1', barcode: null, alternate_codes_json: '["Z-1","z-2"]', legacy_alternate_code: 'OLD',
+    category: 'lacteos', brand: '', description: 'Entera', icon: '🥛', cost_cents: 300, price_cents: 450, box_price_cents: null, units_per_box: null, stock_min_quantity: 3, expiry_date: '2026-12-01',
+    image: 'img://x', tracks_inventory: 1, unit: 'unidad', tax_type: 'gravado', current_stock_quantity: 12, activo: true };
+  const sent = plain(api.updatePayload(raw, 333));
+  assert.deepEqual(Object.keys(sent).sort(), fields.filter(f => !envelope.includes(f)).sort());
+  const map = { expected_metadata_revision: 'metadata_revision', alternate_codes: 'alternate_codes_json' };
+  for (const k of Object.keys(sent)) {
+    if (k === 'cost_cents') { assert.equal(sent[k], 333); continue; }
+    const want = k === 'alternate_codes' ? JSON.parse(raw.alternate_codes_json) : raw[map[k] || k];
+    assert.deepEqual(sent[k], want, k);
+  }
+  for (const k of ['image', 'tracks_inventory', 'unit', 'tax_type', 'current_stock_quantity', 'activo', 'legacy_alternate_code']) assert.ok(!(k in sent), k + ' no viaja');
+  assert.doesNotMatch(read('tools/cloudflare-lab/src/a6-canonical.js').match(/PRODUCT_REVISION_FIELDS=\[[^\]]*\]/)[0], /image|tracks_inventory|unit'|tax_type|stock_quantity/);
+});
+
+test('CANON: el historial queda como «Compra» con ref (recordPurchase) y la actualización no agrega «Ficha»', async () => {
+  const { ctx, sent } = canonCtx();
+  ctx.NA_ROLES = { isOwner: () => true, label: 'Ana', deviceId: 'dev-1' };
+  vm.runInContext(read('POS/js/products/price-history.js'), ctx);
+  ctx.productos = [{ id: 'p1', costo: 4 }, { id: 'p2', costo: 0.5 }];
+  ctx.NA_PRICE_HISTORY.recordPurchase('PUR-7', lines, applied); // lo que hace submit antes del gancho
+  await ctx.NA_COSTO_COMPRA_FICHA.afterCanonPurchase('PUR-7', lines, applied);
+  assert.equal(sent.length, 2);
+  const all = Object.values(JSON.parse(ctx.localStorage.getItem('na_price_history_v1'))).flat();
+  assert.deepEqual(plain(all.map(e => [e.type, e.origin, e.ref, e.after]).sort()), [['costo', 'compra', 'PUR-7:1:costo', 4.2], ['costo', 'compra', 'PUR-7:2:costo', 4.5], ['costo', 'compra', 'PUR-7:3:costo', 0.7]]);
+  assert.ok(!all.some(e => e.origin === 'ficha'));
 });

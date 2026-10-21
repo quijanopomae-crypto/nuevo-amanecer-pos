@@ -33,12 +33,14 @@
     if (!(cost > 0) || !(price > 0)) return null;
     return Math.round(((price - cost) / cost) * 1000) / 10;
   }
-  async function summaryFor(id) {
+  // extra: compra recién confirmada; se agrega si la consulta al servidor aún no la trae (o falló).
+  async function summaryFor(id, extra) {
     var h = hist(); if (!h || typeof h.buildHistory !== 'function') return null;
     var purchases = [];
     if (canon() && typeof h.readPurchases === 'function') {
       try { var r = await h.readPurchases(); purchases = (r && Array.isArray(r.purchases)) ? r.purchases : []; } catch (_) { purchases = []; }
     }
+    if (extra && extra.purchase_id && !purchases.some(function (p) { return p && String(p.purchase_id) === String(extra.purchase_id); })) purchases = purchases.concat([extra]);
     var built = h.buildHistory(purchases, canonMoves().concat(localMoves()), id);
     var s = built.summary || {};
     return { lastPurchase: lastCosted(built.rows), weightedUnitCostCents: s.weightedUnitCostCents == null ? null : s.weightedUnitCostCents };
@@ -106,23 +108,24 @@
     });
     return out;
   }
-  async function targetCents(id, lastCents) {
+  async function targetCents(id, lastCents, extra) {
     if (costMode() !== 'promedio') return lastCents;
-    try { var s = await summaryFor(id); return s && s.weightedUnitCostCents != null ? Math.round(s.weightedUnitCostCents) : lastCents; } catch (_) { return lastCents; }
+    try { var s = await summaryFor(id, extra); return s && s.weightedUnitCostCents != null ? Math.round(s.weightedUnitCostCents) : lastCents; } catch (_) { return lastCents; }
   }
+  // Exactamente la lista guardada: product.update escribe una revisión completa de estos campos.
   function alternates(raw) {
     var list = raw.alternate_codes_json;
     if (typeof list === 'string') { try { list = JSON.parse(list); } catch (_) { list = []; } }
-    list = Array.isArray(list) ? list.map(function (c) { return String(c == null ? '' : c).trim(); }).filter(Boolean) : [];
-    if (raw.legacy_alternate_code) list.push(String(raw.legacy_alternate_code).trim());
-    var seen = new Set([raw.sku, raw.barcode].filter(Boolean).map(function (c) { return String(c).trim().toLowerCase(); }));
-    return list.filter(function (c) { var k = c.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 10);
+    return Array.isArray(list) ? list.slice() : [];
   }
+  // El Worker (normalizeUpdate) recibe y reescribe estos 14 campos; imagen, unidad, impuestos, stock y
+  // control de inventario no viajan y no cambian. Todo se copia tal cual de la réplica salvo cost_cents.
+  function keep(v) { return v === undefined ? null : v; }
   function updatePayload(raw, costCents) {
-    return { product_id: String(raw.product_id), expected_metadata_revision: Number(raw.metadata_revision) || 0, name: raw.name, sku: raw.sku || null, barcode: raw.barcode || null,
-      alternate_codes: alternates(raw), category: raw.category || null, brand: raw.brand || null, description: raw.description || null, icon: raw.icon || null,
-      cost_cents: costCents, price_cents: raw.price_cents, box_price_cents: raw.box_price_cents == null ? null : raw.box_price_cents,
-      units_per_box: raw.units_per_box == null ? null : raw.units_per_box, stock_min_quantity: raw.stock_min_quantity == null ? 0 : raw.stock_min_quantity, expiry_date: raw.expiry_date || null };
+    return { product_id: String(raw.product_id), expected_metadata_revision: Number(raw.metadata_revision) || 0, name: raw.name, sku: keep(raw.sku), barcode: keep(raw.barcode),
+      alternate_codes: alternates(raw), category: keep(raw.category), brand: keep(raw.brand), description: keep(raw.description), icon: keep(raw.icon),
+      cost_cents: costCents, price_cents: raw.price_cents, box_price_cents: keep(raw.box_price_cents),
+      units_per_box: keep(raw.units_per_box), stock_min_quantity: raw.stock_min_quantity == null ? 0 : raw.stock_min_quantity, expiry_date: keep(raw.expiry_date) };
   }
   function notify(msg, kind) { try { if (typeof root.toast === 'function') root.toast(msg, kind || 'info'); } catch (_) {} }
   // CANON: tras la compra confirmada por /auth/purchases, el dueño actualiza el costo con product.update
@@ -136,12 +139,15 @@
     var client = canon();
     if (!client || typeof client.updateProduct !== 'function' || typeof client.snapshot !== 'function') { report.skipped.push('canon_unavailable'); return report; }
     var costs = lineCosts(lines, applied);
+    // La compra recién confirmada, en el formato de /auth/purchases, para que el promedio la incluya.
+    var current = { purchase_id: String(operationId), status: 'aplicada', created_at: new Date().toISOString(),
+      lines: (Array.isArray(lines) ? lines : []).filter(function (l) { return l && applied[String(l.line)]; }).map(function (l) { return { line_number: Number(l.line), product_id: String(l.product_id), quantity: Number(l.quantity), unit_cost_cents: l.unit_cost_cents == null ? null : Number(l.unit_cost_cents) }; }) };
     for (var [id, last] of costs) {
       if (!isOwner()) { report.skipped.push('not_owner'); break; }
       try {
         var snap = client.snapshot(), raw = (snap && Array.isArray(snap.products) ? snap.products : []).find(function (p) { return String(p.product_id) === id; });
         if (!raw || !Object.prototype.hasOwnProperty.call(raw, 'metadata_revision')) { report.skipped.push(id); continue; }
-        var cents = await targetCents(id, last);
+        var cents = await targetCents(id, last, current);
         if (Number(raw.cost_cents) === cents) { report.skipped.push(id); continue; }
         await client.updateProduct(updatePayload(raw, cents));
         report.updated.push({ product_id: id, before_cents: raw.cost_cents == null ? null : Number(raw.cost_cents), after_cents: cents });

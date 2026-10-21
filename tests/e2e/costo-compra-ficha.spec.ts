@@ -85,3 +85,45 @@ for (const role of ['owner', 'empleado'] as const) {
     }
   });
 }
+
+test('compra manual (CANON, dueño): costo y margen cambian sin abrir la ficha; historial «Compra» con ref', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await rolePage(page, 'owner');
+  await page.evaluate(() => {
+    const w = window as any, real = w.NuevoAmanecerCanonical, wrapped: Record<string, unknown> = {};
+    for (const key of Object.keys(real)) { const v = real[key]; wrapped[key] = typeof v === 'function' ? v.bind(real) : v; }
+    const raw = { product_id: 'cc-1', metadata_revision: 2, name: 'Aceite 1L', sku: 'CC-01', barcode: null, alternate_codes_json: '[]', category: 'abarrotes', brand: null,
+      description: null, icon: null, cost_cents: 400, price_cents: 600, box_price_cents: null, units_per_box: null, stock_min_quantity: 2, expiry_date: null };
+    w.__sent = [];
+    wrapped.enabled = () => true;
+    wrapped.commandContext = () => ({ promotion_id: 'ccf', authority_epoch: 1, expected_control_revision: 1, client_contract: 'test', created_at: new Date().toISOString() });
+    wrapped.prepareCommand = async () => {};
+    wrapped.refresh = async () => {};
+    wrapped.snapshot = () => ({ products: [raw], inventoryMovements: [] });
+    // Simula la confirmación del servidor: la réplica y el catálogo toman el costo nuevo.
+    wrapped.updateProduct = async (b: any) => { w.__sent.push(b); raw.cost_cents = b.cost_cents; raw.metadata_revision++; (0, eval)('productos')[0].costo = b.cost_cents / 100; return { ok: true }; };
+    w.NuevoAmanecerCanonical = wrapped;
+    const original = w.NA_ROLES.api.bind(w.NA_ROLES);
+    w.NA_ROLES.api = async (path: string, body: any, method?: string, headers?: any) =>
+      String(path).startsWith('/auth/purchases') && method === 'POST' ? { applied: body.lines.map((l: any) => ({ line: l.line, product_id: l.product_id })), idempotent: false } : original(path, body, method, headers);
+    w.NA_PURCHASES.open();
+  });
+  const dialog = page.locator('#naPurchaseDialog');
+  await dialog.locator('.na-pur-prod').fill('Aceite 1L');
+  await dialog.locator('.na-pur-qty').fill('6');
+  await dialog.locator('.na-pur-cost').fill('5.00');
+  await dialog.locator('.na-pur-ok').click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('#mProd')).not.toHaveClass(/open/);
+  await expect.poll(() => page.evaluate(() => (0, eval)('productos')[0].costo)).toBe(5);
+  const sent = await page.evaluate(() => (window as any).__sent);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ product_id: 'cc-1', cost_cents: 500, price_cents: 600, name: 'Aceite 1L', expected_metadata_revision: 2 });
+  expect(await page.evaluate(() => (window as any).NA_COSTO_COMPRA_FICHA.margin((0, eval)('productos')[0].costo, (0, eval)('productos')[0].precio))).toBe(20);
+  const hist = await page.evaluate(() => JSON.parse(localStorage.getItem('na_price_history_v1') || '{}')['cc-1'] || []);
+  expect(hist.filter((e: any) => e.type === 'costo')).toEqual([expect.objectContaining({ before: 4, after: 5, origin: 'compra', ref: expect.stringMatching(/:1:costo$/) })]);
+  // Al abrir la ficha después, el margen ya refleja el costo nuevo.
+  await page.evaluate(() => (window as any).editProd('cc-1'));
+  await expect(page.locator('#pCosto')).toHaveValue('5');
+  await expect(page.locator('#mgVal')).toHaveText('20.0%');
+});
