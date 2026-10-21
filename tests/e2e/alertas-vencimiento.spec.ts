@@ -227,3 +227,87 @@ for (const [width, height] of [[390, 844], [768, 900], [1280, 900]]) {
     expect(errors).toEqual([]);
   });
 }
+
+// Revisión #861: con poca altura (horizontal / ventana baja) el aviso es una fila compacta (≤ 48 px)
+// que no tapa las tarjetas de Inicio, «Actividad reciente» ni «Pendientes».
+for (const [width, height, dark] of [[844, 390, false], [915, 412, false], [740, 360, false], [1024, 600, false], [1280, 600, false], [844, 390, true]] as const) {
+  test(`a ${width}x${height}${dark ? ' (oscuro)' : ''} el aviso es una fila compacta y no tapa Inicio`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    const errors = await rolePage(page, 'owner', dark);
+    const alert = page.locator('#naRpvAlert');
+    await expect(alert).toBeVisible();
+    await expect(page.locator('#pageMenu')).toHaveClass(/\bactive\b/);
+    const box = (await alert.boundingBox())!;
+    expect(box.height).toBeLessThanOrEqual(48);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+    // Una sola fila: texto con «…», «Ver» y «×» a la misma altura; sin flex-basis 100 %.
+    const layout = await alert.evaluate(a => {
+      const t = a.querySelector('.rpv-alert-text')!, v = a.querySelector('.rpv-alert-view')!, c = a.querySelector('.rpv-alert-close')!;
+      const cs = getComputedStyle(t), mid = (el: Element) => { const r = el.getBoundingClientRect(); return Math.round(r.top + r.height / 2); };
+      return { basis: cs.flexBasis, ws: cs.whiteSpace, ellipsis: cs.textOverflow, mids: [mid(t), mid(v), mid(c)],
+        labels: [getComputedStyle(v, '::before').content, getComputedStyle(c, '::before').content], z: getComputedStyle(a).zIndex };
+    });
+    expect(layout.basis).not.toBe('100%');
+    expect(layout.ws).toBe('nowrap');
+    expect(layout.ellipsis).toBe('ellipsis');
+    expect(Math.max(...layout.mids) - Math.min(...layout.mids)).toBeLessThanOrEqual(2);
+    expect(layout.labels[0]).toContain('Ver');
+    expect(layout.labels[1]).toContain('×');
+    expect(layout.z).toBe('150');
+    // El texto completo y los nombres accesibles siguen (el «…» es solo visual).
+    await expect(alert).toContainText('1 lote vencido');
+    await expect(alert).toContainText('2 lotes vencen en 30 días');
+    await expect(alert.getByRole('button', { name: 'Ver reporte' })).toBeVisible();
+    await expect(alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' })).toBeVisible();
+    for (const sel of ['.rpv-alert-text', '[data-rpv-alert-view]', '[data-rpv-alert-close]']) expect(await contrast(alert.locator(sel)), sel).toBeGreaterThanOrEqual(4.5);
+
+    // No se cruza con las 4 tarjetas, «Actividad reciente», «Pendientes», la barra lateral ni el encabezado.
+    const cards = page.locator('#pageMenu .qs-card:visible');
+    await expect(cards).toHaveCount(4);
+    const content = page.locator('#pageMenu :is(.qs-card, .menu-data-panel, #naMobileActivity, .menu-side-link, .menu-desktop-heading h1, #menuDesktopDate, .menu-desktop-live), #naMobileMenuToggle, #topBusinessName, #saveStatus');
+    const overlapped: string[] = [];
+    for (let i = 0; i < await content.count(); i++) {
+      const el = content.nth(i), b = await el.boundingBox();
+      if (b && b.width > 0 && b.height > 0 && intersects(box, b)) overlapped.push(await el.evaluate(n => (n.id || n.className) + ': ' + (n.textContent || '').trim().slice(0, 30)));
+    }
+    expect(overlapped).toEqual([]);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+
+    // Modal encima del aviso.
+    await page.evaluate(() => (window as any).abrirModalGasto());
+    await expect(page.locator('#mGasto')).toHaveClass(/\bopen\b/);
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+    await page.evaluate(() => document.getElementById('mGasto')!.classList.remove('open'));
+    await page.waitForTimeout(300);
+    expect(await noticeHits(page)).toEqual([true, true, true, true, true]);
+    if (width < 768) {
+      await page.locator('#naMobileMenuToggle').click();
+      await expect(page.locator('#naMobileDrawer')).toHaveClass(/\bis-open\b/);
+      await page.waitForTimeout(400);
+      expect(await noticeHits(page)).toEqual([false, false, false, false, false]);
+      await page.keyboard.press('Escape');
+    }
+    await page.screenshot({ path: test.info().outputPath(`aviso-${width}x${height}${dark ? '-oscuro' : ''}.png`) });
+    expect(errors).toEqual([]);
+  });
+}
+
+test('a 844x390 «Ver» abre el reporte y «×» cierra el aviso', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await rolePage(page, 'owner', false);
+  const alert = page.locator('#naRpvAlert');
+  await alert.getByRole('button', { name: 'Ver reporte' }).click();
+  await expect(alert).toHaveCount(0);
+  await expect(page.locator(screenId)).toHaveClass(/\bactive\b/);
+  await page.evaluate(() => { sessionStorage.removeItem('na_rpv_alert_closed_v1'); });
+  await page.reload();
+  await page.waitForFunction(() => !!(window as any).NA_REPORTE_PRODUCTOS_VENCER && (window as any).NA_ROLES?.confirmed);
+  await page.evaluate(() => (window as any).goPage('pageMenu'));
+  await expect(alert).toBeVisible();
+  await alert.getByRole('button', { name: 'Cerrar aviso de vencimientos' }).click();
+  await expect(alert).toHaveCount(0);
+});

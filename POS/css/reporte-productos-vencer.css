@@ -87,4 +87,24 @@ body.dark .rpv-alert .rpv-alert-view { background: #fbbf24; color: #1e293b; bord
   .rpv-alert .rpv-alert-text { flex-basis: 100%; }
   .rpv-alert button { flex: 1 1 auto; min-height: 36px; padding: 4px 8px; }
 }
+/* Poca altura (horizontal o ventana baja, < 640 px de alto): una sola fila compacta de 44 px como máximo
+   (texto corto con «…», «Ver» y «×»). Por defecto abajo con safe-area; con ancho suficiente sube a un hueco
+   libre de arriba para no tapar las tarjetas de Inicio, «Actividad reciente» ni «Pendientes». */
+@media (max-height: 639px) {
+  .rpv-alert { top: auto; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: auto; max-width: 460px; max-height: 44px; margin: 0 auto; flex-wrap: nowrap; gap: 6px; padding: 3px 4px 3px 10px; font-size: 13px; line-height: 1.25; overflow: hidden; }
+  .rpv-alert .rpv-alert-text { flex: 1 1 auto; flex-basis: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+  .rpv-alert button { flex: 0 0 auto; min-height: 36px; min-width: 36px; padding: 0 10px; font-size: 0; line-height: 1; }
+  .rpv-alert button::before { font-size: 13px; line-height: 1; }
+  .rpv-alert .rpv-alert-view::before { content: "Ver"; content: "Ver" / ""; }
+  .rpv-alert .rpv-alert-close { padding: 0 8px; }
+  .rpv-alert .rpv-alert-close::before { content: "\00d7"; content: "\00d7" / ""; font-size: 20px; }
+}
+/* Teléfono horizontal (Inicio móvil): en la barra superior, a la derecha del logo (que no tiene más botones). */
+@media (max-height: 639px) and (min-width: 560px) and (max-width: 767px) {
+  .rpv-alert { top: calc(6px + env(safe-area-inset-top, 0px)); bottom: auto; left: auto; width: min(460px, calc(100vw - 280px)); max-width: none; margin: 0; }
+}
+/* Tablet/PC con poca altura: a la derecha de «Resumen», debajo de «Operación del día» y encima de las tarjetas. */
+@media (max-height: 639px) and (min-width: 768px) {
+  .rpv-alert { top: 124px; bottom: auto; left: auto; right: 26px; width: min(440px, calc(100vw - 480px)); max-width: none; margin: 0; }
+}
 @media print { .rpv-alert { display: none !important; } }
