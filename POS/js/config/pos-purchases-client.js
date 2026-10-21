@@ -39,7 +39,14 @@
       client_contract: ctx.client_contract, created_at: ctx.created_at, lines: lines };
     if (meta && meta.supplier) body.supplier = String(meta.supplier).slice(0, 120);
     if (meta && meta.documentRef) body.document_ref = String(meta.documentRef).slice(0, 80);
-    var out = await R.api('/auth/purchases', body, 'POST', headers);
+    var out;
+    try {
+      out = await R.api('/auth/purchases', body, 'POST', headers);
+    } catch (err) {
+      try { if (root.NA_PRICE_HISTORY && err && err.data) root.NA_PRICE_HISTORY.recordPurchase(operationId, lines, err.data); } catch (_) {}
+      throw err;
+    }
+    try { if (root.NA_PRICE_HISTORY) root.NA_PRICE_HISTORY.recordPurchase(operationId, lines, out); } catch (_) {}
     try { await api.refresh(); } catch (_) {}
     try { if (typeof root.invRender === 'function') root.invRender(); } catch (_) {}
     return out;
