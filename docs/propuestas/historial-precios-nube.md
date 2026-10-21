@@ -32,7 +32,8 @@ CREATE TABLE price_history (
   changed_at    TEXT NOT NULL,           -- ISO 8601 en UTC (…Z). La web lo muestra en hora de Lima
   device_id     TEXT NOT NULL,           -- dispositivo que lo subió (lo pone el Worker desde la sesión)
   received_at   TEXT NOT NULL,           -- hora UTC del servidor
-  legacy_id     TEXT                     -- Entry.id local original (solo para backfill/auditoría)
+  legacy_id     TEXT,                    -- Entry.id local original (solo para backfill/auditoría)
+  review_status TEXT CHECK (review_status IN ('pending','approved','rejected'))  -- costo de empleado sin compra válida (§7)
 );
 CREATE INDEX price_history_product ON price_history(product_id, changed_at DESC);
 CREATE UNIQUE INDEX price_history_ref ON price_history(ref, field) WHERE ref IS NOT NULL;
@@ -49,28 +50,35 @@ CREATE UNIQUE INDEX price_history_ref ON price_history(ref, field) WHERE ref IS 
 - `change_id` lo genera el aparato **una vez** al registrar el cambio y lo guarda en la entrada local
   (campo nuevo `cid`). Formato: `ph1:<device_id>:<uuid v4>`. Reenviar la misma entrada (reintento,
   pérdida de respuesta, sincronización repetida) usa el mismo `change_id`.
-- El Worker inserta con `INSERT … ON CONFLICT(change_id) DO NOTHING`:
-  - mismo `change_id` y mismo contenido → `200 {status:'duplicate'}`, no se crea otra fila;
-  - mismo `change_id` con contenido distinto → `409 change_id_conflict` (no se sobrescribe).
+- El Worker inserta con `INSERT … ON CONFLICT DO NOTHING` **sin columna de destino**, así ninguna
+  restricción única (`change_id` ni `(ref, field)`) produce un error. Si no se insertó ninguna fila
+  (`changes = 0`), el Worker lee la fila existente (por `change_id` y, si no está, por `(ref, field)`) y clasifica:
+  - mismo contenido (mismo producto, campo, montos, origen y ref) → `duplicate` (200), no se crea otra fila;
+  - contenido distinto → `conflict` (409 por entrada), no se sobrescribe nada.
 - Cambios que nacen de una compra ya tienen identidad durable (`ref = "<purchase_id>:<línea>"`).
   El índice único `(ref, field)` evita que dos aparatos que vean la misma compra la registren dos veces;
   el segundo recibe `duplicate`.
 
 ## 4. Backfill de los datos locales (sin pérdida)
 
-1. Al activar la función, la web lee `na_price_history_v1` **sin borrarlo**.
+**Orden:** el backfill corre **primero, al iniciar sesión** (después de `/auth/me`) y **antes** de activar
+la función (antes de leer de la nube o de escribir cambios nuevos en ella). Mientras no termine, la
+pantalla usa solo el historial local, como hoy.
+
+1. Al iniciar sesión, la web lee `na_price_history_v1` **sin borrarlo**.
 2. A cada entrada sin `cid` le asigna uno determinista:
    `ph1:legacy:<sha256(device_id + '|' + entry.id + '|' + entry.at + '|' + entry.type)>`,
    y lo escribe en la entrada local. Si la subida se repite (otra pestaña, reintento), sale el mismo
    `change_id` y el servidor responde `duplicate`.
-3. Sube en lotes de ≤ 100 a `POST /price-history/batch` con `origin` original y `legacy_id = entry.id`.
+3. Sube en lotes de ≤ 100 a `POST /price-history/batch` con el `origin` original y `legacy_id = entry.id`.
 4. Solo marca la entrada como `synced: true` cuando el servidor confirma (`inserted` o `duplicate`).
-   Lo no confirmado se reintenta. **Nunca** se borra una entrada local por la sincronización.
-5. El límite local de 200 por producto se mantiene solo para la caché; la nube conserva todo.
-6. Un empleado también sube su historial local, **incluido el costo** (el Worker lo acepta para
-   escritura, pero nunca lo devuelve a un no dueño). Tras subirlo, la web borra de ese aparato
-   solo los campos `before/after` de las entradas de costo ya confirmadas, para que el costo no
-   quede en claro en el teléfono del empleado.
+   Lo no confirmado se reintenta en el próximo inicio de sesión. **Nunca** se borra una entrada local por la sincronización.
+5. Cuando todas las entradas quedaron confirmadas (o en revisión, §7), la web guarda
+   `na_price_history_backfill_v1 = { device_id, done_at }` y recién entonces activa la lectura y escritura en la nube.
+6. El límite local de 200 por producto se mantiene solo para la caché; la nube conserva todo.
+7. Un empleado también sube su historial local. El tratamiento del costo se explica en §7. Tras
+   confirmarse, la web borra de ese aparato solo los montos de las entradas de costo, para que el
+   costo no quede en claro en el teléfono del empleado (la nube conserva el dato).
 
 ## 5. Unión y eliminación de duplicados al leer
 
@@ -100,6 +108,12 @@ con el prefijo `ph1:`.
   `field = 'costo'`** en la consulta SQL (`AND field <> 'costo'`), no solo oculta columnas. Así el
   costo nunca viaja en claro a un aparato de empleado.
 - En `POST`, la respuesta para un no dueño no repite montos de costo.
+- **Costo escrito por un empleado:** se acepta directamente solo si `origin = 'compra'` y `ref` es válido,
+  es decir, si existe en `pos_purchase_lines` una línea `(purchase_id, line_number)` aplicada para ese
+  `product_id` y su `unit_cost_cents` coincide con `after_cents`. En cualquier otro caso (ficha, importación,
+  backfill o ref inválido) la fila se guarda con `review_status = 'pending'` (columna nueva, `NULL` si no
+  necesita revisión), no aparece en el historial y el dueño la ve en Revisiones para aprobarla o descartarla.
+  El valor **nunca** cambia el costo del producto.
 - La web sigue ocultando el costo con `NA_ROLES.isOwner()` dentro de `try/catch` como segunda barrera.
 
 ## 8. Permisos y despliegue
@@ -112,7 +126,9 @@ con el prefijo `ph1:`.
 
 ## 9. Pruebas previstas (cuando se implemente)
 
-- Reenvío del mismo lote: 0 filas nuevas. Mismo `change_id` con otro contenido: 409.
+- Reenvío del mismo lote: 0 filas nuevas (`duplicate`). Mismo `change_id` o `(ref, field)` con otro contenido: `conflict`.
+- Costo de empleado con ref de compra válido: se acepta; sin ref o con ref inválido: queda en revisión del dueño.
+- El backfill corre al iniciar sesión y la función no se activa hasta terminarlo.
 - Backfill dos veces (dos pestañas): mismas filas, ningún dato local perdido.
 - Empleado: `GET` no trae filas `costo`; el `POST` de costo se acepta y luego no se lee.
 - Dos aparatos con la misma compra: una sola fila por `(ref, field)`.
