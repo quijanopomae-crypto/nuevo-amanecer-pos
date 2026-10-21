@@ -18,8 +18,16 @@ async function prepare(page: Page, width: number) {
   await page.evaluate(() => {
     window.eval(`productos=[{id:'SUMMARY-A',name:'Producto prueba',cat:'abarrotes',precio:4.50,costo:2,stock:10,stockMin:1,icon:'📦'}]; clientes=[]; cart=[]; appConfig.igvActive=true; posRender(); posUpdateCart();`);
   });
-  await page.locator('[data-product-id="SUMMARY-A"]').click();
-  if (width <= 1099) await page.locator('.cart-fab').click();
+  // En tablet el carrito está acoplado: el botón flotante permanece oculto.
+  // En teléfono táctil real, el catálogo POS de escritorio está oculto.
+  const realPhone = await page.locator('body').evaluate(el => el.classList.contains('na-pos-phone-device'));
+  if (realPhone) {
+    await expect(page.locator('#pagePOS')).toHaveClass(/phone-sale/);
+    await page.evaluate(() => window.eval("posAdd('SUMMARY-A')"));
+  } else {
+    await page.locator('[data-product-id="SUMMARY-A"]').click();
+    if (width <= 700) await page.locator('.cart-fab').click();
+  }
   if (width >= 701) await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
   await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
 }
