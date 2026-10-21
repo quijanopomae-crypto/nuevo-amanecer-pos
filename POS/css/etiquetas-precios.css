@@ -30,6 +30,9 @@ body.dark #pageEtiquetasPrecios .etq-preview-wrap { background: #0f172a; }
 .etq-bars { display: block; width: 100%; height: 8mm; fill: #000; }
 .etq-no-bars .etq-code { font-size: 9pt; font-weight: 700; }
 .etq-warn { font-size: 6pt; line-height: 1.1; color: #b45309; font-weight: 700; }
+/* Aviso de producto borrado (solo pantalla; al imprimir .etq-warn no sale): una línea con «…» para que en la
+   chica (38×25 mm) no achique las barras. Texto completo en el title y en la lista. */
+.etq-warn[data-etq-missing] { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .etq-meta { display: flex; justify-content: space-between; gap: 2mm; font-size: 6pt; line-height: 1.1; white-space: nowrap; overflow: hidden; }
 @media print {
   /* Solo la hoja de etiquetas ocupa lugar: el resto de la app sale del diseño (no solo se oculta). */

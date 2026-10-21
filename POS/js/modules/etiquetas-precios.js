@@ -133,7 +133,7 @@
     return '<div class="etq-label' + (svg ? '' : ' etq-no-bars') + (priced ? '' : ' etq-no-price') + '" data-etq-label>' +
       '<div class="etq-name">' + escapeHtml(truncateName(productName(product))) + '</div>' +
       '<div class="etq-price"' + (priced ? '' : ' data-etq-noprice') + '>' + escapeHtml(productPrice(product)) + '</div>' +
-      (gone ? '<div class="etq-warn" data-etq-missing>' + escapeHtml(MISSING_NOTICE) + '</div>' : '') +
+      (gone ? '<div class="etq-warn" data-etq-missing title="' + escapeHtml(MISSING_NOTICE) + '">' + escapeHtml(MISSING_NOTICE) + '</div>' : '') +
       svg + (code && !svg ? '<div class="etq-warn" data-etq-warn>' + escapeHtml(INVALID_NOTICE) + '</div>' : '') +
       '<div class="etq-meta"><span class="etq-code">' + escapeHtml(code || 'Sin código') + '</span><span class="etq-date">' + escapeHtml(formatDate(date)) + '</span></div>' +
       '</div>';
@@ -164,7 +164,8 @@
   function catalog() { try { return typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   function page() { return doc.getElementById('pageEtiquetasPrecios'); }
   // Producto actual del catálogo por id (precio/nombre al día); si ya no está, el que se eligió, sin precio y con aviso.
-  function current(item) { var id = productKey(item.product), p = catalog().find(function (x) { return productKey(x) === id; }); return p || missingProduct(item.product); }
+  // Catálogo vacío (recarga o sincronización en curso): no se marca nada como borrado, se usa lo que se eligió.
+  function current(item) { var cat = catalog(), id = productKey(item.product), p = cat.find(function (x) { return productKey(x) === id; }); return p || (cat.length ? missingProduct(item.product) : item.product); }
   function currentSelection() { return selected.map(function (item) { return { product: current(item), qty: item.qty }; }); }
   function q(sel) { var p = page(); return p && p.querySelector(sel); }
   function renderMatches() {
@@ -220,7 +221,7 @@
   // Impresión: fuera de la hoja nada ocupa lugar en el diseño. Con visibility:hidden el resto de la app seguía midiendo
   // (p. ej. 279 px) y Chromium encogía la etiqueta de rollo al ~66 %. Se marca cada hermano de la hoja y de sus
   // ancestros (display:none al imprimir) y los ancestros quedan sin relleno, borde ni ancho propio.
-  var endPrint = null;
+  var endPrint = null, ownPrint = false;
   function isolate(sheet) {
     var marked = [], node = sheet;
     while (node && node !== doc.body && node.parentElement) {
@@ -241,7 +242,7 @@
     doc.body.classList.add('etq-printing');
     var style = doc.createElement('style'); style.setAttribute('data-etq-page-style', format); style.textContent = pageCss(format); doc.head.appendChild(style);
     var done = function () {
-      if (endPrint !== done) return; endPrint = null;
+      if (endPrint !== done) return; endPrint = null; ownPrint = false;
       restore();
       doc.documentElement.classList.remove('etq-printing-root');
       doc.body.classList.remove('etq-printing');
@@ -252,6 +253,8 @@
     // todavía arma las páginas y las dejaba en blanco. Si «afterprint» no llegara, la siguiente impresión limpia antes.
     endPrint = done;
     root.addEventListener('afterprint', done);
+    // Marca que la impresión que viene es de Etiquetas: su «beforeprint» no debe limpiar la hoja.
+    ownPrint = true;
     if (typeof root.print === 'function') root.print(); else done();
   }
   // Respaldo si «afterprint» nunca llega (algunos móviles): sin esto la clase y las marcas quedaban y un window.print()
@@ -292,6 +295,9 @@
     var p = page(); if (!p) return; wire();
     if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } else cleanStalePrint(); }).observe(p, { attributes: true, attributeFilter: ['class'] });
   }
+  // Último respaldo: si quedaron marcas (sin «afterprint» y la limpieza cayó durante la impresión) y otra pantalla
+  // imprime (Ctrl+P en Venta, ticket, reporte), se limpian antes de que el navegador arme las páginas.
+  root.addEventListener('beforeprint', function () { if (ownPrint) { ownPrint = false; return; } if (endPrint) endPrint(); });
   doc.addEventListener('visibilitychange', function () { if (doc.visibilityState === 'visible') cleanStalePrint(); });
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(typeof window !== 'undefined' ? window : globalThis);

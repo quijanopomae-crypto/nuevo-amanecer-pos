@@ -189,7 +189,7 @@ test('fecha de Lima con el aparato en otra zona horaria (TZ) y sin Intl', async 
 
 // ---- Impresión sin «afterprint» (algunos móviles): al salir de Etiquetas o al volver a la pestaña se limpia ----
 // DOM mínimo de prueba (solo lo que usa el módulo); MutationObserver se dispara al cambiar la clase.
-function fakeDom({ printing = false } = {}) {
+function fakeDom({ printing = false, firesBeforeprint = true } = {}) {
   const observers = [];
   class ClassList { constructor(el) { this.el = el; this.set = new Set(); }
     add(...c) { c.forEach(x => this.set.add(x)); this.fire(); } remove(...c) { c.forEach(x => this.set.delete(x)); this.fire(); }
@@ -227,7 +227,8 @@ function fakeDom({ printing = false } = {}) {
   const win = { document, productos: [],
     MutationObserver: class { constructor(cb) { this.cb = cb; } observe(el) { observers.push({ el, cb: this.cb }); } },
     matchMedia: q => ({ matches: q === 'print' && state.printing }),
-    print: () => { state.prints++; }, confirm: () => true,
+    // Como un navegador real: window.print() dispara «beforeprint» antes de armar las páginas.
+    print: () => { state.prints++; if (firesBeforeprint) (winListeners.beforeprint || []).slice().forEach(f => f({})); }, confirm: () => true,
     addEventListener: (t, f) => (winListeners[t] ||= []).push(f), removeEventListener: (t, f) => { winListeners[t] = (winListeners[t] || []).filter(x => x !== f); } };
   const ctx = vm.createContext(win); win.window = win;
   vm.runInContext(readFileSync('POS/js/modules/etiquetas-precios.js', 'utf8'), ctx);
@@ -236,6 +237,7 @@ function fakeDom({ printing = false } = {}) {
     printing: () => body.classList.contains('etq-printing') || html.classList.contains('etq-printing-root') || head.children.some(c => c.hasAttribute('data-etq-page-style')),
     clickPrint: () => page.dispatch('click', { target: printBtn }),
     afterprint: () => (winListeners.afterprint || []).slice().forEach(f => f({})),
+    beforeprint: () => (winListeners.beforeprint || []).slice().forEach(f => f({})),
     visible: () => { document.visibilityState = 'visible'; (docListeners.visibilitychange || []).forEach(f => f({})); } };
 }
 
@@ -286,7 +288,7 @@ test('precio con «S/.» (forma peruana) y «+» inicial', () => {
 test('producto borrado del catálogo: aviso visible, «Sin precio» y entra en la confirmación', () => {
   const gone = E.missingProduct({ id: 7, name: 'Leche vieja', barcode: 'LECHE-1', precio: 9.9 });
   const html = E.sheetHtml([gone], 'chica', new Date('2026-10-21T15:00:00Z'));
-  assert.match(html, /data-etq-missing>Producto ya no está en el catálogo</);
+  assert.match(html, /data-etq-missing title="Producto ya no está en el catálogo">Producto ya no está en el catálogo</);
   assert.match(html, /Sin precio/);
   assert.doesNotMatch(html, /9\.90/, 'no sale el precio viejo');
 
@@ -296,7 +298,7 @@ test('producto borrado del catálogo: aviso visible, «Sin precio» y entra en l
   d.page.dispatch('click', { target: add });
   const sheet = d.page.querySelector('[data-etq-sheet]');
   assert.match(sheet.innerHTML, /S\/ 9\.90/);
-  d.win.productos = []; // se borró del catálogo
+  d.win.productos = [{ id: 8, name: 'Otro', barcode: 'OTRO-1', precio: 1 }]; // se borró del catálogo (que sigue cargado)
   let asked = ''; d.win.confirm = m => { asked = String(m); return false; };
   d.clickPrint();
   assert.match(asked, /1 producto ya no está en el catálogo/);
@@ -305,4 +307,54 @@ test('producto borrado del catálogo: aviso visible, «Sin precio» y entra en l
   assert.match(sheet.innerHTML, /Producto ya no está en el catálogo/);
   assert.doesNotMatch(sheet.innerHTML, /9\.90/);
   assert.ok(d.page.querySelector('[data-etq-missing-warn="7"]'), 'aviso en la lista');
+});
+
+test('catálogo vacío un momento (recarga/sincronización): no marca nada como borrado, usa lo elegido', () => {
+  const d = fakeDom();
+  d.win.productos = [{ id: 7, name: 'Leche', barcode: 'LECHE-1', precio: 9.9 }];
+  const add = d.page.appendChild(d.document.createElement('button')); add.setAttribute('data-etq-add', '7');
+  d.page.dispatch('click', { target: add });
+  d.win.productos = [];
+  let asked = ''; d.win.confirm = m => { asked = String(m); return true; };
+  d.clickPrint();
+  const sheet = d.page.querySelector('[data-etq-sheet]');
+  assert.equal(asked, '', 'sin confirmación: no hay borrados ni «Sin precio»');
+  assert.equal(d.state.prints, 1);
+  assert.doesNotMatch(sheet.innerHTML, /ya no está en el catálogo/);
+  assert.match(sheet.innerHTML, /S\/ 9\.90/);
+  assert.equal(d.page.querySelector('[data-etq-missing-warn="7"]'), null);
+  // Con catálogo cargado y sin el producto, sí se marca.
+  d.afterprint(); d.win.productos = [{ id: 8, name: 'Otro', barcode: 'OTRO-1', precio: 1 }]; asked = '';
+  d.clickPrint();
+  assert.match(asked, /1 producto ya no está en el catálogo/);
+});
+
+test('guarda de impresión en curso: con el medio «print» activo, ni salir de Etiquetas ni volver a la pestaña limpian', () => {
+  const d = fakeDom();
+  d.clickPrint();
+  d.state.printing = true; // el navegador está armando las páginas
+  d.page.classList.remove('active');
+  d.visible();
+  assert.equal(d.marks() > 0 && d.printing(), true, 'la hoja sigue aislada mientras se imprime');
+  d.state.printing = false;
+  d.visible();
+  assert.equal(d.marks(), 0);
+});
+
+test('marcas viejas y otra pantalla imprime (Ctrl+P en Venta): «beforeprint» las limpia antes; el de Etiquetas no', () => {
+  const d = fakeDom();
+  d.clickPrint(); // su propio «beforeprint» no limpia
+  assert.ok(d.marks() > 0 && d.printing(), 'Etiquetas sigue aislada durante su impresión');
+  // Sin «afterprint», y la única limpieza cayó con el medio «print» activo.
+  d.state.printing = true; d.page.classList.remove('active'); d.state.printing = false;
+  assert.ok(d.marks() > 0, 'quedan marcas viejas');
+  d.beforeprint(); // Ctrl+P en Venta
+  assert.equal(d.marks(), 0, 'sin marcas antes de que imprima Venta');
+  assert.equal(d.printing(), false);
+  // Una impresión nueva de Etiquetas vuelve a aislar y su «beforeprint» no la limpia.
+  d.page.classList.add('active');
+  d.clickPrint();
+  assert.ok(d.marks() > 0 && d.printing());
+  d.afterprint();
+  assert.equal(d.marks(), 0);
 });

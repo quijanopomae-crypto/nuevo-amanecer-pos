@@ -336,10 +336,65 @@ test('producto borrado del catálogo: aviso en la vista previa y en la lista, co
   await expect(gone.locator('.etq-price')).toHaveText('Sin precio');
   await expect(root.locator('[data-etq-missing-warn="990201"]')).toBeVisible();
   await expect(root.locator('[data-etq-sheet] .etq-price').filter({ hasText: 'S/ 4.50' })).toHaveCount(0);
+  // El aviso entra en la etiqueta chica (38×25 mm) y en la mediana: nada se sale ni queda cortado.
+  for (const fmt of ['chica', 'mediana']) {
+    await root.locator('[data-etq-format]').selectOption(fmt);
+    const fit = await gone.evaluate(label => {
+      const lb = label.getBoundingClientRect(), pad = parseFloat(getComputedStyle(label).paddingBottom);
+      return { label: [Math.round(lb.width), Math.round(lb.height)], kids: [...label.children].map(el => { const r = el.getBoundingClientRect(); return { cls: (el.className as any).baseVal ?? el.className, bottomOver: Math.round((r.bottom - (lb.bottom - pad)) * 10) / 10, rightOver: Math.round((r.right - lb.right) * 10) / 10, h: Math.round(r.height) }; }) };
+    });
+    for (const k of fit.kids) {
+      expect(k.bottomOver, `${fmt}: ${k.cls} no se sale por abajo (${JSON.stringify(fit)})`).toBeLessThanOrEqual(0.5);
+      expect(k.rightOver, `${fmt}: ${k.cls} no se sale por la derecha`).toBeLessThanOrEqual(0.5);
+    }
+    // El aviso va en una línea («…» si no entra) y las barras conservan sus 8 mm (en la chica, a 2 líneas se achicaban a ~7.4 mm).
+    const bars = fit.kids.find(k => k.cls === 'etq-bars')!, warn = fit.kids.find(k => k.cls === 'etq-warn')!;
+    expect(Math.abs(bars.h - 8 * 96 / 25.4), `${fmt}: barras ${bars.h}px ≈ 8 mm`).toBeLessThanOrEqual(1);
+    expect(warn.h, `${fmt}: aviso en una línea`).toBeLessThanOrEqual(10);
+    await expect(gone.locator('[data-etq-missing]')).toHaveAttribute('title', 'Producto ya no está en el catálogo');
+    await expect(gone.locator('.etq-meta')).toBeVisible();
+  }
   // Confirmando, imprime (como «Sin precio»).
   await page.evaluate(() => { window.confirm = () => true; });
   await root.locator('[data-etq-print]').click();
   expect(await page.evaluate(() => (window as any).__printed)).toBe(1);
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  expect(errors).toEqual([]);
+});
+
+// Sin «afterprint» y con la única limpieza cayendo durante la impresión, quedan marcas viejas. Un Ctrl+P en Venta
+// (otra impresión, no de Etiquetas) las limpia en «beforeprint»: el PDF de Venta no sale en blanco.
+test('marcas viejas de Etiquetas y Ctrl+P en Venta: el PDF de Venta no sale en blanco', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { root, errors } = await open(page, false);
+  await pick(root, 'arroz', 990201);
+  // Como el navegador: window.print() dispara «beforeprint» (y aquí nunca «afterprint»).
+  await page.evaluate(() => { window.confirm = () => true; window.print = () => { window.dispatchEvent(new Event('beforeprint')); }; });
+  await root.locator('[data-etq-print]').click();
+  const marks = () => page.evaluate(() => document.querySelectorAll('[data-etq-print-hide], [data-etq-print-path]').length + (document.body.classList.contains('etq-printing') ? 1 : 0));
+  expect(await marks(), 'su propio «beforeprint» no limpia la hoja').toBeGreaterThan(0);
+  // La salida de Etiquetas cae mientras el navegador dice que imprime (matchMedia('print') verdadero): la guarda no limpia.
+  // (Se simula con matchMedia: emulateMedia('print') deja a Chromium con un page.pdf posterior en blanco.)
+  await page.evaluate(() => { const real = window.matchMedia.bind(window); (window as any).__realMM = real;
+    window.matchMedia = (q: string) => q === 'print' ? ({ matches: true, media: q } as any) : real(q); });
+  await page.evaluate(() => (window as any).goPage('pagePOS'));
+  await page.evaluate(() => { window.matchMedia = (window as any).__realMM; });
+  // Venta ya dibujada (se renderiza después de goPage): el producto está en la grilla.
+  await expect(page.locator('#pagePOS').getByText('Arroz impresion').first()).toBeVisible();
+  // Y quieta: sin pedidos pendientes y dos cuadros dibujados (un page.pdf a mitad del render de Venta salía casi vacío).
+  await page.waitForLoadState('networkidle');
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
+  expect(await marks(), 'quedan marcas viejas').toBeGreaterThan(0);
+  // Ctrl+P en Venta (page.pdf dispara «beforeprint» y arma las páginas como el diálogo).
+  const pdf = await page.pdf({ printBackground: true });
+  const pdfPath = testInfo.outputPath('venta.pdf');
+  require('fs').writeFileSync(pdfPath, pdf);
+  expect(await marks(), 'limpio').toBe(0);
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  expect(pages).toBeGreaterThanOrEqual(1);
+  let text = '';
+  try { text = require('child_process').execFileSync('pdftotext', [pdfPath, '-'], { encoding: 'utf8' }); } catch { testInfo.annotations.push({ type: 'info', description: 'pdftotext no disponible: solo se mide el tamaño del PDF' }); }
+  if (text) expect(text.replace(/\s+/g, ' ').trim().length, 'el PDF de Venta tiene texto').toBeGreaterThan(20);
+  expect(pdf.length, 'no es un PDF en blanco (~2 KB)').toBeGreaterThan(10000);
   expect(errors).toEqual([]);
 });
