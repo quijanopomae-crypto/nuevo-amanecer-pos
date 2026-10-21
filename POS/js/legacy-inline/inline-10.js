@@ -33,8 +33,10 @@ function _naSecComputeKpis(){
   const range=ventasTab==='hoy'?_naF8RangeFromPeriod('today'):ventasTab==='semana'?_naF8RangeFromPeriod('week'):{from:'0000-01-01',to:'9999-12-31'};
   const sales=_naF8SaleRows(range),expenses=_naF8UnifiedExpenses(range),metrics=_naF8SaleMetrics(sales);
   const operating=_naF8Money(expenses.filter(e=>!_naF8IsInvestment(e)).reduce((a,e)=>a+_naNumber(e.monto),0));
-  return [metrics.revenue,metrics.gross,operating,_naF8Money(metrics.gross-operating)];
+  // Costo ausente (#884/#886): sin costo no hay ganancia; gross null => «—», nunca ganancia = ventas ni S/ 0.00.
+  return [metrics.revenue,metrics.gross,operating,metrics.gross==null?null:_naF8Money(metrics.gross-operating)];
 }
+function _naSecKpiText(value){return value==null?NA_COST_ABSENT:fmt(value);}
 function _naSecRenderSaleKpis(){
   const container=document.getElementById('ventasKPI');
   if(!container)return;
@@ -43,7 +45,7 @@ function _naSecRenderSaleKpis(){
   const vals=[];
   [['teal','Ventas'],['green','Ganancia bruta'],['amber','Gastos operativos'],['purple','Ganancia neta']].forEach(([tone,label],i)=>{
     const card=_naSecAppend(container,'div',`vkpi ${tone}`);
-    vals.push(_naSecAppend(card,'div','vkpi-val',memo?fmt(memo[i]):'—'));
+    vals.push(_naSecAppend(card,'div','vkpi-val',memo?_naSecKpiText(memo[i]):'—'));
     _naSecAppend(card,'div','vkpi-lbl',label);
   });
   if(memo)return;
@@ -51,7 +53,7 @@ function _naSecRenderSaleKpis(){
   requestAnimationFrame(()=>_naSecIdle(()=>{
     if(job!==_naSecKpiJob||!container.isConnected)return;
     const values=_naSecComputeKpis();_naSecKpiMemo={key,ventas,values};
-    vals.forEach((el,i)=>{if(el.isConnected)el.textContent=fmt(values[i]);});
+    vals.forEach((el,i)=>{if(el.isConnected)el.textContent=_naSecKpiText(values[i]);});
   },400));
 }
 function _naSecRenderTopProducts(container){

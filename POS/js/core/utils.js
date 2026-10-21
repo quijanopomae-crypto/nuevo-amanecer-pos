@@ -76,3 +76,11 @@ function _naInicioCashText(state) {
   }
   return ['Abierta', name, time].filter(Boolean).join(' · ');
 }
+
+// Costo ausente (#884/#886): el servidor y la réplica offline omiten el costo para los roles sin permiso.
+// Ausente (undefined, null, '' o texto sin dígitos) NO es 0: se muestra «—» y nunca se convierte en 0.
+// Un costo 0 real (cargado por el dueño) sigue siendo 0. _naCostValue devuelve el número o undefined.
+const NA_COST_ABSENT='—';
+function _naCostKnown(v){if(v===undefined||v===null)return false;if(typeof v==='number')return Number.isFinite(v);if(typeof v!=='string'||!/[0-9]/.test(v))return false;return Number.isFinite(_naNumber(v,NaN));}
+function _naCostValue(v){return _naCostKnown(v)?Math.max(0,_naNumber(v)):undefined;}
+if (typeof window !== 'undefined') { window._naCostKnown = _naCostKnown; window._naCostValue = _naCostValue; window.NA_COST_ABSENT = NA_COST_ABSENT; }

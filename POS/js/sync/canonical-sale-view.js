@@ -104,7 +104,8 @@
         qty:Number(row.quantity), cantidad:Number(row.quantity),
         precio:Number(row.unit_price_cents)/100, precioUnitario:Number(row.unit_price_cents)/100,
         subtotal:Number(row.line_total_cents)/100,
-        costo:generic?0:Number(product && product.costo || 0),
+        // Costo ausente (rol sin permiso, #884/#886) queda sin dato; nunca 0.
+        costo:generic?0:(product && product.costo != null && product.costo !== '' && Number.isFinite(Number(product.costo)) ? Number(product.costo) : undefined),
         ventaLibre:!!generic, tipoLinea:generic?'venta_libre':'producto',
         controlInventario:generic?false:(product ? product.controlInventario !== false : true),
         canonical:true
