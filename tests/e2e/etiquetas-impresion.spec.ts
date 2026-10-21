@@ -362,6 +362,24 @@ test('producto borrado del catálogo: aviso en la vista previa y en la lista, co
   expect(errors).toEqual([]);
 });
 
+// Catálogo vacío un momento (recarga o sincronización): lo elegido no se marca como borrado, no hay aviso ni confirmación
+// y se imprime con el precio que tenía.
+test('catálogo vacío un momento: sin aviso de borrado ni confirmación, imprime con lo elegido', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const { root, errors } = await open(page, false);
+  await pick(root, 'arroz', 990201);
+  await page.evaluate(() => { (0, eval)('productos = []'); (window as any).__asked = []; (window as any).__printed = 0;
+    window.confirm = (m?: string) => { (window as any).__asked.push(String(m)); return true; }; window.print = () => { (window as any).__printed++; }; });
+  await root.locator('[data-etq-print]').click();
+  expect(await page.evaluate(() => (window as any).__asked), 'sin confirmación').toEqual([]);
+  expect(await page.evaluate(() => (window as any).__printed)).toBe(1);
+  await expect(root.locator('[data-etq-sheet] [data-etq-missing]')).toHaveCount(0);
+  await expect(root.locator('[data-etq-missing-warn]')).toHaveCount(0);
+  await expect(root.locator('[data-etq-sheet] .etq-price').filter({ hasText: 'S/ 4.50' })).toHaveCount(1);
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  expect(errors).toEqual([]);
+});
+
 // Sin «afterprint» y con la única limpieza cayendo durante la impresión, quedan marcas viejas. Un Ctrl+P en Venta
 // (otra impresión, no de Etiquetas) las limpia en «beforeprint»: el PDF de Venta no sale en blanco.
 test('marcas viejas de Etiquetas y Ctrl+P en Venta: el PDF de Venta no sale en blanco', async ({ page }, testInfo) => {
@@ -384,6 +402,17 @@ test('marcas viejas de Etiquetas y Ctrl+P en Venta: el PDF de Venta no sale en b
   // Y quieta: sin pedidos pendientes y dos cuadros dibujados (un page.pdf a mitad del render de Venta salía casi vacío).
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
+  // Y con la entrada de Venta terminada: «na-enter-fade» (240 ms, opacidad 0→1) arranca unos cuadros después de goPage
+  // y un page.pdf a mitad del fundido salía casi vacío (1-4 de 10). Se espera a que la entrada exista (si hay Motion) y
+  // a que ninguna animación de #pagePOS ni de sus hijos siga corriendo.
+  await page.waitForFunction(() => {
+    const el = document.getElementById('pagePOS');
+    if (!el) return false;
+    const anims = el.getAnimations({ subtree: true });
+    const motion = (window as any).NA_MOTION, animated = !!motion?.core && !motion.core.reducedMotion() && window.innerWidth > 700;
+    if (animated && !anims.some(a => (a as any).animationName === 'na-motion-fade-in' && a.playState === 'finished')) return false;
+    return anims.every(a => a.playState !== 'running' && !a.pending);
+  });
   expect(await marks(), 'quedan marcas viejas').toBeGreaterThan(0);
   // Ctrl+P en Venta (page.pdf dispara «beforeprint» y arma las páginas como el diálogo).
   const pdf = await page.pdf({ printBackground: true });

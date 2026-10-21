@@ -189,7 +189,7 @@ test('fecha de Lima con el aparato en otra zona horaria (TZ) y sin Intl', async 
 
 // ---- Impresión sin «afterprint» (algunos móviles): al salir de Etiquetas o al volver a la pestaña se limpia ----
 // DOM mínimo de prueba (solo lo que usa el módulo); MutationObserver se dispara al cambiar la clase.
-function fakeDom({ printing = false, firesBeforeprint = true } = {}) {
+function fakeDom({ printing = false, firesBeforeprint = true, observer = true } = {}) {
   const observers = [];
   class ClassList { constructor(el) { this.el = el; this.set = new Set(); }
     add(...c) { c.forEach(x => this.set.add(x)); this.fire(); } remove(...c) { c.forEach(x => this.set.delete(x)); this.fire(); }
@@ -225,7 +225,7 @@ function fakeDom({ printing = false, firesBeforeprint = true } = {}) {
     addEventListener: (t, f) => (docListeners[t] ||= []).push(f) };
   const winListeners = {}, state = { printing, prints: 0 };
   const win = { document, productos: [],
-    MutationObserver: class { constructor(cb) { this.cb = cb; } observe(el) { observers.push({ el, cb: this.cb }); } },
+    MutationObserver: observer ? class { constructor(cb) { this.cb = cb; } observe(el) { observers.push({ el, cb: this.cb }); } } : undefined,
     matchMedia: q => ({ matches: q === 'print' && state.printing }),
     // Como un navegador real: window.print() dispara «beforeprint» antes de armar las páginas.
     print: () => { state.prints++; if (firesBeforeprint) (winListeners.beforeprint || []).slice().forEach(f => f({})); }, confirm: () => true,
@@ -357,4 +357,41 @@ test('marcas viejas y otra pantalla imprime (Ctrl+P en Venta): «beforeprint» l
   assert.ok(d.marks() > 0 && d.printing());
   d.afterprint();
   assert.equal(d.marks(), 0);
+});
+
+// print() que nunca dispara «beforeprint» (algunos móviles): «ownPrint» quedaba en true y el siguiente Ctrl+P de otra
+// pantalla se tomaba como de Etiquetas y no limpiaba las marcas viejas.
+test('«ownPrint» atascado (print sin «beforeprint»): al salir de Etiquetas se olvida y el Ctrl+P de otra pantalla limpia', () => {
+  const d = fakeDom({ firesBeforeprint: false });
+  d.clickPrint();
+  assert.ok(d.marks() > 0 && d.printing(), 'Etiquetas aislada (sin «beforeprint» propio)');
+  d.state.printing = true; d.page.classList.remove('active'); d.state.printing = false; // la limpieza cae durante la impresión
+  assert.ok(d.marks() > 0, 'quedan marcas viejas');
+  d.beforeprint(); // Ctrl+P en Venta
+  assert.equal(d.marks(), 0, 'sin marcas antes de que imprima Venta');
+  assert.equal(d.printing(), false);
+});
+
+test('«ownPrint» atascado: salir y volver a Etiquetas lo olvida; un Ctrl+P allí limpia las marcas viejas', () => {
+  const d = fakeDom({ firesBeforeprint: false });
+  d.clickPrint();
+  d.state.printing = true; d.page.classList.remove('active'); d.page.classList.add('active'); d.state.printing = false;
+  assert.ok(d.marks() > 0, 'quedan marcas viejas');
+  d.beforeprint(); // Ctrl+P del navegador, no el botón de Etiquetas
+  assert.equal(d.marks(), 0);
+  assert.equal(d.printing(), false);
+});
+
+test('«ownPrint» atascado y sin aviso de cambio de pantalla: «beforeprint» con Etiquetas oculta limpia igual', () => {
+  const d = fakeDom({ firesBeforeprint: false, observer: false });
+  d.clickPrint();
+  d.page.classList.remove('active'); // sin MutationObserver: nada se entera de la salida
+  assert.ok(d.marks() > 0, 'quedan marcas viejas');
+  d.beforeprint(); // Ctrl+P en Venta
+  assert.equal(d.marks(), 0);
+  assert.equal(d.printing(), false);
+  // Con Etiquetas a la vista, su propia impresión sigue protegida de su «beforeprint».
+  d.page.classList.add('active');
+  d.clickPrint(); d.beforeprint();
+  assert.ok(d.marks() > 0 && d.printing());
 });

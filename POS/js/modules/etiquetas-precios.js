@@ -293,11 +293,18 @@
   }
   function start() {
     var p = page(); if (!p) return; wire();
-    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } else cleanStalePrint(); }).observe(p, { attributes: true, attributeFilter: ['class'] });
+    // Al salir de Etiquetas también se olvida «ownPrint»: si print() nunca disparó «beforeprint» (algunos móviles), quedaba
+    // en true y el siguiente Ctrl+P de otra pantalla se tomaba como propio y no limpiaba.
+    if (root.MutationObserver) new root.MutationObserver(function () { if (p.classList.contains('active')) { renderMatches(); renderSelected(); } else { ownPrint = false; cleanStalePrint(); } }).observe(p, { attributes: true, attributeFilter: ['class'] });
   }
   // Último respaldo: si quedaron marcas (sin «afterprint» y la limpieza cayó durante la impresión) y otra pantalla
   // imprime (Ctrl+P en Venta, ticket, reporte), se limpian antes de que el navegador arme las páginas.
-  root.addEventListener('beforeprint', function () { if (ownPrint) { ownPrint = false; return; } if (endPrint) endPrint(); });
+  // Solo es propia si Etiquetas sigue a la vista: con otra pantalla activa, un «ownPrint» viejo no evita la limpieza.
+  root.addEventListener('beforeprint', function () {
+    var p = page(), mine = ownPrint && !!p && p.classList.contains('active');
+    ownPrint = false;
+    if (!mine && endPrint) endPrint();
+  });
   doc.addEventListener('visibilitychange', function () { if (doc.visibilityState === 'visible') cleanStalePrint(); });
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start); else start();
 })(typeof window !== 'undefined' ? window : globalThis);
