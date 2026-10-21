@@ -179,3 +179,47 @@ test.describe('cabecera del teléfono sin reducción', () => {
     await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
   });
 });
+
+for (const width of [768, 1366]) {
+  test(`TOTAL horizontal en mayúsculas ${width}px, con IGV visible y oculto`, async ({ page }) => {
+    await prepare(page, width);
+    const main = page.locator('#pagePOS .total-main');
+    const label = main.locator('span').first();
+    const money = page.locator('#posTotal');
+
+    for (const enabled of [false, true]) {
+      await setIgVisible(page, enabled);
+      await expect(main).toHaveCSS('flex-direction', 'row');
+      await expect(label).toHaveCSS('text-transform', 'uppercase');
+      await expect(label).toHaveText('Total');
+      await expect(money).toHaveText('S/ 4.50');
+      const bounds = await page.evaluate(() => {
+        const bar = document.querySelector('#pagePOS .cart-totals')!.getBoundingClientRect();
+        const main = document.querySelector('#pagePOS .total-main')!.getBoundingClientRect();
+        const label = document.querySelector('#pagePOS .total-main>span:first-child')!.getBoundingClientRect();
+        const amount = document.getElementById('posTotal')!.getBoundingClientRect();
+        return {
+          height: bar.height,
+          sameLine: Math.abs((label.top + label.bottom) / 2 - (amount.top + amount.bottom) / 2) <= 2,
+          correctOrder: label.right < amount.left,
+          withinBar: label.top >= bar.top - 1 && label.bottom <= bar.bottom + 1
+            && amount.top >= bar.top - 1 && amount.bottom <= bar.bottom + 1,
+          withinColumn: label.left >= main.left - 1 && amount.right <= main.right + 1,
+        };
+      });
+      expect(bounds).toMatchObject({ height: 44, sameLine: true, correctOrder: true, withinBar: true, withinColumn: true });
+    }
+  });
+}
+
+test.describe('TOTAL del teléfono conserva su diseño anterior', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  test('sin cambios en flex ni mayúsculas móviles', async ({ page }) => {
+    await prepare(page, 390);
+    await expect(page.locator('body')).toHaveClass(/na-pos-phone-device/);
+    await setIgVisible(page, false);
+    await expect(page.locator('#pagePOS .total-main')).toHaveCSS('text-transform', 'none');
+    await expect(page.locator('#pagePOS .total-main>span:first-child')).not.toHaveCSS('text-transform', 'uppercase');
+    await expect(page.locator('#posTotal')).toHaveText('S/ 4.50');
+  });
+});
