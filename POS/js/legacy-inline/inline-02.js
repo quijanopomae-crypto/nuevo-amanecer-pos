@@ -700,6 +700,7 @@ guardarProd=async function(){
   }
   else{const created={id:Date.now(),...persistedData,stock:0};productos.push(created);if(controlInventario&&targetStock>0){const outcome=applyInventoryMovement({productId:created.id,type:'ALTA',delta:targetStock,reason:`Alta de producto con stock inicial ${targetStock}`,source:'PRODUCT_CREATE',referenceId:String(created.id)});if(!outcome.ok){productos=backup.productos;inventoryMovements=backup.inventoryMovements;toast(outcome.message||'No se pudo registrar el stock inicial','error');return;}}}
   const persistResult=await saveAllData();if(!_naWasPersisted(persistResult)){productos=backup.productos;inventoryMovements=backup.inventoryMovements;await saveAllData();invRender();posRender();toast('No se guardó el producto porque no existe almacenamiento permanente verificado','error');return;}
+  try{if(invEditId&&globalThis.NA_PRICE_HISTORY){const saved=productos.find(x=>String(x.id)===String(invEditId));globalThis.NA_PRICE_HISTORY.recordCatalogDiff(editingPrevious?[editingPrevious]:[],saved?[saved]:[],'ficha');}}catch(_){}
   cerrarModal('mProd');invRender();posRender();toast(invEditId?'Producto actualizado':'Producto agregado','success');
   }finally{if(btnOk){btnOk.disabled=false;btnOk.textContent=btnText;}}
 };

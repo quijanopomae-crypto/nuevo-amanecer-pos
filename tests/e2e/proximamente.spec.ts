@@ -15,7 +15,7 @@ async function rolePage(page, role) {
   await page.waitForFunction(role => window.NA_ROLES?.role === role && window.NA_ROLES.confirmed, role);
 }
 
-const unlockedPages = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial' };
+const unlockedPages = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario' };
 
 async function registry(page) {
   return page.evaluate(async () => { const api = (window as any).NA_PROXIMAMENTE; await api.load(); return api.list().map(f => ({ id: f.id, module: f.module, unlocked: api.isUnlocked(f), locked: (window as any).NA_PERMISSIONS.featureLocked(f.id), uncertain: !!f.uncertain })); });
@@ -189,4 +189,18 @@ test('local owner opens Próximamente from the drawer and configuration', async 
   await expect(button).toBeVisible();
   await button.click();
   await expect(page.locator('#pageProximamente')).toHaveClass(/\bactive\b/);
+});
+
+test('Historial de precios: la tarjeta dice Disponible y abre Inventario (ficha); el empleado no entra', async ({ page, browser }) => {
+  await rolePage(page, 'owner');
+  await page.evaluate(() => window.goPage('pageProximamente'));
+  const card = page.locator('[data-feature-id="historial-precios-producto"]');
+  await expect(card.locator('.na-prox-available')).toHaveText('Disponible');
+  await expect(card.locator('.na-prox-badge')).toHaveCount(0);
+  await card.click();
+  await expect(page.locator('#pageInventario')).toHaveClass(/\bactive\b/);
+  const employee = await browser.newPage();
+  await rolePage(employee, 'empleado');
+  expect(await employee.evaluate(() => (window as any).NA_PERMISSIONS.canAccessScreen('empleado', 'pageProximamente'))).toBe(false);
+  await employee.close();
 });

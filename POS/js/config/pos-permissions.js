@@ -91,7 +91,7 @@
     'periodo-contable-percepcion': true,
     'desbloquear-usuario': true,
     'detraccion-retencion': true,
-    'historial-precios-producto': true,
+    'historial-precios-producto': false,
     'canales-venta': true,
     'estado-recepcion-compras': true,
     'adjuntos-proveedor': true,
