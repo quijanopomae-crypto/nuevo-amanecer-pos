@@ -2,9 +2,14 @@ name: Turso Daily Backup and Restore Verify
 
 # Daily encrypted logical backup of the PRODUCTION Turso database (the one the
 # Worker uses since DB_PROVIDER=turso), verified by restoring it into a throwaway
-# local SQLite on the runner. Read-only against Turso: no migrations, no deploys,
-# no Cloudflare credentials. The D1 daily backup (tools/cloudflare-backup) and the
-# Owner Backup Recovery Drill still export only the pre-cutover D1 database.
+# local SQLite on the runner, then stored in the private R2 backup bucket
+# (prefix turso-daily-backup/). Read-only against Turso: no migrations, no deploys.
+# Uses the existing Cloudflare secrets ONLY for that R2 put/get (the token should be
+# scoped to the nuevo-amanecer-prod-v2-backups bucket; owner action).
+# Public repo: nothing is uploaded as a GitHub artifact, and logs/step summary carry
+# no row counts or money totals (those stay in the encrypted backup and the R2 manifest).
+# The D1 daily backup (tools/cloudflare-backup) and the Owner Backup Recovery Drill
+# still export only the pre-cutover D1 database.
 
 on:
   schedule:
@@ -16,7 +21,8 @@ permissions:
   contents: read
 
 # Own group on purpose: joining nuevo-amanecer-production-change could replace a
-# pending deploy/migration run in that queue. The snapshot is a single read transaction.
+# pending deploy/migration run in that queue. The snapshot is a single read transaction
+# and the only write is new objects under turso-daily-backup/ in the private R2 bucket.
 concurrency:
   group: nuevo-amanecer-turso-daily-backup
   cancel-in-progress: false
@@ -25,19 +31,30 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # No secrets at job level: each step receives only the secrets it needs.
     env:
-      TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
-      TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
-      TURSO_BACKUP_ENCRYPTION_KEY: ${{ secrets.TURSO_BACKUP_ENCRYPTION_KEY }}
+      R2_BUCKET: nuevo-amanecer-prod-v2-backups
       TURSO_BACKUP_DIR: ${{ github.workspace }}/../turso-backup-out
 
     steps:
-      - name: Require existing Turso credentials and dedicated backup key
+      - name: Require default branch
         shell: bash
+        run: test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
+
+      - name: Require existing Turso/Cloudflare credentials and dedicated backup key
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+          TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+          TURSO_BACKUP_ENCRYPTION_KEY: ${{ secrets.TURSO_BACKUP_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
           # A missing GitHub secret arrives as an empty string; default unset ones too.
-          : "${TURSO_PROD_DATABASE_URL:=}" "${TURSO_PROD_AUTH_TOKEN:=}" "${TURSO_BACKUP_ENCRYPTION_KEY:=}"
+          : "${TURSO_PROD_DATABASE_URL:=}" "${TURSO_PROD_AUTH_TOKEN:=}" "${TURSO_BACKUP_ENCRYPTION_KEY:=}" "${CLOUDFLARE_API_TOKEN:=}" "${CLOUDFLARE_ACCOUNT_ID:=}"
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Secret CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | grep -Eq '^[a-f0-9]{32}$' || { echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is missing or invalid"; exit 1; }
           test -n "$TURSO_PROD_DATABASE_URL" || { echo "::error::Secret TURSO_PROD_DATABASE_URL is missing"; exit 1; }
           test "${#TURSO_PROD_AUTH_TOKEN}" -ge 32 || { echo "::error::Secret TURSO_PROD_AUTH_TOKEN is missing"; exit 1; }
           echo "::add-mask::$TURSO_PROD_DATABASE_URL"
@@ -57,57 +74,68 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Require default branch
-        shell: bash
-        run: test "$GITHUB_REF_NAME" = "feature/v1.3-mobile-cloud"
-
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
 
+      - name: Install pinned Cloudflare tooling
+        working-directory: tools/cloudflare-lab
+        run: npm ci --no-audit --no-fund
+
       - name: Local backup and restore-verify guards (synthetic data)
         run: node --test tests/cloud-sync/turso-scheduled-backup.test.mjs tests/cloud-sync/backup-select-images.test.mjs tools/cloudflare-lab/test/turso-d1-adapter.test.mjs
 
       - name: Create consistent encrypted logical Turso backup (read-only)
+        env:
+          TURSO_PROD_DATABASE_URL: ${{ secrets.TURSO_PROD_DATABASE_URL }}
+          TURSO_PROD_AUTH_TOKEN: ${{ secrets.TURSO_PROD_AUTH_TOKEN }}
+          TURSO_BACKUP_ENCRYPTION_KEY: ${{ secrets.TURSO_BACKUP_ENCRYPTION_KEY }}
         run: node tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs backup
 
-      - name: Restore into throwaway SQLite and verify (FK off load, foreign_key_check, quick_check, per-table counts)
+      - name: Restore into throwaway SQLite and verify (FK off load, foreign_key_check, quick_check, per-table digests)
         shell: bash
+        env:
+          TURSO_BACKUP_ENCRYPTION_KEY: ${{ secrets.TURSO_BACKUP_ENCRYPTION_KEY }}
         run: |
           set -euo pipefail
-          status=0
+          # Prints only pass/fail, table count, total digest and integrity checks (no row counts).
           node tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs verify \
             "$TURSO_BACKUP_DIR/turso-backup.enc.json" \
-            --manifest "$TURSO_BACKUP_DIR/turso-backup.manifest.json" > "$RUNNER_TEMP/verify-report.json" || status=$?
-          if [ -s "$RUNNER_TEMP/verify-report.json" ]; then
-          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(JSON.stringify({state:r.state,tables:r.tables,rows:r.rows,quick_check:r.quick_check,foreign_key_violations:r.foreign_key_violations,per_table_rows:Object.fromEntries(Object.entries(r.per_table).map(([n,t])=>[n,t.rows])),failures:r.failures},null,1))' "$RUNNER_TEMP/verify-report.json"
-          else echo "::error::verify produced no report (see error above)"; fi
-          if [ "$status" -ne 0 ]; then echo "::error::Restore verification FAILED; backup is not uploaded"; exit 1; fi
-          cp "$RUNNER_TEMP/verify-report.json" "$TURSO_BACKUP_DIR/turso-backup.verify-report.json"
-          echo "BACKUP_SHA256=$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.enc.json" | awk '{print $1}')" >> "$GITHUB_ENV"
+            --manifest "$TURSO_BACKUP_DIR/turso-backup.manifest.json" \
+            || { echo "::error::Restore verification FAILED; nothing is uploaded to R2"; exit 1; }
 
-      - name: Upload encrypted backup (only after verification passed)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: turso-backup-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ env.TURSO_BACKUP_DIR }}/turso-backup.enc.json
-            ${{ env.TURSO_BACKUP_DIR }}/turso-backup.manifest.json
-            ${{ env.TURSO_BACKUP_DIR }}/turso-backup.verify-report.json
-          if-no-files-found: error
-          # GitHub maximum for artifacts is 90 days; an off-GitHub copy needs owner-chosen storage.
-          retention-days: 90
-          compression-level: 0
+      - name: Store and verify backup in private remote R2
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          KEY="turso-daily-backup/$(date -u +%Y-%m-%dT%H-%M-%SZ)-$GITHUB_SHA.json"
+          npx wrangler r2 object put "$R2_BUCKET/$KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup.enc.json"
+          npx wrangler r2 object get "$R2_BUCKET/$KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup-check.json"
+          test "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.enc.json" | awk '{print $1}')" = "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup-check.json" | awk '{print $1}')"
+          MANIFEST_KEY="${KEY%.json}.manifest.json"
+          npx wrangler r2 object put "$R2_BUCKET/$MANIFEST_KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup.manifest.json"
+          npx wrangler r2 object get "$R2_BUCKET/$MANIFEST_KEY" --remote --file="$TURSO_BACKUP_DIR/turso-backup-manifest-check.json"
+          test "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.manifest.json" | awk '{print $1}')" = "$(sha256sum "$TURSO_BACKUP_DIR/turso-backup-manifest-check.json" | awk '{print $1}')"
+          {
+            echo "DAILY_BACKUP_KEY=$KEY"
+            echo "DAILY_BACKUP_MANIFEST_KEY=$MANIFEST_KEY"
+            echo "DAILY_BACKUP_SHA256=$(sha256sum "$TURSO_BACKUP_DIR/turso-backup.enc.json" | awk '{print $1}')"
+          } >> "$GITHUB_ENV"
 
       - name: Backup summary
         if: ${{ success() }}
         shell: bash
         run: |
           {
-            echo "- Artifact: turso-backup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} (retention 90 days)"
-            echo "- Encrypted sha256: $BACKUP_SHA256"
+            echo "- Private R2: $DAILY_BACKUP_KEY (manifest $DAILY_BACKUP_MANIFEST_KEY)"
+            echo "- Encrypted sha256: $DAILY_BACKUP_SHA256"
             echo "- Encryption key secret: TURSO_BACKUP_ENCRYPTION_KEY (not the Turso token)"
+            echo "- GitHub artifacts: none"
             echo "- Turso writes in this run: none"
           } >> "$GITHUB_STEP_SUMMARY"
 

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { activeCanon, device } from './canon-browser-harness.mjs';
-import { backup, verify, decryptBackup, requireBackupKey, REQUIRED_TABLES, KEY_ENV } from '../../tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs';
+import { backup, verify, decryptBackup, requireBackupKey, publicSummary, REQUIRED_TABLES, KEY_ENV } from '../../tools/cloudflare-prod/scripts/turso-scheduled-backup.mjs';
 import { backup as migrationBackup, backupPath as migrationBackupPath } from '../../tools/cloudflare-prod/scripts/turso-expense-server-received-maintenance.mjs';
 
 const MIGS = readdirSync('infra/database/migrations').filter(n => /^00(1[4-9]|2\d|3[0-4])_/.test(n)).sort();
@@ -69,6 +69,11 @@ test('daily backup: dedicated key, restore verify PASS with FK off, per-table di
   assert.equal(R.prepare('SELECT COUNT(*) n FROM sales').get().n, f.database.prepare('SELECT COUNT(*) n FROM sales').get().n);
   assert.equal(R.prepare('SELECT current_stock_quantity q FROM canonical_live_products WHERE product_id=?').get('BK-P1').q, 17);
   R.close();
+  // Public log/summary: only pass/fail, table count, digest ok and integrity; no row counts.
+  const pub = publicSummary(report);
+  assert.deepEqual(Object.keys(pub).sort(), ['failures', 'foreign_key_check', 'quick_check', 'state', 'tables', 'total_digest_match']);
+  assert.equal(pub.total_digest_match, true);
+  assert.equal(JSON.stringify(pub).includes('rows'), false);
 });
 
 test('runbook literal order (FK on during load) fails with FOREIGN KEY constraint failed', async (t) => {
@@ -103,6 +108,7 @@ test('failures are loud: missing/short key, key equal to Turso token, wrong key,
   const r = await verify(enc, { secret: KEY, manifest: tampered });
   assert.equal(r.state, 'TURSO_BACKUP_RESTORE_VERIFY_FAIL');
   assert.ok(r.failures.some(x => /differs from manifest: sales/.test(x)));
+  assert.ok(r.failures.every(x => !/\d+ rows|rows=\d/.test(x)), 'failure messages carry no counts');
   const wrongSha = { ...manifest, encrypted_sha256: '0'.repeat(64) };
   assert.ok((await verify(enc, { secret: KEY, manifest: wrongSha })).failures.some(x => /sha256/.test(x)));
 });
@@ -117,20 +123,39 @@ test('the same verifier restores an existing canon-migration backup (token-deriv
   assert.equal(report.format, 'nuevo-amanecer-turso-migration-0033-backup-v1');
 });
 
-test('workflows: daily schedule + dispatch, read-only Turso, artifact retention, hotfix backs up before deploy', () => {
+test('workflows: daily schedule + dispatch, read-only Turso, private R2 only after verify, hotfix backs up before deploy', () => {
   const wf = readFileSync('.github/workflows/turso-daily-backup.yml', 'utf8');
   assert.match(wf, /schedule:\n(?:\s*#[^\n]*\n)*\s*- cron: "30 8 \* \* \*"/);
   assert.match(wf, /workflow_dispatch:/);
   assert.match(wf, /TURSO_BACKUP_ENCRYPTION_KEY: \$\{\{ secrets\.TURSO_BACKUP_ENCRYPTION_KEY \}\}/);
   assert.match(wf, /turso-scheduled-backup\.mjs backup/);
   assert.match(wf, /turso-scheduled-backup\.mjs verify/);
-  assert.match(wf, /retention-days: 90/);
-  assert.doesNotMatch(wf, /wrangler|npx|maintenance\.mjs (migrate|apply)|CLOUDFLARE_API_TOKEN|group: nuevo-amanecer-production-change|set -x|workflow_run/);
-  assert.ok(wf.indexOf('turso-scheduled-backup.mjs verify') < wf.indexOf('upload-artifact'), 'only verified backups are uploaded');
+  // Public repo: no GitHub artifact; private R2 via the same put/get/sha256 step as the hotfix, after verify.
+  assert.doesNotMatch(wf, /upload-artifact|retention-days/);
+  assert.doesNotMatch(wf, /wrangler (deploy|d1|secret)|maintenance\.mjs (migrate|apply)|group: nuevo-amanecer-production-change|set -x|workflow_run/);
+  const verifyAt = wf.indexOf('turso-scheduled-backup.mjs verify');
+  const r2Block = wf.slice(wf.indexOf('- name: Store and verify backup in private remote R2'));
+  assert.ok(verifyAt > 0 && wf.indexOf('- name: Store and verify backup in private remote R2') > verifyAt, 'R2 upload only after verification');
+  assert.match(r2Block, /KEY="turso-daily-backup\/\$\(date -u \+%Y-%m-%dT%H-%M-%SZ\)-\$GITHUB_SHA\.json"/);
+  assert.match(r2Block, /npx wrangler r2 object put "\$R2_BUCKET\/\$KEY" --remote/);
+  assert.match(r2Block, /npx wrangler r2 object get "\$R2_BUCKET\/\$KEY" --remote/);
+  assert.match(wf, /R2_BUCKET: nuevo-amanecer-prod-v2-backups/);
+  assert.match(wf, /CLOUDFLARE_API_TOKEN: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/);
+  assert.doesNotMatch(wf, /per_table|\.rows\b/, 'no per-table counts in the workflow log or summary');
   const hf = readFileSync('.github/workflows/v1.3-turso-prod-worker-hotfix.yml', 'utf8');
-  const bk = hf.indexOf('Create consistent encrypted logical Turso backup');
-  const r2 = hf.indexOf('Store and verify backup in private remote R2');
-  const deploy = hf.indexOf('Deploy Turso production Worker hotfix');
-  assert.ok(bk > 0 && r2 > bk && deploy > r2);
-  assert.match(hf.slice(bk, r2), /turso-expense-server-received-maintenance\.mjs backup/);
+  const bk = hf.indexOf('- name: Create consistent encrypted logical Turso backup');
+  const vf = hf.indexOf('- name: Restore-verify pre-deploy Turso backup');
+  const r2h = hf.indexOf('- name: Store and verify backup in private remote R2');
+  const health = hf.indexOf('- name: Verify production health before hotfix');
+  const deploy = hf.indexOf('- name: Deploy Turso production Worker hotfix');
+  assert.ok(bk > 0 && vf > bk && r2h > vf && health > r2h && deploy > health, 'backup -> verify -> R2 -> deploy');
+  assert.match(hf.slice(bk, vf), /turso-scheduled-backup\.mjs backup/);
+  assert.match(hf.slice(bk, vf), /TURSO_BACKUP_ENCRYPTION_KEY: \$\{\{ secrets\.TURSO_BACKUP_ENCRYPTION_KEY \}\}/);
+  assert.match(hf.slice(vf, r2h), /turso-scheduled-backup\.mjs verify[\s\S]*\|\| \{ echo "::error::[^"]*NOT deployed"; exit 1; \}/);
+  assert.doesNotMatch(hf.slice(bk, deploy), /continue-on-error|turso-expense-server-received-maintenance/);
+  assert.match(hf.slice(r2h, health), /KEY="v1\.3-turso-worker-hotfix\//);
+  // Daily: default-branch check is the first step, before any step that receives secrets; no job-level secrets.
+  const firstSecret = wf.indexOf('${{ secrets.');
+  assert.ok(wf.indexOf('- name: Require default branch') > 0 && wf.indexOf('- name: Require default branch') < firstSecret);
+  assert.doesNotMatch(wf.slice(wf.indexOf('jobs:'), wf.indexOf('steps:')), /secrets\./);
 });

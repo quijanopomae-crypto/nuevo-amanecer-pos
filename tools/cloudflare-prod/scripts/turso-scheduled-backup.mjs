@@ -103,7 +103,8 @@ export async function backup(db, { env = process.env, dir = env.TURSO_BACKUP_DIR
     excluded: ['sqlite_sequence (AUTOINCREMENT counters restart after restore)', "pos_settings internal:img:% / internal:imgrate:% rows"],
   };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
-  console.log(JSON.stringify({ state: 'TURSO_SCHEDULED_BACKUP_READY', tables: manifest.tables, rows: manifest.rows, size_bytes: encrypted.length, sha256: manifest.encrypted_sha256 }));
+  // Log stays count-free (public repo): only state, table count and the encrypted file hash.
+  console.log(JSON.stringify({ state: 'TURSO_SCHEDULED_BACKUP_READY', tables: manifest.tables, sha256: manifest.encrypted_sha256 }));
   return { encPath, manifestPath, manifest };
 }
 
@@ -161,7 +162,7 @@ export async function restoreInto(plain, file = ':memory:') {
 export async function verify(encryptedBytes, { secret, manifest = null, out = null } = {}) {
   const plain = decryptBackup(encryptedBytes, secret);
   const failures = [];
-  if (!/^nuevo-amanecer-turso-.*backup-v1$/.test(String(plain.format || ''))) failures.push('unexpected backup format ' + plain.format);
+  if (!/^nuevo-amanecer-turso-.*backup-v1$/.test(String(plain.format || ''))) failures.push('unexpected backup format');
   if (!plain.tables || !Array.isArray(plain.schema)) throw new Error('backup has no schema/tables');
   const source = summarize(plain.tables);
   const missing = REQUIRED_TABLES.filter(n => !plain.tables[n]);
@@ -176,8 +177,8 @@ export async function verify(encryptedBytes, { secret, manifest = null, out = nu
   if (out && existsSync(out)) rmSync(out);
   const r = await restoreInto(plain, out || ':memory:');
   try {
-    if (r.fk_violations !== 0) failures.push('foreign_key_check violations: ' + r.fk_violations);
-    if (r.quick_check !== 'ok') failures.push('quick_check: ' + r.quick_check);
+    if (r.fk_violations !== 0) failures.push('foreign_key_check reported violations');
+    if (r.quick_check !== 'ok') failures.push('quick_check failed (details only in --report)');
     const perTable = {};
     for (const name of Object.keys(plain.tables)) {
       const rows = r.db.prepare(`SELECT * FROM ${q(name)}`).all().map(x => ({ ...x }));
@@ -185,14 +186,14 @@ export async function verify(encryptedBytes, { secret, manifest = null, out = nu
       const expected = source.perTable[name];
       const match = restored.rows === expected.rows && restored.sha256 === expected.sha256;
       perTable[name] = { rows: restored.rows, expected_rows: expected.rows, digest_match: match };
-      if (!match) failures.push(`table ${name}: restored rows=${restored.rows} digest ${restored.sha256 === expected.sha256 ? 'ok' : 'MISMATCH'} vs backup rows=${expected.rows}`);
+      if (!match) failures.push(`table ${name}: restored ${restored.rows === expected.rows ? 'digest' : 'row count'} differs from backup`);
       if (REQUIRED_TABLES.includes(name)) {
         const restoredSums = sums(rows);
-        if (JSON.stringify(restoredSums) !== JSON.stringify(source.focus[name]?.sums)) failures.push('sums differ in ' + name);
+        if (JSON.stringify(restoredSums) !== JSON.stringify(source.focus[name]?.sums)) failures.push(`table ${name}: amount/quantity totals differ from backup`);
       }
     }
     const ctl = r.db.prepare('SELECT * FROM canonical_control').all().map(x => ({ ...x }));
-    if (ctl.length !== 1) failures.push('canonical_control must have exactly 1 row, has ' + ctl.length);
+    if (ctl.length !== 1) failures.push('canonical_control must have exactly 1 row');
     else if (canonicalRow(ctl[0]) !== canonicalRow(plain.tables.canonical_control[0])) failures.push('canonical_control differs after restore');
     else if (ctl[0].mode !== 'ACTIVE' || !ctl[0].active_promotion_id) failures.push('canonical_control is not ACTIVE in backup');
     const report = {
@@ -201,10 +202,20 @@ export async function verify(encryptedBytes, { secret, manifest = null, out = nu
       tables: Object.keys(plain.tables).length, rows: r.inserted, schema_objects: r.objects,
       foreign_key_violations: r.fk_violations, quick_check: r.quick_check,
       focus: Object.fromEntries(REQUIRED_TABLES.filter(n => source.focus[n]).map(n => [n, source.focus[n]])),
-      per_table: perTable, failures,
+      per_table: perTable,
+      total_digest_match: Object.values(perTable).every(t => t.digest_match),
+      total_digest: createHash('sha256').update(Object.keys(source.perTable).sort().map(n => n + ':' + source.perTable[n].sha256).join('\n')).digest('hex'),
+      failures,
     };
     return report;
   } finally { r.db.close(); }
+}
+
+// What may appear in a public log: pass/fail, table count, digest ok, integrity checks. No row counts.
+export function publicSummary(report) {
+  return { state: report.state, tables: report.tables, total_digest_match: report.total_digest_match,
+    quick_check: report.quick_check === 'ok' ? 'ok' : 'FAIL', foreign_key_check: report.foreign_key_violations === 0 ? 'ok' : 'FAIL',
+    failures: report.failures };
 }
 
 function arg(argv, name) { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null; }
@@ -220,19 +231,21 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (command === 'verify') {
     const file = argv[1];
-    if (!file) throw new Error('usage: verify <enc.json> [--manifest f] [--key-env NAME] [--out restored.sqlite]');
+    if (!file) throw new Error('usage: verify <enc.json> [--manifest f] [--key-env NAME] [--out restored.sqlite] [--report full-report.json]');
     const keyEnv = arg(argv, '--key-env') || KEY_ENV;
     const secret = requireBackupKey(process.env, keyEnv);
     const manifestPath = arg(argv, '--manifest');
     const report = await verify(readFileSync(file), { secret, manifest: manifestPath ? JSON.parse(readFileSync(manifestPath, 'utf8')) : null, out: arg(argv, '--out') });
-    console.log(JSON.stringify(report, null, 2));
+    // Full report (per-table counts, sums) only to a file the operator asks for; never to the log.
+    const reportPath = arg(argv, '--report');
+    if (reportPath) writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+    console.log(JSON.stringify(publicSummary(report)));
     if (process.env.GITHUB_STEP_SUMMARY) {
+      const p = publicSummary(report);
       const lines = [`## Turso backup restore verification: ${report.failures.length ? 'FAIL' : 'PASS'}`,
-        `- Tables: ${report.tables}, rows: ${report.rows}, schema objects: ${report.schema_objects}`,
-        `- quick_check: ${report.quick_check}; foreign_key_check violations: ${report.foreign_key_violations}`,
-        '', '| table | rows | digest |', '|---|---:|---|',
-        ...Object.entries(report.per_table).map(([n, t]) => `| ${n} | ${t.rows} | ${t.digest_match ? 'ok' : 'MISMATCH'} |`),
-        ...report.failures.map(f => `- FAIL: ${f}`)];
+        `- Tables: ${p.tables}`, `- Total digest: ${p.total_digest_match ? 'ok' : 'MISMATCH'}`,
+        `- quick_check: ${p.quick_check}; foreign_key_check: ${p.foreign_key_check}`,
+        ...p.failures.map(f => `- FAIL: ${f}`)];
       writeFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n', { flag: 'a' });
     }
     if (report.failures.length) process.exitCode = 1;
