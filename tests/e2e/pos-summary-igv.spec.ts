@@ -110,3 +110,21 @@ test.describe('teléfono táctil real sin cambios en el resumen', () => {
     expect(await page.locator('#pagePOS .cart-totals').evaluate(el => getComputedStyle(el).display)).toBe('flex');
   });
 });
+
+test('tablet 768px: importe de S/ 1,000 no invade otra columna ni altera el cálculo', async ({ page }) => {
+  await prepare(page, 768);
+  await page.evaluate(() => window.eval('cart[0].precio=1000; posUpdateCart()'));
+  await expect(page.locator('#posTotal')).toContainText('1000.00');
+  await setIgVisible(page, true);
+  const contained = await page.evaluate(() => {
+    const root = document.querySelector('#pagePOS .cart-totals')!;
+    const total = root.querySelector('.total-main')!;
+    const value = total.querySelector('span:last-child')!;
+    const a = total.getBoundingClientRect(), b = value.getBoundingClientRect();
+    return { right: b.right <= a.right + 1, left: b.left >= a.left - 1, height: a.height };
+  });
+  expect(contained).toMatchObject({ right: true, left: true, height: 44 });
+  await setIgVisible(page, false);
+  await expect(page.locator('#posTotal')).toContainText('1000.00');
+  await expect(page.locator('#posProductCount')).toHaveText('Nro. de productos: 1');
+});
