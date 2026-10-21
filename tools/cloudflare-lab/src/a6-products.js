@@ -1,3 +1,4 @@
+import { canDo } from './pos-permissions.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -306,10 +307,11 @@ async function productState(db, body) {
   const codes=JSON.stringify([body.sku,body.barcode,...body.alternate_codes].filter(Boolean));
   const row=await db.prepare(`SELECT t.provenance,t.tracks_inventory,
       COALESCE((SELECT MAX(r.revision) FROM canonical_product_revisions r WHERE r.promotion_id=?1 AND r.product_id=?2),0) AS metadata_revision,
+      COALESCE((SELECT r.cost_cents FROM canonical_product_revisions r WHERE r.promotion_id=?1 AND r.product_id=?2 ORDER BY r.revision DESC LIMIT 1),t.cost_cents) AS current_cost_cents,
       (SELECT json_object('product_id',x.product_id,'name',x.name,'code',x.code) FROM (${CODE_OWNER_SQL}) x) AS code_owner
     FROM (
-      SELECT 'IMPORT' AS provenance,tracks_inventory,0 AS source_rank FROM products WHERE promotion_id=?1 AND product_id=?2
-      UNION ALL SELECT 'LIVE',tracks_inventory,1 FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
+      SELECT 'IMPORT' AS provenance,tracks_inventory,cost_cents,0 AS source_rank FROM products WHERE promotion_id=?1 AND product_id=?2
+      UNION ALL SELECT 'LIVE',tracks_inventory,cost_cents,1 FROM canonical_live_products WHERE promotion_id=?1 AND product_id=?2
     ) t ORDER BY t.source_rank LIMIT 1`).bind(body.promotion_id,body.product_id,codes).first();
   return row;
 }
@@ -346,6 +348,10 @@ export async function updateCanonicalProduct(request, env, auth, json) {
     const owner=JSON.parse(state.code_owner);
     return json({error:'product_code_conflict',code:owner.code,product_id:owner.product_id,product_name:owner.name},409);
   }
+
+  // T-46: a role without purchases.costs.view never receives cost_cents in its replica, so whatever it
+  // sends there is not a cost decision. Keep the product's current cost (owner-managed). Owner unchanged.
+  if (auth.posRole != null && !canDo(auth.posRole,'purchases.costs.view') && state.current_cost_cents != null) body.cost_cents=Number(state.current_cost_cents);
 
   const revision=body.expected_metadata_revision+1;
   const result={
