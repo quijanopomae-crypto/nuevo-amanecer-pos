@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 178: #845 etiquetas e impresión de precios (merge 4c7a2fc2). Solo web, sin cambios de Worker. Rollback: web 177 (build c156e6b9).",
-  "retry_attempt": 178,
-  "retry_reason": "Deploy de base 4c7a2fc2710efb6f3765ae3953e32bd7f0a260ce (incluye #845 merge 4c7a2fc2). Rollback: web 177 (build c156e6b9).",
-  "requested_at_utc": "2026-10-21T02:09:14Z",
-  "approved_base": "4c7a2fc2710efb6f3765ae3953e32bd7f0a260ce"
+  "note": "Web 179: #849 seguimiento de #833/#837 (mayorista 0/vacío sin registro falso, canSeeCost estricto, e2e del recálculo del filtro Vendedor) (merge 3cbc9a3c). Solo web (price-history.js); no cambia pos-permissions.js. Corrige el registro: web 177 salió con base e5ef5ed3 y rollback f88b2b8c. Rollback: web 178 (build 0d6dbd3e).",
+  "retry_attempt": 179,
+  "retry_reason": "Deploy de base 3cbc9a3c7064a3b42da0894d12dc4201af7e3d62 (incluye #849 merge 3cbc9a3c sobre web 178). Rollback: web 178 (build 0d6dbd3e).",
+  "requested_at_utc": "2026-10-21T03:34:49Z",
+  "approved_base": "3cbc9a3c7064a3b42da0894d12dc4201af7e3d62"
 }
