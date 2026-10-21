@@ -1,4 +1,4 @@
-import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict } from './operation-ledgers.js';
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict, OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -91,7 +91,9 @@ function normalize(body){
 async function schemaReady(db){
   const row=await db.prepare(`SELECT
     (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('canonical_customer_operations','canonical_customer_registry','canonical_live_customers')) AS count,
-    (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_customer_contacts') AS contacts`).first();
+    (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_customer_contacts') AS contacts,
+    ${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db,row?.ledger_tables);
   return Number(row?.count)===3?{contacts:Number(row?.contacts)===1}:null;
 }
 

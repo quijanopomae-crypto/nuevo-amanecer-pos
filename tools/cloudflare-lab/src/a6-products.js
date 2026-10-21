@@ -354,15 +354,23 @@ export async function updateCanonicalProduct(request, env, auth, json) {
     status:'created',command:'product.update',operation_id:body.operation_id,product_id:body.product_id,
     promotion_id:body.promotion_id,authority_epoch:body.authority_epoch,metadata_revision:revision,idempotent:false
   };
+  // Atomic fence in the same write (one batch = one round trip): the 0022 trigger
+  // does not see every ledger (e.g. canonical_expense_revisions).
+  const fenceId='product-update:'+crypto.randomUUID()+':foreign-operation';
   try {
-    await db.prepare(`INSERT INTO canonical_product_revisions
+    const insert=db.prepare(`INSERT INTO canonical_product_revisions
       (operation_id,promotion_id,product_id,command,request_hash,result_json,revision,name,sku,barcode,alternate_codes_json,category,brand,description,icon,
        cost_cents,price_cents,box_price_cents,units_per_box,stock_min_quantity,expiry_date,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
       VALUES(?1,?2,?3,'product.update',?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)`)
       .bind(body.operation_id,body.promotion_id,body.product_id,requestHash,stableStringify(result),revision,body.name,body.sku,body.barcode,
         JSON.stringify(body.alternate_codes),body.category,body.brand,body.description,body.icon,body.cost_cents,body.price_cents,
         body.box_price_cents,body.units_per_box,body.stock_min_quantity,body.expiry_date,body.authority_epoch,body.expected_control_revision,
-        body.client_contract,auth.principalId,auth.credentialHash,body.created_at).run();
+        body.client_contract,auth.principalId,auth.credentialHash,body.created_at);
+    await db.batch([
+      foreignOperationAssertion(db,fenceId,body.operation_id,ledgers,OWN_UPDATE),
+      insert,
+      db.prepare('DELETE FROM canonical_assertions WHERE assertion_id=?1').bind(fenceId),
+    ]);
   } catch (error) {
     try {
       const again=await replay(); if (again) return again;

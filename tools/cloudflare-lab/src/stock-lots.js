@@ -1,5 +1,6 @@
 import lotCore from '../../../POS/js/inventory/stock-lots.js';
 export const lotsCore = lotCore;
+import { OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 const schemaCache = new WeakMap();
 export function rememberLotSchema(db, schema) {
   if (schemaCache.get(db)?.ready === true) return;
@@ -9,7 +10,9 @@ export function rememberLotSchema(db, schema) {
 export async function lotsReady(db) {
   const cached = schemaCache.get(db);
   if (cached && Date.now() < cached.expiresAt) return cached.ready;
-  const row = await db.prepare("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name IN ('canonical_stock_lots','canonical_stock_lot_effects')").first();
+  // The operation-ledger probe rides in this same read (no extra round trip).
+  const row = await db.prepare(`SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('canonical_stock_lots','canonical_stock_lot_effects')) AS n,${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db, row?.ledger_tables);
   const ready = schemaCache.get(db)?.ready === true || Number(row?.n) === 2;
   schemaCache.set(db, { ready, expiresAt: ready ? Infinity : Date.now() + 60000 });
   return ready;

@@ -334,9 +334,11 @@ async function createCanonicalSaleFast(body, env, auth, json) {
   const db = getDatabase(env);
   const lotEffects=[];
   const payloadHash = await sha256Hex(stableStringify(body));
-  // Cached per isolate (warmed by reads/capabilities): no extra round trip once known.
+  // lotsReady's schema read (already paid per request) also fills the ledger cache;
+  // after it, operationLedgers is answered from the per-isolate cache.
+  const lotSchema = await lotsReady(db);
   const ledgers = await operationLedgers(db);
-  if(await lotsReady(db)){
+  if(lotSchema){
     // Reads are in one pipeline; the existing stock CAS fences this plan in the write batch.
     const reads=body.items.map(item=>db.prepare(`SELECT p.*,COALESCE((SELECT json_group_array(json_object(
       'lot_id',lot_id,'lot_code',lot_code,'expiry_date',expiry_date,'quantity',quantity,'received_at',received_at))

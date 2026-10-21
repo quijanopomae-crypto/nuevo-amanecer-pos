@@ -4,6 +4,8 @@
 // Derived rows (sale_items, movements, effects, write guards, owner approvals)
 // are not receipts and are deliberately absent.
 
+import { TursoD1Adapter } from './turso-d1-adapter.js';
+
 export const OPERATION_LEDGER_TABLES = Object.freeze([
   'sales',
   'canonical_financial_operations',
@@ -45,25 +47,53 @@ export function crossLedgerConflict(operationId, row) {
     ledger: OPERATION_LEDGER_LABELS[row?.ledger] || 'other' };
 }
 
-const ledgerCache = new WeakMap();
+// Per-isolate cache of which ledger tables exist. Keyed by the database
+// *identity* as a string: 'turso:<TURSO_DATABASE_URL>' for the Turso adapter,
+// 'd1' otherwise. Never keyed by the env/db object (worker-entry.js copies env
+// on every request, so object keys never hit) and never by the D1 binding, so a
+// Turso schema can never be confused with the old D1 one.
+// TTL: all 13 present -> kept for the isolate's life (migrations are additive;
+// a dropped table would make the ledger SQL fail with "no such table" = the
+// write is rejected, never silently accepted). Some missing -> re-probe after
+// 60 s, so a newly migrated ledger is picked up without a deploy.
+const ledgerCache = new Map();
 const ORDER = new Map(OPERATION_LEDGER_TABLES.map((name, index) => [name, index]));
+const LEDGER_TTL_INCOMPLETE_MS = 60000;
+const LEDGER_LIST_SQL = OPERATION_LEDGER_TABLES.map(name => `'${name}'`).join(',');
 
-// Remember which ledgers exist (additive migrations: re-probe after 60 s until all exist).
-export function rememberOperationLedgers(db, names) {
-  if (!db || (typeof db !== 'object' && typeof db !== 'function')) return;
-  const present = OPERATION_LEDGER_TABLES.filter(name => names.has(name));
-  const known = ledgerCache.get(db)?.tables || [];
-  const tables = OPERATION_LEDGER_TABLES.filter(name => present.includes(name) || known.includes(name));
-  ledgerCache.set(db, { tables, expiresAt: tables.length === OPERATION_LEDGER_TABLES.length ? Infinity : Date.now() + 60000 });
+export function operationLedgerCacheKey(db) {
+  return db instanceof TursoD1Adapter ? 'turso:' + db.baseUrl : 'd1';
 }
 
-// Existing ledger tables, from cache when fresh (no round trip) or one sqlite_master read.
+// Tests build many databases (different schemas) in one process: reset between fixtures.
+export function resetOperationLedgerCache() { ledgerCache.clear(); }
+
+// Scalar column to fold the ledger probe into a sqlite_master read that a
+// command already does (no extra statement or round trip).
+export const OPERATION_LEDGER_COLUMN_SQL =
+  `(SELECT group_concat(name) FROM sqlite_master WHERE type='table' AND name IN (${LEDGER_LIST_SQL}))`;
+
+// Remember exactly the ledgers that exist now (no union with older answers).
+export function rememberOperationLedgers(db, names) {
+  if (!db || (typeof db !== 'object' && typeof db !== 'function')) return;
+  const tables = OPERATION_LEDGER_TABLES.filter(name => names.has(name));
+  ledgerCache.set(operationLedgerCacheKey(db), { tables,
+    expiresAt: tables.length === OPERATION_LEDGER_TABLES.length ? Infinity : Date.now() + LEDGER_TTL_INCOMPLETE_MS });
+}
+
+// Same, from the value of OPERATION_LEDGER_COLUMN_SQL (comma-separated names or NULL).
+export function rememberOperationLedgerColumn(db, value) {
+  rememberOperationLedgers(db, new Set(String(value || '').split(',').filter(Boolean)));
+}
+
+// Existing ledger tables: from the isolate cache when fresh (no round trip),
+// otherwise one sqlite_master read (cold isolate whose command has no probe to fold into).
 export async function operationLedgers(db) {
-  const cached = ledgerCache.get(db);
+  const cached = ledgerCache.get(operationLedgerCacheKey(db));
   if (cached && Date.now() < cached.expiresAt) return cached.tables;
-  const rows = await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPERATION_LEDGER_TABLES.map(name => `'${name}'`).join(',')})`).all();
+  const rows = await db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${LEDGER_LIST_SQL})`).all();
   rememberOperationLedgers(db, new Set((rows?.results ?? []).map(row => row.name)));
-  return ledgerCache.get(db).tables;
+  return ledgerCache.get(operationLedgerCacheKey(db)).tables;
 }
 
 const others = (tables, own) => tables.filter(name => !own.includes(name)).sort((a, b) => ORDER.get(a) - ORDER.get(b));

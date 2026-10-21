@@ -3,7 +3,7 @@ import { sha256Hex, stableStringify } from './a5-import-core.js';
 import { lotsCore, lotsReady, productLots, effectStatements, receiptStatements, annulAllocations, lotError } from './stock-lots.js';
 
 import { consumeApproval } from './pos-roles.js';
-import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict } from './operation-ledgers.js';
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, crossLedgerConflict, OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 
 export const INVENTORY_COMMANDS = new Set(['inventory.adjust']);
 
@@ -48,7 +48,9 @@ function normalize(body){
 }
 
 async function schemaReady(db){
-  const row=await db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('canonical_inventory_operations','canonical_manual_inventory_movements')").first();
+  // The operation-ledger probe rides in this existing schema read (no extra round trip).
+  const row=await db.prepare(`SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('canonical_inventory_operations','canonical_manual_inventory_movements')) AS count,${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db,row?.ledger_tables);
   return Number(row?.count)===2;
 }
 

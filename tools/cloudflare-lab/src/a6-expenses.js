@@ -1,4 +1,4 @@
-import { operationLedgers, foreignOperationRead, foreignOperationAssertion, foreignOperationSql, crossLedgerConflict } from './operation-ledgers.js';
+import { operationLedgers, foreignOperationRead, foreignOperationAssertion, foreignOperationSql, crossLedgerConflict, OPERATION_LEDGER_COLUMN_SQL, rememberOperationLedgerColumn } from './operation-ledgers.js';
 import { getDatabase } from './database-binding.js';
 import { sha256Hex, stableStringify } from './a5-import-core.js';
 
@@ -196,7 +196,9 @@ export async function expenseDateError(db, expense, date, checkDate = true, serv
 }
 
 export async function expenseRevisionsAvailable(db) {
-  return !!await db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='canonical_expense_revisions'").first();
+  const row=await db.prepare(`SELECT (SELECT 1 FROM sqlite_master WHERE type='table' AND name='canonical_expense_revisions') AS ok,${OPERATION_LEDGER_COLUMN_SQL} AS ledger_tables`).first();
+  rememberOperationLedgerColumn(db,row?.ledger_tables);
+  return !!row?.ok;
 }
 
 export async function reviseCanonicalExpense(command, request, env, auth, json) {
