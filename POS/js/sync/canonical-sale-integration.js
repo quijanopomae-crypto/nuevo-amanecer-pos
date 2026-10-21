@@ -130,11 +130,20 @@
     PRICE_INVALID: 'Un precio del carrito no es válido (máximo 2 decimales).',
     BUSY: 'Se está cerrando la caja o guardando otra venta. Espera unos segundos y vuelve a cobrar; el carrito se conserva.',
     OUTBOX_STORAGE_WRITE_FAILED: 'El navegador no pudo guardar la venta (almacenamiento lleno o bloqueado).',
+    OUTBOX_STORAGE_READBACK_FAILED: 'El navegador no pudo guardar la venta (almacenamiento lleno o bloqueado).',
+    OUTBOX_STORAGE_READBACK_MISMATCH: 'El navegador no pudo guardar la venta (almacenamiento lleno o bloqueado).',
     VENTA_LIBRE_UNSUPPORTED: 'La venta libre no está disponible en este cobro.'
   };
+  // Qué hacer cuando el almacenamiento del navegador para este POS está lleno (la cuota es por sitio).
+  var STORAGE_HELP = 'Qué hacer: con conexión, deja que se sincronicen las ventas pendientes (al confirmarse liberan espacio) y cierra otras pestañas del POS; si sigue lleno, avisa al encargado. No borres los datos del navegador: ahí están las ventas sin sincronizar.';
+  function storageProblem(value) {
+    var text = String(value && (value.code || value.name || value.message) || value || '');
+    return /QuotaExceeded|QUOTA_REACHED|exceeded the quota|STORAGE_(WRITE|READBACK)|STORAGE_FULL|STORAGE_NOT_DURABLE|CONFIRMED_NOT_STORED/i.test(text);
+  }
   function captureErrorMessage(error) {
     var code = String(error && (error.code || error.message) || '');
-    return (CAPTURE_ERRORS[code] || 'No se guardó la venta.') + ' Tus productos siguen en el carrito.';
+    return (CAPTURE_ERRORS[code] || (storageProblem(error) ? CAPTURE_ERRORS.OUTBOX_STORAGE_WRITE_FAILED : 'No se guardó la venta.')) + ' Tus productos siguen en el carrito.' +
+      (storageProblem(error) ? ' ' + STORAGE_HELP : '');
   }
   function clearLiveCart() {
     if (runtime()) return runtime().clearCart();
@@ -225,11 +234,20 @@
   }
   // Si el servidor no confirmó la venta recién guardada (error 5xx, sin red…), se avisa en ámbar que falta
   // confirmarla; queda en la cola y se confirma sola con el MISMO id.
-  function warnIfUnconfirmed(outbox, saleId, why) {
+  function warnIfUnconfirmed(outbox, saleId, why, reason) {
     try {
       if (!saleId || typeof outbox.snapshot !== 'function') return;
       var still = (outbox.snapshot().intents || []).some(function (x) { return x && x.sale_id === saleId; });
-      if (still) notify('Venta ' + saleId + ' guardada, falta confirmar con el servidor' + (why ? ' (' + why + ')' : '') + '. Se confirmará sola; no la cobres de nuevo.', 'warning');
+      if (!still) return;
+      if (/CONFIRMED_NOT_STORED/.test(String(reason || ''))) {
+        notify('Venta ' + saleId + ' registrada en el servidor, pero este equipo no pudo guardar la confirmación (almacenamiento lleno). No la cobres de nuevo. ' + STORAGE_HELP, 'warning');
+        return;
+      }
+      if (storageProblem(reason)) {
+        notify('Venta ' + saleId + ' guardada en este equipo, falta confirmar con el servidor: el almacenamiento del navegador está lleno. Se confirmará sola cuando haya espacio; no la cobres de nuevo. ' + STORAGE_HELP, 'warning');
+        return;
+      }
+      notify('Venta ' + saleId + ' guardada, falta confirmar con el servidor' + (why ? ' (' + why + ')' : '') + '. Se confirmará sola; no la cobres de nuevo.', 'warning');
     } catch (_) {}
   }
   function syncOutboxInBackground(outbox, saleId) {
@@ -237,10 +255,10 @@
     var run = function () {
       Promise.resolve().then(function () { return outbox.sync(); }).then(function (r) {
         var offline = root.navigator && root.navigator.onLine === false;
-        if (r && /^(WAITING|BLOCKED_)/.test(String(r.status || ''))) warnIfUnconfirmed(outbox, saleId, offline || /OFFLINE|Failed to fetch|NetworkError|AUTHORITY_UNAVAILABLE|TIMEOUT/i.test(String(r.reason || '')) ? 'sin conexión' : /5\d\d|internal|storage/i.test(String(r.reason || '')) ? 'el servidor respondió con un error' : '');
+        if (r && /^(WAITING|BLOCKED_)/.test(String(r.status || ''))) warnIfUnconfirmed(outbox, saleId, offline || /OFFLINE|Failed to fetch|NetworkError|AUTHORITY_UNAVAILABLE|TIMEOUT/i.test(String(r.reason || '')) ? 'sin conexión' : /5\d\d|internal|storage/i.test(String(r.reason || '')) ? 'el servidor respondió con un error' : '', r.reason);
         else if (saleId && !offline) { try { if (!(outbox.snapshot().intents || []).some(function (x) { return x && x.sale_id === saleId; })) notify('Venta ' + saleId + ' confirmada', 'success'); } catch (_) {} }
       }).catch(function (error) {
-        warnIfUnconfirmed(outbox, saleId, root.navigator && root.navigator.onLine === false ? 'sin conexión' : 'el servidor respondió con un error');
+        warnIfUnconfirmed(outbox, saleId, root.navigator && root.navigator.onLine === false ? 'sin conexión' : 'el servidor respondió con un error', error && (error.code || error.message));
         if (root.console && typeof root.console.warn === 'function')
           root.console.warn('[Venta CANON] Venta local conservada; sincronización pendiente', error && (error.code || error.message) || 'SYNC_FAILED');
       });
