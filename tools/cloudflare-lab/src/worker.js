@@ -16,6 +16,7 @@ import { adjustCanonicalInventory, INVENTORY_COMMANDS } from './a6-inventory.js'
 import { PRODUCT_IMAGE_PATHS, productImagesRoute } from './pos-product-images.js';
 import { saleNoteRoute, recordMetaRoute } from './pos-sale-notes.js';
 import { purchasesRoute, closePartialRoute } from './pos-purchases.js';
+import { priceHistoryRoute } from './price-history.js';
 import { cashClosesRoute } from './pos-cash-closes.js';
 import { annulCanonicalSale, listSaleAnnulments, SALE_ANNUL_COMMAND } from './pos-sale-annul.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
@@ -102,6 +103,12 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return auth;
         return cors(await cashClosesRoute(request, env, auth, json));
+      }
+      // Misión 3 (#857): historial de precios en la nube (permisos por ruta en pos-permissions.js).
+      if (url.pathname === '/auth/price-history' || url.pathname.startsWith('/auth/price-history/')) {
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return auth;
+        return cors(await priceHistoryRoute(request, env, auth, json));
       }
       if (url.pathname === '/auth/purchases') {
         const auth = await authorizeSession(request, env);
