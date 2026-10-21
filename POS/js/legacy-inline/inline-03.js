@@ -813,6 +813,31 @@ cliRender=function(){
   try{window.dispatchEvent(new CustomEvent('na:clients-rendered'));}catch(_){}
 };
 window.addEventListener('offline',()=>{_naCanonicalTransportConnected=false;if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()){const state=NuevoAmanecerCanonical.sourceState(),badge=document.getElementById('cliAuthorityBadge');_naSetHeaderConnectionState('disconnected','Desconectado');/* Etapa 1.6 (auditoría 2026-10-12, Bot 3 P1-1): una réplica ya validada (remote/revalidated) se trata igual que la caché: la lista de clientes queda visible en solo lectura; solo sin datos se muestra "Canónico no disponible". */if(state.source!=='none'&&_naCanonicalViewApplied){if(badge){badge.hidden=false;badge.textContent='Sin conexión · datos guardados';}_naSchedulePageRender(_naActivePageId());}else{_naCanonicalLoadError=new Error('AUTHORITY_UNAVAILABLE');_naSchedulePageRender(_naActivePageId());}}});
+// Cabecera #saveStatus coherente con la franja de estado: «Guardado en la nube» solo si NO hay nada esperando
+// envío en las colas canónicas (ventas: canonical-sale-outbox; abonos/diario: canonical-client). Cuenta lo
+// mismo que canonical-status-banner.js (compute) para que cabecera y franja no se contradigan.
+let _naSaveStatusCloud=false;
+function _naCanonicalQueueCounts(){
+  try{const b=window.NuevoAmanecerStatusBanner;if(b&&typeof b.compute==='function'){const st=b.compute();return{retrying:Number(st.retrying)||0,blocked:Number(st.blocked)||0};}}catch(_){}
+  let retrying=0,blocked=0;
+  try{const o=window.NuevoAmanecerCanonicalSaleOutbox;if(o&&typeof o.snapshot==='function')retrying+=(o.snapshot().intents||[]).length;if(o&&typeof o.quarantine==='function')blocked+=(o.quarantine().entries||[]).filter(e=>e&&e.status==='QUARANTINED').length;}catch(_){}
+  try{const p=typeof NuevoAmanecerCanonical!=='undefined'&&typeof NuevoAmanecerCanonical.pendingSnapshot==='function'?NuevoAmanecerCanonical.pendingSnapshot():null;if(p&&p.command&&p.command!=='sale.create')retrying+=1;}catch(_){}
+  return{retrying,blocked};
+}
+// force=true solo tras una lectura canónica correcta (na:canonical-updated); la franja (cada 5 s y en
+// online/offline) lo llama sin force y entonces no pisa un texto que puso otro módulo (p. ej. aviso de guardado).
+function _naRenderCanonicalSaveStatus(force){
+  const el=document.getElementById('saveStatus');if(!el||!_naSaveStatusCloud)return;
+  if(force!==true&&el.textContent.trim()!==(el.dataset.naQueueMsg||''))return;
+  const q=_naCanonicalQueueCounts();
+  // Íconos que existen en NA_ICON_TEXT (na-line-icons.js): 'save' = guardado en este aparato, aún sin enviar.
+  const icon=q.retrying?'save':q.blocked?'alert':'cloud';
+  const msg=q.retrying?(q.retrying===1?'1 pendiente de enviar':q.retrying+' pendientes de enviar'):q.blocked?(q.blocked===1?'1 por revisar':q.blocked+' por revisar'):'Guardado en la nube';
+  if(el.dataset.naQueueMsg===msg&&el.textContent.trim()===msg)return;
+  el.dataset.naQueueMsg=msg;
+  if(window.NA_ICON_TEXT)NA_ICON_TEXT(el,icon,msg);else el.textContent=(q.retrying?'💾 ':q.blocked?'⚠️ ':'☁️ ')+msg;
+}
+window._naRenderCanonicalSaveStatus=_naRenderCanonicalSaveStatus;
 window.addEventListener('na:canonical-updated',()=>{
   if(typeof NuevoAmanecerCanonical==='undefined'||!NuevoAmanecerCanonical.enabled())return;
   const state=NuevoAmanecerCanonical.sourceState(),saveStatus=document.getElementById('saveStatus'),badge=document.getElementById('cliAuthorityBadge');
@@ -822,7 +847,7 @@ window.addEventListener('na:canonical-updated',()=>{
     _naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
     _naSetHeaderConnectionState('disconnected',state.validation==='offline'?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
-    if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+    _naSaveStatusCloud=false;if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
     if(badge){badge.hidden=false;badge.textContent='Canónico no disponible';}
     return;
   }
@@ -835,14 +860,14 @@ window.addEventListener('na:canonical-updated',()=>{
     _naCanonicalLoadError=null;_naSchedulePageRender(_naActivePageId());
     const connectionReady=state.validation==='current',connectionSyncing=state.validation==='validating';
     _naSetHeaderConnectionState(connectionReady?'connected':connectionSyncing?'update':'disconnected',connectionReady?'Conectado':connectionSyncing?'Sincronizando CANON…':'Desconectado');
-    if(saveStatus){if(window.NA_ICON_TEXT)NA_ICON_TEXT(saveStatus,'cloud','Guardado en la nube');else saveStatus.textContent='☁️ Guardado en la nube';}
+    _naSaveStatusCloud=true;_naRenderCanonicalSaveStatus(true);
     if(badge){badge.hidden=false;badge.textContent=state.validation==='offline'?'Cache canónico · sin conexión':'Canónico · '+String(reuse?clientes.length:canonical.customers.length)+' clientes';}
   }catch(error){
     _naCanonicalTransportConnected=false;
     _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
     renderCategorySelects();_naSchedulePageRender(_naActivePageId());
     _naSetHeaderConnectionState('disconnected','Canónico no disponible · reintenta');
-    if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+    _naSaveStatusCloud=false;if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
   }
 });
 window.addEventListener('storage',event=>{if(typeof NuevoAmanecerCanonical!=='undefined'&&NuevoAmanecerCanonical.enabled()&&(!event.key||event.key==='na_canonical_binding'||event.key==='na_cloud_sync_credentials')){_naCanonicalTransportConnected=false;_naCanonicalLoadError=new Error('STALE_AUTHORITY_BINDING');_naSchedulePageRender(_naActivePageId());_naSetHeaderConnectionState('disconnected','Desconectado');}});
@@ -866,7 +891,7 @@ document.addEventListener('DOMContentLoaded',async()=>{
       _naCanonicalLoadError=error;_naClearCanonicalLegacyView();
       renderCategorySelects();_naSchedulePageRender(_naActivePageId());
       _naSetHeaderConnectionState('disconnected',navigator.onLine===false?'Sin conexión · CANON no disponible':'Canónico no disponible · reintenta');
-      if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
+      _naSaveStatusCloud=false;if(saveStatus)saveStatus.textContent='Autoridad canónica no validada';
       if(cliBadge){cliBadge.hidden=false;cliBadge.textContent='Canónico no disponible';cliBadge.style.cssText='padding:5px 9px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800';}
     });
   }

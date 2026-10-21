@@ -91,6 +91,8 @@
   var last = null;
   function render() {
     var v = view(compute()); last = v;
+    // Misma cuenta para la cabecera #saveStatus (inline-03.js): no decir «Guardado en la nube» con pendientes.
+    try { if (typeof root._naRenderCanonicalSaveStatus === 'function') root._naRenderCanonicalSaveStatus(); } catch (_) {}
     var el = element(); if (!el) return v;
     var body = root.document.body;
     if (!v) { el.style.display = 'none'; if (body && body.classList) body.classList.remove('na-sb-on'); return v; }
