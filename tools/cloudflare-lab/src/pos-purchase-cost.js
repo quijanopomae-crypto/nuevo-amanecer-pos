@@ -15,7 +15,8 @@ const FIELDS = ['name','sku','barcode','category','brand','description','icon','
 export function lastCostByProduct(lines, appliedLines) {
   const ok = new Set((appliedLines || []).map(Number));
   const out = new Map();
-  [...(lines || [])].filter(l => ok.has(Number(l.line)) && l.unit_cost_cents != null)
+  // Igual que #870 en el cliente: costo vacío, 0 (regalo), negativo o no entero no pisa el costo del producto.
+  [...(lines || [])].filter(l => ok.has(Number(l.line)) && l.unit_cost_cents != null && l.unit_cost_cents !== '' && Number.isSafeInteger(Number(l.unit_cost_cents)) && Number(l.unit_cost_cents) > 0)
     .sort((a, b) => a.line - b.line).forEach(l => out.set(String(l.product_id), { line: Number(l.line), cents: Number(l.unit_cost_cents) }));
   return out;
 }
@@ -48,8 +49,8 @@ export async function applyPurchaseCosts(db, env, auth, b, appliedLines, json) {
     const opId = b.operation_id + ':costo:' + last.line;
     let entry = { product_id: productId, line: last.line, status: 'failed' };
     for (let attempt = 0; attempt < 2; attempt++) {
-      const prior = await db.prepare('SELECT result_json FROM canonical_product_revisions WHERE operation_id=?1').bind(opId).first();
-      if (prior) { entry = { ...entry, status: 'updated', idempotent: true }; break; }
+      const prior = await db.prepare('SELECT revision,cost_cents FROM canonical_product_revisions WHERE operation_id=?1').bind(opId).first();
+      if (prior) { entry = { ...entry, status: 'updated', idempotent: true, metadata_revision: Number(prior.revision), after_cents: Number(prior.cost_cents) }; break; }
       const cur = await effective(db, b.promotion_id, productId);
       if (!cur) { entry.status = 'product_not_found'; break; }
       if (Number(cur.row.cost_cents) === last.cents) { entry.status = 'unchanged'; break; }
@@ -61,7 +62,7 @@ export async function applyPurchaseCosts(db, env, auth, b, appliedLines, json) {
       if (body.stock_min_quantity == null) body.stock_min_quantity = 0;
       const res = await updateCanonicalProduct(sub(body), env, auth, json);
       let out = {}; try { out = await res.json(); } catch {}
-      if (res.status === 200 || res.status === 201) { entry = { ...entry, status: 'updated', before_cents: Number(cur.row.cost_cents), after_cents: last.cents, metadata_revision: out.metadata_revision }; break; }
+      if (res.status === 200 || res.status === 201) { entry = { ...entry, status: 'updated', before_cents: Number(cur.row.cost_cents), after_cents: last.cents, metadata_revision: out.metadata_revision, ...(out.idempotent ? { idempotent: true } : {}) }; break; }
       entry.error = out.error || 'product_update_failed';
       if (out.error !== 'stale_product') break;
     }
@@ -71,6 +72,12 @@ export async function applyPurchaseCosts(db, env, auth, b, appliedLines, json) {
 }
 
 // El empleado no ve costos en claro: solo qué productos se actualizaron.
+// Solo se avisa cost_source='server' si el servidor resolvió TODOS los productos; si alguno falló,
+// el cliente puede intentar su propia actualización (el hook de #858 corre solo en el aparato del dueño).
+export function serverHandledAll(updates) {
+  return Array.isArray(updates) && updates.every(u => u && ['updated', 'unchanged'].includes(u.status));
+}
+
 export function redactCostUpdates(updates, canSeeCosts) {
   return canSeeCosts ? updates : updates.map(({ before_cents, after_cents, ...rest }) => rest);
 }

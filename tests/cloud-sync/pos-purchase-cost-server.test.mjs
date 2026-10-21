@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { activeCanon } from './canon-browser-harness.mjs';
-import { lastCostByProduct, redactCostUpdates } from '../../tools/cloudflare-lab/src/pos-purchase-cost.js';
+import { lastCostByProduct, redactCostUpdates, serverHandledAll } from '../../tools/cloudflare-lab/src/pos-purchase-cost.js';
 
 const read = n => readFileSync(new URL('../../infra/database/migrations/' + n, import.meta.url), 'utf8');
 const H = token => ({ authorization: 'Bearer ' + token, 'content-type': 'application/json' });
@@ -36,6 +36,10 @@ async function empBuy(f, op, lines) {
 test('última línea con costo por producto; solo líneas aplicadas', () => {
   const m = lastCostByProduct([{ line: 1, product_id: 'A', unit_cost_cents: 100 }, { line: 3, product_id: 'A', unit_cost_cents: 130 }, { line: 2, product_id: 'B', unit_cost_cents: null }, { line: 4, product_id: 'C', unit_cost_cents: 50 }], [1, 2, 3]);
   assert.deepEqual([...m], [['A', { line: 3, cents: 130 }]]);
+  const gift = lastCostByProduct([{ line: 1, product_id: 'A', unit_cost_cents: 200 }, { line: 2, product_id: 'A', unit_cost_cents: 0 }, { line: 3, product_id: 'B', unit_cost_cents: '' }, { line: 4, product_id: 'C', unit_cost_cents: -5 }], [1, 2, 3, 4]);
+  assert.deepEqual([...gift], [['A', { line: 1, cents: 200 }]], 'costo 0/vacío/negativo no cuenta (igual que #870)');
+  assert.equal(serverHandledAll([{ status: 'updated' }, { status: 'unchanged' }]), true);
+  assert.equal(serverHandledAll([{ status: 'updated' }, { status: 'failed' }]), false);
   assert.deepEqual(redactCostUpdates([{ product_id: 'A', before_cents: 1, after_cents: 2, status: 'updated' }], false), [{ product_id: 'A', status: 'updated' }]);
 });
 
@@ -96,4 +100,37 @@ test('parte de la revisión vigente: conserva el precio que puso el dueño antes
 test('cliente #858: con cost_source=server el aparato no repite la actualización', () => {
   const src = readFileSync(new URL('../../POS/js/products/costo-compra-ficha.js', import.meta.url), 'utf8');
   assert.match(src, /result\.cost_source === 'server'\) \{ report\.skipped\.push\('server'\)/);
+});
+
+test('compra de empleado con regalo (costo 0) no pone el costo en 0', async t => {
+  const f = await setup(t);
+  const r = await empBuy(f, 'emp-g-1', [{ line: 1, product_id: '00003', quantity: 1, unit_cost_cents: 0 }]);
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.body.cost_updates, []);
+  assert.equal(revs(f, '00003').length, 0);
+});
+
+test('si una actualización falla no se responde cost_source=server (el cliente puede hacer su respaldo)', async t => {
+  const f = await setup(t);
+  f.database.exec("CREATE TRIGGER t_fail BEFORE INSERT ON canonical_product_revisions BEGIN SELECT RAISE(ABORT,'boom'); END;");
+  const r = await empBuy(f, 'emp-f-1', [{ line: 1, product_id: '00003', quantity: 1, unit_cost_cents: 555 }]);
+  assert.equal(r.status, 201);
+  assert.equal('cost_source' in r.body, false);
+  assert.equal(r.body.cost_updates[0].status, 'failed');
+});
+
+test('línea ya aplicada por la ruta vieja (mismo operation_id) también cuenta para el costo, una sola vez', async t => {
+  const f = await setup(t);
+  const s = f.sql('SELECT stock_revision r FROM products WHERE product_id=?', '00003');
+  const old = await call(f, '/commands/inventory.adjust', 'owner-token', { ...ctl(f), operation_id: 'emp-o-1:1', created_at: '2026-10-12T17:00:00.000Z', product_id: '00003', movement_type: 'ENTRADA', quantity: 1, expected_stock_revision: s.r, reason: 'Compra emp-o-1, línea 1: +1' });
+  assert.ok([200, 201].includes(old.status), JSON.stringify(old.body));
+  const r = await empBuy(f, 'emp-o-1', [{ line: 1, product_id: '00003', quantity: 1, unit_cost_cents: 610 }]);
+  assert.deepEqual(r.body.skipped.map(x => x.line), [1]);
+  assert.equal(r.body.cost_source, 'server');
+  assert.deepEqual(revs(f, '00003').map(x => [x.operation_id, x.cost_cents]), [['emp-o-1:costo:1', 610]]);
+});
+
+test('respuesta idempotente guarda la revisión (metadata_revision) de la actualización previa', async () => {
+  const src = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-purchase-cost.js', import.meta.url), 'utf8');
+  assert.match(src, /idempotent: true, metadata_revision: Number\(prior\.revision\)/);
 });
