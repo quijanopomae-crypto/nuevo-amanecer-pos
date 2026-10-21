@@ -305,6 +305,33 @@ body.na-pos-phone-device.na-pos-reference-active #backBtn::before{font-size:19px
   }
   body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals>.total-row{display:none!important}
   body:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-totals>.total-main{grid-column:2}
+  /* Cabecera compacta de Venta actual: solo PC/tablet; teléfonos intactos.
+     60px -> 32px sin cambiar el ancho de la columna ni los IDs/handlers. */
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head{
+    height:32px;
+    min-height:32px;
+    max-height:32px;
+    flex:0 0 32px;
+    padding:1px 9px;
+    gap:6px;
+  }
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-title{
+    font-size:16px;
+    line-height:1;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-actions{gap:4px}
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-clear{
+    height:28px;
+    min-height:28px;
+    padding:2px 7px;
+    gap:4px;
+    font-size:11px;
+    white-space:nowrap;
+  }
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-head-clear svg{width:14px;height:14px}
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer #btnCartMenu{width:28px;height:28px;border-radius:6px;font-size:15px}
+  body:not(.na-pos-phone-device) #pagePOS #cartDrawer .cart-menu-dropdown{top:32px}
   body.dark:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-row>span,
   body.dark:not(.na-pos-phone-device) #pagePOS .cart-totals>.total-main>span,
   body.dark:not(.na-pos-phone-device) #pagePOS.na-pos-summary-igv-hidden .cart-count-line>span{color:#fff!important}
