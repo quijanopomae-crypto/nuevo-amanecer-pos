@@ -109,7 +109,7 @@
     'clonar-venta': true,
     'nota-credito-parcial-compras': true,
     'clientes-filtro-deuda': false,
-    'permisos-empleado': false,
+    'permisos-empleado': true,
     'clientes-deudores-caja': false,
     'clientes-dias-credito': true,
     'nota-credito-devolucion-parcial': true,
