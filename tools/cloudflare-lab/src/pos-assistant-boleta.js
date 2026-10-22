@@ -10,6 +10,7 @@ import { assistantAccess } from './pos-assistant-access.js';
 import { reserveUsage, createSettingsUsageStore, readBounded, IMAGE_UNSUPPORTED, redactText } from './pos-assistant.js';
 import { resolveProvider, callModel, stripThink } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
+import { boletaNote } from './pos-assistant-memoria.js';
 
 export const BOLETA_PATH = '/auth/assistant/boleta';
 export const BOLETA_LIMITS = Object.freeze({ imageBytes: 4 * 1024 * 1024, bodyBytes: Math.ceil(4 * 1024 * 1024 * 4 / 3) + 16384, modelMs: 90000, maxItems: 80, maxHints: 20 });
@@ -109,5 +110,6 @@ export async function assistantBoletaRoute(request, env, auth, json, deps = {}) 
   const o = extractJson(r.content);
   if (!o) return json({ error: 'boleta_unreadable', ms }, 422);
   const boleta = normalizeBoleta(o);
-  return json({ ok: true, boleta, checks: boletaChecks(boleta), ms, model: r.model || cfg.model });
+  // nota: memoria corta de lo leído (solo números, fecha y serie; nunca nombres) para que el asistente no vuelva a pedir la foto.
+  return json({ ok: true, boleta, checks: boletaChecks(boleta), nota: boletaNote(boleta), ms, model: r.model || cfg.model });
 }
