@@ -14,13 +14,77 @@ function context(extra = {}) {
 }
 const api = context().NA_CLIENTE_HISTORIAL;
 const now = '2026-10-16T04:59:59Z'; // 15 de octubre en Lima.
-const options = { now };
+const period = days => ({ now, ...api.periodDates(String(days), now) });
+const options = period(30);
 const item = (id, precio, qty = 1, extra = {}) => ({ id, name: 'Producto ' + id, precio, qty, ...extra });
 const sale = (extra = {}) => ({ id: 'venta-prueba', clienteId: 'c1', fecha: '2026-10-15', total: 10, metodo: 'efectivo', items: [item('p1', 10)], ...extra });
 function freeze(value) {
   if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
   return value;
 }
+
+test('name-only seller folds into the single id with the normalized name and prefers its label', () => {
+  const sales = freeze([
+    sale({ cajero: ' lUiS ' }),
+    sale({ cajeroId: 'v1', cajeroNombre: 'Luis' }),
+    sale({ cajeroId: 'v1', cajeroNombre: 'Luis' }),
+    sale({ clienteId: 'c2', cajeroId: 'v2', cajeroNombre: 'Luis' }),
+    sale({ anulada: true, cajeroId: 'v3', cajeroNombre: 'Luis' })
+  ]);
+  for (const rows of [sales, [...sales].reverse()]) {
+    assert.deepEqual(plain(api.sellerOptions(rows, 'c1')), [{ value: 'id:v1', label: 'Luis' }]);
+  }
+});
+
+test('name-only seller with zero matching ids has a stable sin id option', () => {
+  const sales = freeze([
+    sale({ cajeroNombre: 'Luis' }), sale({ cajero: ' Luis ' }),
+    sale({ clienteId: 'c2', cajeroId: 'v1', cajeroNombre: 'Luis' }),
+    sale({ status: 'void', cajeroId: 'v2', cajeroNombre: 'Luis' })
+  ]);
+  assert.deepEqual(plain(api.sellerOptions(sales, 'c1')), [{ value: 'name:luis', label: 'Luis (sin id)' }]);
+  assert.equal(api.filterSales(sales, 'c1', { seller: 'name:luis' }).length, 2);
+});
+
+test('two ids named Luis stay distinct from the name-only sin id option', () => {
+  const sales = freeze([
+    sale({ id: 'legacy', cajeroNombre: 'Luis' }),
+    sale({ id: 'first', cajeroId: 'v1', cajeroNombre: 'Luis' }),
+    sale({ id: 'second', cajeroId: 'v2', cajeroNombre: 'Luis' }),
+    sale({ id: 'repeat', cajeroId: 'v1', cajeroNombre: 'Luis' })
+  ]);
+  for (const rows of [sales, [...sales].reverse()]) {
+    assert.deepEqual(plain(api.sellerOptions(rows, 'c1')), [
+      { value: 'id:v1', label: 'Luis' }, { value: 'id:v2', label: 'Luis' },
+      { value: 'name:luis', label: 'Luis (sin id)' }
+    ]);
+  }
+  for (const [seller, expected] of [['name:luis', ['legacy']], ['id:v1', ['first', 'repeat']], ['id:v2', ['second']]]) {
+    assert.deepEqual(plain(api.filterSales(sales, 'c1', { seller }).map(row => row.id)), expected);
+  }
+});
+
+test('filtering by the folded seller includes both id and name-only sales', () => {
+  const sales = freeze([
+    sale({ id: 'legacy', cajeroNombre: ' LUIS ' }),
+    sale({ id: 'known', cajeroId: 'v1', cajeroNombre: 'Luis' }),
+    sale({ id: 'other', cajeroId: 'v2', cajeroNombre: 'Ana' })
+  ]);
+  assert.deepEqual(plain(api.filterSales(sales, 'c1', { seller: 'id:v1' }).map(row => row.id)), ['legacy', 'known']);
+  assert.equal(api.buildReport(sales, 'c1', { seller: 'id:v1' }).purchases, 2);
+});
+
+test('CSV guards formula prefixes after leading spaces while preserving spaces and quoting', () => {
+  for (const raw of ['  =1+1', ' +x', '  @a', ' -2', '\t=1', '\r=1', '\n=1', '  \t=1', '  \r=1', '  \n=1']) {
+    assert.equal(api.csvCell(raw), '"\'' + raw + '"');
+  }
+  for (const prefix of ['=', '+', '@', '-', '\t', '\r', '\n']) {
+    assert.equal(api.csvCell(prefix + 'prueba'), '"\'' + prefix + 'prueba"');
+  }
+  for (const raw of ['Luis', '  Texto normal', 'Texto =1+1', '  ', '']) assert.equal(api.csvCell(raw), '"' + raw + '"');
+  assert.equal(api.csvCell('a,b"c'), '"a,b""c"');
+  assert.equal(api.csvCell('  ="x"'), '"\'  =""x"""');
+});
 
 test('inclusive 30/90/365/all periods use Lima and validate leap days', () => {
   for (const [days, from] of [[30, '2026-09-16'], [90, '2026-07-18'], [365, '2025-10-16'], ['all', '']]) {
@@ -49,7 +113,7 @@ test('matches durable customer id only; excludes void, invalid, future and out-o
   assert.equal(report.purchases, 2);
   assert.equal(report.lastPurchase, '2026-10-15');
   assert.deepEqual(plain(report.sales.map(s => s.reference)), ['end', 'start']);
-  assert.equal(api.buildReport(sales, 'c1', { ...options, days: 90 }).purchases, 3);
+  assert.equal(api.buildReport(sales, 'c1', period(90)).purchases, 3);
   assert.equal(JSON.stringify(sales), before);
 });
 
@@ -82,7 +146,8 @@ test('numeric ids, missing totals, empty data, malformed items and all-history b
     sale({ clienteId: 7, fecha: '2020-01-01', total: 0, items: null }),
     sale({ clienteId: 7, fecha: '2026-10-16' })];
   assert.equal(api.buildReport(sales, '7', options).total, 0.3);
-  assert.equal(api.buildReport(sales, '7', { ...options, days: 'all' }).purchases, 2);
+  // «Todo» = Desde/Hasta vacíos: sin límite de fechas.
+  assert.equal(api.buildReport(sales, '7', period('all')).purchases, 3);
   for (const input of [[], undefined, {}, [null]]) {
     const report = api.buildReport(input, 'c1', options);
     assert.equal(report.total, 0); assert.equal(report.purchases, 0); assert.equal(report.lastPurchase, '');

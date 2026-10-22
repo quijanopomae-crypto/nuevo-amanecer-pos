@@ -61,7 +61,7 @@ async function noOverflow(page: Page) {
   })).toBe(true);
 }
 
-for (const width of [390, 650, 768, 1366]) for (const dark of [false, true]) {
+for (const width of [390, 650, 768, 1280, 1366]) for (const dark of [false, true]) {
   test(`owner catalog at ${width}px, ${dark ? 'dark' : 'light'}: only public fields, filters and print without writes`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner');
@@ -130,23 +130,16 @@ for (const width of [390, 650, 768, 1366]) for (const dark of [false, true]) {
   });
 }
 
-test('Próximamente keeps catalog locked and pending; no side menu entry', async ({ page }) => {
+test('Próximamente: catálogo desbloqueado abre su pantalla (dueño)', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await rolePage(page, 'owner');
-  await page.evaluate(() => (window as any).goPage('pageProximamente'));
-  const card = page.locator('[data-feature-id="catalogo-desde-pos"]');
-  await expect(card).toBeVisible(); await expect(card).not.toHaveClass(/is-enabled/);
-  await expect(card).toContainText('Próximamente');
+  await page.evaluate(() => (window as any).NA_PROXIMAMENTE.load());
   expect(await page.evaluate(() => {
     const api = (window as any).NA_PROXIMAMENTE, feature = api.get('catalogo-desde-pos');
-    return { page: feature.page, pending: feature.pending, enabled: api.isEnabled(feature.id), locked: (window as any).NA_PERMISSIONS.FEATURE_LOCKS[feature.id] };
-  })).toEqual({ page: pageId, pending: true, enabled: false, locked: true });
-  await card.click();
-  await expect(page.locator('#' + pageId)).not.toHaveClass(/\bactive\b/);
-  await expect(page.locator('#naProxPreview')).toBeVisible();
-  await page.locator('#naProxPreview').evaluate(node => (node as HTMLDialogElement).close());
-  await page.locator('#naMobileMenuToggle').click();
-  await expect(page.locator('#naMobileDrawer [data-page="' + pageId + '"]')).toHaveCount(0);
+    return { page: feature.page, pending: !!feature.pending, locked: (window as any).NA_PERMISSIONS.FEATURE_LOCKS[feature.id] };
+  })).toEqual({ page: pageId, pending: false, locked: false });
+  await page.evaluate(() => (window as any).goPage('pageCatalogoDesdePos'));
+  await expect(page.locator('#' + pageId)).toHaveClass(/\bactive\b/);
 });
 
 test('employee cannot open catalog or print; revoking owner clears cached products and categories', async ({ page }) => {

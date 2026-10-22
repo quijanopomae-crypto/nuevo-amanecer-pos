@@ -54,11 +54,22 @@
     return { categories: Array.from(labels, function (pair) { return { value: pair[0], label: pair[1] }; })
       .sort(function (a, b) { return a.label.localeCompare(b.label, 'es-PE'); }), rows: rows };
   }
-  function ownerAllowed() {
-    return !!(root.NA_ROLES && typeof root.NA_ROLES.isOwner === 'function' && root.NA_ROLES.isOwner() &&
-      root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function' &&
-      root.NA_PERMISSIONS.canAccessScreen('owner', PAGE_ID));
+  function featureUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('catalogo-desde-pos') === false); } catch (_) { return false; }
   }
+  function ownerOnly() {
+    try {
+      return !!(root.NA_ROLES && typeof root.NA_ROLES.isOwner === 'function' && root.NA_ROLES.isOwner() === true &&
+        root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function' &&
+        root.NA_PERMISSIONS.canAccessScreen('owner', PAGE_ID));
+    } catch (_) { return false; }
+  }
+  // Permisos por empleado (#924): el empleado entra solo si el servidor prendió su casilla (falla cerrada).
+  function employeeMay() {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.may === 'function' && e.may('catalogo-desde-pos') === true); } catch (_) { return false; }
+  }
+  // Dueño o empleado con casilla; el candado siempre gana.
+  function ownerAllowed() { return featureUnlocked() && (ownerOnly() || employeeMay()); }
   function element(tag, className, value) {
     var node = root.document.createElement(tag);
     if (className) node.className = className;

@@ -15,6 +15,23 @@ async function setup(t, { migrate = true } = {}) {
   f.addDevice('owner-phone', 'writer', 'active', 'owner-token');
   return f;
 }
+// El PIN nunca se guarda en texto plano. La sal, el hash, los ids de aprobación y el id de sesión
+// del aparato (UUID) son hex al azar y pueden traer los 4 dígitos del PIN por casualidad, así que
+// esos valores se validan por su formato (y el hash recalculándolo) y no buscando el PIN dentro de
+// ellos. Así la prueba no depende del azar.
+const RANDOM_HEX = /^(?:apr-|xreq:|session:)?(?:[0-9a-f]{32,64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+function assertNoPlainPin(rows, pin) {
+  for (const row of [].concat(rows)) {
+    for (const [k, v] of Object.entries(row)) {
+      assert.ok(!/pin/i.test(k), 'no plaintext pin column: ' + k);
+      if (v === null || v === undefined) continue;
+      const s = String(v);
+      assert.notEqual(s, pin, 'field ' + k + ' equals the PIN');
+      if (RANDOM_HEX.test(s)) continue;
+      assert.ok(!s.includes(pin), 'field ' + k + ' contains the PIN');
+    }
+  }
+}
 const H = token => ({ authorization: 'Bearer ' + token, 'content-type': 'application/json' });
 async function call(f, path, token, body, method = body ? 'POST' : 'GET', extra = {}) {
   const r = await f.fetch('http://localhost' + path, { method, headers: { ...(token ? H(token) : { 'content-type': 'application/json' }), ...extra }, body: body ? JSON.stringify(body) : undefined });
@@ -46,7 +63,10 @@ test('owner sets PIN; stored only as salted PBKDF2; change needs current PIN; lo
   assert.equal((await call(f, '/auth/owner-pin', 'owner-token', { new_pin: '4821' })).status, 200);
   const row = f.sql('SELECT * FROM pos_owner_pin WHERE id=1');
   assert.equal(row.iterations, PIN_ITERATIONS);
-  assert.ok(!JSON.stringify(row).includes('4821'));
+  assert.deepEqual(Object.keys(row).sort(), ['failed_count', 'hash_hex', 'id', 'iterations', 'locked_until', 'salt_hex', 'updated_at', 'updated_by']);
+  assert.match(row.salt_hex, /^[0-9a-f]{32}$/);
+  assert.match(row.hash_hex, /^[0-9a-f]{64}$/);
+  assertNoPlainPin(row, '4821');
   assert.equal(await hashPin('4821', row.salt_hex, row.iterations), row.hash_hex);
   assert.equal((await call(f, '/auth/owner-pin', 'owner-token', { new_pin: '9999' })).status, 403);
   assert.equal((await call(f, '/auth/owner-pin', 'owner-token', { new_pin: '9999', current_pin: '4821' })).status, 200);
@@ -88,7 +108,7 @@ test('employee device: paired by code, cannot use owner endpoints or owner comma
   f.exec("UPDATE pos_owner_approvals SET expires_at='2000-01-01T00:00:00.000Z'");
   const expired = await call(f, '/commands/inventory.adjust', emp, { operation_id: 'op-1' }, 'POST', { 'x-owner-approval': ap.body.approval_id });
   assert.equal(expired.body.error, 'owner_approval_required');
-  assert.ok(!JSON.stringify(f.database.prepare('SELECT * FROM pos_owner_approvals').all()).includes('1234'));
+  assertNoPlainPin(f.database.prepare('SELECT * FROM pos_owner_approvals').all(), '1234');
 });
 
 test('owner lists and revokes devices (PIN when set); settings revisioned; expired codes refused', async t => {
@@ -111,6 +131,56 @@ test('owner lists and revokes devices (PIN when set); settings revisioned; expir
   f.exec("UPDATE pos_pairing_codes SET expires_at='2000-01-01T00:00:00.000Z' WHERE used_at IS NULL");
   assert.equal((await call(f, '/auth/pair', null, { code: code.body.code })).status, 401);
   assert.equal((await call(f, '/auth/pair', null, { code: 'AAAAA-AAAAA' })).status, 401);
+});
+
+test('/settings expected_revision: match saves and returns new revision; mismatch is 409 with current revision; omitted keeps last-write', async t => {
+  const f = await setup(t);
+  const save = body => call(f, '/settings', 'owner-token', body);
+  const stored = () => ({ ...f.sql("SELECT value_json, revision FROM pos_settings WHERE key='pos.flags'") });
+  // Clave nueva: expected_revision 0 coincide.
+  let r = await save({ key: 'pos.flags', value: { a: 1 }, expected_revision: 0 });
+  assert.deepEqual([r.status, r.body.status, r.body.revision], [200, 'saved', 1]);
+  r = await save({ key: 'pos.flags', value: { a: 2 }, expected_revision: 1 });
+  assert.deepEqual([r.status, r.body.revision], [200, 2]);
+  // Revisión vieja o adelantada: 409 con la revisión actual y sin escribir.
+  for (const stale of [0, 1, 5]) {
+    r = await save({ key: 'pos.flags', value: { a: 'pisado' }, expected_revision: stale });
+    assert.equal(r.status, 409);
+    assert.deepEqual(r.body, { error: 'revision_conflict', revision: 2 });
+  }
+  assert.deepEqual(stored(), { value_json: '{"a":2}', revision: 2 });
+  // Clave inexistente con expected_revision > 0: 409 con revision 0.
+  r = await save({ key: 'negocio', value: {}, expected_revision: 3 });
+  assert.deepEqual([r.status, r.body], [409, { error: 'revision_conflict', revision: 0 }]);
+  // Reintento con la revisión 2 que devolvieron los 409 de `pos.flags` (hoy config-g.js vuelve a pedir GET /settings; esto prueba que el servidor lo acepta).
+  r = await save({ key: 'pos.flags', value: { a: 3 }, expected_revision: 2 });
+  assert.deepEqual([r.status, r.body.revision], [200, 3]);
+  // Sin expected_revision (o null): comportamiento anterior, guarda sobre la revisión actual.
+  r = await save({ key: 'pos.flags', value: { a: 4 } });
+  assert.deepEqual([r.status, r.body.revision], [200, 4]);
+  r = await save({ key: 'pos.flags', value: { a: 5 }, expected_revision: null });
+  assert.deepEqual([r.status, r.body.revision], [200, 5]);
+  r = await save({ key: 'nuevo.sin.rev', value: true });
+  assert.deepEqual([r.status, r.body.revision], [200, 1]);
+  assert.deepEqual(stored(), { value_json: '{"a":5}', revision: 5 });
+});
+
+test('/settings expected_revision: concurrent write between read and CAS returns 409 with the latest revision', async t => {
+  const f = await setup(t);
+  assert.equal((await call(f, '/settings', 'owner-token', { key: 'pos.flags', value: { a: 1 } })).body.revision, 1);
+  // Simula otro aparato que guarda justo antes del UPDATE condicional (dos veces: revision 1 -> 3).
+  const binding = f.env.nuevo_amanecer_lab, prepare = binding.prepare.bind(binding);
+  let raced = false;
+  binding.prepare = sql => {
+    if (!raced && /^\s*INSERT INTO pos_settings/.test(sql)) { raced = true; f.exec("UPDATE pos_settings SET revision=revision+2, value_json='{\"otro\":true}' WHERE key='pos.flags'"); }
+    return prepare(sql);
+  };
+  t.after(() => { binding.prepare = prepare; });
+  const r = await call(f, '/settings', 'owner-token', { key: 'pos.flags', value: { a: 2 }, expected_revision: 1 });
+  assert.ok(raced);
+  assert.equal(r.status, 409);
+  assert.deepEqual(r.body, { error: 'revision_conflict', revision: 3 });
+  assert.deepEqual({ ...f.sql("SELECT value_json, revision FROM pos_settings WHERE key='pos.flags'") }, { value_json: '{"otro":true}', revision: 3 });
 });
 
 const reviews = read('0025_pos_reviews_pin_failures.sql');

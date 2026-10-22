@@ -85,3 +85,59 @@ for (const width of [390, 768, 1366]) {
     });
   }
 }
+
+// ownerAllowed = NA_ROLES.isOwner: un rol "owner" en caché sin confirmar por /auth/me ya no muestra costos.
+test('owner en caché sin confirmar: oculta proveedor y costos hasta confirmar el rol', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let meOk = false;
+  await page.route('**/*', async route => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.hostname === '127.0.0.1') return route.continue();
+    if (url.hostname !== 'permissions.test') return route.abort();
+    if (request.method() === 'GET' && url.pathname === '/auth/me') {
+      if (!meOk) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'temporarily_unavailable' }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        pos_role: 'owner', owner_pin_set: true, roles_ready: true, device_id: 'TEST-device',
+      }) });
+    }
+    if (request.method() === 'GET' && url.pathname === '/auth/purchases' && !url.search) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ purchases: FULL, truncated: false }) });
+    }
+    return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'test_endpoint_unavailable' }) });
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem('na_cloud_sync_credentials', JSON.stringify({ endpoint: 'https://permissions.test', token: 'TEST-synthetic-token' }));
+    localStorage.setItem('na_pos_role_v1', JSON.stringify({ role: 'owner', pinSet: true, at: Date.now() }));
+  });
+  await page.goto('/index.html');
+  await expect.poll(() => page.evaluate(() => {
+    const w = window as any;
+    return typeof w.NA_PURCHASES?.history === 'function' && typeof w.NA_ROLES?.refresh === 'function';
+  }), { timeout: 30_000 }).toBe(true);
+  await page.evaluate(async () => { await (window as any).NA_ROLES.refresh(); });
+  expect(await page.evaluate(() => {
+    const roles = (window as any).NA_ROLES;
+    return [roles.role, roles.confirmed, roles.isOwner()];
+  })).toEqual(['owner', false, false]);
+  await page.evaluate(() => {
+    (0, eval)('productos = ' + JSON.stringify([{ id: 101, name: 'Paracetamol', stock: 5 }]));
+    (window as any).NuevoAmanecerCanonical = { enabled: () => true, snapshot: () => ({}), refresh: async () => {} };
+  });
+  await page.evaluate(() => (window as any).NA_PURCHASES.history());
+  const history = page.locator('#naPurchaseHistory');
+  await expect(history.locator('.na-pur-item')).toHaveCount(2);
+  await expect(history).not.toContainText('Proveedor');
+  await expect(history).not.toContainText(/45[.,]50|13[.,]00|6[.,]50/);
+  await expect(history).not.toContainText('×');
+  await expect(history).toContainText('Compra');
+  await expect(history).toContainText('x 7');
+
+  meOk = true;
+  await page.evaluate(async () => { await (window as any).NA_ROLES.refresh(); });
+  expect(await page.evaluate(() => (window as any).NA_ROLES.isOwner())).toBe(true);
+  await page.evaluate(() => { document.getElementById('naPurchaseHistory')?.remove(); return (window as any).NA_PURCHASES.history(); });
+  await expect(history.locator('.na-pur-item')).toHaveCount(2);
+  await expect(history).toContainText('Proveedor Secreto SAC');
+  await expect(history).toContainText(/45[.,]50/);
+  await expect(history).toContainText('×');
+});

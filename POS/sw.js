@@ -8,6 +8,7 @@ const LAZY_CACHE_PREFIX = 'nuevo-amanecer-pos-lazy-';
 const LAZY_CACHE_NAME = LAZY_CACHE_PREFIX + CACHE_NAME.slice(CACHE_PREFIX.length);
 const PRECACHE_URLS = [
   './index.html',
+  './js/modules/asistente/asistente-loader.js', // cargador del asistente (prototipo): nunca bloquea el arranque instalado
   './manifest.webmanifest',
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
@@ -24,6 +25,8 @@ const PRECACHE_URLS = [
   './js/modules/clientes-frecuencia.js',
   './css/catalogo-desde-pos.css',
   './js/modules/catalogo-desde-pos.js',
+  './css/reporte-productos-vencer.css',
+  './js/modules/reporte-productos-vencer.js',
   './css/cliente-historial-compras.css',
   './js/modules/cliente-historial-compras.js',
   './css/kardex.css',
@@ -34,6 +37,19 @@ const PRECACHE_URLS = [
   './js/modules/reporte-arqueo.js',
   './css/historial-compras.css',
   './js/inventory/historial-compras.js',
+  './js/products/costo-compra-ficha.js',
+  './css/costo-compra-ficha.css',
+  './css/price-history.css',
+  './js/products/price-history.js',
+  './js/products/price-history-ui.js',
+  './css/etiquetas-precios.css',
+  './js/modules/etiquetas-precios.js',
+  './css/productos-sin-movimiento.css',
+  './js/modules/productos-sin-movimiento.js',
+  './css/sugerencia-compra.css',
+  './js/modules/sugerencia-compra.js',
+  './css/ajustes-inventario.css',
+  './js/modules/ajustes-inventario.js',
   './css/layout.css',
   './css/components.css',
   './css/responsive.css',
@@ -86,6 +102,7 @@ const PRECACHE_URLS = [
   './css/experience-v2/animations/notifications.css',
   './js/core/utils.js',
   './js/core/lima-time.js',
+  './js/core/seller-labels.js',
   './js/sync/outbox.js',
   './js/sync/hosted-canonical-guard.js',
   './js/adapters/canonical-ui-adapter.js',
@@ -149,6 +166,8 @@ const PRECACHE_URLS = [
   './js/modules/client-credit-accounts-v2.js',
   './css/clientes-reporte-deuda.css',
   './js/modules/clientes-reporte-deuda.js',
+  './css/clientes-deudores-caja.css',
+  './js/modules/clientes-deudores-caja.js',
   './js/compat/legacy-globals.js',
   './js/app.js',
   './js/canon-pos-reference-ui.js',
@@ -160,6 +179,9 @@ const PRECACHE_URLS = [
   './js/config/pos-annul-client.js',
   './js/modules/discount-sheet.js','./js/config/pos-sale-note-client.js','./js/config/pos-purchases-client.js','./js/config/pos-dni-lookup-client.js','./js/config/config-v9.js','./js/config/config-v9-boot.js','./css/config-v9-screen.css',
   './js/config/pos-roles-client.js',
+  './js/config/pos-employee-toggles.js',
+  './js/config/employee-perms-client.js',
+  './js/config/employee-perms-ui.js',
   './js/core/lazy-assets.js'
 ];
 const LAZY_URLS = [

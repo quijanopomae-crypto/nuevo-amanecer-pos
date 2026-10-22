@@ -145,6 +145,28 @@ jobs:
           fi
           echo "DECOLECTA_SECRET_SYNC=PASS"
 
+      - name: Sync assistant AI provider secrets to the Worker (values never printed)
+        working-directory: tools/cloudflare-lab
+        shell: bash
+        env:
+          ASSISTANT_AI_API_KEY_4: ${{ secrets.ASSISTANT_AI_API_KEY_4 }}
+          ASSISTANT_AI_API_KEY_2: ${{ secrets.ASSISTANT_AI_API_KEY_2 }}
+          ASSISTANT_CONFIRM_SECRET: ${{ secrets.ASSISTANT_CONFIRM_SECRET }}
+        run: |
+          set -euo pipefail
+          # OhMyAgent (principal) = ASSISTANT_AI_API_KEY_4, Routeway (respaldo) = ASSISTANT_AI_API_KEY_2, firma de tarjetas = ASSISTANT_CONFIRM_SECRET.
+          # Base URLs y modelos NO son secretos: van en "vars" de wrangler.turso-prod.jsonc. Valores solo por stdin, nunca en echo.
+          for name in ASSISTANT_AI_API_KEY_4 ASSISTANT_AI_API_KEY_2 ASSISTANT_CONFIRM_SECRET; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then echo "ASSISTANT_SECRET_SYNC[$name]=SKIPPED (GitHub secret not set)"; continue; fi
+            echo "::add-mask::$value"
+            printf '%s' "$value" | npx wrangler secret put "$name" --config ../cloudflare-prod/wrangler.turso-prod.jsonc 2>&1
+            echo "ASSISTANT_SECRET_SYNC[$name]=PASS"
+          done
+          unset value
+          npx wrangler secret list --config ../cloudflare-prod/wrangler.turso-prod.jsonc > /tmp/asst-secret-list.json 2>/tmp/asst-secret-list.err || { cat /tmp/asst-secret-list.err; exit 1; }
+          node -e 'const l=JSON.parse(require("fs").readFileSync("/tmp/asst-secret-list.json","utf8")).map(x=>x.name);for(const n of ["ASSISTANT_AI_API_KEY_4","ASSISTANT_AI_API_KEY_2","ASSISTANT_CONFIRM_SECRET"])console.log(n+"="+(l.includes(n)?"present":"MISSING"))'
+
       - name: Verify production health after secret sync
         shell: bash
         run: |

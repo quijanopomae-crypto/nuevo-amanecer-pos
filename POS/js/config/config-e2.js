@@ -28,8 +28,13 @@
   }
   function showIgvLine() { try { return root.localStorage.getItem(IGV_KEY) !== '0'; } catch (_) { return true; } }
   function syncIgvRow() {
+    var visible = showIgvLine();
     var el = doc.getElementById('posIgv'); var row = el && el.closest ? el.closest('.total-row') : null;
-    if (row) row.hidden = !showIgvLine();
+    if (row) row.hidden = !visible;
+    // La misma preferencia visual gobierna solo el resumen de PC/tablet.
+    // En móvil permanece intacta la disposición anterior.
+    var page = doc.getElementById('pagePOS');
+    if (page) page.classList.toggle('na-pos-summary-igv-hidden', !visible);
   }
   // Etapa 2 (G): falla cerrada. Solo el aparato del dueño y con el permiso cargado.
   function canEdit() {

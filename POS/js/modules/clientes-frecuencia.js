@@ -101,11 +101,15 @@
       revenue: rows.reduce(function (sum, row) { return sum + row.revenueCents; }, 0) / 100 };
   }
 
-  function ownerAllowed() {
-    var roles = root.NA_ROLES, permissions = root.NA_PERMISSIONS;
-    return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() && permissions &&
-      typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID));
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  // No es una regla de rol: confirma que la tabla de permisos cargó (falla cerrada sin ella).
+  function policyReady() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
+  }
+  function ownerAllowed() { return isOwner() && policyReady(); }
   // Toda etiqueta y nombre usa textContent; ningún dato del cliente se interpreta como HTML.
   function element(tag, className, value) {
     var node = root.document.createElement(tag);
@@ -113,7 +117,7 @@
     if (value !== undefined) node.textContent = String(value);
     return node;
   }
-  function money(value) { return 'S/ ' + value.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(value) { return 'S/\u00a0' + value.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function dateLabel(day) { return day.split('-').reverse().join('/'); }
   function render() {
     var page = root.document && root.document.getElementById(PAGE_ID);
@@ -139,7 +143,8 @@
     var table = element('table', 'cf-table');
     table.appendChild(element('caption', 'cf-sr-only', 'Frecuencia de compra de clientes, primero quienes están por volver o inactivos'));
     var head = element('thead'), tr = element('tr');
-    ['Cliente', 'Compras', 'Cada (días)', 'Última compra', 'Días sin comprar', 'Estado', 'Importe'].forEach(function (label) { var th = element('th', '', label); th.scope = 'col'; tr.appendChild(th); });
+    var numericHeads = { 'Compras': true, 'Días sin comprar': true, 'Importe': true };
+    ['Cliente', 'Compras', 'Cada (días)', 'Última compra', 'Días sin comprar', 'Estado', 'Importe'].forEach(function (label) { var th = element('th', numericHeads[label] ? 'cf-num' : '', label); th.scope = 'col'; tr.appendChild(th); });
     head.appendChild(tr); table.appendChild(head);
     var body = element('tbody');
     report.rows.forEach(function (row) {

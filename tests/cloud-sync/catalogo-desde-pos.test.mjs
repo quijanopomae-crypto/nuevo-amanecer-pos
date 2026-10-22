@@ -179,17 +179,16 @@ test('Imprimir / PDF calls window.print only for the active owner page; no data 
   assert.doesNotMatch(source, /fetch\s*\(|XMLHttpRequest|sendBeacon|localStorage|indexedDB|\.setItem\s*\(|\.innerHTML\s*=|saveAppState|saveAllData|\b(?:POST|PUT|PATCH|DELETE)\b/);
 });
 
-test('feature stays locked and pending with an owner-only page and unchanged owner-only feature routes', async () => {
+test('feature unlocked (owner OK 2026-10-22) with an owner-only page and unchanged owner-only feature routes', async () => {
   const c = context();
   vm.runInContext(read('POS/js/config/pos-permissions.js'), c);
   vm.runInContext(read('POS/js/modules/proximamente-registry.js'), c);
   vm.runInContext(read('POS/js/modules/proximamente.js'), c);
   await c.NA_PROXIMAMENTE.load();
   const feature = c.NA_PROXIMAMENTE.get('catalogo-desde-pos');
-  assert.equal(feature.page, pageId); assert.equal(feature.pending, true); assert.equal(feature.module, 'Ventas');
-  assert.equal(c.NA_PROXIMAMENTE.isEnabled(feature.id), false);
+  assert.equal(feature.page, pageId); assert.ok(!feature.pending); assert.equal(feature.module, 'Ventas');
   for (const policy of [PERMISSIONS, c.NA_PERMISSIONS]) {
-    assert.equal(policy.FEATURE_LOCKS[feature.id], true); assert.equal(policy.featureLocked(feature.id), true);
+    assert.equal(policy.FEATURE_LOCKS[feature.id], false); assert.equal(policy.featureLocked(feature.id), false);
     assert.deepEqual(Array.from(policy.SCREENS[pageId]), ['owner']);
     assert.deepEqual(Array.from(policy.FEATURE_ROLES[feature.id]), ['owner']);
     for (const role of ['empleado', 'unknown', '', null]) assert.equal(policy.canAccessScreen(role, pageId), false);
@@ -234,4 +233,11 @@ test('table cells override global mobile hiding before cards; every print select
   assert.match(print, /body:has\(#pageCatalogoDesdePos\.active\)[^{]+\{ display: none !important;/);
   assert.match(print, /\.cdp-controls, \.cdp-status\) \{ display: none !important;/);
   assert.match(print, /\.cdp-table :is\(th, td\) \{ display: table-cell !important;/);
+});
+
+test('catálogo: empleado solo con NA_EMPLOYEE_PERMS.may(catalogo-desde-pos); el candado siempre gana', () => {
+  assert.match(source, /e\.may\('catalogo-desde-pos'\) === true/);
+  assert.match(source, /featureLocked\('catalogo-desde-pos'\) === false/);
+  const client = read('POS/js/config/employee-perms-client.js');
+  assert.match(client, /pageCatalogoDesdePos: 'catalogo-desde-pos'/);
 });

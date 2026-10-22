@@ -104,6 +104,8 @@
       return Object.assign({
         openedByName: s.opened_by_name || null,
         closedByName: s.closed_by_name || null,
+        openedById: text(s.opened_by_user_id),
+        closedById: text(s.closed_by_user_id),
         sessionId: s.session_id,
         status: s.status === 'CLOSED' ? 'CLOSED' : 'OPEN',
         fecha: opened.date,
@@ -115,10 +117,14 @@
         esperado: int(s.expected_cents),
         contado: s.counted_cents == null ? null : int(s.counted_cents),
         diferencia: s.difference_cents == null ? null : int(s.difference_cents),
-        cajero: who && who.nombre ? who.nombre : ''
+        cajero: who && who.nombre ? who.nombre : '',
+        cajeroId: who && who.id ? text(who.id) : ''
       }, t);
     });
   }
+
+  // Mismo nombre, distinta persona: se agrega el sufijo del id (NA_SELLER_LABELS); un nombre único queda igual.
+  function personLabel(labeler, id, name) { return name && labeler ? name + labeler.suffix(id, name) : name; }
 
   function el(tag, cls, content, css) {
     var node = root.document.createElement(tag);
@@ -179,13 +185,14 @@
     wrap.append(el('div', 'mov-section-title', 'Historial de cierres · ' + rows.length + (rows.length === 1 ? ' cierre' : ' cierres')));
     wrap.append(el('div', '', 'Solo lectura. Fechas y horas de Lima. Datos de la última sincronización.', 'font-size:11px;color:var(--slate)'));
     if (!rows.length) wrap.append(el('div', 'na-cash-hist-empty', 'Aún no hay cierres de caja registrados en CANON.', 'font-size:13px;color:var(--slate);padding:14px 0'));
+    var sellerLabels = root.NA_SELLER_LABELS, cashierLabels = sellerLabels ? sellerLabels.cashiers() : null, userLabels = sellerLabels ? sellerLabels.sessionUsers() : null;
     rows.forEach(function (r) {
       var card = el('div', 'na-cash-hist-card', null, 'border:1px solid var(--line,#e5e7eb);border-radius:12px;padding:10px 12px;background:var(--white,#fff)');
       card.setAttribute('data-session-id', r.sessionId);
       card.append(el('div', 'na-cash-hist-title', '📅 ' + r.fechaLabel + ' · ' + r.apertura + ' → ' + (r.cierreFecha && r.cierreFecha !== r.fecha ? r.cierreFecha.split('-').reverse().join('/') + ' ' : '') + r.cierre, 'font-size:13px;font-weight:800;margin-bottom:4px'));
-      line(card, 'Cajero', r.cajero || 'No registrado');
-      line(card, 'Abrió', r.openedByName || 'No registrado');
-      line(card, 'Cerró', r.closedByName || 'No registrado');
+      line(card, 'Cajero', personLabel(cashierLabels, r.cajeroId, r.cajero) || 'No registrado');
+      line(card, 'Abrió', personLabel(userLabels, r.openedById, r.openedByName) || 'No registrado');
+      line(card, 'Cerró', personLabel(userLabels, r.closedById, r.closedByName) || 'No registrado');
       line(card, 'Fondo inicial', money(r.fondo));
       line(card, 'Ventas (' + r.ventasCount + ')', money(r.ventas));
       if (r.ventasCredito) line(card, '   · al crédito', money(r.ventasCredito));

@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner authorized (2026-10-16 Lima; asistente 2 code OK, asistente 3 spec OK, asistente 4 LOCAL OK, e2e 462/464 flaky conocidos, Worker 403/404/401 checks OK) deploy of base 511f95a7c4b9785d53c150a69e6f67e7773c68c9: #795 clientes-frecuencia (frecuencia de compra del cliente). No schema changes. Rollback to 1354350a (worker 55, Cloudflare version e7329e2f, currently live). Web NOT deployed (pending asistente 5 live check).",
-  "target_commit": "511f95a7c4b9785d53c150a69e6f67e7773c68c9",
-  "rollback_ref": "1354350a6430419a7ffdcb32c124e861d8fc7a4c",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #946 #947 #948 #930 #949 #927 #939 (assistant long memory, Lima time, caja_abierta, below-cost alerts, business name, overdue credits with codes only, levels 1/2/3). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39863942113 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "target_commit": "8e0f236b451b5003220b332648c1725449dc12ba",
+  "rollback_ref": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 56,
-  "optimization": "CLIENTES_FRECUENCIA_795"
+  "attempt": 72,
+  "optimization": "ASSISTANT_BATCH_LEVELS_MEMORY_CREDITS"
 }

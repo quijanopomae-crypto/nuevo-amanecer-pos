@@ -135,12 +135,13 @@ test('redacted history and status finish args omit hidden keys and retain explic
 });
 
 test('history hides supplier and money for employees and missing permissions, preserving markup', async () => {
-  for (const role of ['owner', 'empleado', undefined]) {
+  // Como el NA_ROLES real: isOwner() solo es true para el dueño confirmado por el servidor.
+  for (const [role, confirmed] of [['owner', true], ['owner', false], ['empleado', true], [undefined, false]]) {
     const list = { innerHTML: '', querySelectorAll: () => [] }, button = {};
     const w = { querySelector: s => s === '.na-pur-list' ? list : button, addEventListener() {} };
     const root = {
       document: { querySelector: () => null, getElementById: () => null, createElement: () => w, body: { appendChild() {} } },
-      NA_ROLES: { role, api: async () => ({ purchases: ['aplicada', 'en_curso'].map(status => ({
+      NA_ROLES: { role, isOwner: () => role === 'owner' && confirmed, api: async () => ({ purchases: ['aplicada', 'en_curso'].map(status => ({
         status, supplier: 'Proveedor secreto', document_ref: 'F1', created_at: '2026-10-16',
         total_cost_cents: 99900, lines: [{ product_id: 'A', quantity: 3, unit_cost_cents: 33300 }]
       })) }) }
@@ -151,7 +152,7 @@ test('history hides supplier and money for employees and missing permissions, pr
     assert.match(list.innerHTML, /na-pur-row/);
     assert.match(list.innerHTML, /F1/);
     assert.match(list.innerHTML, /2026-10-16/);
-    if (role === 'owner') assert.match(list.innerHTML, /Proveedor secreto.*S\/ 999.00/s);
+    if (role === 'owner' && confirmed) assert.match(list.innerHTML, /Proveedor secreto.*S\/ 999.00/s);
     else {
       assert.doesNotMatch(list.innerHTML, /Proveedor secreto|S\/|×|sin costo/);
       assert.match(list.innerHTML, /<strong>Compra<\/strong>/);

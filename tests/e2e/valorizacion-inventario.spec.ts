@@ -36,7 +36,9 @@ for (const width of [390, 768, 1366]) {
     test(`owner valuation at ${width}px, ${dark ? 'dark' : 'light'}: values, layout and read-only refresh`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await rolePage(page, 'owner');
-      await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
+      // Tema por la preferencia de la app (no solo la clase): con CPU cargada, loadAppState (inline-02.js) llama a
+      // NA_THEME.apply() después de confirmarse el rol y una clase puesta a mano se perdía (fondo claro en «dark»).
+      await page.evaluate(dark => (window as any).NA_THEME.setMode(dark ? 'noche' : 'claro'), dark);
       await page.evaluate(() => (window as any).goPage('pageProximamente'));
       const entry = page.locator('#pageProximamente [data-feature-id="valorizacion-inventario"]');
       await expect(entry).toContainText('Disponible');
@@ -53,7 +55,7 @@ for (const width of [390, 768, 1366]) {
       await expect(screen.locator('.val-notices')).toContainText('stock proyectado');
       await expect(screen.locator('.val-notices')).toContainText('sin control de inventario excluidos');
       await expect(page.locator('#naNoPermission')).toHaveCount(0);
-      expect(await screen.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(dark ? 'rgb(15, 23, 42)' : 'rgb(248, 250, 252)');
+      await expect(screen).toHaveCSS('background-color', dark ? 'rgb(15, 23, 42)' : 'rgb(248, 250, 252)');
       const refresh = screen.getByRole('button', { name: 'Actualizar', exact: true });
       await expect(refresh).toBeVisible();
       expect(await refresh.evaluate(el => {
@@ -91,7 +93,9 @@ for (const width of [390, 768, 1366]) {
     test(`employee cannot see valuation at ${width}px, ${dark ? 'dark' : 'light'}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await rolePage(page, 'empleado');
-      await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
+      // Tema por la preferencia de la app (no solo la clase): con CPU cargada, loadAppState (inline-02.js) llama a
+      // NA_THEME.apply() después de confirmarse el rol y una clase puesta a mano se perdía (fondo claro en «dark»).
+      await page.evaluate(dark => (window as any).NA_THEME.setMode(dark ? 'noche' : 'claro'), dark);
       if (width === 390) {
         await page.locator('#naMobileMenuToggle').click();
         await expect(page.locator('#naMobileDrawer [data-page="pageValorizacion"]')).toHaveCount(0);
