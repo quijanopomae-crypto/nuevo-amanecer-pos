@@ -31,9 +31,9 @@ const setRow = (f, value) => f.exec(`INSERT INTO pos_settings(key,value_json,rev
 
 test('la lista cerrada no incluye nada de costos, cierres, tesorería, ajustes ni proveedores', () => {
   for (const bad of ['purchases.costs.view', 'dashboard-compras', 'precio-por-margen', 'punto-equilibrio', 'valorizacion-inventario', 'cash.closes.view',
-    'dashboard-tesoreria', 'settings.set', 'ajustes-inventario', 'importar-proveedores', 'adjuntos-proveedor', 'edicion-masiva-productos', 'kardex', 'asistente-virtual', 'reporte-arqueo', 'permisos-empleado'])
+    'dashboard-tesoreria', 'settings.set', 'ajustes-inventario', 'importar-proveedores', 'adjuntos-proveedor', 'edicion-masiva-productos', 'kardex', 'asistente-virtual', 'reporte-arqueo', 'permisos-empleado', 'estado-cuenta-abonos', 'estado-cuenta-cliente'])
     assert.ok(!EMPLOYEE_TOGGLES.includes(bad), bad);
-  assert.equal(EMPLOYEE_TOGGLES.length, 11);
+  assert.equal(EMPLOYEE_TOGGLES.length, 10);
   assert.ok(Object.isFrozen(EMPLOYEE_TOGGLES));
 });
 
@@ -112,4 +112,19 @@ test('guardar (candado abierto en prueba): solo dueño, con aprobación PIN liga
   assert.equal((await call(f, '/features/etiquetas-precios', emp)).status, 404);
   const settings = await call(f, '/settings', emp);
   assert.ok(!JSON.stringify(settings.body).includes('emp:perm'), 'el empleado no ve la fila');
+});
+
+test('id fuera de la lista, sin candado y con true en la fila: el empleado sigue con 403', async t => {
+  const f = await setup(t); const emp = await employee(f);
+  for (const id of ['valorizacion-inventario', 'kardex', 'reporte-arqueo']) {
+    assert.equal(PERMISSIONS.featureLocked(id), false, id + ' sin candado');
+    assert.deepEqual(PERMISSIONS.FEATURE_ROLES[id], ['owner']);
+    assert.ok(!EMPLOYEE_TOGGLES.includes(id));
+  }
+  setRow(f, JSON.stringify({ allow: { 'valorizacion-inventario': true, kardex: true, 'reporte-arqueo': true } }));
+  for (const id of ['valorizacion-inventario', 'kardex', 'reporte-arqueo']) {
+    const r = await call(f, '/features/' + id, emp);
+    assert.deepEqual([r.status, r.body.error], [403, 'forbidden_role'], id);
+    assert.equal((await call(f, '/features/' + id, 'owner-token')).status, 404, id + ' dueño como hoy');
+  }
 });

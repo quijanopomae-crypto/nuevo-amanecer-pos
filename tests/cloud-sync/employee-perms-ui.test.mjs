@@ -39,7 +39,7 @@ test('normalize: solo ids de la lista y valor true; todo lo demás cerrado', () 
   assert.equal(JSON.stringify(T.normalize({ allow: { 'ventas-espera': true, kardex: true, 'clonar-venta': 'true', __proto__: { x: 1 } } })), '{"ventas-espera":true}');
   for (const v of [null, 1, 'x', [], { allow: [] }, { allow: null }, {}]) assert.equal(JSON.stringify(T.normalize(v)), '{}');
   assert.equal(T.KEY, 'internal:emp:perm:v1');
-  assert.equal(T.IDS.length, 11);
+  assert.equal(T.IDS.length, 10);
 });
 
 test('el módulo no usa innerHTML, no define ownerAllowed y arranca todo apagado', () => {

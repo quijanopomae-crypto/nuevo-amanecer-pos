@@ -61,9 +61,9 @@ test('dueño: todo arranca apagado; marca, guarda con PIN ligado a operation_id'
   const panel = page.locator('#naEmpPerm');
   await expect(panel.locator('.cfg-panel-title')).toHaveText('Qué puede hacer o ver el empleado');
   const boxes = panel.locator('input[type=checkbox]');
-  await expect(boxes).toHaveCount(11);
+  await expect(boxes).toHaveCount(10);
   await expect(boxes.first()).toBeEnabled();
-  for (let i = 0; i < 11; i++) await expect(boxes.nth(i)).not.toBeChecked();
+  for (let i = 0; i < 10; i++) await expect(boxes.nth(i)).not.toBeChecked();
   await panel.getByText('El empleado puede: dejar ventas en espera').click();
   await panel.locator('#naEmpPermSave').click();
   await page.locator('.na-pin-input').fill('4821');
@@ -83,7 +83,7 @@ test('si no se puede leer: casillas apagadas y deshabilitadas; texto con datos v
   await openUsuarios(page);
   const boxes = page.locator('#naEmpPerm input[type=checkbox]');
   await expect(page.locator('#naEmpPerm .na-emp-perm-status')).toContainText('No se pudo leer los permisos');
-  for (let i = 0; i < 11; i++) { await expect(boxes.nth(i)).toBeDisabled(); await expect(boxes.nth(i)).not.toBeChecked(); }
+  for (let i = 0; i < 10; i++) { await expect(boxes.nth(i)).toBeDisabled(); await expect(boxes.nth(i)).not.toBeChecked(); }
   await expect(page.locator('#naEmpPermSave')).toBeDisabled();
 });
 

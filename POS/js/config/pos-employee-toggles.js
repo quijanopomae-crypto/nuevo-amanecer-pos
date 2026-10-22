@@ -12,7 +12,6 @@
       ['cobro-qr-yape-plin', 'Mostrar el QR de Yape y Plin'],
       ['compartir-pdf-whatsapp', 'Enviar el PDF por WhatsApp']] },
     { title: 'Clientes', items: [
-      ['estado-cuenta-abonos', 'Ver los abonos del estado de cuenta'],
       ['cliente-historial-compras', 'Ver el historial de compras del cliente']] },
     { title: 'Productos', items: [
       ['etiquetas-precios', 'Imprimir etiquetas de precios'],
