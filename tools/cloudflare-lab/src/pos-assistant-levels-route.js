@@ -103,7 +103,7 @@ export async function levelsRoute(request, env, auth, json, deps = {}) {
 
 // ---------- Herramienta del Admin en el chat ----------
 export const LEVEL_TOOL_DEF = Object.freeze({ name: LEVEL_TOOL,
-  description: 'Solo Admin. Cambia el nivel del asistente de una persona (0 sin permiso, 1, 2 o 3) y/o le da o le quita el permiso de costos y cambios (solo cuenta en el nivel 3). La persona va con la etiqueta de su aparato (por ejemplo «Caja 2») o su código; nunca con nombre, DNI ni teléfono. El Admin lo aplica con un toque.',
+  description: 'Solo Admin. Nivel del asistente de una persona (0 sin permiso, 1, 2 o 3) y/o permiso de costos y cambios (solo en nivel 3). Persona: etiqueta de su aparato («Caja 2») o código; nunca nombre, DNI ni teléfono.',
   parameters: { type: 'object', properties: { persona: { type: 'string' }, nivel: { type: 'integer', enum: [0, 1, 2, 3] }, costos: { type: 'boolean' } }, required: ['persona'] } });
 
 // Llamada del modelo -> borrador de tarjeta (se completa con la base en resolveLevelProposals). Sin persona o sin cambio: se descarta.
