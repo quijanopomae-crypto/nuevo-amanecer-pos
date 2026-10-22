@@ -143,6 +143,7 @@ test('período pedido por el Admin: hoy, ayer, semana, mes, mes pasado y último
   assert.deepEqual(P({ periodo: 'semana' }), ['2026-10-19', '2026-10-22']);
   assert.deepEqual(P({ periodo: 'mes' }), ['2026-10-01', '2026-10-22']);
   assert.deepEqual(P({ periodo: 'mes_pasado' }), ['2026-09-01', '2026-09-30']);
+  assert.deepEqual(P({ periodo: 'semana_pasada' }), ['2026-10-12', '2026-10-18']); // misma función de Lima que el resto (#947)
   assert.deepEqual(P({ dias: 7 }), ['2026-10-16', '2026-10-22']);
   assert.deepEqual(P({ dias: 500 }), ['2026-07-23', '2026-10-22']);
   // El aparato traduce lo que escribió el Admin.

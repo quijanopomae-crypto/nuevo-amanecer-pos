@@ -10,7 +10,7 @@ import { assistantAccess } from './pos-assistant-access.js';
 import { redactText, redactOwnerText, reserveUsage, createSettingsUsageStore } from './pos-assistant.js';
 import { resolveProvider, callModel } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
-import { canonicalReader, period } from './pos-assistant-queries.js';
+import { canonicalReader, period, dateWordRange } from './pos-assistant-queries.js';
 
 export const BELOW_COST_PATH = '/auth/assistant/below-cost';
 export const BELOW_COST_LIMITS = Object.freeze({ maxRows: 50, modelRows: 10, modelMs: 20000, defaultDays: 30, maxBodyBytes: 2048 });
@@ -29,11 +29,8 @@ export const TRUNC_NOTE = 'Ojo: hay muchos registros y no se pudo leer todo; pue
 // Sin nada: los últimos 30 días hasta hoy.
 export function belowCostPeriod(body, nowMs) {
   const today = limaToday(nowMs), per = String(body?.periodo || ''), dias = Number.parseInt(body?.dias, 10);
-  if (per === 'hoy') return period({ desde: today, hasta: today }, nowMs);
-  if (per === 'ayer') { const y = addDays(today, -1); return period({ desde: y, hasta: y }, nowMs); }
-  if (per === 'semana') { const dow = (new Date(today + 'T00:00:00Z').getUTCDay() + 6) % 7; return period({ desde: addDays(today, -dow), hasta: today }, nowMs); }
-  if (per === 'mes') return period({ desde: today.slice(0, 8) + '01', hasta: today }, nowMs);
-  if (per === 'mes_pasado') { const first = today.slice(0, 8) + '01', last = addDays(first, -1); return period({ desde: last.slice(0, 8) + '01', hasta: last }, nowMs); }
+  const w = per ? dateWordRange(per, nowMs) : null; // la misma hora de Lima que el resto del asistente (#947)
+  if (w) return period(w, nowMs);
   if (Number.isFinite(dias) && dias >= 1) return period({ desde: addDays(today, -(Math.min(dias, 92) - 1)), hasta: today }, nowMs);
   const hasta = DATE.test(body?.hasta || '') ? body.hasta : today;
   const desde = DATE.test(body?.desde || '') ? body.desde : addDays(hasta, -(BELOW_COST_LIMITS.defaultDays - 1));
