@@ -62,7 +62,7 @@ Las claves se ponen con `wrangler secret put NOMBRE` (nunca en el repo ni en `wr
 ## Matriz de roles
 | | Dueño | Empleado «Consultas y documentos» | Empleado «Solo consultas» | Empleado «Apagado» (por defecto) / sin rol |
 |---|---|---|---|---|
-| Chat / confirm | sí | sí | sí | **403** `assistant_off` (empleado) / `admin_only` + `reason:"sin_rol"` (aparato sin fila) |
+| Chat / confirm | sí | sí | sí | **403** `assistant_off` (empleado; o aparato sin fila cuya sesión no es Admin: `sin_rol`). Aparato sin fila con sesión Admin = Admin (ver «Rol del asistente») |
 | Qué ve | tarjeta en Inicio (reemplaza la burbuja ahí) + burbuja flotante en el resto | solo la burbuja flotante con sus atajos | igual | **nada**: el cargador no baja ni un archivo del asistente (0 JS, 0 CSS) |
 | `consultar` | todo: stock, bajo stock, sin costo, ventas, más vendidos, deudas, compras | stock, por reponer, precios de venta (sin costos, márgenes, caja ni deudas) | igual | — |
 | `preparar_documento` | 6 tipos | solo `lista_precios`, `lista_pedido` (sin costos, armadas en el servidor) | **no** | — |
@@ -162,7 +162,12 @@ Ventas o carrito, comprobantes SUNAT, importar, descuentos, anular ventas, reset
 - Control de inventario de una tarjeta (chat y confirm): `canonicalReader().productsById(ids)` lee SOLO esos ids (`product_id IN (...)`, tramos de hasta 50 ids con parámetros enlazados; importados + creados en vivo de la promoción activa). Sin tope de 5000 productos. Consulta caída -> 503 `stock_check_unavailable`; id que no vuelve -> 409 `product_missing`; no se gasta ni la aprobación ni la tarjeta.
 
 ## Permiso que cambia con la app abierta (sobre 50b6716b: Bots 2, 3, 4 y 5)
-- `assistantAccess`: teléfono SIN fila de rol = `sin_rol` (antes `empleado:off`); así aparece en la bitácora. Sigue sin asistente (403 `assistant_off`, `reason:"sin_rol"`). Error de base: `empleado:off` (falla cerrado).
+- `assistantAccess` (Rol del asistente, aprobado por el Admin el 2026-10-22):
+  - fila `owner` + sesión Admin = `owner` (sin cambios);
+  - fila `empleado` = `empleado:<nivel>` (sin cambios, aunque la sesión diga otra cosa);
+  - SIN fila: se usa la MISMA regla del POS (`posRoleFor` de `pos-roles.js`: sin fila = Admin) y además la sesión autenticada debe ser Admin → `owner`. Si la sesión no es Admin → `sin_rol` (403 `assistant_off`; así aparece en la bitácora). Así el PC del Admin activado de forma normal tiene el asistente sin registrar nada y sin migraciones;
+  - error de base: `empleado:off` (falla cerrado).
+  - Las rutas solo Admin del asistente (`employee-access`, proveedor, revisión, boleta, confirm) usan este mismo criterio. `/auth/assistant/confirm` sigue siendo solo Admin y solo para tarjetas de ESE aparato (`other_device` si es de otro).
 - Chat: si la lectura por id del inventario FALLA, no se ofrece ninguna tarjeta de compra ni de ajuste (ni las de costo que salen de la compra); `dropped: stock_unavailable` y un mensaje simple. El confirm ya fallaba cerrado (503).
 - UI: 403 `assistant_off` / `forbidden_role` / `admin_only` en chat o confirm → se cierra el panel y se QUITAN del DOM burbuja, panel y tarjeta; se borra `na_asistente_acc` (un recargo no reserva hueco). `assistant_off`: aviso neutro con el `toast` del POS sin tipo: «El asistente fue desactivado por el dueño». `forbidden_role`/`admin_only`: ping enseguida y, si todavía tiene asistente, se arma de nuevo con su rol y nivel.
 - UI: 403 `forbidden_document` (bajaron «Consultas y documentos» a «Solo consultas») → el panel sigue abierto, salen las tarjetas de documento (y su vista previa) y el nivel pasa a `consultas` (atajos nuevos); un ping lo confirma.

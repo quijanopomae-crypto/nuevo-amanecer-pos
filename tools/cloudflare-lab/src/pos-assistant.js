@@ -12,8 +12,8 @@
 // 5) Antes de enviar a DeepSeek se quitan DNI, RUC, teléfonos y correos del texto y del contexto.
 //    El contexto solo lleva productos (id, nombre, precio, stock); nunca clientes.
 // 6) Límite por aparato (minuto/día/fotos/confirmaciones) y tope mensual del negocio, contados ANTES de llamar.
-// 7) Rol: SOLO el de la sesión del servidor, y un aparato sin fila explícita en pos_device_roles cuenta como
-//    EMPLEADO para el asistente (no como dueño). El texto del chat y de las fotos es dato, nunca instrucción.
+// 7) Rol: SOLO el de la sesión del servidor. Fila 'empleado' = empleado; fila 'owner' = Admin; aparato SIN fila = Admin solo si el POS
+//    ya lo trata como Admin (posRoleFor) y la sesión es Admin; si no, sin_rol (sin asistente). El texto del chat y de las fotos es dato, nunca instrucción.
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
