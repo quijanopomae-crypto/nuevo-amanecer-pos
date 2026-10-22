@@ -110,12 +110,13 @@
     if (!body.length) return { error: 'El archivo no tiene filas de clientes.' };
     if (body.length > MAX_ROWS) return { error: 'El archivo tiene ' + body.length + ' filas. El máximo por importación es ' + MAX_ROWS + '.' };
     existing = existing || existingKeys();
+    var ownerLine = isOwner();
     var seenDocs = {}, seenPhones = {};
     var rows = body.map(function (cells, idx) {
       var get = function (col) { return map[col] === undefined ? '' : clean(cells[map[col]]); };
       var r = { line: idx + 2, nombre: get('nombre'), documento: docDigits(get('documento')), telefono: get('telefono'),
         direccion: get('direccion'), lineaTexto: '', lineaCents: null, status: 'valido', reason: '' };
-      var line = parseLine(get('linea_credito'));
+      var line = ownerLine ? parseLine(get('linea_credito')) : { cents: null };
       var fail = function (msg) { r.status = 'error'; r.reason = msg; };
       var dup = function (msg) { r.status = 'duplicado'; r.reason = msg; };
       if (!r.nombre) fail('Falta el nombre');
@@ -136,7 +137,7 @@
       return r;
     });
     var count = function (s) { return rows.filter(function (r) { return r.status === s; }).length; };
-    return { rows: rows, valid: count('valido'), duplicates: count('duplicado'), errors: count('error') };
+    return { lineIgnored: !ownerLine && map.linea_credito !== undefined, rows: rows, valid: count('valido'), duplicates: count('duplicado'), errors: count('error') };
   }
 
   function templateCsv() {
@@ -204,13 +205,22 @@
   function loadText(text) {
     var res = buildPreview(text);
     if (res.error) { preview = null; renderPreview(); status(res.error); return res; }
-    preview = res; status(res.valid ? 'Revisa la lista y pulsa «Importar ' + res.valid + (res.valid === 1 ? ' cliente»' : ' clientes»') + '.' : 'No hay filas nuevas para importar.');
+    preview = res; status((res.lineIgnored ? 'La columna «Línea» se ignora: solo el dueño puede fijar línea de crédito. ' : '') + (res.valid ? 'Revisa la lista y pulsa «Importar ' + res.valid + (res.valid === 1 ? ' cliente»' : ' clientes»') + '.' : 'No hay filas nuevas para importar.'));
     var c = doc.querySelector('#' + PANEL_ID + ' [data-ic-confirm]');
     if (c) c.textContent = 'Importar ' + res.valid + (res.valid === 1 ? ' cliente' : ' clientes');
     renderPreview();
     return res;
   }
 
+  var FORM_IDS = ['cNombre', 'cDni', 'cTel', 'cDir', 'cLinea'];
+  // Solo el dueño puede fijar línea de crédito al importar; si no hay sistema de roles (modo local) se trata como dueño.
+  function isOwner() {
+    try { var r = root.NA_ROLES; if (!r) return true; return typeof r.isOwner === 'function' && r.isOwner() === true; } catch (_) { return false; }
+  }
+  function formHasText() {
+    return FORM_IDS.some(function (id) { var n = doc.getElementById(id); return !!(n && String(n.value || '').trim()); });
+  }
+  var FORM_BUSY_MSG = 'Tienes datos sin guardar en «+ Cliente». Guárdalos o bórralos antes de importar.';
   function setField(id, v) { var n = doc.getElementById(id); if (n) n.value = v; }
   function countClients() { try { return Array.isArray(clientes) ? clientes.length : 0; } catch (_) { return 0; } }
 
@@ -220,7 +230,7 @@
     setField('cDir', r.direccion); setField('cLinea', r.lineaTexto);
     var before = countClients(), result;
     try { result = await root.guardarCli(); } catch (_) { result = false; }
-    ['cNombre', 'cDni', 'cTel', 'cDir', 'cLinea'].forEach(function (id) { setField(id, ''); });
+    FORM_IDS.forEach(function (id) { setField(id, ''); });
     return result === true || countClients() > before;
   }
 
@@ -228,6 +238,7 @@
     if (busy || !preview || !preview.valid) return;
     if (!canImport()) { status('No tienes permiso para registrar clientes o el módulo está bloqueado.'); return; }
     if (typeof root.guardarCli !== 'function') { status('El registro de clientes no está disponible.'); return; }
+    if (formHasText()) { status(FORM_BUSY_MSG); return; }
     var fresh = existingKeys();
     busy = true; renderPreview();
     var ok = 0, fail = 0, skipped = 0;
@@ -246,8 +257,11 @@
       busy = false;
       preview.valid = 0;
       renderPreview();
-      status(ok + (ok === 1 ? ' cliente importado' : ' clientes importados') + (fail ? ' · ' + fail + ' no se guardaron' : '') +
-        (skipped ? ' · ' + skipped + ' omitidos por duplicado' : '') + '. Los clientes existentes no se modificaron.');
+      var summary = ok + (ok === 1 ? ' cliente importado' : ' clientes importados') + (fail ? ' · ' + fail + ' no se guardaron' : '') +
+        (skipped ? ' · ' + skipped + ' omitidos por duplicado' : '') + '. Los clientes existentes no se modificaron.';
+      status(summary);
+      // Un solo aviso final: reemplaza los «Cliente registrado» de cada fila (el aviso es un único elemento).
+      try { if (typeof root.toast === 'function') root.toast(summary, fail ? 'warning' : 'success'); } catch (_) {}
       try { if (typeof root.cliRender === 'function') root.cliRender(); } catch (_) {}
     }
     return { ok: ok, fail: fail, skipped: skipped };
@@ -272,6 +286,7 @@
       var panel = el('section', 'ic-panel'); panel.id = PANEL_ID; panel.hidden = true;
       panel.setAttribute('aria-label', 'Importar clientes');
       btn.addEventListener('click', function () {
+        if (panel.hidden && formHasText()) { var t = FORM_BUSY_MSG; try { if (typeof root.toast === 'function') root.toast(t, 'warning'); } catch (_) {} return; }
         panel.hidden = !panel.hidden; btn.setAttribute('aria-expanded', String(!panel.hidden));
       });
       var help = el('p', 'ic-help', 'Sube un archivo CSV con las columnas nombre, documento, telefono, direccion y linea_credito. Desde Excel: Archivo → Guardar como → CSV. Solo se agregan clientes nuevos; los que ya existen no se tocan.');
