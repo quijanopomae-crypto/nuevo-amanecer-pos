@@ -461,7 +461,7 @@
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
     var head = p.type === 'compra' && (p.proveedor || p.documento) ? '<div class="note" data-docnote></div>' : '';
-    return '<h4>' + E(p.title) + '<span class="pill">Solo dueño</span></h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
+    return '<h4>' + E(p.title) + '<span class="pill">Solo Admin</span></h4>' + head + '<table>' + rows + '</table>' + warn + '<div class="note">' + E(note) + '</div>' +
       '<div class="meta"><span>Vence en <b data-left>5:00</b></span><span>Se usa una sola vez</span></div>' +
       '<div class="res" aria-live="polite"></div>' +
       '<div class="acts"><button type="button" class="na-asst-ok" data-ok>Confirmar</button><button type="button" class="na-asst-no" data-no>Cancelar</button>' +
@@ -472,7 +472,7 @@
   function tokenData(p) { try { var b = String(p.confirm_token || '').split('.')[0].replace(/-/g, '+').replace(/_/g, '/'); return JSON.parse(atob(b)) || {}; } catch (_) { return {}; } }
   function tokenExp(p) { return tokenData(p).exp || 0; }
   function tokenOp(p) { var op = tokenData(p).op; return typeof op === 'string' ? op : null; }
-  function addDenied(d) { var c = el('div', 'na-asst-card denied'); c.innerHTML = '<h4>No permitido</h4><div>' + C.esc(C.looksTechnical(d.message) ? C.friendlyError('forbidden_role').msg : d.message) + '</div><div class="note">El asistente no puede hacerlo por ti. Pídeselo al dueño.</div>'; msgsEl.appendChild(c); scrollEnd(); }
+  function addDenied(d) { var c = el('div', 'na-asst-card denied'); c.innerHTML = '<h4>No permitido</h4><div>' + C.esc(C.looksTechnical(d.message) ? C.friendlyError('forbidden_role').msg : d.message) + '</div><div class="note">El asistente no puede hacerlo por ti. Pídeselo al Admin.</div>'; msgsEl.appendChild(c); scrollEnd(); }
   function addCard(p, prompt) {
     var key = gate.add(p); if (!key) return;
     var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
@@ -583,7 +583,7 @@
   // de Inicio en ese momento (no solo se ocultan). Se borra el rol guardado en el teléfono (un recargo no reserva hueco).
   // assistant_off: aviso corto y neutro con el aviso del POS (window.toast sin tipo: sin color de error ni emoji).
   // forbidden_role / admin_only: el rol cambió; un ping pregunta el nuevo y, si todavía tiene asistente, se arma de nuevo con su nivel.
-  var ACCESS_LOST = { assistant_off: 1, forbidden_role: 1, admin_only: 1 }, OFF_NOTICE = 'El asistente fue desactivado por el dueño';
+  var ACCESS_LOST = { assistant_off: 1, forbidden_role: 1, admin_only: 1 }, OFF_NOTICE = 'El asistente fue desactivado por el Admin';
   function posNotice(msg) { try { if (typeof root.toast === 'function') root.toast(msg); } catch (_) {} }
   function dropUi() {
     padded.forEach(unpad); padded = [];
@@ -772,7 +772,7 @@
   function openPanel() {
     panelEl.hidden = false; rootEl.hidden = true; place(); applyPause(); mascotOn();
     if (!msgsEl.children.length) addMsg('a', isOwnerAccess() ? '¡Hola! Soy Burbuja, tu ayudante de gestión. Te digo qué falta reponer y cómo van las ventas, preparo compras y ajustes de stock, cambios de precio y costo, productos nuevos y documentos. Nada se guarda sin que pulses Confirmar.'
-      : '¡Hola! Soy Burbuja. Te digo el stock y qué falta reponer' + (access && access.level === 'consultas_documentos' ? ', y armo la lista de precios o de pedido' : '') + '. Los cambios (precios, stock, compras) los hace el dueño desde su teléfono.');
+      : '¡Hola! Soy Burbuja. Te digo el stock y qué falta reponer' + (access && access.level === 'consultas_documentos' ? ', y armo la lista de precios o de pedido' : '') + '. Los cambios (precios, stock, compras) los hace el Admin desde su teléfono.');
     var off = root.navigator.onLine === false; offline(off); if (off) setState('offline'); else setState('feliz', 1300); measureFrames();
     setTimeout(function () { try { inputEl.focus({ preventScroll: true }); } catch (_) {} }, 50);
   }
@@ -826,7 +826,7 @@
     // Al empleado no se le muestran opciones de dueño: sin botón de foto (leer factura es del dueño).
     if (photoBtn) photoBtn.hidden = !canPhoto(); // y sin lectura de fotos (vision:false), tampoco al dueño; el aviso de send() queda de respaldo
     var ch = panelEl.querySelector('.na-asst-chips'); if (ch) ch.innerHTML = chipsHtml();
-    var sm = panelEl.querySelector('.na-asst-head-t small'); if (sm) sm.textContent = isOwnerAccess() ? 'Gestión · dueño · prueba aislada' : 'Consultas · empleado · prueba aislada';
+    var sm = panelEl.querySelector('.na-asst-head-t small'); if (sm) sm.textContent = isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada';
   }
 
   // ---------- Tarjeta en Inicio ----------
@@ -978,8 +978,8 @@
       var r = await run(op, apr.approval_id); return r && r.ok ? { ok: true } : { msg: (r && r.msg) || 'No se pudo guardar.', stop: true };
     };
     var R = root.NA_ROLES;
-    if (R && typeof R.askPin === 'function' && creds()) return R.askPin(title, 'Escribe tu PIN de dueño.', save);
-    var pin = root.prompt ? root.prompt(title + ' — PIN del dueño') : ''; if (!pin) return Promise.resolve(false);
+    if (R && typeof R.askPin === 'function' && creds()) return R.askPin(title, 'Escribe tu PIN de Admin.', save);
+    var pin = root.prompt ? root.prompt(title + ': PIN del Admin') : ''; if (!pin) return Promise.resolve(false);
     return save(pin).then(function (r) { return r.ok ? true : (r.msg || false); });
   }
   var PHONE_SVG = '<svg viewBox="0 0 24 24" width="20" height="20"><rect x="7" y="2.5" width="10" height="19" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -992,16 +992,16 @@
         if (!d || !d.owners) { box.hidden = true; return; }
         box.hidden = false;
         var own = d.owners.map(function (o) {
-          return '<div class="na-asst-own-r" data-dev="' + C.esc(o.device_id) + '"><span class="ic" aria-hidden="true">' + devIcon(o.label) + '</span><div><strong>' + C.esc(o.label || 'Aparato de dueño') +
+          return '<div class="na-asst-own-r" data-dev="' + C.esc(o.device_id) + '"><span class="ic" aria-hidden="true">' + devIcon(o.label) + '</span><div><strong>' + C.esc(o.label || 'Aparato de Admin') +
             (o.this_device ? ' <em>Este teléfono</em>' : '') + '</strong><small class="st" role="status">' + (o.last_seen_at ? 'Último uso: ' + C.esc(String(o.last_seen_at).slice(0, 16).replace('T', ' ')) : '') + '</small></div>' +
-            (d.owners.length <= 1 ? '<button type="button" class="na-asst-quitar" data-quitar="1" disabled aria-disabled="true" title="Es el único aparato dueño">Quitar</button></div>' +
-              '<p class="na-asst-own-only">Es el único aparato dueño. Registra otro antes de quitarlo.</p>'
+            (d.owners.length <= 1 ? '<button type="button" class="na-asst-quitar" data-quitar="1" disabled aria-disabled="true" title="Es el único aparato Admin">Quitar</button></div>' +
+              '<p class="na-asst-own-only">Es el único aparato Admin. Registra otro antes de quitarlo.</p>'
               : '<button type="button" class="na-asst-quitar" data-quitar="1">Quitar</button></div>'); }).join('');
         var pend = (d.pending || []).map(function (p) {
-          return '<div class="na-asst-own-r pend" data-dev="' + C.esc(p.device_id) + '"><span class="ic" aria-hidden="true">' + PHONE_SVG + '</span><div><strong>' + C.esc(p.label || 'Teléfono nuevo') + '</strong><small class="st" role="status">Pidió ser dueño: ' + C.esc(String(p.requested_at || '').slice(0, 16).replace('T', ' ')) + '</small></div></div>' +
+          return '<div class="na-asst-own-r pend" data-dev="' + C.esc(p.device_id) + '"><span class="ic" aria-hidden="true">' + PHONE_SVG + '</span><div><strong>' + C.esc(p.label || 'Teléfono nuevo') + '</strong><small class="st" role="status">Pidió ser Admin: ' + C.esc(String(p.requested_at || '').slice(0, 16).replace('T', ' ')) + '</small></div></div>' +
             '<div class="na-asst-own-a" data-dev="' + C.esc(p.device_id) + '"><button type="button" class="na-asst-ok" data-decision="approve">Aprobar</button><button type="button" class="na-asst-no" data-decision="reject">Rechazar</button></div>'; }).join('');
-        box.innerHTML = '<h4>Aparatos de dueño (' + d.owners.length + ')</h4>' + own +
-          '<p class="na-asst-own-w">Un teléfono nuevo de dueño se aprueba solo desde un teléfono de dueño que ya esté en esta lista.</p>' +
+        box.innerHTML = '<h4>Aparatos de Admin (' + d.owners.length + ')</h4>' + own +
+          '<p class="na-asst-own-w">Un teléfono nuevo de Admin se aprueba solo desde un teléfono de Admin que ya esté en esta lista.</p>' +
           (pend ? '<h4>Pendiente de aprobar (' + d.pending.length + ')</h4>' + pend : '');
       }, function () { box.hidden = true; });
     };
@@ -1012,17 +1012,17 @@
       if (b.dataset.quitar) {
         // Aviso antes de quitar cualquier aparato dueño. El servidor nunca deja quitar el último (409 last_owner).
         var only = box.querySelectorAll('[data-quitar]').length <= 1;
-        if (only) { stEl.textContent = 'Es el único aparato dueño. Registra otro antes de quitarlo.'; return; }
-        if (root.confirm && !root.confirm('¿Quitar este aparato como dueño? Deja de ver el asistente de gestión y de aprobar cambios. Puedes volver a registrarlo después.')) return;
-        withApproval('Quitar aparato de dueño', 'assistant.owner_device', async function (op, apr) {
+        if (only) { stEl.textContent = 'Es el único aparato Admin. Registra otro antes de quitarlo.'; return; }
+        if (root.confirm && !root.confirm('¿Quitar este aparato como Admin? Deja de ver el asistente de gestión y de aprobar cambios. Puedes volver a registrarlo después.')) return;
+        withApproval('Quitar aparato de Admin', 'assistant.owner_device', async function (op, apr) {
           var r = await post(OWNER_DEV_PATH + '/revoke', { device_id: dev, operation_id: op }, { 'x-owner-approval': apr }, 15000);
           if (r && r.ok) { paint(); return { ok: true }; }
-          return { msg: r && (r.code === 'last_owner' || r.error === 'last_owner') ? 'Es el único aparato dueño. Registra otro antes de quitarlo.' : 'No se pudo quitar.' };
+          return { msg: r && (r.code === 'last_owner' || r.error === 'last_owner') ? 'Es el único aparato Admin. Registra otro antes de quitarlo.' : 'No se pudo quitar.' };
         }).then(function (ok) { if (ok !== true) stEl.textContent = typeof ok === 'string' ? ok : 'Sin cambios.'; });
         return;
       }
       var dec = b.dataset.decision; if (!dec) return;
-      withApproval(dec === 'approve' ? 'Aprobar teléfono de dueño' : 'Rechazar teléfono', 'assistant.owner_device', async function (op, apr) {
+      withApproval(dec === 'approve' ? 'Aprobar teléfono de Admin' : 'Rechazar teléfono', 'assistant.owner_device', async function (op, apr) {
         var r = await post(OWNER_DEV_PATH + '/approve', { device_id: dev, operation_id: op, decision: dec }, { 'x-owner-approval': apr }, 15000);
         if (r && r.ok) { paint(); return { ok: true }; } return { msg: 'No se pudo guardar.' };
       }).then(function (ok) { if (ok !== true) stEl.textContent = typeof ok === 'string' ? ok : 'Sin cambios.'; });
@@ -1039,7 +1039,7 @@
       doc.querySelectorAll('#naDevList').forEach(function (list) {
         var host = list.parentElement; if (!host || host.querySelector('.na-asst-reg')) return;
         var box = el('div', 'na-asst-reg'); box.dataset.state = 'emp';
-        box.innerHTML = '<h4>Este teléfono</h4><p class="st" role="status">Este teléfono ya es de empleado y no puede pasar a dueño así.</p><p>Si de verdad debe ser del dueño, el dueño lo cambia desde su teléfono en Usuarios y Aparatos.</p>';
+        box.innerHTML = '<h4>Este teléfono</h4><p class="st" role="status">Este teléfono ya es de empleado y no puede pasar a Admin así.</p><p>Si de verdad debe ser del Admin, el Admin lo cambia desde su teléfono en Usuarios y Aparatos.</p>';
         host.insertBefore(box, host.firstChild);
       });
       return;
@@ -1048,20 +1048,20 @@
     doc.querySelectorAll('#naDevList').forEach(function (list) {
       var host = list.parentElement; if (!host || host.querySelector('.na-asst-reg')) return;
       var box = el('div', 'na-asst-reg');
-      box.innerHTML = '<h4>Registrar este teléfono como dueño</h4><p>Hazlo solo en el teléfono del dueño. Escribe tu PIN de dueño. El PIN no se guarda en el teléfono.</p>' +
-        '<label>Escribe tu PIN de dueño<input type="password" inputmode="numeric" autocomplete="off" maxlength="8"></label><p class="st" role="status"></p>' +
-        '<button type="button" class="na-asst-ok">Registrar este teléfono como dueño</button>' +
-        '<p class="na-asst-own-w">Si ya hay un teléfono de dueño, este quedará esperando hasta que lo apruebes desde ese teléfono.</p>';
+      box.innerHTML = '<h4>Registrar este teléfono como Admin</h4><p>Hazlo solo en el teléfono del Admin. Escribe tu PIN de Admin. El PIN no se guarda en el teléfono.</p>' +
+        '<label>Escribe tu PIN de Admin<input type="password" inputmode="numeric" autocomplete="off" maxlength="8"></label><p class="st" role="status"></p>' +
+        '<button type="button" class="na-asst-ok">Registrar este teléfono como Admin</button>' +
+        '<p class="na-asst-own-w">Si ya hay un teléfono de Admin, este quedará esperando hasta que lo apruebes desde ese teléfono.</p>';
       host.insertBefore(box, host.firstChild);
       var inp = box.querySelector('input'), btn = box.querySelector('button'), st = box.querySelector('.st');
       btn.onclick = async function () {
-        var pin = inp.value.trim(); inp.value = ''; if (!pin) { st.textContent = 'Escribe tu PIN de dueño.'; return; }
+        var pin = inp.value.trim(); inp.value = ''; if (!pin) { st.textContent = 'Escribe tu PIN de Admin.'; return; }
         btn.disabled = true; var r = await post(OWNER_DEV_PATH + '/register', { pin: pin }, null, 15000);
-        if (r && r.ok) { st.textContent = 'Listo: este teléfono es de dueño.'; box.dataset.state = 'ok'; refreshAccess(); return; }
-        if (r && r.pending) { st.textContent = 'Esperando aprobación desde el teléfono del dueño.'; box.dataset.state = 'pend'; return; }
+        if (r && r.ok) { st.textContent = 'Listo: este teléfono es de Admin.'; box.dataset.state = 'ok'; refreshAccess(); return; }
+        if (r && r.pending) { st.textContent = 'Esperando aprobación desde el teléfono del Admin.'; box.dataset.state = 'pend'; return; }
         var e = String(r && r.error || '');
         if (/locked|too_many/.test(e) || (r && r.locked_until)) { st.textContent = 'Demasiados intentos. Espera 15 min.'; inp.disabled = true; inp.placeholder = 'Bloqueado'; box.dataset.state = 'lock'; return; }
-        if (/employee/.test(e)) { st.textContent = 'Este teléfono ya es de empleado y no puede pasar a dueño así.'; box.dataset.state = 'emp'; return; }
+        if (/employee/.test(e)) { st.textContent = 'Este teléfono ya es de empleado y no puede pasar a Admin así.'; box.dataset.state = 'emp'; return; }
         btn.disabled = false; st.textContent = /pin/.test(e) ? 'PIN incorrecto.' + (r.attempts_left != null ? (Number(r.attempts_left) === 1 ? ' Te queda 1 intento.' : ' Te quedan ' + r.attempts_left + ' intentos.') : '') : r && r.error === 'not_found' ? 'Esta opción todavía no está activa en el servidor.' : 'No se pudo registrar.';
       };
     });
@@ -1069,7 +1069,7 @@
 
   function paintAccess(box, d) {
     var l = box.querySelector('.na-asst-acc-l');
-    if (!d || !d.devices) { l.textContent = (d && d.error === 'admin_only') ? 'Solo el aparato del dueño puede cambiar esto.' : 'No se pudo cargar.'; return; }
+    if (!d || !d.devices) { l.textContent = (d && d.error === 'admin_only') ? 'Solo el aparato del Admin puede cambiar esto.' : 'No se pudo cargar.'; return; }
     if (!d.devices.length) { l.textContent = 'No hay aparatos de empleado vinculados.'; return; }
     l.innerHTML = d.devices.map(function (x, i) {
       return '<div class="na-asst-acc-r" data-dev="' + C.esc(x.device_id) + '" data-cur="' + C.esc(x.level) + '"><div><strong>' + C.esc(x.label || 'Aparato de empleado') + '</strong><small class="st" role="status"></small></div>' +
@@ -1092,10 +1092,10 @@
         return { msg: /locked/.test(e2) ? 'Demasiados intentos. Espera unos minutos.' : /pin/.test(e2) ? 'PIN incorrecto.' : 'No se pudo guardar.', stop: !/pin_invalid/.test(e2) };
       };
       if (R && typeof R.askPin === 'function' && creds()) {
-        R.askPin('Asistente: ' + LEVELS.filter(function (L) { return L[0] === lvl; })[0][1], 'Escribe tu PIN de dueño.', save).then(function (ok) { if (!ok) revert('Sin cambios.'); });
+        R.askPin('Asistente: ' + LEVELS.filter(function (L) { return L[0] === lvl; })[0][1], 'Escribe tu PIN de Admin.', save).then(function (ok) { if (!ok) revert('Sin cambios.'); });
       } else {
         // Prototipo local sin sesión: PIN en una ventana simple del navegador.
-        var pin = root.prompt ? root.prompt('PIN del dueño para cambiar el asistente') : '';
+        var pin = root.prompt ? root.prompt('PIN del Admin para cambiar el asistente') : '';
         if (!pin) { revert('Sin cambios.'); return; }
         save(pin).then(function (r) { if (!r.ok) revert(r.msg); });
       }
@@ -1117,7 +1117,7 @@
     rootEl.innerHTML = '<span class="na-asst-tag" aria-hidden="true"></span><button type="button" class="na-asst-bubble" aria-label="Abrir asistente Burbuja">' + charHtml() + '</button>';
     tagEl = rootEl.querySelector('.na-asst-tag');
     panelEl = el('section', 'na-asst-panel'); panelEl.hidden = true; panelEl.setAttribute('role', 'dialog'); panelEl.setAttribute('aria-label', 'Asistente Burbuja');
-    panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · dueño · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
+    panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
       '<div class="na-asst-offline" hidden>Asistente no disponible sin internet</div><div class="na-asst-msgs"></div><div class="na-asst-live" aria-live="polite" aria-atomic="true"></div>' +
       '<div class="na-asst-chips">' + chipsHtml() + '</div>' +
       '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*" capture="environment" hidden>' +

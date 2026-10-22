@@ -43,7 +43,7 @@ test('texto: cada serie en UNA span nowrap con «-» ASCII, sin U+2011; serie al
 });
 
 test('tablas y tarjetas: la serie en la celda (con etiqueta de tarjeta y con máscara al lado) va en una span; texto igual en trozos de 1/2/3/7/47', () => {
-  const txt = 'Compras:\n| Doc | Proveedor | Monto |\n|---|---|---|\n| B001-00000123 | Alicorp | S/ 10.00 |\n| F001-7 y T001-00012345 | [dato del dueño] | [dato del dueño] |\nFin E001-5';
+  const txt = 'Compras:\n| Doc | Proveedor | Monto |\n|---|---|---|\n| B001-00000123 | Alicorp | S/ 10.00 |\n| F001-7 y T001-00012345 | [dato del Admin] | [dato del Admin] |\nFin E001-5';
   for (const step of STEPS) {
     const h = paint(txt, step); const sp = codeSpans(h);
     assert.deepEqual(sp.map((x) => x.textContent), ['B001-00000123', 'F001-7', 'T001-00012345', 'E001-5'], 'trozos de ' + step);

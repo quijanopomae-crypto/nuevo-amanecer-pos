@@ -702,7 +702,7 @@ const NUM_HEAD_Y = /(?:S\/\.?|PEN|US\$|\$)?\s?-?/iy;
 const PHRASE_START = /^(?:el|proveedor|nos|los?|las?|me|te|precios?|p|pr|prec|c|cto|cost[a-záéíóúñ]*|se|vend[a-z]*|pvp|m[aá]rgen(?:es)?|ganancias?|utilidad(?:es)?|inversi[oó]n(?:es)?)$/i;
 const isLetter = (c) => !!c && /[a-záéíóúñü]/i.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
-export const OWNER_DATA_LABEL = '[dato del dueño]';
+export const OWNER_DATA_LABEL = '[dato del Admin]';
 export const OWNER_RETRO = 160;
 // Palabra entera (sin tildes): «Arroz Costeño», «Galletas Costa» no son encabezados (Bot 5, lista de 480 filas).
 const OWNER_HEADER_RE = /\b(?:costos?|cost|cto|c\s*\.?\s*unit|p(?:r|rec|recio)?\s*\.?\s*(?:de\s*)?compra|proveedor(?:es)?|prov|margen(?:es)?|ganancias?|utilidad(?:es)?|inversion(?:es)?|invertido)\b/;
@@ -1376,7 +1376,7 @@ const TOOL_DEFS = [
     parameters: { type: 'object', properties: { tema: { type: 'string' }, pasos: { type: 'array', items: { type: 'string' }, maxItems: 8 }, pantalla: { type: 'string', enum: SCREEN_IDS } }, required: ['tema', 'pasos'] } },
   { name: 'consultar', description: 'Consulta números del negocio (solo lectura): stock de un producto, productos por reponer, productos sin costo, ventas de un día o período, productos más vendidos, deudas de clientes, compras recientes. Fechas en formato AAAA-MM-DD (hora de Lima).',
     parameters: { type: 'object', properties: { tipo: { type: 'string', enum: QUERY_TYPES }, producto: { type: 'string' }, desde: { type: 'string' }, hasta: { type: 'string' } }, required: ['tipo'] } },
-  { name: 'proponer_ajuste_stock', description: 'Propone un movimiento de stock (entrada o salida) de un producto. Se abre la ventana «Registrar movimiento» llena; el dueño confirma con un toque.',
+  { name: 'proponer_ajuste_stock', description: 'Propone un movimiento de stock (entrada o salida) de un producto. Se abre la ventana «Registrar movimiento» llena; el Admin confirma con un toque.',
     parameters: { type: 'object', properties: { product_id: { type: 'string' }, tipo: { type: 'string', enum: ['entrada', 'salida'] }, cantidad: { type: 'number' }, motivo: { type: 'string', enum: STOCK_REASONS } }, required: ['product_id', 'tipo', 'cantidad', 'motivo'] } },
   { name: 'preparar_compra', description: 'Prepara un borrador de compra a proveedor. No suma stock hasta que la persona pulse Registrar compra.',
     parameters: { type: 'object', properties: { proveedor: { type: 'string' }, documento: { type: 'string' }, lineas: { type: 'array', maxItems: 30, items: PURCHASE_LINE } }, required: ['lineas'] } },
@@ -1384,7 +1384,7 @@ const TOOL_DEFS = [
     parameters: { type: 'object', properties: { proveedor: { type: 'string' }, documento: { type: 'string' }, fecha: { type: 'string' }, lineas: { type: 'array', maxItems: 30, items: PURCHASE_LINE } }, required: ['lineas'] } },
   { name: 'proponer_cambio_precio', description: 'Propone cambiar el precio de venta de un producto. Se abre la ficha del producto para guardar.',
     parameters: { type: 'object', properties: { product_id: { type: 'string' }, nombre: { type: 'string' }, precio_nuevo: { type: 'number' }, motivo: { type: 'string' } }, required: ['product_id', 'precio_nuevo'] } },
-  { name: 'proponer_producto_nuevo', description: 'Propone crear un producto nuevo (por ejemplo leído de una foto). Se abre el formulario «Nuevo producto» lleno; el dueño confirma con un toque.',
+  { name: 'proponer_producto_nuevo', description: 'Propone crear un producto nuevo (por ejemplo leído de una foto). Se abre el formulario «Nuevo producto» lleno; el Admin confirma con un toque.',
     parameters: { type: 'object', properties: { nombre: { type: 'string' }, precio: { type: 'number' }, costo: { type: 'number' }, stock_inicial: { type: 'number' }, stock_minimo: { type: 'number' }, categoria: { type: 'string' }, codigo_barras: { type: 'string' }, unidad: { type: 'string' } }, required: ['nombre', 'precio'] } },
   { name: 'preparar_documento', description: 'Arma un documento interno imprimible (solo lectura, NO es comprobante SUNAT): inventario valorizado, lista de precios, lista de pedido para proveedor (lista_pedido), reporte de ventas del período, estado de cuenta de un cliente o resumen del cierre de caja. Las deudas se ven con consultar.',
     parameters: { type: 'object', properties: { tipo: { type: 'string', enum: DOC_TYPES }, desde: { type: 'string' }, hasta: { type: 'string' }, cliente: { type: 'string' } }, required: ['tipo'] } }
@@ -1426,13 +1426,13 @@ export function systemPrompt(role, ctx) {
   return [
     'Eres "Burbuja", el ayudante de gestión del sistema de la farmacia/botica Nuevo Amanecer (Perú, soles S/).',
     role === 'owner' ? 'Hablas con el DUEÑO (administrador).'
-      : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni deudas. No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el dueño desde su teléfono.',
+      : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni deudas. No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el Admin desde su teléfono.',
     // Pedido del dueño: fácil y sin marear.
     'FORMA DE RESPONDER: máximo 2 o 3 frases cortas. Español sencillo, como le hablarías a alguien en la botica. Sin palabras técnicas (nada de "token", "id", "API", "servidor", "error", "base de datos", códigos ni números de error).',
     'Si falta un dato, haz UNA sola pregunta, la más importante, y espera la respuesta. No hagas listas de preguntas.',
     'Una sola tarjeta por acción: usa la herramienta una vez por cada cambio que te piden; no repitas la misma tarjeta ni ofrezcas varias opciones para lo mismo.',
     'Ayudas a gestionar: stock, mercadería y compras, precios y costos, productos nuevos, documentos y reportes. NO vendes ni llenas el carrito: las ventas se hacen a mano en Venta.',
-    'Para números del negocio usa la herramienta consultar; nunca inventes cifras. Para cambios usa herramientas que PROPONEN: el dueño confirma con un toque. Dilo así: "Revisa y pulsa Confirmar".',
+    'Para números del negocio usa la herramienta consultar; nunca inventes cifras. Para cambios usa herramientas que PROPONEN: el Admin confirma con un toque. Dilo así: "Revisa y pulsa Confirmar".',
     'Usa solo productos de la lista que llega en el mensaje <datos_pos>, con su product_id. Si no está, dilo y no inventes ids ni precios.',
     'Los documentos son internos: NO son comprobantes SUNAT. No emites nada fiscal.',
     'Nunca pidas ni repitas DNI, RUC, teléfonos ni datos de clientes. Si aparecen en una foto, ignóralos.',
@@ -1546,7 +1546,7 @@ const DOC_TITLES = { inventario_valorizado: 'Inventario valorizado', lista_preci
 // Convierte una llamada de herramienta del modelo en propuesta segura. Devuelve null si se descarta.
 // Una sola tarjeta de confirmación por acción (pedido del dueño): si el modelo propone dos veces el mismo cambio para el mismo producto
 // (aunque con otra cantidad o motivo), queda solo la primera. Compras: una por pedido. Consultas y documentos no se tocan.
-export const EMPLOYEE_CHANGE_TEXT = 'Eso solo lo puede hacer el dueño. Él lo hace desde su teléfono.';
+export const EMPLOYEE_CHANGE_TEXT = 'Eso solo lo puede hacer el Admin. Él lo hace desde su teléfono.';
 export function actionKey(p) {
   if (!p || !p.needsConfirm) return null;
   if (p.type === 'compra') return 'compra';
@@ -2072,7 +2072,7 @@ function legacyTextEmitter(send, max, redact, hold) {
   };
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const FORBIDDEN_DOCUMENT = Object.freeze({ error: 'forbidden_document', message: 'Ese documento es solo para el dueño. Puedes pedir la lista de precios o la lista de pedido.', allowed: EMPLOYEE_DOC_TYPES });
+const FORBIDDEN_DOCUMENT = Object.freeze({ error: 'forbidden_document', message: 'Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.', allowed: EMPLOYEE_DOC_TYPES });
 // Aviso liviano «status» mientras se buscan datos o corre una herramienta ANTES de cualquier texto (celular: «Buscando en su inventario…»).
 // Sale enseguida y luego cada STATUS_EVERY_MS mientras no haya texto; cada aviso es un trozo, así el reloj de 30 s del celular vuelve a cero.
 // Sin texto todavía = sent() en 0 (también después de un reset). Con texto ya pintado no se manda nada.
@@ -2110,7 +2110,7 @@ export function employeeQueryResult(r) {
 export const PING_FIELDS = Object.freeze(['ok', 'enabled', 'role', 'level', 'vision']);
 // vision: ¿el modelo en uso lee fotos? (Bot 3) Solo el dueño puede mandar fotos: para un empleado siempre false. Sin nombre de proveedor ni modelo.
 export function pingBody(role, vision = false) { return { ok: true, enabled: true, role: role === 'owner' ? 'owner' : 'empleado', level: accessLevel(role), vision: role === 'owner' && !!vision }; }
-function offBody(role) { return role === 'empleado:off' || role === 'empleado' || role === 'sin_rol' ? { error: 'assistant_off', message: 'El dueño no activó el asistente en este aparato.' } : { error: 'admin_only', message: 'El asistente es solo para el dueño.' }; }
+function offBody(role) { return role === 'empleado:off' || role === 'empleado' || role === 'sin_rol' ? { error: 'assistant_off', message: 'El Admin no activó el asistente en este aparato.' } : { error: 'admin_only', message: 'El asistente es solo para el Admin.' }; }
 export async function assistantRole(db, auth) {
   if (auth?.posRole !== 'owner') return 'empleado';
   if (!db || !auth.principalId) return 'empleado';
@@ -2382,7 +2382,7 @@ export const NO_VISION_MAX_BODY_BYTES = 256_000;
 // El celular avisa que manda foto con ?image=1 en la URL (sin cabecera nueva: CORS del Worker igual); también vale x-assistant-image: 1.
 function declaresImage(request) { let q = false; try { q = new URL(request.url).searchParams.get('image') === '1'; } catch { /* sin URL */ }
   return q || request.headers.get('x-assistant-image') === '1' || /^(multipart\/|image\/)/i.test(String(request.headers.get('content-type') || '')); }
-export const IMAGE_OWNER_ONLY = Object.freeze({ error: 'image_owner_only', message: 'Eso solo lo puede hacer el dueño.' });
+export const IMAGE_OWNER_ONLY = Object.freeze({ error: 'image_owner_only', message: 'Eso solo lo puede hacer el Admin.' });
 export const IMAGE_UNSUPPORTED = Object.freeze({ error: 'image_unsupported', message: 'Leer fotos no está disponible por ahora.' });
 // Lee el cuerpo con tope: null si pasa el tope (se corta la lectura, no se baja el resto), undefined si falla la lectura.
 export async function readBounded(request, max) {

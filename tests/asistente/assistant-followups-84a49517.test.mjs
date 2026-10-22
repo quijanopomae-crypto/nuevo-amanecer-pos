@@ -10,7 +10,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error('red prohibida en las pruebas'); };
 test.after(() => { globalThis.fetch = realFetch; });
 const EMP = 'empleado:consultas';
-const M = '[dato del dueño]';
+const M = '[dato del Admin]';
 const red = (t, role = EMP) => redactFor(role)(t);
 function emit(text, role, n) { let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, redactFor(role), role === 'owner' ? null : ownerHold, false); for (let i = 0; i < text.length; i += n) e.push(text.slice(i, i + n)); e.flush(); return o; }
 const SIZES = [1, 2, 3, 7, 13, 47];

@@ -1,4 +1,4 @@
-// Registro del aparato dueño (detrás de ASSISTANT_OWNER_BOOTSTRAP=1). Base real del laboratorio y Worker real.
+// Registro del aparato Admin (detrás de ASSISTANT_OWNER_BOOTSTRAP=1). Base real del laboratorio y Worker real.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
@@ -6,7 +6,7 @@ import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
 const MIG = ['0024_pos_roles_owner_pin.sql', '0025_pos_reviews_pin_failures.sql'];
 const PIN = '4821', B = '/auth/assistant/owner-device';
 async function setup(t, { log = true, flag = '1', owner = true } = {}) {
-  const f = await activeCanon(t, { migrations: log ? [...MIG, '0035_pos_owner_device_log.sql'] : MIG });
+  const f = await activeCanon(t, { migrations: log ? [...MIG, '0036_pos_owner_device_log.sql'] : MIG });
   Object.assign(f.env, { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: 'secreto-de-prueba-0123456789abcdef', ASSISTANT_DEMO: '1', ASSISTANT_OWNER_BOOTSTRAP: flag });
   for (const d of ['dueno', 'nuevo', 'otro', 'emp']) f.addDevice(d, 'writer', 'active', 'tok-' + d);
   const at = new Date().toISOString();
@@ -26,7 +26,7 @@ test('sin bandera ASSISTANT_OWNER_BOOTSTRAP: 404 y nada cambia', async (t) => {
   assert.equal(role('nuevo'), null);
 });
 
-test('sin la bitácora (migración 0035 no aplicada): falla cerrado 503, no registra', async (t) => {
+test('sin la bitácora (migración 0036 no aplicada): falla cerrado 503, no registra', async (t) => {
   const { call, role } = await setup(t, { log: false, owner: false });
   const r = await call('tok-nuevo', B + '/register', { pin: PIN });
   assert.equal(r.status, 503); assert.equal(r.body.error, 'owner_device_log_missing'); assert.equal(role('nuevo'), null);
@@ -43,7 +43,7 @@ test('primer dueño: botón + PIN con 0 dueños -> owner, anotado; sin PIN no', 
   assert.equal(r2.status, 202); assert.equal(r2.body.status, 'esperando_aprobacion'); assert.equal(role('otro'), null);
 });
 
-test('un aparato empleado nunca se registra como dueño (409, sin gastar intentos de PIN)', async (t) => {
+test('un aparato empleado nunca se registra como Admin (409, sin gastar intentos de PIN)', async (t) => {
   const { f, call, role } = await setup(t);
   // El gate de rutas ya lo corta (403 forbidden_role); si llegara a la ruta, 409 employee_device_cannot_register. Nunca 200.
   for (let i = 0; i < 7; i++) { const r = await call('tok-emp', B + '/register', { pin: i % 2 ? PIN : '0000' }); assert.ok(['forbidden_role', 'employee_device_cannot_register'].includes(r.body.error), JSON.stringify(r.body)); }
@@ -94,7 +94,7 @@ test('rechazar un pendiente (approve con decision reject): no queda dueño y se 
   assert.equal((await call('tok-dueno', B + '/approve', { device_id: 'session:otro', operation_id: 'op-w', decision: 'si' })).status, 400);
 });
 
-test('quitar el ÚLTIMO aparato dueño: 409 last_owner (sin gastar la aprobación); con dos dueños sí, y el quitado pierde el asistente', async (t) => {
+test('quitar el ÚLTIMO aparato Admin: 409 last_owner (sin gastar la aprobación); con dos dueños sí, y el quitado pierde el asistente', async (t) => {
   const { call, approval, role } = await setup(t);
   const a1 = await approval('tok-dueno', 'op-q');
   const last = await call('tok-dueno', B + '/revoke', { device_id: 'session:dueno', operation_id: 'op-q' }, { 'x-owner-approval': a1 });

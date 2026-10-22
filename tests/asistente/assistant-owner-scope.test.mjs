@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTextEmitter, redactFor } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 
-const EMP = 'empleado:consultas', red = redactFor(EMP), M = '[dato del dueño]';
+const EMP = 'empleado:consultas', red = redactFor(EMP), M = '[dato del Admin]';
 function emit(text, n) { let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red); for (let i = 0; i < text.length; i += n) e.push(text.slice(i, i + n)); e.flush(); return o; }
 const BUL = [['- ', '- '], ['* ', '* '], ['• ', '• '], ['1. ', '2. '], ['1) ', '2) ']];
 // [texto, montos que se ven, montos que se tapan]
@@ -41,7 +41,7 @@ test('Bot 2 (a)–(d): los casos tapados de más ahora se ven; lo del dueño en 
   for (const [t, vis, hid] of VISIBLE) { const o = red(t); for (const a of vis) assert.ok(o.includes(a), JSON.stringify(t) + ' → ' + JSON.stringify(o)); for (const a of hid) assert.ok(!o.includes(a), JSON.stringify(o)); }
 });
 test('Bot 2 (a)–(d): frases de compra en la línea siguiente, presentación antes de la lista y título de compras siguen tapando todo', () => {
-  for (const t of MASKED) { const o = red(t); assert.ok(o.includes(M) && !/S\/ \d/.test(o.replace(/costo: \[dato del dueño\]/, '')), JSON.stringify(t) + ' → ' + JSON.stringify(o)); }
+  for (const t of MASKED) { const o = red(t); assert.ok(o.includes(M) && !/S\/ \d/.test(o.replace(/costo: \[dato del Admin\]/, '')), JSON.stringify(t) + ' → ' + JSON.stringify(o)); }
 });
 for (const n of [1, 2, 3, 5, 7, 47]) test('Bot 2 (a)–(d) en partes de ' + n + ': igual a lo final', () => {
   for (const t of [...VISIBLE.map((x) => x[0]), ...MASKED]) assert.equal(emit(t, n), red(t), n + ' ' + JSON.stringify(t));

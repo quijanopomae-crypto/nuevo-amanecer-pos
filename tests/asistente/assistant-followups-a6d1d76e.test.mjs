@@ -52,7 +52,7 @@ test('«sigue» (Bot 5): la continuación con filas, párrafo largo y más filas
   const cont = '| Producto 5 | S/ 1.85 |\n\n' + LONG + '\n| Producto 6 | S/ 1.86 |\n\nOtra cosa: el local abre a las ocho de la mañana todos los días.\n\n| Producto 7 | S/ 1.87 |';
   const p = primed(cont); assert.ok(!/1\.8[567]/.test(p), JSON.stringify(p));
   // superconjunto: todo lo tapado sin contexto sigue tapado con él (aquí sin contexto se ven, pues no hay cabecera)
-  const plain = red(cont); assert.ok(plain.split('[dato del dueño]').length <= p.split('[dato del dueño]').length);
+  const plain = red(cont); assert.ok(plain.split('[dato del Admin]').length <= p.split('[dato del Admin]').length);
   // cabecera nueva o título de venta en la continuación: vuelve a decidir como siempre
   assert.match(primed('| Producto 5 | S/ 1.85 |\n\n' + LONG + '\n\nPrecios de venta:\n| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'), /4\.20/);
   assert.match(primed('| Producto 5 | S/ 1.85 |\n\n' + LONG + '\n\n| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'), /4\.20/);
@@ -112,7 +112,7 @@ test('celular (Bot 4): filas tras un párrafo se dibujan como filas con la cabec
     const tables = f.kids.filter((k) => k.className === 'na-asst-tbl'); assert.equal(tables.length, 2, 'dos tablas (la segunda retoma la cabecera) en pasos de ' + step);
     assert.deepEqual(ths(tables[1]), ['Producto', 'Precio'], 'cabecera reusada de lo pintado');
     assert.ok(f.kids.filter((k) => k.nodeType === 3).every((k) => !k.data.includes('|')), 'ninguna fila como texto con «|»');
-    assert.ok(txt(tables[1]).includes('Producto 1') && txt(tables[1]).includes('[dato del dueño]'));
+    assert.ok(txt(tables[1]).includes('Producto 1') && txt(tables[1]).includes('[dato del Admin]'));
     assert.ok(f.kids.some((k) => k.nodeType === 3 && k.data.includes('Esta nota')), 'el párrafo queda como texto');
   }
   // (Bot 4 sobre 25ffde10) otra cantidad de columnas tras la tabla: también fila (las celdas que sobran se juntan en la última), nunca texto con «|»

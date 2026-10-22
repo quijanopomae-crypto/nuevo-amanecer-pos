@@ -15,7 +15,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error('red prohibida en las pruebas'); };
 test.after(() => { globalThis.fetch = realFetch; });
 const EMP = 'empleado:consultas';
-const M = '[dato del dueño]';
+const M = '[dato del Admin]';
 const red = (t, role = EMP) => redactFor(role)(t);
 function emit(text, role, n, max = 1e9, prime = false) { let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, max, redactFor(role), role === 'owner' ? null : ownerHold, prime); for (let i = 0; i < text.length; i += n) e.push(text.slice(i, i + n)); e.flush(); return o; }
 const SIZES = [1, 2, 3, 7, 13, 47];
@@ -217,9 +217,9 @@ test("B) tarjeta de compra del dueño: RUC de empresa y comprobante exactos; RUC
   const ok = toProposal({ name: 'preparar_compra', arguments: { proveedor: 'Alicorp SAC RUC 20100055237', documento: 'F001-00012345 cód. 12345678', lineas: LINEAS } }, 'owner', { products: [] }, 1);
   assert.equal(ok.proveedor, 'Alicorp SAC RUC 20100055237'); assert.equal(ok.documento, 'F001-00012345 cód. 12345678'); assert.equal(ok.completar, undefined);
   // (desde 84a49517, Bot 2) el campo conserva la parte EXACTA antes de la máscara, sin la etiqueta suelta («RUC», «DNI», «clave:»)
-  const PREFIX = { 'Bodega Juan RUC 10456789012': 'Bodega Juan', 'pedido 12345678': 'pedido', 'Juan DNI 45678912': 'Juan', 'clave: Zq9xK2 F001-1': '', 'Alicorp RUC *******5237': 'Alicorp', 'DNI ****5678': '', 'Prov [dato del dueño]': 'Prov' };
+  const PREFIX = { 'Bodega Juan RUC 10456789012': 'Bodega Juan', 'pedido 12345678': 'pedido', 'Juan DNI 45678912': 'Juan', 'clave: Zq9xK2 F001-1': '', 'Alicorp RUC *******5237': 'Alicorp', 'DNI ****5678': '', 'Prov [dato del Admin]': 'Prov' };
   for (const [prov, docu, miss] of [['Bodega Juan RUC 10456789012', 'F001-00012345', ['proveedor']], ['Alicorp SAC', 'pedido 12345678', ['documento']], ['Juan DNI 45678912', 'clave: Zq9xK2 F001-1', ['proveedor', 'documento']],
-    ['Alicorp RUC *******5237', 'DNI ****5678', ['proveedor', 'documento']], ['Prov [dato del dueño]', 'F001-2', ['proveedor']]]) {
+    ['Alicorp RUC *******5237', 'DNI ****5678', ['proveedor', 'documento']], ['Prov [dato del Admin]', 'F001-2', ['proveedor']]]) {
     const p = toProposal({ name: 'preparar_compra', arguments: { proveedor: prov, documento: docu, lineas: LINEAS } }, 'owner', { products: [] }, 1);
     assert.deepEqual(p.completar, miss, prov + ' / ' + docu); for (const n of miss) assert.equal(p[n], PREFIX[n === 'proveedor' ? prov : docu]);
     assert.ok(!/\*{3}|\[(?:dato|oculto)/.test(JSON.stringify(p)), 'nunca una máscara en la tarjeta: ' + JSON.stringify(p)); }

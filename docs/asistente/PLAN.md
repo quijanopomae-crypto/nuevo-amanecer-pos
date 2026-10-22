@@ -69,8 +69,8 @@ Importante: DeepSeek procesa los datos en servidores en China. Por eso el protot
 1. **`product.create` en el servidor del POS** (commit aparte `f5b3587c`): pasa por `ownerGate` (dueño, o PIN del dueño ligado al `operation_id`). Hoy cualquier aparato puede crear productos.
 2. **Registro del aparato del dueño** (`pos-owner-device.js`, detrás de `ASSISTANT_OWNER_BOOTSTRAP=1`, commit aparte): botón explícito «Registrar este teléfono como dueño» con PIN; solo en un teléfono sin fila; con 0 dueños queda dueño, si ya hay uno queda «esperando aprobación» y el dueño lo aprueba o rechaza desde su teléfono con PIN; límite de PIN por aparato (5 fallos → 15 min); un empleado nunca sube a dueño; nunca se quita el último dueño (409 `last_owner`).
 3. **Migraciones escritas y NO aplicadas** (antes de aplicarlas: copia de respaldo en R2 y OK del jefe):
-   - `0034_pos_assistant_access_log.sql`: bitácora de cambios de nivel de empleados. Sin la tabla los cambios funcionan pero no quedan anotados (`logged:false`).
-   - `0035_pos_owner_device_log.sql`: bitácora del registro de dueños. Sin la tabla las rutas de dueño fallan cerrado (503): no se registra nada sin bitácora.
+   - `0035_pos_assistant_access_log.sql`: bitácora de cambios de nivel de empleados. Sin la tabla los cambios funcionan pero no quedan anotados (`logged:false`).
+   - `0036_pos_owner_device_log.sql`: bitácora del registro de dueños. Sin la tabla las rutas de dueño fallan cerrado (503): no se registra nada sin bitácora.
 4. Acciones nuevas en `APPROVAL_ACTIONS` (`pos-roles.js`, aditivo): `assistant.employee_access`, `assistant.owner_device`; y en `OWNER_COMMANDS`: `product.create`, `assistant.employee_access`, `assistant.owner_device`.
 5. **Pendiente del jefe (no se cambió):** quitar un aparato dueño lo deja como **empleado** (no le borra la fila). Hay que decidir si debe quedar sin rol.
 6. **Pendiente del jefe (no se cambió):** el tope global de **20 PIN fallidos** es compartido por todos los aparatos; un aparato puede gastar ese cupo y bloquear el PIN del dueño en los demás.

@@ -40,7 +40,7 @@ test('B) servidor: «manual» fuera de la propuesta firmada; cada rechazo (4xx, 
   const store = createMemoryUsageStore();
   const good = { proveedor: 'Bodega Juan RUC 10456789012', documento: 'F001-00012345 pedido 87654321' };
   // 422 fields_required: falta, vacío, con máscara, no texto
-  for (const manual of [undefined, {}, { proveedor: '   ', documento: good.documento }, { proveedor: 'Bodega Juan RUC *******9012', documento: good.documento }, { proveedor: 'Bodega Juan [dato del dueño]', documento: 'x' },
+  for (const manual of [undefined, {}, { proveedor: '   ', documento: good.documento }, { proveedor: 'Bodega Juan RUC *******9012', documento: good.documento }, { proveedor: 'Bodega Juan [dato del Admin]', documento: 'x' },
     { proveedor: ['Bodega'], documento: 'x' }, { proveedor: good.proveedor }]) {
     const r = await confirm(p, manual === undefined ? {} : { manual }, store);
     assert.equal(r.status, 422, JSON.stringify(manual)); assert.equal(r.body.error, 'fields_required'); assert.ok(!r.body.ok && !r.body.proposal && r.body.fields.length, JSON.stringify(r.body));
@@ -72,7 +72,7 @@ test('B) servidor: «manual» fuera de la propuesta firmada; cada rechazo (4xx, 
 test('B) servidor: una máscara en CUALQUIER campo de la propuesta (firmada así) → 422 fields_required; sin máscara ni completar, como siempre', async () => {
   const base = toProposal({ name: 'preparar_compra', arguments: { proveedor: 'Alicorp SAC', documento: 'F001-00012345', lineas: LINEAS } }, 'owner', { products: [] }, 1);
   const clean = await confirm(base, {}, createMemoryUsageStore()); assert.equal(clean.status, 200, JSON.stringify(clean.body));
-  for (const [k, v] of [['proveedor', 'Alicorp RUC *******5237'], ['documento', 'F001-[DNI oculto]'], ['title', 'Compra [dato del dueño]'], ['lineas', [{ nombre: 'Galleta DNI ****5678', cantidad: 1, costo_unitario: 1 }]]]) {
+  for (const [k, v] of [['proveedor', 'Alicorp RUC *******5237'], ['documento', 'F001-[DNI oculto]'], ['title', 'Compra [dato del Admin]'], ['lineas', [{ nombre: 'Galleta DNI ****5678', cantidad: 1, costo_unitario: 1 }]]]) {
     const p = { ...base, [k]: v }; const r = await confirm(p, {}, createMemoryUsageStore());
     assert.equal(r.status, 422, k); assert.equal(r.body.error, 'fields_required'); assert.ok(r.body.fields.includes(k), JSON.stringify(r.body)); }
   // otro tipo de tarjeta con máscara: igual

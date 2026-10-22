@@ -128,7 +128,7 @@ test('Bot 5: empleado en partes -> ni el modelo ni ningún trozo (status, text, 
     { role: 'empleado:consultas', fetch: dsSeq([first, second], bodies), reader: OWNER_READER, statusEveryMs: 50 });
   assert.match(r.headers.get('content-type'), /event-stream/);
   const raw = await new Response(r.body).text();
-  for (const c of CANARY) { assert.ok(!raw.includes(c), 'trozo con dato del dueño ' + c); for (const b of bodies) assert.ok(!b.includes(c), 'al modelo llegó ' + c); }
+  for (const c of CANARY) { assert.ok(!raw.includes(c), 'trozo con dato del Admin ' + c); for (const b of bodies) assert.ok(!b.includes(c), 'al modelo llegó ' + c); }
   assert.ok(!/costo|margen|ganancia/i.test(raw), 'ninguna llave de costo en el canal');
   assert.equal(bodies.length, 2); assert.ok(!/"costo"|margen|ganancia/.test(bodies[1]), 'resultado de la herramienta para el modelo ya sin datos del dueño');
   assert.match(raw, /event: final/);

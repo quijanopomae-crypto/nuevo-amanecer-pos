@@ -153,7 +153,7 @@ test('5) fillPurchase: sin el producto en el catálogo local un nombre tapado NO
   const ctx = vm.createContext({ C, Event: class { constructor(t) { this.type = t; } }, deps: { productos: () => [{ id: 'P1', nombre: 'Leche Gloria 400g' }] } });
   const fill = vm.runInContext('(' + src + ')', ctx);
   const w = DOC.body.appendChild(purchaseDialog());
-  const p = { type: 'compra', proveedor: 'Bodega Juan', documento: 'F001-', lineas: [{ product_id: 'P1', nombre: 'Leche [dato del dueño]', cantidad: 2, costo_unitario: 3 }, { nombre: 'Arroz DNI ****5678', cantidad: 1, costo_unitario: 4 }, { nombre: 'Azúcar rubia', cantidad: 5, costo_unitario: 2 }, { nombre: '▪▪▪▪ Fideo', cantidad: 1 }] };
+  const p = { type: 'compra', proveedor: 'Bodega Juan', documento: 'F001-', lineas: [{ product_id: 'P1', nombre: 'Leche [dato del Admin]', cantidad: 2, costo_unitario: 3 }, { nombre: 'Arroz DNI ****5678', cantidad: 1, costo_unitario: 4 }, { nombre: 'Azúcar rubia', cantidad: 5, costo_unitario: 2 }, { nombre: '▪▪▪▪ Fideo', cantidad: 1 }] };
   fill(w, p);
   const prods = w.querySelectorAll('.na-pur-prod');
   assert.deepEqual(prods.map((i) => i.value), ['Leche Gloria 400g', '', 'Azúcar rubia', '']);

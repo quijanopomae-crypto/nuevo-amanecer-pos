@@ -1,5 +1,5 @@
 // Bot 4/3/5 sobre 66f1ecb5: tablas en la respuesta del asistente (solo en el celular, sobre texto YA filtrado por el servidor).
-// createElement + textContent únicamente; fila por fila mientras llega; «[dato del dueño]» sin partirse; foto oculta con vision:false; proveedor en uso.
+// createElement + textContent únicamente; fila por fila mientras llega; «[dato del Admin]» sin partirse; foto oculta con vision:false; proveedor en uso.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -58,7 +58,7 @@ for (const n of [1, 2, 5, 47]) {
 }
 test('propiedad: con cortes al azar el DOM es igual al de una sola vez (texto, tablas, cabeceras falsas, filas sin salto final)', () => {
   let seed = 99; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648); const pick = (a) => a[Math.floor(rnd() * a.length)];
-  const P = ['| A | B |\n', '|---|---|\n', '| x | [dato del dueño] |\n', '| y | S/ 2.50 |', 'Texto normal. ', 'Hola\n', '\n', '  | sangría | z |\n', '---|---\n', '| :--- | ---: |\n', 'a | b\n', '<b>x</b> ', '| <img src=x onerror=alert(1)> | <script>alert(1)</script> |\n'];
+  const P = ['| A | B |\n', '|---|---|\n', '| x | [dato del Admin] |\n', '| y | S/ 2.50 |', 'Texto normal. ', 'Hola\n', '\n', '  | sangría | z |\n', '---|---\n', '| :--- | ---: |\n', 'a | b\n', '<b>x</b> ', '| <img src=x onerror=alert(1)> | <script>alert(1)</script> |\n'];
   for (let i = 0; i < 1500; i++) { let t = ''; const k = 1 + Math.floor(rnd() * 12); for (let j = 0; j < k; j++) t += pick(P);
     const one = render(t, t.length || 1).html, mode = rnd(); const size = () => (mode < 0.3 ? 1 : mode < 0.6 ? 1 + Math.floor(rnd() * 6) : 1 + Math.floor(rnd() * 40));
     assert.equal(render(t, size).html, one, JSON.stringify(t)); }
@@ -78,7 +78,7 @@ test('seguridad (Bot 5): <img onerror> y <script> en celdas solo como texto; nad
   assert.ok(src.length > 500 && !/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(src));
   assert.match(UI, /function paintReply\(m, t, opts\) \{ m\.textContent = ''; if \(m\.classList\) m\.classList\.remove\('na-asst-wide'\); var r = C\.createReplyRenderer\(doc,/);
 });
-test('el renderer trabaja DESPUÉS del filtro: el costo original no está en el DOM ni en atributos; «[dato del dueño]» en un span que no se parte', () => {
+test('el renderer trabaja DESPUÉS del filtro: el costo original no está en el DOM ni en atributos; «[dato del Admin]» en un span que no se parte', () => {
   const src = 'Te paso costo y precio:\n| Producto | Costo | PVP |\n|---|---|---|\n| Galleta | S/ 7.77 | S/ 2.50 |\n| Arroz | 3.21 | S/ 4.20 |\n';
   for (const n of [1, 5, 47]) {
     // lo que de verdad llega al celular: el emisor del servidor (empleado), en partes
@@ -88,7 +88,7 @@ test('el renderer trabaja DESPUÉS del filtro: el costo original no está en el 
     walk(host, (k) => { all += k.nodeType === 3 ? k.data : Object.values(k.attrs).join(' ') + ' ' + k.className; });
     assert.ok(!/7\.77|3\.21/.test(all), all);
     const masks = []; walk(host, (k) => { if (k.className === 'na-asst-mask') masks.push(k.textContent); });
-    assert.deepEqual(masks, ['[dato del dueño]', '[dato del dueño]']);
+    assert.deepEqual(masks, ['[dato del Admin]', '[dato del Admin]']);
     assert.ok(all.includes('S/\u00a02.50') && all.includes('S/\u00a04.20'));
   }
   assert.match(CSS, /\.na-asst-mask\{white-space:nowrap\}/);

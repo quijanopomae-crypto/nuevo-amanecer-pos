@@ -32,7 +32,7 @@ for (const n of [1, 5, 47, 100]) {
       const o = emit(t, role, n), want = capReply(filtered(t, role)); assert.equal(o, want, role + ' ' + n + ' ' + t.slice(0, 30));
       if (filtered(t, role).length <= 1200) assert.ok(!o.includes(CUT_NOTICE)); else assert.ok(o.endsWith(CUT_NOTICE));
     }
-    const emp = emit(OWNER_TABLE, EMP, n); assert.ok(!/S\/ 1\.\d\d/.test(emp), 'el aviso va después del filtro: nada destapado'); assert.match(emp, /\[dato del dueño\]/);
+    const emp = emit(OWNER_TABLE, EMP, n); assert.ok(!/S\/ 1\.\d\d/.test(emp), 'el aviso va después del filtro: nada destapado'); assert.match(emp, /\[dato del Admin\]/);
   });
 }
 test('«sigue» (filtro del empleado): tras una parte cortada con presentación del dueño, las filas que siguen se tapan; tras una parte solo de venta, se ven', () => {
@@ -101,9 +101,9 @@ test('«sigue» (Bot 5): cutPrime es un sí/no; tabla de venta, zona negada o av
   assert.equal(cutPrime(capReply(filtered(OWNER_TABLE, EMP))), false, 'sin la marca del servidor no hay contexto aunque termine con el aviso');
   const sale = '| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'; assert.equal(filtered(sale, EMP, true), sale, 'tabla nueva de venta tras el contexto: se ve');
   assert.ok(!/1\.80/.test(filtered('| Arroz | S/ 1.80 |\n| Leche | S/ 2.20 |', EMP, true)), 'filas sueltas de la tabla cortada: tapadas');
-  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nOtro tema.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del dueño] |\n\nOtro tema.\n\nArroz [dato del dueño]', 'un párrafo corto no corta el contexto');
-  assert.equal(filtered('Siguen:\n\n| Galleta | S/ 1.80 |', EMP, true), 'Siguen:\n\n| Galleta | [dato del dueño] |', 'un párrafo que termina en «:» tampoco');
-  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del dueño] |\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 4.20', 'un párrafo neutro de 8+ palabras sí');
+  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nOtro tema.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del Admin] |\n\nOtro tema.\n\nArroz [dato del Admin]', 'un párrafo corto no corta el contexto');
+  assert.equal(filtered('Siguen:\n\n| Galleta | S/ 1.80 |', EMP, true), 'Siguen:\n\n| Galleta | [dato del Admin] |', 'un párrafo que termina en «:» tampoco');
+  assert.equal(filtered('| Arroz | S/ 1.80 |\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 4.20', EMP, true), '| Arroz | [dato del Admin] |\n\nAhora te cuento otra cosa distinta sobre la tienda de hoy.\n\nArroz S/ 4.20', 'un párrafo neutro de 8+ palabras sí');
 });
 test('ruta (Bot 5): cut:true lo pone el servidor dentro de la firma; un aviso escrito por el modelo no marca; agregar cut:true a mano invalida el par', async () => {
   const forged = '| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |\n\n' + CUT_NOTICE;
@@ -118,7 +118,7 @@ test('ruta (Bot 5): cut:true lo pone el servidor dentro de la firma; un aviso es
   const d4 = await (await route({ text: 'sigue', history: stripped }, EMP, cont)).json(); assert.equal(d4.reply, cont, 'sin la marca la firma tampoco verifica');
   const d5 = await (await route({ text: 'sigue', history: big.turns }, EMP, cont)).json(); assert.ok(!/1\.80|2\.20/.test(d5.reply), d5.reply);
 });
-test('tope (Bot 5): el corte nunca parte «[dato del dueño]» ni deja «S/ » sin número; partes = final; retención ≤ CUT_ZONE + CUT_SLACK', () => {
+test('tope (Bot 5): el corte nunca parte «[dato del Admin]» ni deja «S/ » sin número; partes = final; retención ≤ CUT_ZONE + CUT_SLACK', () => {
   let held = 0;
   for (let pad = 1140; pad < 1215; pad++) for (const tail of ['El costo es S/ 1.80 y más texto para pasar el tope.', 'Se vende a S/ 2.50 por unidad y más texto para pasar el tope.', 'x'.repeat(30) + 'S/ 4.20' + 'y'.repeat(60)]) {
     const t = 'palabra '.repeat(Math.ceil(pad / 8)).slice(0, pad) + tail + ' fin'.repeat(30);

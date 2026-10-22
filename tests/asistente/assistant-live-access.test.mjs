@@ -64,10 +64,10 @@ test('entrar a Inicio sin cambios: sigue Apagado y sigue sin bajar nada; ya carg
 });
 
 test('UI: 403 assistant_off / forbidden_role / admin_only en chat o confirm quita panel, burbuja y tarjeta, borra el rol guardado y avisa neutro', () => {
-  assert.match(UI, /var ACCESS_LOST = \{ assistant_off: 1, forbidden_role: 1, admin_only: 1 \}, OFF_NOTICE = 'El asistente fue desactivado por el dueño';/);
+  assert.match(UI, /var ACCESS_LOST = \{ assistant_off: 1, forbidden_role: 1, admin_only: 1 \}, OFF_NOTICE = 'El asistente fue desactivado por el Admin';/);
   // aviso con el toast del POS SIN tipo (sin color de error) y sin emoji
   assert.match(UI, /function posNotice\(msg\) \{ try \{ if \(typeof root\.toast === 'function'\) root\.toast\(msg\); \} catch \(_\) \{\} \}/);
-  assert.doesNotMatch('El asistente fue desactivado por el dueño', /[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u);
+  assert.doesNotMatch('El asistente fue desactivado por el Admin', /[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u);
   // se QUITAN del DOM (no solo se ocultan) y se borra el rol guardado: un recargo no reserva hueco
   const drop = UI.slice(UI.indexOf('function dropUi()'), UI.indexOf('function accessLost('));
   assert.match(drop, /if \(panelEl\) panelEl\.remove\(\); if \(rootEl\) rootEl\.remove\(\);/); assert.match(drop, /padded\.forEach\(unpad\)/);
@@ -153,7 +153,7 @@ test('tarjeta sin PIN: resumen antes → después, «Confirmar» de un toque que
   assert.match(card, /E\(p\.nombre\) \+ '<\/td><td class="r">' \+ soles\(p\.precio_actual\) \+ ' → <b>' \+ soles\(p\.precio_nuevo\)/, 'precio: producto, antes → después');
   assert.match(card, /E\(p\.stock_actual\) \+ ' → <b>' \+ E\(p\.stock_despues\)/, 'ajuste: stock antes → después');
   assert.match(card, /soles\(p\.costo_actual\) : 'sin costo'\) \+ ' → <b>' \+ soles\(p\.costo_nuevo\)/, 'costo: antes → después');
-  assert.match(card, /<span class="pill">Solo dueño<\/span>/); assert.match(card, /data-ok>Confirmar</);
+  assert.match(card, /<span class="pill">Solo Admin<\/span>/); assert.match(card, /data-ok>Confirmar</);
   assert.ok(!/type="password"|inputmode="numeric"|PIN/.test(card), 'sin campo de PIN en la tarjeta');
   assert.match(ui, /if \(ok\) ok\.onclick = async function \(\) \{\n\s*if \(c\.dataset\.st !== 'pending'\) return;\n(?:\s*if \(need && need\.recheck && need\.recheck\(\)\) \{ syncOk\(\); return; \}[^\n]*\n)?\s*ok\.disabled = true;/, 'un segundo toque no dispara otro envío'); // (39ccd25c) la revisión síncrona de campos no cede el turno: un segundo toque sigue sin pasar
 });

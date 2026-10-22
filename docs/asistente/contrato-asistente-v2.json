@@ -379,7 +379,7 @@
  "escenario_dos_propuestas": "dos_gestion",
  "escenario_simple": "pide_precio",
  "registro_owner": {
-  "_nota": "Confirmado en la rama (detrás de ASSISTANT_OWNER_BOOTSTRAP=1 y migración 0035 NO aplicada). register {pin}; approve {device_id, operation_id, decision approve|reject} + x-owner-approval; revoke {device_id, operation_id} + x-owner-approval; GET /auth/assistant/owner-device lista dueños y pendientes.",
+  "_nota": "Confirmado en la rama (detrás de ASSISTANT_OWNER_BOOTSTRAP=1 y migración 0036 NO aplicada). register {pin}; approve {device_id, operation_id, decision approve|reject} + x-owner-approval; revoke {device_id, operation_id} + x-owner-approval; GET /auth/assistant/owner-device lista dueños y pendientes.",
   "ruta_registrar": "/auth/assistant/owner-device/register",
   "ruta_aprobar_nuevo": "/auth/assistant/owner-device/approve",
   "ruta_revocar": "/auth/assistant/owner-device/revoke",

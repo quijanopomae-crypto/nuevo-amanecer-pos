@@ -8,7 +8,7 @@ import { toolsForRole, EMPLOYEE_TOOLS, PING_FIELDS, pingBody } from '../../tools
 const MIG = ['0024_pos_roles_owner_pin.sql', '0025_pos_reviews_pin_failures.sql'];
 const PIN = '4821';
 async function setup(t, { log = false } = {}) {
-  const f = await activeCanon(t, { migrations: log ? [...MIG, '0034_pos_assistant_access_log.sql'] : MIG });
+  const f = await activeCanon(t, { migrations: log ? [...MIG, '0035_pos_assistant_access_log.sql'] : MIG });
   Object.assign(f.env, { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: 'secreto-de-prueba-0123456789abcdef', ASSISTANT_DEMO: '1' });
   f.addDevice('dueno', 'writer', 'active', 'tok-dueno');
   f.addDevice('emp', 'writer', 'active', 'tok-emp');
@@ -65,7 +65,7 @@ test('ping: la respuesta trae solo los campos de nivel (ok, enabled, role, level
   assert.deepEqual(Object.keys(pingBody('empleado:consultas')), [...PING_FIELDS]);
 });
 
-test('cambiar el nivel: solo aparato dueño + PIN correcto; el empleado no puede subirse solo; queda anotado si existe la bitácora', async (t) => {
+test('cambiar el nivel: solo aparato Admin + PIN correcto; el empleado no puede subirse solo; queda anotado si existe la bitácora', async (t) => {
   const { f, level, call } = await setup(t, { log: true });
   assert.equal((await level('session:emp', 'consultas', 'tok-emp')).status, 403, 'empleado no cambia niveles');
   const sinPin = await level('session:emp', 'consultas', 'tok-dueno', ''); assert.equal(sinPin.status, 403); assert.equal((await sinPin.json()).action, 'assistant.employee_access');
@@ -78,7 +78,7 @@ test('cambiar el nivel: solo aparato dueño + PIN correcto; el empleado no puede
   const list = await (await call('tok-dueno', '/auth/assistant/employee-access', null, {}, 'GET')).json();
   assert.deepEqual(list.devices.map((d) => [d.device_id, d.level]), [['session:emp', 'consultas'], ['session:emp2', 'off']]);
   assert.equal((await call('tok-emp', '/auth/assistant/employee-access', null, {}, 'GET')).status, 403);
-  // Sin la migración 0034 el nivel se guarda igual, solo no se anota.
+  // Sin la migración 0035 el nivel se guarda igual, solo no se anota.
 });
 
 test('Solo consultas: stock y por reponer sí; costos, ventas, deudas y documentos no; SIN escritura (ni tarjetas ni confirmar)', async (t) => {
@@ -110,7 +110,7 @@ test('sin PIN: el dueño confirma con un toque (sin x-owner-approval); doble toq
   assert.deepEqual(rs.map((r) => r.status), [200, 200, 200]);
   assert.equal(rs.filter((r) => !r.body.already_confirmed).length, 1, 'un solo efecto'); assert.equal(new Set(rs.map((r) => r.body.operation_id)).size, 1);
   const again = await confirm('tok-dueno', card); assert.equal(again.body.already_confirmed, true, 'reenvío tardío: mismo operation_id');
-  // la sesión debe ser dueño de verdad: fila owner + sesión owner del POS. Un aparato que el POS trata como dueño pero sin fila: bloqueado.
+  // la sesión debe ser dueño de verdad: fila owner + sesión owner del POS. Un aparato que el POS trata como Admin pero sin fila: bloqueado.
   f.addDevice('sinrol', 'writer', 'active', 'tok-sinrol');
   const r1 = await confirm('tok-sinrol', card); assert.equal(r1.status, 403); assert.equal(r1.body.error, 'assistant_off');
   // si la fila deja de ser owner (el dueño pasó este aparato a empleado): bloqueado al instante

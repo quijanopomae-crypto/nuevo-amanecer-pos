@@ -77,7 +77,7 @@ test('corte de señal al confirmar: reintento con el mismo token, se ejecuta una
 test('empleado: nada se ejecuta en el aparato (asistente solo para el dueño), sin abrir la ficha ni gastar token', async () => {
   const { d, calls } = deps(emp); const g = C.createGate(d); g.add(precio);
   const r = await g.execute(precio.id, { confirmed: true });
-  assert.equal(r.ok, false); assert.match(r.msg, /solo para el dueño/); assert.equal(calls.confirm, 0); assert.equal(calls.editor.length, 0);
+  assert.equal(r.ok, false); assert.match(r.msg, /solo para el Admin/); assert.equal(calls.confirm, 0); assert.equal(calls.editor.length, 0);
   assert.equal(g.state(precio.id), 'denied');
   // dueño sin rol confirmado por el servidor tampoco
   const { d: d2, calls: c2 } = deps({ role: 'owner', isOwner: () => false }); const g2 = C.createGate(d2); g2.add(precio);
@@ -259,7 +259,7 @@ test('niveles en el aparato: el empleado NO ejecuta cambios (sin PIN, solo el du
   const lvl = (level) => ({ role: 'empleado', level, isOwner: () => false });
   assert.equal(C.canExecute(lvl('off'), ajuste).ok, false);
   for (const L of ['consultas', 'consultas_documentos']) for (const p of [ajuste, { type: 'precio', needsConfirm: true }, { type: 'compra' }, { type: 'producto' }]) {
-    const r = C.canExecute(lvl(L), p); assert.equal(r.ok, false, L + ' ' + p.type); assert.match(r.msg, /dueño/);
+    const r = C.canExecute(lvl(L), p); assert.equal(r.ok, false, L + ' ' + p.type); assert.match(r.msg, /Admin/);
   }
   assert.equal(C.canExecute(lvl('consultas'), { type: 'consulta' }).ok, true);
   assert.equal(C.canExecute({ role: 'owner', isOwner: () => true }, ajuste).ok, true);

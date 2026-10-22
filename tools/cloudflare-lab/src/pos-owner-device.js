@@ -1,6 +1,6 @@
 // Registro del aparato del dueño para el asistente (rama feature/asistente-aislado).
 // DETRÁS DE BANDERA: ASSISTANT_OWNER_BOOTSTRAP=1 (además de ASSISTANT_ENABLED=1). Sin la bandera todas las rutas responden 404.
-// No está aplicado en ningún lado; necesita el visto bueno del jefe (y la migración 0035 con respaldo R2 antes).
+// No está aplicado en ningún lado; necesita el visto bueno del jefe (y la migración 0036 con respaldo R2 antes).
 //
 // Rutas (contrato de Bot 5, registro_owner; el GET se agregó para la pantalla «Pendiente de aprobar» de las maquetas v2):
 //   POST /auth/assistant/owner-device/register {pin}                        teléfono SIN fila de rol: «Registrar este teléfono como dueño»
@@ -15,7 +15,7 @@
 //     ligada al operation_id y gastada con UPDATE ... operation_id=? AND used_at IS NULL (changes===1). Un PIN suelto no basta.
 //   - Nunca se quita el ÚLTIMO aparato dueño: 409 { error:'last_owner', code:'last_owner' }.
 //   - El aparato es siempre el de la sesión: rol o aparato en cabeceras o cuerpo se ignoran.
-//   - Cada registro, pedido, aprobación, rechazo y revocación se anota en pos_owner_device_log. Sin esa tabla (migración 0035,
+//   - Cada registro, pedido, aprobación, rechazo y revocación se anota en pos_owner_device_log. Sin esa tabla (migración 0036,
 //     NO aplicada) las rutas fallan cerrado (503): no se registra nada sin bitácora.
 import { prefixRange } from './pos-assistant-audit.js';
 import { sha256Hex } from './a5-import-core.js';
@@ -51,7 +51,7 @@ export async function ownerDeviceRoute(request, env, auth, json, deps = {}) {
   if (!isOwnerDevicePath(path)) return json({ error: 'not_found' }, 404);
   const db = deps.db; if (!db) return json({ error: 'db_missing' }, 500);
   const me = String(auth?.principalId || ''); if (!me) return json({ error: 'unauthorized' }, 401);
-  if (!(await logReady(db))) return json({ error: 'owner_device_log_missing', message: 'Falta la bitácora (migración 0035). No se registra nada sin bitácora.' }, 503);
+  if (!(await logReady(db))) return json({ error: 'owner_device_log_missing', message: 'Falta la bitácora (migración 0036). No se registra nada sin bitácora.' }, 503);
   const logStmt = logStmtFor(db);
   const isOwner = async () => (await roleOf(db, me)) === 'owner' && auth.posRole === 'owner';
 
@@ -88,7 +88,7 @@ export async function ownerDeviceRoute(request, env, auth, json, deps = {}) {
         .bind(await pendingKey(me), JSON.stringify({ device_id: me, label, at: t0, exp: Date.now() + PENDING_MS }), t0, me.slice(0, 120)),
       logStmt('request', me, me, '1=1', []),
     ]);
-    return json({ ok: false, pending: true, status: 'esperando_aprobacion', message: 'Esperando aprobación desde el teléfono del dueño.' }, 202);
+    return json({ ok: false, pending: true, status: 'esperando_aprobacion', message: 'Esperando aprobación desde el teléfono del Admin.' }, 202);
   }
 
   // approve (decision approve|reject) / revoke: aparato dueño + aprobación estricta ligada al operation_id.
@@ -103,7 +103,7 @@ export async function ownerDeviceRoute(request, env, auth, json, deps = {}) {
   if (path === OWNER_DEVICE_PATHS.revoke) {
     const r = await roleOf(db, target);
     if (r !== 'owner') return json({ error: 'not_owner' }, 409);
-    if ((await ownerCount(db)) <= 1) return json({ error: 'last_owner', code: 'last_owner', message: 'Es el único aparato dueño. Registra otro antes de quitarlo.' }, 409);
+    if ((await ownerCount(db)) <= 1) return json({ error: 'last_owner', code: 'last_owner', message: 'Es el único aparato Admin. Registra otro antes de quitarlo.' }, 409);
   } else {
     const key = await pendingKey(target), row = (await pending(db)).find((p) => p.key === key);
     if (!row) return json({ error: 'not_pending' }, 409);

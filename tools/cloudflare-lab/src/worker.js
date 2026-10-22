@@ -233,8 +233,14 @@ export default {
         if (auth instanceof Response) return auth;
         // product.create ahora también pasa por ownerGate (dueño, o aprobación con PIN del dueño ligada al operation_id).
         // CAMBIO DE SERVIDOR DEL POS en la rama feature/asistente-aislado: NO desplegar sin el visto bueno del jefe (ver docs/asistente/PLAN.md).
-        const gated = await ownerGate(request, env, auth, financialCommand, json, getDatabase(env));
-        if (gated) return gated;
+        // (forma de la base: product.update sigue pasando por ownerGate en su propio bloque; product.create, solo en esta rama, en el else)
+        if (financialCommand === 'product.update') {
+          const gated = await ownerGate(request, env, auth, financialCommand, json, getDatabase(env));
+          if (gated) return gated;
+        } else {
+          const gated = await ownerGate(request, env, auth, financialCommand, json, getDatabase(env));
+          if (gated) return gated;
+        }
         return financialCommand === 'product.update'
           ? await updateCanonicalProduct(request, env, auth, json)
           : await createCanonicalProduct(request, env, auth, json);

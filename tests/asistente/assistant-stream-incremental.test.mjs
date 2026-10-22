@@ -66,7 +66,7 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
       const txt = pre + 'El costo de 2 unidades… es S/ 3.60. Hay 40 unidades.';
       const s = stream(txt, EMP, n);
       assert.ok(!s.text.includes('3.60') && !s.events.some((d) => d.t && /3\.6|3\.$/.test(d.t)), JSON.stringify(s.events));
-      assert.equal(s.text, full(txt, EMP)); assert.ok(s.text.includes('El costo de 2 unidades… es [dato del dueño]. Hay 40 unidades.'), s.text);
+      assert.equal(s.text, full(txt, EMP)); assert.ok(s.text.includes('El costo de 2 unidades… es [dato del Admin]. Hay 40 unidades.'), s.text);
       assert.equal(stream(txt, 'owner', n).text, txt);
     }
   });
@@ -74,15 +74,15 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
 
 // ---------- 4. sala: etiquetas de venta, monto antes de la palabra, tope ----------
 const ROOM = [
-  ['costo, precio S/ 1.80', 'costo, precio [dato del dueño]'],
+  ['costo, precio S/ 1.80', 'costo, precio [dato del Admin]'],
   ['El costo no lo tengo, pero el precio de venta es S/ 2.50', 'El costo no lo tengo, pero el precio de venta es S/ 2.50'],
-  ['S/ 1.80 es el costo', '[dato del dueño] es el costo'],
-  ['S/ 1.80 de costo y S/ 2.50 de precio de venta.', '[dato del dueño] de costo y [dato del dueño] de precio de venta.'],
-  ['precio de venta S/ 2.50, costo S/ 1.80', 'precio de venta S/ 2.50, costo [dato del dueño]'],
-  ['el costo es S/ 1.80, pero el precio de venta es S/ 2.50', 'el costo es [dato del dueño], pero el precio de venta es S/ 2.50'],
-  ['costo S/ 1.80 y venta S/ 2.50', 'costo [dato del dueño] y venta S/ 2.50'],
-  ['El costo es S/ 1.80. Se vende a S/ 2.50, lo vendemos a S/ 2.40, vendo a S/ 2.30, PVP S/ 2.60, P. venta S/ 2.70.', 'El costo es [dato del dueño]. Se vende a S/ 2.50, lo vendemos a S/ 2.40, vendo a S/ 2.30, PVP S/ 2.60, P. venta S/ 2.70.'],
-  ['El costo es S/ 1.80 y el proveedor se lo vende a S/ 1.50', 'El costo es [dato del dueño] y el proveedor se lo vende a [dato del dueño]'],
+  ['S/ 1.80 es el costo', '[dato del Admin] es el costo'],
+  ['S/ 1.80 de costo y S/ 2.50 de precio de venta.', '[dato del Admin] de costo y [dato del Admin] de precio de venta.'],
+  ['precio de venta S/ 2.50, costo S/ 1.80', 'precio de venta S/ 2.50, costo [dato del Admin]'],
+  ['el costo es S/ 1.80, pero el precio de venta es S/ 2.50', 'el costo es [dato del Admin], pero el precio de venta es S/ 2.50'],
+  ['costo S/ 1.80 y venta S/ 2.50', 'costo [dato del Admin] y venta S/ 2.50'],
+  ['El costo es S/ 1.80. Se vende a S/ 2.50, lo vendemos a S/ 2.40, vendo a S/ 2.30, PVP S/ 2.60, P. venta S/ 2.70.', 'El costo es [dato del Admin]. Se vende a S/ 2.50, lo vendemos a S/ 2.40, vendo a S/ 2.30, PVP S/ 2.60, P. venta S/ 2.70.'],
+  ['El costo es S/ 1.80 y el proveedor se lo vende a S/ 1.50', 'El costo es [dato del Admin] y el proveedor se lo vende a [dato del Admin]'],
   ['Arroz S/ 2.50; el costo lo ve el dueño.', 'Arroz S/ 2.50; el costo lo ve el dueño.']
 ];
 for (const n of [1, 2, 5, 47, 48, 49, 100]) {
@@ -92,7 +92,7 @@ for (const n of [1, 2, 5, 47, 48, 49, 100]) {
 }
 test('4) monto sin fin de frase: espera como mucho ' + OWNER_RETRO + ' caracteres y entonces se tapa (a prueba de fallas); con punto antes sale', () => {
   const longTail = 'S/ 4.20 cada uno ' + 'y es bueno '.repeat(20);
-  assert.ok(redactOwnerData(longTail).startsWith('[dato del dueño] cada uno'));
+  assert.ok(redactOwnerData(longTail).startsWith('[dato del Admin] cada uno'));
   assert.ok(redactOwnerData('S/ 4.20 cada uno. ' + 'y es bueno '.repeat(20)).startsWith('S/ 4.20 cada uno.'));
   const s = stream(longTail, EMP, 5); assert.equal(s.text, redactOwnerData(longTail));
   const firstAt = s.marks.find(([, out]) => out > 0)[0]; assert.ok(firstAt <= 7 + OWNER_RETRO + 10, 'sale al llegar al tope: ' + firstAt);
@@ -106,7 +106,7 @@ test('5) nombres de productos y proveedores (Arroz Costeño, Galletas Costa, Mar
   }
   // palabras enteras: costo/costó/costos/cost/margen/ganancia/inversión/utilidad siguen contando
   for (const t of ['costo S/ 1.80', 'costó S/ 1.80', 'costos S/ 1.80', 'cost 1.80', 'margen 20%', 'ganancia S/ 2.00', 'inversión S/ 300', 'utilidad 15%', 'Arroz Costo S/ 1.80'])
-    assert.ok(redactOwnerData(t).endsWith('[dato del dueño]'), t);
+    assert.ok(redactOwnerData(t).endsWith('[dato del Admin]'), t);
 });
 
 // ---------- 6. tiempos ----------
@@ -165,11 +165,11 @@ test('8) lo que llega de golpe se pinta en tandas de ~48 caracteres (cortadas en
   assert.equal(writes.join(''), txt); assert.ok(writes.length >= 2 && writes.slice(0, -1).every((w) => w.length <= 60 && w.endsWith(' ')), JSON.stringify(writes));
   const w2 = []; const p2 = C.createTextPainter((t) => w2.push(t), { minMs: 0, schedule: () => {} }); p2.push(txt); p2.finish(); assert.deepEqual(w2, [txt], 'finish pinta todo');
 });
-test('8) foto de un empleado: el celular avisa «Eso solo lo puede hacer el dueño.» al instante, sin subirla', () => {
+test('8) foto de un empleado: el celular avisa «Eso solo lo puede hacer el Admin.» al instante, sin subirla', () => {
   const UI = read('POS/js/modules/asistente/asistente-ui.js'); const sendFn = UI.slice(UI.indexOf('  async function send(text, image) {'), UI.indexOf('  // Comprime en el aparato'));
   const a = sendFn.indexOf("if (image && access && access.role !== 'owner') { addMsg('u', text || 'Foto'); errMsg('image_owner_only'); setState('error', 2600); return; }");
   assert.ok(a > 0 && a < sendFn.indexOf('reqInit(') && a < sendFn.indexOf('busy = true'), 'antes de armar o mandar el pedido');
-  assert.equal(C.friendlyError('image_owner_only').msg, 'Eso solo lo puede hacer el dueño.');
+  assert.equal(C.friendlyError('image_owner_only').msg, 'Eso solo lo puede hacer el Admin.');
 });
 
 // ---------- 9. Bot 4 ----------
@@ -204,7 +204,7 @@ for (const n of [1, 2, 5, 47, 48, 49, 100]) {
   test('10) trozos de ' + n + ': las 21 frases de Bot 2 (punto, salto de línea, pero/aunque/sino/mientras, PVP negado, «se vende» sin «a», P. de compra…) quedan tapadas', () => {
     assert.equal(BOT2.length, 21);
     for (const t of [...BOT2, ...MORE2]) {
-      const want = redactOwnerData(t); assert.ok(!/1\.80|7,797|30%|500|15%/.test(want) && want.includes('[dato del dueño]'), t + ' -> ' + want);
+      const want = redactOwnerData(t); assert.ok(!/1\.80|7,797|30%|500|15%/.test(want) && want.includes('[dato del Admin]'), t + ' -> ' + want);
       assert.equal(stream(t, EMP, n).text, want, n + ': ' + t);
       assert.equal(stream(t, 'owner', n).text, t, 'el dueño ve todo');
     }
@@ -223,7 +223,7 @@ const BODEGA_OK = ['El cliente pagó S/ 2.50 en efectivo.', 'Pagó con Yape S/ 1
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('11) trozos de ' + n + ': «lo que pagué», «pagué», «me salió/sale a», «me/nos costó», «lo compré a», «lo traje a», «mi costo» (también con el monto antes) se tapan; «el cliente pagó», «pagó con Yape» se ven', () => {
     for (const t of BODEGA) {
-      const want = redactOwnerData(t); assert.ok(!/1\.80|18\.00/.test(want) && want.includes('[dato del dueño]'), t + ' -> ' + want);
+      const want = redactOwnerData(t); assert.ok(!/1\.80|18\.00/.test(want) && want.includes('[dato del Admin]'), t + ' -> ' + want);
       assert.equal(stream(t, EMP, n).text, want, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t);
     }
     for (const t of BODEGA_OK) { assert.equal(redactOwnerData(t), t, t); assert.equal(stream(t, EMP, n).text, t, n + ': ' + t); }
@@ -256,7 +256,7 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     assert.equal(stream(OWNER_TABLE, EMP, n).text, want);
   });
   test('12) trozos de ' + n + ': etiqueta de venta pegada a la palabra del dueño no deja ver; negación cierra al fin de frase (no con «;»); monto a >60 en la misma frase se tapa', () => {
-    for (const t of B5_MASK) { const w = redactOwnerData(t); assert.ok(!w.includes('1.80') && w.includes('[dato del dueño]'), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
+    for (const t of B5_MASK) { const w = redactOwnerData(t); assert.ok(!w.includes('1.80') && w.includes('[dato del Admin]'), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
     for (const t of B5_SHOW) { const w = redactOwnerData(t); assert.ok(w.includes('2.50'), t + ' -> ' + w); assert.ok(!w.includes('1.80'), t); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
   });
 }
@@ -277,7 +277,7 @@ const NEG_SHOW = [['No sé el costo.\nEl precio es S/ 2.50', '2.50'], ['Desconoz
   ['No sé el costo. Ok. Fin. Hay 3 a S/ 2.50', '2.50'], ['Costo desconocido, P. venta S/ 2.50', '2.50'], ['El costo no lo tengo, pero el precio de venta es S/ 2.50', '2.50']];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('13) trozos de ' + n + ': zona negada (resto de la frase + la siguiente) tapa todo monto salvo detrás de una etiqueta de venta o «precio»; etiqueta del dueño al final de línea tapa el monto de abajo', () => {
-    for (const [t, hide] of NEG_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, hide] of NEG_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del Admin]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
     for (const [t, v] of NEG_SHOW) { const w = redactOwnerData(t); assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
   });
 }
@@ -299,7 +299,7 @@ const ROW_MASK = [['| Costo unitario |\n| S/ 1.80 |', ['1.80']], ['Producto\tNot
   ['| Producto | Nota |\n| Arroz | no sé el costo, S/ 1.80 |', ['1.80']], ['Producto\tNota\nArroz\tno sé el costo\nS/ 1.80\tAzúcar', ['1.80']], ['| Producto | Nota |\n| Arroz | el costo |\n| S/ 1.80 | x |', ['1.80']]];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('14) trozos de ' + n + ': zona negada: «precio» solo pegado al monto deja ver; con palabras en medio o «, precio S/» se tapa; la ventana y la zona no cruzan filas de tabla', () => {
-    for (const [t, hide] of [...PRECIO_MASK, ...ROW_MASK]) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, hide] of [...PRECIO_MASK, ...ROW_MASK]) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del Admin]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
     for (const [t, v] of [...PRECIO_SHOW, ...ROW_SHOW]) { const w = redactOwnerData(t); assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); }
   });
 }
@@ -335,13 +335,13 @@ const T15_SHOW = [
   ['Lista:\n| Producto | Precio |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | costo pendiente |\n| Azúcar | S/ 2.50 |', ['1.80', '2.50']]];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('15) trozos de ' + n + ': título del dueño justo antes de la tabla tapa sus montos (salvo columnas de venta); «Precio S/» con dueño detrás se tapa; pagamos/nos salió a/lo conseguí a; «PVP» bajo «Costo» no se tapa', () => {
-    for (const [t, hide] of T15_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, hide] of T15_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del Admin]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
     for (const [t, vs] of T15_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
   });
 }
 test('15) los nombres de la tabla se quedan: con título del dueño solo salen los montos («Galleta», «Arroz», «Producto», «Monto» visibles)', () => {
   const w = redactOwnerData('Te paso los costos:\n| Producto | Monto |\n|---|---|\n| Galleta | S/ 1.80 |\n| Arroz | S/ 3.10 c/u |');
-  assert.equal(w, 'Te paso los costos:\n| Producto | Monto |\n|---|---|\n| Galleta | [dato del dueño] |\n| Arroz | [dato del dueño] c/u |');
+  assert.equal(w, 'Te paso los costos:\n| Producto | Monto |\n|---|---|\n| Galleta | [dato del Admin] |\n| Arroz | [dato del Admin] c/u |');
 });
 
 // ---------- 16. Bot 5 sobre 1c17310c (+ Bot 3, Bot 4): 3 frases antes de tabla/lista, venta con dueño detrás, verbos, encabezados, retención ----------
@@ -373,7 +373,7 @@ const T16_SHOW = [
   ['El costo es alto. Uno. Dos. Tres.\n| Producto | Monto |\n| Galleta | S/ 1.80 |', ['1.80']], ['| Producto | Costo | Precio |\n|---|---|---|\n| Arroz | 1.80 | 2.50 |', ['2.50']]];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('16) trozos de ' + n + ': 3 frases antes de tabla/lista, listas ítem por ítem, venta con dueño detrás, verbos (conseguimos, nos sale, compraste…), encabezados de venta', () => {
-    for (const [t, hide] of T16_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, hide] of T16_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del Admin]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
     for (const [t, vs] of T16_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
   });
 }
@@ -383,7 +383,7 @@ function held(text, role = EMP, size = 5) {
   for (let i = 0; i < text.length; i += size) { e.push(text.slice(i, i + size)); const got = out.filter((d) => d.t).map((d) => d.t).join('').split(OWNER_LABEL).join('S/ 1.80').length; last = Math.min(i + size, text.length) - got; max = Math.max(max, last); }
   e.flush(); return { max, last };
 }
-const OWNER_LABEL = '[dato del dueño]';
+const OWNER_LABEL = '[dato del Admin]';
 const FILL = (n) => 'texto normal de la tienda '.repeat(Math.ceil(n / 26)).slice(0, n);
 test('16) retención: una presentación del dueño ya no retiene la línea siguiente (Bot 3: 4000 → ~20); «Precio S/» en la zona solo hasta su tope; listas y tablas ítem por ítem', () => {
   for (const [t, cap] of [['El costo no lo tengo.\n' + FILL(4000), 40], ['Tu margen fue bueno esta semana.\n' + FILL(600), 40], ['Lo que pagué lo ves tú.\n' + FILL(300), 40], ['Hola, te cuento.\n' + FILL(4000), 40],
@@ -422,7 +422,7 @@ const T17_SHOW = [
   ['El costo subió.\n\nLista de precios\n- Galleta S/ 1.80', ['1.80']]];
 for (const n of [1, 2, 47, 48, 49, 100]) {
   test('17) trozos de ' + n + ': monto al final de línea con dueño en los primeros 20 caracteres de la siguiente; títulos de compras/proveedor; «El Margen»; título de precios corta la presentación', () => {
-    for (const [t, hide] of T17_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del dueño]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
+    for (const [t, hide] of T17_MASK) { const w = redactOwnerData(t); for (const h of hide) assert.ok(!w.includes(h), t + ' -> ' + w); assert.ok(w.includes('[dato del Admin]')); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
     for (const [t, vs] of T17_SHOW) { const w = redactOwnerData(t); for (const v of vs) assert.ok(w.includes(v), t + ' -> ' + w); assert.equal(stream(t, EMP, n).text, w, n + ': ' + t); assert.equal(stream(t, 'owner', n).text, t); }
   });
 }

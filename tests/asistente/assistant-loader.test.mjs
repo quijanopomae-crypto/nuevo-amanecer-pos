@@ -40,7 +40,7 @@ test('dueño: carga css + core + ui y recuerda el rol; empleado con nivel: tambi
   assert.deepEqual(e.added, ASSETS); assert.equal(e.store.get('na_asistente_acc'), 'on');
 });
 
-test('aparato sin rol (403 reason sin_rol): carga para mostrar «Registrar este teléfono como dueño»', async () => {
+test('aparato sin rol (403 reason sin_rol): carga para mostrar «Registrar este teléfono como Admin»', async () => {
   const r = run({ status: 403, body: { error: 'admin_only', reason: 'sin_rol' } }); await tick();
   assert.deepEqual(r.added, ASSETS);
 });

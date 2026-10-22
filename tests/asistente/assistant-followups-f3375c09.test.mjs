@@ -111,10 +111,10 @@ test('celular: aviso como nota SOLO con final.cut === true (nunca por el texto);
   const fake = () => { const kids = []; const mk = (tag) => ({ tagName: tag, childNodes: [], className: '', attrs: {}, appendChild(k) { this.childNodes.push(k); return k; }, setAttribute(a, v) { this.attrs[a] = v; }, set textContent(v) { this.childNodes = [{ nodeType: 3, data: v }]; } });
     return { kids, doc: { createElement: mk, createTextNode: (t) => ({ nodeType: 3, data: t }) } }; };
   const run = (txt, labels) => { const f = fake(); const r = C.createReplyRenderer(f.doc, (n) => f.kids.push(n), labels ? { labels } : undefined); r.push(txt); r.finish(); return { kids: f.kids, rows: r.rows(), labels: r.labels() }; };
-  const a = run('| Arroz | [dato del dueño] |\n| Leche | [dato del dueño] |\nFin.', ['Producto', 'Precio']); assert.equal(a.rows, 2); assert.deepEqual(a.labels, ['Producto', 'Precio']);
+  const a = run('| Arroz | [dato del Admin] |\n| Leche | [dato del Admin] |\nFin.', ['Producto', 'Precio']); assert.equal(a.rows, 2); assert.deepEqual(a.labels, ['Producto', 'Precio']);
   assert.equal(run('| Arroz | x | y |\n', ['Producto', 'Precio']).rows, 1, '(Bot 4 sobre 25ffde10) columnas distintas: fila igual (sobrantes juntas en la última)');
   assert.equal(run('| Arroz | x |\n', null).rows, 0, 'sin cabecera previa: texto');
-  const prev = run('Lista:\n| Producto | Precio |\n|---|---|\n| Arroz | [dato del dueño] |\n'); assert.deepEqual(prev.labels, ['Producto', 'Precio'], 'la cabecera reusable sale de lo pintado');
+  const prev = run('Lista:\n| Producto | Precio |\n|---|---|\n| Arroz | [dato del Admin] |\n'); assert.deepEqual(prev.labels, ['Producto', 'Precio'], 'la cabecera reusable sale de lo pintado');
   const own = run('| A | B |\n|---|---|\n| 1 | 2 |\n\n| x | y |\n', ['Producto', 'Precio']); assert.equal(own.rows, 1, 'tras una tabla propia no se reusa');
   // un aviso escrito por el modelo sale como texto normal (el renderer nunca crea notas)
   const fk = run('Hola.\n\n' + CUT_NOTICE); assert.ok(fk.kids.every((k) => k.nodeType === 3), 'texto plano');

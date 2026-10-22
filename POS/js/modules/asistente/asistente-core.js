@@ -186,12 +186,12 @@
   function canExecute(roles, proposal) {
     var role = roles && roles.role;
     if (role !== 'owner' && role !== 'empleado') return { ok: false, msg: 'No se sabe quién usa este aparato. Revisa la conexión.' };
-    if (role === 'owner' && roles.isOwner && !roles.isOwner()) return { ok: false, msg: 'El asistente es solo para el dueño.' };
+    if (role === 'owner' && roles.isOwner && !roles.isOwner()) return { ok: false, msg: 'El asistente es solo para el Admin.' };
     if (role === 'empleado') {
-      if (EMP_LEVELS.indexOf(roles.level) < 0) return { ok: false, msg: 'El asistente es solo para el dueño.' };
-      if (proposal && proposal.type === 'costo') return { ok: false, msg: 'Solo el dueño puede cambiar costos.' };
-      if (proposal && (proposal.needsConfirm || ['compra', 'precio', 'ajuste', 'producto'].indexOf(proposal.type) >= 0)) return { ok: false, msg: 'Los cambios los hace el dueño desde su teléfono.' };
-      if (proposal && proposal.type === 'documento' && (roles.level !== 'consultas_documentos' || EMP_DOCS.indexOf(proposal.tipo) < 0)) return { ok: false, msg: 'Ese documento es solo para el dueño.' };
+      if (EMP_LEVELS.indexOf(roles.level) < 0) return { ok: false, msg: 'El asistente es solo para el Admin.' };
+      if (proposal && proposal.type === 'costo') return { ok: false, msg: 'Solo el Admin puede cambiar costos.' };
+      if (proposal && (proposal.needsConfirm || ['compra', 'precio', 'ajuste', 'producto'].indexOf(proposal.type) >= 0)) return { ok: false, msg: 'Los cambios los hace el Admin desde su teléfono.' };
+      if (proposal && proposal.type === 'documento' && (roles.level !== 'consultas_documentos' || EMP_DOCS.indexOf(proposal.tipo) < 0)) return { ok: false, msg: 'Ese documento es solo para el Admin.' };
     }
     if (!proposal || TYPES.indexOf(proposal.type) < 0) return { ok: false, msg: 'Acción desconocida.' };
     return { ok: true };
@@ -402,7 +402,7 @@
   // Solo createElement + textContent (nunca innerHTML ni texto del modelo en atributos). En partes: cada fila se dibuja al cerrar su línea,
   // el estado se guarda (no se relee el mensaje entero). Una línea que empieza con «|» espera hasta su salto; la cabecera espera además la
   // línea siguiente (si es «|---|» es tabla; si no, vuelve como texto). El resto del texto se pinta enseguida, como antes.
-  var MASK_LABEL = '[dato del dueño]', MASK_NOTE = 'Montos ocultos para empleado';
+  var MASK_LABEL = '[dato del Admin]', MASK_NOTE = 'Montos ocultos para empleado';
   var CUR_SP_RE = /(S\/\.?|US\$|PEN)[ \t](?=-?\d)/g;
   // (Bot 4 sobre 84a49517 / Bot 2 sobre 58200f60) solo al pintar: la serie de un comprobante («B001-00000123») no se parte en el guion a 360.
   // El guion sigue siendo el ASCII «-» (copiar y pegar da el mismo texto): la serie va entera en un <span class="na-asst-code"> (nowrap por CSS),
@@ -627,7 +627,7 @@
   // Errores en palabras simples (pedido del dueño): la persona NUNCA ve un código (403, 409, 429, 503, assistant_off, forbidden_document…).
   // Cada código conocido tiene su frase; uno desconocido o «HTTP_xxx» cae en la frase general. retry=true: se muestra «Reintentar».
   var MSG = {
-    owner: 'Eso solo lo puede hacer el dueño.',
+    owner: 'Eso solo lo puede hacer el Admin.',
     offline: 'Sin conexión. Toca «Reintentar» cuando vuelva el internet.',
     wait: 'Espera un momento e intenta de nuevo.',
     slow: 'Está tardando mucho. Toca «Reintentar».',
@@ -638,9 +638,9 @@
   var FRIENDLY = {
     forbidden_role: [MSG.owner], admin_only: [MSG.owner], image_owner_only: [MSG.owner], owner_approval_required: [MSG.owner], forbidden: [MSG.owner], HTTP_403: [MSG.owner],
     assistant_off: ['El asistente está apagado en este aparato.'], unauthorized: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'], HTTP_401: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'],
-    forbidden_document: ['Ese documento es solo para el dueño. Puedes pedir la lista de precios o la lista de pedido.'],
+    forbidden_document: ['Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.'],
     rate_limited: [MSG.wait, true], HTTP_429: [MSG.wait, true], upstream_busy: [MSG.wait, true],
-    daily_limit: ['Por hoy ya no quedan preguntas en este aparato. Mañana sigue.'], monthly_cap: ['El asistente llegó a su tope del mes. Avisa al dueño.'],
+    daily_limit: ['Por hoy ya no quedan preguntas en este aparato. Mañana sigue.'], monthly_cap: ['El asistente llegó a su tope del mes. Avisa al Admin.'],
     network: [MSG.offline, true], offline: [MSG.offline, true], timeout: [MSG.slow, true], upstream_timeout: [MSG.slow, true],
     upstream_error: [MSG.again, true], stock_check_unavailable: ['No pude revisar el inventario ahora. Toca «Reintentar» en un momento.', true], HTTP_503: [MSG.again, true], HTTP_502: [MSG.again, true], HTTP_500: [MSG.again, true],
     confirm_expired: [MSG.expired], HTTP_410: [MSG.expired], proposal_changed: [MSG.changed], proposal_id_mismatch: [MSG.changed], HTTP_409: [MSG.changed],

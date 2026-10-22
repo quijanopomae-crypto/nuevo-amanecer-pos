@@ -26,7 +26,7 @@ test('mapeo de errores: ningún código llega a la persona; cada uno es una fras
 });
 
 test('mapeo de errores: las frases que pidió el dueño', () => {
-  for (const c of ['forbidden_role', 'admin_only', 'HTTP_403']) assert.equal(C.friendlyError(c).msg, 'Eso solo lo puede hacer el dueño.');
+  for (const c of ['forbidden_role', 'admin_only', 'HTTP_403']) assert.equal(C.friendlyError(c).msg, 'Eso solo lo puede hacer el Admin.');
   for (const c of ['network', 'offline']) { const f = C.friendlyError(c); assert.match(f.msg, /^Sin conexión\. Toca «Reintentar»/); assert.equal(f.retry, true); }
   for (const c of ['rate_limited', 'HTTP_429', 'upstream_busy']) { const f = C.friendlyError(c); assert.equal(f.msg, 'Espera un momento e intenta de nuevo.'); assert.equal(f.retry, true); }
   for (const c of ['timeout', 'upstream_timeout']) { const f = C.friendlyError(c); assert.match(f.msg, /tardando/); assert.equal(f.retry, true); }
@@ -111,7 +111,7 @@ test('una sola tarjeta por acción: el mismo cambio dos veces para el mismo prod
   assert.equal(dedupeActions([{ type: 'consulta', needsConfirm: false }, { type: 'consulta', needsConfirm: false }], []).length, 2);
 });
 
-test('empleado que pide un cambio: sin tarjeta y una frase simple («Eso solo lo puede hacer el dueño…»)', async () => {
+test('empleado que pide un cambio: sin tarjeta y una frase simple («Eso solo lo puede hacer el Admin…»)', async () => {
   const { EMPLOYEE_CHANGE_TEXT } = await import('../../tools/cloudflare-lab/src/pos-assistant.js');
   const tool = (name, args, id) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text: 'merma de 1 arroz', context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, stock: 5 }] } }) }),

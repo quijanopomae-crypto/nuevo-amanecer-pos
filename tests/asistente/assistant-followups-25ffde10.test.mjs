@@ -103,7 +103,7 @@ test('Bot 3: la fila se tapa apenas llega su «|» y el monto; no espera el fin 
   const pre = T3 + '| Galleta | S/ 1.80 | y sigue un texto largo sin salto';
   let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, redactFor(EMP), ownerHold);
   for (const ch of pre) e.push(ch);
-  assert.ok(o.includes('| Galleta | [dato del dueño] |'), JSON.stringify(o.slice(-80)));
+  assert.ok(o.includes('| Galleta | [dato del Admin] |'), JSON.stringify(o.slice(-80)));
   assert.ok(!o.includes('1.80 |'));
   e.flush();
 });
@@ -115,7 +115,7 @@ test('«sigue»: corte con la regla fija activa → cutPrime sí; la continuaci�
   for (const cont of ['| Galleta | S/ 1.80 |', '| Galleta | S/ 1.80 | S/ 2.50 | x |', 'Galleta | S/ 1.80', LONG + '\n\nPrecios:\n| B | S/ 1.81 |', 'Lista de precios\n| B | S/ 1.81 |',
     LONG + '\n\n| Producto | Precio |\n|---|---|\n| B | S/ 1.81 |', 'Galleta\tS/ 1.80']) {
     const p = primed(cont), u = red(cont); hides(p, ['1.80', '1.81']);
-    assert.ok(u.split('[dato del dueño]').length <= p.split('[dato del dueño]').length, 'superconjunto');
+    assert.ok(u.split('[dato del Admin]').length <= p.split('[dato del Admin]').length, 'superconjunto');
   }
   assert.match(primed('| Producto | PVP |\n|---|---|\n| Arroz | S/ 4.20 |'), /4\.20/, 'cabecera de venta explícita: suelta');
   assert.match(primed(LONG + '\n\nArroz S/ 4.20'), /4\.20/, 'texto suelto tras un párrafo largo: igual que sin contexto');
@@ -153,17 +153,17 @@ test('celular (Bot 4): filas tapadas tras la regla fija se dibujan como filas (t
 });
 
 test('celular (Bot 4): todos los montos tapados → máscara corta por CSS y UNA nota bajo la tabla; con un monto visible no hay nota', () => {
-  const host = render('| Producto | Costo |\n|---|---|\n| A | [dato del dueño] |\n| B | [dato del dueño] |\n| C | [dato del dueño] |\nListo.', 1e9);
+  const host = render('| Producto | Costo |\n|---|---|\n| A | [dato del Admin] |\n| B | [dato del Admin] |\n| C | [dato del Admin] |\nListo.', 1e9);
   const notes = all(host, (n) => n.className && /na-asst-tnote/.test(n.className));
   assert.equal(notes.length, 1); assert.equal(notes[0].textContent, C.MASK_NOTE); assert.equal(notes[0].className, 'na-asst-tnote');
   const tbl = host.childNodes.find((k) => k.className === 'na-asst-tbl'); assert.equal(host.childNodes.indexOf(notes[0]), host.childNodes.indexOf(tbl) + 1, 'nota justo bajo la tabla');
   assert.equal(tbl.childNodes[0].className, 'na-asst-allmask');
   assert.equal(all(host, (n) => n.className === 'na-asst-mask').length, 3, 'el texto del DOM sigue siendo la etiqueta');
-  const mix = render('| Producto | Costo | PVP |\n|---|---|---|\n| A | [dato del dueño] | S/ 2.50 |\n', 1e9);
+  const mix = render('| Producto | Costo | PVP |\n|---|---|---|\n| A | [dato del Admin] | S/ 2.50 |\n', 1e9);
   const n2 = all(mix, (n) => n.className && /na-asst-tnote/.test(n.className)); assert.ok(n2.every((n) => /na-asst-off/.test(n.className)), 'con un monto visible: sin nota');
   assert.equal(all(mix, (n) => n.className === 'na-asst-allmask').length, 0);
   // partes = entero
-  const t = '| Producto | Costo |\n|---|---|\n| A | [dato del dueño] |\n| B | S/ 2.50 |\n';
+  const t = '| Producto | Costo |\n|---|---|\n| A | [dato del Admin] |\n| B | S/ 2.50 |\n';
   const ser = (n) => (n.nodeType === 3 ? n.data : '<' + n.tagName + '.' + n.className + '>' + n.childNodes.map(ser).join('') + '</>');
   for (const s of [1, 2, 5, 13]) assert.equal(ser(render(t, s)), ser(render(t, 1e9)));
   assert.match(CSS, /\.na-asst-allmask \.na-asst-mask\{font-size:0/); assert.match(CSS, /\.na-asst-allmask \.na-asst-mask::after\{content:'•••'/);
@@ -262,7 +262,7 @@ test('Bot 4: 2+ filas sueltas sin cabecera con las mismas columnas → tabla sin
 });
 
 test('Bot 4/3: la tabla se crea con su primera fila (cabecera + párrafo no deja una tabla vacía); el ancho de la burbuja va por clase, sin :has', () => {
-  const t = '| Producto | Costo | PVP |\n|---|---|---|\n\nEsta nota tiene más de ocho palabras para ver qué pasa ahora.\n| A | [dato del dueño] | S/ 2.50 |\n';
+  const t = '| Producto | Costo | PVP |\n|---|---|---|\n\nEsta nota tiene más de ocho palabras para ver qué pasa ahora.\n| A | [dato del Admin] | S/ 2.50 |\n';
   const host = render(t, 1e9); const tbls = host.childNodes.filter((k) => k.className === 'na-asst-tbl');
   assert.equal(tbls.length, 1, 'una sola tabla, sin la vacía');
   assert.equal(all(tbls[0], (n) => n.tagName === 'TH').map((n) => n.textContent).join('|'), 'Producto|Costo|PVP', 'la cabecera una sola vez');
@@ -276,7 +276,7 @@ test('Bot 4/3: la tabla se crea con su primera fila (cabecera + párrafo no deja
 test('Bot 2 (regresión desde f3375c09): la línea siguiente que EMPIEZA con costo/margen/ganancia/utilidad, o es corta y la trae, tapa el monto de arriba; «El costo lo ve el dueño.» no', () => {
   // (Bot 2/3 sobre 6280deae) «ganancia S/ 0.70» trae SU monto en sus primeros 20 caracteres: tapa el 0.70 y suelta el de arriba (ver la prueba de 6280deae)
   for (const nx of ['costo unitario', 'es el costo', 'de costo', '(mi costo)', 'margen', '(costo por unidad)', 'utilidad', 'el costo', 'Ese es el margen']) {
-    const t = 'Galleta S/ 1.80\n' + nx; const f = same(t); assert.ok(!f.includes('1.80') && f.startsWith('Galleta [dato del dueño]\n'), JSON.stringify(f));
+    const t = 'Galleta S/ 1.80\n' + nx; const f = same(t); assert.ok(!f.includes('1.80') && f.startsWith('Galleta [dato del Admin]\n'), JSON.stringify(f));
     assert.ok(!f.includes('0.70')); assert.equal(same(t + '\nGracias.'), f + '\nGracias.'); assert.equal(same(t, 'owner'), t); }
   for (const t of ['Galleta S/ 1.80\nEl costo lo ve el dueño.', 'Arroz S/ 4.20\nEl costo lo ve el dueño.', 'Galleta S/ 1.80\nCosteño de la sierra', 'Galleta S/ 1.80\nLeche S/ 3.80',
     'Galleta S/ 1.80\nEl costo es alto este mes en todas las tiendas', 'Galleta S/ 1.80\nGracias por su compra, vuelva pronto.']) assert.equal(same(t), t, t);

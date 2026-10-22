@@ -278,11 +278,11 @@ test('Usar: la tarjeta vence a los 5 minutos (410) y no se puede usar después; 
   const both = await Promise.all([route('POST', '/select', { operation_id: b.body.operation_id, confirm: true }, { store, now: t0 }), route('POST', '/select', { operation_id: b.body.operation_id, confirm: true }, { store, now: t0 })]);
   assert.deepEqual(both.map((x) => x.status).sort(), [200, 409]);
 });
-test('Probar: el tope de 6 por minuto es por aparato dueño, no global; si no se puede contar, no se prueba', async () => {
+test('Probar: el tope de 6 por minuto es por aparato Admin, no global; si no se puede contar, no se prueba', async () => {
   const store = createMemoryUsageStore(), f = stub(() => jsonR(JSONS.openai)), A = { principalId: 'dueno-1', posRole: 'owner' }, B = { principalId: 'dueno-2', posRole: 'owner' };
   for (let i = 0; i < 6; i++) assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: A })).status, 200);
   assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: A })).status, 429);
-  assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: B })).status, 200, 'otro aparato dueño sigue pudiendo');
+  assert.equal((await route('POST', '/test', { provider: 'deepseek' }, { store, fetch: f, auth: B })).status, 200, 'otro aparato Admin sigue pudiendo');
   const stuck = { get: store.get, put: async () => false }; const g = stub(() => jsonR(JSONS.openai));
   const r = await route('POST', '/test', { provider: 'deepseek' }, { store: stuck, fetch: g, auth: { principalId: 'dueno-3', posRole: 'owner' } }); assert.equal(r.status, 503); assert.equal(g.calls.length, 0);
 });

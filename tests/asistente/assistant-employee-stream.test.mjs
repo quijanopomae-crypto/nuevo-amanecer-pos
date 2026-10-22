@@ -125,7 +125,7 @@ test('2) empleado en partes de punta a punta: ni texto ni final llevan montos de
   const emp = await events(await chat({ text: 'hola', stream: true }, { role: 'empleado:consultas', fetch: mk() }));
   const raw = JSON.stringify(emp);
   for (const l of LEAKS) assert.ok(!raw.includes(l), 'salió ' + l);
-  assert.match(emp.find((e) => e.ev === 'final').d.reply, /\[dato del dueño\]/);
+  assert.match(emp.find((e) => e.ev === 'final').d.reply, /\[dato del Admin\]/);
   const own = await events(await chat({ text: 'hola', stream: true }, { role: 'owner', fetch: mk() }));
   assert.ok(JSON.stringify(own).includes('3.50') && own.find((e) => e.ev === 'final').d.reply.includes('25 %'));
   // sin partes (JSON) el mismo filtro
@@ -171,8 +171,8 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     }
     const t = emitSplit(TABLE, n, 'empleado:consultas');
     assert.ok(!/7\.77|3\.21/.test(t), 'tabla: ' + JSON.stringify(t));
-    assert.match(t, /\| Arroz \| \[dato del dueño\] \| S\/ 9\.00 \| 40 \|/); assert.match(t, /\| Leche \| \[dato del dueño\] \| 4\.50 \| 12 \|/);
-    assert.match(t, /\|---\|---:\|---\|---\|/, 'la fila separadora queda'); assert.match(t, /Azúcar\t\[dato del dueño\]\t8/); assert.ok(t.endsWith('Listo.'));
+    assert.match(t, /\| Arroz \| \[dato del Admin\] \| S\/ 9\.00 \| 40 \|/); assert.match(t, /\| Leche \| \[dato del Admin\] \| 4\.50 \| 12 \|/);
+    assert.match(t, /\|---\|---:\|---\|---\|/, 'la fila separadora queda'); assert.match(t, /Azúcar\t\[dato del Admin\]\t8/); assert.ok(t.endsWith('Listo.'));
     assert.equal(emitSplit(TABLE, n, 'owner'), TABLE);
   });
 }
@@ -182,7 +182,7 @@ test('2b) la distancia de 60 caracteres no cruza el punto ni el salto de línea;
   assert.equal(redactOwnerData('El costo\n40 unidades'), 'El costo\n40 unidades');
   assert.equal(redactOwnerData('Compramos ayer 3 cajas. Tengo costumbre de 5 cajas.'), 'Compramos ayer 3 cajas. Tengo costumbre de 5 cajas.');
   assert.equal(redactOwnerData('| Producto | Precio | Stock |\n| Arroz | 9.00 | 40 |'), '| Producto | Precio | Stock |\n| Arroz | 9.00 | 40 |');
-  assert.equal(redactOwnerData('el costo de este producto que compramos ayer en la feria es S/ 7.77'), 'el costo de este producto que compramos ayer en la feria es [dato del dueño]', 'solo el monto se tapa');
+  assert.equal(redactOwnerData('el costo de este producto que compramos ayer en la feria es S/ 7.77'), 'el costo de este producto que compramos ayer en la feria es [dato del Admin]', 'solo el monto se tapa');
 });
 
 test('2b) primeras palabras de respuestas cortas del empleado: igual que antes y que el dueño (mismos trozos en el mismo momento)', () => {
@@ -216,7 +216,7 @@ test('celular: con «text {reset:true}» se borra lo ya pintado («Claro, te pre
     'var bubble = null, painter = null, mdOpts = null, panelEl = panel, mine = panel; function setState(){} function wake(){} function atBottom(){ return true; } function follow(){}\n' +
     ensure + '\n' + searching + '\n' + painterSt + 'return (async function () { ' + streamSt + ' painter.finish(); return { st: st, bubble: bubble }; })();');
   const evs = [['open', { ok: true }], ['text', { t: 'Claro, te preparo el inventario con ' }], ['wait', 160], ['text', { t: 'costos para imprimir' }], ['text', { reset: true }], ['wait', 160],
-    ['error', { error: 'forbidden_document', status: 403, message: 'Ese documento es solo para el dueño. Puedes pedir la lista de precios o la lista de pedido.' }]];
+    ['error', { error: 'forbidden_document', status: 403, message: 'Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.' }]];
   const fetchImpl = async () => new Response(new ReadableStream({ async start(c) { for (const [e, d] of evs) { if (e === 'wait') { await sleep(d); seen.push(thinking.textContent); continue; }
     c.enqueue(enc.encode('event: ' + e + '\ndata: ' + JSON.stringify(d) + '\n\n')); } c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
   const out = await run(C, { createTextNode: (t) => ({ data: t, nodeType: 3 }) }, thinking, fetchImpl, seen, {}, dots);
@@ -244,7 +244,7 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
     const T = 'Lista:\n| Producto | P. compra | Precio | P. venta | Stock |\n|---|---|---|---|---|\n| Arroz | S/ 7.77 | S/ 9.00 | 9.50 | 40 |\n| Leche | 3.21 | 4.50 | 4.80 | 12 |\nListo.';
     const emp = emitSplit(T, n, 'empleado:consultas');
     assert.ok(!/7\.77|3\.21/.test(emp), JSON.stringify(emp));
-    assert.match(emp, /\| Arroz \| \[dato del dueño\] \| S\/ 9\.00 \| 9\.50 \| 40 \|/); assert.match(emp, /\| Leche \| \[dato del dueño\] \| 4\.50 \| 4\.80 \| 12 \|/);
+    assert.match(emp, /\| Arroz \| \[dato del Admin\] \| S\/ 9\.00 \| 9\.50 \| 40 \|/); assert.match(emp, /\| Leche \| \[dato del Admin\] \| 4\.50 \| 4\.80 \| 12 \|/);
     assert.equal(emp, redactOwnerData(redactText(T)));
     assert.equal(emitSplit(T, n, 'owner'), T);
   });
@@ -280,7 +280,7 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
       const full = 'Hola. ' + txt + '. Hay 40 unidades.';
       const emp = emitSplit(full, n, 'empleado:consultas');
       assert.ok(!/1\.10|500|300|40 hoy|15%|12|3\.50/.test(emp.replace('Hay 40 unidades.', '')), 'salió en: ' + emp);
-      assert.match(emp, /\[dato del dueño\]/); assert.equal(emp, redactOwnerData(redactText(full)));
+      assert.match(emp, /\[dato del Admin\]/); assert.equal(emp, redactOwnerData(redactText(full)));
       assert.equal(emitSplit(full, n, 'owner'), full);
     }
   });
@@ -360,7 +360,7 @@ for (const n of [1, 2, 47, 48, 49, 100, 0]) {
       const emp = n ? emitSplit(full, n, 'empleado:consultas') : redactOwnerData(redactText(full));
       for (const h of hide) assert.ok(!emp.includes(h), 'salió ' + h + ' en «' + txt + '»: ' + emp);
       for (const v of show) assert.ok(emp.includes(v), 'se tapó lo visible en «' + txt + '»: ' + emp);
-      assert.match(emp, /\[dato del dueño\]/);
+      assert.match(emp, /\[dato del Admin\]/);
       assert.equal(emp, redactOwnerData(redactText(full)), 'sin perder ni repetir'); assert.ok(emp.endsWith('Hay 40 unidades.'));
       assert.equal(n ? emitSplit(full, n, 'owner') : redactText(full), full, 'el dueño ve todo');
     }

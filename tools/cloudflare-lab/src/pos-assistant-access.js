@@ -8,7 +8,7 @@
 // - Cambiarlo exige aparato dueño (fila pos_role='owner' explícita) + aprobación del dueño con PIN (POST /auth/owner-approval,
 //   acción 'assistant.employee_access', ligada al operation_id del cambio y gastada de forma estricta: changes===1).
 //   Solo con aprobación ligada al operation_id (se quitó el PIN suelto en el cuerpo). Se valida el aparato destino ANTES de gastarla.
-// - Cada cambio se anota en pos_assistant_access_log SI la tabla existe (migración 0034, escrita y NO aplicada).
+// - Cada cambio se anota en pos_assistant_access_log SI la tabla existe (migración 0035, escrita y NO aplicada).
 // - Las herramientas que cambian algo piden SIEMPRE el PIN del dueño en una tarjeta de un solo uso, en cualquier nivel.
 import { sha256Hex } from './a5-import-core.js';
 
@@ -57,7 +57,7 @@ async function logChange(db, row) {
     await db.prepare('INSERT INTO pos_assistant_access_log(event_id,device_id,level,changed_by,created_at) VALUES(?1,?2,?3,?4,?5)')
       .bind(crypto.randomUUID(), row.device_id, row.level, row.changed_by, new Date().toISOString()).run();
     return true;
-  } catch { return false; } // sin la migración 0034 no se anota (documentado en PLAN.md)
+  } catch { return false; } // sin la migración 0035 no se anota (documentado en PLAN.md)
 }
 
 // GET  /auth/assistant/employee-access            -> niveles de los aparatos empleado (solo aparato dueño)

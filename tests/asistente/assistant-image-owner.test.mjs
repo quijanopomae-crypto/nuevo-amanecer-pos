@@ -32,7 +32,7 @@ test('empleado (con nivel) que manda una foto: 403 image_owner_only, DeepSeek 0 
     const h = harness(role);
     for (const img of [IMG, BIG]) {
       const r = await h.send({ text: 'lee esta factura', image: img, context: {} });
-      assert.equal(r.status, 403, role); assert.equal(r.body.error, 'image_owner_only'); assert.equal(r.body.message, 'Eso solo lo puede hacer el dueño.');
+      assert.equal(r.status, 403, role); assert.equal(r.body.error, 'image_owner_only'); assert.equal(r.body.message, 'Eso solo lo puede hacer el Admin.');
     }
     // aunque no declare tamaño ni tipo: cabecera de foto, tipo multipart/imagen, o campo image escondido al final
     assert.equal((await h.send({ text: 'x', image: IMG }, { headers: { 'x-assistant-image': '1' } })).status, 403);
@@ -75,8 +75,8 @@ test('dueño con foto: sigue funcionando (llega a DeepSeek una vez)', async () =
   assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(h.ds.calls, 1); assert.equal(r.body.reply, 'Leí la foto.');
 });
 
-test('celular: image_owner_only se muestra como «Eso solo lo puede hacer el dueño.», sin código ni «Reintentar»; no quita el asistente', () => {
-  const f = C.friendlyError('image_owner_only'); assert.equal(f.msg, 'Eso solo lo puede hacer el dueño.'); assert.equal(f.retry, false);
+test('celular: image_owner_only se muestra como «Eso solo lo puede hacer el Admin.», sin código ni «Reintentar»; no quita el asistente', () => {
+  const f = C.friendlyError('image_owner_only'); assert.equal(f.msg, 'Eso solo lo puede hacer el Admin.'); assert.equal(f.retry, false);
   assert.equal(IMAGE_OWNER_ONLY.error, 'image_owner_only');
   const ui = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   const lost = ui.match(/var ACCESS_LOST = \{[^}]*\}/); assert.ok(lost && !/image_owner_only/.test(lost[0]), 'no es pérdida de acceso');
