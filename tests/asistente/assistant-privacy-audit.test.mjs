@@ -93,7 +93,7 @@ test('1) servidor: el estado de cuenta va por cliente_id (código), nunca por no
   { store: createMemoryUsageStore(), resolveRole: async () => 'owner', audit: async () => {}, mockChunkMs: 0,
     fetch: async (u, init) => { cap.push(JSON.parse(init.body)); return jsonR({ choices: [{ message: { content: 'Listo, cliente #c1.', tool_calls: [{ id: 't1', type: 'function', function: { name: 'preparar_documento', arguments: JSON.stringify({ tipo: 'estado_cuenta', cliente_id: 'c1' }) } }] } }], usage: { prompt_tokens: 5, completion_tokens: 5 } }); } });
   const d = await r.json(), sent = JSON.stringify(cap);
-  assert.ok(sent.includes('cliente #c1') && !/Rosa|Quispe|Olivos/.test(sent), sent);
+  assert.ok(sent.includes('cliente #C-0001') && !sent.includes('cliente #c1') && !/Rosa|Quispe|Olivos/.test(sent), sent); // hacia la IA, código neutro
   assert.equal(d.proposals[0].cliente_id, 'c1'); assert.match(d.reply, /cliente #c1/);
 });
 test('1) aparato: el documento busca al cliente por su código y pone el nombre en la hoja (el modelo nunca lo vio)', async () => {
