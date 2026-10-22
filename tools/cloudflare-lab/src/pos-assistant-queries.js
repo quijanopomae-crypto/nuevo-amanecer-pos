@@ -6,14 +6,30 @@ import { canonicalRead } from './a6-canonical.js';
 
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
-export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes', 'resumen_dia', 'resumen_mes', 'caja_abierta']);
+export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes', 'sugerencias_compra', 'resumen_dia', 'resumen_mes', 'caja_abierta',
+  'ganancia', 'productos_sin_ventas', 'deuda_cliente', 'ventas_por_hora']);
+// Ganancia: usa costos. Solo quien ve costos (purchases.costs.view = hoy solo el Admin); el permiso se revisa en pos-assistant.js.
+export const COST_QUERY_TYPES = Object.freeze(['ganancia']);
 // Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
 export const SUMMARY_TYPES = Object.freeze(['resumen_dia', 'resumen_mes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
 const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos por reponer', sin_costo: 'Productos sin costo', ventas_periodo: 'Ventas del período',
   top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', creditos_atrasados: 'Créditos atrasados', compras_recientes: 'Compras recientes',
-  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes', caja_abierta: 'Caja abierta' };
+  sugerencias_compra: 'Sugerencias de compra',
+  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes', caja_abierta: 'Caja abierta', ganancia: 'Ganancia', productos_sin_ventas: 'Productos sin ventas',
+  deuda_cliente: 'Deuda del cliente', ventas_por_hora: 'Ventas por hora' };
+// Topes de las consultas nuevas: filas que vuelven de SQL (agrupadas) y filas de la tabla «sin ventas».
+export const NEW_QUERY_LIMITS = Object.freeze({ sqlRows: 5000, idleRows: 50, idleDays: 30 });
+// Sugerencias de compra (solo Admin, solo lectura): con el stock, el mínimo y lo vendido en los últimos días (todo dato que ya existe).
+// Nunca crea una compra ni cambia stock: es una lista para que el dueño la revise y registre él mismo en «Registrar compra».
+export const SUGGEST_RULES = Object.freeze({ diasVentas: 30, diasCobertura: 14, alertaDias: 7, filas: 30, listaMax: 20, revisarBajo: -50 });
+// Productos «genéricos» (se venden por monto, sin contar stock): nunca entran en las sugerencias de compra. Se compara el nombre
+// sin tildes ni mayúsculas, entero o como prefijo claro («VERDURAS», «Verduras - kg», «RECARGA CLARO»; no «VARIOSITO»).
+// Para sumar otro (p. ej. 'DULCES Y CARAMELOS'), agrégalo aquí.
+export const GENERIC_PRODUCT_NAMES = Object.freeze(['VARIOS', 'VERDURAS', 'RECARGAS', 'PRÉSTAMOS']);
+// Categorías de servicios (préstamos, recargas): no llevan stock. La pantalla de Inventario guarda «servicios»; se acepta también «servicio».
+export const SERVICE_CATEGORIES = Object.freeze(['servicios', 'servicio']);
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
 // Precio vacío (null, '' o ausente) queda en null: Number(null) daría 0 y contaría como una venta a S/ 0.
@@ -30,14 +46,26 @@ export const LIMA_OFFSET_MS = 5 * 3600 * 1000;
 export function limaToday(nowMs = Date.now()) { return new Date(nowMs - LIMA_OFFSET_MS).toISOString().slice(0, 10); }
 export function addDays(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const normName = (s) => norm(s).replace(/\s+/g, ' ').trim();
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Entero o prefijo seguido de algo que no es letra ni número; la «s» final es opcional (RECARGA / RECARGAS).
+const GENERIC_RE = (names) => new RegExp('^(?:' + names.map((n) => escRe(normName(n)).replace(/s$/, 's?')).join('|') + ')(?![a-z0-9])');
+export function isServiceProduct(p) { return SERVICE_CATEGORIES.includes(normName(p?.categoria)); }
+const DEFAULT_GENERIC_RE = GENERIC_RE(GENERIC_PRODUCT_NAMES);
+export function isGenericProduct(p, names = GENERIC_PRODUCT_NAMES) { return isServiceProduct(p) || (names.length > 0 && (names === GENERIC_PRODUCT_NAMES ? DEFAULT_GENERIC_RE : GENERIC_RE(names)).test(normName(p?.nombre))); }
 // Día de Lima D = [D 05:00Z, D+1 05:00Z). fromIso/toIso: los límites que se comparan con created_at (ISO en UTC) o se enlazan en SQL.
 export function limaBounds(desde, hasta) { return { desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' }; }
 // Palabras de fecha que el servidor convierte en días de Lima (el modelo NO calcula fechas: manda la palabra en «periodo»).
-export const DATE_WORDS = Object.freeze(['hoy', 'ayer', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']);
+// antier = hoy − 2; mismo_dia_semana_pasada = el MISMO día de la semana, 7 días atrás (jueves 22 -> jueves 15; no el lunes de esa semana).
+export const DATE_WORDS = Object.freeze(['hoy', 'ayer', 'antier', 'mismo_dia_semana_pasada', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']);
 const WORD_ALIASES = { hoy: 'hoy', oy: 'hoy', ayer: 'ayer', 'esta semana': 'esta_semana', semana: 'esta_semana', 'la semana': 'esta_semana', 'semana actual': 'esta_semana',
   'semana pasada': 'semana_pasada', 'la semana pasada': 'semana_pasada', 'este mes': 'este_mes', mes: 'este_mes', 'el mes': 'este_mes', 'mes actual': 'este_mes',
-  'mes pasado': 'mes_pasado', 'el mes pasado': 'mes_pasado' };
-export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').trim(); return WORD_ALIASES[k] || null; }
+  'mes pasado': 'mes_pasado', 'el mes pasado': 'mes_pasado',
+  antier: 'antier', anteayer: 'antier', 'ante ayer': 'antier', 'antes de ayer': 'antier', 'antes ayer': 'antier', 'antesdeayer': 'antier', 'era antier': 'antier', 'era anteayer': 'antier',
+  'mismo dia semana pasada': 'mismo_dia_semana_pasada', 'mismo dia de la semana pasada': 'mismo_dia_semana_pasada', 'el mismo dia de la semana pasada': 'mismo_dia_semana_pasada',
+  'mismo dia de la otra semana': 'mismo_dia_semana_pasada', 'el mismo dia de la otra semana': 'mismo_dia_semana_pasada', 'hoy hace una semana': 'mismo_dia_semana_pasada',
+  'hace una semana': 'mismo_dia_semana_pasada', 'hace 7 dias': 'mismo_dia_semana_pasada', 'hace siete dias': 'mismo_dia_semana_pasada' };
+export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').replace(/[¿?¡!.,]/g, '').trim(); return WORD_ALIASES[k] || null; }
 // Lunes = inicio de la semana (Lima). 0 = lunes … 6 = domingo.
 const weekdayIdx = (d) => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
 // { desde, hasta } en fechas de Lima para una palabra de fecha, o null si no es una. «esta semana» = lunes a hoy; «este mes» = día 1 a hoy.
@@ -46,6 +74,8 @@ export function dateWordRange(word, nowMs = Date.now()) {
   const today = limaToday(nowMs), mon = addDays(today, -weekdayIdx(today));
   if (w === 'hoy') return { desde: today, hasta: today };
   if (w === 'ayer') { const y = addDays(today, -1); return { desde: y, hasta: y }; }
+  if (w === 'antier') { const y = addDays(today, -2); return { desde: y, hasta: y }; }
+  if (w === 'mismo_dia_semana_pasada') { const y = addDays(today, -7); return { desde: y, hasta: y }; }
   if (w === 'esta_semana') return { desde: mon, hasta: today };
   if (w === 'semana_pasada') return { desde: addDays(mon, -7), hasta: addDays(mon, -1) };
   if (w === 'este_mes') return { desde: today.slice(0, 8) + '01', hasta: today };
@@ -55,14 +85,19 @@ const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', '
 // Calendario de hoy en Lima para el mensaje del sistema (solo fechas, ningún dato del negocio).
 export function limaCalendarLine(nowMs = Date.now()) {
   const r = (w) => dateWordRange(w, nowMs), t = limaToday(nowMs), s = r('esta_semana'), m = r('este_mes');
-  return 'Hoy (Lima) es ' + DIAS[weekdayIdx(t)] + ' ' + t + '; ayer fue ' + r('ayer').desde + '; esta semana (de lunes a hoy) va de ' + s.desde + ' a ' + s.hasta
-    + '; este mes va de ' + m.desde + ' a ' + m.hasta + '. Para hoy, ayer, esta semana, la semana pasada, este mes o el mes pasado usa periodo en consultar (el sistema calcula las fechas).';
+  const a = r('antier').desde, md = r('mismo_dia_semana_pasada').desde;
+  return 'Hoy (Lima) es ' + DIAS[weekdayIdx(t)] + ' ' + t + '; ayer fue ' + r('ayer').desde + '; antier (anteayer) fue ' + DIAS[weekdayIdx(a)] + ' ' + a
+    + '; el mismo día de la semana pasada («el mismo día de la otra semana») fue ' + DIAS[weekdayIdx(md)] + ' ' + md
+    + '; esta semana (de lunes a hoy) va de ' + s.desde + ' a ' + s.hasta + '; este mes va de ' + m.desde + ' a ' + m.hasta + '.'
+    + ' Para esas palabras (y semana o mes pasado) usa periodo en consultar (el sistema calcula las fechas); un día exacto: fecha AAAA-MM-DD.'
+    + ' Si corrigen la fecha («era antier»), llama consultar de nuevo con el periodo NUEVO; no repitas el de antes.';
 }
 // Fecha de un campo: AAAA-MM-DD tal cual, o una palabra de fecha (lado: 'desde' o 'hasta' de su rango). Si no, null.
 function dateArg(v, side, nowMs) { if (DATE.test(v || '')) return v; const r = dateWordRange(v, nowMs); return r ? r[side] : null; }
 // Período en fechas de Lima. Por defecto: hoy. «periodo» (palabra de fecha) manda sobre desde/hasta. Máximo 92 días.
+// «fecha» (AAAA-MM-DD): un solo día exacto de Lima; va después de «periodo» y antes de desde/hasta.
 export function period(args, nowMs) {
-  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs);
+  const today = limaToday(nowMs), f = DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null, w = dateWordRange(args?.periodo, nowMs) || f;
   let hasta = w ? w.hasta : dateArg(args?.hasta, 'hasta', nowMs) || today, desde = w ? w.desde : dateArg(args?.desde, 'desde', nowMs) || (dateWordRange(args?.hasta, nowMs)?.desde ?? hasta);
   if (desde > hasta) [desde, hasta] = [hasta, desde];
   if (Date.parse(hasta) - Date.parse(desde) > QUERY_LIMITS.maxDays * 86400000) desde = addDays(hasta, -QUERY_LIMITS.maxDays);
@@ -113,7 +148,8 @@ const mkPeriod = limaBounds;
 // Mes: el mes del día pedido; si es el mes en curso va hasta hoy y se compara con los MISMOS días del mes anterior (1 al N).
 export function summaryPeriods(tipo, args, nowMs) {
   // «periodo» (o una palabra en hasta/desde): el día de referencia es el ÚLTIMO de su rango en Lima («ayer», «mes_pasado» -> su último día).
-  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs) || dateWordRange(args?.hasta, nowMs) || dateWordRange(args?.desde, nowMs);
+  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs) || (DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null)
+    || dateWordRange(args?.hasta, nowMs) || dateWordRange(args?.desde, nowMs);
   const raw = String(args?.hasta || args?.desde || '');
   let ref = w ? w.hasta : DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
   if (ref > today) ref = today;
@@ -155,10 +191,25 @@ export function canonicalReader(db) {
       return new Set(rows.filter((r) => r.status === 'anulada').map((r) => String(r.sale_id))); }
     catch (e) { if (/no such table/i.test(String(e?.message || e))) return new Set(); throw e; }
   }
+  // Consultas nuevas (ganancia, sin ventas, por hora): la fecha se filtra EN SQL (created_at dentro de [fromIso, toIso) del período de
+  // Lima) y la base devuelve filas YA agrupadas, con LIMIT. Misma autoridad que la lectura canónica de ventas: en ACTIVE solo las ventas
+  // de la promoción activa (canonical_sale_context); antes de ACTIVE, la tabla sales tal cual (como canonicalRead). Anuladas fuera con la
+  // misma tabla que GET /auth/sale-annulments (si aún no existe, no hay anuladas). Solo SELECT.
+  async function salesSql(p, build, limit) {
+    const ctl = await db.prepare('SELECT mode,active_promotion_id FROM canonical_control WHERE id=1').first();
+    if (!ctl || !['CANONICAL_READ_ONLY', 'ACTIVE'].includes(ctl.mode) || !ctl.active_promotion_id) throw new Error('canonical_not_published');
+    const active = ctl.mode === 'ACTIVE';
+    const from = active ? 'canonical_sale_context x JOIN sales r ON r.sale_id=x.sale_id' : 'sales r';
+    const scope = (active ? 'x.promotion_id=?1' : '?1 IS NOT NULL') + ' AND r.created_at>=?2 AND r.created_at<?3';
+    const NOT_ANNULLED = " AND NOT EXISTS(SELECT 1 FROM pos_sale_annulments a WHERE a.sale_id=r.sale_id AND a.status='anulada')";
+    const run = async (ann) => (await db.prepare(build(from, scope + ann) + ' LIMIT ?4').bind(ctl.active_promotion_id, p.fromIso, p.toIso, limit).all()).results || [];
+    try { return await run(NOT_ANNULLED); }
+    catch (e) { if (!/no such table: pos_sale_annulments/i.test(String(e?.message || e))) throw e; return run(''); }
+  }
   async function salesIn(p) { const [sales, out] = await Promise.all([all('sales'), annulled()]); const list = sales.filter((s) => s.created_at >= p.fromIso && s.created_at < p.toIso && !out.has(String(s.sale_id))); list.truncated = sales.truncated; return list; }
   return {
     async products() { const rows = await all('products'); const list = rows.map((p) => ({ id: String(p.product_id), nombre: p.name, stock: Number(p.current_stock_quantity), min: Number(p.stock_min_quantity || 0),
-      costo: cents(p.cost_cents), precio: cents(p.price_cents), controla: p.tracks_inventory === 1 || p.tracks_inventory === true })); list.truncated = rows.truncated; return list; },
+      costo: cents(p.cost_cents), precio: cents(p.price_cents), categoria: p.category ?? null, controla: p.tracks_inventory === 1 || p.tracks_inventory === true })); list.truncated = rows.truncated; return list; },
     // Solo los ids pedidos (control de inventario de una tarjeta): una consulta por tramo de <= 50 ids con parámetros enlazados, sin
     // leer el catálogo. Misma autoridad que la lectura canónica: promoción activa (importados + creados en vivo). Si la consulta
     // falla, lanza (quien llama falla CERRADO). Un id que no vuelve es un producto que no existe.
@@ -185,6 +236,17 @@ export function canonicalReader(db) {
       list.truncated = rows.truncated; return list; },
     async customers() { const rows = await all('customers'); const list = rows.map((c) => ({ id: String(c.customer_id), nombre: c.name, dni: c.document == null ? null : String(c.document), tel: c.phone == null ? null : String(c.phone) }));
       list.truncated = rows.truncated; return list; },
+    // Ventas por producto del período (agrupado en SQL): { product_id, q, c }. Tope NEW_QUERY_LIMITS.sqlRows (truncated si llega).
+    async itemsByProduct(p) {
+      const lim = NEW_QUERY_LIMITS.sqlRows;
+      const rows = await salesSql(p, (from, where) => `SELECT i.product_id AS product_id,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c FROM ${from} JOIN sale_items i ON i.sale_id=r.sale_id WHERE ${where} GROUP BY i.product_id ORDER BY c DESC`, lim);
+      const list = rows.map((x) => ({ product_id: String(x.product_id), q: Number(x.q) || 0, c: Number(x.c) || 0 })); list.truncated = rows.length >= lim; return list;
+    },
+    // Ventas por hora de Lima (agrupado en SQL, como mucho 24 filas + «sin hora»): { h, n, c }.
+    async salesByHour(p) {
+      const rows = await salesSql(p, (from, where) => `SELECT CAST(strftime('%H',r.created_at,'-5 hours') AS INTEGER) AS h,COUNT(*) AS n,SUM(r.total_cents) AS c FROM ${from} WHERE ${where} GROUP BY h ORDER BY h`, 25);
+      return rows.map((x) => ({ h: x.h == null ? null : Number(x.h), n: Number(x.n) || 0, c: Number(x.c) || 0 }));
+    },
     async salesTotals(p) {
       const m = new Map(); for (const s of await salesIn(p)) { const dia = new Date(Date.parse(s.created_at) - 5 * 3600 * 1000).toISOString().slice(0, 10), k = dia + '|' + s.payment_method;
         const r = m.get(k) || { dia, metodo: s.payment_method, n: 0, c: 0 }; r.n++; r.c += Number(s.total_cents) || 0; m.set(k, r); }
@@ -194,6 +256,15 @@ export function canonicalReader(db) {
       const ids = new Set((await salesIn(p)).map((s) => String(s.sale_id))), m = new Map();
       for (const it of await all('sale-items')) { if (!ids.has(String(it.sale_id))) continue; const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n);
+    },
+    // Unidades vendidas por producto en el período (ventas anuladas fuera), con la misma lectura canónica que topItems.
+    // La lectura canónica pagina por sale_id (no por fecha) y tiene tope de páginas: si ventas O líneas se cortan, pueden faltar
+    // ventas recientes. No hay filtro por fecha en /read/canonical sin tocar a6-canonical.js, así que se marca truncated y la
+    // consulta lo avisa (pantalla, texto y modelo) en vez de callarlo.
+    async soldQty(p) {
+      const [sales, items] = await Promise.all([salesIn(p), all('sale-items')]), ids = new Set(sales.map((s) => String(s.sale_id))), m = new Map();
+      for (const it of items) { if (!ids.has(String(it.sale_id))) continue; const k = String(it.product_id); m.set(k, (m.get(k) || 0) + (Number(it.quantity) || 0)); }
+      m.truncated = !!(sales.truncated || items.truncated); return m;
     },
     // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. Solo lectura; la usa «Ventas bajo costo».
     async saleLines(p) {
@@ -264,10 +335,18 @@ export function memoryReader(data) {
     async productsById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), { ...p }); return out; },
     async credits() { const l = (data.credits || []).map((c) => ({ ...c })); l.truncated = !!data.creditsTruncated; return l; },
     async customers() { const l = (data.customers || []).map((c) => ({ ...c })); l.truncated = !!data.customersTruncated; return l; },
+    async itemsByProduct(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)), m = new Map();
+      for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const k = String(it.product_id), r = m.get(k) || { product_id: k, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(k, r); }
+      return [...m.values()].sort((a, b) => b.c - a.c); },
+    async salesByHour(p) { const m = new Map();
+      for (const s of (data.sales || []).filter((x) => inRange(x, p))) { const h = new Date(Date.parse(s.created_at) - LIMA_OFFSET_MS).getUTCHours(), r = m.get(h) || { h, n: 0, c: 0 }; r.n++; r.c += Number(s.total_cents) || 0; m.set(h, r); }
+      return [...m.values()].sort((a, b) => a.h - b.h); },
     async salesTotals(p) { const m = new Map(); for (const s of (data.sales || []).filter((x) => inRange(x, p))) { const k = dia(s.created_at) + '|' + s.metodo; const r = m.get(k) || { dia: dia(s.created_at), metodo: s.metodo, n: 0, c: 0 }; r.n++; r.c += s.total_cents; m.set(k, r); } return [...m.values()].sort((a, b) => a.dia.localeCompare(b.dia)); },
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
+    async soldQty(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)), m = new Map();
+      for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const k = String(it.product_id); m.set(k, (m.get(k) || 0) + (Number(it.quantity) || 0)); } return m; },
     async saleLines(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id));
       return (data.saleItems || []).filter((x) => ids.has(x.sale_id)).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null })); },
     async periodSummary(periods) {
@@ -357,6 +436,44 @@ function matchProducts(list, text) {
   if (!words.length) return [];
   return list.map((p) => ({ p, s: words.filter((w) => norm(p.nombre).includes(w)).length })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.p);
 }
+// Cálculo puro de las sugerencias (se prueba aparte). products: forma del lector; sold: Map product_id -> unidades vendidas en `dias` días.
+// Entra un producto con control de stock si está agotado, en o bajo el mínimo, o si a su ritmo de venta le alcanza para menos de
+// alertaDias días. Objetivo: mínimo + lo que se vende en diasCobertura días (sin ventas: el doble del mínimo, como «¿Qué falta reponer?»).
+// Agotado (stock <= 0, también negativo) SIEMPRE entra: al menos 1, o lo que falte para volver a 0 y llegar al objetivo; sin mínimo ni
+// ventas queda marcado sinDatos (la cantidad es solo un piso, el dueño decide).
+// Orden: agotados primero, luego los que se acaban antes (días que alcanza), luego los sin ventas más lejos del mínimo; empate: más unidades.
+// Fuera de la lista (no son compras): genéricos y servicios (GENERIC_PRODUCT_NAMES / SERVICE_CATEGORIES); stock bajo revisarBajo
+// (−50) -> revisarDatos (el número está mal, no hay que comprar 7660 verduras); en 0 o negativo, sin mínimo y sin ventas en el
+// período -> sinContar (stock que nadie contó, p. ej. vendido con «Faltan N» y nunca repuesto).
+export function purchasePlan(products, sold, dias, rules = SUGGEST_RULES) {
+  const out = [], sinContar = [], revisarDatos = []; let genericos = 0;
+  const revisarBajo = Number.isFinite(Number(rules.revisarBajo)) ? Number(rules.revisarBajo) : SUGGEST_RULES.revisarBajo;
+  for (const p of products || []) {
+    if (!p || !p.controla || !Number.isFinite(Number(p.stock))) continue;
+    if (isGenericProduct(p)) { genericos++; continue; }
+    const stock = Number(p.stock), min = Math.max(0, Number(p.min) || 0), vendidos = Math.max(0, Number(sold?.get(String(p.id))) || 0);
+    if (stock < revisarBajo) { revisarDatos.push({ id: String(p.id), nombre: p.nombre, stock: r2(stock), min: r2(min), vendidos: r2(vendidos) }); continue; }
+    if (stock <= 0 && min === 0 && vendidos === 0) { sinContar.push({ id: String(p.id), nombre: p.nombre, stock: r2(stock) }); continue; }
+    const ritmo = dias > 0 ? vendidos / dias : 0, alcanza = ritmo > 0 ? Math.max(0, stock) / ritmo : null;
+    if (!(stock <= 0 || stock <= min || (alcanza != null && alcanza < rules.alertaDias))) continue;
+    const objetivo = ritmo > 0 ? min + ritmo * rules.diasCobertura : min * 2, calc = Math.ceil(objetivo - stock - 1e-9);
+    const sugerido = stock <= 0 ? Math.max(1, calc) : calc, sinDatos = stock <= 0 && ritmo === 0 && min === 0;
+    if (!(sugerido > 0)) continue;
+    const costo = Number(p.costo) > 0 ? Number(p.costo) : null;
+    out.push({ id: String(p.id), nombre: p.nombre, stock: r2(stock), min: r2(min), vendidos: r2(vendidos), alcanza: alcanza == null ? null : Math.floor(alcanza * 10) / 10,
+      sugerido, sinDatos, costo, costoEst: costo == null ? null : r2(costo * sugerido) });
+  }
+  const rank = (x) => (x.stock <= 0 ? 0 : x.alcanza != null ? 1 : 2), byId = (a, b) => a.id.localeCompare(b.id);
+  revisarDatos.sort((a, b) => a.stock - b.stock || byId(a, b)); sinContar.sort((a, b) => a.stock - b.stock || byId(a, b));
+  const sugerencias = out.sort((a, b) => rank(a) - rank(b) || (rank(a) === 1 ? a.alcanza - b.alcanza : rank(a) === 2 ? (a.stock - a.min) - (b.stock - b.min) : 0) || b.sugerido - a.sugerido || a.id.localeCompare(b.id));
+  return { sugerencias, sinContar, revisarDatos, genericos };
+}
+// Compatibilidad: solo la lista de compras.
+export function purchaseSuggestions(products, sold, dias, rules = SUGGEST_RULES) { return purchasePlan(products, sold, dias, rules).sugerencias; }
+function suggestPeriod(args, nowMs) {
+  if (dateWordRange(args?.periodo, nowMs) || DATE.test(args?.desde || '') || DATE.test(args?.hasta || '') || dateWord(args?.desde) || dateWord(args?.hasta)) return period(args, nowMs); // fecha o palabra de fecha: la de period()
+  const hasta = limaToday(nowMs); return period({ desde: addDays(hasta, -(SUGGEST_RULES.diasVentas - 1)), hasta }, nowMs);
+}
 // Devuelve { tipo, titulo, columnas, filas, texto, resumen } o { error }.
 // filas/columnas: para la pantalla del dueño. resumen: lo único que ve el modelo (chico, sin datos personales).
 export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
@@ -374,7 +491,8 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
         resumen: { encontrados: hits.length, productos: hits.map((p) => (p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) })) } };
     }
     if (tipo === 'bajo_stock') {
-      const low = list.filter((p) => p.controla && Number.isFinite(p.stock) && (p.stock <= 0 || p.stock <= p.min)).sort((a, b) => (a.stock - a.min) - (b.stock - b.min));
+      // Servicios fuera (no llevan stock), igual que la pestaña «Crítico» de Inventario.
+      const low = list.filter((p) => p.controla && !isServiceProduct(p) && Number.isFinite(p.stock) && (p.stock <= 0 || p.stock <= p.min)).sort((a, b) => (a.stock - a.min) - (b.stock - b.min));
       const filas = low.slice(0, N).map((p) => [p.nombre, r2(p.stock), r2(p.min), Math.max(1, Math.ceil(p.min * 2 - p.stock))]);
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir'], filas, total: low.length,
         texto: low.length ? (low.length === 1 ? 'Hay 1 producto en o bajo el mínimo' : 'Hay ' + low.length + ' productos en o bajo el mínimo') + note + '. Los más urgentes: ' + low.slice(0, 3).map((p) => p.nombre + ' (' + (p.stock <= 0 ? stockLabel(p.stock) : r2(p.stock)) + ')').join(', ') + '.' : 'Ningún producto está bajo el mínimo' + note + '.',
@@ -405,6 +523,10 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       resumen: { desde: p.desde, hasta: p.hasta, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
   }
   if (SUMMARY_TYPES.includes(tipo)) return summaryQuery(reader, tipo, args, nowMs, base);
+  if (tipo === 'ganancia') return profitQuery(reader, args, nowMs, base);
+  if (tipo === 'productos_sin_ventas') return idleProductsQuery(reader, args, nowMs, base);
+  if (tipo === 'deuda_cliente') return customerDebtQuery(reader, args, base);
+  if (tipo === 'ventas_por_hora') return hourlySalesQuery(reader, args, nowMs, base);
   if (tipo === 'deudas_clientes') {
     const [credits, customers] = await Promise.all([reader.credits(), reader.customers()]);
     const names = new Map(customers.map((c) => [c.id, c.nombre])), by = new Map();
@@ -419,6 +541,31 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       texto: top.length ? (top.length === 1 ? '1 cliente debe' : top.length + ' clientes deben') + ' en total S/ ' + total.toFixed(2) + '.' : 'Ningún cliente tiene deuda.',
       // Al modelo: sin nombres ni documentos.
       resumen: { clientes_con_deuda: top.length, total_soles: total, mayores_saldos: top.slice(0, M).map(([id, s], i) => ({ cliente: cli(id, i), soles: r2(s) })) } };
+  }
+  if (tipo === 'sugerencias_compra') {
+    const p = suggestPeriod(args, nowMs), dias = Math.round((Date.parse(p.hasta) - Date.parse(p.desde)) / 86400000) + 1;
+    const [list, sold] = await Promise.all([reader.products(), typeof reader.soldQty === 'function' ? reader.soldQty(p) : new Map()]);
+    const plan = purchasePlan(list, sold, dias), sug = plan.sugerencias, F = SUGGEST_RULES.filas, L = SUGGEST_RULES.listaMax;
+    const nSC = plan.sinContar.length, nRD = plan.revisarDatos.length;
+    const sin_contar = { total: nSC, lista: plan.sinContar.slice(0, L).map((x) => ({ codigo: x.id, nombre: x.nombre, stock: x.stock })) };
+    const revisar_datos = { total: nRD, lista: plan.revisarDatos.slice(0, L).map((x) => ({ codigo: x.id, nombre: x.nombre, stock: x.stock, vendidos: x.vendidos })) };
+    const aparte = [...(nRD ? [(nRD === 1 ? '1 producto tiene' : nRD + ' productos tienen') + ' el stock muy en negativo (menos de ' + SUGGEST_RULES.revisarBajo + '): revisa sus datos antes de comprar'] : []),
+      ...(nSC ? [(nSC === 1 ? '1 producto está' : nSC + ' productos están') + ' en 0 o en negativo, sin mínimo y sin ventas en ' + dias + ' días: es stock sin contar, no los sugiero'] : [])];
+    const unidades = sug.reduce((s, x) => s + x.sugerido, 0), conCosto = sug.filter((x) => x.costoEst != null), sinCosto = sug.length - conCosto.length;
+    const costo = r2(conCosto.reduce((s, x) => s + x.costoEst, 0));
+    const truncado = !!(list.truncated || sold.truncated), note = truncado ? ' (lista larga: se revisó una parte)' : '';
+    // Pantalla del dueño: con nombres. Al modelo: solo número de fila, código del producto y cantidades (nunca nombres ni datos de clientes).
+    const filas = sug.slice(0, F).map((x, i) => [i + 1, x.nombre || 'Producto ' + x.id, x.stock, x.min, x.vendidos, x.sinDatos ? 'sin datos' : x.alcanza == null ? '-' : x.alcanza, x.sugerido, x.costoEst == null ? '-' : x.costoEst]);
+    return { ...base, titulo: 'Sugerencias de compra (ventas ' + p.desde + ' a ' + p.hasta + ')', columnas: ['N°', 'Producto', 'Stock', 'Mínimo', 'Vendidos ' + dias + ' d', 'Días que alcanza', 'Sugerido', 'Costo est. S/'], filas,
+      total: sug.length, desde: p.desde, hasta: p.hasta, truncado, sin_contar, revisar_datos, genericos_excluidos: plan.genericos,
+      texto: sug.length ? sentences([(sug.length === 1 ? 'Sugiero reponer 1 producto' : 'Sugiero reponer ' + sug.length + ' productos') + ': ' + r2(unidades) + ' unidades' + (conCosto.length ? ', unos S/ ' + costo.toFixed(2) + ' según el costo registrado' + (sinCosto ? ' (' + sinCosto + ' sin costo)' : '') : '') + note,
+        ...(truncado ? ['Ojo: hay muchos datos y solo se leyó una parte; las ventas recientes pueden faltar y las cantidades quedar cortas'] : []), ...aparte,
+        'Es solo una sugerencia: revisa la tabla y registra la compra tú mismo en Inventario > Registrar compra']) : 'Según las ventas de los últimos ' + dias + ' días no hace falta reponer nada' + note + '.' + (truncado ? ' Ojo: solo se leyó una parte de los datos.' : '') + (aparte.length ? ' ' + sentences(aparte) : ''),
+      resumen: { dias_analizados: dias, revisados: list.length, truncado, productos_sugeridos: sug.length, unidades_total: r2(unidades), costo_estimado_soles: costo, sin_costo: sinCosto,
+        primeros: sug.slice(0, M).map((x, i) => ({ fila: i + 1, codigo: x.id, stock: x.stock, minimo: x.min, vendidos: x.vendidos, dias_alcanza: x.alcanza, sugerido: x.sugerido, ...(x.sinDatos ? { sin_datos: true } : {}) })),
+        // Aparte (no son compras): solo totales y códigos.
+        sin_contar: { total: nSC, codigos: sin_contar.lista.map((x) => x.codigo) }, revisar_datos: { total: nRD, codigos: revisar_datos.lista.map((x) => x.codigo) }, genericos_excluidos: plan.genericos,
+        nota: 'Solo sugerencia. Los productos van por número de fila de la tabla que ve el dueño. No se creó ninguna compra.' } };
   }
   if (tipo === 'creditos_atrasados') {
     const { list, sinFecha, total, truncado, clientesCortados } = await overdueCredits(reader, nowMs);
@@ -446,7 +593,8 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
 // ---------- Caja abierta (solo Admin) ----------
 // Hora de Lima: los helpers de arriba (limaDateTime / limaDay), los mismos de todo el asistente.
 const dmy = (iso) => { const c = limaDateTime(iso); return c ? c.slice(8, 10) + '/' + c.slice(5, 7) + '/' + c.slice(0, 4) : null; };
-const soles = (c) => 'S/ ' + cents(c).toFixed(2);
+// (unión con #958: ahí «soles» devuelve el número; aquí el texto «S/ 0.00» de la caja)
+const cajaSoles = (c) => 'S/ ' + cents(c).toFixed(2);
 // Esperado = el expected_cents de la vista (no se recalcula aquí). El desglose se arma con la MISMA suma que la vista:
 // fondo + efectivo de ventas + cash_delta de cobros/ingresos/egresos/devoluciones + cash_delta de gastos (negativo).
 async function cajaAbierta(reader, base) {
@@ -474,8 +622,8 @@ async function cajaAbierta(reader, base) {
     ['Cobros de crédito en efectivo', cents(cobroEf)], ...(cobroDig ? [['Cobros de crédito digitales', cents(cobroDig)]] : []), ['Ingresos de caja', cents(ingresos)], ['Egresos de caja', cents(egresos)],
     ...(devol ? [['Devoluciones por anulación', cents(devol)]] : []), ['Gastos en efectivo', cents(gastosEf)], ['Efectivo esperado ahora', cents(esperado)]];
   return { ...base, titulo: 'Caja abierta', columnas: ['Detalle', 'S/'], filas, total: cents(esperado), ventas: ventasN,
-    texto: 'La caja todavía está abierta (desde ' + desde + '). Fondo ' + soles(o.opening_cents) + ', ventas ' + soles(ventasC) + ' en ' + ventasN + (ventasN === 1 ? ' venta' : ' ventas') +
-      '. Efectivo esperado ahora: ' + soles(esperado) + '. Aún no hay cierre ni conteo.',
+    texto: 'La caja todavía está abierta (desde ' + desde + '). Fondo ' + cajaSoles(o.opening_cents) + ', ventas ' + cajaSoles(ventasC) + ' en ' + ventasN + (ventasN === 1 ? ' venta' : ' ventas') +
+      '. Efectivo esperado ahora: ' + cajaSoles(esperado) + '. Aún no hay cierre ni conteo.',
     // Al modelo: solo totales (sin nombres de cajero ni de clientes, sin ids).
     resumen: { caja_abierta: true, abierta_desde: desde, fondo_inicial_soles: cents(o.opening_cents), ventas: ventasN, ventas_soles: cents(ventasC), por_metodo: Object.fromEntries(metodos),
       cobros_credito: cobrosN, cobros_efectivo_soles: cents(cobroEf), cobros_digitales_soles: cents(cobroDig), ingresos_soles: cents(ingresos), egresos_soles: cents(egresos),
@@ -535,6 +683,115 @@ async function summaryQuery(reader, tipo, args, nowMs, base) {
       top_por_unidades: byQty.slice(0, M).map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q) })) },
     // Solo para el servidor (no va al aparato ni al modelo): códigos a proteger del redactor en el mensaje al modelo y en la respuesta.
     refIds: [...new Set([...byAmount.slice(0, 5), ...byQty.slice(0, 5)].map((x) => String(x.product_id)))] };
+}
+
+// ---------- Consultas nuevas: ganancia, productos sin ventas, deuda de un cliente, ventas por hora ----------
+// Mismo criterio que los resúmenes: los productos ante el modelo y en el texto SOLO como «producto #código» (el nombre solo en la tabla del
+// Admin) y los clientes SOLO como «cliente #código». Nada aquí escribe en la base.
+const rangeLabel = (p) => (p.desde === p.hasta ? p.desde : p.desde + ' a ' + p.hasta);
+const soles = (c) => cents(c) ?? 0;
+const money = (c) => 'S/ ' + soles(c).toFixed(2);
+
+// Ganancia = ventas − costo de lo vendido (período de Lima; por defecto hoy). Costo = costo ACTUAL del producto × unidades (las líneas de
+// venta no guardan el costo de ese día). Lo vendido de productos sin costo (o líneas genéricas sin producto) NO entra en la ganancia: se
+// informa aparte para no inventar un costo. Solo quien ve costos (se revisa en pos-assistant.js antes de llegar aquí).
+async function profitQuery(reader, args, nowMs, base) {
+  const p = period(args, nowMs), rango = rangeLabel(p);
+  const [items, list] = await Promise.all([reader.itemsByProduct(p), reader.products()]);
+  const byId = new Map(list.map((x) => [String(x.id), x]));
+  let ventas = 0, conCosto = 0, costo = 0, sinCosto = 0; const sinCostoIds = [], rows = [];
+  for (const it of items) {
+    const pr = byId.get(String(it.product_id)), c = Number(it.c) || 0, q = Number(it.q) || 0; ventas += c;
+    const uc = pr && Number(pr.costo) > 0 ? Math.round(Number(pr.costo) * 100) : null;
+    if (uc == null) { sinCosto += c; sinCostoIds.push(String(it.product_id)); continue; }
+    const k = Math.round(uc * q); costo += k; conCosto += c; rows.push({ product_id: String(it.product_id), q, c, k, g: c - k });
+  }
+  const ganancia = conCosto - costo, margen = conCosto > 0 ? Math.round((ganancia / conCosto) * 1000) / 10 : null, truncado = !!items.truncated;
+  const top = rows.slice().sort((a, b) => b.g - a.g).slice(0, 5), bajo = rows.filter((x) => x.g < 0).sort((a, b) => a.g - b.g).slice(0, 3);
+  const nm = (id) => (byId.get(id)?.nombre || 'Producto') + ' (' + productRef(id) + ')';
+  const filas = [
+    ...(truncado ? [['Aviso: hay más productos vendidos de los que el asistente suma de una vez; revise Reportes.', '']] : []),
+    ['Ventas S/', soles(ventas)],
+    ['Costo de lo vendido S/ (costo actual)', soles(costo)],
+    ['Ganancia S/', soles(ganancia)],
+    ['Margen %', margen == null ? '—' : margen],
+    ...(sinCosto ? [['Ventas sin costo registrado S/ (' + sinCostoIds.length + (sinCostoIds.length === 1 ? ' producto' : ' productos') + '; no entran en la ganancia)', soles(sinCosto)]] : []),
+    ...top.map((x, i) => ['Top ' + (i + 1) + ' ganancia: ' + nm(x.product_id) + ', ' + r2(x.q) + ' unid.', soles(x.g)]),
+    ...bajo.map((x) => ['Vendido bajo costo: ' + nm(x.product_id), soles(x.g)])
+  ];
+  const texto = ventas
+    ? sentences(['Ganancia ' + rango + ': ' + money(ganancia) + ' (ventas ' + money(conCosto) + ' menos costo ' + money(costo) + (margen == null ? '' : ', margen ' + margen + ' %') + ')',
+      ...(sinCosto ? [money(sinCosto) + ' vendidos de productos sin costo no se cuentan; complete sus costos'] : []),
+      ...(top.length ? ['Lo que más ganancia dejó: ' + productRef(top[0].product_id) + ' (' + money(top[0].g) + ')'] : [])])
+    : 'No hay ventas registradas ' + rango + '.';
+  return { ...base, titulo: 'Ganancia ' + rango, columnas: ['Detalle', 'S/'], filas, desde: p.desde, hasta: p.hasta, texto,
+    resumen: { desde: p.desde, hasta: p.hasta, truncado, base_costo: 'costo actual del producto', ventas_soles: soles(ventas), ventas_con_costo_soles: soles(conCosto),
+      costo_soles: soles(costo), ganancia_soles: soles(ganancia), margen_pct: margen, ventas_sin_costo_soles: soles(sinCosto), productos_sin_costo: sinCostoIds.length,
+      top_ganancia: top.map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q), ganancia_soles: soles(x.g) })),
+      bajo_costo: bajo.map((x) => ({ producto: productRef(x.product_id), ganancia_soles: soles(x.g) })) },
+    refIds: [...new Set([...top, ...bajo].map((x) => x.product_id))] };
+}
+
+// Productos del catálogo actual (promoción activa + creados en vivo) sin ninguna venta en el período (por defecto los últimos 30 días de Lima,
+// hoy incluido). Los de más stock primero (más plata parada). Tabla: hasta 50 con su stock.
+async function idleProductsQuery(reader, args, nowMs, base) {
+  const today = limaToday(nowMs), dflt = !(args?.periodo || args?.fecha || args?.desde || args?.hasta);
+  const p = dflt ? limaBounds(addDays(today, -(NEW_QUERY_LIMITS.idleDays - 1)), today) : period(args, nowMs), rango = rangeLabel(p);
+  const [items, list] = await Promise.all([reader.itemsByProduct(p), reader.products()]);
+  const sold = new Set(items.map((x) => String(x.product_id)));
+  const stockOf = (x) => (x.controla && Number.isFinite(Number(x.stock)) ? Number(x.stock) : null);
+  const idle = list.filter((x) => x.id != null && !sold.has(String(x.id))).sort((a, b) => (stockOf(b) ?? -1) - (stockOf(a) ?? -1) || String(a.id).localeCompare(String(b.id)));
+  const truncado = !!(items.truncated || list.truncated), M = QUERY_LIMITS.modelRows, first = idle.slice(0, M);
+  const filas = [...(truncado ? [['Aviso: lista larga; pueden faltar o sobrar productos. Revise Reportes.', '']] : []),
+    ...idle.slice(0, NEW_QUERY_LIMITS.idleRows).map((x) => [(x.nombre || 'Producto') + ' (' + productRef(x.id) + ')', stockOf(x) == null ? 'sin control' : r2(stockOf(x))])];
+  const texto = idle.length
+    ? sentences([(idle.length === 1 ? '1 producto no tuvo ventas ' : idle.length + ' productos no tuvieron ventas ') + rango + ' (de ' + list.length + ' revisados)',
+      'Con más stock: ' + idle.slice(0, 3).map((x) => productRef(x.id) + (stockOf(x) == null ? '' : ' (' + r2(stockOf(x)) + ')')).join(', ')])
+    : 'Todos los productos tuvieron ventas ' + rango + '.';
+  return { ...base, titulo: 'Sin ventas ' + rango, columnas: ['Producto', 'Stock'], filas, total: idle.length, desde: p.desde, hasta: p.hasta, texto,
+    resumen: { desde: p.desde, hasta: p.hasta, sin_ventas: idle.length, revisados: list.length, truncado,
+      primeros: first.map((x) => ({ producto: productRef(x.id), stock: stockOf(x) == null ? null : r2(stockOf(x)) })) },
+    refIds: idle.slice(0, Math.max(M, 3)).map((x) => String(x.id)) };
+}
+
+// Deuda de UN cliente por su código («cliente #código»). Al modelo y a la tabla: solo el código, el saldo total, cuántos créditos abiertos
+// y cuál vence primero. Usa la misma lectura canónica de créditos que deudas_clientes (reader.credits, sin SQL aparte). Nunca nombre, DNI ni teléfono (el aparato del Admin pone el nombre de SU lista con el código).
+async function customerDebtQuery(reader, args, base) {
+  const { customerCode } = await import('./pos-assistant.js');
+  const code = customerCode(args?.cliente_id) ?? customerCode(args?.cliente);
+  if (!code) return { ...base, columnas: [], filas: [], texto: 'Dime el código del cliente (aparece como «cliente #código» en Clientes).', resumen: { falta: 'cliente_id' } };
+  const ref = 'cliente #' + code, credits = await reader.credits();
+  let mine = credits.filter((c) => String(c.cliente) === code);
+  if (!mine.length) mine = credits.filter((c) => String(c.cliente).toLowerCase() === code.toLowerCase());
+  const open = mine.filter((c) => Number(c.saldo) > 0).sort((a, b) => String(a.vence || '9999').localeCompare(String(b.vence || '9999')));
+  const total = r2(open.reduce((s, c) => s + Number(c.saldo), 0)), first = open.find((c) => c.vence)?.vence || null;
+  let known = mine.length > 0;
+  if (!known && typeof reader.customers === 'function') { const cs = await reader.customers(); known = cs.some((c) => String(c.id) === code || String(c.id).toLowerCase() === code.toLowerCase()); }
+  const texto = open.length
+    ? ref + ' debe S/ ' + total.toFixed(2) + ' en ' + open.length + (open.length === 1 ? ' crédito abierto' : ' créditos abiertos') + (first ? '; el primero vence el ' + first : '') + '.'
+    : known ? ref + ' no tiene deudas pendientes.' : 'No encontré deudas de ' + ref + '. Revise el código en Clientes.';
+  return { ...base, titulo: 'Deuda de ' + ref, columnas: ['Vence', 'Saldo S/'], filas: open.slice(0, QUERY_LIMITS.topRows).map((c) => [c.vence || '-', r2(c.saldo)]),
+    ...(open.length > QUERY_LIMITS.topRows ? { total: open.length } : {}), texto,
+    resumen: { cliente: ref, saldo_soles: total, creditos_abiertos: open.length, vence_primero: first } };
+}
+
+// Ventas por hora de Lima (período por defecto hoy): número y total por hora. Sin clientes ni productos.
+async function hourlySalesQuery(reader, args, nowMs, base) {
+  // «¿A qué hora vendo más?» sin fecha: esta semana (lunes a hoy, Lima), sin volver a preguntar el período.
+  const noDate = !args?.periodo && !args?.fecha && !args?.desde && !args?.hasta;
+  const p = period(noDate ? { ...args, periodo: 'esta_semana' } : args, nowMs), rango = rangeLabel(p), rows = (await reader.salesByHour(p)).filter((x) => x.n > 0);
+  const hh = (h) => (h == null ? 'sin hora' : String(h).padStart(2, '0') + ':00');
+  const slot = (h) => (h == null ? 'Sin hora' : hh(h) + '–' + String(h).padStart(2, '0') + ':59');
+  const n = rows.reduce((s, x) => s + x.n, 0), c = rows.reduce((s, x) => s + x.c, 0);
+  const best = rows.filter((x) => x.h != null).sort((a, b) => b.c - a.c || b.n - a.n)[0], most = rows.filter((x) => x.h != null).sort((a, b) => b.n - a.n || b.c - a.c)[0];
+  const texto = n
+    ? sentences(['Ventas por hora ' + rango + ': ' + n + (n === 1 ? ' venta' : ' ventas') + ', ' + money(c),
+      ...(best ? ['Donde más vende es de ' + slot(best.h) + ' (' + money(best.c) + ' en ' + best.n + (best.n === 1 ? ' venta' : ' ventas') + ')'] : []),
+      ...(most && best && most.h !== best.h ? ['Con más ventas: ' + slot(most.h) + ' (' + most.n + ')'] : [])])
+    : 'No hay ventas registradas ' + rango + '.';
+  return { ...base, titulo: 'Ventas por hora ' + rango, columnas: ['Hora (Lima)', 'Ventas', 'S/'], filas: rows.map((x) => [slot(x.h), x.n, soles(x.c)]), desde: p.desde, hasta: p.hasta, texto,
+    resumen: { desde: p.desde, hasta: p.hasta, ventas: n, total_soles: soles(c), mejor_hora: best ? { hora: hh(best.h), ventas: best.n, soles: soles(best.c) } : null,
+      por_hora: rows.map((x) => ({ hora: hh(x.h), ventas: x.n, soles: soles(x.c) })) } };
 }
 
 // ---------- Documentos para aparatos de empleado ----------
