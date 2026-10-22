@@ -31,7 +31,7 @@ const setRow = (f, value) => f.exec(`INSERT INTO pos_settings(key,value_json,rev
 
 test('la lista cerrada no incluye nada de costos, cierres, tesorería, ajustes ni proveedores', () => {
   for (const bad of ['purchases.costs.view', 'dashboard-compras', 'precio-por-margen', 'punto-equilibrio', 'valorizacion-inventario', 'cash.closes.view',
-    'dashboard-tesoreria', 'settings.set', 'ajustes-inventario', 'importar-proveedores', 'adjuntos-proveedor', 'edicion-masiva-productos', 'kardex', 'asistente-virtual', 'reporte-arqueo', 'permisos-empleado', 'estado-cuenta-abonos', 'estado-cuenta-cliente'])
+    'dashboard-tesoreria', 'settings.set', 'ajustes-inventario', 'importar-proveedores', 'adjuntos-proveedor', 'edicion-masiva-productos', 'kardex', 'asistente-virtual', 'reporte-arqueo', 'permisos-empleado', 'permisos-por-empleado', 'estado-cuenta-abonos', 'estado-cuenta-cliente'])
     assert.ok(!EMPLOYEE_TOGGLES.includes(bad), bad);
   assert.equal(EMPLOYEE_TOGGLES.length, 10);
   assert.ok(Object.isFrozen(EMPLOYEE_TOGGLES));
@@ -83,7 +83,7 @@ test('featureDecision puro: orden candado → rol → casilla', async () => {
 
 test('/auth/employee-permissions cerrado por su candado mientras no se desbloquee', async t => {
   const f = await setup(t);
-  assert.equal(PERMISSIONS.featureLocked('permisos-empleado'), true);
+  assert.equal(PERMISSIONS.featureLocked('permisos-por-empleado'), true);
   const r = await call(f, '/auth/employee-permissions', 'owner-token');
   assert.deepEqual([r.status, r.body.error], [403, 'feature_locked']);
   assert.equal(f.sql('SELECT COUNT(*) n FROM pos_settings WHERE key=?', EMPLOYEE_PERMS_KEY).n, 0);

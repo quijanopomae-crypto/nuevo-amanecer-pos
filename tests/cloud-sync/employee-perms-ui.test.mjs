@@ -12,7 +12,7 @@ function load(extra) {
   vm.runInContext(UI, ctx);
   return ctx;
 }
-const perms = locked => ({ featureLocked: id => (id === 'permisos-empleado' ? locked : true) });
+const perms = locked => ({ featureLocked: id => (id === 'permisos-por-empleado' ? locked : true) });
 const owner = v => ({ isOwner: () => v });
 
 test('visible solo con candado propio abierto Y dueño confirmado; cualquier error cierra', () => {
@@ -26,12 +26,12 @@ test('visible solo con candado propio abierto Y dueño confirmado; cualquier err
   assert.equal(load({ NA_PERMISSIONS: perms(false), NA_ROLES: owner(true) }).NA_EMPLOYEE_PERMS_UI.mount(null), false);
 });
 
-test('hoy el candado permisos-empleado está cerrado y no hay entradas nuevas en FEATURE_LOCKS/FEATURE_ROLES/SCREENS', () => {
+test('hoy el candado permisos-por-empleado está cerrado y no hay entradas nuevas en FEATURE_LOCKS/FEATURE_ROLES/SCREENS', () => {
   const ctx = vm.createContext({});
   vm.runInContext(read('POS/js/config/pos-permissions.js'), ctx);
   const P = ctx.NA_PERMISSIONS;
-  assert.equal(P.featureLocked('permisos-empleado'), true);
-  assert.ok(!('permisos-empleado' in P.FEATURE_LOCKS) && !('permisos-empleado' in P.FEATURE_ROLES));
+  assert.equal(P.featureLocked('permisos-por-empleado'), true);
+  assert.ok(!('permisos-por-empleado' in P.FEATURE_LOCKS) && !('permisos-por-empleado' in P.FEATURE_ROLES));
 });
 
 test('normalize: solo ids de la lista y valor true; todo lo demás cerrado', () => {

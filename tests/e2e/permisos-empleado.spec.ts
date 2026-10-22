@@ -30,7 +30,7 @@ async function boot(page: Page, { role = 'owner', allow = {} as Record<string, b
   await page.waitForFunction(r => (window as any).NA_ROLES?.role === r && (window as any).NA_ROLES.confirmed && (window as any).NA_THEME && (window as any).NA_MENU_NAVIGATION, role);
   await page.evaluate(dark => { const w = window as any; if (w.NA_THEME.isDark() !== dark) w.NA_THEME.toggle(); }, dark);
   if (unlock) await page.evaluate(() => { const w = window as any, p = w.NA_PERMISSIONS, orig = p.featureLocked;
-    w.NA_PERMISSIONS = Object.assign({}, p, { featureLocked: (id: string) => id === 'permisos-empleado' ? false : orig(id) }); });
+    w.NA_PERMISSIONS = Object.assign({}, p, { featureLocked: (id: string) => id === 'permisos-por-empleado' ? false : orig(id) }); });
   return calls;
 }
 async function openUsuarios(page: Page) {

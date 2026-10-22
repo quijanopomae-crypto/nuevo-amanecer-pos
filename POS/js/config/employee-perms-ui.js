@@ -6,7 +6,7 @@
   'use strict';
   var doc = root.document;
   var T = function () { return root.NA_EMPLOYEE_TOGGLES; };
-  var LOCK_ID = 'permisos-empleado';
+  var LOCK_ID = 'permisos-por-empleado';
   var PATH = '/auth/employee-permissions';
   function panelUnlocked() {
     try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(LOCK_ID) === false); } catch (_) { return false; }

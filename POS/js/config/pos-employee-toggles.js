@@ -33,7 +33,7 @@
     return out;
   }
   root.NA_EMPLOYEE_TOGGLES = Object.freeze({
-    KEY: 'internal:emp:perm:v1', LOCK_ID: 'permisos-empleado', IDS: Object.freeze(IDS), GROUPS: Object.freeze(GROUPS),
+    KEY: 'internal:emp:perm:v1', LOCK_ID: 'permisos-por-empleado', IDS: Object.freeze(IDS), GROUPS: Object.freeze(GROUPS),
     has: function (id) { return Object.prototype.hasOwnProperty.call(SET, id); }, normalize: normalize
   });
 })(globalThis);
