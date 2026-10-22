@@ -102,6 +102,7 @@
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/punto-equilibrio.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
     <script>
@@ -527,6 +528,26 @@
     <p class="psm-status" data-psm-status role="status" aria-live="polite"></p>
     <div data-psm-content></div>
   </div>
+</div>
+
+<div class="page" id="pagePuntoEquilibrio" aria-labelledby="puntoEquilibrioTitle">
+    <header class="pe-header">
+        <div class="pe-heading">
+            <h1 id="puntoEquilibrioTitle">Punto de equilibrio</h1>
+            <p>Consulta de solo lectura · Solo dueño</p>
+        </div>
+        <div class="pe-controls" data-pe-controls hidden>
+            <label>Mes
+                <input type="month" data-pe-month>
+            </label>
+            <button type="button" data-pe-refresh>Actualizar</button>
+        </div>
+    </header>
+    <div class="pe-content">
+        <p class="pe-explanation">Venta mínima para cubrir tus gastos del mes: gastos ÷ margen de contribución. El margen sale de tus ventas y del costo de lo vendido.</p>
+        <p class="pe-status" data-pe-status role="status" aria-live="polite"></p>
+        <div data-pe-report></div>
+    </div>
 </div>
 
 <div class="page" id="pageValorizacion">
@@ -1466,6 +1487,7 @@
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/punto-equilibrio.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>

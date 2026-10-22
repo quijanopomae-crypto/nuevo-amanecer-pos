@@ -40,11 +40,11 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
       assert.equal(P.FEATURE_LOCKS[f.id], false); assert.equal(f.page, unlocked[f.id]);
       assert.ok(indexHtml.includes(`id="${f.page}"`)); assert.equal(api.isUnlocked(f), true);
     } else {
-      assert.equal(P.FEATURE_LOCKS[f.id], true, f.id); assert.equal(f.page, f.id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : null); assert.equal(api.isUnlocked(f), false); assert.ok(f.pending || ['cotizaciones', 'cuentas-pagar', 'compartir-pdf-whatsapp'].includes(f.id));
+      assert.equal(P.FEATURE_LOCKS[f.id], true, f.id); assert.equal(f.page, f.id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : f.id === 'punto-equilibrio' ? 'pagePuntoEquilibrio' : null); assert.equal(api.isUnlocked(f), false); assert.ok(f.pending || f.id === 'punto-equilibrio' || ['cotizaciones', 'cuentas-pagar', 'compartir-pdf-whatsapp'].includes(f.id));
     }
   }
   const prioritized = api.list().filter(f => f.priority);
-  assert.equal(prioritized.length, 85);
+  assert.equal(prioritized.length, 86);
   assert.deepEqual(Array.from(api.list().filter(f=>f.uncertain).map(f=>f.id)).sort(), 'app-android-nativa cpe-sin-internet venta-granel gaveta-dinero comprobante-por-correo app-almaceneros equipos-pos shopify-woocommerce bandeja-multicanal plan-distribuidor multi-ruc balanza calendario-gastos gasto-a-cuenta tipo-cierre firma-digital sunat-comprobantes'.split(' ').sort());
   for (const id of ['cuotas', 'cobro-multiple', 'lista-ventas', 'precios-mayor', 'limite-credito', 'compras', 'stock-lotes-fefo']) assert.equal(api.get(id), undefined, id + ' already exists in the POS');
 });
