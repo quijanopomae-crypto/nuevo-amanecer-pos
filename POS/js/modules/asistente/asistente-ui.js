@@ -752,6 +752,20 @@
     }, function (e) { throw P.message(e && e.code); }); }).catch(function (m) {
       wait.remove(); addMsg('a', typeof m === 'string' ? m : 'No pude abrir ese PDF.'); setState('error', 2000); throw m; });
   }
+  // ---------- «Foto de producto» (solo Admin, carga diferida de asistente-producto-foto.js): solo PRELLENA «Nuevo producto» ----------
+  var PRODFOTO_RE = /\bfoto\s+(?:de(?:l)?\s+)?(?:la\s+)?(?:producto|etiqueta)\b|\b(?:lee|leer|l[eé]ame)\s+(?:la\s+|esta\s+)?etiqueta\b/i;
+  var prodFotoP = null;
+  function loadProdFoto() {
+    if (root.NA_ASISTENTE_PRODUCTO_FOTO) return Promise.resolve(root.NA_ASISTENTE_PRODUCTO_FOTO);
+    if (prodFotoP) return prodFotoP;
+    prodFotoP = new Promise(function (ok, ko) { var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-producto-foto.js';
+      sc.onload = function () { root.NA_ASISTENTE_PRODUCTO_FOTO ? ok(root.NA_ASISTENTE_PRODUCTO_FOTO) : ko(new Error('producto-foto')); }; sc.onerror = function () { prodFotoP = null; ko(new Error('producto-foto')); }; doc.body.appendChild(sc); });
+    return prodFotoP;
+  }
+  function prodFotoPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('producto_foto_admin_only'); return; } fileMode = 'producto'; fileEl.click(); }
+  function prodFotoStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true;
+    compress(f).then(function (img) { addMsg('u', 'Foto de producto', img); return loadProdFoto().then(function (P) { var h = boletaHost(); h.openNewProduct = deps.openNewProduct; return P.start(img, h); }); })
+      .catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); }
   function boletaPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('boleta_admin_only'); return; } fileMode = 'boleta'; fileEl.click(); }
   function boletaStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; addMsg('u', 'Leer boleta con IA');
     loadBoleta().then(function (B) { return B.start(f, boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir el lector de boletas. Inténtelo otra vez.'); setState('error', 2000); }); }
@@ -783,6 +797,7 @@
     if (busy) return;
     text = String(text || '').trim(); if (!text && !image) return;
     if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
+    if (!image && isOwnerAccess() && PRODFOTO_RE.test(text)) { inputEl.value = ''; return prodFotoPick(); }
     if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !REVIEW_RE.test(text)) return learnedShow(text);
     if (!image && isOwnerAccess() && REVIEW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
@@ -898,7 +913,7 @@
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + (canPhoto() ? '<button type="button" data-prodfoto>Foto de producto</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }
@@ -1270,8 +1285,9 @@
       if (k === 'pdf' && !isOwnerAccess()) { errMsg('image_owner_only'); return; }
       var got = k === 'pdf' ? pdfImage(f) : Promise.resolve({ blob: f });
       if (mode === 'boleta') { if (isOwnerAccess()) got.then(function (r) { boletaStart(r.blob); }, function () {}); return; }
+      if (mode === 'producto') { if (isOwnerAccess()) got.then(function (r) { prodFotoStart(r.blob); }, function () {}); return; }
       got.then(function (r) { return compress(r.blob).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }, function () { addMsg('a', k === 'pdf' ? 'No pude abrir ese PDF.' : 'No pude abrir esa foto.'); setState('error', 2000); }); }, function () {}); };
-    panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else send(b.dataset.q); });
+    panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else if (b.hasAttribute('data-prodfoto')) prodFotoPick(); else send(b.dataset.q); });
     shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón
     rootEl.addEventListener('pointerdown', wake, { passive: true }); panelEl.addEventListener('pointerdown', wake, { passive: true });

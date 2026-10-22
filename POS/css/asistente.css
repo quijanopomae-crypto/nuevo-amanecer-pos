@@ -465,3 +465,8 @@ input.na-asst-bol-learned { background: #ecfdf5; border-color: #10b981; }
 .na-asst-bol-actions .na-asst-ok { background: #16a34a; color: #fff; border-color: #16a34a; }
 .na-asst-bol-actions .na-asst-bol-dup { background: #fee2e2; color: #991b1b; border: 2px solid #b91c1c; }
 .na-asst-cli { display: inline; padding: 0; border: 0; background: none; color: #1d4ed8; text-decoration: underline; font: inherit; cursor: pointer; min-height: 0; }
+/* «Foto de producto»: revisión editable antes de prellenar «Nuevo producto» */
+.na-asst-pf-row { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; font-size: 13px; }
+.na-asst-pf-row .fi { width: 100%; box-sizing: border-box; }
+.na-asst-pf-info { margin-top: 4px; font-size: 13px; color: #475569; }
+.na-asst-pf-note { margin-top: 6px; font-size: 12.5px; color: #92400e; }

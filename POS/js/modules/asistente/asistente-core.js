@@ -664,6 +664,7 @@
     forbidden_document: ['Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.'],
     review_admin_only: ['La revisión del punto de venta es solo para el Admin.'],
     boleta_admin_only: ['Leer boletas con IA es solo para el Admin.'],
+    producto_foto_admin_only: ['La foto de producto es solo para el Admin.'],
     boleta_unreadable: ['No pude leer esa boleta. Tome la foto de frente, con buena luz y sin mover.'],
     boleta_timeout: ['La lectura tardó más de 90 s. Pruebe con una foto más nítida o recortada.'],
     rate_limited: [MSG.wait, true], HTTP_429: [MSG.wait, true], upstream_busy: [MSG.wait, true],
