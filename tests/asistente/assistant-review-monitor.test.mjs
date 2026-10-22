@@ -117,7 +117,7 @@ test('servidor: errores, lentitud, cuelgues y boletas en el informe; clientes SO
 test('payload al proveedor: lleva el código del cliente y NO su nombre ni DNI (ni lo que el aparato mande de más)', async () => {
   const x = await route(BODY, { ASSISTANT_AI_API_KEY_4: 'k4' }, async () => OK('Errores: • 3 veces con cliente #1729550000000 (abono).'));
   assert.equal(x.seen.length, 1); const p = JSON.stringify(x.seen[0].messages);
-  assert.ok(p.includes('cliente #1729550000000'));
+  assert.ok(p.includes('cliente #C-0001') && !p.includes('1729550000000')); // hacia la IA, código neutro
   for (const bad of ['Rosa', 'Quispe', '45678912', '"nombre"', '"dni"']) assert.ok(!p.includes(bad), bad);
   assert.equal(x.d.source, 'modelo'); assert.match(x.d.report, /cliente #1729550000000/); assert.deepEqual(x.d.customers, ['1729550000000']);
 });
