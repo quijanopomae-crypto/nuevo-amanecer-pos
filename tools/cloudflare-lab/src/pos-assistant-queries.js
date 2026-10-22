@@ -73,6 +73,16 @@ export function summaryPeriods(tipo, args, nowMs) {
   const pym = prevMonth(ym), pEnd = monthEnd(pym), day = Number(hasta.slice(8, 10)), pHasta = enCurso ? (pym + '-' + pad2(Math.min(day, Number(pEnd.slice(8, 10))))) : pEnd;
   return { actual: mkPeriod(ym + '-01', hasta), anterior: mkPeriod(pym + '-01', pHasta), en_curso: enCurso };
 }
+// Productos ante el modelo: SOLO «producto #código» (un nombre puede llevar el de un cliente, p. ej. «Encargo Sra. …»). El nombre se pone
+// únicamente en la tabla de la pantalla del Admin (mismo criterio que «Ventas bajo costo», PR #930). Código raro: sin código.
+const CODE_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
+export const productRef = (id) => 'producto #' + (CODE_RE.test(String(id)) ? String(id) : 'sin-código');
+// Protege «producto #código» del redactor (un código numérico largo parece DNI o teléfono) y lo devuelve igual después.
+export function protectProductRefs(text, ids, fn) {
+  const refs = [...new Set([...(ids || [])].map(productRef))].sort((a, b) => b.length - a.length); // «#123» antes que «#12»
+  let t = String(text ?? ''); refs.forEach((r, i) => { t = t.split(r).join('\uE000' + String.fromCharCode(0xE100 + i) + '\uE001'); });
+  return fn(t).replace(/\uE000([\uE100-\uE8FF])\uE001/g, (_m, c) => refs[c.charCodeAt(0) - 0xE100] || '').replace(/[\uE000\uE001]/g, '');
+}
 const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
 
 // ---------- Lectores ----------
@@ -246,8 +256,8 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
     resumen: { compras: rows.length, total_soles: r2(filas.reduce((s, f) => s + (f[3] || 0), 0)), recientes: filas.slice(0, M).map((f) => ({ fecha: f[0], proveedor: f[1], soles: f[3] })) } };
 }
 
-// Resumen del día o del mes. Pantalla del Admin: tabla actual vs. anterior y productos top. Modelo: SOLO totales, conteos y nombres
-// de producto (sin clientes: ni nombre, ni DNI, ni teléfono, ni código). Nada aquí escribe en la base.
+// Resumen del día o del mes. Pantalla del Admin: tabla actual vs. anterior y productos top (con nombre). Modelo y texto de la respuesta:
+// SOLO totales, conteos y «producto #código» (sin nombres de producto ni datos de clientes). Nada aquí escribe en la base.
 async function summaryQuery(reader, tipo, args, nowMs, base) {
   const per = summaryPeriods(tipo, args, nowMs);
   if (typeof reader.periodSummary !== 'function') return { error: 'no_summary' };
@@ -269,8 +279,8 @@ async function summaryQuery(reader, tipo, args, nowMs, base) {
     ['Al crédito S/', S(cur.credito_c), S(prev.credito_c), fmtPct(pct(cur.credito_c, prev.credito_c))],
     ['Cobros de créditos S/', cobro(cur), cobro(prev), cur.pagos_c == null ? '—' : fmtPct(pct(cur.pagos_c, prev.pagos_c))],
     ...metodos.map((m) => ['Método: ' + (METODO[m] || m), S(cur.metodos[m]?.c || 0), S(prev.metodos[m]?.c || 0), fmtPct(pct(cur.metodos[m]?.c || 0, prev.metodos[m]?.c || 0))]),
-    ...byAmount.slice(0, 5).map((x, i) => ['Top ' + (i + 1) + ' por monto: ' + nm(x) + ' (' + r2(x.q) + ' unid.)', S(x.c), '', '']),
-    ...byQty.slice(0, 5).map((x, i) => ['Top ' + (i + 1) + ' por unidades: ' + nm(x), r2(x.q), '', ''])
+    ...byAmount.slice(0, 5).map((x, i) => ['Top ' + (i + 1) + ' por monto: ' + nm(x) + ' (' + productRef(x.product_id) + ', ' + r2(x.q) + ' unid.)', S(x.c), '', '']),
+    ...byQty.slice(0, 5).map((x, i) => ['Top ' + (i + 1) + ' por unidades: ' + nm(x) + ' (' + productRef(x.product_id) + ')', r2(x.q), '', ''])
   ];
   const cambio = pct(cur.c, prev.c), nota = cur.truncado ? ' (lista larga: se revisaron las primeras ventas)' : '';
   const texto = cur.n
@@ -278,7 +288,7 @@ async function summaryQuery(reader, tipo, args, nowMs, base) {
       prevL + ': ' + money(prev.c) + (cambio == null ? '' : ' (' + fmtPct(cambio) + ')'),
       'Al contado ' + money(cur.c - cur.credito_c) + ' y al crédito ' + money(cur.credito_c),
       ...(cur.pagos_c == null ? [] : ['Cobros de créditos: ' + money(cur.pagos_c)]),
-      ...(byAmount.length ? ['Lo que más vendió: ' + nm(byAmount[0]) + ' (' + money(byAmount[0].c) + ')'] : [])])
+      ...(byAmount.length ? ['Lo que más vendió: ' + productRef(byAmount[0].product_id) + ' (' + money(byAmount[0].c) + ')'] : [])])
     : sentences(['No hay ventas registradas ' + (dia ? 'el ' : 'en ') + lab(per.actual) + nota, prevL + ': ' + money(prev.c),
       ...(cur.pagos_c ? ['Cobros de créditos: ' + money(cur.pagos_c)] : [])]);
   const tot = (r) => ({ desde: r.desde, hasta: r.hasta, total_soles: S(r.c), ventas: r.n, ticket_promedio: r.n ? r2(S(r.c) / r.n) : 0,
@@ -290,8 +300,10 @@ async function summaryQuery(reader, tipo, args, nowMs, base) {
     total_soles: S(cur.c), ventas: cur.n, desde: per.actual.desde, hasta: per.actual.hasta, texto,
     resumen: { periodo: dia ? 'dia' : 'mes', en_curso: per.en_curso, actual: tot(cur), anterior: tot(prev),
       cambio_pct: { total: cambio, ventas: pct(cur.n, prev.n) },
-      top_por_monto: byAmount.slice(0, M).map((x) => ({ nombre: nm(x), unidades: r2(x.q), soles: S(x.c) })),
-      top_por_unidades: byQty.slice(0, M).map((x) => ({ nombre: nm(x), unidades: r2(x.q) })) } };
+      top_por_monto: byAmount.slice(0, M).map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q), soles: S(x.c) })),
+      top_por_unidades: byQty.slice(0, M).map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q) })) },
+    // Solo para el servidor (no va al aparato ni al modelo): códigos a proteger del redactor en el mensaje al modelo y en la respuesta.
+    refIds: [...new Set([...byAmount.slice(0, 5), ...byQty.slice(0, 5)].map((x) => String(x.product_id)))] };
 }
 
 // ---------- Documentos para aparatos de empleado ----------

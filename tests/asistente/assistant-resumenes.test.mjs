@@ -89,8 +89,10 @@ test('resumen del día: totales, contado/crédito (mixto por cash-movements), co
   assert.deepEqual(a.por_metodo, { Efectivo: 20, Crédito: 10, Mixto: 30 });
   assert.deepEqual([b.desde, b.total_soles, b.ventas, b.cobros_soles], ['2026-10-21', 40, 1, 3]);
   assert.equal(r.resumen.cambio_pct.total, 50); assert.equal(r.resumen.cambio_pct.ventas, 200);
-  assert.deepEqual(r.resumen.top_por_monto.map((x) => x.nombre), ['Aceite 1 L', 'Arroz 1 kg', 'Fideos 500 g']);
-  assert.deepEqual(r.resumen.top_por_unidades.map((x) => x.nombre), ['Arroz 1 kg', 'Fideos 500 g', 'Aceite 1 L']);
+  assert.deepEqual(r.resumen.top_por_monto.map((x) => x.producto), ['producto #P2', 'producto #P1', 'producto #P3']);
+  assert.deepEqual(r.resumen.top_por_unidades.map((x) => x.producto), ['producto #P1', 'producto #P3', 'producto #P2']);
+  assert.ok(!/Aceite|Arroz|Fideos/.test(JSON.stringify(r.resumen) + r.texto), 'al modelo y en el texto: solo códigos de producto');
+  assert.ok(r.filas.some((f) => f[0] === 'Top 1 por monto: Aceite 1 L (producto #P2, 3 unid.)'), 'la tabla del Admin sí lleva el nombre');
   assert.deepEqual(r.columnas, ['Detalle', 'Hoy', 'Día anterior', 'Cambio']);
   assert.deepEqual(r.filas[0], ['Ventas S/', 60, 40, '+50 %']);
   assert.match(r.texto, /S\/ 60\.00 en 3 ventas/); assert.match(r.texto, /contado S\/ 38\.00 y al crédito S\/ 22\.00/); assert.match(r.texto, /Cobros de créditos: S\/ 12\.00/);
@@ -110,7 +112,7 @@ test('resumen del mes: en curso (1 al 22) contra septiembre 1 al 22; sin ventas 
   assert.deepEqual(await runAssistantQuery({ products: async () => [] }, { tipo: 'resumen_dia' }, NOW), { error: 'no_summary' });
 });
 
-test('al modelo: solo totales y nombres de producto; nunca nombres, DNI, teléfonos, direcciones ni códigos de cliente', async () => {
+test('al modelo: solo totales y códigos de producto; nunca nombres, DNI, teléfonos, direcciones ni códigos de cliente', async () => {
   for (const tipo of SUMMARY_TYPES) {
     const r = await runAssistantQuery(reader(), { tipo }, NOW), sent = JSON.stringify(r.resumen) + JSON.stringify(r.filas) + r.texto;
     for (const v of PII) assert.ok(!sent.includes(v), tipo + ': no debe ir ' + v);
@@ -181,6 +183,31 @@ test('empleado en partes (stream): resumen pedido por el modelo a mitad -> se co
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'cómo vamos', stream: true }) }),
     env({ DEEPSEEK_API_KEY: 'k' }), { principalId: 'session:x', posRole: 'empleado' }, json, { store: createMemoryUsageStore(), resolveRole: async () => 'empleado:consultas', fetch, reader: rd, audit: async () => {}, now: () => NOW });
   const raw = await new Response(r.body).text();
-  assert.match(raw, /summary_admin_only/); assert.ok(!/S\/ 60|Arroz 1 kg/.test(raw), 'nada del resumen en el canal');
+  assert.match(raw, /summary_admin_only/); assert.ok(!/S\/ 60|Arroz 1 kg|producto #/.test(raw), 'nada del resumen en el canal');
   assert.equal(n.reads, 0); assert.equal(bodies.length, 1);
+});
+
+test('producto con nombre de cliente («Encargo Sra. Rosa Quispe»): nunca llega al modelo; solo su código, también con código numérico largo', async () => {
+  const NAME = 'Encargo Sra. Rosa Quispe', ID = '12345678'; // código de 8 cifras: el redactor lo taparía como DNI si no se protege
+  const data = { ...DATA, products: [...DATA.products, { id: ID, nombre: NAME, precio: 50, costo: 40, stock: 1, min: 0, controla: true }],
+    saleItems: [...DATA.saleItems, { sale_id: 'S1', product_id: ID, quantity: 1, line_total_cents: 9000 }] };
+  for (const tipo of SUMMARY_TYPES) {
+    const r = await runAssistantQuery(memoryReader(data), { tipo }, NOW);
+    assert.ok(!JSON.stringify(r.resumen).includes('Rosa') && !r.texto.includes('Rosa'), tipo);
+    assert.equal(r.resumen.top_por_monto[0].producto, 'producto #' + ID);
+    assert.ok(r.filas.some((f) => String(f[0]).includes(NAME)), tipo + ': el nombre solo en la tabla del Admin');
+  }
+  const cap = [];
+  // El modelo «explica» citando el código; la respuesta al Admin conserva el código (vuelve como historial) y la tarjeta trae el nombre.
+  const r = await chat({ text: 'Dame el resumen del día', context: {} }, { rd: memoryReader(data), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: 'resumen_dia' }, 'c1')] }, { content: 'Lo que más vendió fue producto #' + ID + '.' }], cap) });
+  assert.equal(r.status, 200); assert.equal(cap.length, 2);
+  for (const body of cap) { assert.ok(!body.includes('Rosa') && !body.includes('Quispe') && !body.includes('Encargo'), 'al modelo llegó el nombre'); for (const v of PII) assert.ok(!body.includes(v)); }
+  const toolMsg = JSON.parse(cap[1]).messages.find((m) => m.role === 'tool');
+  assert.ok(toolMsg.content.includes('producto #' + ID), 'el código pasa por redactText sin taparse: ' + toolMsg.content.slice(0, 300));
+  assert.equal(r.body.reply, 'Lo que más vendió fue producto #' + ID + '.');
+  assert.ok(!r.body.reply.includes('Rosa'));
+  assert.ok(r.body.proposals[0].result.filas.some((f) => String(f[0]).includes(NAME)));
+  // Un código con caracteres raros no se copia al modelo.
+  const odd = await runAssistantQuery(memoryReader({ ...DATA, saleItems: [{ sale_id: 'S1', product_id: 'Rosa Quispe <b>', quantity: 1, line_total_cents: 100 }] }), { tipo: 'resumen_dia' }, NOW);
+  assert.equal(odd.resumen.top_por_monto[0].producto, 'producto #sin-código');
 });

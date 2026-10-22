@@ -22,7 +22,7 @@ import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, employeeDocumentRows } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, employeeDocumentRows, protectProductRefs } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 
@@ -2562,7 +2562,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     return json(SUMMARY_ADMIN_ONLY, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
-  const consultas = [], toolMsgs = [];
+  const consultas = [], toolMsgs = [], refIds = new Set();
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
   if (role !== 'owner') for (const p of proposals.filter((x) => x.type === 'documento')) {
     let d; try { d = reader ? await employeeDocumentRows(reader, p.tipo) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
@@ -2584,13 +2584,18 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     // Al modelo: solo { tipo, resumen }. Empleado: el resumen ya pasó por la lista blanca (employeeQueryResult) y aquí se vuelve a quitar
     // toda clave del dueño (costo, margen, proveedor, compras, caja, deudas) por si una consulta nueva trae algo más.
     const forModel = r.error ? { error: r.error } : { tipo: r.tipo, resumen: role === 'owner' ? r.resumen : stripOwnerKeys(r.resumen) };
-    if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: redactText(JSON.stringify(forModel)).slice(0, 2000) });
+    // Resúmenes: los «producto #código» pasan por redactText sin taparse (el resto del texto sí se limpia).
+    if (r.refIds) for (const id of r.refIds) refIds.add(id);
+    if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: protectProductRefs(JSON.stringify(forModel), r.refIds || [], redactText).slice(0, 2000) });
   }
   // mismo filtro que el texto en partes (Bot 5) y DESPUÉS el tope con aviso (Bot 2), igual que lo pintado
   // capped: la respuesta que el SERVIDOR cortó (si reply sigue siendo esa al firmar, el par lleva cut:true)
   let capped = null;
   const empText = (c) => redactEmployeeText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
-  const finalText = (c) => { const f = role !== 'owner' ? redactOwnerData(empText(c), prime) : redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim(); const r = capReply(f); capped = r !== f ? r : null; return r; };
+  const ownerText = (c) => redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
+  // Dueño con resumen: los «producto #código» de la respuesta quedan como código (la respuesta vuelve al modelo como historial;
+  // el nombre se ve solo en la tabla de la tarjeta).
+  const finalText = (c) => { const f = role !== 'owner' ? redactOwnerData(empText(c), prime) : refIds.size ? protectProductRefs(c, refIds, ownerText) : ownerText(c); const r = capReply(f); capped = r !== f ? r : null; return r; };
   let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
