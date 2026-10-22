@@ -5,8 +5,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, toolsForRole, employeeSummaryDenied, toProposal } from '../../tools/cloudflare-lab/src/pos-assistant.js';
-import { runAssistantQuery, memoryReader, summaryPeriods, paymentDay, QUERY_TYPES, SUMMARY_TYPES } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { assistantChatRoute, createMemoryUsageStore, toolsForRole, employeeSummaryDenied, toProposal, redactDeep, redactText } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { runAssistantQuery, memoryReader, summaryPeriods, paymentDay, QUERY_TYPES, SUMMARY_TYPES, protectProductRefs } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 const require = createRequire(import.meta.url);
 const C = require('../../POS/js/modules/asistente/asistente-core.js');
 
@@ -239,4 +239,28 @@ test('sin cash-movements (null, como el lector real si la lectura falla): con ve
   assert.ok(!/Al contado/.test(r.texto), 'el texto no inventa la división');
   // Sin mixtas no hace falta cash-movements: el día anterior (solo efectivo) sí se calcula por método.
   assert.equal(r.resumen.anterior.contado_soles, 40); assert.equal(r.resumen.anterior.credito_soles, 0);
+});
+
+test('#931 + #934: redactDeep con «producto #código» protegido; el resto (DNI, teléfono) se sigue tapando', () => {
+  const ids = ['12345678', 'P1'];
+  const fn = (t) => protectProductRefs(t, ids, redactText);
+  const v = { top_por_monto: [{ producto: 'producto #12345678', monto: 90 }, { producto: 'producto #P1', monto: 20 }], nota: 'Rosa Quispe DNI 45678912 cel 987654321', otro: ['+51 912 345 678'] };
+  const out = redactDeep(v, 0, fn);
+  assert.equal(out.top_por_monto[0].producto, 'producto #12345678'); assert.equal(out.top_por_monto[1].producto, 'producto #P1'); assert.equal(out.top_por_monto[0].monto, 90);
+  const s = fn(JSON.stringify(out));
+  assert.ok(s.includes('producto #12345678'), s);
+  for (const x of ['45678912', '987654321', '912 345 678']) assert.ok(!s.includes(x), x + ' en ' + s);
+  // sin el protector, el código de 8 cifras se tapa (por eso hace falta)
+  assert.ok(!JSON.stringify(redactDeep(v)).includes('#12345678'));
+  // por defecto redactDeep sigue igual que en #934
+  assert.deepEqual(redactDeep({ a: ['x 987654321'] }), { a: ['x ' + redactText('987654321')] });
+});
+
+test('#931 + #934: chat del Admin con resumen_mes -> al modelo ningún nombre, DNI, teléfono ni dirección de cliente', async () => {
+  const cap = [];
+  const r = await chat({ text: 'resumen del mes', context: {} }, { rd: memoryReader(DATA), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: 'resumen_mes' }, 'c1')] }, { content: 'Listo.' }], cap) });
+  assert.equal(r.status, 200);
+  for (const body of cap) for (const v of PII) assert.ok(!body.includes(v), v);
+  const toolMsg = JSON.parse(cap[cap.length - 1]).messages.find((m) => m.role === 'tool');
+  assert.ok(toolMsg && /producto #P\d/.test(toolMsg.content), toolMsg && toolMsg.content.slice(0, 300));
 });

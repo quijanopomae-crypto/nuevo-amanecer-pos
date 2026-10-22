@@ -32,7 +32,10 @@ test('consultas en memoria: los 7 tipos responden con tabla para la pantalla y r
   const d = await runAssistantQuery(reader, { tipo: 'deudas_clientes' });
   const sent = JSON.stringify(d.resumen);
   for (const c of readerData.customers) { assert.ok(!sent.includes(c.nombre), 'sin nombre al modelo'); if (c.dni) assert.ok(!sent.includes(c.dni)); }
-  assert.ok(d.filas.some((f) => readerData.customers.some((c) => c.nombre === f[0])), 'la pantalla sí ve el nombre');
+  // (22-10, prueba en vivo) la tabla tampoco trae nombres: «cliente #código» (el aparato le pone el nombre de su lista)
+  for (const c of readerData.customers) { assert.ok(!JSON.stringify(d.filas).includes(c.nombre), 'sin nombre en la tabla'); }
+  assert.ok(d.filas.length && d.filas.every((f) => /^cliente #[A-Za-z0-9_-]+$/.test(f[0])), JSON.stringify(d.filas));
+  assert.deepEqual(d.resumen.mayores_saldos.map((x) => x.cliente), d.filas.slice(0, d.resumen.mayores_saldos.length).map((f) => f[0]), 'texto y tabla con los mismos códigos');
   assert.deepEqual(await runAssistantQuery(reader, { tipo: 'borrar_todo' }), { error: 'bad_query' });
 });
 

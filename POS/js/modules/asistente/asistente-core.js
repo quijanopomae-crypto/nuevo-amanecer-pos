@@ -9,8 +9,12 @@
     [/\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\b(\s*(?:es|era|de|:|=)?\s*)[^\s,.;]{3,}/gi, '$1$2[oculto]'],
     [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[correo oculto]'],
     [/\b(?:RUC\s*(?:N[°º.]?\s*)?[:#-]?\s*)?(?:10|15|17|20)\d{9}\b/gi, '[RUC oculto]'],
-    [/(?:\+?51[\s-]?)?\b9\d{2}[\s-]?\d{3}[\s-]?\d{3}\b/g, '[teléfono oculto]'],
-    [/\b(?:DNI\s*[:#-]?\s*)?\d{8}\b/gi, '[DNI oculto]']
+    [/(?<![0-9])(?:\+?51[\s-]?)?9\d{2}[\s-]?\d{3}[\s-]?\d{3}(?![0-9])/g, '[teléfono oculto]'],
+    [/\b(?:DNI\s*[:#-]?\s*)?\d{8}\b/gi, '[DNI oculto]'],
+    // (auditoría de privacidad 2026-10-22) mismo criterio que el servidor: fijo con separadores, DNI con separadores y correo disfrazado.
+    [/(?<![0-9.,])(?:\+?51[\s-]?)?(?:\(0?\d{1,2}\)|0\d{1,2})[\s-]?\d{3}[\s-]\d{3,4}(?![0-9]|[.,]\d)/g, '[teléfono oculto]'],
+    [/(?<![0-9.,])(?:DNI\s*[:#-]?\s*)?(?:\d{2}\.\d{3}\.\d{3}|\d{4}[ .]\d{4}|\d{2} \d{3} \d{3})(?![0-9]|[.,]\d)/gi, '[DNI oculto]'],
+    [/(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}[ \t]{0,3}(?:[(\[{][ \t]{0,2}(?:at|arroba)[ \t]{0,2}[)\]}]|[ \t]arroba[ \t]|[ \t]@[ \t]?|@[ \t])[ \t]{0,3}(?:[A-Za-z0-9-]{1,63}[ \t]{0,3}(?:\.|[(\[{][ \t]{0,2}(?:dot|punto)[ \t]{0,2}[)\]}]|[ \t](?:dot|punto)[ \t])[ \t]{0,3}){1,8}[A-Za-z]{2,24}\b/gi, '[correo oculto]']
   ];
   function redactText(v) { var s = String(v == null ? '' : v); PATTERNS.forEach(function (p) { s = s.replace(p[0], p[1]); }); return s; }
   // (Bot 2 sobre 6280deae) contexto del DUEÑO: RUC de empresa (20/15/17) y 8 dígitos junto a «código», «cód.», «EAN» o «barra(s)» van exactos.
@@ -265,9 +269,13 @@
     }
     if (p.tipo === 'estado_cuenta') {
       if (typeof api.summarizeClient !== 'function' || typeof api.effectiveBalance !== 'function') return unavailable(p, 'el resumen de créditos', business);
-      var words = norm(p.cliente).split(/\s+/).filter(function (w) { return w.length >= 3; });
-      var cli = words.length ? (data.clientes || []).find(function (c) { var n = norm(c.nombre || c.name); return words.every(function (w) { return n.indexOf(w) >= 0; }); }) : null;
-      if (!cli) return { title: p.title, rows: 0, html: docShell(p.title, 'Cliente no encontrado', ['Detalle'], [], null, 'Escribe el nombre del cliente como está en Clientes.', business) };
+      // (auditoría de privacidad 2026-10-22) el cliente llega por su CÓDIGO (cliente_id) y se busca en la lista de este aparato; una tarjeta
+      // vieja con nombre (p.cliente) se sigue buscando por nombre.
+      var cli = null;
+      if (p.cliente_id != null && p.cliente_id !== '') cli = (data.clientes || []).find(function (c) { return c && String(c.id) === String(p.cliente_id); }) || null;
+      else { var words = norm(p.cliente).split(/\s+/).filter(function (w) { return w.length >= 3; });
+        cli = words.length ? (data.clientes || []).find(function (c) { var n = norm(c.nombre || c.name); return words.every(function (w) { return n.indexOf(w) >= 0; }); }) : null; }
+      if (!cli) return { title: p.title, rows: 0, html: docShell(p.title, 'Cliente no encontrado', ['Detalle'], [], null, 'Pida el estado de cuenta con el nombre del cliente como está en Clientes.', business) };
       // Igual que Deudas de clientes: summarizeClient(cliente, solo lectura) + effectiveBalance (pagos en cola incluidos).
       var sum = api.summarizeClient(cli, true), saldo = num(api.effectiveBalance(sum, api.pending ? api.pending() : null));
       var cr = (sum.active || []).map(function (c) { return [c.desc || c.concepto || c.tipo || 'Crédito', soles(num(c.monto)), soles(num(c.pagado)), soles(num(api.outstanding ? api.outstanding(c) : num(c.monto) - num(c.pagado))), c.vence || '-']; });
@@ -850,7 +858,106 @@
     return Math.max(0, over);
   }
 
-  var api = { fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  // ---------- Clientes en el mensaje (auditoría de privacidad 2026-10-22) ----------
+  // Antes de mandar el mensaje del chat, los nombres de clientes que este aparato YA conoce (lista de Clientes del POS) se cambian por
+  // «cliente #código» y sus direcciones por «[dirección oculta]». El nombre nunca sale del aparato: la respuesta se pinta con el nombre
+  // buscado aquí (linkCustomers). Coincide sin tildes ni mayúsculas y solo palabras enteras. Un nombre suelto (solo «Rosa») cuenta si tiene
+  // 4+ letras y no es parte del nombre de un producto; si varios clientes lo comparten, se mandan sus códigos (hasta 3) o «un cliente».
+  var CLI_CODE_RE = /^[A-Za-z0-9_-]{1,40}$/;
+  var NAME_STOP = { de: 1, del: 1, la: 1, las: 1, los: 1, el: 1, y: 1, e: 1, san: 1, santa: 1, sr: 1, sra: 1, don: 1, dona: 1 };
+  function foldCh(ch) { return ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function foldStr(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function nameTokens(v) { return foldStr(v).split(/[^a-z0-9ñ]+/).filter(Boolean); }
+  function customerRef(c) {
+    var id = c && c.id != null ? String(c.id) : '', r = 'cliente #' + id;
+    if (!CLI_CODE_RE.test(id) || id === String(c.dni || '') || id === String(c.tel || c.telefono || '')) return null;
+    return redactText(r) === r ? r : null; // un código que el redactor taparía (8 dígitos…) no sirve: «un cliente»
+  }
+  var ADDRESS_RE = /\b(?:av(?:da|enida)?|jr|jir[oó]n|calle|psje|pje|pasaje|prol(?:ongaci[oó]n)?|mz|manzana|urb(?:anizaci[oó]n)?|asoc(?:iaci[oó]n)?|aa\.?\s?hh)\.?\s+(?:[A-Za-zÁÉÍÓÚÑáéíóúñü.'°ºª-]+\s+){0,5}?(?:n[°ºo]?\.?\s*)?\d{1,5}[A-Za-z]?\b(?:\s*,?\s*(?:mz|lt|lote|int|dpto|of)\.?\s*[A-Za-z0-9]{1,4}\b)*/gi;
+  function maskCustomers(text, clientes, productos) {
+    var src = String(text == null ? '' : text).normalize('NFC'), codes = [];
+    var list = Array.isArray(clientes) ? clientes.slice(0, 5000) : [];
+    if (!src) return { text: src, codes: codes };
+    // texto plegado con mapa de posiciones (una tilde de más o de menos no rompe el mapa)
+    var f = '', map = [];
+    for (var i = 0; i < src.length; i++) { var fc = foldCh(src[i]); for (var k = 0; k < fc.length; k++) { f += fc[k]; map.push(i); } }
+    map.push(src.length);
+    var prodWords = {}; (Array.isArray(productos) ? productos.slice(0, 5000) : []).forEach(function (p) { nameTokens(p && (p.nombre || p.name)).forEach(function (w) { prodWords[w] = 1; }); });
+    var phrases = {}; // frase plegada -> { refs, addr }
+    function add(ph, ref, addr) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr }); if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    list.forEach(function (c) {
+      if (!c || typeof c !== 'object') return;
+      var ref = customerRef(c), t = nameTokens(c.nombre || c.name);
+      if (t.length) {
+        var full = t.join(' '); if (full.replace(/ /g, '').length >= 4) add(full, ref);
+        var core = t.filter(function (w) { return !NAME_STOP[w] && w.length >= 3; });
+        for (var j = 0; j + 1 < core.length; j++) add(core[j] + ' ' + core[j + 1], ref);
+        core.forEach(function (w) { if (w.length >= 4 && !/^\d+$/.test(w) && !prodWords[w]) add(w, ref); });
+      }
+      var dir = nameTokens(c.dir || c.direccion || c.address); if (dir.length && dir.join('').length >= 6) add(dir.join(' '), undefined, true);
+    });
+    var keys = Object.keys(phrases).filter(function (ph) { return f.indexOf(ph.split(' ')[0]) >= 0; }).sort(function (a, b) { return b.length - a.length; });
+    var taken = new Array(f.length).fill(0), hits = [];
+    keys.forEach(function (ph) {
+      var re = new RegExp('(?<![a-z0-9ñ])' + ph.split(' ').map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('[^a-z0-9ñ]{1,3}') + '(?![a-z0-9ñ])', 'g'), m;
+      while ((m = re.exec(f))) { var a = m.index, b = a + m[0].length, free = true; for (var x = a; x < b; x++) if (taken[x]) { free = false; break; }
+        if (!free) continue; for (x = a; x < b; x++) taken[x] = 1; hits.push([a, b, phrases[ph]]); }
+    });
+    hits.sort(function (p, q) { return p[0] - q[0]; });
+    var out = '', last = 0;
+    hits.forEach(function (h) {
+      var o = h[2], refs = o.refs.filter(Boolean), rep;
+      if (o.addr) rep = '[dirección oculta]';
+      else if (o.refs.length === 1 && refs.length === 1) rep = refs[0];
+      else if (refs.length === o.refs.length && refs.length <= 3) rep = refs.join(' o ');
+      else rep = 'un cliente';
+      refs.forEach(function (r) { var id = r.slice(9); if (codes.indexOf(id) < 0 && rep.indexOf(r) >= 0) codes.push(id); });
+      out += src.slice(last, map[h[0]]) + rep; last = map[h[1]];
+    });
+    out += src.slice(last);
+    return { text: out.replace(ADDRESS_RE, '[dirección oculta]'), codes: codes };
+  }
+  // códigos «cliente #…» de una respuesta que existen en la lista local (para pintarlos con su nombre)
+  function customerCodesIn(text, clientes) {
+    var have = {}; (Array.isArray(clientes) ? clientes : []).forEach(function (c) { if (c && c.id != null) have[String(c.id)] = 1; });
+    var out = [], re = /cliente #([A-Za-z0-9_-]{1,40})/g, m; 
+    while ((m = re.exec(String(text == null ? '' : text)))) if (have[m[1]] && out.indexOf(m[1]) < 0) out.push(m[1]);
+    return out;
+  }
+
+  // ---------- «Revisión del punto de venta»: tamaño del envío (2026-10-22) ----------
+  // Con las listas llenas (200 errores, 200 lentos, 300 contadores) el envío pasaba el tope del servidor (96 KB) y se rechazaba (413).
+  // Se manda lo más importante dentro de REVIEW_BUDGET (bien debajo del tope): errores por veces y lo más reciente, lentos por cuelgue y
+  // tiempo total, contadores por veces; textos cortos. Si aún no entra, cada lista se recorta a la mitad (se quedan los primeros).
+  var REVIEW_BUDGET = 64 * 1024, REVIEW_CAPS = { errors: 120, slow: 100, usage: 200, msg: 120, src: 80, name: 80, cli: 40, accion: 30 };
+  function jsonBytes(o) { var js = JSON.stringify(o); try { return new TextEncoder().encode(js).length; } catch (_) { return js.length * 3; } }
+  function revCut(v, n) { return v == null ? v : String(v).slice(0, n); }
+  function compactReview(data, budget) {
+    budget = budget || REVIEW_BUDGET; var d = data && typeof data === 'object' ? data : {};
+    var errs = (Array.isArray(d.errors) ? d.errors.slice() : []).filter(function (x) { return x && typeof x === 'object'; })
+      .sort(function (a, b) { return (Number(b.count) || 0) - (Number(a.count) || 0) || String(b.last || '').localeCompare(String(a.last || '')); })
+      .slice(0, REVIEW_CAPS.errors).map(function (x) { var o = { kind: x.kind, msg: revCut(x.msg, REVIEW_CAPS.msg), src: revCut(x.src, REVIEW_CAPS.src), status: x.status, count: x.count, first: x.first, last: x.last };
+        if (x.cli != null) { o.cli = revCut(x.cli, REVIEW_CAPS.cli); o.accion = revCut(x.accion, REVIEW_CAPS.accion); } return o; });
+    var slow = (Array.isArray(d.slow) ? d.slow.slice() : []).filter(function (x) { return x && typeof x === 'object'; })
+      .sort(function (a, b) { return (b.kind === 'cuelgue') - (a.kind === 'cuelgue') || (Number(b.count) || 0) * (Number(b.ms_avg) || 0) - (Number(a.count) || 0) * (Number(a.ms_avg) || 0); })
+      .slice(0, REVIEW_CAPS.slow).map(function (x) { var o = { kind: x.kind, name: revCut(x.name, REVIEW_CAPS.name), count: x.count, ms_avg: x.ms_avg, ms_max: x.ms_max, last: x.last };
+        if (x.cli != null) { o.cli = revCut(x.cli, REVIEW_CAPS.cli); o.accion = revCut(x.accion, REVIEW_CAPS.accion); } return o; });
+    var u = d.usage && typeof d.usage === 'object' && !Array.isArray(d.usage) ? d.usage : {};
+    var keys = Object.keys(u).filter(function (k) { return k.length <= 120; }).sort(function (a, b) { return (Number(u[b]) || 0) - (Number(u[a]) || 0) || (a < b ? -1 : 1); });
+    var out = { errors: errs, usage: {}, slow: slow, ocr: d.ocr || null }, kept = keys.slice(0, REVIEW_CAPS.usage);
+    function fill() { out.usage = {}; kept.forEach(function (k) { out.usage[k] = u[k]; }); }
+    fill();
+    for (var guard = 0; guard < 20 && jsonBytes(out) > budget; guard++) {
+      var se = jsonBytes(out.errors), ss = jsonBytes(out.slow), su = jsonBytes(out.usage);
+      if (se >= ss && se >= su && out.errors.length) out.errors = out.errors.slice(0, Math.floor(out.errors.length / 2));
+      else if (ss >= su && out.slow.length) out.slow = out.slow.slice(0, Math.floor(out.slow.length / 2));
+      else if (kept.length) { kept = kept.slice(0, Math.floor(kept.length / 2)); fill(); }
+      else break;
+    }
+    return out;
+  }
+
+  var api = { compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
