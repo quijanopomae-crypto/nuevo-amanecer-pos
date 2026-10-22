@@ -330,25 +330,32 @@
   // Pedido con límite de tiempo (solo para el asistente; no cambia NA_ROLES.api del resto del POS).
   // Si no responde en ms, se aborta y lanza un error con timeout=true.
   // (Bot 3 sobre 39ccd25c, 7a) cada intento arma SU propio límite ANTES de llamar a fetch y lo quita solo en finally. Además del temporizador,
-  // un reloj de pared (Date.now) revisa el límite cada segundo y al volver la pantalla/la red (visibilitychange, focus, pageshow, online):
+  // un reloj revisa el límite cada segundo y al volver la pantalla/la red (visibilitychange, focus, pageshow, online):
   // si el navegador demoró el temporizador largo (pestaña en segundo plano, ahorro de batería), el intento se corta igual al pasar ms.
+  // (Bot 3 sobre f773911f) ese reloj es performance.now (monótono: un salto del reloj de pared no corta antes de tiempo); Date.now solo si no hay.
+  // Un 2xx cuyo cuerpo no se puede leer como JSON (cortado o roto) vuelve con bodyError:true (data = {} como antes); confirmRemote lo trata
+  // como un corte de red (el chat no cambia).
   var REQ_WAKE = ['visibilitychange', 'focus', 'pageshow', 'online'];
+  function monoNow() { var pf = root && root.performance; if (!pf || typeof pf.now !== 'function') pf = typeof performance !== 'undefined' ? performance : null;
+    return pf && typeof pf.now === 'function' ? pf.now() : Date.now(); }
   async function request(fetchImpl, url, init, ms) {
     var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null, timer = null, tick = null, timedOut = false, fire = null;
-    var t0 = Date.now(), ev = root && typeof root.addEventListener === 'function' && typeof root.removeEventListener === 'function' ? root : null;
+    var t0 = monoNow(), ev = root && typeof root.addEventListener === 'function' && typeof root.removeEventListener === 'function' ? root : null;
     var opts = Object.assign({}, init || {}); if (ctl) opts.signal = ctl.signal;
     var guard = new Promise(function (_, reject) {
       fire = function () { if (timedOut) return; timedOut = true; if (ctl) { try { ctl.abort(); } catch (_) {} } var e = new Error('timeout'); e.timeout = true; reject(e); };
       timer = setTimeout(fire, ms);
-      tick = setInterval(function () { if (Date.now() - t0 >= ms) fire(); }, Math.max(50, Math.min(1000, ms)));
+      tick = setInterval(function () { if (monoNow() - t0 >= ms) fire(); }, Math.max(50, Math.min(1000, ms)));
     });
     guard.catch(function () {});
-    function wake() { if (Date.now() - t0 >= ms) fire(); }
+    function wake() { if (monoNow() - t0 >= ms) fire(); }
     if (ev) REQ_WAKE.forEach(function (n) { try { ev.addEventListener(n, wake); } catch (_) {} });
     try {
       var r = await Promise.race([fetchImpl(url, opts), guard]);
-      var data = {}; try { data = await Promise.race([r.json(), guard]); } catch (e) { if (e && e.timeout) throw e; data = {}; }
-      return { status: r.status, ok: !!r.ok, data: data || {} };
+      var data = {}, bad = false; try { data = await Promise.race([r.json(), guard]); } catch (e) { if (e && e.timeout) throw e; data = {}; bad = true; }
+      if (!bad && (data === null || typeof data !== 'object')) bad = true; // «null», «3», «"x"»: tampoco es la respuesta
+      var res = { status: r.status, ok: !!r.ok, data: data && typeof data === 'object' ? data : {} }; if (bad) res.bodyError = true;
+      return res;
     } catch (e) { if (timedOut || (e && e.name === 'AbortError')) { var t = new Error('timeout'); t.timeout = true; throw t; } throw e; }
     finally { clearTimeout(timer); clearInterval(tick); if (ev) REQ_WAKE.forEach(function (n) { try { ev.removeEventListener(n, wake); } catch (_) {} }); }
   }
@@ -430,11 +437,47 @@
     out.push(cur);
     return out.map(function (x) { return x.trim().replace(/^(\*\*|__)(.*)\1$/, '$2'); });
   }
+  // (Bots 4/5/3 sobre f773911f) SOLO EN PANTALLA, en el aparato, después del filtro del servidor: las etiquetas de formato escritas como texto
+  // (<code> <strong> <b> <em> <i> <u> <mark> <kbd> <pre> y sus cierres, sin atributos) y las vallas ``` (con su lenguaje: «```text⏎») se quitan
+  // del texto que se ve; lo de dentro queda como texto plano. Nunca se interpreta HTML: el resultado va por textContent (como el texto escapado
+  // por esc(): «&lt;code&gt;» se ve y se quita igual; nada se vuelve etiqueta). El servidor no cambia (sigue tapando igual).
+  // En partes solo se espera una etiqueta/valla INCOMPLETA al final (a lo sumo «</strong» o «```» + 15 letras de lenguaje): lo que se ve al final
+  // es lo mismo que con el texto entero, se corte donde se corte.
+  var STRIP_TAG_RE = /^<\/?(?:code|strong|b|em|i|u|mark|kbd|pre)>/i, STRIP_TAG_NAMES = ['code', 'strong', 'b', 'em', 'i', 'u', 'mark', 'kbd', 'pre'];
+  function stripTagPrefix(t) { var m = /^<(\/?)([A-Za-z]*)$/.exec(t); if (!m) return false; var n = m[2].toLowerCase(); return STRIP_TAG_NAMES.some(function (x) { return x.indexOf(n) === 0; }); }
+  function createDisplayStripper() {
+    var pend = '';
+    function run(fin) {
+      var out = '', i = 0;
+      while (i < pend.length) {
+        var c = pend.charAt(i);
+        if (c !== '<' && c !== '`') { var j = i; while (j < pend.length && pend.charAt(j) !== '<' && pend.charAt(j) !== '`') j++; out += pend.slice(i, j); i = j; continue; }
+        var rest = pend.slice(i);
+        if (c === '<') {
+          var tm = STRIP_TAG_RE.exec(rest); if (tm) { i += tm[0].length; continue; }
+          if (!fin && rest.length <= 8 && stripTagPrefix(rest)) break; // puede ser una etiqueta que sigue en el trozo siguiente
+          out += '<'; i++; continue;
+        }
+        var r = /^`+/.exec(rest)[0];
+        if (r.length === rest.length && !fin) break; // la racha de «`» puede seguir
+        if (r.length < 3) { out += r; i += r.length; continue; } // `código` suelto: queda como está
+        var lang = /^[A-Za-z0-9_+.#-]{0,15}/.exec(rest.slice(r.length))[0], after = r.length + lang.length;
+        if (after >= rest.length && !fin && lang.length < 15) break; // ¿sigue el lenguaje o llega el salto?
+        if (rest.charAt(after) === '\n') { i += after + 1; continue; } // «```text⏎»: la línea de la valla entera
+        if (after >= rest.length && lang) { i += after; continue; } // «```text» al final del texto
+        i += r.length; // «```perro azul```»: solo las marcas
+      }
+      pend = pend.slice(i); return out;
+    }
+    return { push: function (t) { pend += String(t || ''); return run(false); }, flush: function () { var o = run(true); pend = ''; return o; } };
+  }
+  function stripDisplay(t) { var d = createDisplayStripper(); return d.push(t) + d.flush(); }
   // opts.labels (Bot 4/5): cabecera de la tabla de la burbuja ANTERIOR (cortada), tomada de lo que esa burbuja ya pintó (texto filtrado por el
   // servidor), nunca de otros datos. Solo sirve para filas sueltas al inicio de la continuación («sigue»), con el mismo número de columnas.
   function createReplyRenderer(doc, append, opts) {
     var raw = '', line = '', mode = 'start', liveText = null, liveScan = 0, head = null, table = null, tbody = null, labels = null, rows = 0, lastLabels = null, tables = 0;
     var wrap = null, tblEl = null, note = null, nMask = 0, nAmt = 0; // (Bot 4 sobre 25ffde10) montos tapados / visibles de la tabla actual
+    var strip = createDisplayStripper();
     var reuse = opts && Array.isArray(opts.labels) && opts.labels.length > 1 ? opts.labels.map(function (x) { return String(x); }) : null;
     // texto suelto: se va sumando al mismo nodo de texto mientras no aparezca una tabla
     // (Bot 4 sobre 25ffde10) solo en pantalla: «S/», «US$», «PEN» y su monto van unidos con un espacio que no se parte (la respuesta no cambia).
@@ -505,9 +548,10 @@
       if (isPipe(l) && nl) { head = l; return; } // ¿cabecera? espera la línea siguiente
       text(l + (nl ? '\n' : ''));
     }
-    return {
-      push: function (t) {
-        t = String(t || ''); if (!t) return; raw += t; var i = 0;
+    var api = {
+      push: function (t) { t = String(t || ''); if (!t) return; raw += t; api.pushShown(strip.push(t)); },
+      pushShown: function (t) { // texto ya sin etiquetas/vallas (ver createDisplayStripper)
+        if (!t) return; var i = 0;
         while (i < t.length) {
           var k = t.indexOf('\n', i);
           if (k < 0) { // trozo de línea sin salto
@@ -526,11 +570,12 @@
           line = ''; mode = 'start'; i = k + 1;
         }
       },
-      finish: function () { if (line) { if (head != null || table) full(line, false); else if (!(isPipe(line) && reused(line))) text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); closeText(); mode = 'start'; },
+      finish: function () { var tl = strip.flush(); if (tl) api.pushShown(tl); if (line) { if (head != null || table) full(line, false); else if (!(isPipe(line) && reused(line))) text(line); line = ''; } if (head != null) { var h = head; head = null; if (!reused(h)) text(h); } endTable(); closeText(); mode = 'start'; },
       raw: function () { return raw; },
       labels: function () { return lastLabels ? lastLabels.slice() : null; }, // cabecera de la última tabla pintada (para la continuación)
       rows: function () { return rows; }
     };
+    return api;
   }
   // Pide el chat en partes. Si el navegador o el servidor no lo soportan, vuelve el JSON de siempre (kind:'json').
   // Resultado en partes: { kind:'stream', final, error, cut, timeout:'first'|'idle'|'max'|null, text } — las tarjetas SOLO salen de final.
@@ -785,7 +830,7 @@
     return Math.max(0, over);
   }
 
-  var api = { fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, purchaseValue: purchaseValue, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

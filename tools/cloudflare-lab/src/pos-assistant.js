@@ -85,7 +85,12 @@ const PIN_NUM_MONEY = /(?:S\/\.?|US\$|\$|PEN)\s*$/i, PIN_NUM_CODE = /(?:^|[^a-z�
 // dueño; «clave: código 4321», «clave del wifi código 12345678», «contraseña del local cod 12345678» se tapan.
 // fin de frase entre la etiqueta y el número: . ; ! ? salto, salvo el punto de la abreviatura «cód.»/«cod.» («pin cód. 4321» se tapa)
 // (Bot 5 sobre 36f6ae51) un salto seguido de la cita de markdown («pin:\n> 4321») no corta la frase
-const PIN_NUM_STOP = /[;!?]|\n(?![^\S\n]*>)|(?<!(?:^|[^a-záéíóúñü])c[óo]d)\./i;
+const PIN_NUM_STOP = /[;!?]|\n(?![^\S\n]*>)|(?<!(?:^|[^a-záéíóúñü])c[óo]d|S\/)\./i; // (r10) el punto de «S/.» tampoco corta
+// (Bot 2 sobre f773911f, FALLA-3) tras «:», «=» o un verbo de ser, el número puede ir en la línea siguiente o tras una línea en blanco (hasta
+// 2 saltos, \n o \r\n), con una marca de cita o de lista delante («> », «- », «* », «+ », «• », «1. », «1) »): «El PIN de la caja es:⏎⏎> 4321»,
+// «pin:⏎⏎> 4321», «La clave de la caja:⏎4321» se tapan. Esos saltos y la marca no cortan la frase ni cuentan como palabra.
+const PIN_NUM_NL_TAIL = /(?:[:=]|(?:^|[^a-záéíóúñü])(?:es|era|fue|ser[áa]|ser[íi]a))((?:[^\S\n]*\n){1,2}[^\S\n]*(?:(?:>|[-*+•]|\d{1,2}[.)])[^\S\n]*)?)$/i;
+const pinNlTail = (between) => { const t = PIN_NUM_NL_TAIL.exec(between); return t ? between.slice(0, between.length - t[1].length) + ' ' : between; };
 // (Bot 2 sobre 3ee80c18) dinero: «S/», «$», «US$», «PEN» delante ya NO sueltan el número solo («clave de la caja S/ 4321» se tapa); lo suelta
 // si entre la etiqueta y el número aparece precio/costo/monto («clave del precio: S/ 4521»). Con decimales («S/ 43.21», «S/ 4321.00») el número
 // nunca entra en la regla (el patrón no toma montos con decimales).
@@ -113,8 +118,8 @@ function pinWindow(off, str) {
   const pre = str.slice(Math.max(0, off - PIN_NUM_MAX_CHARS - 16), off); let k = null, x; PIN_NUM_KW.lastIndex = 0;
   while ((x = PIN_NUM_KW.exec(pre))) { k = x; PIN_NUM_KW.lastIndex = x.index + x[0].length; }
   if (!k) return null;
-  const between = pre.slice(k.index + k[0].length);
-  if (between.length > PIN_NUM_MAX_CHARS || PIN_NUM_STOP.test(between)) return null;
+  const between0 = pre.slice(k.index + k[0].length), between = pinNlTail(between0);
+  if (between0.length > PIN_NUM_MAX_CHARS || PIN_NUM_STOP.test(between)) return null;
   const words = between.replace(/[:=,]/g, ' ').trim().split(/\s+/).filter((w) => w && !PIN_LINK_SET.has(w.toLowerCase())).length;
   if (words > PIN_NUM_MAX_WORDS) return null;
   return { kw: k[1].toLowerCase(), between, kwAt: off - pre.length + k.index + k[0].length - k[1].length };
@@ -155,7 +160,7 @@ function pinDecimal(m, off, str) {
   const w = pinWindow(off, str); if (!w) return m;
   if (w.kw === 'pin') return '[oculto]';
   const after = str.slice(off + m.length, off + m.length + 16);
-  if (pinMoneyOk(m, w, str, after) || pinUnitOk(w.between, after)) return m;
+  if (pinMoneyOk(m, w, str, after, off) || pinUnitOk(w.between, after)) return m;
   return '[oculto]';
 }
 // (Bots 2/5 sobre 6e0b3c5d, regla final) dinero tras clave/contraseña (tras «pin» nunca): el monto se ve SOLO si tiene céntimos (dos decimales:
@@ -169,8 +174,31 @@ const PIN_PRICE_RE = /(?:^|[^a-záéíóúñü])(?:precios?|costos?|efectivo|mon
 const PIN_PRICE_BEFORE = /(?:^|[^a-záéíóúñü])(?:precios?|costos?|efectivo|montos?|total(?:es)?|vuelto)\s+(?:(?:de|del|la|el)\s+)?$/i;
 const PIN_CENTS = /^\d{1,8}(?:[.,]\d{3})*[.,]\d{2}$/, PIN_MONEY_AFTER = /^\s*(?:soles|sol|PEN)(?![a-záéíóúñü])/i;
 const PIN_CUR_TOK = /^(?:S\/\.?|US\$|\$|PEN)$/i;
-function pinMoneyOk(m, w, str, after) {
+// (Bots 2/5 sobre f773911f, excepción del adjetivo) «producto/cliente/proveedor/punto/dato/insumo clave» + un monto CON MONEDA (S/, S/., $, US$,
+// PEN delante) y céntimos: se ve («producto clave S/ 4.50», «| producto clave | S/ 4.50 |»). Enteros, letras y comillas siguen tapados («dato
+// clave: 4321», «cliente clave es tortuga»), y no vale si pin/contraseña/password/wifi/caja/local/alarma aparecen antes o después en la ventana.
+// «clave del producto 4321» / «clave del producto S/ 4.50» se tapan (el adjetivo va ANTES de «clave»).
+const PIN_ADJ_BEFORE = /(?:^|[^a-záéíóúñü])(?:productos?|clientes?|proveedor(?:es)?|puntos?|datos?|insumos?)\s+$/i;
+const PIN_ADJ_CUR = /(?:^|[^\w])(?:S\/\.?|US\$|\$|PEN)\s?$/i;
+const PIN_ADJ_NO = /(?:^|[^a-záéíóúñü])(?:pin|contrase(?:ñ|n)a|password|wi-?fi|caja|local|alarma)(?![a-záéíóúñü])/i;
+// La ventana: hasta 40 caracteres antes del adjetivo y hasta 40 después del monto, sin pasar un fin de frase (. ; ! ? o salto). En partes la
+// etapa 1 retiene esos tramos (PIN_ADJ_NEAR / PIN_ADJ_OPEN en scan/pinOpen), así que da lo mismo que el texto entero.
+const PIN_ADJ_W = 40, PIN_STOP_CH = /[.;!?\n]/;
+function pinAdjOk(m, w, str, off) {
+  const pre = str.slice(Math.max(0, w.kwAt - 24), w.kwAt), a = PIN_ADJ_BEFORE.exec(pre);
+  if (w.kw !== 'clave' || !a || !PIN_ADJ_CUR.test(str.slice(Math.max(0, off - 5), off))) return false;
+  const adjAt = w.kwAt - pre.length + a.index; let before = str.slice(Math.max(0, adjAt - PIN_ADJ_W), adjAt);
+  for (let i = before.length - 1; i >= 0; i--) if (PIN_STOP_CH.test(before[i])) { before = before.slice(i + 1); break; }
+  let after = str.slice(off + m.length, off + m.length + PIN_ADJ_W); const st = after.search(/[;!?\n]|\.(?!\d)/); if (st >= 0) after = after.slice(0, st);
+  return !PIN_ADJ_NO.test(before) && !PIN_ADJ_NO.test(w.between) && !PIN_ADJ_NO.test(after);
+}
+// en partes: un corte a menos de 40 caracteres tras pin/contraseña/password/wifi/caja/local/alarma (misma frase) solo vale si tryShield lo
+// confirma (el adjetivo que puede venir lo decide); y tras «producto clave … S/ 4.50» hasta 40 caracteres más (lo que sigue también decide)
+const PIN_ADJ_NEAR = /(?:^|[^a-záéíóúñü])(?:pin|contrase(?:ñ|n)a|password|wi-?fi|caja|local|alarma)(?![a-záéíóúñü])[^.;!?\n]{0,40}$/i;
+const PIN_ADJ_OPEN = /(?:^|[^a-záéíóúñü])(?:productos?|clientes?|proveedor(?:es)?|puntos?|datos?|insumos?)\s+clave(?![a-záéíóúñü])[^;!?\n]{0,80}?(?:S\/\.?|US\$|\$|PEN)\s?\d[\d.,]*\d(?:[^;!?\n.]|\.(?=\d)){0,40}$/i;
+function pinMoneyOk(m, w, str, after, off) {
   if (!PIN_CENTS.test(m) || PIN_CRED_RE.test(w.between)) return false;
+  if (off != null && pinAdjOk(m, w, str, off)) return true;
   if (PIN_PRICE_BEFORE.test(str.slice(Math.max(0, w.kwAt - 24), w.kwAt))) return true;
   let x, last = -1; PIN_PRICE_RE.lastIndex = 0; while ((x = PIN_PRICE_RE.exec(w.between))) last = x.index + x[0].length;
   if (last < 0) return false;
@@ -195,13 +223,28 @@ const PIN_ALPHA_SKIP = new Set([...PIN_LINK_SET, 'son', 'misma', 'mismo', 'igual
 // etiqueta HTML de formato pegada al valor («es <b>tortuga</b>»: se tapa el valor, la etiqueta queda).
 const PIN_SEP_ARROW = '(?:->|=>|→|—|–|\\|)';
 const PIN_HTML_OPEN = '<(?:b|strong|code|em|i|u|mark|kbd|pre)>';
-const PIN_ALPHA_RE = new RegExp('(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(pin|clave|contrase(?:ñ|n)a|password)((?:\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=!?|<>→—–]+){0,4}?)?)(\\s*[:=](?:\\s*>(?=\\s))?\\s*|\\s*' + PIN_SEP_ARROW + '\\s*|\\s+(?:es|era|fue)(?:\\s*:)?\\s+)((?:el|la|los|las|lo|para|en|de|del|que)\\s+)?(' + PIN_HTML_OPEN + ')?([A-Za-zÁÉÍÓÚáéíóúÑñÜü][^\\s,.;!?<|]{2,})', 'gi');
+// (Bot 2 sobre f773911f) tras «:»/«=» (o «es:») hasta 2 saltos y una marca de cita o de lista delante del valor: «clave del wifi:⏎⏎- tortuga»,
+// «clave del wifi:⏎⏎1. tortuga», «contraseña:⏎> tortuga». La marca va seguida de un espacio (un «**tortuga**» no es marca).
+const PIN_LIST_MARK = '(?:[^\\S\\n]{0,16}(?:\\n[^\\S\\n]{0,16}){0,2}(?:>|(?:[-*+•]|\\d{1,2}[.)])(?=\\s|$)))?'; // (Bot 5 sobre f773911f) «>» también pegado al valor («:⏎>tortuga»)
+const PIN_ALPHA_RE = new RegExp('(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(pin|clave|contrase(?:ñ|n)a|password)((?:\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=!?|<>→—–]+){0,4}?)?)(\\s*[:=]' + PIN_LIST_MARK + '\\s*|\\s*' + PIN_SEP_ARROW + '\\s*|\\s+(?:es|era|fue)(?:\\s*:' + PIN_LIST_MARK + ')?\\s+)((?:el|la|los|las|lo|para|en|de|del|que)\\s+)?(' + PIN_HTML_OPEN + ')?([A-Za-zÁÉÍÓÚáéíóúÑñÜü][^\\s,.;!?<|]{2,})', 'gi');
 const PIN_DEC_SRC = '\\d{1,8}(?:[.,]\\d{3})*[.,]\\d{1,2}|\\d{1,3}(?:[.,]\\d{3})+|\\d{1,3}(?:[ \\u00a0\\u202f]\\d{3})+';
-const PIN_DEC_RE = new RegExp('(?<![\\w.,])(?:' + PIN_DEC_SRC + ')(?!\\d)(?![.,]\\d)', 'g');
+// (Bots 5/2 sobre f773911f) también pegado a la moneda peruana o a otra: «S/4.50», «S/.4.50», «S/. 4.50», «PEN4.50» (antes el «.» de «S/.» o la
+// palabra «PEN» pegada lo dejaban fuera de la regla)
+const PIN_CUR_LB = '(?<=(?:^|[^\\w])(?:S\\/\\.|PEN|S\\/|US\\$|\\$))';
+const PIN_DEC_RE = new RegExp('(?:(?<![\\w.,])|' + PIN_CUR_LB + ')(?:' + PIN_DEC_SRC + ')(?!\\d)(?![.,]\\d)', 'g');
 const PIN_CRED_RE = new RegExp('(?<![a-záéíóúñü])' + PIN_CRED_WORD, 'i');
 const PIN_ART_ONLY = /^(?:el|la|los|las|lo)\s+$/i;
+// (Bots 5/2 sobre f773911f) una moneda pegada al monto («S/4.50», «S/.4.50», «US$4», «PEN4») nunca es un valor de letras y dígitos: decide la
+// regla de números/dinero («la clave del precio es de S/4.50» ya no sale «… de [oculto].50»)
+const PIN_CUR_VAL = /^(?:S\/|US\$|PEN(?![A-Za-zÁÉÍÓÚáéíóúÑñÜü]))/i;
+// (Bot 5 sobre f773911f, decisión de la sala) «—» y «–» son separador SOLO tras pin/contraseña/password o con un sustantivo de credencial
+// (wifi, caja, local… PIN_CRED_WORD, o «negocio») en la frase de la etiqueta; en prosa son guiones de inciso («confirmar sin PIN — esperaba…»
+// sí, «la clave — dijo — es vender» no). «->», «=>», «→» y «|» valen como «:» siempre.
+function pinDashOk(k, mid) { return k === 'pin' || k === 'password' || k.startsWith('contrase') || !!(mid && (PIN_CRED_RE.test(mid) || /(?<![a-záéíóúñü])negocio(?![a-záéíóúñü])/i.test(mid))); }
 function pinAlpha(m, kw, mid, sep, art, tag, val) {
   const k = kw.toLowerCase(); tag = tag || '';
+  if (PIN_CUR_VAL.test(val)) return m;
+  if (/[—–]/.test(sep) && !pinDashOk(k, mid)) return m;
   // (Bot 5 sobre 36f6ae51) tras es/era/fue una palabra de enlace (para/en/de/del/que) y después el valor: se tapa el valor (la palabra de enlace
   // queda; sola nunca se tapa) si tiene letras y dígitos («la clave es para Tortuga22»), o con palabra fuerte si empieza con mayúscula
   // («la contraseña es en Tortuga», «la clave del wifi es de Tortuga»). «la contraseña es para proteger…» queda igual.
@@ -217,7 +260,7 @@ function pinAlpha(m, kw, mid, sep, art, tag, val) {
   // (Bot 5 sobre 6e0b3c5d) «negocio» es credencial débil: solo con «:»/«=» o valor con mayúscula («la clave del negocio es Gatito» se tapa;
   // «la clave del negocio es la atención» se ve). Un artículo delante del valor («el perro») solo cuenta tras «:» o «=».
   const strong = k === 'password' || k.startsWith('contrase') || (mid && PIN_CRED_RE.test(mid));
-  const colon = /[:=]/.test(sep);
+  const colon = /[:=|→—–]|->/.test(sep); // (Bot 5 sobre f773911f) las flechas cuentan como «:»
   if (!strong && !(mid && /(?<![a-záéíóúñü])negocio(?![a-záéíóúñü])/i.test(mid) && (colon || /^[A-ZÁÉÍÓÚÑÜ]/.test(val)))) return m;
   if (art && !colon && !strong) return m;
   const w = val.toLowerCase().replace(/[^a-záéíóúñü]+$/i, '');
@@ -243,11 +286,12 @@ const PIN_Q_CH = '"\'«»“”‘’‹›„‚';
 // Etiquetas HTML de formato (<b> <strong> <code> <em> <i> <u> <mark> <kbd> <pre>) también abren (cierran con «</»).
 const PIN_WRAP_OPEN = '(?:' + PIN_HTML_OPEN + '|`{3}(?:[A-Za-z0-9_+-]*[^\\S\\n]*\\n)?|[*_~`]{0,3}[' + PIN_Q_CH + ']|\\*{1,3}|_{1,3}|~~|`{1,2}|\\(|\\[)';
 // (Bot 2 sobre 36f6ae51, F1) entre la apertura y el valor: espacios y UN salto de línea («"\ntortuga», «« \r\n tortuga»»), con cualquier apertura
-const PIN_WRAP_GAP = '([^\\S\\n]{0,16}\\n?[^\\S\\n]{0,16})';
+// (Bot 2 sobre f773911f) hasta 2 saltos (una línea en blanco): «es "⏎⏎tortuga"»
+const PIN_WRAP_GAP = '([^\\S\\n]{0,16}(?:\\n[^\\S\\n]{0,16}){0,2})';
 // (acotada: palabras ≤24 caracteres; espacios ≤16 en el enlace y ≤200 en el separador) así la ventana entera cabe en PIN_WRAP_LOOK y la retención
 // en partes tiene tope. (Bot 5 sobre 36f6ae51) hasta 200 espacios (tab, NBSP…) en el separador: «clave del wifi:» + 17–200 espacios + «"tortuga"»
 // (antes 16); también «->», «=>», «→», «—», «–», «|» y la cita «:\n>» (como pinAlpha).
-const PIN_WRAP_HEAD = '(pin|clave|contrase(?:ñ|n)a|password)((?:\\s{1,16}' + PIN_LINK + '(?:\\s{1,16}[^\\s,.;:=!?|<>→—–' + PIN_Q_CH + '*`(\\[~]{1,24}){0,4}?)?)(\\s{0,200}[:=](?:\\s{0,16}>(?=\\s|$))?\\s{0,200}|\\s{0,16}' + PIN_SEP_ARROW + '\\s{0,200}|\\s{1,200}(?:(?:es|era|fue)(?:\\s{0,16}:)?\\s{0,200})?)((?:el|la|los|las|lo)\\s{1,16})?';
+const PIN_WRAP_HEAD = '(pin|clave|contrase(?:ñ|n)a|password)((?:\\s{1,16}' + PIN_LINK + '(?:\\s{1,16}[^\\s,.;:=!?|<>→—–' + PIN_Q_CH + '*`(\\[~]{1,24}){0,4}?)?)(\\s{0,200}[:=]' + PIN_LIST_MARK + '\\s{0,200}|\\s{0,16}' + PIN_SEP_ARROW + '\\s{0,200}|\\s{1,200}(?:(?:es|era|fue)(?:\\s{0,16}:' + PIN_LIST_MARK + ')?\\s{0,200})?)((?:el|la|los|las|lo)\\s{1,16})?';
 // (Bots 2/5 sobre 36f6ae51, F2) ventana de 80 caracteres desde el comienzo del valor (antes 40) y, sin cierre, hasta 20 más para terminar la
 // palabra: nunca queda una cola a la vista («"[oculto]orado gris»). Cuerpo mirado: 80 + 20 + 1.
 const PIN_WRAP_WIN = 80, PIN_WRAP_EXT = 20, PIN_WRAP_BODY = PIN_WRAP_WIN + PIN_WRAP_EXT;
@@ -271,30 +315,152 @@ function wrapClose(body, op) { // índice del cierre dentro de los primeros PIN_
 }
 const PIN_WRAP_MONEY = /^(?:(?:S\/\.?|US\$|\$|PEN)\s*)?(?:\d[\d.,\u00a0\u202f ]*\d|\d|\[oculto\])(?:\s*(?:soles|sol|PEN))?$/i;
 const wrapMoney = (s) => PIN_WRAP_MONEY.test(s) && (/S\/|\$|PEN|sol/i.test(s) || /\d[.,\u00a0\u202f ]\d/.test(s) || s.includes('[oculto]'));
-function pinQuote(m, kw, mid, sep, art, op, gap, body) {
-  art = art || ''; gap = gap || ''; const k = kw.toLowerCase(), j = wrapClose(body, op), closed = j >= 0;
-  let core, rest;
+// Lo que pinQuote decide sobre el cuerpo (lo mismo para pinQuote y para la supresión de abajo): cierre, núcleo, primera palabra (fw), fin de
+// frase dentro de los 80 (st) y si se puede tapar (ok).
+function quoteDecide(kw, mid, sep, art, op, body) {
+  const k = kw.toLowerCase(), j = wrapClose(body, op), closed = j >= 0;
+  let core, rest, fw = 0, st = -1;
   if (closed) { core = body.slice(0, j); rest = body.slice(j); }
   else { // sin cierre: primera palabra entera; luego hasta . ; ! ? (seguido de espacio o fin) o los 80; si los 80 caen a mitad de palabra, hasta
-    // el final de esa palabra (a lo sumo 20 más). Nunca hasta el final del texto.
+    // el final de esa palabra (a lo sumo 20 más). Con más de 80 sin cierre ni fin de frase decide la supresión (supQuotes, abajo).
     // primera palabra (siempre entera), sin sus . ; ! ? del final si le quedan letras o dígitos («tortuga. Luego» para en el punto; «... tortuga» no)
     const tok = /^\s*\S*/.exec(body.slice(0, PIN_WRAP_BODY))[0], tk = tok.replace(/[.;!?]+$/, ''), win = body.slice(0, PIN_WRAP_WIN);
-    const fw = /[A-Za-z0-9áéíóúñüÁÉÍÓÚÑÜ]/.test(tk) ? tk.length : tok.length, st = win.slice(Math.min(fw, win.length)).search(/[.;!?](?=\s|$)/);
+    fw = /[A-Za-z0-9áéíóúñüÁÉÍÓÚÑÜ]/.test(tk) ? tk.length : tok.length; st = win.slice(Math.min(fw, win.length)).search(/[.;!?](?=\s|$)/);
     let e = st >= 0 ? fw + st : Math.max(fw, win.length);
     if (st < 0) { const lim = Math.min(body.length, PIN_WRAP_BODY); while (e < lim && e > 0 && !/\s/.test(body[e]) && !/\s/.test(body[e - 1])) e++; }
     core = body.slice(0, e); rest = body.slice(e); }
-  const bt = core.trim(); if (!bt || bt === '[oculto]' || (!closed && bt.startsWith('[oculto]')) || wrapMoney(bt)) return m;
+  const r = { closed, core, rest, fw, st, ok: false };
+  const bt = core.trim(); if (!bt || bt === '[oculto]' || (!closed && bt.startsWith('[oculto]')) || wrapMoney(bt)) return r;
+  if (/[—–]/.test(sep) && !pinDashOk(k, mid)) return r; // guion de inciso, no separador (ver pinDashOk)
   if (!/[\u0022'«»“”‘’‹›„‚]/.test(op)) { // envoltorio sin comilla: como pinAlpha
     const strong = k === 'password' || k.startsWith('contrase') || (mid && PIN_CRED_RE.test(mid)), colon = /[:=]/.test(sep);
-    if (!strong && !(mid && /(?<![a-záéíóúñü])negocio(?![a-záéíóúñü])/i.test(mid) && (colon || /^[A-ZÁÉÍÓÚÑÜ]/.test(bt)))) return m;
-    if (art && !colon && !strong) return m;
-    if (PIN_ALPHA_SKIP.has(bt.split(/\s+/)[0].toLowerCase().replace(/^[^a-záéíóúñü]+|[^a-záéíóúñü]+$/gi, ''))) return m;
+    if (!strong && !(mid && /(?<![a-záéíóúñü])negocio(?![a-záéíóúñü])/i.test(mid) && (colon || /^[A-ZÁÉÍÓÚÑÜ]/.test(bt)))) return r;
+    if (art && !colon && !strong) return r;
+    if (PIN_ALPHA_SKIP.has(bt.split(/\s+/)[0].toLowerCase().replace(/^[^a-záéíóúñü]+|[^a-záéíóúñü]+$/gi, ''))) return r;
   }
-  if (closed) return kw + mid + sep + art + op + gap + '[oculto]' + rest; // como antes: «"[oculto]"» (sin los espacios de dentro)
-  const lead = /^\s*/.exec(core)[0], trail = /[\s,:]*$/.exec(core)[0];
-  return kw + mid + sep + art + op + gap + lead + '[oculto]' + trail + rest;
+  r.ok = true; return r;
 }
+function pinQuote(m, kw, mid, sep, art, op, gap, body) {
+  art = art || ''; gap = gap || ''; const d = quoteDecide(kw, mid, sep, art, op, body);
+  if (!d.ok) return m;
+  if (d.closed) return kw + mid + sep + art + op + gap + '[oculto]' + d.rest; // como antes: «"[oculto]"» (sin los espacios de dentro)
+  const lead = /^\s*/.exec(d.core)[0], trail = /[\s,:]*$/.exec(d.core)[0];
+  return kw + mid + sep + art + op + gap + lead + '[oculto]' + trail + d.rest;
+}
+// (Bot 2 sobre f773911f, FALLA-1/2; diseño nuevo en vez de un tope de caracteres) SUPRESIÓN: una comilla/envoltorio tras la etiqueta que a
+// los 80 caracteres sigue sin cierre ni fin de frase (y que pinQuote taparía) entra en un estado de supresión: sale UN «[oculto]» y se quita
+// todo lo que sigue hasta el cierre, un salto de línea, un fin de frase («. ; ! ?» seguido de espacio o fin), otra etiqueta (pin/clave/
+// contraseña/password) o un tope de 400 caracteres (y luego hasta el final de esa palabra). Nunca queda una palabra de la frase a la vista ni
+// una palabra cortada: «la clave es "perro azul … marrón violeta» → «la clave es "[oculto]». Es una etapa propia, la MISMA para el texto
+// entero (supQuotes, antes de los patrones) y en partes (createSupStage, entre la etapa de espacios y la etapa 1): en partes no es retención,
+// «[oculto]» sale una vez y lo que llega mientras dura se descarta. Solo espera (retiene) el cuerpo hasta decidir (≤ 101 caracteres, como antes).
+const SUP_CAP = 400, SUP_CTX = PIN_WRAP_LOOK + 160;
+const SUP_HEAD_END = new RegExp('(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])' + PIN_WRAP_HEAD + '$', 'i');
+const SUP_RE = new RegExp('(?<![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])' + PIN_WRAP_HEAD + '(' + PIN_WRAP_OPEN + ')' + PIN_WRAP_GAP + '((?:(?!' + PIN_LBL + ')[^\\n]){0,' + (PIN_WRAP_BODY + 1) + '})', 'iy');
+const SUP_OPEN_CH = new Set([...PIN_Q_CH, '*', '_', '~', '`', '(', '[', '<']);
+const SUP_LBL_Y = /(?:pin|clave|contrase(?:ñ|n)a|password)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])/iy;
+const SUP_LBL_WORDS = ['pin', 'clave', 'contraseña', 'contrasena', 'password'];
+const SUP_LBL_SCAN = /pin|clave|contrase|password/gi;
+const SUP_WORD_CH = /[A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ]/;
+// ¿c (con lo que sigue, nx) cierra la apertura op? Las mismas reglas que wrapClose
+function supCloses(op, c, prev, nx) {
+  const o0 = op.replace(/\s+$/, '');
+  if (/^`{3}/.test(o0)) return c === '`';
+  if (o0[0] === '<') return c === '<' && nx === '/';
+  const last = o0[o0.length - 1];
+  if (PIN_Q_SET.has(last)) return PIN_Q_SET.has(c) && !((c === "'" || c === '’') && PIN_LETTER.test(prev || '') && PIN_LETTER.test(nx || ''));
+  if (last === '`') return c === '`';
+  if (last === '(') return c === ')';
+  if (last === '[') return c === ']';
+  if (last === '_') return c === '_' && !PIN_LETTER.test(nx || '');
+  return c === last;
+}
+// ¿a cuántos caracteres de lo que sigue necesita mirar supCloses? (para esperar en partes)
+const supNeedsNext = (op, c) => { const o0 = op.replace(/\s+$/, ''); return (o0[0] === '<' && c === '<') || ((c === "'" || c === '’' || c === '_')); };
+function createSupStage(out0) {
+  let ctx = '', pend = '', drop = null, scanAt = 0, absOut = 0, lastLbl = -1e9, lblFound = -1;
+  const out = (x) => { if (!x) return; ctx = (ctx + x).slice(-SUP_CTX); absOut += x.length; out0(x); };
+  // decide en la apertura que empieza en pend[k]: 'wait' (falta texto), null (no suprime) o el estado de supresión
+  const decide = (k, final) => {
+    const txt = ctx + pend, P = ctx.length + k, from = Math.max(0, P - PIN_WRAP_LOOK), hm = SUP_HEAD_END.exec(txt.slice(from, P));
+    if (!hm) return null;
+    const L = from + hm.index; SUP_RE.lastIndex = L; const m = SUP_RE.exec(txt);
+    if (!m) return !final && txt[P] === '<' && txt.length - P < 9 ? 'wait' : null;
+    const [, kw, mid, sep, art0, op, gap, body] = m, art = art0 || '';
+    if (L + kw.length + mid.length + sep.length + art.length !== P) return null;
+    const end = L + m[0].length;
+    // (Bot 3 sobre f773911f, retención) en cuanto llega ENTERA la primera palabra (seguida de espacio) y con ella pinQuote ya tapa sí o sí, se entra
+    // a la supresión sin esperar los 80: lo que sigue se tapa igual hasta el cierre, el fin de frase, el salto, otra etiqueta o el tope (es lo mismo
+    // que haría pinQuote: con cierre tapa hasta el cierre, sin cierre hasta el fin de frase/salto/etiqueta, y con más de 80 decide la supresión).
+    // Solo con una palabra con letras, sin signos de cierre/fin de frase y que no sea moneda: así nada que llegue después cambia la decisión.
+    { const lead0 = /^\s*/.exec(body)[0], wm = /^[^\s]+(?=\s)/.exec(body.slice(lead0.length));
+      if (wm && SUP_EARLY_WORD.test(wm[0]) && !SUP_EARLY_BAD.test(wm[0]) && !PIN_CUR_VAL.test(wm[0])) {
+        const d0 = quoteDecide(kw, mid, sep, art, op, wm[0]);
+        if (d0.ok) return { vs: P + op.length + gap.length + lead0.length - ctx.length, op, bi: lead0.length, lead: lead0.length, fw: wm[0].length, prev: '' }; } }
+    if (!final && body.length <= PIN_WRAP_BODY) {
+      if (end >= txt.length) return 'wait';
+      if (txt[end] !== '\n') { SUP_LBL_Y.lastIndex = end; const lm = SUP_LBL_Y.exec(txt); if (!lm || end + lm[0].length >= txt.length) return 'wait'; }
+    }
+    const d = quoteDecide(kw, mid, sep, art, op, body);
+    if (!(d.ok && !d.closed && d.st < 0 && body.length > PIN_WRAP_WIN)) return null;
+    const lead = /^\s*/.exec(body)[0];
+    return { vs: P + op.length + gap.length + lead.length - ctx.length, op, bi: lead.length, lead: lead.length, fw: d.fw, prev: '' };
+  };
+  const run = (final) => {
+    for (;;) {
+      if (drop) { // supresión: se descarta hasta el cierre / salto / fin de frase / otra etiqueta / tope (+ fin de palabra)
+        let k = 0, endAt = -1;
+        for (; k < pend.length; k++) {
+          const c = pend[k], nx = pend[k + 1], prev = k > 0 ? pend[k - 1] : drop.prev;
+          if (c === '\n') { endAt = k; break; }
+          if (nx === undefined && !final && supNeedsNext(drop.op, c)) break;
+          if (supCloses(drop.op, c, prev, nx)) { endAt = k; break; }
+          if (drop.bi >= drop.fw && (c === '.' || c === ';' || c === '!' || c === '?')) {
+            if (nx === undefined && !final) break;
+            if (nx === undefined || /\s/.test(nx)) { endAt = k; break; } }
+          // otra etiqueta: corta ANTES del espacio que la precede (así queda «[oculto] clave …», con su espacio), o justo antes si va pegada
+          { const ws = c === ' ' || c === '\t' || c === '\u00a0', at = ws ? k + 1 : k;
+            if ((ws || !SUP_WORD_CH.test(prev || ' ')) && at < pend.length + 1 && (at >= pend.length || /[pPcC]/.test(pend[at]))) {
+              if (at >= pend.length) { if (!final) break; }
+              else { SUP_LBL_Y.lastIndex = at; const lm = SUP_LBL_Y.exec(pend);
+                if (lm && (at + lm[0].length < pend.length || final)) { endAt = k; break; }
+                if (!final && pend.length - at < 12) { const rest = pend.slice(at).toLowerCase(); if (SUP_LBL_WORDS.some((w) => w.startsWith(rest))) break; } } } }
+          if (drop.bi - drop.lead >= SUP_CAP && /\s/.test(c)) { endAt = k; break; }
+          drop.bi++;
+        }
+        if (endAt < 0) { if (k > 0) drop.prev = pend[k - 1]; pend = pend.slice(k); if (final) { pend = ''; drop = null; } return; }
+        pend = pend.slice(endAt); drop = null; scanAt = 0; continue;
+      }
+      // normal: se suelta todo salvo desde una apertura que aún no se puede decidir
+      { const tl = ctx.slice(-10), w = tl + pend.slice(scanAt), b0 = absOut + scanAt - tl.length; SUP_LBL_SCAN.lastIndex = 0; let x; // etiquetas nuevas (también partidas entre trozos)
+        while ((x = SUP_LBL_SCAN.exec(w))) { const a = b0 + x.index; if (a > lblFound) lblFound = a; } }
+      let k = scanAt, hit = null, waitAt = -1;
+      for (; k < pend.length; k++) {
+        if (!SUP_OPEN_CH.has(pend[k])) continue;
+        // sin etiqueta en los PIN_WRAP_LOOK anteriores no hay nada que decidir (CPU)
+        if (absOut + k - Math.min(lblFound, absOut + k) > PIN_WRAP_LOOK || lblFound < 0) continue;
+        if (lblFound >= absOut + k) { // la última etiqueta vista está después de k: buscar si hay otra antes (raro)
+          if (!/pin|clave|contrase|password/i.test((ctx + pend.slice(0, k)).slice(-PIN_WRAP_LOOK))) continue; }
+        const r = decide(k, final);
+        if (r === 'wait') { waitAt = k; break; }
+        if (r) { hit = r; break; }
+      }
+      if (hit) { out(pend.slice(0, hit.vs) + '[oculto]'); pend = pend.slice(hit.vs); drop = hit; continue; }
+      if (waitAt >= 0) { out(pend.slice(0, waitAt)); pend = pend.slice(waitAt); scanAt = 0; return; }
+      out(pend); pend = ''; scanAt = 0; return;
+    }
+  };
+  return {
+    push(str) { if (!str) return; pend += str; run(false); },
+    flush() { run(true); if (pend) out(pend); ctx = ''; pend = ''; drop = null; scanAt = 0; absOut = 0; lastLbl = -1e9; lblFound = -1; }
+  };
+}
+const SUP_GATE = /pin|clave|contrase|password/i;
+const SUP_EARLY_WORD = /[A-Za-záéíóúñüÁÉÍÓÚÑÜ]/, SUP_EARLY_BAD = /[.;!?"'«»“”‘’‹›„‚`*_~()[\]<>]|^(?:soles?|pen)$/i;
+function supQuotes(v) { if (!SUP_GATE.test(v)) return v; let o = ''; const st = createSupStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 // un carácter dentro de la misma frase (el punto de «cód.» no la corta); para la regla de la etiqueta (abajo)
+// (Bots 5/2 sobre f773911f) una moneda con su monto («S/4.50», «S/.4.50», «S/. 4.50», «$12», «PEN4») nunca es «el valor» de letras y dígitos
+const PIN_CUR_NUM = '(?:S\\/\\.?|US\\$|\\$|PEN)\\s?\\d';
 const PIN_SAME = '(?:[^.;!?\\n]|(?<=c[óo]d)\\.)';
 const PATTERNS = [
   // Bot 5: un «data:» (foto pegada como texto, base64) nunca va a DeepSeek dentro del mensaje: se cambia por un aviso corto. Va primero para que
@@ -312,7 +478,9 @@ const PATTERNS = [
   // (3ee80c18) …salvo que ese «[oculto]» sea de OTRA etiqueta: un valor con dígito y después otra etiqueta (pin/clave/contraseña/password/
   // token/api key) antes del «[oculto]». «api key sk-123456, la clave 4321» tapaba solo el 4321 y dejaba la api key a la vista en el texto entero
   // (en partes sí se tapaba); «la clave del pin es 4321» sigue «la clave del pin es [oculto]».
-  [/(?<![\w/$])\d{4,8}(?!\d)(?![.,]\d)/g, pinNumber],
+  // (Bots 5/2 sobre f773911f) también pegado a la moneda («S/4321», «S/.4321», «$4321», «PEN4321»): decide pinNumber (un entero tras clave/
+  // contraseña nunca se suelta por dinero; tras «pin» nunca). Antes lo tapaba como «valor de letras y dígitos» la regla de letras.
+  [new RegExp('(?:(?<![\\w/$])|' + PIN_CUR_LB + ')\\d{4,8}(?!\\d)(?![.,]\\d)', 'g'), pinNumber],
   // (Bots 5/2 sobre 5646a4c9) número con decimales en la ventana de la etiqueta (ver pinDecimal) y clave de puras letras dicha como clave (ver pinAlpha); antes de la regla
   // de la etiqueta, que no tapa nada si ya hay un «[oculto]» cerca.
   // (Bot 5 sobre 6e0b3c5d) también miles: «4.321», «12.345», «1.234.567», «4,321» y con espacio «4 321» (UNA pieza, misma regla que los decimales)
@@ -321,9 +489,9 @@ const PATTERNS = [
   [PIN_QUOTE_RE, pinQuote],
   // El valor con letras y dígitos: hasta 5 palabras tras el enlace; si una de esas palabras nombra algo que se abre con clave (wifi, caja, local…)
   // llega a 6 («clave del wifi del local de la esquina Zq9xK2mPw7»).
-  [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}?(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
-    + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?=(?:\\s+[^\\s,.;:=]+){0,5}\\s+' + PIN_CRED_WORD + ')(?:\\s+[^\\s,.;:=]+){6}(?:\\s*[:=]\\s*|\\s+))(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
-    + '|(?!(?=' + PIN_SAME + '{0,62}\\[oculto\\])(?!(?:' + PIN_SAME + '{0,62}?\\d|\\s*(?:es|era|de|:|=)?\\s*(?!(?:' + PIN_LINK + '|es|era|fue|son)(?![a-zñáéíóú])|\\[)[^\\s,.;]{3,})' + PIN_SAME + '{0,62}?(?<![a-zñ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b' + PIN_SAME + '{0,62}?\\[oculto\\]))(\\s*(?:es|era|de|:|=)?\\s*)(?![*_`~(\\[]{1,3}(?:(?:S\\/|US\\$|\\$|PEN)(?=\\s|\\d)|\\d{1,8}[.,]\\d))(?![*_`~(\\[' + PIN_Q_CH + ']{1,4}\\[oculto\\])(?!' + PIN_LINK + '(?=[\\s,.;]|$))(?!' + PIN_PRICE_WORD + ')[^\\s,.;]{3,})', 'gi'),
+  [new RegExp('\\b(pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b(?:(\\s+' + PIN_LINK + '(?:\\s+[^\\s,.;:=]+){0,5}?(?:\\s*[:=]\\s*|\\s+))(?![*_`~(\\[]{0,3}' + PIN_CUR_NUM + ')(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
+    + '|(?<=\\b(?:pin|clave|contrase(?:ñ|n)a))(\\s+' + PIN_LINK + '(?=(?:\\s+[^\\s,.;:=]+){0,5}\\s+' + PIN_CRED_WORD + ')(?:\\s+[^\\s,.;:=]+){6}(?:\\s*[:=]\\s*|\\s+))(?![*_`~(\\[]{0,3}' + PIN_CUR_NUM + ')(?=[^\\s,.;]*\\d)(?=[^\\s,.;]*[a-zñ])[^\\s,.;]{6,}'
+    + '|(?!(?=' + PIN_SAME + '{0,62}\\[oculto\\])(?!(?:' + PIN_SAME + '{0,62}?\\d|\\s*(?:es|era|fue|de|->|=>|→|(?<=(?:pin|contrase(?:ñ|n)a|password)\\s{0,16})[—–]|:|=)?\\s*(?!(?:' + PIN_LINK + '|es|era|fue|son)(?![a-zñáéíóú])|\\[)[^\\s,.;]{3,})' + PIN_SAME + '{0,62}?(?<![a-zñ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)\\b' + PIN_SAME + '{0,62}?\\[oculto\\]))(\\s*(?:es|era|fue|de|->|=>|→|(?<=(?:pin|contrase(?:ñ|n)a|password)\\s{0,16})[—–]|:|=)?\\s*)(?![*_`~(\\[]{0,3}(?:(?:S\\/\\.?|US\\$|\\$|PEN)(?=\\s|\\d)|\\d{1,8}[.,]\\d))(?![*_`~(\\[' + PIN_Q_CH + ']{1,4}\\[oculto\\])(?!' + PIN_LINK + '(?=[\\s,.;]|$))(?!' + PIN_PRICE_WORD + ')[^\\s,.;]{3,})', 'gi'),
     // (Bot 2 sobre 39ccd25c) un monto envuelto («`S/ 12.50`», «**S/ 4.50**») no es «la palabra que sigue»: decide pinDecimal, igual que sin envoltorio
     // y un valor ya tapado dentro de su envoltorio («"[oculto]"», «**[oculto]**») tampoco: si no, «clave "abc" y clave…» se volvía a tapar según
     // lo que viene después y el texto en partes no podía soltarse (retención sin tope).
@@ -358,7 +526,9 @@ const PIN_GATED = new Set(PATTERNS.filter((p) => [pinNumber, pinDecimal, pinAlph
 // partes (createWsStage antes de la etapa 1, la misma función). Así la etapa 1 ya no retiene la racha entera y el valor sigue tapado.
 // (Bot 2 sobre 36f6ae51, INFO) tope 120 (antes 160): la etapa de espacios retiene a lo sumo 120 caracteres de la racha («pin» + 500 espacios).
 const WS_RUN_MAX = 120;
-const WS_KW_TAIL = /(?:^|[^A-Za-z0-9_])(?:RUC(?:\s*N[°ºo]\.?)?|DNI|pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key|data)\s*(?:[:=]|es|era|de)?$/i;
+// (Bot 5 sobre f773911f) también tras la frase de la etiqueta («clave del wifi:», «la contraseña del correo es»): una racha con invisibles (U+200B…)
+// mezclados se limpia y una de más de 120 se junta, igual que tras la etiqueta sola (tomado del parche de Bot 5)
+const WS_KW_TAIL = /(?:^|[^A-Za-z0-9_])(?:(?:RUC(?:\s*N[°ºo]\.?)?|DNI|pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key|data)\s*(?:[:=]|es|era|de)?|(?:pin|clave|contrase(?:ñ|n)a|password)\s+(?:del?|la|las|el|los|lo|mi|mis|tu|tus|su|sus|nuestra|nuestro|para|en|que)(?:\s+[^\s:=]{1,24}){0,4}?(?:\s*[:=]|\s+(?:es|era|fue)))$/i;
 // (Bot 3 sobre a6d1d76e, CPU) filtro previo exacto: WS_KW_TAIL solo puede calzar si el carácter justo antes de la racha es el último de una
 // etiqueta o de su cola: RUC→c, N°/Nº/No/N°.→° º o ., DNI→i, pin/token→n, clave/de→e, contraseña/data/era→a, password→d, api key→y, es→s,
 // «:», «=». Con cualquier otro carácter el regex no se prueba (mismo resultado, sin armar el texto ni probar el regex en cada palabra).
@@ -369,6 +539,7 @@ const WS_KW_LAST = /[c°ºo.ineadys:=]/i;
 // texto queda igual). «clave:» + « \n\u200b» ×70 + «4321» se junta igual que sin ellos. Una racha corta de puros invisibles queda como estaba.
 const WS_ZW = /[\u200b-\u200f\u2060-\u2064\ufeff\u180e\u00ad\u202a-\u202e\u2066-\u2069]/;
 const isWsCh = (c) => (c > ' ' && c < '\x7f' ? false : /\s/.test(c) || WS_ZW.test(c)); // ASCII visible: no es espacio, sin regex
+const WS_TAIL_N = 160; // (r10) la frase de la etiqueta (etiqueta + enlace + 4 palabras ≤24) cabe entera (antes 40: solo la etiqueta)
 function createWsStage(out) {
   let tail = '', ws = '', zw = '', pend = false, drop = false, seen = false; // seen: esta racha ya se miró (sin etiqueta delante); zw: invisibles quitados
   return {
@@ -377,7 +548,7 @@ function createWsStage(out) {
         if (isWsCh(c)) {
           if (drop) { o += str.slice(from, i); from = i + 1; continue; }
           if (!pend && !seen) { const lc = i > 0 ? str[i - 1] : tail[tail.length - 1];
-            if (lc && WS_KW_LAST.test(lc)) { const t = (tail + o.slice(-40) + str.slice(Math.max(from, i - 40), i)).slice(-40); pend = WS_KW_TAIL.test(t); } seen = true; }
+            if (lc && WS_KW_LAST.test(lc)) { const t = (tail + o.slice(-WS_TAIL_N) + str.slice(Math.max(from, i - WS_TAIL_N), i)).slice(-WS_TAIL_N); pend = WS_KW_TAIL.test(t); } seen = true; }
           if (!pend) continue;
           o += str.slice(from, i); from = i + 1; if (WS_ZW.test(c)) zw += c; else ws += c;
           if (ws.length + zw.length > WS_RUN_MAX) { o += ' '; ws = ''; zw = ''; drop = true; }
@@ -386,7 +557,7 @@ function createWsStage(out) {
           ws = ''; zw = ''; drop = false; pend = false; seen = false;
         }
       }
-      o += str.slice(from); if (o) { tail = (tail + o).slice(-40); out(o); }
+      o += str.slice(from); if (o) { tail = (tail + o).slice(-WS_TAIL_N); out(o); }
     },
     flush() { if (ws || zw) { out(ws || zw); } tail = ''; ws = ''; zw = ''; pend = false; drop = false; seen = false; }
   };
@@ -394,7 +565,7 @@ function createWsStage(out) {
 const WS_LONG = new RegExp('\\s{' + (WS_RUN_MAX + 1) + '}');
 function collapseWs(v) { if (!WS_LONG.test(v) && !WS_ZW.test(v)) return v; let o = ''; const st = createWsStage((x) => { o += x; }); st.push(v); st.flush(); return o; }
 export function redactText(value) {
-  let out = collapseWs(String(value ?? ''));
+  let out = supQuotes(collapseWs(String(value ?? '')));
   const kw = PIN_GATE.test(out); for (const [re, label] of PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
   return out;
 }
@@ -440,22 +611,29 @@ function idMask(m, d4, off, str) {
   // doc./identidad delante (misma línea, hasta 24 caracteres sin dígitos) o en una columna de tabla con ese encabezado.
   // (Bot 5 sobre 36f6ae51, menor) con «documento/doc/identidad» JUSTO delante (y «:», «#» o espacios) no se repite la etiqueta: «documento ****5678»
   // (antes «documento DNI ****5678»), igual que «código ****1234» tras «código».
-  if (ID_DNI_RE.test(before)) return ID_DOC_JUST.test(before) ? '****' + d4 : 'DNI ****' + d4;
+  // (Bot 2 sobre f773911f, INFO) con la palabra DNI ya en la frase (hasta 24 caracteres antes) la etiqueta no se repite: «el DNI del cliente es
+  // 45678912» → «el DNI del cliente es ****8912» (antes «… es DNI ****8912»). Con documento/doc./identidad, como antes.
+  if (ID_DNI_RE.test(before)) return ID_DOC_JUST.test(before) || ID_DNI_WORD.test(before) ? '****' + d4 : 'DNI ****' + d4;
   return headerColumn(ID_PRE ? ID_PRE + str : str, (ID_PRE ? ID_PRE.length : 0) + off, ID_DNI_HDR) ? 'DNI ****' + d4 : 'código ****' + d4;
 }
+const ID_DNI_WORD = /(?:^|[^a-záéíóúñü])d\.?\s?n\.?\s?i(?![a-záéíóúñü])[^\n\d]{0,24}$/i;
 const ID_DOC_JUST = /(?:^|[^a-záéíóúñü])(?:documentos?|doc\.?|identidad)\s*[:#]?\s*$/i;
 const ID_DNI_RE = /(?:^|[^a-záéíóúñü])(?:d\.?\s?n\.?\s?i|documentos?|doc|identidad)(?![a-záéíóúñü])[^\n\d]{0,24}$/i;
 const ID_DNI_HDR = /(?:^|[^a-záéíóúñü])(?:d\.?\s?n\.?\s?i|documentos?|doc|identidad)(?![a-záéíóúñü])/i;
-const idLabel8 = (m, d4, off, str) => { const b = str.slice(Math.max(0, off - 48), off); return (ID_DNI_RE.test(b) ? (ID_DOC_JUST.test(b) ? '****' : 'DNI ****') : headerColumn(str, off, ID_DNI_HDR) ? 'DNI ****' : 'código ****') + d4; };
-function redactTextCtx(value, pre) { ID_PRE = pre ? String(pre).slice(-ID_PRE_MAX) : ''; try { return redactText(value); } finally { ID_PRE = ''; } }
+// (r10) también con lo ya filtrado delante (ID_PRE), como idMask: en partes la etiqueta sale igual que en el texto entero (modelo-dueño)
+const idLabel8 = (m, d4, off, str) => { const near = str.slice(Math.max(0, off - 48), off), b = near.length < 48 && ID_PRE ? ID_PRE.slice(-(48 - near.length)) + near : near;
+  return (ID_DNI_RE.test(b) ? (ID_DOC_JUST.test(b) || ID_DNI_WORD.test(b) ? '****' : 'DNI ****') : headerColumn(ID_PRE ? ID_PRE + str : str, (ID_PRE ? ID_PRE.length : 0) + off, ID_DNI_HDR) ? 'DNI ****' : 'código ****') + d4; };
+function redactTextCtx(value, pre, fn = redactText) { ID_PRE = pre ? String(pre).slice(-ID_PRE_MAX) : ''; try { return fn(value); } finally { ID_PRE = ''; } }
+const idBefore = (str, off) => { const near = str.slice(Math.max(0, off - 48), off); return near.length < 48 && ID_PRE ? ID_PRE.slice(-(48 - near.length)) + near : near; };
+const idCodeColumn = (str, off) => (ID_PRE ? codeColumn(ID_PRE + str, ID_PRE.length + off) : codeColumn(str, off));
 const RECEIPT_BEFORE = /(?:^|[^\w])(?:[FBET][A-Z0-9]{3}|0\d{3})-$/;
 const MODEL_OWNER_PATTERNS = PATTERNS.map((pt) => {
   if (pt[2] !== 'id') return pt;
   if (/RUC/.test(pt[0].source)) return [pt[0], (m, d4) => (/^(?:20|15|17)/.test(m.replace(/^\D+/, '')) ? m : 'RUC *******' + d4), 'id'];
-  return [pt[0], (m, d4, off, str) => (/^\d/.test(m) && (RECEIPT_BEFORE.test(str.slice(Math.max(0, off - 6), off)) || CODE_LABEL_RE.test(str.slice(Math.max(0, off - 48), off)) || codeColumn(str, off)) ? m : /^\d/.test(m) ? idLabel8(m, d4, off, str) : 'DNI ****' + d4), 'id'];
+  return [pt[0], (m, d4, off, str) => (/^\d/.test(m) && (RECEIPT_BEFORE.test(str.slice(Math.max(0, off - 6), off)) || CODE_LABEL_RE.test(idBefore(str, off)) || idCodeColumn(str, off)) ? m : /^\d/.test(m) ? idLabel8(m, d4, off, str) : 'DNI ****' + d4), 'id'];
 });
 export function redactModelOwner(value) {
-  let out = collapseWs(String(value ?? ''));
+  let out = supQuotes(collapseWs(String(value ?? '')));
   const kw = PIN_GATE.test(out); for (const [re, label] of MODEL_OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
   return out;
 }
@@ -467,7 +645,7 @@ export function redactModelOwner(value) {
 export const MASK_LEFT_RE = /\*{3,}|[*∗＊•●·⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡]{2,}(?=[\s-]?\d)|[∗＊•●·▪■◦□▫]{3,}|[▪■◦□▫]{2,}|(?:_{2,}|#{2,}|~{2,}|\?{2,}|-{3,})(?=[\s-]?\d)|(?:^\s*|(?<=\b[A-Z0-9]{4}-))[*∗＊•●·▪■◦#_⁎✱⁕⁑⁂\u2732-\u273D\u2749-\u274B⚹⊛٭﹡](?=\d)|…\s?\d|\bx{3,}\d|\bx{2,}(?:-x+)+-?\d|\[[^\]\n]{0,24}(?:oculto|omitid|dato)[^\]\n]{0,24}\]|\((?:oculto|omitid[oa])\)/i;
 // respuesta al dueño: lo mismo sin DNI/RUC
 export function redactOwnerText(value) {
-  let out = collapseWs(String(value ?? ''));
+  let out = supQuotes(collapseWs(String(value ?? '')));
   const kw = PIN_GATE.test(out); for (const [re, label] of OWNER_PATTERNS) if (kw || !PIN_GATED.has(re)) out = out.replace(re, label);
   return out;
 }
@@ -1576,7 +1754,7 @@ const PIN_TOKEN_END = /(?:es|era|de|:|=)$/i;
 // (Bot 5 sobre d72b7601) PIN numérico: tras «pin» el número puede venir hasta 6 palabras después (sin palabras de corte), tras clave/contraseña
 // hasta enlace + 6 (frase de credencial), con «: es» en medio. Mientras tanto no se corta. Y con «… 4321 » recién llegado tampoco: la unidad
 // que podría seguir («2500 unidades») cambia el resultado de clave/contraseña.
-const PIN_NUM_WAIT = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:[^.;!?\n]{0,61}|[^.;!?\n]{0,60}(?<=(?:^|[^a-záéíóúñü])c[óo]d)\.[^.;!?\n]{0,60})$/i; // (3ee80c18) también tras un «cód.» (clase simple: CPU)
+const PIN_NUM_WAIT = /(?:^|[^A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:pin|clave|contrase(?:ñ|n)a)(?![A-Za-z0-9_áéíóúñüÁÉÍÓÚÑÜ])(?:(?:[^.;!?\n]|(?<=S\/)\.){0,61}|[^.;!?\n]{0,60}(?<=(?:^|[^a-záéíóúñü])c[óo]d)\.[^.;!?\n]{0,60})$/i; // (3ee80c18) también tras un «cód.» (clase simple: CPU)
 // (Bot 5 sobre 6e0b3c5d) también decimales y miles («clave 2.5 » + «kg»): la unidad que puede llegar decide igual que en el texto entero
 const PIN_NUM_TAIL = new RegExp('(?<![\\d.,])(?:\\d{4,8}|' + PIN_DEC_SRC + ')\\s+$');
 // (Bot 5 sobre 6e0b3c5d) comilla abierta tras pin/clave/contraseña/password: no se corta hasta que cierre (pinQuote mira lo de dentro entero)
@@ -1586,6 +1764,20 @@ const PIN_NUM_TAIL = new RegExp('(?<![\\d.,])(?:\\d{4,8}|' + PIN_DEC_SRC + ')\\s
 // CIERRE parecía otra apertura y «clave "abc" y …» repetido retenía toda la respuesta.
 // (Bots 2/5 sobre 36f6ae51) con el hueco de la apertura (espacios y un salto) y el cuerpo de 80 + 20: se retiene hasta que pinQuote ya no puede cambiar.
 const PIN_QUOTE_OPEN = new RegExp(PIN_LBL + PIN_WRAP_HEAD.replace('(pin|clave|contrase(?:ñ|n)a|password)', '') + '(?:' + PIN_WRAP_OPEN + PIN_WRAP_GAP + '(?:(?!' + PIN_LBL + ')[^\\n]){0,' + PIN_WRAP_BODY + '})?$', 'i');
+// (Bot 3 sobre f773911f, retención) una ventana de envoltorio SIN comilla (** ` ( [ _ ~ <b>…) cuya primera palabra ya llegó entera y con la que
+// pinQuote ya NO tapa nada pase lo que pase (palabra de enlace, sin etiqueta fuerte, o un «[oculto]» que puso la supresión) no se retiene: lo que
+// llegue después no cambia el resultado. Antes se esperaban los 101 caracteres de la ventana igual.
+const PIN_QUOTE_GROUPS = new RegExp('^' + PIN_WRAP_HEAD + '(' + PIN_WRAP_OPEN + ')' + PIN_WRAP_GAP + '((?:(?!' + PIN_LBL + ')[^\\n]){0,' + PIN_WRAP_BODY + '})$', 'i');
+function quoteOpenAt(t) {
+  const qm = PIN_QUOTE_OPEN.exec(t); if (!qm) return null;
+  const g = PIN_QUOTE_GROUPS.exec(qm[0]); if (!g) return qm;
+  const [, kw, mid, sep, art0, op, , body] = g, lead = /^\s*/.exec(body)[0], rest = body.slice(lead.length);
+  // con comilla: solo «"[oculto]"» ya cerrado (lo que deja la supresión) es seguro; «"[oculto] y …"» aún puede cerrarse y taparse entero
+  if (/[\u0022'«»“”‘’‹›„‚]/.test(op)) return rest.startsWith('[oculto]') && rest.length > 8 && wrapClose(rest.slice(8), op) === 0 ? null : qm;
+  if (rest.startsWith('[oculto]')) return null; // envoltorio sin comilla: pinQuote nunca toca un cuerpo que empieza con «[oculto]»
+  const wm = /^[^\s]+(?=\s)/.exec(rest); if (!wm || !SUP_EARLY_WORD.test(wm[0]) || SUP_EARLY_BAD.test(wm[0]) || PIN_CUR_VAL.test(wm[0])) return qm;
+  return quoteDecide(kw, mid, sep, art0 || '', op, wm[0]).ok ? qm : null;
+}
 const PIN_KW_SCAN = /pin|clave|contrase|password|token|api|data/gi;
 export const SHIELD_M = 72, SHIELD_EVERY = 8, SHIELD_TRIES = 3;
 const SHIELD_FAR_W = 10, SHIELD_FAR_C = 72, PIN_KW_PROBE = /pin|clave|contrase|password|token|api|data/gi;
@@ -1597,7 +1789,7 @@ function pinOpen(t, h) {
   if (PIN_KW_END.test(a)) return true;
   if (PIN_LINK_END.test(t.slice(Math.max(0, i - 80), i))) return true;
   { const w = t.slice(Math.max(0, i - 80), i); if (PIN_NUM_WAIT.test(w)) return true;
-    if (PIN_QUOTE_OPEN.test(t.slice(Math.max(0, i - PIN_WRAP_LOOK), i))) return true;
+    if (quoteOpenAt(t.slice(Math.max(0, i - PIN_WRAP_LOOK), i))) return true;
     const d = PIN_NUM_TAIL.exec(t.slice(Math.max(0, h - 40), h)); if (d && PIN_NUM_WAIT.test(t.slice(Math.max(0, h - d[0].length - 80), h - d[0].length))) {
       // (Bot 3 sobre c16a407d) número al final con su etiqueta: solo la PRIMERA palabra que sigue decide (unidad o no, ver pinUnitOk). Si ya llegó
       // entera y no es unidad, se puede cortar; si aún puede ser el comienzo de una unidad, se vuelve a mirar cuando llegue ('wait').
@@ -1605,6 +1797,7 @@ function pinOpen(t, h) {
       const rest = t.slice(h, h + 14), wd = PIN_UNIT_WORD.exec(rest)[0];
       if (wd.length < rest.length) { if (PIN_NUM_UNIT.test(t.slice(h, h + 16))) return true; }
       else if (PIN_UNIT_PREFIXES.some((u) => u.startsWith(wd.toLowerCase()))) tail = 'wait'; } }
+  if (PIN_ADJ_OPEN.test(t.slice(Math.max(0, i - 160), i))) return true; // «producto clave S/ 4.50 y …»: lo que sigue (≤ 40) decide
   // (Bot 5 sobre 36f6ae51) «password es en » / «la clave es para »: el valor que sigue a la palabra de enlace lo decide pinAlpha
   if (PIN_ES_LINK_END.test(t.slice(Math.max(0, i - 80), i))) return true;
   const m = PIN_TOKEN_END.exec(a); if (!m) return tail;
@@ -1628,8 +1821,8 @@ function priceKwNext(t, h) { let e = h; while (e < t.length && isLetter(t[e])) e
 // Etapa 1: datos sensibles. Los cortes válidos dependen solo del texto hasta el corte, así que cada posición se mira una vez.
 function createTextStage(out0, red0 = redactText) {
   // (Bots 4/5 sobre 6e0b3c5d) redactText en partes ve lo ya soltado (para la etiqueta «código ****1234», ver idMask)
-  let done = ''; const ctx = red0 === redactText;
-  const red = ctx ? (x) => redactTextCtx(x, done) : red0, out = ctx ? (x) => { done += x; if (done.length > 2 * ID_PRE_MAX) done = done.slice(-ID_PRE_MAX); out0(x); } : out0; // redactTextCtx toma los últimos ID_PRE_MAX
+  let done = ''; const ctx = red0 === redactText || red0 === redactModelOwner; // (r10) también modelo-dueño (etiqueta del DNI / código)
+  const red = ctx ? (x) => redactTextCtx(x, done, red0) : red0, out = ctx ? (x) => { done += x; if (done.length > 2 * ID_PRE_MAX) done = done.slice(-ID_PRE_MAX); out0(x); } : out0; // redactTextCtx toma los últimos ID_PRE_MAX
   let pend = '', off = 0, seen = 0, best = 0, wsm = { at: -1, open: false }; const data = []; // data: {at (absoluto), phase 0|1|2 (2=roto), n, pos}
   // (Bot 3 sobre c16a407d) lastKw: comienzo (absoluto) de la última etiqueta ya vista; sin etiqueta cerca pinOpen no se prueba (CPU).
   // cands: cortes que solo frenó pinOpen; pasados SHIELD_M caracteres se prueba soltar ahí (ver tryShield). Así una etiqueta repetida sin punto
@@ -1668,11 +1861,11 @@ function createTextStage(out0, red0 = redactText) {
   const shieldAt = (c) => {
     const h = c - off; if (h <= best || h <= 0) return false;
     const A = pend.slice(0, h), B = pend.slice(h), rA = WS_ONLY.test(A) ? A : red(A);
-    const redB = (x) => (ctx ? redactTextCtx(x, done + rA) : red0(x)), same = (x) => red(x) === rA + redB(x.slice(h));
+    const redB = (x) => (ctx ? redactTextCtx(x, done + rA, red0) : red0(x)), same = (x) => red(x) === rA + redB(x.slice(h));
     if (!same(pend)) return false;
     // (Bots 2/5 sobre 39ccd25c) una comilla/envoltorio cuya ventana sigue abierta al final de lo pendiente y empezó antes del corte: lo que
     // llegue aún puede alargar lo tapado más allá del corte → no se corta (la ventana es corta: se suelta al cerrarse)
-    { const qt = pend.slice(Math.max(0, pend.length - PIN_WRAP_LOOK)), qm = PIN_QUOTE_OPEN.exec(qt); if (qm && pend.length - qt.length + qm.index < h) return false; }
+    { const qt = pend.slice(Math.max(0, pend.length - PIN_WRAP_LOOK)), qm = quoteOpenAt(qt); if (qm && pend.length - qt.length + qm.index < h) return false; }
     // y lo que aún no llegó tampoco puede cambiar A: se prueba con las continuaciones que podrían colgarse de una etiqueta en A
     // (número, decimal, «es Valor», «: Valor», valor con letras y dígitos, entre comillas, un «[oculto]» que viene). Si con alguna filtrar A y el resto por separado ya no da lo mismo que todo junto, no se corta (se sigue reteniendo).
     // También desde el último espacio: la palabra a medias del final puede terminar siendo otra («432» → «4321», «[ocult» → «[oculto]»).
@@ -1710,7 +1903,8 @@ function createTextStage(out0, red0 = redactText) {
       if (rucOpen(pend, h) || apiOpen(pend, h) || dataOpen(h)) continue;
       // (Bot 2) «precio clave S/ 4.50»: la palabra de precio va con la etiqueta. (Bots 3/4 sobre 39ccd25c) es un corte candidato (como pinOpen),
       // no un freno fijo: «precio clave » ×N ya no retiene toda la respuesta; tryShield lo suelta solo si da lo mismo que el texto entero.
-      if (PIN_PRICE_BEFORE.test(pend.slice(Math.max(0, h - 24), h)) && priceKwNext(pend, h)) { if (cands.length < 256) cands.push(off + h); continue; }
+      if ((PIN_PRICE_BEFORE.test(pend.slice(Math.max(0, h - 24), h)) || PIN_ADJ_BEFORE.test(pend.slice(Math.max(0, h - 24), h))) && priceKwNext(pend, h)) { if (cands.length < 256) cands.push(off + h); continue; }
+      if (PIN_ADJ_NEAR.test(pend.slice(Math.max(0, h - 64), h))) { if (cands.length < 256) cands.push(off + h); continue; } // (excepción del adjetivo, arriba)
       const po = pinNear(h) && pinOpen(pend, h);
       if (po === 'wait') { recheck.push(off + h); continue; }
       if (po) { if (cands.length < 256) cands.push(off + h); continue; }
@@ -1718,15 +1912,19 @@ function createTextStage(out0, red0 = redactText) {
     }
     seen = Math.max(seen, pend.length - 1 < 1 ? 0 : pend.length - 1);
   };
-  return {
-    push(str) {
+  // (r10) un trozo largo (p. ej. lo que suelta de una vez la etapa de supresión al decidir) se mira en tramos de SHIELD_EVERY: tryShield prueba
+  // los cortes a medida que llegan, igual que con trozos chicos (antes un trozo largo en fase con el texto repetido descartaba los cortes y
+  // retenía todo). La salida no cambia (es la del texto entero); solo la retención.
+  const push1 = (str) => {
       pend += str; scan(); if (recheck.length) doRecheck(); if (cands.length) tryShield();
       // (Bot 3) un tramo soltado que es solo espacios no pasa por redactText (no hay nada que tapar: todos los patrones piden un carácter
       // que no es espacio). El corte sigue igual: con una clave/pin/token, RUC, DNI o data: esperando su valor no se suelta nada (ver scan).
       if (best > 0) { const piece = pend.slice(0, best); if (preRed && preRed.h === best) out(preRed.r); else out(WS_ONLY.test(piece) ? piece : red(piece)); preRed = null;
         pend = pend.slice(best); off += best; seen -= best; best = 0; while (cands.length && cands[0] <= off) cands.shift();
         while (data.length && data[0].phase === 2 && data[0].pos <= off) data.shift(); }
-    },
+  };
+  return {
+    push(str) { if (str.length <= SHIELD_EVERY) { push1(str); return; } for (let i = 0; i < str.length; i += SHIELD_EVERY) push1(str.slice(i, i + SHIELD_EVERY)); },
     flush() { if (pend) out(red(pend)); pend = ''; off = 0; seen = 0; best = 0; wsm = { at: -1, open: false }; data.length = 0; done = ''; lastKw = -1e9; kwFound = -1; cands = []; lastTry = 0; preRed = null; recheck = []; }
   };
 }
@@ -1822,7 +2020,7 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
-  let sent = 0, ready = '', prevCtrl = false, s0, sw, s1, s2, cut = false, lastNl = false;
+  let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
   const batches = (n) => { while (n > 0) { let m = n; if (m > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); m = sp > 8 && sp < n ? sp + 1 : Math.min(TEXT_BATCH, n); }
     send({ t: ready.slice(0, m) }); lastNl = ready[m - 1] === '\n'; sent += m; n -= m; ready = ready.slice(m); } };
   const deliver = (final) => {
@@ -1843,7 +2041,8 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
     sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false;
     s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; }, prime) : null;
     s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else ready += x; }, s2 ? redactText : redact);
-    sw = createWsStage((x) => s1.push(x)); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
+    sq = createSupStage((x) => s1.push(x)); // (Bot 2 sobre f773911f) supresión de la comilla larga sin cierre (igual que redactText: supQuotes)
+    sw = createWsStage((x) => sq.push(x)); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
     s0 = s2 ? createLongRunStage((x) => sw.push(x)) : null; // solo empleado: racha larga sin espacios
   };
   init();
@@ -1855,7 +2054,7 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
       if (cut) return;
       if (s0) s0.push(c); else sw.push(c); deliver(false);
     },
-    flush() { if (s0) s0.flush(); sw.flush(); s1.flush(); if (s2) s2.flush(); deliver(true); },
+    flush() { if (s0) s0.flush(); sw.flush(); sq.flush(); s1.flush(); if (s2) s2.flush(); deliver(true); },
     reset() { if (sent) send({ reset: true }); init(); },
     drop() { const keep = sent; init(); sent = keep; }, // lo que quedaba sin salir no sale
     sent: () => sent

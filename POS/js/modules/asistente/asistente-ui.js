@@ -14,6 +14,7 @@
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
   var history = [], state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
+  var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
   // Pantallas de gestión donde vive la burbuja. Nunca Venta (pagePOS) ni Caja (pageCaja).
@@ -68,6 +69,7 @@
     state = s; clearTimeout(stateTimer);
     chars().forEach(function (c) { c.dataset.state = s; var b = c.querySelector('.na-asst-badge'); if (b) b.textContent = s === 'error' ? '!' : s === 'feliz' ? '✓' : ''; });
     if (rootEl) { rootEl.dataset.state = s; tagEl.textContent = LABELS[s] || ''; }
+    if (mascot) mascot.state(s);
     if (ms) stateTimer = setTimeout(function () { setState(root.navigator.onLine === false ? 'offline' : 'listo'); }, ms);
     wake();
   }
@@ -248,6 +250,7 @@
     var q = reqInit(path, body, headers), url = q.url, init = q.init;
     var r = await C.request(root.fetch.bind(root), url, init, ms || C.TIMEOUTS.chat);
     var d = r.data || {}; if (!r.ok) { d.error = d.error || 'HTTP_' + r.status; d.status = r.status; }
+    if (r.bodyError) { try { Object.defineProperty(d, 'bodyError', { value: true, enumerable: false, configurable: true }); } catch (_) {} }
     return d;
   }
   // Confirmación: el MISMO token se reenvía si se corta la señal (mismo operation_id).
@@ -263,6 +266,9 @@
     for (var i = 0; i < (C.CONFIRM_ATTEMPTS || 2); i++) {
       try { if (i > 0 && opts && typeof opts.onRetry === 'function') { try { opts.onRetry(); } catch (_) {} }
         var d = await post('/auth/assistant/confirm', body, null, C.TIMEOUTS.confirm);
+        // (Bot 3 sobre f773911f) 200 con el cuerpo cortado o roto = corte de red: «Reconectando…» y UN reintento con el MISMO cuerpo (mismo token,
+        // propuesta y manual; el servidor contesta 200 replay:true y no guarda nada otra vez). Un 409/403 del reintento se muestra tal cual.
+        if (d.bodyError && d.status == null) { var be = new Error('network'); be.bodyError = true; throw be; }
         var out = d.ok ? d : { ok: false, error: d.error, status: d.status, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null,
           confirmed: d.confirmed === true, operation_id: d.operation_id, type: d.type, proposal: d.error === 'already_confirmed_same_session' && d.proposal && typeof d.proposal === 'object' ? d.proposal : undefined };
         try { Object.defineProperty(out, 'sentBody', { value: body, enumerable: false, configurable: true }); } catch (_) {}
@@ -380,7 +386,19 @@
   function atBottom() { return !msgsEl || msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight <= 24; }
   // ¿la nota de corte está a la vista en la lista? Entonces «Ver nuevo ↓» (sticky abajo) no se muestra: la taparía.
   function noteSeen() { if (!cutNote || !msgsEl || !cutNote.isConnected) return false; var r = cutNote.getBoundingClientRect(), m = msgsEl.getBoundingClientRect(); return r.bottom > m.top && r.top < m.bottom; }
-  function showNew() { if (!newBtn || !msgsEl || noteSeen()) return; msgsEl.appendChild(newBtn); newBtn.hidden = false; } // siempre al final de la lista (sticky abajo)
+  // (Bot 4 sobre f773911f, 412×760) tarjeta que se está confirmando: su estado («Guardando…», «Reconectando…», «Sin conexión…») se trae a la
+  // vista dentro de la lista (solo se mueve la lista del asistente, nunca la página) y «Ver nuevo ↓» no sale mientras esa tarjeta se ve (la taparía).
+  var liveCard = null;
+  function inView(n) { if (!n || !msgsEl || !n.isConnected) return false; var r = n.getBoundingClientRect(), m = msgsEl.getBoundingClientRect(); return r.bottom > m.top && r.top < m.bottom; }
+  function revealCard(c, nodes) {
+    if (!msgsEl || !c || !c.isConnected) return; liveCard = c; if (newBtn) newBtn.hidden = true;
+    var m = msgsEl.getBoundingClientRect(), top = Infinity, bot = -Infinity;
+    (nodes || [c]).forEach(function (n) { if (!n || !n.isConnected || n.hidden) return; var r = n.getBoundingClientRect(); if (r.top < top) top = r.top; if (r.bottom > bot) bot = r.bottom; });
+    if (bot === -Infinity) return;
+    if (bot > m.bottom - 8) msgsEl.scrollTop += Math.min(bot - m.bottom + 8, Math.max(0, top - m.top - 8)); // abajo: sube lo justo, sin esconder el arriba de lo que se muestra
+    else if (top < m.top + 8) msgsEl.scrollTop -= m.top + 8 - top;
+  }
+  function showNew() { if (!newBtn || !msgsEl || noteSeen() || (liveCard && inView(liveCard))) return; msgsEl.appendChild(newBtn); newBtn.hidden = false; } // siempre al final de la lista (sticky abajo)
   function follow(stick) { if (stick) scrollEnd(); else showNew(); }
   // Lector de pantalla: la respuesta se anuncia UNA vez, completa, al final (la lista de mensajes no es aria-live: no lee trozo por trozo).
   function announce(t) { if (!liveEl) return; liveEl.textContent = ''; var v = String(t || ''); setTimeout(function () { if (liveEl) liveEl.textContent = v; }, 30); }
@@ -526,7 +544,7 @@
     if (ok) ok.onclick = async function () {
       if (c.dataset.st !== 'pending') return;
       if (need && need.recheck && need.recheck()) { syncOk(); return; } // (Bot 5 sobre 39ccd25c) un campo cambiado sin evento: se limpia a la vista y no se manda
-      ok.disabled = true; no.disabled = true; ok.textContent = gate.locked && gate.locked(key) ? C.RECONNECT_MSG : 'Guardando…'; setState('concentrado');
+      ok.disabled = true; no.disabled = true; ok.textContent = gate.locked && gate.locked(key) ? C.RECONNECT_MSG : 'Guardando…'; setState('concentrado'); revealCard(c, [res, ok]);
       lockFields(true); // (Bots 3/4/5 sobre d72b7601) nada se edita mientras se confirma ni después de un corte
       if (again) again.disabled = true;
       // Antes de confirmar: si el POS no puede abrir la pantalla, se dice el motivo real y no se gasta la tarjeta.
@@ -534,12 +552,12 @@
       if (pre) { lockFields(!!(gate.locked && gate.locked(key))); res.textContent = pre; no.disabled = false; ok.disabled = false; ok.textContent = c.dataset.btn || 'Confirmar'; if (again) { again.hidden = false; again.disabled = false; } c.dataset.fail = 'precheck'; syncOk(); setState('error', 2000); return; }
       // Sin PIN: un toque. El botón queda apagado al instante (un doble toque no dispara otro), la puerta reusa el pedido en curso y el
       // servidor marca la tarjeta usada una sola vez (el segundo envío recibe already_confirmed con el mismo operation_id).
-      gate.execute(key, { confirmed: true, review: review(), onRetry: function () { if (!c.isConnected) return; ok.textContent = C.RECONNECT_MSG; res.textContent = C.RECONNECT_MSG; } }).then(function (r) {
+      gate.execute(key, { confirmed: true, review: review(), onRetry: function () { if (!c.isConnected) return; ok.textContent = C.RECONNECT_MSG; res.textContent = C.RECONNECT_MSG; revealCard(c, [res, ok]); } }).then(function (r) {
         if (r && r.code === 'forbidden_role') { roleLost(c, key, p, need); return; } // (Bots 4/5 sobre 58200f60) ver roleLost
         if (r && ACCESS_LOST[r.code]) { accessLost(r.code); return; } // 403 de permiso al confirmar: igual que en el chat
         if (!c.isConnected) return;
         wake();
-        res.textContent = r.msg; c.dataset.st = gate.state(key) || 'pending';
+        res.textContent = r.msg; c.dataset.st = gate.state(key) || 'pending'; revealCard(c, [res, ok]);
         // sin respuesta: campos y cuerpo quedan como se mandaron; solo «Reintentar» (mismo cuerpo). Con 200 o un 4xx real se puede editar.
         if (r.locked) { lockFields(true); c.dataset.fail = 'network'; c.dataset.btn = 'Reintentar'; ok.disabled = false; no.disabled = false; ok.textContent = 'Reintentar'; if (again) { again.hidden = true; } setState('error', 2600); return; }
         lockFields(false);
@@ -571,6 +589,7 @@
     padded.forEach(unpad); padded = [];
     var dv = doc.querySelector('.na-asst-doc'); if (dv) dv.remove();
     if (bubbleIO) { try { bubbleIO.disconnect(); } catch (_) {} bubbleIO = null; }
+    if (mascot) { mascot.destroy(); mascot = null; } mascotAsked = false;
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
     history.length = 0; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
@@ -645,7 +664,7 @@
     var lab = el('div', 'na-asst-incomplete'); lab.textContent = 'Respuesta incompleta';
     var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Reintentar';
     b.onclick = function () { if (busy) return; b.disabled = true; var u = m.previousElementSibling; m.remove(); if (u && u.classList.contains('na-asst-msg') && u.classList.contains('u')) u.remove(); send(t, img); };
-    var stick = atBottom(), said = m._md ? m._md.raw() : m.textContent; m.removeAttribute('aria-busy'); m.appendChild(lab); m.appendChild(b); follow(stick); announce(said + ' (Respuesta incompleta)'); return m;
+    var stick = atBottom(), said = m._md ? (C.stripDisplay ? C.stripDisplay(m._md.raw()) : m._md.raw()) : m.textContent; m.removeAttribute('aria-busy'); m.appendChild(lab); m.appendChild(b); follow(stick); announce(said + ' (Respuesta incompleta)'); return m;
   }
   // ¿El navegador puede leer la respuesta en partes? Si no, el chat de siempre (una sola respuesta JSON).
   function canStream() { return typeof root.ReadableStream === 'function' && typeof root.TextDecoder === 'function' && typeof root.AbortController === 'function' && root.NA_ASISTENTE_NO_STREAM !== true; }
@@ -658,7 +677,7 @@
     // Bot 3: el modelo en uso no lee fotos (lo dice el ping): se avisa al instante, SIN subirla (el servidor igual responde 422 sin leerla).
     if (image && access && access.vision === false) { addMsg('u', text || 'Foto'); errMsg('image_unsupported'); setState('error', 2600); return; }
     var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; // menos desplazamiento tras el primer mensaje
-    addMsg('u', text || 'Foto', image); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState(image ? 'concentrado' : 'pensando');
+    liveCard = null; addMsg('u', text || 'Foto', image); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState(image ? 'concentrado' : 'pensando');
     var thinking = addMsg('a', image ? 'Concentrado, leyendo la foto' : 'Pensando'); thinking.classList.add('na-asst-thinking');
     var dots = el('span', 'na-asst-dots'); dots.setAttribute('aria-hidden', 'true'); dots.innerHTML = '<i></i><i></i><i></i>'; thinking.appendChild(dots);
     var screen = (doc.querySelector('.page.active') || {}).id || null;
@@ -672,7 +691,7 @@
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
     function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
     function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') b.classList.add('na-asst-wide'); b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
-    function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); }
+    function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); if (bubble) bubble.removeAttribute('aria-busy'); } // (Bot 4) con aria-busy se va la línea de los puntos: misma altura (CSS)
     // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
     function backToThinking() { painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
     // Aviso del servidor mientras busca datos (antes de cualquier texto): «Buscando en su inventario…» en la misma burbuja.
@@ -712,7 +731,7 @@
       var stick = atBottom();
       if (d.cut === true) { if (bubble) bubble.removeAttribute('aria-busy'); else bubble = addMsg('a', ''); paintCut(bubble, d.reply, mdOpts); lastCut = bubble; }
       else if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply, mdOpts); } else { bubble = addMsg('a', ''); paintReply(bubble, d.reply, mdOpts); }
-      announce(d.reply);
+      { var shown = C.stripDisplay ? C.stripDisplay(d.reply) : d.reply; announce(shown); if (mascot) mascot.speak(shown); } // (Bots 4/5 sobre f773911f) lo que se lee y lo que «dice» la mascota = lo que se ve
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
       (d.denied || []).forEach(addDenied);
       if (d.proposals && d.proposals.some(function (x) { return x.type === 'consulta'; }) && d.reply) { /* el texto ya resume los números */ }
@@ -740,14 +759,24 @@
     });
   }
   function offline(on) { if (!panelEl || !offEl) return; offEl.hidden = !on; sendBtn.disabled = on || busy; photoBtn.disabled = on || busy; if (on) setState('offline'); else if (state === 'offline') setState('listo'); }
+  // Mascota v11 (ver asistente-mascota.js): al abrir el panel la primera vez, en un momento libre, se baja el módulo chico y él pide la
+  // mascota en un marco del mismo sitio. El arranque del POS no baja nada de esto. Si algo falla queda la cara de siempre.
+  function mascotOn() {
+    if (mascot) { mascot.visible(true); return; }
+    if (mascotAsked || !panelEl) return; mascotAsked = true;
+    function go() { var M = root.NA_ASISTENTE_MASCOTA, host = panelEl && panelEl.querySelector('.na-asst-head .na-asst-char'); if (!M || !host || mascot) return;
+      mascot = M.create(host, { quality: quality }); M.idle(root, function () { if (mascot && panelEl) mascot.load(); }); }
+    if (root.NA_ASISTENTE_MASCOTA) { go(); return; }
+    var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-mascota.js'; sc.async = true; sc.onload = go; sc.onerror = function () {}; doc.body.appendChild(sc);
+  }
   function openPanel() {
-    panelEl.hidden = false; rootEl.hidden = true; place(); applyPause();
+    panelEl.hidden = false; rootEl.hidden = true; place(); applyPause(); mascotOn();
     if (!msgsEl.children.length) addMsg('a', isOwnerAccess() ? '¡Hola! Soy Burbuja, tu ayudante de gestión. Te digo qué falta reponer y cómo van las ventas, preparo compras y ajustes de stock, cambios de precio y costo, productos nuevos y documentos. Nada se guarda sin que pulses Confirmar.'
       : '¡Hola! Soy Burbuja. Te digo el stock y qué falta reponer' + (access && access.level === 'consultas_documentos' ? ', y armo la lista de precios o de pedido' : '') + '. Los cambios (precios, stock, compras) los hace el dueño desde su teléfono.');
     var off = root.navigator.onLine === false; offline(off); if (off) setState('offline'); else setState('feliz', 1300); measureFrames();
     setTimeout(function () { try { inputEl.focus({ preventScroll: true }); } catch (_) {} }, 50);
   }
-  function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); }
+  function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
     if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button>';

@@ -336,6 +336,16 @@ body.dark .na-asst-card[data-st="expired"] .na-asst-ok:disabled,body.dark .na-as
 .na-asst-dots{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
 .na-asst-dots i{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.35;animation:na-asst-dot 1.2s ease-in-out infinite}
 .na-asst-dots i:nth-child(2){animation-delay:.2s}.na-asst-dots i:nth-child(3){animation-delay:.4s}
+/* (Bot 3 sobre f773911f) «escribiendo» en la burbuja: la regla de la mascota (arriba: absoluta, opacidad 0 salvo [data-state="pensando"] en la
+   mascota) también tocaba estos puntos y nunca se veían. En la burbuja se ven siempre que estén puestos: «Pensando», mientras llega el texto,
+   mientras el servidor retiene o suprime; al terminar se quitan del DOM (doneBubble). */
+/* (Bot 4 sobre f773911f) contraste ≥ 3 en los 3 temas: puntos sólidos del color del texto de la burbuja (sin opacidad; la animación solo los
+   mueve). Sin saltos (CLS 0): los puntos van en su propia línea de 10 px que ocupa el lugar del relleno de abajo de la burbuja; al terminar se
+   quitan y el relleno vuelve (misma altura). Con movimiento reducido quedan quietos. */
+.na-asst-msg .na-asst-dots{display:flex;position:static;right:auto;top:auto;opacity:1;height:10px;margin:0;align-items:flex-end;gap:4px;pointer-events:none}
+.na-asst-msg .na-asst-dots i{width:7px;height:7px;opacity:1!important;background:currentColor;box-shadow:none;animation:na-asst-dot-b 1.2s ease-in-out infinite!important} /* !important: la regla de la mascota [data-q][data-state="pensando"] (más específica) no les cambia la animación ni la opacidad */
+.na-asst-msg.na-asst-thinking,.na-asst-msg[aria-busy="true"]{padding-bottom:0}
+@keyframes na-asst-dot-b{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-3px)}}
 @keyframes na-asst-dot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 /* Último aparato dueño: Quitar se ve apagado. */
 .na-asst-quitar:disabled{border-color:#9ca3af;color:#4b5563;background:#f3f4f6;cursor:not-allowed}
@@ -344,6 +354,7 @@ body.dark .na-asst-quitar:disabled{border-color:#475569;color:#cbd5e1;background
 /* Tarjeta de Inicio: brillo e iconos descansan con la burbuja; sin movimiento si el sistema lo pide. */
 .na-asst-hero[data-paused="1"] .h-glow,.na-asst-hero[data-paused="1"] .h-card{animation-play-state:paused!important}
 @media (prefers-reduced-motion:reduce){.na-asst-hero .h-glow,.na-asst-hero .h-card,.na-asst-dots i{animation:none!important}.na-asst-dots i{opacity:.7}}
+@media (prefers-reduced-motion:reduce){.na-asst-msg .na-asst-dots i{animation:none!important;opacity:1;transform:none}}
 /* ---- Inicio: alto reservado = alto real (sin franja vacía) ----
    El cargador reserva un alto FIJO por tramo antes de pintar. Para que ese alto sea exacto, el contenido tiene el MISMO número
    de líneas en todo el tramo: título y texto con ancho tope (siempre 2 líneas en celular y tableta, 1 en PC) y atajos que se
@@ -421,3 +432,14 @@ body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.da
 .na-asst-msg.a.na-asst-wide{max-width:100%} /* clase puesta desde JS al pintar la 1.ª tabla (antes :has) */
 /* (Bot 4 sobre 3ee80c18) documento / RUC / proveedor: de izquierda a derecha y aislado (un control de dirección no da vuelta «F001-…») */
 .na-asst-ltr{direction:ltr;unicode-bidi:isolate}
+
+/* ---- Mascota v11 del dueño (asistente-mascota.js) ----
+   Solo dentro de la cabecera del panel, en el lugar de la cara (46 px, mismo hueco: el panel no cambia de alto). Se dibuja a 120 px y se
+   achica (46/96: la mascota ocupa 96 de sus 120). Transparente, sin toques ni foco. La cara de siempre queda debajo hasta que la mascota
+   está lista y vuelve si falla. color-scheme normal: en tema oscuro el marco no pinta fondo. */
+.na-asst-head .na-asst-char{position:relative}
+.na-asst-m11{position:absolute;left:50%;top:50%;width:120px;height:120px;border:0;margin:0;padding:0;background:transparent;color-scheme:normal;pointer-events:none;
+  transform:translate(-50%,-50%) scale(.479);transform-origin:50% 50%;opacity:0;transition:opacity .25s ease-out;contain:strict}
+.na-asst-m11-on>.na-asst-m11{opacity:1}
+.na-asst-m11-on>:not(.na-asst-m11){visibility:hidden}
+@media (prefers-reduced-motion:reduce){.na-asst-m11{transition:none}}
