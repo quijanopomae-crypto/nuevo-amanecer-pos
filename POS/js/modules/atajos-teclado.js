@@ -31,9 +31,18 @@
     } catch (_) {}
     return 'F2';
   }
+  /* Candado de Próximamente: falla cerrado si no hay permisos o si fallan. */
+  function featureLocked() {
+    try {
+      var p = root.NA_PERMISSIONS;
+      if (!p || typeof p.featureLocked !== 'function') return true;
+      return p.featureLocked('atajos-teclado') !== false;
+    } catch (_) { return true; }
+  }
   /* Decide la acción sin tocar el DOM: fácil de probar. */
   function resolveAction(event, state) {
     if (!event || event.defaultPrevented || event.isComposing) return null;
+    if (!state || state.featureLocked !== false) return null;
     if (event.ctrlKey || event.metaKey || event.altKey) return null;
     if (state.touchOnly || state.locked) return null;
     var key = event.key;
@@ -57,6 +66,7 @@
     var locked = false;
     try { locked = (typeof root.securityIsLocked === 'function' && root.securityIsLocked()) || !!(body && body.classList.contains('security-session-locked')); } catch (_) {}
     return {
+      featureLocked: featureLocked(),
       touchOnly: isTouchOnly(root),
       locked: locked,
       posActive: !!(d.getElementById('pagePOS') && d.getElementById('pagePOS').classList.contains('active')),
@@ -118,6 +128,7 @@
   }
   function guardKeydown(event) {
     if (!guardArmed) return;
+    if (featureLocked()) { guardArmed = false; return; }
     if (!cobroOpen()) { guardArmed = false; return; }
     if (event.key === 'Enter') {
       guardArmed = false;
@@ -129,18 +140,19 @@
   }
   function guardPointer() { guardArmed = false; }
   function onKeydown(event) {
+    if (featureLocked()) return;
     var action = resolveAction(event, currentState(event));
     if (!action) return;
     if (run(action)) event.preventDefault();
   }
   var ready = false;
   function init() {
-    if (ready || !root.document) return; ready = true;
+    if (ready || !root.document || featureLocked()) return; ready = true;
     root.document.addEventListener('keydown', onKeydown, false);
     root.document.addEventListener('keydown', guardKeydown, true);
     root.document.addEventListener('pointerdown', guardPointer, true);
   }
-  root.NA_ATAJOS_TECLADO = Object.freeze({ SHORTCUTS: SHORTCUTS, resolveAction: resolveAction, isEditable: isEditable, isTouchOnly: isTouchOnly, init: init, _guardKeydown: guardKeydown, _isGuardArmed: function () { return guardArmed; } });
+  root.NA_ATAJOS_TECLADO = Object.freeze({ SHORTCUTS: SHORTCUTS, resolveAction: resolveAction, isEditable: isEditable, isTouchOnly: isTouchOnly, init: init, featureLocked: featureLocked, isReady: function () { return ready; }, _guardKeydown: guardKeydown, _isGuardArmed: function () { return guardArmed; } });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init); else init();
   }

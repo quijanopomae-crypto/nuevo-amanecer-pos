@@ -1,6 +1,18 @@
 import { test, expect, type Page } from '@playwright/test';
 
-async function prepare(page: Page, width = 1280, dark = false) {
+// Abre el candado solo dentro del navegador de prueba (pos-permissions.js sigue en true).
+async function unlock(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as any; let value: any;
+    Object.defineProperty(w, 'NA_PERMISSIONS', { configurable: true, get: () => value, set: original => {
+      value = original && { ...original, FEATURE_LOCKS: { ...original.FEATURE_LOCKS, 'atajos-teclado': false },
+        featureLocked: (id: string) => id === 'atajos-teclado' ? false : original.featureLocked(id) };
+    } });
+  });
+}
+
+async function prepare(page: Page, width = 1280, dark = false, open = true) {
+  if (open) await unlock(page);
   await page.setViewportSize({ width, height: 900 });
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await page.goto('/index.html');
@@ -50,6 +62,16 @@ test('escribir en el buscador no dispara atajos', async ({ page }) => {
   await prepare(page);
   await page.locator('#posSearch').focus();
   await page.keyboard.type('?+-');
+  await expect(page.locator('#naAtajosAyuda')).toHaveCount(0);
+});
+
+test('con el candado cerrado (real) F1/F3 no hacen nada', async ({ page }) => {
+  await prepare(page, 1280, false, false);
+  expect(await page.evaluate(() => (window as any).NA_ATAJOS_TECLADO.isReady())).toBe(false);
+  await page.locator('body').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('F3');
+  await expect(page.locator('#posSearch')).not.toBeFocused();
+  await page.keyboard.press('F1');
   await expect(page.locator('#naAtajosAyuda')).toHaveCount(0);
 });
 
