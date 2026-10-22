@@ -2212,12 +2212,33 @@ export function cutPrime(reply, cut = false) {
   if (cut !== true) return false;
   let t = String(reply ?? ''); if (t.endsWith(CUT_NOTICE)) t = t.slice(0, -CUT_NOTICE.length); // el aviso lo puso el servidor (par marcado)
   return t.trim() ? ownerContextAtEnd(t) : false; }
+// (22-10, fix/asist-filtro-partes, diseño simple aprobado por Alfa) TEXTO EN PARTES CON ETIQUETA PELIGROSA: se retiene hasta el final.
+// Lo que sale por partes es SIEMPRE un prefijo exacto del filtro del texto entero. Mientras el texto llegado (ya con la racha de espacios
+// colapsada y sin caracteres invisibles, lo mismo que ve el filtro entero) no tiene ninguna etiqueta peligrosa (la MISMA lista que activa las
+// reglas de clave del filtro entero: PIN_GATE = pin|clave|contrase|password|token|api, en cualquier mayúscula/minúscula), sale en vivo por las
+// etapas de siempre, guardando siempre una cola de LABEL_TAIL caracteres sin pasar a las etapas (≥ largo de la etiqueta más larga − 1, contando
+// «contraseña» con tilde descompuesta): una etiqueta partida entre trozos («cla» | «ve») nunca llega a las etapas. Desde la primera etiqueta: no
+// sale nada más; se guarda el resto y al cerrar se filtra la respuesta entera UNA vez (wholeOf) y sale lo que falta (filtro entero − lo ya
+// enviado). Mientras retiene, holding() es true y el Worker manda «status» (streamHoldStatus) para que el celular siga en «Pensando…».
+// Costo: sin etiqueta, el de las etapas de siempre; con etiqueta, un filtro entero al final. Contra: con etiqueta, el resto aparece de una vez.
+export const STREAM_LABELS = Object.freeze(['pin', 'clave', 'contraseña', 'contrasena', 'password', 'token', 'api key', 'api_key', 'api-key']);
+export const LABEL_TAIL = Math.max(...STREAM_LABELS.map((l) => l.normalize('NFD').length)) - 1;
+export function streamHoldStatus(emit) { return emit && emit.sent && emit.sent() ? { s: 'pensando' } : { s: 'buscando' }; } // una sola función: #957 agrega aquí «pulsa Confirmar»
 export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false) {
   const stages = redact === redactText || redact === redactOwnerText || redact === redactModelOwner ? 1 : redact === redactEmployee ? 2 : 0; // (r8) redactModelOwner también por el camino incremental (paridad en las 4 vías)
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
+  const wholeOf = stages === 2 ? (t) => redactOwnerData(redactEmployeeText(t), prime) : redact; // el filtro del texto entero (capReply aparte, en deliver)
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
   let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
+  // acc: texto limpio llegado (lo que filtra wholeOf); lab: salida de la etapa de espacios aún sin pasar a sq (más la cola); out: lo ya puesto en ready
+  let acc = '', lab = '', danger = false, out = '';
+  const gate = (x) => { if (danger) return; lab += x;
+    if (PIN_GATE.test(lab)) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas
+    const n = lab.length - LABEL_TAIL; if (n > 0) { const pass = lab.slice(0, n); lab = lab.slice(n); sq.push(pass); } };
+  const finish = () => { if (cut) return; const zf = wholeOf(acc); // al cerrar: el filtro entero de todo, una vez
+    if (zf.startsWith(out)) { ready += zf.slice(out.length); out = zf; return; }
+    if (sent) send({ reset: true }); sent = 0; lastNl = false; ready = zf; out = zf; }; // no debería pasar nunca: reset y el texto entero
   const batches = (n) => { while (n > 0) { let m = n; if (m > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); m = sp > 8 && sp < n ? sp + 1 : Math.min(TEXT_BATCH, n); }
     send({ t: ready.slice(0, m) }); lastNl = ready[m - 1] === '\n'; sent += m; n -= m; ready = ready.slice(m); } };
   const deliver = (final) => {
@@ -2235,11 +2256,11 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
     batches(n);
   };
   const init = () => {
-    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false;
-    s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; }, prime) : null;
-    s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else ready += x; }, s2 ? redactText : redact);
+    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false; acc = ''; lab = ''; danger = false; out = '';
+    s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; out += x; }, prime) : null;
+    s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else { ready += x; out += x; } }, s2 ? redactText : redact);
     sq = createSupStage((x) => s1.push(x)); // (Bot 2 sobre f773911f) supresión de la comilla larga sin cierre (igual que redactText: supQuotes)
-    sw = createWsStage((x) => sq.push(x)); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
+    sw = createWsStage(gate); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
     s0 = s2 ? createLongRunStage((x) => sw.push(x)) : null; // solo empleado: racha larga sin espacios
   };
   init();
@@ -2249,9 +2270,10 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
       let c = raw.replace(CTRL_RE, ' '); if (prevCtrl && CTRL_CHAR.test(raw[0])) c = c.slice(1);
       prevCtrl = CTRL_CHAR.test(raw[raw.length - 1]);
       if (cut) return;
-      if (s0) s0.push(c); else sw.push(c); deliver(false);
+      acc += c; if (s0) s0.push(c); else sw.push(c); deliver(false);
     },
-    flush() { if (s0) s0.flush(); sw.flush(); sq.flush(); s1.flush(); if (s2) s2.flush(); deliver(true); },
+    flush() { finish(); deliver(true); }, // las etapas no se vacían: el resto sale del filtro entero (igual a vaciarlas si no hubo etiqueta)
+    holding: () => danger && !cut,
     reset() { if (sent) send({ reset: true }); init(); },
     drop() { const keep = sent; init(); sent = keep; }, // lo que quedaba sin salir no sale
     sent: () => sent
@@ -2272,12 +2294,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const FORBIDDEN_DOCUMENT = Object.freeze({ error: 'forbidden_document', message: 'Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.', allowed: EMPLOYEE_DOC_TYPES });
 // Aviso liviano «status» mientras se buscan datos o corre una herramienta ANTES de cualquier texto (celular: «Buscando en su inventario…»).
 // Sale enseguida y luego cada STATUS_EVERY_MS mientras no haya texto; cada aviso es un trozo, así el reloj de 30 s del celular vuelve a cero.
-// Sin texto todavía = sent() en 0 (también después de un reset). Con texto ya pintado no se manda nada.
+// Sin texto todavía = sent() en 0 (también después de un reset). Con texto ya pintado no se manda nada, salvo mientras el texto en partes retiene una etiqueta (holding): { s: "pensando" }, así el reloj del celular no vence.
 export const STATUS_EVERY_MS = 8000;
 export const SERVER_MAX_MS = 90000;
 export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
   let iv = null, last = 0;
-  const tick = (throttle) => { if (!sse || !emit || emit.sent()) return; const t = Date.now(); if (throttle && t - last < 1000) return; last = t; sse.send('status', { s: 'buscando' }); };
+  const tick = (throttle) => { if (!sse || !emit || (emit.sent() && !(emit.holding && emit.holding()))) return; const t = Date.now(); if (throttle && t - last < 1000) return; last = t; sse.send('status', streamHoldStatus(emit)); };
   return { tick, start() { if (!sse || iv) return; tick(); iv = setInterval(() => tick(), everyMs); }, stop() { clearInterval(iv); iv = null; } };
 }
 // Bot 5: lo que un EMPLEADO puede recibir de una consulta (pantalla y modelo). Lista blanca por tipo; todo lo demás (costos, márgenes,
@@ -2715,7 +2737,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, resumen: resumenIn || null });
     bytes.push(payloadBytes(req));
-    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
+    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal)
       : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     if (emit && !result.error && !result.forbidden) emit.flush();
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}) }, ERR_STATUS[result.error] || 502);
