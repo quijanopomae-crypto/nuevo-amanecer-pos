@@ -136,11 +136,15 @@
     });
     return '\uFEFF' + lines.map(function (line) { return line.map(cell).join(','); }).join('\r\n') + '\r\n';
   }
-  function ownerAllowed() {
-    var roles = root.NA_ROLES, permissions = root.NA_PERMISSIONS;
-    return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() &&
-      permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID));
+  // Alias de NA_ROLES.isOwner (fuente única del rol dueño). Falla cerrada si NA_ROLES falta o lanza error.
+  function isOwner() {
+    try { var roles = root.NA_ROLES; return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true); } catch (_) { return false; }
   }
+  // No es una regla de rol: confirma que la tabla de permisos cargó (falla cerrada sin ella).
+  function policyReady() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
+  }
+  function ownerAllowed() { return isOwner() && policyReady(); }
   function element(tag, className, value) {
     var node = root.document.createElement(tag);
     if (className) node.className = className;

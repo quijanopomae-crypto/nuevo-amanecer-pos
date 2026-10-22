@@ -19,10 +19,13 @@
     'pageProximamente',
     'pageValorizacion',
     'pageRotacionAbc',
+    'pageClientesFrecuencia',
+    'pageReporteProductosVencer',
     'pageKardex',
     'pageVentasStock',
     'pageReporteArqueo',
     'pageHistorialCompras',
+    'pageClienteHistorial',
     'pageConfig'
   ]);
   var MOBILE_SCROLL_PAGES = Object.freeze({
@@ -248,6 +251,12 @@
     var toggle = document.getElementById('naMobileMenuToggle');
     var wasOpen = drawer && drawer.classList.contains('is-open');
     if (drawer) {
+      // Sacar el foco antes de aria-hidden: evita el aviso de foco dentro de un nodo oculto.
+      var active = document.activeElement;
+      if (active && active !== document.body && drawer.contains(active)) {
+        if (wasOpen && toggle && isMobile()) toggle.focus();
+        if (drawer.contains(document.activeElement) && typeof active.blur === 'function') active.blur();
+      }
       drawer.classList.remove('is-open');
       drawer.setAttribute('aria-hidden', 'true');
       // Cerrado = fuera de pantalla: sin foco ni clics accidentales.
@@ -333,7 +342,7 @@
     if (root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function') {
       return root.NA_PERMISSIONS.canAccessScreen(role, pageId);
     }
-    return (pageId !== 'pageConfig' && pageId !== 'pageGastos' && pageId !== 'pageProximamente' && pageId !== 'pageValorizacion' && pageId !== 'pageRotacionAbc' && pageId !== 'pageKardex' && pageId !== 'pageVentasStock' && pageId !== 'pageReporteArqueo' && pageId !== 'pageReporteDeuda' && pageId !== 'pageCodigosDuplicados' && pageId !== 'pageHistorialCompras') || role === 'owner';
+    return (pageId !== 'pageConfig' && pageId !== 'pageGastos' && pageId !== 'pageProximamente' && pageId !== 'pageValorizacion' && pageId !== 'pageRotacionAbc' && pageId !== 'pageClientesFrecuencia' && pageId !== 'pageReporteProductosVencer' && pageId !== 'pageKardex' && pageId !== 'pageVentasStock' && pageId !== 'pageReporteArqueo' && pageId !== 'pageReporteDeuda' && pageId !== 'pageCodigosDuplicados' && pageId !== 'pageHistorialCompras' && pageId !== 'pageClienteHistorial') || role === 'owner';
   }
 
   function renderDrawerItems() {

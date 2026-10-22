@@ -1,0 +1,66 @@
+/* Etiquetas e impresión de precios: estilos limitados a #pageEtiquetasPrecios y a la impresión. */
+#pageEtiquetasPrecios { padding: 16px; color: var(--text, #1f2937); }
+#pageEtiquetasPrecios *, #pageEtiquetasPrecios *::before, #pageEtiquetasPrecios *::after { box-sizing: border-box; }
+#pageEtiquetasPrecios [hidden] { display: none !important; }
+#pageEtiquetasPrecios .etq-shell { width: 100%; max-width: 1100px; min-width: 0; margin: 0 auto; }
+#pageEtiquetasPrecios h1 { font-size: 24px; margin: 0 0 8px; overflow-wrap: anywhere; }
+#pageEtiquetasPrecios h2 { font-size: 18px; margin: 20px 0 10px; }
+#pageEtiquetasPrecios .etq-note { color: #6b7280; font-size: 14px; margin: 6px 0 12px; overflow-wrap: anywhere; }
+#pageEtiquetasPrecios .etq-field { display: block; font-weight: 700; margin: 12px 0 6px; }
+#pageEtiquetasPrecios .etq-search, #pageEtiquetasPrecios select { width: 100%; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 10px; font: inherit; background: #fff; color: #111827; }
+#pageEtiquetasPrecios .etq-matches { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 8px; max-height: 240px; overflow-y: auto; }
+#pageEtiquetasPrecios .etq-match, #pageEtiquetasPrecios .etq-remove, #pageEtiquetasPrecios .etq-print { min-height: 44px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #111827; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; min-width: 0; }
+#pageEtiquetasPrecios .etq-print { background: #2563eb; color: #fff; border-color: #2563eb; font-weight: 800; margin-top: 12px; }
+#pageEtiquetasPrecios .etq-print:disabled { opacity: .5; cursor: not-allowed; }
+#pageEtiquetasPrecios .etq-selected { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+#pageEtiquetasPrecios .etq-item { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; border: 1px solid #e5e7eb; border-radius: 10px; min-width: 0; }
+#pageEtiquetasPrecios .etq-item-name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+#pageEtiquetasPrecios .etq-qty input { width: 80px; min-height: 40px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+#pageEtiquetasPrecios .etq-preview-wrap { overflow-x: auto; max-width: 100%; padding: 8px; border: 1px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; }
+body.dark #pageEtiquetasPrecios { color: #e5e7eb; }
+body.dark #pageEtiquetasPrecios .etq-preview-wrap { background: #0f172a; }
+.etq-sheet { display: flex; flex-wrap: wrap; gap: 2mm; }
+.etq-label { display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 1.5mm; background: #fff; color: #000; border: 1px solid #d1d5db; font-family: Arial, Helvetica, sans-serif; break-inside: avoid; page-break-inside: avoid; }
+.etq-format-chica .etq-label { width: 38mm; height: 25mm; }
+.etq-format-mediana .etq-label { width: 50mm; height: 30mm; }
+.etq-format-a4 { width: 210mm; max-width: none; gap: 0; }
+.etq-format-a4 .etq-label { width: 70mm; height: 37mm; }
+.etq-name { font-size: 8pt; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.etq-price { font-size: 13pt; font-weight: 800; line-height: 1.1; }
+.etq-bars { display: block; width: 100%; height: 8mm; fill: #000; }
+.etq-no-bars .etq-code { font-size: 9pt; font-weight: 700; }
+.etq-warn { font-size: 6pt; line-height: 1.1; color: #b45309; font-weight: 700; }
+/* Aviso de producto borrado (solo pantalla; al imprimir .etq-warn no sale): una línea con «…» para que en la
+   chica (38×25 mm) no achique las barras. Texto completo en el title y en la lista. */
+.etq-warn[data-etq-missing] { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.etq-meta { display: flex; justify-content: space-between; gap: 2mm; font-size: 6pt; line-height: 1.1; white-space: nowrap; overflow: hidden; }
+@media print {
+  /* Solo la hoja de etiquetas ocupa lugar: el resto de la app sale del diseño (no solo se oculta). */
+  html.etq-printing-root, body.etq-printing { margin: 0 !important; padding: 0 !important; border: 0 !important; width: auto !important; min-width: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; }
+  body.etq-printing { display: block !important; }
+  body.etq-printing [data-etq-print-hide], body.etq-printing > :not([data-etq-print-path]) { display: none !important; }
+  body.etq-printing [data-etq-print-path] { display: block !important; position: static !important; margin: 0 !important; padding: 0 !important; border: 0 !important; width: auto !important; min-width: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; transform: none !important; background: #fff !important; box-shadow: none !important; }
+  body.etq-printing #pageEtiquetasPrecios .etq-sheet { position: static; margin: 0; background: #fff; }
+  body.etq-printing .etq-label { border-color: transparent; }
+  .etq-warn { display: none !important; }
+}
+/* Misión 1: aviso sin precio, tope de vista previa, A4 por hojas y tema oscuro (contraste ≥ 4.5:1). */
+#pageEtiquetasPrecios .etq-item-warn { flex: 1 1 100%; margin: 0; color: #92400e; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+#pageEtiquetasPrecios .etq-cap { color: #92400e; font-weight: 700; }
+.etq-no-price .etq-price { color: #b91c1c; font-size: 11pt; }
+.etq-format-a4 { display: block; }
+.etq-a4-page { width: 210mm; display: grid; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; background: #fff; }
+.etq-a4-page + .etq-a4-page { margin-top: 4mm; }
+body.dark #pageEtiquetasPrecios .etq-note { color: #cbd5e1; }
+body.dark #pageEtiquetasPrecios .etq-search, body.dark #pageEtiquetasPrecios select, body.dark #pageEtiquetasPrecios .etq-qty input { background: #1e293b; color: #f1f5f9; border-color: #64748b; }
+body.dark #pageEtiquetasPrecios .etq-search::placeholder { color: #cbd5e1; opacity: 1; }
+body.dark #pageEtiquetasPrecios .etq-match, body.dark #pageEtiquetasPrecios .etq-remove { background: #1e293b; color: #f1f5f9; border-color: #64748b; }
+body.dark #pageEtiquetasPrecios .etq-item { border-color: #475569; }
+body.dark #pageEtiquetasPrecios .etq-item-warn, body.dark #pageEtiquetasPrecios .etq-cap { color: #fcd34d; }
+@media print {
+  body.etq-printing .etq-format-chica, body.etq-printing .etq-format-mediana { display: block; gap: 0; }
+  body.etq-printing .etq-format-chica .etq-label, body.etq-printing .etq-format-mediana .etq-label { break-after: page; page-break-after: always; }
+  body.etq-printing .etq-format-chica .etq-label:last-child, body.etq-printing .etq-format-mediana .etq-label:last-child { break-after: auto; page-break-after: auto; }
+  body.etq-printing .etq-a4-page { height: 296mm; align-content: start; margin: 0; break-after: page; page-break-after: always; }
+  body.etq-printing .etq-a4-page:last-child { break-after: auto; page-break-after: auto; }
+}

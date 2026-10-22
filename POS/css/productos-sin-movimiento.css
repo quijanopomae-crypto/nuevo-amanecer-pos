@@ -1,0 +1,44 @@
+/* Productos sin movimiento: estilos limitados a #pageProductosSinMovimiento. */
+#pageProductosSinMovimiento { --psm-bg: #f8fafc; --psm-surface: #fff; --psm-text: #0f172a; --psm-muted: #475569; --psm-border: #cbd5e1;
+  min-width: 0; overflow-y: auto; padding: 16px; color: var(--psm-text); background: var(--psm-bg); font-size: 14px; line-height: 1.5; }
+body.dark #pageProductosSinMovimiento { --psm-bg: #0f172a; --psm-surface: #1e293b; --psm-text: #f8fafc; --psm-muted: #cbd5e1; --psm-border: #64748b; color-scheme: dark; }
+#pageProductosSinMovimiento *, #pageProductosSinMovimiento *::before, #pageProductosSinMovimiento *::after { box-sizing: border-box; }
+#pageProductosSinMovimiento [hidden] { display: none !important; }
+#pageProductosSinMovimiento .psm-shell { width: 100%; max-width: 1200px; margin: 0 auto; }
+#pageProductosSinMovimiento h1 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 30px); line-height: 1.2; overflow-wrap: anywhere; }
+#pageProductosSinMovimiento p { margin: 0 0 16px; }
+#pageProductosSinMovimiento .psm-description, #pageProductosSinMovimiento .psm-status, #pageProductosSinMovimiento .psm-note { color: var(--psm-muted); overflow-wrap: anywhere; }
+#pageProductosSinMovimiento .psm-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 20px 0 12px; }
+#pageProductosSinMovimiento label { display: grid; gap: 6px; min-width: 0; font-weight: 700; }
+#pageProductosSinMovimiento :is(select, button) { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--psm-border); border-radius: 10px; font: inherit; color: var(--psm-text); background: var(--psm-surface); }
+#pageProductosSinMovimiento button { cursor: pointer; font-weight: 700; }
+#pageProductosSinMovimiento label.psm-check { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+#pageProductosSinMovimiento .psm-check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: #0d9488; }
+#pageProductosSinMovimiento .psm-check input:focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
+#pageProductosSinMovimiento :is(select, button):focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
+#pageProductosSinMovimiento .psm-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+#pageProductosSinMovimiento .psm-card, #pageProductosSinMovimiento .psm-empty { padding: 12px 14px; border: 1px solid var(--psm-border); border-radius: 12px; background: var(--psm-surface); min-width: 0; }
+#pageProductosSinMovimiento .psm-card span { display: block; font-size: 12px; color: var(--psm-muted); }
+#pageProductosSinMovimiento .psm-card strong { font-size: 20px; overflow-wrap: anywhere; }
+#pageProductosSinMovimiento .psm-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--psm-surface); border: 1px solid var(--psm-border); border-radius: 12px; }
+#pageProductosSinMovimiento .psm-table :is(th, td) { display: table-cell; padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--psm-border); overflow-wrap: anywhere; color: var(--psm-text); }
+/* base.css pone th { white-space: nowrap }: sin esto un nombre largo se sale de su celda y tapa Stock, Última venta y Valor. */
+#pageProductosSinMovimiento .psm-table :is(th, td) { white-space: normal; }
+#pageProductosSinMovimiento .psm-table .psm-product { overflow-wrap: anywhere; word-break: normal; }
+#pageProductosSinMovimiento .psm-table thead th { font-size: 12px; color: var(--psm-muted); }
+#pageProductosSinMovimiento .psm-table .psm-num { text-align: right; font-variant-numeric: tabular-nums; }
+#pageProductosSinMovimiento .psm-product small { display: block; font-weight: 400; color: var(--psm-muted); }
+#pageProductosSinMovimiento .psm-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 599px) {
+  #pageProductosSinMovimiento .psm-table, #pageProductosSinMovimiento .psm-table tbody { display: block; border: 0; background: transparent; }
+  #pageProductosSinMovimiento .psm-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #pageProductosSinMovimiento .psm-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--psm-border); border-radius: 12px; background: var(--psm-surface); }
+  #pageProductosSinMovimiento .psm-table :is(th, td) { display: block; padding: 0; border: 0; }
+  #pageProductosSinMovimiento .psm-table th { grid-column: 1 / -1; }
+  #pageProductosSinMovimiento .psm-table td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--psm-muted); }
+  #pageProductosSinMovimiento .psm-table .psm-num { text-align: left; }
+}
+@media (min-width: 600px) {
+  #pageProductosSinMovimiento { padding: 24px; }
+  #pageProductosSinMovimiento .psm-controls { grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: end; }
+}

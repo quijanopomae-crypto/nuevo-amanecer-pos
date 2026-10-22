@@ -139,7 +139,7 @@
   function ownerAllowed() {
     try {
       var roles = root.NA_ROLES;
-      return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner());
+      return !!(roles && typeof roles.isOwner === 'function' && roles.isOwner() === true);
     } catch (_) { return false; }
   }
   async function readPurchases() {

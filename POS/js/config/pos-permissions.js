@@ -4,7 +4,7 @@
   var owner = ['owner'], both = ['owner', 'empleado'];
   var SCREENS = {};
   ['pageMenu', 'pagePOS', 'pageInventario', 'pageVentas', 'pageClientes', 'pageCaja'].forEach(function (id) { SCREENS[id] = both; });
-  ['pageGastos', 'pageConfig', 'pageProximamente', 'pageValorizacion', 'pageRotacionAbc', 'pageKardex', 'pageVentasStock', 'pageReporteArqueo', 'pageHistorialCompras', 'ventas:reportes'].forEach(function (id) { SCREENS[id] = owner; });
+  ['pageGastos', 'pageConfig', 'pageProximamente', 'pageValorizacion', 'pageRotacionAbc', 'pageClientesFrecuencia', 'pageReporteProductosVencer', 'pageKardex', 'pageVentasStock', 'pageReporteArqueo', 'pageHistorialCompras', 'pageClienteHistorial', 'pageEtiquetasPrecios', 'pageProductosSinMovimiento', 'pageSugerenciaCompra', 'pageAjustesInventario', 'ventas:reportes'].forEach(function (id) { SCREENS[id] = owner; });
   var ACTIONS = {};
   ['cash.closes.view', 'purchases.costs.view', 'expense.create', 'expense.update', 'expense.void', 'settings.set', 'product-images.write', 'reports.view', 'devices.manage', 'owner-pin.set', 'pairing-code.create', 'reviews.resolve'].forEach(function (id) { ACTIONS[id] = owner; });
   ['cash.expense', 'sync.write'].forEach(function (id) { ACTIONS[id] = both; });
@@ -75,7 +75,7 @@
   // Bloqueo de funciones Próximamente por id estable (única fuente, cliente y servidor).
   // true = bloqueada (sin rutas de escritura). Desbloquear = cambiar UNA línea a false.
   // Id ausente = bloqueada (default-deny).
-  var FEATURE_ROLES = { 'asistencia-empleados': owner, 'asistente-virtual': owner, 'valorizacion-inventario': owner, 'rotacion-abc': owner, 'kardex': owner, 'reporte-ventas-stock': owner, 'reporte-arqueo': owner, 'historial-compras-producto': owner, 'lotes-multiples-fefo': owner, 'stock-negativo-configurable': owner, 'app-pedidos-marca-propia': owner, 'cambiar-clave-usuarios': owner, 'conversion-masiva-documentos': owner, 'vendedor-en-venta': owner, 'comentarios-venta': owner, 'despacho-productos': owner, 'cliente-historial-compras': owner, 'vendedor-por-cliente': owner, 'consulta-dni-ruc': owner, 'edicion-masiva-productos': owner, 'marcas-productos': owner, 'subcategorias-atributos': owner, 'produccion-recetas': owner, 'registro-sanitario': owner, 'numero-serie-producto': owner, 'tipos-movimiento-inventario': owner, 'conciliacion-bancaria': owner, 'historial-exportaciones': owner, 'catalogo-reportes': owner, 'importar-proveedores': owner, 'periodo-contable-percepcion': owner, 'desbloquear-usuario': owner, 'detraccion-retencion': owner, 'historial-precios-producto': owner, 'canales-venta': owner, 'estado-recepcion-compras': owner, 'adjuntos-proveedor': owner, 'dashboard-compras': owner, 'recargo-servicio': owner };
+  var FEATURE_ROLES = { 'asistencia-empleados': owner, 'asistente-virtual': owner, 'valorizacion-inventario': owner, 'rotacion-abc': owner, 'clientes-frecuencia': owner, 'kardex': owner, 'reporte-ventas-stock': owner, 'reporte-arqueo': owner, 'historial-compras-producto': owner, 'lotes-multiples-fefo': owner, 'stock-negativo-configurable': owner, 'app-pedidos-marca-propia': owner, 'cambiar-clave-usuarios': owner, 'conversion-masiva-documentos': owner, 'vendedor-en-venta': owner, 'comentarios-venta': owner, 'despacho-productos': owner, 'cliente-historial-compras': owner, 'vendedor-por-cliente': owner, 'consulta-dni-ruc': owner, 'edicion-masiva-productos': owner, 'marcas-productos': owner, 'subcategorias-atributos': owner, 'produccion-recetas': owner, 'registro-sanitario': owner, 'numero-serie-producto': owner, 'tipos-movimiento-inventario': owner, 'conciliacion-bancaria': owner, 'historial-exportaciones': owner, 'catalogo-reportes': owner, 'importar-proveedores': owner, 'periodo-contable-percepcion': owner, 'desbloquear-usuario': owner, 'detraccion-retencion': owner, 'historial-precios-producto': owner, 'canales-venta': owner, 'estado-recepcion-compras': owner, 'adjuntos-proveedor': owner, 'dashboard-compras': owner, 'recargo-servicio': owner, 'producto-activo-venta': owner, 'precio-min-max': owner, 'cajas-multiples': owner, 'reporte-productos-vencer': owner, 'cierre-remoto-cajas': owner, 'dashboard-tesoreria': owner, 'producto-servicio': owner, 'catalogo-desde-pos': owner, 'etiquetas-precios': owner, 'productos-sin-movimiento': owner, 'sugerencia-compra': owner, 'ajustes-inventario': owner };
   var FEATURE_LOCKS = {
     'venta-exitosa-comprobante': true,
     'credito-cuotas': true,
@@ -88,7 +88,7 @@
     'vendedor-en-venta': true,
     'comentarios-venta': true,
     'despacho-productos': true,
-    'cliente-historial-compras': true,
+    'cliente-historial-compras': false,
     'vendedor-por-cliente': true,
     'consulta-dni-ruc': true,
     'edicion-masiva-productos': true,
@@ -105,16 +105,25 @@
     'periodo-contable-percepcion': true,
     'desbloquear-usuario': true,
     'detraccion-retencion': true,
-    'historial-precios-producto': true,
+    'historial-precios-producto': false,
     'canales-venta': true,
     'estado-recepcion-compras': true,
     'adjuntos-proveedor': true,
     'dashboard-compras': true,
     'recargo-servicio': true,
+    'producto-activo-venta': true,
+    'precio-min-max': true,
+    'cajas-multiples': true,
+    'reporte-productos-vencer': false,
+    'cierre-remoto-cajas': true,
+    'dashboard-tesoreria': true,
+    'producto-servicio': true,
+    'catalogo-desde-pos': true,
 
     'clonar-venta': true,
     'nota-credito-parcial-compras': true,
     'clientes-filtro-deuda': false,
+    'clientes-deudores-caja': false,
     'clientes-dias-credito': true,
     'nota-credito-devolucion-parcial': true,
     'ordenes-compra': true,
@@ -124,7 +133,7 @@
     'impresion-directa-xprinter': true,
     'clientes-direcciones-multiples': true,
     'clientes-descuento': true,
-    'clientes-frecuencia': true,
+    'clientes-frecuencia': false,
     'listas-precios-asignacion-masiva': true,
     'historial-compras-producto': false,
     'inventario-padre-hijo': true,
@@ -162,7 +171,10 @@
     'sucursales': true,
     'recetas-psicotropicos': true,
     'sunat-comprobantes': true,
-    'etiquetas-precios': true,
+    'etiquetas-precios': false,
+    'productos-sin-movimiento': false,
+    'sugerencia-compra': false,
+    'ajustes-inventario': false,
     'promociones-combos': true,
     'delivery': true,
     'catalogo-en-linea': true,

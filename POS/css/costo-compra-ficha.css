@@ -1,0 +1,12 @@
+/* Misión 2: costo de compra en la ficha (solo dueño). */
+.ccf-box { margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--border, #d0d7de); border-radius: 10px; background: var(--surface-2, #f6f8fa); color: var(--text, #1f2328); font-size: 14px; }
+.ccf-line { margin: 0 0 4px; overflow-wrap: anywhere; }
+.ccf-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ccf-btn { min-height: 40px; padding: 6px 12px; border-radius: 8px; border: 1px solid #0f6b5c; background: #0f6b5c; color: #fff; font-weight: 600; cursor: pointer; }
+.ccf-btn-alt { background: transparent; color: #0f6b5c; }
+.ccf-btn:disabled { opacity: .55; cursor: not-allowed; }
+.ccf-msg { margin: 6px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+body.dark .ccf-box { background: #1b2430; border-color: #3a4655; color: #e6edf3; }
+body.dark .ccf-btn { background: #2dd4bf; border-color: #2dd4bf; color: #0b1220; }
+body.dark .ccf-btn-alt { background: transparent; color: #5eead4; }
+.ccf-pref { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; font-size: 13px; overflow-wrap: anywhere; }

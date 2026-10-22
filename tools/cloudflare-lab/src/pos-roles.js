@@ -316,7 +316,11 @@ export async function handleRoles(request, url, env, { json, authorizeSession, g
           ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,revision=pos_settings.revision+1,
           updated_at=excluded.updated_at,updated_by=excluded.updated_by WHERE pos_settings.revision=?5`)
         .bind(key, value, now(), auth.principalId, rev).run();
-      if (res?.meta && res.meta.changes === 0) return json({ error: 'revision_conflict' }, 409);
+      if (res?.meta && res.meta.changes === 0) {
+        // Otro aparato guardó entre la lectura y la escritura: se devuelve la revisión actual para que el cliente se resincronice.
+        const latest = await db.prepare('SELECT revision FROM pos_settings WHERE key=?1').bind(key).first();
+        return json({ error: 'revision_conflict', revision: Number(latest?.revision || 0) }, 409);
+      }
       return json({ status: 'saved', key, revision: rev + 1 });
     }
     return json({ error: 'not_found' }, 404);

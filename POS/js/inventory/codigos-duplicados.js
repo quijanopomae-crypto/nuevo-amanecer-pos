@@ -90,7 +90,8 @@
 
   const liveProducts = () => typeof productos !== 'undefined' ? productos : (root.productos || []);
   const liveSales = () => typeof ventas !== 'undefined' ? ventas : (root.ventas || []);
-  const ownerAllowed = () => root.NA_ROLES?.role === 'owner' && root.NA_ROLES.isOwner?.() === true;
+  // Alias de NA_ROLES.isOwner; falla cerrada si NA_ROLES falta o lanza error.
+  const ownerAllowed = () => { try { return root.NA_ROLES?.isOwner?.() === true; } catch (_) { return false; } };
   const doc = root.document;
   function element(tag, className, text) {
     const node = doc.createElement(tag);

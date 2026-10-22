@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner authorized (2026-10-16 Lima; asistente 2 code OK, asistente 3 spec OK, asistente 4 LOCAL OK, e2e 434/434) deploy of base dde26fb5ef3236966bdd2578433b78697e08e3e9: #793 kardex por producto. No schema changes. Rollback to fffaf2ad (worker 53, Cloudflare version 84a7afc6, currently live). Web NOT deployed (pending asistente 5 live check).",
-  "target_commit": "dde26fb5ef3236966bdd2578433b78697e08e3e9",
-  "rollback_ref": "fffaf2ad4c97c30efa0b2de123c2879c230496a3",
+  "authorization_context": "Owner OK to publish PR #894 (2026-10-21 ~20:53 Lima); approved by all 5 assistants. Merge fb0daf65 adds one line to pos-permissions.js FEATURE_LOCKS ('clientes-deudores-caja': false) plus a Próximamente card; Worker before web. CI green on dcd1e4f7. No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39708986052 success (R2 recovery-drills/2026-10-22T02-01-09Z-fb0daf65….sql). Rollback to dba42e22 (worker 64).",
+  "target_commit": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8",
+  "rollback_ref": "dba42e22eab4b41ec92cbe2c7160d492cefc09a3",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 54,
-  "optimization": "KARDEX_793"
+  "attempt": 65,
+  "optimization": "FEATURE_LOCK_CLIENTES_DEUDORES_CAJA_894"
 }

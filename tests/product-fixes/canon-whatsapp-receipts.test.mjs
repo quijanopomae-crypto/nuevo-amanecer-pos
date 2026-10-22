@@ -49,10 +49,96 @@ test('WhatsApp text URL encodes receipt safely and rejects invalid phone',()=>{
   assert.equal(new URL(url).pathname,'/51987654321');
   assert.throws(()=>a.textUrl('123','x'));
 });
+test('WhatsApp message greets the customer and keeps the ticket monospaced',()=>{
+  const a=api();
+  const named=a.whatsappText({customerName:'María Pérez',text:'2 Arroz S/ 14.00\nTOTAL S/ 14.00'});
+  assert.equal(named,'Hola María Pérez, gracias por tu compra.\n\n```\n2 Arroz S/ 14.00\nTOTAL S/ 14.00\n```');
+  assert.match(a.whatsappText({customerName:'Sin cliente',text:'x'}),/^Gracias por tu compra\./);
+  assert.match(a.whatsappText({customerName:'Consumidor final',text:'x'}),/^Gracias por tu compra\./);
+  // Abono: el saludo agradece el pago, no una compra; venta y crédito siguen igual.
+  assert.match(a.whatsappText({kind:'payment',customerName:'María Pérez',text:'x'}),/^Hola María Pérez, gracias por tu pago\.\n/);
+  assert.match(a.whatsappText({kind:'payment',customerName:'Sin cliente',text:'x'}),/^Gracias por tu pago\./);
+  assert.match(a.whatsappText({kind:'credit',customerName:'María Pérez',text:'x'}),/gracias por tu compra\./);
+  assert.match(a.whatsappText({kind:'sale',customerName:'María Pérez',text:'x'}),/gracias por tu compra\./);
+  assert.equal(a.whatsappText({customerName:'Ana',text:'a```b'}).includes("a'''b"),true);
+  const url=a.textUrl('987654321',named);
+  assert.equal(new URL(url).searchParams.get('text'),named);
+});
+const ANDROID='Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36';
+const IPHONE='Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1';
+const DESKTOP='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36';
+test('Android detection only matches Android user agents',()=>{
+  const a=api();
+  assert.equal(a.isAndroid(ANDROID),true);
+  assert.equal(a.isAndroid(IPHONE),false);
+  assert.equal(a.isAndroid(DESKTOP),false);
+  assert.equal(a.isAndroid(''),false);
+  assert.equal(api({navigator:{userAgent:ANDROID}}).isAndroid(),true);
+  assert.equal(api().isAndroid(),false);
+});
+test('intent URL targets the chosen WhatsApp package with an encoded wa.me fallback',()=>{
+  const a=api(),msg='Arroz & azúcar\nS/ 7.00';
+  const normal=a.intentUrl('987654321',msg,'whatsapp'),business=a.intentUrl('987654321',msg,'business');
+  assert.equal(normal,'intent://send?phone=51987654321&text='+encodeURIComponent(msg)+'#Intent;scheme=whatsapp;package=com.whatsapp;S.browser_fallback_url='+encodeURIComponent(a.textUrl('987654321',msg))+';end');
+  assert.ok(business.includes(';package=com.whatsapp.w4b;'));
+  assert.ok(!business.includes('package=com.whatsapp;'));
+  for(const url of [normal,business]){
+    const fallback=/;S\.browser_fallback_url=([^;]*);end$/.exec(url)[1];
+    assert.equal(decodeURIComponent(fallback),a.textUrl('987654321',msg));
+    assert.ok(!/[;#]/.test(url.slice(url.indexOf('?')+1,url.indexOf('#Intent'))),'query must not contain raw ; or #');
+  }
+  assert.throws(()=>a.intentUrl('123','x','whatsapp'));
+  assert.throws(()=>a.intentUrl('987654321','x','auto'));
+  assert.throws(()=>a.intentUrl('987654321','x','evil'));
+});
+test('send URL: intent only on Android with an explicit app; wa.me everywhere else and in auto',()=>{
+  const a=api(),wa=a.textUrl('987654321','hola');
+  assert.equal(a.sendUrl('987654321','hola','auto',ANDROID),wa);
+  assert.equal(a.sendUrl('987654321','hola',undefined,ANDROID),wa);
+  assert.equal(a.sendUrl('987654321','hola','whatsapp',ANDROID),a.intentUrl('987654321','hola','whatsapp'));
+  assert.equal(a.sendUrl('987654321','hola','business',ANDROID),a.intentUrl('987654321','hola','business'));
+  for(const ua of [IPHONE,DESKTOP,''])for(const app of ['auto','whatsapp','business'])assert.equal(a.sendUrl('987654321','hola',app,ua),wa);
+  assert.throws(()=>a.sendUrl('123','x','business',ANDROID));
+  assert.throws(()=>a.sendUrl('987654321','x','evil',ANDROID));
+});
+function memoryStorage(seed={}){const data={...seed};return{data,getItem:k=>Object.prototype.hasOwnProperty.call(data,k)?data[k]:null,setItem:(k,v)=>{data[k]=String(v);},removeItem:k=>{delete data[k];}};}
+test('WhatsApp app setting is per device: localStorage, never pos.ticket; legacy pos.ticket.shareApp is a read-only fallback',()=>{
+  const config={ticket:{shareFormat:'image'}},localStorage=memoryStorage();
+  const a=api({appConfig:config,localStorage});
+  assert.equal(a.appStorageKey,'na_pos_share_app_v1');
+  assert.equal(a.settings().app,'auto');
+  a.setSettings({format:'text',ask:true,app:'business'});
+  assert.equal(config.ticket.shareApp,undefined,'shareApp must not be written to pos.ticket');
+  assert.equal(localStorage.data.na_pos_share_app_v1,'business');
+  assert.equal(config.ticket.shareFormat,'text','format stays shared in pos.ticket');
+  // Recarga: mismo aparato, configuración del servidor sin shareApp.
+  assert.equal(api({appConfig:JSON.parse(JSON.stringify(config)),localStorage}).settings().app,'business');
+  a.setSettings({format:'pdf',ask:false});
+  assert.equal(a.settings().app,'business','omitting app keeps the device choice');
+  a.setApp('whatsapp');
+  assert.equal(localStorage.data.na_pos_share_app_v1,'whatsapp');
+  assert.equal(config.ticket.shareApp,undefined);
+  assert.throws(()=>a.setApp('bogus'));
+  assert.throws(()=>a.setSettings({format:'text',ask:true,app:'bogus'}));
+  assert.equal(a.settings().app,'whatsapp');
+});
+test('legacy pos.ticket.shareApp migrates as fallback without background writes and never overrides the device choice',()=>{
+  const fresh=memoryStorage();
+  const legacy=api({appConfig:{ticket:{shareApp:'business'}},localStorage:fresh});
+  assert.equal(legacy.settings().app,'business','old value is not lost');
+  assert.deepEqual(fresh.data,{},'reading the fallback does not write localStorage');
+  const chosen=memoryStorage({na_pos_share_app_v1:'whatsapp'});
+  // Un pull de settings del servidor que trae pos.ticket.shareApp no pisa la elección del aparato.
+  assert.equal(api({appConfig:{ticket:{shareApp:'business'}},localStorage:chosen}).settings().app,'whatsapp');
+  assert.equal(api({appConfig:{ticket:{shareApp:'bogus'}},localStorage:memoryStorage()}).settings().app,'auto');
+  assert.equal(api({appConfig:{ticket:{}},localStorage:memoryStorage({na_pos_share_app_v1:'evil'})}).settings().app,'auto');
+});
 test('settings persist through reload and reject invalid format',()=>{
   const config={ticket:{}};
   const a=api({appConfig:config});
   assert.equal(a.settings().format,'image');
+  const saved=api({appConfig:{ticket:{shareFormat:'image'}}});
+  assert.equal(saved.settings().format,'image');
   a.setSettings({format:'pdf',ask:false});
   assert.equal(config.ticket.shareFormat,'pdf');
   const b=api({appConfig:JSON.parse(JSON.stringify(config))});
@@ -96,4 +182,21 @@ test('repayment receipt identifier distinguishes separate payments for the same 
   const one=a.build({kind:'payment',sale,payment:{id:'P-1',monto:5}});
   const two=a.build({kind:'payment',sale,payment:{id:'P-2',monto:5}});
   assert.equal(one.id,'P-1');assert.equal(two.id,'P-2');
+});
+test('receipt format defaults to image (share menu) when nothing is saved; users choose their own default',()=>{
+  for(const cfg of [{},{ticket:{}},{ticket:{shareFormat:'bogus'}},{ticket:null}])assert.equal(api({appConfig:cfg}).settings().format,'image');
+  assert.equal(api().settings().format,'image');
+  assert.equal(api({appConfig:{ticket:{shareFormat:'text'}}}).settings().format,'text');
+  assert.equal(api({appConfig:{ticket:{shareFormat:'pdf'}}}).settings().format,'pdf');
+  const config={ticket:{}},a=api({appConfig:config});
+  a.setSettings({format:'text',ask:true});
+  assert.equal(config.ticket.shareFormat,'text');
+  assert.equal(api({appConfig:JSON.parse(JSON.stringify(config))}).settings().format,'text');
+});
+test('UI copy: Abrir con, Abrir WhatsApp, phone error and download hint',()=>{
+  const src=readFileSync(path,'utf8'),ui=readFileSync('POS/js/modules/ticket/share-receipt-ui.js','utf8');
+  for(const t of ["'Abrir con'","'Automático (la app que tenga el celular)'","'Abrir WhatsApp'","Escribe el número del cliente, por ejemplo 987 654 321","Úsalo si WhatsApp no abre"])assert.ok(src.includes(t),t);
+  assert.ok(ui.includes('Abrir con (solo texto, solo Android)')&&ui.includes("opt('auto','Automático',s.app)"));
+  assert.ok(!src.includes('Enviar por WhatsApp')&&!src.includes('Enviar desde'));
+  assert.throws(()=>api().textUrl('123','x'),/Escribe el número del cliente, por ejemplo 987 654 321/);
 });
