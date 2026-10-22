@@ -208,6 +208,17 @@
       busy = true; var btn = this; btn.disabled = true; btn.textContent = 'Registrando…';
       try {
         var meta = { supplier: w.querySelector('#naPurSupplier').value.trim(), documentRef: w.querySelector('#naPurDoc').value.trim() };
+        var dupKey = normDoc(meta.supplier) + '|' + normDoc(meta.documentRef);
+        if (normDoc(meta.documentRef) && w.__naDupAck !== dupKey) {
+          var prior = null;
+          try { var list = await root.NA_ROLES.api('/auth/purchases'); prior = findDuplicatePurchase(list && list.purchases, meta); } catch (_) { prior = null; }
+          if (prior) {
+            w.__naDupAck = dupKey;
+            fail('Ya hay una compra registrada con el documento «' + (prior.document_ref || meta.documentRef) + '» (' + limaDay(prior.created_at) + ', hora de Lima). Revisa que no sea la misma factura. Si es otra, pulsa «Registrar compra» otra vez.');
+            errBox.classList.add('info');
+            return;
+          }
+        }
         var pick = await opFor(r.lines, meta);
         if (pick.stop) { fail(pick.stop); if (pick.info) errBox.classList.add('info'); if (pick.finish) finishButton(pick.finish); return; }
         curId = pick.id;
@@ -247,6 +258,22 @@
         if (e.message === 'owner_pin_invalid') return { msg: R.message(e) }; return { msg: R.message(e), stop: e.message === 'owner_pin_locked' }; }
     });
     return ok ? done : null;
+  }
+  // Aviso de factura repetida (sin migración): compara el documento y, si el servidor lo envía (solo dueño),
+  // también el proveedor, contra las compras ya registradas. Solo avisa; un segundo clic registra igual.
+  function normDoc(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s.\-_/]+/g, '').toUpperCase(); }
+  function findDuplicatePurchase(rows, meta) {
+    var d = normDoc(meta && meta.documentRef); if (!d) return null;
+    var sup = normDoc(meta && meta.supplier);
+    return (Array.isArray(rows) ? rows : []).find(function (p) {
+      if (!p || normDoc(p.document_ref) !== d) return false;
+      if ('supplier' in p && sup && normDoc(p.supplier) && normDoc(p.supplier) !== sup) return false;
+      return true;
+    }) || null;
+  }
+  function limaDay(iso) {
+    var ms = Date.parse(String(iso || '')); if (!Number.isFinite(ms)) return 'fecha no registrada';
+    return new Date(ms - 5 * 3600000).toISOString().slice(0, 10).split('-').reverse().join('/');
   }
   async function openHistory() {
     var w = overlay('naPurchaseHistory', '<h3>Compras registradas</h3><div class="na-pur-list">Cargando…</div><div class="na-review-actions" style="justify-content:space-between"><button type="button" class="na-pur-new">Nueva compra</button><button type="button" class="na-pur-close" style="background:#64748b">Cerrar</button></div>');
@@ -316,6 +343,6 @@
       src.appendChild(c);
     }
   }
-  root.NA_PURCHASES = { open: openNew, history: openHistory, submit: submit, _opFor: opFor, pendingOps: pendingOps, _submit: submit, _finish: finishPurchase, _closePartial: closePartial, _historyFinishArgs: historyFinishArgs };
+  root.NA_PURCHASES = { open: openNew, history: openHistory, submit: submit, _opFor: opFor, pendingOps: pendingOps, _submit: submit, _finish: finishPurchase, _closePartial: closePartial, _historyFinishArgs: historyFinishArgs, _findDuplicate: findDuplicatePurchase };
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', installButtons); else installButtons();
 })(window);

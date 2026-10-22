@@ -88,3 +88,19 @@ test('clientes-deudores-caja is unlocked on client and server (no feature_locked
   }
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
+
+test('aviso-factura-duplicada is unlocked for owner and employee (no feature_locked, no writes)', async t => {
+  assert.equal(PERMISSIONS.featureLocked('aviso-factura-duplicada'), false);
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
+  f.addDevice('dup-owner', 'writer', 'active', 'dup-owner-token');
+  f.addDevice('dup-employee', 'writer', 'active', 'dup-employee-token');
+  f.exec("INSERT INTO pos_device_roles(device_id,pos_role,created_by,created_at) VALUES('session:dup-employee','empleado','test','2026-10-21T00:00:00Z')");
+  const before = f.database.prepare('SELECT * FROM canonical_control').all();
+  for (const token of ['dup-owner-token', 'dup-employee-token']) for (const method of ['GET', 'POST']) {
+    const response = await f.fetch('http://localhost/features/aviso-factura-duplicada', { method, headers: { authorization: 'Bearer ' + token } });
+    const body = await response.json();
+    assert.notEqual(body.error, 'feature_locked');
+    assert.notEqual(response.status, 403);
+  }
+  assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
+});
