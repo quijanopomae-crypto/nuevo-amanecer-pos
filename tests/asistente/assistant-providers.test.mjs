@@ -302,7 +302,7 @@ test('celular: el bloque solo se arma para el dueño, sin campos de clave ni URL
   const block = UI.slice(UI.indexOf('function decorateProvider'), UI.indexOf('// ---------- Aparatos de dueño'));
   assert.ok(block.length > 500); assert.ok(!/api_?key|base_?url|type="password"|<input/i.test(block), 'nunca se escribe una clave ni una URL en el celular');
   assert.match(block, /data-act="confirm"[^]*Confirmar/); assert.match(block, /isOwnerAccess\(\)/); assert.match(UI, /decorateProvider\(host\)/);
-  assert.match(UI, /function decorateConfig\(\) \{\s*if \(!isOwnerAccess\(\)/);
+  assert.match(UI, /function decorateConfig\(\) \{\s*if \(offHere\(\) \|\| !isOwnerAccess\(\)/);
   const PERM = readFileSync(new URL('../../POS/js/config/pos-permissions.js', import.meta.url), 'utf8');
   assert.match(PERM, /'\/auth\/assistant\/provider', methods: \['GET'\], roles: owner/);
   const CORE = readFileSync(new URL('../../POS/js/modules/asistente/asistente-core.js', import.meta.url), 'utf8'); assert.match(CORE, /image_unsupported: \['Leer fotos no está disponible por ahora\.'\]/);

@@ -88,7 +88,7 @@ test('uso: pantalla + función/id del botón (sin textos ni datos), el asistente
 test('empleado o sin dato: no se instala ninguna escucha ni se guarda nada', () => {
   for (const acc of ['on', null]) { const b = boot(acc);
     assert.equal(b.window.NA_ASISTENTE_REVISION.installed(), false); assert.ok(!b.L.error && !b.L.unhandledrejection && !b.D.click, String(acc)); assert.equal(b.obs.length, 0); }
-  assert.match(LOADER, /if \(ls\('na_asistente_acc'\) === 'owner'\) \{ reserve\(\); revInstall\(\); \}/);
+  assert.match(LOADER, /if \(!disabled && ls\('na_asistente_acc'\) === 'owner'\) \{ reserve\(\); revInstall\(\); \}/);
   assert.match(LOADER, /\{ capture: true, passive: true \}/);
 });
 

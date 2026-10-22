@@ -1,5 +1,6 @@
-/* Asistente (PROTOTIPO AISLADO): cargador apagado por defecto.
-   Solo se activa con ?asistente=1 (queda guardado en este aparato) y se apaga con ?asistente=0.
+/* Asistente: cargador chico. Encendido por defecto; el servidor decide (ASSISTANT_ENABLED y el rol/nivel del aparato).
+   Se apaga en ESTE aparato con el interruptor «Asistente en este aparato» de Configuración (solo Admin) o con ?asistente=0
+   (queda guardado: localStorage na_asistente_off). ?asistente=1 lo vuelve a encender.
    Antes de bajar NADA del asistente pregunta al servidor si este aparato lo tiene (POST /auth/assistant/chat {ping:true}, ~100 bytes,
    sin modelo ni cupo). Solo si la respuesta es «sí» (dueño o empleado con nivel encendido) o «aparato sin rol» (para mostrar
    «Registrar este teléfono como dueño») carga asistente.css, asistente-core.js y asistente-ui.js.
@@ -8,14 +9,15 @@
    Todo pasa DESPUÉS de que el POS abrió y el navegador está libre. */
 (function (root) {
   'use strict';
-  var on = false;
+  var OFF_KEY = 'na_asistente_off', disabled = false, lastState = null;
   try {
     var q = new URLSearchParams(root.location.search).get('asistente');
-    if (q === '1') root.localStorage.setItem('na_asistente_proto', '1');
-    if (q === '0') { root.localStorage.removeItem('na_asistente_proto'); root.localStorage.removeItem('na_asistente_acc'); }
-    on = root.localStorage.getItem('na_asistente_proto') === '1';
+    if (q === '1') root.localStorage.removeItem(OFF_KEY);
+    if (q === '0') { root.localStorage.setItem(OFF_KEY, '1'); root.localStorage.removeItem('na_asistente_acc'); }
+    root.localStorage.removeItem('na_asistente_proto'); // marca vieja del prototipo: ya no hace falta
+    disabled = root.localStorage.getItem(OFF_KEY) === '1';
   } catch (_) {}
-  if (!on) { try { root.document.documentElement.classList.remove('na-asst-owner', 'na-asst-pre'); } catch (_) {} return; }
+  if (disabled) { try { root.document.documentElement.classList.remove('na-asst-owner', 'na-asst-pre'); } catch (_) {} }
   var loaded = false, asking = false, lastAsk = 0;
   function ls(k, v) { try { if (v === undefined) return root.localStorage.getItem(k); if (v === null) root.localStorage.removeItem(k); else root.localStorage.setItem(k, v); } catch (_) {} return null; }
   // Tarjeta de Inicio del dueño ARRIBA (debajo del saludo, antes de los totales) con alto FIJO: el hueco se reserva en cuanto corre
@@ -113,6 +115,7 @@
   }
   function revCtxNow() { return revCtx && Date.now() - revCtx.t <= REV_CTX_MS ? revCtx : null; }
   function revError(kind, msg, src, status) {
+    if (disabled) return;
     var r = revLoad(), m = revClean(msg, 160), s = revClean(src, 80), now = new Date().toISOString(), cx = revCtxNow(), cli = cx ? cx.cli : null, ac = cx ? cx.accion : null; status = status || 0;
     if (!m && !s) return;
     for (var i = r.e.length - 1; i >= 0; i--) { var x = r.e[i];
@@ -123,6 +126,7 @@
     revSave();
   }
   function revSlow(kind, name, ms) { // kind: api | tarea | pantalla | cuelgue
+    if (disabled) return;
     var r = revLoad(), n = revClean(name, 80), now = new Date().toISOString(), cx = revCtxNow(), cli = cx ? cx.cli : null; ms = Math.max(0, Math.round(Number(ms) || 0));
     if (!n) return;
     for (var i = r.s.length - 1; i >= 0; i--) { var x = r.s[i];
@@ -147,6 +151,7 @@
     return act && /^[A-Za-z]/.test(scr) ? scr + ':' + act + (arg ? ':' + arg : '') : null;
   }
   function revClick(ev) {
+    if (disabled) return;
     var k = revUseKey(ev.target); if (!k) return; var r = revLoad();
     if (r.u[k] || Object.keys(r.u).length < REV_USAGE_MAX) { r.u[k] = (r.u[k] || 0) + 1; revSave(); }
     var e = revTarget(ev.target), p = e && revParse(e);
@@ -215,7 +220,7 @@
     _test: { beat: revBeat, ctx: function () { return revCtxNow(); }, slow: revSlow }
   };
   slotCss();
-  if (ls('na_asistente_acc') === 'owner') { reserve(); revInstall(); }
+  if (!disabled && ls('na_asistente_acc') === 'owner') { reserve(); revInstall(); }
   root.NA_ASISTENTE_SLOT = { reserve: reserve, unreserve: unreserve, release: release, NOTICE: NOTICE };
   function load() {
     if (loaded) return; loaded = true;
@@ -231,7 +236,7 @@
   // DESPUÉS de que el POS abrió (load + requestIdleCallback) y desde este cargador chico: el empleado en Apagado no baja nada más.
   var ASK_EVERY_MS = 10000, ASK_TIMEOUT_MS = 3000;
   function ask() {
-    if (loaded || asking || Date.now() - lastAsk < ASK_EVERY_MS) return;
+    if (disabled || loaded || asking || Date.now() - lastAsk < ASK_EVERY_MS) return;
     if (root.navigator && root.navigator.onLine === false) { if (ls('na_asistente_acc') === 'owner') load(); return; }
     asking = true; lastAsk = Date.now();
     var url = '/auth/assistant/chat', h = { 'content-type': 'application/json' }, init = { method: 'POST', cache: 'no-store', body: '{"ping":true}' };
@@ -242,12 +247,59 @@
     var ctl = root.AbortController ? new root.AbortController() : null, t = ctl ? setTimeout(function () { ctl.abort(); }, ASK_TIMEOUT_MS) : 0; if (ctl) init.signal = ctl.signal;
     root.fetch(url, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { st: r.status, d: d || {} }; }); }).then(function (x) {
       clearTimeout(t); asking = false;
-      if (x.st === 200 && x.d.ok) { ls('na_asistente_acc', x.d.role === 'owner' ? 'owner' : 'on'); if (x.d.role !== 'owner') unreserve(); else revInstall(); load(); return; }
-      if (x.st === 403 && x.d.reason === 'sin_rol') { ls('na_asistente_acc', null); unreserve(); load(); return; }
-      if (x.st === 401 || x.st === 403 || x.st === 404) { ls('na_asistente_acc', null); unreserve(); } // apagado: no se baja nada y el hueco (si lo había) se quita
+      if (disabled) return; // lo apagaron mientras se preguntaba
+      if (x.st === 200 && x.d.ok) { lastState = x.d.role === 'owner' ? 'owner' : 'on'; ls('na_asistente_acc', lastState); if (x.d.role !== 'owner') unreserve(); else revInstall(); load(); cfgPaint(); return; }
+      if (x.st === 403 && x.d.reason === 'sin_rol') { lastState = 'sin_rol'; ls('na_asistente_acc', null); unreserve(); load(); cfgPaint(); return; }
+      if (x.st === 401 || x.st === 403 || x.st === 404) { lastState = 'off'; ls('na_asistente_acc', null); unreserve(); cfgPaint(); } // apagado: no se baja nada y el hueco (si lo había) se quita
     }, function () { clearTimeout(t); asking = false; lastAsk = 0; if (ls('na_asistente_acc') === 'owner') load(); });
   }
-  root.NA_ASISTENTE_LOADER = { ask: ask, loaded: function () { return loaded; } };
+  // ---------- Configuración > Personal y seguridad > Aparatos conectados: «Asistente en este aparato» (solo Admin) ----------
+  // Va junto al permiso del asistente para empleados (debajo de la lista de aparatos). Se guarda solo, en este aparato, sin PIN.
+  // Apagar: fuera la burbuja, la tarjeta de Inicio y la revisión del POS en este aparato, y no se vuelven a bajar sus archivos.
+  // Encender: se pregunta al servidor enseguida y, si corresponde, se carga sin recargar la página.
+  function isAdminHere() { try { return !!(root.NA_ROLES && root.NA_ROLES.isOwner && root.NA_ROLES.isOwner()); } catch (_) { return false; } }
+  function cfgText() {
+    if (disabled) return 'Apagado: el asistente no aparece en este aparato.';
+    if (lastState === 'owner') return 'Encendido: el asistente aparece en este aparato.';
+    if (lastState === 'sin_rol') return 'Encendido, pero este aparato todavía no está habilitado como Admin del asistente.';
+    if (lastState === 'off') return 'Encendido, pero el servidor no tiene el asistente activo para este aparato.';
+    return 'Encendido.';
+  }
+  function cfgPaint() { var d = root.document; if (!d.querySelectorAll) return; d.querySelectorAll('.na-asst-sw').forEach(function (r) { var cb = r.querySelector('input'), t = r.querySelector('small'); if (cb) cb.checked = !disabled; if (t) t.textContent = cfgText(); }); }
+  function cfgSwitch() {
+    var d = root.document; if (!d.querySelectorAll || !isAdminHere()) return;
+    d.querySelectorAll('#naDevList').forEach(function (list) {
+      var host = list.parentElement; if (!host || host.querySelector('.na-asst-sw')) return;
+      var row = d.createElement('div'); row.className = 'na9-row na9-row-sw na-asst-sw';
+      var t = d.createElement('div'); t.className = 'na9-t'; t.appendChild(d.createTextNode('Asistente en este aparato '));
+      var tag = d.createElement('em'); tag.className = 'na9-tag'; tag.textContent = 'este aparato'; t.appendChild(tag);
+      var sm = d.createElement('small'); t.appendChild(sm);
+      var lab = d.createElement('label'); lab.className = 'na9-sw'; var cb = d.createElement('input'); cb.type = 'checkbox'; cb.setAttribute('aria-label', 'Asistente en este aparato');
+      lab.appendChild(cb); lab.appendChild(d.createElement('span'));
+      cb.addEventListener('change', function () { setEnabled(cb.checked); });
+      row.appendChild(t); row.appendChild(lab); host.insertBefore(row, list.nextSibling);
+    });
+    cfgPaint();
+  }
+  function setEnabled(v) {
+    v = !!v;
+    if (!v) {
+      disabled = true; ls(OFF_KEY, '1'); ls('na_asistente_acc', null);
+      var A = root.NA_ASISTENTE; if (A && A.suspend) try { A.suspend(); } catch (_) {}
+      release();
+    } else {
+      disabled = false; ls(OFF_KEY, null); lastAsk = 0;
+      var B = root.NA_ASISTENTE; if (loaded && B && B.resume) try { B.resume(); } catch (_) {} else ask();
+    }
+    cfgPaint();
+    return !disabled;
+  }
+  function watchConfig() {
+    var cfg = root.document.getElementById && root.document.getElementById('pageConfig'); if (!cfg || !root.MutationObserver) { cfgSwitch(); return; }
+    var tm = 0; new root.MutationObserver(function () { if (tm) return; tm = setTimeout(function () { tm = 0; cfgSwitch(); }, 120); }).observe(cfg, { childList: true, subtree: true }); // solo Configuración
+    cfgSwitch();
+  }
+  root.NA_ASISTENTE_LOADER = { ask: ask, loaded: function () { return loaded; }, setEnabled: setEnabled, enabled: function () { return !disabled; }, state: function () { return lastState; }, cfgSwitch: cfgSwitch };
   function idle() { if (root.requestIdleCallback) root.requestIdleCallback(ask, { timeout: 2500 }); else setTimeout(ask, 800); }
   if (root.document.readyState === 'complete') idle(); else root.addEventListener('load', idle, { once: true });
   // Si el dueño lo enciende con la app abierta: se vuelve a preguntar al volver a la app, al reconectar y al ENTRAR A INICIO
@@ -262,4 +314,5 @@
     mo.observe(m, { attributes: true, attributeFilter: ['class'] });
   }
   if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', watchInicio, { once: true }); else watchInicio();
+  if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', watchConfig, { once: true }); else watchConfig();
 })(window);
