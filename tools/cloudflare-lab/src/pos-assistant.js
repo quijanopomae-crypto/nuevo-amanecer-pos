@@ -1463,14 +1463,43 @@ export function employeeToolGuard(role) {
   };
 }
 
+// Nombre del negocio (prueba en vivo 22-10: usaba un tipo de negocio equivocado): el que el Admin puso en Configuración › Nombre del negocio, que el POS
+// sincroniza en pos_settings 'pos.business' (config-g.js SHARED). Solo se lee el nombre (nunca RUC, dirección ni teléfono), SOLO LECTURA.
+export const BUSINESS_SETTING_KEY = 'pos.business';
+export const BUSINESS_NAME_FALLBACK = 'Nuevo Amanecer';
+export const BUSINESS_NAME_MAX = 60;
+// Sin control, sin etiquetas ni signos de marcado, espacios juntos, 60 letras. Si el redactor tapa algo (teléfono, correo, RUC) o queda
+// vacío, va «Nuevo Amanecer»: al modelo nunca llega un dato tapado ni uno personal.
+export function sanitizeBusinessName(v) {
+  if (typeof v !== 'string') return BUSINESS_NAME_FALLBACK;
+  const t = v.replace(/<[^>]*>/g, ' ').replace(/[\x00-\x1f\x7f\u2028\u2029<>«»{}\[\]`"*_#|\\]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, BUSINESS_NAME_MAX).trim();
+  if (!t || redactText(t) !== t) return BUSINESS_NAME_FALLBACK;
+  return t;
+}
+export async function readBusinessName(db) {
+  try {
+    const row = db && db.prepare ? await db.prepare('SELECT value_json FROM pos_settings WHERE key=?1').bind(BUSINESS_SETTING_KEY).first() : null;
+    const v = row && typeof row.value_json === 'string' ? JSON.parse(row.value_json) : null;
+    return sanitizeBusinessName(v && typeof v === 'object' ? v.nombre : null);
+  } catch { return BUSINESS_NAME_FALLBACK; } // sin tabla o sin dato: el nombre por defecto, nunca un error del chat
+}
+// Stock bajo cero con las palabras de Inventario en la app («✕ Faltan 3»).
+export const STOCK_RULE = 'STOCK: si un producto tiene stock menor que 0 (por ejemplo -3), di «Faltan 3», como en Inventario; si tiene 0, di «Sin stock». Nunca digas «stock negativo» ni escribas el stock con signo menos. Si un dato trae «estado», usa esa frase tal cual.';
+export function palabrasRule(name) {
+  return 'NOMBRE: al negocio llámalo «' + name + '», «la tienda» o «el negocio». Es una tienda de abarrotes: no le pongas otro tipo de negocio.';
+}
 export function systemPrompt(role, ctx) {
+  const business = sanitizeBusinessName(ctx && ctx.business);
   return [
-    'Eres "Burbuja", el ayudante de gestión del sistema de la farmacia/botica Nuevo Amanecer (Perú, soles S/).',
+    // Pedido del dueño (22-10): al presentarse, «tienda de abarrotes» (nunca otro tipo de negocio).
+    'Eres "Burbuja", el asistente del negocio «' + business + '», una tienda de abarrotes, y ayudas con la gestión del sistema (Perú, soles S/).',
     role === 'owner' ? 'Hablas con el ADMIN (administrador del negocio); llámalo Admin, nunca «dueño». Para el nivel del asistente de una persona o su permiso de costos usa configurar_nivel con la etiqueta de su aparato (por ejemplo «Caja 2»), nunca con su nombre.'
       : hasCosts(role) ? 'Hablas con un EMPLEADO con permiso de costos y cambios: puedes mostrar costos y ganancias y proponer cambios (precios, stock, compras, productos), que él aplica con un toque. No muestres caja ni deudas de clientes.'
       : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni deudas. No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el Admin desde su teléfono.',
     // Pedido del dueño: fácil y sin marear.
-    'FORMA DE RESPONDER: máximo 2 o 3 frases cortas. Español sencillo, como le hablarías a alguien en la botica. Sin palabras técnicas (nada de "token", "id", "API", "servidor", "error", "base de datos", códigos ni números de error).',
+    'FORMA DE RESPONDER: máximo 2 o 3 frases cortas. Español sencillo, como le hablarías a un compañero del negocio. Sin palabras técnicas (nada de "token", "id", "API", "servidor", "error", "base de datos", códigos ni números de error).',
+    palabrasRule(business),
+    STOCK_RULE,
     'Si falta un dato, haz UNA sola pregunta, la más importante, y espera la respuesta. No hagas listas de preguntas.',
     'Una sola tarjeta por acción: usa la herramienta una vez por cada cambio que te piden; no repitas la misma tarjeta ni ofrezcas varias opciones para lo mismo.',
     'Ayudas a gestionar: stock, mercadería y compras, precios y costos, productos nuevos, documentos y reportes. NO vendes ni llenas el carrito: las ventas se hacen a mano en Venta.',
@@ -2210,7 +2239,7 @@ export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
 }
 // Bot 5: lo que un EMPLEADO puede recibir de una consulta (pantalla y modelo). Lista blanca por tipo; todo lo demás (costos, márgenes,
 // ganancia, inversión, caja, deudas) se quita ANTES de mandar cualquier trozo y antes de dárselo al modelo.
-const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'stock', 'minimo'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
+const EMPLOYEE_QUERY_FIELDS = Object.freeze({ resumen: ['encontrados', 'productos', 'total', 'revisados', 'primeros', 'nombre', 'stock', 'minimo', 'estado'], columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir', 'Precio S/'] });
 export const OWNER_ONLY_KEY = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles/i;
 const OWNER_ONLY_KEY_MODEL = /cost|margen|ganancia|utilidad|inversi|valoriz|caja|deuda|saldo|ticket|venta|total_soles|proveedor|supplier|compra|purchase|precio_compra/i;
 export function stripOwnerKeys(v, depth = 0) {
@@ -2638,6 +2667,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     // Demostración también en partes: palabra por palabra con una pausa corta (deps.mockChunkMs).
     else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } emit.flush(); }
   } else {
+    ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, resumen: resumenIn || null });
     bytes.push(payloadBytes(req));
     result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
