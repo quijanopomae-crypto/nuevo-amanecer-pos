@@ -285,7 +285,9 @@ test('Bot 2 (regresión desde f3375c09): la línea siguiente que EMPIEZA con cos
     for (let i = 0; i < t.length; i++) { e.push(t[i]); if (got < 0 && o.includes('1.80')) got = i; } e.flush(); return got; };
   const a = 'Hola, te paso el precio. Galleta S/ 1.80\n';
   const lags = ['Gracias por su compra y vuelva pronto a la tienda de siempre, amigo.', 'uno dos tres cuatro cinco seis siete ocho', 'Leche fresca entera de vaca de la granja local y mas', 'Hasta luego.\nOtra linea mas larga aqui'].map((b) => lagAt(a + b) - a.length);
-  assert.deepEqual(lags, [38, 31, 31, 18]);
+  // (auditoría de privacidad 2026-10-22) 39 en la primera: «… pronto a la …» espera UN carácter más para saber si «a» empieza «arroba»
+  // (correo disfrazado «rosa arroba gmail punto com»); las demás igual.
+  assert.deepEqual(lags, [39, 31, 31, 18]);
   // ítem de lista o fila con tabulador: la palabra del dueño tapa solo su ítem (Bot 2 b, sin cambios)
   for (const t of ['- Arroz S/ 4.20\n- costo S/ 1.80', 'Leche Gloria\tS/ 3.70\ncosto\tS/ 1.80']) { const f = same(t); assert.ok(/4\.20|3\.70/.test(f) && !f.includes('1.80'), f); }
 });

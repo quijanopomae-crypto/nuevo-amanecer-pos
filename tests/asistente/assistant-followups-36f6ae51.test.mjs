@@ -94,7 +94,8 @@ test('6) invisibles (U+200B…) en la racha tras la etiqueta y tope de la racha 
   const t = ('pin' + ' '.repeat(500) + '4321 y sigue el texto normal. ').repeat(4);
   for (const [k, [red, hold]] of Object.entries(VIAS)) for (const step of [1, 5]) { let o = '', lag = 0, inq = 0; const e = A.createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red, hold);
     for (let i = 0; i < t.length; i += step) { e.push(t.slice(i, i + step)); const fed = Math.min(t.length, i + step); lag = Math.max(lag, red(t.slice(0, fed)).length - o.length); }
-    e.flush(); assert.equal(o, red(t), k); assert.ok(lag <= 130, k + '/' + step + ' retiene ' + lag); }
+    e.flush(); assert.equal(o, red(t), k); assert.ok(lag <= 170, k + '/' + step + ' retiene ' + lag); } // (auditoría 2026-10-22, ALTA) 130 -> 170: cerca de una etiqueta todo corte espera
+  // su palabra entera y la prueba de texto entero (ver nearOnly); medido 161 en el empleado, fijo (no crece con más vueltas)
 });
 
 test('7) la palabra de precio nunca se tapa: «la clave es precio S/ 43.21» queda igual; el número entero sigue tapado (Bot 2 sobre 36f6ae51, INFO)', () => {
