@@ -555,3 +555,19 @@ test('20) Bot 3: un tramo de solo espacios no pasa por redactText (mismo resulta
     for (const role of ['owner', EMP]) { const red = redactFor(role); let o = ''; const em = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red); for (const ch of t) em.push(ch); em.flush();
       assert.equal(o, red(t)); assert.ok(!/abc123/.test(o)); if (role !== 'owner') assert.ok(!/20123456789/.test(o)); }
 });
+
+// (auditoría 2026-10-22, ALTA) caso fijo: en partes se veía «sk-123456» (un «[oculto]» de antes hace que «api key» empiece palabra en el texto
+// entero). Ahora en partes = texto entero con cualquier tamaño de trozo, y lo mismo con la etiqueta pegada a otros datos tapados.
+test('2b) «clave 4.321api key sk-123456 | Producto |»: en partes (1..todo) = texto entero, sin la api key a la vista; familia de etiquetas pegadas', () => {
+  const t = 'clave 4.321api key sk-123456 | Producto |';
+  assert.equal(redactText(t), 'clave [oculto]api key [oculto] | Producto |');
+  const parts = (s, role, n) => { let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, redactFor(role)); for (let i = 0; i < s.length; i += n) e.push(s.slice(i, i + n)); e.flush(); return o; };
+  for (const role of ['owner', 'empleado:consultas']) for (let n = 1; n <= t.length; n++) { const o = parts(t, role, n); assert.equal(o, redactFor(role)(t), role + '/' + n); assert.ok(!o.includes('sk-123456'), o); }
+  const pre = ['clave 4.321', 'pin 4321', 'DNI 45678912', '987654321', 'a@b.com', 'x', 'rosa [at] gmail [dot] com '];
+  const kw = ['api key', 'api_key', 'pin', 'clave', 'token', 'password', 'clave del wifi'];
+  const val = [' sk-123456', ' 4321', ' Zq9xK2mPw7', ' 4.321', ' "abc def"'];
+  for (const a of pre) for (const sep of ['', ' ']) for (const k of kw) for (const v of val) for (const z of [' | Producto |', ' y listo']) {
+    const s = a + sep + k + v + z;
+    for (const role of ['owner', 'empleado:consultas']) for (const n of [1, 3, 1000]) assert.equal(parts(s, role, n), redactFor(role)(s), role + '/' + n + ' ' + JSON.stringify(s));
+  }
+});

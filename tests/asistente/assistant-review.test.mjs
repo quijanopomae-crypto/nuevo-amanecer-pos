@@ -185,7 +185,7 @@ test('UI: la revisión es solo del Admin (chip, texto o aviso de errores nuevos)
   assert.match(UI, /if \(!image && isOwnerAccess\(\) && REVIEW_RE\.test\(text\)\) \{/);
   const rv = UI.slice(UI.indexOf('function reviewData()'), UI.indexOf('async function send('));
   assert.match(rv, /msg: x\.kind === 'api' \? C\.redactText\(String\(x\.msg \|\| ''\)\)\.slice\(0, 160\) : errType\(x\.msg\)/); assert.ok(!/innerHTML/.test(rv));
-  assert.match(rv, /post\('\/auth\/assistant\/review', reviewData\(\)/); assert.match(rv, /R\.markSeen\(\)/);
+  assert.match(rv, /post\('\/auth\/assistant\/review', C\.compactReview \? C\.compactReview\(reviewData\(\)\) : reviewData\(\)/); assert.match(rv, /R\.markSeen\(\)/);
   assert.match(rv, /isOwnerAccess\(\) && R && R\.newErrors \? R\.newErrors\(\) : 0/);
   assert.match(UI, /reviewNotice\(\);\n    var off = root\.navigator\.onLine === false;/);
   assert.equal(C.friendlyError('review_admin_only').msg, 'La revisión del punto de venta es solo para el Admin.');
