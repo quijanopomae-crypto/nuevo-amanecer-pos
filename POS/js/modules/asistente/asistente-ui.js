@@ -491,6 +491,7 @@
         !(r.filas && r.filas.length) ? '<div class="note na-asst-empty">Sin datos.</div>' : // tabla vacía: sin cabecera suelta
         '<table class="q">' + (r.columnas && r.columnas.length ? '<tr>' + r.columnas.map(function (c, i) { return '<th' + (i ? ' class="r"' : '') + '>' + E(c) + '</th>'; }).join('') + '</tr>' : '') +
         (r.filas || []).map(function (f) { return '<tr>' + f.map(function (c, i) { return '<td' + (i ? ' class="r"' : '') + '>' + E(typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
+        (r.truncado ? '<div class="warn">Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.</div>' : '') +
         (qCount(r) != null && r.filas && r.filas.length < qCount(r) ? '<div class="note">Mostrando ' + r.filas.length + ' de ' + E(qCount(r)) + '.</div>' : '')) +
         '<div class="note">Datos leídos del servidor. No cambia nada.</div>';
     }
@@ -1055,7 +1056,7 @@
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Ventas bajo costo">Ventas bajo costo</button><button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button><button type="button" data-q="Dame las sugerencias de compra">Sugerencias de compra</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Ventas bajo costo">Ventas bajo costo</button><button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }
