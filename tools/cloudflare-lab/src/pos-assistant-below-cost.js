@@ -108,7 +108,9 @@ export async function belowCostRoute(request, env, auth, json, deps = {}) {
   const names = new Map([...s.ventas, ...s.catalogo].map((g) => [g.id, g.nombre])), ids = [...names.keys()].sort((a, b) => b.length - a.length); // «#123» antes que «#12»
   let safe = report; ids.forEach((id, i) => { safe = safe.split(productRef(id)).join('\u0001' + i + '\u0001'); });
   safe = redactOwnerText(safe).replace(/\u0001(\d+)\u0001/g, (m, i) => names.get(ids[+i]) || productRef(ids[+i])).replace(/\u0001/g, '');
+  const truncado = !!(lineas?.truncated || productos?.truncated);
+  if (truncado) safe += '\n\nOjo: hay muchos registros y no se pudo leer todo; puede haber más ventas bajo costo que no aparecen aquí.';
   return json({ ok: true, report: safe, source, desde: p.desde, hasta: p.hasta, perdida_total: s.perdida_total, lineas_revisadas: s.lineas_revisadas, sin_costo: s.sin_costo,
-    truncado: !!(lineas?.truncated || productos?.truncated),
+    truncado,
     ventas: s.ventas.slice(0, BELOW_COST_LIMITS.maxRows), catalogo: s.catalogo.slice(0, BELOW_COST_LIMITS.maxRows), server_now: now });
 }

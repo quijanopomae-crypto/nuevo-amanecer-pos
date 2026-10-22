@@ -112,3 +112,15 @@ test('pantalla y Worker: solo Admin, ruta con la misma bandera, mensaje amable',
   for (const t of ['Ventas bajo costo', '¿Vendí algo por debajo del costo?', 'pérdidas en ventas', 'vendimos a pérdida']) assert.ok(re.test(t), t);
   for (const t of ['Productos sin costo', '¿Cuánto vendimos hoy?', 'Revisión del punto de venta']) assert.ok(!re.test(t), t);
 });
+
+test('lectura cortada (ventas o líneas): avisa en el informe y marca truncado', async () => {
+  const base = memoryReader(DATA);
+  const rd = { ...base, async saleLines(p) { const l = await base.saleLines(p); l.truncated = true; return l; } };
+  const r = await belowCostRoute(req(), ENV, OWNER, jsonR, { resolveRole: owner, reader: rd, store: createMemoryUsageStore(), fetch: async () => { throw new Error('sin modelo'); } });
+  const d = await r.json();
+  assert.equal(r.status, 200); assert.equal(d.truncado, true);
+  assert.match(d.report, /no se pudo leer todo/);
+  const ok = await (await belowCostRoute(req(), ENV, OWNER, jsonR, { resolveRole: owner, reader: base, store: createMemoryUsageStore(), fetch: async () => { throw new Error('sin modelo'); } })).json();
+  assert.equal(ok.truncado, false); assert.doesNotMatch(ok.report, /no se pudo leer todo/);
+  assert.match(readFileSync('tools/cloudflare-lab/src/pos-assistant-queries.js', 'utf8'), /out\.truncated = !!\(sales\.truncated \|\| items\.truncated\)/);
+});

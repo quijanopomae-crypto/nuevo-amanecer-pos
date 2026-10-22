@@ -88,10 +88,10 @@ export function canonicalReader(db) {
     },
     // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. Solo lectura; la usa «Ventas bajo costo».
     async saleLines(p) {
-      const sales = await salesIn(p), ids = new Set(sales.map((s) => String(s.sale_id))), out = [];
-      for (const it of await all('sale-items')) { if (!ids.has(String(it.sale_id))) continue;
+      const [sales, items] = await Promise.all([salesIn(p), all('sale-items')]), ids = new Set(sales.map((s) => String(s.sale_id))), out = [];
+      for (const it of items) { if (!ids.has(String(it.sale_id))) continue;
         out.push({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: Number(it.unit_price_cents), line_cents: Number(it.line_total_cents) || 0, created_at: it.created_at || null }); }
-      out.truncated = !!sales.truncated; return out;
+      out.truncated = !!(sales.truncated || items.truncated); return out; // las lecturas van por id, no por fecha: si se cortan, faltan ventas
     },
     async purchases(n) {
       try { return (await db.prepare('SELECT supplier,document_ref,total_cost_cents,line_count,status,created_at FROM pos_purchases ORDER BY created_at DESC LIMIT ?1').bind(n).all()).results || []; }
