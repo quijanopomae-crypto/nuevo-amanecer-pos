@@ -1,6 +1,7 @@
 // Modo demostración del asistente: se usa cuando el Worker no tiene DEEPSEEK_API_KEY.
 // Responde con reglas simples y devuelve las MISMAS llamadas de herramienta que haría el modelo,
 // así la validación, los permisos y las tarjetas «Confirmar» se prueban igual sin gastar.
+import { dateWordRange } from './pos-assistant-queries.js';
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function findProducts(text, products) {
   const t = norm(text);
@@ -13,11 +14,14 @@ function numberBefore(text, product) {
 }
 const call = (name, args) => ({ name, arguments: JSON.stringify(args) });
 
-function dates(t) { const m = t.match(/\d{4}-\d{2}-\d{2}/g) || []; const today = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+// Fechas de documentos (AAAA-MM-DD; las arma el aparato): la palabra se convierte con el mismo cálculo de Lima del servidor (lunes = inicio de semana).
+function dates(t) { const m = t.match(/\d{4}-\d{2}-\d{2}/g) || [];
   if (m.length) return { desde: m[0], hasta: m[1] || m[0] };
-  if (/semana/.test(t)) return { desde: new Date(Date.now() - 5 * 3600 * 1000 - 6 * 86400000).toISOString().slice(0, 10), hasta: today };
-  if (/mes/.test(t)) return { desde: today.slice(0, 8) + '01', hasta: today };
-  return { desde: today, hasta: today }; }
+  return dateWordRange(periodWord(t)); }
+// Consultas: igual que el modelo, la palabra de fecha va como «periodo» y el servidor calcula el rango en hora de Lima (pos-assistant-queries.js).
+function periodWord(t) { return /semana pasada/.test(t) ? 'semana_pasada' : /semana/.test(t) ? 'esta_semana' : /mes pasado/.test(t) ? 'mes_pasado'
+  : /\bmes\b/.test(t) ? 'este_mes' : /\bayer\b/.test(t) ? 'ayer' : 'hoy'; }
+function queryDates(t) { const m = t.match(/\d{4}-\d{2}-\d{2}/g) || []; return m.length ? { desde: m[0], hasta: m[1] || m[0] } : { periodo: periodWord(t) }; }
 
 export function mockAssistantReply({ role, ctx, text, image }) {
   const t = norm(text), products = ctx.products || [];
@@ -38,13 +42,13 @@ export function mockAssistantReply({ role, ctx, text, image }) {
     return { content: 'Armé el documento. Es interno, NO es comprobante SUNAT.', calls: [call('preparar_documento', { tipo, ...dates(t), ...(cli ? { cliente_id: cli[1] } : {}) })] };
   }
   if (/sugerencias? de compra|sugiereme (que )?comprar|que (debo|tengo que|me conviene|deberia) comprar|cuanto (debo|tengo que|deberia) (comprar|pedir)/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sugerencias_compra' })] };
-  if (/resumen/.test(t) && !/cierre|caja/.test(t)) return { content: '', calls: [call('consultar', { tipo: /mes|mensual/.test(t) ? 'resumen_mes' : 'resumen_dia', ...(/\d{4}-\d{2}-\d{2}/.test(t) ? { hasta: t.match(/\d{4}-\d{2}-\d{2}/)[0] } : {}) })] };
+  if (/resumen/.test(t) && !/cierre|caja/.test(t)) return { content: '', calls: [call('consultar', { tipo: /mes|mensual/.test(t) ? 'resumen_mes' : 'resumen_dia', ...(/\d{4}-\d{2}-\d{2}/.test(t) ? { hasta: t.match(/\d{4}-\d{2}-\d{2}/)[0] } : /\bayer\b|mes pasado/.test(t) ? { periodo: /mes pasado/.test(t) ? 'mes_pasado' : 'ayer' } : {}) })] };
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
   if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
   if (/compras (recientes|ultimas)|ultimas compras/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'compras_recientes' })] };
-  if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...dates(t) })] };
-  if (/ventas|vendi|vendimos/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_periodo', ...dates(t) })] };
+  if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...queryDates(t) })] };
+  if (/ventas|vendi|vendimos/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'ventas_periodo', ...queryDates(t) })] };
   if (/cuanto (hay|queda|tengo)|stock de/.test(t)) { const p = findProducts(t, products)[0]; return { content: '', calls: [call('consultar', { tipo: 'stock_producto', producto: p ? p.nombre : t.replace(/.*(stock de|queda de|hay de)/, '') })] }; }
   if (/precio/.test(t)) {
     const p = findProducts(t, products)[0];
