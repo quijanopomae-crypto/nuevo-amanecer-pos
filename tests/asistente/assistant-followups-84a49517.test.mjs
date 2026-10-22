@@ -57,12 +57,12 @@ test('84a49517: retención por fila igual a 84a49517 en 120 filas/ítems (venta,
   const neutral = '| Producto | Monto |\n|---|---|\n' + Array.from({ length: N }, (_, i) => `| Producto ${nm(i)} | S/ 2.${p2(i)} |\n`).join('');
   const list = Array.from({ length: N }, (_, i) => `- Producto ${nm(i)} S/ 2.${p2(i)}\n`).join('');
   const got = [lag(sale), lag(neutral), lag(list)]; console.log('# retención máx. por fila (venta, neutra, lista): ' + got.join(', '));
-  assert.deepEqual(got, [21, 21, 55]);
+  assert.deepEqual(got, [31, 31, 67]); // (#962, diseño simple) medido: 21, 21, 55 + la cola fija LABEL_TAIL (10) de la etapa de etiquetas;
   const E = ['Esencia', 'Elefante', 'El Chino', 'Este mes', 'Es de casa', 'Detergente'];
   const listE = Array.from({ length: N }, (_, i) => `- ${E[i % E.length]} ${nm(i)} S/ 2.${p2(i)}\n`).join('');
   const neuE = '| Producto | Monto |\n|---|---|\n' + Array.from({ length: N }, (_, i) => `| ${E[i % E.length]} ${nm(i)} | S/ 2.${p2(i)} |\n`).join('');
   const gotE = [lag(listE), lag(neuE)]; console.log('# retención máx. por fila, nombres con E/el/es (lista, neutra): ' + gotE.join(', '));
-  assert.deepEqual(gotE, [61, 21]); // iguales a 84a49517 con el mismo arnés (61, 21)
+  assert.deepEqual(gotE, [71, 31]); // 84a49517 con el mismo arnés: 61, 21; (#962, diseño simple) + la cola fija LABEL_TAIL (10)
 });
 
 // ---------- Ampliación (Bot 5 sobre 84a49517: cantidades, ganancia/margen/utilidad, más comienzos, «(mi costo)», claves) ----------

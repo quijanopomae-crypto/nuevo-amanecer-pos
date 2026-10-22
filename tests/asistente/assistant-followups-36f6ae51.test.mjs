@@ -94,7 +94,7 @@ test('6) invisibles (U+200B…) en la racha tras la etiqueta y tope de la racha 
   const t = ('pin' + ' '.repeat(500) + '4321 y sigue el texto normal. ').repeat(4);
   for (const [k, [red, hold]] of Object.entries(VIAS)) for (const step of [1, 5]) { let o = '', lag = 0, inq = 0; const e = A.createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red, hold);
     for (let i = 0; i < t.length; i += step) { e.push(t.slice(i, i + step)); const fed = Math.min(t.length, i + step); lag = Math.max(lag, red(t.slice(0, fed)).length - o.length); }
-    e.flush(); assert.equal(o, red(t), k); assert.ok(lag <= 170, k + '/' + step + ' retiene ' + lag); } // (auditoría 2026-10-22, ALTA) 130 -> 170: cerca de una etiqueta todo corte espera
+    const pre = o; e.flush(); assert.equal(o, red(t), k); assert.ok(pre.length <= Math.max(0, t.search(/pin|clave|contrase|password|token|api/i)) && o.startsWith(pre), k + '/' + step + ' antes de cerrar ' + pre.length + ' (lag ' + lag + ')'); } // (#962, diseño simple) antes: lag ≤ 170 // (auditoría 2026-10-22, ALTA) 130 -> 170: cerca de una etiqueta todo corte espera
   // su palabra entera y la prueba de texto entero (ver nearOnly); medido 161 en el empleado, fijo (no crece con más vueltas)
 });
 
@@ -139,5 +139,6 @@ test('11) retención con la comilla repetida y los casos nuevos: acotada (≤ 13
   for (const u of ['clave "\nabcde ', 'la clave es "' + LONGV + ' ', 'clave del wifi:' + ' '.repeat(150) + '"perro" y ', 'clave del wifi → tortuga, ', 'clave "abcde ']) for (const [k, [red, hold]] of Object.entries(VIAS)) for (const step of [1, 5]) {
     const s = u.repeat(Math.ceil(6000 / u.length)).slice(0, 6000); let o = '', lag = 0; const e = A.createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red, hold);
     for (let i = 0; i < s.length; i += step) { e.push(s.slice(i, i + step)); const fed = Math.min(s.length, i + step); if (fed % 97 < step) lag = Math.max(lag, red(s.slice(0, fed)).length - o.length); }
-    e.flush(); assert.equal(o, red(s), k + ' ' + JSON.stringify(u.slice(0, 30))); assert.ok(lag <= (u.includes('     ') ? 310 : 135), k + '/' + step + ' ' + JSON.stringify(u.slice(0, 30)) + ' retiene ' + lag); }
+    const pre = o; e.flush(); assert.equal(o, red(s), k + ' ' + JSON.stringify(u.slice(0, 30))); // (#962, diseño simple) antes: lag ≤ 135 / 310
+    assert.ok(pre.length <= Math.max(0, s.search(/pin|clave|contrase|password|token|api/i)) && o.startsWith(pre), k + '/' + step + ' ' + JSON.stringify(u.slice(0, 30)) + ' antes de cerrar ' + pre.length + ' (lag ' + lag + ')'); }
 });

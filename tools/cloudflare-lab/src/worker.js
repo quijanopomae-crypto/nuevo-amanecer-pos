@@ -25,8 +25,10 @@ import { employeeAccessRoute, ACCESS_PATH as ASSISTANT_ACCESS_PATH } from './pos
 import { ownerDeviceRoute, isOwnerDevicePath } from './pos-owner-device.js';
 import { providerRoute, PROVIDER_PATH as ASSISTANT_PROVIDER_PATH } from './pos-assistant-provider-route.js';
 import { auditRoute, AUDIT_PATH as ASSISTANT_AUDIT_PATH } from './pos-assistant-audit.js';
+import { levelsRoute, LEVELS_PATH as ASSISTANT_LEVELS_PATH } from './pos-assistant-levels-route.js';
 import { assistantReviewRoute, REVIEW_PATH as ASSISTANT_REVIEW_PATH } from './pos-assistant-review.js';
 import { assistantBoletaRoute, BOLETA_PATH as ASSISTANT_BOLETA_PATH } from './pos-assistant-boleta.js';
+import { belowCostRoute, BELOW_COST_PATH as ASSISTANT_BELOW_COST_PATH } from './pos-assistant-below-cost.js';
 import { featureDecision, employeeFeatureGrant, handleEmployeePerms, EMPLOYEE_PERMS_PATH } from './pos-employee-perms.js';
 import { handleRoles, ownerGate, posRoleFor, ROLE_PATHS, flagSaleDiscount, flagReview } from './pos-roles.js';
 
@@ -131,6 +133,13 @@ export default {
         if (auth instanceof Response) return cors(auth);
         return cors(await employeeAccessRoute(request, env, auth, json, { db: getDatabase(env) }));
       }
+      // Niveles 0..3 del asistente por persona (solo Admin, SIN PIN; cada cambio va a la bitácora). Misma bandera.
+      if (url.pathname === ASSISTANT_LEVELS_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await levelsRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
       // Auditoría del asistente (solo dueño). Misma bandera ASSISTANT_ENABLED.
       if (url.pathname === ASSISTANT_AUDIT_PATH) {
         if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
@@ -144,6 +153,13 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return cors(auth);
         return cors(await assistantReviewRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // «Ventas bajo costo» (solo Admin): solo lectura de productos y ventas; al modelo van códigos de producto y totales. Misma bandera.
+      if (url.pathname === ASSISTANT_BELOW_COST_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await belowCostRoute(request, env, auth, json, { db: getDatabase(env) }));
       }
       // «Leer boleta con IA» (solo Admin): una foto -> JSON para revisar en el aparato. No guarda nada ni toca stock. Misma bandera.
       if (url.pathname === ASSISTANT_BOLETA_PATH) {
