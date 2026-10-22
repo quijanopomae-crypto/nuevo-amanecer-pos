@@ -24,13 +24,19 @@
     invalid_lines: 'Agrega al menos un producto.'
   };
 
+  // Ajuste del dueño «compras.pin_empleado» (false = el empleado registra compras sin PIN, como CasaMarket).
+  // Si no se puede leer, se pide el PIN: el servidor decide igual y responde owner_approval_required.
+  async function purchasePinRequired(R) {
+    try { var out = await R.api('/settings'); var row = (out && out.settings || []).find(function (x) { return x && x.key === 'compras.pin_empleado'; }); return !(row && row.value === false); }
+    catch (_) { return true; }
+  }
   // Envía una compra en una sola llamada. lines: [{line, product_id, quantity, unit_cost_cents|null}]
   async function submit(operationId, lines, meta) {
     var R = root.NA_ROLES, api = root.NuevoAmanecerCanonical;
     if (!R || !api || typeof api.commandContext !== 'function') { var e0 = new Error('purchase_unavailable'); e0.status = 0; throw e0; }
     if (typeof api.prepareCommand === 'function') await api.prepareCommand('inventory.adjust');
     var ctx = api.commandContext(), headers = {};
-    if (R.role !== 'owner') {
+    if (R.role !== 'owner' && await purchasePinRequired(R)) {
       var approval = await R.approve('inventory.adjust', operationId, 'Autorización del dueño', 'Registrar compra: pide al dueño que escriba su PIN.');
       if (!approval) { var e1 = new Error('OWNER_APPROVAL_CANCELLED'); e1.status = 0; e1.cancelled = true; throw e1; }
       headers['x-owner-approval'] = String(approval).slice(0, 80);
