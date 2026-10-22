@@ -118,7 +118,11 @@
   }
   function amountText() { var t = doc.getElementById('mCobroTotal'); return t ? String(t.textContent || '').trim() : ''; }
   function closeOverlay() { var o = doc.getElementById('naQrOverlay'); if (o) o.remove(); doc.removeEventListener('keydown', onKey, true); }
-  function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closeOverlay(); } }
+  // Con el QR a la vista, Enter NO debe confirmar el cobro (el cobro escucha Enter en document).
+  function onKey(e) {
+    if (e.key === 'Escape') { e.stopPropagation(); closeOverlay(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); closeOverlay(); }
+  }
   function openOverlay(wallet) {
     var url = getQr(wallet); if (!url) return;
     closeOverlay();

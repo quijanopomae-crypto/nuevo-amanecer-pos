@@ -82,6 +82,14 @@ test('empleado ve el QR guardado pero no la tarjeta de Configuración', async ({
   await expect(page.locator('#naQrOverlay')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#naQrOverlay')).toHaveCount(0);
+  // Enter con el QR abierto solo lo cierra: no confirma el cobro.
+  await page.locator('#naQrShowBtn').click();
+  await expect(page.locator('#naQrOverlay')).toBeVisible();
+  const before = await snapshot(page);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#naQrOverlay')).toHaveCount(0);
+  await expect(page.locator('#mCobro')).toHaveClass(/open/);
+  expect(await snapshot(page)).toBe(before);
 });
 
 test('con la tarjeta bloqueada no aparece nada', async ({ page }) => {
