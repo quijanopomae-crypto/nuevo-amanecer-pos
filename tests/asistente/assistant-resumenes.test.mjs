@@ -264,3 +264,15 @@ test('#931 + #934: chat del Admin con resumen_mes -> al modelo ningún nombre, D
   const toolMsg = JSON.parse(cap[cap.length - 1]).messages.find((m) => m.role === 'tool');
   assert.ok(toolMsg && /producto #P\d/.test(toolMsg.content), toolMsg && toolMsg.content.slice(0, 300));
 });
+
+// (22-10, prueba en vivo) líneas genéricas («GENERIC:<uuid>», una por línea, p. ej. VARIOS/VERDURAS): en el resumen van juntas como
+// «Producto genérico» / «producto genérico»; nunca el id crudo en la tabla ni en lo que ve el modelo.
+test('resumen: líneas genéricas juntas como «Producto genérico», sin el id GENERIC:<uuid>', async () => {
+  const g = (n) => 'GENERIC:11111111-aaaa-4bbb-8ccc-00000000000' + n;
+  const data = { ...DATA, sales: DATA.sales.concat([{ sale_id: 'G1', created_at: at('2026-10-22', 14), metodo: 'efectivo', total_cents: 6000 }, { sale_id: 'G2', created_at: at('2026-10-22', 15), metodo: 'efectivo', total_cents: 5000 }]),
+    saleItems: DATA.saleItems.concat([{ sale_id: 'G1', product_id: g(1), quantity: 2, line_total_cents: 6000 }, { sale_id: 'G2', product_id: g(2), quantity: 1, line_total_cents: 5000 }]) };
+  const r = await runAssistantQuery(memoryReader(data), { tipo: 'resumen_dia' }, NOW);
+  const all = JSON.stringify(r);
+  assert.ok(!all.includes('GENERIC:'), all);
+  assert.ok(r.filas.some((f) => /^Top 1 por monto: Producto genérico \(producto genérico, 3 unid\.\)$/.test(f[0]) && f[1] === 110), JSON.stringify(r.filas));
+});

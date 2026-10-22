@@ -28,9 +28,9 @@ const bucketRange = (b) => prefixRange(AUDIT_PREFIX + b + ':');
 const stats = { write_errors: 0, last_write_error_at: null };
 export const auditStats = () => ({ ...stats });
 const s = (v, n) => (v == null ? null : String(v).slice(0, n));
-const AGG_OUTCOMES = new Set(['rate_limited', 'forbidden_role', 'assistant_off', 'admin_only', 'other_device', 'forbidden_document', 'image_owner_only']);
+const AGG_OUTCOMES = new Set(['rate_limited', 'forbidden_role', 'assistant_off', 'admin_only', 'other_device', 'forbidden_document', 'image_owner_only', 'query_admin_only']);
 // Nombre corto para la clave (máx. 14): mismo motivo, misma fila.
-const AGG_SHORT = { forbidden_document: 'forbidden_doc', image_owner_only: 'img_owner_only' };
+const AGG_SHORT = { forbidden_document: 'forbidden_doc', image_owner_only: 'img_owner_only', query_admin_only: 'qry_admin_only' };
 export const isAggregated = (outcome) => AGG_OUTCOMES.has(String(outcome || '').replace(/^rejected:/, ''));
 export function bucketOf(r) {
   const owner = r.role === 'owner', rej = String(r.outcome || '').startsWith('rejected');
@@ -43,6 +43,15 @@ function warn(e) {
   try { console.warn('[asistente] no se pudo anotar la auditoría:', String(e?.name || 'Error'), (String(e?.message || '').match(/\b(?:D1_[A-Z_]+|SQLITE_[A-Z_]+|no such table)\b/) || ['sin_codigo'])[0]); } catch { /* nada */ }
 }
 
+// Tiempos del pedido (lentitud 22-10): solo números, verdadero/falso y nombres cortos de proveedor/modelo. Nunca textos del chat.
+const TIMING_NUM = ['ms_gates', 'ms_model1', 'ms_db', 'ms_model2', 'ms_total', 'attempts', 'db_stmts'];
+export function cleanTimings(t) {
+  const o = {}; if (!t || typeof t !== 'object') return o;
+  for (const k of TIMING_NUM) if (Number.isFinite(Number(t[k])) && t[k] !== null && t[k] !== '') o[k] = Math.max(0, Math.min(1e7, Math.round(Number(t[k]))));
+  for (const k of ['provider', 'model']) if (typeof t[k] === 'string' && /^[A-Za-z0-9._:/@-]{1,120}$/.test(t[k])) o[k] = t[k].slice(0, 60);
+  for (const k of ['fallback', 'second_call']) if (typeof t[k] === 'boolean') o[k] = t[k];
+  return o;
+}
 export async function auditWrite(db, rows) {
   if (!db || !rows || !rows.length) return 0;
   const at = new Date().toISOString(), minute = Math.floor(Date.now() / 60000); let n = 0;
@@ -50,7 +59,7 @@ export async function auditWrite(db, rows) {
     const stmts = [], used = new Set();
     for (const [i, r] of rows.entries()) {
       const b = bucketOf(r); used.add(b);
-      const val = { at, device_id: s(r.device_id, 160), role: s(r.role, 40), tool: s(r.tool, 40), type: s(r.type, 20), outcome: s(r.outcome, 40), card_id: s(r.card_id, 64), operation_id: s(r.operation_id, 64), ...(r.src ? { src: s(r.src, 10) } : {}) };
+      const val = { at, device_id: s(r.device_id, 160), role: s(r.role, 40), tool: s(r.tool, 40), type: s(r.type, 20), outcome: s(r.outcome, 40), card_id: s(r.card_id, 64), operation_id: s(r.operation_id, 64), ...(r.src ? { src: s(r.src, 10) } : {}), ...(r.timings ? { timings: cleanTimings(r.timings) } : {}) };
       if (AGG_BUCKETS.has(b)) {
         const full = String(r.outcome || '').replace(/^rejected:/, ''), out = (AGG_SHORT[full] || full).slice(0, 14);
         // c = chat, k = confirm: el mismo motivo en rutas distintas son filas distintas. Clave <= 58 caracteres.
