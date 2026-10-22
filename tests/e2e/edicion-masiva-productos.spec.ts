@@ -32,6 +32,8 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', width: number, d
   await page.evaluate(({ dark, local, fixture }) => {
     const w = window as any;
     (0, eval)(fixture);
+    // El candado sigue cerrado en pos-permissions.js; aquí se abre solo en este navegador.
+    if (!(w as any).__keepLock) { const perms = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'edicion-masiva-productos' ? false : perms.featureLocked(id) }; }
     (0, eval)("_naSecurity.pinEnabled=true;_naSecurity.pinHash=_naSecHash('2468');");
     if (w.NA_THEME?.setMode) w.NA_THEME.setMode(dark ? 'noche' : 'claro'); else document.body.classList.toggle('dark', dark);
     w.goPage('pageInventario');
@@ -132,4 +134,14 @@ test('el empleado no ve la edición masiva', async ({ page }) => {
   await expect(page.locator('#invEdicionMasivaBtn')).toHaveCount(0);
   expect(await page.evaluate(() => (window as any).NA_EDICION_MASIVA_PRODUCTOS.open())).toBe(false);
   await expect(page.locator('#naEdicionMasiva')).toHaveCount(0);
+});
+
+test('con el candado cerrado el botón no aparece (falla cerrado)', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForFunction(() => !!(window as any).NA_PERMISSIONS);
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-productos'))).toBe(true);
+  await page.evaluate(() => (window as any).goPage('pageInventario'));
+  await expect(page.locator('#invEdicionMasivaBtn')).toHaveCount(0);
+  await page.evaluate(() => { const w = window as any; w.NA_PERMISSIONS = { ...w.NA_PERMISSIONS, featureLocked: undefined }; w.goPage('pageMenu'); (window as any).goPage('pageInventario'); });
+  await expect(page.locator('#invEdicionMasivaBtn')).toHaveCount(0);
 });
