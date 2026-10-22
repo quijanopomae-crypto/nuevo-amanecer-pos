@@ -269,11 +269,18 @@
     try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('aviso-factura-duplicada') === false); }
     catch (_) { return false; }
   }
+  // Compra anulada/cancelada: no cuenta como duplicado. Conservador: solo estados explícitos o banderas en true.
+  // (Hoy el Worker solo usa 'en_curso', 'aplicada' y 'cerrada_parcial'; estas siguen contando.)
+  var ANNULLED_RE = /^(anulad[ao]|cancelad[ao]|annulled|cancell?ed|void(ed)?)$/i;
+  function isAnnulledPurchase(p) {
+    var st = [p.status, p.estado].some(function (v) { return typeof v === 'string' && ANNULLED_RE.test(v.trim()); });
+    return st || p.anulado === true || p.anulada === true || p.voided === true || p.cancelled === true;
+  }
   function findDuplicatePurchase(rows, meta) {
     var d = normDoc(meta && meta.documentRef); if (!d) return null;
     var sup = normDoc(meta && meta.supplier);
     return (Array.isArray(rows) ? rows : []).find(function (p) {
-      if (!p || normDoc(p.document_ref) !== d) return false;
+      if (!p || isAnnulledPurchase(p) || normDoc(p.document_ref) !== d) return false;
       if ('supplier' in p && sup && normDoc(p.supplier) && normDoc(p.supplier) !== sup) return false;
       return true;
     }) || null;

@@ -62,3 +62,19 @@ test('devuelve la primera coincidencia de la lista', () => {
   const A2 = { ...A, id: 'p9' };
   assert.equal(find([A, A2], { supplier: 'Distribuidora Sol', documentRef: 'F001-123' }), A);
 });
+
+test('ignora compras anuladas o canceladas (estado o bandera) y sigue con la siguiente', () => {
+  const meta = { supplier: 'Distribuidora Sol', documentRef: 'F001-123' };
+  for (const extra of [{ status: 'anulada' }, { status: 'ANULADO' }, { estado: ' Cancelada ' }, { status: 'cancelled' }, { status: 'canceled' }, { status: 'voided' }, { status: 'void' }, { status: 'annulled' }, { anulado: true }, { anulada: true }, { voided: true }, { cancelled: true }]) {
+    assert.equal(find([{ ...A, ...extra }], meta), null, JSON.stringify(extra));
+    assert.equal(find([{ ...A, ...extra, id: 'x' }, A], meta), A, JSON.stringify(extra));
+  }
+});
+
+test('estados reales del Worker y banderas no verdaderas siguen contando', () => {
+  const meta = { supplier: 'Distribuidora Sol', documentRef: 'F001-123' };
+  for (const extra of [{ status: 'en_curso' }, { status: 'aplicada' }, { status: 'cerrada_parcial' }, { status: 'no anulada' }, { status: 'anulacion_pendiente' }, { anulado: false }, { anulado: 'false' }, { voided: 0 }, { status: null }]) {
+    const row = { ...A, ...extra };
+    assert.equal(find([row], meta), row, JSON.stringify(extra));
+  }
+});
