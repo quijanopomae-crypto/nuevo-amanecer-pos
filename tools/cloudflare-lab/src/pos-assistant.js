@@ -63,12 +63,14 @@ export const EMPLOYEE_DOC_TYPES = EMPLOYEE_DOC_TYPES_ALL;
 // Consultas SOLO del Admin que a un empleado se le cortan con 403 query_admin_only (no 200 con la tarjeta descartada): en el chat
 // por frase clara antes del modelo (sin cupo), a mitad del texto (guard) y si el modelo igual pide la herramienta. Mismo esquema que el #929.
 // caja_abierta (#948): la caja del día también es solo del Admin; si el modelo se la pide para un empleado, 403 sin leer la caja.
-export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['creditos_atrasados', 'caja_abierta']);
+export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['sugerencias_compra', 'creditos_atrasados', 'caja_abierta']);
 export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
+const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
-  return ADMIN_ONLY_ASK.test(String(text || ''));
+  const t = String(text || '');
+  return ADMIN_ONLY_ASK.test(t) || SUGGEST_ASK.test(t);
 }
 export function toolAllowed(role, name) {
   const a = TOOL_ACTIONS[name]; if (!a) return false;
@@ -1415,7 +1417,7 @@ export const STOCK_REASONS = Object.freeze(['Compra a proveedor', 'Devolución',
 const TOOL_DEFS = [
   { name: 'explicar_pasos', description: 'Explica paso a paso cómo hacer algo en el sistema. No cambia nada.',
     parameters: { type: 'object', properties: { tema: { type: 'string' }, pasos: { type: 'array', items: { type: 'string' }, maxItems: 8 }, pantalla: { type: 'string', enum: SCREEN_IDS } }, required: ['tema', 'pasos'] } },
-  { name: 'consultar', description: 'Consulta números del negocio (solo lectura): stock de un producto, productos por reponer, productos sin costo, ventas de un día o período, productos más vendidos, deudas de clientes, créditos atrasados (vencidos, con borrador de recordatorio que el Admin envía él mismo), compras recientes, resumen del día (resumen_dia) o del mes (resumen_mes) con contado/crédito, cobros, productos top y comparación con el día o mes anterior, ganancia (ventas menos costo de lo vendido: «cuánto gané hoy», «cuánta ganancia», «utilidad»), productos_sin_ventas (productos que no se venden, por defecto los últimos 30 días: «qué productos no se venden», «qué no sale»), deuda_cliente (cuánto debe UN cliente: manda cliente_id con el código de «cliente #CODIGO» o el número que diga la persona, p. ej. «cuánto debe el cliente 12» -> cliente_id 12; nunca el nombre) y ventas_por_hora (número de ventas y total por hora: «a qué hora vendo más», «horas de más venta»). Para hoy, ayer, esta semana (lunes a hoy), la semana pasada, este mes o el mes pasado manda periodo y no calcules fechas: el sistema las pone en hora de Lima. Otras fechas en formato AAAA-MM-DD (hora de Lima); en los resúmenes, hasta = el día pedido o un día del mes pedido (por defecto hoy).',
+  { name: 'consultar', description: 'Consulta números del negocio (solo lectura): stock de un producto, productos por reponer, productos sin costo, ventas de un día o período, productos más vendidos, deudas de clientes, créditos atrasados (vencidos, con borrador de recordatorio que el Admin envía él mismo), compras recientes, sugerencias de compra (sugerencias_compra: qué y cuánto reponer según stock, mínimo y ventas de los últimos 30 días; es solo una lista, no crea ninguna compra), resumen del día (resumen_dia) o del mes (resumen_mes) con contado/crédito, cobros, productos top y comparación con el día o mes anterior, ganancia (ventas menos costo de lo vendido: «cuánto gané hoy», «cuánta ganancia», «utilidad»), productos_sin_ventas (productos que no se venden, por defecto los últimos 30 días: «qué productos no se venden», «qué no sale»), deuda_cliente (cuánto debe UN cliente: manda cliente_id con el código de «cliente #CODIGO» o el número que diga la persona, p. ej. «cuánto debe el cliente 12» -> cliente_id 12; nunca el nombre) y ventas_por_hora (número de ventas y total por hora: «a qué hora vendo más», «horas de más venta»). Para hoy, ayer, esta semana (lunes a hoy), la semana pasada, este mes o el mes pasado manda periodo y no calcules fechas: el sistema las pone en hora de Lima. Otras fechas en formato AAAA-MM-DD (hora de Lima); en los resúmenes, hasta = el día pedido o un día del mes pedido (por defecto hoy).',
     parameters: { type: 'object', properties: { tipo: { type: 'string', enum: QUERY_TYPES }, producto: { type: 'string' }, periodo: { type: 'string', enum: DATE_WORDS, description: 'antier = anteayer (hoy−2); mismo_dia_semana_pasada = «el mismo día de la otra semana» (hoy−7)' }, fecha: { type: 'string', description: 'AAAA-MM-DD' }, desde: { type: 'string' }, hasta: { type: 'string' }, cliente_id: { type: 'string', description: 'Solo para deuda_cliente: el código de «cliente #CODIGO», sin el nombre.' } }, required: ['tipo'] } },
   { name: 'proponer_ajuste_stock', description: 'Propone un movimiento de stock (entrada o salida) de un producto. Se abre la ventana «Registrar movimiento» llena; el Admin confirma con un toque.',
     parameters: { type: 'object', properties: { product_id: { type: 'string' }, tipo: { type: 'string', enum: ['entrada', 'salida'] }, cantidad: { type: 'number' }, motivo: { type: 'string', enum: STOCK_REASONS } }, required: ['product_id', 'tipo', 'cantidad', 'motivo'] } },
@@ -2750,7 +2752,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const ctx = sanitizeContext(parsed.context, role);
   // Documento del dueño pedido con todas las letras por un empleado: 403 en JSON antes de abrir el canal, sin cupo ni DeepSeek (Bot 5).
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
-  // Créditos atrasados pedidos por un empleado: 403 antes de abrir el canal, sin cupo ni modelo.
+  // Sugerencias de compra o créditos atrasados pedidos por un empleado: 403 antes de abrir el canal, sin cupo ni modelo.
   if (employeeQueryDenied(role, parsed.text)) return json(QUERY_ADMIN_ONLY, 403);
   if (employeeSummaryDenied(role, parsed.text)) return json(SUMMARY_ADMIN_ONLY, 403);
   const store = store0;
@@ -2836,7 +2838,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (emit) { emit.drop(); emit.reset(); }
     return json(FORBIDDEN_DOCUMENT, 403);
   }
-  // Empleado al que el modelo le propuso una consulta solo del Admin (créditos atrasados, caja abierta): 403, sin leer la base ni segunda llamada.
+  // Empleado al que el modelo le propuso una consulta solo del Admin (sugerencias de compra, créditos atrasados, caja abierta): 403, sin leer la base ni segunda llamada.
   if (role !== 'owner' && dropped.some((d) => d.dropped === 'query_admin_only')) {
     if (emit) { emit.drop(); emit.reset(); }
     return json(QUERY_ADMIN_ONLY, 403);
@@ -2872,7 +2874,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     else try { r = reader ? await timed(() => runAssistantQuery(reader, p.query, now)) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
     if (r && r.truncado) queryCut = true;
     if (!seesOwnerData(role)) r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
-    p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null };
+    p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null, ...(r.truncado === true ? { truncado: true } : {}) };
     consultas.push(p);
     // Al modelo: solo { tipo, resumen }. Empleado: el resumen ya pasó por la lista blanca (employeeQueryResult) y aquí se vuelve a quitar
     // toda clave del dueño (costo, margen, proveedor, compras, caja, deudas) por si una consulta nueva trae algo más.
