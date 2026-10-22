@@ -420,6 +420,8 @@
   // (que puede venir tapado: «Leche DNI ****5678»); sin el producto en el catálogo, el de la propuesta tal cual.
   function lineName(l) { var prod = null; try { prod = l && l.product_id && deps.productos().find(function (x) { return String(x.id) === String(l.product_id); }); } catch (_) { prod = null; }
     var n = prod && (prod.nombre || prod.name); return n ? n : (l ? l.nombre : ''); }
+  // cuántas filas hay en total: en deudas es «clientes» y en ventas no hay cuenta («total» es plata: antes salía «Mostrando 10 de 22057.72»)
+  function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'ventas_periodo' ? null : r.total; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +
@@ -429,7 +431,7 @@
       return '<h4>' + E(r.titulo || 'Consulta') + '<span class="pill ro">Solo lectura</span></h4>' + (r.error ? '<div class="warn">' + E(r.texto) + '</div>' :
         '<table class="q">' + (r.columnas && r.columnas.length ? '<tr>' + r.columnas.map(function (c, i) { return '<th' + (i ? ' class="r"' : '') + '>' + E(c) + '</th>'; }).join('') + '</tr>' : '') +
         (r.filas || []).map(function (f) { return '<tr>' + f.map(function (c, i) { return '<td' + (i ? ' class="r"' : '') + '>' + E(typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
-        (r.total != null && r.filas && r.filas.length < r.total ? '<div class="note">Mostrando ' + r.filas.length + ' de ' + E(r.total) + '.</div>' : '')) +
+        (qCount(r) != null && r.filas && r.filas.length < qCount(r) ? '<div class="note">Mostrando ' + r.filas.length + ' de ' + E(qCount(r)) + '.</div>' : '')) +
         '<div class="note">Datos leídos del servidor. No cambia nada.</div>';
     }
     if (p.type === 'documento') return '<h4>' + E(p.title) + '<span class="pill ro">Solo lectura</span></h4>' +
@@ -480,6 +482,8 @@
   function addCard(p, prompt) {
     var key = gate.add(p); if (!key) return;
     var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
+    // tabla de consulta: «cliente #código» como en el texto del chat (el nombre sale de la lista de ESTE aparato, nunca del servidor)
+    var qt = p.type === 'consulta' && C.customerCodesIn ? c.querySelector('table.q') : null; if (qt) linkCustomers(qt, C.customerCodesIn(qt.textContent, deps.clientes()));
     // (Bot 4 sobre 3ee80c18) cada valor en su span; proveedor (RUC) y documento aislados de izquierda a derecha
     var dn = c.querySelector('[data-docnote]'); if (dn) [[p.proveedor, true], [p.documento, true], [p.fecha, false]].filter(function (x) { return x[0]; }).forEach(function (x, i) {
       if (i) dn.appendChild(doc.createTextNode(' · ')); var sp = doc.createElement('span'); if (x[1]) ltrIsolate(sp); C.appendCoded(doc, sp, String(x[0])); dn.appendChild(sp); });
