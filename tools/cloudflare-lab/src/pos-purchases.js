@@ -201,3 +201,13 @@ export async function closePartialRoute(request, env, auth, json) {
     .bind(id, reason, JSON.stringify(applied), JSON.stringify(missing), String(auth.principalId || 'unknown'), new Date().toISOString()).run();
   return json({ status: 'closed_partial', purchase_id: id, applied_lines: applied, missing_lines: missing }, 201);
 }
+
+// Ajuste del dueño (pos_settings, sin migración): «compras.pin_empleado» = false quita el PIN del dueño al
+// registrar compras desde el aparato del empleado. Cualquier otro valor, ausencia o error = se pide el PIN.
+export const PURCHASE_PIN_SETTING = 'compras.pin_empleado';
+export async function purchasePinWaived(db) {
+  try {
+    const row = await db.prepare('SELECT value_json FROM pos_settings WHERE key=?1').bind(PURCHASE_PIN_SETTING).first();
+    return !!row && JSON.parse(row.value_json) === false;
+  } catch { return false; }
+}

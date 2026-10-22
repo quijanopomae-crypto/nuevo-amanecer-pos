@@ -238,3 +238,27 @@ test('employee POST 201 response omits supplier and total; owner response keeps 
   const mine = list.body.purchases.find(p => p.purchase_id === 'emp-buy-1');
   assert.deepEqual([mine.supplier, mine.total_cost_cents, mine.lines[0].unit_cost_cents], ['Distribuidora Sol', 1050, 350]);
 });
+
+test('ítem 3: el dueño puede quitar el PIN de compras al empleado con el ajuste compras.pin_empleado=false (sin migración)', async t => {
+  const f = await setup(t);
+  const code = await call(f, '/auth/pairing-code', 'owner-token', { label: 'Caja 3', pin: '4821' });
+  const emp = (await call(f, '/auth/pair', null, { code: code.body.code })).body.session_token;
+  // Por defecto: se pide el PIN.
+  assert.deepEqual((await call(f, '/auth/purchases', emp, purchase(f, 'pin-1', two()))).body.error, 'owner_approval_required');
+  // El empleado no puede cambiar el ajuste.
+  assert.equal((await call(f, '/settings', emp, { key: 'compras.pin_empleado', value: false })).status, 403);
+  // Valor no booleano: se sigue pidiendo.
+  assert.equal((await call(f, '/settings', 'owner-token', { key: 'compras.pin_empleado', value: 'no' })).status < 300, true);
+  assert.deepEqual((await call(f, '/auth/purchases', emp, purchase(f, 'pin-2', two()))).body.error, 'owner_approval_required');
+  // El dueño lo apaga: el empleado registra sin PIN; GET sigue sin proveedor ni costo para el empleado.
+  assert.equal((await call(f, '/settings', 'owner-token', { key: 'compras.pin_empleado', value: false })).status < 300, true);
+  const q0 = stockOf(f, '00003');
+  const ok = await call(f, '/auth/purchases', emp, purchase(f, 'pin-3', two()));
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.ok(Math.abs(stockOf(f, '00003') - (q0 + 3)) < 1e-9);
+  const list = await call(f, '/auth/purchases', emp);
+  assert.ok(list.body.purchases.every(p => !('supplier' in p) && !('total_cost_cents' in p)));
+  // Volver a encenderlo: se pide el PIN otra vez.
+  assert.equal((await call(f, '/settings', 'owner-token', { key: 'compras.pin_empleado', value: true })).status < 300, true);
+  assert.deepEqual((await call(f, '/auth/purchases', emp, purchase(f, 'pin-4', two()))).body.error, 'owner_approval_required');
+});

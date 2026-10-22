@@ -15,7 +15,7 @@ import { setCanonicalCustomerCreditPolicy, CUSTOMER_CREDIT_POLICY_COMMANDS } fro
 import { adjustCanonicalInventory, INVENTORY_COMMANDS } from './a6-inventory.js';
 import { PRODUCT_IMAGE_PATHS, productImagesRoute } from './pos-product-images.js';
 import { saleNoteRoute, recordMetaRoute } from './pos-sale-notes.js';
-import { purchasesRoute, closePartialRoute } from './pos-purchases.js';
+import { purchasesRoute, closePartialRoute, purchasePinWaived } from './pos-purchases.js';
 import { cashClosesRoute } from './pos-cash-closes.js';
 import { annulCanonicalSale, listSaleAnnulments, SALE_ANNUL_COMMAND } from './pos-sale-annul.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
@@ -109,8 +109,12 @@ export default {
         if (request.method === 'POST') {
           const denied = canonicalRuntimeDenied(url, env, json);
           if (denied) return denied;
-          const gated = await ownerGate(request, env, auth, 'inventory.adjust', json, getDatabase(env));
-          if (gated) return gated;
+          // Como CasaMarket: el dueño puede permitir que el empleado registre compras sin su PIN
+          // (ajuste «compras.pin_empleado» = false). Por defecto (sin ajuste) se sigue pidiendo el PIN.
+          if (!(await purchasePinWaived(getDatabase(env)))) {
+            const gated = await ownerGate(request, env, auth, 'inventory.adjust', json, getDatabase(env));
+            if (gated) return gated;
+          }
         }
         return cors(await purchasesRoute(request, env, auth, json));
       }

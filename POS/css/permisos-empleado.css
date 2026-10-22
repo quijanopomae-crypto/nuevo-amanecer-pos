@@ -1,0 +1,12 @@
+/* Permisos del empleado (solo dueño), al final de Configuración. */
+#naPermisosEmpleado { --pe-surface:#fff; --pe-text:#0f172a; --pe-muted:#475569; --pe-border:#cbd5e1; margin:16px; padding:16px; border:1px solid var(--pe-border); border-radius:12px; background:var(--pe-surface); color:var(--pe-text); box-sizing:border-box; max-width:calc(100% - 32px); }
+body.dark #naPermisosEmpleado { --pe-surface:#1e293b; --pe-text:#f8fafc; --pe-muted:#cbd5e1; --pe-border:#64748b; }
+#naPermisosEmpleado[hidden] { display:none !important; }
+#naPermisosEmpleado .pe-title { margin:0 0 10px; font-size:16px; color:var(--pe-text); }
+#naPermisosEmpleado .pe-list { list-style:none; margin:0 0 12px; padding:0; display:grid; gap:8px; }
+#naPermisosEmpleado .pe-row { display:grid; gap:2px; }
+#naPermisosEmpleado .pe-row span, #naPermisosEmpleado .pe-status { color:var(--pe-muted); font-size:13px; overflow-wrap:anywhere; }
+#naPermisosEmpleado .pe-toggle { display:grid; grid-template-columns:24px minmax(0,1fr); gap:10px; align-items:center; min-height:44px; font-weight:700; cursor:pointer; }
+#naPermisosEmpleado .pe-toggle input { width:22px; height:22px; margin:0; }
+#naPermisosEmpleado .pe-toggle input:focus-visible { outline:3px solid #0d9488; outline-offset:2px; }
+#naPermisosEmpleado .pe-status { margin:8px 0 0; }
