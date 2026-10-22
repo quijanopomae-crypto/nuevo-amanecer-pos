@@ -1,0 +1,9 @@
+/* #18 Ayuda de atajos: capa flotante, no cambia el diseño de Venta. */
+.na-atajos-ayuda{position:fixed;right:16px;bottom:16px;z-index:9000;min-width:220px;max-width:calc(100vw - 32px);padding:12px 14px;border-radius:12px;background:#fff;color:var(--dark,#1e293b);border:1px solid var(--border,#e2e8f0);box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:14px}
+.na-atajos-ayuda[hidden]{display:none}
+.na-atajos-ayuda dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:8px 0}
+.na-atajos-ayuda dt{font-weight:700;font-family:ui-monospace,monospace}
+.na-atajos-ayuda dd{margin:0}
+.na-atajos-ayuda small{opacity:.75}
+body.dark .na-atajos-ayuda{background:#1e293b;color:#f1f5f9;border-color:#334155}
+@media (hover:none) and (pointer:coarse){.na-atajos-ayuda{display:none!important}}
