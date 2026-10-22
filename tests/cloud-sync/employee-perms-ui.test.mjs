@@ -26,12 +26,13 @@ test('visible solo con candado propio abierto Y dueño confirmado; cualquier err
   assert.equal(load({ NA_PERMISSIONS: perms(false), NA_ROLES: owner(true) }).NA_EMPLOYEE_PERMS_UI.mount(null), false);
 });
 
-test('hoy el candado permisos-por-empleado está cerrado y no hay entradas nuevas en FEATURE_LOCKS/FEATURE_ROLES/SCREENS', () => {
+test('desbloqueo #924: el candado permisos-por-empleado está abierto, sin pantalla nueva en SCREENS', () => {
   const ctx = vm.createContext({});
   vm.runInContext(read('POS/js/config/pos-permissions.js'), ctx);
   const P = ctx.NA_PERMISSIONS;
-  assert.equal(P.featureLocked('permisos-por-empleado'), true);
-  assert.ok(!('permisos-por-empleado' in P.FEATURE_LOCKS) && !('permisos-por-empleado' in P.FEATURE_ROLES));
+  assert.equal(P.FEATURE_LOCKS['permisos-por-empleado'], false);
+  assert.equal(P.featureLocked('permisos-por-empleado'), false);
+  assert.ok(!('permisos-por-empleado' in P.FEATURE_ROLES));
 });
 
 test('normalize: solo ids de la lista y valor true; todo lo demás cerrado', () => {

@@ -81,11 +81,13 @@ test('featureDecision puro: orden candado → rol → casilla', async () => {
   assert.equal((await featureDecision(db, 'ventas-espera', 'owner', { locked: () => false, roles })).status, 404);
 });
 
-test('/auth/employee-permissions cerrado por su candado mientras no se desbloquee', async t => {
-  const f = await setup(t);
-  assert.equal(PERMISSIONS.featureLocked('permisos-por-empleado'), true);
+test('/auth/employee-permissions con el candado abierto: el dueño lee todo apagado, el empleado recibe 403 y no se escribe nada', async t => {
+  const f = await setup(t); const empToken = await employee(f);
+  assert.equal(PERMISSIONS.featureLocked('permisos-por-empleado'), false);
   const r = await call(f, '/auth/employee-permissions', 'owner-token');
-  assert.deepEqual([r.status, r.body.error], [403, 'feature_locked']);
+  assert.equal(r.status, 200); assert.deepEqual(r.body.allow, {});
+  const e = await call(f, '/auth/employee-permissions', empToken);
+  assert.equal(e.status, 403);
   assert.equal(f.sql('SELECT COUNT(*) n FROM pos_settings WHERE key=?', EMPLOYEE_PERMS_KEY).n, 0);
 });
 

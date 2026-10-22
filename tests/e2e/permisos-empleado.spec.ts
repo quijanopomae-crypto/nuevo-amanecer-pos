@@ -29,8 +29,9 @@ async function boot(page: Page, { role = 'owner', allow = {} as Record<string, b
   await page.reload();
   await page.waitForFunction(r => (window as any).NA_ROLES?.role === r && (window as any).NA_ROLES.confirmed && (window as any).NA_THEME && (window as any).NA_MENU_NAVIGATION, role);
   await page.evaluate(dark => { const w = window as any; if (w.NA_THEME.isDark() !== dark) w.NA_THEME.toggle(); }, dark);
-  if (unlock) await page.evaluate(() => { const w = window as any, p = w.NA_PERMISSIONS, orig = p.featureLocked;
-    w.NA_PERMISSIONS = Object.assign({}, p, { featureLocked: (id: string) => id === 'permisos-por-empleado' ? false : orig(id) }); });
+  // El candado ya está en false en pos-permissions.js (#924); unlock:false simula volver a cerrarlo (rollback).
+  await page.evaluate(unlock => { const w = window as any, p = w.NA_PERMISSIONS, orig = p.featureLocked;
+    w.NA_PERMISSIONS = Object.assign({}, p, { featureLocked: (id: string) => id === 'permisos-por-empleado' ? !unlock : orig(id) }); }, unlock);
   return calls;
 }
 async function openUsuarios(page: Page) {
@@ -40,13 +41,18 @@ async function openUsuarios(page: Page) {
   await page.locator('[data-tab="pin"]').first().evaluate(n => (n as HTMLElement).click());
 }
 
-test('candado cerrado (como hoy): el panel no aparece', async ({ page }) => {
+test('candado cerrado (rollback): el panel no aparece', async ({ page }) => {
   await boot(page, { unlock: false });
   await page.evaluate(() => (window as any).NA_MENU_NAVIGATION.navigate('pageConfig'));
   await openUsuarios(page);
   await expect(page.locator('[data-tab="pin"][aria-selected="true"]')).toBeAttached();
   await expect(page.locator('#naPinNew')).toBeAttached();
   await expect(page.locator('#naEmpPerm')).toHaveCount(0);
+});
+
+test('candado real de pos-permissions.js: abierto para el desbloqueo #924', async ({ page }) => {
+  await page.goto('/index.html');
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('permisos-por-empleado'))).toBe(false);
 });
 
 test('empleado: nunca ve el panel', async ({ page }) => {
