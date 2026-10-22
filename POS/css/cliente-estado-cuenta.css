@@ -1,0 +1,18 @@
+/* Estado de cuenta del cliente (solo lectura). Solo dentro de Clientes. */
+#pageClientes #naEstadoCuentaBtn.ec-entry { display:block; width:calc(100% - 24px); min-height:44px; margin:8px 12px; padding:10px 12px; white-space:normal; cursor:pointer; height:auto; flex:none; }
+#naEstadoCuentaBtn[hidden], #naEstadoCuenta[hidden] { display:none !important; }
+#naEstadoCuenta { --ec-surface:#fff; --ec-text:#172b3a; --ec-muted:#526574; --ec-border:#d9e3ea; --ec-accent:#0f766e;
+  margin:0 12px 12px; padding:12px; border:1px solid var(--ec-border); border-radius:12px; background:var(--ec-surface); color:var(--ec-text); box-sizing:border-box; max-width:calc(100% - 24px); }
+body.dark #naEstadoCuenta { --ec-surface:#111c26; --ec-text:#e6eef4; --ec-muted:#a7b8c5; --ec-border:#2b3b49; --ec-accent:#5eead4; color-scheme:dark; }
+#naEstadoCuenta * { box-sizing:border-box; }
+#naEstadoCuenta .ec-label { display:grid; gap:6px; font-weight:700; }
+#naEstadoCuenta .ec-select { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--ec-border); border-radius:10px; background:var(--ec-surface); color:var(--ec-text); font:inherit; }
+#naEstadoCuenta :is(.ec-select, .ec-table-wrap):focus-visible, #naEstadoCuentaBtn:focus-visible { outline:3px solid var(--ec-accent); outline-offset:2px; }
+#naEstadoCuenta .ec-status, #naEstadoCuenta .ec-footer { color:var(--ec-muted); margin:10px 0 0; font-size:13px; }
+#naEstadoCuenta .ec-footer { color:var(--ec-text); font-weight:700; }
+#naEstadoCuenta .ec-table-wrap { margin-top:10px; max-width:100%; overflow-x:auto; border:1px solid var(--ec-border); border-radius:10px; }
+#naEstadoCuenta .ec-table { width:100%; min-width:520px; border-collapse:collapse; color:var(--ec-text); }
+#naEstadoCuenta .ec-table :is(th, td) { display:table-cell; padding:8px; text-align:left; border-bottom:1px solid var(--ec-border); overflow-wrap:anywhere; color:var(--ec-text); background:transparent; }
+#naEstadoCuenta .ec-table thead th { font-size:12px; color:var(--ec-muted); }
+#naEstadoCuenta .ec-table small { display:block; font-size:12px; color:var(--ec-muted); font-weight:400; }
+#naEstadoCuenta .ec-num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
