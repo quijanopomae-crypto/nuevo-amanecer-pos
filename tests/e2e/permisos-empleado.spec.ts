@@ -119,3 +119,30 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     await panel.screenshot({ path: `test-results/permisos-empleado-${width}-${dark ? 'dark' : 'light'}.png` });
   });
 }
+
+test('rol confirmado tarde: na:role vuelve a montar el panel sin duplicarlo', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => (window as any).NA_MENU_NAVIGATION.navigate('pageConfig'));
+  await openUsuarios(page);
+  await expect(page.locator('#naEmpPerm')).toHaveCount(1);
+  // Simula una pestaña dibujada antes de confirmar: se quita el panel y luego llega la confirmación del servidor.
+  await page.evaluate(() => document.getElementById('naEmpPerm')!.remove());
+  await expect(page.locator('#naEmpPerm')).toHaveCount(0);
+  await page.evaluate(() => (window as any).NA_ROLES.refresh());
+  await expect(page.locator('#naEmpPerm')).toHaveCount(1);
+  await page.evaluate(() => { for (let i = 0; i < 3; i++) window.dispatchEvent(new CustomEvent('na:role', { detail: { role: 'owner' } })); });
+  await expect(page.locator('#naEmpPerm')).toHaveCount(1);
+  await expect(page.locator('#naEmpPerm input[type=checkbox]')).toHaveCount(10);
+});
+
+test('dueño en modo local (sin nube): ve el panel; sin sesión no carga y queda todo apagado', async ({ page }) => {
+  await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+  await page.goto('/index.html');
+  await page.waitForFunction(() => (window as any).NA_ROLES && (window as any).NA_MENU_NAVIGATION);
+  expect(await page.evaluate(() => (window as any).NA_ROLES.isOwner())).toBe(true);
+  await page.evaluate(() => (window as any).NA_MENU_NAVIGATION.navigate('pageConfig'));
+  await openUsuarios(page);
+  await expect(page.locator('#naEmpPerm')).toHaveCount(1);
+  await expect(page.locator('#naEmpPerm .na-emp-perm-status')).toContainText('No se pudo leer los permisos');
+  await expect(page.locator('#naEmpPermSave')).toBeDisabled();
+});
