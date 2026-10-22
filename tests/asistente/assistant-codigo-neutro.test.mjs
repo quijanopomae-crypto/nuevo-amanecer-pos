@@ -4,7 +4,7 @@
 // herramientas) se traduce al código real antes de leer la base y antes de llegar al aparato; un neutro desconocido = «no encontré».
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantChatRoute, createMemoryUsageStore, customerCode, UNKNOWN_CUSTOMER_TEXT } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { assistantChatRoute, createMemoryUsageStore, customerCode, UNKNOWN_CUSTOMER_TEXT, lessonsKey, LESSONS_PREFIX } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { memoryReader, runAssistantQuery } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import { configFor, callModel } from '../../tools/cloudflare-lab/src/pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from '../../tools/cloudflare-lab/src/pos-assistant-codigos.js';
@@ -28,14 +28,14 @@ const DATA = {
 const ENV = { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, OHMYAGENT_API_KEY: 'k-ohmy', ROUTEWAY_API_KEY: 'k-rw' };
 
 // Pedido del Admin con lecturas espiadas; responses[i] = respuesta (o función) de la llamada i al proveedor.
-async function route(body, responses) {
+async function route(body, responses, store = createMemoryUsageStore()) {
   const cap = [], hosts = [], reads = [];
   const base = memoryReader(DATA);
   const reader = Object.fromEntries(Object.entries(base).map(([k, fn]) => [k, (...a) => { reads.push(k); return fn(...a); }]));
   const f = async (url, init) => { cap.push(String(init.body)); hosts.push(new URL(url).host); const r = responses[Math.min(cap.length - 1, responses.length - 1)]; return typeof r === 'function' ? r() : msg(r); };
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ context: { products: DATA.products }, ...body }) }),
     ENV, { principalId: 'session:x', posRole: 'owner' }, json,
-    { store: createMemoryUsageStore(), resolveRole: async () => 'owner', fetch: f, reader, audit: async () => {}, mockChunkMs: 0, now: () => NOW });
+    { store, resolveRole: async () => 'owner', fetch: f, reader, audit: async () => {}, mockChunkMs: 0, now: () => NOW });
   return { r, cap, hosts, reads };
 }
 const sseEvents = (text) => text.split('\n\n').filter(Boolean).map((b) => { const e = /^event: (\w+)/m.exec(b)?.[1]; const d = /^data: (.*)$/m.exec(b)?.[1]; return { e, d: d ? JSON.parse(d) : null }; });
@@ -137,4 +137,18 @@ test('4) neutro desconocido = «no encontré», sin leer la base (estado de cuen
   assert.equal(JSON.parse(m.argsToReal('{"cliente_id":"C-0042"}')).cliente_id, UNKNOWN_CUSTOMER);
   assert.equal(customerCode(UNKNOWN_CUSTOMER), null, 'el centinela nunca es un código');
   assert.equal(JSON.parse(m.argsToReal('{"cliente_id":"C-0001"}')).cliente_id, REAL);
+});
+
+test('5) #957: la lección guardada en internal:asst:taught (con el código real) sale hacia la IA con el neutro, sin nombre', async () => {
+  const store = createMemoryUsageStore(), auth = { principalId: 'session:x', posRole: 'owner' };
+  await route({ text: 'apunta: Misael Ramos me debe 3 cajas de leche' }, [{ content: 'Anotado.' }], store);
+  const key = await lessonsKey(auth); assert.ok(key.startsWith('internal:asst:taught:') && key.startsWith(LESSONS_PREFIX), key);
+  const saved = (await store.get(key)).value; assert.deepEqual(saved.items, ['apunta: cliente #' + REAL + ' me debe 3 cajas de leche'], JSON.stringify(saved));
+  const { r, cap } = await route({ text: '¿Qué te enseñé hoy?' }, [{ content: 'Me enseñó que el cliente #C-0001 le debe 3 cajas de leche.' }], store);
+  assert.equal(r.status, 200); const d = await r.json();
+  assert.equal(cap.length, 1);
+  const taught = JSON.parse(cap[0]).messages.find((m) => m.role === 'user' && /ensenado_por_usuario/.test(m.content));
+  assert.ok(taught && taught.content.includes('cliente #C-0001 me debe 3 cajas de leche'), 'la lección va con el neutro: ' + (taught && taught.content));
+  assert.ok(!LEAK.test(cap[0]) && !/Ramos/.test(cap[0]), 'ni código real ni nombre hacia la IA');
+  assert.match(d.reply, /cliente #SIN-DOC-MISAEL le debe 3 cajas/); assert.ok(!d.reply.includes('C-0001'));
 });
