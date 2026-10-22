@@ -116,6 +116,6 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     expect(Math.min(...m.rows)).toBeGreaterThanOrEqual(44);
     expect(m.dark).toBe(dark);
     expect(m.color).not.toBe(m.bg);
-    await panel.screenshot({ path: `/workspace/patches/permisos-empleado-shots/${width}-${dark ? 'dark' : 'light'}.png` });
+    await panel.screenshot({ path: `test-results/permisos-empleado-${width}-${dark ? 'dark' : 'light'}.png` });
   });
 }
