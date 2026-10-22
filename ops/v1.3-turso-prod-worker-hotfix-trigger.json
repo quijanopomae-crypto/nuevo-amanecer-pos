@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved merge + publish of PR #899 (asistente: OhMyAgent + Routeway, Revisión del punto de venta, Leer boleta con IA; ASSISTANT_ENABLED=1) on 2026-10-22. Merge 0eb45984. CI green on f4ad6a09 (critical-regression, e2e-smoke, visual). No schema changes: migrations 0035/0036 NOT applied (not required). Assistant secrets ASSISTANT_AI_API_KEY_4/_2 and ASSISTANT_CONFIRM_SECRET synced by the workflow (stdin, masked). D1 backup taken first: Owner Backup Recovery Drill run 39724608229 success (R2 recovery-drills/2026-10-22T04-50-46Z-0eb45984….sql). Rollback to fb0daf65 (worker 65).",
-  "target_commit": "0eb45984bf89446815c7b118a39be46966f554bd",
-  "rollback_ref": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8",
+  "authorization_context": "Owner OK 2026-10-22 («aprobado publica todo») to publish PR #934 (asistente: privacidad, clientes por código, redactor en partes = entero, tabla de deudas sin nombres del servidor) and PR #935 (subir foto o PDF, solo web). Merges 8687bf2d (#934) and dbca4aea (#935) on top of Worker 68 (48a8d920, #924). Sin migración, sin cambios de esquema. CI critical-regression + e2e-smoke + visual green on both PRs. D1 backup today: Owner Backup Recovery Drill run 39787686903 success (R2). Rollback to 48a8d920 (Worker 68, version 8bd10309-6fb9-400a-a83f-c233aaa623a5).",
+  "target_commit": "dbca4aeac570f3749f5c056ad4391982e547acdd",
+  "rollback_ref": "48a8d9203029826812fb4613894f2a7f70f4b569",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 66,
-  "optimization": "ASISTENTE_899"
+  "attempt": 69,
+  "optimization": "ASISTENTE_PRIVACIDAD_SUBIR_ARCHIVO"
 }

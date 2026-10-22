@@ -80,7 +80,10 @@
   function ls(k, v) { try { var s = root.localStorage; if (v === undefined) return s.getItem(k); if (v === null) s.removeItem(k); else s.setItem(k, v); } catch (_) { return null; } }
   function learnRead() { try { var o = JSON.parse(ls(LEARN_KEY) || 'null'); return o && o.v === 1 && Array.isArray(o.list) ? o.list : []; } catch (_) { return []; } }
   function learnWrite(list) { ls(LEARN_KEY, JSON.stringify({ v: 1, list: list.slice(-LEARN_MAX) })); }
-  var SAFE = function (s) { s = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60); return s && !/\d{8,}|@/.test(s) ? s : ''; }; // sin DNI/teléfonos/correos
+  // Sin DNI/teléfonos/correos: además del filtro corto, el MISMO redactor del asistente (auditoría 2026-10-22); si tapa algo, no se aprende.
+  var SAFE = function (s) { s = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!s || /\d{8,}|@|\d(?:[ .-]?\d){7,}|\(\s*at\s*\)|\barroba\b/i.test(s)) return '';
+    var C = root.NA_ASISTENTE_CORE; return C && C.redactText && C.redactText(s) !== s ? '' : s; };
   // Pares (leído -> corregido) de los campos que se aprenden. item._orig = lo que leyó el modelo (antes del historial).
   function correctionsOf(items) {
     var out = [];
@@ -104,7 +107,8 @@
       if (m && it[f] !== m.a) { it[f] = m.a; it._applied = it._applied || {}; it._applied[f] = true; n++; } }); });
     return n;
   }
-  function learnHints() { return learnRead().slice().sort(function (a, b) { return (b.n || 1) - (a.n || 1) || (b.t || 0) - (a.t || 0); }).slice(0, HINTS_MAX).map(function (x) { return { campo: x.campo, de: x.de, a: x.a }; }); }
+  function learnHints() { return learnRead().slice().sort(function (a, b) { return (b.n || 1) - (a.n || 1) || (b.t || 0) - (a.t || 0); }) // las guardadas antes de esta regla también pasan por SAFE al enviarse
+    .map(function (x) { return { campo: x.campo, de: SAFE(x.de), a: SAFE(x.a) }; }).filter(function (x) { return x.de && x.a; }).slice(0, HINTS_MAX); }
   function learnClear() { ls(LEARN_KEY, null); }
   function showLearned(ctx) {
     var list = learnRead(), m = ctx.card('na-asst-bol-learned'), d = ctx.doc;

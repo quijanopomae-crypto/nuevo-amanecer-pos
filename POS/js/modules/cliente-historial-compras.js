@@ -292,6 +292,12 @@
     try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.featureLocked === 'function' && !permissions.featureLocked(FEATURE_ID)); } catch (_) { return false; }
   }
   function ownerAllowed() { return isOwner() && policyReady() && featureUnlocked(); }
+  // Permisos por empleado (#924): el empleado entra solo si el servidor prendió su casilla (falla cerrada).
+  function employeeMay() {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.may === 'function' && e.may(FEATURE_ID) === true); } catch (_) { return false; }
+  }
+  // Ver el historial: dueño como hoy, o empleado con casilla. Exportar sigue siendo solo del dueño.
+  function viewAllowed() { return ownerAllowed() || (policyReady() && featureUnlocked() && employeeMay()); }
   function render() {
     var page = root.document && root.document.getElementById(PAGE_ID);
     if (!page) return false;
@@ -301,7 +307,7 @@
     var seller = page.querySelector('[data-ch-seller]'), exportButton = page.querySelector('[data-ch-export]');
     renderedReport = null;
     if (exportButton) { exportButton.disabled = true; exportButton.hidden = !exportAllowed(); }
-    var allowed = ownerAllowed();
+    var allowed = viewAllowed();
     if (controls) controls.hidden = !allowed;
     content.replaceChildren();
     if (!allowed) {
@@ -406,7 +412,8 @@
     }
     page.__naClienteHistorialExport = exportCsv;
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
-    root.addEventListener('na:role', function () { if (!ownerAllowed()) render(); else update(); });
+    root.addEventListener('na:role', function () { if (!viewAllowed()) render(); else update(); });
+    root.addEventListener('na:employee-perms', function () { if (!viewAllowed()) render(); else update(); });
     ['na:canonical-updated', 'na:canonical-sale-projection', 'focus'].forEach(function (event) { root.addEventListener(event, update); });
     update();
   }

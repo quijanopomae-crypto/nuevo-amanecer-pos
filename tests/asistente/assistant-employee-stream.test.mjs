@@ -286,18 +286,24 @@ for (const n of [1, 2, 47, 48, 49, 100]) {
   });
 }
 
-test('4) tarjeta de documento: el nombre del cliente solo en el estado de cuenta (con «Cliente:»); la lista de precios nunca lo muestra ni lo recibe', async () => {
+test('4) tarjeta de documento: el cliente solo en el estado de cuenta (con «Cliente:»), por su CÓDIGO (el nombre lo pone el aparato); la lista de precios nunca lo muestra ni lo recibe', async () => {
   const { toProposal } = await import('../../tools/cloudflare-lab/src/pos-assistant.js');
-  const lp = toProposal({ name: 'preparar_documento', arguments: { tipo: 'lista_precios', cliente: 'Rosa Quispe' } }, 'owner', { products: [] }, 1);
-  const ec = toProposal({ name: 'preparar_documento', arguments: { tipo: 'estado_cuenta', cliente: 'Rosa Quispe' } }, 'owner', { products: [] }, 2);
-  assert.equal(lp.cliente, null, 'la lista de precios no lleva cliente'); assert.equal(ec.cliente, 'Rosa Quispe');
+  const lp = toProposal({ name: 'preparar_documento', arguments: { tipo: 'lista_precios', cliente_id: 'c7' } }, 'owner', { products: [] }, 1);
+  const ec = toProposal({ name: 'preparar_documento', arguments: { tipo: 'estado_cuenta', cliente_id: 'c7' } }, 'owner', { products: [] }, 2);
+  assert.equal(lp.cliente_id, null, 'la lista de precios no lleva cliente'); assert.equal(ec.cliente_id, 'c7'); assert.equal(ec.cliente, undefined, 'nunca un nombre');
+  // un nombre en lugar del código no pasa; «cliente #c7» sí; un código que el redactor taparía (8 dígitos) tampoco
+  assert.equal(toProposal({ name: 'preparar_documento', arguments: { tipo: 'estado_cuenta', cliente: 'Rosa Quispe' } }, 'owner', { products: [] }, 3).cliente_id, null);
+  assert.equal(toProposal({ name: 'preparar_documento', arguments: { tipo: 'estado_cuenta', cliente: 'cliente #c7' } }, 'owner', { products: [] }, 4).cliente_id, 'c7');
+  assert.equal(toProposal({ name: 'preparar_documento', arguments: { tipo: 'estado_cuenta', cliente_id: '45678912' } }, 'owner', { products: [] }, 5).cliente_id, null);
   const UI = (await import('node:fs')).readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   const line = UI.match(/if \(p\.type === 'documento'\) return[\s\S]*?data-open>Abrir documento<\/button><\/div>';/)[0];
-  const E = (v) => String(v), cardDoc = new Function('p', 'E', 'CUSTOMER_DOCS', line.replace(/^if \(p\.type === 'documento'\) /, ''));
-  const html = (p) => cardDoc({ title: 'T', ...p }, E, ['estado_cuenta']);
-  assert.ok(!html({ tipo: 'lista_precios', cliente: 'Rosa Quispe' }).includes('Rosa'), 'lista de precios sin nombre aunque llegue');
-  assert.match(html({ tipo: 'estado_cuenta', cliente: 'Rosa Quispe' }), /Cliente: Rosa Quispe/);
-  assert.ok(!html({ tipo: 'lista_pedido', cliente: 'Rosa' }).includes('Rosa'));
+  const E = (v) => String(v), cardDoc = new Function('p', 'E', 'CUSTOMER_DOCS', 'cliLabel', line.replace(/^if \(p\.type === 'documento'\) /, ''));
+  const local = { c7: 'Rosa Quispe' }, cliLabel = (c) => local[c] || 'cliente #' + c; // nombre buscado en ESTE aparato
+  const html = (p) => cardDoc({ title: 'T', ...p }, E, ['estado_cuenta'], cliLabel);
+  assert.ok(!html({ tipo: 'lista_precios', cliente_id: 'c7' }).includes('Rosa'), 'lista de precios sin nombre aunque llegue');
+  assert.match(html({ tipo: 'estado_cuenta', cliente_id: 'c7' }), /Cliente: Rosa Quispe/);
+  assert.match(html({ tipo: 'estado_cuenta', cliente_id: 'zz' }), /Cliente: cliente #zz/);
+  assert.ok(!html({ tipo: 'lista_pedido', cliente_id: 'c7' }).includes('Rosa'));
 });
 
 // ---------- Bot 5 sobre d92a7d35: frases compuestas del dueño enteras; el corte solo para precios de venta de verdad ----------
