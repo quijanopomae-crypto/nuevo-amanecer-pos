@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, redactFor, redactText, redactOwnerData, OWNER_RETRO, FIRST_TEXT_MIN, capReply } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, LABEL_TAIL, redactFor, redactText, redactOwnerData, OWNER_RETRO, FIRST_TEXT_MIN, capReply } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { runAssistantQuery } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 const require = createRequire(import.meta.url);
 const C = require('../../POS/js/modules/asistente/asistente-core.js');
@@ -95,7 +95,7 @@ test('4) monto sin fin de frase: espera como mucho ' + OWNER_RETRO + ' caractere
   assert.ok(redactOwnerData(longTail).startsWith('[dato del Admin] cada uno'));
   assert.ok(redactOwnerData('S/ 4.20 cada uno. ' + 'y es bueno '.repeat(20)).startsWith('S/ 4.20 cada uno.'));
   const s = stream(longTail, EMP, 5); assert.equal(s.text, redactOwnerData(longTail));
-  const firstAt = s.marks.find(([, out]) => out > 0)[0]; assert.ok(firstAt <= 7 + OWNER_RETRO + 10, 'sale al llegar al tope: ' + firstAt);
+  const firstAt = s.marks.find(([, out]) => out > 0)[0]; assert.ok(firstAt <= 7 + OWNER_RETRO + 10 + LABEL_TAIL, 'sale al llegar al tope: ' + firstAt); // (#962, diseño simple) + LABEL_TAIL: la cola fija que nunca pasa a las etapas (una etiqueta partida entre trozos no sale) (+ 5: un trozo, la cola corre la decisión de la etapa)
 });
 
 // ---------- 5. Bot 2: nombres que no son datos del dueño ----------
@@ -125,7 +125,7 @@ test('6) primera letra: el empleado recibe el primer texto en el mismo trozo que
   assert.deepEqual(fe, fo); assert.ok(fe[1] >= FIRST_TEXT_MIN);
   // con una palabra del dueño delante, el texto que no es monto sigue saliendo (sin la pausa de antes)
   const k = 'El costo lo ve el dueño desde su teléfono; tú puedes ver el stock y el precio de venta en Inventario cuando quieras. ';
-  const ke = stream(k, EMP, 5); ke.marks.forEach(([pushed, out]) => { if (pushed > 40) assert.ok(pushed - out <= 14, pushed + '/' + out); });
+  const ke = stream(k, EMP, 5); ke.marks.forEach(([pushed, out]) => { if (pushed > 40) assert.ok(pushed - out <= 14 + LABEL_TAIL + 5, pushed + '/' + out); }); // (#962, diseño simple) + LABEL_TAIL: la cola fija que nunca pasa a las etapas (una etiqueta partida entre trozos no sale) (+ 5: un trozo, la cola corre la decisión de la etapa)
 });
 
 // ---------- 7. cortar el pedido a DeepSeek ----------
@@ -520,13 +520,14 @@ for (const n of [1, 2, 5, 47, 48, 49, 100]) {
   });
 }
 test('20) retención: el título largo no retiene la línea esperando el «:»; una racha de líneas de espacios cuenta dentro del tope de 160', () => {
-  for (const t of ['Compras de hoy en la tienda: Galleta S/ 1.80', 'Compras de hoy del proveedor Lima Norte: Galleta S/ 1.80', 'Las compras del cliente: S/ 30', 'El cliente pagó sus compras: S/ 30']) assert.ok(held(t).max <= 40, t + ' ' + held(t).max);
+  for (const t of ['Compras de hoy en la tienda: Galleta S/ 1.80', 'Compras de hoy del proveedor Lima Norte: Galleta S/ 1.80', 'Las compras del cliente: S/ 30', 'El cliente pagó sus compras: S/ 30']) assert.ok(held(t).max <= 40 + LABEL_TAIL, t + ' ' + held(t).max);
   // 500 caracteres que empiezan con «Compras», sin «:», monto en 30 o en 130: lo decide la regla normal (tope de su frase), nada más
   const base = 'Compras de hoy en la tienda y ' + FILL(600);
-  for (const at of [30, 130]) { const t = (base.slice(0, at) + 'S/ 1.80 ' + base.slice(at)).slice(0, 500); const h = held(t); assert.ok(h.max <= OWNER_RETRO + 30, at + ': ' + h.max); assert.equal(stream(t, EMP, 5).text, full(t, EMP)); }
+  // (#962, diseño simple) + LABEL_TAIL: la cola fija que nunca pasa a las etapas (una etiqueta partida entre trozos no sale) (+ 5: un trozo, la cola corre la decisión de la etapa)
+  for (const at of [30, 130]) { const t = (base.slice(0, at) + 'S/ 1.80 ' + base.slice(at)).slice(0, 500); const h = held(t); assert.ok(h.max <= OWNER_RETRO + 30 + LABEL_TAIL + 5, at + ': ' + h.max); assert.equal(stream(t, EMP, 5).text, full(t, EMP)); }
   // Bot 3: 30 líneas de 10 espacios tras un monto al final de línea retenían 355; ahora a lo más el tope
   for (const [l, sp] of [[2, 19], [5, 10], [10, 15], [30, 10], [100, 40]]) { const t = 'Paracetamol caja S/ 1.80\n' + (' '.repeat(sp) + '\n').repeat(l) + FILL(300); const h = held(t);
-    assert.ok(h.max <= OWNER_RETRO + 30, l + 'x' + sp + ': ' + h.max); assert.equal(stream(t, EMP, 5).text, full(t, EMP)); assert.equal(stream(t, 'owner', 5).text, full(t, 'owner')); }
+    assert.ok(h.max <= OWNER_RETRO + 30 + LABEL_TAIL, l + 'x' + sp + ': ' + h.max); assert.equal(stream(t, EMP, 5).text, full(t, EMP)); assert.equal(stream(t, 'owner', 5).text, full(t, 'owner')); }
 });
 test('20) propiedad: cortar entre espacios no cambia lo tapado (RUC, DNI, clave, foto, teléfono y montos separados por rachas de espacios)', () => {
   let seed = 4242; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648); const pick = (a) => a[Math.floor(rnd() * a.length)];
