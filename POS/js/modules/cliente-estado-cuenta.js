@@ -48,8 +48,11 @@
         moves.push({ type: 'abono', key: pa.key, day: pa.day, time: pa.time, detail: 'Abono' + (p.metodo ? ' · ' + p.metodo : ''), cents: cents(p.monto || p.montoPagado) });
       });
     });
+    // Para ordenar, un movimiento con día pero sin hora va al final de ese día ('T24:00' > 'T23:59'),
+    // así un abono sin hora no queda antes de los cargos del mismo día. La fecha mostrada no cambia.
     // Mismo instante: primero el cargo y luego su abono.
-    moves.sort(function (a, b) { return a.key.localeCompare(b.key) || (a.type === b.type ? 0 : a.type === 'cargo' ? -1 : 1); });
+    function sortKey(m) { return m.day && !m.time ? m.day + 'T24:00' : m.key; }
+    moves.sort(function (a, b) { return sortKey(a).localeCompare(sortKey(b)) || (a.type === b.type ? 0 : a.type === 'cargo' ? -1 : 1); });
     var bal = 0, charged = 0, paid = 0;
     moves.forEach(function (m) {
       if (m.type === 'cargo') { bal += m.cents; charged += m.cents; } else { bal -= m.cents; paid += m.cents; }

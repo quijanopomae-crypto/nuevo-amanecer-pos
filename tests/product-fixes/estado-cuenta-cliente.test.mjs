@@ -89,3 +89,34 @@ test('money: miles con coma, dos decimales y signo', () => {
   assert.equal(M.money(-1234.5), '-S/ 1,234.50');
   assert.equal(M.money('abc'), 'S/ 0.00');
 });
+
+test('abono con fecha pero sin hora va después de los cargos con hora del mismo día; el saldo nunca queda negativo', () => {
+  const s = plain(M.buildStatement(client, apiFor([
+    { timestamp: '2026-04-10T23:30:00Z', monto: 80, desc: 'Venta tarde', pagos: [{ fecha: '2026-04-10', monto: 80 }] },
+    { timestamp: '2026-04-10T14:00:00Z', monto: 20, desc: 'Venta mañana', pagos: [{ fecha: '2026-04-10', monto: 20 }] }
+  ])));
+  assert.deepEqual(s.rows.map(r => [r.type, r.time, r.amount, r.balance]), [
+    ['cargo', '09:00', 20, 20], ['cargo', '18:30', 80, 100], ['abono', '', 80, 20], ['abono', '', 20, 0]
+  ]);
+  assert.ok(s.rows.every(r => r.balance >= 0));
+  // La fecha mostrada no cambia: mismo día, sin hora, clave original.
+  assert.equal(s.rows[2].day, '2026-04-10'); assert.equal(s.rows[2].key, '2026-04-10T00:00');
+  assert.equal(s.balance, 0);
+});
+
+test('abono sin hora va antes de los movimientos del día siguiente', () => {
+  const s = plain(M.buildStatement(client, apiFor([
+    { timestamp: '2026-04-10T15:00:00Z', monto: 50, pagos: [{ fecha: '2026-04-10', monto: 30 }] },
+    { timestamp: '2026-04-11T05:30:00Z', monto: 10, pagos: [] }
+  ])));
+  assert.deepEqual(s.rows.map(r => [r.type, r.day, r.balance]), [
+    ['cargo', '2026-04-10', 50], ['abono', '2026-04-10', 20], ['cargo', '2026-04-11', 30]
+  ]);
+});
+
+test('cargo y abono ambos sin hora el mismo día: se mantiene primero el cargo', () => {
+  const s = plain(M.buildStatement(client, apiFor([
+    { fecha: '2026-04-12', monto: 40, pagos: [{ fecha: '2026-04-12', monto: 40 }] }
+  ])));
+  assert.deepEqual(s.rows.map(r => [r.type, r.balance]), [['cargo', 40], ['abono', 0]]);
+});
