@@ -29,12 +29,13 @@ async function chat(body, { role = 'owner', fetch, reader = OWNER_READER } = {})
 const first = (...calls) => [...calls.map((c) => delta({ tool_calls: [c] })), delta({}, 'tool_calls')];
 const quiet = (t) => { const o = console.log; console.log = () => {}; t.after(() => { console.log = o; }); };
 
+// (#957) stock_producto lleva el precio: «Arroz (S/ 4.00): 40 unid.».
 test('Admin, consulta simple: una sola llamada; la respuesta es el texto de la consulta, también en partes', async (t) => {
   quiet(t); const bodies = [];
   const r = await chat({ text: '¿cuánto arroz hay?' }, { fetch: seq([first(call(0, 'c1', 'stock_producto')), SECOND], bodies) });
   assert.equal(bodies.length, 1, 'sin segunda llamada');
-  assert.equal(r.final.reply, 'Arroz: 40 unid.'); assert.equal(r.final.timings.second_call, false); assert.equal(r.final.timings.ms_model2, undefined);
-  assert.equal(r.ev.filter((x) => x.ev === 'text' && x.d.t).map((x) => x.d.t).join(''), 'Arroz: 40 unid.');
+  assert.equal(r.final.reply, 'Arroz (S/ 4.00): 40 unid.'); assert.equal(r.final.timings.second_call, false); assert.equal(r.final.timings.ms_model2, undefined);
+  assert.equal(r.ev.filter((x) => x.ev === 'text' && x.d.t).map((x) => x.d.t).join(''), 'Arroz (S/ 4.00): 40 unid.');
   assert.equal(r.final.proposals[0].type, 'consulta'); assert.ok(r.final.proposals[0].result.filas.length === 1);
   assert.equal(r.final.turns.length, 2, 'el par firmado sigue igual');
 });
