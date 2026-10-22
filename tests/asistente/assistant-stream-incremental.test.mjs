@@ -571,3 +571,17 @@ test('2b) «clave 4.321api key sk-123456 | Producto |»: en partes (1..todo) = t
     for (const role of ['owner', 'empleado:consultas']) for (const n of [1, 3, 1000]) assert.equal(parts(s, role, n), redactFor(role)(s), role + '/' + n + ' ' + JSON.stringify(s));
   }
 });
+
+// (22-10, PR #934) caso fijo: «caja fuerte 4321 data:text/html;base64,AAAA, producto clave S/ 4.50» en partes dejaba «S/ 4.50» a la vista; el
+// texto entero lo tapa (la ventana de 40 del adjetivo se mide sin el «data:…;» que el filtro quita). Familia: data largo, correo, DNI con puntos.
+test('2c) «caja fuerte 4321 data:…, producto clave S/ 4.50»: en partes (1..todo) = texto entero, el monto tapado; familia con data largo, correo y DNI con puntos', () => {
+  const parts = (s, role, n) => { let o = ''; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, redactFor(role)); for (let i = 0; i < s.length; i += n) e.push(s.slice(i, i + n)); e.flush(); return o; };
+  const t = 'caja fuerte 4321 data:text/html;base64,AAAA, producto clave S/ 4.50 y listo';
+  for (const role of ['owner', 'empleado:consultas']) {
+    assert.match(redactFor(role)(t), /producto clave S\/ \[oculto\]/);
+    for (let n = 1; n <= t.length; n++) { const o = parts(t, role, n); assert.equal(o, redactFor(role)(t), role + '/' + n); assert.ok(!o.includes('4.50'), o); }
+  }
+  for (const a of ['caja fuerte 4321', 'el wifi', 'pin 4321', 'x']) for (const m of [' data:text/html;base64,AAAA,', ' data:image/png;base64,' + 'QUJD'.repeat(30) + ',', ' rosa.q@x.com', ' 45.678.912', ''])
+    for (const z of [' producto clave S/ 4.50 y listo', ' | producto clave | S/ 4.50 |']) { const s = a + m + z;
+      for (const role of ['owner', 'empleado:consultas']) for (const n of [1, 2, 5, 13, 1000]) assert.equal(parts(s, role, n), redactFor(role)(s), role + '/' + n + ' ' + JSON.stringify(s)); }
+});

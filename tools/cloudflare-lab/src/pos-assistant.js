@@ -1807,7 +1807,13 @@ function quoteOpenAt(t) {
 const PIN_KW_SCAN = /pin|clave|contrase|password|token|api|data/gi;
 export const SHIELD_M = 72, SHIELD_EVERY = 8, SHIELD_TRIES = 3;
 const SHIELD_FAR_W = 10, SHIELD_FAR_C = 72, PIN_KW_PROBE = /pin|clave|contrase|password|token|api|data/gi;
-const SHIELD_PROBES = [' 4321.', ' 43.21.', ' es Gatito.', ': Gatito.', ' Zq9xK2mPw7.', ' "abc".', ' [oculto].'];
+// ADJ_PROBES (22-10, PR #934): «producto clave S/ 4.50» (excepción del adjetivo); solo en cortes frenados por la ventana del adjetivo (adjCut)
+const SHIELD_PROBES = [' 4321.', ' 43.21.', ' es Gatito.', ': Gatito.', ' Zq9xK2mPw7.', ' "abc".', ' [oculto].'], ADJ_PROBES = [' producto clave S/ 4.50.', ' clave S/ 4.50.'];
+// (22-10, PR #934) en el texto entero la ventana de 40 de la excepción del adjetivo se mide DESPUÉS de las reglas de «data:…» (las únicas que
+// van antes que la de la clave): un «data:text/html;base64,…» trae «;» y largo que ahí ya no están («[imagen omitida]»). Si entre la palabra
+// (caja, pin, wifi…) y el corte hay un «data», se filtra ese tramo y se mira ahí. También cuenta lo ya soltado (rawTail).
+const DATA_HINT = /data/i;
+const PIN_ADJ_WIDE = /(?:^|[^a-záéíóúñü])(?:pin|contrase(?:ñ|n)a|password|wi-?fi|caja|local|alarma)(?![a-záéíóúñü])[^\n]*$/i;
 function skipWsBack(t, i) { while (i > 0 && isWs(t[i - 1])) i--; return i; }
 // ¿Hay una palabra de clave antes de h esperando su valor? (espacios, opcional «es/era/de/:/=», espacios)
 function pinOpen(t, h) {
@@ -1867,7 +1873,7 @@ function createTextStage(out0, red0 = redactText) {
   // (Bot 3 sobre c16a407d) lastKw: comienzo (absoluto) de la última etiqueta ya vista; sin etiqueta cerca pinOpen no se prueba (CPU).
   // cands: cortes que solo frenó pinOpen; pasados SHIELD_M caracteres se prueba soltar ahí (ver tryShield). Así una etiqueta repetida sin punto
   // («pin pin pin…», «la contraseña es perrito, el pin 4321 …») ya no retiene todo el texto ni lo vuelve a mirar.
-  let lastKw = -1e9, kwFound = -1, cands = [], lastTry = 0, preRed = null, recheck = []; const obfWait = new Set(), nearOnly = new Set(); // recheck que esperan «arroba»/«at»; cortes frenados solo por cercanía
+  let lastKw = -1e9, kwFound = -1, cands = [], lastTry = 0, preRed = null, recheck = []; let rawTail = ''; const obfWait = new Set(), nearOnly = new Set(), adjCut = new Set(); // recheck que esperan «arroba»/«at»; cortes frenados solo por cercanía
   const dataOpen = (h) => { // conservador: desde el último «data:» antes de h, ¿podría seguir siendo el mismo dato?
     for (let j = data.length - 1; j >= 0; j--) {
       const d = data[j]; if (d.at + 5 > off + h) continue;
@@ -1889,7 +1895,10 @@ function createTextStage(out0, red0 = redactText) {
     const end = off + pend.length; if (end - lastTry < SHIELD_EVERY || pend.length > 4000) return; lastTry = end;
     // un corte frenado SOLO por la cercanía de la etiqueta (nearOnly) se prueba en cuanto la palabra que empieza ahí llegó entera: las pruebas de
     // shieldAt (texto entero y continuaciones) deciden; si no, espera como los demás.
-    const ready = (c) => end - c >= SHIELD_M || (nearOnly.has(c) && NEAR_WORD_DONE.test(pend.slice(c - off, c - off + 120)));
+    // (22-10, PR #934) «≥ SHIELD_M detrás» se cuenta en texto FILTRADO cuando lo de detrás trae algo que el filtro encoge (un «data:…;base64,…»
+    // largo pasa a «[imagen omitida]»): si no, «caja fuerte 4321 data:…(150), producto clave S/ 4.50» soltaba «caja…» y el monto quedaba a la vista.
+    const farEnough = (c) => { if (end - c < SHIELD_M) return false; const B = pend.slice(c - off); return !DATA_HINT.test(B) || red0(B).length >= SHIELD_M; };
+    const ready = (c) => farEnough(c) || (nearOnly.has(c) && NEAR_WORD_DONE.test(pend.slice(c - off, c - off + 120)));
     let j = cands.length - 1; while (j >= 0 && !ready(cands[j])) j--;
     if (j < 0) return;
     // (Bots 3/4 sobre 39ccd25c) si el corte más reciente no sirve se prueban hasta SHIELD_TRIES anteriores (cada etiqueta/comilla abre su propia
@@ -1918,8 +1927,14 @@ function createTextStage(out0, red0 = redactText) {
     if (kwAt < 0) { best = h; preRed = { h, r: rA }; return true; }
     const rest = pend.slice(kwAt); if (rest.length >= SHIELD_FAR_C && rest.split(/\s+/).length > SHIELD_FAR_W) { best = h; preRed = { h, r: rA }; return true; }
     let w = pend.length; while (w > h && !isWs(pend[w - 1])) w--; const cut = pend.slice(0, w);
-    for (const p of SHIELD_PROBES) if (!same(pend + p) || (w < pend.length && !same(cut + p.trimStart()))) return false;
+    for (const p of adjCut.has(c) ? SHIELD_PROBES.concat(ADJ_PROBES) : SHIELD_PROBES) if (!same(pend + p) || (w < pend.length && !same(cut + p.trimStart()))) return false;
     best = h; preRed = { h, r: rA }; return true;
+  };
+  const adjNear = (h) => {
+    if (PIN_ADJ_NEAR.test(pend.slice(Math.max(0, h - 64), h))) return true; // como siempre (solo lo pendiente)
+    const w = (rawTail + pend.slice(Math.max(0, h - 600), h)).slice(-600);
+    const m = PIN_ADJ_WIDE.exec(w); if (!m) return false;
+    const seg = w.slice(m.index); return DATA_HINT.test(seg) && PIN_ADJ_NEAR.test(red0(seg).slice(-64));
   };
   const doRecheck = () => { // cortes que esperaban la palabra que sigue a un número (¿unidad?)
     const keep = []; let added = false;
@@ -1950,7 +1965,7 @@ function createTextStage(out0, red0 = redactText) {
       // (Bot 2) «precio clave S/ 4.50»: la palabra de precio va con la etiqueta. (Bots 3/4 sobre 39ccd25c) es un corte candidato (como pinOpen),
       // no un freno fijo: «precio clave » ×N ya no retiene toda la respuesta; tryShield lo suelta solo si da lo mismo que el texto entero.
       if ((PIN_PRICE_BEFORE.test(pend.slice(Math.max(0, h - 24), h)) || PIN_ADJ_BEFORE.test(pend.slice(Math.max(0, h - 24), h))) && priceKwNext(pend, h)) { if (cands.length < 256) cands.push(off + h); continue; }
-      if (PIN_ADJ_NEAR.test(pend.slice(Math.max(0, h - 64), h))) { if (cands.length < 256) cands.push(off + h); continue; } // (excepción del adjetivo, arriba)
+      if (adjNear(h)) { if (cands.length < 256) { cands.push(off + h); adjCut.add(off + h); } continue; } // (excepción del adjetivo, arriba)
       const ob = obfOpen(pend, h); // correo disfrazado (arriba)
       if (ob === 'wait') { if (!obfWait.has(off + h)) { recheck.push(off + h); obfWait.add(off + h); } continue; } // una vez (la última posición se mira de nuevo)
       if (ob) { if (cands.length < 256) cands.push(off + h); continue; }
@@ -1972,13 +1987,13 @@ function createTextStage(out0, red0 = redactText) {
       pend += str; scan(); if (recheck.length) doRecheck(); if (cands.length) tryShield();
       // (Bot 3) un tramo soltado que es solo espacios no pasa por redactText (no hay nada que tapar: todos los patrones piden un carácter
       // que no es espacio). El corte sigue igual: con una clave/pin/token, RUC, DNI o data: esperando su valor no se suelta nada (ver scan).
-      if (best > 0) { const piece = pend.slice(0, best); if (preRed && preRed.h === best) out(preRed.r); else out(WS_ONLY.test(piece) ? piece : red(piece)); preRed = null;
-        pend = pend.slice(best); off += best; seen -= best; best = 0; while (cands.length && cands[0] <= off) nearOnly.delete(cands.shift()); if (nearOnly.size > 512) for (const c of nearOnly) if (c <= off) nearOnly.delete(c);
+      if (best > 0) { const piece = pend.slice(0, best); rawTail = (rawTail + piece).slice(-600); if (preRed && preRed.h === best) out(preRed.r); else out(WS_ONLY.test(piece) ? piece : red(piece)); preRed = null;
+        pend = pend.slice(best); off += best; seen -= best; best = 0; while (cands.length && cands[0] <= off) { const c0 = cands.shift(); nearOnly.delete(c0); adjCut.delete(c0); } if (adjCut.size > 512) for (const c of adjCut) if (c <= off) adjCut.delete(c); if (nearOnly.size > 512) for (const c of nearOnly) if (c <= off) nearOnly.delete(c);
         while (data.length && data[0].phase === 2 && data[0].pos <= off) data.shift(); }
   };
   return {
     push(str) { if (str.length <= SHIELD_EVERY) { push1(str); return; } for (let i = 0; i < str.length; i += SHIELD_EVERY) push1(str.slice(i, i + SHIELD_EVERY)); },
-    flush() { if (pend) out(red(pend)); pend = ''; off = 0; seen = 0; best = 0; wsm = { at: -1, open: false }; data.length = 0; done = ''; lastKw = -1e9; kwFound = -1; cands = []; lastTry = 0; preRed = null; recheck = []; obfWait.clear(); nearOnly.clear(); }
+    flush() { if (pend) out(red(pend)); pend = ''; off = 0; seen = 0; best = 0; wsm = { at: -1, open: false }; data.length = 0; done = ''; lastKw = -1e9; kwFound = -1; cands = []; lastTry = 0; preRed = null; recheck = []; obfWait.clear(); nearOnly.clear(); adjCut.clear(); rawTail = ''; }
   };
 }
 export const FIRST_TEXT_MIN = 20, TEXT_BATCH = 48;
