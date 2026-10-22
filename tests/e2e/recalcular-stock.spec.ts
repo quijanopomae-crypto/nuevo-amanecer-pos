@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 // Recalcular stock: vista previa (solo dueño) (solo lectura). Datos sintéticos, modo local.
-async function rolePage(page: Page, role: 'owner' | 'empleado') {
+async function rolePage(page: Page, role: 'owner' | 'empleado', openLock = false) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
@@ -16,6 +16,12 @@ async function rolePage(page: Page, role: 'owner' | 'empleado') {
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed, role);
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('recalcular-stock'))).toBe(true);
+  // Abre el candado solo en este navegador de prueba (copia, el original está congelado); pos-permissions.js no cambia.
+  if (openLock) await page.evaluate(() => {
+    const w = window as any, P = w.NA_PERMISSIONS;
+    w.NA_PERMISSIONS = Object.freeze({ ...P, featureLocked: (id: string) => id === 'recalcular-stock' ? false : P.featureLocked(id) });
+  });
 }
 async function seed(page: Page) {
   await page.evaluate(() => (window as any).eval(`
@@ -49,7 +55,7 @@ test('el módulo no usa innerHTML', () => {
 for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
   test(`dueño ve la vista previa de diferencias a ${width}px ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await rolePage(page, 'owner');
+    await rolePage(page, 'owner', true);
     await seed(page);
     await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
     await openScreen(page);
@@ -79,4 +85,14 @@ test('empleado no ve Recalcular stock', async ({ page }) => {
   await page.evaluate(() => { (window as any).goPage('pageAjustesInventario'); (window as any).NA_RECALCULAR_STOCK.render(); });
   await expect(page.locator('[data-rs-section]')).toBeHidden();
   await expect(page.locator('[data-rs-row]')).toHaveCount(0);
+});
+
+test('candado real cerrado: el dueño no ve Recalcular stock', async ({ page }) => {
+  await rolePage(page, 'owner');
+  await seed(page);
+  await openScreen(page);
+  await page.evaluate(() => (window as any).NA_RECALCULAR_STOCK.render());
+  await expect(page.locator('[data-rs-section]')).toBeHidden();
+  await expect(page.locator('[data-rs-row]')).toHaveCount(0);
+  await expect(page.locator('[data-rs-summary]')).toHaveCount(0);
 });

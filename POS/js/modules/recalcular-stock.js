@@ -10,7 +10,9 @@
   function pid(p) { return text(p && (p.id != null ? p.id : p.product_id)); }
   function aj() { return root.NA_AJUSTES_INVENTARIO; }
   function kx() { return root.NA_KARDEX; }
-  function allowed() { try { var a = aj(); return !!(a && typeof a.available === 'function' && a.available()); } catch (_) { return false; } }
+  // Candado propio: falla cerrado si no hay NA_PERMISSIONS/featureLocked, si da error o si no devuelve false.
+  function featureOpen() { try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('recalcular-stock') === false); } catch (_) { return false; } }
+  function allowed() { if (!featureOpen()) return false; try { var a = aj(); return !!(a && typeof a.available === 'function' && a.available()); } catch (_) { return false; } }
   function canon() { var c = root.NuevoAmanecerCanonical; try { return c && typeof c.enabled === 'function' && c.enabled() ? c : null; } catch (_) { return null; } }
   function data() {
     var c = canon(), snap = null; try { snap = c && c.snapshot(); } catch (_) {}
@@ -81,6 +83,6 @@
     ['na:role', 'na:canonical-updated'].forEach(function (ev) { root.addEventListener(ev, update); });
     update();
   }
-  root.NA_RECALCULAR_STOCK = Object.freeze({ recompute: recompute, analyze: analyze, render: render, init: init });
+  root.NA_RECALCULAR_STOCK = Object.freeze({ recompute: recompute, analyze: analyze, render: render, init: init, featureOpen: featureOpen, allowed: allowed });
   if (root.document) { if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true }); else init(); }
 })(globalThis);
