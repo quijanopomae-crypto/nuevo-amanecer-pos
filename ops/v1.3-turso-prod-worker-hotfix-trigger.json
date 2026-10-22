@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved 2026-10-22: Aslo. Deploy PR #953 invoice conversation memory and clarifications. CANON Critical CI 39830113594, E2E Smoke CI 39830113650 and Visual Regression 39830113808 success; independent Reviewer/Forensic no P0/P1. Backend first then web. No schema, business data or secret changes.",
-  "target_commit": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
-  "rollback_ref": "e58826c093ee0b411eef30012ba9038e4bbecca1",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #946 #947 #948 #930 #949 #927 #939 (assistant long memory, Lima time, caja_abierta, below-cost alerts, business name, overdue credits with codes only, levels 1/2/3). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39863942113 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "target_commit": "8e0f236b451b5003220b332648c1725449dc12ba",
+  "rollback_ref": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 71,
-  "optimization": "ASSISTANT_INVOICE_CONVERSATION_MEMORY"
+  "attempt": 72,
+  "optimization": "ASSISTANT_BATCH_LEVELS_MEMORY_CREDITS"
 }
