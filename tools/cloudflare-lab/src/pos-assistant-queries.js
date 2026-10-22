@@ -70,9 +70,9 @@ export function limaCalendarLine(nowMs = Date.now()) {
   const r = (w) => dateWordRange(w, nowMs), t = limaToday(nowMs), s = r('esta_semana'), m = r('este_mes');
   const a = r('antier').desde, md = r('mismo_dia_semana_pasada').desde;
   return 'Hoy (Lima) es ' + DIAS[weekdayIdx(t)] + ' ' + t + '; ayer fue ' + r('ayer').desde + '; antier (anteayer) fue ' + DIAS[weekdayIdx(a)] + ' ' + a
-    + '; el mismo día de la semana pasada (hoy−7) fue ' + DIAS[weekdayIdx(md)] + ' ' + md
+    + '; el mismo día de la semana pasada («el mismo día de la otra semana») fue ' + DIAS[weekdayIdx(md)] + ' ' + md
     + '; esta semana (de lunes a hoy) va de ' + s.desde + ' a ' + s.hasta + '; este mes va de ' + m.desde + ' a ' + m.hasta + '.'
-    + ' Para esas palabras (y semana o mes pasado) usa periodo en consultar (no calcules); un día exacto: fecha AAAA-MM-DD.'
+    + ' Para esas palabras (y semana o mes pasado) usa periodo en consultar (el sistema calcula las fechas); un día exacto: fecha AAAA-MM-DD.'
     + ' Si corrigen la fecha («era antier»), llama consultar de nuevo con el periodo NUEVO; no repitas el de antes.';
 }
 // Fecha de un campo: AAAA-MM-DD tal cual, o una palabra de fecha (lado: 'desde' o 'hasta' de su rango). Si no, null.

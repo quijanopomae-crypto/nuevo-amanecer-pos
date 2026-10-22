@@ -337,3 +337,36 @@ test('chat: «era antier» tras «ayer» vuelve a consultar con periodo antier (
   assert.deepEqual(b.p.result.filas, [['10:00–10:59', 1, 12.34]]);
   assert.match(JSON.parse(b.cap[0]).messages[0].content, /periodo NUEVO/, 'el prompt pide volver a consultar');
 });
+
+// Prompt y herramientas por rol (alfa, 22-10): el empleado solo ve sus tipos y sus líneas; el Admin recibe todo.
+const ADMIN_TYPES = ['ganancia', 'caja_abierta', 'creditos_atrasados', 'deuda_cliente', 'deudas_clientes', 'resumen_dia', 'resumen_mes', 'sin_costo', 'ventas_periodo', 'compras_recientes', 'productos_sin_ventas', 'ventas_por_hora', 'top_productos'];
+const ADMIN_LINES = [/CAJA DE HOY/, /caja_abierta/, /MEMORIA DE BOLETA/, /leer_factura_compra/, /deuda_cliente/, /estado de cuenta/, /ganancia/i, /creditos_atrasados|créditos atrasados/];
+const consultarOf = (role) => toolsForRole(role).find((t) => t.function.name === 'consultar').function;
+test('por rol: el enum de consultar del empleado no trae tipos del Admin ni de costos; el del Admin los trae todos', () => {
+  for (const role of ['empleado:consultas', 'empleado:consultas_documentos']) {
+    const c = consultarOf(role);
+    assert.deepEqual(c.parameters.properties.tipo.enum, ['stock_producto', 'bajo_stock'], role);
+    for (const t of ADMIN_TYPES) assert.ok(!c.description.includes(t), role + ': la descripción no nombra ' + t);
+    assert.doesNotMatch(c.description, /ganancia|costo|caja|deuda|atrasad/i, role);
+    assert.equal(c.parameters.properties.cliente_id, undefined, role + ': sin cliente_id');
+    const all = JSON.stringify(toolsForRole(role));
+    for (const t of ['ganancia', 'caja_abierta', 'creditos_atrasados', 'deuda_cliente']) assert.ok(!all.includes(t), role + ': ' + t);
+  }
+  const a = consultarOf('owner');
+  assert.deepEqual(a.parameters.properties.tipo.enum, [...QUERY_TYPES]);
+  for (const t of ['ganancia', 'productos_sin_ventas', 'deuda_cliente', 'ventas_por_hora', 'resumen_dia', 'resumen_mes']) assert.ok(a.description.includes(t), 'Admin: ' + t);
+  assert.match(a.description, /créditos atrasados \(vencidos, con borrador de recordatorio/);
+  assert.match(a.description, /el sistema las pone en hora de Lima/);
+  assert.ok(a.parameters.properties.cliente_id);
+});
+test('por rol: el prompt del empleado no trae las líneas de ganancia, costos, caja, boleta ni deudas; el del Admin sí', () => {
+  for (const role of ['empleado:consultas', 'empleado:consultas_documentos']) {
+    const p = systemPrompt(role, {});
+    for (const re of ADMIN_LINES) assert.doesNotMatch(p, re, role + ': ' + re);
+    assert.match(p, /Hablas con un EMPLEADO/, role); assert.match(p, /cliente #código/, role); assert.match(p, /Hoy \(Lima\) es /, role);
+  }
+  const o = systemPrompt('owner', {});
+  for (const re of [/CAJA DE HOY/, /caja_abierta/, /MEMORIA DE BOLETA/, /leer_factura_compra/, /estado de cuenta/, /consultar deuda_cliente con cliente_id = ese código/]) assert.match(o, re, 'Admin: ' + re);
+  assert.match(o, /«el mismo día de la otra semana»/); assert.match(o, /el sistema calcula las fechas/);
+  assert.ok(o.length > systemPrompt('empleado:consultas', {}).length, 'el empleado recibe menos texto');
+});
