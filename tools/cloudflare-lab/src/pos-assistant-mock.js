@@ -34,8 +34,8 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/document|pdf|imprim|reporte de|lista de precios|estado de cuenta|inventario valorizado|valorizado|cierre de caja|pedido para|lista de pedido/.test(t)) {
     const tipo = /lista de precios/.test(t) ? 'lista_precios' : /valoriz/.test(t) ? 'inventario_valorizado' : /reponer|pedido/.test(t) ? 'lista_pedido'
       : /estado de cuenta/.test(t) ? 'estado_cuenta' : /cierre|caja/.test(t) ? 'resumen_cierre' : 'reporte_ventas';
-    const cli = /estado de cuenta (?:de|del cliente)?\s*([a-z ]{3,40})/.exec(t);
-    return { content: 'Armé el documento. Es interno, NO es comprobante SUNAT.', calls: [call('preparar_documento', { tipo, ...dates(t), ...(cli ? { cliente: cli[1].trim() } : {}) })] };
+    const cli = /cliente #([A-Za-z0-9_-]{1,40})/.exec(String(text || '')); // el aparato manda «cliente #código», nunca el nombre
+    return { content: 'Armé el documento. Es interno, NO es comprobante SUNAT.', calls: [call('preparar_documento', { tipo, ...dates(t), ...(cli ? { cliente_id: cli[1] } : {}) })] };
   }
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
