@@ -6,11 +6,14 @@ import { canonicalRead } from './a6-canonical.js';
 
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
-export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes']);
+export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes', 'resumen_dia', 'resumen_mes']);
+// Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
+export const SUMMARY_TYPES = Object.freeze(['resumen_dia', 'resumen_mes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
 const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos por reponer', sin_costo: 'Productos sin costo', ventas_periodo: 'Ventas del período',
-  top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', creditos_atrasados: 'Créditos atrasados', compras_recientes: 'Compras recientes' };
+  top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', creditos_atrasados: 'Créditos atrasados', compras_recientes: 'Compras recientes',
+  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes' };
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -27,6 +30,65 @@ export function period(args, nowMs) {
   // Lima = UTC-5: el día local D va de D 05:00Z a D+1 05:00Z.
   return { desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' };
 }
+
+// ---------- Resúmenes del día y del mes (helpers) ----------
+const limaDay = (iso) => new Date(Date.parse(iso) - 5 * 3600 * 1000).toISOString().slice(0, 10);
+// Día de Lima de un cobro: hora exacta si la hay; si no, la fecha conocida (AAAA-MM-DD). Sin fecha conocida: no cuenta en ningún período.
+export function paymentDay(x) {
+  const ts = x?.payment_timestamp || x?.created_at;
+  if (ts && /T\d{2}:/.test(String(ts)) && Number.isFinite(Date.parse(ts))) return limaDay(ts);
+  const d = String(x?.payment_date || x?.fecha || '');
+  if (DATE.test(d) && x?.payment_date_known !== 0 && x?.payment_date_known !== false) return d;
+  return null;
+}
+// Suma por período: ventas, número, por método, contado/crédito (la parte crédito de una venta mixta sale de cash-movements),
+// cobros de créditos y productos. moves/pays = null: esa lectura no estuvo disponible.
+export function aggregatePeriods(periods, sales, items, moves, pays, truncated) {
+  const credit = new Map(); for (const m of moves || []) credit.set(m.sale_id, (credit.get(m.sale_id) || 0) + m.credit_cents);
+  return periods.map((p) => {
+    const inP = sales.filter((s) => s.created_at >= p.fromIso && s.created_at < p.toIso), ids = new Set(inP.map((s) => s.sale_id));
+    const r = { desde: p.desde, hasta: p.hasta, n: inP.length, c: 0, credito_c: 0, metodos: {}, pagos_n: null, pagos_c: null, items: [], truncado: !!truncated };
+    // Sin cash-movements no se sabe qué parte de una venta mixta fue a crédito: contado/crédito quedan «no disponible» (null).
+    const splitUnknown = moves == null && inP.some((s) => s.metodo === 'mixto');
+    for (const s of inP) {
+      r.c += s.total_cents; const m = r.metodos[s.metodo] || (r.metodos[s.metodo] = { n: 0, c: 0 }); m.n++; m.c += s.total_cents;
+      // credit_cents > 0: esa parte fue a crédito. 0 o sin movimiento: según el método (una venta «credito» con 0 no pasa a contado).
+      const cc = credit.get(s.sale_id) || 0;
+      r.credito_c += cc > 0 ? Math.min(cc, s.total_cents) : s.metodo === 'credito' ? s.total_cents : 0;
+    }
+    if (splitUnknown) r.credito_c = null;
+    const by = new Map(); for (const it of items) { if (!ids.has(it.sale_id)) continue; const x = by.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; x.q += it.quantity; x.c += it.line_total_cents; by.set(it.product_id, x); }
+    r.items = [...by.values()];
+    if (pays) { const ps = pays.filter((x) => x.dia && x.dia >= p.desde && x.dia <= p.hasta); r.pagos_n = ps.filter((x) => x.c > 0).length; r.pagos_c = ps.reduce((a, x) => a + x.c, 0); }
+    return r;
+  });
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+function monthEnd(ym) { const [y, m] = ym.split('-').map(Number); return ym + '-' + pad2(new Date(Date.UTC(y, m, 0)).getUTCDate()); }
+function prevMonth(ym) { const [y, m] = ym.split('-').map(Number); return m === 1 ? (y - 1) + '-12' : y + '-' + pad2(m - 1); }
+const mkPeriod = (desde, hasta) => ({ desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' });
+// Períodos del resumen (hora de Lima). Día: el pedido (por defecto hoy) contra el día anterior.
+// Mes: el mes del día pedido; si es el mes en curso va hasta hoy y se compara con los MISMOS días del mes anterior (1 al N).
+export function summaryPeriods(tipo, args, nowMs) {
+  const today = limaToday(nowMs), raw = String(args?.hasta || args?.desde || '');
+  let ref = DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
+  if (ref > today) ref = today;
+  if (tipo === 'resumen_dia') return { actual: mkPeriod(ref, ref), anterior: mkPeriod(addDays(ref, -1), addDays(ref, -1)), en_curso: ref === today };
+  const ym = ref.slice(0, 7), end = monthEnd(ym), enCurso = today.slice(0, 7) === ym, hasta = enCurso ? today : end;
+  const pym = prevMonth(ym), pEnd = monthEnd(pym), day = Number(hasta.slice(8, 10)), pHasta = enCurso ? (pym + '-' + pad2(Math.min(day, Number(pEnd.slice(8, 10))))) : pEnd;
+  return { actual: mkPeriod(ym + '-01', hasta), anterior: mkPeriod(pym + '-01', pHasta), en_curso: enCurso };
+}
+// Productos ante el modelo: SOLO «producto #código» (un nombre puede llevar el de un cliente, p. ej. «Encargo Sra. …»). El nombre se pone
+// únicamente en la tabla de la pantalla del Admin (mismo criterio que «Ventas bajo costo», PR #930). Código raro: sin código.
+const CODE_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
+export const productRef = (id) => 'producto #' + (CODE_RE.test(String(id)) ? String(id) : 'sin-código');
+// Protege «producto #código» del redactor (un código numérico largo parece DNI o teléfono) y lo devuelve igual después.
+export function protectProductRefs(text, ids, fn) {
+  const refs = [...new Set([...(ids || [])].map(productRef))].sort((a, b) => b.length - a.length); // «#123» antes que «#12»
+  let t = String(text ?? ''); refs.forEach((r, i) => { t = t.split(r).join('\uE000' + String.fromCharCode(0xE100 + i) + '\uE001'); });
+  return fn(t).replace(/\uE000([\uE100-\uE8FF])\uE001/g, (_m, c) => refs[c.charCodeAt(0) - 0xE100] || '').replace(/[\uE000\uE001]/g, '');
+}
+const pct = (a, b) => (b > 0 ? Math.round(((a - b) / b) * 1000) / 10 : null);
 
 // ---------- Lectores ----------
 // Lector sobre la base real: usa la lectura canónica existente (/read/canonical/*) para productos, créditos (saldo calculado
@@ -89,6 +151,20 @@ export function canonicalReader(db) {
       for (const it of await all('sale-items')) { if (!ids.has(String(it.sale_id))) continue; const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n);
     },
+    // Resúmenes: UNA lectura de cada colección para todos los períodos pedidos (actual y anterior), sin escribir nada.
+    // Cobros de créditos: la lectura canónica de credit-payments (importados + abonos en vivo). Solo se suman montos y fechas:
+    // ni el cliente ni el nombre que trae el pago salen de aquí. Si una lectura secundaria falla, ese dato queda «no disponible».
+    async periodSummary(periods) {
+      const [sales, out, items] = await Promise.all([all('sales'), annulled(), all('sale-items')]);
+      // Tope de páginas: la lectura canónica va en orden de sale_id / movement_id (no por fecha), así que si alguna colección llega
+      // al tope pueden faltar ventas RECIENTES. Se marca truncado y el resumen lo avisa en la tabla y al modelo.
+      let moves = null, pays = null, cut = !!(sales.truncated || items.truncated);
+      try { const m = await all('cash-movements'); cut = cut || !!m.truncated; moves = m.map((x) => ({ sale_id: String(x.sale_id), credit_cents: Number(x.credit_cents) || 0 })); } catch { moves = null; }
+      try { const y = await all('credit-payments'); cut = cut || !!y.truncated; pays = y.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0 })); } catch { pays = null; }
+      const list = sales.filter((s) => !out.has(String(s.sale_id))).map((s) => ({ sale_id: String(s.sale_id), created_at: s.created_at, metodo: s.payment_method, total_cents: Number(s.total_cents) || 0 }));
+      return aggregatePeriods(periods, list, items.map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, line_total_cents: Number(it.line_total_cents) || 0 })),
+        moves, pays, cut);
+    },
     async purchases(n) {
       try { return (await db.prepare('SELECT supplier,document_ref,total_cost_cents,line_count,status,created_at FROM pos_purchases ORDER BY created_at DESC LIMIT ?1').bind(n).all()).results || []; }
       catch (e) { if (/no such table/i.test(String(e?.message || e))) return []; throw e; }
@@ -109,6 +185,13 @@ export function memoryReader(data) {
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
+    async periodSummary(periods) {
+      const list = (data.sales || []).filter((s) => !s.anulada).map((s) => ({ sale_id: String(s.sale_id), created_at: s.created_at, metodo: s.metodo, total_cents: Number(s.total_cents) || 0 }));
+      const items = (data.saleItems || []).map((it) => ({ ...it, sale_id: String(it.sale_id), product_id: String(it.product_id) }));
+      // Igual que el lector real: sin cash-movements / cobros -> null («no disponible»). data.truncated simula el tope de páginas.
+      return aggregatePeriods(periods, list, items, data.cashMovements ? data.cashMovements.map((m) => ({ sale_id: String(m.sale_id), credit_cents: Number(m.credit_cents) || 0 })) : null,
+        data.payments ? data.payments.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0 })) : null, !!data.truncated);
+    },
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
   };
 }
@@ -234,6 +317,7 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       texto: filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.',
       resumen: { desde: p.desde, hasta: p.hasta, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
   }
+  if (SUMMARY_TYPES.includes(tipo)) return summaryQuery(reader, tipo, args, nowMs, base);
   if (tipo === 'deudas_clientes') {
     const [credits, customers] = await Promise.all([reader.credits(), reader.customers()]);
     const names = new Map(customers.map((c) => [c.id, c.nombre])), by = new Map();
@@ -269,6 +353,60 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   return { ...base, columnas: ['Fecha', 'Proveedor', 'Documento', 'Total S/', 'Líneas'], filas,
     texto: rows.length ? (rows.length === 1 ? 'Última compra' : 'Últimas ' + rows.length + ' compras') + '. La más reciente: ' + filas[0][0] + ', ' + filas[0][1] + ', S/ ' + Number(filas[0][3] || 0).toFixed(2) + '.' : 'No hay compras registradas.',
     resumen: { compras: rows.length, total_soles: r2(filas.reduce((s, f) => s + (f[3] || 0), 0)), recientes: filas.slice(0, M).map((f) => ({ fecha: f[0], proveedor: f[1], soles: f[3] })) } };
+}
+
+// Resumen del día o del mes. Pantalla del Admin: tabla actual vs. anterior y productos top (con nombre). Modelo y texto de la respuesta:
+// SOLO totales, conteos y «producto #código» (sin nombres de producto ni datos de clientes). Nada aquí escribe en la base.
+async function summaryQuery(reader, tipo, args, nowMs, base) {
+  const per = summaryPeriods(tipo, args, nowMs);
+  if (typeof reader.periodSummary !== 'function') return { error: 'no_summary' };
+  const [cur, prev] = await reader.periodSummary([per.actual, per.anterior]);
+  const names = new Map((await reader.products()).map((x) => [String(x.id), x.nombre]));
+  const S = (c) => cents(c) ?? 0, money = (c) => 'S/ ' + S(c).toFixed(2);
+  const dia = tipo === 'resumen_dia', lab = (p) => (p.desde === p.hasta ? p.desde : p.desde + ' a ' + p.hasta);
+  const curL = dia ? (per.en_curso ? 'Hoy' : per.actual.desde) : (per.en_curso ? 'Este mes' : per.actual.desde.slice(0, 7)), prevL = dia ? 'Día anterior' : 'Mes anterior';
+  const byAmount = cur.items.slice().sort((a, b) => b.c - a.c || b.q - a.q), byQty = cur.items.slice().sort((a, b) => b.q - a.q || b.c - a.c);
+  const nm = (x) => names.get(String(x.product_id)) || 'Producto ' + x.product_id;
+  const fmtPct = (v) => (v == null ? '—' : (v > 0 ? '+' : '') + v + ' %');
+  const metodos = [...new Set([...Object.keys(cur.metodos), ...Object.keys(prev.metodos)])].sort((a, b) => (cur.metodos[b]?.c || 0) - (cur.metodos[a]?.c || 0));
+  const cobro = (r) => (r.pagos_c == null ? 'no disponible' : S(r.pagos_c));
+  const ND = 'no disponible', contado = (r) => (r.credito_c == null ? null : r.c - r.credito_c), sv = (c) => (c == null ? ND : S(c));
+  const pctN = (a, b) => (a == null || b == null ? null : pct(a, b)), truncado = !!(cur.truncado || prev.truncado);
+  const AVISO = 'Aviso: datos incompletos. Hay más registros de los que el asistente lee de una vez y pueden faltar ventas recientes; revise Reportes.';
+  const filas = [
+    ...(truncado ? [[AVISO, '', '', '']] : []),
+    ['Ventas S/', S(cur.c), S(prev.c), fmtPct(pct(cur.c, prev.c))],
+    ['N.º de ventas', cur.n, prev.n, fmtPct(pct(cur.n, prev.n))],
+    ['Ticket promedio S/', cur.n ? r2(S(cur.c) / cur.n) : 0, prev.n ? r2(S(prev.c) / prev.n) : 0, '—'],
+    ['Al contado S/', sv(contado(cur)), sv(contado(prev)), fmtPct(pctN(contado(cur), contado(prev)))],
+    ['Al crédito S/', sv(cur.credito_c), sv(prev.credito_c), fmtPct(pctN(cur.credito_c, prev.credito_c))],
+    ['Cobros de créditos S/', cobro(cur), cobro(prev), cur.pagos_c == null ? '—' : fmtPct(pct(cur.pagos_c, prev.pagos_c))],
+    ...metodos.map((m) => ['Método: ' + (METODO[m] || m), S(cur.metodos[m]?.c || 0), S(prev.metodos[m]?.c || 0), fmtPct(pct(cur.metodos[m]?.c || 0, prev.metodos[m]?.c || 0))]),
+    ...byAmount.slice(0, 5).map((x, i) => ['Top ' + (i + 1) + ' por monto: ' + nm(x) + ' (' + productRef(x.product_id) + ', ' + r2(x.q) + ' unid.)', S(x.c), '', '']),
+    ...byQty.slice(0, 5).map((x, i) => ['Top ' + (i + 1) + ' por unidades: ' + nm(x) + ' (' + productRef(x.product_id) + ')', r2(x.q), '', ''])
+  ];
+  const cambio = pct(cur.c, prev.c), nota = truncado ? ' (datos incompletos: pueden faltar ventas recientes)' : '';
+  const texto = cur.n
+    ? sentences([(dia ? 'Resumen de ' + lab(per.actual) : 'Resumen del mes ' + lab(per.actual)) + ': ' + money(cur.c) + ' en ' + cur.n + (cur.n === 1 ? ' venta' : ' ventas') + nota,
+      prevL + ': ' + money(prev.c) + (cambio == null ? '' : ' (' + fmtPct(cambio) + ')'),
+      ...(cur.credito_c == null ? [] : ['Al contado ' + money(contado(cur)) + ' y al crédito ' + money(cur.credito_c)]),
+      ...(cur.pagos_c == null ? [] : ['Cobros de créditos: ' + money(cur.pagos_c)]),
+      ...(byAmount.length ? ['Lo que más vendió: ' + productRef(byAmount[0].product_id) + ' (' + money(byAmount[0].c) + ')'] : [])])
+    : sentences(['No hay ventas registradas ' + (dia ? 'el ' : 'en ') + lab(per.actual) + nota, prevL + ': ' + money(prev.c),
+      ...(cur.pagos_c ? ['Cobros de créditos: ' + money(cur.pagos_c)] : [])]);
+  const tot = (r) => ({ desde: r.desde, hasta: r.hasta, truncado: !!r.truncado, total_soles: S(r.c), ventas: r.n, ticket_promedio: r.n ? r2(S(r.c) / r.n) : 0,
+    contado_soles: r.credito_c == null ? null : S(contado(r)), credito_soles: r.credito_c == null ? null : S(r.credito_c), cobros_soles: r.pagos_c == null ? null : S(r.pagos_c), cobros: r.pagos_n,
+    por_metodo: Object.fromEntries(Object.entries(r.metodos).map(([m, v]) => [METODO[m] || m, S(v.c)])) });
+  const M = 5;
+  return { ...base, titulo: (dia ? 'Resumen del día ' : 'Resumen del mes ') + lab(per.actual), columnas: ['Detalle', curL, prevL, 'Cambio'], filas,
+    // Sin «total» arriba: la tarjeta lo leería como «Mostrando N de total» (filas truncadas). El total va en la tabla y en total_soles.
+    total_soles: S(cur.c), ventas: cur.n, desde: per.actual.desde, hasta: per.actual.hasta, texto,
+    resumen: { periodo: dia ? 'dia' : 'mes', en_curso: per.en_curso, truncado, actual: tot(cur), anterior: tot(prev),
+      cambio_pct: { total: cambio, ventas: pct(cur.n, prev.n) },
+      top_por_monto: byAmount.slice(0, M).map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q), soles: S(x.c) })),
+      top_por_unidades: byQty.slice(0, M).map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q) })) },
+    // Solo para el servidor (no va al aparato ni al modelo): códigos a proteger del redactor en el mensaje al modelo y en la respuesta.
+    refIds: [...new Set([...byAmount.slice(0, 5), ...byQty.slice(0, 5)].map((x) => String(x.product_id)))] };
 }
 
 // ---------- Documentos para aparatos de empleado ----------
