@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner OK 2026-10-22 («aprobado publica todo») to publish PR #934 (asistente: privacidad, clientes por código, redactor en partes = entero, tabla de deudas sin nombres del servidor) and PR #935 (subir foto o PDF, solo web). Merges 8687bf2d (#934) and dbca4aea (#935) on top of Worker 68 (48a8d920, #924). Sin migración, sin cambios de esquema. CI critical-regression + e2e-smoke + visual green on both PRs. D1 backup today: Owner Backup Recovery Drill run 39787686903 success (R2). Rollback to 48a8d920 (Worker 68, version 8bd10309-6fb9-400a-a83f-c233aaa623a5).",
-  "target_commit": "dbca4aeac570f3749f5c056ad4391982e547acdd",
-  "rollback_ref": "48a8d9203029826812fb4613894f2a7f70f4b569",
+  "authorization_context": "Owner explicitly approved 2026-10-22: Aplícalo lo apruebo. Deploy PR #950 invoice/new product correction; CANON Critical CI 39822600750, E2E Smoke CI 39822600145 and Visual Regression 39822600315 all success. Independent Reviewer/Forensic no P0/P1. Backend first, then web. No schema changes, migrations or live sales. Rollback to previous deployed Worker code.",
+  "target_commit": "59dc8b810983af04173266ddf79207f91785bb9f",
+  "rollback_ref": "dbca4aeac570f3749f5c056ad4391982e547acdd",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 69,
-  "optimization": "ASISTENTE_PRIVACIDAD_SUBIR_ARCHIVO"
+  "attempt": 70,
+  "optimization": "ASSISTANT_INVOICE_NEW_PRODUCTS"
 }
