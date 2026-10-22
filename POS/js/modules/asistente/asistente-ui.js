@@ -767,6 +767,44 @@
       if (frag) { if (last < v.length) frag.appendChild(doc.createTextNode(v.slice(last))); t.parentNode.replaceChild(frag, t); } });
     return n;
   }
+  // ---------- «Ventas bajo costo» (solo Admin) ----------
+  // Solo lectura: el servidor compara lo cobrado con el costo actual y arma el informe. Aquí solo se muestra (texto, sin tablas HTML).
+  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b/i;
+  function belowRows(m, d) {
+    var list = el('div', 'na-asst-below');
+    (d.ventas || []).slice(0, 50).forEach(function (g) { if (!g) return; var r = el('div', 'na-asst-below-row');
+      r.textContent = String(g.nombre || '') + ': ' + g.unidades + ' unid., cobrado desde S/ ' + Number(g.precio_min || 0).toFixed(2) + ' con costo S/ ' + Number(g.costo || 0).toFixed(2) + ', pérdida S/ ' + Number(g.perdida || 0).toFixed(2);
+      list.appendChild(r); });
+    (d.catalogo || []).slice(0, 50).forEach(function (c) { if (!c) return; var r = el('div', 'na-asst-below-row');
+      r.textContent = 'Precio actual: ' + String(c.nombre || '') + ' a S/ ' + Number(c.precio || 0).toFixed(2) + ' con costo S/ ' + Number(c.costo || 0).toFixed(2);
+      list.appendChild(r); });
+    if (list.childNodes.length) m.appendChild(list);
+  }
+  // Período que pidió el Admin; las fechas las calcula el servidor con la hora de Lima. Sin período: los últimos 30 días.
+  function belowPeriod(text) {
+    var t = String(text || '').toLowerCase(), m = t.match(/[uú]ltimos?\s+(\d{1,2})\s+d[ií]as/);
+    if (m) return { dias: Number(m[1]) };
+    if (/\bhoy\b/.test(t)) return { periodo: 'hoy' };
+    if (/\bayer\b/.test(t)) return { periodo: 'ayer' };
+    if (/(esta|la)\s+semana/.test(t)) return { periodo: 'semana' };
+    if (/mes\s+(pasado|anterior)/.test(t)) return { periodo: 'mes_pasado' };
+    if (/(este|del|el)\s+mes\b/.test(t)) return { periodo: 'mes' };
+    return {};
+  }
+  async function belowCost(text) {
+    var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true;
+    addMsg('u', text); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState('pensando');
+    var thinking = addMsg('a', 'Revisando ventas y costos'); thinking.classList.add('na-asst-thinking');
+    var mine = panelEl;
+    try {
+      var d = await post('/auth/assistant/below-cost', belowPeriod(text), null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
+      if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
+      var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review'); belowRows(b, d);
+      var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
+      setState('hablando', 2500);
+    } catch (e) { if (!panelEl) return; thinking.remove(); errMsg(root.navigator.onLine === false ? 'offline' : 'network', null, [text, null]); setState('error', 2600); }
+    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; }
+  }
   // ---------- «Leer boleta con IA» (solo Admin, carga diferida de asistente-boleta.js) ----------
   var BOLETA_RE = /\b(?:lee|leer|l[eé]ame|escanea|escanear)\s+(?:una\s+|la\s+|esta\s+)?boleta\b|\bboleta con ia\b/i;
   var LEARNED_RE = /\bcorrecciones(?:\s+(?:guardadas|aprendidas|de (?:las )?boletas))?\b|\b(?:borrar|ver)\s+(?:lo\s+)?aprendido\b/i;
@@ -840,6 +878,7 @@
     text = String(text || '').trim(); if (!text && !image) return;
     if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
     if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !isReview(text)) return learnedShow(text);
+    if (!image && isOwnerAccess() && BELOW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return belowCost(text); }
     if (!image && isOwnerAccess() && isReview(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
@@ -957,7 +996,7 @@
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Ventas bajo costo">Ventas bajo costo</button><button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }
