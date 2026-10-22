@@ -93,3 +93,17 @@ test('con el candado puesto no aparece el botón', async ({ page }) => {
   await page.evaluate(() => { ventas = [{ id: 'V-9003', fecha: '2026-10-20', hora: '1', metodo: 'efectivo', items: [{ id: 1, name: 'x', precio: 1, qty: 1 }] }]; (window as any).NA_MENU_NAVIGATION.navigate('pageVentas'); ventasTab = 'historial'; (window as any).ventasRender(); });
   await expect(page.locator('#ventasContent .na-clonar-venta-btn')).toHaveCount(0);
 });
+
+test('si los permisos aún no cargan, Clonar venta queda bloqueado (falla cerrado)', async ({ page }) => {
+  await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : r.abort());
+  await page.goto('/index.html');
+  await page.waitForFunction(() => !!(window as any).NA_CLONAR_VENTA);
+  const r = await page.evaluate(() => {
+    const w = window as any;
+    w.eval(`ventas=[{id:'V-1',items:[{id:'x',name:'X',qty:1}]}]`);
+    w.NA_PERMISSIONS = undefined;
+    return w.NA_CLONAR_VENTA.clone('V-1');
+  });
+  expect(r).toEqual({ ok: false, reason: 'locked' });
+  expect(await page.evaluate(() => (window as any).eval('cart.length'))).toBe(0);
+});
