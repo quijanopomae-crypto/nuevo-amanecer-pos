@@ -115,9 +115,10 @@ test('lectura cortada (muchas ventas o líneas): truncado llega al resultado, al
   assert.match(JSON.parse(f.calls[1]).messages.find((m) => m.role === 'tool').content, /"truncado":true/, 'el modelo lo sabe');
   const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   assert.match(UI, /r\.truncado \? '<div class="warn">Ojo: solo se leyó una parte de los datos\./, 'aviso visible en la tabla');
-  // Lector canónico: se marca si se cortan las LÍNEAS (no solo las ventas).
+  // Lector canónico (#960): suma en SQL por producto (misma lectura de ventas que topItems) y se marca si se pasa del tope.
   const Q = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant-queries.js', import.meta.url), 'utf8');
-  assert.match(Q, /m\.truncated = !!\(sales\.truncated \|\| items\.truncated\)/);
+  assert.match(Q, /async soldQty\(p\) \{\n\s+const rows = await salesSql\(p, 'i\.product_id AS product_id,SUM\(i\.quantity\) AS q'/);
+  assert.match(Q, /m\.truncated = rows\.length > SOLD_QTY_MAX/);
 });
 
 // ---------- Puntos 2 y 4 (#929): genéricos y servicios fuera, «stock sin contar» y «revisar datos» aparte ----------

@@ -97,7 +97,7 @@ test('chat del Admin: la tabla llega a su pantalla y al modelo solo el resumen s
   const { r, cap } = await route('¿Quiénes tienen créditos atrasados?', 'owner');
   assert.equal(r.status, 200); const body = await r.text();
   assert.ok(body.includes('Rosa Quispe') && body.includes('Recordatorio'), 'la pantalla del Admin ve nombres y borrador');
-  assert.equal(cap.length, 2);
+  assert.equal(cap.length, 1, 'consulta simple: va el texto de la consulta, sin segunda llamada (#960)');
   for (const c of CUSTOMERS) for (const v of [c.nombre, c.dni, c.tel]) assert.ok(!cap.join('\n').includes(v), 'al modelo: ' + v);
 });
 
