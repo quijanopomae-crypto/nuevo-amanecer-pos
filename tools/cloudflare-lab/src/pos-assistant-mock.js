@@ -39,6 +39,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   }
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
+  if (/atrasad|moros|creditos? vencid/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'creditos_atrasados' })] };
   if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
   if (/compras (recientes|ultimas)|ultimas compras/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'compras_recientes' })] };
   if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...dates(t) })] };

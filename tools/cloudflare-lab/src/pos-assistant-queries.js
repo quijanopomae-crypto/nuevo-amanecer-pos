@@ -6,11 +6,11 @@ import { canonicalRead } from './a6-canonical.js';
 
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
-export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes']);
+export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
 const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos por reponer', sin_costo: 'Productos sin costo', ventas_periodo: 'Ventas del período',
-  top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', compras_recientes: 'Compras recientes' };
+  top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', creditos_atrasados: 'Créditos atrasados', compras_recientes: 'Compras recientes' };
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -75,7 +75,7 @@ export function canonicalReader(db) {
       return out;
     },
     async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null })); },
-    async customers() { const rows = await all('customers'); return rows.map((c) => ({ id: String(c.customer_id), nombre: c.name })); },
+    async customers() { const rows = await all('customers'); return rows.map((c) => ({ id: String(c.customer_id), nombre: c.name, dni: c.document == null ? null : String(c.document), tel: c.phone == null ? null : String(c.phone) })); },
     async salesTotals(p) {
       const m = new Map(); for (const s of await salesIn(p)) { const dia = new Date(Date.parse(s.created_at) - 5 * 3600 * 1000).toISOString().slice(0, 10), k = dia + '|' + s.payment_method;
         const r = m.get(k) || { dia, metodo: s.payment_method, n: 0, c: 0 }; r.n++; r.c += Number(s.total_cents) || 0; m.set(k, r); }
@@ -108,6 +108,43 @@ export function memoryReader(data) {
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
   };
+}
+
+// ---------- Créditos atrasados (solo Admin) ----------
+// Fecha de vencimiento del crédito -> 'AAAA-MM-DD' (acepta AAAA-MM-DD[...] y DD/MM/AAAA). Sin fecha válida: null (no se cuenta como atrasado).
+export function dueDay(v) {
+  const s = String(v == null ? '' : v).trim(); let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) { const d = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s); if (d) m = [null, d[3], d[2].padStart(2, '0'), d[1].padStart(2, '0')]; }
+  if (!m) return null; const iso = m[1] + '-' + m[2] + '-' + m[3], t = Date.parse(iso + 'T00:00:00Z');
+  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === iso ? iso : null;
+}
+const daysBetween = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+// Código que puede ver la IA: el id interno del cliente, solo si es corto, alfanumérico y NO es su DNI ni su teléfono. Si no, null.
+export function safeClientCode(id, customer) {
+  const code = String(id == null ? '' : id);
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(code)) return null;
+  const digits = (v) => String(v == null ? '' : v).replace(/\D/g, '');
+  if (customer && [customer.dni, customer.tel, customer.telefono].some((v) => v != null && digits(v).length >= 6 && digits(v) === digits(code))) return null;
+  return code;
+}
+export const OVERDUE_BUCKETS = Object.freeze([['1-7 días', 1, 7], ['8-30 días', 8, 30], ['31-90 días', 31, 90], ['más de 90 días', 91, Infinity]]);
+// Borrador de recordatorio de cobro: SOLO para la pantalla del Admin, que lo copia y lo envía él mismo. Nunca va al modelo.
+export function reminderDraft(nombre, soles, desde) {
+  const quien = String(nombre || '').trim(), saludo = quien ? 'Hola ' + quien + ', ' : 'Hola, ';
+  return saludo + 'le saludamos de Nuevo Amanecer. Le recordamos que tiene un saldo pendiente de S/ ' + r2(soles).toFixed(2) + ' vencido desde el ' + desde.split('-').reverse().join('/') +
+    '. Cuando pueda, acérquese a la tienda para ponerse al día. ¡Gracias!';
+}
+async function overdueCredits(reader, nowMs) {
+  const today = limaToday(nowMs), [credits, customers] = await Promise.all([reader.credits(), reader.customers()]);
+  const byId = new Map(customers.map((c) => [String(c.id), c])), by = new Map(); let sinFecha = 0;
+  for (const c of credits) {
+    if (!(Number(c.saldo) > 0)) continue; const due = dueDay(c.vence); if (!due) { sinFecha++; continue; }
+    const dias = daysBetween(due, today); if (dias < 1) continue;
+    const k = String(c.cliente), g = by.get(k) || { id: k, soles: 0, creditos: 0, dias: 0, desde: due };
+    g.soles += Number(c.saldo); g.creditos++; if (dias > g.dias) { g.dias = dias; g.desde = due; } by.set(k, g);
+  }
+  const list = [...by.values()].map((g) => ({ ...g, soles: r2(g.soles), cust: byId.get(g.id) || null })).sort((a, b) => b.dias - a.dias || b.soles - a.soles);
+  return { list, sinFecha, total: r2(list.reduce((s, g) => s + g.soles, 0)) };
 }
 
 // ---------- Consultas ----------
@@ -177,6 +214,18 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       texto: top.length ? (top.length === 1 ? '1 cliente debe' : top.length + ' clientes deben') + ' en total S/ ' + total.toFixed(2) + '.' : 'Ningún cliente tiene deuda.',
       // Al modelo: sin nombres ni documentos.
       resumen: { clientes_con_deuda: top.length, total_soles: total, mayores_saldos: top.slice(0, M).map(([id, s], i) => ({ cliente: cli(id, i), soles: r2(s) })) } };
+  }
+  if (tipo === 'creditos_atrasados') {
+    const { list, sinFecha, total } = await overdueCredits(reader, nowMs);
+    const rangos = Object.fromEntries(OVERDUE_BUCKETS.map(([n, lo, hi]) => [n, list.filter((g) => g.dias >= lo && g.dias <= hi).length]));
+    const nota = sinFecha ? ' Hay ' + sinFecha + (sinFecha === 1 ? ' crédito con saldo y sin fecha de vencimiento: no se cuenta.' : ' créditos con saldo y sin fecha de vencimiento: no se cuentan.') : '';
+    return { ...base, columnas: ['Cliente', 'Código', 'Vencido S/', 'Días de atraso', 'Recordatorio (borrador)'], total, clientes: list.length,
+      // Pantalla del Admin: nombre y borrador del recordatorio (él lo copia y lo envía). Nada se envía solo.
+      filas: list.slice(0, N).map((g) => [g.cust?.nombre || 'Cliente ' + g.id, g.id, g.soles, g.dias, reminderDraft(g.cust?.nombre, g.soles, g.desde)]),
+      texto: (list.length ? (list.length === 1 ? '1 cliente tiene' : list.length + ' clientes tienen') + ' créditos atrasados por S/ ' + total.toFixed(2) + '. El más atrasado lleva ' + list[0].dias + (list[0].dias === 1 ? ' día' : ' días') + '. En la tabla está el borrador de cada recordatorio para que usted lo envíe.' : 'Ningún cliente tiene créditos atrasados.') + nota,
+      // Al modelo: solo totales, rangos y el código del cliente (nunca nombre, DNI ni teléfono).
+      resumen: { clientes_atrasados: list.length, total_vencido_soles: total, sin_fecha: sinFecha, por_rango: rangos,
+        mas_atrasados: list.slice(0, M).map((g, i) => ({ cliente: safeClientCode(g.id, g.cust) ? 'cliente #' + g.id : 'Cliente ' + (i + 1), soles: g.soles, dias: g.dias })) } };
   }
   const rows = await reader.purchases(N);
   const filas = rows.map((r) => [String(r.created_at || '').slice(0, 10), r.supplier || '-', r.document_ref || '-', cents(r.total_cost_cents), r.line_count]);
