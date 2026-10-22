@@ -53,8 +53,71 @@
     var mo = root.MutationObserver ? new root.MutationObserver(function () { if (!m.classList.contains('active')) { mo.disconnect(); release(); } }) : null;
     if (mo) mo.observe(m, { attributes: true, attributeFilter: ['class'] }); else release();
   }
+  // ---------- «Revisión del punto de venta» (solo en el aparato del Admin) ----------
+  // Escuchas PASIVAS (no cambian nada del POS, no envuelven fetch): error y unhandledrejection de la ventana, y respuestas 4xx/5xx de la
+  // API vistas con PerformanceObserver (solo ruta y código, nunca el cuerpo). Más contadores de uso por pantalla/acción (clics en
+  // botones: pantalla + nombre de la función del botón o su id; nunca el texto del botón ni lo escrito). Todo queda en ESTE aparato
+  // (localStorage na_asst_rev, últimos 200 errores agrupados, 300 contadores), limpio y cortado; solo sale cuando el Admin pide la
+  // revisión al asistente (asistente-ui.js -> /auth/assistant/review). Aparato de empleado o sin rol: no se instala nada.
+  var REV_KEY = 'na_asst_rev', REV_MAX = 200, REV_USAGE_MAX = 300, rev = null, revTimer = 0, revOn = false;
+  function revClean(v, n) {
+    var s = String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 600)
+      .replace(/(https?:\/\/[^\s?#]*)[?#]\S*/gi, '$1').replace(/\b(?:bearer|basic)\s+\S+/gi, '[clave]')
+      .replace(/\b(?:token|clave|password|contraseña|pin|secret|api[_-]?key|authorization)\b\s*[:=]\s*[^\s,;]+/gi, '[clave]')
+      .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[correo]').replace(/(?:S\/\.?|US\$|PEN|\$)\s?-?\d[\d.,]*/gi, '[monto]')
+      .replace(/\b\d+[.,]\d{1,2}\b/g, '[monto]').replace(/[A-Za-z0-9_+\/=-]{24,}/g, '[clave]').replace(/\d{6,}/g, '[num]').replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '\u2026' : s;
+  }
+  function revLoad() {
+    if (rev) return rev; try { rev = JSON.parse(ls(REV_KEY) || 'null'); } catch (_) { rev = null; }
+    if (!rev || rev.v !== 1 || !Array.isArray(rev.e) || !rev.u || typeof rev.u !== 'object') rev = { v: 1, e: [], u: {}, seen: null };
+    return rev;
+  }
+  function revFlush() { clearTimeout(revTimer); revTimer = 0; if (rev) ls(REV_KEY, JSON.stringify(rev)); }
+  function revSave() { if (!revTimer) revTimer = setTimeout(revFlush, 3000); } // se escribe en tanda, nunca en cada evento
+  function revError(kind, msg, src, status) {
+    var r = revLoad(), m = revClean(msg, 160), s = revClean(src, 80), now = new Date().toISOString(); status = status || 0;
+    if (!m && !s) return;
+    for (var i = r.e.length - 1; i >= 0; i--) { var x = r.e[i];
+      if (x.kind === kind && x.msg === m && x.src === s && (x.status || 0) === status) { x.count++; x.last = now; r.e.splice(i, 1); r.e.push(x); revSave(); return; } }
+    r.e.push({ kind: kind, msg: m, src: s, status: status, count: 1, first: now, last: now });
+    if (r.e.length > REV_MAX) r.e.splice(0, r.e.length - REV_MAX);
+    revSave();
+  }
+  function revFile(u) { var s = String(u || ''); try { var x = new URL(s, root.location.href); s = x.origin === root.location.origin ? x.pathname : x.host + x.pathname; } catch (_) {} return s.replace(/\d{3,}/g, '#'); }
+  function revUseKey(t) {
+    var e = t && t.closest ? t.closest('button,a,[onclick],[data-action],[role="button"],input[type="button"],input[type="submit"]') : null;
+    if (!e || e.closest('[id^="naAsst"],[class*="na-asst"]')) return null; // el propio asistente no cuenta
+    var pg = e.closest('.page'), scr = pg && pg.id ? pg.id : (e.closest('.modal,[role="dialog"]') ? 'modal' : 'otro');
+    var oc = e.getAttribute('onclick'), m = oc && /^\s*([A-Za-z_][\w]{0,40})\s*\(\s*(?:'([A-Za-z][\w-]{0,30})'|"([A-Za-z][\w-]{0,30})")?/.exec(oc);
+    var act = m ? m[1] : (e.getAttribute('data-action') || e.id || ''), arg = m ? (m[2] || m[3] || '') : '';
+    act = String(act).replace(/\d+/g, '#').replace(/[^\w#-]/g, '').slice(0, 40); arg = String(arg).replace(/\d+/g, '#').slice(0, 30);
+    scr = String(scr).replace(/[^\w-]/g, '').slice(0, 30);
+    return act && /^[A-Za-z]/.test(scr) ? scr + ':' + act + (arg ? ':' + arg : '') : null;
+  }
+  function revInstall() {
+    if (revOn) return; revOn = true;
+    root.addEventListener('error', function (e) { if (e && e.message) revError('error', e.message, revFile(e.filename) + (e.lineno ? ':' + e.lineno : ''), 0); });
+    root.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; revError('promesa', r && r.message ? (r.name ? r.name + ': ' : '') + r.message : String(r), '', 0); });
+    root.document.addEventListener('click', function (e) { var k = revUseKey(e.target); if (!k) return; var r = revLoad();
+      if (r.u[k] || Object.keys(r.u).length < REV_USAGE_MAX) { r.u[k] = (r.u[k] || 0) + 1; revSave(); } }, { capture: true, passive: true });
+    root.addEventListener('pagehide', revFlush);
+    root.document.addEventListener('visibilitychange', function () { if (root.document.hidden) revFlush(); });
+    try {
+      if (root.PerformanceObserver) new root.PerformanceObserver(function (l) { l.getEntries().forEach(function (x) {
+        var st = Number(x.responseStatus) || 0; if (st >= 400 && (x.initiatorType === 'fetch' || x.initiatorType === 'xmlhttprequest')) revError('api', revFile(x.name), '', st); }); })
+        .observe({ type: 'resource', buffered: true });
+    } catch (_) {}
+  }
+  root.NA_ASISTENTE_REVISION = {
+    // Lo que se manda SOLO cuando el Admin pide la revisión (la UI lo pasa además por el redactor del asistente).
+    data: function () { var r = revLoad(); return { errors: r.e.map(function (x) { return { kind: x.kind, msg: x.msg, src: x.src, status: x.status, count: x.count, first: x.first, last: x.last }; }), usage: JSON.parse(JSON.stringify(r.u)) }; },
+    newErrors: function () { var r = revLoad(), n = 0; r.e.forEach(function (x) { if (!r.seen || x.last > r.seen) n++; }); return n; },
+    markSeen: function () { var r = revLoad(); r.seen = new Date().toISOString(); revFlush(); },
+    installed: function () { return revOn; }
+  };
   slotCss();
-  if (ls('na_asistente_acc') === 'owner') reserve();
+  if (ls('na_asistente_acc') === 'owner') { reserve(); revInstall(); }
   root.NA_ASISTENTE_SLOT = { reserve: reserve, unreserve: unreserve, release: release, NOTICE: NOTICE };
   function load() {
     if (loaded) return; loaded = true;
@@ -81,7 +144,7 @@
     var ctl = root.AbortController ? new root.AbortController() : null, t = ctl ? setTimeout(function () { ctl.abort(); }, ASK_TIMEOUT_MS) : 0; if (ctl) init.signal = ctl.signal;
     root.fetch(url, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { st: r.status, d: d || {} }; }); }).then(function (x) {
       clearTimeout(t); asking = false;
-      if (x.st === 200 && x.d.ok) { ls('na_asistente_acc', x.d.role === 'owner' ? 'owner' : 'on'); if (x.d.role !== 'owner') unreserve(); load(); return; }
+      if (x.st === 200 && x.d.ok) { ls('na_asistente_acc', x.d.role === 'owner' ? 'owner' : 'on'); if (x.d.role !== 'owner') unreserve(); else revInstall(); load(); return; }
       if (x.st === 403 && x.d.reason === 'sin_rol') { ls('na_asistente_acc', null); unreserve(); load(); return; }
       if (x.st === 401 || x.st === 403 || x.st === 404) { ls('na_asistente_acc', null); unreserve(); } // apagado: no se baja nada y el hueco (si lo había) se quita
     }, function () { clearTimeout(t); asking = false; lastAsk = 0; if (ls('na_asistente_acc') === 'owner') load(); });

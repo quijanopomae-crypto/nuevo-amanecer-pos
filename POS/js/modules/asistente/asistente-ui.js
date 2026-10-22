@@ -668,9 +668,42 @@
   }
   // ¿El navegador puede leer la respuesta en partes? Si no, el chat de siempre (una sola respuesta JSON).
   function canStream() { return typeof root.ReadableStream === 'function' && typeof root.TextDecoder === 'function' && typeof root.AbortController === 'function' && root.NA_ASISTENTE_NO_STREAM !== true; }
+  // ---------- «Revisión del punto de venta» (solo Admin) ----------
+  // Lo pide el Admin (chip o texto) o se ofrece al abrir el panel si hay errores NUEVOS guardados en este aparato (aviso con botón; el
+  // informe nunca se pide solo). Se manda el resumen LOCAL (asistente-loader.js) pasado por el redactor del asistente; el servidor lo
+  // vuelve a limpiar, arma el informe y no guarda nada. Empleado: nunca se manda (y el servidor responde 403 review_admin_only).
+  var REVIEW_RE = /revisi[oó]n del (?:punto de venta|pos)\b|\brevis(?:a|e|ar)\s+(?:el\s+)?(?:punto de venta|pos)\b|\berrores del (?:punto de venta|pos)\b/i;
+  function reviewData() {
+    var R = root.NA_ASISTENTE_REVISION, raw = R && R.data ? R.data() : { errors: [], usage: {} };
+    return { errors: (raw.errors || []).slice(-200).map(function (x) { return { kind: x.kind, msg: C.redactText(String(x.msg || '')).slice(0, 160), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }; }), usage: raw.usage || {} };
+  }
+  async function review(text) {
+    var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true;
+    var nt = panelEl.querySelector('.na-asst-revnote'); if (nt) nt.remove();
+    addMsg('u', text); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState('pensando');
+    var thinking = addMsg('a', 'Revisando el punto de venta'); thinking.classList.add('na-asst-thinking');
+    var mine = panelEl;
+    try {
+      var d = await post('/auth/assistant/review', reviewData(), null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
+      if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
+      var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review');
+      var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
+      var R = root.NA_ASISTENTE_REVISION; if (R && R.markSeen) R.markSeen();
+      setState('hablando', 2500);
+    } catch (e) { if (!panelEl) return; thinking.remove(); errMsg(root.navigator.onLine === false ? 'offline' : 'network', null, [text, null]); setState('error', 2600); }
+    finally { busy = false; if (sendBtn) sendBtn.disabled = root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = root.navigator.onLine === false; }
+  }
+  function reviewNotice() {
+    var R = root.NA_ASISTENTE_REVISION, n = isOwnerAccess() && R && R.newErrors ? R.newErrors() : 0;
+    if (!n || panelEl.querySelector('.na-asst-revnote')) return;
+    var m = el('div', 'na-asst-msg a na-asst-revnote'); m.textContent = n === 1 ? 'Hay 1 error nuevo en el punto de venta.' : 'Hay ' + n + ' errores nuevos en el punto de venta.';
+    var b = el('button', 'na-asst-retry'); b.type = 'button'; b.textContent = 'Ver revisión'; b.onclick = function () { if (!busy) send('Revisión del punto de venta'); };
+    m.appendChild(b); msgsEl.appendChild(m);
+  }
   async function send(text, image) {
     if (busy) return;
     text = String(text || '').trim(); if (!text && !image) return;
+    if (!image && isOwnerAccess() && REVIEW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
     if (image && access && access.role !== 'owner') { addMsg('u', text || 'Foto'); errMsg('image_owner_only'); setState('error', 2600); return; }
@@ -773,13 +806,14 @@
     panelEl.hidden = false; rootEl.hidden = true; place(); applyPause(); mascotOn();
     if (!msgsEl.children.length) addMsg('a', isOwnerAccess() ? '¡Hola! Soy Burbuja, tu ayudante de gestión. Te digo qué falta reponer y cómo van las ventas, preparo compras y ajustes de stock, cambios de precio y costo, productos nuevos y documentos. Nada se guarda sin que pulses Confirmar.'
       : '¡Hola! Soy Burbuja. Te digo el stock y qué falta reponer' + (access && access.level === 'consultas_documentos' ? ', y armo la lista de precios o de pedido' : '') + '. Los cambios (precios, stock, compras) los hace el Admin desde su teléfono.');
+    reviewNotice();
     var off = root.navigator.onLine === false; offline(off); if (off) setState('offline'); else setState('feliz', 1300); measureFrames();
     setTimeout(function () { try { inputEl.focus({ preventScroll: true }); } catch (_) {} }, 50);
   }
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }

@@ -654,6 +654,7 @@
     forbidden_role: [MSG.owner], admin_only: [MSG.owner], image_owner_only: [MSG.owner], owner_approval_required: [MSG.owner], forbidden: [MSG.owner], HTTP_403: [MSG.owner],
     assistant_off: ['El asistente está apagado en este aparato.'], unauthorized: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'], HTTP_401: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'],
     forbidden_document: ['Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.'],
+    review_admin_only: ['La revisión del punto de venta es solo para el Admin.'],
     rate_limited: [MSG.wait, true], HTTP_429: [MSG.wait, true], upstream_busy: [MSG.wait, true],
     daily_limit: ['Por hoy ya no quedan preguntas en este aparato. Mañana sigue.'], monthly_cap: ['El asistente llegó a su tope del mes. Avisa al Admin.'],
     network: [MSG.offline, true], offline: [MSG.offline, true], timeout: [MSG.slow, true], upstream_timeout: [MSG.slow, true],

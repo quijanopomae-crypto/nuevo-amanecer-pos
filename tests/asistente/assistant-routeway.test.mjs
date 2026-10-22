@@ -24,10 +24,10 @@ test('Routeway: valores por defecto (base compatible OpenAI, gemma :free con res
   assert.ok(ALLOWED_HOSTS.includes('api.routeway.ai'));
   assert.equal(configFor({}, 'routeway').reason, 'missing_key', 'sin secreto no hay proveedor (no hay clave en el código)');
   const c = configFor({ ROUTEWAY_API_KEY: KEY }, 'routeway');
-  assert.equal(c.ok, true); assert.equal(c.model, 'gemma-4-26b-a4b-it-luminous:free'); assert.deepEqual(c.fallbacks, ['minimax-m2.7:free']);
+  assert.equal(c.ok, true); assert.equal(c.model, 'gemma-4-26b-a4b-it-luminous:free'); assert.deepEqual(c.fallbacks.map((x) => x.model), ['minimax-m2.7:free']);
   assert.equal(configFor({ AI_PROVIDER: 'routeway', AI_API_KEY: KEY }, 'routeway').ok, true, 'también con AI_API_KEY');
   // por defecto: Routeway si tiene clave; si no, DeepSeek como antes
-  assert.equal(resolveProvider({ ROUTEWAY_API_KEY: KEY, DEEPSEEK_API_KEY: 'd' }).id, 'routeway');
+  assert.equal(resolveProvider({ ROUTEWAY_API_KEY: KEY, DEEPSEEK_API_KEY: 'd' }).id, 'routeway', 'sin OhMyAgent: Routeway');
   assert.equal(resolveProvider({ DEEPSEEK_API_KEY: 'd' }).id, 'deepseek');
   assert.equal(resolveProvider({ AI_PROVIDER: 'deepseek', ROUTEWAY_API_KEY: KEY, DEEPSEEK_API_KEY: 'd' }).id, 'deepseek', 'AI_PROVIDER manda');
   assert.deepEqual(modelsFor({ ROUTEWAY_API_KEY: KEY }, 'routeway'), ['gemma-4-26b-a4b-it-luminous:free', 'minimax-m2.7:free']);
@@ -51,8 +51,9 @@ test('429: reintento con espera en el mismo modelo y paso al modelo de respaldo 
   // el reintento sí funciona en el mismo modelo
   seen.length = 0; let n = 0; r = await callModel(cfg, { messages: [] }, async (_u, init) => { seen.push(JSON.parse(init.body).model); return n++ ? okJson('ok') : jsonR({}, 429); }, 5000);
   assert.deepEqual(seen, ['gemma-4-26b-a4b-it-luminous:free', 'gemma-4-26b-a4b-it-luminous:free']); assert.equal(r.content, 'ok'); assert.equal(r.model, undefined);
-  // 401 o 500: sin reintento
-  for (const st of [401, 500]) { n = 0; r = await callModel(cfg, { messages: [] }, async () => { n++; return jsonR({}, st); }, 5000); assert.equal(n, 1, String(st)); }
+  // 401, 403, 404 o 400: sin reintento; 5xx: igual que 429 (2 por modelo)
+  for (const st of [400, 401, 403, 404]) { n = 0; r = await callModel(cfg, { messages: [] }, async () => { n++; return jsonR({}, st); }, 5000); assert.equal(n, 1, String(st)); }
+  for (const st of [500, 502, 503]) { n = 0; r = await callModel(cfg, { messages: [] }, async () => { n++; return jsonR({}, st); }, 5000); assert.equal(n, 4, String(st)); }
   // Retry-After corto se respeta (1 s)
   n = 0; t0 = Date.now(); r = await callModel({ ...cfg, fallbacks: [] }, { messages: [] }, async () => (n++ ? okJson('ya') : jsonR({}, 429, { 'retry-after': '1' })), 5000);
   assert.equal(r.content, 'ya'); assert.ok(Date.now() - t0 >= 950, 'Retry-After 1 s');

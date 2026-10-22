@@ -25,6 +25,7 @@ import { employeeAccessRoute, ACCESS_PATH as ASSISTANT_ACCESS_PATH } from './pos
 import { ownerDeviceRoute, isOwnerDevicePath } from './pos-owner-device.js';
 import { providerRoute, PROVIDER_PATH as ASSISTANT_PROVIDER_PATH } from './pos-assistant-provider-route.js';
 import { auditRoute, AUDIT_PATH as ASSISTANT_AUDIT_PATH } from './pos-assistant-audit.js';
+import { assistantReviewRoute, REVIEW_PATH as ASSISTANT_REVIEW_PATH } from './pos-assistant-review.js';
 import { handleRoles, ownerGate, posRoleFor, ROLE_PATHS, flagSaleDiscount, flagReview } from './pos-roles.js';
 
 const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
@@ -133,6 +134,13 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return cors(auth);
         return cors(await auditRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // «Revisión del punto de venta» (solo Admin): el aparato manda SU resumen local de errores y uso; no se guarda nada. Misma bandera.
+      if (url.pathname === ASSISTANT_REVIEW_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await assistantReviewRoute(request, env, auth, json, { db: getDatabase(env) }));
       }
       // Registro del aparato dueño: además necesita ASSISTANT_OWNER_BOOTSTRAP=1 (la ruta responde 404 sin esa bandera).
       // Proveedor del asistente (solo dueño): estado de las claves (sin mostrarlas), «Probar» y cambio con tarjeta Confirmar.

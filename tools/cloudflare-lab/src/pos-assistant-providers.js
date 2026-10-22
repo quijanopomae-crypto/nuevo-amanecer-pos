@@ -18,7 +18,10 @@ export const PROVIDERS = Object.freeze({
   mistral: { label: 'Mistral', kind: 'openai', base: 'https://api.mistral.ai/v1', key: 'MISTRAL_API_KEY', model: 'mistral-small-latest', vision: re(/pixtral|mistral-(?:small|medium)/i) },
   together: { label: 'Together', kind: 'openai', base: 'https://api.together.xyz/v1', key: 'TOGETHER_API_KEY', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', vision: re(/vision|-vl|llama-4/i) },
   anthropic: { label: 'Anthropic Claude', kind: 'anthropic', base: 'https://api.anthropic.com', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5', vision: re(/^claude/i) },
-  // (22-10) Proveedor que eligió el Admin: Routeway, compatible OpenAI. Solo valores por defecto; la clave va como secreto del Worker
+  // (22-10) Proveedor PRINCIPAL que eligió el Admin: OhMyAgent (compatible OpenAI, gpt-6.1-sol, ~4 s). Respaldo: Routeway (next).
+  // Solo valores por defecto; la clave es secreto del Worker (OHMYAGENT_API_KEY), nunca en el código. Fotos apagadas salvo AI_VISION=1.
+  ohmyagent: { label: 'OhMyAgent', kind: 'openai', base: 'https://ohhmyagent.com/v1', key: 'OHMYAGENT_API_KEY', model: 'gpt-6.1-sol', next: 'routeway', vision: () => false },
+  // (22-10) Routeway, compatible OpenAI (respaldo de OhMyAgent; también se puede usar solo). Solo valores por defecto; la clave va como secreto del Worker
   // (ROUTEWAY_API_KEY, o AI_API_KEY con AI_PROVIDER=routeway), nunca en el código. Los modelos gratis dan 429 a menudo: ver callModel.
   routeway: { label: 'Routeway', kind: 'openai', base: 'https://api.routeway.ai/v1', key: 'ROUTEWAY_API_KEY', model: 'gemma-4-26b-a4b-it-luminous:free', fallbacks: ['minimax-m2.7:free'], vision: () => false },
   gemini: { label: 'Google Gemini', kind: 'gemini', base: 'https://generativelanguage.googleapis.com', key: 'GEMINI_API_KEY', model: 'gemini-2.5-flash', vision: re(/^gemini/i) }
@@ -44,14 +47,14 @@ export function modelsFor(env, id) {
   const m = envProvider(env) === id && MODEL_RE.test(str(env?.AI_MODEL)) ? [str(env.AI_MODEL)] : [];
   return [...new Set([...m, p.model, ...(p.fallbacks || [])])];
 }
-// Modelos de respaldo (en orden) cuando el elegido responde 429: los del catálogo y AI_FALLBACK_MODEL (si es el proveedor de AI_PROVIDER).
+// Modelos de respaldo del MISMO proveedor (en orden) cuando el elegido responde 429/5xx: los del catálogo y AI_FALLBACK_MODEL (si es el de AI_PROVIDER).
 function fallbacksFor(env, id, model) {
   const p = PROVIDERS[id]; if (!p) return [];
   const extra = envProvider(env) === id && MODEL_RE.test(str(env?.AI_FALLBACK_MODEL)) ? [str(env.AI_FALLBACK_MODEL)] : [];
   return [...new Set([...extra, ...(p.fallbacks || []), p.model])].filter((x) => x && x !== model).slice(0, 2);
 }
 // Configuración estricta de UN proveedor. { ok:true, id, kind, label, base, key, model, vision } o { ok:false, reason }.
-export function configFor(env, id, model) {
+export function configFor(env, id, model, noNext = false) {
   const p = PROVIDERS[id]; if (!p) return { ok: false, reason: 'unknown_provider' };
   const key = keyFor(env, id); if (!key) return { ok: false, reason: 'missing_key', id };
   const custom = envProvider(env) === id ? str(env?.AI_BASE_URL) : '';
@@ -61,13 +64,21 @@ export function configFor(env, id, model) {
   const models = modelsFor(env, id); const m = model && models.includes(model) ? model : models[0];
   const v = str(env?.AI_VISION); // '1' o '0' fuerza la lectura de fotos para el proveedor de AI_PROVIDER
   const vision = envProvider(env) === id && (v === '1' || v === '0') ? v === '1' : !!p.vision(m);
-  return { ok: true, id, kind: p.kind, label: p.label, base, key, model: m, vision, fallbacks: p.fallbacks || envProvider(env) === id && str(env?.AI_FALLBACK_MODEL) ? fallbacksFor(env, id, m) : [] };
+  const same = p.fallbacks || (envProvider(env) === id && str(env?.AI_FALLBACK_MODEL)) ? fallbacksFor(env, id, m) : [];
+  const own = { id, kind: p.kind, label: p.label, base, key, model: m, vision };
+  // Respaldo: primero otros modelos del mismo proveedor, luego el proveedor siguiente (p.next) si tiene su propia clave, con sus modelos.
+  const fallbacks = same.map((x) => ({ ...own, model: x, vision: envProvider(env) === id && (v === '1' || v === '0') ? v === '1' : !!p.vision(x) }));
+  if (p.next && p.next !== id && PROVIDERS[p.next] && !noNext) {
+    const n = configFor(env, p.next, undefined, true);
+    if (n.ok) { const { fallbacks: nf, ok: _ok, ...nc } = n; fallbacks.push(nc, ...nf); }
+  }
+  return { ok: true, ...own, fallbacks: fallbacks.slice(0, 3) };
 }
-// Proveedor en uso: lo que eligió el dueño (si sigue listo) o, si no, AI_PROVIDER; sin AI_PROVIDER: Routeway si tiene clave (lo que eligió el
-// Admin), si no DeepSeek con DEEPSEEK_API_KEY (como antes).
+// Proveedor en uso: lo que eligió el dueño (si sigue listo) o, si no, AI_PROVIDER; sin AI_PROVIDER: OhMyAgent si tiene clave (lo que eligió
+// el Admin, con Routeway de respaldo si también tiene clave), si no Routeway, si no DeepSeek con DEEPSEEK_API_KEY (como antes).
 export function resolveProvider(env, choice) {
   if (choice && PROVIDERS[choice.provider]) { const c = configFor(env, choice.provider, choice.model); if (c.ok) return { ...c, source: 'owner' }; }
-  const id = envProvider(env) || (str(env?.ROUTEWAY_API_KEY) ? 'routeway' : str(env?.DEEPSEEK_API_KEY) ? 'deepseek' : '');
+  const id = envProvider(env) || (str(env?.OHMYAGENT_API_KEY) ? 'ohmyagent' : str(env?.ROUTEWAY_API_KEY) ? 'routeway' : str(env?.DEEPSEEK_API_KEY) ? 'deepseek' : '');
   if (!id) return { ok: false, reason: 'no_provider' };
   const c = configFor(env, id); return c.ok ? { ...c, source: 'env' } : c;
 }
@@ -263,9 +274,10 @@ export const ADAPTERS = Object.freeze({ openai: openaiAdapter, anthropic: anthro
 export function linkAbort(controller, outer) { if (!outer) return; if (outer.aborted) controller.abort(); else outer.addEventListener('abort', () => controller.abort(), { once: true }); }
 function adapterOf(cfg) { const a = cfg && cfg.ok !== false ? ADAPTERS[cfg.kind] : null; return a || null; }
 
-// (22-10) 429 de los modelos gratis: el mismo modelo se reintenta una vez tras una espera corta (Retry-After si es de 3 s o menos) y luego
-// se pasa a los modelos de respaldo (cfg.fallbacks), cada uno con el mismo reintento. Solo si NO llegó texto todavía (nada se repite en
-// pantalla). Esperas cortas: no gastan CPU del Worker y el tope de 90 s del pedido sigue mandando (outer corta también la espera).
+// (22-10) 429 y 5xx: el mismo modelo se reintenta una vez tras una espera corta (Retry-After si es de 3 s o menos) y luego se pasa a los
+// respaldos (cfg.fallbacks: otros modelos del proveedor y el proveedor siguiente, p. ej. OhMyAgent -> Routeway), cada uno con el mismo
+// reintento. Solo si NO llegó texto todavía (nada se repite en pantalla). Con foto, solo respaldos que leen fotos. Esperas cortas: no
+// gastan CPU del Worker y el tope de 90 s del pedido sigue mandando (outer corta también la espera). 401/403/404/400 no se reintentan.
 export const RETRY_WAITS_MS = Object.freeze([800, 1500]);
 const MAX_RETRY_AFTER_MS = 3000;
 function waitMs(ms, outer) {
@@ -274,19 +286,23 @@ function waitMs(ms, outer) {
 }
 function retryAfter(r, i, cfg) {
   const waits = Array.isArray(cfg.retryWaits) ? cfg.retryWaits : RETRY_WAITS_MS; const base = Number(waits[Math.min(i, waits.length - 1)]) || 0;
-  const ra = Number(r?.retryAfterS); return ra > 0 && ra * 1000 <= MAX_RETRY_AFTER_MS && waits.length && base > 0 ? ra * 1000 : base;
+  const ra = Number(r?.retryAfterS); return ra > 0 && ra * 1000 <= MAX_RETRY_AFTER_MS && base > 0 ? ra * 1000 : base;
 }
-const isRateLimited = (r) => !!r && (r.status === 429 || (r.error === 'upstream_busy' && !r.status && !r.content));
-async function withRetries(cfg, outer, once) {
-  const models = [cfg.model, ...(Array.isArray(cfg.fallbacks) ? cfg.fallbacks : [])].filter((m, i, a) => m && a.indexOf(m) === i);
-  let r = null, n = 0;
-  for (const model of models) {
-    const c = model === cfg.model ? cfg : { ...cfg, model };
+export const isRetryable = (r) => !!r && !!r.error && !r.content && (r.status === 429 || (r.status >= 500 && r.status <= 599) || (!r.status && r.error === 'upstream_busy'));
+const hasImage = (req) => (req?.messages || []).some((m) => Array.isArray(m?.content) && m.content.some((x) => x?.type === 'image_url'));
+async function withRetries(cfg, req, outer, once) {
+  const chain = [cfg, ...(Array.isArray(cfg.fallbacks) ? cfg.fallbacks : [])]
+    .map((c) => (typeof c === 'string' ? { ...cfg, model: c } : { ...c, retryWaits: cfg.retryWaits }))
+    .filter((c, i, a) => c.model && a.findIndex((x) => x.base === c.base && x.model === c.model) === i)
+    .filter((c, i) => i === 0 || !hasImage(req) || c.vision);
+  let r = null;
+  for (let k = 0; k < chain.length; k++) {
+    const c = chain[k];
     for (let attempt = 0; attempt < 2; attempt++) {
-      if (n++ > 0 && attempt > 0) await waitMs(retryAfter(r, models.indexOf(model), cfg), outer);
+      if (attempt > 0) await waitMs(retryAfter(r, k, cfg), outer);
       if (outer?.aborted) return r || { error: 'upstream_timeout' };
       r = await once(c);
-      if (!isRateLimited(r)) return model === cfg.model ? r : { ...r, model };
+      if (!isRetryable(r)) return k === 0 ? r : { ...r, model: c.model, provider: c.id };
     }
   }
   return r;
@@ -295,7 +311,7 @@ function retryAfterS(res) { const v = Number(res?.headers?.get?.('retry-after'))
 
 export async function callModel(cfg, req, fetchImpl, timeoutMs, outer) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  const r = await withRetries(cfg, outer, (c) => callModelOnce(c, req, fetchImpl, timeoutMs, outer));
+  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, fetchImpl, timeoutMs, outer));
   return r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r;
 }
 async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
@@ -315,7 +331,7 @@ async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
 // (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs). Si se corta a mitad: { error, partial:true }.
 export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  return withRetries(cfg, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer));
+  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer));
 }
 async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
