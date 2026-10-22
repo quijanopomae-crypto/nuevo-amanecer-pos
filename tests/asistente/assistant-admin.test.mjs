@@ -48,6 +48,18 @@ test('consultas sobre la base real (lectura canónica existente): 400 productos,
   for (const tipo of ['ventas_periodo', 'top_productos', 'compras_recientes', 'stock_producto']) assert.ok(!(await runAssistantQuery(reader, { tipo, producto: 'Synthetic 00002' })).error, tipo);
 });
 
+test('resúmenes del día y del mes sobre la base real (lectura canónica existente): sin error, sin clientes al modelo', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
+  const reader = canonicalReader(f.env.nuevo_amanecer_lab);
+  for (const tipo of ['resumen_dia', 'resumen_mes']) {
+    const r = await runAssistantQuery(reader, { tipo });
+    assert.ok(!r.error, tipo + ' ' + JSON.stringify(r)); assert.ok(r.resumen.actual && r.resumen.anterior, tipo);
+    assert.ok(typeof r.resumen.actual.total_soles === 'number' && typeof r.resumen.actual.ventas === 'number', tipo);
+    const sent = JSON.stringify(r.resumen); assert.ok(!sent.includes('sintético') && !/customer|cliente/i.test(sent), tipo + ': sin clientes');
+    assert.ok(sent.length < 1500, tipo);
+  }
+});
+
 test('chat con consulta: segunda llamada a DeepSeek solo con el resumen (mensaje role tool), sin inventario completo; payload_bytes medido', async () => {
   const many = Array.from({ length: 400 }, (_, i) => ({ id: 'X' + i, nombre: 'Producto inventado ' + i, precio: 2, costo: i % 3 ? 1 : 0, stock: i % 5, min: 3, controla: true }));
   const reader = memoryReader({ ...readerData, products: many });

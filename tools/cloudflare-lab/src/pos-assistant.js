@@ -22,7 +22,7 @@ import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
 import { mockAssistantReply } from './pos-assistant-mock.js';
-import { runAssistantQuery, canonicalReader, QUERY_TYPES, employeeDocumentRows } from './pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, QUERY_TYPES, SUMMARY_TYPES, employeeDocumentRows } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 
@@ -1374,7 +1374,7 @@ export const STOCK_REASONS = Object.freeze(['Compra a proveedor', 'Devolución',
 const TOOL_DEFS = [
   { name: 'explicar_pasos', description: 'Explica paso a paso cómo hacer algo en el sistema. No cambia nada.',
     parameters: { type: 'object', properties: { tema: { type: 'string' }, pasos: { type: 'array', items: { type: 'string' }, maxItems: 8 }, pantalla: { type: 'string', enum: SCREEN_IDS } }, required: ['tema', 'pasos'] } },
-  { name: 'consultar', description: 'Consulta números del negocio (solo lectura): stock de un producto, productos por reponer, productos sin costo, ventas de un día o período, productos más vendidos, deudas de clientes, compras recientes. Fechas en formato AAAA-MM-DD (hora de Lima).',
+  { name: 'consultar', description: 'Consulta números del negocio (solo lectura): stock de un producto, productos por reponer, productos sin costo, ventas de un día o período, productos más vendidos, deudas de clientes, compras recientes, resumen del día (resumen_dia) o del mes (resumen_mes) con contado/crédito, cobros, productos top y comparación con el día o mes anterior. Fechas en formato AAAA-MM-DD (hora de Lima); en los resúmenes, hasta = el día pedido o un día del mes pedido (por defecto hoy).',
     parameters: { type: 'object', properties: { tipo: { type: 'string', enum: QUERY_TYPES }, producto: { type: 'string' }, desde: { type: 'string' }, hasta: { type: 'string' } }, required: ['tipo'] } },
   { name: 'proponer_ajuste_stock', description: 'Propone un movimiento de stock (entrada o salida) de un producto. Se abre la ventana «Registrar movimiento» llena; el Admin confirma con un toque.',
     parameters: { type: 'object', properties: { product_id: { type: 'string' }, tipo: { type: 'string', enum: ['entrada', 'salida'] }, cantidad: { type: 'number' }, motivo: { type: 'string', enum: STOCK_REASONS } }, required: ['product_id', 'tipo', 'cantidad', 'motivo'] } },
@@ -1411,6 +1411,14 @@ export function employeeDocDenied(role, text) {
   if (OWNER_DOC_ASK.test(t) && /\b(documento|imprim\w*|pdf|reporte|arma|prepara|hazme|dame|genera|saca|quiero|necesito|lista|resumen|estado)\b/i.test(t)) return true;
   return !toolAllowed(role, 'preparar_documento') && ANY_DOC_ASK.test(t) && /\b(lista\s+de\s+(?:precios|pedido)|imprim\w*|pdf|documento)\b/i.test(t);
 }
+// Resúmenes del día y del mes: solo el Admin. Un empleado que los pide con todas las letras recibe 403 summary_admin_only en JSON
+// ANTES de abrir el canal (sin DeepSeek ni cupo). Lo dudoso sigue al modelo, que no tiene esos tipos; si igual los pide, también 403.
+const OWNER_SUMMARY_ASK = /\bres[uú]men(?:es)?\s+(?:diario|mensual|de(?:l)?\s+(?:las\s+ventas\s+de(?:l)?\s+)?(?:hoy|ayer|d[ií]a|mes)\b)|\bres[uú]men(?:es)?\s+de\s+(?:las\s+)?ventas\b/i;
+export function employeeSummaryDenied(role, text) {
+  if (role === 'owner') return false;
+  return OWNER_SUMMARY_ASK.test(String(text || ''));
+}
+export const SUMMARY_ADMIN_ONLY = Object.freeze({ error: 'summary_admin_only', message: 'Los resúmenes del día y del mes son solo para el Admin.' });
 // Llamada a herramienta prohibida para el empleado que aparece A MITAD del texto: se corta ahí (ver callDeepSeekStream guard).
 export function employeeToolGuard(role) {
   if (role === 'owner') return null;
@@ -1418,6 +1426,7 @@ export function employeeToolGuard(role) {
     if (!c || !TOOL_DEFS.some((t) => t.name === c.name)) return null;
     if (!toolAllowed(role, c.name)) return c.name === 'preparar_documento' ? 'forbidden_document' : 'forbidden_role';
     if (c.name === 'preparar_documento') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !EMPLOYEE_DOC_TYPES.includes(m[1])) return 'forbidden_document'; }
+    if (c.name === 'consultar') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && SUMMARY_TYPES.includes(m[1])) return 'forbidden_summary'; }
     return null;
   };
 }
@@ -1579,6 +1588,7 @@ export function toProposal(call, role, ctx, n) {
   }
   if (name === 'consultar') {
     if (!QUERY_TYPES.includes(args.tipo)) return { dropped: 'bad_query', tool: name };
+    if (role !== 'owner' && SUMMARY_TYPES.includes(args.tipo)) return { dropped: 'forbidden_summary', tool: name };
     if (role !== 'owner' && !EMPLOYEE_QUERY_TYPES.includes(args.tipo)) return { dropped: 'forbidden_query', tool: name };
     return { id, type: 'consulta', needsConfirm: false, query: { tipo: args.tipo, producto: cleanText(args.producto, 80), desde: cleanText(args.desde, 10), hasta: cleanText(args.hasta, 10) } };
   }
@@ -2479,6 +2489,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const ctx = sanitizeContext(parsed.context, role);
   // Documento del dueño pedido con todas las letras por un empleado: 403 en JSON antes de abrir el canal, sin cupo ni DeepSeek (Bot 5).
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
+  if (employeeSummaryDenied(role, parsed.text)) return json(SUMMARY_ADMIN_ONLY, 403);
   const store = store0;
   if (!store) return json({ error: 'usage_store_missing' }, 500);
   const quota = await reserveUsage(store, { ...auth, posRole: role }, env, (deps.now || Date.now)(), !!parsed.image);
@@ -2516,6 +2527,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (result.forbidden) {
     if (emit) { emit.drop(); emit.reset(); }
     if (result.forbidden === 'forbidden_document') return json(FORBIDDEN_DOCUMENT, 403);
+    if (result.forbidden === 'forbidden_summary') return json(SUMMARY_ADMIN_ONLY, 403);
     preDropped = { dropped: 'forbidden_role', tool: 'cut_mid_stream' }; result = { content: '', calls: [], usage: result.usage };
   }
   // Herramientas o búsquedas por delante y todavía sin texto: «buscando» enseguida y cada pocos segundos hasta el primer texto.
@@ -2543,6 +2555,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_document')) {
     if (emit) { emit.drop(); emit.reset(); }
     return json(FORBIDDEN_DOCUMENT, 403);
+  }
+  // Empleado que pide un resumen del día o del mes: 403 (no 200 con la consulta descartada). Nada de la consulta se lee.
+  if (role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_summary')) {
+    if (emit) { emit.drop(); emit.reset(); }
+    return json(SUMMARY_ADMIN_ONLY, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
   const consultas = [], toolMsgs = [];
