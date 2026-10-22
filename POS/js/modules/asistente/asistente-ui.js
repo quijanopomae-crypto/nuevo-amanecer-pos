@@ -310,6 +310,7 @@
   var deps = {
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
+    clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
     navigate: function (id) { try { root.NA_MENU_NAVIGATION.navigate(id); } catch (_) { try { root.goPage(id); } catch (__) {} } },
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
@@ -412,10 +413,15 @@
   function soles(n) { return C.soles(n); }
   // Nombre del cliente en la tarjeta: solo en documentos de UN cliente (estado de cuenta), con su etiqueta. En la lista de precios, nunca.
   var CUSTOMER_DOCS = ['estado_cuenta'];
+  // (auditoría de privacidad 2026-10-22) la tarjeta trae solo el código (cliente_id); el nombre se busca en la lista de ESTE aparato.
+  function cliLabel(code) { var c = null; try { c = deps.clientes().find(function (x) { return String(x.id) === String(code); }); } catch (_) { c = null; }
+    var n = c && String(c.nombre || c.name || '').trim(); return n ? n.slice(0, 80) : 'cliente #' + code; }
   // (Bot 2 sobre d72b7601, INFO) en la tarjeta, una línea con product_id del catálogo local muestra el nombre del catálogo, no el de la propuesta
   // (que puede venir tapado: «Leche DNI ****5678»); sin el producto en el catálogo, el de la propuesta tal cual.
   function lineName(l) { var prod = null; try { prod = l && l.product_id && deps.productos().find(function (x) { return String(x.id) === String(l.product_id); }); } catch (_) { prod = null; }
     var n = prod && (prod.nombre || prod.name); return n ? n : (l ? l.nombre : ''); }
+  // cuántas filas hay en total: en deudas es «clientes» y en ventas no hay cuenta («total» es plata: antes salía «Mostrando 10 de 22057.72»)
+  function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'ventas_periodo' ? null : r.total; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +
@@ -426,11 +432,11 @@
         '<table class="q">' + (r.columnas && r.columnas.length ? '<tr>' + r.columnas.map(function (c, i) { return '<th' + (i ? ' class="r"' : '') + '>' + E(c) + '</th>'; }).join('') + '</tr>' : '') +
         (r.filas || []).map(function (f) { return '<tr>' + f.map(function (c, i) { return '<td' + (i ? ' class="r"' : '') + '>' + E(typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
         (r.truncado ? '<div class="warn">Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.</div>' : '') +
-        (r.total != null && r.filas && r.filas.length < r.total ? '<div class="note">Mostrando ' + r.filas.length + ' de ' + E(r.total) + '.</div>' : '')) +
+        (qCount(r) != null && r.filas && r.filas.length < qCount(r) ? '<div class="note">Mostrando ' + r.filas.length + ' de ' + E(qCount(r)) + '.</div>' : '')) +
         '<div class="note">Datos leídos del servidor. No cambia nada.</div>';
     }
     if (p.type === 'documento') return '<h4>' + E(p.title) + '<span class="pill ro">Solo lectura</span></h4>' +
-      '<div class="note">' + E([p.desde, p.hasta && p.hasta !== p.desde ? p.hasta : null].filter(Boolean).join(' a ') + (p.cliente && CUSTOMER_DOCS.indexOf(p.tipo) >= 0 ? ' · Cliente: ' + p.cliente : '')) + '</div>' +
+      '<div class="note">' + E([p.desde, p.hasta && p.hasta !== p.desde ? p.hasta : null].filter(Boolean).join(' a ') + (p.cliente_id && CUSTOMER_DOCS.indexOf(p.tipo) >= 0 ? ' · Cliente: ' + cliLabel(p.cliente_id) : '')) + '</div>' +
       '<div class="warn doc">Documento interno. NO es comprobante SUNAT.</div>' +
       '<div class="res" aria-live="polite"></div><div class="acts"><button type="button" class="na-asst-ok" data-open>Abrir documento</button></div>';
     if (p.type === 'compra') rows = '<tr><th>Producto</th><th class="r">Costo actual</th><th class="r">Factura</th></tr>' + p.lineas.map(function (l, i) {
@@ -477,6 +483,9 @@
   function addCard(p, prompt) {
     var key = gate.add(p); if (!key) return;
     var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
+    // tabla de consulta: el servidor manda «cliente #código»; al ADMIN se le muestra el nombre de la lista de ESTE aparato (decisión del Admin
+    // 22-10), al empleado solo el código. El nombre nunca va al modelo.
+    var qt = p.type === 'consulta' && C.customerCodesIn && isOwnerAccess() ? c.querySelector('table.q') : null; if (qt) linkCustomers(qt, C.customerCodesIn(qt.textContent, deps.clientes()));
     // (Bot 4 sobre 3ee80c18) cada valor en su span; proveedor (RUC) y documento aislados de izquierda a derecha
     var dn = c.querySelector('[data-docnote]'); if (dn) [[p.proveedor, true], [p.documento, true], [p.fecha, false]].filter(function (x) { return x[0]; }).forEach(function (x, i) {
       if (i) dn.appendChild(doc.createTextNode(' · ')); var sp = doc.createElement('span'); if (x[1]) ltrIsolate(sp); C.appendCoded(doc, sp, String(x[0])); dn.appendChild(sp); });
@@ -677,25 +686,28 @@
   // Cliente: SOLO su código interno (el id que ya tiene en la lista de clientes del POS) y la acción. Nunca nombre, DNI ni montos.
   var CLI_RE = /^[A-Za-z0-9_-]{1,40}$/;
   function cliPart(x) { return x && x.cli != null && CLI_RE.test(String(x.cli)) ? { cli: String(x.cli), accion: String(x.accion || 'cliente').slice(0, 30) } : {}; }
+  // Datos viejos guardados antes de este cambio: de un error de pantalla solo sale el TIPO, nunca el mensaje.
+  function errType(v) { var t = String(v == null ? '' : v).trim(); if (/^[A-Za-z]{1,40}$/.test(t)) return t; var m = /^(?:Uncaught\s+)?(?:\(in promise\)\s*)?([A-Z][A-Za-z]{0,39}(?:Error|Exception))\b/.exec(t); return m ? m[1] : 'Error'; }
   function reviewData() {
     var R = root.NA_ASISTENTE_REVISION, raw = R && R.data ? R.data() : { errors: [], usage: {} };
-    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: C.redactText(String(x.msg || '')).slice(0, 160), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
+    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: x.kind === 'api' ? C.redactText(String(x.msg || '')).slice(0, 160) : errType(x.msg), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
       usage: raw.usage || {},
       slow: (raw.slow || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, name: C.redactText(String(x.name || '')).slice(0, 80), count: x.count || 1, ms_avg: x.ms_avg || 0, ms_max: x.ms_max || 0, last: x.last || null }, cliPart(x)); }),
       ocr: raw.ocr ? { reads: raw.ocr.reads || 0, fails: raw.ocr.fails || 0, timeouts: raw.ocr.timeouts || 0, ms_sum: raw.ocr.ms_sum || 0, ms_max: raw.ocr.ms_max || 0, confirmed: raw.ocr.confirmed || 0, corrections: raw.ocr.corrections || 0 } : null };
   }
   // «cliente #código» del informe -> enlace que muestra el nombre buscado EN ESTE APARATO y abre al cliente. El nombre nunca sale del aparato.
   function linkCustomers(node, codes) {
-    var R = root.NA_ASISTENTE_REVISION; if (!node || !codes || !codes.length || !R || !R.customerName) return 0;
+    var R = root.NA_ASISTENTE_REVISION; if (!node || !codes || !codes.length) return 0;
+    var nameOf = R && R.customerName ? R.customerName : function (code) { var c = deps.clientes().find(function (x) { return String(x.id) === String(code); }); return c ? String(c.nombre || c.name || '').slice(0, 80) : null; };
     var ok = {}; codes.forEach(function (c) { if (CLI_RE.test(String(c))) ok[String(c)] = 1; });
     var re = /cliente #([A-Za-z0-9_-]{1,40})/g, n = 0, walk = [], tw = doc.createTreeWalker ? doc.createTreeWalker(node, 4) : null;
     if (tw) { while (tw.nextNode()) walk.push(tw.currentNode); } else (function rec(x) { (x.childNodes || []).forEach(function (c) { if (c.nodeType === 3) walk.push(c); else rec(c); }); })(node);
     walk.forEach(function (t) { var v = t.nodeValue || '', last = 0, m, frag = null; re.lastIndex = 0;
       while ((m = re.exec(v))) { if (!ok[m[1]]) continue; frag = frag || doc.createDocumentFragment();
         if (m.index > last) frag.appendChild(doc.createTextNode(v.slice(last, m.index)));
-        var code = m[1], name = R.customerName(code), a = el('button', 'na-asst-cli'); a.type = 'button'; a.dataset.cli = code;
+        var code = m[1], name = nameOf(code), a = el('button', 'na-asst-cli'); a.type = 'button'; a.dataset.cli = code;
         a.textContent = 'cliente #' + code + (name ? ' (' + name + ')' : ''); a.title = name ? 'Abrir a ' + name : 'Abrir cliente';
-        a.onclick = function (e) { e.preventDefault(); if (!R.openCustomer || !R.openCustomer(this.dataset.cli)) addMsg('a', 'No encontré ese cliente en este aparato.'); };
+        a.onclick = function (e) { e.preventDefault(); if (!R || !R.openCustomer || !R.openCustomer(this.dataset.cli)) addMsg('a', 'No encontré ese cliente en este aparato.'); };
         frag.appendChild(a); last = m.index + m[0].length; n++; }
       if (frag) { if (last < v.length) frag.appendChild(doc.createTextNode(v.slice(last))); t.parentNode.replaceChild(frag, t); } });
     return n;
@@ -717,6 +729,30 @@
       say: function (t) { addMsg('a', t); }, state: setState,
       busy: function (on) { busy = !!on; if (sendBtn) sendBtn.disabled = on || root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = on || root.navigator.onLine === false; } };
   }
+  // ---------- «Subir archivo»: PDF -> imagen en el aparato (carga diferida de asistente-pdf.js; usa el pdf.js que ya trae el POS) ----------
+  function fileKind(f) {
+    var n = String(f && f.name || '').toLowerCase(), t = String(f && f.type || '').toLowerCase();
+    if (t === 'application/pdf' || /\.pdf$/.test(n)) return 'pdf';
+    if (/^image\//.test(t) || /\.(?:jpe?g|png|webp|gif|bmp|heic|heif)$/.test(n)) return 'image';
+    if (/\.(?:docx?|xlsx?|xlsm|csv|odt|ods|rtf|txt|pptx?)$/.test(n) || /msword|ms-excel|officedocument|opendocument|text\/(?:plain|csv)|rtf/.test(t)) return 'doc';
+    return 'other';
+  }
+  var pdfP = null;
+  function loadPdf() {
+    if (root.NA_ASISTENTE_PDF) return Promise.resolve(root.NA_ASISTENTE_PDF);
+    if (pdfP) return pdfP;
+    pdfP = new Promise(function (ok, ko) { var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-pdf.js';
+      sc.onload = function () { root.NA_ASISTENTE_PDF ? ok(root.NA_ASISTENTE_PDF) : ko(new Error('pdf')); }; sc.onerror = function () { pdfP = null; ko(new Error('pdf')); }; doc.body.appendChild(sc); });
+    return pdfP;
+  }
+  // -> Promise<{ blob, pages, total }>; si falla, ya avisó en el chat y rechaza.
+  function pdfImage(f) {
+    var wait = addMsg('a', 'Abriendo el PDF'); wait.classList.add('na-asst-thinking'); setState('concentrado');
+    return loadPdf().then(function (P) { return P.toImage(f, { doc: doc }).then(function (r) {
+      wait.remove(); if (r.total > r.pages) addMsg('a', 'El PDF tiene ' + r.total + ' páginas: leo solo las primeras ' + r.pages + '.'); return r;
+    }, function (e) { throw P.message(e && e.code); }); }).catch(function (m) {
+      wait.remove(); addMsg('a', typeof m === 'string' ? m : 'No pude abrir ese PDF.'); setState('error', 2000); throw m; });
+  }
   function boletaPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('boleta_admin_only'); return; } fileMode = 'boleta'; fileEl.click(); }
   function boletaStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; addMsg('u', 'Leer boleta con IA');
     loadBoleta().then(function (B) { return B.start(f, boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir el lector de boletas. Inténtelo otra vez.'); setState('error', 2000); }); }
@@ -728,7 +764,7 @@
     var thinking = addMsg('a', 'Revisando el punto de venta'); thinking.classList.add('na-asst-thinking');
     var mine = panelEl;
     try {
-      var d = await post('/auth/assistant/review', reviewData(), null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
+      var d = await post('/auth/assistant/review', C.compactReview ? C.compactReview(reviewData()) : reviewData(), null, C.TIMEOUTS.chat); // bajo el tope del servidor (96 KB) if (panelEl !== mine) return; thinking.remove();
       if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
       var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review'); linkCustomers(b, Array.isArray(d.customers) ? d.customers : []);
       var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
@@ -760,7 +796,10 @@
     var thinking = addMsg('a', image ? 'Concentrado, leyendo la foto' : 'Pensando'); thinking.classList.add('na-asst-thinking');
     var dots = el('span', 'na-asst-dots'); dots.setAttribute('aria-hidden', 'true'); dots.innerHTML = '<i></i><i></i><i></i>'; thinking.appendChild(dots);
     var screen = (doc.querySelector('.page.active') || {}).id || null;
-    var body = { text: C.redactText(text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
+    // (auditoría de privacidad 2026-10-22) nombres y direcciones de clientes conocidos -> «cliente #código» / «[dirección oculta]» ANTES
+    // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
+    var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
+    var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
     if (image) body.image = image;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
@@ -810,6 +849,7 @@
       var stick = atBottom();
       if (d.cut === true) { if (bubble) bubble.removeAttribute('aria-busy'); else bubble = addMsg('a', ''); paintCut(bubble, d.reply, mdOpts); lastCut = bubble; }
       else if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply, mdOpts); } else { bubble = addMsg('a', ''); paintReply(bubble, d.reply, mdOpts); }
+      if (C.customerCodesIn && isOwnerAccess()) linkCustomers(bubble, C.customerCodesIn(d.reply, deps.clientes())); // «cliente #código» -> nombre de ESTE aparato (solo Admin)
       { var shown = C.stripDisplay ? C.stripDisplay(d.reply) : d.reply; announce(shown); if (mascot) mascot.speak(shown); } // (Bots 4/5 sobre f773911f) lo que se lee y lo que «dice» la mascota = lo que se ve
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
       (d.denied || []).forEach(addDenied);
@@ -1210,7 +1250,7 @@
     panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
       '<div class="na-asst-offline" hidden>Asistente no disponible sin internet</div><div class="na-asst-msgs"></div><div class="na-asst-live" aria-live="polite" aria-atomic="true"></div>' +
       '<div class="na-asst-chips">' + chipsHtml() + '</div>' +
-      '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*" capture="environment" hidden>' +
+      '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto o PDF" title="Tomar foto o subir foto/PDF"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*,application/pdf,.pdf" hidden>' +
       '<textarea rows="1" placeholder="Escribe aquí…" aria-label="Mensaje para el asistente"></textarea><button type="button" class="na-asst-send" aria-label="Enviar">➤</button></div>';
     doc.body.appendChild(rootEl); doc.body.appendChild(panelEl);
     msgsEl = panelEl.querySelector('.na-asst-msgs'); liveEl = panelEl.querySelector('.na-asst-live');
@@ -1223,9 +1263,15 @@
     sendBtn.onclick = function () { send(inputEl.value); };
     inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(inputEl.value); } });
     photoBtn.onclick = function () { fileMode = ''; fileEl.click(); };
+    // Sin «capture»: el teléfono ofrece cámara, galería o archivos. Fotos y PDF (el PDF se pasa a imagen EN EL APARATO); Word/Excel: aún no.
     fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0], mode = fileMode; fileMode = ''; fileEl.value = ''; if (!f) return;
-      if (mode === 'boleta') { if (isOwnerAccess()) boletaStart(f); return; }
-      compress(f).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }).catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); };
+      var k = fileKind(f);
+      if (k === 'doc') { addMsg('a', 'Por ahora leo fotos y PDF. Si es Word o Excel, guárdelo como PDF o tómele una foto y súbalo.'); return; }
+      if (k === 'other') { addMsg('a', 'Ese archivo no lo puedo leer. Suba una foto o un PDF.'); return; }
+      if (k === 'pdf' && !isOwnerAccess()) { errMsg('image_owner_only'); return; }
+      var got = k === 'pdf' ? pdfImage(f) : Promise.resolve({ blob: f });
+      if (mode === 'boleta') { if (isOwnerAccess()) got.then(function (r) { boletaStart(r.blob); }, function () {}); return; }
+      got.then(function (r) { return compress(r.blob).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }, function () { addMsg('a', k === 'pdf' ? 'No pude abrir ese PDF.' : 'No pude abrir esa foto.'); setState('error', 2000); }); }, function () {}); };
     panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else send(b.dataset.q); });
     shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón

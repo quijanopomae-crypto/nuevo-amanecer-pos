@@ -56,9 +56,16 @@
     try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
   }
   function ownerAllowed() { return isOwner() && policyReady(); }
+  function unlocked() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.featureLocked === 'function' && permissions.featureLocked(FEATURE_ID) === false); } catch (_) { return false; }
+  }
+  // Permisos por empleado (#924): el empleado entra solo si el servidor prendió su casilla (falla cerrada).
+  function employeeMay() {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.may === 'function' && e.may(FEATURE_ID) === true); } catch (_) { return false; }
+  }
+  // Dueño como hoy, o empleado con casilla; el candado manda en los dos casos.
   function available() {
-    var permissions = root.NA_PERMISSIONS;
-    return ownerAllowed() && !!(permissions && typeof permissions.featureLocked === 'function' && !permissions.featureLocked(FEATURE_ID));
+    try { return unlocked() && (ownerAllowed() || (policyReady() && employeeMay())); } catch (_) { return false; }
   }
   function currentProducts() {
     var canonical = root.NuevoAmanecerCanonical, view = root.NuevoAmanecerCanonicalSaleView;
@@ -195,6 +202,7 @@
     if (exportButton) exportButton.addEventListener('click', exportCsv);
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', function () { if (!available()) render(); else update(); showAlert(); });
+    root.addEventListener('na:employee-perms', function () { if (!available()) render(); else update(); showAlert(); });
     root.addEventListener('na:canonical-updated', showAlert);
     page.addEventListener('input', function (e) { if (e.target && e.target.matches && e.target.matches('[data-rpv-lot]')) update(); });
     root.setTimeout(showAlert, 1500);

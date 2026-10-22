@@ -11,6 +11,7 @@
 // - Cada cambio se anota en pos_assistant_access_log SI la tabla existe (migración 0035, escrita y NO aplicada).
 // - Las herramientas que cambian algo piden SIEMPRE el PIN del dueño en una tarjeta de un solo uso, en cualquier nivel.
 import { sha256Hex } from './a5-import-core.js';
+import { posRoleFor } from './pos-roles.js';
 
 export const ACCESS_LEVELS = Object.freeze(['off', 'consultas', 'consultas_documentos']);
 export const ACCESS_APPROVAL_ACTION = 'assistant.employee_access';
@@ -34,8 +35,13 @@ export async function assistantAccess(db, auth) {
   let row = null;
   try { row = await db.prepare('SELECT pos_role FROM pos_device_roles WHERE device_id=?1').bind(String(auth.principalId)).first(); } catch { return 'empleado:off'; }
   if (row?.pos_role === 'owner' && auth.posRole === 'owner') return 'owner';
-  // Teléfono SIN fila de rol: 'sin_rol' (así aparece en la bitácora, no como 'empleado:off'). Sin asistente igual (accessOn = false).
-  if (!row) return 'sin_rol';
+  // Aparato SIN fila de rol (aprobado por el Admin el 2026-10-22): MISMA regla que el POS (posRoleFor, sin fila = Admin), y solo si la
+  // sesión autenticada también es Admin. Así el PC del Admin activado de forma normal tiene asistente sin registrar nada ni migrar.
+  // Si la sesión no es Admin: 'sin_rol' (así aparece en la bitácora). Sin asistente igual (accessOn = false).
+  if (!row) {
+    let pos = null; try { pos = await posRoleFor(db, String(auth.principalId)); } catch { return 'empleado:off'; }
+    return pos === 'owner' && auth.posRole === 'owner' ? 'owner' : 'sin_rol';
+  }
   // Solo un aparato empleado vinculado (fila 'empleado') puede tener nivel; sin fila no hay asistente.
   if (row.pos_role !== 'empleado') return 'empleado:off';
   return 'empleado:' + (await employeeLevel(db, auth.principalId));
@@ -43,8 +49,9 @@ export async function assistantAccess(db, auth) {
 export function accessLevel(role) { return role === 'owner' ? 'dueno' : String(role || '').split(':')[1] || 'off'; }
 export function accessOn(role) { return role === 'owner' || role === 'empleado:consultas' || role === 'empleado:consultas_documentos'; }
 
+// Mismo criterio que el chat (assistantAccess): fila 'owner' explícita, o sin fila con sesión Admin (regla del POS).
 async function isOwnerDevice(db, auth) {
-  try { const r = await db.prepare('SELECT pos_role FROM pos_device_roles WHERE device_id=?1').bind(String(auth.principalId)).first(); return r?.pos_role === 'owner' && auth.posRole === 'owner'; } catch { return false; }
+  try { return (await assistantAccess(db, auth)) === 'owner'; } catch { return false; }
 }
 // Mismo consumo estricto que las tarjetas: UPDATE ... operation_id=? AND used_at IS NULL, válido solo con changes===1.
 export async function verifyOwnerApproval(db, deviceId, approvalId, action, operationId) {

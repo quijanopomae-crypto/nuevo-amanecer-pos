@@ -110,9 +110,12 @@ test('sin PIN: el dueño confirma con un toque (sin x-owner-approval); doble toq
   assert.deepEqual(rs.map((r) => r.status), [200, 200, 200]);
   assert.equal(rs.filter((r) => !r.body.already_confirmed).length, 1, 'un solo efecto'); assert.equal(new Set(rs.map((r) => r.body.operation_id)).size, 1);
   const again = await confirm('tok-dueno', card); assert.equal(again.body.already_confirmed, true, 'reenvío tardío: mismo operation_id');
-  // la sesión debe ser dueño de verdad: fila owner + sesión owner del POS. Un aparato que el POS trata como Admin pero sin fila: bloqueado.
+  // Aparato SIN fila que el POS trata como Admin (regla del POS, aprobada 2026-10-22): es Admin del asistente, pero la tarjeta de OTRO
+  // aparato sigue siendo ajena (other_device). Con su propia tarjeta confirma igual que el dueño.
   f.addDevice('sinrol', 'writer', 'active', 'tok-sinrol');
-  const r1 = await confirm('tok-sinrol', card); assert.equal(r1.status, 403); assert.equal(r1.body.error, 'assistant_off');
+  const r1 = await confirm('tok-sinrol', card); assert.equal(r1.status, 403); assert.equal(r1.body.error, 'other_device');
+  const own = (await chat('tok-sinrol', 'merma de 1 Synthetic 00003')).body.proposals.find((p) => p.type === 'ajuste'); assert.ok(own, 'sin fila + sesión Admin: tiene tarjetas de Admin');
+  assert.equal(own.requiresRole, 'owner'); const rOwn = await confirm('tok-sinrol', own); assert.equal(rOwn.status, 200);
   // si la fila deja de ser owner (el dueño pasó este aparato a empleado): bloqueado al instante
   f.exec("UPDATE pos_device_roles SET pos_role='empleado' WHERE device_id='session:dueno'");
   const card2 = { ...card }; const r2 = await confirm('tok-dueno', card2); assert.equal(r2.status, 403);
@@ -387,7 +390,6 @@ test('Bot 2: GET de la bitácora muestra PRIMERO las filas del dueño aunque hay
 test('Bot 5: rechazos del DUEÑO en su propio cajón (or); bad_token y bad_request de otros aparatos (empleado y sin rol) van agrupados y no los sacan', async (t) => {
   const { f, call, chat, level } = await setup(t);
   const { AUDIT_CAPS } = await import('../../tools/cloudflare-lab/src/pos-assistant-audit.js');
-  f.addDevice('sinrol', 'writer', 'active', 'tok-sinrol');
   const cnt = (b) => f.all(`SELECT COUNT(*) AS n FROM pos_settings WHERE key LIKE 'internal:asst:audit:${b}:%'`)[0].n;
   const keys = (b) => f.all(`SELECT key FROM pos_settings WHERE key LIKE 'internal:asst:audit:${b}:%' ORDER BY key`).map((r) => r.key);
   const raw = (tok, path, body) => f.fetch('http://localhost' + path, { method: 'POST', headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json' }, body });
@@ -400,12 +402,12 @@ test('Bot 5: rechazos del DUEÑO en su propio cajón (or); bad_token y bad_reque
   const ownerRej = keys('or'); assert.equal(ownerRej.length, 4, JSON.stringify(ownerRej));
   const ownerOut = f.all("SELECT value_json FROM pos_settings WHERE key LIKE 'internal:asst:audit:or:%'").map((r) => JSON.parse(r.value_json).outcome).sort();
   assert.deepEqual(ownerOut, ['rejected:bad_request', 'rejected:bad_request', 'rejected:bad_token', 'rejected:proposal_changed']);
-  // diluvio de otros aparatos: empleado con nivel (sin PIN no confirma: 403 forbidden_role antes del cuerpo) y teléfono sin rol (se corta en el rol)
+  // diluvio de otros aparatos: empleado con nivel (sin PIN no confirma: 403 forbidden_role antes del cuerpo) y otro empleado en Apagado (se corta en el rol; un aparato sin fila ya es Admin si el POS lo trata como Admin)
   assert.equal((await level('session:emp', 'consultas')).status, 200);
   for (let i = 0; i < 200; i++) assert.equal((await call('tok-emp', '/auth/assistant/confirm', { token: 'x' + i, proposal: {} })).status, 403);
   for (let i = 0; i < 200; i++) assert.equal((await raw('tok-emp', '/auth/assistant/confirm', '{roto' + i)).status, 403);
-  for (let i = 0; i < 200; i++) assert.equal((await raw('tok-sinrol', '/auth/assistant/confirm', '{roto' + i)).status, 403);
-  for (let i = 0; i < 200; i++) assert.equal((await raw('tok-sinrol', '/auth/assistant/chat', '{roto' + i)).status, 403);
+  for (let i = 0; i < 200; i++) assert.equal((await raw('tok-emp2', '/auth/assistant/confirm', '{roto' + i)).status, 403);
+  for (let i = 0; i < 200; i++) assert.equal((await raw('tok-emp2', '/auth/assistant/chat', '{roto' + i)).status, 403);
   assert.deepEqual(keys('or'), ownerRej, 'los rechazos del dueño siguen todos');
   assert.equal(cnt('r'), 0, 'ningún rechazo de otro aparato va suelto');
   const agg = f.all("SELECT value_json FROM pos_settings WHERE key LIKE 'internal:asst:audit:a:%'").map((r) => JSON.parse(r.value_json));
