@@ -909,3 +909,5 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
 - <datos_pos> y consultas: el nombre de producto pasa siempre por el redactor (Admin: redactModelOwner); cada texto del resumen de una consulta (p. ej. proveedor de compras recientes) pasa por redactText antes del modelo.
 - Se quitó `assistantRole` (sin uso; el rol sale de assistantAccess).
 - Decisiones del Admin, SIN cambios en esta rama: (4) las fotos (boleta, factura, producto) llegan completas al proveedor de IA; (5) el respaldo Routeway recibe el mismo contexto que el principal.
+
+- Texto en partes (propiedad con las pruebas de #929/#930/#935/#938): «costo⏎la contraseña … S/ 1.80» se veía entero pero en partes salía «S/ [oculto]» (el corte antes del artículo «la» soltaba el tramo sin la palabra de precio). Ahora ese corte es candidato (priceKwNext con artículo); prueba 2d.
