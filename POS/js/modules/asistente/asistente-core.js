@@ -876,11 +876,14 @@
   // ---------- Clientes en el mensaje (auditoría de privacidad 2026-10-22) ----------
   // Antes de mandar el mensaje del chat, los nombres de clientes que este aparato YA conoce (lista de Clientes del POS) se cambian por
   // «cliente #código» y sus direcciones por «[dirección oculta]». El nombre nunca sale del aparato: la respuesta se pinta con el nombre
-  // buscado aquí (linkCustomers). Coincide sin tildes ni mayúsculas y solo palabras enteras, y SOLO con el nombre COMPLETO del cliente o, si
-  // tiene 3+ palabras, con dos palabras seguidas de ese nombre («Rosa Quispe» de «Rosa Quispe Mamani»)
-  // (pedido del jefe 22-10: «Distribuidora San Juan» salía «Distribuidora cliente #c4»). Un nombre suelto («Rosa», «Quispe») ya no se tapa;
-  // tampoco dentro del nombre de un producto ni de una empresa («Distribuidora …», «Comercial …», «… S.A.C.»). Si varios clientes comparten
-  // el nombre completo, se mandan sus códigos (hasta 3) o «un cliente».
+  // buscado aquí (linkCustomers). Coincide sin tildes ni mayúsculas y solo palabras enteras: el nombre COMPLETO, dos palabras seguidas de un
+  // nombre de 3+ palabras («Rosa Quispe» de «Rosa Quispe Mamani») y también un nombre o apellido SUELTO («Juan», «Pérez» de «Juan Pérez»;
+  // regla de privacidad: el nombre de un cliente nunca llega a la IA). Excepciones (pedido del jefe 22-10: «Distribuidora San Juan» salía
+  // «Distribuidora cliente #c4»): nunca dentro del nombre de un producto o proveedor que este aparato conoce (lista de productos, su
+  // campo proveedor y los proveedores de los movimientos de compra), y tampoco en
+  // contexto de empresa («Distribuidora …», «Comercial …», «proveedor …», «… S.A.C.»; para la palabra suelta también con palabras en
+  // mayúscula en medio: «Distribuidora San Juan», «San Juan S.A.C.»). Si varios clientes comparten el nombre, se mandan sus códigos (hasta 3)
+  // o «un cliente».
   var CLI_CODE_RE = /^[A-Za-z0-9_-]{1,40}$/;
   var NAME_STOP = { de: 1, del: 1, la: 1, las: 1, los: 1, el: 1, y: 1, e: 1, san: 1, santa: 1, sr: 1, sra: 1, don: 1, dona: 1 };
   function foldCh(ch) { return ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
@@ -894,10 +897,24 @@
   var ADDRESS_RE = /\b(?:av(?:da|enida)?|jr|jir[oó]n|calle|psje|pje|pasaje|prol(?:ongaci[oó]n)?|mz|manzana|urb(?:anizaci[oó]n)?|asoc(?:iaci[oó]n)?|aa\.?\s?hh)\.?\s+(?:[A-Za-zÁÉÍÓÚÑáéíóúñü.'°ºª-]+\s+){0,5}?(?:n[°ºo]?\.?\s*)?\d{1,5}[A-Za-z]?\b(?:\s*,?\s*(?:mz|lt|lote|int|dpto|of)\.?\s*[A-Za-z0-9]{1,4}\b)*/gi;
   // Palabras de empresa JUSTO antes o después: «Distribuidora San Juan», «Comercial Rosa Quispe», «San Juan S.A.C.» son proveedores o
   // negocios, no clientes. Con algo en medio («la bodega de Rosa Quispe», «farmacia y Rosa Quispe») el nombre se tapa igual.
-  var BIZ_BEFORE_RE = /(?:^|[^a-z0-9ñ])(?:distribuidora|distribuciones|distribuidor|comercial|comercializadora|corporacion|corp|inversiones|importadora|importaciones|botica|boticas|farmacia|farmacias|drogueria|laboratorio|laboratorios|bodega|minimarket|market|supermercado|almacen|negociaciones|grupo|proveedor|proveedora|industrias|representaciones|multiservicios|agroveterinaria|veterinaria|libreria|ferreteria|panificadora|panaderia|transportes)[^a-z0-9ñ]{1,3}$/;
+  var BIZ_WORDS = 'distribuidora|distribuciones|distribuidor|comercial|comercializadora|corporacion|corp|inversiones|importadora|importaciones|botica|boticas|farmacia|farmacias|drogueria|laboratorio|laboratorios|bodega|minimarket|market|supermercado|almacen|negociaciones|grupo|proveedor|proveedora|proveedores|industrias|representaciones|multiservicios|agroveterinaria|veterinaria|libreria|ferreteria|panificadora|panaderia|transportes';
+  var BIZ_BEFORE_RE = new RegExp('(?:^|[^a-z0-9ñ])(?:' + BIZ_WORDS + ')[^a-z0-9ñ]{1,3}$'), BIZ_WORD = {}; BIZ_WORDS.split('|').forEach(function (w) { BIZ_WORD[w] = 1; });
   var BIZ_AFTER_RE = /^[^a-z0-9ñ]{0,3}(?:s[^a-z0-9ñ]?a[^a-z0-9ñ]?c|s[^a-z0-9ñ]?a[^a-z0-9ñ]?a|e[^a-z0-9ñ]?i[^a-z0-9ñ]?r[^a-z0-9ñ]?l|s[^a-z0-9ñ]?r[^a-z0-9ñ]?l|s[^a-z0-9ñ]?a|sociedad|hermanos|hnos|e hijos|import|export)(?![a-z0-9ñ])/;
   function bizName(f, a, b) { return BIZ_BEFORE_RE.test(f.slice(Math.max(0, a - 40), a)) || BIZ_AFTER_RE.test(f.slice(b, b + 24)); }
-  function maskCustomers(text, clientes, productos) {
+  // Palabra suelta: contexto de empresa también con hasta 3 palabras en Mayúscula (o «de/san…») en medio: «Distribuidora San Juan» -> «Juan»,
+  // «San Juan S.A.C.» -> «San». «el proveedor me dijo que Juan…» SÍ se tapa (en medio hay palabras en minúscula).
+  function bizWide(f, src, map, a, b) {
+    if (bizName(f, a, b)) return true;
+    var isW = function (ch) { return /[a-z0-9ñ]/.test(ch || ''); }, cap = function (x) { var ch = src[map[x]]; return !!ch && ch !== ch.toLowerCase(); };
+    var pos = a, k, n, e, w;
+    for (k = 0; k < 4; k++) { n = 0; while (pos > 0 && !isW(f[pos - 1]) && n < 3) { pos--; n++; } if (!n || pos === 0) break; e = pos; while (pos > 0 && isW(f[pos - 1])) pos--;
+      w = f.slice(pos, e); if (BIZ_WORD[w]) return true; if (!cap(pos) && !NAME_STOP[w]) break; }
+    pos = b;
+    for (k = 0; k < 4; k++) { if (BIZ_AFTER_RE.test(f.slice(pos, pos + 24))) return true; n = 0; while (pos < f.length && !isW(f[pos]) && n < 3) { pos++; n++; } if (!n || pos >= f.length) break;
+      e = pos; while (pos < f.length && isW(f[pos])) pos++; w = f.slice(e, pos); if (!cap(e) && !NAME_STOP[w]) break; }
+    return false;
+  }
+  function maskCustomers(text, clientes, productos, proveedores) {
     var src = String(text == null ? '' : text).normalize('NFC'), codes = [];
     var list = Array.isArray(clientes) ? clientes.slice(0, 5000) : [];
     if (!src) return { text: src, codes: codes };
@@ -905,10 +922,17 @@
     var f = '', map = [];
     for (var i = 0; i < src.length; i++) { var fc = foldCh(src[i]); for (var k = 0; k < fc.length; k++) { f += fc[k]; map.push(i); } }
     map.push(src.length);
-    var prodWords = {}, prodNames = {}; (Array.isArray(productos) ? productos.slice(0, 5000) : []).forEach(function (p) { var pt = nameTokens(p && (p.nombre || p.name)); pt.forEach(function (w) { prodWords[w] = 1; });
+    // pares de palabras seguidas de un producto/proveedor («leche gloria» de «Leche Gloria 400g»): una palabra suelta junto a su pareja no se tapa
+    var prodPairs = {}, pairsOf = function (pt) { for (var q = 0; q + 1 < pt.length; q++) prodPairs[pt[q] + ' ' + pt[q + 1]] = 1; };
+    var prodWords = {}, prodNames = {}; (Array.isArray(productos) ? productos.slice(0, 5000) : []).forEach(function (p) { var pt = nameTokens(p && (p.nombre || p.name)); pt.forEach(function (w) { prodWords[w] = 1; }); pairsOf(pt);
       if (pt.length > 1 || (pt.length === 1 && pt[0].length >= 4)) prodNames[pt.join(' ')] = 1; });
+    // proveedores que el aparato conoce (lista + campo proveedor de cada producto): su nombre queda reservado como el de un producto
+    (Array.isArray(proveedores) ? proveedores.slice(0, 2000) : []).concat((Array.isArray(productos) ? productos.slice(0, 5000) : []).map(function (p) { return p && (p.proveedor || p.supplier); }))
+      .forEach(function (v) { var st = nameTokens(typeof v === 'string' ? v : v && (v.nombre || v.name)); pairsOf(st); if (st.length > 1 || (st.length === 1 && st[0].length >= 4)) prodNames[st.join(' ')] = 1; });
     var phrases = {}; // frase plegada -> { refs, addr }
-    function add(ph, ref, addr) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr }); if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    function add(ph, ref, addr, single) { if (!ph) return; var o = phrases[ph] || (phrases[ph] = { refs: [], addr: !!addr, single: !!single }); if (!single) o.single = false; if (ref !== undefined && o.refs.indexOf(ref) < 0) o.refs.push(ref); }
+    function inPair(a, b) { var w = f.slice(a, b), pm = /([a-z0-9ñ]+)[^a-z0-9ñ]{1,3}$/.exec(f.slice(Math.max(0, a - 40), a)), nm = /^[^a-z0-9ñ]{1,3}([a-z0-9ñ]+)/.exec(f.slice(b, b + 40));
+      return !!((pm && prodPairs[pm[1] + ' ' + w]) || (nm && prodPairs[w + ' ' + nm[1]])); }
     list.forEach(function (c) {
       if (!c || typeof c !== 'object') return;
       var ref = customerRef(c), t = nameTokens(c.nombre || c.name);
@@ -917,6 +941,8 @@
         // nombre de 3+ palabras: también dos palabras SEGUIDAS de ese nombre («Rosa Quispe», «Quispe Mamani»), sin «de/san…» ni palabras de producto
         if (t.length >= 3) for (var j = 0; j + 1 < t.length; j++) { var w1 = t[j], w2 = t[j + 1];
           if (!NAME_STOP[w1] && !NAME_STOP[w2] && !(prodWords[w1] && prodWords[w2]) && (w1 + w2).length >= 6) add(w1 + ' ' + w2, ref); }
+        // nombre o apellido SUELTO: se tapa salvo «de/san…», 1-2 letras o números (dentro de un producto/proveedor ya está reservado arriba)
+        if (t.length >= 2) t.forEach(function (w) { if (!NAME_STOP[w] && w.length >= 3 && !/^\d+$/.test(w)) add(w, ref, false, true); });
       }
       var dir = nameTokens(c.dir || c.direccion || c.address); if (dir.length && dir.join('').length >= 6) add(dir.join(' '), undefined, true);
     });
@@ -930,7 +956,7 @@
     keys.forEach(function (ph) {
       var re = phraseRe(ph), m;
       while ((m = re.exec(f))) { var a = m.index, b = a + m[0].length, free = true; for (var x = a; x < b; x++) if (taken[x]) { free = false; break; }
-        if (!free || (!phrases[ph].addr && bizName(f, a, b))) continue; for (x = a; x < b; x++) taken[x] = 1; hits.push([a, b, phrases[ph]]); }
+        if (!free || (!phrases[ph].addr && (phrases[ph].single ? (bizWide(f, src, map, a, b) || inPair(a, b)) : bizName(f, a, b)))) continue; for (x = a; x < b; x++) taken[x] = 1; hits.push([a, b, phrases[ph]]); }
     });
     hits.sort(function (p, q) { return p[0] - q[0]; });
     var out = '', last = 0;

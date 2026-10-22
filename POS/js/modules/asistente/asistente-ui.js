@@ -316,6 +316,12 @@
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
+    // proveedores que el aparato conoce (campo proveedor de los productos y movimientos de compra): no se tapan como clientes
+    proveedores: function () { var out = {}, put = function (v) { v = typeof v === 'string' ? v.trim() : ''; if (v && v.length <= 120 && v !== 'Sin proveedor registrado') out[v] = 1; };
+      var ps = g('productos'), ms = g('inventoryMovements'); if (!Array.isArray(ms)) ms = root.inventoryMovements;
+      (Array.isArray(ps) ? ps : []).slice(0, 5000).forEach(function (x) { if (x) { put(x.proveedor); put(x.supplier); } });
+      (Array.isArray(ms) ? ms : []).slice(-5000).forEach(function (x) { if (x) { put(x.supplier); put(x.proveedor); } });
+      return Object.keys(out).slice(0, 2000); },
     refreshProducts: async function () {
       var client = root.NuevoAmanecerCanonical;
       if (!client || typeof client.refresh !== 'function') throw new Error('catalog_unavailable');
@@ -937,7 +943,7 @@
     turnNo++;
     // memoria (#946): ventana hasta memoria.max_bytes; lo que no entra va resumido en «resumen» (el del servidor, firmado para el empleado)
     var role = isOwnerAccess() ? 'owner' : 'employee', mreq = null;
-    var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
+    var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos(), deps.proveedores ? deps.proveedores() : []) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
     if (mem && C.memRequest) { mreq = C.memRequest(history, mem, { role: role, now: Date.now() + clockOffset, bodyBase: body }); body.history = mreq.history; if (mreq.resumen) body.resumen = mreq.resumen; }
     if (image) { body.image = image; invoiceMemory = null; }

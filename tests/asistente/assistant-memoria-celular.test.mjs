@@ -94,7 +94,7 @@ test('la UI: memoria en el envío, «Nueva conversación», aviso, nada en el al
   assert.ok(!/(localStorage|sessionStorage)[^;\n]*setItem\([^)]*history/.test(UI));
 });
 
-test('tapado de clientes: solo nombre completo (o dos palabras seguidas de un nombre largo), nunca dentro de proveedor o producto', () => {
+test('tapado de clientes: nombre completo, dos palabras o una sola, nunca dentro de proveedor o producto', () => {
   const CLI = [{ id: 'c4', nombre: 'San Juan' }, { id: 'c1', nombre: 'Rosa Quispe Mamani' }, { id: 'c5', nombre: 'Gloria' }];
   const PROD = [{ id: 'P1', nombre: 'Galletas San Juan' }, { id: 'P2', nombre: 'Leche Gloria' }];
   const m = (t) => C.maskCustomers(t, CLI, PROD).text;
@@ -103,9 +103,37 @@ test('tapado de clientes: solo nombre completo (o dos palabras seguidas de un no
   assert.equal(m('stock de Galletas San Juan'), 'stock de Galletas San Juan');
   assert.equal(m('precio de Leche Gloria'), 'precio de Leche Gloria');
   assert.equal(m('cuánto debe San Juan'), 'cuánto debe cliente #c4');
-  assert.equal(m('Rosa Quispe pagó y Quispe pagó'), 'cliente #c1 pagó y Quispe pagó');
+  assert.equal(m('Rosa Quispe pagó y Quispe pagó'), 'cliente #c1 pagó y cliente #c1 pagó', 'el apellido suelto también se tapa');
   assert.equal(m('la bodega de Rosa Quispe Mamani'), 'la bodega de cliente #c1', 'con algo en medio, el nombre se tapa igual');
   assert.match(UI, /if \(C\.customerCodesIn && isOwnerAccess\(\)\) linkCustomers\(bubble/, 'el Admin ve el nombre real en el aparato');
+});
+
+test('tapado de clientes: nombre o apellido SUELTO se tapa; dentro de un producto, proveedor conocido o contexto de proveedor no', () => {
+  const CLI = [{ id: 'c7', nombre: 'Juan Pérez' }, { id: 'c8', nombre: 'Marta Andina Flores' }, { id: 'c9', nombre: 'Lucía Cárdenas' }];
+  const PROD = [{ id: 'P1', nombre: 'Galletas San Juan' }, { id: 'P2', nombre: 'Arroz Costeño', proveedor: 'Alicorp Cárdenas' }];
+  const PROV = ['Comercial Andina'];
+  const m = (t) => C.maskCustomers(t, CLI, PROD, PROV).text;
+  // sueltos: se tapan (la IA nunca ve el nombre de un cliente)
+  assert.equal(m('cuánto debe Juan'), 'cuánto debe cliente #c7');
+  assert.equal(m('Pérez pagó 20'), 'cliente #c7 pagó 20');
+  assert.equal(m('juan pagó y luego perez volvió'), 'cliente #c7 pagó y luego cliente #c7 volvió', 'sin tildes ni mayúsculas');
+  assert.equal(m('el proveedor me dijo que Juan no vino'), 'el proveedor me dijo que cliente #c7 no vino', 'con palabras en minúscula en medio no es contexto de proveedor');
+  assert.equal(m('Flores debe 10'), 'cliente #c8 debe 10');
+  assert.equal(m('Lucía trajo'), 'cliente #c9 trajo');
+  // dentro de producto / proveedor conocido / contexto de proveedor: no
+  assert.equal(m('stock de Galletas San Juan'), 'stock de Galletas San Juan', 'producto conocido');
+  assert.equal(m('compré a Distribuidora San Juan'), 'compré a Distribuidora San Juan', 'contexto: Distribuidora …');
+  assert.equal(m('San Juan S.A.C. mandó la factura'), 'San Juan S.A.C. mandó la factura', 'contexto: … S.A.C.');
+  assert.equal(m('el proveedor Juan trajo arroz'), 'el proveedor Juan trajo arroz', 'contexto: proveedor …');
+  assert.equal(m('Pérez Hermanos S.A.C. trajo arroz'), 'Pérez Hermanos S.A.C. trajo arroz', 'contexto con palabras en mayúscula en medio');
+  assert.equal(m('pedido a Comercial Andina hoy'), 'pedido a Comercial Andina hoy', 'proveedor de la lista');
+  assert.equal(m('factura de Alicorp Cárdenas'), 'factura de Alicorp Cárdenas', 'proveedor del campo proveedor del producto');
+  assert.equal(m('Andina pagó'), 'cliente #c8 pagó', 'fuera del nombre del proveedor, la palabra suelta sí se tapa');
+  assert.equal(m('Juan compró Galletas San Juan'), 'cliente #c7 compró Galletas San Juan', 'mismo texto: el cliente se tapa, el producto no');
+  assert.equal(m('Marta Andina pagó'), 'cliente #c8 pagó', 'el nombre completo (dos palabras) se tapa igual');
+  // la UI le pasa los proveedores que el aparato conoce (productos + movimientos de compra)
+  assert.match(UI, /C\.maskCustomers\(text, deps\.clientes\(\), deps\.productos\(\), deps\.proveedores \? deps\.proveedores\(\) : \[\]\)/);
+  assert.match(UI, /proveedores: function \(\) \{[^\n]*\n[^\n]*g\('inventoryMovements'\)[\s\S]{0,300}put\(x\.proveedor\); put\(x\.supplier\);/);
 });
 
 test('tarjetas: «Mostrando N de M» solo con cuentas (no con plata), tabla vacía dice «Sin datos.», sin repetir tablas', () => {
