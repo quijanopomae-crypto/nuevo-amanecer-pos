@@ -137,7 +137,8 @@ test('8) Bot 3: etiqueta repetida sin punto ya no retiene todo el texto (tope) n
       const full = red(s), ratio = s.length / full.length; // patrón que se repite: la salida es proporcional a la entrada (error < una vuelta del patrón)
       const em = A.createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red, role === 'owner' ? null : A.ownerHold);
       for (let k = 0; k < s.length; k += step) { em.push(s.slice(k, k + step)); held = Math.max(held, Math.min(s.length, k + step) - Math.round(o.length * ratio)); }
-      em.flush(); assert.equal(o, red(s), role + ' ' + JSON.stringify(u)); assert.ok(held <= cap, role + '/' + step + ' ' + JSON.stringify(u) + ' retiene ' + held + ' > ' + cap); }
+      const pre = o; em.flush(); assert.equal(o, red(s), role + ' ' + JSON.stringify(u)); // (#962, diseño simple) antes: retiene ≤ cap; ahora con etiqueta todo espera al cierre
+      assert.ok(cap > 0 && pre.length <= Math.max(0, s.search(/pin|clave|contrase|password|token|api/i)) && o.startsWith(pre), role + '/' + step + ' ' + JSON.stringify(u) + ' antes de cerrar ' + pre.length + ' (retenía ' + held + ')'); }
 });
 
 test('8b) Bot 3: costo lineal con «pin pin pin…» y «la contraseña es perrito, el pin 4321» repetidos (12/25/50/100 KB, trozos de 1)', () => {

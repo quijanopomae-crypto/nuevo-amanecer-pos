@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, redactFor, redactText, redactOwnerData, ownerHold, toolsForRole, employeeDocDenied,
+import { assistantChatRoute, createMemoryUsageStore, createTextEmitter, LABEL_TAIL, redactFor, redactText, redactOwnerData, ownerHold, toolsForRole, employeeDocDenied,
   STREAM_HOLDBACK, OWNER_DATA_LABEL, EMPLOYEE_DOC_TYPES } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 const require = createRequire(import.meta.url);
 const C = require('../../POS/js/modules/asistente/asistente-core.js');
@@ -138,9 +138,10 @@ test('2) sin freno de 160 ni cola fija (Bot 3): lo que no es monto sale enseguid
   const lag = (role, txt) => { const out = []; const e = createTextEmitter((d) => out.push(d.t), 1200, redactFor(role)); let pushed = 0, worst = 0;
     for (const w of txt.split(/(?<=\s)/)) { e.push(w); pushed += w.length; if (out.length) worst = Math.max(worst, pushed - out.join('').length); } e.flush(); return { worst, all: out.join('') }; };
   const plain = 'Hay arroz en la tienda y está bien de stock, no hace falta pedir hoy, gracias por preguntar y que tengas buen día. ';
-  assert.ok(lag('empleado:consultas', plain).worst <= 12, 'texto sin montos: solo la última palabra espera');
+  assert.ok(lag('empleado:consultas', plain).worst <= 12 + LABEL_TAIL, 'texto sin montos: solo la última palabra espera');
   const kw = 'El costo de ese producto lo ve el dueño desde su teléfono, tú puedes ver el stock y el precio de venta en Inventario. ';
-  const k = lag('empleado:consultas', kw); assert.ok(k.worst <= 14, 'con «costo» delante el texto sigue saliendo: ' + k.worst); assert.equal(k.all, kw);
+  // (#962, diseño simple) + LABEL_TAIL: la cola fija que nunca pasa a las etapas (una etiqueta partida entre trozos no sale)
+  const k = lag('empleado:consultas', kw); assert.ok(k.worst <= 14 + LABEL_TAIL, 'con «costo» delante el texto sigue saliendo: ' + k.worst); assert.equal(k.all, kw);
   assert.equal(ownerHold('Hay 40 unidades de arroz en la tienda y está bien.'), Infinity, 'compatibilidad');
 });
 
@@ -193,7 +194,7 @@ test('2b) primeras palabras de respuestas cortas del empleado: igual que antes y
   assert.equal(e.all, o.all);
   // el empleado va casi a la par del dueño: solo espera un número mientras se decide si es monto (unos 16 caracteres más)
   const words = short.join('').split(/(?<=\s)/); let pushed = 0;
-  words.forEach((w, i) => { pushed += w.length; if (o.marks[i]) assert.ok(o.marks[i] - e.marks[i] <= 24 && pushed - o.marks[i] <= 14, i + ': ' + o.marks[i] + ' / ' + e.marks[i]); });
+  words.forEach((w, i) => { pushed += w.length; if (o.marks[i]) assert.ok(o.marks[i] - e.marks[i] <= 24 && pushed - o.marks[i] <= 14 + LABEL_TAIL, i + ': ' + o.marks[i] + ' / ' + e.marks[i]); }); // (#962, diseño simple) + LABEL_TAIL: la cola fija que nunca pasa a las etapas (una etiqueta partida entre trozos no sale)
   // lo primero que sale nunca es un trozo suelto de menos de 20 caracteres (Bot 4: nada de «El » solo)
   const firstIdx = e.marks.findIndex((x) => x > 0); assert.ok(e.marks[firstIdx] >= 20 && o.marks[o.marks.findIndex((x) => x > 0)] >= 20);
 });
