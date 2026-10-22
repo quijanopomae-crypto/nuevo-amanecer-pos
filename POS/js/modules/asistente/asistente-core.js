@@ -445,13 +445,28 @@
   // es lo mismo que con el texto entero, se corte donde se corte.
   var STRIP_TAG_RE = /^<\/?(?:code|strong|b|em|i|u|mark|kbd|pre)>/i, STRIP_TAG_NAMES = ['code', 'strong', 'b', 'em', 'i', 'u', 'mark', 'kbd', 'pre'];
   function stripTagPrefix(t) { var m = /^<(\/?)([A-Za-z]*)$/.exec(t); if (!m) return false; var n = m[2].toLowerCase(); return STRIP_TAG_NAMES.some(function (x) { return x.indexOf(n) === 0; }); }
+  // (22-10) Markdown simple, también solo en pantalla y con la misma regla de partes: «**» y «__» se quitan (lo de dentro queda), y una línea
+  // que empieza con «- » o «* » (con o sin sangría) se ve como «• ». Una «*» o «_» sola queda como está. En partes solo se espera una «*»/«_»
+  // al final o el inicio de línea todavía sin decidir (sangría, «-», «*»): lo que se ve al final es igual que con el texto entero.
   function createDisplayStripper() {
-    var pend = '';
+    var pend = '', bol = true;
     function run(fin) {
       var out = '', i = 0;
       while (i < pend.length) {
+        if (bol) {
+          var rb = pend.slice(i), ind = /^[ \t]*/.exec(rb)[0], aft = rb.slice(ind.length);
+          if (!fin && aft.length < 2 && /^[-*]?$/.test(aft)) break; // inicio de línea sin decidir: espera
+          bol = false;
+          if (/^[-*][ \t]/.test(aft)) { out += ind + '\u2022 '; i += ind.length + 2; continue; }
+        }
         var c = pend.charAt(i);
-        if (c !== '<' && c !== '`') { var j = i; while (j < pend.length && pend.charAt(j) !== '<' && pend.charAt(j) !== '`') j++; out += pend.slice(i, j); i = j; continue; }
+        if (c === '\n') { out += c; i++; bol = true; continue; }
+        if (c === '*' || c === '_') {
+          if (i + 1 >= pend.length && !fin) break; // puede ser «**» / «__»
+          if (pend.charAt(i + 1) === c) { i += 2; continue; }
+          out += c; i++; continue;
+        }
+        if (c !== '<' && c !== '`') { var j = i; while (j < pend.length && '<`*_\n'.indexOf(pend.charAt(j)) < 0) j++; out += pend.slice(i, j); i = j; continue; }
         var rest = pend.slice(i);
         if (c === '<') {
           var tm = STRIP_TAG_RE.exec(rest); if (tm) { i += tm[0].length; continue; }
@@ -463,13 +478,13 @@
         if (r.length < 3) { out += r; i += r.length; continue; } // `código` suelto: queda como está
         var lang = /^[A-Za-z0-9_+.#-]{0,15}/.exec(rest.slice(r.length))[0], after = r.length + lang.length;
         if (after >= rest.length && !fin && lang.length < 15) break; // ¿sigue el lenguaje o llega el salto?
-        if (rest.charAt(after) === '\n') { i += after + 1; continue; } // «```text⏎»: la línea de la valla entera
+        if (rest.charAt(after) === '\n') { i += after + 1; bol = true; continue; } // «```text⏎»: la línea de la valla entera
         if (after >= rest.length && lang) { i += after; continue; } // «```text» al final del texto
         i += r.length; // «```perro azul```»: solo las marcas
       }
       pend = pend.slice(i); return out;
     }
-    return { push: function (t) { pend += String(t || ''); return run(false); }, flush: function () { var o = run(true); pend = ''; return o; } };
+    return { push: function (t) { pend += String(t || ''); return run(false); }, flush: function () { var o = run(true); pend = ''; bol = true; return o; } };
   }
   function stripDisplay(t) { var d = createDisplayStripper(); return d.push(t) + d.flush(); }
   // opts.labels (Bot 4/5): cabecera de la tabla de la burbuja ANTERIOR (cortada), tomada de lo que esa burbuja ya pintó (texto filtrado por el

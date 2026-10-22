@@ -870,3 +870,9 @@ Todo en las 4 vías (respuesta al empleado, respuesta al dueño, modelo-empleado
 ## 22-10: «Admin» en pantalla y migraciones renumeradas
 - Todo texto que se ve en el asistente dice «Admin» en vez de «dueño» (cabecera «Gestión · Admin», «Registrar este teléfono como Admin», mensajes del servidor y del aparato, la etiqueta de montos ocultos «[dato del Admin]»). Los nombres internos de rol (`owner`, `empleado:*`), los códigos de error y la API no cambian.
 - Migraciones del asistente renumeradas para no chocar con `0034_price_history.sql` de la base: `0035_pos_assistant_access_log.sql` y `0036_pos_owner_device_log.sql`. Solo se renombraron los archivos; **no se aplicó nada**.
+
+## 22-10: Routeway por defecto, 429 y respaldo, sin <think>, sin markdown en pantalla
+- Proveedor por defecto (solo configuración): Routeway, `https://api.routeway.ai/v1` (compatible OpenAI), modelo `gemma-4-26b-a4b-it-luminous:free` con respaldo `minimax-m2.7:free`. La clave es un secreto del Worker que pone el Admin: `ROUTEWAY_API_KEY` (o `AI_API_KEY` con `AI_PROVIDER=routeway`). Sin `AI_PROVIDER`: Routeway si tiene clave; si no, DeepSeek como antes. `AI_FALLBACK_MODEL` opcional. Lectura de fotos apagada para Routeway salvo `AI_VISION=1`.
+- 429: el mismo modelo se reintenta una vez tras 0,8 s (o `Retry-After` de hasta 3 s); luego pasa al modelo de respaldo, con un reintento tras 1,5 s. Solo antes de que salga texto. La espera se corta con el pedido.
+- `<think>…</think>` (y `<thinking>`) se quitan en el servidor ANTES de la redacción, en JSON y en partes; un bloque sin cierre se descarta.
+- En pantalla (después del filtro del servidor y de `esc()`): `**`, `__` se quitan y las líneas «- » / «* » se ven con «• ». Misma regla en partes que con el texto entero.

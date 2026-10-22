@@ -18,6 +18,9 @@ export const PROVIDERS = Object.freeze({
   mistral: { label: 'Mistral', kind: 'openai', base: 'https://api.mistral.ai/v1', key: 'MISTRAL_API_KEY', model: 'mistral-small-latest', vision: re(/pixtral|mistral-(?:small|medium)/i) },
   together: { label: 'Together', kind: 'openai', base: 'https://api.together.xyz/v1', key: 'TOGETHER_API_KEY', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', vision: re(/vision|-vl|llama-4/i) },
   anthropic: { label: 'Anthropic Claude', kind: 'anthropic', base: 'https://api.anthropic.com', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5', vision: re(/^claude/i) },
+  // (22-10) Proveedor que eligió el Admin: Routeway, compatible OpenAI. Solo valores por defecto; la clave va como secreto del Worker
+  // (ROUTEWAY_API_KEY, o AI_API_KEY con AI_PROVIDER=routeway), nunca en el código. Los modelos gratis dan 429 a menudo: ver callModel.
+  routeway: { label: 'Routeway', kind: 'openai', base: 'https://api.routeway.ai/v1', key: 'ROUTEWAY_API_KEY', model: 'gemma-4-26b-a4b-it-luminous:free', fallbacks: ['minimax-m2.7:free'], vision: () => false },
   gemini: { label: 'Google Gemini', kind: 'gemini', base: 'https://generativelanguage.googleapis.com', key: 'GEMINI_API_KEY', model: 'gemini-2.5-flash', vision: re(/^gemini/i) }
 });
 export const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
@@ -39,7 +42,13 @@ export function checkBaseUrl(raw, env) {
 export function modelsFor(env, id) {
   const p = PROVIDERS[id]; if (!p) return [];
   const m = envProvider(env) === id && MODEL_RE.test(str(env?.AI_MODEL)) ? [str(env.AI_MODEL)] : [];
-  return [...new Set([...m, p.model])];
+  return [...new Set([...m, p.model, ...(p.fallbacks || [])])];
+}
+// Modelos de respaldo (en orden) cuando el elegido responde 429: los del catálogo y AI_FALLBACK_MODEL (si es el proveedor de AI_PROVIDER).
+function fallbacksFor(env, id, model) {
+  const p = PROVIDERS[id]; if (!p) return [];
+  const extra = envProvider(env) === id && MODEL_RE.test(str(env?.AI_FALLBACK_MODEL)) ? [str(env.AI_FALLBACK_MODEL)] : [];
+  return [...new Set([...extra, ...(p.fallbacks || []), p.model])].filter((x) => x && x !== model).slice(0, 2);
 }
 // Configuración estricta de UN proveedor. { ok:true, id, kind, label, base, key, model, vision } o { ok:false, reason }.
 export function configFor(env, id, model) {
@@ -52,12 +61,13 @@ export function configFor(env, id, model) {
   const models = modelsFor(env, id); const m = model && models.includes(model) ? model : models[0];
   const v = str(env?.AI_VISION); // '1' o '0' fuerza la lectura de fotos para el proveedor de AI_PROVIDER
   const vision = envProvider(env) === id && (v === '1' || v === '0') ? v === '1' : !!p.vision(m);
-  return { ok: true, id, kind: p.kind, label: p.label, base, key, model: m, vision };
+  return { ok: true, id, kind: p.kind, label: p.label, base, key, model: m, vision, fallbacks: p.fallbacks || envProvider(env) === id && str(env?.AI_FALLBACK_MODEL) ? fallbacksFor(env, id, m) : [] };
 }
-// Proveedor en uso: lo que eligió el dueño (si sigue listo) o, si no, AI_PROVIDER; sin AI_PROVIDER y con DEEPSEEK_API_KEY, DeepSeek (como antes).
+// Proveedor en uso: lo que eligió el dueño (si sigue listo) o, si no, AI_PROVIDER; sin AI_PROVIDER: Routeway si tiene clave (lo que eligió el
+// Admin), si no DeepSeek con DEEPSEEK_API_KEY (como antes).
 export function resolveProvider(env, choice) {
   if (choice && PROVIDERS[choice.provider]) { const c = configFor(env, choice.provider, choice.model); if (c.ok) return { ...c, source: 'owner' }; }
-  const id = envProvider(env) || (str(env?.DEEPSEEK_API_KEY) ? 'deepseek' : '');
+  const id = envProvider(env) || (str(env?.ROUTEWAY_API_KEY) ? 'routeway' : str(env?.DEEPSEEK_API_KEY) ? 'deepseek' : '');
   if (!id) return { ok: false, reason: 'no_provider' };
   const c = configFor(env, id); return c.ok ? { ...c, source: 'env' } : c;
 }
@@ -219,6 +229,33 @@ const geminiAdapter = {
   }; }
 };
 
+// ---------- Bloques de razonamiento ----------
+// (22-10) Algunos modelos (gratis de Routeway y otros) escriben su razonamiento entre <think>…</think> (o <thinking>). Se quita ANTES de que el
+// texto llegue a la redacción del servidor y al celular. En partes: una etiqueta cortada entre trozos se espera; un bloque sin cierre al final
+// se descarta entero. Un «</think>» suelto se quita. Si se quitó un bloque, el espacio en blanco del comienzo de la respuesta también.
+const THINK_OPEN_RE = /<think(?:ing)?>/i, THINK_CLOSE_RE = /<\/think(?:ing)?>/i, THINK_TAGS = ['<think>', '<thinking>', '</think>', '</thinking>'];
+function tagTail(buf) { // cola de buf que todavía puede ser el comienzo de una de las etiquetas
+  const k = buf.lastIndexOf('<'); if (k < 0 || buf.length - k > 11) return 0;
+  const t = buf.slice(k).toLowerCase(); return THINK_TAGS.some((x) => x.startsWith(t) && x !== t) ? buf.length - k : 0;
+}
+export function createThinkStripper() {
+  let buf = '', inside = false, seen = false, emitted = false;
+  const emit = (o) => { if (!emitted && seen) o = o.replace(/^\s+/, ''); if (o) emitted = true; return o; };
+  function run(fin) {
+    let out = '';
+    for (;;) {
+      if (inside) { const m = THINK_CLOSE_RE.exec(buf); if (!m) { if (fin) buf = ''; else { const h = tagTail(buf); buf = h ? buf.slice(-h) : ''; } return out; }
+        buf = buf.slice(m.index + m[0].length); inside = false; continue; }
+      const o = THINK_OPEN_RE.exec(buf), c = THINK_CLOSE_RE.exec(buf);
+      const m = o && (!c || o.index < c.index) ? o : c;
+      if (m) { out += emit(buf.slice(0, m.index)); buf = buf.slice(m.index + m[0].length); seen = true; if (m === o) inside = true; continue; }
+      const h = fin ? 0 : tagTail(buf); out += emit(buf.slice(0, buf.length - h)); buf = buf.slice(buf.length - h); return out;
+    }
+  }
+  return { push: (t) => { buf += String(t || ''); return run(false); }, flush: () => { const o = run(true); buf = ''; return o; } };
+}
+export function stripThink(text) { const t = createThinkStripper(); return t.push(text) + t.flush(); }
+
 export const ADAPTERS = Object.freeze({ openai: openaiAdapter, anthropic: anthropicAdapter, gemini: geminiAdapter });
 
 // ---------- Llamadas (iguales para todos los proveedores) ----------
@@ -226,13 +263,48 @@ export const ADAPTERS = Object.freeze({ openai: openaiAdapter, anthropic: anthro
 export function linkAbort(controller, outer) { if (!outer) return; if (outer.aborted) controller.abort(); else outer.addEventListener('abort', () => controller.abort(), { once: true }); }
 function adapterOf(cfg) { const a = cfg && cfg.ok !== false ? ADAPTERS[cfg.kind] : null; return a || null; }
 
+// (22-10) 429 de los modelos gratis: el mismo modelo se reintenta una vez tras una espera corta (Retry-After si es de 3 s o menos) y luego
+// se pasa a los modelos de respaldo (cfg.fallbacks), cada uno con el mismo reintento. Solo si NO llegó texto todavía (nada se repite en
+// pantalla). Esperas cortas: no gastan CPU del Worker y el tope de 90 s del pedido sigue mandando (outer corta también la espera).
+export const RETRY_WAITS_MS = Object.freeze([800, 1500]);
+const MAX_RETRY_AFTER_MS = 3000;
+function waitMs(ms, outer) {
+  if (!(ms > 0) || outer?.aborted) return Promise.resolve();
+  return new Promise((ok) => { const t = setTimeout(ok, ms); outer?.addEventListener?.('abort', () => { clearTimeout(t); ok(); }, { once: true }); });
+}
+function retryAfter(r, i, cfg) {
+  const waits = Array.isArray(cfg.retryWaits) ? cfg.retryWaits : RETRY_WAITS_MS; const base = Number(waits[Math.min(i, waits.length - 1)]) || 0;
+  const ra = Number(r?.retryAfterS); return ra > 0 && ra * 1000 <= MAX_RETRY_AFTER_MS && waits.length && base > 0 ? ra * 1000 : base;
+}
+const isRateLimited = (r) => !!r && (r.status === 429 || (r.error === 'upstream_busy' && !r.status && !r.content));
+async function withRetries(cfg, outer, once) {
+  const models = [cfg.model, ...(Array.isArray(cfg.fallbacks) ? cfg.fallbacks : [])].filter((m, i, a) => m && a.indexOf(m) === i);
+  let r = null, n = 0;
+  for (const model of models) {
+    const c = model === cfg.model ? cfg : { ...cfg, model };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (n++ > 0 && attempt > 0) await waitMs(retryAfter(r, models.indexOf(model), cfg), outer);
+      if (outer?.aborted) return r || { error: 'upstream_timeout' };
+      r = await once(c);
+      if (!isRateLimited(r)) return model === cfg.model ? r : { ...r, model };
+    }
+  }
+  return r;
+}
+function retryAfterS(res) { const v = Number(res?.headers?.get?.('retry-after')); return Number.isFinite(v) && v > 0 ? v : null; }
+
 export async function callModel(cfg, req, fetchImpl, timeoutMs, outer) {
+  if (!adapterOf(cfg)) return { error: 'upstream_error' };
+  const r = await withRetries(cfg, outer, (c) => callModelOnce(c, req, fetchImpl, timeoutMs, outer));
+  return r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r;
+}
+async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
   const controller = new AbortController(); linkAbort(controller, outer);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetchImpl(A.url(cfg, false), { method: 'POST', signal: controller.signal, headers: A.headers(cfg, false), body: JSON.stringify(A.body(cfg, req, false)) });
-    if (!res.ok) return { error: A.status(res.status), status: res.status };
+    if (!res.ok) return { error: A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
     return A.parseJson(await res.json());
   } catch (e) {
     return { error: e?.name === 'AbortError' || controller.signal.aborted ? 'upstream_timeout' : 'upstream_error' };
@@ -242,7 +314,12 @@ export async function callModel(cfg, req, fetchImpl, timeoutMs, outer) {
 // En partes: cada trozo de texto va a onText en cuanto llega; las llamadas a herramientas se juntan aquí y recién al final se devuelven
 // (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs). Si se corta a mitad: { error, partial:true }.
 export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
+  if (!adapterOf(cfg)) return { error: 'upstream_error' };
+  return withRetries(cfg, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer));
+}
+async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
+  const think = createThinkStripper(); // <think>…</think> fuera antes de la redacción (onText) y del texto final
   const controller = new AbortController(); let timer = null; let reader = null; linkAbort(controller, outer);
   controller.signal.addEventListener('abort', () => { try { if (reader) reader.cancel().catch(() => {}); } catch { /* ya cortado */ } }, { once: true });
   const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), idleMs); };
@@ -250,11 +327,11 @@ export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onToo
   try {
     arm();
     const res = await fetchImpl(A.url(cfg, true), { method: 'POST', signal: controller.signal, headers: A.headers(cfg, true), body: JSON.stringify(A.body(cfg, req, true)) });
-    if (!res.ok) return { error: A.status(res.status), status: res.status };
+    if (!res.ok) return { error: A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
     if (!res.body || typeof res.body.getReader !== 'function') return { error: 'upstream_error' };
     reader = res.body.getReader(); const dec = new TextDecoder(); const parse = A.parser(); let buf = '', done = false;
     const handle = (e) => {
-      if (e.t === 'text') { content += e.v; onText(e.v); }
+      if (e.t === 'text') { const v = think.push(e.v); if (v) { content += v; onText(v); } }
       else if (e.t === 'usage') usage = e.v;
       else if (e.t === 'done') done = true;
       else if (e.t === 'error') { failed = e.error || 'upstream_error'; done = true; }
@@ -282,6 +359,7 @@ export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onToo
     if (failed) return { error: failed, partial: !!content, content };
     if (controller.signal.aborted) return { error: 'upstream_timeout', partial: !!content, content }; // tiempo, tope o celular ido
     if (buf) line(buf.trim());
+    { const tail = think.flush(); if (tail && !forbidden && !failed) { content += tail; onText(tail); } } // cola retenida («<thi» que no era etiqueta)
     if (forbidden) return { forbidden, content, calls: [], usage };
     if (failed) return { error: failed, partial: !!content, content };
     // Sin fin del proveedor: el corte fue a mitad (lo recibido queda, las herramientas a medias NO se usan).
