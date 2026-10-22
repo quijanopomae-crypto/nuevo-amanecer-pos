@@ -296,6 +296,24 @@ for (const [width, height, dark] of [[844, 390, false], [915, 412, false], [740,
   });
 }
 
+// El mismo aviso no se rehace con cada evento (na:canonical-updated, temporizador de 1,5 s, clases de Inicio): antes se quitaba y
+// volvía a poner varias veces en los primeros segundos y las medidas caían sobre el nodo ya quitado (fallas intermitentes a 740x360).
+test('a 740x360 el aviso queda estable (mismo nodo) si los datos no cambian', async ({ page }) => {
+  await page.setViewportSize({ width: 740, height: 360 });
+  const errors = await rolePage(page, 'owner', false);
+  const alert = page.locator('#naRpvAlert');
+  await expect(alert).toBeVisible();
+  const node = await alert.elementHandle();
+  await page.evaluate(() => { window.dispatchEvent(new Event('na:canonical-updated')); window.dispatchEvent(new Event('na:canonical-updated')); });
+  await page.waitForTimeout(1800);
+  expect(await node!.evaluate(n => n.isConnected && document.querySelectorAll('#naRpvAlert').length === 1)).toBe(true);
+  // Si los datos cambian, el texto sí se actualiza.
+  await page.evaluate(() => { const w = window as any; w.eval('productos = productos.slice(0, 1)'); w.dispatchEvent(new Event('na:canonical-updated')); });
+  await expect(alert).toContainText('1 lote vencido');
+  await expect(alert).toContainText('1 lote vence en 30 días');
+  expect(errors).toEqual([]);
+});
+
 test('a 844x390 «Ver» abre el reporte y «×» cierra el aviso', async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await rolePage(page, 'owner', false);
