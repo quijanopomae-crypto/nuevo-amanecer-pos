@@ -161,7 +161,7 @@
         input.__naArqueoDefaultSet = true;
       }
     });
-    var report, options, fromServer = false, truncated = false;
+    var report, options, fromServer = false, truncated = false, serverCount = 0;
     try { options = buildReport([], rangeOptions(page)).range; options.cajero = rangeOptions(page).cajero; }
     catch (error) { status.textContent = error.message; return false; }
     function current() {
@@ -181,6 +181,7 @@
             report = buildReport(response.cash_closes, options);
             fromServer = true;
             truncated = response.truncated === true;
+            serverCount = response.cash_closes.length; // total que mandó el servidor, antes del filtro por cajero
           } else report = localReport(options);
         } catch (error) {
           if (!current()) return false;
@@ -197,7 +198,7 @@
     if (exportButton) exportButton.disabled = false;
     status.textContent = dateLabel(report.range.desde) + ' al ' + dateLabel(report.range.hasta) + ' · hora de Lima · ' + (report.cajero ? 'cajero: ' + report.cajero + ' · ' : '') + (fromServer ? 'desde el servidor' : 'cierres cargados en este dispositivo');
     if (truncated) {
-      var notice = element('p', 'ra-truncated', 'Atención: el servidor devolvió solo los ' + report.rows.length + ' cierres más recientes de este rango. Los totales están incompletos; elige un rango de fechas más corto.');
+      var notice = element('p', 'ra-truncated', 'Atención: el servidor devolvió solo los ' + serverCount + ' cierres más recientes de este rango' + (report.cajero ? ' (' + report.rows.length + ' son de este cajero)' : '') + '. Los totales están incompletos; elige un rango de fechas más corto.');
       notice.setAttribute('role', 'alert'); notice.setAttribute('data-ra-truncated', '');
       content.appendChild(notice);
     }

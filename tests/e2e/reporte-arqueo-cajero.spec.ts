@@ -63,3 +63,23 @@ test('el módulo usa solo textContent', async ({ page }) => {
   const res = await page.request.get('/js/modules/reporte-arqueo.js');
   expect(await res.text()).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
 });
+
+test('servidor recortó la lista: el aviso usa el total del servidor, no el filtrado', async ({ page }) => {
+  await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : r.abort());
+  await page.goto('/index.html');
+  await page.waitForFunction(() => !!(window as any).NA_REPORTE_ARQUEO && !!(window as any).NA_MENU_NAVIGATION);
+  await page.evaluate(() => {
+    const w = window as any;
+    const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+    const at = (t: string) => new Date(today + 'T' + t + ':00-05:00').toISOString();
+    const s = (id: string, who: string) => ({ session_id: id, status: 'CLOSED', opened_at: at('08:00'), closed_at: at('20:00'), expected_cents: 100, counted_cents: 100, difference_cents: 0, opened_by_name: who, closed_by_name: who });
+    const rows = [s('a1', 'Ana Prueba'), s('b1', 'Beto Prueba'), s('a2', 'Ana Prueba')];
+    const roles = w.NA_ROLES;
+    w.NA_ROLES = new Proxy(roles, { get: (t, k) => k === 'role' ? 'owner' : k === 'isOwner' ? () => true : k === 'api' ? async () => ({ cash_closes: rows, truncated: true }) : t[k] });
+    w.NA_MENU_NAVIGATION.navigate('pageReporteArqueo');
+  });
+  const screen = page.locator('#pageReporteArqueo');
+  await expect(screen.locator('[data-ra-truncated]')).toContainText('solo los 3 cierres');
+  await screen.getByLabel('Cajero').selectOption('Ana Prueba');
+  await expect(screen.locator('[data-ra-truncated]')).toContainText('solo los 3 cierres más recientes de este rango (2 son de este cajero)');
+});
