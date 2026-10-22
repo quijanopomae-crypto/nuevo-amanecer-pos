@@ -310,6 +310,7 @@
   var deps = {
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
+    clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
     navigate: function (id) { try { root.NA_MENU_NAVIGATION.navigate(id); } catch (_) { try { root.goPage(id); } catch (__) {} } },
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
@@ -412,6 +413,9 @@
   function soles(n) { return C.soles(n); }
   // Nombre del cliente en la tarjeta: solo en documentos de UN cliente (estado de cuenta), con su etiqueta. En la lista de precios, nunca.
   var CUSTOMER_DOCS = ['estado_cuenta'];
+  // (auditoría de privacidad 2026-10-22) la tarjeta trae solo el código (cliente_id); el nombre se busca en la lista de ESTE aparato.
+  function cliLabel(code) { var c = null; try { c = deps.clientes().find(function (x) { return String(x.id) === String(code); }); } catch (_) { c = null; }
+    var n = c && String(c.nombre || c.name || '').trim(); return n ? n.slice(0, 80) : 'cliente #' + code; }
   // (Bot 2 sobre d72b7601, INFO) en la tarjeta, una línea con product_id del catálogo local muestra el nombre del catálogo, no el de la propuesta
   // (que puede venir tapado: «Leche DNI ****5678»); sin el producto en el catálogo, el de la propuesta tal cual.
   function lineName(l) { var prod = null; try { prod = l && l.product_id && deps.productos().find(function (x) { return String(x.id) === String(l.product_id); }); } catch (_) { prod = null; }
@@ -429,7 +433,7 @@
         '<div class="note">Datos leídos del servidor. No cambia nada.</div>';
     }
     if (p.type === 'documento') return '<h4>' + E(p.title) + '<span class="pill ro">Solo lectura</span></h4>' +
-      '<div class="note">' + E([p.desde, p.hasta && p.hasta !== p.desde ? p.hasta : null].filter(Boolean).join(' a ') + (p.cliente && CUSTOMER_DOCS.indexOf(p.tipo) >= 0 ? ' · Cliente: ' + p.cliente : '')) + '</div>' +
+      '<div class="note">' + E([p.desde, p.hasta && p.hasta !== p.desde ? p.hasta : null].filter(Boolean).join(' a ') + (p.cliente_id && CUSTOMER_DOCS.indexOf(p.tipo) >= 0 ? ' · Cliente: ' + cliLabel(p.cliente_id) : '')) + '</div>' +
       '<div class="warn doc">Documento interno. NO es comprobante SUNAT.</div>' +
       '<div class="res" aria-live="polite"></div><div class="acts"><button type="button" class="na-asst-ok" data-open>Abrir documento</button></div>';
     if (p.type === 'compra') rows = '<tr><th>Producto</th><th class="r">Costo actual</th><th class="r">Factura</th></tr>' + p.lineas.map(function (l, i) {
@@ -685,25 +689,28 @@
   // Cliente: SOLO su código interno (el id que ya tiene en la lista de clientes del POS) y la acción. Nunca nombre, DNI ni montos.
   var CLI_RE = /^[A-Za-z0-9_-]{1,40}$/;
   function cliPart(x) { return x && x.cli != null && CLI_RE.test(String(x.cli)) ? { cli: String(x.cli), accion: String(x.accion || 'cliente').slice(0, 30) } : {}; }
+  // Datos viejos guardados antes de este cambio: de un error de pantalla solo sale el TIPO, nunca el mensaje.
+  function errType(v) { var t = String(v == null ? '' : v).trim(); if (/^[A-Za-z]{1,40}$/.test(t)) return t; var m = /^(?:Uncaught\s+)?(?:\(in promise\)\s*)?([A-Z][A-Za-z]{0,39}(?:Error|Exception))\b/.exec(t); return m ? m[1] : 'Error'; }
   function reviewData() {
     var R = root.NA_ASISTENTE_REVISION, raw = R && R.data ? R.data() : { errors: [], usage: {} };
-    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: C.redactText(String(x.msg || '')).slice(0, 160), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
+    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: x.kind === 'api' ? C.redactText(String(x.msg || '')).slice(0, 160) : errType(x.msg), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
       usage: raw.usage || {},
       slow: (raw.slow || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, name: C.redactText(String(x.name || '')).slice(0, 80), count: x.count || 1, ms_avg: x.ms_avg || 0, ms_max: x.ms_max || 0, last: x.last || null }, cliPart(x)); }),
       ocr: raw.ocr ? { reads: raw.ocr.reads || 0, fails: raw.ocr.fails || 0, timeouts: raw.ocr.timeouts || 0, ms_sum: raw.ocr.ms_sum || 0, ms_max: raw.ocr.ms_max || 0, confirmed: raw.ocr.confirmed || 0, corrections: raw.ocr.corrections || 0 } : null };
   }
   // «cliente #código» del informe -> enlace que muestra el nombre buscado EN ESTE APARATO y abre al cliente. El nombre nunca sale del aparato.
   function linkCustomers(node, codes) {
-    var R = root.NA_ASISTENTE_REVISION; if (!node || !codes || !codes.length || !R || !R.customerName) return 0;
+    var R = root.NA_ASISTENTE_REVISION; if (!node || !codes || !codes.length) return 0;
+    var nameOf = R && R.customerName ? R.customerName : function (code) { var c = deps.clientes().find(function (x) { return String(x.id) === String(code); }); return c ? String(c.nombre || c.name || '').slice(0, 80) : null; };
     var ok = {}; codes.forEach(function (c) { if (CLI_RE.test(String(c))) ok[String(c)] = 1; });
     var re = /cliente #([A-Za-z0-9_-]{1,40})/g, n = 0, walk = [], tw = doc.createTreeWalker ? doc.createTreeWalker(node, 4) : null;
     if (tw) { while (tw.nextNode()) walk.push(tw.currentNode); } else (function rec(x) { (x.childNodes || []).forEach(function (c) { if (c.nodeType === 3) walk.push(c); else rec(c); }); })(node);
     walk.forEach(function (t) { var v = t.nodeValue || '', last = 0, m, frag = null; re.lastIndex = 0;
       while ((m = re.exec(v))) { if (!ok[m[1]]) continue; frag = frag || doc.createDocumentFragment();
         if (m.index > last) frag.appendChild(doc.createTextNode(v.slice(last, m.index)));
-        var code = m[1], name = R.customerName(code), a = el('button', 'na-asst-cli'); a.type = 'button'; a.dataset.cli = code;
+        var code = m[1], name = nameOf(code), a = el('button', 'na-asst-cli'); a.type = 'button'; a.dataset.cli = code;
         a.textContent = 'cliente #' + code + (name ? ' (' + name + ')' : ''); a.title = name ? 'Abrir a ' + name : 'Abrir cliente';
-        a.onclick = function (e) { e.preventDefault(); if (!R.openCustomer || !R.openCustomer(this.dataset.cli)) addMsg('a', 'No encontré ese cliente en este aparato.'); };
+        a.onclick = function (e) { e.preventDefault(); if (!R || !R.openCustomer || !R.openCustomer(this.dataset.cli)) addMsg('a', 'No encontré ese cliente en este aparato.'); };
         frag.appendChild(a); last = m.index + m[0].length; n++; }
       if (frag) { if (last < v.length) frag.appendChild(doc.createTextNode(v.slice(last))); t.parentNode.replaceChild(frag, t); } });
     return n;
@@ -736,7 +743,7 @@
     var thinking = addMsg('a', 'Revisando el punto de venta'); thinking.classList.add('na-asst-thinking');
     var mine = panelEl;
     try {
-      var d = await post('/auth/assistant/review', reviewData(), null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
+      var d = await post('/auth/assistant/review', C.compactReview ? C.compactReview(reviewData()) : reviewData(), null, C.TIMEOUTS.chat); // bajo el tope del servidor (96 KB) if (panelEl !== mine) return; thinking.remove();
       if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
       var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review'); linkCustomers(b, Array.isArray(d.customers) ? d.customers : []);
       var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
@@ -768,7 +775,10 @@
     var thinking = addMsg('a', image ? 'Concentrado, leyendo la foto' : 'Pensando'); thinking.classList.add('na-asst-thinking');
     var dots = el('span', 'na-asst-dots'); dots.setAttribute('aria-hidden', 'true'); dots.innerHTML = '<i></i><i></i><i></i>'; thinking.appendChild(dots);
     var screen = (doc.querySelector('.page.active') || {}).id || null;
-    var body = { text: C.redactText(text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
+    // (auditoría de privacidad 2026-10-22) nombres y direcciones de clientes conocidos -> «cliente #código» / «[dirección oculta]» ANTES
+    // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
+    var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
+    var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
     if (image) body.image = image;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
@@ -818,6 +828,7 @@
       var stick = atBottom();
       if (d.cut === true) { if (bubble) bubble.removeAttribute('aria-busy'); else bubble = addMsg('a', ''); paintCut(bubble, d.reply, mdOpts); lastCut = bubble; }
       else if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply, mdOpts); } else { bubble = addMsg('a', ''); paintReply(bubble, d.reply, mdOpts); }
+      if (C.customerCodesIn) linkCustomers(bubble, C.customerCodesIn(d.reply, deps.clientes())); // «cliente #código» -> nombre de ESTE aparato
       { var shown = C.stripDisplay ? C.stripDisplay(d.reply) : d.reply; announce(shown); if (mascot) mascot.speak(shown); } // (Bots 4/5 sobre f773911f) lo que se lee y lo que «dice» la mascota = lo que se ve
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
       (d.denied || []).forEach(addDenied);

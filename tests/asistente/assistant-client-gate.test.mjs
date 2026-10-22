@@ -140,11 +140,14 @@ test('documentos con dinero: usan los cálculos del POS (mismos números que la 
   assert.ok(v.includes('S/ 1.11') && v.includes('S/ 2.22')); assert.match(v, /no actualiza el costo/);
   const s = (await C.buildDocument(DOC('reporte_ventas', { desde: '2026-10-15', hasta: '2026-10-15' }), data, 'B')).html;
   assert.ok(s.includes('S/ 3.00'), 'suma totalV(v) sin la anulada'); assert.ok(!s.includes('S/ 18.00')); assert.match(s, /efectivo y pagos digitales/);
-  const e = (await C.buildDocument(DOC('estado_cuenta', { cliente: 'rosa quispe' }), data, 'B')).html;
+  const e = (await C.buildDocument(DOC('estado_cuenta', { cliente_id: 'C1' }), data, 'B')).html;
   assert.ok(e.includes('S/ 7.77'), 'saldo = effectiveBalance como en Clientes'); assert.ok(!e.includes('45678912') && e.includes('8912'));
+  assert.ok(e.includes('Rosa Quispe'), 'el nombre lo pone el aparato desde su lista');
+  // tarjeta vieja (con nombre): se sigue buscando por nombre
+  assert.ok((await C.buildDocument(DOC('estado_cuenta', { cliente: 'rosa quispe' }), data, 'B')).html.includes('S/ 7.77'));
   const c = (await C.buildDocument(DOC('resumen_cierre', { desde: '2026-10-15', hasta: '2026-10-15' }), data, 'B')).html;
   assert.ok(c.includes('S/ 123.45') && c.includes('S/ -0.45')); assert.match(c, /servidor/); assert.match(c, /efectivo y pagos digitales/);
-  assert.deepEqual(seen, ['valorizacion:2', 'totalV', 'summary:true', 'arqueo:2026-10-15:2026-10-15']);
+  assert.deepEqual(seen, ['valorizacion:2', 'totalV', 'summary:true', 'summary:true', 'arqueo:2026-10-15:2026-10-15']);
   for (const h of [v, s, e, c]) assert.ok(h.includes('NO ES COMPROBANTE SUNAT'));
 });
 

@@ -114,6 +114,13 @@
     return cli ? { cli: cli, accion: accion, t: Date.now() } : null;
   }
   function revCtxNow() { return revCtx && Date.now() - revCtx.t <= REV_CTX_MS ? revCtx : null; }
+  // Solo el TIPO del error («TypeError»), nunca su mensaje: puede traer el nombre o los datos de un cliente.
+  function revErrType(msg, err) {
+    var n = err && typeof err.name === 'string' ? err.name : '';
+    if (/^[A-Za-z]{1,40}$/.test(n)) return n;
+    var m = /^(?:Uncaught\s+)?(?:\(in promise\)\s*)?([A-Z][A-Za-z]{0,39}(?:Error|Exception))\b/.exec(String(msg == null ? '' : msg).trim());
+    return m ? m[1] : (err == null || typeof err === 'object' || msg ? 'Error' : 'Rechazo');
+  }
   function revError(kind, msg, src, status) {
     if (disabled) return;
     var r = revLoad(), m = revClean(msg, 160), s = revClean(src, 80), now = new Date().toISOString(), cx = revCtxNow(), cli = cx ? cx.cli : null, ac = cx ? cx.accion : null; status = status || 0;
@@ -171,8 +178,8 @@
   }
   function revInstall() {
     if (revOn) return; revOn = true;
-    root.addEventListener('error', function (e) { if (e && e.message) revError('error', e.message, revFile(e.filename) + (e.lineno ? ':' + e.lineno : ''), 0); });
-    root.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; revError('promesa', r && r.message ? (r.name ? r.name + ': ' : '') + r.message : String(r), '', 0); });
+    root.addEventListener('error', function (e) { if (e && e.message) revError('error', revErrType(e.message, e.error), revFile(e.filename) + (e.lineno ? ':' + e.lineno : ''), 0); });
+    root.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; revError('promesa', revErrType(r && typeof r === 'object' ? r.message : '', r && typeof r === 'object' ? r : null), '', 0); });
     root.document.addEventListener('click', revClick, { capture: true, passive: true });
     root.addEventListener('pagehide', revFlush);
     root.document.addEventListener('visibilitychange', function () { beatLast = Date.now(); if (root.document.hidden) revFlush(); });

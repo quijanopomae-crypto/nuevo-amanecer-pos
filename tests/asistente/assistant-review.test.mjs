@@ -59,17 +59,18 @@ test('captura (Admin): error, promesa y API 4xx/5xx se guardan limpios y agrupad
   const e0 = s.e.find((x) => x.kind === 'error');
   assert.equal(e0.count, 2, 'el mismo error se agrupa'); assert.equal(e0.src, '/js/app.js:120');
   for (const bad of ['25.50', 'juan@', '45678912', 'abc123', 'eyJhbGci']) assert.ok(!JSON.stringify(s).includes(bad), bad);
-  assert.ok(e0.msg.length <= 160);
+  assert.equal(e0.msg, 'TypeError', 'solo el tipo del error, nunca su mensaje');
   assert.deepEqual(s.e.filter((x) => x.kind === 'api').map((x) => [x.msg, x.status]), [['w.example/commands/sale.create', 500]]);
-  assert.equal(s.e.find((x) => x.kind === 'promesa').msg, 'Error: red caída');
+  assert.equal(s.e.find((x) => x.kind === 'promesa').msg, 'Error'); assert.ok(!JSON.stringify(s).includes('red caída'));
   assert.equal(R.newErrors(), 3); R.markSeen(); assert.equal(R.newErrors(), 0);
 });
 
-test('captura: tope de 200 errores (los últimos) y mensajes cortados', () => {
+test('captura: tope de 200 errores (los últimos); de cada error solo el tipo, archivo y línea', () => {
   const b = boot('owner');
-  for (let i = 0; i < 230; i++) b.fire(b.L, 'error', { message: 'Error n' + String.fromCharCode(97 + (i % 26)) + String.fromCharCode(97 + Math.floor(i / 26)) + ' ' + 'abc defghij '.repeat(30), filename: 'a.js', lineno: 1 });
-  const s = b.saved(); assert.equal(s.e.length, 200); assert.ok(s.e.every((x) => x.msg.length <= 160));
-  assert.match(s.e[199].msg, /^Error nvi .*…$/, 'el último que llegó queda'); assert.ok(!s.e.some((x) => /^Error naa /.test(x.msg)), 'los más viejos salen');
+  for (let i = 0; i < 230; i++) b.fire(b.L, 'error', { message: 'Error n' + i + ' ' + 'abc defghij '.repeat(30), filename: 'a.js', lineno: i + 1 });
+  const s = b.saved(); assert.equal(s.e.length, 200); assert.ok(s.e.every((x) => x.msg === 'Error'));
+  assert.equal(s.e[199].src, '/a.js:230', 'el último que llegó queda'); assert.ok(!s.e.some((x) => x.src === '/a.js:1'), 'los más viejos salen');
+  assert.ok(!JSON.stringify(s).includes('defghij'));
 });
 
 test('uso: pantalla + función/id del botón (sin textos ni datos), el asistente no cuenta, tope de claves', () => {
@@ -144,7 +145,9 @@ test('servidor: con OhMyAgent el modelo redacta el informe con SOLO datos limpio
 
 test('limpieza del servidor: mismo redactor del asistente + montos, correos, claves, números largos; claves de uso válidas', () => {
   assert.equal(cleanReviewText('pago S/ 12.50 de pepe@a.com con api_key=XYZ y 987654321 en https://x.pe/a?dni=12345678', 200), 'pago [monto] de [correo] con [clave] y [num] en https://x.pe/a');
-  const d = sanitizeReview({ errors: Array.from({ length: 300 }, (_, i) => ({ kind: 'nope', msg: 'e' + (i % 3) })), usage: { 'pagePOS:x': 1, '<script>': 2, 'a:b:c:d': 3 } });
+  const d = sanitizeReview({ errors: Array.from({ length: 300 }, (_, i) => ({ kind: 'nope', msg: 'TypeError: no se pudo con Rosa Quispe', src: 'js/a' + (i % 3) + '.js:1' })), usage: { 'pagePOS:x': 1, '<script>': 2, 'a:b:c:d': 3 } });
+  assert.ok(d.groups.every((g) => g.msg === 'TypeError'), 'el servidor también deja solo el tipo'); assert.ok(!JSON.stringify(d).includes('Rosa'));
+  assert.equal(sanitizeReview({ errors: [{ kind: 'error', msg: 'algo de Rosa', src: 'https://pos.example/js/x.js:9 Rosa' }] }).groups[0].src, 'js/x.js:9');
   assert.equal(d.groups.length, 3); assert.equal(d.groups.reduce((t, g) => t + g.count, 0), 200, 'solo los 200 primeros'); assert.ok(d.groups.every((g) => g.kind === 'error'));
   assert.deepEqual(d.usage.map((u) => u.key), ['pagePOS:x']);
   assert.match(buildReviewSummary({ groups: [], usage: [] }), /ninguno guardado[\s\S]*Cuelgues: ninguno[\s\S]*Lentitud: nada lento[\s\S]*todavía no hay contadores[\s\S]*Todo en orden/);
@@ -181,8 +184,8 @@ test('UI: la revisión es solo del Admin (chip, texto o aviso de errores nuevos)
   assert.ok(!chips.slice(2, 4).join('\n').includes('Revisión'), 'el empleado no ve el chip');
   assert.match(UI, /if \(!image && isOwnerAccess\(\) && isReview\(text\)\) \{/);
   const rv = UI.slice(UI.indexOf('function reviewData()'), UI.indexOf('async function send('));
-  assert.match(rv, /msg: C\.redactText\(String\(x\.msg \|\| ''\)\)\.slice\(0, 160\)/); assert.ok(!/innerHTML/.test(rv));
-  assert.match(rv, /post\('\/auth\/assistant\/review', reviewData\(\)/); assert.match(rv, /R\.markSeen\(\)/);
+  assert.match(rv, /msg: x\.kind === 'api' \? C\.redactText\(String\(x\.msg \|\| ''\)\)\.slice\(0, 160\) : errType\(x\.msg\)/); assert.ok(!/innerHTML/.test(rv));
+  assert.match(rv, /post\('\/auth\/assistant\/review', C\.compactReview \? C\.compactReview\(reviewData\(\)\) : reviewData\(\)/); assert.match(rv, /R\.markSeen\(\)/);
   assert.match(rv, /isOwnerAccess\(\) && R && R\.newErrors \? R\.newErrors\(\) : 0/);
   assert.match(UI, /reviewNotice\(\);\n    var off = root\.navigator\.onLine === false;/);
   assert.equal(C.friendlyError('review_admin_only').msg, 'La revisión del punto de venta es solo para el Admin.');
