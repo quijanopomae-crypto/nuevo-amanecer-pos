@@ -56,7 +56,8 @@ export const EMPLOYEE_QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock
 // Consultas SOLO del Admin que a un empleado se le cortan con 403 query_admin_only (no 200 con la tarjeta descartada): en el chat
 // por frase clara antes del modelo, a mitad del texto (guard) y si el modelo igual pide la herramienta.
 export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['sugerencias_compra']);
-export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Las sugerencias de compra son solo para el Admin.' });
+// Mensaje genérico: lo reusan todas las consultas solo del Admin (sugerencias de compra y las que vengan).
+export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
 const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
@@ -2581,7 +2582,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     let r;
     try { r = reader ? await runAssistantQuery(reader, p.query, now) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
     if (role !== 'owner') r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
-    p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null };
+    p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null, ...(r.truncado === true ? { truncado: true } : {}) };
     consultas.push(p);
     // Al modelo: solo { tipo, resumen }. Empleado: el resumen ya pasó por la lista blanca (employeeQueryResult) y aquí se vuelve a quitar
     // toda clave del dueño (costo, margen, proveedor, compras, caja, deudas) por si una consulta nueva trae algo más.

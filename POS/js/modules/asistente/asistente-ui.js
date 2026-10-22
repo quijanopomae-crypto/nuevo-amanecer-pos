@@ -425,6 +425,7 @@
       return '<h4>' + E(r.titulo || 'Consulta') + '<span class="pill ro">Solo lectura</span></h4>' + (r.error ? '<div class="warn">' + E(r.texto) + '</div>' :
         '<table class="q">' + (r.columnas && r.columnas.length ? '<tr>' + r.columnas.map(function (c, i) { return '<th' + (i ? ' class="r"' : '') + '>' + E(c) + '</th>'; }).join('') + '</tr>' : '') +
         (r.filas || []).map(function (f) { return '<tr>' + f.map(function (c, i) { return '<td' + (i ? ' class="r"' : '') + '>' + E(typeof c === 'number' && !Number.isInteger(c) ? c.toFixed(2) : c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
+        (r.truncado ? '<div class="warn">Ojo: solo se leyó una parte de los datos. Las cantidades pueden quedar cortas.</div>' : '') +
         (r.total != null && r.filas && r.filas.length < r.total ? '<div class="note">Mostrando ' + r.filas.length + ' de ' + E(r.total) + '.</div>' : '')) +
         '<div class="note">Datos leídos del servidor. No cambia nada.</div>';
     }
