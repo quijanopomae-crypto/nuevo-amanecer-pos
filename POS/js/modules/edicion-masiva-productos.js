@@ -43,6 +43,8 @@
   }
 
   function cloud() { try { return !!(root.NuevoAmanecerCanonical && root.NuevoAmanecerCanonical.enabled()); } catch (_) { return false; } }
+  // Candado 'edicion-masiva-productos': visible solo si los permisos cargaron y el candado está abierto (falla cerrado).
+  function unlocked() { try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('edicion-masiva-productos') === false); } catch (_) { return false; } }
   function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
   function catalog() { try { return typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   function categories() {
@@ -130,7 +132,7 @@
     return true;
   }
   async function confirm() {
-    if (running || !isOwner()) return;
+    if (running || !isOwner() || !unlocked()) return;
     var rows = preview.slice();
     if (!rows.length) return;
     if (prodOpen()) { notify('Cierra primero el formulario de producto abierto.', 'error'); return; }
@@ -201,7 +203,7 @@
     });
   }
   function open() {
-    if (!isOwner()) return false;
+    if (!isOwner() || !unlocked()) return false;
     if (!dlg) build();
     var cats = categories(), cat = q('[data-pl-cat]'), newcat = q('[data-pl-newcat]'), prev = cat.value || ALL;
     cat.textContent = ''; opt(cat, ALL, 'Todas');
@@ -222,7 +224,7 @@
   function mountButton() {
     var host = doc.querySelector('#pageInventario .inv-secondary-menu'); if (!host) return;
     var btn = doc.getElementById('invEdicionMasivaBtn');
-    if (!isOwner()) { if (btn) btn.remove(); if (dlg && !dlg.hidden) close(); return; }
+    if (!isOwner() || !unlocked()) { if (btn) btn.remove(); if (dlg && !dlg.hidden) close(); return; }
     if (!btn) { btn = el('button', 'top-btn-nuevo', 'Edición masiva de productos'); btn.id = 'invEdicionMasivaBtn'; btn.type = 'button'; btn.title = 'Cambiar la categoría o el estado de varios productos'; btn.addEventListener('click', open); }
     if (btn.parentNode !== host) host.appendChild(btn);
   }
