@@ -52,7 +52,8 @@
     if (!allowed()) { box.hidden = true; if (body) body.replaceChildren(); return false; }
     box.hidden = false;
     var d = data(), rows = analyze(d.products, d.movements, d.sales);
-    if (status) status.textContent = 'Solo vista previa: no cambia stock, ventas ni pagos.' + (canon() ? ' Usa los movimientos cargados de la nube.' : '');
+    if (status) status.textContent = 'Solo vista previa: no cambia stock, ventas ni pagos.' + (canon() ? ' Usa los movimientos cargados de la nube.' : '') +
+      ' Los productos creados antes de empezar a registrar movimientos saldrán como «Historial incompleto»: es normal.';
     body.replaceChildren();
     var diffs = rows.filter(function (r) { return r.status === 'diferencia'; }).length, unknown = rows.filter(function (r) { return r.status === 'sin-alta' || r.status === 'sin-historial'; }).length;
     var sum = el('p', 'rs-summary', diffs + ' con diferencia · ' + unknown + ' sin historial completo · ' + rows.length + ' revisados'); sum.setAttribute('data-rs-summary', ''); body.appendChild(sum);
