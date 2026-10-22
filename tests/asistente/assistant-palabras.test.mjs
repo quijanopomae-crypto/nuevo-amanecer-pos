@@ -95,11 +95,13 @@ const DATA = { products: [
 
 test('stock_producto: el texto dice «Faltan N» y al modelo va estado «Faltan N»', async () => {
   const r = await runAssistantQuery(memoryReader(DATA), { tipo: 'stock_producto', producto: 'arroz' });
-  assert.equal(r.texto, 'Arroz Costeño: Faltan 3.');
-  assert.deepEqual(r.resumen.productos[0], { nombre: 'Arroz Costeño', stock: -3, minimo: 5, estado: 'Faltan 3' });
+  // (#957 + base) el texto lleva el precio y la frase de Inventario; al modelo van precio y costo (solo Admin) junto a «estado».
+  assert.equal(r.texto, 'Arroz Costeño (S/ 4.00): Faltan 3.');
+  assert.deepEqual(r.resumen.productos[0], { nombre: 'Arroz Costeño', stock: -3, minimo: 5, estado: 'Faltan 3', precio: 4, costo: 3 });
+  assert.deepEqual(employeeQueryResult(r).resumen.productos[0], { nombre: 'Arroz Costeño', stock: -3, minimo: 5, estado: 'Faltan 3', precio: 4 }, 'empleado: precio y estado sí, costo no');
   const ok = await runAssistantQuery(memoryReader(DATA), { tipo: 'stock_producto', producto: 'leche' });
-  assert.equal(ok.texto, 'Leche Gloria: 20 unid.');
-  assert.deepEqual(ok.resumen.productos[0], { nombre: 'Leche Gloria', stock: 20, minimo: 4 });
+  assert.equal(ok.texto, 'Leche Gloria (S/ 4.00): 20 unid.');
+  assert.deepEqual(ok.resumen.productos[0], { nombre: 'Leche Gloria', stock: 20, minimo: 4, precio: 4, costo: 3 });
 });
 
 test('bajo_stock: los urgentes salen con «Faltan N» / «Sin stock», nunca con signo menos', async () => {

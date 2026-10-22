@@ -183,3 +183,27 @@ test('Bot 4: «Pensando…» se vuelve la respuesta en el mismo lugar; mascota �
   assert.match(sendFn, /bubble\.setAttribute\('aria-busy', 'true'\)/); assert.match(sendFn, /bubble\.removeAttribute\('aria-busy'\)/);
   assert.match(CSS, /\.na-asst-live\{position:absolute;width:1px;height:1px/);
 });
+
+// ---------- (#957 sobre #962) «pulsa Confirmar» partido entre trozos: el mismo filtro final del texto entero ----------
+const painted = (e) => { let s = ''; for (const x of e) if (x.ev === 'text') { if (x.d.reset) s = ''; else s += x.d.t || ''; } return s; };
+test('#957/#962: «pulsa Confirmar» partido entre trozos («pul» | «sa Confirm» | «ar») sin tarjeta de cambio -> nunca se pinta; con tarjeta de cambio sí', async () => {
+  const pasos = JSON.stringify({ tema: 'Kardex', pasos: ['Entra a Inventario', 'Abre Kardex'] });
+  const info = [[0, delta({ content: 'Te dejo los pasos para ver el Kardex en la tarjeta de abajo, son cortos. Revisa y pul' })], [5, delta({ content: 'sa Confirm' })], [5, delta({ content: 'ar cuando quieras.' })],
+    [0, delta({ tool_calls: [{ index: 0, id: 'p1', function: { name: 'explicar_pasos', arguments: pasos } }] })], [0, delta({}, 'tool_calls')]];
+  const r = await chat({ text: '¿cómo veo el kardex?', stream: true }, { fetch: dsSeq([info], []), reader: READER });
+  const e = await events(r), fin = e.at(-1);
+  assert.equal(fin.ev, 'final'); assert.equal(fin.d.proposals.length, 1);
+  assert.doesNotMatch(fin.d.reply, /puls|Confirmar/i, fin.d.reply);
+  assert.ok(e.filter((x) => x.ev === 'text').every((x) => !/puls|Confirm/i.test(x.d.t || '')), 'ningún trozo lleva «pulsa Confirmar»');
+  assert.equal(painted(e), fin.d.reply, 'lo pintado en partes es la respuesta final (mismo filtro)');
+  assert.ok(!e.some((x) => x.ev === 'status'), 'sin «buscando» por la retención');
+
+  const args = JSON.stringify({ product_id: 'A', tipo: 'salida', cantidad: 1, motivo: 'Merma / daño' });
+  const change = [[0, delta({ content: 'Preparé la salida de 1 Arroz por merma en la tarjeta. Revisa y pul' })], [5, delta({ content: 'sa Confirm' })], [5, delta({ content: 'ar.' })],
+    [0, delta({ tool_calls: [{ index: 0, id: 'c1', function: { name: 'proponer_ajuste_stock', arguments: args } }] })], [0, delta({}, 'tool_calls')]];
+  const r2 = await chat({ text: 'merma de 1 arroz', context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, stock: 40 }] }, stream: true }, { fetch: dsSeq([change], []), reader: READER });
+  const e2 = await events(r2), fin2 = e2.at(-1);
+  assert.equal(fin2.ev, 'final'); assert.equal(fin2.d.proposals.length, 1); assert.ok(fin2.d.proposals[0].confirm_token);
+  assert.match(fin2.d.reply, /pulsa Confirmar/);
+  assert.equal(painted(e2), fin2.d.reply, 'con tarjeta de cambio la frase queda y lo pintado coincide');
+});
