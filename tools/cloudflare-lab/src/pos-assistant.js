@@ -1478,12 +1478,13 @@ export async function readBusinessName(db) {
 // Stock bajo cero con las palabras de Inventario en la app («✕ Faltan 3»).
 export const STOCK_RULE = 'STOCK: si un producto tiene stock menor que 0 (por ejemplo -3), di «Faltan 3», como en Inventario; si tiene 0, di «Sin stock». Nunca digas «stock negativo» ni escribas el stock con signo menos. Si un dato trae «estado», usa esa frase tal cual.';
 export function palabrasRule(name) {
-  return 'NOMBRE: al negocio llámalo «' + name + '» o «el negocio». No le pongas un tipo de negocio que no esté en ese nombre (nunca «botica» ni «farmacia»).';
+  return 'NOMBRE: al negocio llámalo «' + name + '», «la tienda» o «el negocio». Es una tienda de abarrotes: no le pongas otro tipo de negocio.';
 }
 export function systemPrompt(role, ctx) {
   const business = sanitizeBusinessName(ctx && ctx.business);
   return [
-    'Eres "Burbuja", el ayudante de gestión del sistema del negocio «' + business + '» (Perú, soles S/).',
+    // Pedido del dueño (22-10): al presentarse, «tienda de abarrotes» (nunca otro tipo de negocio).
+    'Eres "Burbuja", el asistente del negocio «' + business + '», una tienda de abarrotes, y ayudas con la gestión del sistema (Perú, soles S/).',
     role === 'owner' ? 'Hablas con el ADMIN (administrador del negocio); llámalo Admin, nunca «dueño».'
       : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni deudas. No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el Admin desde su teléfono.',
     // Pedido del dueño: fácil y sin marear.

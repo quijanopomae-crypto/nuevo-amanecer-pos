@@ -1,5 +1,5 @@
 // Palabras del asistente (prueba en vivo 22-10): el negocio se llama como lo puso el Admin en Configuración (pos_settings
-// 'pos.business'.nombre) o «Nuevo Amanecer»; nunca «botica»/«farmacia»/«bodega» fijos. El stock bajo cero se dice «Faltan N»,
+// 'pos.business'.nombre) o «Nuevo Amanecer», «una tienda de abarrotes»; nunca «botica»/«farmacia»/«bodega». El stock bajo cero se dice «Faltan N»,
 // como en Inventario de la app; nunca «stock negativo».
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +9,8 @@ import { runAssistantQuery, memoryReader, stockLabel, employeeDocumentRows } fro
 const read = (p) => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
 const BAD = /botica|farmacia|stock negativo/i;
 const sinReglas = (t, name) => t.split(palabrasRule(name)).join('').split(STOCK_RULE).join('');
-const BODEGA = /bodega|tienda/i;
+const BODEGA = /bodega/i;
+const ABARROTES = /«Nuevo Amanecer», una tienda de abarrotes/;
 
 test('la app dice «Faltan N» en Inventario (la regla copia esas palabras)', () => {
   assert.match(read('POS/js/legacy-inline/inline-01.js'), /p\.stock<0\?`✕ Faltan \$\{Math\.abs\(p\.stock\)\}`/);
@@ -22,18 +23,23 @@ test('el nombre sale de Configuración: el POS lo sincroniza en pos_settings «p
 test('prompt: usa el nombre configurado; sin nombre, «Nuevo Amanecer»; reglas de nombre y de stock', () => {
   for (const role of ['owner', 'consultas', 'gestion']) {
     const p = systemPrompt(role, { business: 'Multiservicios Nuevo Amanecer' });
-    assert.match(p, /del negocio «Multiservicios Nuevo Amanecer»/, role);
+    assert.match(p, /del negocio «Multiservicios Nuevo Amanecer», una tienda de abarrotes/, role);
+    assert.doesNotMatch(p, /botica|farmacia/i, role);
     assert.ok(p.includes(palabrasRule('Multiservicios Nuevo Amanecer')) && p.includes(STOCK_RULE), role);
     for (const ctx of [{}, undefined, { business: '' }, { business: null }]) {
       const d = systemPrompt(role, ctx);
       assert.match(d, /del negocio «Nuevo Amanecer»/, role);
+      assert.match(d, ABARROTES, role);
+      assert.ok(d.includes('tienda de abarrotes'), role);
+      assert.doesNotMatch(d, /botica|farmacia/i, role + ': el prompt no nombra botica ni farmacia');
       assert.doesNotMatch(sinReglas(d, 'Nuevo Amanecer'), BAD, role);
-      assert.doesNotMatch(d, BODEGA, role + ': nada de «bodega»/«tienda» fijo');
+      assert.doesNotMatch(d, BODEGA, role + ': nada de «bodega»');
     }
   }
   assert.match(STOCK_RULE, /«Faltan 3»/); assert.match(STOCK_RULE, /«Sin stock»/);
   assert.match(STOCK_RULE, /Nunca digas «stock negativo» ni escribas el stock con signo menos/);
-  assert.match(palabrasRule('X'), /nunca «botica» ni «farmacia»/);
+  assert.match(palabrasRule('X'), /Es una tienda de abarrotes: no le pongas otro tipo de negocio/);
+  assert.doesNotMatch(palabrasRule('X'), /botica|farmacia/i);
 });
 
 test('nombre configurado: limpio, 60 letras como máximo, sin marcado ni datos tapados', () => {
@@ -63,13 +69,13 @@ test('chat: el modelo recibe el nombre de Configuración (y nunca RUC ni teléfo
         fetch: async (u, init) => { bodies.push(JSON.parse(init.body)); return new Response(JSON.stringify({ choices: [{ message: { content: 'Hola.' } }] })); } });
     assert.equal(r.status, 200); return bodies[0].messages[0].content; };
   const sys = await run({ readBusinessName: () => readBusinessName(fakeDb({ value_json: JSON.stringify({ nombre: 'Minimarket Rosa', ruc: '20601234567', telefono: '945123456' }) })) });
-  assert.match(sys, /del negocio «Minimarket Rosa»/); assert.doesNotMatch(sys, /20601234567|945123456/);
-  assert.match(await run({}), /del negocio «Nuevo Amanecer»/);
+  assert.match(sys, /del negocio «Minimarket Rosa», una tienda de abarrotes/); assert.doesNotMatch(sys, /20601234567|945123456|botica|farmacia/i);
+  const def = await run({}); assert.match(def, /del negocio «Nuevo Amanecer», una tienda de abarrotes/); assert.doesNotMatch(def, /botica|farmacia/i);
 });
 
-test('ningún texto del servidor del asistente usa botica/farmacia/stock negativo (salvo las reglas que lo prohíben)', () => {
+test('ningún texto del servidor del asistente usa botica/farmacia/stock negativo (salvo la regla de stock que lo prohíbe)', () => {
   for (const f of ['pos-assistant.js', 'pos-assistant-queries.js', 'pos-assistant-review.js', 'pos-assistant-boleta.js', 'pos-assistant-mock.js', 'pos-assistant-providers.js']) {
-    const src = read('tools/cloudflare-lab/src/' + f).split('\n').filter((l) => !/STOCK_RULE =|return 'NOMBRE:/.test(l)).join('\n');
+    const src = read('tools/cloudflare-lab/src/' + f).split('\n').filter((l) => !/STOCK_RULE =/.test(l)).join('\n');
     assert.doesNotMatch(src, BAD, f);
   }
 });
