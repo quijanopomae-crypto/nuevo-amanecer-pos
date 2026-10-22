@@ -211,3 +211,32 @@ test('producto con nombre de cliente («Encargo Sra. Rosa Quispe»): nunca llega
   const odd = await runAssistantQuery(memoryReader({ ...DATA, saleItems: [{ sale_id: 'S1', product_id: 'Rosa Quispe <b>', quantity: 1, line_total_cents: 100 }] }), { tipo: 'resumen_dia' }, NOW);
   assert.equal(odd.resumen.top_por_monto[0].producto, 'producto #sin-código');
 });
+
+test('tope de lectura (truncado): aviso en la PRIMERA fila de la tabla del Admin, en el texto y «truncado: true» al modelo', async () => {
+  for (const tipo of SUMMARY_TYPES) {
+    const r = await runAssistantQuery(memoryReader({ ...DATA, truncated: true }), { tipo }, NOW);
+    assert.match(String(r.filas[0][0]), /^Aviso: datos incompletos/); assert.match(r.texto, /datos incompletos/);
+    assert.equal(r.resumen.truncado, true); assert.equal(r.resumen.actual.truncado, true); assert.equal(r.resumen.anterior.truncado, true);
+  }
+  const ok = await runAssistantQuery(reader(), { tipo: 'resumen_dia' }, NOW);
+  assert.equal(ok.resumen.truncado, false); assert.equal(ok.resumen.actual.truncado, false); assert.ok(!/Aviso/.test(String(ok.filas[0][0])));
+  // Lector real: el tope de sale-items (no solo el de sales) también marca truncado.
+  const src = (await import('node:fs')).readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant-queries.js', import.meta.url), 'utf8');
+  assert.match(src, /cut = !!\(sales\.truncated \|\| items\.truncated\)/);
+});
+
+test('venta «credito» con credit_cents 0 en cash-movements: sigue siendo crédito (no pasa a contado); mixto usa credit_cents > 0', async () => {
+  const data = { ...DATA, cashMovements: [{ sale_id: 'S2', credit_cents: 0 }, { sale_id: 'S1', credit_cents: 0 }, { sale_id: 'S3', credit_cents: 1200 }] };
+  const r = await runAssistantQuery(memoryReader(data), { tipo: 'resumen_dia' }, NOW);
+  assert.equal(r.resumen.actual.credito_soles, 22, 'S2 (credito, 10) + parte crédito de S3 (12)'); assert.equal(r.resumen.actual.contado_soles, 38);
+});
+
+test('sin cash-movements (null, como el lector real si la lectura falla): con ventas mixtas, contado/crédito «no disponible»', async () => {
+  const r = await runAssistantQuery(memoryReader({ ...DATA, cashMovements: undefined }), { tipo: 'resumen_dia' }, NOW);
+  assert.equal(r.resumen.actual.contado_soles, null); assert.equal(r.resumen.actual.credito_soles, null);
+  assert.deepEqual(r.filas.find((f) => f[0] === 'Al contado S/').slice(1, 2), ['no disponible']);
+  assert.deepEqual(r.filas.find((f) => f[0] === 'Al crédito S/').slice(1, 2), ['no disponible']);
+  assert.ok(!/Al contado/.test(r.texto), 'el texto no inventa la división');
+  // Sin mixtas no hace falta cash-movements: el día anterior (solo efectivo) sí se calcula por método.
+  assert.equal(r.resumen.anterior.contado_soles, 40); assert.equal(r.resumen.anterior.credito_soles, 0);
+});
