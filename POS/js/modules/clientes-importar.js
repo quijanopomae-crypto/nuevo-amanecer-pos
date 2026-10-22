@@ -213,16 +213,10 @@
   }
 
   var FORM_IDS = ['cNombre', 'cDni', 'cTel', 'cDir', 'cLinea'];
-  // Solo el dueño puede fijar línea de crédito al importar. Falla cerrado:
-  // con roles cargados manda NA_ROLES; sin roles, solo es dueño en modo local puro (sin sesión en la nube).
+  // Solo el dueño puede fijar línea de crédito al importar. Falla cerrado: sin NA_ROLES no es dueño
+  // (el modo local ya fija el rol de dueño en pos-roles-client.js).
   function isOwner() {
-    try {
-      var r = root.NA_ROLES;
-      if (r && typeof r.isOwner === 'function') return r.isOwner() === true;
-      var c = root.NuevoAmanecerCanonical;
-      if (!c || typeof c.enabled !== 'function') return false;
-      return c.enabled() === false;
-    } catch (_) { return false; }
+    try { var r = root.NA_ROLES; if (!r || typeof r.isOwner !== 'function') return false; return r.isOwner() === true; } catch (_) { return false; }
   }
   function formHasText() {
     return FORM_IDS.some(function (id) { var n = doc.getElementById(id); return !!(n && String(n.value || '').trim()); });
