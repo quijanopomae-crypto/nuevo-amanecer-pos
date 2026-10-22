@@ -62,3 +62,35 @@ test('con foto la espera inicial no se acorta (firstMs = idleMs)', async () => {
   const ok = await callModelStream(cfg, req, slowStream(150, 0), 400, () => {}, null, null, undefined);
   assert.equal(ok.content, 'Hola Admin.');
 });
+
+test('stallMs (segunda llamada): corta una pausa SIN DATOS a mitad del flujo, pero no pone tope al tiempo total', async () => {
+  const cfg = { ...configFor({ OHMYAGENT_API_KEY: 'k' }, 'ohmyagent'), fallbacks: [] };
+  const req = { messages: [{ role: 'user', content: 'hola' }] };
+  const cut = await callModelStream(cfg, req, slowStream(10, 250), 5000, () => {}, null, null, undefined, { stallMs: 80 });
+  assert.equal(cut.error, 'upstream_timeout'); assert.equal(cut.partial, true, 'llegó «Hola » y luego 250 ms sin nada > 80 ms');
+  // 3 trozos con pausas de 60 ms (< 80) suman más de 80 ms en total: no se corta.
+  const t0 = Date.now(); const ok = await callModelStream(cfg, req, slowStream(60, 60), 5000, () => {}, null, null, undefined, { stallMs: 80 });
+  assert.equal(ok.content, 'Hola Admin.'); assert.ok(Date.now() - t0 > 80, 'el total pasó de stallMs: ' + (Date.now() - t0));
+});
+
+test('stallMs con foto: no se acorta (manda idleMs, como antes)', async () => {
+  const cfg = { ...configFor({ OHMYAGENT_API_KEY: 'k' }, 'ohmyagent'), fallbacks: [] };
+  const req = { messages: [{ role: 'user', content: [{ type: 'text', text: 'lee' }, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAAA' } }] }] };
+  const ok = await callModelStream(cfg, req, slowStream(10, 150), 1000, () => {}, null, null, undefined, { stallMs: 50 });
+  assert.equal(ok.content, 'Hola Admin.');
+});
+
+test('ruta en partes: la segunda llamada usa el corte por espera sin datos (deps.firstDataMs); la primera no', async (t) => {
+  quiet(t); let n = 0;
+  const sse = (chunks, gap) => new Response(new ReadableStream({ async start(c) { for (let i = 0; i < chunks.length; i++) { if (i) await sleep(gap); c.enqueue(enc.encode(chunks[i])); } c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  const d = (o) => 'data: ' + JSON.stringify(o) + '\n\n';
+  const fetch = async () => { n++;
+    if (n === 1) return sse([d({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'consultar', arguments: JSON.stringify({ tipo: 'bajo_stock' }) } }] } }] }), d({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] }), 'data: [DONE]\n\n'], 150); // 1.ª: pausas de 150 ms, sigue
+    return sse([d({ choices: [{ delta: { content: 'Explico ' } }] }), d({ choices: [{ delta: { content: 'todo.' }, finish_reason: 'stop' }] }), 'data: [DONE]\n\n'], 400); }; // 2.ª: se queda 400 ms sin datos
+  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text: '¿qué falta y por qué?', stream: true }) }), ENV, { principalId: 'session:o', posRole: 'owner' }, jsonR,
+    { store: createMemoryUsageStore(), resolveRole: async () => 'owner', fetch, reader: READER, audit: async () => {}, firstDataMs: 100, timeoutMs: 5000 });
+  const txt = await r.text();
+  assert.match(txt, /Hay 1 producto/, 'la 2.ª se cortó: queda el texto con los números');
+  assert.doesNotMatch(txt, /todo\./);
+  assert.ok(n >= 2);
+});

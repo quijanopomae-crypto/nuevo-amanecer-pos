@@ -339,11 +339,13 @@ async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
 
 // En partes: cada trozo de texto va a onText en cuanto llega; las llamadas a herramientas se juntan aquí y recién al final se devuelven
 // (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs). Si se corta a mitad: { error, partial:true }.
-// opts.firstMs: espera máxima hasta el PRIMER byte (por defecto FIRST_DATA_MS sin foto; con foto, idleMs). Nunca más que idleMs.
+// opts.stallMs: espera máxima entre trozos (y hasta el primero), sin foto. opts.firstMs: espera máxima hasta el PRIMER byte (por defecto FIRST_DATA_MS sin foto; con foto, idleMs). Nunca más que idleMs.
 export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, opts = {}) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
   const firstMs = Math.min(idleMs, Number(opts.firstMs) > 0 ? Number(opts.firstMs) : hasImage(req) ? idleMs : FIRST_DATA_MS);
-  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer, firstMs));
+  // opts.stallMs (segunda llamada): corte por ESPERA SIN DATOS en todo el flujo (no un tope total: cada trozo reinicia la cuenta). Con foto, idleMs.
+  const idle = Number(opts.stallMs) > 0 && !hasImage(req) ? Math.min(idleMs, Number(opts.stallMs)) : idleMs;
+  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idle, onText, onTool, guard, outer, Math.min(firstMs, idle)));
 }
 async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, firstMs = idleMs) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };

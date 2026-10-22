@@ -17,7 +17,7 @@
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
-import { resolveProvider, callModel, callModelStream, linkAbort } from './pos-assistant-providers.js';
+import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
@@ -2714,7 +2714,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       const a2 = clock();
       // (lentitud 22-10) sin respaldo a modelos gratis: si esta llamada falla, queda el texto armado con los números (no vale la pena esperar).
       const cfg2 = { ...cfg, noFreeFallback: true };
-      const second = emit ? await callModelStream(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
+      const second = emit ? await callModelStream(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal, { stallMs: deps.firstDataMs || FIRST_DATA_MS })
         : await callModel(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       noteCall(second, 'ms_model2', a2); tm.second_call = true;
       if (emit && !second.error) emit.flush();
