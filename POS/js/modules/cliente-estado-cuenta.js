@@ -8,6 +8,11 @@
   var PANEL_ID = 'naEstadoCuenta', BUTTON_ID = 'naEstadoCuentaBtn';
   var open = false, selected = '', timer = null, initialized = false;
 
+  // Falla cerrado: si los permisos no cargaron o el candado sigue en true, no se muestra.
+  function unlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('estado-cuenta-cliente') === false); }
+    catch (_) { return false; }
+  }
   function role() {
     try { var r = root.NA_ROLES; if (!r) return ''; if (r.isOwner() === true) return 'owner'; return r.role === 'empleado' ? 'empleado' : ''; }
     catch (_) { return ''; }
@@ -18,7 +23,10 @@
   function limaMoment(value, fallbackDay) {
     var raw = String(value || '');
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) {
-      var ms = new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : raw + 'Z').getTime();
+      // Con zona (Z u offset, como lo manda el servidor/toISOString) → se pasa a Lima.
+      // Sin zona → ya es hora local de la tienda; se usa tal cual (igual que canonical-sale-view.js).
+      if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) { var d0 = raw.slice(0, 10), t0 = raw.slice(11, 16); return { key: d0 + 'T' + t0, day: d0, time: t0 }; }
+      var ms = new Date(raw).getTime();
       if (Number.isFinite(ms)) { var l = new Date(ms - 5 * 3600e3).toISOString(); return { key: l.slice(0, 16), day: l.slice(0, 10), time: l.slice(11, 16) }; }
     }
     var day = String(fallbackDay || raw).slice(0, 10);
@@ -62,7 +70,7 @@
   function render() {
     var panel = doc.getElementById(PANEL_ID);
     if (!panel) return false;
-    var allowed = !!role();
+    var allowed = unlocked() && !!role();
     panel.hidden = !(allowed && open);
     var select = panel.querySelector('[data-ec-client]'), content = panel.querySelector('[data-ec-content]'), status = panel.querySelector('[data-ec-status]');
     content.replaceChildren();
@@ -120,7 +128,7 @@
       bar.parentNode.insertBefore(panel, bar.nextSibling);
       bar.parentNode.insertBefore(btn, bar.nextSibling);
     }
-    var allowed = !!role();
+    var allowed = unlocked() && !!role();
     btn.hidden = !allowed;
     if (!allowed) { open = false; btn.setAttribute('aria-expanded', 'false'); }
     render();
@@ -132,7 +140,7 @@
     ['na:role', 'na:canonical-updated', 'na:canonical-payment-receipt', 'focus', 'pageshow', 'storage'].forEach(function (n) { root.addEventListener(n, schedule); });
     ensureUi();
   }
-  root.NA_CLIENTE_ESTADO_CUENTA = Object.freeze({ buildStatement: buildStatement, money: money, render: ensureUi, init: init });
+  root.NA_CLIENTE_ESTADO_CUENTA = Object.freeze({ buildStatement: buildStatement, money: money, limaMoment: limaMoment, render: ensureUi, init: init });
   if (doc) {
     if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init, { once: true }); else init();
     root.addEventListener('load', init, { once: true });

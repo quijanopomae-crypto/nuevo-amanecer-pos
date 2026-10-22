@@ -14,6 +14,9 @@ async function openClients(page: Page, { dark = false, role = 'empleado' } = {})
     const w = window as any;
     const roles = w.NA_ROLES;
     w.NA_ROLES = new Proxy(roles, { get: (t, k) => k === 'role' ? role : k === 'isOwner' ? () => role === 'owner' : t[k] });
+    // El candado sigue en true en pos-permissions.js; solo esta prueba lo abre.
+    const perms = w.NA_PERMISSIONS;
+    w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'estado-cuenta-cliente' ? false : perms.featureLocked(id) };
     document.body.classList.toggle('dark', dark);
     clientes = [
       { id: 't-ana', nombre: 'Ana Prueba', dni: '', telefono: '', creditos: [] },
@@ -91,4 +94,26 @@ test('rol desconocido: falla cerrado', async ({ page }) => {
 test('el módulo usa solo textContent', async ({ page }) => {
   const res = await page.request.get('/js/modules/cliente-estado-cuenta.js');
   expect(await res.text()).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
+});
+
+test('candado en true o permisos sin cargar: el botón no aparece (falla cerrado)', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await openClients(page, { role: 'owner' });
+  const entry = page.getByRole('button', { name: 'Movimientos de cuenta', exact: true });
+  await expect(entry).toBeVisible();
+  await page.evaluate(() => { const w = window as any; w.NA_PERMISSIONS = { ...w.NA_PERMISSIONS, featureLocked: () => true }; w.NA_CLIENTE_ESTADO_CUENTA.render(); });
+  await expect(entry).toBeHidden();
+  await page.evaluate(() => { const w = window as any; w.NA_PERMISSIONS = { ...w.NA_PERMISSIONS, featureLocked: undefined }; w.NA_CLIENTE_ESTADO_CUENTA.render(); });
+  await expect(entry).toBeHidden();
+});
+
+test('limaMoment: con zona se pasa a Lima, sin zona se usa la hora local tal cual', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.waitForFunction(() => !!(window as any).NA_CLIENTE_ESTADO_CUENTA);
+  const r = await page.evaluate(() => { const m = (window as any).NA_CLIENTE_ESTADO_CUENTA.limaMoment;
+    return [m('2026-10-02T03:00:00Z'), m('2026-10-02T03:00:00-05:00'), m('2026-10-02T03:00:00'), m('', '2026-10-03')]; });
+  expect(r[0]).toEqual({ key: '2026-10-01T22:00', day: '2026-10-01', time: '22:00' });
+  expect(r[1]).toEqual({ key: '2026-10-02T03:00', day: '2026-10-02', time: '03:00' });
+  expect(r[2]).toEqual({ key: '2026-10-02T03:00', day: '2026-10-02', time: '03:00' });
+  expect(r[3]).toEqual({ key: '2026-10-03T00:00', day: '2026-10-03', time: '' });
 });
