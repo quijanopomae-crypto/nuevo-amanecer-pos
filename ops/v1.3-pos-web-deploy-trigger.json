@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web193: PR953 memoria de boletas y aclaraciones, fuente 36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d. Backend Worker71 run 39833121980 success y salud verificada. CI crítico, E2E y visual success; revisión independiente sin P0/P1. Sin migraciones ni datos comerciales. Rollback web 50c2f09c835384cb38c9e6ce9d63eedd5f3b22b9.",
-  "retry_attempt": 193,
-  "retry_reason": "Owner autorizó 2026-10-22: Aslo. Publicar memoria de la boleta; rollback a Web192 50c2f09.",
-  "requested_at_utc": "2026-10-22T18:39:25.121Z",
-  "approved_base": "1b75a35b2ac741894cb0eaebac477fab1ed0e26d"
+  "note": "Web 191: publicar CANON commit cbd88718485c19806ce3a7edbda81f2613be196e (PR #940: panel de permisos por empleado se monta al confirmar el rol; employee-perms-ui.js en PRECACHE_URLS). Solo estáticos web: sin Worker, sin migraciones, sin secretos. Rollback a Web 190 (a422f434, run 39791120674).",
+  "retry_attempt": 191,
+  "retry_reason": "OK del dueño 2026-10-22 para publicar #940 (solo web).",
+  "requested_at_utc": "2026-10-22T19:15:00Z",
+  "approved_base": "cbd88718485c19806ce3a7edbda81f2613be196e"
 }
