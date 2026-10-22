@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner explicitly ordered in DM (2026-10-21 14:28 Lima: «revertir y republicar») to revert #871 and #868 and republish. #878 (merge dba42e22) reverts 9f2f8f2e and 56a7cba7, keeping 0034_price_history.sql as a record (table stays in prod, unused). Code OK asistente 2, spec OK asistente 3, LOCAL OK asistente 4 on 4b3f87f0. Worker code equals worker 62 (06a12253). No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39665526755 success. Rollback to 0c03715e (worker 63 base c31e048a).",
-  "target_commit": "dba42e22eab4b41ec92cbe2c7160d492cefc09a3",
-  "rollback_ref": "c31e048a00ad92bb75ff3402a60a5726a4e9d8c9",
+  "authorization_context": "Owner OK to publish PR #894 (2026-10-21 ~20:53 Lima); approved by all 5 assistants. Merge fb0daf65 adds one line to pos-permissions.js FEATURE_LOCKS ('clientes-deudores-caja': false) plus a Próximamente card; Worker before web. CI green on dcd1e4f7. No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39708986052 success (R2 recovery-drills/2026-10-22T02-01-09Z-fb0daf65….sql). Rollback to dba42e22 (worker 64).",
+  "target_commit": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8",
+  "rollback_ref": "dba42e22eab4b41ec92cbe2c7160d492cefc09a3",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 64,
-  "optimization": "REVERT_868_871"
+  "attempt": 65,
+  "optimization": "FEATURE_LOCK_CLIENTES_DEUDORES_CAJA_894"
 }
