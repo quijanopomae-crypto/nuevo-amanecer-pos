@@ -20,21 +20,55 @@ const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.rou
 const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
-function limaToday(nowMs) { return new Date(nowMs - 5 * 3600 * 1000).toISOString().slice(0, 10); }
-function addDays(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
+// ---------- Hora de Lima (America/Lima = UTC-5 todo el año; Perú no tiene horario de verano) ----------
+// ÚNICO lugar con la cuenta: el resto del asistente (consultas, resúmenes, prompt, modo demostración, límites de uso) usa estas funciones.
+export const LIMA_OFFSET_MS = 5 * 3600 * 1000;
+export function limaToday(nowMs = Date.now()) { return new Date(nowMs - LIMA_OFFSET_MS).toISOString().slice(0, 10); }
+export function addDays(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-// Período en fechas de Lima. Por defecto: hoy. Máximo 92 días.
+// Día de Lima D = [D 05:00Z, D+1 05:00Z). fromIso/toIso: los límites que se comparan con created_at (ISO en UTC) o se enlazan en SQL.
+export function limaBounds(desde, hasta) { return { desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' }; }
+// Palabras de fecha que el servidor convierte en días de Lima (el modelo NO calcula fechas: manda la palabra en «periodo»).
+export const DATE_WORDS = Object.freeze(['hoy', 'ayer', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']);
+const WORD_ALIASES = { hoy: 'hoy', oy: 'hoy', ayer: 'ayer', 'esta semana': 'esta_semana', semana: 'esta_semana', 'la semana': 'esta_semana', 'semana actual': 'esta_semana',
+  'semana pasada': 'semana_pasada', 'la semana pasada': 'semana_pasada', 'este mes': 'este_mes', mes: 'este_mes', 'el mes': 'este_mes', 'mes actual': 'este_mes',
+  'mes pasado': 'mes_pasado', 'el mes pasado': 'mes_pasado' };
+export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').trim(); return WORD_ALIASES[k] || null; }
+// Lunes = inicio de la semana (Lima). 0 = lunes … 6 = domingo.
+const weekdayIdx = (d) => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
+// { desde, hasta } en fechas de Lima para una palabra de fecha, o null si no es una. «esta semana» = lunes a hoy; «este mes» = día 1 a hoy.
+export function dateWordRange(word, nowMs = Date.now()) {
+  const w = DATE_WORDS.includes(word) ? word : dateWord(word); if (!w) return null;
+  const today = limaToday(nowMs), mon = addDays(today, -weekdayIdx(today));
+  if (w === 'hoy') return { desde: today, hasta: today };
+  if (w === 'ayer') { const y = addDays(today, -1); return { desde: y, hasta: y }; }
+  if (w === 'esta_semana') return { desde: mon, hasta: today };
+  if (w === 'semana_pasada') return { desde: addDays(mon, -7), hasta: addDays(mon, -1) };
+  if (w === 'este_mes') return { desde: today.slice(0, 8) + '01', hasta: today };
+  const last = addDays(today.slice(0, 8) + '01', -1); return { desde: last.slice(0, 8) + '01', hasta: last }; // mes_pasado
+}
+const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+// Calendario de hoy en Lima para el mensaje del sistema (solo fechas, ningún dato del negocio).
+export function limaCalendarLine(nowMs = Date.now()) {
+  const r = (w) => dateWordRange(w, nowMs), t = limaToday(nowMs), s = r('esta_semana'), m = r('este_mes');
+  return 'Hoy (Lima) es ' + DIAS[weekdayIdx(t)] + ' ' + t + '; ayer fue ' + r('ayer').desde + '; esta semana (de lunes a hoy) va de ' + s.desde + ' a ' + s.hasta
+    + '; este mes va de ' + m.desde + ' a ' + m.hasta + '. Para hoy, ayer, esta semana, la semana pasada, este mes o el mes pasado usa periodo en consultar (el sistema calcula las fechas).';
+}
+// Fecha de un campo: AAAA-MM-DD tal cual, o una palabra de fecha (lado: 'desde' o 'hasta' de su rango). Si no, null.
+function dateArg(v, side, nowMs) { if (DATE.test(v || '')) return v; const r = dateWordRange(v, nowMs); return r ? r[side] : null; }
+// Período en fechas de Lima. Por defecto: hoy. «periodo» (palabra de fecha) manda sobre desde/hasta. Máximo 92 días.
 export function period(args, nowMs) {
-  const today = limaToday(nowMs);
-  let hasta = DATE.test(args?.hasta || '') ? args.hasta : today, desde = DATE.test(args?.desde || '') ? args.desde : hasta;
+  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs);
+  let hasta = w ? w.hasta : dateArg(args?.hasta, 'hasta', nowMs) || today, desde = w ? w.desde : dateArg(args?.desde, 'desde', nowMs) || (dateWordRange(args?.hasta, nowMs)?.desde ?? hasta);
   if (desde > hasta) [desde, hasta] = [hasta, desde];
   if (Date.parse(hasta) - Date.parse(desde) > QUERY_LIMITS.maxDays * 86400000) desde = addDays(hasta, -QUERY_LIMITS.maxDays);
-  // Lima = UTC-5: el día local D va de D 05:00Z a D+1 05:00Z.
-  return { desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' };
+  return limaBounds(desde, hasta);
 }
 
 // ---------- Resúmenes del día y del mes (helpers) ----------
-const limaDay = (iso) => new Date(Date.parse(iso) - 5 * 3600 * 1000).toISOString().slice(0, 10);
+export const limaDay = (iso) => new Date(Date.parse(iso) - LIMA_OFFSET_MS).toISOString().slice(0, 10);
+// Fecha de Lima de un registro para mostrar: con hora (cualquier zona que Date.parse entienda) -> día de Lima; solo fecha -> tal cual.
+export function limaDateOf(v) { const t = String(v || ''); if (/T\d{2}:/.test(t) && Number.isFinite(Date.parse(t))) return limaDay(t); return DATE.test(t.slice(0, 10)) ? t.slice(0, 10) : ''; }
 // Día de Lima de un cobro: hora exacta si la hay; si no, la fecha conocida (AAAA-MM-DD). Sin fecha conocida: no cuenta en ningún período.
 export function paymentDay(x) {
   const ts = x?.payment_timestamp || x?.created_at;
@@ -68,12 +102,14 @@ export function aggregatePeriods(periods, sales, items, moves, pays, truncated) 
 const pad2 = (n) => String(n).padStart(2, '0');
 function monthEnd(ym) { const [y, m] = ym.split('-').map(Number); return ym + '-' + pad2(new Date(Date.UTC(y, m, 0)).getUTCDate()); }
 function prevMonth(ym) { const [y, m] = ym.split('-').map(Number); return m === 1 ? (y - 1) + '-12' : y + '-' + pad2(m - 1); }
-const mkPeriod = (desde, hasta) => ({ desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' });
+const mkPeriod = limaBounds;
 // Períodos del resumen (hora de Lima). Día: el pedido (por defecto hoy) contra el día anterior.
 // Mes: el mes del día pedido; si es el mes en curso va hasta hoy y se compara con los MISMOS días del mes anterior (1 al N).
 export function summaryPeriods(tipo, args, nowMs) {
-  const today = limaToday(nowMs), raw = String(args?.hasta || args?.desde || '');
-  let ref = DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
+  // «periodo» (o una palabra en hasta/desde): el día de referencia es el ÚLTIMO de su rango en Lima («ayer», «mes_pasado» -> su último día).
+  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs) || dateWordRange(args?.hasta, nowMs) || dateWordRange(args?.desde, nowMs);
+  const raw = String(args?.hasta || args?.desde || '');
+  let ref = w ? w.hasta : DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
   if (ref > today) ref = today;
   if (tipo === 'resumen_dia') return { actual: mkPeriod(ref, ref), anterior: mkPeriod(addDays(ref, -1), addDays(ref, -1)), en_curso: ref === today };
   const ym = ref.slice(0, 7), end = monthEnd(ym), enCurso = today.slice(0, 7) === ym, hasta = enCurso ? today : end;
@@ -274,7 +310,8 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       resumen: { clientes_con_deuda: top.length, total_soles: total, mayores_saldos: top.slice(0, M).map(([id, s], i) => ({ cliente: cli(id, i), soles: r2(s) })) } };
   }
   const rows = await reader.purchases(N);
-  const filas = rows.map((r) => [String(r.created_at || '').slice(0, 10), r.supplier || '-', r.document_ref || '-', cents(r.total_cost_cents), r.line_count]);
+  // Fecha de la compra en día de Lima (una compra de las 23:30 en Lima ya es el día siguiente en UTC).
+  const filas = rows.map((r) => [limaDateOf(r.created_at), r.supplier || '-', r.document_ref || '-', cents(r.total_cost_cents), r.line_count]);
   return { ...base, columnas: ['Fecha', 'Proveedor', 'Documento', 'Total S/', 'Líneas'], filas,
     texto: rows.length ? (rows.length === 1 ? 'Última compra' : 'Últimas ' + rows.length + ' compras') + '. La más reciente: ' + filas[0][0] + ', ' + filas[0][1] + ', S/ ' + Number(filas[0][3] || 0).toFixed(2) + '.' : 'No hay compras registradas.',
     resumen: { compras: rows.length, total_soles: r2(filas.reduce((s, f) => s + (f[3] || 0), 0)), recientes: filas.slice(0, M).map((f) => ({ fecha: f[0], proveedor: f[1], soles: f[3] })) } };
