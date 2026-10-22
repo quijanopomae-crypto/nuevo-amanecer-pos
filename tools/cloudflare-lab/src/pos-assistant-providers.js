@@ -296,17 +296,18 @@ async function withRetries(cfg, req, outer, once) {
     .map((c) => (typeof c === 'string' ? { ...cfg, model: c } : { ...c, retryWaits: cfg.retryWaits }))
     .filter((c, i, a) => c.model && a.findIndex((x) => x.base === c.base && x.model === c.model) === i)
     .filter((c, i) => i === 0 || !hasImage(req) || c.vision);
-  let r = null;
+  let r = null, n = 0; // n: intentos hechos (tiempos del asistente: cuántas veces se llamó al proveedor)
+  const tag = (x, k) => (x && typeof x === 'object' ? Object.assign(x, { attempts: n, fallback: k > 0 }) : x);
   for (let k = 0; k < chain.length; k++) {
     const c = chain[k];
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) await waitMs(retryAfter(r, k, cfg), outer);
-      if (outer?.aborted) return r || { error: 'upstream_timeout' };
-      r = await once(c);
-      if (!isRetryable(r)) return k === 0 ? r : { ...r, model: c.model, provider: c.id };
+      if (outer?.aborted) return tag(r || { error: 'upstream_timeout' }, k);
+      r = await once(c); n++;
+      if (!isRetryable(r)) return k === 0 ? tag(r, 0) : tag({ ...r, model: c.model, provider: c.id }, k);
     }
   }
-  return r;
+  return tag(r, chain.length - 1);
 }
 function retryAfterS(res) { const v = Number(res?.headers?.get?.('retry-after')); return Number.isFinite(v) && v > 0 ? v : null; }
 

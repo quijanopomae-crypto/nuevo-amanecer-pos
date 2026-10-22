@@ -2467,6 +2467,30 @@ export async function readBounded(request, max) {
 // ¿Trae el campo "image" con algo distinto de null? Sin JSON.parse; un "image" escrito DENTRO del texto va escapado (\") y no cuenta.
 export function hasImageField(raw) { return /(^|[^\\])"image"\s*:\s*(?!null\b)/.test(String(raw)); }
 
+// ---------- Tiempos por paso (lentitud 22-10) ----------
+// Sin datos de clientes ni textos: solo milisegundos, proveedor, modelo, intentos, si hubo respaldo y cuántas sentencias fueron a la base.
+// Van en la respuesta final (timings), en una línea de consola «[asistente] tiempos {...}» y en la fila de bitácora del pedido si hay una.
+// db_stmts cuenta las sentencias de ESTE pedido desde chatCore (no cuenta la sesión de worker.js: +1). Con Turso cada una es un viaje HTTPS.
+export function countingDb(db, counter) {
+  if (!db || typeof db.prepare !== 'function') return db;
+  const wrap = (st) => new Proxy(st, { get(t, k) {
+    if (k === '__raw') return t;
+    if (k === 'bind') return (...v) => wrap(t.bind(...v));
+    const v = t[k];
+    if (typeof v !== 'function') return v;
+    if (k === 'first' || k === 'all' || k === 'run' || k === 'raw') return (...a) => { counter.n++; return v.apply(t, a); };
+    return v.bind(t);
+  } });
+  return new Proxy(db, { get(t, k) {
+    if (k === 'prepare') return (sql) => wrap(t.prepare(sql));
+    if (k === 'batch' && typeof t.batch === 'function') return (list) => { counter.n++; return t.batch((list || []).map((x) => (x && x.__raw) || x)); };
+    const v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+  } });
+}
+const TIMING_KEYS = Object.freeze(['ms_gates', 'ms_model1', 'ms_db', 'ms_model2', 'ms_total', 'provider', 'model', 'attempts', 'fallback', 'db_stmts', 'second_call']);
+export function timingFields(t) { const o = {}; for (const k of TIMING_KEYS) if (t[k] !== undefined) o[k] = t[k]; return o; }
+function logTimings(t) { try { console.log('[asistente] tiempos ' + JSON.stringify(timingFields(t))); } catch { /* nada */ } }
+
 export async function assistantChatRoute(request, env, auth, json, deps = {}) {
   const ctx = {}; let rej = null;
   // Respuesta en partes (stream:true en el cuerpo, sin cabeceras nuevas: CORS sigue igual). Todas las puertas van ANTES de abrir el
@@ -2494,6 +2518,9 @@ export async function assistantChatRoute(request, env, auth, json, deps = {}) {
 }
 async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (String(env?.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+  const clock = deps.clock || (() => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()));
+  const t0 = clock(), dbc = { n: 0 }, tm = {}; const ms = (a) => Math.max(0, Math.round(clock() - a));
+  if (deps.db) deps = { ...deps, db: countingDb(deps.db, dbc) };
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
   const role = deps.resolveRole ? await deps.resolveRole(auth) : await assistantAccess(deps.db, auth);
   ctxOut.role = role;
@@ -2562,6 +2589,9 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const up = new AbortController(); if (deps.sse && deps.sse.signal) linkAbort(up, deps.sse.signal);
   const cap = setTimeout(() => up.abort(), deps.maxStreamMs ?? SERVER_MAX_MS); ctxOut.stopCap = () => clearTimeout(cap);
   if (sse) sse.open();
+  tm.ms_gates = ms(t0); tm.provider = mode; tm.model = cfg.ok ? cfg.model : null; tm.attempts = 0; tm.fallback = false;
+  const noteCall = (r, key, a) => { tm[key] = ms(a); if (!r) return; tm.attempts += Number(r.attempts) || 0; if (r.fallback) { tm.fallback = true; if (r.provider) tm.provider = r.provider; if (r.model) tm.model = r.model; } };
+  const failTimes = () => { tm.ms_total = ms(t0); tm.db_stmts = dbc.n; logTimings(tm); return timingFields(tm); };
   let result, req = null; const bytes = [];
   if (mode === 'mock') {
     result = mockAssistantReply({ role, ctx, text: parsed.text, image: !!parsed.image });
@@ -2573,10 +2603,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   } else {
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image });
     bytes.push(payloadBytes(req));
+    const a1 = clock();
     result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
       : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+    noteCall(result, 'ms_model1', a1);
     if (emit && !result.error && !result.forbidden) emit.flush();
-    if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}) }, ERR_STATUS[result.error] || 502);
+    if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}), timings: failTimes() }, ERR_STATUS[result.error] || 502);
   }
   // Herramienta prohibida a mitad (empleado): lo que quedaba en la cola no sale, lo pintado se borra (reset) y va solo el mensaje simple.
   let preDropped = null;
@@ -2595,10 +2627,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
   // Compra con costos distintos a los del inventario: tarjetas APARTE «Actualizar costo» (product.update con PIN). La compra del POS no cambia el costo.
   const reader = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
+  let dbMs = 0; const timed = async (f) => { const a = clock(); try { return await f(); } finally { dbMs += clock() - a; } };
   // Sin control de inventario: fuera antes de firmar (y se vuelve a mirar al confirmar).
   let noStock = [], stockFailed = false;
   if (proposals.some((p) => p.type === 'ajuste' || p.type === 'compra') || dropped.some((d) => d.dropped === 'sin_control_stock')) {
-    const map = await stockControlMap(reader, ctx, proposalProductIds(proposals));
+    const map = await timed(() => stockControlMap(reader, ctx, proposalProductIds(proposals)));
     noStock = dropped.filter((d) => d.dropped === 'sin_control_stock' && d.nombre).map((d) => d.nombre);
     if (map.failed) stockFailed = dropStockCards(proposals, dropped) > 0; // falla la lectura: fuera compras y ajustes, con mensaje simple
     else noStock.push(...applyStockControl(proposals, dropped, map));
@@ -2615,7 +2648,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const consultas = [], toolMsgs = [];
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
   if (role !== 'owner') for (const p of proposals.filter((x) => x.type === 'documento')) {
-    let d; try { d = reader ? await employeeDocumentRows(reader, p.tipo) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
+    let d; try { d = reader ? await timed(() => employeeDocumentRows(reader, p.tipo)) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
     p.data = d.error ? { error: d.error } : { columnas: d.columnas, filas: d.filas, truncado: d.truncado };
     // Lista blanca: solo estos campos llegan al aparato del empleado (aunque el modelo mande costos, totales o inversión).
     // lista_pedido: producto, stock, cantidad_sugerida. lista_precios: producto, precio de venta.
@@ -2627,7 +2660,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   }
   for (const p of proposals.filter((x) => x.type === 'consulta').slice(0, 2)) {
     let r;
-    try { r = reader ? await runAssistantQuery(reader, p.query, now) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
+    try { r = reader ? await timed(() => runAssistantQuery(reader, p.query, now)) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
     if (role !== 'owner') r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null };
     consultas.push(p);
@@ -2652,8 +2685,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       bytes.push(payloadBytes(req2));
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
       if (emit) { emit.reset(); beat.start(); beat.tick(); }
+      const a2 = clock();
       const second = emit ? await callModelStream(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
         : await callModel(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+      noteCall(second, 'ms_model2', a2); tm.second_call = true;
       if (emit && !second.error) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);
     }
@@ -2673,16 +2708,21 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (stockFailed) reply = STOCK_READ_FAILED_TEXT + (proposals.length ? ' Las otras tarjetas sí se pueden revisar.' : '') + (notes.length ? ' ' + notes.join(' ') : '');
   if (!reply && proposals.length) reply = 'Listo. Revisa y pulsa Confirmar.';
   if (!reply) reply = 'No entendí bien. ¿Me lo dices de otra forma?';
-  // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos.
-  await (deps.audit || auditWrite)(deps.db, [...proposals.map((p) => ({ device_id: auth.principalId, role, tool: AUDIT_TOOL[p.type] || TYPE_TOOL[p.type] || p.type, type: p.type, outcome: 'proposed', card_id: p.id })),
-    ...dropped.map((d) => ({ device_id: auth.principalId, role, tool: d.tool, outcome: 'dropped:' + d.dropped }))]);
+  tm.ms_db = Math.round(dbMs); tm.db_stmts = dbc.n; tm.ms_total = ms(t0); // antes de la bitácora (su escritura: +1 sentencia)
+  const times = timingFields(tm); logTimings(tm);
+  // Auditoría (A20): una fila por llamada a herramienta. Sin textos ni argumentos. La primera fila lleva los tiempos del pedido (sin migración:
+  // va dentro de value_json de pos_settings). Un chat sin herramientas no escribe fila (solo la línea de consola y la respuesta).
+  const auditRows = [...proposals.map((p) => ({ device_id: auth.principalId, role, tool: AUDIT_TOOL[p.type] || TYPE_TOOL[p.type] || p.type, type: p.type, outcome: 'proposed', card_id: p.id })),
+    ...dropped.map((d) => ({ device_id: auth.principalId, role, tool: d.tool, outcome: 'dropped:' + d.dropped }))];
+  if (auditRows.length) auditRows[0].timings = times;
+  await (deps.audit || auditWrite)(deps.db, auditRows);
   // Turnos firmados para el historial del aparato (el celular los guarda tal cual y los devuelve con su firma).
   const cls = role === 'owner' ? 'owner' : 'empleado', userTurn = parsed.text || 'Foto';
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
   return json({ ok: true, mode, role, server_now: now, reply, cut: wasCut, turns, proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
-    payload_bytes: bytes, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
+    payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 
 // Tarjetas «Actualizar costo» a partir de una compra: solo filas con producto conocido, costo leído distinto (>1 %) y sin marcas de revisión.
