@@ -147,8 +147,10 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   const tipo = QUERY_TYPES.includes(args?.tipo) ? args.tipo : null;
   if (!tipo) return { error: 'bad_query' };
   const N = QUERY_LIMITS.topRows, M = QUERY_LIMITS.modelRows, base = { tipo, titulo: TITLES[tipo] };
+  // truncado: la lectura se cortó (lista larga). Lo usa el chat para NO contestar directo con texto (va la segunda llamada al modelo).
   if (['stock_producto', 'bajo_stock', 'sin_costo'].includes(tipo)) {
     const list = await reader.products(), note = list.truncated ? ' (lista larga: se revisaron los primeros ' + list.length + ')' : '';
+    if (list.truncated) base.truncado = true;
     if (tipo === 'stock_producto') {
       const hits = matchProducts(list, args.producto || '').slice(0, 5);
       if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };

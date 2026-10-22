@@ -44,7 +44,8 @@ test('a) servidor: herramienta antes de cualquier texto -> «status» enseguida 
   const bodies = [];
   const first = [[0, consulta('c1', 'stock_producto')], [0, delta({}, 'tool_calls')]];
   const second = [[260, delta({ content: 'Tiene 40 unidades de Arroz, ' })], [20, delta({ content: 'está bien de stock.' })], [0, delta({}, 'stop')]];
-  const r = await chat({ text: '¿cuánto arroz hay?', stream: true }, { fetch: dsSeq([first, second], bodies), reader: READER, statusEveryMs: 60 });
+  // (lentitud 22-10) pregunta que pide explicación: sigue la segunda llamada (la consulta simple se contesta directo, ver assistant-respuesta-directa)
+  const r = await chat({ text: '¿cuánto arroz hay y por qué?', stream: true }, { fetch: dsSeq([first, second], bodies), reader: READER, statusEveryMs: 60 });
   const e = await events(r);
   const kinds = e.map((x) => x.ev), firstText = kinds.indexOf('text'), fin = kinds.indexOf('final');
   assert.equal(kinds[0], 'open'); assert.ok(firstText > 0 && fin > firstText, kinds.join(','));
@@ -124,8 +125,8 @@ test('Bot 5: empleado en partes -> ni el modelo ni ningún trozo (status, text, 
   const bodies = [];
   const first = [[0, consulta('c1', 'stock_producto')], [0, delta({}, 'tool_calls')]];
   const second = [[30, delta({ content: 'Hay 40 unidades de Arroz.' })], [0, delta({}, 'stop')]];
-  const r = await chat({ text: '¿cuánto arroz hay?', stream: true, context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, costo: 777.77, stock: 40 }] } },
-    { role: 'empleado:consultas', fetch: dsSeq([first, second], bodies), reader: OWNER_READER, statusEveryMs: 50 });
+  const r = await chat({ text: '¿cuánto arroz hay? explícame', stream: true, context: { products: [{ id: 'A', nombre: 'Arroz', precio: 4, costo: 777.77, stock: 40 }] } },
+    { role: 'empleado:consultas', fetch: dsSeq([first, second], bodies), reader: OWNER_READER, statusEveryMs: 50 }); // (lentitud 22-10) con segunda llamada
   assert.match(r.headers.get('content-type'), /event-stream/);
   const raw = await new Response(r.body).text();
   for (const c of CANARY) { assert.ok(!raw.includes(c), 'trozo con dato del Admin ' + c); for (const b of bodies) assert.ok(!b.includes(c), 'al modelo llegó ' + c); }

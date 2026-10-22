@@ -2467,6 +2467,24 @@ export async function readBounded(request, max) {
 // ¿Trae el campo "image" con algo distinto de null? Sin JSON.parse; un "image" escrito DENTRO del texto va escapado (\") y no cuenta.
 export function hasImageField(raw) { return /(^|[^\\])"image"\s*:\s*(?!null\b)/.test(String(raw)); }
 
+// ---------- Respuesta directa de una consulta simple (lentitud 22-10) ----------
+// Conservador: solo UNA consulta, sin texto del modelo, sin otras herramientas ni descartes, sin foto, lectura sin error ni corte,
+// con texto armado, y un mensaje corto que no pide explicación, consejo ni comparación. Si no, va la segunda llamada como siempre.
+export const DIRECT_ASK_MAX = 160;
+const EXPLAIN_ASK = /por\s*qu[eé]|explica|expl[ií]came|recomien|consej|suger|compar|anali[sz]|deber[ií]a|conviene|mejor|peor|qu[eé] hago|c[oó]mo (?:hago|puedo|mejor)|tendencia|resum|y (?:adem[aá]s|tambi[eé]n)|predic|estrategia/i;
+export function directQueryReply({ result, proposals, dropped, consultas, queryCut, text, image }) {
+  if (image || queryCut || (dropped && dropped.length)) return null;
+  if (String(result?.content || '').trim()) return null;
+  const calls = result?.calls || [];
+  if (calls.length !== 1 || calls[0]?.name !== 'consultar') return null;
+  if (proposals.length !== 1 || proposals[0].type !== 'consulta' || consultas.length !== 1) return null;
+  const r = consultas[0].result;
+  if (!r || r.error || typeof r.texto !== 'string' || !r.texto.trim()) return null;
+  const t = String(text || '');
+  if (!t.trim() || t.length > DIRECT_ASK_MAX || EXPLAIN_ASK.test(t)) return null;
+  return r.texto;
+}
+
 // ---------- Tiempos por paso (lentitud 22-10) ----------
 // Sin datos de clientes ni textos: solo milisegundos, proveedor, modelo, intentos, si hubo respaldo y cuántas sentencias fueron a la base.
 // Van en la respuesta final (timings), en una línea de consola «[asistente] tiempos {...}» y en la fila de bitácora del pedido si hay una.
@@ -2645,7 +2663,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     return json(FORBIDDEN_DOCUMENT, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
-  const consultas = [], toolMsgs = [];
+  const consultas = [], toolMsgs = []; let queryCut = false;
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
   if (role !== 'owner') for (const p of proposals.filter((x) => x.type === 'documento')) {
     let d; try { d = reader ? await timed(() => employeeDocumentRows(reader, p.tipo)) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
@@ -2661,6 +2679,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   for (const p of proposals.filter((x) => x.type === 'consulta').slice(0, 2)) {
     let r;
     try { r = reader ? await timed(() => runAssistantQuery(reader, p.query, now)) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
+    if (r && r.truncado) queryCut = true;
     if (role !== 'owner') r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null };
     consultas.push(p);
@@ -2679,7 +2698,14 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');
     // Segunda llamada (sin herramientas) para explicar el resumen en palabras sencillas. Si falla, queda el texto armado con los números.
-    if (mode !== 'mock' && toolMsgs.length) {
+    // Respuesta directa (lentitud 22-10): pedido simple = el modelo SOLO pidió una consulta (sin texto, sin otra herramienta ni tarjeta
+    // descartada), la lectura salió bien, completa y con texto armado, y la persona no pidió explicación ni consejo. Entonces la respuesta
+    // es el texto de la consulta (por el MISMO filtro del rol que la respuesta del modelo) y NO hay segunda llamada: ~1 llamada menos.
+    const direct = directQueryReply({ result, proposals, dropped, consultas, queryCut, text: parsed.text, image: parsed.image });
+    if (direct && mode !== 'mock') {
+      reply = finalText(direct); tm.second_call = false;
+      if (emit) { emit.reset(); emit.push(reply); emit.flush(); }
+    } else if (mode !== 'mock' && toolMsgs.length) {
       const calls = consultas.map((c) => ({ id: c._call.id, type: 'function', function: { name: 'consultar', arguments: typeof c._call.arguments === 'string' ? c._call.arguments : JSON.stringify(c._call.arguments || {}) } }));
       const req2 = { model: DEEPSEEK_MODEL, messages: [...req.messages, { role: 'assistant', content: result.content || '', tool_calls: calls }, ...toolMsgs], thinking: { type: 'disabled' }, temperature: 0.2, max_tokens: 350, stream: false };
       bytes.push(payloadBytes(req2));
