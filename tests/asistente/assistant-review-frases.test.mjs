@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 
 const UI = readFileSync('POS/js/modules/asistente/asistente-ui.js', 'utf8');
 const pick = (re) => { const m = UI.match(re); assert.ok(m, String(re)); return m[0]; };
-const src = [pick(/  var REVIEW_RE = \/.*\/i;\n/), pick(/  var REVIEW_ASK_RE = \/.*\/;\n/), pick(/  function reviewNorm\(t\) \{.*\n/), pick(/  function isReview\(t\) \{.*\n/)].join('');
+const src = [pick(/  var REVIEW_RE = \/.*\/i;\n/), pick(/  var REVIEW_ASK_RE = \/.*\/;\n/), pick(/  function reviewNorm\(t\) \{.*\n/), pick(/  var REVIEW_BIZ_RE = \/.*\/;\n/), pick(/  function isReview\(t\) \{.*\n/)].join('');
 const isReview = new Function(src + 'return isReview;')();
 
 const POSITIVOS = [
@@ -19,6 +19,8 @@ const POSITIVOS = [
   'como esta el pos', '¿Cómo está el sistema?', 'como va la app', 'cómo anda el punto de venta', 'el sistema está bien?',
   'revisa la app', 'revisa el sistema', 'revisame el sistema', 'chequea el pos', 'verifica la aplicacion',
   'informe de errores', 'reporte de errores', 'reporte de fallas', 'resumen de errores', 'reporte', 'el reporte', 'informe', 'dame el reporte', 'hazme un reporte',
+  // errores del POS / sistema / app siguen abriendo la revisión
+  'errores del sistema', 'hay errores en el sistema?', 'errores en la app', 'fallas del pos', 'hubo un error en el punto de venta',
   // las frases de siempre siguen funcionando
   'Revisión del punto de venta', 'revisa el POS', 'errores del punto de venta', 'hazme el informe', 'Hágame un informe', 'informe del POS',
 ];
@@ -27,6 +29,10 @@ const NEGATIVOS = [
   'dame el reporte de ventas', 'reporte de ventas de hoy', 'informe de compras', 'productos de lenta rotación', 'qué productos se venden lento',
   'clientes con deuda', 'quién me debe', 'registra una venta de 2 arroz', 'que hago si sale error al imprimir', 'hola', 'gracias',
   'correcciones guardadas', 'lee una boleta', 'que paso con el pedido de ayer', 'error en la venta del cliente',
+  // errores en DATOS del negocio: van al chat (revisión de PR #933)
+  '¿algún error en los precios?', 'algun error en los precios', 'hay errores en el stock?', 'errores en el stock', 'falla en la caja', 'hay una falla en la caja',
+  'hubo un error en la venta del cliente', 'error en el precio del arroz', 'errores en el inventario', 'hay errores en las ventas de hoy', 'error en la compra de ayer',
+  'errores en los créditos', 'error en la boleta', 'algo anda mal en la caja', 'que esta mal en el stock', 'problemas con el proveedor', 'erores en los precios',
 ];
 
 test('Admin: preguntas naturales sobre errores, fallas, lentitud y estado del sistema abren la revisión', () => {
