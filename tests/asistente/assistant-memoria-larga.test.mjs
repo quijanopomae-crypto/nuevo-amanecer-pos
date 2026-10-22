@@ -170,3 +170,25 @@ test('boletaNote: solo números, fecha y serie; sin descripciones ni códigos de
   assert.equal(n, '[Foto leída] boleta de proveedor: 2 productos, 3.5 unidades, total S/ 45.50, comprobante B001-00045, fecha 2026-10-20.');
   assert.ok(!/comprobante/.test(boletaNote({ numero: 'Juan 987654321', items: [] })));
 });
+
+// Unión con #953 (memoria de boleta): el detalle de la factura va SOLO en <boleta_recordada> (invoice_memory firmado del Admin);
+// la nota del historial es la marca corta (sin nombres). Un solo camino para las líneas: no se repiten en el historial.
+test('boleta (#953) + nota (#946): las líneas van solo en <boleta_recordada>; la nota del turno no repite nombres', async () => {
+  const lineas = [{ nombre: 'GALLETAS PRUEBA 16X6X32 GR', cantidad: 2, costo_unitario: 60 }];
+  const img = 'data:image/jpeg;base64,' + Buffer.from('foto').toString('base64');
+  const first = await chat({ text: 'Lee esta factura', image: img }, { message: { content: '', tool_calls: [tool('leer_factura_compra', { proveedor: 'Proveedor Prueba', documento: 'B001-123', lineas })] } });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(typeof first.body.invoice_memory, 'string');
+  assert.ok(first.body.nota && first.body.nota.startsWith(NOTA_PREFIX));
+  assert.match(first.body.nota, /B001-123/); assert.doesNotMatch(first.body.nota, /GALLETAS|Proveedor Prueba/);
+  assert.match(first.body.turns[0].content, /\[Foto leída\]/);
+  const history = [{ role: 'user', content: first.body.turns[0].content }, { role: 'assistant', content: first.body.turns[1].content }];
+  const next = await chat({ text: 'Cuántas cajas eran', history, invoice_memory: first.body.invoice_memory });
+  const msgs = next.sent[0].messages, all = JSON.stringify(msgs);
+  assert.equal(msgs.filter((m) => String(m.content).startsWith('<boleta_recordada>')).length, 1);
+  assert.equal((all.match(/GALLETAS PRUEBA/g) || []).length, 1, 'las líneas salen una sola vez (en la boleta recordada)');
+  assert.match(all, /\[Foto leída\]/);
+  // El empleado no recibe boleta recordada; su nota sí queda en su turno firmado.
+  const emp = await chat({ text: 'Lee esta foto', image: img }, { auth: EMP, role: 'empleado' });
+  assert.equal(emp.body.invoice_memory, undefined);
+});
