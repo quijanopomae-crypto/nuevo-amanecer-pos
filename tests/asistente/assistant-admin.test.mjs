@@ -67,7 +67,7 @@ test('chat con consulta: segunda llamada a DeepSeek solo con el resumen (mensaje
   const many = Array.from({ length: 400 }, (_, i) => ({ id: 'X' + i, nombre: 'Producto inventado ' + i, precio: 2, costo: i % 3 ? 1 : 0, stock: i % 5, min: 3, controla: true }));
   const reader = memoryReader({ ...readerData, products: many });
   const cap = [];
-  const r = await chat({ text: '¿Qué me falta reponer?' }, { reader, fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: 'bajo_stock' }, 'call_1')] }, { content: 'Te faltan varios; los más urgentes están en la tabla.' }], cap) }, env({ DEEPSEEK_API_KEY: 'k' }));
+  const r = await chat({ text: '¿Qué me falta reponer? Explícame por qué.' }, { reader, fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: 'bajo_stock' }, 'call_1')] }, { content: 'Te faltan varios; los más urgentes están en la tabla.' }], cap) }, env({ DEEPSEEK_API_KEY: 'k' }));
   assert.equal(r.status, 200); assert.equal(cap.length, 2);
   const toolMsg = cap[1].messages.find((m) => m.role === 'tool');
   assert.equal(toolMsg.tool_call_id, 'call_1'); assert.ok(toolMsg.content.length <= 2000);
