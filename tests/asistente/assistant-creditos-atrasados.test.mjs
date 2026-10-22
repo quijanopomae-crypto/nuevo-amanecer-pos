@@ -122,6 +122,11 @@ test('cuotas: solo cuenta lo pendiente de las cuotas vencidas; lo pagado cubre p
   // abonó S/ 40: la cuota 1 está pagada y de la 2 faltan S/ 20
   assert.deepEqual(overduePart({ saldo: 50, original: 90, vence: '2026-11-01', cuotas }, '2026-10-22'), { soles: 20, desde: '2026-10-01' });
   assert.equal(overduePart({ saldo: 30, original: 90, cuotas }, '2026-10-22'), null);
+  // saldo inicial que no coincide con las cuotas: lo pagado se calcula con la suma de cuotas (90 - 50 = 40), no con 120 - 50
+  assert.deepEqual(overduePart({ saldo: 50, original: 120, vence: '2026-11-01', cuotas }, '2026-10-22'), { soles: 20, desde: '2026-10-01' });
+  // saldo mayor que las cuotas: lo de fuera cuenta desde el vencimiento del crédito si ya pasó
+  assert.deepEqual(overduePart({ saldo: 100, vence: '2026-08-15', cuotas }, '2026-10-22'), { soles: 70, desde: '2026-08-15' });
+  assert.deepEqual(overduePart({ saldo: 100, vence: '2026-12-01', cuotas }, '2026-10-22'), { soles: 60, desde: '2026-09-01' });
   assert.deepEqual(parseCuotas('roto'), []); assert.deepEqual(parseCuotas('[]'), []);
 });
 

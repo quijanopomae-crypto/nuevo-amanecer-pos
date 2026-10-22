@@ -139,10 +139,14 @@ export function overduePart(c, today) {
   const saldo = Number(c.saldo) || 0; if (!(saldo > 0)) return null;
   const cuotas = Array.isArray(c.cuotas) ? c.cuotas : [];
   if (cuotas.length) {
-    const sum = cuotas.reduce((s, q) => s + q.soles, 0), orig = Number(c.original) > 0 ? Number(c.original) : sum;
-    let pagado = Math.max(0, orig - saldo), soles = 0, desde = null;
+    // Lo pagado sale de las propias cuotas (suma de cuotas - saldo), no del saldo inicial, que puede no coincidir.
+    const sum = cuotas.reduce((s, q) => s + q.soles, 0);
+    let pagado = Math.max(0, sum - saldo), soles = 0, desde = null;
     for (const q of cuotas) { const pend = Math.max(0, q.soles - pagado); pagado = Math.max(0, pagado - q.soles);
       if (pend > 0 && q.vence < today) { soles += pend; if (!desde) desde = q.vence; } }
+    // Saldo que no cubre ninguna cuota (cuotas que suman menos que el saldo): cuenta desde el vencimiento del crédito, si ya pasó.
+    const fuera = r2(saldo - sum), due = dueDay(c.vence);
+    if (fuera > 0 && due && due < today) { soles += fuera; if (!desde || due < desde) desde = due; }
     soles = Math.min(saldo, r2(soles)); return soles > 0 ? { soles, desde } : null;
   }
   const due = dueDay(c.vence); if (!due) return undefined; // sin fecha
