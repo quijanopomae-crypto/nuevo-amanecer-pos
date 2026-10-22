@@ -124,3 +124,87 @@ test('lectura cortada (ventas o líneas): avisa en el informe y marca truncado',
   assert.equal(ok.truncado, false); assert.doesNotMatch(ok.report, /no se pudo leer todo/);
   assert.match(readFileSync('tools/cloudflare-lab/src/pos-assistant-queries.js', 'utf8'), /out\.truncated = !!\(sales\.truncated \|\| items\.truncated\)/);
 });
+
+const KEY = { ...ENV, OHMYAGENT_API_KEY: 'clave-prueba-ohmyagent' };
+const okModel = (sent) => async (u, init) => { sent.push(String(init?.body || '')); return jsonR({ choices: [{ message: { content: 'Revise producto #12.' } }], usage: { prompt_tokens: 5, completion_tokens: 5 } }); };
+
+test('la nota de corte también llega a la IA', async () => {
+  const base = memoryReader(DATA), sent = [];
+  const rd = { ...base, async saleLines(p) { const l = await base.saleLines(p); l.truncated = true; return l; } };
+  const d = await (await belowCostRoute(req(), KEY, OWNER, jsonR, { resolveRole: owner, reader: rd, store: createMemoryUsageStore(), now: () => NOW, fetch: okModel(sent) })).json();
+  assert.equal(sent.length, 1); assert.match(sent[0], /no se pudo leer todo/);
+  assert.equal(d.source, 'modelo'); assert.match(d.report, /no se pudo leer todo/);
+});
+
+test('período pedido por el Admin: hoy, ayer, semana, mes, mes pasado y últimos N días (hora de Lima)', () => {
+  const P = (b) => { const p = belowCostPeriod(b, NOW); return [p.desde, p.hasta]; };
+  assert.deepEqual(P({ periodo: 'hoy' }), ['2026-10-22', '2026-10-22']);
+  assert.deepEqual(P({ periodo: 'ayer' }), ['2026-10-21', '2026-10-21']);
+  assert.deepEqual(P({ periodo: 'semana' }), ['2026-10-19', '2026-10-22']);
+  assert.deepEqual(P({ periodo: 'mes' }), ['2026-10-01', '2026-10-22']);
+  assert.deepEqual(P({ periodo: 'mes_pasado' }), ['2026-09-01', '2026-09-30']);
+  assert.deepEqual(P({ dias: 7 }), ['2026-10-16', '2026-10-22']);
+  assert.deepEqual(P({ dias: 500 }), ['2026-07-23', '2026-10-22']);
+  // El aparato traduce lo que escribió el Admin.
+  const src = UI.match(/function belowPeriod\(text\) \{[\s\S]*?\n  \}\n/)[0];
+  const belowPeriod = new Function(src + '; return belowPeriod;')();
+  assert.deepEqual(belowPeriod('Ventas bajo costo de hoy'), { periodo: 'hoy' });
+  assert.deepEqual(belowPeriod('¿vendí bajo costo este mes?'), { periodo: 'mes' });
+  assert.deepEqual(belowPeriod('pérdidas del mes pasado'), { periodo: 'mes_pasado' });
+  assert.deepEqual(belowPeriod('bajo costo en los últimos 7 días'), { dias: 7 });
+  assert.deepEqual(belowPeriod('Ventas bajo costo'), {});
+  assert.match(UI, /post\('\/auth\/assistant\/below-cost', belowPeriod\(text\)/);
+});
+
+test('el informe al modelo pasa por redactText; los «producto #código» largos se conservan', async () => {
+  const sent = [];
+  const data = { products: [{ id: '77554433', nombre: 'Gaseosa', costo: 5, precio: 4 }], sales: [], saleItems: [] };
+  await belowCostRoute(req(), KEY, OWNER, jsonR, { resolveRole: owner, reader: memoryReader(data), store: createMemoryUsageStore(), now: () => NOW, fetch: okModel(sent) });
+  assert.equal(sent.length, 1); assert.match(sent[0], /producto #77554433/);
+  assert.match(SRC, /return redactText\(out\)/);
+});
+
+test('precio vacío no cuenta como venta a S/ 0; códigos raros se cuentan', () => {
+  const prods = [{ id: '12', nombre: 'Arroz', costo: 20, precio: 24 }, { id: 'con espacio', nombre: 'Raro', costo: 5, precio: 6 }];
+  const s = findBelowCost(prods, [
+    { product_id: '12', quantity: 1, unit_cents: null, line_cents: null },
+    { product_id: '12', quantity: 1, unit_cents: '', line_cents: '' },
+    { product_id: '12', quantity: 2, unit_cents: null, line_cents: 3000 },   // 15 c/u: sí está bajo costo
+    { product_id: 'otro raro!', quantity: 1, unit_cents: 100, line_cents: 100 }
+  ]);
+  assert.equal(s.sin_precio, 2); assert.equal(s.codigos_raros, 2);
+  assert.deepEqual(s.ventas.map((g) => [g.id, g.ventas, g.precio_min, g.perdida]), [['12', 1, 15, 10]]);
+  const r = buildBelowCostReport(s, belowCostPeriod({}, NOW));
+  assert.match(r, /Sin precio guardado: 2 líneas/); assert.match(r, /Con código no válido: 2 productos/);
+  assert.ok(!r.includes('Raro') && !r.includes('con espacio'));
+});
+
+test('lector de memoria: precio vacío queda en null, no en 0', async () => {
+  const R = memoryReader({ products: [], sales: [{ sale_id: 's1', created_at: '2026-10-21T15:00:00Z', total_cents: 0 }], saleItems: [{ sale_id: 's1', product_id: '12', quantity: 1, unit_price_cents: null, line_total_cents: null }] });
+  const [l] = await R.saleLines(belowCostPeriod({}, NOW)); assert.equal(l.unit_cents, null); assert.equal(l.line_cents, null);
+});
+
+test('si el modelo falla: informe fijo con nombres en pantalla (status 200)', async () => {
+  for (const fetchFn of [async () => { throw new Error('caído'); }, async () => jsonR({ error: 'x' }, 500), async () => jsonR({ choices: [{ message: { content: '' } }] })]) {
+    const r = await belowCostRoute(req(), KEY, OWNER, jsonR, { resolveRole: owner, reader: memoryReader(DATA), store: createMemoryUsageStore(), now: () => NOW, fetch: fetchFn });
+    const d = await r.json(); assert.equal(r.status, 200); assert.equal(d.source, 'resumen'); assert.match(d.report, /• Arroz Costeño 5 kg: 1 venta/);
+  }
+});
+
+test('cupo agotado: no se llama al modelo y sale el informe fijo', async () => {
+  let called = 0;
+  const r = await belowCostRoute(req(), { ...KEY, ASSISTANT_PER_DAY: '0' }, OWNER, jsonR, { resolveRole: owner, reader: memoryReader(DATA), store: createMemoryUsageStore(), now: () => NOW, fetch: async () => { called++; } });
+  const d = await r.json(); assert.equal(called, 0); assert.equal(r.status, 200); assert.equal(d.source, 'resumen');
+});
+
+test('producto con nombre de cliente («Encargo Sra. Rosa Quispe»): no llega a la IA, sí a la pantalla del Admin', async () => {
+  const sent = [];
+  const data = { products: [{ id: '45', nombre: 'Encargo Sra. Rosa Quispe', costo: 10, precio: 12 }],
+    sales: [{ sale_id: 's1', created_at: '2026-10-21T15:00:00Z', metodo: 'efectivo', total_cents: 800 }],
+    saleItems: [{ sale_id: 's1', product_id: '45', quantity: 1, unit_price_cents: 800, line_total_cents: 800 }] };
+  const fetchFn = async (u, init) => { sent.push(String(init?.body || '')); return jsonR({ choices: [{ message: { content: 'Revise producto #45.' } }] }); };
+  const d = await (await belowCostRoute(req(), KEY, OWNER, jsonR, { resolveRole: owner, reader: memoryReader(data), store: createMemoryUsageStore(), now: () => NOW, fetch: fetchFn })).json();
+  assert.equal(sent.length, 1); for (const n of ['Rosa', 'Quispe', 'Encargo']) assert.ok(!sent[0].includes(n), n);
+  assert.match(sent[0], /producto #45/);
+  assert.equal(d.report, 'Revise Encargo Sra. Rosa Quispe.'); assert.equal(d.ventas[0].nombre, 'Encargo Sra. Rosa Quispe');
+});

@@ -712,13 +712,24 @@
       list.appendChild(r); });
     if (list.childNodes.length) m.appendChild(list);
   }
+  // Período que pidió el Admin; las fechas las calcula el servidor con la hora de Lima. Sin período: los últimos 30 días.
+  function belowPeriod(text) {
+    var t = String(text || '').toLowerCase(), m = t.match(/[uú]ltimos?\s+(\d{1,2})\s+d[ií]as/);
+    if (m) return { dias: Number(m[1]) };
+    if (/\bhoy\b/.test(t)) return { periodo: 'hoy' };
+    if (/\bayer\b/.test(t)) return { periodo: 'ayer' };
+    if (/(esta|la)\s+semana/.test(t)) return { periodo: 'semana' };
+    if (/mes\s+(pasado|anterior)/.test(t)) return { periodo: 'mes_pasado' };
+    if (/(este|del|el)\s+mes\b/.test(t)) return { periodo: 'mes' };
+    return {};
+  }
   async function belowCost(text) {
     var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true;
     addMsg('u', text); inputEl.value = ''; busy = true; sendBtn.disabled = true; photoBtn.disabled = true; setState('pensando');
     var thinking = addMsg('a', 'Revisando ventas y costos'); thinking.classList.add('na-asst-thinking');
     var mine = panelEl;
     try {
-      var d = await post('/auth/assistant/below-cost', {}, null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
+      var d = await post('/auth/assistant/below-cost', belowPeriod(text), null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
       if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
       var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review'); belowRows(b, d);
       var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);

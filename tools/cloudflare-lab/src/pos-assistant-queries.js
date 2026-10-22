@@ -13,6 +13,8 @@ const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos po
   top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', compras_recientes: 'Compras recientes' };
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
+// Precio vacío (null, '' o ausente) queda en null: Number(null) daría 0 y contaría como una venta a S/ 0.
+const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function limaToday(nowMs) { return new Date(nowMs - 5 * 3600 * 1000).toISOString().slice(0, 10); }
@@ -90,7 +92,7 @@ export function canonicalReader(db) {
     async saleLines(p) {
       const [sales, items] = await Promise.all([salesIn(p), all('sale-items')]), ids = new Set(sales.map((s) => String(s.sale_id))), out = [];
       for (const it of items) { if (!ids.has(String(it.sale_id))) continue;
-        out.push({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: Number(it.unit_price_cents), line_cents: Number(it.line_total_cents) || 0, created_at: it.created_at || null }); }
+        out.push({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null }); }
       out.truncated = !!(sales.truncated || items.truncated); return out; // las lecturas van por id, no por fecha: si se cortan, faltan ventas
     },
     async purchases(n) {
@@ -114,7 +116,7 @@ export function memoryReader(data) {
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
     async saleLines(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id));
-      return (data.saleItems || []).filter((x) => ids.has(x.sale_id)).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: Number(it.unit_price_cents ?? (it.quantity ? it.line_total_cents / it.quantity : NaN)), line_cents: Number(it.line_total_cents) || 0, created_at: it.created_at || null })); },
+      return (data.saleItems || []).filter((x) => ids.has(x.sale_id)).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null })); },
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
   };
 }
