@@ -103,3 +103,24 @@ test('permisos: candado sigue cerrado y la pantalla es solo dueño', () => {
   assert.equal(P.canAccessScreen('empleado', 'pageDashboardCompras'), false);
   assert.equal(P.canAccessScreen('', 'pageDashboardCompras'), false);
 });
+
+test('candado falla cerrado (faltante, error o distinto de false)', () => {
+  const owner = { isOwner: () => true };
+  const c = vm.createContext({ module: { exports: {} } }); vm.runInContext(permissionsSource, c);
+  assert.equal(load({ NA_ROLES: owner }).featureOpen(), false);
+  assert.equal(load({ NA_ROLES: owner, NA_PERMISSIONS: {} }).featureOpen(), false);
+  assert.equal(load({ NA_ROLES: owner, NA_PERMISSIONS: { featureLocked() { throw new Error('x'); } } }).featureOpen(), false);
+  assert.equal(load({ NA_ROLES: owner, NA_PERMISSIONS: { featureLocked: () => 0 } }).featureOpen(), false);
+  assert.equal(load({ NA_ROLES: owner, NA_PERMISSIONS: { featureLocked: () => undefined } }).featureOpen(), false);
+  assert.equal(load({ NA_ROLES: owner, NA_PERMISSIONS: c.NA_PERMISSIONS }).featureOpen(), false, 'candado real en true');
+  assert.equal(load({ NA_ROLES: owner, NA_PERMISSIONS: { featureLocked: id => id !== 'dashboard-compras' } }).featureOpen(), true);
+});
+
+test('candado real cerrado: el dueño no pide /auth/purchases ni renderiza', async () => {
+  const c = vm.createContext({ module: { exports: {} } }); vm.runInContext(permissionsSource, c);
+  const calls = [];
+  const DCx = load({ NA_ROLES: { isOwner: () => true, api: async p => { calls.push(p); return { purchases: [] }; } }, NA_PERMISSIONS: c.NA_PERMISSIONS, NuevoAmanecerCanonical: { enabled: () => true } });
+  DCx.render();
+  await DCx.refresh(); await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(calls, []);
+});

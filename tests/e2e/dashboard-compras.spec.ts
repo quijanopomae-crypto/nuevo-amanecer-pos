@@ -10,7 +10,7 @@ const PURCHASES = [
   { purchase_id: 'c1', status: 'aplicada', supplier: 'Proveedor Sintético SAC', created_at: CUR + '-02T15:00:00Z', lines: [{ line_number: 0, product_id: 'dc-1', quantity: 100, unit_cost_cents: 1234 }, { line_number: 1, product_id: 'dc-2', quantity: 10, unit_cost_cents: 500 }] },
   { purchase_id: 'c2', status: 'aplicada', supplier: 'Distribuidora Prueba', created_at: PREV + '-10T15:00:00Z', lines: [{ line_number: 0, product_id: 'dc-1', quantity: 50, unit_cost_cents: 1200 }] }
 ];
-async function rolePage(page: Page, role: 'owner' | 'empleado' | '') {
+async function rolePage(page: Page, role: 'owner' | 'empleado' | '', openLock = false) {
   let purchaseReads = 0;
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
@@ -34,6 +34,12 @@ async function rolePage(page: Page, role: 'owner' | 'empleado' | '') {
     const w = window as any, roles = w.NA_ROLES;
     w.NA_ROLES = new Proxy(roles, { get: (t, k) => k === 'role' ? '' : k === 'isOwner' ? () => false : t[k] });
   });
+  // Abre el candado solo en este navegador de prueba; pos-permissions.js sigue en true.
+  if (openLock) await page.evaluate(() => {
+    const w = window as any, P = w.NA_PERMISSIONS;
+    // Copia (el original está congelado): solo cambia featureLocked para esta función.
+    w.NA_PERMISSIONS = Object.freeze({ ...P, featureLocked: (id: string) => id === 'dashboard-compras' ? false : P.featureLocked(id) });
+  });
   await page.evaluate(() => {
     const w = window as any;
     // Modo nube simulado: la fuente es GET /auth/purchases.
@@ -51,7 +57,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
   const theme = dark ? 'oscuro' : 'claro';
   test(`dueño ve el dashboard de compras en ${width}px, tema ${theme}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await rolePage(page, 'owner');
+    await rolePage(page, 'owner', true);
     await page.evaluate(dark => (window as any).NA_THEME.setMode(dark ? 'noche' : 'claro'), dark);
     const before = await snapshot(page);
     expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.FEATURE_LOCKS['dashboard-compras'])).toBe(true);
@@ -106,6 +112,20 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     expect(net.reads()).toBe(0);
   });
 }
+
+test('candado real cerrado: el dueño no ve nada y no se piden compras', async ({ page }) => {
+  const net = await rolePage(page, 'owner');
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('dashboard-compras'))).toBe(true);
+  await page.evaluate(() => (window as any).goPage('pageDashboardCompras'));
+  await page.evaluate(() => (window as any).NA_DASHBOARD_COMPRAS.render());
+  await page.evaluate(() => (window as any).NA_DASHBOARD_COMPRAS.refresh());
+  await page.waitForTimeout(300);
+  await expect(page.locator('#pageDashboardCompras .dc-card')).toHaveCount(0);
+  await expect(page.locator('#pageDashboardCompras .dc-section')).toHaveCount(0);
+  const text = (await page.locator('#pageDashboardCompras').textContent()) || '';
+  for (const leak of ['S/ 1,284.00', 'Proveedor Sintético', 'Distribuidora', 'Aceite sintético']) expect(text).not.toContain(leak);
+  expect(net.reads()).toBe(0);
+});
 
 test('rol desconocido: falla cerrado', async ({ page }) => {
   const net = await rolePage(page, '');

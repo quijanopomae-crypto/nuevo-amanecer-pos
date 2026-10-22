@@ -6,6 +6,7 @@
   'use strict';
   var PAGE_ID = 'pageDashboardCompras';
   var READ_PATH = '/auth/purchases';
+  var FEATURE_ID = 'dashboard-compras';
   function text(value) { return value == null ? '' : String(value).trim(); }
   function normalize(value) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function quantity(value) {
@@ -148,7 +149,11 @@
   function policyReady() {
     try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.canAccessScreen === 'function' && p.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
   }
-  function screenAllowed() { return isOwner() && policyReady(); }
+  // Candado de la función: falla cerrado si no hay NA_PERMISSIONS, no hay featureLocked, da error o no devuelve false.
+  function featureOpen() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(FEATURE_ID) === false); } catch (_) { return false; }
+  }
+  function screenAllowed() { return featureOpen() && isOwner() && policyReady(); }
   function cloudEnabled() {
     try { var api = root.NuevoAmanecerCanonical; return !!(api && typeof api.enabled === 'function' && api.enabled()); } catch (_) { return false; }
   }
@@ -275,7 +280,7 @@
     if (typeof root.addEventListener === 'function') root.addEventListener('na:role', update);
     update();
   }
-  root.NA_DASHBOARD_COMPRAS = Object.freeze({ calculate: calculate, collectLines: collectLines, months: months, limaMonth: limaMonth, formatMoney: formatMoney, formatChange: formatChange, isOwner: isOwner, render: render, refresh: refresh });
+  root.NA_DASHBOARD_COMPRAS = Object.freeze({ calculate: calculate, collectLines: collectLines, months: months, limaMonth: limaMonth, formatMoney: formatMoney, formatChange: formatChange, isOwner: isOwner, featureOpen: featureOpen, render: render, refresh: refresh });
   if (typeof module !== 'undefined' && module.exports) module.exports = root.NA_DASHBOARD_COMPRAS;
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init);
