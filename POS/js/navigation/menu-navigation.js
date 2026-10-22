@@ -333,6 +333,11 @@
     return button;
   }
 
+  // Permisos por empleado (#924): pantallas de la lista cerrada con su casilla prendida. Falla cerrada.
+  function employeeMayScreen(pageId) {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.mayScreen === 'function' && e.mayScreen(pageId) === true); } catch (_) { return false; }
+  }
+
   function canShowDrawerPage(pageId) {
     var roles = root.NA_ROLES;
     // Unknown or unconfirmed identities get the restricted menu; isOwner() already requires a confirmed cloud role.
@@ -340,7 +345,7 @@
     if (pageId === 'pageMenu') return true;
     // The shared table (POS/js/config/pos-permissions.js, PR #668) plugs in here automatically.
     if (root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function') {
-      return root.NA_PERMISSIONS.canAccessScreen(role, pageId);
+      return root.NA_PERMISSIONS.canAccessScreen(role, pageId) || employeeMayScreen(pageId);
     }
     return (pageId !== 'pageConfig' && pageId !== 'pageGastos' && pageId !== 'pageProximamente' && pageId !== 'pageValorizacion' && pageId !== 'pageRotacionAbc' && pageId !== 'pageClientesFrecuencia' && pageId !== 'pageReporteProductosVencer' && pageId !== 'pageKardex' && pageId !== 'pageVentasStock' && pageId !== 'pageReporteArqueo' && pageId !== 'pageReporteDeuda' && pageId !== 'pageCodigosDuplicados' && pageId !== 'pageHistorialCompras' && pageId !== 'pageClienteHistorial') || role === 'owner';
   }
