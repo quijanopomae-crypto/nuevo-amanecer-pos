@@ -44,6 +44,9 @@
     return out.sort(function (a, b) { return catLabel(a).localeCompare(catLabel(b), 'es'); });
   }
   function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
+  // Candado propio: si está cerrado, no existe o la consulta falla, no se muestra nada (falla cerrado).
+  function unlocked() { try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('catalogo-desde-pos') === false); } catch (_) { return false; } }
+  function allowed() { return unlocked() && isOwner(); }
   function catalog() { try { return typeof productos !== 'undefined' && Array.isArray(productos) ? productos : []; } catch (_) { return []; } } // eslint-disable-line no-undef
   function businessName() { try { return typeof _naGetBusiness === 'function' ? text((_naGetBusiness() || {}).nombre).trim() : ''; } catch (_) { return ''; } } // eslint-disable-line no-undef
 
@@ -103,7 +106,7 @@
     });
   }
   function open() {
-    if (!isOwner()) return;
+    if (!allowed()) return;
     if (!dlg) build();
     var sel = dlg.querySelector('[data-cat-filter]'); sel.textContent = '';
     var all = el('option', null, 'Todas'); all.value = ALL; sel.appendChild(all);
@@ -130,9 +133,8 @@
   }
   // Va en «Más opciones» de Inventario (igual que «Códigos duplicados»): no cambia el ancho de la cabecera.
   function mountButton() {
+    var btn = doc.getElementById('invCatalogoBtn'); if (!allowed()) { if (btn) btn.remove(); return; }
     var host = doc.querySelector('#pageInventario .inv-secondary-menu') || doc.querySelector('#pageInventario .ocr-purchase-actions'); if (!host) return;
-    var btn = doc.getElementById('invCatalogoBtn');
-    if (!isOwner()) { if (btn) btn.remove(); return; }
     if (!btn) { btn = el('button', 'top-btn-nuevo', 'Generar catálogo'); btn.id = 'invCatalogoBtn'; btn.type = 'button'; btn.title = 'Catálogo para imprimir o guardar como PDF'; btn.addEventListener('click', open); }
     if (btn.parentNode !== host) host.appendChild(btn);
   }

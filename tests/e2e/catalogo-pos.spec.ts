@@ -1,6 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
 
-async function rolePage(page: Page, role: 'owner' | 'empleado', width: number, dark: boolean) {
+// Abre el candado 'catalogo-desde-pos' solo en el navegador de prueba (no toca pos-permissions.js).
+async function openLock(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as any; let real: any;
+    Object.defineProperty(w, 'NA_PERMISSIONS', { configurable: true, get: () => real, set: v => {
+      real = v && { ...v, featureLocked: (id: string) => id === 'catalogo-desde-pos' ? false : v.featureLocked(id) };
+    } });
+  });
+}
+
+async function rolePage(page: Page, role: 'owner' | 'empleado', width: number, dark: boolean, unlock = true) {
+  if (unlock) await openLock(page);
   await page.setViewportSize({ width, height: 900 });
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
@@ -69,6 +80,16 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
 
 test('el empleado no ve el botón de catálogo', async ({ page }) => {
   await rolePage(page, 'empleado', 1280, false);
+  await page.locator('#pageInventario .inv-secondary>summary').click();
+  await expect(page.locator('#pageInventario .inv-secondary-menu')).toBeVisible();
+  await expect(page.locator('#invCatalogoBtn')).toHaveCount(0);
+  await page.evaluate(() => (window as any).NA_CATALOGO_POS.open());
+  await expect(page.locator('#naCatalogoPos')).toHaveCount(0);
+});
+
+test('con el candado real cerrado, el dueño no ve el botón ni abre el catálogo', async ({ page }) => {
+  await rolePage(page, 'owner', 1280, false, false);
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('catalogo-desde-pos'))).toBe(true);
   await page.locator('#pageInventario .inv-secondary>summary').click();
   await expect(page.locator('#pageInventario .inv-secondary-menu')).toBeVisible();
   await expect(page.locator('#invCatalogoBtn')).toHaveCount(0);

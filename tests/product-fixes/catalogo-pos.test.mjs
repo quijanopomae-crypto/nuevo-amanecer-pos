@@ -60,3 +60,51 @@ test('se carga en index.html y en la caché del service worker', () => {
   assert.match(sw, /'\.\/js\/modules\/catalogo-pos\.js'/);
   assert.match(sw, /'\.\/css\/catalogo-pos\.css'/);
 });
+
+function fakeDoc() {
+  const host = { children: [], appendChild(n) { n.parentNode = host; host.children.push(n); } };
+  const made = [];
+  const node = tag => ({ tag, attrs: {}, children: [], classList: { add() {}, remove() {}, contains: () => false },
+    setAttribute(k, v) { this.attrs[k] = v; }, addEventListener() {}, append(...n) { this.children.push(...n); },
+    appendChild(n) { this.children.push(n); }, querySelector: () => null, remove() { host.children = host.children.filter(c => c !== this); } });
+  const doc = { readyState: 'complete', body: node('body'), made,
+    createElement: t => { const n = node(t); made.push(n); return n; },
+    getElementById: id => host.children.find(c => c.id === id) || null,
+    querySelector: sel => (sel.includes('inv-secondary-menu') ? host : null),
+    addEventListener() {} };
+  return { doc, host };
+}
+function load({ lock, owner = true }) {
+  const { doc, host } = fakeDoc();
+  const ctx = vm.createContext({ document: doc, addEventListener() {}, NA_ROLES: { isOwner: () => owner },
+    NA_PERMISSIONS: { featureLocked: id => { if (lock === 'throw') throw new Error('x'); return id === 'catalogo-desde-pos' ? lock : true; } } });
+  ctx.window = ctx; vm.runInContext(source.replace(/typeof window !== 'undefined' \? window : globalThis/, 'window'), ctx);
+  return { ctx, doc, host };
+}
+test('candado cerrado: el dueño no ve botón ni abre el catálogo', () => {
+  const { ctx, doc, host } = load({ lock: true });
+  assert.equal(host.children.length, 0);
+  const before = doc.made.length; ctx.NA_CATALOGO_POS.open(); assert.equal(doc.made.length, before);
+});
+test('candado abierto y dueño: aparece «Generar catálogo»', () => {
+  const { host } = load({ lock: false });
+  assert.equal(host.children.length, 1);
+  assert.equal(host.children[0].id, 'invCatalogoBtn');
+  assert.equal(host.children[0].textContent, 'Generar catálogo');
+});
+test('candado abierto pero empleado: no hay botón', () => {
+  assert.equal(load({ lock: false, owner: false }).host.children.length, 0);
+});
+test('si revisar el candado falla, queda cerrado', () => {
+  const { ctx, doc, host } = load({ lock: 'throw' });
+  assert.equal(host.children.length, 0);
+  const before = doc.made.length; ctx.NA_CATALOGO_POS.open(); assert.equal(doc.made.length, before);
+  assert.equal(load({ lock: false, owner: true }).host.children.length, 1);
+});
+test('sin NA_PERMISSIONS queda cerrado y el registro mantiene pending', () => {
+  const { doc } = fakeDoc(); const ctx = vm.createContext({ document: doc, addEventListener() {}, NA_ROLES: { isOwner: () => true } });
+  ctx.window = ctx; vm.runInContext(source.replace(/typeof window !== 'undefined' \? window : globalThis/, 'window'), ctx);
+  assert.equal(doc.made.length, 0);
+  assert.match(source, /featureLocked\('catalogo-desde-pos'\) === false/);
+  assert.match(readFileSync('POS/js/modules/proximamente-registry.js', 'utf8'), /id: 'catalogo-desde-pos'[^\n]*pending: true/);
+});
