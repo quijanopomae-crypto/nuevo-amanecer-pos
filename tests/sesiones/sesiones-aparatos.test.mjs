@@ -72,3 +72,29 @@ test('solo textContent y sin almacenamiento propio', () => {
   assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|indexedDB/);
 });
+
+test('cerrar sesión con PIN: pasa por askPin, reintenta si el PIN es incorrecto y no actúa si se cancela', async () => {
+  const stub = () => ({ textContent: '', hidden: false, replaceChildren() {}, appendChild() {}, append() {} });
+  const nodes = { '[data-sa-list]': stub(), '[data-sa-status]': stub(), '[data-sa-controls]': stub() };
+  const page = { classList: { contains: () => true }, querySelector: s => nodes[s] || null, addEventListener() {} };
+  const document = { getElementById: id => (id === 'pageSesionesAparatos' ? page : null), createElement: () => ({ ...stub(), setAttribute() {}, addEventListener() {}, classList: { add() {} } }), readyState: 'complete', addEventListener() {} };
+  function setup(answers) {
+    const calls = [];
+    const roles = {
+      isOwner: () => true, pinSet: true, message: e => e.message,
+      api: async (path, body) => { calls.push([path, body && body.pin]); if (path === '/auth/devices/revoke' && body.pin !== '2468') { const e = new Error('owner_pin_invalid'); throw e; } return { devices: [] }; },
+      askPin: async (title, detail, cb) => { for (const pin of answers) { if (pin === null) return null; const r = await cb(pin); if (r && r.ok) return r.value; if (r && r.stop) return null; } return null; }
+    };
+    const S = load({ NA_PERMISSIONS: OPEN, NA_ROLES: roles, document, _naConfirmAction: async () => true, toast() {}, setTimeout, addEventListener() {} });
+    return { S, calls };
+  }
+  const ok = setup(['1111', '2468']);
+  assert.equal(await ok.S.revoke({ id: 'session:a', label: 'Caja 2', current: false }), true);
+  assert.deepEqual(ok.calls.filter(c => c[0] === '/auth/devices/revoke').map(c => c[1]), ['1111', '2468']);
+  const cancel = setup([null]);
+  assert.equal(await cancel.S.revoke({ id: 'session:a', label: 'Caja 2', current: false }), false);
+  assert.equal(cancel.calls.filter(c => c[0] === '/auth/devices/revoke').length, 0);
+  const self = setup(['2468']);
+  assert.equal(await self.S.revoke({ id: 'session:me', label: 'Este', current: true }), false);
+  assert.equal(self.calls.filter(c => c[0] === '/auth/devices/revoke').length, 0);
+});
