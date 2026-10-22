@@ -886,6 +886,8 @@
   // o «un cliente».
   var CLI_CODE_RE = /^[A-Za-z0-9_-]{1,40}$/;
   var NAME_STOP = { de: 1, del: 1, la: 1, las: 1, los: 1, el: 1, y: 1, e: 1, san: 1, santa: 1, sr: 1, sra: 1, don: 1, dona: 1 };
+  // palabras de clientes genéricos («Cliente Varios», «Público General», «SIN DOC»): sueltas no son un nombre y no se tapan
+  var SINGLE_STOP = { cliente: 1, clientes: 1, varios: 1, varias: 1, general: 1, publico: 1, consumidor: 1, final: 1, sin: 1, doc: 1, documento: 1, nombre: 1, otro: 1, otros: 1, casa: 1, tienda: 1 };
   function foldCh(ch) { return ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function foldStr(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
   function nameTokens(v) { return foldStr(v).split(/[^a-z0-9ñ]+/).filter(Boolean); }
@@ -942,13 +944,20 @@
         if (t.length >= 3) for (var j = 0; j + 1 < t.length; j++) { var w1 = t[j], w2 = t[j + 1];
           if (!NAME_STOP[w1] && !NAME_STOP[w2] && !(prodWords[w1] && prodWords[w2]) && (w1 + w2).length >= 6) add(w1 + ' ' + w2, ref); }
         // nombre o apellido SUELTO: se tapa salvo «de/san…», 1-2 letras o números (dentro de un producto/proveedor ya está reservado arriba)
-        if (t.length >= 2) t.forEach(function (w) { if (!NAME_STOP[w] && w.length >= 3 && !/^\d+$/.test(w)) add(w, ref, false, true); });
+        if (t.length >= 2) t.forEach(function (w) { if (!NAME_STOP[w] && !SINGLE_STOP[w] && w.length >= 3 && !/^\d+$/.test(w)) add(w, ref, false, true); });
       }
       var dir = nameTokens(c.dir || c.direccion || c.address); if (dir.length && dir.join('').length >= 6) add(dir.join(' '), undefined, true);
     });
     var keys = Object.keys(phrases).filter(function (ph) { return f.indexOf(ph.split(' ')[0]) >= 0; }).sort(function (a, b) { return b.length - a.length; });
     var taken = new Array(f.length).fill(0), hits = [];
     function phraseRe(ph) { return new RegExp('(?<![a-z0-9ñ])' + ph.split(' ').map(function (w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('[^a-z0-9ñ]{1,3}') + '(?![a-z0-9ñ])', 'g'); }
+    // 0) CÓDIGOS (prueba en CANON 22-10: «cliente SIN-DOC-MISAEL» salía «cliente #SIN-DOC-un cliente»): nunca se tapa dentro de «#código»,
+    // de un código en MAYÚSCULAS/números con guion o guion bajo («SIN-DOC-MISAEL», «CLI_0042») ni de un código de cliente de la lista
+    var ids = {}; list.forEach(function (c) { if (c && c.id != null && String(c.id).length >= 2) ids[String(c.id).toLowerCase()] = 1; });
+    var codeRe = /#[A-Za-z0-9_-]+|[A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+(?:[-_][A-Za-z0-9ÁÉÍÓÚÑáéíóúñ]+)+/g, cm;
+    while ((cm = codeRe.exec(src))) { var cw = cm[0], ca = cm.index, cb = ca + cw.length;
+      if (cw[0] === '#' || ids[cw.toLowerCase()] || /\d/.test(cw) || cw === cw.toUpperCase()) for (var fx = 0; fx < f.length; fx++) if (map[fx] >= ca && map[fx] < cb) taken[fx] = 2; }
+    ids = null;
     // 1) nombres de producto que están en el texto: ese tramo queda reservado (un cliente nunca se tapa dentro de un producto)
     Object.keys(prodNames).filter(function (ph) { return f.indexOf(ph.split(' ')[0]) >= 0; }).sort(function (a, b) { return b.length - a.length; }).forEach(function (ph) {
       var re = phraseRe(ph), m; while ((m = re.exec(f))) { for (var x = m.index; x < m.index + m[0].length; x++) taken[x] = 2; } });

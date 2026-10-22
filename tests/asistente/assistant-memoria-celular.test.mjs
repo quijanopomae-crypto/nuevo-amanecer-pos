@@ -197,3 +197,54 @@ test('«Pensando…» con la burbuja ya abierta (status «pensando» de #962) y 
   assert.match(UI, /onStatus: searching \}\);/);
   assert.match(CSS, /\.na-asst-hold\{display:block;/);
 });
+
+test('códigos: el tapado nunca entra en un código de cliente («SIN-DOC-MISAEL», «#c7», «CLI_0042»); el nombre suelto fuera del código sí', () => {
+  const CLI = [{ id: 'SIN-DOC-MISAEL', nombre: 'Misael Torres' }, { id: 'c7', nombre: 'Juan Pérez' }, { id: 'CLI_0042', nombre: 'Rosa Quispe' }, { id: 'c1', nombre: 'Cliente Varios' }];
+  const m = (t) => C.maskCustomers(t, CLI, []).text;
+  assert.equal(m('¿Cuánto debe el cliente SIN-DOC-MISAEL?'), '¿Cuánto debe el cliente SIN-DOC-MISAEL?', 'antes: «cliente #SIN-DOC-un cliente»');
+  assert.equal(m('¿cuánto debe sin-doc-misael?'), '¿cuánto debe sin-doc-misael?', 'el código de la lista, aunque venga en minúsculas');
+  assert.equal(m('cliente #c7 y cliente #SIN-DOC-MISAEL'), 'cliente #c7 y cliente #SIN-DOC-MISAEL');
+  assert.equal(m('deuda de CLI_0042 y de JUAN-PEREZ-01'), 'deuda de CLI_0042 y de JUAN-PEREZ-01', 'códigos en MAYÚSCULAS/números con guion o guion bajo');
+  assert.equal(m('Misael pagó; Torres también'), 'cliente #SIN-DOC-MISAEL pagó; cliente #SIN-DOC-MISAEL también', 'fuera del código, el nombre sí se tapa');
+  assert.equal(m('el cliente Juan'), 'el cliente cliente #c7', '«cliente» (de «Cliente Varios») suelto no es un nombre');
+  assert.equal(m('Cliente Varios compró'), 'cliente #c1 compró');
+});
+
+test('venta bajo costo: «perdiendo plata», «pierdo plata», «estoy perdiendo» (sin importar tildes ni mayúsculas)', () => {
+  const re = new RegExp(UI.match(/var BELOW_RE = \/(.+)\/i;/)[1], 'i');
+  for (const t of ['¿Estoy perdiendo plata?', 'creo que pierdo plata con el arroz', 'ESTOY PERDIENDO', 'estóy perdiendo', 'Perdiendo dinero en ventas', 'pierdo la plata', 'Ventas bajo costo', 'vendimos a pérdida'])
+    assert.ok(re.test(t), t);
+  for (const t of ['¿Cuánto vendimos hoy?', 'perdí el recibo', 'estoy perdido en la pantalla', 'Productos sin costo', 'perdiendo la señal']) assert.ok(!re.test(t), t);
+  assert.match(UI, /isOwnerAccess\(\) && BELOW_RE\.test\(text\)/, 'sigue solo para el Admin');
+});
+
+test('tarjetas: «Mostrando N de M» nunca con plata (no «8 de 650» ni «1 de 36»); cada tarjeta va con SU respuesta', () => {
+  const a = UI.indexOf('  function qCount(r)'), b = UI.indexOf('\n', a);
+  const qCount = new Function(UI.slice(a, b) + '\nreturn qCount;')();
+  const h0 = UI.indexOf('  function cardHtml(p) {'), h1 = UI.indexOf('  function cardSig(p)');
+  const Cs = { esc: (x) => String(x == null ? '' : x) };
+  const cardHtml = new Function('C', 'qCount', 'CUSTOMER_DOCS', 'cliLabel', UI.slice(h0, h1) + '\nreturn cardHtml;')(Cs, qCount, [], (x) => x);
+  const rows = (n) => Array.from({ length: n }, (_, i) => ['p' + i, i + 0.5]);
+  const card = (tipo, n, extra) => cardHtml({ type: 'consulta', result: Object.assign({ tipo, titulo: tipo, columnas: ['a', 'b'], filas: rows(n) }, extra) });
+  for (const [tipo, n, extra] of [['ventas_dia', 8, { total: 650 }], ['top_productos', 8, { total: 650 }], ['caja_abierta', 1, { total: 36 }], ['compras_recientes', 1, { total: 36 }],
+    ['deudas_clientes', 8, { total: 650, clientes: 8 }], ['bajo_stock', 8, { total: 650.5 }], ['creditos_atrasados', 1, { total: 36.2, total_soles: 36 }]])
+    assert.doesNotMatch(card(tipo, n, extra), /Mostrando/, tipo + ' total=' + extra.total);
+  assert.match(card('bajo_stock', 8, { total: 650 }), /Mostrando 8 de 650\./, 'con cuenta de filas sí');
+  assert.match(card('deudas_clientes', 8, { total: 999.9, clientes: 36 }), /Mostrando 8 de 36\./, 'deudas: cuenta clientes, no soles');
+  // anclado: tarjetas del turno 1 bajo la respuesta 1 aunque el turno 2 ya esté en pantalla; la misma tabla de solo lectura no se repite
+  class N { constructor(cls) { this.className = cls; this.parentNode = null; this.dataset = {}; } get nextSibling() { const k = this.parentNode ? this.parentNode.kids : []; return k[k.indexOf(this) + 1] || null; } querySelector() { return null; } querySelectorAll() { return []; } }
+  const msgsEl = { kids: [], appendChild(n) { n.parentNode = this; this.kids.push(n); return n; }, insertBefore(n, r) { n.parentNode = this; this.kids.splice(this.kids.indexOf(r), 0, n); return n; },
+    querySelectorAll() { return this.kids.filter((k) => k.className === 'na-asst-card'); } };
+  const s0 = UI.indexOf('  function cardSig(p)'), s1 = UI.indexOf('  var cardAnchor = null;'), e1 = UI.indexOf('    if (cardAnchor) cardAnchor = c;', s1);
+  let n = 0;
+  const env = new Function('msgsEl', 'gate', 'el', 'cardHtml', 'shownSigs', 'S',
+    UI.slice(s0, s1) + UI.slice(s1, e1) + '    if (cardAnchor) cardAnchor = c; return c; }\nreturn { addCard: addCard, setAnchor: function (x) { cardAnchor = x; }, turn: function (t) { turnNo = t; } };\nvar turnNo = 0;')(
+    msgsEl, { add: () => 'k' + (++n) }, (t, cls) => new N(cls), (p) => p.title || '', {});
+  const A = msgsEl.appendChild(new N('na-asst-msg a')); env.turn(1); env.setAnchor(A);
+  const q = (t) => ({ type: 'consulta', title: t, result: { tipo: 'bajo_stock', titulo: t, filas: [[t, 1]] } });
+  const c1 = env.addCard(q('stock'), 'x'), c2 = env.addCard({ type: 'pasos', title: 'ir', pasos: ['a'] }, 'x'); env.setAnchor(null);
+  const B = msgsEl.appendChild(new N('na-asst-msg a')); env.turn(2); env.setAnchor(B);
+  assert.equal(env.addCard(q('stock'), 'y'), null, 'la misma tabla de solo lectura del turno 1 no se repite');
+  const c3 = env.addCard(q('ventas'), 'y'); env.setAnchor(null);
+  assert.deepEqual(msgsEl.kids, [A, c1, c2, B, c3], 'cada tarjeta debajo de su respuesta, en orden');
+});

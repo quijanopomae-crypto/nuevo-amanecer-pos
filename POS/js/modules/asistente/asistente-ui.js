@@ -795,7 +795,7 @@
   }
   // ---------- «Ventas bajo costo» (solo Admin) ----------
   // Solo lectura: el servidor compara lo cobrado con el costo actual y arma el informe. Aquí solo se muestra (texto, sin tablas HTML).
-  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b/i;
+  var BELOW_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
   function belowRows(m, d) {
     var list = el('div', 'na-asst-below');
     (d.ventas || []).slice(0, 50).forEach(function (g) { if (!g) return; var r = el('div', 'na-asst-below-row');
