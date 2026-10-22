@@ -465,3 +465,5 @@ input.na-asst-bol-learned { background: #ecfdf5; border-color: #10b981; }
 .na-asst-bol-actions .na-asst-ok { background: #16a34a; color: #fff; border-color: #16a34a; }
 .na-asst-bol-actions .na-asst-bol-dup { background: #fee2e2; color: #991b1b; border: 2px solid #b91c1c; }
 .na-asst-cli { display: inline; padding: 0; border: 0; background: none; color: #1d4ed8; text-decoration: underline; font: inherit; cursor: pointer; min-height: 0; }
+.na-asst-below { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 0.92em; }
+.na-asst-below-row { padding: 4px 6px; border-left: 3px solid #b91c1c; background: rgba(185, 28, 28, 0.06); border-radius: 4px; }
