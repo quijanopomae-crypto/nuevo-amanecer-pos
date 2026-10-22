@@ -672,11 +672,54 @@
   // Lo pide el Admin (chip o texto) o se ofrece al abrir el panel si hay errores NUEVOS guardados en este aparato (aviso con botón; el
   // informe nunca se pide solo). Se manda el resumen LOCAL (asistente-loader.js) pasado por el redactor del asistente; el servidor lo
   // vuelve a limpiar, arma el informe y no guarda nada. Empleado: nunca se manda (y el servidor responde 403 review_admin_only).
-  var REVIEW_RE = /revisi[oó]n del (?:punto de venta|pos)\b|\brevis(?:a|e|ar)\s+(?:el\s+)?(?:punto de venta|pos)\b|\berrores del (?:punto de venta|pos)\b/i;
+  var REVIEW_RE = /revisi[oó]n del (?:punto de venta|pos)\b|\brevis(?:a|e|ar)\s+(?:el\s+)?(?:punto de venta|pos)\b|\berrores del (?:punto de venta|pos)\b|\b(?:hazme|h[aá]game|haz|dame|d[eé]me|arma|genera|quiero|ver)\s+(?:el|un|mi)\s+informe\b|\binforme del (?:punto de venta|pos)\b/i;
+  // Cliente: SOLO su código interno (el id que ya tiene en la lista de clientes del POS) y la acción. Nunca nombre, DNI ni montos.
+  var CLI_RE = /^[A-Za-z0-9_-]{1,40}$/;
+  function cliPart(x) { return x && x.cli != null && CLI_RE.test(String(x.cli)) ? { cli: String(x.cli), accion: String(x.accion || 'cliente').slice(0, 30) } : {}; }
   function reviewData() {
     var R = root.NA_ASISTENTE_REVISION, raw = R && R.data ? R.data() : { errors: [], usage: {} };
-    return { errors: (raw.errors || []).slice(-200).map(function (x) { return { kind: x.kind, msg: C.redactText(String(x.msg || '')).slice(0, 160), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }; }), usage: raw.usage || {} };
+    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: C.redactText(String(x.msg || '')).slice(0, 160), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
+      usage: raw.usage || {},
+      slow: (raw.slow || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, name: C.redactText(String(x.name || '')).slice(0, 80), count: x.count || 1, ms_avg: x.ms_avg || 0, ms_max: x.ms_max || 0, last: x.last || null }, cliPart(x)); }),
+      ocr: raw.ocr ? { reads: raw.ocr.reads || 0, fails: raw.ocr.fails || 0, timeouts: raw.ocr.timeouts || 0, ms_sum: raw.ocr.ms_sum || 0, ms_max: raw.ocr.ms_max || 0, confirmed: raw.ocr.confirmed || 0, corrections: raw.ocr.corrections || 0 } : null };
   }
+  // «cliente #código» del informe -> enlace que muestra el nombre buscado EN ESTE APARATO y abre al cliente. El nombre nunca sale del aparato.
+  function linkCustomers(node, codes) {
+    var R = root.NA_ASISTENTE_REVISION; if (!node || !codes || !codes.length || !R || !R.customerName) return 0;
+    var ok = {}; codes.forEach(function (c) { if (CLI_RE.test(String(c))) ok[String(c)] = 1; });
+    var re = /cliente #([A-Za-z0-9_-]{1,40})/g, n = 0, walk = [], tw = doc.createTreeWalker ? doc.createTreeWalker(node, 4) : null;
+    if (tw) { while (tw.nextNode()) walk.push(tw.currentNode); } else (function rec(x) { (x.childNodes || []).forEach(function (c) { if (c.nodeType === 3) walk.push(c); else rec(c); }); })(node);
+    walk.forEach(function (t) { var v = t.nodeValue || '', last = 0, m, frag = null; re.lastIndex = 0;
+      while ((m = re.exec(v))) { if (!ok[m[1]]) continue; frag = frag || doc.createDocumentFragment();
+        if (m.index > last) frag.appendChild(doc.createTextNode(v.slice(last, m.index)));
+        var code = m[1], name = R.customerName(code), a = el('button', 'na-asst-cli'); a.type = 'button'; a.dataset.cli = code;
+        a.textContent = 'cliente #' + code + (name ? ' (' + name + ')' : ''); a.title = name ? 'Abrir a ' + name : 'Abrir cliente';
+        a.onclick = function (e) { e.preventDefault(); if (!R.openCustomer || !R.openCustomer(this.dataset.cli)) addMsg('a', 'No encontré ese cliente en este aparato.'); };
+        frag.appendChild(a); last = m.index + m[0].length; n++; }
+      if (frag) { if (last < v.length) frag.appendChild(doc.createTextNode(v.slice(last))); t.parentNode.replaceChild(frag, t); } });
+    return n;
+  }
+  // ---------- «Leer boleta con IA» (solo Admin, carga diferida de asistente-boleta.js) ----------
+  var BOLETA_RE = /\b(?:lee|leer|l[eé]ame|escanea|escanear)\s+(?:una\s+|la\s+|esta\s+)?boleta\b|\bboleta con ia\b/i;
+  var LEARNED_RE = /\bcorrecciones(?:\s+(?:guardadas|aprendidas|de (?:las )?boletas))?\b|\b(?:borrar|ver)\s+(?:lo\s+)?aprendido\b/i;
+  var boletaP = null, fileMode = '';
+  function loadBoleta() {
+    if (root.NA_ASISTENTE_BOLETA) return Promise.resolve(root.NA_ASISTENTE_BOLETA);
+    if (boletaP) return boletaP;
+    boletaP = new Promise(function (ok, ko) { var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-boleta.js';
+      sc.onload = function () { root.NA_ASISTENTE_BOLETA ? ok(root.NA_ASISTENTE_BOLETA) : ko(new Error('boleta')); }; sc.onerror = function () { boletaP = null; ko(new Error('boleta')); }; doc.body.appendChild(sc); });
+    return boletaP;
+  }
+  function boletaHost() {
+    return { doc: doc, post: post, productos: deps.productos, openPurchase: deps.openPurchase, fillPurchase: deps.fillPurchase,
+      card: function (cls) { var m = el('div', 'na-asst-msg a ' + cls); msgsEl.appendChild(m); scrollEnd(); return m; },
+      say: function (t) { addMsg('a', t); }, state: setState,
+      busy: function (on) { busy = !!on; if (sendBtn) sendBtn.disabled = on || root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = on || root.navigator.onLine === false; } };
+  }
+  function boletaPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('boleta_admin_only'); return; } fileMode = 'boleta'; fileEl.click(); }
+  function boletaStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; addMsg('u', 'Leer boleta con IA');
+    loadBoleta().then(function (B) { return B.start(f, boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir el lector de boletas. Inténtelo otra vez.'); setState('error', 2000); }); }
+  function learnedShow(text) { addMsg('u', text); inputEl.value = ''; loadBoleta().then(function (B) { B.showLearned(boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir las correcciones guardadas.'); }); }
   async function review(text) {
     var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true;
     var nt = panelEl.querySelector('.na-asst-revnote'); if (nt) nt.remove();
@@ -686,7 +729,7 @@
     try {
       var d = await post('/auth/assistant/review', reviewData(), null, C.TIMEOUTS.chat); if (panelEl !== mine) return; thinking.remove();
       if (!d.ok) { errMsg(d.error, null, [text, null]); setState('error', 2600); return; }
-      var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review');
+      var b = addMsg('a', String(d.report || '')); b.classList.add('na-asst-review'); linkCustomers(b, Array.isArray(d.customers) ? d.customers : []);
       var shown = C.stripDisplay ? C.stripDisplay(String(d.report || '')) : String(d.report || ''); announce(shown); if (mascot) mascot.speak(shown);
       var R = root.NA_ASISTENTE_REVISION; if (R && R.markSeen) R.markSeen();
       setState('hablando', 2500);
@@ -703,6 +746,8 @@
   async function send(text, image) {
     if (busy) return;
     text = String(text || '').trim(); if (!text && !image) return;
+    if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
+    if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !REVIEW_RE.test(text)) return learnedShow(text);
     if (!image && isOwnerAccess() && REVIEW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
@@ -813,7 +858,7 @@
   function closePanel() { panelEl.hidden = true; rootEl.hidden = false; place(); applyPause(); if (mascot) mascot.visible(false); }
 
   function chipsHtml() {
-    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
+    if (isOwnerAccess()) return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto vendimos hoy?">Ventas de hoy</button>' + (canPhoto() ? '<button type="button" data-photo>Leer factura (foto)</button>' : '') + (canPhoto() ? '<button type="button" data-boleta>Leer boleta con IA</button>' : '') + '<button type="button" data-q="Arma el documento de inventario valorizado">Inventario valorizado</button><button type="button" data-q="Revisión del punto de venta">Revisión del POS</button>';
     return '<button type="button" data-q="¿Qué me falta reponer?">¿Qué falta reponer?</button><button type="button" data-q="¿Cuánto stock hay de paracetamol?">Stock de un producto</button>' +
       (access && access.level === 'consultas_documentos' ? '<button type="button" data-q="Arma la lista de precios">Lista de precios</button><button type="button" data-q="Arma la lista de pedido para el proveedor">Lista de pedido</button>' : '');
   }
@@ -1166,10 +1211,11 @@
     panelEl.querySelector('.na-asst-x').onclick = closePanel;
     sendBtn.onclick = function () { send(inputEl.value); };
     inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(inputEl.value); } });
-    photoBtn.onclick = function () { fileEl.click(); };
-    fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0]; fileEl.value = ''; if (!f) return;
+    photoBtn.onclick = function () { fileMode = ''; fileEl.click(); };
+    fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0], mode = fileMode; fileMode = ''; fileEl.value = ''; if (!f) return;
+      if (mode === 'boleta') { if (isOwnerAccess()) boletaStart(f); return; }
       compress(f).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }).catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); };
-    panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) fileEl.click(); else send(b.dataset.q); });
+    panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else send(b.dataset.q); });
     shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón
     rootEl.addEventListener('pointerdown', wake, { passive: true }); panelEl.addEventListener('pointerdown', wake, { passive: true });

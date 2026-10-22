@@ -19,11 +19,12 @@ export const PROVIDERS = Object.freeze({
   together: { label: 'Together', kind: 'openai', base: 'https://api.together.xyz/v1', key: 'TOGETHER_API_KEY', model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', vision: re(/vision|-vl|llama-4/i) },
   anthropic: { label: 'Anthropic Claude', kind: 'anthropic', base: 'https://api.anthropic.com', key: 'ANTHROPIC_API_KEY', model: 'claude-haiku-4-5', vision: re(/^claude/i) },
   // (22-10) Proveedor PRINCIPAL que eligió el Admin: OhMyAgent (compatible OpenAI, gpt-6.1-sol, ~4 s). Respaldo: Routeway (next).
-  // Solo valores por defecto; la clave es secreto del Worker (OHMYAGENT_API_KEY), nunca en el código. Fotos apagadas salvo AI_VISION=1.
-  ohmyagent: { label: 'OhMyAgent', kind: 'openai', base: 'https://ohhmyagent.com/v1', key: 'OHMYAGENT_API_KEY', model: 'gpt-6.1-sol', next: 'routeway', vision: () => false },
+  // Solo valores por defecto; la clave es secreto del Worker (ASSISTANT_AI_API_KEY_4 u OHMYAGENT_API_KEY), nunca en el código. AI_VISION=0 apaga las fotos.
+  // (22-10, 3) gpt-6.1-sol LEE fotos (es el modelo de «Leer boleta con IA»). Clave: ASSISTANT_AI_API_KEY_4 (nombre que puso el Admin) u OHMYAGENT_API_KEY.
+  ohmyagent: { label: 'OhMyAgent', kind: 'openai', base: 'https://ohhmyagent.com/v1', key: 'OHMYAGENT_API_KEY', altKeys: ['ASSISTANT_AI_API_KEY_4'], model: 'gpt-6.1-sol', next: 'routeway', vision: re(/^gpt-(?:4o|4\.1|5|6)/i) },
   // (22-10) Routeway, compatible OpenAI (respaldo de OhMyAgent; también se puede usar solo). Solo valores por defecto; la clave va como secreto del Worker
-  // (ROUTEWAY_API_KEY, o AI_API_KEY con AI_PROVIDER=routeway), nunca en el código. Los modelos gratis dan 429 a menudo: ver callModel.
-  routeway: { label: 'Routeway', kind: 'openai', base: 'https://api.routeway.ai/v1', key: 'ROUTEWAY_API_KEY', model: 'gemma-4-26b-a4b-it-luminous:free', fallbacks: ['minimax-m2.7:free'], vision: () => false },
+  // (ASSISTANT_AI_API_KEY_2 o ROUTEWAY_API_KEY, o AI_API_KEY con AI_PROVIDER=routeway), nunca en el código. Los modelos gratis dan 429 a menudo: ver callModel.
+  routeway: { label: 'Routeway', kind: 'openai', base: 'https://api.routeway.ai/v1', key: 'ROUTEWAY_API_KEY', altKeys: ['ASSISTANT_AI_API_KEY_2'], model: 'gemma-4-26b-a4b-it-luminous:free', fallbacks: ['minimax-m2.7:free'], vision: () => false },
   gemini: { label: 'Google Gemini', kind: 'gemini', base: 'https://generativelanguage.googleapis.com', key: 'GEMINI_API_KEY', model: 'gemini-2.5-flash', vision: re(/^gemini/i) }
 });
 export const PROVIDER_IDS = Object.freeze(Object.keys(PROVIDERS));
@@ -33,7 +34,7 @@ const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,119}$/;
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
 function envProvider(env) { return str(env?.AI_PROVIDER).toLowerCase(); }
-function keyFor(env, id) { const p = PROVIDERS[id]; if (!p) return ''; return str(env?.[p.key]) || (envProvider(env) === id ? str(env?.AI_API_KEY) : ''); }
+function keyFor(env, id) { const p = PROVIDERS[id]; if (!p) return ''; return str(env?.[p.key]) || (p.altKeys || []).map((k) => str(env?.[k])).find(Boolean) || (envProvider(env) === id ? str(env?.AI_API_KEY) : ''); }
 // URL base: solo https, sin usuario/clave en la URL, sin ? ni #, y de la lista de hosts conocidos salvo AI_ALLOW_CUSTOM_BASE=1.
 export function checkBaseUrl(raw, env) {
   let u; try { u = new URL(raw); } catch { return null; }
@@ -78,7 +79,7 @@ export function configFor(env, id, model, noNext = false) {
 // el Admin, con Routeway de respaldo si también tiene clave), si no Routeway, si no DeepSeek con DEEPSEEK_API_KEY (como antes).
 export function resolveProvider(env, choice) {
   if (choice && PROVIDERS[choice.provider]) { const c = configFor(env, choice.provider, choice.model); if (c.ok) return { ...c, source: 'owner' }; }
-  const id = envProvider(env) || (str(env?.OHMYAGENT_API_KEY) ? 'ohmyagent' : str(env?.ROUTEWAY_API_KEY) ? 'routeway' : str(env?.DEEPSEEK_API_KEY) ? 'deepseek' : '');
+  const id = envProvider(env) || (keyFor(env, 'ohmyagent') ? 'ohmyagent' : str(env?.ROUTEWAY_API_KEY) ? 'routeway' : str(env?.DEEPSEEK_API_KEY) ? 'deepseek' : '');
   if (!id) return { ok: false, reason: 'no_provider' };
   const c = configFor(env, id); return c.ok ? { ...c, source: 'env' } : c;
 }

@@ -59,7 +59,14 @@
   // botones: pantalla + nombre de la función del botón o su id; nunca el texto del botón ni lo escrito). Todo queda en ESTE aparato
   // (localStorage na_asst_rev, últimos 200 errores agrupados, 300 contadores), limpio y cortado; solo sale cuando el Admin pide la
   // revisión al asistente (asistente-ui.js -> /auth/assistant/review). Aparato de empleado o sin rol: no se instala nada.
-  var REV_KEY = 'na_asst_rev', REV_MAX = 200, REV_USAGE_MAX = 300, rev = null, revTimer = 0, revOn = false;
+  // Lentitud y cuelgues: llamadas a la API de más de 3 s (solo la ruta), tareas largas (PerformanceObserver longtask, si existe), carga
+  // de pantallas de más de 1,5 s y un latido de 1 s que marca «cuelgue» cuando la pantalla visible se congela más de 5 s. Lectura de
+  // boletas: duración, fallas y correcciones (sin la foto ni los datos).
+  // Cliente: si el problema pasa justo después de tocar algo de un cliente (abono, crédito, editar cliente), se guarda SOLO el código
+  // interno que ya tiene ese cliente en la lista del POS (su id) y la acción. Nunca nombre, DNI, teléfono, dirección ni montos.
+  var REV_KEY = 'na_asst_rev', REV_MAX = 200, REV_USAGE_MAX = 300, REV_SLOW_MAX = 200, rev = null, revTimer = 0, revOn = false;
+  var REV_SLOW_API_MS = 3000, REV_SCREEN_MS = 1500, REV_TASK_MS = 1000, REV_HANG_MS = 5000, REV_BEAT_MS = 1000, REV_CTX_MS = 15000;
+  var revCtx = null, ltOn = false, ltUntil = 0, beatLast = 0, beatTimer = 0;
   function revClean(v, n) {
     var s = String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 600)
       .replace(/(https?:\/\/[^\s?#]*)[?#]\S*/gi, '$1').replace(/\b(?:bearer|basic)\s+\S+/gi, '[clave]')
@@ -71,50 +78,141 @@
   function revLoad() {
     if (rev) return rev; try { rev = JSON.parse(ls(REV_KEY) || 'null'); } catch (_) { rev = null; }
     if (!rev || rev.v !== 1 || !Array.isArray(rev.e) || !rev.u || typeof rev.u !== 'object') rev = { v: 1, e: [], u: {}, seen: null };
+    if (!Array.isArray(rev.s)) rev.s = [];
+    if (!rev.o || typeof rev.o !== 'object') rev.o = { reads: 0, fails: 0, timeouts: 0, ms_sum: 0, ms_max: 0, corrections: 0, confirmed: 0 };
     return rev;
   }
   function revFlush() { clearTimeout(revTimer); revTimer = 0; if (rev) ls(REV_KEY, JSON.stringify(rev)); }
   function revSave() { if (!revTimer) revTimer = setTimeout(revFlush, 3000); } // se escribe en tanda, nunca en cada evento
+  // ---- cliente: solo el código interno que YA existe en la lista de clientes del POS ----
+  function revClients() { try { return typeof clientes !== 'undefined' && Array.isArray(clientes) ? clientes : (Array.isArray(root.clientes) ? root.clientes : []); } catch (_) { return []; } }
+  function revCredits() { try { return typeof creditos !== 'undefined' && Array.isArray(creditos) ? creditos : (Array.isArray(root.creditos) ? root.creditos : []); } catch (_) { return []; } }
+  function revGlobal(n) { try { return n === 'cliCredId' ? (typeof cliCredId !== 'undefined' ? cliCredId : null) : n === 'pagoCredId' ? (typeof pagoCredId !== 'undefined' ? pagoCredId : null) : null; } catch (_) { return null; } }
+  function revClientCode(id) { // id -> código del cliente existente (o null). Nunca devuelve otra cosa que el id ya guardado.
+    if (id == null || id === '') return null; var c = revClients().find(function (x) { return x && String(x.id) === String(id); });
+    if (!c) return null; var code = String(c.id);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(code) || code === String(c.dni || '') || code === String(c.telefono || c.tel || '')) return null;
+    return code;
+  }
+  function revCreditClient(crId) { var cr = crId == null ? null : revCredits().find(function (x) { return x && String(x.id) === String(crId); }); return cr ? revClientCode(cr.cliId) : null; }
+  function revAction(fn) {
+    fn = String(fn || '');
+    if (/pago|abon|cobr/i.test(fn)) return 'abono';
+    if (/guardarCli|ModalCli|editar?Cli|editCli/i.test(fn)) return 'editar cliente';
+    if (/cred|fiad|linea/i.test(fn)) return 'venta a crédito';
+    if (/cli/i.test(fn)) return 'ver cliente';
+    return null;
+  }
+  function revCustomerCtx(e, fn, arg) { // al tocar un botón: ¿es de un cliente? -> { cli, accion, t }
+    var accion = revAction(fn); if (!accion) return null;
+    var cli = null;
+    if (accion === 'abono') cli = revCreditClient(arg) || revCreditClient(revGlobal('pagoCredId'));
+    if (!cli) cli = revClientCode(arg) || revClientCode(revGlobal('cliCredId'));
+    if (!cli && e && e.closest) { var h = e.closest('[data-cli-id],[data-client-id]'); if (h) cli = revClientCode(h.getAttribute('data-cli-id') || h.getAttribute('data-client-id')); }
+    return cli ? { cli: cli, accion: accion, t: Date.now() } : null;
+  }
+  function revCtxNow() { return revCtx && Date.now() - revCtx.t <= REV_CTX_MS ? revCtx : null; }
   function revError(kind, msg, src, status) {
-    var r = revLoad(), m = revClean(msg, 160), s = revClean(src, 80), now = new Date().toISOString(); status = status || 0;
+    var r = revLoad(), m = revClean(msg, 160), s = revClean(src, 80), now = new Date().toISOString(), cx = revCtxNow(), cli = cx ? cx.cli : null, ac = cx ? cx.accion : null; status = status || 0;
     if (!m && !s) return;
     for (var i = r.e.length - 1; i >= 0; i--) { var x = r.e[i];
-      if (x.kind === kind && x.msg === m && x.src === s && (x.status || 0) === status) { x.count++; x.last = now; r.e.splice(i, 1); r.e.push(x); revSave(); return; } }
-    r.e.push({ kind: kind, msg: m, src: s, status: status, count: 1, first: now, last: now });
+      if (x.kind === kind && x.msg === m && x.src === s && (x.status || 0) === status && (x.cli || null) === cli) { x.count++; x.last = now; r.e.splice(i, 1); r.e.push(x); revSave(); return; } }
+    var it = { kind: kind, msg: m, src: s, status: status, count: 1, first: now, last: now }; if (cli) { it.cli = cli; it.accion = ac; }
+    r.e.push(it);
     if (r.e.length > REV_MAX) r.e.splice(0, r.e.length - REV_MAX);
     revSave();
   }
+  function revSlow(kind, name, ms) { // kind: api | tarea | pantalla | cuelgue
+    var r = revLoad(), n = revClean(name, 80), now = new Date().toISOString(), cx = revCtxNow(), cli = cx ? cx.cli : null; ms = Math.max(0, Math.round(Number(ms) || 0));
+    if (!n) return;
+    for (var i = r.s.length - 1; i >= 0; i--) { var x = r.s[i];
+      if (x.kind === kind && x.name === n && (x.cli || null) === cli) { x.count++; x.ms_sum += ms; if (ms > x.ms_max) x.ms_max = ms; x.last = now; r.s.splice(i, 1); r.s.push(x); revSave(); return; } }
+    var it = { kind: kind, name: n, count: 1, ms_sum: ms, ms_max: ms, first: now, last: now }; if (cli) { it.cli = cli; it.accion = cx.accion; }
+    r.s.push(it); if (r.s.length > REV_SLOW_MAX) r.s.splice(0, r.s.length - REV_SLOW_MAX);
+    revSave();
+  }
+  function revScreen() { var p = root.document.querySelector ? root.document.querySelector('.page.active') : null; return p && p.id ? String(p.id).replace(/[^\w-]/g, '').slice(0, 30) : 'otro'; }
   function revFile(u) { var s = String(u || ''); try { var x = new URL(s, root.location.href); s = x.origin === root.location.origin ? x.pathname : x.host + x.pathname; } catch (_) {} return s.replace(/\d{3,}/g, '#'); }
-  function revUseKey(t) {
+  function revParse(e) { var oc = e.getAttribute('onclick'), m = oc && /^\s*([A-Za-z_][\w]{0,40})\s*\(\s*(?:'([\w-]{0,40})'|"([\w-]{0,40})"|([\w-]{1,40}))?/.exec(oc); return m ? { fn: m[1], arg: m[2] || m[3] || m[4] || '' } : null; }
+  function revTarget(t) {
     var e = t && t.closest ? t.closest('button,a,[onclick],[data-action],[role="button"],input[type="button"],input[type="submit"]') : null;
-    if (!e || e.closest('[id^="naAsst"],[class*="na-asst"]')) return null; // el propio asistente no cuenta
+    return !e || e.closest('[id^="naAsst"],[class*="na-asst"]') ? null : e; // el propio asistente no cuenta
+  }
+  function revUseKey(t) {
+    var e = revTarget(t); if (!e) return null;
     var pg = e.closest('.page'), scr = pg && pg.id ? pg.id : (e.closest('.modal,[role="dialog"]') ? 'modal' : 'otro');
-    var oc = e.getAttribute('onclick'), m = oc && /^\s*([A-Za-z_][\w]{0,40})\s*\(\s*(?:'([A-Za-z][\w-]{0,30})'|"([A-Za-z][\w-]{0,30})")?/.exec(oc);
-    var act = m ? m[1] : (e.getAttribute('data-action') || e.id || ''), arg = m ? (m[2] || m[3] || '') : '';
+    var p = revParse(e), act = p ? p.fn : (e.getAttribute('data-action') || e.id || ''), arg = p && /^[A-Za-z]/.test(p.arg) ? p.arg : '';
     act = String(act).replace(/\d+/g, '#').replace(/[^\w#-]/g, '').slice(0, 40); arg = String(arg).replace(/\d+/g, '#').slice(0, 30);
     scr = String(scr).replace(/[^\w-]/g, '').slice(0, 30);
     return act && /^[A-Za-z]/.test(scr) ? scr + ':' + act + (arg ? ':' + arg : '') : null;
+  }
+  function revClick(ev) {
+    var k = revUseKey(ev.target); if (!k) return; var r = revLoad();
+    if (r.u[k] || Object.keys(r.u).length < REV_USAGE_MAX) { r.u[k] = (r.u[k] || 0) + 1; revSave(); }
+    var e = revTarget(ev.target), p = e && revParse(e);
+    revCtx = revCustomerCtx(e, p ? p.fn : (e.getAttribute('data-action') || e.id), p ? p.arg : '') || null;
+    if (p && p.fn === 'goPage' && p.arg) { var t0 = Date.now(), pageId = p.arg; // carga de pantalla: hasta el primer cuadro libre después del clic
+      setTimeout(function () { var raf = root.requestAnimationFrame || function (f) { setTimeout(f, 16); };
+        raf(function () { var ms = Date.now() - t0; if (ms >= REV_SCREEN_MS) revSlow('pantalla', pageId, ms); }); }, 0); }
+  }
+  function revBeat() { // latido: si la pantalla VISIBLE no respondió en más de 5 s -> cuelgue (una tarea larga ya contada no se cuenta dos veces)
+    var now = Date.now(), gap = now - beatLast; beatLast = now;
+    if (root.document.hidden || gap < REV_HANG_MS) return gap;
+    var scr = revScreen(), from = now - gap;
+    // Con tareas largas observadas, se espera un poco: si el congelamiento ya vino como tarea larga, no se cuenta dos veces.
+    if (!ltOn) revSlow('cuelgue', scr, gap - REV_BEAT_MS);
+    else (root.setTimeout || setTimeout)(function () { if (ltUntil < from) revSlow('cuelgue', scr, gap - REV_BEAT_MS); }, REV_BEAT_MS * 2);
+    return gap;
   }
   function revInstall() {
     if (revOn) return; revOn = true;
     root.addEventListener('error', function (e) { if (e && e.message) revError('error', e.message, revFile(e.filename) + (e.lineno ? ':' + e.lineno : ''), 0); });
     root.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; revError('promesa', r && r.message ? (r.name ? r.name + ': ' : '') + r.message : String(r), '', 0); });
-    root.document.addEventListener('click', function (e) { var k = revUseKey(e.target); if (!k) return; var r = revLoad();
-      if (r.u[k] || Object.keys(r.u).length < REV_USAGE_MAX) { r.u[k] = (r.u[k] || 0) + 1; revSave(); } }, { capture: true, passive: true });
+    root.document.addEventListener('click', revClick, { capture: true, passive: true });
     root.addEventListener('pagehide', revFlush);
-    root.document.addEventListener('visibilitychange', function () { if (root.document.hidden) revFlush(); });
+    root.document.addEventListener('visibilitychange', function () { beatLast = Date.now(); if (root.document.hidden) revFlush(); });
     try {
       if (root.PerformanceObserver) new root.PerformanceObserver(function (l) { l.getEntries().forEach(function (x) {
-        var st = Number(x.responseStatus) || 0; if (st >= 400 && (x.initiatorType === 'fetch' || x.initiatorType === 'xmlhttprequest')) revError('api', revFile(x.name), '', st); }); })
+        if (x.initiatorType !== 'fetch' && x.initiatorType !== 'xmlhttprequest') return;
+        var st = Number(x.responseStatus) || 0; if (st >= 400) revError('api', revFile(x.name), '', st);
+        if (Number(x.duration) > REV_SLOW_API_MS) revSlow('api', revFile(x.name), x.duration); }); })
         .observe({ type: 'resource', buffered: true });
     } catch (_) {}
+    try {
+      var P = root.PerformanceObserver, types = P && P.supportedEntryTypes;
+      if (P && types && types.indexOf('longtask') >= 0) { ltOn = true; new P(function (l) { l.getEntries().forEach(function (x) {
+        var d = Number(x.duration) || 0; if (d < REV_TASK_MS) return; ltUntil = Date.now(); revSlow(d >= REV_HANG_MS ? 'cuelgue' : 'tarea', revScreen(), d); }); })
+        .observe({ type: 'longtask' }); }
+    } catch (_) { ltOn = false; }
+    beatLast = Date.now(); if (typeof root.setInterval === 'function') beatTimer = root.setInterval(revBeat, REV_BEAT_MS); // 1 latido por segundo: casi sin costo
+  }
+  function revOcr(x) { // lo llama asistente-boleta.js: { ok, ms, timeout, corrections, confirmed } (sin foto ni datos)
+    var o = revLoad().o, ms = Math.max(0, Math.round(Number(x && x.ms) || 0));
+    if (x && x.confirmed) { o.confirmed++; o.corrections += Math.max(0, Math.min(500, Math.floor(Number(x.corrections) || 0))); revSave(); return; }
+    o.reads++; o.ms_sum += ms; if (ms > o.ms_max) o.ms_max = ms; if (!(x && x.ok)) o.fails++; if (x && x.timeout) o.timeouts++;
+    if (ms > REV_SLOW_API_MS * 10) revSlow('api', 'leer boleta', ms);
+    revSave();
   }
   root.NA_ASISTENTE_REVISION = {
-    // Lo que se manda SOLO cuando el Admin pide la revisión (la UI lo pasa además por el redactor del asistente).
-    data: function () { var r = revLoad(); return { errors: r.e.map(function (x) { return { kind: x.kind, msg: x.msg, src: x.src, status: x.status, count: x.count, first: x.first, last: x.last }; }), usage: JSON.parse(JSON.stringify(r.u)) }; },
-    newErrors: function () { var r = revLoad(), n = 0; r.e.forEach(function (x) { if (!r.seen || x.last > r.seen) n++; }); return n; },
+    // Lo que se manda SOLO cuando el Admin pide la revisión (la UI lo pasa además por el redactor del asistente). De clientes: solo el código.
+    data: function () { var r = revLoad(); return {
+      errors: r.e.map(function (x) { var o = { kind: x.kind, msg: x.msg, src: x.src, status: x.status, count: x.count, first: x.first, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }),
+      usage: JSON.parse(JSON.stringify(r.u)),
+      slow: r.s.map(function (x) { var o = { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.ms_sum / Math.max(1, x.count)), ms_max: x.ms_max, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }),
+      ocr: JSON.parse(JSON.stringify(r.o)) }; },
+    newErrors: function () { var r = revLoad(), n = 0; r.e.concat(r.s.filter(function (x) { return x.kind === 'cuelgue'; })).forEach(function (x) { if (!r.seen || x.last > r.seen) n++; }); return n; },
     markSeen: function () { var r = revLoad(); r.seen = new Date().toISOString(); revFlush(); },
-    installed: function () { return revOn; }
+    installed: function () { return revOn; },
+    ocr: function (x) { if (revOn) revOcr(x); },
+    // Nombre del cliente SOLO para mostrarlo en ESTE aparato (nunca se manda): busca en la lista de clientes que ya tiene el POS.
+    customerName: function (code) { var c = revClientCode(code) && revClients().find(function (x) { return String(x.id) === String(code); }); return c ? String(c.nombre || c.name || '').slice(0, 80) : null; },
+    openCustomer: function (code) {
+      var c = revClientCode(code) && revClients().find(function (x) { return String(x.id) === String(code); }); if (!c) return false;
+      try { if (typeof abrirCred === 'function') { abrirCred(c.id); return true; } } catch (_) {}
+      try { if (typeof root.goPage === 'function') { root.goPage('pageClientes'); return true; } } catch (_) {}
+      return false;
+    },
+    _test: { beat: revBeat, ctx: function () { return revCtxNow(); }, slow: revSlow }
   };
   slotCss();
   if (ls('na_asistente_acc') === 'owner') { reserve(); revInstall(); }

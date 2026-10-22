@@ -443,3 +443,25 @@ body.dark .na-asst-tbl th,body.dark .na-asst-tbl td{border-color:#1f3b2b}body.da
 .na-asst-m11-on>.na-asst-m11{opacity:1}
 .na-asst-m11-on>:not(.na-asst-m11){visibility:hidden}
 @media (prefers-reduced-motion:reduce){.na-asst-m11{transition:none}}
+
+/* «Leer boleta con IA» (solo Admin): revisión editable dentro del panel. Sin cambios fuera del panel. */
+.na-asst-bol-bar { height: 8px; border-radius: 4px; background: #e5e7eb; overflow: hidden; margin-top: 6px; }
+.na-asst-bol-fill { height: 100%; width: 0; background: #2563eb; transition: width .9s linear; }
+.na-asst-bol-img { display: block; max-width: 100%; max-height: 220px; margin: 0 auto 6px; border-radius: 6px; object-fit: contain; }
+.na-asst-bol-rot { display: flex; gap: 6px; justify-content: center; margin-bottom: 6px; }
+.na-asst-bol-rot button, .na-asst-bol-actions button { min-height: 40px; padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; font: inherit; }
+.na-asst-bol-head { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.na-asst-bol-head label, .na-asst-bol-row label { display: flex; flex-direction: column; font-size: 11px; color: #475569; min-width: 0; }
+.na-asst-bol-head input, .na-asst-bol-row input { width: 100%; min-width: 0; box-sizing: border-box; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+.na-asst-bol-items { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; }
+.na-asst-bol-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 4px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.na-asst-bol-row label:nth-child(4) { grid-column: span 3; }
+input.na-asst-bol-null { background: #fef9c3; border-color: #f59e0b; }
+input.na-asst-bol-learned { background: #ecfdf5; border-color: #10b981; }
+.na-asst-bol-row small { color: #047857; font-size: 10px; }
+.na-asst-bol-warn { background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 8px; padding: 4px 8px; margin-bottom: 6px; font-size: 12px; }
+.na-asst-bol-warn p { margin: 2px 0; }
+.na-asst-bol-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.na-asst-bol-actions .na-asst-ok { background: #16a34a; color: #fff; border-color: #16a34a; }
+.na-asst-bol-actions .na-asst-bol-dup { background: #fee2e2; color: #991b1b; border: 2px solid #b91c1c; }
+.na-asst-cli { display: inline; padding: 0; border: 0; background: none; color: #1d4ed8; text-decoration: underline; font: inherit; cursor: pointer; min-height: 0; }

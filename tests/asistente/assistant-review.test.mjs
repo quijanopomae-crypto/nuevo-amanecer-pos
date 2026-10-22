@@ -111,7 +111,7 @@ test('servidor: empleado, empleado con nivel y aparato sin rol -> 403 review_adm
   }
   assert.equal((await route(SAMPLE, { env: { ASSISTANT_ENABLED: '0' } })).r.status, 404);
   assert.equal((await route(null, { method: 'GET' })).r.status, 405);
-  assert.equal((await route(null, { raw: '{"errors":"' + 'x'.repeat(70000) + '"}' })).r.status, 413);
+  assert.equal((await route(null, { raw: '{"errors":"' + 'x'.repeat(100000) + '"}' })).r.status, 413);
   assert.equal((await route(null, { raw: '{no' })).r.status, 400);
   assert.ok(!/admin_only'?:/.test(UI.match(/ACCESS_LOST = \{[^}]*\}/)[0].replace('admin_only: 1', '')) && !/review_admin_only/.test(UI.match(/ACCESS_LOST = \{[^}]*\}/)[0]), 'el 403 de la revisión no quita el asistente');
 });
@@ -147,7 +147,7 @@ test('limpieza del servidor: mismo redactor del asistente + montos, correos, cla
   const d = sanitizeReview({ errors: Array.from({ length: 300 }, (_, i) => ({ kind: 'nope', msg: 'e' + (i % 3) })), usage: { 'pagePOS:x': 1, '<script>': 2, 'a:b:c:d': 3 } });
   assert.equal(d.groups.length, 3); assert.equal(d.groups.reduce((t, g) => t + g.count, 0), 200, 'solo los 200 primeros'); assert.ok(d.groups.every((g) => g.kind === 'error'));
   assert.deepEqual(d.usage.map((u) => u.key), ['pagePOS:x']);
-  assert.match(buildReviewSummary({ groups: [], usage: [] }), /ninguno guardado.*\n.*todavía no hay contadores[\s\S]*Todo en orden/);
+  assert.match(buildReviewSummary({ groups: [], usage: [] }), /ninguno guardado[\s\S]*Cuelgues: ninguno[\s\S]*Lentitud: nada lento[\s\S]*todavía no hay contadores[\s\S]*Todo en orden/);
 });
 
 // ---------- proveedores ----------
