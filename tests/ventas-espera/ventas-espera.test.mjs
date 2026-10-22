@@ -72,3 +72,13 @@ test('no usa innerHTML y el index carga el módulo; Venta sin botones nuevos', (
   assert.ok(html.includes('<script src="js/modules/ventas-espera.js"></script>'));
   assert.ok(!html.includes('btnHoldSale'));
 });
+
+test('sw.js precachea ventas-espera.js, una sola vez, para que funcione sin internet', () => {
+  const sw = read('POS/sw.js');
+  const start = sw.indexOf('const PRECACHE_URLS = [');
+  assert.ok(start >= 0);
+  const block = sw.slice(start, sw.indexOf('];', start));
+  const hits = block.match(/['"][^'"]*js\/modules\/ventas-espera\.js['"]/g) || [];
+  assert.equal(hits.length, 1);
+  assert.ok(read('POS/index.html').includes('js/modules/ventas-espera.js'));
+});
