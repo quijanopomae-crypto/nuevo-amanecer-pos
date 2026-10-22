@@ -77,7 +77,8 @@ test('XSS (Bot 5): etiquetas alrededor/dentro de una serie salen como texto; 0 e
     '<span class="na-asst-code">E001-1</span>'
   ];
   for (const txt of evil) for (const step of STEPS) {
-    const h = paint(txt, step); assert.equal(h.textContent, txt, step);
+    // (Bots 4/5/3 sobre f773911f) las etiquetas de formato escritas como texto (<b> <i> …) ya no se ven en la burbuja; el resto sale como texto, igual
+    const h = paint(txt, step); assert.equal(h.textContent, txt.replace(/<\/?(?:code|strong|b|em|i|u|mark|kbd|pre)>/gi, ''), step);
     const els = created.filter((x) => x !== h); assert.ok(els.every((x) => x.className === 'na-asst-code' && x.tagName === 'SPAN'), JSON.stringify(els.map((x) => x.tagName + '.' + x.className)));
     assert.equal(els.length, codeSpans(h).length); for (const s of codeSpans(h)) assert.ok(/^(?:[FBET][A-Z0-9]{3}|0\d{3})-\d{1,8}$/.test(s.textContent), s.textContent);
     walk(h, (k) => { if (k.attrs) assert.deepEqual(Object.keys(k.attrs), [], 'ningún atributo desde el texto'); });

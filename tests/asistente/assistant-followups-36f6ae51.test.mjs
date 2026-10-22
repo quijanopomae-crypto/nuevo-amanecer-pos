@@ -60,7 +60,8 @@ test('2) F2: sin cierre se tapa hasta 80 caracteres desde el valor y luego hasta
   // cerrada entre 41 y 80 caracteres: todo lo de dentro (Bot 5: antes «"[oculto]nco gris"»)
   assert.equal(A.redactText('la clave del wifi es "' + LONGV + ' blanco"'), 'la clave del wifi es "[oculto]"');
   // la palabra que cruza los 80 se tapa entera
-  const w = 'clave: "' + 'abcd '.repeat(15) + 'supercalifragilistico y sigue'; const f = A.redactText(w); assert.ok(!/abcd|supercal|istico/.test(f), f); assert.ok(f.endsWith(' y sigue'), f);
+  // (r10, Bot 2 sobre f773911f) con la supresión, sin cierre ni fin de frase se tapa hasta el final (antes quedaba « y sigue»)
+  const w = 'clave: "' + 'abcd '.repeat(15) + 'supercalifragilistico y sigue'; const f = A.redactText(w); assert.ok(!/abcd|supercal|istico/.test(f), f); assert.equal(f, 'clave: "[oculto]');
   // nunca hasta el final del texto: con . ; ! ? (seguido de espacio) o salto se para antes, como siempre
   assert.equal(A.redactText('contraseña: "tortuga. Luego vamos'), 'contraseña: "[oculto]. Luego vamos');
 });
@@ -111,7 +112,7 @@ test('8) «documento/doc/identidad» justo delante: sin repetir la etiqueta («d
 
 test('9) dinero del dueño (Bot 2): los 12 montos dan lo mismo en texto plano, en tabla y con flecha (9/12 visibles) y los 5 precios normales intactos', () => {
   const L = [['precio clave S/ 4.50', 1], ['La clave: el precio del arroz es S/ 4.50', 1], ['la clave del margen fue el costo de S/ 3.20', 1], ['La clave fue el precio: S/ 12.50 por caja', 1], ['precio clave del mes: S/ 1250.00', 1],
-    ['Clave del día: efectivo S/ 830.40 y Yape S/ 120.00', 1], ['producto clave: Arroz a S/ 4.50, costo S/ 3.20', 0], ['La clave fue comprar a S/ 3.20 y vender a S/ 4.50', 0], ['el efectivo de la caja chica es S/ 250.00', 1],
+    ['Clave del día: efectivo S/ 830.40 y Yape S/ 120.00', 1], ['producto clave: Arroz a S/ 4.50, costo S/ 3.20', 1 /* (r10, Bots 2/5 sobre f773911f) excepción del adjetivo: «producto clave» + moneda con céntimos se ve (10/12) */], ['La clave fue comprar a S/ 3.20 y vender a S/ 4.50', 0], ['el efectivo de la caja chica es S/ 250.00', 1],
     ['En caja hay S/ 1250.50 en efectivo', 1], ['costo clave 4.50 soles', 1], ['La clave para vender es el precio S/ 2500', 0], ['Arroz a S/ 4.50', 1], ['El azúcar cuesta S/ 3.20', 1], ['Precio de venta: S/ 12.50', 1],
     ['Total del día S/ 1,250.00', 1], ['Aceite **S/ 9.90**', 1]];
   const amt = (t) => /(?:S\/\s?)?(\d[\d.,]*\d)(?: soles)?/.exec(t);

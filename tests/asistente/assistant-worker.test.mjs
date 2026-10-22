@@ -62,7 +62,7 @@ test('petición a DeepSeek: deepseek-flash, sin thinking, herramientas, URL base
   assert.ok(b.tools.length >= 4); assert.equal(b.tool_choice, 'auto');
   const sent = JSON.stringify(b);
   assert.ok(!sent.includes('45678912') && !sent.includes('987654321'), 'DNI/teléfono completos no salen');
-  assert.ok(sent.includes('DNI ****8912'));
+  assert.ok(sent.includes('DNI es ****8912')); // (r10, Bot 2 sobre f773911f) «Mi DNI es» ya dice DNI: sin repetir la etiqueta
   assert.ok(!sent.includes('sk-test-local'));
   assert.ok(sent.includes('<dato_usuario>'));
   assert.equal(body.mode, 'deepseek'); assert.equal(body.proposals[0].cantidad, 3);
