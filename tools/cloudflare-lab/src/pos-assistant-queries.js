@@ -206,8 +206,7 @@ export function canonicalReader(db) {
       }
       return out;
     },
-    async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null,
-      fecha: limaDateOf(c.issued_value || c.created_at) || null })); },
+    async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null })); },
     // Ventas por producto del período (agrupado en SQL): { product_id, q, c }. Tope NEW_QUERY_LIMITS.sqlRows (truncated si llega).
     async itemsByProduct(p) {
       const lim = NEW_QUERY_LIMITS.sqlRows;
@@ -486,7 +485,7 @@ async function idleProductsQuery(reader, args, nowMs, base) {
 }
 
 // Deuda de UN cliente por su código («cliente #código»). Al modelo y a la tabla: solo el código, el saldo total, cuántos créditos abiertos
-// y la fecha del más antiguo. Nunca nombre, DNI ni teléfono (el aparato del Admin pone el nombre de SU lista con el código).
+// y cuál vence primero. Usa la misma lectura canónica de créditos que deudas_clientes (reader.credits, sin SQL aparte). Nunca nombre, DNI ni teléfono (el aparato del Admin pone el nombre de SU lista con el código).
 async function customerDebtQuery(reader, args, base) {
   const { customerCode } = await import('./pos-assistant.js');
   const code = customerCode(args?.cliente_id) ?? customerCode(args?.cliente);
@@ -494,16 +493,16 @@ async function customerDebtQuery(reader, args, base) {
   const ref = 'cliente #' + code, credits = await reader.credits();
   let mine = credits.filter((c) => String(c.cliente) === code);
   if (!mine.length) mine = credits.filter((c) => String(c.cliente).toLowerCase() === code.toLowerCase());
-  const open = mine.filter((c) => Number(c.saldo) > 0).sort((a, b) => String(a.fecha || '9999').localeCompare(String(b.fecha || '9999')));
-  const total = r2(open.reduce((s, c) => s + Number(c.saldo), 0)), oldest = open.find((c) => c.fecha)?.fecha || null;
+  const open = mine.filter((c) => Number(c.saldo) > 0).sort((a, b) => String(a.vence || '9999').localeCompare(String(b.vence || '9999')));
+  const total = r2(open.reduce((s, c) => s + Number(c.saldo), 0)), first = open.find((c) => c.vence)?.vence || null;
   let known = mine.length > 0;
   if (!known && typeof reader.customers === 'function') { const cs = await reader.customers(); known = cs.some((c) => String(c.id) === code || String(c.id).toLowerCase() === code.toLowerCase()); }
   const texto = open.length
-    ? ref + ' debe S/ ' + total.toFixed(2) + ' en ' + open.length + (open.length === 1 ? ' crédito abierto' : ' créditos abiertos') + (oldest ? '; el más antiguo es del ' + oldest : '') + '.'
+    ? ref + ' debe S/ ' + total.toFixed(2) + ' en ' + open.length + (open.length === 1 ? ' crédito abierto' : ' créditos abiertos') + (first ? '; el primero vence el ' + first : '') + '.'
     : known ? ref + ' no tiene deudas pendientes.' : 'No encontré deudas de ' + ref + '. Revise el código en Clientes.';
-  return { ...base, titulo: 'Deuda de ' + ref, columnas: ['Fecha', 'Vence', 'Saldo S/'], filas: open.slice(0, QUERY_LIMITS.topRows).map((c) => [c.fecha || 'sin fecha', c.vence || '-', r2(c.saldo)]),
+  return { ...base, titulo: 'Deuda de ' + ref, columnas: ['Vence', 'Saldo S/'], filas: open.slice(0, QUERY_LIMITS.topRows).map((c) => [c.vence || '-', r2(c.saldo)]),
     ...(open.length > QUERY_LIMITS.topRows ? { total: open.length } : {}), texto,
-    resumen: { cliente: ref, saldo_soles: total, creditos_abiertos: open.length, mas_antiguo: oldest } };
+    resumen: { cliente: ref, saldo_soles: total, creditos_abiertos: open.length, vence_primero: first } };
 }
 
 // Ventas por hora de Lima (período por defecto hoy): número y total por hora. Sin clientes ni productos.

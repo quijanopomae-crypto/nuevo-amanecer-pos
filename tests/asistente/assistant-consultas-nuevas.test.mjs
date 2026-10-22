@@ -122,12 +122,12 @@ test('productos sin ventas: por defecto 30 días de Lima, de más stock a menos,
   assert.ok(big.resumen.primeros.length <= 8); assert.ok(JSON.stringify(big.resumen).length < 1500);
 });
 
-test('deuda de un cliente por código: saldo, créditos abiertos y el más antiguo; sin código pide el código', async () => {
+test('deuda de un cliente por código: saldo, créditos abiertos y cuál vence primero (misma lectura que deudas_clientes); sin código pide el código', async () => {
   const r = await q('deuda_cliente', { cliente_id: 'C1' });
-  assert.deepEqual(r.resumen, { cliente: 'cliente #C1', saldo_soles: 35, creditos_abiertos: 2, mas_antiguo: '2026-09-01' });
-  assert.deepEqual(r.filas, [['2026-09-01', '2026-10-01', 30], ['2026-10-10', '2026-11-10', 5]]);
-  assert.equal(r.texto, 'cliente #C1 debe S/ 35.00 en 2 créditos abiertos; el más antiguo es del 2026-09-01.');
-  assert.deepEqual((await q('deuda_cliente', { cliente_id: '12' })).resumen, { cliente: 'cliente #12', saldo_soles: 12, creditos_abiertos: 1, mas_antiguo: '2026-10-15' });
+  assert.deepEqual(r.resumen, { cliente: 'cliente #C1', saldo_soles: 35, creditos_abiertos: 2, vence_primero: '2026-10-01' });
+  assert.deepEqual(r.filas, [['2026-10-01', 30], ['2026-11-10', 5]]);
+  assert.equal(r.texto, 'cliente #C1 debe S/ 35.00 en 2 créditos abiertos; el primero vence el 2026-10-01.');
+  assert.deepEqual((await q('deuda_cliente', { cliente_id: '12' })).resumen, { cliente: 'cliente #12', saldo_soles: 12, creditos_abiertos: 1, vence_primero: '2026-11-01' });
   const none = await q('deuda_cliente', { cliente_id: 'C9' });
   assert.equal(none.resumen.saldo_soles, 0); assert.match(none.texto, /No encontré deudas de cliente #C9/);
   const sin = await q('deuda_cliente', {});
@@ -173,7 +173,7 @@ test('chat del Admin: deuda_cliente manda al modelo SOLO código, saldo, crédit
   assert.equal(r.status, 200); assert.equal(cap.length, 2);
   const toolMsg = JSON.parse(cap[1]).messages.find((m) => m.role === 'tool');
   const sent = JSON.parse(toolMsg.content);
-  assert.deepEqual(sent, { tipo: 'deuda_cliente', resumen: { cliente: 'cliente #C1', saldo_soles: 35, creditos_abiertos: 2, mas_antiguo: '2026-09-01' } });
+  assert.deepEqual(sent, { tipo: 'deuda_cliente', resumen: { cliente: 'cliente #C1', saldo_soles: 35, creditos_abiertos: 2, vence_primero: '2026-10-01' } });
   for (const body of cap) for (const v of PII) assert.ok(!body.includes(v), 'al modelo llegó ' + v);
   const p = r.body.proposals.find((x) => x.type === 'consulta'); assert.equal(p.result.filas.length, 2);
   // Un nombre en vez de código no llega a la consulta.
@@ -195,7 +195,7 @@ test('chat del Admin: ganancia y ventas por hora llegan al modelo solo con códi
 });
 
 test('demostración: las cuatro preguntas van al tipo correcto', async () => {
-  for (const [text, tipo, extra] of [['¿Cuánto gané hoy?', 'ganancia'], ['¿Qué productos no se venden?', 'productos_sin_ventas'], ['¿Cuánto debe el cliente 12?', 'deuda_cliente', (p) => assert.equal(p.result.texto, 'cliente #12 debe S/ 12.00 en 1 crédito abierto; el más antiguo es del 2026-10-15.')], ['¿A qué hora vendo más?', 'ventas_por_hora']]) {
+  for (const [text, tipo, extra] of [['¿Cuánto gané hoy?', 'ganancia'], ['¿Qué productos no se venden?', 'productos_sin_ventas'], ['¿Cuánto debe el cliente 12?', 'deuda_cliente', (p) => assert.equal(p.result.texto, 'cliente #12 debe S/ 12.00 en 1 crédito abierto; el primero vence el 2026-11-01.')], ['¿A qué hora vendo más?', 'ventas_por_hora']]) {
     const r = await chat({ text }, { rd: reader(), e: env({ ASSISTANT_DEMO: '1' }) });
     assert.equal(r.status, 200, text);
     const p = r.body.proposals.find((x) => x.type === 'consulta'); assert.ok(p, text + ' ' + JSON.stringify(r.body));
@@ -261,8 +261,8 @@ test('base real del arnés canónico: las 4 consultas nuevas corren sin error y 
     const sent = JSON.stringify(r.resumen); assert.ok(!sent.includes('sintético'), tipo); assert.ok(sent.length < 1500, tipo);
   }
   const d = await runAssistantQuery(rd, { tipo: 'deuda_cliente', cliente_id: '000C' }, NOW);
-  assert.deepEqual(Object.keys(d.resumen).sort(), ['cliente', 'creditos_abiertos', 'mas_antiguo', 'saldo_soles']);
-  assert.equal(d.resumen.saldo_soles, 7); assert.equal(d.resumen.mas_antiguo, '2026-01-01');
+  assert.deepEqual(Object.keys(d.resumen).sort(), ['cliente', 'creditos_abiertos', 'saldo_soles', 'vence_primero']);
+  assert.equal(d.resumen.saldo_soles, 7); assert.equal(d.resumen.vence_primero, null); // el crédito del arnés no trae vencimiento
 });
 
 // ---------- Palabras de fecha nuevas: antier, el mismo día de la semana pasada y un día exacto (fecha) ----------
