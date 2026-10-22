@@ -482,8 +482,9 @@
   function addCard(p, prompt) {
     var key = gate.add(p); if (!key) return;
     var c = el('div', 'na-asst-card', cardHtml(p)); c.dataset.type = p.type; c.dataset.st = 'pending'; c._naKey = key; msgsEl.appendChild(c);
-    // tabla de consulta: «cliente #código» como en el texto del chat (el nombre sale de la lista de ESTE aparato, nunca del servidor)
-    var qt = p.type === 'consulta' && C.customerCodesIn ? c.querySelector('table.q') : null; if (qt) linkCustomers(qt, C.customerCodesIn(qt.textContent, deps.clientes()));
+    // tabla de consulta: el servidor manda «cliente #código»; al ADMIN se le muestra el nombre de la lista de ESTE aparato (decisión del Admin
+    // 22-10), al empleado solo el código. El nombre nunca va al modelo.
+    var qt = p.type === 'consulta' && C.customerCodesIn && isOwnerAccess() ? c.querySelector('table.q') : null; if (qt) linkCustomers(qt, C.customerCodesIn(qt.textContent, deps.clientes()));
     // (Bot 4 sobre 3ee80c18) cada valor en su span; proveedor (RUC) y documento aislados de izquierda a derecha
     var dn = c.querySelector('[data-docnote]'); if (dn) [[p.proveedor, true], [p.documento, true], [p.fecha, false]].filter(function (x) { return x[0]; }).forEach(function (x, i) {
       if (i) dn.appendChild(doc.createTextNode(' · ')); var sp = doc.createElement('span'); if (x[1]) ltrIsolate(sp); C.appendCoded(doc, sp, String(x[0])); dn.appendChild(sp); });
@@ -823,7 +824,7 @@
       var stick = atBottom();
       if (d.cut === true) { if (bubble) bubble.removeAttribute('aria-busy'); else bubble = addMsg('a', ''); paintCut(bubble, d.reply, mdOpts); lastCut = bubble; }
       else if (bubble) { bubble.removeAttribute('aria-busy'); if ((bubble._md ? bubble._md.raw() : bubble.textContent).trim() !== d.reply) paintReply(bubble, d.reply, mdOpts); } else { bubble = addMsg('a', ''); paintReply(bubble, d.reply, mdOpts); }
-      if (C.customerCodesIn) linkCustomers(bubble, C.customerCodesIn(d.reply, deps.clientes())); // «cliente #código» -> nombre de ESTE aparato
+      if (C.customerCodesIn && isOwnerAccess()) linkCustomers(bubble, C.customerCodesIn(d.reply, deps.clientes())); // «cliente #código» -> nombre de ESTE aparato (solo Admin)
       { var shown = C.stripDisplay ? C.stripDisplay(d.reply) : d.reply; announce(shown); if (mascot) mascot.speak(shown); } // (Bots 4/5 sobre f773911f) lo que se lee y lo que «dice» la mascota = lo que se ve
       if (d.mode === 'mock') { var m = el('div', 'na-asst-mode'); m.textContent = 'Modo demostración'; msgsEl.appendChild(m); }
       (d.denied || []).forEach(addDenied);
