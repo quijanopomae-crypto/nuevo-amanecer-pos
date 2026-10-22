@@ -3,6 +3,7 @@
   'use strict';
 
   var PAGE_ID = 'pageReporteArqueo';
+  var CAJERO_LOCK_ID = 'reporte-arqueo-cajero';
   var DAY_MS = 86400000;
   var renderVersion = 0, renderedReport = null;
   function text(value) { return String(value == null ? '' : value); }
@@ -28,6 +29,19 @@
   }
   function dateLabel(day) { return day.split('-').reverse().join('/'); }
   function name(value) { var raw = text(value); return raw.trim() ? raw : 'No registrado'; }
+  // Candado propio del filtro por cajero. Falla cerrado: sin NA_PERMISSIONS, sin el id o con error, queda cerrado.
+  function cajeroUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(CAJERO_LOCK_ID) === false); }
+    catch (_) { return false; }
+  }
+  function applyCajeroLock(page) {
+    var select = page && page.querySelector('[data-ra-cajero]');
+    if (!select) return;
+    var locked = !cajeroUnlocked(), label = typeof select.closest === 'function' ? select.closest('label') : null;
+    select.hidden = locked; select.disabled = locked;
+    if (label) label.hidden = locked;
+    if (locked) select.value = '';
+  }
   function buildReport(sessions, options) {
     options = options || {};
     var defaults = defaultRange();
@@ -64,7 +78,7 @@
     // Filtro opcional por cajero: coincide con quien abrió o cerró (nombre mostrado).
     var cashiers = Array.from(new Set(rows.reduce(function (all, r) { return all.concat([r.openedByName, r.closedByName]); }, [])
       .filter(function (n) { return n !== 'No registrado'; }))).sort(function (a, b) { return a.localeCompare(b, 'es'); });
-    var cajero = text(options.cajero);
+    var cajero = cajeroUnlocked() ? text(options.cajero) : '';
     if (cajero) rows = rows.filter(function (r) { return r.openedByName === cajero || r.closedByName === cajero; });
     var totals = { count: rows.length, esperado: 0, contado: 0, diferencia: 0, sinContar: 0 };
     rows.forEach(function (row) {
@@ -115,7 +129,7 @@
   function rangeOptions(page) {
     var desde = page.querySelector('[data-ra-desde]'), hasta = page.querySelector('[data-ra-hasta]');
     var cajero = page.querySelector('[data-ra-cajero]');
-    return { desde: desde ? desde.value : undefined, hasta: hasta ? hasta.value : undefined, cajero: cajero ? cajero.value : '' };
+    return { desde: desde ? desde.value : undefined, hasta: hasta ? hasta.value : undefined, cajero: cajero && cajeroUnlocked() ? cajero.value : '' };
   }
   function localReport(options) {
     var client = root.NuevoAmanecerCanonical;
@@ -125,7 +139,8 @@
   function money(value) { return (value < 0 ? '-' : '') + 'S/ ' + (Math.abs(value) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function fillCashiers(page, report) {
     var select = page.querySelector('[data-ra-cajero]');
-    if (!select) return;
+    applyCajeroLock(page);
+    if (!select || !cajeroUnlocked()) return;
     var keep = report.cajero, names = report.cashiers.slice();
     if (keep && names.indexOf(keep) < 0) names.push(keep);
     var all = element('option', '', 'Todos los cajeros'); all.value = '';
@@ -150,6 +165,7 @@
     if (!content || !status) return false;
     var authorized = ownerAllowed(), controls = page.querySelector('[data-ra-controls]'), exportButton = page.querySelector('[data-ra-export]');
     if (controls) controls.hidden = !authorized;
+    applyCajeroLock(page);
     if (exportButton) exportButton.disabled = true;
     content.replaceChildren();
     if (!authorized) { status.textContent = 'Sin permiso. Pídele acceso al dueño.'; return false; }

@@ -119,10 +119,11 @@ class Node {
   setAttribute(key, value) { this.attrs[key] = value; }
   addEventListener(type, callback) { this.events[type] = callback; }
 }
-function harness() {
+function harness({ cajero = null, locks = null } = {}) {
   const content = new Node(), status = new Node(), controls = new Node(), desde = new Node(), hasta = new Node(), button = new Node('button');
   const nodes = { '[data-ra-content]': content, '[data-ra-status]': status, '[data-ra-controls]': controls,
     '[data-ra-desde]': desde, '[data-ra-hasta]': hasta, '[data-ra-export]': button };
+  if (cajero) nodes['[data-ra-cajero]'] = cajero;
   const page = new Node(); page.querySelector = selector => nodes[selector]; page.classList = { contains: () => false };
   let owner = true, screenAllowed = true, reads = 0, initialize;
   const events = {}, downloads = [], blobs = [];
@@ -131,7 +132,7 @@ function harness() {
       createElement(tag) { const node = new Node(tag); node.click = () => downloads.push(node.download); return node; } },
     addEventListener(type, callback) { events[type] = callback; }, setTimeout(callback) { callback(); },
     URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} }, Blob: class { constructor(parts) { blobs.push(parts.join('')); } },
-    NA_ROLES: { isOwner: () => owner }, NA_PERMISSIONS: { canAccessScreen: () => screenAllowed },
+    NA_ROLES: { isOwner: () => owner }, NA_PERMISSIONS: { canAccessScreen: () => screenAllowed, ...(locks ? { featureLocked: id => locks(id) } : {}) },
     NuevoAmanecerCanonical: { enabled: () => true, snapshot() { reads++; return { cashSessions: [closed('x', '2026-10-16T18:00:00Z', { opened_by_name: '<img onerror=unsafe>' })] }; }, refresh() { throw new Error('refresh'); } },
     fetch() { throw new Error('network'); }, localStorage: { setItem() { throw new Error('storage write'); } },
   });
@@ -295,4 +296,76 @@ test('server truncated:true shows a visible incomplete-totals notice; truncated:
       assert.match(notice.textContent, /solo los 1 cierres más recientes/);
     } else assert.equal(notice, undefined);
   }
+});
+
+// Candado 'reporte-arqueo-cajero' (#896): el filtro por cajero falla cerrado.
+const open = id => id !== 'reporte-arqueo-cajero';
+const rowsAB = [closed('a', '2026-10-16T18:00:00Z', { opened_by_name: 'Ana', closed_by_name: 'Ana' }),
+  closed('b', '2026-10-15T18:00:00Z', { opened_by_name: 'Beto', closed_by_name: 'Beto' }),
+  closed('c', '2026-10-14T18:00:00Z', { opened_by_name: 'Ana', closed_by_name: 'Beto' })];
+const unlocked = () => load({ NA_PERMISSIONS: { featureLocked: id => id === 'reporte-arqueo-cajero' ? false : true } });
+test('candado abierto: buildReport filtra por quien abrió o cerró y totaliza solo lo filtrado', () => {
+  const api = unlocked();
+  const ana = api.buildReport(rowsAB, { ...range, cajero: 'Ana' });
+  assert.deepEqual(Array.from(ana.rows, r => r.sessionId), ['a', 'c']);
+  assert.equal(ana.cajero, 'Ana'); assert.equal(ana.totals.count, 2); assert.equal(ana.totals.esperado, 2500);
+  assert.deepEqual(Array.from(api.buildReport(rowsAB, { ...range, cajero: 'Beto' }).rows, r => r.sessionId), ['b', 'c']);
+  assert.equal(api.buildReport(rowsAB, { ...range, cajero: 'Nadie' }).rows.length, 0);
+  assert.deepEqual(Array.from(ana.cashiers), ['Ana', 'Beto'], 'la lista de cajeros sale antes del filtro');
+  assert.equal(api.buildReport(rowsAB, { ...range, cajero: '' }).rows.length, 3);
+});
+test('candado cerrado, ausente o con error: buildReport ignora options.cajero', () => {
+  const variants = [load(), load({ NA_PERMISSIONS: {} }), load({ NA_PERMISSIONS: { featureLocked: () => true } }),
+    load({ NA_PERMISSIONS: { featureLocked: () => undefined } }), load({ NA_PERMISSIONS: { featureLocked() { throw new Error('x'); } } })];
+  for (const api of variants) {
+    const report = api.buildReport(rowsAB, { ...range, cajero: 'Ana' });
+    assert.equal(report.rows.length, 3); assert.equal(report.cajero, '');
+  }
+});
+test('candado ausente en pos-permissions.js real: queda cerrado', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext(readFileSync('POS/js/config/pos-permissions.js', 'utf8'), ctx);
+  assert.equal(ctx.NA_PERMISSIONS.featureLocked('reporte-arqueo-cajero'), true);
+  const report = load({ NA_PERMISSIONS: ctx.NA_PERMISSIONS }).buildReport(rowsAB, { ...range, cajero: 'Ana' });
+  assert.equal(report.rows.length, 3);
+});
+test('candado cerrado: el selector Cajero se oculta y no se aplica el filtro al render', async () => {
+  const select = new Node('select'), label = new Node('label'); select.closest = () => label; select.value = 'Ana';
+  const h = harness({ cajero: select, locks: () => true }); h.desde.value = range.desde; h.hasta.value = range.hasta;
+  h.ctx.NuevoAmanecerCanonical.snapshot = () => ({ cashSessions: rowsAB });
+  assert.equal(await h.api.render(), true);
+  assert.equal(select.hidden, true); assert.equal(label.hidden, true); assert.equal(select.disabled, true); assert.equal(select.value, '');
+  assert.equal(select.children.length, 0, 'no se llenan opciones');
+  assert.doesNotMatch(h.status.textContent, /cajero:/);
+  assert.match(descendants(h.content).find(n => n.tagName === 'tfoot').textContent, /3 cierres/);
+});
+test('candado abierto: el selector se muestra, se llena y filtra', async () => {
+  const select = new Node('select'), label = new Node('label'); select.closest = () => label;
+  const h = harness({ cajero: select, locks: open.bind(null) }); h.desde.value = range.desde; h.hasta.value = range.hasta;
+  h.ctx.NuevoAmanecerCanonical.snapshot = () => ({ cashSessions: rowsAB });
+  assert.equal(await h.api.render(), true);
+  assert.equal(select.hidden, false); assert.equal(label.hidden, false);
+  assert.deepEqual(select.children.map(o => o.textContent), ['Todos los cajeros', 'Ana', 'Beto']);
+  select.value = 'Beto';
+  assert.equal(await h.api.render(), true);
+  assert.match(h.status.textContent, /cajero: Beto/);
+  assert.match(descendants(h.content).find(n => n.tagName === 'tfoot').textContent, /2 cierres/);
+});
+test('servidor recortó la lista: serverCount es el total del servidor, no el filtrado', async () => {
+  const select = new Node('select'); select.value = 'Ana';
+  const h = harness({ cajero: select, locks: open }); h.initialize(); h.desde.value = range.desde; h.hasta.value = range.hasta;
+  online(h, async () => ({ truncated: true, cash_closes: rowsAB }));
+  select.value = 'Ana';
+  assert.equal(await h.api.render(), true);
+  const notice = descendants(h.content).find(n => n.className === 'ra-truncated');
+  assert.ok(notice);
+  assert.match(notice.textContent, /solo los 3 cierres más recientes de este rango \(2 son de este cajero\)/);
+});
+test('servidor recortó la lista con candado cerrado: sin texto de cajero', async () => {
+  const select = new Node('select'); select.value = 'Ana';
+  const h = harness({ cajero: select, locks: () => true }); h.initialize(); h.desde.value = range.desde; h.hasta.value = range.hasta;
+  online(h, async () => ({ truncated: true, cash_closes: rowsAB }));
+  assert.equal(await h.api.render(), true);
+  const notice = descendants(h.content).find(n => n.className === 'ra-truncated');
+  assert.match(notice.textContent, /solo los 3 cierres más recientes de este rango\. /);
 });
