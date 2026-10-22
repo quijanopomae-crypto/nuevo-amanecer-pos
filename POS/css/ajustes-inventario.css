@@ -52,3 +52,7 @@ body.dark #pageAjustesInventario [data-aj-type] option:disabled { color: #94a3b8
   #pageAjustesInventario .aj-form .aj-wide { grid-column: 1 / -1; }
 }
 @media (min-width: 1000px) { #pageAjustesInventario .aj-form { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* Recalcular stock (solo dueño) */
+#pageAjustesInventario .rs-section { margin-top: 24px; }
+#pageAjustesInventario .rs-summary { font-weight: 600; margin: 8px 0; }
+#pageAjustesInventario .rs-wrap { max-width: 100%; overflow-x: auto; }
