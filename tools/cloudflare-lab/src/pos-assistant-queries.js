@@ -6,19 +6,24 @@ import { canonicalRead } from './a6-canonical.js';
 
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
-export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'resumen_dia', 'resumen_mes']);
+export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'resumen_dia', 'resumen_mes', 'caja_abierta']);
 // Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
 export const SUMMARY_TYPES = Object.freeze(['resumen_dia', 'resumen_mes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
 const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos por reponer', sin_costo: 'Productos sin costo', ventas_periodo: 'Ventas del período',
   top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', compras_recientes: 'Compras recientes',
-  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes' };
+  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes', caja_abierta: 'Caja abierta' };
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
+// Precio vacío (null, '' o ausente) queda en null: Number(null) daría 0 y contaría como una venta a S/ 0.
 const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 export const SALE_LINES_MAX = 5000, SALES_READ_MAX = 5000;
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+// Mismas palabras que Inventario en la app: stock < 0 → «Faltan N» (N sin signo), 0 → «Sin stock». Nunca el número con signo menos.
+export function stockLabel(stock) { const n = r2(stock); return n < 0 ? 'Faltan ' + r2(Math.abs(n)) : n === 0 ? 'Sin stock' : n + ' unid.'; }
+// Al modelo: el número se queda y, si es 0 o menos, va también «estado» con la frase que muestra la app.
+const stockForModel = (p) => { const o = { nombre: p.nombre, stock: r2(p.stock), minimo: r2(p.min) }; if (o.stock <= 0) o.estado = stockLabel(o.stock); return o; };
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 // ---------- Hora de Lima (America/Lima = UTC-5 todo el año; Perú no tiene horario de verano) ----------
 // ÚNICO lugar con la cuenta: el resto del asistente (consultas, resúmenes, prompt, modo demostración, límites de uso) usa estas funciones.
@@ -67,6 +72,8 @@ export function period(args, nowMs) {
 
 // ---------- Resúmenes del día y del mes (helpers) ----------
 export const limaDay = (iso) => new Date(Date.parse(iso) - LIMA_OFFSET_MS).toISOString().slice(0, 10);
+// Fecha y hora de Lima «AAAA-MM-DD HH:MM» (para mostrar, p. ej. la apertura de caja). Sin hora válida: null.
+export const limaDateTime = (iso) => { const t = Date.parse(iso); return Number.isFinite(t) ? new Date(t - LIMA_OFFSET_MS).toISOString().slice(0, 16).replace('T', ' ') : null; };
 // Fecha de Lima de un registro para mostrar: con hora (cualquier zona que Date.parse entienda) -> día de Lima; solo fecha -> tal cual.
 export function limaDateOf(v) { const t = String(v || ''); if (/T\d{2}:/.test(t) && Number.isFinite(Date.parse(t))) return limaDay(t); return DATE.test(t.slice(0, 10)) ? t.slice(0, 10) : ''; }
 // Día de Lima de un cobro: hora exacta si la hay; si no, la fecha conocida (AAAA-MM-DD). Sin fecha conocida: no cuenta en ningún período.
@@ -269,8 +276,40 @@ export function canonicalReader(db) {
     async purchases(n) {
       try { return (await db.prepare('SELECT supplier,document_ref,total_cost_cents,line_count,status,created_at FROM pos_purchases ORDER BY created_at DESC LIMIT ?1').bind(n).all()).results || []; }
       catch (e) { if (/no such table/i.test(String(e?.message || e))) return []; throw e; }
-    }
+    },
+    // Caja abierta (SOLO LECTURA, 2 consultas): la vista canonical_cash_state es la que pinta «Efectivo esperado» en la pantalla Caja
+    // (canonical-ui-adapter uiCashState) y con la que el servidor acepta el cierre (cash_close_reconciles exige ESTE expected_cents).
+    async cashOpen() { return cashOpenSql(db); }
   };
+}
+
+// 1) la sesión abierta (o, si no hay, solo la fecha del último cierre) en UNA lectura; 2) el desglose ya sumado en SQL (GROUP BY), filtrado
+// a esa sesión: ventas por las mismas marcas de agua de la vista (rowid de cash_movements), cobros/ingresos/egresos por session_id (y los
+// cobros digitales sin caja desde la hora de apertura, como el desglose del cierre en canonical-cash-history.js) y gastos por session_id.
+// Nunca se leen nombres (ni de cajero ni de clientes). Sin esquema de caja: { ready: false }, sin cifras.
+export async function cashOpenSql(db) {
+  let s;
+  try {
+    s = await db.prepare(`SELECT c.active_promotion_id AS promotion_id,s.session_id,s.opened_at,s.opening_cents,s.expected_cents,s.cash_movement_watermark,s.closing_watermark,
+      (SELECT MAX(z.closed_at) FROM canonical_cash_state z WHERE z.promotion_id=c.active_promotion_id AND z.status='CLOSED') AS last_closed_at
+      FROM canonical_control c LEFT JOIN canonical_cash_state s ON s.promotion_id=c.active_promotion_id AND s.status='OPEN'
+      WHERE c.id=1 ORDER BY s.opened_at DESC LIMIT 1`).first();
+  } catch (e) { if (/no such (table|column)/i.test(String(e?.message || e))) return { ready: false }; throw e; }
+  if (!s || !s.promotion_id) return { ready: false };
+  if (!s.session_id) return { ready: true, open: null, lastClosedAt: s.last_closed_at || null };
+  const rows = (await db.prepare(`SELECT 'venta' AS k,COALESCE(m.digital_method,'') AS metodo,'' AS signo,COUNT(*) AS n,
+      COALESCE(SUM(m.cash_cents),0) AS a,COALESCE(SUM(m.digital_cents),0) AS b,COALESCE(SUM(m.credit_cents),0) AS c
+      FROM cash_movements m JOIN canonical_sale_context x ON x.sale_id=m.sale_id
+      WHERE x.promotion_id=?1 AND m.rowid>?2 AND m.rowid<=?3 GROUP BY m.digital_method
+    UNION ALL SELECT CASE WHEN e.event_type='ADJUSTMENT' AND e.reason LIKE 'Anulación de venta %' THEN 'devolucion' ELSE lower(e.event_type) END,
+      COALESCE(e.payment_method,''),CASE WHEN e.cash_delta_cents<0 THEN '-' ELSE '+' END,COUNT(*),COALESCE(SUM(e.cash_delta_cents),0),COALESCE(SUM(e.credit_delta_cents),0),0
+      FROM canonical_financial_events e
+      WHERE e.promotion_id=?1 AND (e.session_id=?4 OR (e.session_id IS NULL AND e.event_type='PAYMENT' AND julianday(e.created_at)>=julianday(?5)))
+      GROUP BY 1,2,3
+    UNION ALL SELECT 'gasto',g.payment_method,'',COUNT(*),COALESCE(SUM(g.cash_delta_cents),0),COALESCE(SUM(g.amount_cents),0),0
+      FROM canonical_expenses g WHERE g.session_id=?4 GROUP BY g.payment_method`)
+    .bind(s.promotion_id, Number(s.cash_movement_watermark), Number(s.closing_watermark), s.session_id, s.opened_at).all()).results || [];
+  return { ready: true, open: { opened_at: s.opened_at, opening_cents: Number(s.opening_cents), expected_cents: Number(s.expected_cents) }, rows, lastClosedAt: s.last_closed_at || null };
 }
 
 // Lector en memoria con la MISMA forma (prototipo local y pruebas; datos inventados).
@@ -297,7 +336,8 @@ export function memoryReader(data) {
       return aggregatePeriods(periods, list, items, data.cashMovements ? data.cashMovements.map((m) => ({ sale_id: String(m.sale_id), credit_cents: Number(m.credit_cents) || 0 })) : null,
         data.payments ? data.payments.map((x) => ({ dia: paymentDay(x), c: Number(x.amount_cents) || 0 })) : null, !!data.truncated);
     },
-    async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
+    async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); },
+    async cashOpen() { return data.cash ? JSON.parse(JSON.stringify(data.cash)) : { ready: false }; }
   };
 }
 
@@ -317,6 +357,7 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   if (!tipo) return { error: 'bad_query' };
   const N = QUERY_LIMITS.topRows, M = QUERY_LIMITS.modelRows, base = { tipo, titulo: TITLES[tipo] };
   // truncado: la lectura se cortó (lista larga). Lo usa el chat para NO contestar directo con texto (va la segunda llamada al modelo).
+  if (tipo === 'caja_abierta') return cajaAbierta(reader, base);
   if (['stock_producto', 'bajo_stock', 'sin_costo'].includes(tipo)) {
     const list = await reader.products(), note = list.truncated ? ' (lista larga: se revisaron los primeros ' + list.length + ')' : '';
     if (list.truncated) base.truncado = true;
@@ -324,15 +365,15 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       const hits = matchProducts(list, args.producto || '').slice(0, 5);
       if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };
       const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio]);
-      return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/'], filas, texto: sentences(hits.map((p) => p.nombre + ': ' + (p.controla ? r2(p.stock) + ' unid.' : 'sin control de stock'))),
-        resumen: { encontrados: hits.length, productos: hits.map((p) => ({ nombre: p.nombre, stock: p.controla ? r2(p.stock) : null, minimo: r2(p.min) })) } };
+      return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/'], filas, texto: sentences(hits.map((p) => p.nombre + ': ' + (p.controla ? stockLabel(p.stock) : 'sin control de stock'))),
+        resumen: { encontrados: hits.length, productos: hits.map((p) => (p.controla ? stockForModel(p) : { nombre: p.nombre, stock: null, minimo: r2(p.min) })) } };
     }
     if (tipo === 'bajo_stock') {
       const low = list.filter((p) => p.controla && Number.isFinite(p.stock) && (p.stock <= 0 || p.stock <= p.min)).sort((a, b) => (a.stock - a.min) - (b.stock - b.min));
       const filas = low.slice(0, N).map((p) => [p.nombre, r2(p.stock), r2(p.min), Math.max(1, Math.ceil(p.min * 2 - p.stock))]);
       return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Pedir'], filas, total: low.length,
-        texto: low.length ? (low.length === 1 ? 'Hay 1 producto en o bajo el mínimo' : 'Hay ' + low.length + ' productos en o bajo el mínimo') + note + '. Los más urgentes: ' + low.slice(0, 3).map((p) => p.nombre + ' (' + r2(p.stock) + ')').join(', ') + '.' : 'Ningún producto está bajo el mínimo' + note + '.',
-        resumen: { total: low.length, revisados: list.length, primeros: low.slice(0, M).map((p) => ({ nombre: p.nombre, stock: r2(p.stock), minimo: r2(p.min) })) } };
+        texto: low.length ? (low.length === 1 ? 'Hay 1 producto en o bajo el mínimo' : 'Hay ' + low.length + ' productos en o bajo el mínimo') + note + '. Los más urgentes: ' + low.slice(0, 3).map((p) => p.nombre + ' (' + (p.stock <= 0 ? stockLabel(p.stock) : r2(p.stock)) + ')').join(', ') + '.' : 'Ningún producto está bajo el mínimo' + note + '.',
+        resumen: { total: low.length, revisados: list.length, primeros: low.slice(0, M).map(stockForModel) } };
     }
     const sin = list.filter((p) => !(p.costo > 0));
     return { ...base, columnas: ['Producto', 'Precio S/'], filas: sin.slice(0, N).map((p) => [p.nombre, p.precio]), total: sin.length,
@@ -388,6 +429,46 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   return { ...base, columnas: ['Fecha', 'Proveedor', 'Documento', 'Total S/', 'Líneas'], filas,
     texto: rows.length ? (rows.length === 1 ? 'Última compra' : 'Últimas ' + rows.length + ' compras') + '. La más reciente: ' + filas[0][0] + ', ' + filas[0][1] + ', S/ ' + Number(filas[0][3] || 0).toFixed(2) + '.' : 'No hay compras registradas.',
     resumen: { compras: rows.length, total_soles: r2(filas.reduce((s, f) => s + (f[3] || 0), 0)), recientes: filas.slice(0, M).map((f) => ({ fecha: f[0], proveedor: f[1], soles: f[3] })) } };
+}
+
+// ---------- Caja abierta (solo Admin) ----------
+// Hora de Lima: los helpers de arriba (limaDateTime / limaDay), los mismos de todo el asistente.
+const dmy = (iso) => { const c = limaDateTime(iso); return c ? c.slice(8, 10) + '/' + c.slice(5, 7) + '/' + c.slice(0, 4) : null; };
+const soles = (c) => 'S/ ' + cents(c).toFixed(2);
+// Esperado = el expected_cents de la vista (no se recalcula aquí). El desglose se arma con la MISMA suma que la vista:
+// fondo + efectivo de ventas + cash_delta de cobros/ingresos/egresos/devoluciones + cash_delta de gastos (negativo).
+async function cajaAbierta(reader, base) {
+  const d = reader.cashOpen ? await reader.cashOpen() : { ready: false };
+  if (!d || !d.ready) return { ...base, columnas: [], filas: [], texto: 'No pude leer la caja ahora. Revisa la pantalla Caja.', resumen: { caja_abierta: null, sin_datos: true } };
+  if (!d.open) {
+    const f = d.lastClosedAt ? dmy(d.lastClosedAt) : null;
+    return { ...base, titulo: 'Caja', columnas: [], filas: [], texto: 'No hay caja abierta.' + (f ? ' La última caja se cerró el ' + f + '.' : ' Todavía no hay cierres registrados.'),
+      resumen: { caja_abierta: false, ultimo_cierre: d.lastClosedAt ? limaDateOf(d.lastClosedAt) || null : null } };
+  }
+  const o = d.open, met = { efectivo: 0, yape: 0, plin: 0, transferencia: 0, credito: 0 };
+  let ventasN = 0, ventasC = 0, cobroEf = 0, cobroDig = 0, cobrosN = 0, ingresos = 0, egresos = 0, devol = 0, gastosEf = 0, gastosN = 0, gastosTot = 0;
+  for (const r of d.rows || []) {
+    const n = Number(r.n) || 0, a = Number(r.a) || 0, b = Number(r.b) || 0, c = Number(r.c) || 0;
+    if (r.k === 'venta') { ventasN += n; ventasC += a + b + c; met.efectivo += a; met.credito += c; if (b) met[['yape', 'plin'].includes(r.metodo) ? r.metodo : 'transferencia'] += b; }
+    else if (r.k === 'payment') { cobrosN += n; if (r.metodo === 'efectivo') cobroEf += a; else cobroDig += -b; } // cobro digital: no mueve efectivo
+    else if (r.k === 'devolucion') devol += -a;
+    else if (r.k === 'adjustment' || r.k === 'compensation') { if (a >= 0) ingresos += a; else egresos += -a; }
+    else if (r.k === 'gasto') { gastosN += n; gastosEf += -a; gastosTot += b; }
+  }
+  const esperado = o.expected_cents, suma = o.opening_cents + met.efectivo + cobroEf + ingresos - egresos - devol - gastosEf;
+  const metodos = Object.entries(met).filter(([, c]) => c).map(([k, c]) => [METODO[k] || k, cents(c)]);
+  const desde = limaDateTime(o.opened_at);
+  const filas = [['Abierta desde', desde], ['Fondo inicial', cents(o.opening_cents)], ...metodos.map(([m, c]) => ['Ventas ' + m, c]),
+    ['Cobros de crédito en efectivo', cents(cobroEf)], ...(cobroDig ? [['Cobros de crédito digitales', cents(cobroDig)]] : []), ['Ingresos de caja', cents(ingresos)], ['Egresos de caja', cents(egresos)],
+    ...(devol ? [['Devoluciones por anulación', cents(devol)]] : []), ['Gastos en efectivo', cents(gastosEf)], ['Efectivo esperado ahora', cents(esperado)]];
+  return { ...base, titulo: 'Caja abierta', columnas: ['Detalle', 'S/'], filas, total: cents(esperado), ventas: ventasN,
+    texto: 'La caja todavía está abierta (desde ' + desde + '). Fondo ' + soles(o.opening_cents) + ', ventas ' + soles(ventasC) + ' en ' + ventasN + (ventasN === 1 ? ' venta' : ' ventas') +
+      '. Efectivo esperado ahora: ' + soles(esperado) + '. Aún no hay cierre ni conteo.',
+    // Al modelo: solo totales (sin nombres de cajero ni de clientes, sin ids).
+    resumen: { caja_abierta: true, abierta_desde: desde, fondo_inicial_soles: cents(o.opening_cents), ventas: ventasN, ventas_soles: cents(ventasC), por_metodo: Object.fromEntries(metodos),
+      cobros_credito: cobrosN, cobros_efectivo_soles: cents(cobroEf), cobros_digitales_soles: cents(cobroDig), ingresos_soles: cents(ingresos), egresos_soles: cents(egresos),
+      devoluciones_anulacion_soles: cents(devol), gastos: gastosN, gastos_efectivo_soles: cents(gastosEf), gastos_total_soles: cents(gastosTot),
+      efectivo_esperado_soles: cents(esperado), desglose_cuadra: suma === esperado, cierre: 'todavía no: no hay contado ni diferencia' } };
 }
 
 // Resumen del día o del mes. Pantalla del Admin: tabla actual vs. anterior y productos top (con nombre). Modelo y texto de la respuesta:
