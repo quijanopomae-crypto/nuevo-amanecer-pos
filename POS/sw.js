@@ -179,6 +179,7 @@ const PRECACHE_URLS = [
   './js/config/pos-roles-client.js',
   './js/config/pos-employee-toggles.js',
   './js/config/employee-perms-client.js',
+  './js/config/employee-perms-ui.js',
   './js/core/lazy-assets.js'
 ];
 const LAZY_URLS = [
