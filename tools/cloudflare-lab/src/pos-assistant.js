@@ -1875,16 +1875,9 @@ function quoteOpenAt(t) {
 }
 const PIN_KW_SCAN = /pin|clave|contrase|password|token|api|data/gi;
 export const SHIELD_M = 72, SHIELD_EVERY = 8, SHIELD_TRIES = 3;
-const SHIELD_FAR_W = 10, SHIELD_FAR_C = 72, SHIELD_CHAIN_C = 200, PIN_KW_PROBE = /pin|clave|contrase|password|token|api|data/gi;
+const SHIELD_FAR_W = 10, SHIELD_FAR_C = 72, PIN_KW_PROBE = /pin|clave|contrase|password|token|api|data/gi;
 // ADJ_PROBES (22-10, PR #934): «producto clave S/ 4.50» (excepción del adjetivo); solo en cortes frenados por la ventana del adjetivo (adjCut)
-const SHIELD_PROBES = [' 4321.', ' 43.21.', ' es Gatito.', ': Gatito.', ' Zq9xK2mPw7.', ' "abc".', ' [oculto].', ' clave 4321.', ' clave: Gatito.'], ADJ_PROBES = [' producto clave S/ 4.50.', ' clave S/ 4.50.'];
-// (22-10, fix/asist-filtro-partes) cadena de etiquetas: la 3.ª rama de la regla de la etiqueta NO tapa el valor si hay un «[oculto]» a ≤ 62,
-// SALVO que tras un dígito/valor (≤ 62) venga OTRA etiqueta (≤ 62) con su propio «[oculto]» (≤ 62). O sea: lo que tapa A puede cambiar por una
-// etiqueta + valor que todavía no llegó (hasta ~62 + 62 + 10 + 62 caracteres después de la etiqueta de A). Repro: «clave abc123 1.1s m clave
-// el wifi:ga)» → entero «clave [oculto] [oculto]s m …», pero por partes se soltaba «clave abc123 [oculto]s » antes de que «clav» fuera «clave»
-// y «ga)» su valor. Por eso (1) las pruebas incluyen «una etiqueta más con su valor» (' clave 4321.', ' clave: Gatito.'; también desde el
-// último espacio, que cubre la palabra a medias «clav») y (2) el atajo que salta las pruebas exige SHIELD_CHAIN_C (> 62·3 + 10) caracteres
-// (medidos ya filtrados si hay «data»/espacios largos, que encogen el texto antes de esa regla) desde la última etiqueta de A.
+const SHIELD_PROBES = [' 4321.', ' 43.21.', ' es Gatito.', ': Gatito.', ' Zq9xK2mPw7.', ' "abc".', ' [oculto].'], ADJ_PROBES = [' producto clave S/ 4.50.', ' clave S/ 4.50.'];
 // (22-10, PR #934) en el texto entero la ventana de 40 de la excepción del adjetivo se mide DESPUÉS de las reglas de «data:…» (las únicas que
 // van antes que la de la clave): un «data:text/html;base64,…» trae «;» y largo que ahí ya no están («[imagen omitida]»). Si entre la palabra
 // (caja, pin, wifi…) y el corte hay un «data», se filtra ese tramo y se mira ahí. También cuenta lo ya soltado (rawTail).
@@ -2009,8 +2002,7 @@ function createTextStage(out0, red0 = redactText) {
     // ninguna regla de etiqueta llega tan lejos (desde el fin de la etiqueta: pinNumber/pinDecimal 60 caracteres, regla de la etiqueta 62 + «[oculto]» o 8 palabras, pinAlpha/comillas 7).
     let kwAt = -1; PIN_KW_PROBE.lastIndex = 0; for (let x; (x = PIN_KW_PROBE.exec(A));) kwAt = x.index + x[0].length; // fin de la última etiqueta
     if (kwAt < 0) { best = h; preRed = { h, r: rA }; return true; }
-    const rest = pend.slice(kwAt), restF = DATA_HINT.test(rest) || WS_LONG.test(rest) ? red0(rest) : rest;
-    if (restF.length >= Math.max(SHIELD_FAR_C, SHIELD_CHAIN_C) && rest.length >= SHIELD_CHAIN_C && rest.split(/\s+/).length > SHIELD_FAR_W) { best = h; preRed = { h, r: rA }; return true; }
+    const rest = pend.slice(kwAt); if (rest.length >= SHIELD_FAR_C && rest.split(/\s+/).length > SHIELD_FAR_W) { best = h; preRed = { h, r: rA }; return true; }
     let w = pend.length; while (w > h && !isWs(pend[w - 1])) w--; const cut = pend.slice(0, w);
     for (const p of adjCut.has(c) ? SHIELD_PROBES.concat(ADJ_PROBES) : SHIELD_PROBES) if (!same(pend + p) || (w < pend.length && !same(cut + p.trimStart()))) return false;
     best = h; preRed = { h, r: rA }; return true;
@@ -2168,42 +2160,18 @@ export function cutPrime(reply, cut = false) {
   if (cut !== true) return false;
   let t = String(reply ?? ''); if (t.endsWith(CUT_NOTICE)) t = t.slice(0, -CUT_NOTICE.length); // el aviso lo puso el servidor (par marcado)
   return t.trim() ? ownerContextAtEnd(t) : false; }
-// (22-10, fix/asist-filtro-partes) GUARDIA del texto en partes: lo que sale por partes es SIEMPRE un prefijo de lo que da el filtro del texto
-// entero. Causa del arreglo: las etapas incrementales (createTextStage y sus sondas) deciden cortes con heurísticas; con ciertas cadenas
-// («clave abc123 1.1s m clave el wifi:ga)», «clave mS/ 1.1 Lima, clave el wifi:ga)», «contraseña 1.1s …», «clave+51 987-654-321 S/ 1.10 …»)
-// lo ya soltado dejaba de coincidir con el texto entero (un «[oculto]s» de más o un «S/ 1.10» a la vista que el texto entero tapa).
-// Diseño: se acumula el texto limpio (acc) y se filtra con el MISMO filtro de texto entero (wholeOf). De lo que proponen las etapas solo pasa
-// al envío el prefijo en que coinciden (1) la propuesta de las etapas y (2) el filtro entero de todo lo llegado, menos los últimos GUARD_HOLD
-// caracteres de esa salida (una regla puede tapar algo hacia atrás al completarse su dato, p. ej. «la clave+51 987-654-321») y sin soltar el
-// valor de una etiqueta abierta mientras la frase siga (chainHold). Así la retención es la mayor de las dos, no la suma. Al cerrar
-// (flush) se filtra todo una vez y sale el resto; si lo soltado no fuera prefijo (no debería pasar nunca) se manda reset y el texto entero.
-// Por qué la cola basta: las reglas que miran hacia adelante (pin/clave/contraseña…: 60–62 caracteres por tramo, cortadas en . ; ! ? y salto
-// de línea; comillas 80 + 20; DNI/RUC/teléfono/correo: el largo del dato) quedan retenidas además por las etapas incrementales (que no sueltan
-// una etiqueta abierta ni un valor a medias). La guardia solo QUITA texto de lo que se suelta, nunca agrega: es más conservadora que antes.
-// Costo: el filtro entero corre sobre una ventana (desde un punto de control ya verificado, con GUARD_CTX de contexto detrás), a lo más cada
-// GUARD_STEP caracteres nuevos y solo si hay algo propuesto sin soltar: lineal en el largo del texto.
-const GUARD_HOLD = 40, GUARD_STEP = 8, GUARD_WIN = 900, GUARD_CTX = 600;
-// La guardia solo trabaja si en la ventana hay una etiqueta de clave (pin/clave/contraseña/password/token/api key/wifi): las reglas que miran
-// lejos hacia adelante son las de la etiqueta. Sin etiqueta, montos/RUC/DNI/teléfonos/correos ya los retienen las etapas y sale lo de siempre.
-const GUARD_ANY = /(?:pin|clave|contrase|password|token|api|wi-?fi)/i;
-const guardHold = (acc) => (/(?:pin|clave|contrase|password|token|api|wi-?fi|data|ruc|dni|@|arroba|\[at\]|S\/|\d)/i.test(acc.slice(-GUARD_WIN)) ? GUARD_HOLD : 0);
-// Cadena de etiquetas: la 3.ª rama de la regla de la etiqueta decide si tapa la palabra que sigue a «clave/pin/…» mirando ~62 + 62 + 62
-// caracteres adelante (otro valor, otra etiqueta y su «[oculto]»), y ese «[oculto]» lo deciden reglas que también miran adelante: la cadena no
-// tiene un largo fijo, pero NO pasa de un fin de frase (. ; ! ? salto de línea; «cód.» y el punto de un número como «1.10» no cortan). Por eso, además de la cola: una palabra
-// a la vista justo después de una etiqueta (no tapada, ni palabra de enlace o de precio) no se suelta mientras su frase siga abierta y
-// esté a menos de GUARD_CHAIN caracteres del final. Solo retiene ESA palabra y lo que sigue; lo de antes sale.
-const GUARD_CHAIN = 320;
-const GUARD_LBL = /(?<![A-Za-z0-9_áéíóúñÁÉÍÓÚÑ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)(?![A-Za-z0-9_áéíóúñÁÉÍÓÚÑ])(\s*(?:(?:es|era|fue|de)(?![a-zñ])|->|=>|→|[—–:=])?\s*)(?=[^\s,.;])([^\s,.;]*)/gi;
-const GUARD_FIXED = new RegExp('^(?:[*_`~(\\[' + PIN_Q_CH + ']{0,4}\\[[a-záéíóúñ ]{2,30}\\][*_`~)\\]' + PIN_Q_CH + ']{0,4}|' + PIN_LINK + '|es|era|fue|son|S\\/\\.?|US\\$|\\$|PEN|' + PIN_PRICE_WORD + ')$', 'i'); // moneda: lo que sigue es un monto
-const GUARD_END = /(?<!c[óo]d)(?:\.(?=[^\d])|[;!?\n])/i; // «1.10» / «12.345.678» no cierran la frase; un «.» al final todavía no
-function chainHold(w) { // primer valor «abierto» de la cola de w (posición en w) o w.length
-  const from = Math.max(0, w.length - GUARD_CHAIN), tail = w.slice(from); GUARD_LBL.lastIndex = 0; let m;
-  while ((m = GUARD_LBL.exec(tail))) { const v = m[2], at = m.index + m[0].length - v.length;
-    if (GUARD_FIXED.test(v)) continue;
-    if (GUARD_END.test(tail.slice(at + v.length))) continue; // su frase ya terminó
-    return from + at; }
-  return w.length; }
-const lcp = (a, b) => { const n = Math.min(a.length, b.length); let i = 0; while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++; return i; };
+// (22-10, fix/asist-filtro-partes, diseño simple aprobado por Alfa) TEXTO EN PARTES CON ETIQUETA PELIGROSA: se retiene hasta el final.
+// Lo que sale por partes es SIEMPRE un prefijo exacto del filtro del texto entero. Mientras el texto llegado (ya con la racha de espacios
+// colapsada y sin caracteres invisibles, lo mismo que ve el filtro entero) no tiene ninguna etiqueta peligrosa (la MISMA lista que activa las
+// reglas de clave del filtro entero: PIN_GATE = pin|clave|contrase|password|token|api, en cualquier mayúscula/minúscula), sale en vivo por las
+// etapas de siempre, guardando siempre una cola de LABEL_TAIL caracteres sin pasar a las etapas (≥ largo de la etiqueta más larga − 1, contando
+// «contraseña» con tilde descompuesta): una etiqueta partida entre trozos («cla» | «ve») nunca llega a las etapas. Desde la primera etiqueta: no
+// sale nada más; se guarda el resto y al cerrar se filtra la respuesta entera UNA vez (wholeOf) y sale lo que falta (filtro entero − lo ya
+// enviado). Mientras retiene, holding() es true y el Worker manda «status» (streamHoldStatus) para que el celular siga en «Pensando…».
+// Costo: sin etiqueta, el de las etapas de siempre; con etiqueta, un filtro entero al final. Contra: con etiqueta, el resto aparece de una vez.
+export const STREAM_LABELS = Object.freeze(['pin', 'clave', 'contraseña', 'contrasena', 'password', 'token', 'api key', 'api_key', 'api-key']);
+export const LABEL_TAIL = Math.max(...STREAM_LABELS.map((l) => l.normalize('NFD').length)) - 1;
+export function streamHoldStatus(emit) { return emit && emit.sent && emit.sent() ? { s: 'pensando' } : { s: 'buscando' }; } // una sola función: #957 agrega aquí «pulsa Confirmar»
 export function createTextEmitter(send, max = 1200, redact = redactText, hold = null, prime = false) {
   const stages = redact === redactText || redact === redactOwnerText || redact === redactModelOwner ? 1 : redact === redactEmployee ? 2 : 0; // (r8) redactModelOwner también por el camino incremental (paridad en las 4 vías)
   if (!stages) return legacyTextEmitter(send, max, redact, hold);
@@ -2211,39 +2179,14 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
   // known: lo ya soltado (enviado + listo). Cerca del tope (los últimos CUT_ZONE) se espera a saber si se pasa: así el corte cae donde
   // lo pone capReply y lo pintado es igual a la respuesta final.
   let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
-  // guardia: acc (texto limpio llegado), cand (lo que proponen las etapas), fwd (lo ya pasado a ready); punto de control ra/oa: el filtro entero
-  // de acc[0, ra) es exactamente fwd[0, oa) y sigue siendo prefijo con el texto que vino después (verificado con la ventana)
-  let acc = '', cand = '', fwd = '', ra = 0, wc = 0, oa = 0, lastAt = 0, pre = '';
-  const guard = (final) => {
-    if (cut) return;
-    if (final) { const zf = wholeOf(acc); // al cerrar: el filtro entero de todo, una vez
-      if (zf.startsWith(fwd)) { ready += zf.slice(fwd.length); fwd = zf; return; }
-      if (sent) send({ reset: true }); sent = 0; lastNl = false; ready = zf; fwd = zf; return; } // no debería pasar: reset y el texto entero
-    const free = !GUARD_ANY.test(acc.slice(wc)); // sin etiqueta en la ventana: lo de las etapas sale tal cual (misma retención de antes)
-    if (free) { if (cand.length > fwd.length) { const add = cand.slice(fwd.length); fwd += add; ready += add; }
-      if (acc.length - ra <= GUARD_WIN + GUARD_CTX || acc.length - lastAt < GUARD_HOLD) return;
-      if (Math.max(acc.lastIndexOf(' ', ra + GUARD_WIN), acc.lastIndexOf('\n', ra + GUARD_WIN)) <= ra) return; } // sin espacio donde cortar: nada que mover // solo mover el punto de control
-    else if (cand.length <= fwd.length || acc.length - lastAt < GUARD_STEP) return;
-    lastAt = acc.length;
-    const cs = wc, fw = wholeOf(acc.slice(cs)); if (!fw.startsWith(pre)) return; // la ventana no separa limpio: se espera
-    const w = fw.slice(pre.length);
-    if (!free) { const stable = Math.min(Math.max(0, w.length - guardHold(acc)), chainHold(w));
-      const lim = oa + lcp(cand.slice(oa, oa + stable), w.slice(0, stable));
-      if (lim > fwd.length) { const add = cand.slice(fwd.length, lim); fwd += add; ready += add; } }
-    if (acc.length - ra > GUARD_WIN + GUARD_CTX) { // nuevo punto de control (ventana acotada: costo lineal), en un espacio ya soltado
-      const c = Math.max(acc.lastIndexOf(' ', ra + GUARD_WIN), acc.lastIndexOf('\n', ra + GUARD_WIN));
-      if (c > ra) { const zc = wholeOf(acc.slice(cs, c)), k = zc.length - pre.length;
-        if (zc.startsWith(pre) && w.startsWith(zc.slice(pre.length)) && oa + k <= fwd.length) {
-          // el nuevo comienzo de ventana debe dar, desde c, EXACTAMENTE lo mismo que la ventana actual (p. ej. «pin pin pin…» se empareja
-          // distinto según dónde empiece): se prueban algunos comienzos en palabra y se usa el primero que coincide; si ninguno, se sigue igual
-          let at = Math.max(0, c - GUARD_CTX);
-          for (let tries = 0; tries < 6 && at >= 0; tries++) {
-            const p2 = wholeOf(acc.slice(at, c)), f2 = wholeOf(acc.slice(at));
-            if (f2.startsWith(p2) && f2.slice(p2.length) === w.slice(k)) {
-              ra = c; wc = at; oa += k; pre = p2; break; }
-            if (at === 0) break;
-            const sp = acc.lastIndexOf(' ', at - 2); at = sp < 0 ? 0 : sp + 1; } } } }
-  };
+  // acc: texto limpio llegado (lo que filtra wholeOf); lab: salida de la etapa de espacios aún sin pasar a sq (más la cola); out: lo ya puesto en ready
+  let acc = '', lab = '', danger = false, out = '';
+  const gate = (x) => { if (danger) return; lab += x;
+    if (PIN_GATE.test(lab)) { danger = true; lab = ''; return; } // desde aquí no pasa nada más a las etapas
+    const n = lab.length - LABEL_TAIL; if (n > 0) { const pass = lab.slice(0, n); lab = lab.slice(n); sq.push(pass); } };
+  const finish = () => { if (cut) return; const zf = wholeOf(acc); // al cerrar: el filtro entero de todo, una vez
+    if (zf.startsWith(out)) { ready += zf.slice(out.length); out = zf; return; }
+    if (sent) send({ reset: true }); sent = 0; lastNl = false; ready = zf; out = zf; }; // no debería pasar nunca: reset y el texto entero
   const batches = (n) => { while (n > 0) { let m = n; if (m > TEXT_BATCH * 1.5) { const sp = ready.lastIndexOf(' ', TEXT_BATCH); m = sp > 8 && sp < n ? sp + 1 : Math.min(TEXT_BATCH, n); }
     send({ t: ready.slice(0, m) }); lastNl = ready[m - 1] === '\n'; sent += m; n -= m; ready = ready.slice(m); } };
   const deliver = (final) => {
@@ -2261,11 +2204,11 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
     batches(n);
   };
   const init = () => {
-    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false; acc = ''; cand = ''; fwd = ''; ra = 0; wc = 0; oa = 0; lastAt = 0; pre = '';
-    s2 = stages === 2 ? createOwnerPipeline((x) => { cand += x; }, prime) : null;
-    s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else cand += x; }, s2 ? redactText : redact);
+    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false; acc = ''; lab = ''; danger = false; out = '';
+    s2 = stages === 2 ? createOwnerPipeline((x) => { ready += x; out += x; }, prime) : null;
+    s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else { ready += x; out += x; } }, s2 ? redactText : redact);
     sq = createSupStage((x) => s1.push(x)); // (Bot 2 sobre f773911f) supresión de la comilla larga sin cierre (igual que redactText: supQuotes)
-    sw = createWsStage((x) => sq.push(x)); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
+    sw = createWsStage(gate); // racha de espacios tras una etiqueta: un espacio (igual que redactText)
     s0 = s2 ? createLongRunStage((x) => sw.push(x)) : null; // solo empleado: racha larga sin espacios
   };
   init();
@@ -2275,9 +2218,10 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
       let c = raw.replace(CTRL_RE, ' '); if (prevCtrl && CTRL_CHAR.test(raw[0])) c = c.slice(1);
       prevCtrl = CTRL_CHAR.test(raw[raw.length - 1]);
       if (cut) return;
-      acc += c; if (s0) s0.push(c); else sw.push(c); guard(false); deliver(false);
+      acc += c; if (s0) s0.push(c); else sw.push(c); deliver(false);
     },
-    flush() { if (s0) s0.flush(); sw.flush(); sq.flush(); s1.flush(); if (s2) s2.flush(); guard(true); deliver(true); },
+    flush() { finish(); deliver(true); }, // las etapas no se vacían: el resto sale del filtro entero (igual a vaciarlas si no hubo etiqueta)
+    holding: () => danger && !cut,
     reset() { if (sent) send({ reset: true }); init(); },
     drop() { const keep = sent; init(); sent = keep; }, // lo que quedaba sin salir no sale
     sent: () => sent
@@ -2298,12 +2242,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const FORBIDDEN_DOCUMENT = Object.freeze({ error: 'forbidden_document', message: 'Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.', allowed: EMPLOYEE_DOC_TYPES });
 // Aviso liviano «status» mientras se buscan datos o corre una herramienta ANTES de cualquier texto (celular: «Buscando en su inventario…»).
 // Sale enseguida y luego cada STATUS_EVERY_MS mientras no haya texto; cada aviso es un trozo, así el reloj de 30 s del celular vuelve a cero.
-// Sin texto todavía = sent() en 0 (también después de un reset). Con texto ya pintado no se manda nada.
+// Sin texto todavía = sent() en 0 (también después de un reset). Con texto ya pintado no se manda nada, salvo mientras el texto en partes retiene una etiqueta (holding): { s: "pensando" }, así el reloj del celular no vence.
 export const STATUS_EVERY_MS = 8000;
 export const SERVER_MAX_MS = 90000;
 export function createStatusBeat(sse, emit, everyMs = STATUS_EVERY_MS) {
   let iv = null, last = 0;
-  const tick = (throttle) => { if (!sse || !emit || emit.sent()) return; const t = Date.now(); if (throttle && t - last < 1000) return; last = t; sse.send('status', { s: 'buscando' }); };
+  const tick = (throttle) => { if (!sse || !emit || (emit.sent() && !(emit.holding && emit.holding()))) return; const t = Date.now(); if (throttle && t - last < 1000) return; last = t; sse.send('status', streamHoldStatus(emit)); };
   return { tick, start() { if (!sse || iv) return; tick(); iv = setInterval(() => tick(), everyMs); }, stop() { clearInterval(iv); iv = null; } };
 }
 // Bot 5: lo que un EMPLEADO puede recibir de una consulta (pantalla y modelo). Lista blanca por tipo; todo lo demás (costos, márgenes,
@@ -2734,7 +2678,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, resumen: resumenIn || null });
     bytes.push(payloadBytes(req));
-    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
+    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal)
       : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     if (emit && !result.error && !result.forbidden) emit.flush();
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}) }, ERR_STATUS[result.error] || 502);

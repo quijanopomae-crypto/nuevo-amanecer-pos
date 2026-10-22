@@ -48,22 +48,39 @@ const TOKENS = ['clave', 'clave es', 'clave del wifi:', 'clave el wifi:', 'contr
   'abc123', 'ga)', '(tortuga)', 'Gatito', 'mS/', 'Zq9xK2mPw7', '4321', '1.1', '1.1s', '"abc"', 'RUC N°', 'RUC', '20123456789', 'DNI', 'DNI:', '12345678', '12.345.678',
   'S/ 1.10', 'S/ 4.50', 'S/ 1.80', 'S/', '987 654 321', '+51 987-654-321', 'juan.perez+1@gmail.com', 'ventas@botica-na.com.pe', 'Distribuidora Inversiones Lima', 'Lima',
   'lo compré a', 'costo', 'precio de venta', 'm', 'el', 'es', 'de', 'y', ' ', ' ', ' ', ',', '.', ':', ';', '(', ')', '\n', '-', '/'];
-for (const seed of [20261022, 944, 7, 123456789]) {
-  test('equivalencia: al azar con semilla ' + seed + ' (tokens de clave/contraseña/wifi/RUC/DNI/montos/teléfonos/correos y cortes al azar): en partes = texto entero, dueño y empleado', () => {
+// (diseño simple) también mayúsculas / sin tilde, y cortes DENTRO de las etiquetas («cla» | «ve abc123», «contra» | «seña»)
+TOKENS.push('CLAVE', 'Clave:', 'CONTRASEÑA', 'Contrasena', 'PASSWORD', 'Pin', 'PIN:', 'Token:', 'API KEY');
+const LABEL_IN = /pin|clave|contrase(?:ñ|n)a|password|token|api key/gi;
+// 50 semillas en la suite; STREAM_SEEDS=300 para la corrida local larga
+const SEEDS = Array.from({ length: +(process.env.STREAM_SEEDS || 50) }, (_, i) => (i === 0 ? 20261022 : i * 7919 + 1));
+test('equivalencia: al azar con ' + SEEDS.length + ' semillas (tokens de clave/contraseña/wifi/RUC/DNI/montos/teléfonos/correos, mayúsculas, cortes al azar y dentro de las etiquetas): en partes = texto entero, dueño y empleado', () => {
+  let cases = 0, inside = 0;
+  for (const seed of SEEDS) {
     const rnd = prng(seed), pick = (a) => a[Math.floor(rnd() * a.length)];
-    let cases = 0;
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 60; i++) {
       let t = ''; const n = 3 + Math.floor(rnd() * 22);
       for (let j = 0; j < n; j++) t += pick(TOKENS) + (rnd() < 0.6 ? ' ' : '');
       for (const role of ROLES) {
-        const w = whole(t, role), mode = rnd(), pieces = []; let a = 0;
-        while (a < t.length) { const k = mode < 0.3 ? 1 : mode < 0.6 ? 1 + Math.floor(rnd() * 6) : 1 + Math.floor(rnd() * 40); pieces.push(t.slice(a, a + k)); a += k; }
-        assert.equal(streamPieces(pieces, role), w, role + ' ' + JSON.stringify(pieces)); cases++;
+        const w = whole(t, role), mode = rnd(); let pieces = [];
+        if (mode < 0.35) { // un corte dentro de cada etiqueta (más algunos al azar)
+          const cuts = new Set(); LABEL_IN.lastIndex = 0; let m;
+          while ((m = LABEL_IN.exec(t))) { cuts.add(m.index + 1 + Math.floor(rnd() * (m[0].length - 1))); inside++; }
+          for (let k = 0; k < 3; k++) cuts.add(1 + Math.floor(rnd() * Math.max(1, t.length - 1)));
+          pieces = cutAt(t, [...cuts].filter((c) => c > 0 && c < t.length).sort((a, b) => a - b));
+        } else { let a = 0; while (a < t.length) { const k = mode < 0.55 ? 1 : mode < 0.8 ? 1 + Math.floor(rnd() * 6) : 1 + Math.floor(rnd() * 40); pieces.push(t.slice(a, a + k)); a += k; } }
+        assert.equal(streamPieces(pieces, role), w, seed + ' ' + role + ' ' + JSON.stringify(pieces)); cases++;
       }
     }
-    assert.equal(cases, 800);
-  });
-}
+  }
+  assert.equal(cases, SEEDS.length * 120); assert.ok(inside > SEEDS.length * 20, 'cortes dentro de etiquetas: ' + inside);
+});
+test('equivalencia: cortes dentro de la etiqueta, fijos («cla» | «ve abc123», «contra» | «seña», mayúsculas)', () => {
+  for (const t of ['hola, la clave abc123 de la caja', 'la contraseña del wifi es tortuga99 y listo', 'Su CONTRASEÑA: Gatito9 ok', 'el PIN 4321 de la caja', 'mi password Zq9xK2mPw7.', 'token = abc123 fin'])
+    for (const role of ROLES) { const w = whole(t, role); LABEL_IN.lastIndex = 0; const m = LABEL_IN.exec(t);
+      for (let k = 1; k < m[0].length; k++) { const c = m.index + k;
+        assert.equal(streamPieces([t.slice(0, c), t.slice(c)], role), w, role + ' ' + JSON.stringify([t.slice(0, c), t.slice(c)]));
+        assert.equal(streamPieces([...t.slice(0, c)].concat([t.slice(c)]), role), w, role + ' letra por letra hasta ' + c); } }
+});
 
 // Casos encontrados por la búsqueda al azar (más semillas): varias etiquetas y valores mezclados sin espacios.
 const STRESS = [
