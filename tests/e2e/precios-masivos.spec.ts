@@ -20,7 +20,11 @@ async function open(page: Page, { role = 'owner', dark = false, canon = false } 
     document.body.classList.toggle('dark', dark);
     w.eval(`productos=[{id:'p1',nombre:'Arroz Prueba',cat:'Abarrotes',precio:1234.5,costo:999,stock:5},{id:'p2',nombre:'Azúcar Prueba',cat:'Abarrotes',precio:4,costo:3,stock:5},{id:'p3',nombre:'Jabón Prueba',cat:'Limpieza',precio:2.5,costo:2,stock:5}]`);
     w.eval(`ventas=[]`);
-    w.confirm = () => true;
+    // El candado sigue cerrado en pos-permissions.js; la prueba lo abre solo en este navegador.
+    const perms = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'edicion-masiva-precios' || id === 'precio-por-margen' ? false : perms.featureLocked(id) };
+    (0, eval)("_naSecurity.pinEnabled=true;_naSecurity.pinHash=_naSecHash('2468');");
+    w.__approvals = [];
+    w.NA_ROLES = { ...w.NA_ROLES, approve: async (action: string, opId: string) => { w.__approvals.push(action); return true; } };
     if (!canon) w.NuevoAmanecerCanonical = { ...w.NuevoAmanecerCanonical, enabled: () => false };
     else {
       const products = [{ product_id: 'p1', name: 'Arroz Prueba', category: 'Abarrotes', price_cents: 123450, cost_cents: 99900, metadata_revision: 3, sku: 'A1', barcode: null, alternate_codes_json: '[]' },
@@ -59,6 +63,8 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/precios-masivos-${width}-${dark ? 'oscuro' : 'claro'}.png` });
     await apply.click();
+    await page.locator('.na-pin-overlay .na-pin-input').fill('2468');
+    await page.locator('.na-pin-overlay .na-pin-ok').click();
     await expect(s.locator('[data-pm-status]')).toHaveText('Listo: se cambió el precio de 2 productos.');
     const out = await page.evaluate(() => (window as any).eval('JSON.stringify({p:productos.map(p=>[p.id,p.precio,p.costo,p.stock]),v:ventas})'));
     expect(JSON.parse(out)).toEqual({ p: [['p1', 1357.95, 999, 5], ['p2', 4.4, 3, 5], ['p3', 2.5, 2, 5]], v: [] });
@@ -73,6 +79,7 @@ test('CANON: un product.update por producto, solo cambia price_cents', async ({ 
   await expect(s.locator('tbody tr')).toHaveCount(2);
   await s.locator('[data-pm-apply]').click();
   await expect(s.locator('[data-pm-status]')).toContainText('Listo');
+  expect(await page.evaluate(() => (window as any).__approvals)).toEqual(['product.update']);
   const ups = await page.evaluate(() => (window as any).__updates);
   expect(ups.map((u: any) => [u.product_id, u.price_cents, u.cost_cents, u.expected_metadata_revision])).toEqual([['p1', 123400, 99900, 3], ['p3', 200, 200, 1]]);
 });
@@ -128,4 +135,23 @@ test('plan: valida datos y no baja de 0', async ({ page }) => {
 test('el módulo usa solo textContent', async ({ page }) => {
   const res = await page.request.get('/js/modules/precios-masivos.js');
   expect(await res.text()).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
+});
+
+test('local: PIN incorrecto o cancelado no cambia ningún precio', async ({ page }) => {
+  await open(page);
+  const s = page.locator('#pageEdicionPrecios');
+  await s.locator('[data-pm-value]').fill('10');
+  await s.locator('[data-pm-apply]').click();
+  await page.locator('.na-pin-overlay .na-pin-input').fill('1111');
+  await page.locator('.na-pin-overlay .na-pin-ok').click();
+  await expect(page.locator('.na-pin-overlay .na-pin-msg')).toHaveText('PIN incorrecto.');
+  await page.locator('.na-pin-overlay .na-pin-cancel').click();
+  await expect(s.locator('[data-pm-status]')).toContainText('falta el PIN');
+  const out = await page.evaluate(() => (window as any).eval('JSON.stringify(productos.map(p=>p.precio))'));
+  expect(JSON.parse(out)).toEqual([1234.5, 4, 2.5]);
+});
+
+test('el candado sigue cerrado en pos-permissions.js', async ({ page }) => {
+  await page.goto('/index.html');
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-precios'))).toBe(true);
 });
