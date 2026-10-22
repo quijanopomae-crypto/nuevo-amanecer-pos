@@ -19,12 +19,12 @@
 #pageReporteArqueo h1 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 30px); line-height: 1.2; overflow-wrap: anywhere; }
 #pageReporteArqueo .ra-description, #pageReporteArqueo .ra-status { color: var(--ra-muted); }
 #pageReporteArqueo p { margin: 0 0 16px; overflow-wrap: anywhere; }
-#pageReporteArqueo .ra-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 20px 0 12px; }
+#pageReporteArqueo .ra-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 20px 0 12px; }
 #pageReporteArqueo label { display: grid; gap: 6px; min-width: 0; font-weight: 700; }
-#pageReporteArqueo input, #pageReporteArqueo button { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--ra-border); border-radius: 10px; font: inherit; color: var(--ra-text); background: var(--ra-surface); }
+#pageReporteArqueo input, #pageReporteArqueo select, #pageReporteArqueo button { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--ra-border); border-radius: 10px; font: inherit; color: var(--ra-text); background: var(--ra-surface); }
 #pageReporteArqueo button { cursor: pointer; font-weight: 700; }
 #pageReporteArqueo button:disabled { cursor: default; opacity: .6; }
-#pageReporteArqueo :is(input, button, .ra-table-wrap):focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
+#pageReporteArqueo :is(input, select, button, .ra-table-wrap):focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
 #pageReporteArqueo .ra-empty { padding: 16px; background: var(--ra-surface); border: 1px solid var(--ra-border); border-radius: 12px; }
 #pageReporteArqueo .ra-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--ra-border); border-radius: 12px; background: var(--ra-surface); }
 #pageReporteArqueo .ra-table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; color: var(--ra-text); }
@@ -46,7 +46,7 @@ body.dark #pageReporteArqueo { --ra-sobrante: #4ade80; --ra-faltante: #fca5a5; }
 #pageReporteArqueo .ra-table .ra-faltante, #pageReporteArqueo .ra-table tr:hover .ra-faltante { color: var(--ra-faltante); font-weight: 700; }
 @media (min-width: 600px) {
   #pageReporteArqueo { padding: 24px; }
-  #pageReporteArqueo .ra-controls { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; }
+  #pageReporteArqueo .ra-controls { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
 }
 #pageReporteArqueo .ra-truncated { margin: 0 0 10px; padding: 12px 16px; border: 2px solid #b45309; border-radius: 12px; background: #fef3c7; color: #78350f; font-weight: 600; }
 /* base.css (≤700px) oculta th/td:nth-child(4,5) en todas las tablas: aquí ocultaba Esperado/Contado del cuerpo

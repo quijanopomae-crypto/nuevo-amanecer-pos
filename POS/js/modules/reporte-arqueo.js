@@ -61,6 +61,11 @@
       if (text(p.opened_by_name).trim()) row.openedByName += labeler.suffix(p.opened_by_user_id, p.opened_by_name);
       if (text(p.closed_by_name).trim()) row.closedByName += labeler.suffix(p.closed_by_user_id, p.closed_by_name);
     });
+    // Filtro opcional por cajero: coincide con quien abrió o cerró (nombre mostrado).
+    var cashiers = Array.from(new Set(rows.reduce(function (all, r) { return all.concat([r.openedByName, r.closedByName]); }, [])
+      .filter(function (n) { return n !== 'No registrado'; }))).sort(function (a, b) { return a.localeCompare(b, 'es'); });
+    var cajero = text(options.cajero);
+    if (cajero) rows = rows.filter(function (r) { return r.openedByName === cajero || r.closedByName === cajero; });
     var totals = { count: rows.length, esperado: 0, contado: 0, diferencia: 0, sinContar: 0 };
     rows.forEach(function (row) {
       // Los tres totales suman solo cierres contados: contado − esperado == diferencia.
@@ -69,7 +74,7 @@
       totals.contado += row.contado;
       totals.diferencia += row.diferencia === null ? row.contado - row.esperado : row.diferencia;
     });
-    return { range: { desde: desde, hasta: hasta }, rows: rows, totals: totals };
+    return { range: { desde: desde, hasta: hasta }, cajero: cajero, cashiers: cashiers, rows: rows, totals: totals };
   }
   function toCsv(report) {
     function cell(value) {
@@ -109,13 +114,25 @@
   }
   function rangeOptions(page) {
     var desde = page.querySelector('[data-ra-desde]'), hasta = page.querySelector('[data-ra-hasta]');
-    return { desde: desde ? desde.value : undefined, hasta: hasta ? hasta.value : undefined };
+    var cajero = page.querySelector('[data-ra-cajero]');
+    return { desde: desde ? desde.value : undefined, hasta: hasta ? hasta.value : undefined, cajero: cajero ? cajero.value : '' };
   }
   function localReport(options) {
     var client = root.NuevoAmanecerCanonical;
     return buildReport(client && typeof client.snapshot === 'function' ? client.snapshot() : {}, options);
   }
-  function money(value) { return (value < 0 ? '-' : '') + 'S/ ' + (Math.abs(value) / 100).toFixed(2); }
+  // Miles con coma y dos decimales, igual que #872.
+  function money(value) { return (value < 0 ? '-' : '') + 'S/ ' + (Math.abs(value) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function fillCashiers(page, report) {
+    var select = page.querySelector('[data-ra-cajero]');
+    if (!select) return;
+    var keep = report.cajero, names = report.cashiers.slice();
+    if (keep && names.indexOf(keep) < 0) names.push(keep);
+    var all = element('option', '', 'Todos los cajeros'); all.value = '';
+    select.replaceChildren(all);
+    names.forEach(function (n) { var o = element('option', '', n); o.value = n; select.appendChild(o); });
+    select.value = keep;
+  }
   function difference(value) {
     return value === null ? '—' : (value > 0 ? '+' : '') + money(value) + (value > 0 ? ' (sobrante)' : value < 0 ? ' (faltante)' : '');
   }
@@ -145,13 +162,13 @@
       }
     });
     var report, options, fromServer = false, truncated = false;
-    try { options = buildReport([], rangeOptions(page)).range; }
+    try { options = buildReport([], rangeOptions(page)).range; options.cajero = rangeOptions(page).cajero; }
     catch (error) { status.textContent = error.message; return false; }
     function current() {
       if (version !== renderVersion) return false;
       if (!ownerAllowed()) { render(); return false; }
       var selected = rangeOptions(page);
-      return (selected.desde === undefined || selected.desde === options.desde) && (selected.hasta === undefined || selected.hasta === options.hasta);
+      return (selected.desde === undefined || selected.desde === options.desde) && (selected.hasta === undefined || selected.hasta === options.hasta) && selected.cajero === options.cajero;
     }
     try {
       if (root.navigator && root.navigator.onLine && root.NA_ROLES && typeof root.NA_ROLES.api === 'function') {
@@ -176,8 +193,9 @@
     catch (error) { status.textContent = error instanceof RangeError ? error.message : 'No se pudo leer el reporte de este dispositivo.'; return false; }
     if (!current()) return false;
     renderedReport = report;
+    fillCashiers(page, report);
     if (exportButton) exportButton.disabled = false;
-    status.textContent = dateLabel(report.range.desde) + ' al ' + dateLabel(report.range.hasta) + ' · hora de Lima · ' + (fromServer ? 'desde el servidor' : 'cierres cargados en este dispositivo');
+    status.textContent = dateLabel(report.range.desde) + ' al ' + dateLabel(report.range.hasta) + ' · hora de Lima · ' + (report.cajero ? 'cajero: ' + report.cajero + ' · ' : '') + (fromServer ? 'desde el servidor' : 'cierres cargados en este dispositivo');
     if (truncated) {
       var notice = element('p', 'ra-truncated', 'Atención: el servidor devolvió solo los ' + report.rows.length + ' cierres más recientes de este rango. Los totales están incompletos; elige un rango de fechas más corto.');
       notice.setAttribute('role', 'alert'); notice.setAttribute('data-ra-truncated', '');
@@ -229,7 +247,7 @@
       if (!ownerAllowed()) { render(); return; }
       if (exportButton.disabled) return;
       var options = rangeOptions(page), report = renderedReport;
-      if (!report || options.desde !== report.range.desde || options.hasta !== report.range.hasta) {
+      if (!report || options.desde !== report.range.desde || options.hasta !== report.range.hasta || options.cajero !== report.cajero) {
         if (!await render()) return;
         report = renderedReport;
       }
