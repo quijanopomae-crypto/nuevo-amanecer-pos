@@ -1,6 +1,7 @@
 /* Historial de archivos exportados (id historial-exportaciones, #95). Registra en ESTE dispositivo
  * (localStorage, máx. 200 entradas) cada archivo descargado desde el POS: fecha/hora de Lima, tipo,
- * reporte, filas y quién lo exportó. Nunca guarda el contenido del archivo, montos ni costos.
+ * reporte, extensión, filas y quién lo exportó. Nunca guarda el nombre del archivo (puede llevar nombres de
+ * clientes), el contenido, montos ni costos.
  * Engancha un solo punto común: toda descarga del POS termina en un <a download> (incluido
  * XLSX.writeFile de SheetJS), así que se envuelve HTMLAnchorElement.prototype.click y se escuchan los
  * clics reales en enlaces con «download». No toca la base, el Worker, CANON ni pos-permissions.js.
@@ -8,7 +9,7 @@
 (function (root) {
   'use strict';
   var PAGE_ID = 'pageHistorialExportaciones', FEATURE_ID = 'historial-exportaciones';
-  var KEY = 'na_export_history_v1', MAX = 200, BLOBS_MAX = 40;
+  var KEY = 'na_export_history_v1', MAX = 200, BLOBS_MAX = 20;
   var REPORTS = [
     [/^kardex-/, 'Kardex'], [/^sugerencia-compra-/, 'Sugerencia de compra'],
     [/^productos-sin-movimiento-/, 'Productos sin movimiento'], [/^ajustes-inventario-/, 'Ajustes de inventario'],
@@ -17,7 +18,8 @@
     [/^reporte_ganancias_/, 'Reporte de ganancias'], [/^plantilla_productos/, 'Plantilla de productos'],
     [/^productos_nuevo_amanecer_/, 'Productos'], [/^auditoria_nuevo_amanecer_/, 'Auditoría'],
     [/^seguridad_nuevo_amanecer_/, 'Registro de seguridad'], [/^nuevo_amanecer_/, 'Respaldo completo'],
-    [/^fotos-productos/, 'Fotos de productos'], [/^comprobante-/, 'Comprobante']
+    [/^fotos-productos/, 'Fotos de productos'], [/^comprobante-/, 'Comprobante'],
+    [/^ventas[_-]/, 'Ventas'], [/^clientes[_-]/, 'Clientes'], [/^gastos[_-]/, 'Gastos']
   ];
   var TYPES = { csv: 'CSV', xlsx: 'Excel', xls: 'Excel', pdf: 'PDF', json: 'JSON', txt: 'Texto', png: 'Imagen', jpg: 'Imagen', jpeg: 'Imagen', html: 'HTML' };
 
@@ -45,8 +47,7 @@
   }
   function reportName(name) {
     for (var i = 0; i < REPORTS.length; i++) if (REPORTS[i][0].test(name)) return REPORTS[i][1];
-    var stem = name.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[_-]?\d{4}-\d{2}-\d{2}.*$/, '').replace(/[_-]+/g, ' ').trim();
-    return stem ? stem.charAt(0).toUpperCase() + stem.slice(1) : 'Archivo';
+    return 'Otro archivo'; // nunca se usa el nombre del archivo: puede llevar datos de clientes
   }
   function who() {
     var role = '', label = '';
@@ -77,7 +78,7 @@
   function storage() { try { return root.localStorage || null; } catch (_) { return null; } }
   function load() {
     var s = storage(); if (!s) return [];
-    try { var list = JSON.parse(s.getItem(KEY) || '[]'); return Array.isArray(list) ? list.filter(function (e) { return e && typeof e === 'object' && typeof e.at === 'string'; }).slice(0, MAX) : []; } catch (_) { return []; }
+    try { var list = JSON.parse(s.getItem(KEY) || '[]'); return Array.isArray(list) ? list.filter(function (e) { return e && typeof e === 'object' && typeof e.at === 'string'; }).slice(0, MAX).map(function (e) { delete e.file; return e; }) : []; } catch (_) { return []; }
   }
   function save(list) {
     var s = storage(); if (!s) return false;
@@ -91,7 +92,7 @@
   function record(info) {
     if (!unlocked()) return null; // candado cerrado o permisos sin cargar: no registra
     var name = baseName(info && info.fileName); if (!name) return null;
-    var entry = { id: Date.now().toString(36) + '-' + (++seq), at: new Date(info.at || Date.now()).toISOString(), file: name,
+    var entry = { id: Date.now().toString(36) + '-' + (++seq), at: new Date(info.at || Date.now()).toISOString(), ext: extension(name),
       type: fileType(name, info.mime), report: clean(info.report, 80) || reportName(name),
       rows: typeof info.rows === 'number' && info.rows >= 0 && isFinite(info.rows) ? Math.floor(info.rows) : null, by: clean(info.by, 80) || who() };
     var list = load(); list.unshift(entry); save(list);
@@ -144,22 +145,22 @@
       var U = root.URL;
       if (U && typeof U.createObjectURL === 'function') {
         var create = U.createObjectURL, revoke = U.revokeObjectURL;
-        U.createObjectURL = function (obj) { var url = create.apply(this, arguments); wrapXlsx(); try { if (obj && typeof obj.size === 'number') rememberBlob(url, obj); } catch (_) {} return url; };
-        if (typeof revoke === 'function') U.revokeObjectURL = function (url) { var b = blobs.get(url); var out = revoke.apply(this, arguments); if (b) root.setTimeout(function () { blobs.delete(url); }, 0); return out; };
+        U.createObjectURL = function (obj) { var url = create.apply(this, arguments); try { wrapXlsx(); if (obj && typeof obj.size === 'number') rememberBlob(url, obj); } catch (_) {} return url; };
+        if (typeof revoke === 'function') U.revokeObjectURL = function (url) { var out = revoke.apply(this, arguments); try { if (blobs.has(url)) root.setTimeout(function () { blobs.delete(url); }, 0); } catch (_) {} return out; };
       }
     } catch (_) {}
     try {
       var A = root.HTMLAnchorElement && root.HTMLAnchorElement.prototype;
       if (A && typeof A.click === 'function') {
         var click = A.click;
-        A.click = function () { if (this.hasAttribute && this.hasAttribute('download')) onDownload(this); return click.apply(this, arguments); };
+        A.click = function () { try { if (this.hasAttribute && this.hasAttribute('download')) onDownload(this); } catch (_) {} return click.apply(this, arguments); };
       }
     } catch (_) {}
     try {
       // Clics reales en enlaces <a download> del DOM (los programáticos ya pasan por click()).
       root.document.addEventListener('click', function (ev) {
         if (!ev.isTrusted) return;
-        var a = ev.target && ev.target.closest ? ev.target.closest('a[download]') : null; if (a) onDownload(a);
+        try { var a = ev.target && ev.target.closest ? ev.target.closest('a[download]') : null; if (a) onDownload(a); } catch (_) {}
       }, true);
     } catch (_) {}
     wrapXlsx();
@@ -201,7 +202,7 @@
       var cells = [['Fecha y hora', limaDateTime(e.at), ''], ['Reporte', e.report, 'hx-report'], ['Tipo', e.type, ''], ['Filas', e.rows == null ? '—' : e.rows.toLocaleString('es-PE'), 'hx-num'], ['Exportó', e.by, '']];
       cells.forEach(function (c, i) {
         var td = element('td', c[2], c[1]); td.setAttribute('data-label', c[0]);
-        if (i === 1) td.appendChild(element('small', '', e.file));
+        if (i === 1 && e.ext) td.appendChild(element('small', '', '.' + e.ext));
         line.appendChild(td);
       });
       body.appendChild(line);

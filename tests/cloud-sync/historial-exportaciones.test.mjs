@@ -69,7 +69,7 @@ test('tope de 200 entradas, la más reciente primero', () => {
   const t = context();
   for (let i = 0; i < 205; i++) t.api.record({ fileName: 'f' + i + '.json' });
   const list = t.api.load();
-  assert.equal(list.length, 200); assert.equal(list[0].file, 'f204.json');
+  assert.equal(list.length, 200); assert.equal(list[0].file, undefined); assert.equal(list[0].ext, 'json');
 });
 
 test('nombres y tipos', () => {
@@ -85,4 +85,22 @@ test('enganchado en index.html y sw.js; módulo sin innerHTML', () => {
   const html = read('POS/index.html'), sw = read('POS/sw.js');
   for (const a of ['css/historial-exportaciones.css', 'js/modules/historial-exportaciones.js']) { assert.ok(html.includes(a)); assert.ok(sw.includes("'./" + a + "'")); }
   assert.ok(!/innerHTML|insertAdjacentHTML/.test(source));
+});
+
+test('nunca guarda el nombre del archivo (puede tener nombres de clientes)', () => {
+  const t = context();
+  t.api.record({ fileName: 'comprobante-Juana-Perez-123.pdf' });
+  t.api.record({ fileName: 'Juana Perez deudas.csv' });
+  assert.doesNotMatch(t.ctx.localStorage.getItem(t.api.KEY) || '', /Juana|Perez/);
+  const list = t.api.load();
+  assert.equal(list[0].report, 'Otro archivo'); assert.equal(list[0].ext, 'csv');
+  assert.equal(list[1].report, 'Comprobante');
+});
+
+test('si el registro falla, la descarga sigue igual (falla abierta para la descarga)', () => {
+  const t = context();
+  t.ctx.localStorage.setItem = () => { throw new Error('lleno'); };
+  t.ctx.localStorage.getItem = () => { throw new Error('roto'); };
+  download(t, 'kardex-2026-10-01.csv', { size: 3, type: 'text/csv', text: async () => 'a\n1' });
+  assert.deepEqual(t.clicks, ['kardex-2026-10-01.csv']);
 });
