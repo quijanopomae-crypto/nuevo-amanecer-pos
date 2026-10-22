@@ -112,11 +112,15 @@ export function memoryReader(data) {
 
 // ---------- Consultas ----------
 const METODO = { efectivo: 'Efectivo', yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', credito: 'Crédito', mixto: 'Mixto' };
-function matchProducts(list, text) {
-  const words = norm(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+// (lote en vivo 22-10) «aceites», «cervezas»: el plural también encuentra el producto en singular. Palabras de relleno fuera.
+const FILLER = new Set(['del', 'las', 'los', 'una', 'uno', 'que', 'con', 'para', 'por', 'caja', 'cajas']);
+const stem = (w) => (w.length >= 5 && w.endsWith('es') && !/[aeiou]es$/.test(w) ? w.slice(0, -2) : w.length >= 4 && w.endsWith('s') ? w.slice(0, -1) : w);
+export function matchProducts(list, text) {
+  const words = norm(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILLER.has(w)).map(stem);
   if (!words.length) return [];
   return list.map((p) => ({ p, s: words.filter((w) => norm(p.nombre).includes(w)).length })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.p);
 }
+export const PRODUCT_MATCH_ROWS = 8;
 // Devuelve { tipo, titulo, columnas, filas, texto, resumen } o { error }.
 // filas/columnas: para la pantalla del dueño. resumen: lo único que ve el modelo (chico, sin datos personales).
 export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
@@ -126,11 +130,14 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   if (['stock_producto', 'bajo_stock', 'sin_costo'].includes(tipo)) {
     const list = await reader.products(), note = list.truncated ? ' (lista larga: se revisaron los primeros ' + list.length + ')' : '';
     if (tipo === 'stock_producto') {
-      const hits = matchProducts(list, args.producto || '').slice(0, 5);
+      // (lote en vivo 22-10) nombre a medias («leche Gloria», «aceite»): se listan TODOS los parecidos (hasta 8) con precio y costo,
+      // para que el asistente muestre opciones en vez de preguntar «¿cuál?». El costo solo queda para el Admin: employeeQueryResult lo quita.
+      const all = matchProducts(list, args.producto || ''), hits = all.slice(0, PRODUCT_MATCH_ROWS);
       if (!hits.length) return { ...base, columnas: [], filas: [], texto: 'No encontré ese producto.', resumen: { encontrados: 0 } };
-      const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio]);
-      return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/'], filas, texto: sentences(hits.map((p) => p.nombre + ': ' + (p.controla ? r2(p.stock) + ' unid.' : 'sin control de stock'))),
-        resumen: { encontrados: hits.length, productos: hits.map((p) => ({ nombre: p.nombre, stock: p.controla ? r2(p.stock) : null, minimo: r2(p.min) })) } };
+      const filas = hits.map((p) => [p.nombre, p.controla ? r2(p.stock) : 'sin control', r2(p.min), p.precio, p.costo]);
+      return { ...base, columnas: ['Producto', 'Stock', 'Mínimo', 'Precio S/', 'Costo S/'], filas, total: all.length,
+        texto: sentences(hits.map((p) => p.nombre + (p.precio != null ? ' (S/ ' + Number(p.precio).toFixed(2) + ')' : '') + ': ' + (p.controla ? r2(p.stock) + ' unid.' : 'sin control de stock'))),
+        resumen: { encontrados: all.length, productos: hits.map((p) => ({ nombre: p.nombre, precio: p.precio, costo: p.costo, stock: p.controla ? r2(p.stock) : null, minimo: r2(p.min) })) } };
     }
     if (tipo === 'bajo_stock') {
       const low = list.filter((p) => p.controla && Number.isFinite(p.stock) && (p.stock <= 0 || p.stock <= p.min)).sort((a, b) => (a.stock - a.min) - (b.stock - b.min));
