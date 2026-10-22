@@ -29,7 +29,9 @@ export const readerData = {
   products: P.map(([id, nombre, precio, costo, stock, min]) => ({ id, nombre, precio, costo: costo || null, stock, min, controla: true })),
   sales: SALES, saleItems: ITEMS, purchases: PURCHASES,
   customers: CUSTOMERS.map((c) => ({ id: c.id, nombre: c.nombre })),
-  credits: CREDITS.map((c) => ({ cliente: c.cliId, saldo: c.saldo, vence: c.vence }))
+  credits: CREDITS.map((c) => ({ cliente: c.cliId, saldo: c.saldo, vence: c.vence })),
+  // Cobros de créditos (abonos) para los resúmenes del día y del mes: solo monto y hora.
+  payments: [{ payment_timestamp: iso(0, 12), amount_cents: 1000 }, { payment_timestamp: iso(1, 17), amount_cents: 500 }]
 };
 export const posSeed = {
   productos: P.map(([id, name, precio, costo, stock, stockMin, cat]) => ({ id, name, precio, costo, stock, stockMin, cat, icon: '💊', controlInventario: true })),
