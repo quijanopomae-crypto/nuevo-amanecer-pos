@@ -424,6 +424,8 @@
     var host = main.querySelector('.na9-legacy-host');
     if (host) mountLegacy(host, host.dataset.legacy, host.dataset.only ? new RegExp(host.dataset.only) : null);
     if (main.querySelector('#naDevList') && root.NA_CONFIG_G && root.NA_CONFIG_G.loadDevices) Promise.resolve(root.NA_CONFIG_G.loadDevices()).then(function () { relabel(doc.getElementById('na9Main')); });
+    var permHost = main.querySelector('.na9-bd[data-sec="pin"]');
+    if (permHost && root.NA_EMPLOYEE_PERMS_UI) try { root.NA_EMPLOYEE_PERMS_UI.mount(permHost); } catch (_) {}
     if (main.querySelector('#na9Ver')) version();
     relabel(main); fitPreview();
   }
