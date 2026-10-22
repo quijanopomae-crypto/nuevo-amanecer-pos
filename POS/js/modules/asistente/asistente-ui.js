@@ -13,7 +13,7 @@
   if (!doc || !C || root.NA_ASISTENTE) return;
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
-  var history = [], state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
+  var history = [], invoiceMemory = null, state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -311,6 +311,13 @@
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
+    refreshProducts: async function () {
+      var client = root.NuevoAmanecerCanonical;
+      if (!client || typeof client.refresh !== 'function') throw new Error('catalog_unavailable');
+      var pending = typeof client.pendingSnapshot === 'function' ? client.pendingSnapshot() : null;
+      if (pending && pending.command === 'product.create') throw new Error('product_pending');
+      await client.refresh();
+    },
     navigate: function (id) { try { root.NA_MENU_NAVIGATION.navigate(id); } catch (_) { try { root.goPage(id); } catch (__) {} } },
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
@@ -332,7 +339,7 @@
         if (!prod && !nm) { pin.placeholder = 'Complete el producto'; pin.setAttribute('aria-invalid', 'true'); pin.dataset.naNeed = '1'; }
         row.querySelector('.na-pur-qty').value = l.cantidad;
         if (l.costo_unitario != null) row.querySelector('.na-pur-cost').value = l.costo_unitario;
-        if (!prod) row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b';
+        if (!prod) { row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b'; purchaseProductButton(w, row); }
       });
       w.dispatchEvent(new Event('input', { bubbles: true }));
     },
@@ -377,6 +384,46 @@
     },
     businessName: function () { return 'Botica Nuevo Amanecer'; }
   };
+  // Conserva el borrador de compra mientras se guarda la ficha normal del producto.
+  // No llama comandos ni suma stock: Nuevo producto y Registrar compra mantienen sus permisos.
+  function purchaseProductButton(w, row) {
+    var box = el('div', 'na-asst-purchase-product'), button = el('button', 'na-asst-ok'), note = el('small', 'na-asst-note');
+    box.style.gridColumn = '1 / -1'; button.type = 'button'; button.textContent = 'Crear o vincular producto';
+    note.textContent = 'Busca uno existente o crea su ficha. El stock se sumará al registrar la compra.';
+    box.appendChild(button); box.appendChild(note); row.appendChild(box);
+    button.addEventListener('click', async function () {
+      if (!isOwnerAccess()) { note.textContent = 'Vuelve a entrar como Admin.'; return; }
+      button.disabled = true;
+      try { await deps.refreshProducts(); }
+      catch (_) { button.disabled = false; note.textContent = 'No pude verificar el catálogo o hay un producto pendiente. No repitas el guardado; revisa Inventario y vuelve a intentar.'; return; }
+      button.disabled = false;
+      if (!isOwnerAccess() || !w.parentNode) return;
+      var pin = row.querySelector('.na-pur-prod'), cost = row.querySelector('.na-pur-cost').value;
+      var draft = C.purchaseProductDraft({ nombre: pin.value, costo_unitario: cost === '' ? null : Number(cost) }, deps.productos());
+      if (!draft || draft.ambiguous) { note.textContent = 'Revisa el nombre y selecciona la presentación correcta en el catálogo.'; return; }
+      if (draft.product_id) { pin.value = draft.nombre; pin.style.outline = ''; note.textContent = 'Producto existente vinculado. Revisa cantidad y costo.'; w.dispatchEvent(new Event('input', { bubbles: true })); return; }
+      var display = w.style.display; w.style.display = 'none';
+      if (!deps.openNewProduct(draft)) { w.style.display = display; note.textContent = 'No se pudo abrir Nuevo producto. Revisa el catálogo.'; return; }
+      var modal = doc.getElementById('mProd');
+      note.textContent = 'Completa el precio de venta y guarda la ficha con stock inicial cero.';
+      var observer = new root.MutationObserver(async function () {
+        if (modal.classList.contains('open')) return;
+        observer.disconnect();
+        if (!w.parentNode || !isOwnerAccess()) return;
+        w.style.display = display; button.disabled = true;
+        try { await deps.refreshProducts(); }
+        catch (_) { note.textContent = 'No pude comprobar el producto guardado. No lo crees otra vez; revisa Inventario y vuelve a intentar.'; button.disabled = false; return; }
+        button.disabled = false;
+        if (!isOwnerAccess() || !w.parentNode) return;
+        var name = doc.getElementById('pNombre'), linked = C.purchaseProductDraft({ nombre: name ? name.value : draft.nombre }, deps.productos());
+        if (linked && linked.product_id) { pin.value = linked.nombre; pin.style.outline = ''; note.textContent = 'Producto vinculado. Revisa la compra antes de registrarla.'; }
+        else note.textContent = 'No se encontró una ficha guardada para vincular. Revisa el catálogo y los datos antes de continuar.';
+        w.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+  }
+
   var gate = C.createGate(deps);
 
   // ---------- Panel ----------
@@ -601,7 +648,7 @@
     if (mascot) { mascot.destroy(); mascot = null; } mascotAsked = false;
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
-    history.length = 0; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
+    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
   }
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
@@ -728,6 +775,30 @@
       say: function (t) { addMsg('a', t); }, state: setState,
       busy: function (on) { busy = !!on; if (sendBtn) sendBtn.disabled = on || root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = on || root.navigator.onLine === false; } };
   }
+  // ---------- «Subir archivo»: PDF -> imagen en el aparato (carga diferida de asistente-pdf.js; usa el pdf.js que ya trae el POS) ----------
+  function fileKind(f) {
+    var n = String(f && f.name || '').toLowerCase(), t = String(f && f.type || '').toLowerCase();
+    if (t === 'application/pdf' || /\.pdf$/.test(n)) return 'pdf';
+    if (/^image\//.test(t) || /\.(?:jpe?g|png|webp|gif|bmp|heic|heif)$/.test(n)) return 'image';
+    if (/\.(?:docx?|xlsx?|xlsm|csv|odt|ods|rtf|txt|pptx?)$/.test(n) || /msword|ms-excel|officedocument|opendocument|text\/(?:plain|csv)|rtf/.test(t)) return 'doc';
+    return 'other';
+  }
+  var pdfP = null;
+  function loadPdf() {
+    if (root.NA_ASISTENTE_PDF) return Promise.resolve(root.NA_ASISTENTE_PDF);
+    if (pdfP) return pdfP;
+    pdfP = new Promise(function (ok, ko) { var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-pdf.js';
+      sc.onload = function () { root.NA_ASISTENTE_PDF ? ok(root.NA_ASISTENTE_PDF) : ko(new Error('pdf')); }; sc.onerror = function () { pdfP = null; ko(new Error('pdf')); }; doc.body.appendChild(sc); });
+    return pdfP;
+  }
+  // -> Promise<{ blob, pages, total }>; si falla, ya avisó en el chat y rechaza.
+  function pdfImage(f) {
+    var wait = addMsg('a', 'Abriendo el PDF'); wait.classList.add('na-asst-thinking'); setState('concentrado');
+    return loadPdf().then(function (P) { return P.toImage(f, { doc: doc }).then(function (r) {
+      wait.remove(); if (r.total > r.pages) addMsg('a', 'El PDF tiene ' + r.total + ' páginas: leo solo las primeras ' + r.pages + '.'); return r;
+    }, function (e) { throw P.message(e && e.code); }); }).catch(function (m) {
+      wait.remove(); addMsg('a', typeof m === 'string' ? m : 'No pude abrir ese PDF.'); setState('error', 2000); throw m; });
+  }
   function boletaPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('boleta_admin_only'); return; } fileMode = 'boleta'; fileEl.click(); }
   function boletaStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; addMsg('u', 'Leer boleta con IA');
     loadBoleta().then(function (B) { return B.start(f, boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir el lector de boletas. Inténtelo otra vez.'); setState('error', 2000); }); }
@@ -775,7 +846,8 @@
     // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
-    if (image) body.image = image;
+    if (image) { body.image = image; invoiceMemory = null; }
+    else if (isOwnerAccess() && invoiceMemory) body.invoice_memory = invoiceMemory;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
     var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null; cutNote = null;
@@ -815,6 +887,8 @@
       if (!d.ok && ACCESS_LOST[d.error]) { accessLost(d.error); return; }
       if (!d.ok && d.error === 'forbidden_document') { levelLowered(); errMsg('forbidden_document'); setState('error', 2600); return; }
       if (!d.ok) { errMsg(d.error, null, [text, image]); setState('error', 2600); return; }
+      if (isOwnerAccess() && typeof d.invoice_memory === 'string') invoiceMemory = d.invoice_memory;
+      else if (d.invoice_memory === null || !isOwnerAccess()) invoiceMemory = null;
       // Turnos firmados por el servidor (texto exacto + firma). Sin firma, el servidor los descarta en un aparato de empleado.
       if (Array.isArray(d.turns) && d.turns.length === 2) history.push({ role: 'user', content: d.turns[0].content, sig: d.turns[0].sig, n: d.turns[0].n, iat: d.turns[0].iat }, { role: 'assistant', content: d.turns[1].content, sig: d.turns[1].sig, n: d.turns[1].n, iat: d.turns[1].iat, cut: d.turns[1].cut === true });
       else history.push({ role: 'user', content: body.text || 'Foto' }, { role: 'assistant', content: d.reply });
@@ -1225,7 +1299,7 @@
     panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
       '<div class="na-asst-offline" hidden>Asistente no disponible sin internet</div><div class="na-asst-msgs"></div><div class="na-asst-live" aria-live="polite" aria-atomic="true"></div>' +
       '<div class="na-asst-chips">' + chipsHtml() + '</div>' +
-      '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*" capture="environment" hidden>' +
+      '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto o PDF" title="Tomar foto o subir foto/PDF"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*,application/pdf,.pdf" hidden>' +
       '<textarea rows="1" placeholder="Escribe aquí…" aria-label="Mensaje para el asistente"></textarea><button type="button" class="na-asst-send" aria-label="Enviar">➤</button></div>';
     doc.body.appendChild(rootEl); doc.body.appendChild(panelEl);
     msgsEl = panelEl.querySelector('.na-asst-msgs'); liveEl = panelEl.querySelector('.na-asst-live');
@@ -1238,9 +1312,15 @@
     sendBtn.onclick = function () { send(inputEl.value); };
     inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(inputEl.value); } });
     photoBtn.onclick = function () { fileMode = ''; fileEl.click(); };
+    // Sin «capture»: el teléfono ofrece cámara, galería o archivos. Fotos y PDF (el PDF se pasa a imagen EN EL APARATO); Word/Excel: aún no.
     fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0], mode = fileMode; fileMode = ''; fileEl.value = ''; if (!f) return;
-      if (mode === 'boleta') { if (isOwnerAccess()) boletaStart(f); return; }
-      compress(f).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }).catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); };
+      var k = fileKind(f);
+      if (k === 'doc') { addMsg('a', 'Por ahora leo fotos y PDF. Si es Word o Excel, guárdelo como PDF o tómele una foto y súbalo.'); return; }
+      if (k === 'other') { addMsg('a', 'Ese archivo no lo puedo leer. Suba una foto o un PDF.'); return; }
+      if (k === 'pdf' && !isOwnerAccess()) { errMsg('image_owner_only'); return; }
+      var got = k === 'pdf' ? pdfImage(f) : Promise.resolve({ blob: f });
+      if (mode === 'boleta') { if (isOwnerAccess()) got.then(function (r) { boletaStart(r.blob); }, function () {}); return; }
+      got.then(function (r) { return compress(r.blob).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }, function () { addMsg('a', k === 'pdf' ? 'No pude abrir ese PDF.' : 'No pude abrir esa foto.'); setState('error', 2000); }); }, function () {}); };
     panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else send(b.dataset.q); });
     shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón

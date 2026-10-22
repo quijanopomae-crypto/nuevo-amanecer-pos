@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner OK to publish PR #924 (permisos por empleado, 2026-10-22). Merge 48a8d920: worker.js authorizeSession + pos-employee-perms.js (/auth/employee-permissions), pos-roles.js (/auth/me employee_allow solo empleado); FEATURE_LOCKS 'permisos-por-empleado': false. Sin migración: fila pos_settings internal:emp:perm:v1 (sin fila = todo apagado). Worker before web. CI critical-regression + visual green. D1 backup taken first: Owner Backup Recovery Drill run 39781034687 success (R2 recovery-drills/2026-10-22T12-46-03Z-94a98e23….sql). Rollback to 7e06690c (worker 67).",
-  "target_commit": "48a8d9203029826812fb4613894f2a7f70f4b569",
-  "rollback_ref": "7e06690cc6c83651e60d1daeaa7a3f73da02f1ad",
+  "authorization_context": "Owner approved 2026-10-22: Aslo. Deploy PR #953 invoice conversation memory and clarifications. CANON Critical CI 39830113594, E2E Smoke CI 39830113650 and Visual Regression 39830113808 success; independent Reviewer/Forensic no P0/P1. Backend first then web. No schema, business data or secret changes.",
+  "target_commit": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
+  "rollback_ref": "e58826c093ee0b411eef30012ba9038e4bbecca1",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 68,
-  "optimization": "PERMISOS_POR_EMPLEADO"
+  "attempt": 71,
+  "optimization": "ASSISTANT_INVOICE_CONVERSATION_MEMORY"
 }

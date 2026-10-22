@@ -181,7 +181,7 @@ test('UI: solo Admin (chip y texto), carga diferida del módulo, foto por el mis
   assert.ok(!chips.slice(2, 4).join('\n').includes('data-boleta'));
   assert.match(UI, /if \(!image && isOwnerAccess\(\) && BOLETA_RE\.test\(text\)\) \{ inputEl\.value = ''; return boletaPick\(\); \}/);
   assert.match(UI, /sc\.src = 'js\/modules\/asistente\/asistente-boleta\.js'/);
-  assert.match(UI, /if \(mode === 'boleta'\) \{ if \(isOwnerAccess\(\)\) boletaStart\(f\); return; \}/);
+  assert.match(UI, /if \(mode === 'boleta'\) \{ if \(isOwnerAccess\(\)\) got\.then\(function \(r\) \{ boletaStart\(r\.blob\); \}, function \(\) \{\}\); return; \}/);
   const re = new RegExp(UI.match(/var BOLETA_RE = \/(.*)\/i;/)[1], 'i'); for (const t of ['Lee esta boleta', 'leer boleta', 'boleta con IA']) assert.match(t, re, t);
   assert.match(WORKER, /if \(url\.pathname === ASSISTANT_BOLETA_PATH\) \{\n\s+if \(String\(env\.ASSISTANT_ENABLED \|\| ''\) !== '1'\) return json\(\{ error: 'not_found' \}, 404\);\n\s+const auth = await authorizeSession\(request, env\);/);
   assert.doesNotMatch(BOL_SRC, /\.innerHTML\s*=|insertAdjacentHTML/);
