@@ -13,7 +13,7 @@
   if (!doc || !C || root.NA_ASISTENTE) return;
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
-  var history = [], state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
+  var history = [], invoiceMemory = null, state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -648,7 +648,7 @@
     if (mascot) { mascot.destroy(); mascot = null; } mascotAsked = false;
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
-    history.length = 0; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
+    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
   }
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
@@ -846,7 +846,8 @@
     // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
-    if (image) body.image = image;
+    if (image) { body.image = image; invoiceMemory = null; }
+    else if (isOwnerAccess() && invoiceMemory) body.invoice_memory = invoiceMemory;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
     var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null; cutNote = null;
@@ -886,6 +887,8 @@
       if (!d.ok && ACCESS_LOST[d.error]) { accessLost(d.error); return; }
       if (!d.ok && d.error === 'forbidden_document') { levelLowered(); errMsg('forbidden_document'); setState('error', 2600); return; }
       if (!d.ok) { errMsg(d.error, null, [text, image]); setState('error', 2600); return; }
+      if (isOwnerAccess() && typeof d.invoice_memory === 'string') invoiceMemory = d.invoice_memory;
+      else if (d.invoice_memory === null || !isOwnerAccess()) invoiceMemory = null;
       // Turnos firmados por el servidor (texto exacto + firma). Sin firma, el servidor los descarta en un aparato de empleado.
       if (Array.isArray(d.turns) && d.turns.length === 2) history.push({ role: 'user', content: d.turns[0].content, sig: d.turns[0].sig, n: d.turns[0].n, iat: d.turns[0].iat }, { role: 'assistant', content: d.turns[1].content, sig: d.turns[1].sig, n: d.turns[1].n, iat: d.turns[1].iat, cut: d.turns[1].cut === true });
       else history.push({ role: 'user', content: body.text || 'Foto' }, { role: 'assistant', content: d.reply });
