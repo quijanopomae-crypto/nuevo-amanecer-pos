@@ -217,6 +217,8 @@ body.dark .na-asst-card .flag-a button{background:#1f0a0a;color:#fecaca;border-c
 .na-asst-card table.q th{font-size:13px;text-align:left;color:#334155;border-bottom:2px solid #e2e8f0;padding:4px 2px}.na-asst-card table.q th.r{text-align:right}
 .na-asst-card th{font-size:13px;text-align:left;color:#334155;font-weight:700}.na-asst-card th.r{text-align:right}
 .na-asst-card td.chg{color:#9a3412;font-weight:800}
+.na-asst-card td .lt{font-size:13px;font-weight:400;color:#475569}.na-asst-card tr.tot td{border-bottom:0;padding-top:6px}
+body.dark .na-asst-card td .lt{color:#b6cbbf}
 .na-asst-card .warn.doc{background:#fff7ed;color:#9a3412}
 body.dark .na-asst-card th,body.dark .na-asst-card table.q th{color:#b6cbbf;border-color:#1f3b2b}
 body.dark .na-asst-card td.chg{color:#fdba74}

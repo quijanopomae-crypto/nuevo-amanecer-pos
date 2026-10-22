@@ -469,6 +469,12 @@
     var n = prod && (prod.nombre || prod.name); return n ? n : (l ? l.nombre : ''); }
   // cuántas filas hay en total: en deudas es «clientes» y en ventas no hay cuenta («total» es plata: antes salía «Mostrando 10 de 22057.72»)
   function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'ventas_periodo' ? null : r.total; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
+  // (fix/asist-compras-borrador) fila final con el total de la compra; si alguna fila no trae costo, se avisa cuántas.
+  function totalRow(t) {
+    if (!t || t.filas.length === t.sinCosto) return '';
+    return '<tr class="tot"><td><b>Total de la compra</b>' + (t.sinCosto ? '<div class="note" data-sincosto>' + (t.sinCosto === 1 ? '1 fila sin costo' : t.sinCosto + ' filas sin costo') + '</div>' : '') +
+      '</td><td></td><td class="r"><b data-total>' + soles(t.total) + '</b></td></tr>';
+  }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +
@@ -485,6 +491,7 @@
       '<div class="note">' + E([p.desde, p.hasta && p.hasta !== p.desde ? p.hasta : null].filter(Boolean).join(' a ') + (p.cliente_id && CUSTOMER_DOCS.indexOf(p.tipo) >= 0 ? ' · Cliente: ' + cliLabel(p.cliente_id) : '')) + '</div>' +
       '<div class="warn doc">Documento interno. NO es comprobante SUNAT.</div>' +
       '<div class="res" aria-live="polite"></div><div class="acts"><button type="button" class="na-asst-ok" data-open>Abrir documento</button></div>';
+    var tot = p.type === 'compra' ? C.purchaseTotals(p) : null;
     if (p.type === 'compra') rows = '<tr><th>Producto</th><th class="r">Costo actual</th><th class="r">Factura</th></tr>' + p.lineas.map(function (l, i) {
       var flag = l.revisar && l.revisar.length;
       var why = flag ? l.revisar.map(function (k) { return REVIEW_TEXT[k] || k; }).join(', ') : '';
@@ -492,7 +499,8 @@
       return '<tr' + (flag ? ' class="flag" data-row="' + i + '"' : '') + '><td>' + E(l.cantidad) + ' × ' + E(lineName(l)) + (l.product_id ? '' : ' <b class="nr">(no registrado)</b>') +
         (l.limite && l.limite.length ? '<div class="flag-t">Fuera del límite: ' + E(why) + '. Corrige la factura o quita la fila.</div><div class="flag-a"><button type="button" data-drop="' + i + '">Quitar fila</button></div>'
           : flag ? '<div class="flag-t">Revisa este dato: ' + E(why) + '</div><div class="flag-a"><button type="button" data-accept="' + i + '">Está bien</button><button type="button" data-drop="' + i + '">Quitar fila</button></div>' : '') +
-        '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') + '</td></tr>'; }).join('');
+        '</td><td class="r">' + (l.costo_actual != null ? soles(l.costo_actual) : '-') + '</td><td class="r' + (diff ? ' chg' : '') + '">' + (l.costo_unitario != null ? soles(l.costo_unitario) : '-') +
+        (tot.filas[i] != null ? '<div class="lt" data-lt="' + i + '">Total ' + soles(tot.filas[i]) + '</div>' : '') + '</td></tr>'; }).join('') + totalRow(tot);
     if (p.type === 'precio') rows = '<tr><td>' + E(p.nombre) + '</td><td class="r">' + soles(p.precio_actual) + ' → <b>' + soles(p.precio_nuevo) + '</b></td></tr>';
     if (p.type === 'costo') rows = '<tr><td>' + E(p.nombre) + '<div class="note">Costo</div></td><td class="r">' + (p.costo_actual != null ? soles(p.costo_actual) : 'sin costo') + ' → <b>' + soles(p.costo_nuevo) + '</b></td></tr>';
     if (p.type === 'ajuste') rows = '<tr><td>' + E(p.nombre) + '<div class="note">' + E(p.motivo) + '</div></td><td class="r">' + (p.tipo === 'entrada' ? '+' : '−') + E(p.cantidad) + '</td></tr>' +
@@ -509,7 +517,7 @@
     if (p.type === 'ajuste' && p.grande) warn += '<div class="warn">Cantidad muy grande. Revisa bien.</div>';
     if (p.type === 'producto' && p.parecidos && p.parecidos.length) warn += '<div class="warn">Ya hay productos parecidos: ' + E(p.parecidos.join(', ')) + '.</div>';
     if (p.type === 'producto' && p.revisar) warn += '<div class="warn">Precio o costo fuera de lo normal. Revisa bien.</div>';
-    var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». La compra no cambia el costo del producto: usa las tarjetas «Actualizar costo».',
+    var note = { compra: 'Al confirmar, se abre «Nueva compra» llena. El stock sube solo cuando pulses «Registrar compra». Al registrar la compra, el costo de cada producto se actualiza con el de la compra.',
       precio: 'Al confirmar, se abre la ficha del producto con el precio nuevo. Se aplica cuando pulses Guardar.', costo: 'Al confirmar, se abre la ficha del producto con el costo de la factura. Se aplica cuando pulses Guardar.' + (p.origen ? ' (' + p.origen + ')' : ''),
       ajuste: 'Al confirmar, se abre «Registrar movimiento» lleno. El stock cambia solo cuando pulses Guardar.', producto: 'Al confirmar, se abre «Nuevo producto» lleno. Se crea solo cuando pulses Guardar.' }[p.type];
     // (Bot 2 sobre 58200f60) proveedor · documento · fecha: se llena en addCard con textContent, la serie en su span que no se parte
@@ -539,11 +547,15 @@
     var go = c.querySelector('[data-go]'); if (go) go.onclick = function () { gate.execute(key, { confirmed: true }).then(function () { closePanel(); }); };
     // Documento local (solo lectura): se puede abrir varias veces, sin servidor ni PIN.
     var op = c.querySelector('[data-open]'); if (op) op.onclick = function () { var perm = C.canExecute(roles(), p); if (!perm.ok) { c.querySelector('.res').textContent = perm.msg; return; } op.disabled = true; Promise.resolve(C.EXECUTORS.documento(p, deps)).then(function (r) { c.querySelector('.res').textContent = r.msg; }, function () { c.querySelector('.res').textContent = 'No se pudo armar el documento.'; }).then(function () { op.disabled = false; }); };
-    var no = c.querySelector('[data-no]'); if (no) no.onclick = function () { gate.cancel(key); c.dataset.st = 'cancelled'; res.textContent = 'Cancelado. No se hizo nada.'; };
+    var no = c.querySelector('[data-no]'); if (no) no.onclick = function () { gate.cancel(key, 'cancelada'); c.dataset.st = 'cancelled'; res.textContent = 'Cancelado. No se hizo nada.'; };
     var ok = c.querySelector('[data-ok]'), left = c.querySelector('[data-left]');
     var exp = tokenExp(p), timer = null;
     // Filas «Revisa este dato»: Confirmar queda apagado hasta aceptar o quitar cada una (el servidor exige lo mismo).
     var decided = {};
+    // fila quitada: el total de la compra deja de contarla
+    function syncTotal() { if (p.type !== 'compra') return; var b = c.querySelector('[data-total]'); if (!b) return;
+      var t = C.purchaseTotals({ lineas: p.lineas.filter(function (_, i) { return decided[i] !== 'drop'; }) }); b.textContent = soles(t.total);
+      var n = c.querySelector('[data-sincosto]'); if (n) n.textContent = t.sinCosto ? (t.sinCosto === 1 ? '1 fila sin costo' : t.sinCosto + ' filas sin costo') : ''; }
     function pendingRows() { return Array.prototype.filter.call(c.querySelectorAll('tr.flag'), function (tr) { return !decided[tr.dataset.row]; }).length; }
     function review() { if (p.type !== 'compra') return null; var a = [], d = []; Object.keys(decided).forEach(function (k) { (decided[k] === 'drop' ? d : a).push(Number(k)); }); return { op: tokenOp(p), accept: a, drop: d }; }
     // (Bot 2 sobre 6280deae) campos vacíos de la tarjeta de compra: Confirmar apagado hasta llenarlos
@@ -579,7 +591,7 @@
       var i = b.getAttribute('data-accept') != null ? b.getAttribute('data-accept') : b.getAttribute('data-drop'), tr = c.querySelector('tr[data-row="' + i + '"]');
       decided[i] = b.hasAttribute('data-drop') ? 'drop' : 'accept';
       if (tr) { tr.dataset.decision = decided[i]; var t = tr.querySelector('.flag-t'); if (t) t.textContent = decided[i] === 'drop' ? 'Fila quitada: no se agregará.' : 'Revisado: lo aceptaste.'; }
-      syncOk();
+      syncTotal(); syncOk();
     });
     // Vencida (por la hora o porque el servidor dijo 410): Confirmar queda a la vista pero apagado, «Venció», y se ofrece «Pedir de nuevo».
     function expire() {
@@ -591,7 +603,7 @@
     function tick() {
       if (!left) return; var ms = exp - (Date.now() + clockOffset); if (!exp) { left.textContent = '-'; return; }
       if (ms <= 0 && ok && ok.textContent === 'Guardando…') { left.textContent = '0:00'; return; } // en curso: el servidor decide (ya usada = mismo id)
-      if (ms <= 0) { clearInterval(timer); if (c.dataset.st === 'pending') { gate.cancel(key); expire(); if (again) { again.hidden = false; again.disabled = false; } } left.textContent = '0:00'; return; }
+      if (ms <= 0) { clearInterval(timer); if (c.dataset.st === 'pending') { gate.cancel(key, 'vencida'); expire(); if (again) { again.hidden = false; again.disabled = false; } } left.textContent = '0:00'; return; }
       var sec = Math.ceil(ms / 1000); left.textContent = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
     }
     syncOk();
@@ -855,6 +867,7 @@
     // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
+    if (gate.summary) body.cards = gate.summary(); // (fix/asist-compras-borrador) estado real de las tarjetas: una cancelada no vuelve como pendiente
     if (image) { body.image = image; invoiceMemory = null; }
     else if (isOwnerAccess() && invoiceMemory) body.invoice_memory = invoiceMemory;
     var bubble = null, painter = null, streaming = canStream();
