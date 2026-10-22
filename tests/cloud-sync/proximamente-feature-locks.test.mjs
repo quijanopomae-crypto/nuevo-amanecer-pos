@@ -73,3 +73,18 @@ test('clientes-filtro-deuda is unlocked on client and server (no feature_locked,
   }
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
+
+test('clientes-deudores-caja is unlocked on client and server (no feature_locked, no writes)', async t => {
+  assert.equal(PERMISSIONS.FEATURE_LOCKS['clientes-deudores-caja'], false);
+  assert.equal(PERMISSIONS.featureLocked('clientes-deudores-caja'), false);
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
+  f.addDevice('debtors-owner', 'writer', 'active', 'debtors-owner-token');
+  const before = f.database.prepare('SELECT * FROM canonical_control').all();
+  for (const method of ['GET', 'POST']) {
+    const response = await f.fetch('http://localhost/features/clientes-deudores-caja', { method, headers: { authorization: 'Bearer debtors-owner-token' } });
+    const body = await response.json();
+    assert.notEqual(body.error, 'feature_locked');
+    assert.equal(response.status, 404);
+  }
+  assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
+});
