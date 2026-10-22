@@ -102,6 +102,7 @@
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/catalogo-reportes.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
     <script>
@@ -527,6 +528,21 @@
     <p class="psm-status" data-psm-status role="status" aria-live="polite"></p>
     <div data-psm-content></div>
   </div>
+</div>
+
+<div class="page" id="pageCatalogoReportes" aria-labelledby="catalogoReportesTitle">
+    <header class="cr-header">
+        <div class="cr-heading">
+            <h1 id="catalogoReportesTitle">Catálogo de reportes</h1>
+            <p>Todos los reportes en un solo lugar · Solo dueño</p>
+        </div>
+        <label class="cr-search" data-cr-search hidden>Buscar reporte
+            <input type="search" placeholder="Ej.: kardex, deuda, arqueo" autocomplete="off">
+        </label>
+    </header>
+    <div class="cr-content">
+        <div data-cr-list></div>
+    </div>
 </div>
 
 <div class="page" id="pageValorizacion">
@@ -1466,6 +1482,7 @@
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/catalogo-reportes.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
