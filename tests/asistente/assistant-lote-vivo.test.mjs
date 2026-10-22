@@ -52,7 +52,7 @@ test('pantallas: los nombres del prompt son los del menú real (POS/index.html);
 test('«cuánto me deben»: regla con consultar deudas_clientes solo para el Admin; el total sale del servidor sin nombres', async () => {
   assert.match(systemPrompt('owner'), /CUÁNTO LE DEBEN[^\n]*deudas_clientes[^\n]*total/);
   assert.doesNotMatch(systemPrompt('empleado:consultas'), /CUÁNTO LE DEBEN/);
-  const r = await chat({ text: '¿cómo sé cuánto me deben?' }, { responses: [call('consultar', { tipo: 'deudas_clientes' }), { content: 'Le deben S/ 75.50 entre 2 clientes. El detalle está en Clientes > Reporte de deuda.' }] });
+  const r = await chat({ text: '¿cómo sé cuánto me deben? Explícame.' }, { responses: [call('consultar', { tipo: 'deudas_clientes' }), { content: 'Le deben S/ 75.50 entre 2 clientes. El detalle está en Clientes > Reporte de deuda.' }] });
   assert.equal(r.status, 200); assert.match(r.body.reply, /75\.50/);
   const toModel = JSON.stringify(r.requests[1].messages.filter((m) => m.role === 'tool'));
   assert.equal(JSON.parse(JSON.parse(toModel)[0].content).resumen.total_soles, 75.5); assert.doesNotMatch(toModel, /Rosa|Juan/);
@@ -79,10 +79,10 @@ test('producto nombrado a medias: lista los que coinciden con precio; costo solo
   assert.equal(r.filas.length, 3); assert.equal(r.resumen.encontrados, 3);
   assert.deepEqual(r.resumen.productos.map((p) => p.precio), [4.2, 4.5, 6.9]); assert.match(r.texto, /S\/ 4\.20/);
   assert.equal(matchProducts(PRODUCTS, 'six pack de cerveza').length, 1); assert.equal(matchProducts(PRODUCTS, 'aceites').length, 1);
-  const own = await chat({ text: 'leche gloria' }, { responses: [call('consultar', { tipo: 'stock_producto', producto: 'leche gloria' }), { content: 'Hay 3 Leche Gloria.' }] });
+  const own = await chat({ text: 'leche gloria, explícame' }, { responses: [call('consultar', { tipo: 'stock_producto', producto: 'leche gloria' }), { content: 'Hay 3 Leche Gloria.' }] });
   const card = own.body.proposals.find((p) => p.type === 'consulta');
   assert.ok(card.result.columnas.includes('Costo S/')); assert.equal(card.result.filas.length, 3);
-  const emp = await chat({ text: 'leche gloria' }, { role: 'empleado:consultas', responses: [call('consultar', { tipo: 'stock_producto', producto: 'leche gloria' }), { content: 'Hay 3.' }] });
+  const emp = await chat({ text: 'leche gloria, explícame' }, { role: 'empleado:consultas', responses: [call('consultar', { tipo: 'stock_producto', producto: 'leche gloria' }), { content: 'Hay 3.' }] });
   const ec = emp.body.proposals.find((p) => p.type === 'consulta');
   assert.ok(!ec.result.columnas.includes('Costo S/') && ec.result.columnas.includes('Precio S/'));
   const toModel = JSON.stringify(emp.requests[1].messages.filter((m) => m.role === 'tool'));
@@ -202,12 +202,13 @@ test('lote 3: Admin ve el NOMBRE aunque la pantalla no mande productos (se busca
 });
 
 // ---------- Lote 4 (a-d) y alfa ----------
+// (#960) una consulta simple responde sin segunda llamada: las pruebas que revisan lo que recibe el modelo piden «explícame».
 test('a) sin dato: compras vacías -> «No tengo ese dato registrado» + dónde; al modelo va sin_dato; regla SIN DATO (flete en Gastos)', async () => {
   const empty = { products: async () => PRODUCTS, purchases: async () => [], credits: async () => [], customers: async () => [] };
   const q = await runAssistantQuery(empty, { tipo: 'compras_recientes' }, 200000);
   assert.match(q.texto, /^No tengo ese dato registrado/); assert.match(q.texto, /Inventario > Compras > Nueva compra/); assert.match(q.texto, /Compras > Historial/);
   assert.match(q.resumen.sin_dato, /No tengo ese dato registrado/);
-  const r = await chat({ text: 'a qué precio compré el aceite?' }, { reader: empty, responses: [call('consultar', { tipo: 'compras_recientes' }), { content: 'No tengo ese dato registrado; las compras se registran en Inventario > Compras > Nueva compra.' }] });
+  const r = await chat({ text: 'a qué precio compré el aceite? Explícame.' }, { reader: empty, responses: [call('consultar', { tipo: 'compras_recientes' }), { content: 'No tengo ese dato registrado; las compras se registran en Inventario > Compras > Nueva compra.' }] });
   assert.equal(r.status, 200); assert.equal(r.requests.length, 2);
   const tool = r.requests[1].messages.find((m) => m.role === 'tool'); assert.match(tool.content, /No tengo ese dato registrado/);
   for (const role of ['owner', 'empleado:consultas']) {
