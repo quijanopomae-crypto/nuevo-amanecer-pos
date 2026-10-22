@@ -75,5 +75,17 @@
       return true;
     } catch (_) { return false; }
   }
-  root.NA_EMPLOYEE_PERMS_UI = Object.freeze({ mount: mount, canShow: canShow, LOCK_ID: LOCK_ID });
+  // El rol del dueño puede confirmarse después de dibujar la pestaña: se vuelve a revisar con cada na:role.
+  // Sin permiso se quita el panel (falla cerrada); con permiso se monta una sola vez.
+  function sync() {
+    try {
+      var cont = doc.querySelector && doc.querySelector('.na9-bd[data-sec="pin"]'); if (!cont) return false;
+      var old = cont.querySelector('#naEmpPerm');
+      if (!canShow()) { if (old) old.remove(); return false; }
+      if (old) return false;
+      return mount(cont);
+    } catch (_) { return false; }
+  }
+  try { if (typeof root.addEventListener === 'function') root.addEventListener('na:role', sync); } catch (_) {}
+  root.NA_EMPLOYEE_PERMS_UI = Object.freeze({ mount: mount, canShow: canShow, sync: sync, LOCK_ID: LOCK_ID });
 })(globalThis);
