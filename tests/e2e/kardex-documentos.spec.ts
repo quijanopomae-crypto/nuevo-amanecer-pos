@@ -96,13 +96,15 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
   });
 }
 
-for (const role of ['empleado', ''] as const) test(`rol ${role || 'desconocido'}: Sin permiso y ninguna lectura`, async ({ page }) => {
+for (const role of ['empleado', ''] as const) test(`rol ${role || 'desconocido'}: sección oculta y ninguna lectura`, async ({ page }) => {
   const { requests } = await rolePage(page, role);
   const before = await state(page);
   await page.evaluate(() => (window as any).NA_KARDEX_DOCUMENTOS.render());
   const box = page.locator('[data-kdoc]');
-  await expect(box.locator('[data-kdoc-status]')).toHaveText('Sin permiso. Pídele acceso al dueño.');
+  await expect(box).toBeHidden();
   await expect(box.locator('[data-kdoc-controls]')).toBeHidden();
+  await expect(box.locator('[data-kdoc-status]')).toHaveText('');
+  await expect(box.getByText('Sin permiso')).toHaveCount(0);
   await expect(box.locator('[data-kdoc-row]')).toHaveCount(0);
   expect(await state(page)).toBe(before);
   expect(requests.filter(r => !r.startsWith('GET /auth/me'))).toEqual([]);

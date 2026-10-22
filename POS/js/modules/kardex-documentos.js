@@ -209,10 +209,9 @@
     var box = section(); if (!box) return false;
     var controls = box.querySelector('[data-kdoc-controls]'), status = box.querySelector('[data-kdoc-status]'), content = box.querySelector('[data-kdoc-content]');
     content.replaceChildren();
-    if (!featureUnlocked()) { box.hidden = true; return false; }
-    box.hidden = false;
-    var allowed = canViewDocuments(); controls.hidden = !allowed;
-    if (!allowed) { status.textContent = 'Sin permiso. Pídele acceso al dueño.'; return false; }
+    // Falla cerrada: sin candado abierto o sin rol dueño, toda la sección queda oculta (sin aviso al empleado).
+    if (!featureUnlocked() || !canViewDocuments()) { box.hidden = true; controls.hidden = true; status.textContent = ''; return false; }
+    box.hidden = false; controls.hidden = false;
     var from = box.querySelector('[data-kdoc-from]'), to = box.querySelector('[data-kdoc-to]'), type = box.querySelector('[data-kdoc-type]');
     var defaults = periodRange();
     if (!from.value) from.value = defaults.from;

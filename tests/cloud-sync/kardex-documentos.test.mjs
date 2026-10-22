@@ -69,3 +69,26 @@ test('solo lectura y DOM seguro: sin innerHTML, sin fetch/api, sin storage', () 
   for (const bad of [/innerHTML|outerHTML|insertAdjacentHTML|document\.write/, /fetch\(|\.api\(|XMLHttpRequest|sendBeacon/, /localStorage|sessionStorage|indexedDB/, /\bownerAllowed\b/])
     assert.doesNotMatch(source.replace(/\/\*[\s\S]*?\*\//g, ''), bad);
 });
+
+test('sin dueño o con candado cerrado se oculta toda la sección, sin aviso «Sin permiso»', () => {
+  const node = () => ({ hidden: false, textContent: 'x', value: '', replaceChildren() {}, appendChild() {} });
+  const make = () => { const parts = { '[data-kdoc-controls]': node(), '[data-kdoc-status]': node(), '[data-kdoc-content]': node() };
+    const box = { __naKdocBound: true, hidden: false, querySelector: s => parts[s] || node() }; return { box, parts }; };
+  const perms = locked => ({ canAccessScreen: () => true, featureLocked: id => (id === 'kardex-documentos' ? locked : true) });
+  for (const [roles, permissions] of [[{ isOwner: () => false }, perms(false)], [undefined, perms(false)], [{ isOwner: () => true }, perms(true)], [{ isOwner: () => true }, undefined]]) {
+    const { box, parts } = make();
+    const document = { getElementById: () => ({ querySelector: () => box }), createElement: node };
+    const c = context({ NA_ROLES: roles, NA_PERMISSIONS: permissions, document });
+    assert.equal(c.NA_KARDEX_DOCUMENTOS.render(), false);
+    assert.equal(box.hidden, true); assert.equal(parts['[data-kdoc-controls]'].hidden, true);
+    assert.equal(parts['[data-kdoc-status]'].textContent, '');
+  }
+  assert.doesNotMatch(source, /Sin permiso/);
+});
+
+test('tarjeta kardex-documentos en Próximamente: pending, solo dueño, pageKardex', () => {
+  const reg = readFileSync('POS/js/modules/proximamente-registry.js', 'utf8');
+  const line = reg.split('\n').find(l => l.includes("id: 'kardex-documentos'"));
+  assert.ok(line, 'falta la tarjeta');
+  assert.match(line, /pending: true/); assert.match(line, /roles: \['owner'\]/); assert.match(line, /page: 'pageKardex'/);
+});
