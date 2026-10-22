@@ -9,7 +9,7 @@
   ['cash.closes.view', 'purchases.costs.view', 'expense.create', 'expense.update', 'expense.void', 'settings.set', 'product-images.write', 'reports.view', 'devices.manage', 'owner-pin.set', 'pairing-code.create', 'reviews.resolve'].forEach(function (id) { ACTIONS[id] = owner; });
   ['cash.expense', 'sync.write'].forEach(function (id) { ACTIONS[id] = both; });
   // Asistente (prototipo): SOLO dueño (modo admin). No vende ni llena carritos.
-  ['assistant.chat', 'assistant.query', 'assistant.document', 'assistant.price.propose', 'assistant.purchase.propose', 'assistant.stock.propose', 'assistant.product.propose'].forEach(function (id) { ACTIONS[id] = owner; });
+  ['assistant.chat', 'assistant.query', 'assistant.document', 'assistant.price.propose', 'assistant.purchase.propose', 'assistant.stock.propose', 'assistant.product.propose', 'assistant.levels.set'].forEach(function (id) { ACTIONS[id] = owner; });
   SCREENS['pageReporteDeuda'] = owner;
   SCREENS['pageCodigosDuplicados'] = owner;
   var SYNC_ENTITIES = {};
@@ -44,6 +44,8 @@
   API_ROUTES.push({ path: '/auth/assistant/confirm', methods: ['POST'], roles: ['owner', 'empleado'] });
   API_ROUTES.push({ path: '/auth/assistant/employee-access', methods: ['GET', 'POST'], roles: owner });
   API_ROUTES.push({ path: '/auth/assistant/audit', methods: ['GET'], roles: owner });
+  // Niveles 0..3 del asistente por persona: solo Admin, sin PIN (el Worker responde 403 admin_only a cualquier otro).
+  API_ROUTES.push({ path: '/auth/assistant/levels', methods: ['GET', 'POST'], roles: owner });
   // Proveedor del asistente: solo dueño (el Worker responde 403 admin_only a cualquier otro).
   API_ROUTES.push({ path: '/auth/assistant/provider', methods: ['GET'], roles: owner });
   ['test', 'select'].forEach(function (k) { API_ROUTES.push({ path: '/auth/assistant/provider/' + k, methods: ['POST'], roles: owner }); });
