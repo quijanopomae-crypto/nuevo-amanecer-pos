@@ -2622,7 +2622,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image });
     bytes.push(payloadBytes(req));
     const a1 = clock();
-    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal)
+    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), () => beat.tick(true), guard, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
       : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     noteCall(result, 'ms_model1', a1);
     if (emit && !result.error && !result.forbidden) emit.flush();
@@ -2712,8 +2712,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
       if (emit) { emit.reset(); beat.start(); beat.tick(); }
       const a2 = clock();
-      const second = emit ? await callModelStream(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
-        : await callModel(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+      // (lentitud 22-10) sin respaldo a modelos gratis: si esta llamada falla, queda el texto armado con los números (no vale la pena esperar).
+      const cfg2 = { ...cfg, noFreeFallback: true };
+      const second = emit ? await callModelStream(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
+        : await callModel(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       noteCall(second, 'ms_model2', a2); tm.second_call = true;
       if (emit && !second.error) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);

@@ -280,6 +280,13 @@ function adapterOf(cfg) { const a = cfg && cfg.ok !== false ? ADAPTERS[cfg.kind]
 // reintento. Solo si NO llegó texto todavía (nada se repite en pantalla). Con foto, solo respaldos que leen fotos. Esperas cortas: no
 // gastan CPU del Worker y el tope de 90 s del pedido sigue mandando (outer corta también la espera). 401/403/404/400 no se reintentan.
 export const RETRY_WAITS_MS = Object.freeze([800, 1500]);
+// (lentitud 22-10) Modelos gratis (sufijo «:free», p. ej. los de Routeway): dan 429 a menudo y tardan. Con cfg.noFreeFallback (la segunda
+// llamada que explica una consulta: si falla, ya está el texto armado con los números) NO se pasa a ellos; el primero de la cadena (el que
+// eligió el Admin) se usa siempre, aunque sea gratis.
+export const isFreeModel = (m) => /:free$/i.test(String(m || ''));
+// (lentitud 22-10) Espera SIN datos al empezar una respuesta en partes: si en 12 s no llegó ni un byte, se corta (antes 25 s). Después del
+// primer trozo manda idleMs (25 s) como siempre. Con foto no se acorta (leer una foto tarda más en empezar).
+export const FIRST_DATA_MS = 12000;
 const MAX_RETRY_AFTER_MS = 3000;
 function waitMs(ms, outer) {
   if (!(ms > 0) || outer?.aborted) return Promise.resolve();
@@ -295,7 +302,8 @@ async function withRetries(cfg, req, outer, once) {
   const chain = [cfg, ...(Array.isArray(cfg.fallbacks) ? cfg.fallbacks : [])]
     .map((c) => (typeof c === 'string' ? { ...cfg, model: c } : { ...c, retryWaits: cfg.retryWaits }))
     .filter((c, i, a) => c.model && a.findIndex((x) => x.base === c.base && x.model === c.model) === i)
-    .filter((c, i) => i === 0 || !hasImage(req) || c.vision);
+    .filter((c, i) => i === 0 || !hasImage(req) || c.vision)
+    .filter((c, i) => i === 0 || !(cfg.noFreeFallback && isFreeModel(c.model)));
   let r = null, n = 0; // n: intentos hechos (tiempos del asistente: cuántas veces se llamó al proveedor)
   const tag = (x, k) => (x && typeof x === 'object' ? Object.assign(x, { attempts: n, fallback: k > 0 }) : x);
   for (let k = 0; k < chain.length; k++) {
@@ -331,19 +339,21 @@ async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
 
 // En partes: cada trozo de texto va a onText en cuanto llega; las llamadas a herramientas se juntan aquí y recién al final se devuelven
 // (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs). Si se corta a mitad: { error, partial:true }.
-export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
+// opts.firstMs: espera máxima hasta el PRIMER byte (por defecto FIRST_DATA_MS sin foto; con foto, idleMs). Nunca más que idleMs.
+export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, opts = {}) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer));
+  const firstMs = Math.min(idleMs, Number(opts.firstMs) > 0 ? Number(opts.firstMs) : hasImage(req) ? idleMs : FIRST_DATA_MS);
+  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer, firstMs));
 }
-async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
+async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, firstMs = idleMs) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
   const think = createThinkStripper(); // <think>…</think> fuera antes de la redacción (onText) y del texto final
   const controller = new AbortController(); let timer = null; let reader = null; linkAbort(controller, outer);
   controller.signal.addEventListener('abort', () => { try { if (reader) reader.cancel().catch(() => {}); } catch { /* ya cortado */ } }, { once: true });
-  const arm = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), idleMs); };
+  const arm = (ms = idleMs) => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), ms); };
   let content = '', usage = null, forbidden = null, failed = null; const calls = [];
   try {
-    arm();
+    arm(firstMs); // hasta el primer byte: firstMs; luego, idleMs desde el último trozo
     const res = await fetchImpl(A.url(cfg, true), { method: 'POST', signal: controller.signal, headers: A.headers(cfg, true), body: JSON.stringify(A.body(cfg, req, true)) });
     if (!res.ok) return { error: A.status(res.status), status: res.status, retryAfterS: retryAfterS(res) };
     if (!res.body || typeof res.body.getReader !== 'function') return { error: 'upstream_error' };
