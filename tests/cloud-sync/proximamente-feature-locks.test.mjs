@@ -88,3 +88,19 @@ test('clientes-deudores-caja is unlocked on client and server (no feature_locked
   }
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
+
+test('estado-cuenta-cliente stays locked for now (feature_locked, no writes)', async t => {
+  assert.equal(PERMISSIONS.FEATURE_LOCKS['estado-cuenta-cliente'], true);
+  assert.equal(PERMISSIONS.featureLocked('estado-cuenta-cliente'), true) // candado cerrado hasta abrirlos todos juntos;
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
+  f.addDevice('ec-owner', 'writer', 'active', 'ec-owner-token');
+  f.addDevice('ec-employee', 'writer', 'active', 'ec-employee-token');
+  f.exec("INSERT INTO pos_device_roles(device_id,pos_role,created_by,created_at) VALUES('session:ec-employee','empleado','test','2026-10-21T00:00:00Z')");
+  const before = f.database.prepare('SELECT * FROM canonical_control').all();
+  for (const token of ['ec-owner-token', 'ec-employee-token']) for (const method of ['GET', 'POST']) {
+    const response = await f.fetch('http://localhost/features/estado-cuenta-cliente', { method, headers: { authorization: 'Bearer ' + token } });
+    const body = await response.json();
+    assert.equal(body.error, 'feature_locked'); // candado cerrado
+  }
+  assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
+});
