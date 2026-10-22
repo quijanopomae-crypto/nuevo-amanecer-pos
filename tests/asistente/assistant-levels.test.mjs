@@ -86,7 +86,7 @@ test('por defecto: empleado sin fila = nivel 0 (apagado, como hoy); Admin = nive
   const by = Object.fromEntries(r.body.personas.map((p) => [p.device_id, p]));
   assert.deepEqual([by['session:dueno'].nivel, by['session:dueno'].fijo, by['session:dueno'].rol], [3, true, 'admin']);
   assert.deepEqual([by['session:emp'].nivel, by['session:emp2'].nivel], [0, 0]);
-  assert.deepEqual(r.body.por_defecto, { empleado: 0, admin: 3 }); assert.equal(r.body.niveles.length, 4);
+  assert.deepEqual(r.body.por_defecto, { empleado: 0, admin: 3, costos: false }); assert.equal(r.body.niveles.length, 4);
   assert.ok(!/pin|token|approval|dni|telefono/i.test(r.raw), 'nada sensible en la lista');
   assert.equal((await chat('tok-emp', 'qué falta reponer')).body.error, 'assistant_off');
   // Fila guardada por la ruta vieja (con PIN): se respeta sin migrar nada.
@@ -175,4 +175,102 @@ test('ruta: apagada sin ASSISTANT_ENABLED; registrada en la tabla de permisos y 
   assert.equal(r.status, 404);
   assert.match(readFileSync('POS/js/config/pos-permissions.js', 'utf8'), /'\/auth\/assistant\/levels', methods: \['GET', 'POST'\], roles: owner/);
   assert.match(readFileSync('tools/cloudflare-lab/src/worker.js', 'utf8'), /url\.pathname === ASSISTANT_LEVELS_PATH/);
+});
+
+// ---------- Permiso aparte «costos y cambios» (solo cuenta en el nivel 3) y herramienta del Admin ----------
+import { COSTS_ROLE, COSTS_CAPABILITIES, seesOwnerData, queryAllowed, docAllowed } from '../../tools/cloudflare-lab/src/pos-assistant-levels.js';
+const confirmCard = async (call, tok, p) => { const { confirm_token, ...proposal } = p; return call(tok, '/auth/assistant/confirm', { token: confirm_token, proposal }); };
+const COMPRA = 'llegaron 5 Synthetic 00003 del proveedor';
+
+test('mapa del permiso: solo cuenta en el nivel 3; sin deudas, caja, fotos ni configurar', () => {
+  assert.equal(roleForLevel(3, true), COSTS_ROLE); assert.equal(roleForLevel(2, true), 'empleado:consultas_documentos'); assert.equal(roleForLevel(1, true), 'empleado:consultas');
+  assert.equal(roleForLevel(3, false), 'empleado:completo'); assert.equal(levelOfRole(COSTS_ROLE), 3);
+  assert.deepEqual([seesOwnerData('owner'), seesOwnerData(COSTS_ROLE), seesOwnerData('empleado:completo'), seesOwnerData('empleado:consultas_documentos')], [true, true, false, false]);
+  assert.equal(COSTS_CAPABILITIES.costos, true); assert.equal(COSTS_CAPABILITIES.cambios, true); assert.equal(COSTS_CAPABILITIES.fotos, false); assert.equal(COSTS_CAPABILITIES.configurar, false);
+  assert.ok(queryAllowed(COSTS_ROLE, 'sin_costo') && !queryAllowed(COSTS_ROLE, 'deudas_clientes') && !queryAllowed('empleado:completo', 'sin_costo'));
+  assert.ok(docAllowed(COSTS_ROLE, 'inventario_valorizado') && !docAllowed(COSTS_ROLE, 'estado_cuenta') && !docAllowed(COSTS_ROLE, 'resumen_cierre'));
+  for (const t of ['leer_factura_compra', 'configurar_nivel']) assert.equal(toolAllowed(COSTS_ROLE, t), false, t);
+  for (const t of ['proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo']) assert.equal(toolAllowed(COSTS_ROLE, t), true, t);
+  assert.equal(accessLevel(COSTS_ROLE), 'consultas_documentos');
+});
+
+test('al modelo: costos solo con nivel 3 + permiso; nivel 3 sin permiso y nivel 2 con permiso no los reciben; nunca DNI ni teléfono', () => {
+  const ctxOf = (role) => sanitizeContext({ products: [{ id: '00003', nombre: 'Arroz', precio: 4.5, costo: 2.17, stock: 3 }] }, role);
+  const reqOf = (role) => JSON.stringify(buildDeepSeekRequest({ role, ctx: ctxOf(role), history: [], text: parseChatBody({ text: 'DNI 45678912, cel 987654321' }, role).text }).messages);
+  assert.ok(reqOf(COSTS_ROLE).includes('2.17'), 'nivel 3 + permiso: costo');
+  for (const r of ['empleado:completo', roleForLevel(2, true)]) assert.ok(!reqOf(r).includes('2.17'), r);
+  for (const r of [COSTS_ROLE, 'empleado:completo']) { const s = reqOf(r); assert.ok(!s.includes('45678912') && !s.includes('987654321'), r); }
+});
+
+test('POST costos: apagado por defecto; dar y quitar queda en la bitácora; el empleado recibe 403 al darse el permiso', async (t) => {
+  const { setLevel, list, call, audit } = await setup(t);
+  assert.equal((await list()).body.personas.find((p) => p.device_id === 'session:emp').costos, false, 'apagado por defecto');
+  const self = await call('tok-emp', LEVELS_PATH, { device_id: 'session:emp', costos: true }); assert.equal(self.status, 403);
+  assert.equal((await call('tok-emp', LEVELS_PATH, { persona: 'Caja 2', nivel: 3, costos: true })).status, 403);
+  const g = await call('tok-dueno', LEVELS_PATH, { persona: 'caja 2', costos: true }); assert.equal(g.status, 200, g.raw);
+  assert.deepEqual([g.body.device_id, g.body.nivel, g.body.costos, g.body.costos_activo], ['session:emp', 0, true, false]); assert.match(g.body.aviso, /nivel 3/);
+  const n3 = await setLevel('session:emp', 3); assert.equal(n3.body.costos_activo, true, 'el permiso se conserva al subir de nivel');
+  const rv = await call('tok-dueno', LEVELS_PATH, { device_id: 'session:emp', costos: false }); assert.equal(rv.body.costos, false); assert.equal(rv.body.nivel, 3);
+  for (const bad of [{ device_id: 'session:emp', costos: 'si' }, { device_id: 'session:emp' }, { persona: 'Caja 9', costos: true }]) assert.notEqual((await call('tok-dueno', LEVELS_PATH, bad)).status, 200, JSON.stringify(bad));
+  const rows = (await audit()).entries.filter((e) => e.tool === 'asistente.nivel' && e.grupo === 'o').map((e) => e.outcome);
+  assert.ok(rows.includes('costos:off->on') && rows.includes('costos:on->off') && rows.includes('nivel:0->3'), rows.join(','));
+});
+
+test('nivel 3 sin permiso: sin costos ni tarjetas; con permiso: ve costos y aplica SU tarjeta con un toque (anotada con su aparato); nivel 2 con permiso: sin costos', async (t) => {
+  const { setLevel, chat, call, audit } = await setup(t);
+  await setLevel('session:emp', 3);
+  const off = await chat('tok-emp', COMPRA); assert.equal(off.status, 200, off.raw);
+  assert.ok(!off.raw.includes('0.29') && !off.body.proposals.some((p) => p.needsConfirm), 'nivel 3 sin permiso: igual que antes');
+  assert.equal((await call('tok-dueno', LEVELS_PATH, { device_id: 'session:emp', costos: true })).status, 200);
+  const on = await chat('tok-emp', COMPRA); assert.equal(on.status, 200, on.raw);
+  const compra = on.body.proposals.find((p) => p.type === 'compra'); assert.ok(compra && compra.confirm_token, on.raw);
+  assert.ok(on.raw.includes('0.29'), 've el costo actual');
+  const merma = (await chat('tok-emp', 'merma de 1 Synthetic 00003')).body.proposals.find((p) => p.type === 'ajuste'); assert.ok(merma?.confirm_token);
+  const ok = await confirmCard(call, 'tok-emp', merma); assert.equal(ok.status, 200, ok.raw); assert.equal(ok.body.type, 'ajuste');
+  assert.ok((await audit()).entries.some((e) => e.outcome === 'confirmed' && e.device_id === 'session:emp' && e.role === COSTS_ROLE && e.grupo === 'r'), 'anotada con su aparato');
+  // Una tarjeta del Admin no la aplica el empleado, ni con permiso.
+  const own = (await chat('tok-dueno', 'merma de 1 Synthetic 00003')).body.proposals.find((p) => p.type === 'ajuste');
+  assert.equal((await confirmCard(call, 'tok-emp', own)).status, 403);
+  // Quitar el permiso aplica al instante, también a una tarjeta ya entregada.
+  const pend = (await chat('tok-emp', 'merma de 2 Synthetic 00003')).body.proposals.find((p) => p.type === 'ajuste'); assert.ok(pend);
+  assert.equal((await call('tok-dueno', LEVELS_PATH, { device_id: 'session:emp', costos: false })).status, 200);
+  const late = await confirmCard(call, 'tok-emp', pend); assert.equal(late.status, 403); assert.equal(late.body.error, 'forbidden_role');
+  assert.ok(!(await chat('tok-emp', COMPRA)).raw.includes('0.29'));
+  // Nivel 2 con el permiso guardado: no cuenta.
+  assert.equal((await call('tok-dueno', LEVELS_PATH, { device_id: 'session:emp', nivel: 2, costos: true })).body.costos_activo, false);
+  const l2 = await chat('tok-emp', COMPRA); assert.ok(!l2.raw.includes('0.29') && !l2.body.proposals.some((p) => p.needsConfirm), 'nivel 2 con permiso: sin costos ni tarjetas');
+  assert.equal((await chat('tok-emp', 'productos sin costo')).body.proposals.some((p) => p.type === 'consulta'), false);
+});
+
+test('herramienta del Admin «configurar_nivel»: tarjeta + «Aplicar» para dar y para quitar; por etiqueta; el empleado no la tiene', async (t) => {
+  const { f, list, chat, call, audit } = await setup(t);
+  const real = globalThis.fetch; let next = null, seen = [];
+  globalThis.fetch = async (u, init) => { seen.push(JSON.parse(init.body)); return new Response(JSON.stringify({ choices: [{ message: { content: '', tool_calls: next ? [{ id: 'c1', type: 'function', function: { name: 'configurar_nivel', arguments: JSON.stringify(next) } }] : [] } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } }); };
+  t.after(() => { globalThis.fetch = real; });
+  f.env.DEEPSEEK_API_KEY = 'k-prueba';
+  assert.ok(toolsForRole('owner').some((x) => x.function.name === 'configurar_nivel'));
+  for (const r of ['empleado:completo', COSTS_ROLE]) assert.ok(!toolsForRole(r).some((x) => x.function.name === 'configurar_nivel'), r);
+  next = { persona: 'Caja 2', nivel: 3, costos: true };
+  const give = await chat('tok-dueno', 'dale permiso a la caja 2 para ver costos'); assert.equal(give.status, 200, give.raw);
+  assert.ok(seen.at(-1).tools.some((x) => x.function.name === 'configurar_nivel'));
+  const card = give.body.proposals.find((p) => p.type === 'nivel'); assert.ok(card, give.raw);
+  assert.deepEqual([card.device_id, card.label, card.nivel_antes, card.nivel_despues, card.costos_antes, card.costos_despues, card.needsConfirm], ['session:emp', 'Caja 2', 0, 3, false, true, true]);
+  assert.equal((await list()).body.personas.find((p) => p.device_id === 'session:emp').nivel, 0, 'nada cambia antes de «Aplicar»');
+  assert.equal((await confirmCard(call, 'tok-emp', card)).status, 403, 'el empleado no aplica la tarjeta del Admin');
+  const ok = await confirmCard(call, 'tok-dueno', card); assert.equal(ok.status, 200, ok.raw); assert.equal(ok.body.proposal.resultado.costos_activo, true);
+  let p = (await list()).body.personas.find((x) => x.device_id === 'session:emp'); assert.deepEqual([p.nivel, p.costos], [3, true]);
+  next = { persona: 'caja 2', costos: false };
+  const take = (await chat('tok-dueno', 'quítale a la caja 2 el permiso de costos')).body.proposals.find((x) => x.type === 'nivel');
+  assert.deepEqual([take.costos_antes, take.costos_despues, take.nivel_despues], [true, false, 3]);
+  assert.equal((await confirmCard(call, 'tok-dueno', take)).status, 200);
+  p = (await list()).body.personas.find((x) => x.device_id === 'session:emp'); assert.deepEqual([p.nivel, p.costos], [3, false]);
+  const outs = (await audit()).entries.filter((e) => e.tool === 'asistente.nivel' && e.grupo === 'o').map((e) => e.outcome);
+  assert.ok(outs.includes('nivel:0->3') && outs.includes('costos:off->on') && outs.includes('costos:on->off'), outs.join(','));
+  // Persona desconocida o el Admin: sin tarjeta.
+  for (const bad of [{ persona: 'Rosa Quispe', costos: true }, { persona: 'Dueño', nivel: 1 }]) { next = bad; const r = await chat('tok-dueno', 'cambia el permiso'); assert.ok(!r.body.proposals.some((x) => x.type === 'nivel'), JSON.stringify(bad)); }
+  // Si el modelo igual la pide para un empleado (nivel 3 con permiso): se descarta.
+  await call('tok-dueno', LEVELS_PATH, { device_id: 'session:emp', costos: true });
+  next = { persona: 'Caja 3', nivel: 3, costos: true };
+  const emp = await chat('tok-emp', 'dame nivel 3 a la caja 3'); assert.ok(!emp.body.proposals.some((x) => x.type === 'nivel')); assert.ok(emp.body.dropped.some((d) => d.tool === 'configurar_nivel'));
+  assert.equal((await list()).body.personas.find((x) => x.device_id === 'session:emp2').nivel, 0);
 });

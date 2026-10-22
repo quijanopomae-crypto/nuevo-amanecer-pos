@@ -7,11 +7,15 @@
 //   Nivel 2  «Completo en sus funciones, el resto solo lectura»: lo del 1 + listas imprimibles (precios y pedido). No propone cambios.
 //   Nivel 3  «Sin restricción»: lo del 2 + revisión de la app de punta a punta (errores, fallas, lentitud, pantallas, menús
 //            y cómo se ve en cada aparato, con /auth/assistant/review).
+//   Permiso aparte «costos y cambios» (costos: true), APAGADO por defecto, solo lo da o quita el Admin. SOLO cuenta en el nivel 3:
+//            en el nivel 0, 1 o 2 se guarda pero no hace nada. Con nivel 3 + permiso: ve costos y ganancias, consultas y documentos del
+//            negocio (sin deudas de clientes ni caja) y recibe tarjetas de cambio que él mismo aplica con UN toque en «Aplicar» (la
+//            bitácora anota SU aparato). Sin el permiso, el nivel 3 sigue igual que antes (sin costos ni cambios).
 //   Admin    siempre nivel 3 y además todo lo de hoy: cambios con UN toque en «Aplicar», costos, compras, fotos y configurar niveles.
 //            Sin PIN y sin otra autenticación (pedido del dueño). No se puede bajar.
 //
 // Guardado: el nombre del nivel va en la MISMA fila interna que ya existía (pos_settings 'internal:asst:lvl:<hash del aparato>'),
-// con { level: 'off'|'consultas'|'consultas_documentos'|'completo', nivel: 0..3 }. Las filas viejas ({ level: 'consultas' }) se leen
+// con { level: 'off'|'consultas'|'consultas_documentos'|'completo', nivel: 0..3, costos: true|false }. Las filas viejas ({ level: 'consultas' }) se leen
 // igual: 'consultas' = 1 y 'consultas_documentos' = 2. Así no cambia nada para quien ya tenía permiso.
 // Al modelo nunca le llegan nombres, DNI ni teléfonos: para un empleado de cualquier nivel siguen los mismos filtros de siempre.
 
@@ -25,6 +29,14 @@ const NONE = freezeAll({ asistente: false, herramientas: [], consultas: [], docu
 const L1 = freezeAll({ ...NONE, asistente: true, herramientas: ['explicar_pasos', 'consultar'], consultas: ['stock_producto', 'bajo_stock'] });
 const L2 = freezeAll({ ...L1, herramientas: [...L1.herramientas, 'preparar_documento'], documentos: ['lista_precios', 'lista_pedido'] });
 const L3 = freezeAll({ ...L2, revision: true });
+// Nivel 3 + permiso «costos y cambios». Fuera siempre: deudas y estado de cuenta de clientes, caja, fotos y configurar niveles.
+const L3C = freezeAll({ ...L3, costos: true, cambios: true,
+  herramientas: [...L3.herramientas, 'proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo'],
+  consultas: [...L3.consultas, 'sin_costo', 'ventas_periodo', 'top_productos', 'compras_recientes'],
+  documentos: [...L3.documentos, 'inventario_valorizado', 'reporte_ventas'] });
+export const COSTS_CAPABILITIES = L3C;
+export const COSTS_SUFFIX = '+costos';
+export const COSTS_ROLE = 'empleado:completo' + COSTS_SUFFIX;
 // Capacidades de un EMPLEADO por nivel. «cambios», «costos», «fotos» y «configurar» quedan para el Admin (ver ADMIN_CAPABILITIES).
 export const LEVEL_CAPABILITIES = Object.freeze([NONE, L1, L2, L3]);
 // Admin: 'todas' = las herramientas y consultas de la tabla única de permisos (POS/js/config/pos-permissions.js), sin cambios respecto de hoy.
@@ -42,20 +54,27 @@ export function levelFromStored(v) {
   const n = parseLevel(v?.nivel); if (n != null && LEVEL_NAMES[n] === (v?.level ?? LEVEL_NAMES[n])) return n;
   const m = parseLevel(v?.level); return m != null && typeof v?.level === 'string' ? m : EMPLOYEE_DEFAULT_LEVEL;
 }
-export function storedValue(nivel) { return { level: LEVEL_NAMES[nivel], nivel }; }
+export function costsFromStored(v) { return v?.costos === true; }
+export function storedValue(nivel, costos = false) { return { level: LEVEL_NAMES[nivel], nivel, costos: costos === true }; }
 
 // Rol del servidor ('owner' | 'empleado:<nombre>' | 'sin_rol' | ...) -> nivel 0..3.
 export function levelOfRole(role) {
   if (role === 'owner') return ADMIN_LEVEL;
   const s = String(role || '');
   if (!s.startsWith('empleado:')) return 0;
-  const i = LEVEL_NAMES.indexOf(s.slice(9)); return i > 0 ? i : 0;
+  const n = s.slice(9), i = LEVEL_NAMES.indexOf(n === COSTS_ROLE.slice(9) ? 'completo' : n); return i > 0 ? i : 0;
 }
-export function roleForLevel(nivel) { return 'empleado:' + (LEVEL_NAMES[nivel] || 'off'); }
-export function capabilitiesFor(role) { return role === 'owner' ? ADMIN_CAPABILITIES : LEVEL_CAPABILITIES[levelOfRole(role)]; }
+// El permiso solo se suma al rol en el nivel 3: 'empleado:completo+costos'. En otro nivel el rol es el de siempre.
+export function roleForLevel(nivel, costos = false) { return nivel === 3 && costos === true ? COSTS_ROLE : 'empleado:' + (LEVEL_NAMES[nivel] || 'off'); }
+export function hasCosts(role) { return role === COSTS_ROLE; }
+// ¿Recibe datos del dueño (costos, ganancias) como el Admin? Admin, o empleado nivel 3 con permiso. Nadie más.
+export function seesOwnerData(role) { return role === 'owner' || hasCosts(role); }
+export function capabilitiesFor(role) { return role === 'owner' ? ADMIN_CAPABILITIES : hasCosts(role) ? L3C : LEVEL_CAPABILITIES[levelOfRole(role)]; }
+export function queryAllowed(role, tipo) { const c = capabilitiesFor(role).consultas; return c === 'todas' || (Array.isArray(c) && c.includes(tipo)); }
+export function docAllowed(role, tipo) { const c = capabilitiesFor(role).documentos; return c === 'todos' || (Array.isArray(c) && c.includes(tipo)); }
 export function levelCan(role, cap) { const c = capabilitiesFor(role)[cap]; return Array.isArray(c) ? c.length > 0 : !!c; }
 // Herramientas del EMPLEADO por nombre de nivel (lo que antes era EMPLOYEE_TOOLS en pos-assistant.js).
-export const EMPLOYEE_TOOLS_BY_NAME = Object.freeze(Object.fromEntries(LEVEL_NAMES.slice(1).map((n, i) => [n, LEVEL_CAPABILITIES[i + 1].herramientas])));
+export const EMPLOYEE_TOOLS_BY_NAME = Object.freeze({ ...Object.fromEntries(LEVEL_NAMES.slice(1).map((n, i) => [n, LEVEL_CAPABILITIES[i + 1].herramientas])), [COSTS_ROLE.slice(9)]: L3C.herramientas });
 // Lo que un empleado puede pedir con «consultar» y «preparar_documento» (unión de los niveles; cada herramienta ya la filtra su nivel).
 export const EMPLOYEE_QUERY_TYPES_ALL = Object.freeze([...new Set(LEVEL_CAPABILITIES.flatMap((c) => c.consultas))]);
 export const EMPLOYEE_DOC_TYPES_ALL = Object.freeze([...new Set(LEVEL_CAPABILITIES.flatMap((c) => c.documentos))]);
@@ -63,5 +82,6 @@ export function levelOn(role) { return role === 'owner' || levelOfRole(role) > 0
 // Lo que ve el Admin en Configuración (sin datos de personas).
 export function levelMap() {
   return { niveles: LEVEL_CAPABILITIES.map((c, n) => ({ nivel: n, nombre: LEVEL_NAMES[n], titulo: LEVEL_LABELS[n], capacidades: c })),
-    admin: { nivel: ADMIN_LEVEL, capacidades: ADMIN_CAPABILITIES }, por_defecto: { empleado: EMPLOYEE_DEFAULT_LEVEL, admin: ADMIN_LEVEL } };
+    permiso_costos: { solo_nivel: 3, por_defecto: false, capacidades: L3C },
+    admin: { nivel: ADMIN_LEVEL, capacidades: ADMIN_CAPABILITIES }, por_defecto: { empleado: EMPLOYEE_DEFAULT_LEVEL, admin: ADMIN_LEVEL, costos: false } };
 }

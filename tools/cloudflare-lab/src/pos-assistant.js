@@ -25,7 +25,8 @@ import { mockAssistantReply } from './pos-assistant-mock.js';
 import { runAssistantQuery, canonicalReader, QUERY_TYPES, employeeDocumentRows } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
-import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL } from './pos-assistant-levels.js';
+import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor } from './pos-assistant-levels.js';
+import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
 export const ASSISTANT_CONFIRM_PATH = '/auth/assistant/confirm';
@@ -42,7 +43,7 @@ export const USAGE_PREFIX = 'internal:asst:';
 // Herramienta -> acción de la tabla única de permisos (POS/js/config/pos-permissions.js).
 export const TOOL_ACTIONS = Object.freeze({ explicar_pasos: 'assistant.chat', consultar: 'assistant.query', preparar_documento: 'assistant.document',
   proponer_cambio_precio: 'assistant.price.propose', preparar_compra: 'assistant.purchase.propose', leer_factura_compra: 'assistant.purchase.propose',
-  proponer_ajuste_stock: 'assistant.stock.propose', proponer_producto_nuevo: 'assistant.product.propose' });
+  proponer_ajuste_stock: 'assistant.stock.propose', proponer_producto_nuevo: 'assistant.product.propose', [LEVEL_TOOL]: 'assistant.levels.set' });
 // Nunca se aceptan estos parámetros en una herramienta (el rol y el PIN no los decide el modelo).
 export const FORBIDDEN_PARAMS = Object.freeze(['role', 'rol', 'owner', 'dueno', 'pin', 'approval', 'approval_id', 'x-owner-approval', 'token', 'pos_role', 'admin']);
 export function hasForbiddenParam(value, depth = 0) {
@@ -62,7 +63,7 @@ export function toolAllowed(role, name) {
   const lvl = String(role || '').startsWith('empleado:') ? role.slice(9) : null;
   return !!(lvl && EMPLOYEE_TOOLS[lvl] && EMPLOYEE_TOOLS[lvl].includes(name));
 }
-function seesCosts(role) { return canDo(role, 'purchases.costs.view'); }
+function seesCosts(role) { return canDo(role, 'purchases.costs.view') || levelCan(role, 'costos'); } // Admin, o nivel 3 con permiso de costos
 const SCREEN_IDS = ['pageInventario', 'pageVentas', 'pageClientes', 'pageCaja', 'pageGastos', 'pageConfig', 'pageHistorialCompras', 'pageValorizacion', 'pageReporteDeuda', 'pageKardex', 'pageVentasStock'];
 export const ADMIN_SCREENS = SCREEN_IDS;
 const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -1391,26 +1392,29 @@ const TOOL_DEFS = [
   { name: 'preparar_documento', description: 'Arma un documento interno imprimible (solo lectura, NO es comprobante SUNAT): inventario valorizado, lista de precios, lista de pedido para proveedor (lista_pedido), reporte de ventas del período, estado de cuenta de un cliente o resumen del cierre de caja. Las deudas se ven con consultar.',
     parameters: { type: 'object', properties: { tipo: { type: 'string', enum: DOC_TYPES }, desde: { type: 'string' }, hasta: { type: 'string' }, cliente: { type: 'string' } }, required: ['tipo'] } }
 ];
+TOOL_DEFS.push(LEVEL_TOOL_DEF); // solo Admin: nivel y permiso de costos de una persona (pos-assistant-levels-route.js)
 export function toolsForRole(role) {
   return TOOL_DEFS.filter((t) => toolAllowed(role, t.name))
-    .map((t) => ({ type: 'function', function: role === 'owner' ? { name: t.name, description: t.description, parameters: t.parameters } : employeeTool(t) }));
+    .map((t) => ({ type: 'function', function: role === 'owner' ? { name: t.name, description: t.description, parameters: t.parameters } : employeeTool(t, role) }));
 }
 // Empleado (Bot 5): el modelo ni ve los documentos ni las consultas del dueño (enum recortado y descripción sin ellos).
-function employeeTool(t) {
-  const only = t.name === 'preparar_documento' ? EMPLOYEE_DOC_TYPES : t.name === 'consultar' ? EMPLOYEE_QUERY_TYPES : null;
+function employeeTool(t, role) {
+  const caps = capabilitiesFor(role); // nivel de la persona (pos-assistant-levels.js)
+  const only = t.name === 'preparar_documento' ? caps.documentos : t.name === 'consultar' ? caps.consultas : null;
   if (!only) return { name: t.name, description: t.description, parameters: t.parameters };
-  const description = t.name === 'preparar_documento' ? 'Arma una lista imprimible (solo lectura, NO es comprobante SUNAT): lista de precios (lista_precios) o lista de pedido para proveedor (lista_pedido).'
+  const description = hasCosts(role) ? t.description : t.name === 'preparar_documento' ? 'Arma una lista imprimible (solo lectura, NO es comprobante SUNAT): lista de precios (lista_precios) o lista de pedido para proveedor (lista_pedido).'
     : 'Consulta el stock (solo lectura): stock de un producto (stock_producto) o productos por reponer (bajo_stock).';
   return { name: t.name, description, parameters: { ...t.parameters, properties: { ...t.parameters.properties, tipo: { type: 'string', enum: [...only] } } } };
 }
 // Pedido explícito de un documento que el empleado no puede ver: se responde 403 forbidden_document en JSON ANTES de abrir el canal
 // (sin DeepSeek ni cupo). Solo frases claras; lo dudoso sigue al modelo, que igual no tiene esas herramientas.
 const OWNER_DOC_ASK = /\b(inventario\s+valorizado|valorizaci[oó]n(?:\s+del\s+inventario)?|reporte\s+de\s+ventas|estado\s+de\s+cuenta|resumen\s+de(?:l)?\s+cierre|cierre\s+de\s+caja)\b/i;
+const COSTS_DENIED_DOC_ASK = /\b(estado\s+de\s+cuenta|resumen\s+de(?:l)?\s+cierre|cierre\s+de\s+caja)\b/i; // nivel 3 con costos: clientes y caja siguen del Admin
 const ANY_DOC_ASK = /\b(lista\s+de\s+(?:precios|pedido)|documento|imprim\w*|pdf)\b/i;
 export function employeeDocDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
   const t = String(text || '');
-  if (OWNER_DOC_ASK.test(t) && /\b(documento|imprim\w*|pdf|reporte|arma|prepara|hazme|dame|genera|saca|quiero|necesito|lista|resumen|estado)\b/i.test(t)) return true;
+  if ((hasCosts(role) ? COSTS_DENIED_DOC_ASK : OWNER_DOC_ASK).test(t) && /\b(documento|imprim\w*|pdf|reporte|arma|prepara|hazme|dame|genera|saca|quiero|necesito|lista|resumen|estado)\b/i.test(t)) return true;
   return !toolAllowed(role, 'preparar_documento') && ANY_DOC_ASK.test(t) && /\b(lista\s+de\s+(?:precios|pedido)|imprim\w*|pdf|documento)\b/i.test(t);
 }
 // Llamada a herramienta prohibida para el empleado que aparece A MITAD del texto: se corta ahí (ver callDeepSeekStream guard).
@@ -1419,7 +1423,7 @@ export function employeeToolGuard(role) {
   return (c) => {
     if (!c || !TOOL_DEFS.some((t) => t.name === c.name)) return null;
     if (!toolAllowed(role, c.name)) return c.name === 'preparar_documento' ? 'forbidden_document' : 'forbidden_role';
-    if (c.name === 'preparar_documento') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !EMPLOYEE_DOC_TYPES.includes(m[1])) return 'forbidden_document'; }
+    if (c.name === 'preparar_documento') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !docAllowed(role, m[1])) return 'forbidden_document'; }
     return null;
   };
 }
@@ -1427,7 +1431,8 @@ export function employeeToolGuard(role) {
 export function systemPrompt(role, ctx) {
   return [
     'Eres "Burbuja", el ayudante de gestión del sistema de la farmacia/botica Nuevo Amanecer (Perú, soles S/).',
-    role === 'owner' ? 'Hablas con el DUEÑO (administrador).'
+    role === 'owner' ? 'Hablas con el DUEÑO (administrador). Para el nivel del asistente de una persona o su permiso de costos usa configurar_nivel con la etiqueta de su aparato (por ejemplo «Caja 2»), nunca con su nombre.'
+      : hasCosts(role) ? 'Hablas con un EMPLEADO con permiso de costos y cambios: puedes mostrar costos y ganancias y proponer cambios (precios, stock, compras, productos), que él aplica con un toque. No muestres caja ni deudas de clientes.'
       : 'Hablas con un EMPLEADO. No muestres costos, márgenes, caja ni deudas. No puedes proponer cambios (precios, stock, compras, productos): si te lo piden, di que eso lo hace el Admin desde su teléfono.',
     // Pedido del dueño: fácil y sin marear.
     'FORMA DE RESPONDER: máximo 2 o 3 frases cortas. Español sencillo, como le hablarías a alguien en la botica. Sin palabras técnicas (nada de "token", "id", "API", "servidor", "error", "base de datos", códigos ni números de error).',
@@ -1579,9 +1584,10 @@ export function toProposal(call, role, ctx, n) {
     if (!pasos.length) return { dropped: 'empty', tool: name };
     return { id, type: 'pasos', needsConfirm: false, title: cleanText(args.tema, 80) || 'Cómo hacerlo', pasos, pantalla: SCREEN_IDS.includes(args.pantalla) ? args.pantalla : null };
   }
+  if (name === LEVEL_TOOL) return levelToolProposal(args, id); // solo Admin (toolAllowed); se completa con la base en chatCore
   if (name === 'consultar') {
     if (!QUERY_TYPES.includes(args.tipo)) return { dropped: 'bad_query', tool: name };
-    if (role !== 'owner' && !EMPLOYEE_QUERY_TYPES.includes(args.tipo)) return { dropped: 'forbidden_query', tool: name };
+    if (!queryAllowed(role, args.tipo)) return { dropped: 'forbidden_query', tool: name };
     return { id, type: 'consulta', needsConfirm: false, query: { tipo: args.tipo, producto: cleanText(args.producto, 80), desde: cleanText(args.desde, 10), hasta: cleanText(args.hasta, 10) } };
   }
   if (name === 'proponer_ajuste_stock') {
@@ -1635,7 +1641,7 @@ export function toProposal(call, role, ctx, n) {
   }
   if (name === 'preparar_documento') {
     const tipo = DOC_TYPES.includes(args.tipo) ? args.tipo : null; if (!tipo) return { dropped: 'bad_document', tool: name };
-    if (role !== 'owner' && !EMPLOYEE_DOC_TYPES.includes(tipo)) return { dropped: 'forbidden_document', tool: name };
+    if (!docAllowed(role, tipo)) return { dropped: 'forbidden_document', tool: name };
     const D = /^\d{4}-\d{2}-\d{2}$/;
     return { id, type: 'documento', needsConfirm: false, title: DOC_TITLES[tipo], tipo, desde: D.test(args.desde || '') ? args.desde : null, hasta: D.test(args.hasta || '') ? args.hasta : null,
       // El nombre del cliente solo viaja en documentos de UN cliente (estado de cuenta); en listas de precios u otros, nunca (Bot 2).
@@ -1705,7 +1711,7 @@ export function buildDeepSeekRequest({ role, ctx, history, text, image }) {
   // antes del modelo pasa por el mismo filtro de montos del dueño. El texto nuevo de la persona va tal cual (es lo que ella escribió).
   // Un turno anterior que nombra al dueño (costo, compré, margen, proveedor…) NO va al modelo: se cambia por un aviso corto (puede venir de
   // una charla del dueño en el mismo aparato); el resto pasa por el filtro de montos.
-  const hist = role === 'owner' ? (x) => x : (x) => (OWNER_HISTORY_RE.test(x) ? HISTORY_OMITTED : redactOwnerData(x));
+  const hist = seesOwnerData(role) ? (x) => x : (x) => (OWNER_HISTORY_RE.test(x) ? HISTORY_OMITTED : redactOwnerData(x));
   for (const m of history) messages.push({ role: m.role, content: m.role === 'user' ? '<dato_usuario>' + hist(m.content).replace(/<\/?dato_usuario>/gi, '') + '</dato_usuario>' : hist(m.content) });
   const userText = '<dato_usuario>' + (text || (image ? 'Lee esta foto de factura o producto y propone las líneas de compra.' : '')).replace(/<\/?dato_usuario>/gi, '') + '</dato_usuario>';
   messages.push(image
@@ -2124,7 +2130,7 @@ export async function assistantRole(db, auth) {
 
 // ---------- Token de confirmación (un solo uso, 5 minutos) ----------
 const AUDIT_TOOL = Object.freeze({ consulta: 'consultar', documento: 'preparar_documento', pasos: 'explicar_pasos', costo: 'actualizar_costo' });
-const TYPE_TOOL = Object.freeze({ compra: 'preparar_compra', precio: 'proponer_cambio_precio', costo: 'proponer_cambio_precio', ajuste: 'proponer_ajuste_stock', producto: 'proponer_producto_nuevo' });
+const TYPE_TOOL = Object.freeze({ [LEVEL_CARD]: LEVEL_TOOL, compra: 'preparar_compra', precio: 'proponer_cambio_precio', costo: 'proponer_cambio_precio', ajuste: 'proponer_ajuste_stock', producto: 'proponer_producto_nuevo' });
 const enc = new TextEncoder();
 function b64url(bytes) { let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function fromB64url(s) { const bin = atob(String(s).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(bin, (c) => c.charCodeAt(0)); }
@@ -2237,7 +2243,8 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   if (!accessOn(role)) return json(offBody(role), 403);
   // Sin PIN: confirmar es SOLO de la sesión dueño verificada por el servidor (fila owner en pos_device_roles + sesión owner del POS,
   // ver assistantAccess). Ocultar el PIN en la UI no abre nada: cualquier otro aparato (empleado con nivel incluido) recibe 403.
-  if (role !== 'owner') return json({ error: 'forbidden_role' }, 403);
+  // Nivel 3 con permiso de costos y cambios (pos-assistant-levels.js): también aplica SUS tarjetas con un toque (tok.r de abajo).
+  if (role !== 'owner' && !levelCan(role, 'cambios')) return json({ error: 'forbidden_role' }, 403);
   const secret = env.ASSISTANT_CONFIRM_SECRET;
   if (!secret || String(secret).length < 16) return json({ error: 'confirm_unavailable' }, 503);
   let body; try { body = JSON.parse((await request.text()).slice(0, 200000)); } catch { return json({ error: 'bad_request' }, 400); }
@@ -2341,6 +2348,8 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   const w = await store.get(devKey); const wv = w.value.min === minute ? { ...w.value } : { min: minute, n: 0 };
   if (wv.n >= capFrom(env, 'ASSISTANT_CONFIRMS_PER_MINUTE', ASSISTANT_LIMITS.confirmsPerMinute)) return json({ error: 'rate_limited', retry_after_s: 60 - Math.floor((now % 60000) / 1000) }, 429);
   wv.n++;
+  // Tarjeta de nivel/permiso (solo Admin): el servidor guarda el cambio aquí y lo anota (pos-assistant-levels-route.js).
+  if (tok.t === LEVEL_CARD) { const lv = await applyLevelCard(deps.db, auth, applied, tok.op, deps.audit || auditWrite); if (lv.status !== 200) return json(lv.body, lv.status); applied = { ...applied, resultado: lv.body }; }
   const rvUsed = tok.t === 'compra' ? { accept: applied.aceptadas || [], drop: applied.quitadas || [] } : null;
   if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(tok.t === 'compra' ? { acc: applied.aceptadas || [] } : {}),
     s: sess, rh: await replayHash(secret, tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
@@ -2490,8 +2499,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const now = (deps.now || Date.now)();
   // Todas las puertas pasaron: recién aquí se abre el canal en partes (si el celular lo pidió y la ruta lo permite).
   const sse = parsed.stream && deps.sse ? deps.sse : null;
-  const red = redactFor(role), guard = employeeToolGuard(role);
-  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, role === 'owner' ? null : ownerHold, prime) : null;
+  const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
+  const emit = sse ? createTextEmitter((d) => sse.send('text', d), REPLY_MAX, red, seesOwnerData(role) ? null : ownerHold, prime) : null;
   const beat = createStatusBeat(sse, emit, deps.statusEveryMs); ctxOut.beat = beat; // se para al cerrar el canal (assistantChatRoute)
   // Tope del servidor (Bot 3): 90 s desde que el cuerpo (y la foto) ya se leyó; también corta si el celular se fue.
   const up = new AbortController(); if (deps.sse && deps.sse.signal) linkAbort(up, deps.sse.signal);
@@ -2528,6 +2537,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
+  await resolveLevelProposals(deps.db, proposals, dropped); // tarjetas de nivel: persona por etiqueta o código (pos-assistant-levels-route.js)
   // Compra con costos distintos a los del inventario: tarjetas APARTE «Actualizar costo» (product.update con PIN). La compra del POS no cambia el costo.
   const reader = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
   // Sin control de inventario: fuera antes de firmar (y se vuelve a mirar al confirmar).
@@ -2539,7 +2549,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     else noStock.push(...applyStockControl(proposals, dropped, map));
   }
   const overNames = dropped.filter((d) => d.dropped === 'over_limit' && d.nombre).map((d) => d.nombre);
-  for (const p of proposals.slice()) if (p.type === 'compra' && role === 'owner') proposals.push(...costProposals(p));
+  for (const p of proposals.slice()) if (p.type === 'compra' && seesOwnerData(role)) proposals.push(...costProposals(p));
   // Empleado que pide un documento solo del dueño: 403 (no 200 con la tarjeta descartada).
   // La bitácora la escribe assistantChatRoute (agrupada por aparato y minuto), así un empleado insistiendo no llena el cajón r.
   if (role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_document')) {
@@ -2549,7 +2559,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
   const consultas = [], toolMsgs = [];
   // Empleado: las filas de la lista de precios / pedido las pone el servidor, sin costos (el aparato no usa sus datos locales).
-  if (role !== 'owner') for (const p of proposals.filter((x) => x.type === 'documento')) {
+  if (!seesOwnerData(role)) for (const p of proposals.filter((x) => x.type === 'documento')) {
     let d; try { d = reader ? await employeeDocumentRows(reader, p.tipo) : { error: 'no_reader' }; } catch { d = { error: 'query_failed' }; }
     p.data = d.error ? { error: d.error } : { columnas: d.columnas, filas: d.filas, truncado: d.truncado };
     // Lista blanca: solo estos campos llegan al aparato del empleado (aunque el modelo mande costos, totales o inversión).
@@ -2563,19 +2573,19 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   for (const p of proposals.filter((x) => x.type === 'consulta').slice(0, 2)) {
     let r;
     try { r = reader ? await runAssistantQuery(reader, p.query, now) : { error: 'no_reader' }; } catch { r = { error: 'query_failed' }; }
-    if (role !== 'owner') r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
+    if (!seesOwnerData(role)) r = employeeQueryResult(r); // Bot 5: sin datos del dueño, antes de la pantalla y antes del modelo
     p.result = r.error ? { error: r.error, texto: 'No pude leer esos datos ahora. Revisa la pantalla de reportes.' } : { titulo: r.titulo, columnas: r.columnas, filas: r.filas, texto: r.texto, total: r.total ?? null };
     consultas.push(p);
     // Al modelo: solo { tipo, resumen }. Empleado: el resumen ya pasó por la lista blanca (employeeQueryResult) y aquí se vuelve a quitar
     // toda clave del dueño (costo, margen, proveedor, compras, caja, deudas) por si una consulta nueva trae algo más.
-    const forModel = r.error ? { error: r.error } : { tipo: r.tipo, resumen: role === 'owner' ? r.resumen : stripOwnerKeys(r.resumen) };
+    const forModel = r.error ? { error: r.error } : { tipo: r.tipo, resumen: seesOwnerData(role) ? r.resumen : stripOwnerKeys(r.resumen) };
     if (p._call) toolMsgs.push({ role: 'tool', tool_call_id: p._call.id, content: redactText(JSON.stringify(forModel)).slice(0, 2000) });
   }
   // mismo filtro que el texto en partes (Bot 5) y DESPUÉS el tope con aviso (Bot 2), igual que lo pintado
   // capped: la respuesta que el SERVIDOR cortó (si reply sigue siendo esa al firmar, el par lleva cut:true)
   let capped = null;
   const empText = (c) => redactEmployeeText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim();
-  const finalText = (c) => { const f = role !== 'owner' ? redactOwnerData(empText(c), prime) : redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim(); const r = capReply(f); capped = r !== f ? r : null; return r; };
+  const finalText = (c) => { const f = !seesOwnerData(role) ? redactOwnerData(empText(c), prime) : redactOwnerText(String(c ?? '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]+/g, ' ')).trim(); const r = capReply(f); capped = r !== f ? r : null; return r; };
   let reply = finalText(result.content);
   if (consultas.length) {
     reply = consultas.map((c) => c.result.texto).join(' ');

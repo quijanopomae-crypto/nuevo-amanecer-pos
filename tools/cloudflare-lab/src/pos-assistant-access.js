@@ -12,7 +12,7 @@
 // - Las herramientas que cambian algo piden SIEMPRE el PIN del dueño en una tarjeta de un solo uso, en cualquier nivel.
 import { sha256Hex } from './a5-import-core.js';
 import { posRoleFor } from './pos-roles.js';
-import { LEVEL_NAMES, levelFromStored, levelOn } from './pos-assistant-levels.js';
+import { LEVEL_NAMES, levelFromStored, costsFromStored, roleForLevel, levelOn } from './pos-assistant-levels.js';
 
 // Niveles 0..3 por persona: ver pos-assistant-levels.js (único lugar con lo que permite cada uno). 'completo' = nivel 3.
 export const ACCESS_LEVELS = LEVEL_NAMES;
@@ -45,12 +45,20 @@ export async function assistantAccess(db, auth) {
   }
   // Solo un aparato empleado vinculado (fila 'empleado') puede tener nivel; sin fila no hay asistente.
   if (row.pos_role !== 'empleado') return 'empleado:off';
-  return 'empleado:' + (await employeeLevel(db, auth.principalId));
+  return employeeRole(db, auth.principalId);
+}
+// Rol del empleado con su nivel y, SOLO en el nivel 3, el permiso aparte de costos y cambios ('empleado:completo+costos').
+export async function employeeRole(db, deviceId) {
+  try {
+    const row = await db.prepare('SELECT value_json FROM pos_settings WHERE key=?1').bind(await levelKey(deviceId)).first();
+    const v = row ? JSON.parse(row.value_json) : null;
+    return roleForLevel(levelFromStored(v), costsFromStored(v));
+  } catch { return 'empleado:off'; }
 }
 // Nombre del nivel para el ping. El nivel 3 ('completo') se informa como 'consultas_documentos' mientras la pantalla del celular
 // (asistente-ui.js / asistente-core.js) solo conozca los nombres viejos: así el empleado con nivel 3 no se queda sin burbuja.
 // El nivel real (0..3) lo da GET /auth/assistant/levels. Cuando la pantalla se actualice, se quita esta equivalencia.
-export function accessLevel(role) { const l = role === 'owner' ? 'dueno' : String(role || '').split(':')[1] || 'off'; return l === 'completo' ? 'consultas_documentos' : l; }
+export function accessLevel(role) { const l = role === 'owner' ? 'dueno' : String(role || '').split(':')[1] || 'off'; return l === 'completo' || l === 'completo+costos' ? 'consultas_documentos' : l; }
 export function accessOn(role) { return levelOn(role); }
 
 // Mismo criterio que el chat (assistantAccess): fila 'owner' explícita, o sin fila con sesión Admin (regla del POS).
