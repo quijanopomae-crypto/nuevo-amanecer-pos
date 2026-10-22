@@ -20,6 +20,7 @@ import { cashClosesRoute } from './pos-cash-closes.js';
 import { annulCanonicalSale, listSaleAnnulments, SALE_ANNUL_COMMAND } from './pos-sale-annul.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 import { dniLookupRoute, DNI_LOOKUP_PATH } from './pos-dni-lookup.js';
+import { featureDecision, employeeFeatureGrant, handleEmployeePerms, EMPLOYEE_PERMS_PATH } from './pos-employee-perms.js';
 import { handleRoles, ownerGate, posRoleFor, ROLE_PATHS, flagSaleDiscount, flagReview } from './pos-roles.js';
 
 const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
@@ -75,8 +76,9 @@ export default {
         if (auth instanceof Response) return auth;
         const id = url.pathname.split('/')[2] || '';
         if (PERMISSIONS.featureLocked(id)) return json({ error: 'feature_locked', feature: id }, 403);
-        const roles = PERMISSIONS.FEATURE_ROLES[id];
-        if (roles && !roles.includes(auth.posRole)) return json({ error: 'forbidden_role' }, 403);
+        // Permisos por empleado: después del candado; solo ids de la lista cerrada y con su casilla prendida.
+        const decision = await featureDecision(getDatabase(env), id, auth.posRole);
+        if (decision.status === 403) return json({ error: decision.error }, 403);
         return json({ error: 'not_found' }, 404);
       }
       if (url.pathname === '/auth/activate') {
@@ -134,6 +136,9 @@ export default {
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return auth;
         return cors(await productImagesRoute(request, url, env, auth, json, getDatabase(env)));
+      }
+      if (url.pathname === EMPLOYEE_PERMS_PATH) {
+        return cors(await handleEmployeePerms(request, env, { json, authorizeSession, getDatabase }));
       }
       if (ROLE_PATHS.has(url.pathname)) {
         return cors(await handleRoles(request, url, env, { json, authorizeSession, getDatabase }));
@@ -440,7 +445,10 @@ async function authorizeSession(request, env) {
   // Authorization is intentionally read-only. It must not create a write race
   // or interfere with the atomic business/canonical batch that follows.
   const role = session.pos_role === 'empleado' ? 'empleado' : 'owner';
-  if (!PERMISSIONS.routeRoles(new URL(request.url).pathname, request.method).includes(role)) return json({ error: 'forbidden_role' }, 403);
+  const sessionPath = new URL(request.url).pathname;
+  // Permisos por empleado: solo /features/:id de la lista cerrada, sin candado y con su casilla prendida (lectura sin caché).
+  if (!PERMISSIONS.routeRoles(sessionPath, request.method).includes(role)
+    && !(role === 'empleado' && await employeeFeatureGrant(db, sessionPath))) return json({ error: 'forbidden_role' }, 403);
   return { sessionId: session.session_id, principalId: session.device_id, credentialHash: tokenHash, posRole: role };
 }
 

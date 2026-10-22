@@ -13,7 +13,7 @@ const APPROVAL_MS = 5 * 60 * 1000;
 const PAIRING_MS = 15 * 60 * 1000;
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const OWNER_COMMANDS = new Set(['inventory.adjust', 'adjustment.create', 'compensation.create', 'product.update', 'customer.credit-policy.set']);
-const APPROVAL_ACTIONS = new Set([...OWNER_COMMANDS, 'settings.set', 'reset', 'discount', 'sale.annul', 'expired_lot_sale']);
+const APPROVAL_ACTIONS = new Set([...OWNER_COMMANDS, 'settings.set', 'reset', 'discount', 'sale.annul', 'expired_lot_sale', 'employee.permissions']);
 const SETTING_KEY = /^[a-z][a-z0-9_.-]{0,59}$/;
 export { ROLE_PATHS } from './pos-permissions.js';
 
