@@ -154,7 +154,7 @@
 .na-asst-card[data-st="done"]{border-color:#cbd5e1;background:#f8fafc;color:#334155}.na-asst-card[data-st="done"] .acts,.na-asst-card[data-st="cancelled"] .acts{display:none}.na-asst-card[data-st="denied"] .na-asst-ok,.na-asst-card[data-st="denied"] .na-asst-no{display:none}
 .na-asst-card .res{font-weight:800;color:#166534}.na-asst-card[data-st="denied"] .res{color:#991b1b}
 .na-asst-chips{display:flex;gap:8px;padding:0 12px 8px;flex-wrap:wrap}
-.na-asst-chips button{min-height:44px;border-radius:999px;border:1px solid #86efac;background:#f0fdf4;color:#14532d;font-size:15px;font-weight:700;padding:0 14px;cursor:pointer}
+.na-asst-chips button{min-height:44px;max-width:100%;white-space:normal;border-radius:999px;border:1px solid #86efac;background:#f0fdf4;color:#14532d;font-size:15px;font-weight:700;padding:0 14px;cursor:pointer}
 .na-asst-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;border-radius:0 0 18px 18px;align-items:flex-end}
 .na-asst-input textarea{flex:1;min-height:52px;max-height:110px;resize:none;border:2px solid #cbd5e1;border-radius:14px;padding:12px;font:inherit;font-size:17px}
 .na-asst-input button{width:52px;height:52px;flex:0 0 52px;border-radius:14px;border:0;font-size:22px;cursor:pointer}

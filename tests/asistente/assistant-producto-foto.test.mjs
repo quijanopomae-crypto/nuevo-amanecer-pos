@@ -122,3 +122,13 @@ test('cableado: ruta en el Worker con bandera y sesión; chip y disparador solo 
   assert.match(UI, /isOwnerAccess\(\) && PRODFOTO_RE\.test\(text\)/);
   assert.match(UI, /if \(isOwnerAccess\(\)\) return '[^\n]*data-prodfoto/); // el chip vive en la rama del Admin
 });
+
+test('botones del Admin: «Sugerencias de compra» y «Foto de producto» juntos; la fila pasa a otra línea en 360 px', async () => {
+  const fs = await import('node:fs');
+  const ui = fs.readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../../POS/css/asistente.css', import.meta.url), 'utf8');
+  const owner = ui.split('\n').find((l) => l.includes('if (isOwnerAccess()) return') && l.includes('data-prodfoto'));
+  assert.ok(owner && owner.includes('Sugerencias de compra'), 'los dos botones en la misma fila del Admin');
+  assert.match(css, /\.na-asst-chips\{[^}]*flex-wrap:wrap/);
+  assert.match(css, /\.na-asst-chips button\{[^}]*max-width:100%[^}]*white-space:normal/);
+});
