@@ -40,7 +40,7 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
       assert.equal(P.FEATURE_LOCKS[f.id], false); assert.equal(f.page, unlocked[f.id]);
       assert.ok(indexHtml.includes(`id="${f.page}"`)); assert.equal(api.isUnlocked(f), true);
     } else {
-      assert.equal(P.FEATURE_LOCKS[f.id], true, f.id); assert.equal(f.page, f.id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : f.id === 'catalogo-reportes' ? 'pageCatalogoReportes' : null); assert.equal(api.isUnlocked(f), false); assert.ok(f.pending || f.id === 'catalogo-reportes' || ['cotizaciones', 'cuentas-pagar', 'compartir-pdf-whatsapp'].includes(f.id));
+      assert.equal(P.FEATURE_LOCKS[f.id], true, f.id); assert.equal(f.page, f.id === 'reporte-productos-vencer' ? 'pageReporteProductosVencer' : f.id === 'catalogo-reportes' ? 'pageCatalogoReportes' : null); assert.equal(api.isUnlocked(f), false); assert.ok(f.pending || ['cotizaciones', 'cuentas-pagar', 'compartir-pdf-whatsapp'].includes(f.id));
     }
   }
   const prioritized = api.list().filter(f => f.priority);
