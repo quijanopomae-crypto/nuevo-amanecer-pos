@@ -136,7 +136,7 @@
 
   function render(cat) {
     var cont = doc.getElementById('cfgContent'); if (!cont) return false;
-    if (cat === 'usuarios') cont.innerHTML = usuariosHtml();
+    if (cat === 'usuarios') { cont.innerHTML = usuariosHtml(); try { if (root.NA_EMPLOYEE_PERMS_UI) root.NA_EMPLOYEE_PERMS_UI.mount(cont); } catch (_) {} }
     else if (cat === 'aparatos') { cont.innerHTML = aparatosHtml(); loadDevices(); }
     else if (cat === 'respaldo') cont.innerHTML = respaldoHtml();
     else if (cat === 'reseteo') cont.innerHTML = reseteoHtml();

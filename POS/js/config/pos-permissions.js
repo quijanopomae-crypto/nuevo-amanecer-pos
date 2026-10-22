@@ -175,6 +175,7 @@
     'productos-sin-movimiento': false,
     'sugerencia-compra': false,
     'ajustes-inventario': false,
+    'permisos-por-empleado': false,
     'promociones-combos': true,
     'delivery': true,
     'catalogo-en-linea': true,
