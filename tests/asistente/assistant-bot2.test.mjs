@@ -196,15 +196,27 @@ test('chat: falla la lectura del inventario -> fuera tarjetas de compra y ajuste
 });
 
 // Bot 2 (50b6716b, menor): teléfono SIN fila de rol = 'sin_rol' en la bitácora (antes salía 'empleado:off').
-test('teléfono sin rol: assistantAccess da sin_rol y la bitácora del chat lo anota así (403 assistant_off, agrupado)', async () => {
+test('aparato sin fila de rol: Admin del asistente SOLO si el POS ya lo trata como Admin (posRoleFor) y la sesión es Admin; si no, sin_rol', async () => {
   const fakeDb = (row, fail) => ({ prepare: () => ({ bind: () => ({ first: async () => { if (fail) throw new Error('x'); return row; } }) }) });
-  assert.equal(await assistantAccess(fakeDb(null), { principalId: 'session:tel', posRole: 'owner' }), 'sin_rol');
+  // sin fila + sesión Admin: misma regla que el POS (sin fila = Admin) -> owner
+  assert.equal(await assistantAccess(fakeDb(null), { principalId: 'session:pc', posRole: 'owner' }), 'owner');
+  // sin fila + sesión que NO es Admin -> sin_rol (sin asistente)
+  assert.equal(await assistantAccess(fakeDb(null), { principalId: 'session:tel', posRole: 'empleado' }), 'sin_rol');
+  assert.equal(await assistantAccess(fakeDb(null), { principalId: 'session:tel' }), 'sin_rol');
+  // fila 'empleado' -> empleado (nivel apagado por defecto), aunque la sesión diga Admin
+  assert.equal(await assistantAccess(fakeDb({ pos_role: 'empleado' }), { principalId: 'session:emp', posRole: 'owner' }), 'empleado:off');
+  // fila 'owner' sin sesión Admin -> no es Admin
   assert.equal(await assistantAccess(fakeDb({ pos_role: 'owner' }), { principalId: 'session:tel', posRole: 'empleado' }), 'empleado:off');
   assert.equal(await assistantAccess(fakeDb(null, true), { principalId: 'session:tel', posRole: 'owner' }), 'empleado:off'); // error de base: falla cerrado
   assert.equal(await assistantAccess(fakeDb({ pos_role: 'owner' }), { principalId: 'session:tel', posRole: 'owner' }), 'owner');
+  // ping del PC del Admin sin fila: 200 con rol owner
+  const ok = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: '{"ping":true}' }), ENV, { principalId: 'session:pc', posRole: 'owner' }, jsonR,
+    { store: createMemoryUsageStore(), db: fakeDb(null), audit: async () => {} });
+  assert.equal(ok.status, 200); assert.equal((await ok.json()).role, 'owner');
+  // sin fila y sesión no Admin: 403 assistant_off, anotado como sin_rol y agrupado
   const rows = []; const audit = async (_db, r) => { rows.push(...r); };
-  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: '{"ping":true}' }), ENV, { principalId: 'session:tel', posRole: 'owner' }, jsonR,
+  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: '{"ping":true}' }), ENV, { principalId: 'session:tel', posRole: 'empleado' }, jsonR,
     { store: createMemoryUsageStore(), db: fakeDb(null), audit });
-  assert.equal(r.status, 403); const b = await r.json(); assert.equal(b.error, 'assistant_off'); assert.equal(b.reason, 'sin_rol');
+  assert.equal(r.status, 403); const b = await r.json(); assert.equal(b.error, 'assistant_off'); assert.equal(b.reason, undefined);
   assert.deepEqual(rows.map((x) => [x.role, x.outcome, !!x.aggregate]), [['sin_rol', 'rejected:assistant_off', true]]);
 });

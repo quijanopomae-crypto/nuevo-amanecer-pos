@@ -113,19 +113,19 @@ test('quitar el ÚLTIMO aparato Admin: 409 last_owner (sin gastar la aprobación
   assert.equal((await call('tok-dueno', B + '/revoke', { device_id: 'session:dueno', operation_id: 'op-y' }, { 'x-owner-approval': await approval('tok-dueno', 'op-y') })).body.code, 'last_owner');
 });
 
-test('ping de un aparato sin fila de rol: 403 con reason sin_rol (para mostrar el registro); empleado sin reason', async (t) => {
+test('ping de un aparato sin fila de rol con sesión Admin: 200 owner (misma regla que el POS); empleado: 403 sin reason', async (t) => {
   const { call } = await setup(t);
   const r = await call('tok-nuevo', '/auth/assistant/chat', { ping: true });
-  assert.equal(r.status, 403); assert.equal(r.body.reason, 'sin_rol');
+  assert.equal(r.status, 200); assert.equal(r.body.role, 'owner');
   const e = await call('tok-emp', '/auth/assistant/chat', { ping: true });
   assert.equal(e.status, 403); assert.equal(e.body.error, 'assistant_off'); assert.equal(e.body.reason, undefined);
 });
 
-test('Worker sin clave de DeepSeek: el ping igual dice sin_rol / rol (el registro se ve); el chat falla cerrado 503', async (t) => {
+test('Worker sin clave de DeepSeek: el ping igual dice el rol (sin fila + sesión Admin = owner); el chat falla cerrado 503', async (t) => {
   const { f, call } = await setup(t);
   delete f.env.DEEPSEEK_API_KEY; f.env.ASSISTANT_DEMO = '';
   const s = await call('tok-nuevo', '/auth/assistant/chat', { ping: true });
-  assert.equal(s.status, 403); assert.equal(s.body.reason, 'sin_rol');
+  assert.equal(s.status, 200); assert.equal(s.body.role, 'owner');
   const o = await call('tok-dueno', '/auth/assistant/chat', { ping: true });
   assert.equal(o.status, 200); assert.deepEqual(o.body, { ok: true, enabled: true, role: 'owner', level: 'dueno', vision: false }); // ping mínimo: sin «configured» (sin proveedor: no lee fotos)
   const c = await call('tok-dueno', '/auth/assistant/chat', { text: 'qué me falta reponer' });
