@@ -20,6 +20,23 @@ export const REVIEW_LIMITS = Object.freeze({ maxBodyBytes: 98304, maxErrors: 200
 export const REVIEW_DENIED = Object.freeze({ error: 'review_admin_only', message: 'La revisión del punto de venta es solo para el Admin.' });
 const KINDS = new Set(['error', 'promesa', 'api']);
 const SLOW_KINDS = new Set(['api', 'tarea', 'pantalla', 'cuelgue']);
+// Pantallas (nivel 3, asistente-pantallas.js): llegan dentro de «slow» con su tipo y name = «aparato|pantalla|elemento».
+// Cada parte se acepta SOLO si cumple su lista o su forma (nunca texto libre de la pantalla) y si el redactor no la cambiaría.
+export const LAYOUT_KINDS = Object.freeze(['corte', 'desborde', 'boton_chico', 'lenta']);
+export const LAYOUT_LIMITS = Object.freeze({ max: 60, devices: 6, perDevice: 4 });
+const LAYOUT_SET = new Set(LAYOUT_KINDS);
+const DEV_PARTS = [['tel', 'tableta', 'pc'], ['tactil', 'raton'], ['vert', 'horiz'], ['Android', 'iOS', 'Windows', 'Mac', 'Linux', 'ChromeOS', 'otro'], ['Chrome', 'Safari', 'Firefox', 'Edge', 'Samsung', 'Opera', 'otro']];
+const SCREEN_RE = /^[A-Za-z][A-Za-z0-9_-]{0,29}$/;
+const ELEMENT_RE = /^(?:[a-z][a-z0-9]{0,9}(?:#[A-Za-z][A-Za-z0-9_#-]{0,19}|\.[A-Za-z][A-Za-z0-9_#-]{0,19}|\[[a-z]{1,12}\])?(?:\([A-Za-z_][A-Za-z0-9_]{0,19}\))?)$/;
+export function parseLayoutName(name) {
+  const parts = String(name == null ? '' : name).split('|'); if (parts.length !== 3) return null;
+  const dv = parts[0].split(','); if (dv.length !== 5 || dv.some((v, i) => !DEV_PARTS[i].includes(v))) return null;
+  const screen = SCREEN_RE.test(parts[1]) ? parts[1] : 'otro';
+  const el = parts[2] && ELEMENT_RE.test(parts[2]) && cleanReviewText(parts[2], 60) === parts[2] ? parts[2] : 'elemento';
+  return { device: dv.join(','), screen, el };
+}
+const DEV_LABEL = { tel: 'Celular', tableta: 'Tableta', pc: 'Computadora', tactil: 'táctil', raton: 'con mouse', vert: 'vertical', horiz: 'horizontal' };
+export function deviceLabel(key) { const [t, i, o, os, nav] = String(key).split(','); return DEV_LABEL[t] + ' ' + DEV_LABEL[i] + ' ' + DEV_LABEL[o] + ' (' + os + ', ' + nav + ')'; }
 export const CUSTOMER_ACTIONS = Object.freeze(['abono', 'venta a crédito', 'editar cliente', 'ver cliente']);
 // Código de cliente: el id que ya existe en la lista de clientes (p. ej. 1729550000000 o un id del canon). Solo letras, números, _ y -.
 export const CUSTOMER_CODE_RE = /^[A-Za-z0-9_-]{1,40}$/;
@@ -68,8 +85,9 @@ export function sanitizeReview(body) {
   const u = body?.usage && typeof body.usage === 'object' && !Array.isArray(body.usage) ? body.usage : {};
   for (const [k, v] of Object.entries(u).slice(0, REVIEW_LIMITS.maxUsageKeys)) { const n = int(v, 1e7); if (n && KEY_RE.test(k)) usage.push({ key: k, label: usageLabel(k), count: n }); }
   usage.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-  const sb = new Map();
+  const sb = new Map(), lb = new Map();
   for (const x of (Array.isArray(body?.slow) ? body.slow : []).slice(0, REVIEW_LIMITS.maxSlow)) {
+    if (x && typeof x === 'object' && LAYOUT_SET.has(x.kind)) { layoutOne(lb, x); continue; }
     if (!x || typeof x !== 'object' || !SLOW_KINDS.has(x.kind)) continue;
     const name = cleanReviewText(x.name, REVIEW_LIMITS.srcChars); if (!name) continue;
     const cli = cliOf(x), accion = accionOf(x, cli), n = int(x.count, 1e6) || 1, avg = int(x.ms_avg, 36e5), mx = int(x.ms_max, 36e5);
@@ -81,7 +99,30 @@ export function sanitizeReview(body) {
   const o = body?.ocr && typeof body.ocr === 'object' ? body.ocr : null;
   const ocr = o ? { reads: int(o.reads, 1e6), fails: int(o.fails, 1e6), timeouts: int(o.timeouts, 1e6), ms_avg: int(o.reads, 1e6) ? Math.round(int(o.ms_sum, 1e10) / int(o.reads, 1e6)) : 0,
     ms_max: int(o.ms_max, 36e5), confirmed: int(o.confirmed, 1e6), corrections: int(o.corrections, 1e7) } : null;
-  return { groups, usage, slow, ocr: ocr && (ocr.reads || ocr.confirmed) ? ocr : null };
+  const layout = [...lb.values()].sort((a, b) => b.count - a.count || a.device.localeCompare(b.device)).slice(0, LAYOUT_LIMITS.max);
+  return { groups, usage, slow, layout, ocr: ocr && (ocr.reads || ocr.confirmed) ? ocr : null };
+}
+function layoutOne(lb, x) {
+  const p = parseLayoutName(x.name); if (!p) return;
+  const n = int(x.count, 1e6) || 1, avg = int(x.ms_avg, 36e5), worst = int(x.ms_max, 36e5) || avg, k = x.kind + '|' + p.device + '|' + p.screen + '|' + p.el, g = lb.get(k);
+  if (g) { g.avg = Math.round((g.avg * g.count + avg * n) / (g.count + n)); g.count += n; g.worst = x.kind === 'boton_chico' ? Math.min(g.worst, worst) : Math.max(g.worst, worst); return; }
+  lb.set(k, { kind: x.kind, device: p.device, screen: p.screen, label: SCREENS[p.screen] || p.screen, el: p.el, count: n, avg, worst });
+}
+// Agrupa por tipo de aparato: [{ device, label, total, kinds: {corte, desborde, boton_chico, lenta}, items }]
+export function layoutByDevice(layout = []) {
+  const by = new Map();
+  for (const x of layout) { let g = by.get(x.device);
+    if (!g) by.set(x.device, (g = { device: x.device, label: deviceLabel(x.device), total: 0, kinds: { corte: 0, desborde: 0, boton_chico: 0, lenta: 0 }, items: [] }));
+    g.total += x.count; g.kinds[x.kind] += 1; g.items.push(x); }
+  return [...by.values()].sort((a, b) => b.total - a.total || a.device.localeCompare(b.device));
+}
+const LAYOUT_TXT = { corte: ['texto o menú cortado', 'textos o menús cortados'], desborde: ['pantalla que se sale de lado', 'pantallas que se salen de lado'],
+  boton_chico: ['botón chico', 'botones chicos'], lenta: ['pantalla lenta', 'pantallas lentas'] };
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+function layoutLine(x) {
+  const what = x.kind === 'lenta' ? 'pantalla lenta, hasta ' + secs(x.worst) : x.kind === 'desborde' ? 'la pantalla se sale ' + x.worst + ' px de lado'
+    : x.kind === 'boton_chico' ? 'botón chico ' + x.el + ' (' + x.worst + ' px; mínimo ' + 40 + ')' : 'texto o menú cortado ' + x.el + ' (' + x.worst + ' px escondidos)';
+  return x.label + ': ' + what + ', ' + plural(x.count, 'vez', 'veces');
 }
 export function usageLabel(key) {
   const [scr, act, arg] = String(key).split(':'); const s = SCREENS[scr] || scr;
@@ -95,7 +136,7 @@ const cliTxt = (g) => (g.cli ? ' [' + customerRef(g.cli) + ', ' + g.accion + ']'
 const slowLabel = (x) => (x.kind === 'api' ? 'Llamada lenta a ' + x.name : x.kind === 'pantalla' ? 'Pantalla lenta al abrir ' + x.label : x.kind === 'cuelgue' ? 'Se colgó en ' + x.label : 'Tarea larga en ' + x.label);
 
 // Informe fijo (siempre disponible; el modelo solo lo redacta mejor). Sin «**» ni markdown: viñetas «•».
-export function buildReviewSummary({ groups, usage, slow = [], ocr = null }) {
+export function buildReviewSummary({ groups, usage, slow = [], ocr = null, layout = [] }) {
   const total = groups.reduce((t, g) => t + g.count, 0), L = ['Revisión del punto de venta'];
   if (!groups.length) L.push('Errores: ninguno guardado en este aparato.');
   else { L.push('Errores: ' + groups.length + (groups.length === 1 ? ' tipo, ' : ' tipos, ') + total + (total === 1 ? ' vez.' : ' veces en total.'));
@@ -109,6 +150,15 @@ export function buildReviewSummary({ groups, usage, slow = [], ocr = null }) {
     const fr = ocr.reads ? Math.round(ocr.fails / ocr.reads * 100) : 0, cpr = ocr.confirmed ? Math.round(ocr.corrections / ocr.confirmed * 10) / 10 : null;
     L.push('Lectura de boletas: ' + ocr.reads + (ocr.reads === 1 ? ' lectura' : ' lecturas') + (ocr.reads ? ', ' + fr + '% fallidas' + (ocr.timeouts ? ' (' + ocr.timeouts + ' por tiempo)' : '') + ', promedio ' + secs(ocr.ms_avg) : '')
       + (cpr != null ? ', ' + String(cpr).replace('.', ',') + ' correcciones por boleta confirmada.' : '.'));
+  }
+  const devs = layoutByDevice(layout);
+  if (devs.length) {
+    L.push('Pantallas por tipo de aparato: ' + plural(layout.length, 'problema', 'problemas') + ' en ' + plural(devs.length, 'tipo de aparato.', 'tipos de aparato.'));
+    for (const g of devs.slice(0, LAYOUT_LIMITS.devices)) {
+      const k = LAYOUT_KINDS.filter((t) => g.kinds[t]).map((t) => plural(g.kinds[t], LAYOUT_TXT[t][0], LAYOUT_TXT[t][1])).join(', ');
+      L.push('• ' + g.label + ': ' + k + '.');
+      for (const x of g.items.slice(0, LAYOUT_LIMITS.perDevice)) L.push('  • ' + layoutLine(x));
+    }
   }
   if (usage.length) {
     L.push('Lo más usado: ' + usage.slice(0, 5).map((x) => x.label + ' (' + x.count + ')').join(', ') + '.');
@@ -128,6 +178,10 @@ export function buildReviewSummary({ groups, usage, slow = [], ocr = null }) {
   if (custs.length) tips.push('Revisar ' + custs.slice(0, 3).map(customerRef).join(', ') + ': los problemas pasaron al trabajar con ' + (custs.length === 1 ? 'ese cliente.' : 'esos clientes.'));
   if (ocr && ocr.reads >= 3 && ocr.fails / ocr.reads >= 0.3) tips.push('Muchas boletas no se leen: tomar la foto con buena luz, de frente y sin mover.');
   else if (ocr && ocr.confirmed && ocr.corrections / ocr.confirmed >= 3) tips.push('Las boletas necesitan muchas correcciones: revisar las correcciones guardadas y la nitidez de las fotos.');
+  const lay = layout.slice().sort((a, b) => b.count - a.count)[0];
+  if (lay) tips.push(lay.kind === 'boton_chico' ? 'Agrandar los botones chicos de ' + lay.label + ' en ' + deviceLabel(lay.device) + ', a 40 px o más, para tocarlos sin errar.'
+    : lay.kind === 'lenta' ? 'Aligerar ' + lay.label + ': tarda en abrir en ' + deviceLabel(lay.device) + '.'
+    : 'Acomodar ' + lay.label + ' en ' + deviceLabel(lay.device) + ': hay textos o menús que no se ven completos.');
   if (usage.length > 5) tips.push('«' + usage[usage.length - 1].label + '» casi no se usa: ver si se puede simplificar o mover a un lugar más visible.');
   if (!tips.length) tips.push('Todo en orden por ahora. Vuelva a pedir la revisión en unos días.');
   L.push('Sugerencias:'); for (const t of tips.slice(0, 5)) L.push('• ' + t);
@@ -135,7 +189,7 @@ export function buildReviewSummary({ groups, usage, slow = [], ocr = null }) {
 }
 
 function reviewPrompt(summary) {
-  return [{ role: 'system', content: 'Eres Burbuja, ayudante del Admin de una bodega. Con SOLO los datos de abajo, escribe en español, tratando de usted, un informe breve (máximo 20 líneas) con estas partes: «Errores» (agrupados, con cuántas veces), «Lentitud y cuelgues», «Lectura de boletas» (si hay datos), «Uso» (lo más y lo menos usado) y «Sugerencias de mejora» (2 a 5, concretas). Los clientes aparecen SOLO como «cliente #código»: escríbelos exactamente así, sin inventar nombres. No inventes datos, no uses markdown ni asteriscos; usa «•» para las listas. No escribas guiones largos.' },
+  return [{ role: 'system', content: 'Eres Burbuja, ayudante del Admin de una bodega. Con SOLO los datos de abajo, escribe en español, tratando de usted, un informe breve (máximo 24 líneas) con estas partes: «Errores» (agrupados, con cuántas veces), «Lentitud y cuelgues», «Lectura de boletas» (si hay datos), «Pantallas por tipo de aparato» (si hay datos: textos o menús cortados, botones chicos y pantallas lentas, por celular, tableta o computadora), «Uso» (lo más y lo menos usado) y «Sugerencias de mejora» (2 a 5, concretas). Los clientes aparecen SOLO como «cliente #código»: escríbelos exactamente así, sin inventar nombres. No inventes datos, no uses markdown ni asteriscos; usa «•» para las listas. No escribas guiones largos.' },
     { role: 'user', content: summary }];
 }
 
@@ -166,6 +220,7 @@ export async function assistantReviewRoute(request, env, auth, json, deps = {}) 
   let safe = report; codes.forEach((c, i) => { safe = safe.split(customerRef(c)).join('cliente #\u0001' + i + '\u0001'); });
   safe = redactOwnerText(safe).replace(/cliente #\u0001(\d+)\u0001/g, (m, i) => customerRef(codes[+i])).replace(/\u0001/g, '');
   return json({ ok: true, report: safe, source, groups: data.groups.slice(0, 20), top: data.usage.slice(0, 5), bottom: data.usage.length > 5 ? data.usage.slice(-5).reverse() : [],
-    slow: data.slow.slice(0, 20), ocr: data.ocr, customers: codes.slice(0, 50),
+    slow: data.slow.slice(0, 20), layout: layoutByDevice(data.layout).slice(0, LAYOUT_LIMITS.devices).map((g) => ({ device: g.device, label: g.label, total: g.total, kinds: g.kinds,
+      items: g.items.slice(0, 10).map((x) => ({ kind: x.kind, screen: x.screen, label: x.label, el: x.el, count: x.count, worst: x.worst })) })), ocr: data.ocr, customers: codes.slice(0, 50),
     errors_total: data.groups.reduce((t, g) => t + g.count, 0), hangs_total: data.slow.filter((x) => x.kind === 'cuelgue').reduce((t, x) => t + x.count, 0), server_now: now });
 }

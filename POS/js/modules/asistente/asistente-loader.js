@@ -69,6 +69,10 @@
   var REV_KEY = 'na_asst_rev', REV_MAX = 200, REV_USAGE_MAX = 300, REV_SLOW_MAX = 200, rev = null, revTimer = 0, revOn = false;
   var REV_SLOW_API_MS = 3000, REV_SCREEN_MS = 1500, REV_TASK_MS = 1000, REV_HANG_MS = 5000, REV_BEAT_MS = 1000, REV_CTX_MS = 15000;
   var revCtx = null, ltOn = false, ltUntil = 0, beatLast = 0, beatTimer = 0;
+  // Pantallas (nivel 3, asistente-pantallas.js): texto o menú cortado, página que se sale de lado, botón chico en táctil y pantalla lenta,
+  // por tipo de aparato. Máx. 60 hallazgos agrupados (r.l). Salen dentro de «slow» con su propio tipo (corte, desborde, boton_chico,
+  // lenta) para que la UI de hoy los mande tal cual: ms_avg/ms_max = px (o ms en «lenta»); en boton_chico ms_max es el lado MÁS chico.
+  var REV_LAYOUT_MAX = 60, REV_LAYOUT_KINDS = { corte: 1, desborde: 1, boton_chico: 1, lenta: 1 }, PANT_DELAY_MS = 5000, pantLoaded = false;
   function revClean(v, n) {
     var s = String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 600)
       .replace(/(https?:\/\/[^\s?#]*)[?#]\S*/gi, '$1').replace(/\b(?:bearer|basic)\s+\S+/gi, '[clave]')
@@ -81,6 +85,7 @@
     if (rev) return rev; try { rev = JSON.parse(ls(REV_KEY) || 'null'); } catch (_) { rev = null; }
     if (!rev || rev.v !== 1 || !Array.isArray(rev.e) || !rev.u || typeof rev.u !== 'object') rev = { v: 1, e: [], u: {}, seen: null };
     if (!Array.isArray(rev.s)) rev.s = [];
+    if (!Array.isArray(rev.l)) rev.l = [];
     if (!rev.o || typeof rev.o !== 'object') rev.o = { reads: 0, fails: 0, timeouts: 0, ms_sum: 0, ms_max: 0, corrections: 0, confirmed: 0 };
     return rev;
   }
@@ -134,6 +139,22 @@
     var it = { kind: kind, name: n, count: 1, ms_sum: ms, ms_max: ms, first: now, last: now }; if (cli) { it.cli = cli; it.accion = cx.accion; }
     r.s.push(it); if (r.s.length > REV_SLOW_MAX) r.s.splice(0, r.s.length - REV_SLOW_MAX);
     revSave();
+  }
+  function revLayout(kind, name, v) { // lo llama asistente-pantallas.js; nunca texto de la pantalla, solo «aparato|pantalla|elemento»
+    if (disabled || !REV_LAYOUT_KINDS[kind]) return;
+    var r = revLoad(), n = revClean(name, 80), now = new Date().toISOString(); v = Math.max(1, Math.min(36e5, Math.round(Number(v) || 0)));
+    if (!n || n.indexOf('|') < 0) return;
+    for (var i = r.l.length - 1; i >= 0; i--) { var x = r.l[i];
+      if (x.kind === kind && x.name === n) { x.count++; x.sum += v; x.worst = kind === 'boton_chico' ? Math.min(x.worst, v) : Math.max(x.worst, v); x.last = now; r.l.splice(i, 1); r.l.push(x); revSave(); return; } }
+    r.l.push({ kind: kind, name: n, count: 1, sum: v, worst: v, first: now, last: now }); if (r.l.length > REV_LAYOUT_MAX) r.l.splice(0, r.l.length - REV_LAYOUT_MAX);
+    revSave();
+  }
+  function revPantallas() { // archivo chico, solo Admin, en un momento libre y bien después de abrir (no compite con el arranque)
+    if (pantLoaded || disabled) return; pantLoaded = true;
+    (root.setTimeout || setTimeout)(function () {
+      var go = function () { if (disabled) return; try { var d = root.document, s = d.createElement('script'); s.src = 'js/modules/asistente/asistente-pantallas.js'; s.async = true; d.body.appendChild(s); } catch (_) {} };
+      if (root.requestIdleCallback) root.requestIdleCallback(go, { timeout: 5000 }); else go();
+    }, PANT_DELAY_MS);
   }
   function revScreen() { var p = root.document.querySelector ? root.document.querySelector('.page.active') : null; return p && p.id ? String(p.id).replace(/[^\w-]/g, '').slice(0, 30) : 'otro'; }
   function revFile(u) { var s = String(u || ''); try { var x = new URL(s, root.location.href); s = x.origin === root.location.origin ? x.pathname : x.host + x.pathname; } catch (_) {} return s.replace(/\d{3,}/g, '#'); }
@@ -190,6 +211,7 @@
         .observe({ type: 'longtask' }); }
     } catch (_) { ltOn = false; }
     beatLast = Date.now(); if (typeof root.setInterval === 'function') beatTimer = root.setInterval(revBeat, REV_BEAT_MS); // 1 latido por segundo: casi sin costo
+    revPantallas();
   }
   function revOcr(x) { // lo llama asistente-boleta.js: { ok, ms, timeout, corrections, confirmed } (sin foto ni datos)
     var o = revLoad().o, ms = Math.max(0, Math.round(Number(x && x.ms) || 0));
@@ -200,11 +222,14 @@
   }
   root.NA_ASISTENTE_REVISION = {
     // Lo que se manda SOLO cuando el Admin pide la revisión (la UI lo pasa además por el redactor del asistente). De clientes: solo el código.
-    data: function () { var r = revLoad(); return {
+    // Pantallas: al FINAL de «slow» y sin pasar de 200 en total (la UI manda los últimos 200), así siempre llegan.
+    data: function () { var r = revLoad(), lay = r.l.map(function (x) { return { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.sum / Math.max(1, x.count)), ms_max: x.worst, last: x.last }; });
+      return {
       errors: r.e.map(function (x) { var o = { kind: x.kind, msg: x.msg, src: x.src, status: x.status, count: x.count, first: x.first, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }),
       usage: JSON.parse(JSON.stringify(r.u)),
-      slow: r.s.map(function (x) { var o = { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.ms_sum / Math.max(1, x.count)), ms_max: x.ms_max, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }),
+      slow: r.s.slice(-Math.max(0, REV_SLOW_MAX - lay.length)).map(function (x) { var o = { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.ms_sum / Math.max(1, x.count)), ms_max: x.ms_max, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }).concat(lay),
       ocr: JSON.parse(JSON.stringify(r.o)) }; },
+    layout: function (kind, name, v) { if (revOn) revLayout(kind, name, v); },
     newErrors: function () { var r = revLoad(), n = 0; r.e.concat(r.s.filter(function (x) { return x.kind === 'cuelgue'; })).forEach(function (x) { if (!r.seen || x.last > r.seen) n++; }); return n; },
     markSeen: function () { var r = revLoad(); r.seen = new Date().toISOString(); revFlush(); },
     installed: function () { return revOn; },
@@ -217,7 +242,7 @@
       try { if (typeof root.goPage === 'function') { root.goPage('pageClientes'); return true; } } catch (_) {}
       return false;
     },
-    _test: { beat: revBeat, ctx: function () { return revCtxNow(); }, slow: revSlow }
+    _test: { beat: revBeat, ctx: function () { return revCtxNow(); }, slow: revSlow, layout: revLayout }
   };
   slotCss();
   if (!disabled && ls('na_asistente_acc') === 'owner') { reserve(); revInstall(); }
