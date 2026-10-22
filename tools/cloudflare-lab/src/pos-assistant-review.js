@@ -11,6 +11,7 @@
 //   y la acción (abono, venta a crédito, editar cliente). Nombre, DNI, teléfono, dirección y montos nunca llegan ni van al modelo:
 //   el informe nombra al cliente como «cliente #código» y el aparato del Admin lo convierte en enlace con el nombre, solo en pantalla.
 import { assistantAccess } from './pos-assistant-access.js';
+import { levelCan } from './pos-assistant-levels.js';
 import { redactText, redactOwnerText, reserveUsage, createSettingsUsageStore } from './pos-assistant.js';
 import { resolveProvider, callModel } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
@@ -143,7 +144,8 @@ export async function assistantReviewRoute(request, env, auth, json, deps = {}) 
   if (String(env?.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405);
   const role = deps.resolveRole ? await deps.resolveRole(auth) : await assistantAccess(deps.db, auth);
-  if (role !== 'owner' || auth?.posRole !== 'owner') return json(REVIEW_DENIED, 403);
+  // Admin (sesión Admin) o persona con nivel 3 (capacidad «revision», pos-assistant-levels.js). Nivel 0, 1 y 2: 403 como antes.
+  if (role === 'owner' ? auth?.posRole !== 'owner' : !levelCan(role, 'revision')) return json(REVIEW_DENIED, 403);
   if (Number(request.headers.get('content-length') || 0) > REVIEW_LIMITS.maxBodyBytes) return json({ error: 'payload_too_large' }, 413);
   let raw; try { raw = await request.text(); } catch { return json({ error: 'bad_request' }, 400); }
   if (raw.length > REVIEW_LIMITS.maxBodyBytes) return json({ error: 'payload_too_large' }, 413);

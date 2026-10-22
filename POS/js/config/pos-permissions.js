@@ -44,6 +44,8 @@
   API_ROUTES.push({ path: '/auth/assistant/confirm', methods: ['POST'], roles: ['owner', 'empleado'] });
   API_ROUTES.push({ path: '/auth/assistant/employee-access', methods: ['GET', 'POST'], roles: owner });
   API_ROUTES.push({ path: '/auth/assistant/audit', methods: ['GET'], roles: owner });
+  // Niveles 0..3 del asistente por persona: solo Admin, sin PIN (el Worker responde 403 admin_only a cualquier otro).
+  API_ROUTES.push({ path: '/auth/assistant/levels', methods: ['GET', 'POST'], roles: owner });
   // Proveedor del asistente: solo dueño (el Worker responde 403 admin_only a cualquier otro).
   API_ROUTES.push({ path: '/auth/assistant/provider', methods: ['GET'], roles: owner });
   ['test', 'select'].forEach(function (k) { API_ROUTES.push({ path: '/auth/assistant/provider/' + k, methods: ['POST'], roles: owner }); });

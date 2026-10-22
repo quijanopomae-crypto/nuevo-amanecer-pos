@@ -25,6 +25,7 @@ import { mockAssistantReply } from './pos-assistant-mock.js';
 import { runAssistantQuery, canonicalReader, QUERY_TYPES, employeeDocumentRows } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
+import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL } from './pos-assistant-levels.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
 export const ASSISTANT_CONFIRM_PATH = '/auth/assistant/confirm';
@@ -51,9 +52,10 @@ export function hasForbiddenParam(value, depth = 0) {
 // Rol del asistente: 'owner' o 'empleado:<nivel>' (lo decide el servidor en cada pedido, ver pos-assistant-access.js).
 // Empleado con asistente: SOLO consultas (sin costos) y, con «Consultas y documentos», listas para imprimir. Sin PIN no hay forma de que el
 // dueño apruebe desde el teléfono del empleado: el empleado NO propone cambios (no hay nivel de escritura). Los cambios los confirma el dueño.
-export const EMPLOYEE_TOOLS = Object.freeze({ consultas: Object.freeze(['explicar_pasos', 'consultar']), consultas_documentos: Object.freeze(['explicar_pasos', 'consultar', 'preparar_documento']) });
-export const EMPLOYEE_QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock']);
-export const EMPLOYEE_DOC_TYPES = Object.freeze(['lista_precios', 'lista_pedido']);
+// Niveles 1, 2 y 3 por persona: lo que permite cada uno está SOLO en pos-assistant-levels.js.
+export const EMPLOYEE_TOOLS = EMPLOYEE_TOOLS_BY_NAME;
+export const EMPLOYEE_QUERY_TYPES = EMPLOYEE_QUERY_TYPES_ALL;
+export const EMPLOYEE_DOC_TYPES = EMPLOYEE_DOC_TYPES_ALL;
 export function toolAllowed(role, name) {
   const a = TOOL_ACTIONS[name]; if (!a) return false;
   if (role === 'owner') return canDo('owner', a);

@@ -12,20 +12,21 @@
 // - Las herramientas que cambian algo piden SIEMPRE el PIN del dueño en una tarjeta de un solo uso, en cualquier nivel.
 import { sha256Hex } from './a5-import-core.js';
 import { posRoleFor } from './pos-roles.js';
+import { LEVEL_NAMES, levelFromStored, levelOn } from './pos-assistant-levels.js';
 
-export const ACCESS_LEVELS = Object.freeze(['off', 'consultas', 'consultas_documentos']);
+// Niveles 0..3 por persona: ver pos-assistant-levels.js (único lugar con lo que permite cada uno). 'completo' = nivel 3.
+export const ACCESS_LEVELS = LEVEL_NAMES;
 export const ACCESS_APPROVAL_ACTION = 'assistant.employee_access';
 export const ACCESS_PATH = '/auth/assistant/employee-access';
 // Consumo estricto de aprobaciones del asistente (también lo usan las tarjetas en pos-assistant.js).
 export const STRICT_APPROVAL_SQL = 'UPDATE pos_owner_approvals SET used_at=? WHERE approval_id=? AND device_id=? AND action=? AND expires_at>? AND operation_id=? AND used_at IS NULL';
-const levelKey = async (deviceId) => 'internal:asst:lvl:' + (await sha256Hex(String(deviceId))).slice(0, 32);
+export const levelKey = async (deviceId) => 'internal:asst:lvl:' + (await sha256Hex(String(deviceId))).slice(0, 32);
 
 export async function employeeLevel(db, deviceId) {
   if (!db || !deviceId) return 'off';
   try {
     const row = await db.prepare('SELECT value_json FROM pos_settings WHERE key=?1').bind(await levelKey(deviceId)).first();
-    const v = row ? JSON.parse(row.value_json) : null;
-    return ACCESS_LEVELS.includes(v?.level) ? v.level : 'off';
+    return row ? LEVEL_NAMES[levelFromStored(JSON.parse(row.value_json))] : 'off';
   } catch { return 'off'; } // sin tabla o error: apagado (falla cerrado)
 }
 
@@ -46,8 +47,11 @@ export async function assistantAccess(db, auth) {
   if (row.pos_role !== 'empleado') return 'empleado:off';
   return 'empleado:' + (await employeeLevel(db, auth.principalId));
 }
-export function accessLevel(role) { return role === 'owner' ? 'dueno' : String(role || '').split(':')[1] || 'off'; }
-export function accessOn(role) { return role === 'owner' || role === 'empleado:consultas' || role === 'empleado:consultas_documentos'; }
+// Nombre del nivel para el ping. El nivel 3 ('completo') se informa como 'consultas_documentos' mientras la pantalla del celular
+// (asistente-ui.js / asistente-core.js) solo conozca los nombres viejos: así el empleado con nivel 3 no se queda sin burbuja.
+// El nivel real (0..3) lo da GET /auth/assistant/levels. Cuando la pantalla se actualice, se quita esta equivalencia.
+export function accessLevel(role) { const l = role === 'owner' ? 'dueno' : String(role || '').split(':')[1] || 'off'; return l === 'completo' ? 'consultas_documentos' : l; }
+export function accessOn(role) { return levelOn(role); }
 
 // Mismo criterio que el chat (assistantAccess): fila 'owner' explícita, o sin fila con sesión Admin (regla del POS).
 async function isOwnerDevice(db, auth) {
