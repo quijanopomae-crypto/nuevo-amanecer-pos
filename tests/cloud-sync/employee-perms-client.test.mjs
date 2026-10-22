@@ -77,6 +77,21 @@ test('refresh usa la fuente conectable; fuente de fábrica lee employee_allow de
   await e.refresh(); assert.equal(e.may(ID), true);
   const roles = { ...emp, api: async () => ({ pos_role: 'empleado' }) };
   e = load({ roles }); await e.refresh(); assert.equal(e.may(ID), false, 'hoy /auth/me no lo trae: cerrado');
-  const roles2 = { ...emp, api: async () => ({ pos_role: 'empleado', employee_allow: { allow: { [ID]: true } } }) };
+  const roles2 = { ...emp, api: async () => ({ pos_role: 'empleado', employee_allow: { [ID]: true } }) };
   e = load({ roles: roles2 }); await e.refresh(); assert.equal(e.may(ID), true);
+});
+
+test('fuente de fábrica: lee employee_allow ({ id: true }) de /auth/me solo para empleado', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = await import('node:vm');
+  const rd = p => readFileSync(new URL('../../' + p, import.meta.url), 'utf8');
+  const mk = me => {
+    const ctx = vm.createContext({ NA_ROLES: { role: me.pos_role, confirmed: true, api: async () => me }, NA_PERMISSIONS: { featureLocked: () => false } });
+    vm.runInContext(rd('POS/js/config/pos-employee-toggles.js'), ctx); vm.runInContext(rd('POS/js/config/employee-perms-client.js'), ctx); return ctx.NA_EMPLOYEE_PERMS;
+  };
+  let e = mk({ pos_role: 'empleado', employee_allow: { 'ventas-espera': true, kardex: true } });
+  assert.equal(JSON.stringify(await e.refresh()), '{"ventas-espera":true}');
+  assert.equal(e.may('ventas-espera'), true); assert.equal(e.may('kardex'), false);
+  e = mk({ pos_role: 'empleado' }); assert.equal(JSON.stringify(await e.refresh()), '{}');
+  e = mk({ pos_role: 'empleado', employee_allow: [true] }); assert.equal(JSON.stringify(await e.refresh()), '{}');
 });

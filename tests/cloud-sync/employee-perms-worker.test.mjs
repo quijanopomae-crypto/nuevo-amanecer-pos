@@ -128,3 +128,32 @@ test('id fuera de la lista, sin candado y con true en la fila: el empleado sigue
     assert.equal((await call(f, '/features/' + id, 'owner-token')).status, 404, id + ' dueño como hoy');
   }
 });
+
+test('/auth/me: employee_allow solo para el empleado, normalizado, sin caché y {} ante fila mala', async t => {
+  const f = await setup(t); const emp = await employee(f);
+  let me = await call(f, '/auth/me', emp);
+  assert.deepEqual([me.body.pos_role, me.body.employee_allow], ['empleado', {}], 'sin fila: {}');
+  setRow(f, JSON.stringify({ allow: { 'etiquetas-precios': true, 'ventas-espera': true, kardex: true, 'valorizacion-inventario': true, 'permisos-por-empleado': true, 'clonar-venta': 'true', 'atajos-teclado': false } }));
+  me = await call(f, '/auth/me', emp);
+  assert.deepEqual(me.body.employee_allow, { 'ventas-espera': true, 'etiquetas-precios': true }, 'solo ids de la lista con true; candado no agrega ids');
+  const owner = await call(f, '/auth/me', 'owner-token');
+  assert.equal(owner.body.pos_role, 'owner');
+  assert.ok(!('employee_allow' in owner.body), 'dueño sin el campo');
+  for (const v of ['[]', '"x"', 'null', '{"allow":[true]}', '{"allow":{"etiquetas-precios":1}}']) {
+    setRow(f, v); assert.deepEqual((await call(f, '/auth/me', emp)).body.employee_allow, {}, v);
+  }
+  setRow(f, JSON.stringify({ allow: { 'productos-sin-movimiento': true } }));
+  assert.deepEqual((await call(f, '/auth/me', emp)).body.employee_allow, { 'productos-sin-movimiento': true }, 'sin caché');
+});
+
+test('/auth/me: rol desconocido u otro no recibe employee_allow; error de lectura -> {}', async t => {
+  const { handleRoles } = await import('../../tools/cloudflare-lab/src/pos-roles.js');
+  const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } });
+  const rowDb = value => ({ prepare: sql => ({ bind: () => ({ first: async () => /pos_settings/.test(sql) ? (value instanceof Error ? (() => { throw value; })() : { value_json: value }) : (/label/.test(sql) ? { label: null } : { id: 1 }) }) , first: async () => ({ id: 1 }) }) });
+  const run = async (posRole, db) => (await handleRoles(new Request('http://localhost/auth/me'), new URL('http://localhost/auth/me'), {}, { json, authorizeSession: async () => ({ principalId: 'session:x', posRole }), getDatabase: () => db })).json();
+  const good = JSON.stringify({ allow: { 'ventas-espera': true } });
+  for (const r of ['unknown', 'read_only', 'admin']) assert.ok(!('employee_allow' in await run(r, rowDb(good))), r);
+  assert.deepEqual((await run('empleado', rowDb(good))).employee_allow, { 'ventas-espera': true });
+  assert.deepEqual((await run('empleado', rowDb(new Error('boom')))).employee_allow, {});
+  assert.deepEqual((await run('empleado', rowDb('{bad json'))).employee_allow, {});
+});

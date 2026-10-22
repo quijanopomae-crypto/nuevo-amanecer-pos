@@ -1,4 +1,5 @@
 import { canDo, PERMISSIONS } from './pos-permissions.js';
+import { readEmployeeAllow } from './pos-employee-perms.js';
 // Etapa 2 (G): roles por aparato y PIN del dueño validado solo en el servidor.
 // - Un aparato sin fila en pos_device_roles es del dueño (compatibilidad con el teléfono actual).
 // - El PIN nunca se registra ni se devuelve; solo se guarda PBKDF2-SHA256 con sal por fila.
@@ -196,6 +197,12 @@ export async function ownerGate(request, env, auth, action, json, db, always = f
   return json({ error: 'owner_approval_required', action, pos_role: role === 'owner' ? 'owner' : 'empleado' }, 403);
 }
 
+// Permisos por empleado: solo el empleado recibe employee_allow ({ id: true }, normalizado, sin caché, {} ante error).
+async function employeeAllowField(db, role) {
+  if (role !== 'empleado') return {};
+  try { return { employee_allow: await readEmployeeAllow(db) }; } catch { return { employee_allow: {} }; }
+}
+
 export async function handleRoles(request, url, env, { json, authorizeSession, getDatabase }) {
   const db = getDatabase(env);
   const path = url.pathname;
@@ -212,8 +219,8 @@ export async function handleRoles(request, url, env, { json, authorizeSession, g
       try {
         pinSet = !!(await pinRow(db));
         label = (await db.prepare('SELECT label FROM pos_device_roles WHERE device_id=?1').bind(auth.principalId).first())?.label ?? null;
-      } catch (e) { if (!missingTable(e)) throw e; return json({ pos_role: role, owner_pin_set: false, roles_ready: false, device_id: auth.principalId }); }
-      return json({ pos_role: role, owner_pin_set: pinSet, roles_ready: true, device_id: auth.principalId, label });
+      } catch (e) { if (!missingTable(e)) throw e; return json({ pos_role: role, owner_pin_set: false, roles_ready: false, device_id: auth.principalId, ...(await employeeAllowField(db, role)) }); }
+      return json({ pos_role: role, owner_pin_set: pinSet, roles_ready: true, device_id: auth.principalId, label, ...(await employeeAllowField(db, role)) });
     }
     if (path === '/settings' && request.method === 'GET') {
       const rows = (await db.prepare('SELECT key,value_json,revision,updated_at FROM pos_settings WHERE key NOT LIKE \'internal:%\' ORDER BY key').all()).results || [];

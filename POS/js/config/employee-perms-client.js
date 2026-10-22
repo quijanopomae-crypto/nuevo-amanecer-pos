@@ -27,12 +27,12 @@
   function normalized(value) {
     try { var t = toggles(); if (!t) return {}; var out = t.normalize(value); return out && typeof out === 'object' ? out : {}; } catch (_) { return {}; }
   }
-  // Fuente de fábrica: /auth/me con `employee_allow` ({ allow: { id: true } }). Hoy el servidor no lo manda: cerrado.
+  // Fuente de fábrica: /auth/me manda `employee_allow` = { id: true } solo al empleado; se envuelve como { allow } para normalize.
   async function defaultSource() {
     var r = root.NA_ROLES;
     if (!r || typeof r.api !== 'function') return null;
     var me = await r.api('/auth/me');
-    return me && me.pos_role === 'empleado' ? me.employee_allow : null;
+    return me && me.pos_role === 'empleado' && me.employee_allow ? { allow: me.employee_allow } : null;
   }
   var source = defaultSource;
 
