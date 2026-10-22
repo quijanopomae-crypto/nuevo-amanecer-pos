@@ -6,14 +6,20 @@ import { canonicalRead } from './a6-canonical.js';
 
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
-export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'resumen_dia', 'resumen_mes']);
+export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'resumen_dia', 'resumen_mes',
+  'ganancia', 'productos_sin_ventas', 'deuda_cliente', 'ventas_por_hora']);
+// Ganancia: usa costos. Solo quien ve costos (purchases.costs.view = hoy solo el Admin); el permiso se revisa en pos-assistant.js.
+export const COST_QUERY_TYPES = Object.freeze(['ganancia']);
 // Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
 export const SUMMARY_TYPES = Object.freeze(['resumen_dia', 'resumen_mes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
 const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos por reponer', sin_costo: 'Productos sin costo', ventas_periodo: 'Ventas del período',
   top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', compras_recientes: 'Compras recientes',
-  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes' };
+  resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes', ganancia: 'Ganancia', productos_sin_ventas: 'Productos sin ventas',
+  deuda_cliente: 'Deuda del cliente', ventas_por_hora: 'Ventas por hora' };
+// Topes de las consultas nuevas: filas que vuelven de SQL (agrupadas) y filas de la tabla «sin ventas».
+export const NEW_QUERY_LIMITS = Object.freeze({ sqlRows: 5000, idleRows: 50, idleDays: 30 });
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -27,11 +33,16 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // Día de Lima D = [D 05:00Z, D+1 05:00Z). fromIso/toIso: los límites que se comparan con created_at (ISO en UTC) o se enlazan en SQL.
 export function limaBounds(desde, hasta) { return { desde, hasta, fromIso: desde + 'T05:00:00.000Z', toIso: addDays(hasta, 1) + 'T05:00:00.000Z' }; }
 // Palabras de fecha que el servidor convierte en días de Lima (el modelo NO calcula fechas: manda la palabra en «periodo»).
-export const DATE_WORDS = Object.freeze(['hoy', 'ayer', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']);
+// antier = hoy − 2; mismo_dia_semana_pasada = el MISMO día de la semana, 7 días atrás (jueves 22 -> jueves 15; no el lunes de esa semana).
+export const DATE_WORDS = Object.freeze(['hoy', 'ayer', 'antier', 'mismo_dia_semana_pasada', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']);
 const WORD_ALIASES = { hoy: 'hoy', oy: 'hoy', ayer: 'ayer', 'esta semana': 'esta_semana', semana: 'esta_semana', 'la semana': 'esta_semana', 'semana actual': 'esta_semana',
   'semana pasada': 'semana_pasada', 'la semana pasada': 'semana_pasada', 'este mes': 'este_mes', mes: 'este_mes', 'el mes': 'este_mes', 'mes actual': 'este_mes',
-  'mes pasado': 'mes_pasado', 'el mes pasado': 'mes_pasado' };
-export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').trim(); return WORD_ALIASES[k] || null; }
+  'mes pasado': 'mes_pasado', 'el mes pasado': 'mes_pasado',
+  antier: 'antier', anteayer: 'antier', 'ante ayer': 'antier', 'antes de ayer': 'antier', 'antes ayer': 'antier', 'antesdeayer': 'antier', 'era antier': 'antier', 'era anteayer': 'antier',
+  'mismo dia semana pasada': 'mismo_dia_semana_pasada', 'mismo dia de la semana pasada': 'mismo_dia_semana_pasada', 'el mismo dia de la semana pasada': 'mismo_dia_semana_pasada',
+  'mismo dia de la otra semana': 'mismo_dia_semana_pasada', 'el mismo dia de la otra semana': 'mismo_dia_semana_pasada', 'hoy hace una semana': 'mismo_dia_semana_pasada',
+  'hace una semana': 'mismo_dia_semana_pasada', 'hace 7 dias': 'mismo_dia_semana_pasada', 'hace siete dias': 'mismo_dia_semana_pasada' };
+export function dateWord(v) { const k = norm(v).replace(/[_\s]+/g, ' ').replace(/[¿?¡!.,]/g, '').trim(); return WORD_ALIASES[k] || null; }
 // Lunes = inicio de la semana (Lima). 0 = lunes … 6 = domingo.
 const weekdayIdx = (d) => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7;
 // { desde, hasta } en fechas de Lima para una palabra de fecha, o null si no es una. «esta semana» = lunes a hoy; «este mes» = día 1 a hoy.
@@ -40,6 +51,8 @@ export function dateWordRange(word, nowMs = Date.now()) {
   const today = limaToday(nowMs), mon = addDays(today, -weekdayIdx(today));
   if (w === 'hoy') return { desde: today, hasta: today };
   if (w === 'ayer') { const y = addDays(today, -1); return { desde: y, hasta: y }; }
+  if (w === 'antier') { const y = addDays(today, -2); return { desde: y, hasta: y }; }
+  if (w === 'mismo_dia_semana_pasada') { const y = addDays(today, -7); return { desde: y, hasta: y }; }
   if (w === 'esta_semana') return { desde: mon, hasta: today };
   if (w === 'semana_pasada') return { desde: addDays(mon, -7), hasta: addDays(mon, -1) };
   if (w === 'este_mes') return { desde: today.slice(0, 8) + '01', hasta: today };
@@ -49,14 +62,19 @@ const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', '
 // Calendario de hoy en Lima para el mensaje del sistema (solo fechas, ningún dato del negocio).
 export function limaCalendarLine(nowMs = Date.now()) {
   const r = (w) => dateWordRange(w, nowMs), t = limaToday(nowMs), s = r('esta_semana'), m = r('este_mes');
-  return 'Hoy (Lima) es ' + DIAS[weekdayIdx(t)] + ' ' + t + '; ayer fue ' + r('ayer').desde + '; esta semana (de lunes a hoy) va de ' + s.desde + ' a ' + s.hasta
-    + '; este mes va de ' + m.desde + ' a ' + m.hasta + '. Para hoy, ayer, esta semana, la semana pasada, este mes o el mes pasado usa periodo en consultar (el sistema calcula las fechas).';
+  const a = r('antier').desde, md = r('mismo_dia_semana_pasada').desde;
+  return 'Hoy (Lima) es ' + DIAS[weekdayIdx(t)] + ' ' + t + '; ayer fue ' + r('ayer').desde + '; antier (anteayer) fue ' + DIAS[weekdayIdx(a)] + ' ' + a
+    + '; el mismo día de la semana pasada («el mismo día de la otra semana») fue ' + DIAS[weekdayIdx(md)] + ' ' + md
+    + '; esta semana (de lunes a hoy) va de ' + s.desde + ' a ' + s.hasta + '; este mes va de ' + m.desde + ' a ' + m.hasta + '.'
+    + ' Para esas palabras (y semana o mes pasado) usa periodo en consultar (el sistema calcula las fechas); un día exacto: fecha AAAA-MM-DD.'
+    + ' Si corrigen la fecha («era antier»), llama consultar de nuevo con el periodo NUEVO; no repitas el de antes.';
 }
 // Fecha de un campo: AAAA-MM-DD tal cual, o una palabra de fecha (lado: 'desde' o 'hasta' de su rango). Si no, null.
 function dateArg(v, side, nowMs) { if (DATE.test(v || '')) return v; const r = dateWordRange(v, nowMs); return r ? r[side] : null; }
 // Período en fechas de Lima. Por defecto: hoy. «periodo» (palabra de fecha) manda sobre desde/hasta. Máximo 92 días.
+// «fecha» (AAAA-MM-DD): un solo día exacto de Lima; va después de «periodo» y antes de desde/hasta.
 export function period(args, nowMs) {
-  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs);
+  const today = limaToday(nowMs), f = DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null, w = dateWordRange(args?.periodo, nowMs) || f;
   let hasta = w ? w.hasta : dateArg(args?.hasta, 'hasta', nowMs) || today, desde = w ? w.desde : dateArg(args?.desde, 'desde', nowMs) || (dateWordRange(args?.hasta, nowMs)?.desde ?? hasta);
   if (desde > hasta) [desde, hasta] = [hasta, desde];
   if (Date.parse(hasta) - Date.parse(desde) > QUERY_LIMITS.maxDays * 86400000) desde = addDays(hasta, -QUERY_LIMITS.maxDays);
@@ -105,7 +123,8 @@ const mkPeriod = limaBounds;
 // Mes: el mes del día pedido; si es el mes en curso va hasta hoy y se compara con los MISMOS días del mes anterior (1 al N).
 export function summaryPeriods(tipo, args, nowMs) {
   // «periodo» (o una palabra en hasta/desde): el día de referencia es el ÚLTIMO de su rango en Lima («ayer», «mes_pasado» -> su último día).
-  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs) || dateWordRange(args?.hasta, nowMs) || dateWordRange(args?.desde, nowMs);
+  const today = limaToday(nowMs), w = dateWordRange(args?.periodo, nowMs) || (DATE.test(args?.fecha || '') ? { desde: args.fecha, hasta: args.fecha } : null)
+    || dateWordRange(args?.hasta, nowMs) || dateWordRange(args?.desde, nowMs);
   const raw = String(args?.hasta || args?.desde || '');
   let ref = w ? w.hasta : DATE.test(raw) ? raw : /^\d{4}-\d{2}$/.test(raw) ? raw + '-01' : today;
   if (ref > today) ref = today;
@@ -147,6 +166,21 @@ export function canonicalReader(db) {
       return new Set(rows.filter((r) => r.status === 'anulada').map((r) => String(r.sale_id))); }
     catch (e) { if (/no such table/i.test(String(e?.message || e))) return new Set(); throw e; }
   }
+  // Consultas nuevas (ganancia, sin ventas, por hora): la fecha se filtra EN SQL (created_at dentro de [fromIso, toIso) del período de
+  // Lima) y la base devuelve filas YA agrupadas, con LIMIT. Misma autoridad que la lectura canónica de ventas: en ACTIVE solo las ventas
+  // de la promoción activa (canonical_sale_context); antes de ACTIVE, la tabla sales tal cual (como canonicalRead). Anuladas fuera con la
+  // misma tabla que GET /auth/sale-annulments (si aún no existe, no hay anuladas). Solo SELECT.
+  async function salesSql(p, build, limit) {
+    const ctl = await db.prepare('SELECT mode,active_promotion_id FROM canonical_control WHERE id=1').first();
+    if (!ctl || !['CANONICAL_READ_ONLY', 'ACTIVE'].includes(ctl.mode) || !ctl.active_promotion_id) throw new Error('canonical_not_published');
+    const active = ctl.mode === 'ACTIVE';
+    const from = active ? 'canonical_sale_context x JOIN sales r ON r.sale_id=x.sale_id' : 'sales r';
+    const scope = (active ? 'x.promotion_id=?1' : '?1 IS NOT NULL') + ' AND r.created_at>=?2 AND r.created_at<?3';
+    const NOT_ANNULLED = " AND NOT EXISTS(SELECT 1 FROM pos_sale_annulments a WHERE a.sale_id=r.sale_id AND a.status='anulada')";
+    const run = async (ann) => (await db.prepare(build(from, scope + ann) + ' LIMIT ?4').bind(ctl.active_promotion_id, p.fromIso, p.toIso, limit).all()).results || [];
+    try { return await run(NOT_ANNULLED); }
+    catch (e) { if (!/no such table: pos_sale_annulments/i.test(String(e?.message || e))) throw e; return run(''); }
+  }
   async function salesIn(p) { const [sales, out] = await Promise.all([all('sales'), annulled()]); const list = sales.filter((s) => s.created_at >= p.fromIso && s.created_at < p.toIso && !out.has(String(s.sale_id))); list.truncated = sales.truncated; return list; }
   return {
     async products() { const rows = await all('products'); const list = rows.map((p) => ({ id: String(p.product_id), nombre: p.name, stock: Number(p.current_stock_quantity), min: Number(p.stock_min_quantity || 0),
@@ -172,7 +206,19 @@ export function canonicalReader(db) {
       }
       return out;
     },
-    async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null })); },
+    async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null,
+      fecha: limaDateOf(c.issued_value || c.created_at) || null })); },
+    // Ventas por producto del período (agrupado en SQL): { product_id, q, c }. Tope NEW_QUERY_LIMITS.sqlRows (truncated si llega).
+    async itemsByProduct(p) {
+      const lim = NEW_QUERY_LIMITS.sqlRows;
+      const rows = await salesSql(p, (from, where) => `SELECT i.product_id AS product_id,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c FROM ${from} JOIN sale_items i ON i.sale_id=r.sale_id WHERE ${where} GROUP BY i.product_id ORDER BY c DESC`, lim);
+      const list = rows.map((x) => ({ product_id: String(x.product_id), q: Number(x.q) || 0, c: Number(x.c) || 0 })); list.truncated = rows.length >= lim; return list;
+    },
+    // Ventas por hora de Lima (agrupado en SQL, como mucho 24 filas + «sin hora»): { h, n, c }.
+    async salesByHour(p) {
+      const rows = await salesSql(p, (from, where) => `SELECT CAST(strftime('%H',r.created_at,'-5 hours') AS INTEGER) AS h,COUNT(*) AS n,SUM(r.total_cents) AS c FROM ${from} WHERE ${where} GROUP BY h ORDER BY h`, 25);
+      return rows.map((x) => ({ h: x.h == null ? null : Number(x.h), n: Number(x.n) || 0, c: Number(x.c) || 0 }));
+    },
     async customers() { const rows = await all('customers'); return rows.map((c) => ({ id: String(c.customer_id), nombre: c.name })); },
     async salesTotals(p) {
       const m = new Map(); for (const s of await salesIn(p)) { const dia = new Date(Date.parse(s.created_at) - 5 * 3600 * 1000).toISOString().slice(0, 10), k = dia + '|' + s.payment_method;
@@ -213,6 +259,12 @@ export function memoryReader(data) {
     async products() { return (data.products || []).map((p) => ({ ...p })); },
     async productsById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), { ...p }); return out; },
     async credits() { return (data.credits || []).map((c) => ({ ...c })); },
+    async itemsByProduct(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)), m = new Map();
+      for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const k = String(it.product_id), r = m.get(k) || { product_id: k, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(k, r); }
+      return [...m.values()].sort((a, b) => b.c - a.c); },
+    async salesByHour(p) { const m = new Map();
+      for (const s of (data.sales || []).filter((x) => inRange(x, p))) { const h = new Date(Date.parse(s.created_at) - LIMA_OFFSET_MS).getUTCHours(), r = m.get(h) || { h, n: 0, c: 0 }; r.n++; r.c += Number(s.total_cents) || 0; m.set(h, r); }
+      return [...m.values()].sort((a, b) => a.h - b.h); },
     async customers() { return (data.customers || []).map((c) => ({ ...c })); },
     async salesTotals(p) { const m = new Map(); for (const s of (data.sales || []).filter((x) => inRange(x, p))) { const k = dia(s.created_at) + '|' + s.metodo; const r = m.get(k) || { dia: dia(s.created_at), metodo: s.metodo, n: 0, c: 0 }; r.n++; r.c += s.total_cents; m.set(k, r); } return [...m.values()].sort((a, b) => a.dia.localeCompare(b.dia)); },
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
@@ -283,6 +335,10 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
       resumen: { desde: p.desde, hasta: p.hasta, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
   }
   if (SUMMARY_TYPES.includes(tipo)) return summaryQuery(reader, tipo, args, nowMs, base);
+  if (tipo === 'ganancia') return profitQuery(reader, args, nowMs, base);
+  if (tipo === 'productos_sin_ventas') return idleProductsQuery(reader, args, nowMs, base);
+  if (tipo === 'deuda_cliente') return customerDebtQuery(reader, args, base);
+  if (tipo === 'ventas_por_hora') return hourlySalesQuery(reader, args, nowMs, base);
   if (tipo === 'deudas_clientes') {
     const [credits, customers] = await Promise.all([reader.credits(), reader.customers()]);
     const names = new Map(customers.map((c) => [c.id, c.nombre])), by = new Map();
@@ -358,6 +414,113 @@ async function summaryQuery(reader, tipo, args, nowMs, base) {
       top_por_unidades: byQty.slice(0, M).map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q) })) },
     // Solo para el servidor (no va al aparato ni al modelo): códigos a proteger del redactor en el mensaje al modelo y en la respuesta.
     refIds: [...new Set([...byAmount.slice(0, 5), ...byQty.slice(0, 5)].map((x) => String(x.product_id)))] };
+}
+
+// ---------- Consultas nuevas: ganancia, productos sin ventas, deuda de un cliente, ventas por hora ----------
+// Mismo criterio que los resúmenes: los productos ante el modelo y en el texto SOLO como «producto #código» (el nombre solo en la tabla del
+// Admin) y los clientes SOLO como «cliente #código». Nada aquí escribe en la base.
+const rangeLabel = (p) => (p.desde === p.hasta ? p.desde : p.desde + ' a ' + p.hasta);
+const soles = (c) => cents(c) ?? 0;
+const money = (c) => 'S/ ' + soles(c).toFixed(2);
+
+// Ganancia = ventas − costo de lo vendido (período de Lima; por defecto hoy). Costo = costo ACTUAL del producto × unidades (las líneas de
+// venta no guardan el costo de ese día). Lo vendido de productos sin costo (o líneas genéricas sin producto) NO entra en la ganancia: se
+// informa aparte para no inventar un costo. Solo quien ve costos (se revisa en pos-assistant.js antes de llegar aquí).
+async function profitQuery(reader, args, nowMs, base) {
+  const p = period(args, nowMs), rango = rangeLabel(p);
+  const [items, list] = await Promise.all([reader.itemsByProduct(p), reader.products()]);
+  const byId = new Map(list.map((x) => [String(x.id), x]));
+  let ventas = 0, conCosto = 0, costo = 0, sinCosto = 0; const sinCostoIds = [], rows = [];
+  for (const it of items) {
+    const pr = byId.get(String(it.product_id)), c = Number(it.c) || 0, q = Number(it.q) || 0; ventas += c;
+    const uc = pr && Number(pr.costo) > 0 ? Math.round(Number(pr.costo) * 100) : null;
+    if (uc == null) { sinCosto += c; sinCostoIds.push(String(it.product_id)); continue; }
+    const k = Math.round(uc * q); costo += k; conCosto += c; rows.push({ product_id: String(it.product_id), q, c, k, g: c - k });
+  }
+  const ganancia = conCosto - costo, margen = conCosto > 0 ? Math.round((ganancia / conCosto) * 1000) / 10 : null, truncado = !!items.truncated;
+  const top = rows.slice().sort((a, b) => b.g - a.g).slice(0, 5), bajo = rows.filter((x) => x.g < 0).sort((a, b) => a.g - b.g).slice(0, 3);
+  const nm = (id) => (byId.get(id)?.nombre || 'Producto') + ' (' + productRef(id) + ')';
+  const filas = [
+    ...(truncado ? [['Aviso: hay más productos vendidos de los que el asistente suma de una vez; revise Reportes.', '']] : []),
+    ['Ventas S/', soles(ventas)],
+    ['Costo de lo vendido S/ (costo actual)', soles(costo)],
+    ['Ganancia S/', soles(ganancia)],
+    ['Margen %', margen == null ? '—' : margen],
+    ...(sinCosto ? [['Ventas sin costo registrado S/ (' + sinCostoIds.length + (sinCostoIds.length === 1 ? ' producto' : ' productos') + '; no entran en la ganancia)', soles(sinCosto)]] : []),
+    ...top.map((x, i) => ['Top ' + (i + 1) + ' ganancia: ' + nm(x.product_id) + ', ' + r2(x.q) + ' unid.', soles(x.g)]),
+    ...bajo.map((x) => ['Vendido bajo costo: ' + nm(x.product_id), soles(x.g)])
+  ];
+  const texto = ventas
+    ? sentences(['Ganancia ' + rango + ': ' + money(ganancia) + ' (ventas ' + money(conCosto) + ' menos costo ' + money(costo) + (margen == null ? '' : ', margen ' + margen + ' %') + ')',
+      ...(sinCosto ? [money(sinCosto) + ' vendidos de productos sin costo no se cuentan; complete sus costos'] : []),
+      ...(top.length ? ['Lo que más ganancia dejó: ' + productRef(top[0].product_id) + ' (' + money(top[0].g) + ')'] : [])])
+    : 'No hay ventas registradas ' + rango + '.';
+  return { ...base, titulo: 'Ganancia ' + rango, columnas: ['Detalle', 'S/'], filas, desde: p.desde, hasta: p.hasta, texto,
+    resumen: { desde: p.desde, hasta: p.hasta, truncado, base_costo: 'costo actual del producto', ventas_soles: soles(ventas), ventas_con_costo_soles: soles(conCosto),
+      costo_soles: soles(costo), ganancia_soles: soles(ganancia), margen_pct: margen, ventas_sin_costo_soles: soles(sinCosto), productos_sin_costo: sinCostoIds.length,
+      top_ganancia: top.map((x) => ({ producto: productRef(x.product_id), unidades: r2(x.q), ganancia_soles: soles(x.g) })),
+      bajo_costo: bajo.map((x) => ({ producto: productRef(x.product_id), ganancia_soles: soles(x.g) })) },
+    refIds: [...new Set([...top, ...bajo].map((x) => x.product_id))] };
+}
+
+// Productos del catálogo actual (promoción activa + creados en vivo) sin ninguna venta en el período (por defecto los últimos 30 días de Lima,
+// hoy incluido). Los de más stock primero (más plata parada). Tabla: hasta 50 con su stock.
+async function idleProductsQuery(reader, args, nowMs, base) {
+  const today = limaToday(nowMs), dflt = !(args?.periodo || args?.fecha || args?.desde || args?.hasta);
+  const p = dflt ? limaBounds(addDays(today, -(NEW_QUERY_LIMITS.idleDays - 1)), today) : period(args, nowMs), rango = rangeLabel(p);
+  const [items, list] = await Promise.all([reader.itemsByProduct(p), reader.products()]);
+  const sold = new Set(items.map((x) => String(x.product_id)));
+  const stockOf = (x) => (x.controla && Number.isFinite(Number(x.stock)) ? Number(x.stock) : null);
+  const idle = list.filter((x) => x.id != null && !sold.has(String(x.id))).sort((a, b) => (stockOf(b) ?? -1) - (stockOf(a) ?? -1) || String(a.id).localeCompare(String(b.id)));
+  const truncado = !!(items.truncated || list.truncated), M = QUERY_LIMITS.modelRows, first = idle.slice(0, M);
+  const filas = [...(truncado ? [['Aviso: lista larga; pueden faltar o sobrar productos. Revise Reportes.', '']] : []),
+    ...idle.slice(0, NEW_QUERY_LIMITS.idleRows).map((x) => [(x.nombre || 'Producto') + ' (' + productRef(x.id) + ')', stockOf(x) == null ? 'sin control' : r2(stockOf(x))])];
+  const texto = idle.length
+    ? sentences([(idle.length === 1 ? '1 producto no tuvo ventas ' : idle.length + ' productos no tuvieron ventas ') + rango + ' (de ' + list.length + ' revisados)',
+      'Con más stock: ' + idle.slice(0, 3).map((x) => productRef(x.id) + (stockOf(x) == null ? '' : ' (' + r2(stockOf(x)) + ')')).join(', ')])
+    : 'Todos los productos tuvieron ventas ' + rango + '.';
+  return { ...base, titulo: 'Sin ventas ' + rango, columnas: ['Producto', 'Stock'], filas, total: idle.length, desde: p.desde, hasta: p.hasta, texto,
+    resumen: { desde: p.desde, hasta: p.hasta, sin_ventas: idle.length, revisados: list.length, truncado,
+      primeros: first.map((x) => ({ producto: productRef(x.id), stock: stockOf(x) == null ? null : r2(stockOf(x)) })) },
+    refIds: idle.slice(0, Math.max(M, 3)).map((x) => String(x.id)) };
+}
+
+// Deuda de UN cliente por su código («cliente #código»). Al modelo y a la tabla: solo el código, el saldo total, cuántos créditos abiertos
+// y la fecha del más antiguo. Nunca nombre, DNI ni teléfono (el aparato del Admin pone el nombre de SU lista con el código).
+async function customerDebtQuery(reader, args, base) {
+  const { customerCode } = await import('./pos-assistant.js');
+  const code = customerCode(args?.cliente_id) ?? customerCode(args?.cliente);
+  if (!code) return { ...base, columnas: [], filas: [], texto: 'Dime el código del cliente (aparece como «cliente #código» en Clientes).', resumen: { falta: 'cliente_id' } };
+  const ref = 'cliente #' + code, credits = await reader.credits();
+  let mine = credits.filter((c) => String(c.cliente) === code);
+  if (!mine.length) mine = credits.filter((c) => String(c.cliente).toLowerCase() === code.toLowerCase());
+  const open = mine.filter((c) => Number(c.saldo) > 0).sort((a, b) => String(a.fecha || '9999').localeCompare(String(b.fecha || '9999')));
+  const total = r2(open.reduce((s, c) => s + Number(c.saldo), 0)), oldest = open.find((c) => c.fecha)?.fecha || null;
+  let known = mine.length > 0;
+  if (!known && typeof reader.customers === 'function') { const cs = await reader.customers(); known = cs.some((c) => String(c.id) === code || String(c.id).toLowerCase() === code.toLowerCase()); }
+  const texto = open.length
+    ? ref + ' debe S/ ' + total.toFixed(2) + ' en ' + open.length + (open.length === 1 ? ' crédito abierto' : ' créditos abiertos') + (oldest ? '; el más antiguo es del ' + oldest : '') + '.'
+    : known ? ref + ' no tiene deudas pendientes.' : 'No encontré deudas de ' + ref + '. Revise el código en Clientes.';
+  return { ...base, titulo: 'Deuda de ' + ref, columnas: ['Fecha', 'Vence', 'Saldo S/'], filas: open.slice(0, QUERY_LIMITS.topRows).map((c) => [c.fecha || 'sin fecha', c.vence || '-', r2(c.saldo)]),
+    ...(open.length > QUERY_LIMITS.topRows ? { total: open.length } : {}), texto,
+    resumen: { cliente: ref, saldo_soles: total, creditos_abiertos: open.length, mas_antiguo: oldest } };
+}
+
+// Ventas por hora de Lima (período por defecto hoy): número y total por hora. Sin clientes ni productos.
+async function hourlySalesQuery(reader, args, nowMs, base) {
+  const p = period(args, nowMs), rango = rangeLabel(p), rows = (await reader.salesByHour(p)).filter((x) => x.n > 0);
+  const hh = (h) => (h == null ? 'sin hora' : String(h).padStart(2, '0') + ':00');
+  const slot = (h) => (h == null ? 'Sin hora' : hh(h) + '–' + String(h).padStart(2, '0') + ':59');
+  const n = rows.reduce((s, x) => s + x.n, 0), c = rows.reduce((s, x) => s + x.c, 0);
+  const best = rows.filter((x) => x.h != null).sort((a, b) => b.c - a.c || b.n - a.n)[0], most = rows.filter((x) => x.h != null).sort((a, b) => b.n - a.n || b.c - a.c)[0];
+  const texto = n
+    ? sentences(['Ventas por hora ' + rango + ': ' + n + (n === 1 ? ' venta' : ' ventas') + ', ' + money(c),
+      ...(best ? ['Donde más vende es de ' + slot(best.h) + ' (' + money(best.c) + ' en ' + best.n + (best.n === 1 ? ' venta' : ' ventas') + ')'] : []),
+      ...(most && best && most.h !== best.h ? ['Con más ventas: ' + slot(most.h) + ' (' + most.n + ')'] : [])])
+    : 'No hay ventas registradas ' + rango + '.';
+  return { ...base, titulo: 'Ventas por hora ' + rango, columnas: ['Hora (Lima)', 'Ventas', 'S/'], filas: rows.map((x) => [slot(x.h), x.n, soles(x.c)]), desde: p.desde, hasta: p.hasta, texto,
+    resumen: { desde: p.desde, hasta: p.hasta, ventas: n, total_soles: soles(c), mejor_hora: best ? { hora: hh(best.h), ventas: best.n, soles: soles(best.c) } : null,
+      por_hora: rows.map((x) => ({ hora: hh(x.h), ventas: x.n, soles: soles(x.c) })) } };
 }
 
 // ---------- Documentos para aparatos de empleado ----------
