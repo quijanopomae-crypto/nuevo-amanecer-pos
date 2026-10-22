@@ -118,7 +118,15 @@
   function print() {
     doc.body.classList.add('cat-printing');
     root.addEventListener('afterprint', endPrint, { once: true });
-    if (typeof root.print === 'function') root.print(); else endPrint();
+    if (typeof root.print !== 'function') { endPrint(); return; }
+    // Espera a que carguen las fotos (máximo 4 s) para que no salgan en blanco en el PDF.
+    var btn = dlg && dlg.querySelector('[data-cat-print]'); if (btn) btn.disabled = true;
+    var imgs = dlg ? Array.prototype.slice.call(dlg.querySelectorAll('[data-cat-sheet] img')) : [];
+    var waits = imgs.filter(function (i) { return !i.complete; }).map(function (i) {
+      return new Promise(function (res) { i.addEventListener('load', res, { once: true }); i.addEventListener('error', res, { once: true }); });
+    });
+    var timeout = new Promise(function (res) { root.setTimeout(res, 4000); });
+    Promise.race([Promise.all(waits), timeout]).then(function () { if (btn) btn.disabled = false; root.print(); });
   }
   // Va en «Más opciones» de Inventario (igual que «Códigos duplicados»): no cambia el ancho de la cabecera.
   function mountButton() {

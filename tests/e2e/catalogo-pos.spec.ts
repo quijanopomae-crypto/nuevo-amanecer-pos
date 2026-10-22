@@ -54,7 +54,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
     await page.evaluate(() => { (window as any).__printed = 0; window.print = () => { (window as any).__printed++; }; });
     await dlg.locator('[data-cat-print]').click();
-    expect(await page.evaluate(() => (window as any).__printed)).toBe(1);
+    await expect.poll(() => page.evaluate(() => (window as any).__printed)).toBe(1);
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('#pageInventario')).toBeHidden();
     await expect(dlg.locator('.cat-toolbar')).toBeHidden();
