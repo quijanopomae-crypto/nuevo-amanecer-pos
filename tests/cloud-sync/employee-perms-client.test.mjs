@@ -95,3 +95,23 @@ test('fuente de fábrica: lee employee_allow ({ id: true }) de /auth/me solo par
   e = mk({ pos_role: 'empleado' }); assert.equal(JSON.stringify(await e.refresh()), '{}');
   e = mk({ pos_role: 'empleado', employee_allow: [true] }); assert.equal(JSON.stringify(await e.refresh()), '{}');
 });
+
+test('menú sin el ayudante de permisos por empleado: el dueño ve su menú normal y el empleado no ve pantallas de casillas', () => {
+  const nav = read('POS/js/navigation/menu-navigation.js');
+  const start = nav.indexOf('  function canShowDrawerPage('), end = nav.indexOf('\n  function ', start + 1);
+  const pctx = vm.createContext({}); pctx.globalThis = pctx;
+  vm.runInContext(read('POS/js/config/pos-permissions.js'), pctx);
+  const P = pctx.NA_PERMISSIONS;
+  const ctx = vm.createContext({ NA_PERMISSIONS: P }); ctx.root = ctx; // sin employeeMayScreen ni NA_EMPLOYEE_PERMS
+  const canShow = vm.runInContext('(' + nav.slice(start, end).trim() + ')', ctx);
+  const client = read('POS/js/config/employee-perms-client.js');
+  const togglePages = [...client.slice(client.indexOf('SCREEN_FEATURE'), client.indexOf('});', client.indexOf('SCREEN_FEATURE'))).matchAll(/(page\w+):/g)].map(m => m[1]);
+  assert.ok(togglePages.length >= 4, 'pantallas de casillas encontradas');
+  const pages = ['pageMenu', 'pagePOS', 'pageInventario', 'pageVentas', 'pageClientes', 'pageCaja', 'pageGastos', 'pageConfig', 'pageKardex', 'pageValorizacion', ...togglePages];
+  ctx.NA_ROLES = { isOwner: () => true };
+  for (const p of pages) assert.equal(canShow(p), p === 'pageMenu' || P.canAccessScreen('owner', p), 'dueño ' + p);
+  for (const p of ['pagePOS', 'pageInventario', 'pageVentas', 'pageClientes', 'pageCaja', 'pageConfig', 'pageKardex', ...togglePages]) assert.equal(canShow(p), true, 'dueño ve ' + p);
+  ctx.NA_ROLES = { isOwner: () => false, role: 'empleado' };
+  for (const p of togglePages) assert.equal(canShow(p), false, 'empleado sin ayudante no ve ' + p);
+  for (const p of ['pagePOS', 'pageInventario', 'pageVentas', 'pageClientes', 'pageCaja']) assert.equal(canShow(p), true, 'empleado ve ' + p);
+});
