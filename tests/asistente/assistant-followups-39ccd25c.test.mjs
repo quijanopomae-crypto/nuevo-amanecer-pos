@@ -67,14 +67,19 @@ test('3) etiqueta o comilla repetida: retención ≤ ~130 (máx. medido 132) y m
   for (const u of ['clave "abcde ', 'precio clave ', 'clave "abc" y ', 'la clave es «perro azul ', 'clave del wifi: **tortuga** y ', 'pin ', 'la contraseña es perrito, el pin 4321 ']) for (const [k, [red, hold]] of Object.entries(VIAS)) for (const step of [1, 5]) {
     const s = u.repeat(Math.ceil(6000 / u.length)).slice(0, 6000); let o = '', lag = 0; const e = A.createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, red, hold);
     for (let i = 0; i < s.length; i += step) { e.push(s.slice(i, i + step)); const fed = Math.min(s.length, i + step); if (fed % 97 < step) lag = Math.max(lag, red(s.slice(0, fed)).length - o.length); }
-    e.flush(); assert.equal(o, red(s), k + ' ' + JSON.stringify(u)); assert.ok(lag <= 135, k + '/' + step + ' ' + JSON.stringify(u) + ' retiene ' + lag); }
+    // (#962, diseño simple aprobado) con etiqueta se retiene hasta el final: antes de cerrar sale a lo más lo de antes de la 1.ª etiqueta (antes: lag ≤ 135)
+    const pre = o; e.flush(); assert.equal(o, red(s), k + ' ' + JSON.stringify(u)); assert.ok(pre.length <= Math.max(0, s.search(/pin|clave|contrase|password|token|api/i)) && o.startsWith(pre), k + '/' + step + ' ' + JSON.stringify(u) + ' antes de cerrar ' + pre.length + ' (lag ' + lag + ')'); }
 });
 
+// (#962, diseño simple) con etiqueta el costo es UN filtro entero al cerrar: se compara con red(s) del texto entero (antes: µs/car. 12 KB ≈ 100 KB).
+// El filtro entero ya era superlineal con «clave "abcde » repetido (28 ms a 12 KB, 1.3 s a 100 KB; no es de esta rama); la respuesta del modelo
+// tiene ≤ 900 tokens (≈ 3.6 KB), y 4000 caracteres cuestan < 20 ms (assistant-stream-filtro-costo, 6b).
 test('3b) costo lineal con la comilla y «precio clave» repetidos (12 KB → 100 KB, trozos de 1)', () => {
   const run = (s, role) => { const em = A.createTextEmitter(() => {}, 1e9, A.redactFor(role), role === 'owner' ? null : A.ownerHold); for (let k = 0; k < s.length; k++) em.push(s[k]); em.flush(); };
   for (const u of ['clave "abcde ', 'precio clave ', 'la clave es «perro azul ']) for (const role of ['owner', EMP]) {
     const per = [12000, 100000].map((n) => { const s = u.repeat(Math.ceil(n / u.length)).slice(0, n); run(s, role); let best = Infinity; for (let j = 0; j < 2; j++) { const a = process.hrtime.bigint(); run(s, role); best = Math.min(best, Number(process.hrtime.bigint() - a) / 1e6); } return best / n; });
-    assert.ok(per[1] <= per[0] * 1.6, role + ' ' + JSON.stringify(u) + ' µs/car. ' + (per[0] * 1000).toFixed(2) + ' → ' + (per[1] * 1000).toFixed(2)); }
+    const whole = [12000, 100000].map((n) => { const s = u.repeat(Math.ceil(n / u.length)).slice(0, n), red = A.redactFor(role); let best = Infinity; for (let j = 0; j < 2; j++) { const a = process.hrtime.bigint(); red(s); best = Math.min(best, Number(process.hrtime.bigint() - a) / 1e6); } return best / n; });
+    per.forEach((p, i) => assert.ok(p <= whole[i] * 1.6 + 0.004, role + ' ' + JSON.stringify(u) + ' µs/car. en partes ' + (p * 1000).toFixed(2) + ' vs texto entero ' + (whole[i] * 1000).toFixed(2))); }
 });
 
 test('4) dinero: la regla de 39ccd25c no cambia (céntimos + palabra de precio); un monto envuelto en ** o ` da lo mismo que sin envoltorio (Bot 2 sobre 39ccd25c)', () => {
