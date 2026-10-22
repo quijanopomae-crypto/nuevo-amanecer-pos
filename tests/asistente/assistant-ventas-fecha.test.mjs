@@ -156,3 +156,32 @@ test('created_at con desfase -05:00 cerca de la medianoche de Lima: cuenta por e
   const mem = memoryReader({ sales: [{ sale_id: 'm', created_at: '2026-10-22T00:30:00-05:00', metodo: 'efectivo', total_cents: 100 }] });
   assert.equal((await mem.salesTotals(period({ desde: '2026-10-22', hasta: '2026-10-22' }, NOW))).length, 1, 'el lector en memoria también');
 });
+
+// (22-10, prueba en vivo) «más vendidos del mes» mostraba «GENERIC:<uuid>»: una línea genérica (VARIOS, VERDURAS…) sale con SU nombre guardado,
+// las del mismo nombre juntas; sin nombre, «Producto genérico». Nunca el id crudo (ni en la tabla ni en lo que ve el modelo).
+test('top_productos: líneas genéricas (GENERIC:<uuid>) con su nombre guardado, agrupadas; nunca el id', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0014_canonical_live_products.sql', '0015_canonical_inventory_adjust.sql', '0016_canonical_generic_sale_lines.sql', '0024_pos_roles_owner_pin.sql', '0026_pos_sale_annulments.sql'] });
+  const d = f.database, c = d.prepare('SELECT active_promotion_id p,authority_epoch e,revision r FROM canonical_control WHERE id=1').get();
+  const [p1] = d.prepare('SELECT product_id,name FROM products WHERE promotion_id=? ORDER BY product_id LIMIT 1').all(c.p);
+  unfence(d); dropTriggers(d, ['canonical_generic_sale_lines']); d.exec('PRAGMA foreign_keys=OFF');
+  const sale = d.prepare("INSERT INTO sales(sale_id,operation_id,payload_hash,commit_token,device_id,payment_method,total_cents,created_at) VALUES(?,?,?,?,?,?,?,?)");
+  const ctx = d.prepare("INSERT INTO canonical_sale_context(sale_id,operation_id,promotion_id,authority_epoch,control_revision,customer_id,client_contract,created_at) VALUES(?,?,?,?,?,NULL,'a6-gate-c-v1',?)");
+  const item = d.prepare("INSERT INTO sale_items(sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at) VALUES(?,?,?,?,?,?,?,?)");
+  const gl = d.prepare('INSERT INTO canonical_generic_sale_lines(sale_id,line_number,operation_id,promotion_id,generic_product_id,name,code,quantity,unit_price_cents,line_total_cents,created_at) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)');
+  const at = '2026-10-22T15:00:00.000Z';
+  const lines = [['G1', 'GENERIC:11111111-aaaa-4bbb-8ccc-000000000001', 'VARIOS', 1, 500], ['G2', 'GENERIC:11111111-aaaa-4bbb-8ccc-000000000002', ' varios ', 2, 400],
+    ['G3', 'GENERIC:11111111-aaaa-4bbb-8ccc-000000000003', 'VERDURAS', 1, 700], ['P1', p1.product_id, null, 1, 300]];
+  for (const [id, pid, name, q, cents] of lines) { sale.run(id, 'o' + id, 'a'.repeat(64), 't', 'session:x', 'efectivo', q * cents, at); ctx.run(id, 'o' + id, c.p, c.e, c.r, at);
+    item.run(id, 1, 'o' + id, pid, q, cents, q * cents, at); if (name !== null) gl.run(id, 1, 'o' + id, c.p, pid, name, q, cents, q * cents, at); }
+  // una genérica sin fila de nombre (réplica incompleta): etiqueta legible
+  sale.run('G4', 'oG4', 'a'.repeat(64), 't', 'session:x', 'efectivo', 100, at); ctx.run('G4', 'oG4', c.p, c.e, c.r, at); item.run('G4', 1, 'oG4', 'GENERIC:11111111-aaaa-4bbb-8ccc-000000000004', 1, 100, 100, at);
+  const r = await runAssistantQuery(canonicalReader(f.env.nuevo_amanecer_lab), { tipo: 'top_productos', periodo: 'mes' }, NOW);
+  assert.deepEqual(r.filas, [['VARIOS', 3, 13], ['VERDURAS', 1, 7], [p1.name, 1, 3], ['Producto genérico', 1, 1]]);
+  assert.ok(!JSON.stringify(r).includes('GENERIC:'), JSON.stringify(r));
+  // el lector en memoria (prototipo) igual
+  const m = memoryReader({ sales: lines.concat([['G4', 'GENERIC:x', null, 1, 100]]).map(([id]) => ({ sale_id: id, created_at: at, metodo: 'efectivo', total_cents: 1 })),
+    products: [{ id: p1.product_id, nombre: p1.name }],
+    saleItems: lines.concat([['G4', 'GENERIC:x', null, 1, 100]]).map(([id, pid, name, q, cents]) => ({ sale_id: id, product_id: pid, generic_name: name, quantity: q, unit_price_cents: cents, line_total_cents: q * cents, created_at: at })) });
+  const rm = await runAssistantQuery(m, { tipo: 'top_productos', periodo: 'mes' }, NOW);
+  assert.deepEqual(rm.filas, r.filas); assert.ok(!JSON.stringify(rm).includes('GENERIC:'));
+});

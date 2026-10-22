@@ -102,9 +102,16 @@ export function canonicalReader(db) {
       const rows = await salesSql(p, '((' + MS('r.created_at') + '-' + MS('?2') + ')/86400000) AS k,r.payment_method AS metodo,COUNT(*) AS n,SUM(r.total_cents) AS c', { rest: 'GROUP BY k,metodo ORDER BY k LIMIT 1000' });
       return rows.map((r) => ({ dia: addDays(p.desde, Number(r.k) || 0), metodo: r.metodo, n: Number(r.n) || 0, c: Number(r.c) || 0 }));
     },
+    // (22-10, prueba en vivo) una línea GENÉRICA (VARIOS, VERDURAS…) lleva product_id «GENERIC:<uuid>», uno distinto por línea: se agrupa por el
+    // nombre guardado en canonical_generic_sale_lines (sin mayúsculas/espacios de más) y sale con ese nombre, nunca con el id. Sin esa tabla
+    // (base vieja): todas las genéricas juntas, sin nombre (la consulta les pone una etiqueta legible).
     async topItems(p, n) {
-      const rows = await salesSql(p, 'i.product_id AS product_id,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c', { join: 'JOIN sale_items i ON i.sale_id=r.sale_id', rest: 'GROUP BY i.product_id ORDER BY c DESC,i.product_id LIMIT ?4' }, [Math.max(1, Math.min(100, Number(n) || 10))]);
-      return rows.map((r) => ({ product_id: r.product_id, q: Number(r.q) || 0, c: Number(r.c) || 0 }));
+      const lim = [Math.max(1, Math.min(100, Number(n) || 10))], gen = "substr(i.product_id,1,8)='GENERIC:'";
+      const q = (withNames) => salesSql(p, `CASE WHEN ${gen} THEN NULL ELSE i.product_id END AS product_id,CASE WHEN ${gen} THEN ${withNames ? "COALESCE(UPPER(TRIM(g.name)),'')" : "''"} END AS gkey,`
+        + `${withNames ? `MIN(CASE WHEN ${gen} THEN TRIM(g.name) END)` : 'NULL'} AS generic_name,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c`,
+        { join: 'JOIN sale_items i ON i.sale_id=r.sale_id' + (withNames ? ' LEFT JOIN canonical_generic_sale_lines g ON g.generic_product_id=i.product_id' : ''), rest: 'GROUP BY 1,2 ORDER BY c DESC,1,2 LIMIT ?4' }, lim);
+      let rows; try { rows = await q(true); } catch (e) { if (!/no such table: canonical_generic_sale_lines/i.test(String(e?.message || e))) throw e; rows = await q(false); }
+      return rows.map((r) => (r.product_id == null ? { product_id: null, generic: true, generic_name: r.generic_name || null, q: Number(r.q) || 0, c: Number(r.c) || 0 } : { product_id: r.product_id, q: Number(r.q) || 0, c: Number(r.c) || 0 }));
     },
     // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. MISMO contrato que «Ventas bajo costo» (#930):
     // { sale_id, product_id, quantity, unit_cents, line_cents, created_at }; unit_cents/line_cents en null si vienen vacíos (= «sin precio»,
@@ -158,7 +165,8 @@ export function memoryReader(data) {
     async customers() { return (data.customers || []).map((c) => ({ ...c })); },
     async salesTotals(p) { const m = new Map(); for (const s of (data.sales || []).filter((x) => inRange(x, p))) { const k = dia(s.created_at) + '|' + s.metodo; const r = m.get(k) || { dia: dia(s.created_at), metodo: s.metodo, n: 0, c: 0 }; r.n++; r.c += s.total_cents; m.set(k, r); } return [...m.values()].sort((a, b) => a.dia.localeCompare(b.dia)); },
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
-      for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
+      for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const g = isGenericId(it.product_id), nm = g ? String(it.generic_name || '').trim() : '', k = g ? 'G|' + nm.toUpperCase() : 'P|' + it.product_id;
+        const r = m.get(k) || (g ? { product_id: null, generic: true, generic_name: nm || null, q: 0, c: 0 } : { product_id: it.product_id, q: 0, c: 0 }); r.q += it.quantity; r.c += it.line_total_cents; m.set(k, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
     async productNamesById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), p.nombre); return out; },
     async saleLines(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id));
@@ -168,6 +176,8 @@ export function memoryReader(data) {
 }
 
 // ---------- Consultas ----------
+const isGenericId = (id) => String(id ?? '').startsWith('GENERIC:');
+export const GENERIC_LABEL = 'Producto genérico';
 const METODO = { efectivo: 'Efectivo', yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', credito: 'Crédito', mixto: 'Mixto' };
 function matchProducts(list, text) {
   const words = norm(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
@@ -216,10 +226,16 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
         texto: n ? 'Ventas ' + rango + ': S/ ' + cents(total).toFixed(2) + ' en ' + n + (n === 1 ? ' venta' : ' ventas') + '. Ticket promedio S/ ' + (cents(total) / n).toFixed(2) + '.' : 'No hay ventas registradas ' + rango + '.',
         resumen: { desde: p.desde, hasta: p.hasta, total_soles: cents(total), ventas: n, por_metodo: Object.fromEntries(metodos), mejor_dia: best ? { dia: best[0], soles: best[1] } : null, dias: dias.length } };
     }
-    const items = await reader.topItems(p, N);
+    const raw = await reader.topItems(p, N), gen = (r) => !!r.generic || isGenericId(r.product_id);
     // Nombres vigentes SOLO de los N más vendidos (por id, con renombres); un lector sin esa búsqueda lee el catálogo como antes.
-    const names = typeof reader.productNamesById === 'function' ? await reader.productNamesById(items.map((r) => String(r.product_id))) : new Map((await reader.products()).map((x) => [x.id, x.nombre]));
-    const filas = items.map((r) => [names.get(String(r.product_id)) || String(r.product_id), r2(r.q), cents(r.c)]);
+    const ids = raw.filter((r) => !gen(r)).map((r) => String(r.product_id));
+    const names = typeof reader.productNamesById === 'function' ? await reader.productNamesById(ids) : new Map((await reader.products()).map((x) => [x.id, x.nombre]));
+    // Genéricas (VARIOS, VERDURAS…): su propio nombre guardado o «Producto genérico»; NUNCA el id «GENERIC:<uuid>». Las del mismo nombre van juntas.
+    const merged = new Map();
+    for (const r of raw) { const label = gen(r) ? (String(r.generic_name || '').trim().replace(/\s+/g, ' ') || GENERIC_LABEL) : (names.get(String(r.product_id)) || String(r.product_id));
+      const k = (gen(r) ? 'G|' + label.toUpperCase() : 'P|' + r.product_id), o = merged.get(k) || { label, q: 0, c: 0 }; o.q += Number(r.q) || 0; o.c += Number(r.c) || 0; merged.set(k, o); }
+    const items = [...merged.values()].sort((a, b) => b.c - a.c).slice(0, N);
+    const filas = items.map((r) => [r.label, r2(r.q), cents(r.c)]);
     return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta,
       texto: filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.',
       resumen: { desde: p.desde, hasta: p.hasta, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
