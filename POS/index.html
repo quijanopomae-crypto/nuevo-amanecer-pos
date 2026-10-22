@@ -102,6 +102,7 @@
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/dashboard-compras.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
     <script>
@@ -395,6 +396,22 @@
 <div class="page" id="pageProximamente">
     <h1>Próximamente</h1>
     <div class="na-prox-grid" id="naProximamenteGrid"></div>
+</div>
+
+<div class="page" id="pageDashboardCompras" aria-labelledby="dashboardComprasTitle">
+    <header class="dc-header">
+        <div class="dc-heading">
+            <h1 id="dashboardComprasTitle">Dashboard de compras</h1>
+            <p>Este mes contra el anterior · Solo lectura · Solo dueño</p>
+        </div>
+        <div class="dc-controls" data-dc-controls hidden>
+            <button type="button" data-dc-refresh>Actualizar</button>
+        </div>
+    </header>
+    <div class="dc-content">
+        <p class="dc-status" data-dc-status role="status" aria-live="polite"></p>
+        <div data-dc-report></div>
+    </div>
 </div>
 
 <div class="page" id="pageHistorialCompras">
@@ -1466,6 +1483,7 @@
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/dashboard-compras.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
