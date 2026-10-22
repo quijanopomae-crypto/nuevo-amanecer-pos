@@ -125,3 +125,15 @@ test('el módulo usa solo textContent', async ({ page }) => {
   const res = await page.request.get('/js/modules/catalogo-reportes.js');
   expect(await res.text()).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
 });
+
+for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
+  test(`vista previa de la tarjeta: columnas Reporte y Categoría en ${width}px, tema ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
+    await rolePage(page, 'owner', false);
+    await page.evaluate(async () => { const P = (window as any).NA_PROXIMAMENTE; await P.load(); P.openPreview('catalogo-reportes'); });
+    const heads = page.locator('#naProxPreview thead th');
+    await expect(heads).toHaveText(['Reporte', 'Categoría']);
+    await expect(page.locator('#naProxPreview')).not.toContainText('Usuarios');
+  });
+}

@@ -93,3 +93,12 @@ test('solo textContent, sin montos, y en el service worker', () => {
   assert.match(source, /roles\.isOwner\(\) === true\); \} catch \(_\) \{ return false; \}/);
   assert.ok(sw.includes("'./js/modules/catalogo-reportes.js'") && sw.includes("'./css/catalogo-reportes.css'"));
 });
+
+test('la vista previa de la tarjeta muestra Reporte y Categoría, no Usuarios', () => {
+  const reg = readFileSync('POS/js/modules/proximamente-registry.js', 'utf8');
+  const c = vm.createContext({ module: { exports: {} } });
+  vm.runInContext(reg, c);
+  const card = Array.from(c.module.exports).find(f => f.id === 'catalogo-reportes');
+  assert.ok(card);
+  assert.deepEqual(Array.from(card.preview.columns), ['Reporte', 'Categoría']);
+});
