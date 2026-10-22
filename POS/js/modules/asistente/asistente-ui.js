@@ -676,9 +676,11 @@
   // Cliente: SOLO su código interno (el id que ya tiene en la lista de clientes del POS) y la acción. Nunca nombre, DNI ni montos.
   var CLI_RE = /^[A-Za-z0-9_-]{1,40}$/;
   function cliPart(x) { return x && x.cli != null && CLI_RE.test(String(x.cli)) ? { cli: String(x.cli), accion: String(x.accion || 'cliente').slice(0, 30) } : {}; }
+  // Datos viejos guardados antes de este cambio: de un error de pantalla solo sale el TIPO, nunca el mensaje.
+  function errType(v) { var t = String(v == null ? '' : v).trim(); if (/^[A-Za-z]{1,40}$/.test(t)) return t; var m = /^(?:Uncaught\s+)?(?:\(in promise\)\s*)?([A-Z][A-Za-z]{0,39}(?:Error|Exception))\b/.exec(t); return m ? m[1] : 'Error'; }
   function reviewData() {
     var R = root.NA_ASISTENTE_REVISION, raw = R && R.data ? R.data() : { errors: [], usage: {} };
-    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: C.redactText(String(x.msg || '')).slice(0, 160), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
+    return { errors: (raw.errors || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, msg: x.kind === 'api' ? C.redactText(String(x.msg || '')).slice(0, 160) : errType(x.msg), src: C.redactText(String(x.src || '')).slice(0, 80), status: x.status || 0, count: x.count || 1, first: x.first || null, last: x.last || null }, cliPart(x)); }),
       usage: raw.usage || {},
       slow: (raw.slow || []).slice(-200).map(function (x) { return Object.assign({ kind: x.kind, name: C.redactText(String(x.name || '')).slice(0, 80), count: x.count || 1, ms_avg: x.ms_avg || 0, ms_max: x.ms_max || 0, last: x.last || null }, cliPart(x)); }),
       ocr: raw.ocr ? { reads: raw.ocr.reads || 0, fails: raw.ocr.fails || 0, timeouts: raw.ocr.timeouts || 0, ms_sum: raw.ocr.ms_sum || 0, ms_max: raw.ocr.ms_max || 0, confirmed: raw.ocr.confirmed || 0, corrections: raw.ocr.corrections || 0 } : null };
