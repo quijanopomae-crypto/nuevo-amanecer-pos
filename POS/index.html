@@ -102,6 +102,7 @@
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/historial-exportaciones.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
     <script>
@@ -503,6 +504,30 @@
       <button type="button" data-aj-export>Exportar CSV</button>
       <div data-aj-report></div>
     </div>
+  </div>
+</div>
+
+<div class="page" id="pageHistorialExportaciones" aria-labelledby="historialExportacionesTitle">
+  <div class="hx-shell">
+    <header>
+      <h1 id="historialExportacionesTitle">Historial de archivos exportados</h1>
+      <p class="hx-description">Archivos descargados desde este dispositivo: fecha, reporte, tipo, filas y quién lo exportó. No guarda el contenido.</p>
+    </header>
+    <div class="hx-controls" data-hx-controls hidden>
+      <label>Tipo
+        <select data-hx-type aria-label="Tipo de archivo">
+          <option value="" selected>Todos</option>
+          <option value="CSV">CSV</option>
+          <option value="Excel">Excel</option>
+          <option value="PDF">PDF</option>
+          <option value="JSON">JSON</option>
+        </select>
+      </label>
+      <button type="button" data-hx-refresh>Actualizar</button>
+      <button type="button" data-hx-clear>Borrar historial</button>
+    </div>
+    <p class="hx-status" data-hx-status role="status" aria-live="polite"></p>
+    <div data-hx-content></div>
   </div>
 </div>
 
@@ -1466,6 +1491,7 @@
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/historial-exportaciones.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>

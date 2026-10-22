@@ -1,0 +1,38 @@
+/* Historial de archivos exportados (#95): estilos limitados a #pageHistorialExportaciones. */
+#pageHistorialExportaciones { --hx-bg: #f8fafc; --hx-surface: #fff; --hx-text: #0f172a; --hx-muted: #475569; --hx-border: #cbd5e1;
+  min-width: 0; overflow-y: auto; padding: 16px; color: var(--hx-text); background: var(--hx-bg); font-size: 14px; line-height: 1.5; }
+body.dark #pageHistorialExportaciones { --hx-bg: #0f172a; --hx-surface: #1e293b; --hx-text: #f8fafc; --hx-muted: #cbd5e1; --hx-border: #64748b; color-scheme: dark; }
+#pageHistorialExportaciones *, #pageHistorialExportaciones *::before, #pageHistorialExportaciones *::after { box-sizing: border-box; }
+#pageHistorialExportaciones [hidden] { display: none !important; }
+#pageHistorialExportaciones .hx-shell { width: 100%; max-width: 1200px; margin: 0 auto; }
+#pageHistorialExportaciones h1 { margin: 0 0 8px; font-size: clamp(22px, 3vw, 30px); line-height: 1.2; overflow-wrap: anywhere; }
+#pageHistorialExportaciones p { margin: 0 0 16px; }
+#pageHistorialExportaciones .hx-description, #pageHistorialExportaciones .hx-status, #pageHistorialExportaciones .hx-note { color: var(--hx-muted); overflow-wrap: anywhere; }
+#pageHistorialExportaciones .hx-controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 20px 0 12px; }
+#pageHistorialExportaciones .hx-empty { padding: 12px 14px; border: 1px solid var(--hx-border); border-radius: 12px; background: var(--hx-surface); min-width: 0; color: var(--hx-muted); }
+#pageHistorialExportaciones label { display: grid; gap: 6px; min-width: 0; font-weight: 700; }
+#pageHistorialExportaciones :is(select, button) { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--hx-border); border-radius: 10px; font: inherit; color: var(--hx-text); background: var(--hx-surface); }
+#pageHistorialExportaciones button { cursor: pointer; font-weight: 700; }
+#pageHistorialExportaciones :is(select, button):focus-visible { outline: 3px solid #0d9488; outline-offset: 3px; }
+#pageHistorialExportaciones .hx-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--hx-surface); border: 1px solid var(--hx-border); border-radius: 12px; }
+#pageHistorialExportaciones .hx-table :is(th, td) { display: table-cell; padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--hx-border); overflow-wrap: anywhere; color: var(--hx-text); }
+/* base.css pone th { white-space: nowrap }: sin esto un nombre largo se sale de su celda y tapa las demás columnas. */
+#pageHistorialExportaciones .hx-table :is(th, td) { white-space: normal; }
+#pageHistorialExportaciones .hx-table .hx-report { overflow-wrap: anywhere; word-break: normal; }
+#pageHistorialExportaciones .hx-table thead th { font-size: 12px; color: var(--hx-muted); }
+#pageHistorialExportaciones .hx-table .hx-num { text-align: right; font-variant-numeric: tabular-nums; }
+#pageHistorialExportaciones .hx-report small { display: block; overflow-wrap: anywhere; font-weight: 400; color: var(--hx-muted); }
+#pageHistorialExportaciones .hx-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 599px) {
+  #pageHistorialExportaciones .hx-table, #pageHistorialExportaciones .hx-table tbody { display: block; border: 0; background: transparent; }
+  #pageHistorialExportaciones .hx-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  #pageHistorialExportaciones .hx-table tbody tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; margin-bottom: 8px; border: 1px solid var(--hx-border); border-radius: 12px; background: var(--hx-surface); }
+  #pageHistorialExportaciones .hx-table :is(th, td) { display: block; padding: 0; border: 0; }
+  #pageHistorialExportaciones .hx-table td.hx-report { grid-column: 1 / -1; }
+  #pageHistorialExportaciones .hx-table td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--hx-muted); }
+  #pageHistorialExportaciones .hx-table .hx-num { text-align: left; }
+}
+@media (min-width: 600px) {
+  #pageHistorialExportaciones { padding: 24px; }
+  #pageHistorialExportaciones .hx-controls { grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; }
+}
