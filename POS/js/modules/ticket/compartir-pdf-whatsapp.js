@@ -6,7 +6,11 @@
   'use strict';
   const LOCK='compartir-pdf-whatsapp';
   let busy=false;
-  function available(){try{const p=root.NA_PERMISSIONS;if(!p||typeof p.featureLocked!=='function')return false;return p.featureLocked(LOCK)===false;}catch(_){return false;}}
+  function unlocked(){try{const p=root.NA_PERMISSIONS;if(!p||typeof p.featureLocked!=='function')return false;return p.featureLocked(LOCK)===false;}catch(_){return false;}}
+  // Dueño (confirmado o modo local) o empleado con su casilla prendida por el servidor (#924). Falla cerrada.
+  function isOwner(){try{const r=root.NA_ROLES;return!!(r&&typeof r.isOwner==='function'&&r.isOwner()===true);}catch(_){return false;}}
+  function employeeMay(){try{const e=root.NA_EMPLOYEE_PERMS;return!!(e&&typeof e.may==='function'&&e.may(LOCK)===true);}catch(_){return false;}}
+  function available(){return unlocked()&&(isOwner()||employeeMay());}
   function share(){return root.NAReceiptShare||null;}
   function notify(message,tone='error'){try{if(typeof toast==='function'){toast(message,tone);return;}}catch(_){}if(typeof root.toast==='function')root.toast(message,tone);}
   function el(tag,cls,text){const n=root.document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
@@ -51,6 +55,7 @@
   function watchDialog(o){const obs=new root.MutationObserver(check);obs.observe(o,{attributes:true,attributeFilter:['class']});check();return obs;}
   function watch(){if(!root.document||typeof root.MutationObserver!=='function')return;const o=root.document.getElementById('naReceiptShare');if(o){watchDialog(o);return;}
     const host=root.document.body||root.document.documentElement;const wait=new root.MutationObserver(()=>{const d=root.document.getElementById('naReceiptShare');if(!d)return;wait.disconnect();watchDialog(d);});wait.observe(host,{childList:true});}
+  try{root.addEventListener?.('na:role',check);root.addEventListener?.('na:employee-perms',check);}catch(_){}
   if(root.document){if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',watch);else watch();}
   root.NA_PDF_WHATSAPP=Object.freeze({LOCK,available,chatText,chatUrl,canShareFile,send,install});
 })(globalThis);

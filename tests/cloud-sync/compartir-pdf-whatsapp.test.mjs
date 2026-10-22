@@ -7,10 +7,10 @@ const SHARE='POS/js/modules/ticket/share-receipt.js',MOD='POS/js/modules/ticket/
 function load(extra={}){const ctx=vm.createContext({console,Blob,TextEncoder,Uint8Array,atob,...extra});vm.runInContext(readFileSync(SHARE,'utf8'),ctx);vm.runInContext(readFileSync(MOD,'utf8'),ctx);return ctx;}
 const perms=locked=>({featureLocked:id=>id==='compartir-pdf-whatsapp'?locked:true});
 
-test('el candado compartir-pdf-whatsapp sigue cerrado en pos-permissions.js',()=>{
+test('el candado compartir-pdf-whatsapp está abierto en pos-permissions.js',()=>{
   const ctx=vm.createContext({});vm.runInContext(readFileSync(PERM,'utf8'),ctx);
-  assert.equal(ctx.NA_PERMISSIONS.FEATURE_LOCKS['compartir-pdf-whatsapp'],true);
-  assert.equal(ctx.NA_PERMISSIONS.featureLocked('compartir-pdf-whatsapp'),true);
+  assert.equal(ctx.NA_PERMISSIONS.FEATURE_LOCKS['compartir-pdf-whatsapp'],false);
+  assert.equal(ctx.NA_PERMISSIONS.featureLocked('compartir-pdf-whatsapp'),false);
 });
 test('falla cerrado: sin NA_PERMISSIONS, con candado o si featureLocked lanza error',()=>{
   assert.equal(load().NA_PDF_WHATSAPP.available(),false);
@@ -18,7 +18,8 @@ test('falla cerrado: sin NA_PERMISSIONS, con candado o si featureLocked lanza er
   assert.equal(load({NA_PERMISSIONS:perms(true)}).NA_PDF_WHATSAPP.available(),false);
   assert.equal(load({NA_PERMISSIONS:{featureLocked(){throw new Error('x');}}}).NA_PDF_WHATSAPP.available(),false);
   assert.equal(load({NA_PERMISSIONS:{featureLocked:()=>'false'}}).NA_PDF_WHATSAPP.available(),false);
-  assert.equal(load({NA_PERMISSIONS:perms(false)}).NA_PDF_WHATSAPP.available(),true);
+  assert.equal(load({NA_PERMISSIONS:perms(false)}).NA_PDF_WHATSAPP.available(),false,'sin rol: cerrado');
+  assert.equal(load({NA_PERMISSIONS:perms(false),NA_ROLES:{isOwner:()=>true}}).NA_PDF_WHATSAPP.available(),true);
 });
 test('con candado send() no hace nada',async()=>{
   assert.equal(await load({NA_PERMISSIONS:perms(true)}).NA_PDF_WHATSAPP.send(),'locked');
@@ -76,4 +77,14 @@ test('sin diálogo espera en body solo con childList y luego cambia al diálogo'
   f.setDialog({id:'naReceiptShare',classList:{contains:()=>false}});wait.cb([]);
   assert.equal(wait.on,false,'desconecta el observador de body');
   assert.equal(f.calls.length,2);assert.equal(f.calls[1].t,f.dialog);assert.ok(!f.calls.some(c=>c.o.subtree));
+});
+
+test('empleado: solo con NA_EMPLOYEE_PERMS.may(compartir-pdf-whatsapp) === true; el candado siempre gana',()=>{
+  const emp=(may,locked=false)=>load({NA_PERMISSIONS:perms(locked),NA_ROLES:{isOwner:()=>false},NA_EMPLOYEE_PERMS:{may:id=>id==='compartir-pdf-whatsapp'&&may}}).NA_PDF_WHATSAPP.available();
+  assert.equal(emp(true),true);
+  assert.equal(emp(false),false);
+  assert.equal(emp(true,true),false,'candado cerrado');
+  assert.equal(load({NA_PERMISSIONS:perms(false),NA_ROLES:{isOwner:()=>false},NA_EMPLOYEE_PERMS:{may(){throw new Error('x');}}}).NA_PDF_WHATSAPP.available(),false);
+  assert.equal(load({NA_PERMISSIONS:perms(false),NA_ROLES:{isOwner:()=>false},NA_EMPLOYEE_PERMS:{may:()=>'true'}}).NA_PDF_WHATSAPP.available(),false);
+  assert.match(readFileSync(MOD,'utf8'),/e\.may\(LOCK\)===true/);
 });

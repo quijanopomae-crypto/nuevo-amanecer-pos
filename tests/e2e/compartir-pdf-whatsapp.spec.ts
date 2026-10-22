@@ -1,12 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 
-// Datos sintéticos, sin red externa. Para probar la opción se abre el candado SOLO en el navegador de la prueba.
+// Datos sintéticos, sin red externa. El candado ya está abierto en producción; unlock:false lo vuelve a cerrar SOLO en el navegador de la prueba (rollback).
 async function boot(page: Page, unlock: boolean) {
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.hostname !== '127.0.0.1') return route.abort();
-    if (unlock && url.pathname.endsWith('/js/config/pos-permissions.js')) {
-      const res = await route.fetch(); const body = (await res.text()).replace("'compartir-pdf-whatsapp': true", "'compartir-pdf-whatsapp': false");
+    if (!unlock && url.pathname.endsWith('/js/config/pos-permissions.js')) {
+      const res = await route.fetch(); const body = (await res.text()).replace("'compartir-pdf-whatsapp': false", "'compartir-pdf-whatsapp': true");
       return route.fulfill({ response: res, body });
     }
     return route.continue();
@@ -21,7 +21,7 @@ async function openReceipt(page: Page, tel = '987654321') {
 }
 const ledger = (page: Page) => page.evaluate(() => JSON.stringify({ ventas, creditos, clientes, productos }));
 
-test('con el candado cerrado (producción) la opción PDF por WhatsApp no aparece', async ({ page }) => {
+test('con el candado cerrado (rollback) la opción PDF por WhatsApp no aparece', async ({ page }) => {
   await boot(page, false); await openReceipt(page);
   expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('compartir-pdf-whatsapp'))).toBe(true);
   await expect(page.locator('#naPdfWa')).toHaveCount(0);
