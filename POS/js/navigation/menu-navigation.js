@@ -345,7 +345,8 @@
     if (pageId === 'pageMenu') return true;
     // The shared table (POS/js/config/pos-permissions.js, PR #668) plugs in here automatically.
     if (root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.canAccessScreen === 'function') {
-      return root.NA_PERMISSIONS.canAccessScreen(role, pageId) || employeeMayScreen(pageId);
+      // typeof: la prueba de valorización evalúa esta función sola; sin el ayudante queda cerrado.
+      return root.NA_PERMISSIONS.canAccessScreen(role, pageId) || (typeof employeeMayScreen === 'function' && employeeMayScreen(pageId));
     }
     return (pageId !== 'pageConfig' && pageId !== 'pageGastos' && pageId !== 'pageProximamente' && pageId !== 'pageValorizacion' && pageId !== 'pageRotacionAbc' && pageId !== 'pageClientesFrecuencia' && pageId !== 'pageReporteProductosVencer' && pageId !== 'pageKardex' && pageId !== 'pageVentasStock' && pageId !== 'pageReporteArqueo' && pageId !== 'pageReporteDeuda' && pageId !== 'pageCodigosDuplicados' && pageId !== 'pageHistorialCompras' && pageId !== 'pageClienteHistorial') || role === 'owner';
   }
