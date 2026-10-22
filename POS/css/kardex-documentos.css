@@ -1,0 +1,11 @@
+/* #85 Documentos que movieron stock (dentro de #pageKardex; reutiliza sus variables claro/oscuro). */
+#pageKardex .kdoc { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--kardex-border); }
+#pageKardex .kdoc select { width: 100%; max-width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--kardex-border); border-radius: 10px; font: inherit; color: var(--kardex-text); background: var(--kardex-surface); }
+#pageKardex .kdoc select:focus-visible { outline: 3px solid #0d9488; outline-offset: 2px; }
+#pageKardex .kdoc-filters { align-items: end; }
+
+#pageKardex .kdoc-table td:nth-child(5) { white-space: nowrap; }
+#pageKardex .kdoc .kdoc-filters label:first-child { grid-column: auto; }
+@media (min-width: 600px) { #pageKardex .kdoc .kdoc-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 720px) { #pageKardex .kdoc .kdoc-filters { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, auto); } }
+@media (max-width: 599px) { #pageKardex .kdoc-table td:nth-child(5) { white-space: normal; } }

@@ -28,6 +28,8 @@ const PRECACHE_URLS = [
   './js/modules/cliente-historial-compras.js',
   './css/kardex.css',
   './js/modules/kardex.js',
+  './css/kardex-documentos.css',
+  './js/modules/kardex-documentos.js',
   './css/ventas-stock.css',
   './js/modules/ventas-stock.js',
   './css/reporte-arqueo.css',
