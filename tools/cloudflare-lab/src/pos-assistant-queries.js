@@ -276,7 +276,7 @@ export function canonicalReader(db) {
 // Lector en memoria con la MISMA forma (prototipo local y pruebas; datos inventados).
 export function memoryReader(data) {
   const inRange = (s, p) => { const t = Date.parse(s.created_at); return t >= Date.parse(p.fromIso) && t < Date.parse(p.toIso) && !s.anulada; }; // por el momento (acepta -05:00)
-  const dia = (iso) => new Date(Date.parse(iso) - 5 * 3600 * 1000).toISOString().slice(0, 10);
+  const dia = limaDay; // el día de Lima de una venta: la misma función que el resto (sin otra cuenta de -5 h aquí)
   return {
     async products() { return (data.products || []).map((p) => ({ ...p })); },
     async productsById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), { ...p }); return out; },
