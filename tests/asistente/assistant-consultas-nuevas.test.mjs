@@ -173,9 +173,10 @@ test('chat del Admin: deuda_cliente manda al modelo SOLO código, saldo, crédit
   assert.equal(r.status, 200); assert.equal(cap.length, 2);
   const toolMsg = JSON.parse(cap[1]).messages.find((m) => m.role === 'tool');
   const sent = JSON.parse(toolMsg.content);
-  assert.deepEqual(sent, { tipo: 'deuda_cliente', resumen: { cliente: 'cliente #C1', saldo_soles: 35, creditos_abiertos: 2, vence_primero: '2026-10-01' } });
-  for (const body of cap) for (const v of PII) assert.ok(!body.includes(v), 'al modelo llegó ' + v);
-  const p = r.body.proposals.find((x) => x.type === 'consulta'); assert.equal(p.result.filas.length, 2);
+  assert.deepEqual(sent, { tipo: 'deuda_cliente', resumen: { cliente: 'cliente #C-0001', saldo_soles: 35, creditos_abiertos: 2, vence_primero: '2026-10-01' } });
+  // Hacia la IA el código va neutro (pos-assistant-codigos.js); el aparato recibe el real.
+  for (const body of cap) { assert.ok(!/#C1\b|"C1"/.test(body), 'al modelo llegó el código real'); for (const v of PII) assert.ok(!body.includes(v), 'al modelo llegó ' + v); }
+  const p = r.body.proposals.find((x) => x.type === 'consulta'); assert.equal(p.result.filas.length, 2); assert.equal(p.query.cliente_id, 'C1'); assert.match(r.body.reply, /cliente #C1\b/);
   // Un nombre en vez de código no llega a la consulta.
   assert.equal(toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: 'deuda_cliente', cliente_id: PII[0] }) }, 'owner', { products: [] }, 1).query.cliente_id, null);
 });

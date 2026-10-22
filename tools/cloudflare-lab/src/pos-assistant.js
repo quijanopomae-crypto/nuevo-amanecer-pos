@@ -1718,6 +1718,8 @@ export function toProposal(call, role, ctx, n) {
     if (role !== 'owner' && SUMMARY_TYPES.includes(args.tipo)) return { dropped: 'forbidden_summary', tool: name };
     if (!costQueryAllowed(role, args.tipo)) return { dropped: 'forbidden_costs', tool: name }; // ganancia: permiso de costos
     if (!queryAllowed(role, args.tipo)) return { dropped: 'forbidden_query', tool: name };
+    // Código neutro que la IA inventó o no está en el mapa de este pedido: «no encontrado», sin leer la base (pos-assistant-codigos.js).
+    if (args.tipo === 'deuda_cliente' && [args.cliente_id, args.cliente].includes(UNKNOWN_CUSTOMER)) return { dropped: 'unknown_customer', tool: name };
     return { id, type: 'consulta', needsConfirm: false, query: { tipo: args.tipo, producto: cleanText(args.producto, 80), periodo: dateWord(args.periodo),
       fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(args.fecha ?? '')) ? args.fecha : null,
       // deuda_cliente: solo el CÓDIGO del cliente (mismo filtro que el estado de cuenta); un nombre o algo que parezca DNI/teléfono no pasa.

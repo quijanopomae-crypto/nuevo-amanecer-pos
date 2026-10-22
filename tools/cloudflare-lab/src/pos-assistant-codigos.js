@@ -54,7 +54,7 @@ export function createCodeMap() {
   const outKey = (s) => { const m = BARE_CODE.exec(s.trim()); if (m) { add(m[1]); if (toN.has(m[1])) return s.replace(m[1], toN.get(m[1])); } return outStr(s); };
   const collectKey = (s) => { const m = BARE_CODE.exec(s.trim()); if (m) add(m[1]); collectStr(s); return s; };
   const toReal = (t) => (typeof t === 'string' && toR.size ? t.replace(NEUTRAL_RE, (m) => toR.get(m.toUpperCase()) ?? m) : t);
-  const inKey = (s) => { const m = NEUTRAL_FIELD.exec(s.trim()); if (m) { const r = toR.get(m[2].toUpperCase()); return r ? m[1] + r : UNKNOWN_CUSTOMER; } return toReal(s); };
+  const inKey = (s) => { const m = NEUTRAL_FIELD.exec(s.trim()); if (m) { const r = toR.get(m[2].toUpperCase()); return r ? m[1] + r : toN.has(m[2]) ? s : UNKNOWN_CUSTOMER; } return toReal(s); };
   const self = {
     size: () => toN.size,
     neutral: (real) => toN.get(real) || null,
