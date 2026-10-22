@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 async function rolePage(page, role) {
   await page.route('**/*', route => {
@@ -47,7 +48,7 @@ test('every registry entry: server lock exists; locked ones show the lock and pr
   test.setTimeout(180000);
   await rolePage(page, 'owner');
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
   await page.evaluate(() => window.goPage('pageConfig'));
   const configButton = page.locator('#na9Nav [data-go="pageProximamente"]');
   await expect(configButton).toContainText('Funciones en preparación');
@@ -110,7 +111,7 @@ test('Asistente virtual is visible for owner and locked; clicking only opens a d
   await page.setViewportSize({ width: 390, height: 844 });
   await rolePage(page, 'owner');
   const writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
   await page.evaluate(() => window.goPage('pageProximamente'));
   const card = page.locator('.na-prox-section[data-module="Extras"] [data-feature-id="asistente-virtual"]');
   await expect(card).toBeVisible();

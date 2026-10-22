@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const SRC = readFileSync(new URL('../../POS/js/modules/asistente/asistente-loader.js', import.meta.url), 'utf8');
-function run({ status, body, online = true, cache = {}, search = '?asistente=1', creds = true, fail = false, slot0 = false }) {
+function run({ status, body, online = true, cache = {}, search = '', creds = true, fail = false, slot0 = false }) {
   const store = new Map(Object.entries(cache)); if (creds) store.set('na_cloud_sync_credentials', JSON.stringify({ endpoint: 'https://w.example', token: 't0k' }));
   const added = [], calls = [], listeners = {};
   const mk = (tag) => ({ tag, set src(v) { this._src = v; added.push(v); }, get src() { return this._src; }, set href(v) { this._href = v; added.push(v); }, get href() { return this._href; } });
@@ -59,9 +59,52 @@ test('sin internet: solo el último dueño confirmado carga (para «Asistente no
   assert.deepEqual(n.added, [], 'red caída y sin rol guardado: nada');
 });
 
-test('sin ?asistente=1 no hay ni ping', async () => {
-  const r = run({ status: 200, body: { ok: true, role: 'owner' }, search: '' }); await tick();
+test('encendido por defecto: sin ?asistente=1 igual pregunta al servidor (el servidor decide); la marca vieja del prototipo se borra', async () => {
+  const r = run({ status: 200, body: { ok: true, role: 'owner' }, cache: { na_asistente_proto: '1' } }); await tick();
+  assert.equal(r.calls.length, 1); assert.deepEqual(r.added, ASSETS); assert.equal(r.store.has('na_asistente_proto'), false);
+  assert.equal(r.window.NA_ASISTENTE_LOADER.enabled(), true); assert.equal(r.window.NA_ASISTENTE_LOADER.state(), 'owner');
+});
+
+test('?asistente=0 apaga ESTE aparato (queda guardado): ni ping ni archivos; ?asistente=1 lo vuelve a encender', async () => {
+  const r = run({ status: 200, body: { ok: true, role: 'owner' }, search: '?asistente=0', cache: { na_asistente_acc: 'owner' } }); await tick();
+  assert.equal(r.calls.length, 0); assert.deepEqual(r.added, []); assert.equal(r.store.get('na_asistente_off'), '1'); assert.equal(r.store.has('na_asistente_acc'), false);
+  const again = run({ status: 200, body: { ok: true, role: 'owner' }, cache: { na_asistente_off: '1' } }); await tick();
+  assert.equal(again.calls.length, 0, 'sigue apagado al volver a abrir'); assert.deepEqual(again.added, []);
+  const on = run({ status: 200, body: { ok: true, role: 'owner' }, search: '?asistente=1', cache: { na_asistente_off: '1' } }); await tick();
+  assert.equal(on.calls.length, 1); assert.deepEqual(on.added, ASSETS); assert.equal(on.store.has('na_asistente_off'), false);
+});
+
+test('interruptor de Configuración: apagar quita el hueco y no pregunta; encender pregunta y carga sin recargar la página', async () => {
+  const r = run({ status: 200, body: { ok: true, role: 'owner' }, cache: { na_asistente_off: '1', na_asistente_acc: 'owner' }, slot0: true }); await tick();
   assert.equal(r.calls.length, 0); assert.deepEqual(r.added, []);
+  const L = r.window.NA_ASISTENTE_LOADER;
+  assert.equal(L.setEnabled(true), true); await tick();
+  assert.equal(r.calls.length, 1); assert.deepEqual(r.added, ASSETS, 'se carga en el momento'); assert.equal(r.store.has('na_asistente_off'), false);
+  let suspended = 0; r.window.NA_ASISTENTE = { suspend() { suspended++; }, resume() {} };
+  assert.equal(L.setEnabled(false), false);
+  assert.equal(suspended, 1, 'la interfaz ya cargada se esconde'); assert.equal(r.store.get('na_asistente_off'), '1'); assert.equal(r.store.has('na_asistente_acc'), false);
+  L.ask(); await tick(); assert.equal(r.calls.length, 1, 'apagado: no se vuelve a preguntar');
+});
+
+test('el interruptor se pone junto a la lista de aparatos SOLO en modo Admin, una vez, y refleja lo que dijo el servidor', async () => {
+  const mkEl = (tag) => { const e = { tag, children: [], parentElement: null, className: '', textContent: '', attrs: {}, listeners: {}, checked: false,
+    appendChild(c) { c.parentElement = e; e.children.push(c); return c; }, insertBefore(c, ref) { c.parentElement = e; const i = e.children.indexOf(ref); if (i < 0) e.children.push(c); else e.children.splice(i, 0, c); return c; },
+    setAttribute(k, v) { e.attrs[k] = v; }, addEventListener(n, f) { e.listeners[n] = f; },
+    querySelector(sel) { const all = []; const walk = (n) => n.children.forEach((c) => { all.push(c); walk(c); }); walk(e);
+      if (sel === '.na-asst-sw') return all.find((c) => /\bna-asst-sw\b/.test(c.className)) || null; if (sel === 'input') return all.find((c) => c.tag === 'input') || null; if (sel === 'small') return all.find((c) => c.tag === 'small') || null; return null; } };
+    return e; };
+  const host = mkEl('div'), list = mkEl('div'); list.id = 'naDevList'; host.appendChild(list);
+  const r = run({ status: 403, body: { error: 'admin_only', reason: 'sin_rol' } });
+  const d = r.window.document; d.createTextNode = (t) => ({ tag: '#text', textContent: t, children: [] });
+  d.createElement = mkEl; d.querySelectorAll = (sel) => sel === '#naDevList' ? [list] : sel === '.na-asst-sw' ? host.children.filter((c) => /na-asst-sw/.test(c.className)) : [];
+  const L = r.window.NA_ASISTENTE_LOADER;
+  r.window.NA_ROLES = { isOwner: () => false }; L.cfgSwitch(); assert.equal(host.children.length, 1, 'empleado: no aparece');
+  r.window.NA_ROLES = { isOwner: () => true }; L.cfgSwitch(); L.cfgSwitch();
+  assert.equal(host.children.length, 2, 'Admin: aparece una sola vez'); const row = host.children[1];
+  assert.match(row.className, /na9-row na9-row-sw na-asst-sw/); assert.equal(row.querySelector('input').checked, true, 'encendido por defecto');
+  await tick(); assert.equal(L.state(), 'sin_rol'); assert.match(row.querySelector('small').textContent, /todavía no está habilitado como Admin del asistente/);
+  const cb = row.querySelector('input'); cb.checked = false; cb.listeners.change();
+  assert.equal(r.store.get('na_asistente_off'), '1'); assert.match(row.querySelector('small').textContent, /^Apagado/);
 });
 
 test('hueco de la tarjeta: si el último ping decía dueño y ahora dice empleado o apagado, el hueco se quita enseguida', async () => {
@@ -78,7 +121,7 @@ test('hueco desde el primer pintado: <head> reserva el mismo alto que el hueco r
   const html = fs.readFileSync(new URL('../../POS/index.html', import.meta.url), 'utf8');
   const loader = fs.readFileSync(new URL('../../POS/js/modules/asistente/asistente-loader.js', import.meta.url), 'utf8');
   const head = html.slice(0, html.indexOf('</head>'));
-  assert.match(head, /localStorage\.getItem\('na_asistente_proto'\)==='1'&&localStorage\.getItem\('na_asistente_acc'\)==='owner'/);
+  assert.match(head, /localStorage\.getItem\('na_asistente_off'\)!=='1'&&localStorage\.getItem\('na_asistente_acc'\)==='owner'/);
   // 272+4+16+12 (<380, Bot 4 sobre 25ffde10: texto corto también a 360), 272+4+16+12 (380-699, Bot 4), 364+4+18+12, 280+4+18+12 (alto real de la tarjeta por tramo)
   for (const [px, q] of [[304, ''], [304, '@media (min-width:380px) and (max-width:699px)'], [398, '@media (min-width:700px)'], [314, '@media (min-width:1100px)']]) assert.ok(head.includes((q ? q + '{' : '') + 'html.na-asst-pre #pageMenu .main-scroll>.quick-stats{margin-top:' + px + 'px}'), String(px));
   assert.match(loader, /height:272px;margin:4px 0 16px/); assert.match(loader, /@media \(min-width:380px\) and \(max-width:699px\)\{#naAsstHero\{height:272px\}\}@media \(min-width:700px\)\{#naAsstHero\{height:364px;margin:4px 0 18px\}\}@media \(min-width:1100px\)\{#naAsstHero\{height:280px\}\}/);
@@ -164,4 +207,15 @@ test('revisión Bot 4 sobre 1b87710d: relleno del contenedor que se desplaza, pa
   assert.ok(!/pinBox|na-asst-pin/.test(ui)); assert.ok(!/\.na-asst-pin/.test(css));
   // 6) menos de 700 (también 360): atajos en una fila con texto corto
   assert.match(css, /@media \(max-width:699px\)\{#naAsstHero \.h-chips\{flex-wrap:nowrap/); assert.match(css, /@media \(max-width:379px\)\{#naAsstHero \.h-chips\{gap:6px\}#naAsstHero \.h-chip\{padding:8px 10px\}\}/);
+});
+
+test('interfaz: apagado en este aparato = sin burbuja, sin tarjeta, sin cuadros en Configuración; encender pregunta de nuevo', () => {
+  const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
+  assert.match(UI, /function offHere\(\) \{ try \{ return root\.localStorage\.getItem\('na_asistente_off'\) === '1'/);
+  assert.match(UI, /function suspend\(\) \{\s*dropUi\(\);/); assert.match(UI, /\.na-asst-acc, \.na-asst-prov, \.na-asst-own, \.na-asst-reg/);
+  assert.match(UI, /function refreshAccess\(opts\) \{\s*if \(offHere\(\)\) \{ suspend\(\); return Promise\.resolve\(null\); \}/);
+  assert.match(UI, /function mount\(\) \{\s*if \(offHere\(\)\) return;/);
+  assert.match(UI, /root\.NA_ASISTENTE = \{ suspend: suspend, resume: resume,/);
+  const LOADER = readFileSync(new URL('../../POS/js/modules/asistente/asistente-loader.js', import.meta.url), 'utf8');
+  assert.ok(!/Dueño|—/.test(LOADER.slice(LOADER.indexOf('function cfgText'), LOADER.indexOf('function cfgPaint'))), 'textos: Admin, sin rayas largas');
 });

@@ -870,7 +870,16 @@
   var pinging = null, lastPing = 0, PING_EVERY_MS = 10000, PING_TIMEOUT_MS = 3000;
   // Los re-chequeos (Inicio, reconectar, volver a la app) corren en un momento libre del navegador: nunca antes que el POS.
   function idleRefresh() { (root.requestIdleCallback || function (f) { return setTimeout(f, 200); })(function () { refreshAccess({ throttle: true }); }, { timeout: 2000 }); }
+  // Interruptor «Asistente en este aparato» (Configuración, solo Admin; lo maneja el cargador): apagado = nada del asistente aquí.
+  function offHere() { try { return root.localStorage.getItem('na_asistente_off') === '1'; } catch (_) { return false; } }
+  function suspend() {
+    dropUi();
+    var S = root.NA_ASISTENTE_SLOT; if (heroEl || doc.getElementById('naAsstHero')) { if (S && S.release) S.release(); else { var h = doc.getElementById('naAsstHero'); if (h) h.remove(); } } heroEl = null;
+    doc.querySelectorAll('.na-asst-acc, .na-asst-prov, .na-asst-own, .na-asst-reg').forEach(function (n) { n.remove(); });
+  }
+  function resume() { lastPing = 0; return refreshAccess(); }
   function refreshAccess(opts) {
+    if (offHere()) { suspend(); return Promise.resolve(null); }
     if (pinging) return pinging;
     if (root.navigator.onLine === false) { renderHero(); return Promise.resolve(access); }
     if (opts && opts.throttle && Date.now() - lastPing < PING_EVERY_MS) return Promise.resolve(access);
@@ -916,7 +925,7 @@
   // Último rol que confirmó el servidor (lo guarda el cargador): solo 'owner' muestra la tarjeta sin internet.
   function cachedOwner() { try { return root.localStorage.getItem('na_asistente_acc') === 'owner'; } catch (_) { return false; } }
   function renderHero() {
-    var menu = doc.getElementById('pageMenu'); if (!menu) return;
+    var menu = doc.getElementById('pageMenu'); if (!menu || offHere()) return;
     var off = root.navigator.onLine === false;
     // Solo el dueño tiene tarjeta en Inicio (la tarjeta reemplaza a la burbuja). El empleado con nivel encendido ve solo la burbuja con sus atajos.
     var mode = isOwnerAccess() ? (off ? 'offline' : 'owner') : (off && cachedOwner() && !adminOff ? 'offline' : null);
@@ -970,7 +979,7 @@
   // pidiendo el PIN del dueño en la ventana de PIN del POS. El servidor exige aparato dueño + PIN y lo anota si hay bitácora.
   var LEVELS = [['off', 'Apagado'], ['consultas', 'Solo consultas'], ['consultas_documentos', 'Consultas y documentos']];
   function decorateConfig() {
-    if (!isOwnerAccess() || root.navigator.onLine === false) return;
+    if (offHere() || !isOwnerAccess() || root.navigator.onLine === false) return;
     // Puede haber dos pantallas de Configuración (v9 y la anterior): se decora cada lista visible una sola vez.
     doc.querySelectorAll('#naDevList').forEach(function (list) { var host = list.parentElement; if (host && !host.querySelector('.na-asst-acc')) decorateOne(host); });
   }
@@ -1112,7 +1121,7 @@
   // ---------- «Registrar este teléfono como dueño»: solo en un aparato SIN rol (el POS lo trata como dueño pero el asistente no),
   // nunca automático: botón + PIN. Si ya hay dueño queda «esperando aprobación». El servidor decide todo (bandera, 0 dueños, límite de PIN).
   function decorateRegister() {
-    if (isOwnerAccess() || root.navigator.onLine === false) return;
+    if (offHere() || isOwnerAccess() || root.navigator.onLine === false) return;
     // Teléfono de empleado (con el asistente encendido; uno en Apagado no baja este código): aviso fijo, sin botón ni PIN.
     if (access && access.role === 'empleado') {
       doc.querySelectorAll('#naDevList').forEach(function (list) {
@@ -1189,6 +1198,7 @@
   }
 
   function mount() {
+    if (offHere()) return;
     if (doc.querySelector('.na-asst-root')) return; // se construye una sola vez
     // Sin permiso del servidor no se arma nada (ni burbuja ni panel).
     if (!isAdmin()) return;
@@ -1249,7 +1259,7 @@
     var menu = doc.getElementById('pageMenu');
     try { if (menu) new MutationObserver(function () { if (menu.classList.contains('active')) idleRefresh(); else if (heroDeferred) renderHero(); }).observe(menu, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
   }
-  root.NA_ASISTENTE = { open: function () { if (panelEl) openPanel(); }, close: function () { if (panelEl) closePanel(); }, setState: setState, send: send, _gate: gate, _deps: deps, get quality() { return quality; }, place: place, refreshAccess: refreshAccess, get access() { return access; } };
+  root.NA_ASISTENTE = { suspend: suspend, resume: resume, open: function () { if (panelEl) openPanel(); }, close: function () { if (panelEl) closePanel(); }, setState: setState, send: send, _gate: gate, _deps: deps, get quality() { return quality; }, place: place, refreshAccess: refreshAccess, get access() { return access; } };
   function later() { (root.requestIdleCallback || function (f) { setTimeout(f, 300); })(boot, { timeout: 2500 }); }
   if (doc.readyState === 'complete') later(); else root.addEventListener('load', later);
 })(window);
