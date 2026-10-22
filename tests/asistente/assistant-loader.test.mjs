@@ -23,7 +23,7 @@ function run({ status, body, online = true, cache = {}, search = '', creds = tru
   return { added, calls, store, window, slot };
 }
 const tick = () => new Promise((r) => setTimeout(r, 10));
-const ASSETS = ['css/asistente.css', 'js/modules/asistente/asistente-core.js', 'js/modules/asistente/asistente-ui.js'];
+const ASSETS = ['css/asistente.css', 'js/modules/asistente/asistente-core.js', 'js/modules/asistente/asistente-acciones.js', 'js/modules/asistente/asistente-ui.js'];
 
 test('empleado en Apagado: 1 ping (~14 bytes de cuerpo, sin modelo) y 0 archivos del asistente', async () => {
   const r = run({ status: 403, body: { error: 'assistant_off' } }); await tick();

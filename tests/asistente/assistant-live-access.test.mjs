@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const C = require('../../POS/js/modules/asistente/asistente-core.js');
 const LOADER = readFileSync(new URL('../../POS/js/modules/asistente/asistente-loader.js', import.meta.url), 'utf8');
 const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
-const ASSETS = ['css/asistente.css', 'js/modules/asistente/asistente-core.js', 'js/modules/asistente/asistente-ui.js'];
+const ASSETS = ['css/asistente.css', 'js/modules/asistente/asistente-core.js', 'js/modules/asistente/asistente-acciones.js', 'js/modules/asistente/asistente-ui.js'];
 
 // Cargador con Inicio (#pageMenu) que se activa/desactiva, reloj y respuestas del servidor controlados.
 function loader({ replies, cache = {} }) {

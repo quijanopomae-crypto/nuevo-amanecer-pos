@@ -880,6 +880,9 @@
     if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !isReview(text)) return learnedShow(text);
     if (!image && isOwnerAccess() && BELOW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return belowCost(text); }
     if (!image && isOwnerAccess() && isReview(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
+    // Abrir funciones / cambiar configuración (asistente-acciones.js, candado 'asistente-acceso-total'): con los permisos de ESTA sesión.
+    var AA = !image && root.NA_ASISTENTE_ACCIONES, aRes = AA ? AA.handle(text, { accessRole: access ? access.role : 'none', nav: deps.navigate }) : null;
+    if (aRes) { addMsg('u', text); inputEl.value = ''; msgsEl.appendChild(AA.render(doc, aRes, { accessRole: access ? access.role : 'none' })); scrollEnd(); return; }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
     if (image && access && access.role !== 'owner') { addMsg('u', text || 'Foto'); errMsg('image_owner_only'); setState('error', 2600); return; }

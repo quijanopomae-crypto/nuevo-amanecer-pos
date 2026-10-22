@@ -233,7 +233,7 @@
     if (loaded) return; loaded = true;
     var d = root.document, l = d.createElement('link'); l.rel = 'stylesheet'; l.href = 'css/asistente.css'; d.head.appendChild(l);
     var a = d.createElement('script'); a.src = 'js/modules/asistente/asistente-core.js';
-    a.onload = function () { var b = d.createElement('script'); b.src = 'js/modules/asistente/asistente-ui.js'; d.body.appendChild(b); };
+    a.onload = function () { var x = d.createElement('script'); x.src = 'js/modules/asistente/asistente-acciones.js'; x.onload = x.onerror = function () { var b = d.createElement('script'); b.src = 'js/modules/asistente/asistente-ui.js'; d.body.appendChild(b); }; d.body.appendChild(x); };
     d.body.appendChild(a);
   }
   // Mismo pedido que usa la UI: endpoint y Bearer de la sesión del POS, sin cookies. En el prototipo local, rol simulado.
