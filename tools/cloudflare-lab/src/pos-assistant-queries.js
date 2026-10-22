@@ -13,6 +13,8 @@ const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos po
   top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', compras_recientes: 'Compras recientes' };
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
+const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+export const SALE_LINES_MAX = 5000;
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function limaToday(nowMs) { return new Date(nowMs - 5 * 3600 * 1000).toISOString().slice(0, 10); }
@@ -42,14 +44,29 @@ export function canonicalReader(db) {
     }
     out.truncated = truncated; return out;
   }
-  // Ventas: la MISMA lectura canónica que usa la réplica del POS (/read/canonical/sales y sale-items) y la MISMA lista de
-  // anulaciones que GET /auth/sale-annulments (pos-sale-annul.js). El asistente solo filtra por fecha y suma.
-  async function annulled() {
-    try { const rows = (await db.prepare('SELECT sale_id,operation_id,reason,status,cash_cents,digital_cents,created_at,completed_at FROM pos_sale_annulments ORDER BY created_at DESC LIMIT 2000').all()).results || [];
-      return new Set(rows.filter((r) => r.status === 'anulada').map((r) => String(r.sale_id))); }
-    catch (e) { if (/no such table/i.test(String(e?.message || e))) return new Set(); throw e; }
+  // Ventas (lentitud 22-10): antes se leían TODAS las ventas por páginas (hasta 20 × 250 = 5000, ordenadas por sale_id, NO por fecha) y se
+  // filtraba por fecha en el Worker: con más de 5000 ventas «¿cuánto vendí hoy?» podía decir que no hubo ventas, y cada página eran 4 viajes
+  // a la base. Ahora: UNA consulta con el rango de fechas de Lima (period) en SQL, SUM/COUNT/GROUP BY y LIMIT. Mismo origen que la lectura
+  // canónica: modo ACTIVE = canonical_sale_context (promoción activa) JOIN sales; CANONICAL_READ_ONLY = tabla sales (como canonicalRead).
+  // Anuladas: las MISMAS que GET /auth/sale-annulments (pos_sale_annulments con status 'anulada'); sin esa tabla, ninguna.
+  let ctlMemo = null; // una lectura de canonical_control por pedido (el lector se arma por pedido)
+  async function ctl() {
+    if (!ctlMemo) ctlMemo = db.prepare('SELECT mode,active_promotion_id FROM canonical_control WHERE id=1').first().then((c) => {
+      if (!c || !['CANONICAL_READ_ONLY', 'ACTIVE'].includes(c.mode) || !c.active_promotion_id) throw new Error('canonical_not_published');
+      return c; }).catch((e) => { ctlMemo = null; throw e; });
+    return ctlMemo;
   }
-  async function salesIn(p) { const [sales, out] = await Promise.all([all('sales'), annulled()]); const list = sales.filter((s) => s.created_at >= p.fromIso && s.created_at < p.toIso && !out.has(String(s.sale_id))); list.truncated = sales.truncated; return list; }
+  const NOT_ANNULLED = " AND NOT EXISTS(SELECT 1 FROM pos_sale_annulments a WHERE a.sale_id=r.sale_id AND a.status='anulada')";
+  // FROM/WHERE comunes: ?1 promoción (solo ACTIVE), ?2 desde (incl.), ?3 hasta (excl.), en ISO UTC (period: día de Lima = 05:00Z a 05:00Z).
+  async function salesSql(p, select, tail, extra = []) {
+    const c = await ctl(), active = c.mode === 'ACTIVE';
+    const from = active ? 'canonical_sale_context x JOIN sales r ON r.sale_id=x.sale_id' : 'sales r';
+    const where = (active ? 'x.promotion_id=?1' : '?1 IS NOT NULL') + ' AND r.created_at>=?2 AND r.created_at<?3';
+    const run = (ann) => db.prepare('SELECT ' + select + ' FROM ' + from + ' ' + (tail.join || '') + ' WHERE ' + where + (ann ? NOT_ANNULLED : '') + ' ' + tail.rest)
+      .bind(c.active_promotion_id, p.fromIso, p.toIso, ...extra).all();
+    try { return (await run(true)).results || []; }
+    catch (e) { if (!/no such table: pos_sale_annulments/i.test(String(e?.message || e))) throw e; return (await run(false)).results || []; }
+  }
   return {
     async products() { const rows = await all('products'); const list = rows.map((p) => ({ id: String(p.product_id), nombre: p.name, stock: Number(p.current_stock_quantity), min: Number(p.stock_min_quantity || 0),
       costo: cents(p.cost_cents), precio: cents(p.price_cents), controla: p.tracks_inventory === 1 || p.tracks_inventory === true })); list.truncated = rows.truncated; return list; },
@@ -58,18 +75,17 @@ export function canonicalReader(db) {
     // falla, lanza (quien llama falla CERRADO). Un id que no vuelve es un producto que no existe.
     async productsById(ids) {
       const want = [...new Set((ids || []).map(String))]; const out = new Map(); if (!want.length) return out;
-      const ctl = await db.prepare('SELECT mode,active_promotion_id FROM canonical_control WHERE id=1').first();
-      if (!ctl || !['CANONICAL_READ_ONLY', 'ACTIVE'].includes(ctl.mode) || !ctl.active_promotion_id) throw new Error('canonical_not_published');
+      const c = await ctl();
       for (let i = 0; i < want.length; i += PRODUCT_ID_CHUNK) {
         const part = want.slice(i, i + PRODUCT_ID_CHUNK), marks = part.map((_, k) => '?' + (k + 2)).join(',');
         const base = `SELECT product_id,name,tracks_inventory FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`;
         const live = `SELECT product_id,name,tracks_inventory FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`;
         let rows;
-        if (ctl.mode === 'ACTIVE') {
-          try { rows = (await db.prepare(base + ' UNION ALL ' + live).bind(ctl.active_promotion_id, ...part).all()).results || []; }
+        if (c.mode === 'ACTIVE') {
+          try { rows = (await db.prepare(base + ' UNION ALL ' + live).bind(c.active_promotion_id, ...part).all()).results || []; }
           catch (e) { if (!/no such table: canonical_live_products/i.test(String(e?.message || e))) throw e; rows = null; }
         }
-        if (!rows) rows = (await db.prepare(base).bind(ctl.active_promotion_id, ...part).all()).results || [];
+        if (!rows) rows = (await db.prepare(base).bind(c.active_promotion_id, ...part).all()).results || [];
         for (const r of rows) out.set(String(r.product_id), { id: String(r.product_id), nombre: r.name, controla: r.tracks_inventory === 1 || r.tracks_inventory === true });
       }
       return out;
@@ -77,14 +93,20 @@ export function canonicalReader(db) {
     async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null })); },
     async customers() { const rows = await all('customers'); return rows.map((c) => ({ id: String(c.customer_id), nombre: c.name })); },
     async salesTotals(p) {
-      const m = new Map(); for (const s of await salesIn(p)) { const dia = new Date(Date.parse(s.created_at) - 5 * 3600 * 1000).toISOString().slice(0, 10), k = dia + '|' + s.payment_method;
-        const r = m.get(k) || { dia, metodo: s.payment_method, n: 0, c: 0 }; r.n++; r.c += Number(s.total_cents) || 0; m.set(k, r); }
-      return [...m.values()].sort((a, b) => a.dia.localeCompare(b.dia));
+      const rows = await salesSql(p, "date(r.created_at,'-5 hours') AS dia,r.payment_method AS metodo,COUNT(*) AS n,SUM(r.total_cents) AS c", { rest: 'GROUP BY dia,metodo ORDER BY dia LIMIT 1000' });
+      return rows.map((r) => ({ dia: String(r.dia), metodo: r.metodo, n: Number(r.n) || 0, c: Number(r.c) || 0 }));
     },
     async topItems(p, n) {
-      const ids = new Set((await salesIn(p)).map((s) => String(s.sale_id))), m = new Map();
-      for (const it of await all('sale-items')) { if (!ids.has(String(it.sale_id))) continue; const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(it.product_id, r); }
-      return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n);
+      const rows = await salesSql(p, 'i.product_id AS product_id,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c', { join: 'JOIN sale_items i ON i.sale_id=r.sale_id', rest: 'GROUP BY i.product_id ORDER BY c DESC,i.product_id LIMIT ?4' }, [Math.max(1, Math.min(100, Number(n) || 10))]);
+      return rows.map((r) => ({ product_id: r.product_id, q: Number(r.q) || 0, c: Number(r.c) || 0 }));
+    },
+    // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. Misma forma que la de «Ventas bajo costo» (#930):
+    // { sale_id, product_id, quantity, unit_cents, line_cents, created_at }; .truncated si hay más de SALE_LINES_MAX en el período.
+    async saleLines(p) {
+      const rows = await salesSql(p, 'i.sale_id AS sale_id,i.product_id AS product_id,i.quantity AS quantity,i.unit_price_cents AS unit_price_cents,i.line_total_cents AS line_total_cents,i.created_at AS created_at',
+        { join: 'JOIN sale_items i ON i.sale_id=r.sale_id', rest: 'ORDER BY r.created_at DESC,i.sale_id,i.line_number LIMIT ?4' }, [SALE_LINES_MAX + 1]);
+      const out = rows.slice(0, SALE_LINES_MAX).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null }));
+      out.truncated = rows.length > SALE_LINES_MAX; return out;
     },
     async purchases(n) {
       try { return (await db.prepare('SELECT supplier,document_ref,total_cost_cents,line_count,status,created_at FROM pos_purchases ORDER BY created_at DESC LIMIT ?1').bind(n).all()).results || []; }
@@ -106,6 +128,8 @@ export function memoryReader(data) {
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
+    async saleLines(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id));
+      return (data.saleItems || []).filter((x) => ids.has(x.sale_id)).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null })); },
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
   };
 }
@@ -157,7 +181,7 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
         texto: n ? 'Ventas ' + rango + ': S/ ' + cents(total).toFixed(2) + ' en ' + n + (n === 1 ? ' venta' : ' ventas') + '. Ticket promedio S/ ' + (cents(total) / n).toFixed(2) + '.' : 'No hay ventas registradas ' + rango + '.',
         resumen: { desde: p.desde, hasta: p.hasta, total_soles: cents(total), ventas: n, por_metodo: Object.fromEntries(metodos), mejor_dia: best ? { dia: best[0], soles: best[1] } : null, dias: dias.length } };
     }
-    const items = await reader.topItems(p, N), names = new Map((await reader.products()).map((x) => [x.id, x.nombre]));
+    const items = await reader.topItems(p, N), names = new Map((await reader.products()).map((x) => [x.id, x.nombre])); // nombres con la ficha vigente (incluye renombres)
     const filas = items.map((r) => [names.get(String(r.product_id)) || String(r.product_id), r2(r.q), cents(r.c)]);
     return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta,
       texto: filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.',
