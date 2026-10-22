@@ -33,7 +33,7 @@ const L3 = freezeAll({ ...L2, revision: true });
 // cambios masivos (cambios_masivos: false, heredado de NONE): una tarjeta por producto, nunca una tarjeta que cambia muchos a la vez.
 const L3C = freezeAll({ ...L3, costos: true, cambios: true,
   herramientas: [...L3.herramientas, 'proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo'],
-  consultas: [...L3.consultas, 'sin_costo', 'ventas_periodo', 'top_productos', 'compras_recientes'],
+  consultas: [...L3.consultas, 'sin_costo', 'ventas_periodo', 'top_productos', 'compras_recientes', 'ganancia', 'productos_sin_ventas', 'ventas_por_hora'],
   documentos: [...L3.documentos, 'inventario_valorizado', 'reporte_ventas'] });
 export const COSTS_CAPABILITIES = L3C;
 export const COSTS_SUFFIX = '+costos';
