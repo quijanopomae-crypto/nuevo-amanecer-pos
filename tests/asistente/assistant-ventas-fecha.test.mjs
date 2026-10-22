@@ -185,3 +185,16 @@ test('top_productos: líneas genéricas (GENERIC:<uuid>) con su nombre guardado,
   const rm = await runAssistantQuery(m, { tipo: 'top_productos', periodo: 'mes' }, NOW);
   assert.deepEqual(rm.filas, r.filas); assert.ok(!JSON.stringify(rm).includes('GENERIC:'));
 });
+
+// (22-10, prueba en vivo W72) el texto decía «otros siete» con 9 filas en la tarjeta: al modelo van como mucho 8 en «top»,
+// así que se le pasa también cuántas filas ve el Admin en pantalla.
+test('top_productos: el resumen al modelo dice cuántas filas tiene la tarjeta (filas_en_pantalla)', async () => {
+  const at = '2026-10-22T15:00:00.000Z', ids = Array.from({ length: 10 }, (_, i) => 'P' + i);
+  const m = memoryReader({ sales: ids.map((id) => ({ sale_id: 'S' + id, created_at: at, metodo: 'efectivo', total_cents: 1 })),
+    products: ids.map((id) => ({ id, nombre: 'Producto ' + id })),
+    saleItems: ids.map((id, i) => ({ sale_id: 'S' + id, product_id: id, quantity: 1, unit_price_cents: 100 + i, line_total_cents: 100 + i, created_at: at })) });
+  const r = await runAssistantQuery(m, { tipo: 'top_productos', periodo: 'mes' }, NOW);
+  assert.equal(r.filas.length, 10);
+  assert.equal(r.resumen.filas_en_pantalla, r.filas.length);
+  assert.ok(r.resumen.top.length < r.filas.length, 'al modelo van menos filas que en pantalla');
+});

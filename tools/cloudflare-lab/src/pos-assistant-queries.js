@@ -476,7 +476,8 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
     const filas = items.map((r) => [r.label, r2(r.q), cents(r.c)]);
     return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta,
       texto: filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.',
-      resumen: { desde: p.desde, hasta: p.hasta, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
+      // filas_en_pantalla: la tarjeta puede tener más filas que «top» (al modelo van M): así no cuenta «otros siete» si hay 9.
+      resumen: { desde: p.desde, hasta: p.hasta, filas_en_pantalla: filas.length, top: filas.slice(0, M).map((f) => ({ nombre: f[0], unidades: f[1], soles: f[2] })) } };
   }
   if (SUMMARY_TYPES.includes(tipo)) return summaryQuery(reader, tipo, args, nowMs, base);
   if (tipo === 'deudas_clientes') {
