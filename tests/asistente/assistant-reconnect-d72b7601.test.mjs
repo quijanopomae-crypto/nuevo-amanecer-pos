@@ -130,7 +130,7 @@ test('tarjeta: al confirmar, campos y «Confirmar» bloqueados; «Reconectando�
   const iLock = h.indexOf('lockFields(true);'), iExec = h.indexOf('gate.execute(key'), iLocked = h.indexOf('if (r.locked) { lockFields(true);'), iUnlock = h.indexOf('lockFields(false);');
   assert.ok(iLock > 0 && iLock < iExec, 'bloquea antes de mandar'); assert.ok(iLocked > iExec && iUnlock > iLocked, 'sin respuesta queda bloqueada; desbloquea solo después');
   assert.match(h, /ok\.disabled = true; no\.disabled = true; ok\.textContent = gate\.locked && gate\.locked\(key\) \? C\.RECONNECT_MSG : 'Guardando…'/);
-  assert.match(h, /onRetry: function \(\) \{ if \(!c\.isConnected\) return; ok\.textContent = C\.RECONNECT_MSG; res\.textContent = C\.RECONNECT_MSG; \}/);
+  assert.match(h, /onRetry: function \(\) \{ if \(!c\.isConnected\) return; ok\.textContent = C\.RECONNECT_MSG; res\.textContent = C\.RECONNECT_MSG; revealCard\(c, \[res, ok\]\); \}/); // (Bot 4 sobre f773911f) y se trae a la vista
   assert.match(h.slice(iLocked, iUnlock), /c\.dataset\.btn = 'Reintentar'/); assert.match(h.slice(iLocked, iUnlock), /again\.hidden = true/);
   const lf = sliceFn(UI, '    function lockFields(on) {', '    function syncOk()'); assert.match(lf, /i\.disabled = !!on; i\.readOnly = !!on/); assert.match(lf, /tr\.flag button/);
   assert.match(UI, /function syncOk\(\) \{ if \(!ok \|\| c\.dataset\.st !== 'pending' \|\| c\.dataset\.locked === '1'\) return;/, 'con bloqueo, escribir no reactiva «Confirmar»');

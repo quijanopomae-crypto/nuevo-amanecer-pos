@@ -177,7 +177,8 @@ test('Bot 4: «Pensando…» se vuelve la respuesta en el mismo lugar; mascota �
   assert.match(UI, /<div class="na-asst-live" aria-live="polite" aria-atomic="true"><\/div>/);
   const painter = sendFn.slice(sendFn.indexOf('C.createTextPainter('), sendFn.indexOf('var st = await C.streamChat'));
   assert.ok(!/announce/.test(painter), 'nada se anuncia por trozo');
-  assert.equal((sendFn.match(/announce\(d\.reply\)/g) || []).length, 1, 'se anuncia la respuesta completa una vez');
+  // (f773911f) se anuncia lo que se ve: la respuesta completa sin las etiquetas/vallas escritas como texto (C.stripDisplay)
+  assert.equal((sendFn.match(/var shown = C\.stripDisplay \? C\.stripDisplay\(d\.reply\) : d\.reply; announce\(shown\)/g) || []).length, 1, 'se anuncia la respuesta completa una vez');
   assert.match(sendFn, /bubble\.setAttribute\('aria-busy', 'true'\)/); assert.match(sendFn, /bubble\.removeAttribute\('aria-busy'\)/);
   assert.match(CSS, /\.na-asst-live\{position:absolute;width:1px;height:1px/);
 });

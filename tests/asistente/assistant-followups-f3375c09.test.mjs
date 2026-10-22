@@ -122,7 +122,7 @@ test('celular: aviso como nota SOLO con final.cut === true (nunca por el texto);
 
 test('celular (Bot 4, 1 y 3): cabecera de tabla legible en claro y oscuro; «Ver nuevo ↓» nunca tapa la nota de corte', () => {
   assert.match(CSS, /\.na-asst-tbl th\{[^}]*color:#0f172a/); assert.match(CSS, /body\.dark \.na-asst-tbl th\{[^}]*color:#e5f3ea/);
-  assert.match(UI, /function showNew\(\) \{ if \(!newBtn \|\| !msgsEl \|\| noteSeen\(\)\) return;/, 'con la nota a la vista no se muestra');
+  assert.match(UI, /function showNew\(\) \{ if \(!newBtn \|\| !msgsEl \|\| noteSeen\(\) \|\| \(liveCard && inView\(liveCard\)\)\) return;/, 'con la nota (o la tarjeta que se confirma, Bot 4 sobre f773911f) a la vista no se muestra');
   assert.match(UI, /if \(!newBtn\.hidden && \(atBottom\(\) \|\| noteSeen\(\)\)\) newBtn\.hidden = true;/, 'al llegar la nota a la vista se esconde');
   assert.match(UI, /m\.appendChild\(n\); cutNote = n; \}/, 'la nota que se mira es la que pintó paintCut (solo con final.cut === true)');
   // noteSeen con rectángulos de mentira: a la vista (aunque sea en parte) -> true; debajo de lo visible -> false
