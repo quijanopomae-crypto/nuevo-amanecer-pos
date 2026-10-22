@@ -28,7 +28,8 @@
   function g(name) { try { return GLOBALS[name](); } catch (_) { return undefined; } }
 
   function locked() {
-    try { return !!(root.NA_PERMISSIONS && typeof root.NA_PERMISSIONS.featureLocked === 'function' && root.NA_PERMISSIONS.featureLocked(FEATURE)); }
+    // Falla cerrado: si aún no cargan los permisos, se trata como bloqueado.
+    try { var p = root.NA_PERMISSIONS; if (!p || typeof p.featureLocked !== 'function') return true; return p.featureLocked(FEATURE) !== false; }
     catch (_) { return true; }
   }
 
