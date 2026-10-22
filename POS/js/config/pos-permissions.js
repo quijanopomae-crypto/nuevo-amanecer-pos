@@ -109,7 +109,7 @@
     'clonar-venta': true,
     'nota-credito-parcial-compras': true,
     'clientes-filtro-deuda': false,
-    'aviso-factura-duplicada': false,
+    'aviso-factura-duplicada': true,
     'clientes-deudores-caja': false,
     'clientes-dias-credito': true,
     'nota-credito-devolucion-parcial': true,
