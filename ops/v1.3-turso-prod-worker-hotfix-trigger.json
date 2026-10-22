@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner approved merge + publish of PR #899 (asistente: OhMyAgent + Routeway, Revisión del punto de venta, Leer boleta con IA; ASSISTANT_ENABLED=1) on 2026-10-22. Merge 0eb45984. CI green on f4ad6a09 (critical-regression, e2e-smoke, visual). No schema changes: migrations 0035/0036 NOT applied (not required). Assistant secrets ASSISTANT_AI_API_KEY_4/_2 and ASSISTANT_CONFIRM_SECRET synced by the workflow (stdin, masked). D1 backup taken first: Owner Backup Recovery Drill run 39724608229 success (R2 recovery-drills/2026-10-22T04-50-46Z-0eb45984….sql). Rollback to fb0daf65 (worker 65).",
-  "target_commit": "0eb45984bf89446815c7b118a39be46966f554bd",
-  "rollback_ref": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8",
+  "authorization_context": "Owner approved Option 1 on 2026-10-22 ('Sí, hazlo y publícalo'): assistant treats a device with NO pos_device_roles entry as Admin only when the POS already treats it as Admin (posRoleFor) and the session is Admin. PR #926 merged 7e06690c, CI green (critical-regression). No schema changes: migrations 0035/0036 NOT applied. D1 backup taken first: Owner Backup Recovery Drill run 39773194902 success (R2 recovery-drills/2026-10-22T11-47-23Z-7e06690c….sql). Rollback to 0eb45984 (worker 66).",
+  "target_commit": "7e06690cc6c83651e60d1daeaa7a3f73da02f1ad",
+  "rollback_ref": "0eb45984bf89446815c7b118a39be46966f554bd",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 66,
-  "optimization": "ASISTENTE_899"
+  "attempt": 67,
+  "optimization": "ASISTENTE_OWNER_SIN_FILA"
 }
