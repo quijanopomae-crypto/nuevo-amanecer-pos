@@ -89,8 +89,8 @@ test('clientes-deudores-caja is unlocked on client and server (no feature_locked
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
 
-test('edicion-masiva-precios: unlocked, owner-only screen and feature route; product.update stays owner-approved', async t => {
-  assert.equal(PERMISSIONS.featureLocked('edicion-masiva-precios'), false);
+test('edicion-masiva-precios: locked for now, owner-only screen and feature route; product.update stays owner-approved', async t => {
+  assert.equal(PERMISSIONS.featureLocked('edicion-masiva-precios'), true) // candado cerrado hasta abrirlos todos juntos;
   assert.equal(PERMISSIONS.canAccessScreen('owner', 'pageEdicionPrecios'), true);
   assert.equal(PERMISSIONS.canAccessScreen('empleado', 'pageEdicionPrecios'), false);
   const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
@@ -99,7 +99,7 @@ test('edicion-masiva-precios: unlocked, owner-only screen and feature route; pro
   f.exec("INSERT INTO pos_device_roles(device_id,pos_role,created_by,created_at) VALUES('session:pm-employee','empleado','test','2026-10-21T00:00:00Z')");
   const before = f.database.prepare('SELECT * FROM canonical_control').all();
   const owner = await f.fetch('http://localhost/features/edicion-masiva-precios', { headers: { authorization: 'Bearer pm-owner-token' } });
-  assert.notEqual((await owner.json()).error, 'feature_locked');
+  assert.equal((await owner.json()).error, 'feature_locked'); // candado cerrado
   const employee = await f.fetch('http://localhost/features/edicion-masiva-precios', { headers: { authorization: 'Bearer pm-employee-token' } });
   assert.equal(employee.status, 403);
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);

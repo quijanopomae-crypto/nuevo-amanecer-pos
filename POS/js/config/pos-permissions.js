@@ -191,7 +191,7 @@
     'clientes-documentos-listas': true,
     'importar-clientes': true,
     'precio-por-margen': true,
-    'edicion-masiva-precios': false,
+    'edicion-masiva-precios': true,
     'transferencias-almacenes': true,
     'transferencias-cajas': true,
     'bancos-depositos': true,

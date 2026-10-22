@@ -128,13 +128,32 @@
     apply.textContent = 'Aplicar a ' + rows.length + (rows.length === 1 ? ' producto' : ' productos');
     return true;
   }
+  // PIN del dueño UNA vez por lote (mismo paso que #62): en la nube NA_ROLES.approve('product.update'),
+  // en modo local el PIN maestro. Falla cerrado si no hay forma de comprobarlo.
+  function cloudMode() { try { var c = root.NuevoAmanecerCanonical; return !!(c && typeof c.enabled === 'function' && c.enabled()); } catch (_) { return true; } }
+  function notify(msg, type) { try { if (typeof root.toast === 'function') root.toast(msg, type || 'error'); } catch (_) {} }
+  async function askOwnerPin(n) {
+    var roles = root.NA_ROLES, detail = 'Se cambiará el precio de ' + n + ' producto(s). Escribe tu PIN una sola vez para todo el lote.';
+    if (!roles || typeof roles.askPin !== 'function') return false;
+    if (cloudMode()) {
+      if (roles.role !== 'owner' || !roles.confirmed || typeof roles.approve !== 'function') { notify('Solo el aparato del dueño puede hacer esto.'); return false; }
+      var opId = 'precios-masivos-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      return !!(await roles.approve('product.update', opId, 'Cambiar precios en lote', detail));
+    }
+    var hasPin = false; try { hasPin = !!(_naSecurity.pinEnabled && _naSecurity.pinHash); } catch (_) {} // eslint-disable-line no-undef
+    if (!hasPin) { notify('Configura primero el PIN maestro para cambiar precios en lote.'); return false; }
+    return !!(await roles.askPin('Cambiar precios en lote', detail, function (pin) {
+      var valid = false; try { valid = !!_naPinValid(pin); } catch (_) {} // eslint-disable-line no-undef
+      return valid ? { ok: true, value: true } : { msg: 'PIN incorrecto.' };
+    }));
+  }
   async function applyAll() {
     var page = root.document.getElementById(PAGE_ID);
     if (running || !allowed() || !current.length) return null;
     var rows = current.slice(), status = q(page, '[data-pm-status]'), apply = q(page, '[data-pm-apply]');
-    if (typeof root.confirm === 'function' && !root.confirm('¿Cambiar el precio de ' + rows.length + ' producto(s)? Se puede volver a cambiar después.')) return null;
     running = true; apply.disabled = true;
     try {
+      if (!(await askOwnerPin(rows.length))) { status.textContent = 'No se cambió nada: falta el PIN del dueño.'; apply.disabled = false; return null; }
       var c = canon();
       status.textContent = 'Aplicando…';
       var out = c && typeof c.updateProduct === 'function'
