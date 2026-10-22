@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner OK to publish PR #894 (2026-10-21 ~20:53 Lima); approved by all 5 assistants. Merge fb0daf65 adds one line to pos-permissions.js FEATURE_LOCKS ('clientes-deudores-caja': false) plus a Próximamente card; Worker before web. CI green on dcd1e4f7. No schema changes. D1 backup taken first: Owner Backup Recovery Drill run 39708986052 success (R2 recovery-drills/2026-10-22T02-01-09Z-fb0daf65….sql). Rollback to dba42e22 (worker 64).",
-  "target_commit": "fb0daf65173e6abcfe6fe066ffdecb650a3076d8",
-  "rollback_ref": "dba42e22eab4b41ec92cbe2c7160d492cefc09a3",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PRs #946 #947 #948 #930 #949 #927 #939 (assistant long memory, Lima time, caja_abierta, below-cost alerts, business name, overdue credits with codes only, levels 1/2/3). Each PR had CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39863942113 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "target_commit": "8e0f236b451b5003220b332648c1725449dc12ba",
+  "rollback_ref": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 65,
-  "optimization": "FEATURE_LOCK_CLIENTES_DEUDORES_CAJA_894"
+  "attempt": 72,
+  "optimization": "ASSISTANT_BATCH_LEVELS_MEMORY_CREDITS"
 }

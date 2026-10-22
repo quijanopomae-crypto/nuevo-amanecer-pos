@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 // Run only after docs/ROTACION_ABC_INTEGRACION.md wiring has been applied.
 // No DOM/permission injection: these cases exercise the integrated page.
@@ -57,7 +58,7 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     await seed(page);
     const before = await readState(page);
     const writes: string[] = [];
-    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
     await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageProximamente'); }, dark);
     const card = page.locator('[data-feature-id="rotacion-abc"]');
     await expect(card).toHaveClass(/is-enabled/);

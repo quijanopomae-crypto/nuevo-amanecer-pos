@@ -56,9 +56,16 @@
     try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
   }
   function ownerAllowed() { return isOwner() && policyReady(); }
+  function unlocked() {
+    try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.featureLocked === 'function' && permissions.featureLocked(FEATURE_ID) === false); } catch (_) { return false; }
+  }
+  // Permisos por empleado (#924): el empleado entra solo si el servidor prendió su casilla (falla cerrada).
+  function employeeMay() {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.may === 'function' && e.may(FEATURE_ID) === true); } catch (_) { return false; }
+  }
+  // Dueño como hoy, o empleado con casilla; el candado manda en los dos casos.
   function available() {
-    var permissions = root.NA_PERMISSIONS;
-    return ownerAllowed() && !!(permissions && typeof permissions.featureLocked === 'function' && !permissions.featureLocked(FEATURE_ID));
+    try { return unlocked() && (ownerAllowed() || (policyReady() && employeeMay())); } catch (_) { return false; }
   }
   function currentProducts() {
     var canonical = root.NuevoAmanecerCanonical, view = root.NuevoAmanecerCanonicalSaleView;
@@ -163,6 +170,12 @@
   function isActive(id) { var v = root.document && root.document.getElementById(id); return !!(v && v.classList && v.classList.contains('active')); }
   function inVenta() { return isActive(VENTA_PAGE) || !isActive(HOME_PAGE); }
   function removeAlert() { var old = root.document && root.document.getElementById(ALERT_ID); if (old) old.remove(); }
+  function alertParts(info) {
+    var parts = [];
+    if (info.expired) parts.push(info.expired === 1 ? '1 lote vencido' : info.expired + ' lotes vencidos');
+    if (info.soon) parts.push(info.soon === 1 ? '1 lote vence en 30 días' : info.soon + ' lotes vencen en 30 días');
+    return parts;
+  }
   function showAlert() {
     var doc = root.document; if (!doc || !doc.body) return false;
     // Solo el dueño (NA_ROLES.isOwner() en try/catch) y con la función habilitada; si algo falla, se oculta.
@@ -170,12 +183,15 @@
     var info;
     try { info = alertSummary(currentProducts()); } catch (_) { removeAlert(); return false; }
     if ((!info.expired && !info.soon) || alertDismissed() || inVenta()) { removeAlert(); return false; }
+    var text = '⏳ ' + alertParts(info).join(' · ') + ' (' + dateLabel(info.today) + ', hora de Lima)';
+    // Mismo aviso ya en pantalla: se deja tal cual. Rehacerlo en cada evento (na:canonical-updated, el temporizador de 1,5 s, cambios de
+    // clase de Inicio) lo sacaba y volvía a poner en medio segundo: parpadeo, el lector de pantalla lo repetía y las pruebas e2e medían
+    // el nodo ya quitado (fallas intermitentes de alertas-vencimiento.spec.ts a 740x360 / 844x390).
+    var old = doc.getElementById(ALERT_ID), oldText = old && old.querySelector('.rpv-alert-text');
+    if (old && old.parentNode === doc.body && oldText && oldText.textContent === text) return true;
     removeAlert();
     var box = element('div', 'rpv-alert'); box.id = ALERT_ID; box.setAttribute('role', 'status'); box.setAttribute('data-rpv-alert', '');
-    var parts = [];
-    if (info.expired) parts.push(info.expired === 1 ? '1 lote vencido' : info.expired + ' lotes vencidos');
-    if (info.soon) parts.push(info.soon === 1 ? '1 lote vence en 30 días' : info.soon + ' lotes vencen en 30 días');
-    box.appendChild(element('p', 'rpv-alert-text', '⏳ ' + parts.join(' · ') + ' (' + dateLabel(info.today) + ', hora de Lima)'));
+    box.appendChild(element('p', 'rpv-alert-text', text));
     var view = element('button', 'rpv-alert-view', 'Ver reporte'); view.type = 'button'; view.setAttribute('data-rpv-alert-view', '');
     var close = element('button', 'rpv-alert-close', 'Cerrar'); close.type = 'button'; close.setAttribute('data-rpv-alert-close', ''); close.setAttribute('aria-label', 'Cerrar aviso de vencimientos');
     function dismiss() { rememberDismiss(); removeAlert(); }
@@ -195,6 +211,7 @@
     if (exportButton) exportButton.addEventListener('click', exportCsv);
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', function () { if (!available()) render(); else update(); showAlert(); });
+    root.addEventListener('na:employee-perms', function () { if (!available()) render(); else update(); showAlert(); });
     root.addEventListener('na:canonical-updated', showAlert);
     page.addEventListener('input', function (e) { if (e.target && e.target.matches && e.target.matches('[data-rpv-lot]')) update(); });
     root.setTimeout(showAlert, 1500);

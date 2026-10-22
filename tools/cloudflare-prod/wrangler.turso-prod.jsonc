@@ -8,6 +8,10 @@
   "vars": {
     "RUNTIME_ENVIRONMENT": "production",
     "CANONICAL_RUNTIME_ENABLED": "enabled",
-    "DB_PROVIDER": "turso"
+    "DB_PROVIDER": "turso",
+    "ASSISTANT_ENABLED": "1",
+    "AI_PROVIDER": "ohmyagent",
+    "AI_BASE_URL": "https://ohhmyagent.com/v1",
+    "AI_MODEL": "gpt-6.1-sol"
   }
 }

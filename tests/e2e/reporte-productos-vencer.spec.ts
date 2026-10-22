@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 import { readFile } from 'node:fs/promises';
 import { stripKnownBackgroundKeys } from './helpers/known-background-keys';
 
@@ -91,7 +92,7 @@ for (const width of [390, 650, 768, 1366]) for (const dark of [false, true]) {
     const before = await state(page);
     const writes: string[] = [];
     page.on('request', request => {
-      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url());
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url());
     });
     await openReport(page);
     const screen = page.locator(screenId), rows = screen.locator('tbody tr'), horizon = screen.locator('[data-rpv-horizon]');
@@ -148,7 +149,7 @@ test('owner CSV contains active horizon, dd/mm/yyyy, expired first and protected
   const before = await state(page);
   const writes: string[] = [];
   page.on('request', request => {
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method());
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method());
   });
   await openReport(page);
   await page.locator(`${screenId} [data-rpv-horizon]`).selectOption('60');
