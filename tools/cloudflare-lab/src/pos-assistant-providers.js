@@ -7,6 +7,7 @@
 // - Tres adaptadores con los mismos eventos internos (texto, herramienta, uso, fin, error):
 //   OpenAI compatible (DeepSeek, OpenAI, xAI Grok, OpenRouter, Groq, Mistral, Together), Anthropic Messages y Google Gemini.
 
+import { createCodeMap } from './pos-assistant-codigos.js';
 const any = () => true;
 const re = (r) => (m) => r.test(String(m || ''));
 export const PROVIDERS = Object.freeze({
@@ -310,10 +311,16 @@ async function withRetries(cfg, req, outer, once) {
 }
 function retryAfterS(res) { const v = Number(res?.headers?.get?.('retry-after')); return Number.isFinite(v) && v > 0 ? v : null; }
 
+// Códigos de cliente neutros (pos-assistant-codigos.js): cfg.codes es el mapa de la conversación (pos-assistant.js lo comparte entre la
+// primera y la segunda llamada); sin él, uno por llamada. El cuerpo se reescribe en el fetch (todos los adaptadores, reintentos y respaldo)
+// y la respuesta vuelve con los códigos reales antes de cualquier lectura de la base o del aparato.
+const codesOf = (cfg) => (cfg && cfg.codes) || createCodeMap();
+const realResult = (codes, r) => (!r || typeof r !== 'object' ? r : { ...r, ...(typeof r.content === 'string' ? { content: codes.toReal(r.content) } : {}), ...(Array.isArray(r.calls) ? { calls: codes.callsToReal(r.calls) } : {}) });
 export async function callModel(cfg, req, fetchImpl, timeoutMs, outer) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, fetchImpl, timeoutMs, outer));
-  return r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r;
+  const codes = codesOf(cfg), f = codes.fetch(fetchImpl);
+  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, f, timeoutMs, outer));
+  return realResult(codes, r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r);
 }
 async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
@@ -332,7 +339,10 @@ async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
 // (nunca se arma una tarjeta con un pedazo). El tiempo cuenta desde el ÚLTIMO trozo (idleMs). Si se corta a mitad: { error, partial:true }.
 export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idleMs, onText, onTool, guard, outer));
+  const codes = codesOf(cfg), f = codes.fetch(fetchImpl); let st = null;
+  const r = await withRetries(cfg, req, outer, (c) => { st = codes.streamer(onText); return callModelStreamOnce(c, req, f, idleMs, st.push, onTool, guard, outer); });
+  if (st) { if (r && !r.error && !r.forbidden) st.flush(); else st.drop(); } // la cola retenida («C-00») sale solo si terminó bien
+  return realResult(codes, r);
 }
 async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };

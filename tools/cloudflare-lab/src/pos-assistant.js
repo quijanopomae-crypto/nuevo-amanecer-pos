@@ -19,6 +19,7 @@
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
 import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage } from './pos-assistant-invoice-memory.js';
 import { resolveProvider, callModel, callModelStream, linkAbort } from './pos-assistant-providers.js';
+import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
@@ -1743,6 +1744,8 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'preparar_documento') {
     const tipo = DOC_TYPES.includes(args.tipo) ? args.tipo : null; if (!tipo) return { dropped: 'bad_document', tool: name };
     if (!docAllowed(role, tipo)) return { dropped: 'forbidden_document', tool: name };
+    // Código neutro que la IA inventó o que no es de esta conversación: «no encontrado», sin buscar ni adivinar (pos-assistant-codigos.js).
+    if (CUSTOMER_DOC_TYPES.includes(tipo) && [args.cliente_id, args.cliente].includes(UNKNOWN_CUSTOMER)) return { dropped: 'unknown_customer', tool: name };
     const D = /^\d{4}-\d{2}-\d{2}$/;
     return { id, type: 'documento', needsConfirm: false, title: DOC_TITLES[tipo], tipo, desde: D.test(args.desde || '') ? args.desde : null, hasta: D.test(args.hasta || '') ? args.hasta : null,
       // (auditoría de privacidad 2026-10-22) el estado de cuenta va por el CÓDIGO del cliente (cliente_id), nunca por su nombre: el aparato
@@ -1751,6 +1754,8 @@ export function toProposal(call, role, ctx, n) {
   }
   return { dropped: 'unknown_tool', tool: name };
 }
+
+export const UNKNOWN_CUSTOMER_TEXT = 'No encontré ese cliente. Revise el código en Clientes.';
 
 // ---------- Límites de uso ----------
 const limaDate = limaToday; // mismo día de Lima que las consultas (pos-assistant-queries.js)
@@ -2695,6 +2700,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const cap = setTimeout(() => up.abort(), deps.maxStreamMs ?? SERVER_MAX_MS); ctxOut.stopCap = () => clearTimeout(cap);
   if (sse) sse.open();
   let result, req = null; const bytes = [];
+  // Códigos de cliente neutros (C-0001…) hacia la IA: un mapa para todo el pedido (primera y segunda llamada), ver pos-assistant-codigos.js.
+  const ccfg = cfg.ok ? { ...cfg, codes: createCodeMap() } : cfg;
   if (mode === 'mock') {
     result = mockAssistantReply({ role, ctx, text: parsed.text, image: !!parsed.image });
     // Empleado: si la demostración trae una herramienta prohibida, no sale ningún texto (igual que el corte en DeepSeek).
@@ -2706,8 +2713,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, resumen: resumenIn || null });
     bytes.push(payloadBytes(req));
-    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal)
-      : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+    result = emit ? await callModelStream(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal)
+      : await callModel(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     if (emit && !result.error && !result.forbidden) emit.flush();
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}) }, ERR_STATUS[result.error] || 502);
   }
@@ -2811,8 +2818,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       bytes.push(payloadBytes(req2));
       // En partes: lo que se pintó de la primera llamada se borra (reset) y se pinta la explicación; si falla, queda el texto con números.
       if (emit) { emit.reset(); beat.start(); beat.tick(); }
-      const second = emit ? await callModelStream(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
-        : await callModel(cfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+      const second = emit ? await callModelStream(ccfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal)
+        : await callModel(ccfg, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       if (emit && !second.error) emit.flush();
       if (!second.error && second.content) reply = finalText(second.content);
     }
@@ -2823,7 +2830,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const secret = env.ASSISTANT_CONFIRM_SECRET && String(env.ASSISTANT_CONFIRM_SECRET).length >= 16 ? env.ASSISTANT_CONFIRM_SECRET : null;
   for (const p of proposals) if (p.needsConfirm) p.confirm_token = secret ? await issueConfirmToken(p, role, auth, secret, now) : null;
   // Si el modelo intentó acciones y ninguna pasó, su texto ("pulsa Confirmar") no puede quedar: no hay tarjeta. Mensaje neutro.
-  if (!proposals.length && dropped.length) reply = role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_role')
+  if (!proposals.length && dropped.length) reply = dropped.every((d) => d.dropped === 'unknown_customer') ? UNKNOWN_CUSTOMER_TEXT
+    : role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_role')
     ? EMPLOYEE_CHANGE_TEXT // empleado que pide un cambio: frase simple, sin hablar de permisos ni códigos
     : 'No puedo hacer eso desde el asistente. Hazlo en su pantalla normal.';
   if (proposals.some((p) => p.type === 'compra')) {
