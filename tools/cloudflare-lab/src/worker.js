@@ -20,6 +20,13 @@ import { cashClosesRoute } from './pos-cash-closes.js';
 import { annulCanonicalSale, listSaleAnnulments, SALE_ANNUL_COMMAND } from './pos-sale-annul.js';
 import { handleLabWorkspace, isLabWorkspacePath } from './lab-workspace.js';
 import { dniLookupRoute, DNI_LOOKUP_PATH } from './pos-dni-lookup.js';
+import { assistantChatRoute, assistantConfirmRoute, ASSISTANT_CHAT_PATH, ASSISTANT_CONFIRM_PATH } from './pos-assistant.js';
+import { employeeAccessRoute, ACCESS_PATH as ASSISTANT_ACCESS_PATH } from './pos-assistant-access.js';
+import { ownerDeviceRoute, isOwnerDevicePath } from './pos-owner-device.js';
+import { providerRoute, PROVIDER_PATH as ASSISTANT_PROVIDER_PATH } from './pos-assistant-provider-route.js';
+import { auditRoute, AUDIT_PATH as ASSISTANT_AUDIT_PATH } from './pos-assistant-audit.js';
+import { assistantReviewRoute, REVIEW_PATH as ASSISTANT_REVIEW_PATH } from './pos-assistant-review.js';
+import { assistantBoletaRoute, BOLETA_PATH as ASSISTANT_BOLETA_PATH } from './pos-assistant-boleta.js';
 import { handleRoles, ownerGate, posRoleFor, ROLE_PATHS, flagSaleDiscount, flagReview } from './pos-roles.js';
 
 const TEXT_FIELDS = ['operation_id', 'entity_type', 'entity_id', 'payload', 'payload_hash', 'created_at'];
@@ -114,6 +121,56 @@ export default {
         }
         return cors(await purchasesRoute(request, env, auth, json));
       }
+      // Asistente (prototipo aislado): apagado salvo ASSISTANT_ENABLED=1; responde 404 antes de autenticar.
+      // Nivel del asistente por aparato de empleado (dueño + PIN). Misma bandera.
+      if (url.pathname === ASSISTANT_ACCESS_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await employeeAccessRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // Auditoría del asistente (solo dueño). Misma bandera ASSISTANT_ENABLED.
+      if (url.pathname === ASSISTANT_AUDIT_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await auditRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // «Revisión del punto de venta» (solo Admin): el aparato manda SU resumen local de errores y uso; no se guarda nada. Misma bandera.
+      if (url.pathname === ASSISTANT_REVIEW_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await assistantReviewRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // «Leer boleta con IA» (solo Admin): una foto -> JSON para revisar en el aparato. No guarda nada ni toca stock. Misma bandera.
+      if (url.pathname === ASSISTANT_BOLETA_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await assistantBoletaRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      // Registro del aparato dueño: además necesita ASSISTANT_OWNER_BOOTSTRAP=1 (la ruta responde 404 sin esa bandera).
+      // Proveedor del asistente (solo dueño): estado de las claves (sin mostrarlas), «Probar» y cambio con tarjeta Confirmar.
+      if (url.pathname === ASSISTANT_PROVIDER_PATH || url.pathname === ASSISTANT_PROVIDER_PATH + '/test' || url.pathname === ASSISTANT_PROVIDER_PATH + '/select') {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await providerRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      if (isOwnerDevicePath(url.pathname)) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        return cors(await ownerDeviceRoute(request, env, auth, json, { db: getDatabase(env) }));
+      }
+      if (url.pathname === ASSISTANT_CHAT_PATH || url.pathname === ASSISTANT_CONFIRM_PATH) {
+        if (String(env.ASSISTANT_ENABLED || '') !== '1') return json({ error: 'not_found' }, 404);
+        const auth = await authorizeSession(request, env);
+        if (auth instanceof Response) return cors(auth);
+        const route = url.pathname === ASSISTANT_CHAT_PATH ? assistantChatRoute : assistantConfirmRoute;
+        return cors(await route(request, env, auth, json, { db: getDatabase(env) }));
+      }
       // Búsqueda de DNI al agregar cliente: primero clientes guardados, luego Decolecta desde el Worker.
       if (url.pathname === DNI_LOOKUP_PATH) {
         const auth = await authorizeSession(request, env);
@@ -190,7 +247,13 @@ export default {
         if (denied) return denied;
         const auth = await authorizeSession(request, env);
         if (auth instanceof Response) return auth;
+        // product.create ahora también pasa por ownerGate (dueño, o aprobación con PIN del dueño ligada al operation_id).
+        // CAMBIO DE SERVIDOR DEL POS en la rama feature/asistente-aislado: NO desplegar sin el visto bueno del jefe (ver docs/asistente/PLAN.md).
+        // (forma de la base: product.update sigue pasando por ownerGate en su propio bloque; product.create, solo en esta rama, en el else)
         if (financialCommand === 'product.update') {
+          const gated = await ownerGate(request, env, auth, financialCommand, json, getDatabase(env));
+          if (gated) return gated;
+        } else {
           const gated = await ownerGate(request, env, auth, financialCommand, json, getDatabase(env));
           if (gated) return gated;
         }
