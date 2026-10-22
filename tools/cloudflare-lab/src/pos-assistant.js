@@ -1848,8 +1848,16 @@ function rucOpen(t, h) { return (t[h] === 'N' || t[h] === 'n') && /(?:^|[^0-9])R
 const DATA_B64 = /[A-Za-z0-9+/=%._~-]/;
 // (Bot 2) tras una palabra de precio solo se frena el corte si lo que sigue es (o puede ser aún) pin/clave/contraseña/password
 const PRICE_KW_NEXT = ['pin', 'clave', 'contraseña', 'contrasena', 'password'];
-function priceKwNext(t, h) { let e = h; while (e < t.length && isLetter(t[e])) e++; const w = t.slice(h, e).toLowerCase();
-  return e >= t.length ? PRICE_KW_NEXT.some((k) => k.startsWith(w)) : PRICE_KW_NEXT.includes(w); }
+// (22-10, propiedad con las pruebas de #929) PIN_PRICE_BEFORE acepta un artículo entre la palabra de precio y la etiqueta («costo⏎la contraseña …
+// S/ 1.80»): con art = true el corte ANTES del artículo también es candidato si lo que sigue es (o puede ser) artículo + etiqueta; si no, el
+// tramo «la contraseña …» salía filtrado sin la palabra de precio delante y tapaba un monto que el texto entero deja ver.
+const PRICE_ART = ['de', 'del', 'la', 'el'];
+function priceKwNext(t, h, art) { let e = h; while (e < t.length && isLetter(t[e])) e++; const w = t.slice(h, e).toLowerCase();
+  if (e >= t.length) return PRICE_KW_NEXT.some((k) => k.startsWith(w)) || (!!art && PRICE_ART.some((k) => k.startsWith(w)));
+  if (PRICE_KW_NEXT.includes(w)) return true;
+  if (!art || !PRICE_ART.includes(w) || !isWs(t[e])) return false;
+  let s = e; while (s < t.length && isWs(t[s])) s++;
+  return s >= t.length || (isLetter(t[s]) && priceKwNext(t, s, false)); }
 // (auditoría de privacidad 2026-10-22) correo disfrazado («rosa [at] gmail [dot] com», «rosa arroba gmail punto com», «rosa @ gmail.com»)
 // lleva espacios: con un separador de arroba cerca, o si la palabra que empieza en el corte puede ser «arroba»/«at», el corte es solo
 // candidato (tryShield lo suelta cuando filtrar por partes da lo mismo que el texto entero); si esa palabra aún no llegó entera, se vuelve
@@ -1964,7 +1972,7 @@ function createTextStage(out0, red0 = redactText) {
       if (rucOpen(pend, h) || apiOpen(pend, h) || dataOpen(h)) continue;
       // (Bot 2) «precio clave S/ 4.50»: la palabra de precio va con la etiqueta. (Bots 3/4 sobre 39ccd25c) es un corte candidato (como pinOpen),
       // no un freno fijo: «precio clave » ×N ya no retiene toda la respuesta; tryShield lo suelta solo si da lo mismo que el texto entero.
-      if ((PIN_PRICE_BEFORE.test(pend.slice(Math.max(0, h - 24), h)) || PIN_ADJ_BEFORE.test(pend.slice(Math.max(0, h - 24), h))) && priceKwNext(pend, h)) { if (cands.length < 256) cands.push(off + h); continue; }
+      if ((PIN_PRICE_BEFORE.test(pend.slice(Math.max(0, h - 24), h)) && priceKwNext(pend, h, true)) || (PIN_ADJ_BEFORE.test(pend.slice(Math.max(0, h - 24), h)) && priceKwNext(pend, h))) { if (cands.length < 256) cands.push(off + h); continue; }
       if (adjNear(h)) { if (cands.length < 256) { cands.push(off + h); adjCut.add(off + h); } continue; } // (excepción del adjetivo, arriba)
       const ob = obfOpen(pend, h); // correo disfrazado (arriba)
       if (ob === 'wait') { if (!obfWait.has(off + h)) { recheck.push(off + h); obfWait.add(off + h); } continue; } // una vez (la última posición se mira de nuevo)

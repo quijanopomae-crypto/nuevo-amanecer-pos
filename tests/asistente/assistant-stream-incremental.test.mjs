@@ -585,3 +585,17 @@ test('2c) «caja fuerte 4321 data:…, producto clave S/ 4.50»: en partes (1..t
     for (const z of [' producto clave S/ 4.50 y listo', ' | producto clave | S/ 4.50 |']) { const s = a + m + z;
       for (const role of ['owner', 'empleado:consultas']) for (const n of [1, 2, 5, 13, 1000]) assert.equal(parts(s, role, n), redactFor(role)(s), role + '/' + n + ' ' + JSON.stringify(s)); }
 });
+test('2d) «costo⏎la contraseña es para proteger tu cuentaGalleta S/ 1.80AST-otro, »: en partes (1..todo y al azar) = texto entero en los dos sentidos (ni tapa de más ni de menos)', () => {
+  const core = 'la contraseña es para proteger tu cuentaGalleta S/ 1.80AST-otro, ';
+  const cases = [['S/ 1.80 es el costo\n' + core, true], [']) for (const role of [EMP,  DNI 12345678. S/ 1.80 es el costo\n' + core, true], ['costo la ' + 'contraseña S/ 1.80 ok', null],
+    ['El precio del ' + 'pin es S/ 4.50 ok', null], [core, false], ['x\n' + core, false]];
+  for (const [t, visible] of cases) {
+    if (visible !== null) assert.equal(redactFor('owner')(t).includes('Galleta S/ 1.80AST'), visible, 'entero ' + t); // precio/costo justo antes de la etiqueta: se ve
+    let seed = 7; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+    for (const role of ['owner', EMP]) {
+      const want = full(t, role);
+      for (let n = 1; n <= t.length; n++) assert.equal(stream(t, role, n).text, want, role + ' ' + n + ': ' + t);
+      for (let r = 0; r < 40; r++) assert.equal(stream(t, role, () => 1 + Math.floor(rnd() * 8)).text, want, role + ' al azar: ' + t);
+    }
+  }
+});

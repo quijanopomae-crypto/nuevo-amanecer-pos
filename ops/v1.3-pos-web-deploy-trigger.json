@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 189: publicar CANON commit 6ed235cc7ee23e776fc8377a8b37ecbada63095a (PR #923: asistente encendido por defecto, el servidor decide; interruptor «Asistente en este aparato» en Configuración, solo Admin). Sin cambios de Worker (sigue Worker 66). Solo estáticos web: sin migraciones, sin secretos. CI verde en 580d4ab4. Rollback a Web 188 (f7f2bbdc, run 39724886134).",
-  "retry_attempt": 189,
-  "retry_reason": "Aprobación del dueño 2026-10-22: el asistente no aparecía en su PC (pedía ?asistente=1).",
-  "requested_at_utc": "2026-10-22T12:00:00Z",
-  "approved_base": "6ed235cc7ee23e776fc8377a8b37ecbada63095a"
+  "note": "Web 190: publicar CANON commit 48a8d9203029826812fb4613894f2a7f70f4b569 (PR #924: permisos por empleado en Configuración › Usuarios y PIN; candado 'permisos-por-empleado' en false; 10 casillas, todas apagadas por defecto, falla cerrado). Worker 68 ya publicado primero (run 39789201843). Solo estáticos web: sin migraciones, sin secretos. Respaldo D1 run 39781034687. Rollback a Web 189 (bee5ea1d, run 39772011368).",
+  "retry_attempt": 190,
+  "retry_reason": "OK del dueño 2026-10-22 para publicar #924 (Worker primero, luego web).",
+  "requested_at_utc": "2026-10-22T14:00:00Z",
+  "approved_base": "48a8d9203029826812fb4613894f2a7f70f4b569"
 }

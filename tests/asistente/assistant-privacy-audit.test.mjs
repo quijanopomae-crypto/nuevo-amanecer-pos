@@ -127,3 +127,33 @@ test('7) <datos_pos>: el nombre de producto pasa por el redactor (cualquier rol)
   assert.match(SRV, /resumen: redactDeep\(role === 'owner' \? r\.resumen : stripOwnerKeys\(r\.resumen\)\)/);
   assert.deepEqual(redactDeep({ a: ['x 987654321', 2, null], b: { c: 'ok' } }), { a: ['x ' + redactText('987654321'), 2, null], b: { c: 'ok' } });
 });
+
+// ---------- (1) tabla de la consulta de deudas (prueba en vivo 22-10: la tarjeta mostraba nombres y «Mostrando 10 de 22057.72») ----------
+test('(1) deudas_clientes: la TABLA también va con «cliente #código» (sin nombres del servidor), igual que el texto; el pie cuenta clientes, no soles', async () => {
+  const { makeDoc } = await import('./fake-dom.mjs');
+  const customers = Array.from({ length: 14 }, (_, i) => ({ id: i ? String(1729550000000 + i) : '45678912', nombre: 'Cliente Real Apellido ' + i }));
+  const credits = customers.map((c, i) => ({ cliente: c.id, saldo: 1000 + i * 37.25 }));
+  const r = await runAssistantQuery(memoryReader({ products: [], customers, credits }), { tipo: 'deudas_clientes' });
+  const js = JSON.stringify({ filas: r.filas, resumen: r.resumen });
+  for (const c of customers) assert.ok(!js.includes(c.nombre), 'sin nombre: ' + c.nombre);
+  assert.ok(!js.includes('45678912'), 'un id con forma de DNI no sale como código');
+  assert.ok(r.filas.every((f) => /^(?:cliente #\d{13}|Cliente \d+)$/.test(f[0])), JSON.stringify(r.filas));
+  assert.deepEqual(r.resumen.mayores_saldos.map((x) => x.cliente), r.filas.slice(0, r.resumen.mayores_saldos.length).map((f) => f[0]), 'texto y tabla dicen lo mismo');
+  // UI: el pie usa la cantidad de clientes (no el total en soles) y la tabla pasa por linkCustomers como el texto del chat
+  const a = UI.indexOf('  function qCount(r)'), b = UI.indexOf('\n', a);
+  const qCount = new Function(UI.slice(a, b) + '\nreturn qCount;')();
+  assert.equal(qCount({ tipo: 'deudas_clientes', total: 22057.72, clientes: 22 }), 22);
+  assert.equal(qCount({ tipo: 'ventas_periodo', total: 22057.72 }), null);
+  assert.equal(qCount({ tipo: 'bajo_stock', total: 31 }), 31);
+  assert.equal(qCount({ tipo: 'deudas_clientes', total: 22057.72 }), null, 'Worker viejo sin «clientes»: sin pie, nunca la plata');
+  assert.match(UI, /var qt = p\.type === 'consulta' && C\.customerCodesIn \? c\.querySelector\('table\.q'\) : null; if \(qt\) linkCustomers\(qt, C\.customerCodesIn\(qt\.textContent, deps\.clientes\(\)\)\);/);
+  // la celda «cliente #código» se vuelve el mismo botón del chat (nombre de la lista de ESTE aparato)
+  const doc = makeDoc(), el = (t, c) => { const e = doc.createElement(t); if (c) e.className = c; return e; };
+  const s0 = UI.indexOf('  var CLI_RE = '), s1 = UI.indexOf('  // ---------- «Leer boleta con IA»');
+  const local = customers.slice(-2).map((c) => ({ id: c.id, nombre: c.nombre }));
+  const api = new Function('root', 'doc', 'C', 'el', 'addMsg', 'deps', UI.slice(s0, s1) + '\nreturn { linkCustomers: linkCustomers };')({}, doc, C, el, () => {}, { clientes: () => local });
+  const cell = doc.createElement('td'); cell.textContent = r.filas.find((f) => f[0] === 'cliente #' + local[0].id)[0];
+  const codes = C.customerCodesIn(cell.textContent, local); assert.deepEqual(codes, [local[0].id]);
+  assert.equal(api.linkCustomers(cell, codes), 1);
+  assert.equal(cell.byClass('na-asst-cli')[0].textContent, 'cliente #' + local[0].id + ' (' + local[0].nombre + ')');
+});
