@@ -7,6 +7,7 @@
 // - Tres adaptadores con los mismos eventos internos (texto, herramienta, uso, fin, error):
 //   OpenAI compatible (DeepSeek, OpenAI, xAI Grok, OpenRouter, Groq, Mistral, Together), Anthropic Messages y Google Gemini.
 
+import { createCodeMap } from './pos-assistant-codigos.js';
 const any = () => true;
 const re = (r) => (m) => r.test(String(m || ''));
 export const PROVIDERS = Object.freeze({
@@ -319,10 +320,16 @@ async function withRetries(cfg, req, outer, once) {
 }
 function retryAfterS(res) { const v = Number(res?.headers?.get?.('retry-after')); return Number.isFinite(v) && v > 0 ? v : null; }
 
+// Códigos de cliente neutros (pos-assistant-codigos.js): cfg.codes es el mapa de la conversación (pos-assistant.js lo comparte entre la
+// primera y la segunda llamada); sin él, uno por llamada. El cuerpo se reescribe en el fetch (todos los adaptadores, reintentos y respaldo)
+// y la respuesta vuelve con los códigos reales antes de cualquier lectura de la base o del aparato.
+const codesOf = (cfg) => (cfg && cfg.codes) || createCodeMap();
+const realResult = (codes, r) => (!r || typeof r !== 'object' ? r : { ...r, ...(typeof r.content === 'string' ? { content: codes.toReal(r.content) } : {}), ...(Array.isArray(r.calls) ? { calls: codes.callsToReal(r.calls) } : {}) });
 export async function callModel(cfg, req, fetchImpl, timeoutMs, outer) {
   if (!adapterOf(cfg)) return { error: 'upstream_error' };
-  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, fetchImpl, timeoutMs, outer));
-  return r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r;
+  const codes = codesOf(cfg), f = codes.fetch(fetchImpl);
+  const r = await withRetries(cfg, req, outer, (c) => callModelOnce(c, req, f, timeoutMs, outer));
+  return realResult(codes, r && typeof r.content === 'string' ? { ...r, content: stripThink(r.content) } : r);
 }
 async function callModelOnce(cfg, req, fetchImpl, timeoutMs, outer) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
@@ -345,7 +352,10 @@ export async function callModelStream(cfg, req, fetchImpl, idleMs, onText, onToo
   const firstMs = Math.min(idleMs, Number(opts.firstMs) > 0 ? Number(opts.firstMs) : hasImage(req) ? idleMs : FIRST_DATA_MS);
   // opts.stallMs (segunda llamada): corte por ESPERA SIN DATOS en todo el flujo (no un tope total: cada trozo reinicia la cuenta). Con foto, idleMs.
   const idle = Number(opts.stallMs) > 0 && !hasImage(req) ? Math.min(idleMs, Number(opts.stallMs)) : idleMs;
-  return withRetries(cfg, req, outer, (c) => callModelStreamOnce(c, req, fetchImpl, idle, onText, onTool, guard, outer, Math.min(firstMs, idle)));
+  const codes = codesOf(cfg), f = codes.fetch(fetchImpl); let st = null;
+  const r = await withRetries(cfg, req, outer, (c) => { st = codes.streamer(onText); return callModelStreamOnce(c, req, f, idle, st.push, onTool, guard, outer, Math.min(firstMs, idle)); });
+  if (st) { if (r && !r.error && !r.forbidden) st.flush(); else st.drop(); } // la cola retenida («C-00») sale solo si terminó bien
+  return realResult(codes, r);
 }
 async function callModelStreamOnce(cfg, req, fetchImpl, idleMs, onText, onTool, guard, outer, firstMs = idleMs) {
   const A = adapterOf(cfg); if (!A) return { error: 'upstream_error' };
