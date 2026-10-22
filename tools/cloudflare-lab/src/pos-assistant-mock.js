@@ -37,6 +37,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
     const cli = /estado de cuenta (?:de|del cliente)?\s*([a-z ]{3,40})/.exec(t);
     return { content: 'Armé el documento. Es interno, NO es comprobante SUNAT.', calls: [call('preparar_documento', { tipo, ...dates(t), ...(cli ? { cliente: cli[1].trim() } : {}) })] };
   }
+  if (/sugerencias? de compra|sugiereme (que )?comprar|que (debo|tengo que|me conviene|deberia) comprar|cuanto (debo|tengo que|deberia) (comprar|pedir)/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sugerencias_compra' })] };
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
   if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
