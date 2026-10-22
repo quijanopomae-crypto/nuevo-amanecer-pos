@@ -311,6 +311,13 @@
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
+    refreshProducts: async function () {
+      var client = root.NuevoAmanecerCanonical;
+      if (!client || typeof client.refresh !== 'function') throw new Error('catalog_unavailable');
+      var pending = typeof client.pendingSnapshot === 'function' ? client.pendingSnapshot() : null;
+      if (pending && pending.command === 'product.create') throw new Error('product_pending');
+      await client.refresh();
+    },
     navigate: function (id) { try { root.NA_MENU_NAVIGATION.navigate(id); } catch (_) { try { root.goPage(id); } catch (__) {} } },
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
@@ -332,7 +339,7 @@
         if (!prod && !nm) { pin.placeholder = 'Complete el producto'; pin.setAttribute('aria-invalid', 'true'); pin.dataset.naNeed = '1'; }
         row.querySelector('.na-pur-qty').value = l.cantidad;
         if (l.costo_unitario != null) row.querySelector('.na-pur-cost').value = l.costo_unitario;
-        if (!prod) row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b';
+        if (!prod) { row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b'; purchaseProductButton(w, row); }
       });
       w.dispatchEvent(new Event('input', { bubbles: true }));
     },
@@ -377,6 +384,46 @@
     },
     businessName: function () { return 'Botica Nuevo Amanecer'; }
   };
+  // Conserva el borrador de compra mientras se guarda la ficha normal del producto.
+  // No llama comandos ni suma stock: Nuevo producto y Registrar compra mantienen sus permisos.
+  function purchaseProductButton(w, row) {
+    var box = el('div', 'na-asst-purchase-product'), button = el('button', 'na-asst-ok'), note = el('small', 'na-asst-note');
+    box.style.gridColumn = '1 / -1'; button.type = 'button'; button.textContent = 'Crear o vincular producto';
+    note.textContent = 'Busca uno existente o crea su ficha. El stock se sumará al registrar la compra.';
+    box.appendChild(button); box.appendChild(note); row.appendChild(box);
+    button.addEventListener('click', async function () {
+      if (!isOwnerAccess()) { note.textContent = 'Vuelve a entrar como Admin.'; return; }
+      button.disabled = true;
+      try { await deps.refreshProducts(); }
+      catch (_) { button.disabled = false; note.textContent = 'No pude verificar el catálogo o hay un producto pendiente. No repitas el guardado; revisa Inventario y vuelve a intentar.'; return; }
+      button.disabled = false;
+      if (!isOwnerAccess() || !w.parentNode) return;
+      var pin = row.querySelector('.na-pur-prod'), cost = row.querySelector('.na-pur-cost').value;
+      var draft = C.purchaseProductDraft({ nombre: pin.value, costo_unitario: cost === '' ? null : Number(cost) }, deps.productos());
+      if (!draft || draft.ambiguous) { note.textContent = 'Revisa el nombre y selecciona la presentación correcta en el catálogo.'; return; }
+      if (draft.product_id) { pin.value = draft.nombre; pin.style.outline = ''; note.textContent = 'Producto existente vinculado. Revisa cantidad y costo.'; w.dispatchEvent(new Event('input', { bubbles: true })); return; }
+      var display = w.style.display; w.style.display = 'none';
+      if (!deps.openNewProduct(draft)) { w.style.display = display; note.textContent = 'No se pudo abrir Nuevo producto. Revisa el catálogo.'; return; }
+      var modal = doc.getElementById('mProd');
+      note.textContent = 'Completa el precio de venta y guarda la ficha con stock inicial cero.';
+      var observer = new root.MutationObserver(async function () {
+        if (modal.classList.contains('open')) return;
+        observer.disconnect();
+        if (!w.parentNode || !isOwnerAccess()) return;
+        w.style.display = display; button.disabled = true;
+        try { await deps.refreshProducts(); }
+        catch (_) { note.textContent = 'No pude comprobar el producto guardado. No lo crees otra vez; revisa Inventario y vuelve a intentar.'; button.disabled = false; return; }
+        button.disabled = false;
+        if (!isOwnerAccess() || !w.parentNode) return;
+        var name = doc.getElementById('pNombre'), linked = C.purchaseProductDraft({ nombre: name ? name.value : draft.nombre }, deps.productos());
+        if (linked && linked.product_id) { pin.value = linked.nombre; pin.style.outline = ''; note.textContent = 'Producto vinculado. Revisa la compra antes de registrarla.'; }
+        else note.textContent = 'No se encontró una ficha guardada para vincular. Revisa el catálogo y los datos antes de continuar.';
+        w.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+  }
+
   var gate = C.createGate(deps);
 
   // ---------- Panel ----------

@@ -150,7 +150,8 @@ test('5) fillPurchase: sin el producto en el catálogo local un nombre tapado NO
   assert.ok(PURCH.includes("overlay('naPurchaseDialog'") && PURCH.includes('id="naPurSupplier"') && PURCH.includes('id="naPurDoc"') && PURCH.includes('na-pur-cancel') && PURCH.includes('na-pur-add') && PURCH.includes('na-pur-prod'));
   DOC = { body: new N('body') };
   const src = sliceFn(UI, 'fillPurchase: function (w, p) {', '    // Ficha EXISTENTE').replace(/^fillPurchase: /, '').replace(/,\s*$/, '');
-  const ctx = vm.createContext({ C, Event: class { constructor(t) { this.type = t; } }, deps: { productos: () => [{ id: 'P1', nombre: 'Leche Gloria 400g' }] } });
+  const missingRows = [];
+  const ctx = vm.createContext({ C, purchaseProductButton: (w, row) => missingRows.push(row), Event: class { constructor(t) { this.type = t; } }, deps: { productos: () => [{ id: 'P1', nombre: 'Leche Gloria 400g' }] } });
   const fill = vm.runInContext('(' + src + ')', ctx);
   const w = DOC.body.appendChild(purchaseDialog());
   const p = { type: 'compra', proveedor: 'Bodega Juan', documento: 'F001-', lineas: [{ product_id: 'P1', nombre: 'Leche [dato del Admin]', cantidad: 2, costo_unitario: 3 }, { nombre: 'Arroz DNI ****5678', cantidad: 1, costo_unitario: 4 }, { nombre: 'Azúcar rubia', cantidad: 5, costo_unitario: 2 }, { nombre: '▪▪▪▪ Fideo', cantidad: 1 }] };
@@ -161,6 +162,7 @@ test('5) fillPurchase: sin el producto en el catálogo local un nombre tapado NO
   assert.equal(prods[2].dataset.naNeed, undefined); assert.equal(prods[0].dataset.naNeed, undefined);
   assert.ok(prods.every((i) => !C.maskLeft(i.value)));
   assert.equal(w.dataset.naAsst, '1', 'marcada como prellenada desde el asistente');
+  assert.equal(missingRows.length, 3, 'solo las filas sin producto reciben el enlace de alta/vinculación');
 });
 
 test('2) 403 forbidden_role con 4 tarjetas: TODAS salen de pantalla y memoria (puerta, _manual, campos), «Nueva compra» prellenada se vacía y se cierra con su «Cancelar», refreshAccess; nada en el almacenamiento', async () => {
