@@ -54,3 +54,26 @@ test('index.html y sw.js cargan el módulo después de share-receipt-ui.js',()=>
   assert.match(sw,/\.\/js\/modules\/ticket\/compartir-pdf-whatsapp\.js/);assert.match(sw,/\.\/css\/compartir-pdf-whatsapp\.css/);
 });
 test('currentReceipt devuelve null sin diálogo abierto',()=>{assert.equal(load().NAReceiptShare.currentReceipt(),null);});
+
+function fakeDom(withDialog){
+  const calls=[];let dialog=withDialog?{id:'naReceiptShare',classList:{contains:()=>false}}:null;const body={tag:'body'};
+  class MO{constructor(cb){this.cb=cb;this.on=false;MO.all.push(this);}observe(t,o){this.on=true;this.t=t;calls.push({t,o});}disconnect(){this.on=false;}}
+  MO.all=[];
+  const document={readyState:'complete',body,documentElement:body,getElementById:id=>id==='naReceiptShare'?dialog:null,addEventListener(){}};
+  return {calls,MO,document,setDialog(d){dialog=d;},get dialog(){return dialog;}};
+}
+test('observa solo el diálogo si ya existe, sin subtree sobre body',()=>{
+  const f=fakeDom(true);load({document:f.document,MutationObserver:f.MO});
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].t,f.dialog);
+  assert.deepEqual({...f.calls[0].o,attributeFilter:[...f.calls[0].o.attributeFilter]},{attributes:true,attributeFilter:['class']});
+  assert.ok(!f.calls.some(c=>c.o.subtree));
+});
+test('sin diálogo espera en body solo con childList y luego cambia al diálogo',()=>{
+  const f=fakeDom(false);load({document:f.document,MutationObserver:f.MO});
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].t,f.document.body);
+  assert.deepEqual({...f.calls[0].o},{childList:true});
+  const wait=f.MO.all[0];wait.cb([]);assert.equal(wait.on,true,'sigue esperando sin diálogo');
+  f.setDialog({id:'naReceiptShare',classList:{contains:()=>false}});wait.cb([]);
+  assert.equal(wait.on,false,'desconecta el observador de body');
+  assert.equal(f.calls.length,2);assert.equal(f.calls[1].t,f.dialog);assert.ok(!f.calls.some(c=>c.o.subtree));
+});

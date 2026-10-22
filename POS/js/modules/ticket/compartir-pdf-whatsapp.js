@@ -47,7 +47,10 @@
     const st=el('p','na-receipt-status');st.id='naPdfWaStatus';st.setAttribute('role','status');
     box.append(button,hint,st);body.append(box);return true;
   }
-  function watch(){if(!root.document||typeof root.MutationObserver!=='function')return;const obs=new root.MutationObserver(()=>{const o=root.document.getElementById('naReceiptShare');if(o&&o.classList.contains('open'))install();});obs.observe(root.document.body||root.document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});}
+  function check(){const o=root.document.getElementById('naReceiptShare');if(o&&o.classList.contains('open'))install();}
+  function watchDialog(o){const obs=new root.MutationObserver(check);obs.observe(o,{attributes:true,attributeFilter:['class']});check();return obs;}
+  function watch(){if(!root.document||typeof root.MutationObserver!=='function')return;const o=root.document.getElementById('naReceiptShare');if(o){watchDialog(o);return;}
+    const host=root.document.body||root.document.documentElement;const wait=new root.MutationObserver(()=>{const d=root.document.getElementById('naReceiptShare');if(!d)return;wait.disconnect();watchDialog(d);});wait.observe(host,{childList:true});}
   if(root.document){if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',watch);else watch();}
   root.NA_PDF_WHATSAPP=Object.freeze({LOCK,available,chatText,chatUrl,canShareFile,send,install});
 })(globalThis);
