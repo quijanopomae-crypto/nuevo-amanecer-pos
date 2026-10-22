@@ -126,7 +126,7 @@ test('7) <datos_pos>: el nombre de producto pasa por el redactor (cualquier rol)
   const q = await runAssistantQuery(reader, { tipo: 'compras_recientes' });
   const forModel = redactDeep(q.resumen);
   assert.ok(!/987654321|45678912/.test(JSON.stringify(forModel)), JSON.stringify(forModel)); assert.equal(forModel.compras, 1);
-  assert.match(SRV, /resumen: redactDeep\(role === 'owner' \? r\.resumen : stripOwnerKeys\(r\.resumen\), 0, redactRefs\)/); // #931: mismo redactor, con «producto #código» protegido
+  assert.match(SRV, /resumen: redactDeep\(seesOwnerData\(role\) \? r\.resumen : stripOwnerKeys\(r\.resumen\), 0, redactRefs\)/); // #931: mismo redactor, con «producto #código» protegido
   assert.deepEqual(redactDeep({ a: ['x 987654321', 2, null], b: { c: 'ok' } }), { a: ['x ' + redactText('987654321'), 2, null], b: { c: 'ok' } });
 });
 
