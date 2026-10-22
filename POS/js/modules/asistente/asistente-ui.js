@@ -474,7 +474,7 @@
     var n = prod && (prod.nombre || prod.name); return n ? n : (l ? l.nombre : ''); }
   // cuántas filas hay en total: en deudas es «clientes» y en ventas no hay cuenta («total» es plata: antes salía «Mostrando 10 de 22057.72»)
   // Solo donde «total» ES una cuenta de filas (bajo stock, sin costo); en caja, compras o ventas es plata (salía «Mostrando 1 de 20»).
-  function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'bajo_stock' || r.tipo === 'sin_costo' ? r.total : null; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
+  function qCount(r) { var n = r.tipo === 'deudas_clientes' ? r.clientes : r.tipo === 'bajo_stock' || r.tipo === 'sin_costo' || r.tipo === 'creditos_atrasados' ? r.total : null; return typeof n === 'number' && Number.isInteger(n) ? n : null; }
   function cardHtml(p) {
     var E = C.esc, rows = '';
     if (p.type === 'pasos') return '<h4>' + E(p.title) + '</h4><ol>' + p.pasos.map(function (s) { return '<li>' + E(s) + '</li>'; }).join('') + '</ol>' +

@@ -115,6 +115,8 @@ test('tarjetas: «Mostrando N de M» solo con cuentas (no con plata), tabla vac�
   assert.equal(qCount({ tipo: 'compras_recientes', total: 20 }), null);
   assert.equal(qCount({ tipo: 'top_productos', total: 300 }), null);
   assert.equal(qCount({ tipo: 'sin_costo', total: 7 }), 7);
+  assert.equal(qCount({ tipo: 'creditos_atrasados', total: 3, total_soles: 250 }), 3);
+  assert.equal(qCount({ tipo: 'deudas_clientes', total: 99.5, clientes: 4 }), 4);
   assert.match(UI, /!\(r\.filas && r\.filas\.length\) \? '<div class="note na-asst-empty">Sin datos\.<\/div>'/);
   assert.match(UI, /if \(sig && shownSigs\[sig\] != null && shownSigs\[sig\] !== turnNo\) return null;/);
   assert.match(UI, /cardAnchor = bubble;/);
