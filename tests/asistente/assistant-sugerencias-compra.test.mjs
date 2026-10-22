@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { assistantChatRoute, createMemoryUsageStore, toolsForRole, employeeQueryDenied, QUERY_ADMIN_ONLY } from '../../tools/cloudflare-lab/src/pos-assistant.js';
-import { runAssistantQuery, memoryReader, canonicalReader, purchaseSuggestions, QUERY_TYPES, SUGGEST_RULES } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { runAssistantQuery, memoryReader, canonicalReader, purchaseSuggestions, purchasePlan, isGenericProduct, isServiceProduct, GENERIC_PRODUCT_NAMES, SERVICE_CATEGORIES, QUERY_TYPES, SUGGEST_RULES } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import { PROVIDERS } from '../../tools/cloudflare-lab/src/pos-assistant-providers.js';
 import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
 
@@ -118,6 +118,83 @@ test('lectura cortada (muchas ventas o líneas): truncado llega al resultado, al
   // Lector canónico: se marca si se cortan las LÍNEAS (no solo las ventas).
   const Q = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant-queries.js', import.meta.url), 'utf8');
   assert.match(Q, /m\.truncated = !!\(sales\.truncated \|\| items\.truncated\)/);
+});
+
+// ---------- Puntos 2 y 4 (#929): genéricos y servicios fuera, «stock sin contar» y «revisar datos» aparte ----------
+const prod = (id, nombre, stock, min = 0, extra = {}) => ({ id, nombre, stock, min, costo: 1, precio: 2, controla: true, ...extra });
+
+test('genéricos: VARIOS, VERDURAS, RECARGAS, PRÉSTAMOS (sin tildes ni mayúsculas, entero o prefijo claro) y categoría servicios/servicio', () => {
+  assert.deepEqual([...GENERIC_PRODUCT_NAMES], ['VARIOS', 'VERDURAS', 'RECARGAS', 'PRÉSTAMOS']); assert.ok(Object.isFrozen(GENERIC_PRODUCT_NAMES));
+  assert.deepEqual([...SERVICE_CATEGORIES], ['servicios', 'servicio']);
+  for (const n of ['VARIOS', 'varios', ' Verduras ', 'VERDURAS - kg', 'Recargas', 'RECARGA CLARO', 'PRÉSTAMOS', 'prestamos', 'Préstamo 50']) assert.equal(isGenericProduct({ nombre: n }), true, n);
+  for (const n of ['VARIOSITO', 'Arroz verduras', 'Pila recargable', 'Recargador USB', 'PEPSI 500 ml', '', null]) assert.equal(isGenericProduct({ nombre: n }), false, String(n));
+  for (const c of ['servicios', 'Servicios', 'SERVICIO', ' servicio ']) { assert.equal(isServiceProduct({ categoria: c }), true, c); assert.equal(isGenericProduct({ nombre: 'Pago luz', categoria: c }), true, c); }
+  for (const c of ['abarrotes', 'servicios-extra', null, undefined]) assert.equal(isServiceProduct({ categoria: c }), false, String(c));
+  // La lista se puede ampliar (p. ej. si el dueño decide que DULCES Y CARAMELOS es genérico).
+  assert.equal(isGenericProduct({ nombre: 'DULCES Y CARAMELOS' }), false);
+  assert.equal(isGenericProduct({ nombre: 'Dulces y caramelos' }, [...GENERIC_PRODUCT_NAMES, 'DULCES Y CARAMELOS']), true);
+});
+
+test('genéricos y servicios nunca entran en sugerencias, ni en sin contar ni en revisar datos (solo se cuentan)', () => {
+  const list = [prod('G1', 'VERDURAS', -7660), prod('G2', 'VARIOS', 0), prod('G3', 'RECARGAS', -12, 5), prod('G4', 'Préstamos', 0),
+    prod('S1', 'Pago de luz', 0, 3, { categoria: 'servicios' }), prod('S2', 'Free Fire', -2, 0, { categoria: 'servicio' }), prod('R1', 'Arroz', 0, 5)];
+  const sold = new Map([['G1', 900], ['G2', 50], ['S1', 10], ['R1', 30]]);
+  const plan = purchasePlan(list, sold, 30);
+  assert.deepEqual(plan.sugerencias.map((x) => x.id), ['R1']); assert.deepEqual(plan.sinContar, []); assert.deepEqual(plan.revisarDatos, []);
+  assert.equal(plan.genericos, 6);
+  assert.deepEqual(purchaseSuggestions(list, sold, 30).map((x) => x.id), ['R1'], 'purchaseSuggestions sigue devolviendo solo la lista');
+});
+
+test('revisar datos: stock por debajo de −50 no es compra (aunque tenga ventas); −50 justo sí se sugiere', () => {
+  const list = [prod('N1', 'Azúcar rubia', -80, 2), prod('N2', 'Aceite', -51), prod('N3', 'Fideos', -50, 0), prod('N4', 'Leche', -300, 0)];
+  const plan = purchasePlan(list, new Map([['N1', 60], ['N3', 30]]), 30);
+  assert.deepEqual(plan.revisarDatos.map((x) => [x.id, x.stock]), [['N4', -300], ['N1', -80], ['N2', -51]], 'más negativo primero');
+  assert.equal(plan.revisarDatos.find((x) => x.id === 'N1').vendidos, 60);
+  assert.deepEqual(plan.sugerencias.map((x) => x.id), ['N3']); assert.deepEqual(plan.sinContar, [], 'bajo −50 va a revisar, no a sin contar');
+  assert.equal(SUGGEST_RULES.revisarBajo, -50);
+});
+
+test('stock sin contar: 0 o negativo, sin mínimo y sin ventas; con mínimo o con ventas sí es sugerencia', () => {
+  const list = [prod('A', 'Sin nada', 0), prod('B', 'Negativo sin nada', -3), prod('C', 'Con mínimo', 0, 2), prod('D', 'Con ventas', -1, 0), prod('E', 'Mínimo vacío', 0, null), prod('F', 'Hay stock', 4, 0)];
+  const plan = purchasePlan(list, new Map([['D', 15]]), 30);
+  assert.deepEqual(plan.sinContar.map((x) => x.id), ['B', 'A', 'E']); assert.deepEqual(plan.sugerencias.map((x) => x.id).sort(), ['C', 'D']);
+  assert.ok(plan.sugerencias.every((x) => x.sinDatos === false), 'ya no hay «sin datos» en la lista: esos son stock sin contar');
+});
+
+test('consulta: sin_contar y revisar_datos aparte (lista con tope de 20), texto que lo dice y al modelo solo totales y códigos', async () => {
+  const many = Array.from({ length: 25 }, (_, i) => prod('Z' + String(i).padStart(2, '0'), 'Producto viejo ' + i, 0));
+  const products = [...many, prod('V', 'VERDURAS', -7660), prod('X', 'Gaseosa 3 L', -120, 2), prod('P', 'Pan', 0, 10)];
+  const r = await runAssistantQuery(memoryReader({ products, sales: [], saleItems: [] }), { tipo: 'sugerencias_compra' }, NOW);
+  assert.equal(r.total, 1); assert.equal(r.filas[0][1], 'Pan'); assert.equal(SUGGEST_RULES.listaMax, 20);
+  assert.equal(r.sin_contar.total, 25); assert.equal(r.sin_contar.lista.length, 20); assert.deepEqual(r.sin_contar.lista[0], { codigo: 'Z00', nombre: 'Producto viejo 0', stock: 0 });
+  assert.deepEqual(r.revisar_datos, { total: 1, lista: [{ codigo: 'X', nombre: 'Gaseosa 3 L', stock: -120, vendidos: 0 }] }, 'VERDURAS es genérico: no va a revisar');
+  assert.equal(r.genericos_excluidos, 1);
+  assert.match(r.texto, /Sugiero reponer 1 producto/); assert.match(r.texto, /1 producto tiene el stock muy en negativo \(menos de -50\): revisa sus datos antes de comprar\./);
+  assert.match(r.texto, /25 productos están en 0 o en negativo, sin mínimo y sin ventas en 30 días: es stock sin contar, no los sugiero\./);
+  assert.ok(!/VERDURAS|Producto viejo|Gaseosa/.test(r.texto));
+  assert.deepEqual(r.resumen.revisar_datos, { total: 1, codigos: ['X'] }); assert.equal(r.resumen.sin_contar.total, 25); assert.equal(r.resumen.sin_contar.codigos.length, 20);
+  assert.equal(r.resumen.genericos_excluidos, 1);
+  const sent = JSON.stringify(r.resumen); assert.ok(!/Producto viejo|Gaseosa|VERDURAS|Pan"/.test(sent), sent); assert.ok(sent.length < 1500, String(sent.length));
+  // Nada que comprar, pero sí cosas aparte: el texto igual las menciona.
+  const only = await runAssistantQuery(memoryReader({ products: [prod('A', 'Viejo', 0), prod('X', 'Gaseosa', -99, 1)], sales: [], saleItems: [] }), { tipo: 'sugerencias_compra' }, NOW);
+  assert.equal(only.total, 0); assert.match(only.texto, /^Según las ventas de los últimos 30 días no hace falta reponer nada\. 1 producto tiene el stock muy en negativo.*\. 1 producto está en 0 o en negativo.*stock sin contar, no los sugiero\.$/);
+});
+
+test('lector canónico: pasa la categoría del producto (para reconocer servicios)', () => {
+  const Q = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant-queries.js', import.meta.url), 'utf8');
+  assert.match(Q, /categoria: p\.category \?\? null/);
+});
+
+test('bajo_stock («¿qué falta reponer?»): servicios fuera, igual que la pestaña «Crítico» de Inventario; el texto no cambia', async () => {
+  const products = [prod('A', 'Arroz', 0, 5), prod('S1', 'Recarga Claro', 0, 0, { categoria: 'servicios' }), prod('S2', 'Préstamo', -4, 0, { categoria: 'Servicio' }), prod('V', 'VERDURAS', -7660, 0, { categoria: 'abarrotes' })];
+  const r = await runAssistantQuery(memoryReader({ products }), { tipo: 'bajo_stock' });
+  assert.equal(r.total, 2); assert.deepEqual(r.filas.map((f) => f[0]).sort(), ['Arroz', 'VERDURAS'], 'solo se quitan los servicios (por categoría), como en la pantalla');
+  assert.ok(!JSON.stringify(r).includes('Recarga Claro') && !JSON.stringify(r).includes('Préstamo'));
+  assert.match(r.texto, /^Hay 2 productos en o bajo el mínimo\. Los más urgentes: VERDURAS \(-7660\), Arroz \(0\)\.$/);
+  assert.equal(r.resumen.total, 2); assert.equal(r.resumen.revisados, 4);
+  // Sin categoría (datos viejos): como antes.
+  const old = await runAssistantQuery(memoryReader({ products: [prod('A', 'Arroz', 0, 5)] }), { tipo: 'bajo_stock' });
+  assert.equal(old.total, 1);
 });
 
 test('consulta: nada que reponer -> texto simple y lista vacía', async () => {
