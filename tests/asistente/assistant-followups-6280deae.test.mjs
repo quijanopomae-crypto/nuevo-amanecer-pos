@@ -74,7 +74,7 @@ test('1) retención: 120 filas de una tabla de venta / neutra y 120 ítems de un
   const neutral = '| Producto | Monto |\n|---|---|\n' + Array.from({ length: N }, (_, i) => `| Producto ${nm(i)} | S/ 2.${p2(i)} |\n`).join('');
   const list = Array.from({ length: N }, (_, i) => `- Producto ${nm(i)} S/ 2.${p2(i)}\n`).join('');
   const got = [lag(sale), lag(neutral), lag(list)]; console.log('# retención máx. por fila (venta, neutra, lista): ' + got.join(', '));
-  assert.deepEqual(got, [21, 21, 55]); // iguales a 6280deae (medido con el mismo arnés: 21, 21, 55)
+  assert.deepEqual(got, [31, 31, 67]); // (#962, diseño simple) medido: 21, 21, 55 + la cola fija LABEL_TAIL (10) de la etapa de etiquetas; // iguales a 6280deae (medido con el mismo arnés: 21, 21, 55)
 });
 
 // ---------- 2) punto al final de la línea del monto ----------
