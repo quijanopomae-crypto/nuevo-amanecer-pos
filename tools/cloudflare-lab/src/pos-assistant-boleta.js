@@ -7,7 +7,7 @@
 //   el Admin revisa y confirma en el aparato, y eso solo PRELLENA la «Nueva compra» de siempre.
 // - Empleado o aparato sin rol: 403 boleta_admin_only. Nunca se registra la foto ni la clave; los registros llevan solo códigos.
 import { assistantAccess } from './pos-assistant-access.js';
-import { reserveUsage, createSettingsUsageStore, readBounded, IMAGE_UNSUPPORTED } from './pos-assistant.js';
+import { reserveUsage, createSettingsUsageStore, readBounded, IMAGE_UNSUPPORTED, redactText } from './pos-assistant.js';
 import { resolveProvider, callModel, stripThink } from './pos-assistant-providers.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 
@@ -66,7 +66,10 @@ export function boletaChecks(b) {
 }
 // Pistas de correcciones anteriores (las manda el aparato; solo productos/unidades, nunca clientes). Cortas y limpias.
 export function cleanHints(h) {
-  return (Array.isArray(h) ? h : []).slice(0, BOLETA_LIMITS.maxHints).map((x) => ({ campo: ['cod', 'descripcion', 'um'].includes(x?.campo) ? x.campo : null, de: str(x?.de, 60), a: str(x?.a, 60) }))
+  // (auditoría de privacidad 2026-10-22) además pasan por el MISMO redactor del asistente: si el redactor tapa algo (DNI, teléfono, correo,
+  // RUC de persona, clave…), esa pista no se manda.
+  const safe = (v) => { const t = str(v, 60); return t && redactText(t) === t ? t : null; };
+  return (Array.isArray(h) ? h : []).slice(0, BOLETA_LIMITS.maxHints).map((x) => ({ campo: ['cod', 'descripcion', 'um'].includes(x?.campo) ? x.campo : null, de: safe(x?.de), a: safe(x?.a) }))
     .filter((x) => x.campo && x.de && x.a && !/\d{8,}|@/.test(x.de + x.a));
 }
 export function boletaRequest(image, hints = []) {

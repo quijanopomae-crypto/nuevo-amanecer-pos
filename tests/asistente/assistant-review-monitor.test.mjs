@@ -70,9 +70,10 @@ test('cliente: un error justo después de tocar un cliente guarda SOLO su códig
   b.fire(b.L, 'error', { message: 'otro', filename: 'a.js', lineno: 1 });
   b.tick(20000); b.fire(b.L, 'error', { message: 'tarde', filename: 'a.js', lineno: 2 }); // pasó la ventana de 15 s
   const s = b.saved();
-  assert.deepEqual(s.e.map((x) => [x.msg.slice(0, 9), x.cli || null, x.accion || null]), [['TypeError', '1729550000000', 'venta a crédito'], ['Error: pa', '1729550000000', 'abono'], ['otro', null, null], ['tarde', null, null]]);
+  // Solo el TIPO del error: el mensaje (con el nombre del cliente) nunca se guarda.
+  assert.deepEqual(s.e.map((x) => [x.msg, x.cli || null, x.accion || null]), [['TypeError', '1729550000000', 'venta a crédito'], ['Error', '1729550000000', 'abono'], ['Error', null, null], ['Error', null, null]]);
   const all = JSON.stringify(s) + JSON.stringify(b.R.data());
-  for (const bad of ['45678912', '987654321', 'Jr. Lima']) assert.ok(!all.includes(bad), bad);
+  for (const bad of ['Rosa', 'Quispe', 'Mamani', 'no se pudo registrar', 'pago falló', '45678912', '987654321', 'Jr. Lima']) assert.ok(!all.includes(bad), bad);
   assert.ok(!/"nombre"|"dni"|"telefono"/.test(all));
   // el nombre se resuelve SOLO en el aparato y abre al cliente con la función del POS
   assert.equal(b.R.customerName('1729550000000'), 'Rosa Quispe Mamani'); assert.equal(b.R.customerName('999'), null);
