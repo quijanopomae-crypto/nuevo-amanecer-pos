@@ -6,13 +6,13 @@ import { canonicalRead } from './a6-canonical.js';
 
 // Frases seguidas con un solo punto al final de cada una (Bot 4: nada de «unid..»).
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
-export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'sugerencias_compra', 'resumen_dia', 'resumen_mes', 'caja_abierta']);
+export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'creditos_atrasados', 'compras_recientes', 'sugerencias_compra', 'resumen_dia', 'resumen_mes', 'caja_abierta']);
 // Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
 export const SUMMARY_TYPES = Object.freeze(['resumen_dia', 'resumen_mes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
 const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos por reponer', sin_costo: 'Productos sin costo', ventas_periodo: 'Ventas del período',
-  top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', compras_recientes: 'Compras recientes',
+  top_productos: 'Productos más vendidos', deudas_clientes: 'Deudas de clientes', creditos_atrasados: 'Créditos atrasados', compras_recientes: 'Compras recientes',
   sugerencias_compra: 'Sugerencias de compra',
   resumen_dia: 'Resumen del día', resumen_mes: 'Resumen del mes', caja_abierta: 'Caja abierta' };
 // Sugerencias de compra (solo Admin, solo lectura): con el stock, el mínimo y lo vendido en los últimos días (todo dato que ya existe).
@@ -197,8 +197,11 @@ export function canonicalReader(db) {
       }
       return out;
     },
-    async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null })); },
-    async customers() { const rows = await all('customers'); return rows.map((c) => ({ id: String(c.customer_id), nombre: c.name })); },
+    async credits() { const rows = await all('credits'); const list = rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0,
+      original: cents(c.opening_balance_cents ?? c.original_amount_cents), vence: c.due_date || c.due_value || termDue(c.issued_value, c.term_days), cuotas: parseCuotas(c.installments_json) }));
+      list.truncated = rows.truncated; return list; },
+    async customers() { const rows = await all('customers'); const list = rows.map((c) => ({ id: String(c.customer_id), nombre: c.name, dni: c.document == null ? null : String(c.document), tel: c.phone == null ? null : String(c.phone) }));
+      list.truncated = rows.truncated; return list; },
     async salesTotals(p) {
       const m = new Map(); for (const s of await salesIn(p)) { const dia = new Date(Date.parse(s.created_at) - 5 * 3600 * 1000).toISOString().slice(0, 10), k = dia + '|' + s.payment_method;
         const r = m.get(k) || { dia, metodo: s.payment_method, n: 0, c: 0 }; r.n++; r.c += Number(s.total_cents) || 0; m.set(k, r); }
@@ -285,8 +288,8 @@ export function memoryReader(data) {
   return {
     async products() { return (data.products || []).map((p) => ({ ...p })); },
     async productsById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), { ...p }); return out; },
-    async credits() { return (data.credits || []).map((c) => ({ ...c })); },
-    async customers() { return (data.customers || []).map((c) => ({ ...c })); },
+    async credits() { const l = (data.credits || []).map((c) => ({ ...c })); l.truncated = !!data.creditsTruncated; return l; },
+    async customers() { const l = (data.customers || []).map((c) => ({ ...c })); l.truncated = !!data.customersTruncated; return l; },
     async salesTotals(p) { const m = new Map(); for (const s of (data.sales || []).filter((x) => inRange(x, p))) { const k = dia(s.created_at) + '|' + s.metodo; const r = m.get(k) || { dia: dia(s.created_at), metodo: s.metodo, n: 0, c: 0 }; r.n++; r.c += s.total_cents; m.set(k, r); } return [...m.values()].sort((a, b) => a.dia.localeCompare(b.dia)); },
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
@@ -305,6 +308,74 @@ export function memoryReader(data) {
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); },
     async cashOpen() { return data.cash ? JSON.parse(JSON.stringify(data.cash)) : { ready: false }; }
   };
+}
+
+// ---------- Créditos atrasados (solo Admin) ----------
+// Fecha de vencimiento del crédito -> 'AAAA-MM-DD' (acepta AAAA-MM-DD[...] y DD/MM/AAAA). Sin fecha válida: null (no se cuenta como atrasado).
+export function dueDay(v) {
+  const s = String(v == null ? '' : v).trim(); let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) { const d = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\D.*)?$/.exec(s); if (d) m = [null, d[3], d[2].padStart(2, '0'), d[1].padStart(2, '0')]; }
+  if (!m) return null; const iso = m[1] + '-' + m[2] + '-' + m[3], t = Date.parse(iso + 'T00:00:00Z');
+  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === iso ? iso : null;
+}
+// Créditos sin vencimiento propio (p. ej. importados de CasaMarket): emisión + plazo en días, si los dos existen.
+export function termDue(issued, term) {
+  if (term == null || term === '') return null; const d = dueDay(issued), n = Number(term); if (!d || !Number.isInteger(n) || n < 0 || n > 3650) return null;
+  return new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+}
+// Cuotas (installments_json de canonical_credit_installments) -> [{ vence: 'AAAA-MM-DD', soles }] ordenadas. JSON roto o vacío: [].
+export function parseCuotas(v) {
+  let a = v; if (typeof a === 'string') { try { a = JSON.parse(a); } catch { return []; } }
+  if (!Array.isArray(a)) return [];
+  return a.map((q) => ({ n: Number(q?.number) || 0, vence: dueDay(q?.due_date ?? q?.vence), soles: q?.amount_cents != null ? (Number(q.amount_cents) || 0) / 100 : Number(q?.soles) || 0 }))
+    .filter((q) => q.vence && q.soles > 0).sort((a, b) => a.vence.localeCompare(b.vence) || a.n - b.n).map(({ vence, soles }) => ({ vence, soles }));
+}
+// Lo vencido de un crédito a la fecha «today». Con cuotas: lo pagado (original - saldo) cubre primero las cuotas más antiguas y
+// solo cuenta lo pendiente de las cuotas ya vencidas. Sin cuotas: todo el saldo desde su vencimiento. -> { soles, desde } o null.
+export function overduePart(c, today) {
+  const saldo = Number(c.saldo) || 0; if (!(saldo > 0)) return null;
+  const cuotas = Array.isArray(c.cuotas) ? c.cuotas : [];
+  if (cuotas.length) {
+    // Lo pagado sale de las propias cuotas (suma de cuotas - saldo), no del saldo inicial, que puede no coincidir.
+    const sum = cuotas.reduce((s, q) => s + q.soles, 0);
+    let pagado = Math.max(0, sum - saldo), soles = 0, desde = null;
+    for (const q of cuotas) { const pend = Math.max(0, q.soles - pagado); pagado = Math.max(0, pagado - q.soles);
+      if (pend > 0 && q.vence < today) { soles += pend; if (!desde) desde = q.vence; } }
+    // Saldo que no cubre ninguna cuota (cuotas que suman menos que el saldo): cuenta desde el vencimiento del crédito, si ya pasó.
+    const fuera = r2(saldo - sum), due = dueDay(c.vence);
+    if (fuera > 0 && due && due < today) { soles += fuera; if (!desde || due < desde) desde = due; }
+    soles = Math.min(saldo, r2(soles)); return soles > 0 ? { soles, desde } : null;
+  }
+  const due = dueDay(c.vence); if (!due) return undefined; // sin fecha
+  return due < today ? { soles: saldo, desde: due } : null;
+}
+const daysBetween = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+// Código que puede ver la IA: el id interno del cliente, solo si es corto, alfanumérico y NO es su DNI ni su teléfono. Si no, null.
+export function safeClientCode(id, customer) {
+  const code = String(id == null ? '' : id);
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(code)) return null;
+  const digits = (v) => String(v == null ? '' : v).replace(/\D/g, '');
+  if (customer && [customer.dni, customer.tel, customer.telefono].some((v) => v != null && digits(v).length >= 6 && digits(v) === digits(code))) return null;
+  return code;
+}
+export const OVERDUE_BUCKETS = Object.freeze([['1-7 días', 1, 7], ['8-30 días', 8, 30], ['31-90 días', 31, 90], ['más de 90 días', 91, Infinity]]);
+// Borrador de recordatorio de cobro: SOLO para la pantalla del Admin, que lo copia y lo envía él mismo. Nunca va al modelo.
+export function reminderDraft(nombre, soles, desde) {
+  const quien = String(nombre || '').trim(), saludo = quien ? 'Hola ' + quien + ', ' : 'Hola, ';
+  return saludo + 'le saludamos de Nuevo Amanecer. Le recordamos que tiene un saldo pendiente de S/ ' + r2(soles).toFixed(2) + ' vencido desde el ' + desde.split('-').reverse().join('/') +
+    '. Cuando pueda, acérquese a la tienda para ponerse al día. ¡Gracias!';
+}
+async function overdueCredits(reader, nowMs) {
+  const today = limaToday(nowMs), [credits, customers] = await Promise.all([reader.credits(), reader.customers()]);
+  const byId = new Map(customers.map((c) => [String(c.id), c])), by = new Map(); let sinFecha = 0;
+  for (const c of credits) {
+    const o = overduePart(c, today); if (o === undefined) { sinFecha++; continue; } if (!o) continue;
+    const dias = daysBetween(o.desde, today); if (dias < 1) continue;
+    const k = String(c.cliente), g = by.get(k) || { id: k, soles: 0, creditos: 0, dias: 0, desde: o.desde };
+    g.soles += o.soles; g.creditos++; if (dias > g.dias) { g.dias = dias; g.desde = o.desde; } by.set(k, g);
+  }
+  const list = [...by.values()].map((g) => ({ ...g, soles: r2(g.soles), cust: byId.get(g.id) || null })).sort((a, b) => b.dias - a.dias || b.soles - a.soles);
+  return { list, sinFecha, total: r2(list.reduce((s, g) => s + g.soles, 0)), truncado: !!(credits.truncated || customers.truncated), clientesCortados: !!customers.truncated };
 }
 
 // ---------- Consultas ----------
@@ -440,6 +511,21 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
         // Aparte (no son compras): solo totales y códigos.
         sin_contar: { total: nSC, codigos: sin_contar.lista.map((x) => x.codigo) }, revisar_datos: { total: nRD, codigos: revisar_datos.lista.map((x) => x.codigo) }, genericos_excluidos: plan.genericos,
         nota: 'Solo sugerencia. Los productos van por número de fila de la tabla que ve el dueño. No se creó ninguna compra.' } };
+  }
+  if (tipo === 'creditos_atrasados') {
+    const { list, sinFecha, total, truncado, clientesCortados } = await overdueCredits(reader, nowMs);
+    const rangos = Object.fromEntries(OVERDUE_BUCKETS.map(([n, lo, hi]) => [n, list.filter((g) => g.dias >= lo && g.dias <= hi).length]));
+    const nota = sinFecha ? ' Hay ' + sinFecha + (sinFecha === 1 ? ' crédito con saldo y sin fecha de vencimiento: no se cuenta.' : ' créditos con saldo y sin fecha de vencimiento: no se cuentan.') : '';
+    const corte = truncado ? ' La lista de créditos o clientes es muy larga y se cortó: puede faltar alguno.' : '';
+    // «total» = número de filas (la tabla muestra «Mostrando N de total»); los soles van en total_soles.
+    return { ...base, columnas: ['Cliente', 'Código', 'Vencido S/', 'Días de atraso', 'Recordatorio (borrador)'], total: list.length, total_soles: total, clientes: list.length, truncado,
+      // Pantalla del Admin: nombre y borrador del recordatorio (él lo copia y lo envía). Nada se envía solo.
+      filas: list.slice(0, N).map((g) => [g.cust?.nombre || 'Cliente ' + g.id, g.id, g.soles, g.dias, reminderDraft(g.cust?.nombre, g.soles, g.desde)]),
+      texto: (list.length ? (list.length === 1 ? '1 cliente tiene' : list.length + ' clientes tienen') + ' créditos atrasados por S/ ' + total.toFixed(2) + '. El más atrasado lleva ' + list[0].dias + (list[0].dias === 1 ? ' día' : ' días') + '. En la tabla está el borrador de cada recordatorio para que usted lo envíe.' : 'Ningún cliente tiene créditos atrasados.') + nota + corte,
+      // Al modelo: solo totales, rangos y el código del cliente (nunca nombre, DNI ni teléfono).
+      resumen: { clientes_atrasados: list.length, total_vencido_soles: total, sin_fecha: sinFecha, por_rango: rangos, truncado,
+        // Sin la ficha del cliente (lista cortada) no se puede descartar que el id sea su DNI o teléfono: «Cliente N».
+        mas_atrasados: list.slice(0, M).map((g, i) => ({ cliente: g.cust && !clientesCortados && safeClientCode(g.id, g.cust) ? 'cliente #' + g.id : 'Cliente ' + (i + 1), soles: g.soles, dias: g.dias })) } };
   }
   const rows = await reader.purchases(N);
   // Fecha de la compra en día de Lima (una compra de las 23:30 en Lima ya es el día siguiente en UTC).

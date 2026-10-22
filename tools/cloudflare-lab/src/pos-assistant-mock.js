@@ -45,6 +45,7 @@ export function mockAssistantReply({ role, ctx, text, image }) {
   if (/resumen/.test(t) && !/cierre|caja/.test(t)) return { content: '', calls: [call('consultar', { tipo: /mes|mensual/.test(t) ? 'resumen_mes' : 'resumen_dia', ...(/\d{4}-\d{2}-\d{2}/.test(t) ? { hasta: t.match(/\d{4}-\d{2}-\d{2}/)[0] } : /\bayer\b|mes pasado/.test(t) ? { periodo: /mes pasado/.test(t) ? 'mes_pasado' : 'ayer' } : {}) })] };
   if (/reponer|falta|bajo|minimo|agotad/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'bajo_stock' })] };
   if (/sin costo/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'sin_costo' })] };
+  if (/atrasad|moros|creditos? vencid/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'creditos_atrasados' })] };
   if (/deud|deben|fiado/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deudas_clientes' })] };
   if (/compras (recientes|ultimas)|ultimas compras/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'compras_recientes' })] };
   if (/mas vendid|top/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'top_productos', ...queryDates(t) })] };
