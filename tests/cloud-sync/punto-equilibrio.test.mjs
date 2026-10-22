@@ -106,3 +106,17 @@ test('usa el total de la venta (con descuentos) cuando existe', () => {
   const r = PE.calculate(sales, [], products, { range });
   assert.equal(r.sales, 100);
 });
+
+test('candado punto-equilibrio: falla cerrado aunque sea dueño y la pantalla esté permitida', () => {
+  const owner = { isOwner: () => true };
+  const perms = (locked) => ({ canAccessScreen: () => true, featureLocked: (id) => (id === 'punto-equilibrio' ? locked : false) });
+  const g = (extra) => { const c = { NA_ROLES: owner, ...extra }; c.globalThis = c; return c; };
+  const run = (ctx) => { const c = vm.createContext({ module: { exports: {} }, ...ctx }); c.globalThis = c; vm.runInContext(source, c); return c.module.exports.allowed(); };
+  assert.equal(run(g({ NA_PERMISSIONS: perms(true) })), false);
+  assert.equal(run(g({ NA_PERMISSIONS: { canAccessScreen: () => true } })), false);
+  assert.equal(run(g({ NA_PERMISSIONS: { canAccessScreen: () => true, featureLocked: () => { throw new Error('x'); } } })), false);
+  assert.equal(run(g({ NA_PERMISSIONS: perms(undefined) })), false);
+  assert.equal(run(g({ NA_PERMISSIONS: perms(false) })), true);
+  assert.equal(run(g({ NA_PERMISSIONS: perms(false), NA_ROLES: { isOwner: () => { throw new Error('x'); } } })), false);
+  assert.match(permissionsSource, /'punto-equilibrio': true/);
+});

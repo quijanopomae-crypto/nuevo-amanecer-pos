@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // HTML y scripts reales. Rol y datos sintéticos, solo en el navegador de la prueba; sin red externa.
-async function rolePage(page: Page, role: 'owner' | 'empleado' | '') {
+async function rolePage(page: Page, role: 'owner' | 'empleado' | '', unlock = true) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
@@ -19,6 +19,11 @@ async function rolePage(page: Page, role: 'owner' | 'empleado' | '') {
   else await page.evaluate(() => {
     const w = window as any, roles = w.NA_ROLES;
     w.NA_ROLES = new Proxy(roles, { get: (t, k) => k === 'role' ? '' : k === 'isOwner' ? () => false : t[k] });
+  });
+  // El candado real 'punto-equilibrio' sigue en true: solo en el navegador de la prueba se abre.
+  if (unlock) await page.evaluate(() => {
+    const p = (window as any).NA_PERMISSIONS, real = p.featureLocked;
+    (window as any).NA_PERMISSIONS = Object.freeze({ ...p, featureLocked: (id: string) => id === 'punto-equilibrio' ? false : real(id) });
   });
   await page.evaluate(() => {
     const month = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 7);
@@ -127,4 +132,12 @@ test('margen 0 o negativo y sin ventas muestran un mensaje claro', async ({ page
 test('el módulo usa solo textContent', async ({ page }) => {
   const res = await page.request.get('/js/modules/punto-equilibrio.js');
   expect(await res.text()).not.toMatch(/innerHTML|insertAdjacentHTML|outerHTML/);
+});
+
+test('con el candado real cerrado, ni el dueño ve el reporte', async ({ page }) => {
+  await rolePage(page, 'owner', false);
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('punto-equilibrio'))).toBe(true);
+  expect(await page.evaluate(() => (window as any).NA_PUNTO_EQUILIBRIO.render())).toBe(false);
+  await expect(page.locator('#pagePuntoEquilibrio [data-pe-controls]')).toBeHidden();
+  await expect(page.locator('#pagePuntoEquilibrio [data-pe-result]')).toHaveCount(0);
 });

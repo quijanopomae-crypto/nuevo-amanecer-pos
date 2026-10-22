@@ -129,7 +129,11 @@
   function policyReady() {
     try { var permissions = root.NA_PERMISSIONS; return !!(permissions && typeof permissions.canAccessScreen === 'function' && permissions.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
   }
-  function ownerAllowed() { return isOwner() && policyReady(); }
+  // Candado propio 'punto-equilibrio' (pos-permissions.js): falla cerrada si falta la tabla o lanza error.
+  function unlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('punto-equilibrio') === false); } catch (_) { return false; }
+  }
+  function puntoEquilibrioAllowed() { return unlocked() && isOwner() && policyReady(); }
   function element(tag, className, value) {
     var node = root.document.createElement(tag);
     if (className) node.className = className;
@@ -143,7 +147,7 @@
     var status = page && page.querySelector('[data-pe-status]');
     if (!host || !status) return false;
     var controls = page.querySelector('[data-pe-controls]');
-    var authorized = ownerAllowed();
+    var authorized = puntoEquilibrioAllowed();
     if (controls) controls.hidden = !authorized;
     if (!authorized) { status.textContent = ''; host.replaceChildren(element('p', 'pe-notice', 'Sin permiso. Pídele acceso al dueño.')); return false; }
     var input = page.querySelector('[data-pe-month]');
@@ -186,12 +190,12 @@
     if (refresh) refresh.addEventListener('click', render);
     var input = page.querySelector('[data-pe-month]');
     if (input) input.addEventListener('change', render);
-    function update() { if (!ownerAllowed() || page.classList.contains('active')) render(); }
+    function update() { if (!puntoEquilibrioAllowed() || page.classList.contains('active')) render(); }
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
     if (typeof root.addEventListener === 'function') root.addEventListener('na:role', update);
     update();
   }
-  root.NA_PUNTO_EQUILIBRIO = Object.freeze({ calculate: calculate, monthRange: monthRange, formatMoney: formatMoney, formatPercent: formatPercent, render: render });
+  root.NA_PUNTO_EQUILIBRIO = Object.freeze({ calculate: calculate, monthRange: monthRange, formatMoney: formatMoney, formatPercent: formatPercent, render: render, allowed: puntoEquilibrioAllowed });
   if (typeof module !== 'undefined' && module.exports) module.exports = root.NA_PUNTO_EQUILIBRIO;
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init);
