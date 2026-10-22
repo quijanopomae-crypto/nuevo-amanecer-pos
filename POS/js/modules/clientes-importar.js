@@ -153,6 +153,12 @@
     return n;
   }
 
+  // Candado propio (#904). Falla cerrado: sin NA_PERMISSIONS, sin el id o con error, queda cerrado.
+  var LOCK_ID = 'importar-clientes';
+  function importarClientesUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(LOCK_ID) === false); }
+    catch (_) { return false; }
+  }
   function canImport() {
     try { if (typeof isModuleLocked === 'function' && isModuleLocked('clientes', { canonicalCustomerUi: true })) return false; } catch (_) {}
     try { var b = root.NuevoAmanecerCanonicalCustomerBridge; if (b && typeof b.userLocked === 'function' && b.userLocked()) return false; } catch (_) {}
@@ -192,7 +198,7 @@
   }
 
   function readFile(file) {
-    if (!file) return;
+    if (!file || !importarClientesUnlocked()) return;
     if (file.size > MAX_BYTES) { preview = null; renderPreview(); status('El archivo pesa más de 1 MB.'); return; }
     var name = String(file.name || '').toLowerCase();
     if (/\.(xlsx|xls|ods)$/.test(name)) { preview = null; renderPreview(); status('Guarda tu hoja de Excel como «CSV (delimitado por comas)» y súbela de nuevo.'); return; }
@@ -203,6 +209,7 @@
   }
 
   function loadText(text) {
+    if (!importarClientesUnlocked()) { preview = null; return { error: 'Disponible pronto.' }; }
     var res = buildPreview(text);
     if (res.error) { preview = null; renderPreview(); status(res.error); return res; }
     preview = res; status((res.lineIgnored ? 'La columna «Línea» se ignora: solo el dueño puede fijar línea de crédito. ' : '') + (res.valid ? 'Revisa la lista y pulsa «Importar ' + res.valid + (res.valid === 1 ? ' cliente»' : ' clientes»') + '.' : 'No hay filas nuevas para importar.'));
@@ -237,6 +244,7 @@
 
   async function confirmImport() {
     if (busy || !preview || !preview.valid) return;
+    if (!importarClientesUnlocked()) { preview = null; status('Disponible pronto.'); return; }
     if (!canImport()) { status('No tienes permiso para registrar clientes o el módulo está bloqueado.'); return; }
     if (typeof root.guardarCli !== 'function') { status('El registro de clientes no está disponible.'); return; }
     if (formHasText()) { status(FORM_BUSY_MSG); return; }
@@ -280,6 +288,11 @@
     var bar = doc.querySelector('#pageClientes .filter-bar');
     if (!bar) return;
     var btn = doc.getElementById(BUTTON_ID);
+    if (!importarClientesUnlocked()) { // candado cerrado: no se crea ni se muestra nada
+      if (btn) { btn.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+      var lp = doc.getElementById(PANEL_ID); if (lp) lp.hidden = true;
+      preview = null; return;
+    }
     if (!btn) {
       btn = el('button', 'f-select ic-entry', 'Importar clientes');
       btn.id = BUTTON_ID; btn.type = 'button';
@@ -329,7 +342,7 @@
   }
 
   root.NA_CLIENTES_IMPORTAR = Object.freeze({ parseCsv: parseCsv, buildPreview: buildPreview, templateCsv: templateCsv,
-    loadText: loadText, confirmImport: confirmImport, render: ensureUi, init: init });
+    loadText: loadText, confirmImport: confirmImport, render: ensureUi, init: init, unlocked: importarClientesUnlocked });
   if (doc) {
     if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init, { once: true });
     else init();

@@ -8,11 +8,13 @@ test.beforeEach(async ({ page }) => {
 
 // Datos sintéticos. guardarCli se envuelve solo para registrar qué filas pasan por el alta manual
 // (el mismo camino de «+ Cliente»); la llamada real se conserva.
-async function openClients(page: Page, { dark = false } = {}) {
+async function openClients(page: Page, { dark = false, unlock = true } = {}) {
   await page.goto('/index.html');
   await page.waitForFunction(() => !!(window as any).NA_CLIENTES_IMPORTAR && !!(window as any).NA_MENU_NAVIGATION);
-  await page.evaluate(({ dark }) => {
+  await page.evaluate(({ dark, unlock }) => {
     const w = window as any;
+    // El candado sigue cerrado en pos-permissions.js; la prueba lo abre solo en este navegador.
+    if (unlock) { const perms = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'importar-clientes' ? false : perms.featureLocked(id) }; }
     document.body.classList.toggle('dark', dark);
     clientes = [{ id: 'existente', nombre: 'Cliente existente', dni: '12345678', tel: '987000111', dir: 'Calle 1', totalCompras: 0 }];
     w.__calls = [];
@@ -24,7 +26,7 @@ async function openClients(page: Page, { dark = false } = {}) {
     w.NA_MENU_NAVIGATION.navigate('pageClientes');
     w.cliRender();
     w.NA_CLIENTES_IMPORTAR.render();
-  }, { dark });
+  }, { dark, unlock });
   await expect(page.locator('#pageClientes')).toHaveClass(/active/);
 }
 
@@ -120,3 +122,21 @@ test('sin roles cargados no es dueño: la columna Línea se ignora', async ({ pa
   expect(res.lineIgnored).toBe(true);
   expect(res.rows[0].lineaTexto).toBe('');
 });
+
+// Candado real cerrado (#904, pos-permissions.js sin tocar): ni botón ni panel, y no importa nada.
+for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
+  test(`candado cerrado real: sin botón ni importación ${width}px ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openClients(page, { dark, unlock: false });
+    expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('importar-clientes'))).toBe(true);
+    expect(await page.evaluate(() => (window as any).NA_CLIENTES_IMPORTAR.unlocked())).toBe(false);
+    await expect(page.getByRole('button', { name: 'Importar clientes', exact: true })).toHaveCount(0);
+    await expect(page.locator('#naImportarClientes')).toHaveCount(0);
+    const res = await page.evaluate(() => (window as any).NA_CLIENTES_IMPORTAR.loadText('nombre\nAna\n'));
+    expect(res).toEqual({ error: 'Disponible pronto.' });
+    await page.evaluate(() => (window as any).NA_CLIENTES_IMPORTAR.confirmImport());
+    expect(await page.evaluate(() => (window as any).__calls)).toEqual([]);
+    expect(await page.evaluate(() => clientes.length)).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
