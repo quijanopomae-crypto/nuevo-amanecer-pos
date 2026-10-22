@@ -24,13 +24,21 @@ export const PRODUCTO_FOTO_PROMPT = 'Lee la etiqueta o el empaque de este produc
 const IMG_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
 const str = (v, n) => { if (v == null) return null; const s = String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim(); return s ? s.slice(0, n) : null; };
 // Lo que no debe colarse en un nombre de producto (RUC, teléfonos, correos, enlaces).
-const clean = (v, n) => { const s = str(v, n * 2); if (!s) return null; const t = s.replace(/https?:\/\/\S+/gi, '').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '').replace(/\b\d{9,11}\b/g, '').replace(/\s+/g, ' ').trim(); return t ? t.slice(0, n) : null; };
+const clean = (v, n) => { const s = str(v, n * 2); if (!s) return null; const t = s.replace(/https?:\/\/\S+/gi, '').replace(/\b(?:tel[eé]fono|telf?|cel(?:ular)?|whatsapp|wsp|ruc)\b\.?:?/gi, '').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '').replace(/\b\d{9,11}\b/g, '').replace(/\s+/g, ' ').trim(); return t ? t.slice(0, n) : null; };
 
-// Dígito de control GS1 (EAN-8, UPC-A de 12, EAN-13, GTIN-14).
+// UPC-E (8 dígitos, sistema 0 o 1) -> UPC-A de 12, para revisar su dígito de control. Si no es UPC-E: null.
+export function upcEToA(code) {
+  const s = String(code || ''); if (!/^[01]\d{7}$/.test(s)) return null;
+  const d = s.slice(1, 7), c = s[7], last = Number(d[5]);
+  const body = last <= 2 ? d.slice(0, 2) + d[5] + '0000' + d.slice(2, 5) : last === 3 ? d.slice(0, 3) + '00000' + d.slice(3, 5) : last === 4 ? d.slice(0, 4) + '00000' + d[4] : d.slice(0, 5) + '0000' + d[5];
+  return s[0] + body + c;
+}
+const gs1 = (s) => { let sum = 0; for (let i = s.length - 2, k = 0; i >= 0; i--, k++) sum += Number(s[i]) * (k % 2 === 0 ? 3 : 1); return (10 - (sum % 10)) % 10 === Number(s[s.length - 1]); };
+// Dígito de control GS1 (EAN-8, UPC-E, UPC-A de 12, EAN-13, GTIN-14).
 export function barcodeValid(code) {
   const s = String(code || ''); if (!/^(?:\d{8}|\d{12,14})$/.test(s)) return false;
-  let sum = 0; for (let i = s.length - 2, k = 0; i >= 0; i--, k++) sum += Number(s[i]) * (k % 2 === 0 ? 3 : 1);
-  return (10 - (sum % 10)) % 10 === Number(s[s.length - 1]);
+  if (gs1(s)) return true;
+  const a = s.length === 8 ? upcEToA(s) : null; return !!a && gs1(a);
 }
 export function normalizeProductoFoto(o) {
   const digits = o?.codigo_barras == null ? '' : String(o.codigo_barras).replace(/[\s-]/g, '');
