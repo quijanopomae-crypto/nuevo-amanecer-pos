@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 192: publicar corrección de facturas y productos nuevos PR #950 (59dc8b810983af04173266ddf79207f91785bb9f). Worker 70 publicado primero, run 39826154591 success. CI crítico, E2E y visual aprobados; revisión independiente sin P0/P1. Solo estáticos, sin migraciones ni datos comerciales. Rollback web a e2fe0ad7b70a80e1df848410f02578fc9f86eec6.",
-  "retry_attempt": 192,
-  "retry_reason": "Autorización explícita del propietario 2026-10-22: Aplícalo lo apruebo.",
-  "requested_at_utc": "2026-10-22T17:51:32.846Z",
-  "approved_base": "e58826c093ee0b411eef30012ba9038e4bbecca1"
+  "note": "Web193: PR953 memoria de boletas y aclaraciones, fuente 36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d. Backend Worker71 run 39833121980 success y salud verificada. CI crítico, E2E y visual success; revisión independiente sin P0/P1. Sin migraciones ni datos comerciales. Rollback web 50c2f09c835384cb38c9e6ce9d63eedd5f3b22b9.",
+  "retry_attempt": 193,
+  "retry_reason": "Owner autorizó 2026-10-22: Aslo. Publicar memoria de la boleta; rollback a Web192 50c2f09.",
+  "requested_at_utc": "2026-10-22T18:39:25.121Z",
+  "approved_base": "1b75a35b2ac741894cb0eaebac477fab1ed0e26d"
 }
