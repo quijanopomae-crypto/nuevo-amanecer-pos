@@ -90,7 +90,9 @@
         if (!unitCost) linesWithoutCost++;
         else cost += unitCost * unitsSold(item);
       });
-      salesTotal += round2(saleAmount);
+      // Si la venta trae su total (ya con descuentos), se usa ese; si no, precio × cantidad.
+      var saleTotal = number(sale.total);
+      salesTotal += round2(Number.isFinite(saleTotal) && saleTotal >= 0 ? saleTotal : saleAmount);
     });
     var expensesTotal = 0, expenseCount = 0, excludedExpenses = 0;
     (Array.isArray(expenses) ? expenses : []).forEach(function (g) {
@@ -156,7 +158,7 @@
     var summary = element('div', 'pe-summary');
     [['Ventas del período', formatMoney(r.sales)],
       ['Costo de lo vendido' + (r.linesWithoutCost ? ' (incompleto)' : ''), formatMoney(r.cost)],
-      ['Gastos fijos', formatMoney(r.expenses)],
+      ['Gastos del mes', formatMoney(r.expenses)],
       ['Margen de contribución', r.margin === null ? '—' : formatPercent(r.margin)],
       ['Venta mínima de equilibrio', r.breakEven === null ? '—' : formatMoney(r.breakEven)]].forEach(function (item) {
       var card = element('div', 'pe-card');

@@ -97,3 +97,12 @@ test('permisos: sigue bloqueada hasta que PROGRAMADOR la desbloquee; pantalla so
   assert.equal(P.canAccessScreen('empleado', 'pagePuntoEquilibrio'), false);
   assert.equal(P.canAccessScreen('', 'pagePuntoEquilibrio'), false);
 });
+
+test('usa el total de la venta (con descuentos) cuando existe', () => {
+  const sales = [
+    { fecha: '2026-10-05', total: 90, items: [{ id: 1, qty: 10, precio: 10, costo: 6 }] },
+    { fecha: '2026-10-06', items: [{ id: 1, qty: 1, precio: 10, costo: 6 }] }
+  ];
+  const r = PE.calculate(sales, [], products, { range });
+  assert.equal(r.sales, 100);
+});
