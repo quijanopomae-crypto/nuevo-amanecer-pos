@@ -94,6 +94,7 @@
     <link rel="stylesheet" href="css/reporte-productos-vencer.css">
     <link rel="stylesheet" href="css/cliente-historial-compras.css">
     <link rel="stylesheet" href="css/kardex.css">
+    <link rel="stylesheet" href="css/kardex-documentos.css">
     <link rel="stylesheet" href="css/ventas-stock.css">
     <link rel="stylesheet" href="css/reporte-arqueo.css">
     <link rel="stylesheet" href="css/historial-compras.css">
@@ -638,6 +639,20 @@
     <p class="kardex-method" data-kardex-cost-method hidden>Promedio ponderado por unidades físicas con costo conocido: cada entrada con costo recalcula el promedio y cada salida usa el promedio vigente. Las entradas sin costo usan costo estimado si hay promedio; de lo contrario, quedan sin costo y no suman valor. El último costo del producto no se aplica al historial anterior. La valorización depende del historial disponible.</p>
     <p data-kardex-status role="status" aria-live="polite"></p>
     <div data-kardex-content></div>
+    <section class="kdoc" data-kdoc aria-labelledby="kdocTitle" hidden>
+      <h2 id="kdocTitle">Documentos que movieron stock</h2>
+      <p class="kardex-method">Una fila por venta, compra o ajuste. Solo lectura · solo dueño · sin costos.</p>
+      <div data-kdoc-controls hidden>
+        <div class="kardex-filters kdoc-filters">
+          <label>Desde<input type="date" data-kdoc-from aria-label="Documentos desde"></label>
+          <label>Hasta<input type="date" data-kdoc-to aria-label="Documentos hasta"></label>
+          <label>Tipo<select data-kdoc-type aria-label="Tipo de documento"><option value="todos">Todos</option><option value="venta">Ventas</option><option value="compra">Compras</option><option value="ajuste">Ajustes</option></select></label>
+          <button type="button" data-kdoc-refresh>Actualizar documentos</button>
+        </div>
+      </div>
+      <p data-kdoc-status role="status" aria-live="polite"></p>
+      <div data-kdoc-content></div>
+    </section>
   </div>
 </div>
 
@@ -1458,6 +1473,7 @@
 <script src="js/modules/reporte-productos-vencer.js"></script>
 <script src="js/modules/cliente-historial-compras.js"></script>
 <script src="js/modules/kardex.js"></script>
+<script src="js/modules/kardex-documentos.js"></script>
 <script src="js/modules/ventas-stock.js"></script>
 <script src="js/modules/reporte-arqueo.js"></script>
 <script src="js/inventory/historial-compras.js"></script>
