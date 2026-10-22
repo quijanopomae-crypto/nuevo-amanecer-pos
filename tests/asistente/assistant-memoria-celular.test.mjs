@@ -1,0 +1,134 @@
+// Memoria de la charla en el celular (contrato de #946), nombre del negocio, tapado de clientes solo con el nombre completo y arreglos
+// de la UI (respuesta una vez, tarjetas con su respuesta, «Mostrando N de M» solo con cuentas, «Sin datos.», botón en Inicio/Inventario,
+// Enter mientras responde, nada de la pregunta anterior). Sin red.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const store = new Map();
+globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+globalThis.window = globalThis;
+const C = require('../../POS/js/modules/asistente/asistente-core.js');
+const UI = readFileSync('POS/js/modules/asistente/asistente-ui.js', 'utf8');
+const CSS = readFileSync('POS/css/asistente.css', 'utf8');
+
+const pair = (i, extra = {}, len = 40) => [{ role: 'user', content: 'pregunta ' + i + ' ' + 'x'.repeat(len), ...extra }, { role: 'assistant', content: 'respuesta ' + i + ' ' + 'y'.repeat(len), ...extra }];
+const hist = (n, len, f) => Array.from({ length: n }, (_, i) => pair(i, f ? f(i) : {}, len)).flat();
+const signed = (i, iat) => ({ sig: 's' + i, n: i, iat });
+
+test('nombre del negocio: el de Configuración; sin él «Nuevo Amanecer» (nunca «Botica» fijo)', () => {
+  assert.equal(C.businessName({ business: { nombre: '  Bodega  Doña\nRosa ' } }), 'Bodega Doña Rosa');
+  assert.equal(C.businessName({ business: { nombre: '' } }), 'Nuevo Amanecer');
+  assert.equal(C.businessName(null), 'Nuevo Amanecer');
+  assert.ok(!/'Botica Nuevo Amanecer'/.test(UI));
+  assert.match(UI, /businessName: function \(\) \{ return C\.businessName \? C\.businessName\(g\('appConfig'\)\) : 'Nuevo Amanecer'; \}/);
+});
+
+test('Admin: manda MÁS de 8 turnos (hasta el tope del servidor) y lo que no entra pasa a «resumen»', () => {
+  const mem = C.memNew(); C.memAfter([], mem, { memoria: { max_turnos: 40, max_bytes: 48000 } }, {});
+  const h = hist(12, 40); const r = C.memRequest(h, mem, { role: 'owner' });
+  assert.equal(r.history.length, 24, 'todo entra: 24 turnos, no 8'); assert.equal(r.resumen, null); assert.equal(r.folded, 0);
+  const big = hist(60, 900); const r2 = C.memRequest(big, mem, { role: 'owner' });
+  assert.ok(r2.history.length <= 40 && r2.history.length > 8, String(r2.history.length));
+  const bytes = r2.history.reduce((s, m) => s + C.utf8Len(m.content), 0); assert.ok(bytes <= 48000 - 1024, String(bytes));
+  assert.ok(r2.folded > 0 && typeof r2.resumen === 'string' && /(Persona|Asistente): (pregunta|respuesta) \d+ /.test(r2.resumen), r2.resumen && r2.resumen.slice(0, 40));
+  assert.ok(r2.resumen.length <= 2000);
+  assert.equal(big.length, r2.history.length, 'lo resumido sale del historial del aparato');
+  assert.equal(r2.history[r2.history.length - 1].content, 'respuesta 59 ' + 'y'.repeat(900), 'lo más nuevo siempre va');
+  assert.deepEqual(C.memAfter(big, mem, { memoria: { max_turnos: 40, max_bytes: 48000 } }, r2), { notice: true });
+  const r3 = C.memRequest(big.concat(pair(60, {}, 900)), mem, { role: 'owner' });
+  assert.deepEqual(C.memAfter([], mem, { memoria: { max_turnos: 40, max_bytes: 48000 } }, r3), { notice: false }, 'el aviso sale una vez por conversación');
+  assert.equal(C.MEMORY.notice, 'Resumí la charla para seguir más rápido');
+});
+
+test('Admin: las notas de foto quedan fijas aunque sean viejas; el historial va limpio (sin celulares)', () => {
+  const mem = C.memNew(); mem.maxBytes = 48000;
+  const h = [{ role: 'user', content: 'Foto [Foto leída] Factura F001-123, 3 líneas, S/ 120.00' }, { role: 'assistant', content: 'Listo, armé la compra.' }].concat(hist(60, 900));
+  const r = C.memRequest(h, mem, { role: 'owner' });
+  assert.match(r.history[0].content, /\[Foto leída\] Factura F001-123/);
+  const h2 = [{ role: 'user', content: 'llama al 987654321' }, { role: 'assistant', content: 'ok' }];
+  assert.ok(!C.memRequest(h2, C.memNew(), { role: 'owner' }).history[0].content.includes('987654321'));
+  const s = [{ role: 'user', content: 'Foto' }, { role: 'assistant', content: 'Leí la factura. Cel 987654321' }];
+  C.memStore(s, 'owner', '[Foto leída] Factura B001-9'); assert.equal(s[0].content, '[Foto leída] Factura B001-9'); assert.ok(!s[1].content.includes('987654321'));
+});
+
+test('servidor viejo (sin «memoria»): como antes, los últimos 8 turnos', () => {
+  const mem = C.memNew(); C.memAfter([], mem, { ok: true, reply: 'x' }, {});
+  const r = C.memRequest(hist(12, 10), mem, { role: 'owner' }); assert.equal(r.history.length, 8); assert.equal(r.resumen, null);
+});
+
+test('empleado: solo pares firmados y vigentes; 2 pares viejos de más para que el servidor los resuma; resumen_sugerido vuelve como «resumen»', () => {
+  const now = 1_800_000_000_000, mem = C.memNew(); mem.maxBytes = 24000; mem.maxTurns = 40;
+  const h = hist(40, 600, (i) => signed(i, now - 1000));
+  h.splice(2, 2, ...pair(99)); // un par sin firma: no se manda (el servidor lo tira)
+  const r = C.memRequest(h, mem, { role: 'employee', now, bodyBase: { text: 'hola', context: {} } });
+  assert.ok(r.history.every((m) => m.sig), 'sin pares sin firma');
+  assert.ok(r.history.length <= 40);
+  assert.equal(r.resumen, null, 'sin resumen firmado todavía');
+  const oldest = r.history[0].n;
+  C.memAfter(h, mem, { memoria: { max_turnos: 40, max_bytes: 24000, recortados: 4 }, resumen_sugerido: { texto: 'Persona: pregunta…', iat: now, sig: 'firma' } }, r);
+  assert.deepEqual(mem.resumen, { texto: 'Persona: pregunta…', iat: now, sig: 'firma' });
+  assert.ok(h[0].n > oldest, 'lo que el servidor resumió sale del aparato');
+  const r2 = C.memRequest(h, mem, { role: 'employee', now: now + 1000, bodyBase: { text: 'hola' } });
+  assert.deepEqual(r2.resumen, { texto: 'Persona: pregunta…', iat: now, sig: 'firma' });
+  const r3 = C.memRequest(h, mem, { role: 'employee', now: now + 25 * 3600 * 1000, bodyBase: { text: 'hola' } });
+  assert.equal(r3.resumen, null, 'más de 24 h: el servidor ya no lo acepta'); assert.equal(r3.history.length, 0);
+});
+
+test('empleado: el cuerpo nunca pasa el tope de 64 KB del servidor', () => {
+  const now = 1_800_000_000_000, mem = C.memNew(); mem.maxBytes = 48000;
+  const h = hist(20, 2400, (i) => signed(i, now));
+  const base = { text: 'x'.repeat(500), context: { productos: 'p'.repeat(20000) } };
+  const r = C.memRequest(h, mem, { role: 'employee', now, bodyBase: base });
+  assert.ok(C.utf8Len(JSON.stringify({ ...base, history: r.history })) <= 60000);
+  const s = [{ role: 'user', content: 'hola' }, { role: 'assistant', content: 'ok' }]; C.memStore(s, 'employee'); assert.equal(s.length, 0, 'sin firma no se guarda');
+});
+
+test('la UI: memoria en el envío, «Nueva conversación», aviso, nada en el almacenamiento', () => {
+  assert.match(UI, /mreq = C\.memRequest\(history, mem, \{ role: role, now: Date\.now\(\) \+ clockOffset, bodyBase: body \}\); body\.history = mreq\.history; if \(mreq\.resumen\) body\.resumen = mreq\.resumen;/);
+  assert.match(UI, /C\.memStore\(history, role, typeof d\.nota === 'string' \? d\.nota : null\); var ma = C\.memAfter\(history, mem, d, mreq\);/);
+  assert.match(UI, /<button type="button" class="na-asst-reset" title="Empezar de cero">Nueva conversación<\/button>/);
+  assert.match(UI, /panelEl\.querySelector\('\.na-asst-reset'\)\.onclick = newChat;/);
+  assert.match(CSS, /\.na-asst-reset\{min-height:48px;/);
+  assert.ok(!/(localStorage|sessionStorage)[^;\n]*setItem\([^)]*history/.test(UI));
+});
+
+test('tapado de clientes: solo nombre completo (o dos palabras seguidas de un nombre largo), nunca dentro de proveedor o producto', () => {
+  const CLI = [{ id: 'c4', nombre: 'San Juan' }, { id: 'c1', nombre: 'Rosa Quispe Mamani' }, { id: 'c5', nombre: 'Gloria' }];
+  const PROD = [{ id: 'P1', nombre: 'Galletas San Juan' }, { id: 'P2', nombre: 'Leche Gloria' }];
+  const m = (t) => C.maskCustomers(t, CLI, PROD).text;
+  assert.equal(m('compré a Distribuidora San Juan'), 'compré a Distribuidora San Juan');
+  assert.equal(m('San Juan S.A.C. mandó la factura'), 'San Juan S.A.C. mandó la factura');
+  assert.equal(m('stock de Galletas San Juan'), 'stock de Galletas San Juan');
+  assert.equal(m('precio de Leche Gloria'), 'precio de Leche Gloria');
+  assert.equal(m('cuánto debe San Juan'), 'cuánto debe cliente #c4');
+  assert.equal(m('Rosa Quispe pagó y Quispe pagó'), 'cliente #c1 pagó y Quispe pagó');
+  assert.equal(m('la bodega de Rosa Quispe Mamani'), 'la bodega de cliente #c1', 'con algo en medio, el nombre se tapa igual');
+  assert.match(UI, /if \(C\.customerCodesIn && isOwnerAccess\(\)\) linkCustomers\(bubble/, 'el Admin ve el nombre real en el aparato');
+});
+
+test('tarjetas: «Mostrando N de M» solo con cuentas (no con plata), tabla vacía dice «Sin datos.», sin repetir tablas', () => {
+  const a = UI.indexOf('  function qCount(r)'), b = UI.indexOf('\n', a);
+  const qCount = new Function(UI.slice(a, b) + '\nreturn qCount;')();
+  assert.equal(qCount({ tipo: 'caja_abierta', total: 20 }), null, 'antes: «Mostrando 1 de 20» con S/ 20');
+  assert.equal(qCount({ tipo: 'compras_recientes', total: 20 }), null);
+  assert.equal(qCount({ tipo: 'top_productos', total: 300 }), null);
+  assert.equal(qCount({ tipo: 'sin_costo', total: 7 }), 7);
+  assert.match(UI, /!\(r\.filas && r\.filas\.length\) \? '<div class="note na-asst-empty">Sin datos\.<\/div>'/);
+  assert.match(UI, /if \(sig && shownSigs\[sig\] != null && shownSigs\[sig\] !== turnNo\) return null;/);
+  assert.match(UI, /cardAnchor = bubble;/);
+});
+
+test('UI: botón flotante en Inicio e Inventario; Enter mientras responde queda en fila; la pregunta anterior no se arrastra; respuesta una vez', () => {
+  assert.match(UI, /var show = allowedHere\(\); rootEl\.style\.display = show \? '' : 'none';/);
+  assert.match(UI, /'pageMenu', 'pageInventario'/);
+  assert.match(UI, /if \(busy\) \{ if \(!image\) queueMsg\(text\); return; \}/);
+  assert.match(UI, /queuedNote\.textContent = 'Te respondo esto apenas termine\.';/);
+  assert.equal((UI.match(/drainQueue\(\); \}/g) || []).length, 3);
+  assert.match(UI, /var prevLabels = !image && CONT_RE\.test\(text\) && lastCut/);
+  const a = UI.indexOf('  var CONT_RE = '), b = UI.indexOf('\n', a); const CONT_RE = new Function(UI.slice(a, b) + '\nreturn CONT_RE;')();
+  for (const t of ['sigue', 'Continúa', 'más', 'y el resto?']) assert.ok(CONT_RE.test(t), t);
+  for (const t of ['¿cuánto stock hay de Inka Kola?', 'masa de pan', 'siguiente producto']) assert.ok(!CONT_RE.test(t), t);
+  assert.match(UI, /liveEl\.style\.cssText = 'position:absolute;width:1px;height:1px;/);
+});

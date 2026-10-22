@@ -61,15 +61,18 @@ test('1) aparato: nombres y direcciones de clientes conocidos -> «cliente #cód
   const m = (t) => C.maskCustomers(t, CLI, PROD);
   assert.deepEqual(m('¿Cuánto debe Rosa Quispe?'), { text: '¿Cuánto debe cliente #c1?', codes: ['c1'] });
   assert.equal(m('estado de cuenta de ROSA QUISPE MAMANI').text, 'estado de cuenta de cliente #c1');
-  assert.equal(m('quispe pagó 20').text, 'cliente #c1 pagó 20');
-  assert.equal(m('cuánto debe Rosa').text, 'cuánto debe cliente #c1 o cliente #c2', 'nombre compartido: sus códigos');
+  // (pedido del jefe 22-10) solo el nombre completo o dos palabras seguidas de un nombre largo: una palabra suelta ya no se tapa
+  assert.equal(m('quispe pagó 20').text, 'quispe pagó 20', 'apellido suelto: no se toca');
+  assert.equal(m('cuánto debe Rosa').text, 'cuánto debe Rosa', 'nombre suelto: no se toca');
+  assert.equal(m('Quispe Mamani pagó').text, 'cliente #c1 pagó');
+  assert.equal(m('Rosa Huamán pagó').text, 'cliente #c2 pagó');
   assert.equal(m('Jose Perez debe').text, 'un cliente debe', 'código que el redactor taparía (8 dígitos): «un cliente»');
   assert.equal(m('vive en Jr. Los Olivos 345, Ate').text, 'vive en [dirección oculta]');
   assert.equal(m('entrega en Av. Grau 123 Mz B Lt 5').text, 'entrega en [dirección oculta]');
   assert.equal(m('precio de Leche Gloria').text, 'precio de Leche Gloria', 'una palabra de un producto no se toma como cliente');
   assert.equal(m('Rosalinda compró arroz').text, 'Rosalinda compró arroz', 'solo palabras enteras');
   assert.equal(m('').text, ''); assert.equal(C.maskCustomers('hola Rosa', null).text, 'hola Rosa');
-  for (const t of ['Rosa Quispe', 'Quispe Mamani', 'Huamán', 'Gloria Ramos']) assert.ok(!/rosa|quispe|mamani|huam|gloria ramos/i.test(m('hable con ' + t + ' hoy').text), t);
+  for (const t of ['Rosa Quispe', 'Quispe Mamani', 'Rosa Huamán', 'Gloria Ramos']) assert.ok(!/rosa|quispe|mamani|huam|gloria ramos/i.test(m('hable con ' + t + ' hoy').text), t);
   assert.deepEqual(C.customerCodesIn('Sí, cliente #c2 debe; cliente #zz no existe; cliente #c2 otra vez', CLI), ['c2']);
 });
 test('1) UI: el mensaje pasa por maskCustomers ANTES del redactor y del envío (el historial guarda lo mismo); la respuesta pinta el nombre local', () => {
