@@ -124,6 +124,8 @@ const PRECACHE_URLS = [
   './js/modules/ticket/legacy.js',
   './js/modules/ticket/share-receipt.js',
   './js/modules/ticket/share-receipt-ui.js',
+  './js/modules/ticket/compartir-pdf-whatsapp.js',
+  './css/compartir-pdf-whatsapp.css',
   './css/receipt-share.css',
   './js/legacy-inline/inline-02.js',
   './js/modules/ticket/overrides.js',
