@@ -164,6 +164,8 @@
     'app-almaceneros': true,
     'equipos-pos': true,
     'asistente-virtual': true,
+    // Asistente: abrir cualquier función y proponer cambios de configuración (asistente-acciones.js, solo aparato). Apagado hasta OK del dueño.
+    'asistente-acceso-total': true,
     'tipo-cierre': true,
     'shopify-woocommerce': true,
     'bandeja-multicanal': true,
