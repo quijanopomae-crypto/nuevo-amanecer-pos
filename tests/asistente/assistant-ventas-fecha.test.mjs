@@ -3,7 +3,7 @@
 // «¿cuánto vendí hoy?» podía responder que no hubo ventas. Datos inventados.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runAssistantQuery, canonicalReader, memoryReader, period, SALE_LINES_MAX } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { runAssistantQuery, canonicalReader, memoryReader, period, SALE_LINES_MAX, SALES_READ_MAX } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import { activeCanon } from '../cloud-sync/canon-browser-harness.mjs';
 
 const NOW = Date.parse('2026-10-22T20:00:00.000Z'); // 15:00 en Lima
@@ -44,7 +44,7 @@ test('ventas de hoy con más de 5000 ventas: cuenta las de hoy (Lima), sin la an
   assert.deepEqual(r.resumen.por_metodo, { Efectivo: 12.5, Yape: 8 });
   assert.equal(r.desde, '2026-10-22');
   assert.ok(st.n <= 3, 'consultas a la base: ' + st.n); // control + una agregada (antes: ~84 = 21 páginas × 4)
-  assert.ok(st.sql.some((s) => /GROUP BY/i.test(s) && /created_at>=\?2/.test(s)), 'filtro de fecha y suma en SQL');
+  assert.ok(st.sql.some((s) => /GROUP BY/i.test(s) && /julianday\(r\.created_at\).*>=.*julianday\(\?2\)/.test(s)), 'filtro de fecha y suma en SQL');
 });
 
 test('top_productos y saleLines del período: solo hoy; saleLines mantiene la forma de #930', async (t) => {
@@ -84,4 +84,75 @@ test('sin la tabla de anulaciones (base sin 0026): igual responde, sin descontar
 test('lector en memoria: saleLines con la misma forma', async () => {
   const m = memoryReader({ sales: [{ sale_id: 's1', created_at: '2026-10-22T15:00:00.000Z', metodo: 'efectivo', total_cents: 100 }], saleItems: [{ sale_id: 's1', product_id: 'P', quantity: 1, unit_price_cents: 100, line_total_cents: 100, created_at: '2026-10-22T15:00:00.000Z' }] });
   assert.deepEqual(await m.saleLines(period({}, NOW)), [{ sale_id: 's1', product_id: 'P', quantity: 1, unit_cents: 100, line_cents: 100, created_at: '2026-10-22T15:00:00.000Z' }]);
+});
+
+// ---------- Seguimiento de alfa (22-10) ----------
+function dropTriggers(d, tables) { for (const { name } of d.prepare(`SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name IN (${tables.map((x) => `'${x}'`).join(',')})`).all()) d.exec('DROP TRIGGER "' + name + '"'); }
+test('top_productos: nombres SOLO de los más vendidos, por id, con el renombre vigente (sin leer el catálogo)', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0014_canonical_live_products.sql', '0015_canonical_inventory_adjust.sql', '0016_canonical_generic_sale_lines.sql', '0017_canonical_live_customers.sql', '0018_canonical_customer_credit_policy.sql', '0019_canonical_debt_reconciliation.sql', '0020_canonical_customer_contacts.sql', '0021_canonical_payment_references.sql', '0022_canonical_product_revisions.sql', '0024_pos_roles_owner_pin.sql', '0026_pos_sale_annulments.sql'] });
+  const d = f.database, c = d.prepare('SELECT active_promotion_id p,authority_epoch e,revision r FROM canonical_control WHERE id=1').get();
+  const [p1, p2] = d.prepare('SELECT product_id,name FROM products WHERE promotion_id=? ORDER BY product_id LIMIT 2').all(c.p);
+  unfence(d); dropTriggers(d, ['canonical_product_revisions']); d.exec('PRAGMA foreign_keys=OFF');
+  const sale = d.prepare("INSERT INTO sales(sale_id,operation_id,payload_hash,commit_token,device_id,payment_method,total_cents,created_at) VALUES(?,?,?,?,?,?,?,?)");
+  const ctx = d.prepare("INSERT INTO canonical_sale_context(sale_id,operation_id,promotion_id,authority_epoch,control_revision,customer_id,client_contract,created_at) VALUES(?,?,?,?,?,NULL,'a6-gate-c-v1',?)");
+  const item = d.prepare("INSERT INTO sale_items(sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at) VALUES(?,?,?,?,?,?,?,?)");
+  const at = '2026-10-22T15:00:00.000Z';
+  for (const [id, pid, cents] of [['S1', p1.product_id, 900], ['S2', p2.product_id, 300]]) { sale.run(id, 'o' + id, 'a'.repeat(64), 't', 'session:x', 'efectivo', cents, at); ctx.run(id, 'o' + id, c.p, c.e, c.r, at); item.run(id, 1, 'o' + id, pid, 1, cents, cents, at); }
+  const rev = d.prepare(`INSERT INTO canonical_product_revisions(operation_id,promotion_id,product_id,command,request_hash,result_json,revision,name,alternate_codes_json,cost_cents,price_cents,stock_min_quantity,authority_epoch,control_revision,client_contract,principal_id,credential_hash,created_at)
+    VALUES(?,?,?,'product.update',?,'{}',?,?,'[]',1,1,0,?,?,'a6-gate-c-v1','session:x',?,?)`);
+  rev.run('rv1', c.p, p1.product_id, 'b'.repeat(64), 1, 'NOMBRE VIEJO', c.e, c.r, 'c'.repeat(64), at);
+  rev.run('rv2', c.p, p1.product_id, 'b'.repeat(64), 2, 'NOMBRE NUEVO', c.e, c.r, 'c'.repeat(64), at);
+  const { db, st } = counting(f.env.nuevo_amanecer_lab);
+  const r = await runAssistantQuery(canonicalReader(db), { tipo: 'top_productos' }, NOW);
+  assert.deepEqual(r.filas.map((x) => x[0]), ['NOMBRE NUEVO', p2.name], 'renombre vigente y nombre original');
+  assert.ok(!st.sql.some((s) => /read_key/.test(s)), 'sin lectura del catálogo por páginas');
+  assert.ok(st.n <= 4, 'sentencias: ' + st.n);
+});
+
+test('saleLines (contrato de #930): precio vacío = null (no 0); truncated si se corta la lectura de ventas o la de líneas', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql', '0026_pos_sale_annulments.sql'] });
+  const d = f.database; seed(f, { old: 0 });
+  // Una base que trae el precio vacío (por ejemplo, una réplica sin la restricción): se lee con un lector cuyo SQL devuelve null.
+  const raw = f.env.nuevo_amanecer_lab;
+  const nullDb = { prepare(sql) { const s = raw.prepare(sql); return { bind(...v) { s.bind(...v); return this; }, async first() { return s.first(); }, async run() { return s.run(); },
+    async all() { const o = await s.all(); return { results: (o.results || []).map((x) => ('unit_price_cents' in x ? { ...x, unit_price_cents: null, line_total_cents: '' } : x)) }; } }; } };
+  const lines = await canonicalReader(nullDb).saleLines(period({}, NOW));
+  assert.ok(lines.length > 0 && lines.every((l) => l.unit_cents === null && l.line_cents === null), JSON.stringify(lines));
+  assert.equal(lines.truncated, false);
+  const ok = await canonicalReader(raw).saleLines(period({}, NOW));
+  assert.ok(ok.every((l) => Number.isFinite(l.unit_cents) && Number.isFinite(l.line_cents)));
+  assert.ok(d);
+});
+
+test('saleLines: más de SALES_READ_MAX ventas en el período -> truncated (quedan las más nuevas)', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql', '0026_pos_sale_annulments.sql'] });
+  seed(f, { old: SALES_READ_MAX + 3 });
+  const lines = await canonicalReader(f.env.nuevo_amanecer_lab).saleLines(period({ desde: '2026-09-01', hasta: '2026-10-22' }, NOW));
+  assert.equal(lines.truncated, true); assert.equal(new Set(lines.map((l) => l.sale_id)).size, SALES_READ_MAX);
+  assert.ok(lines.some((l) => l.sale_id === 'Z-hoy-2'), 'las de hoy (más nuevas) quedan');
+});
+
+test('created_at con desfase -05:00 cerca de la medianoche de Lima: cuenta por el momento real, no por el texto', async (t) => {
+  const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql', '0026_pos_sale_annulments.sql'] });
+  const d = f.database, c = d.prepare('SELECT active_promotion_id p,authority_epoch e,revision r FROM canonical_control WHERE id=1').get();
+  unfence(d); d.exec('PRAGMA foreign_keys=OFF');
+  const sale = d.prepare("INSERT INTO sales(sale_id,operation_id,payload_hash,commit_token,device_id,payment_method,total_cents,created_at) VALUES(?,?,?,?,?,?,?,?)");
+  const ctx = d.prepare("INSERT INTO canonical_sale_context(sale_id,operation_id,promotion_id,authority_epoch,control_revision,customer_id,client_contract,created_at) VALUES(?,?,?,?,?,NULL,'a6-gate-c-v1',?)");
+  const item = d.prepare("INSERT INTO sale_items(sale_id,line_number,operation_id,product_id,quantity,unit_price_cents,line_total_cents,created_at) VALUES(?,?,?,?,?,?,?,?)");
+  const add = (id, at, cents) => { sale.run(id, 'o' + id, 'a'.repeat(64), 't', 'session:x', 'efectivo', cents, at); ctx.run(id, 'o' + id, c.p, c.e, c.r, at); item.run(id, 1, 'o' + id, 'P' + id, 1, cents, cents, at); };
+  add('M1', '2026-10-22T00:30:00-05:00', 100);    // 22 en Lima, 00:30 (como texto quedaría ANTES de 2026-10-22T05:00Z)
+  add('M2', '2026-10-21T23:59:59-05:00', 200);    // 21 en Lima, un segundo antes de medianoche
+  add('M3', '2026-10-23T02:00:00-05:00', 400);    // 23 en Lima (como texto quedaría ANTES de 2026-10-23T05:00Z)
+  add('M4', '2026-10-22T05:00:00.000Z', 800);     // justo la medianoche del 22 en Lima, escrito en UTC
+  const reader = canonicalReader(f.env.nuevo_amanecer_lab);
+  const day = await runAssistantQuery(reader, { tipo: 'ventas_periodo', desde: '2026-10-22', hasta: '2026-10-22' }, NOW);
+  assert.equal(day.ventas, 2, 'M1 y M4'); assert.equal(day.total, 9);
+  const rng = await reader.salesTotals(period({ desde: '2026-10-21', hasta: '2026-10-23' }, NOW));
+  assert.deepEqual(rng.map((r) => [r.dia, r.c]), [['2026-10-21', 200], ['2026-10-22', 900], ['2026-10-23', 400]]);
+  const lines = await reader.saleLines(period({ desde: '2026-10-22', hasta: '2026-10-22' }, NOW));
+  assert.deepEqual(lines.map((l) => l.sale_id).sort(), ['M1', 'M4']);
+  const top = await reader.topItems(period({ desde: '2026-10-22', hasta: '2026-10-22' }, NOW), 10);
+  assert.deepEqual(top.map((x) => x.product_id), ['PM4', 'PM1']);
+  const mem = memoryReader({ sales: [{ sale_id: 'm', created_at: '2026-10-22T00:30:00-05:00', metodo: 'efectivo', total_cents: 100 }] });
+  assert.equal((await mem.salesTotals(period({ desde: '2026-10-22', hasta: '2026-10-22' }, NOW))).length, 1, 'el lector en memoria también');
 });

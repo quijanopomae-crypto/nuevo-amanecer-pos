@@ -14,7 +14,7 @@ const TITLES = { stock_producto: 'Stock del producto', bajo_stock: 'Productos po
 
 const cents = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)) / 100);
 const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
-export const SALE_LINES_MAX = 5000;
+export const SALE_LINES_MAX = 5000, SALES_READ_MAX = 5000;
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 function norm(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
 function limaToday(nowMs) { return new Date(nowMs - 5 * 3600 * 1000).toISOString().slice(0, 10); }
@@ -56,17 +56,22 @@ export function canonicalReader(db) {
       return c; }).catch((e) => { ctlMemo = null; throw e; });
     return ctlMemo;
   }
+  const MS = (x) => 'CAST(ROUND(julianday(' + x + ')*86400000) AS INTEGER)';
   const NOT_ANNULLED = " AND NOT EXISTS(SELECT 1 FROM pos_sale_annulments a WHERE a.sale_id=r.sale_id AND a.status='anulada')";
-  // FROM/WHERE comunes: ?1 promoción (solo ACTIVE), ?2 desde (incl.), ?3 hasta (excl.), en ISO UTC (period: día de Lima = 05:00Z a 05:00Z).
-  async function salesSql(p, select, tail, extra = []) {
+  // FROM/WHERE comunes: ?1 promoción (solo ACTIVE), ?2 desde (incl.), ?3 hasta (excl.): p.fromIso/p.toIso de period(), la ÚNICA función de
+  // hora de Lima (aquí no se calcula ninguna hora de Lima: el día de cada venta sale de su distancia a p.fromIso, en días enteros).
+  // build(from, where) arma la sentencia completa; se prueba con anulaciones y, si la tabla no existe, sin ellas.
+  async function salesQuery(p, build, extra = []) {
     const c = await ctl(), active = c.mode === 'ACTIVE';
     const from = active ? 'canonical_sale_context x JOIN sales r ON r.sale_id=x.sale_id' : 'sales r';
-    const where = (active ? 'x.promotion_id=?1' : '?1 IS NOT NULL') + ' AND r.created_at>=?2 AND r.created_at<?3';
-    const run = (ann) => db.prepare('SELECT ' + select + ' FROM ' + from + ' ' + (tail.join || '') + ' WHERE ' + where + (ann ? NOT_ANNULLED : '') + ' ' + tail.rest)
-      .bind(c.active_promotion_id, p.fromIso, p.toIso, ...extra).all();
+    // Por el MOMENTO (milisegundo exacto: SQLite guarda julianday en ms enteros, ROUND lo recupera sin error de coma), no como texto: una venta puede traer created_at con desfase (-05:00) en vez de «Z». No hay índice por
+    // created_at en sales (no se pierde ninguno); el filtro va junto a canonical_sale_context(promotion_id), que sí lo tiene.
+    const where = (active ? 'x.promotion_id=?1' : '?1 IS NOT NULL') + ' AND ' + MS('r.created_at') + '>=' + MS('?2') + ' AND ' + MS('r.created_at') + '<' + MS('?3');
+    const run = (ann) => db.prepare(build(from, where + (ann ? NOT_ANNULLED : ''))).bind(c.active_promotion_id, p.fromIso, p.toIso, ...extra).all();
     try { return (await run(true)).results || []; }
     catch (e) { if (!/no such table: pos_sale_annulments/i.test(String(e?.message || e))) throw e; return (await run(false)).results || []; }
   }
+  const salesSql = (p, select, tail, extra = []) => salesQuery(p, (from, where) => 'SELECT ' + select + ' FROM ' + from + ' ' + (tail.join || '') + ' WHERE ' + where + ' ' + tail.rest, extra);
   return {
     async products() { const rows = await all('products'); const list = rows.map((p) => ({ id: String(p.product_id), nombre: p.name, stock: Number(p.current_stock_quantity), min: Number(p.stock_min_quantity || 0),
       costo: cents(p.cost_cents), precio: cents(p.price_cents), controla: p.tracks_inventory === 1 || p.tracks_inventory === true })); list.truncated = rows.truncated; return list; },
@@ -93,20 +98,47 @@ export function canonicalReader(db) {
     async credits() { const rows = await all('credits'); return rows.map((c) => ({ cliente: String(c.customer_id), saldo: cents(c.current_balance_cents) || 0, vence: c.due_date || c.due_value || null })); },
     async customers() { const rows = await all('customers'); return rows.map((c) => ({ id: String(c.customer_id), nombre: c.name })); },
     async salesTotals(p) {
-      const rows = await salesSql(p, "date(r.created_at,'-5 hours') AS dia,r.payment_method AS metodo,COUNT(*) AS n,SUM(r.total_cents) AS c", { rest: 'GROUP BY dia,metodo ORDER BY dia LIMIT 1000' });
-      return rows.map((r) => ({ dia: String(r.dia), metodo: r.metodo, n: Number(r.n) || 0, c: Number(r.c) || 0 }));
+      // k = días enteros desde el comienzo del período (medianoche de Lima según period()); dia = p.desde + k.
+      const rows = await salesSql(p, '((' + MS('r.created_at') + '-' + MS('?2') + ')/86400000) AS k,r.payment_method AS metodo,COUNT(*) AS n,SUM(r.total_cents) AS c', { rest: 'GROUP BY k,metodo ORDER BY k LIMIT 1000' });
+      return rows.map((r) => ({ dia: addDays(p.desde, Number(r.k) || 0), metodo: r.metodo, n: Number(r.n) || 0, c: Number(r.c) || 0 }));
     },
     async topItems(p, n) {
       const rows = await salesSql(p, 'i.product_id AS product_id,SUM(i.quantity) AS q,SUM(i.line_total_cents) AS c', { join: 'JOIN sale_items i ON i.sale_id=r.sale_id', rest: 'GROUP BY i.product_id ORDER BY c DESC,i.product_id LIMIT ?4' }, [Math.max(1, Math.min(100, Number(n) || 10))]);
       return rows.map((r) => ({ product_id: r.product_id, q: Number(r.q) || 0, c: Number(r.c) || 0 }));
     },
-    // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. Misma forma que la de «Ventas bajo costo» (#930):
-    // { sale_id, product_id, quantity, unit_cents, line_cents, created_at }; .truncated si hay más de SALE_LINES_MAX en el período.
+    // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. MISMO contrato que «Ventas bajo costo» (#930):
+    // { sale_id, product_id, quantity, unit_cents, line_cents, created_at }; unit_cents/line_cents en null si vienen vacíos (= «sin precio»,
+    // nunca 0 = pérdida). .truncated si se cortó la lectura de ventas (más de SALES_READ_MAX en el período: quedan las más nuevas) O la de
+    // líneas (más de SALE_LINES_MAX). Una sola sentencia: ventas del período (más nuevas primero, con tope) y sus líneas.
     async saleLines(p) {
-      const rows = await salesSql(p, 'i.sale_id AS sale_id,i.product_id AS product_id,i.quantity AS quantity,i.unit_price_cents AS unit_price_cents,i.line_total_cents AS line_total_cents,i.created_at AS created_at',
-        { join: 'JOIN sale_items i ON i.sale_id=r.sale_id', rest: 'ORDER BY r.created_at DESC,i.sale_id,i.line_number LIMIT ?4' }, [SALE_LINES_MAX + 1]);
+      const rows = await salesQuery(p, (from, where) => `WITH s1 AS (SELECT r.sale_id AS sid,${MS('r.created_at')} AS sat FROM ${from} WHERE ${where} ORDER BY ${MS('r.created_at')} DESC,r.sale_id LIMIT ?4),
+        s AS (SELECT sid,sat FROM s1 ORDER BY sat DESC,sid LIMIT ?5)
+        SELECT (SELECT COUNT(*) FROM s1) AS n_sales,i.sale_id AS sale_id,i.product_id AS product_id,i.quantity AS quantity,i.unit_price_cents AS unit_price_cents,
+          i.line_total_cents AS line_total_cents,i.created_at AS created_at FROM s JOIN sale_items i ON i.sale_id=s.sid ORDER BY s.sat DESC,i.sale_id,i.line_number LIMIT ?6`,
+        [SALES_READ_MAX + 1, SALES_READ_MAX, SALE_LINES_MAX + 1]);
+      const salesCut = rows.length > 0 && Number(rows[0].n_sales) > SALES_READ_MAX, linesCut = rows.length > SALE_LINES_MAX;
       const out = rows.slice(0, SALE_LINES_MAX).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null }));
-      out.truncated = rows.length > SALE_LINES_MAX; return out;
+      out.truncated = !!(salesCut || linesCut); return out;
+    },
+    // Nombres VIGENTES de unos pocos productos por id (más vendidos): importados + creados en vivo, con el último cambio de ficha
+    // (canonical_product_revisions, product.update) por encima, igual que la lectura canónica de productos. Sin leer el catálogo.
+    async productNamesById(ids) {
+      const want = [...new Set((ids || []).map(String))]; const out = new Map(); if (!want.length) return out;
+      const c = await ctl();
+      for (let i = 0; i < want.length; i += PRODUCT_ID_CHUNK) {
+        const part = want.slice(i, i + PRODUCT_ID_CHUNK), marks = part.map((_, k) => '?' + (k + 2)).join(',');
+        const base = `SELECT product_id,name FROM products WHERE promotion_id=?1 AND product_id IN (${marks})`;
+        const live = `SELECT product_id,name FROM canonical_live_products WHERE promotion_id=?1 AND product_id IN (${marks})`;
+        const rev = (src) => `SELECT b.product_id,COALESCE((SELECT r.name FROM canonical_product_revisions r WHERE r.promotion_id=?1 AND r.product_id=b.product_id ORDER BY r.revision DESC LIMIT 1),b.name) AS name FROM (${src}) b`;
+        const tries = c.mode === 'ACTIVE' ? [rev(base + ' UNION ALL ' + live), rev(base), base + ' UNION ALL ' + live, base] : [base]; // sin tabla nueva: la versión sin ella
+        let rows = null;
+        for (const sql of tries) {
+          try { rows = (await db.prepare(sql).bind(c.active_promotion_id, ...part).all()).results || []; break; }
+          catch (e) { if (!/no such table: (canonical_product_revisions|canonical_live_products)/i.test(String(e?.message || e))) throw e; }
+        }
+        for (const r of rows || []) out.set(String(r.product_id), r.name);
+      }
+      return out;
     },
     async purchases(n) {
       try { return (await db.prepare('SELECT supplier,document_ref,total_cost_cents,line_count,status,created_at FROM pos_purchases ORDER BY created_at DESC LIMIT ?1').bind(n).all()).results || []; }
@@ -117,7 +149,7 @@ export function canonicalReader(db) {
 
 // Lector en memoria con la MISMA forma (prototipo local y pruebas; datos inventados).
 export function memoryReader(data) {
-  const inRange = (s, p) => s.created_at >= p.fromIso && s.created_at < p.toIso && !s.anulada;
+  const inRange = (s, p) => { const t = Date.parse(s.created_at); return t >= Date.parse(p.fromIso) && t < Date.parse(p.toIso) && !s.anulada; }; // por el momento (acepta -05:00)
   const dia = (iso) => new Date(Date.parse(iso) - 5 * 3600 * 1000).toISOString().slice(0, 10);
   return {
     async products() { return (data.products || []).map((p) => ({ ...p })); },
@@ -128,6 +160,7 @@ export function memoryReader(data) {
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
+    async productNamesById(ids) { const want = new Set((ids || []).map(String)), out = new Map(); for (const p of (data.products || [])) if (want.has(String(p.id))) out.set(String(p.id), p.nombre); return out; },
     async saleLines(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id));
       return (data.saleItems || []).filter((x) => ids.has(x.sale_id)).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: numOrNull(it.unit_price_cents), line_cents: numOrNull(it.line_total_cents), created_at: it.created_at || null })); },
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
@@ -183,7 +216,9 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
         texto: n ? 'Ventas ' + rango + ': S/ ' + cents(total).toFixed(2) + ' en ' + n + (n === 1 ? ' venta' : ' ventas') + '. Ticket promedio S/ ' + (cents(total) / n).toFixed(2) + '.' : 'No hay ventas registradas ' + rango + '.',
         resumen: { desde: p.desde, hasta: p.hasta, total_soles: cents(total), ventas: n, por_metodo: Object.fromEntries(metodos), mejor_dia: best ? { dia: best[0], soles: best[1] } : null, dias: dias.length } };
     }
-    const items = await reader.topItems(p, N), names = new Map((await reader.products()).map((x) => [x.id, x.nombre])); // nombres con la ficha vigente (incluye renombres)
+    const items = await reader.topItems(p, N);
+    // Nombres vigentes SOLO de los N más vendidos (por id, con renombres); un lector sin esa búsqueda lee el catálogo como antes.
+    const names = typeof reader.productNamesById === 'function' ? await reader.productNamesById(items.map((r) => String(r.product_id))) : new Map((await reader.products()).map((x) => [x.id, x.nombre]));
     const filas = items.map((r) => [names.get(String(r.product_id)) || String(r.product_id), r2(r.q), cents(r.c)]);
     return { ...base, titulo: 'Más vendidos ' + rango, columnas: ['Producto', 'Unid.', 'S/'], filas, desde: p.desde, hasta: p.hasta,
       texto: filas.length ? 'Más vendido ' + rango + ': ' + filas[0][0] + ' (' + filas[0][1] + ' unid., S/ ' + Number(filas[0][2]).toFixed(2) + ').' : 'No hay ventas ' + rango + '.',
