@@ -45,6 +45,8 @@ test('totales por medio de pago por turno, fechas de Lima inclusivas, OPEN fuera
   assert.deepEqual({ ...s2.metodos }, { efectivo: 300, yape: 0, plin: 0, transferencia: 1000, credito: 2000 });
   assert.equal(r.totals.count, 2); assert.equal(r.totals.total, 152750 + 3300);
   assert.equal(r.totals.metodos.efectivo, 100300);
+  assert.equal(s1.cobrado, 152750); assert.equal(s2.cobrado, 1300); // cobrado no incluye el crédito
+  assert.equal(r.totals.cobrado, 152750 + 1300);
 });
 test('filtro por cajero y lista de cajeros del rango', () => {
   const api = load();
@@ -70,11 +72,18 @@ test('CSV con guarda de fórmulas e importes numéricos; sin costos', () => {
   const api = load();
   const snap = { ...snapshot, cashSessions: snapshot.cashSessions.map(s => s.session_id === 's1' ? { ...s, opened_by_name: '=HYPERLINK(1)' } : s) };
   const csv = api.toCsv(api.buildReport(snap, range));
-  assert.ok(csv.startsWith('\uFEFFFecha cierre,Apertura,Cierre,Cajero,Efectivo,Yape,Plin,Transferencia,Al crédito,Total,Gastos,Ajustes'));
+  assert.ok(csv.startsWith('\uFEFFFecha cierre,Apertura,Cierre,Cajero,Efectivo,Yape,Plin,Transferencia,Al crédito,Total vendido,Cobrado,Gastos,Ajustes'));
   assert.match(csv, /'=HYPERLINK\(1\)/);
-  assert.match(csv, /1000\.00,500\.00,20\.50,7\.00,0\.00,1527\.50,12\.34,0\.00/);
+  assert.match(csv, /1000\.00,500\.00,20\.50,7\.00,0\.00,1527\.50,1527\.50,12\.34,0\.00/);
   assert.match(csv, /Total,2 turnos/);
   assert.doesNotMatch(csv, /costo/i);
+});
+test('candado propio reporte-medio-pago: falla cerrado', () => {
+  assert.equal(load().featureUnlocked(), false);
+  assert.equal(load({ NA_PERMISSIONS: { featureLocked: () => true } }).featureUnlocked(), false);
+  assert.equal(load({ NA_PERMISSIONS: { featureLocked: () => undefined } }).featureUnlocked(), false);
+  assert.equal(load({ NA_PERMISSIONS: { featureLocked: () => { throw new Error('x'); } } }).featureUnlocked(), false);
+  assert.equal(load({ NA_PERMISSIONS: { featureLocked: id => id !== 'reporte-medio-pago' } }).featureUnlocked(), true);
 });
 test('el módulo no usa innerHTML ni escribe almacenamiento ni llama a la red', () => {
   assert.doesNotMatch(source, /innerHTML|insertAdjacentHTML|setItem|removeItem|fetch\(|NA_ROLES\.api|costo|cost_cents/);

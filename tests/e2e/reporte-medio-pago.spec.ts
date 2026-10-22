@@ -17,6 +17,13 @@ async function rolePage(page: Page, role: 'owner' | 'empleado') {
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed, role);
 }
+// Abre el candado solo dentro del navegador de prueba; pos-permissions.js no cambia.
+async function unlock(page: Page) {
+  await page.evaluate(() => {
+    const w = window as any, original = w.NA_PERMISSIONS;
+    w.NA_PERMISSIONS = { ...original, featureLocked: (id: string) => id === 'reporte-medio-pago' ? false : original.featureLocked(id) };
+  });
+}
 async function seed(page: Page) {
   await page.evaluate(() => {
     const win = window as any;
@@ -43,7 +50,7 @@ async function seed(page: Page) {
 for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
   test(`medios de pago ${width}px ${dark ? 'oscuro' : 'claro'}: totales, filtro de cajero, CSV y sin escrituras`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await rolePage(page, 'owner'); await seed(page);
+    await rolePage(page, 'owner'); await unlock(page); await seed(page);
     const writes: string[] = [];
     page.on('request', r => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(r.method())) writes.push(r.method() + ' ' + r.url()); });
     await page.evaluate(dark => { document.body.classList.toggle('dark', dark); (window as any).goPage('pageReporteArqueo'); }, dark);
@@ -53,7 +60,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     await sec.locator('summary').click();
     await expect(sec.locator('tbody tr')).toHaveCount(2);
     await expect(sec.locator('tfoot th')).toHaveText('Total · 2 turnos');
-    await expect(sec.locator('tfoot td')).toHaveText(['S/ 1,000.00', 'S/ 500.00', 'S/ 20.50', 'S/ 0.00', 'S/ 0.00', 'S/ 1,520.50', 'S/ 0.00']);
+    await expect(sec.locator('tfoot td')).toHaveText(['S/ 1,000.00', 'S/ 500.00', 'S/ 20.50', 'S/ 0.00', 'S/ 0.00', 'S/ 1,520.50', 'S/ 1,520.50', 'S/ 0.00']);
     await expect(sec).not.toContainText(/costo/i);
     await sec.locator('[data-rmp-cajero]').selectOption('Cajera Ana');
     await expect(sec.locator('tbody tr')).toHaveCount(1);
@@ -75,6 +82,14 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
 test('empleado: la sección no se muestra', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await rolePage(page, 'empleado'); await seed(page);
+  await page.evaluate(() => { (document.querySelector('[data-rmp-details]') as HTMLDetailsElement).open = true; (window as any).NA_REPORTE_MEDIO_PAGO.render(); });
+  await expect(page.locator('[data-rmp-section]')).toBeHidden();
+  await expect(page.locator('[data-rmp-section] table')).toHaveCount(0);
+});
+
+test('dueño con el candado cerrado: la sección no se muestra', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await rolePage(page, 'owner'); await seed(page);
   await page.evaluate(() => { (document.querySelector('[data-rmp-details]') as HTMLDetailsElement).open = true; (window as any).NA_REPORTE_MEDIO_PAGO.render(); });
   await expect(page.locator('[data-rmp-section]')).toBeHidden();
   await expect(page.locator('[data-rmp-section] table')).toHaveCount(0);

@@ -3,7 +3,8 @@
 (function (root) {
   'use strict';
 
-  var PAGE_ID = 'pageReporteArqueo'; // vive dentro del reporte de arqueo: mismo candado del dueño, sin pantalla nueva
+  var PAGE_ID = 'pageReporteArqueo'; // vive dentro del reporte de arqueo, sin pantalla nueva
+  var FEATURE_ID = 'reporte-medio-pago'; // candado propio; su línea en FEATURE_LOCKS se agrega en el desbloqueo final
   var DAY_MS = 86400000;
   var METHODS = [['efectivo', 'Efectivo'], ['yape', 'Yape'], ['plin', 'Plin'], ['transferencia', 'Transferencia'], ['credito', 'Al crédito']];
   var renderedReport = null;
@@ -48,7 +49,8 @@
       return { sessionId: text(r.sessionId), fecha: fecha, fechaLabel: dateLabel(fecha), apertura: text(r.apertura), cierre: text(r.cierre),
         cajero: people[0] || 'No registrado', people: people, metodos: metodos,
         ventas: int(r.ventas), cobros: int(r.cobros), gastos: int(r.gastos), ajustes: int(r.ajustes), anulaciones: int(r.anulaciones),
-        total: METHODS.reduce(function (sum, m) { return sum + metodos[m[0]]; }, 0) };
+        total: METHODS.reduce(function (sum, m) { return sum + metodos[m[0]]; }, 0),
+        cobrado: METHODS.reduce(function (sum, m) { return m[0] === 'credito' ? sum : sum + metodos[m[0]]; }, 0) };
     }).filter(function (r) { return r.fecha && r.fecha >= desde && r.fecha <= hasta; });
     var cajeros = [];
     all.forEach(function (r) { r.people.forEach(function (p) { if (cajeros.indexOf(p) < 0) cajeros.push(p); }); });
@@ -56,10 +58,10 @@
     var rows = all.filter(function (r) { return !cajero || r.people.indexOf(cajero) >= 0; })
       .sort(function (a, b) { return b.fecha.localeCompare(a.fecha) || b.cierre.localeCompare(a.cierre) || a.sessionId.localeCompare(b.sessionId); });
     rows.forEach(function (r) { delete r.people; });
-    var totals = { count: rows.length, metodos: emptyMethods(), total: 0, ventas: 0, cobros: 0, gastos: 0, ajustes: 0, anulaciones: 0 };
+    var totals = { count: rows.length, metodos: emptyMethods(), total: 0, cobrado: 0, ventas: 0, cobros: 0, gastos: 0, ajustes: 0, anulaciones: 0 };
     rows.forEach(function (r) {
       METHODS.forEach(function (m) { totals.metodos[m[0]] += r.metodos[m[0]]; });
-      ['total', 'ventas', 'cobros', 'gastos', 'ajustes', 'anulaciones'].forEach(function (k) { totals[k] += r[k]; });
+      ['total', 'cobrado', 'ventas', 'cobros', 'gastos', 'ajustes', 'anulaciones'].forEach(function (k) { totals[k] += r[k]; });
     });
     return { range: { desde: desde, hasta: hasta }, cajero: cajero, cajeros: cajeros, rows: rows, totals: totals };
   }
@@ -70,9 +72,9 @@
       if (typeof value === 'string' && /^[=+@\t\r\n-]/.test(v.replace(/^ +/, ''))) v = "'" + v;
       return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     }
-    var head = ['Fecha cierre', 'Apertura', 'Cierre', 'Cajero'].concat(METHODS.map(function (m) { return m[1]; }), ['Total', 'Gastos', 'Ajustes']);
+    var head = ['Fecha cierre', 'Apertura', 'Cierre', 'Cajero'].concat(METHODS.map(function (m) { return m[1]; }), ['Total vendido', 'Cobrado', 'Gastos', 'Ajustes']);
     var lines = [head.map(cell).join(',')];
-    function amounts(src) { return METHODS.map(function (m) { return (src.metodos[m[0]] / 100).toFixed(2); }).concat([(src.total / 100).toFixed(2), (src.gastos / 100).toFixed(2), (src.ajustes / 100).toFixed(2)]); }
+    function amounts(src) { return METHODS.map(function (m) { return (src.metodos[m[0]] / 100).toFixed(2); }).concat([(src.total / 100).toFixed(2), (src.cobrado / 100).toFixed(2), (src.gastos / 100).toFixed(2), (src.ajustes / 100).toFixed(2)]); }
     report.rows.forEach(function (r) { lines.push([r.fechaLabel, r.apertura, r.cierre, r.cajero].map(cell).concat(amounts(r)).join(',')); });
     lines.push(['Total', report.totals.count + (report.totals.count === 1 ? ' turno' : ' turnos'), '', ''].map(cell).concat(amounts(report.totals)).join(','));
     return '\uFEFF' + lines.join('\r\n') + '\r\n';
@@ -83,6 +85,10 @@
   }
   function policyReady() {
     try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.canAccessScreen === 'function' && p.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
+  }
+  // Candado propio: falla cerrado si no hay permisos, si da error o si no es exactamente false.
+  function featureUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(FEATURE_ID) === false); } catch (_) { return false; }
   }
   function ownerAllowed() { return isOwner() && policyReady(); }
   function element(tag, className, value) {
@@ -109,7 +115,7 @@
     if (!sec) return false;
     var content = sec.querySelector('[data-rmp-content]'), status = sec.querySelector('[data-rmp-status]');
     var controls = sec.querySelector('[data-rmp-controls]'), exportButton = sec.querySelector('[data-rmp-export]');
-    var authorized = ownerAllowed();
+    var authorized = ownerAllowed() && featureUnlocked();
     sec.hidden = !authorized;
     if (controls) controls.hidden = !authorized;
     if (exportButton) exportButton.disabled = true;
@@ -135,7 +141,7 @@
     var wrap = element('div', 'rmp-table-wrap'); wrap.tabIndex = 0;
     wrap.setAttribute('role', 'region'); wrap.setAttribute('aria-label', 'Movimientos por medio de pago por turno');
     var table = element('table', 'rmp-table'), head = element('thead'), tr = element('tr');
-    ['Turno', 'Cajero'].concat(METHODS.map(function (m) { return m[1]; }), ['Total', 'Gastos']).forEach(function (label) {
+    ['Turno', 'Cajero'].concat(METHODS.map(function (m) { return m[1]; }), ['Total vendido', 'Cobrado', 'Gastos']).forEach(function (label) {
       var th = element('th', '', label); th.scope = 'col'; tr.appendChild(th);
     });
     head.appendChild(tr); table.appendChild(head);
@@ -143,6 +149,7 @@
     function amountCells(line, src) {
       METHODS.forEach(function (m) { line.appendChild(element('td', 'rmp-num', money(src.metodos[m[0]]))); });
       line.appendChild(element('td', 'rmp-num rmp-total', money(src.total)));
+      line.appendChild(element('td', 'rmp-num', money(src.cobrado)));
       line.appendChild(element('td', 'rmp-num', money(src.gastos)));
     }
     report.rows.forEach(function (r) {
@@ -158,7 +165,7 @@
     label.scope = 'row'; label.colSpan = 2; total.appendChild(label);
     amountCells(total, report.totals); foot.appendChild(total); table.appendChild(foot);
     wrap.appendChild(table); content.appendChild(wrap);
-    content.appendChild(element('p', 'rmp-note', 'Total = ventas y cobros del turno por medio de pago (incluye lo vendido al crédito). Los gastos se muestran aparte.'));
+    content.appendChild(element('p', 'rmp-note', 'Total vendido = ventas y cobros del turno por medio de pago, incluido lo vendido al crédito. Cobrado = lo que entró sin el crédito. Los gastos se muestran aparte.'));
     return true;
   }
   function init() {
@@ -186,7 +193,7 @@
     ['na:canonical-updated', 'focus'].forEach(function (event) { root.addEventListener(event, update); });
     update();
   }
-  root.NA_REPORTE_MEDIO_PAGO = Object.freeze({ buildReport: buildReport, toCsv: toCsv, money: money, render: render });
+  root.NA_REPORTE_MEDIO_PAGO = Object.freeze({ buildReport: buildReport, toCsv: toCsv, money: money, render: render, featureUnlocked: featureUnlocked });
   if (typeof module !== 'undefined' && module.exports) module.exports = root.NA_REPORTE_MEDIO_PAGO;
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true });
