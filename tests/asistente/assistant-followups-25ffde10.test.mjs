@@ -196,7 +196,8 @@ test('Bot 3 (2): racha larga sin espacios del empleado: «[texto largo omitido]�
   const t = 'Abra este enlace: https://x.example/' + 'a'.repeat(2000) + ' y listo.';
   let o = '', at = -1; const e = createTextEmitter((d) => { if (d.t) o += d.t; }, 1e9, redactFor(EMP), ownerHold);
   for (let i = 0; i < t.length; i++) { e.push(t[i]); if (at < 0 && o.includes('[texto largo omitido]')) at = i; }
-  e.flush(); assert.ok(at > 0 && at < 260, 'etiqueta en el carácter ' + at); assert.equal(o, red(t)); assert.equal(o, 'Abra este enlace: h[texto largo omitido] y listo.');
+  const pre = o; e.flush(); // (#962, diseño simple) la cola fija LABEL_TAIL espera 10 caracteres DESPUÉS de la racha (o el cierre): antes «at < 260»
+  assert.ok(!/aaaa/.test(pre) && o.startsWith(pre), 'nada de la racha antes de cerrar: ' + at); assert.equal(o, red(t)); assert.equal(o, 'Abra este enlace: h[texto largo omitido] y listo.');
   assert.ok(!o.includes('\u2029') && !o.includes('\u2028'));
   for (const k of SIZES) assert.equal(emit(t, EMP, k), o);
   assert.equal(same(t, 'owner'), redactText(t), 'dueño: el enlace intacto');
@@ -287,7 +288,8 @@ test('Bot 2 (regresión desde f3375c09): la línea siguiente que EMPIEZA con cos
   const lags = ['Gracias por su compra y vuelva pronto a la tienda de siempre, amigo.', 'uno dos tres cuatro cinco seis siete ocho', 'Leche fresca entera de vaca de la granja local y mas', 'Hasta luego.\nOtra linea mas larga aqui'].map((b) => lagAt(a + b) - a.length);
   // (auditoría de privacidad 2026-10-22) 39 en la primera: «… pronto a la …» espera UN carácter más para saber si «a» empieza «arroba»
   // (correo disfrazado «rosa arroba gmail punto com»); las demás igual.
-  assert.deepEqual(lags, [39, 31, 31, 18]);
+  // (#962, diseño simple) + LABEL_TAIL (10) de la cola fija: 49, 41, 28; la 2.ª línea tiene 41 caracteres, así que su monto sale al cerrar (-1)
+  assert.deepEqual(lags.map((x) => (x < 0 ? -1 : x)), [49, -1, 41, 28]);
   // ítem de lista o fila con tabulador: la palabra del dueño tapa solo su ítem (Bot 2 b, sin cambios)
   for (const t of ['- Arroz S/ 4.20\n- costo S/ 1.80', 'Leche Gloria\tS/ 3.70\ncosto\tS/ 1.80']) { const f = same(t); assert.ok(/4\.20|3\.70/.test(f) && !f.includes('1.80'), f); }
 });
