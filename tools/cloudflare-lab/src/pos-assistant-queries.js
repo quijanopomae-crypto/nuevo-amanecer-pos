@@ -86,6 +86,13 @@ export function canonicalReader(db) {
       for (const it of await all('sale-items')) { if (!ids.has(String(it.sale_id))) continue; const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += Number(it.quantity) || 0; r.c += Number(it.line_total_cents) || 0; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n);
     },
+    // Líneas vendidas en el período (sin anuladas), con su precio unitario cobrado. Solo lectura; la usa «Ventas bajo costo».
+    async saleLines(p) {
+      const sales = await salesIn(p), ids = new Set(sales.map((s) => String(s.sale_id))), out = [];
+      for (const it of await all('sale-items')) { if (!ids.has(String(it.sale_id))) continue;
+        out.push({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: Number(it.unit_price_cents), line_cents: Number(it.line_total_cents) || 0, created_at: it.created_at || null }); }
+      out.truncated = !!sales.truncated; return out;
+    },
     async purchases(n) {
       try { return (await db.prepare('SELECT supplier,document_ref,total_cost_cents,line_count,status,created_at FROM pos_purchases ORDER BY created_at DESC LIMIT ?1').bind(n).all()).results || []; }
       catch (e) { if (/no such table/i.test(String(e?.message || e))) return []; throw e; }
@@ -106,6 +113,8 @@ export function memoryReader(data) {
     async topItems(p, n) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id)); const m = new Map();
       for (const it of (data.saleItems || []).filter((x) => ids.has(x.sale_id))) { const r = m.get(it.product_id) || { product_id: it.product_id, q: 0, c: 0 }; r.q += it.quantity; r.c += it.line_total_cents; m.set(it.product_id, r); }
       return [...m.values()].sort((a, b) => b.c - a.c).slice(0, n); },
+    async saleLines(p) { const ids = new Set((data.sales || []).filter((x) => inRange(x, p)).map((s) => s.sale_id));
+      return (data.saleItems || []).filter((x) => ids.has(x.sale_id)).map((it) => ({ sale_id: String(it.sale_id), product_id: String(it.product_id), quantity: Number(it.quantity) || 0, unit_cents: Number(it.unit_price_cents ?? (it.quantity ? it.line_total_cents / it.quantity : NaN)), line_cents: Number(it.line_total_cents) || 0, created_at: it.created_at || null })); },
     async purchases(n) { return (data.purchases || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, n); }
   };
 }
