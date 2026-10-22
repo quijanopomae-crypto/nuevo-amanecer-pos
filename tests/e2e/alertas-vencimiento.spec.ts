@@ -1,3 +1,4 @@
+// (sin cambios) PR de diagnóstico: corre e2e-smoke sobre la base tal cual (#933, 740x360). No se fusiona.
 import { test, expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
