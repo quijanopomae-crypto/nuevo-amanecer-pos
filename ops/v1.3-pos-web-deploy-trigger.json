@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 191: publicar CANON commit dbca4aeac570f3749f5c056ad4391982e547acdd (PR #934 asistente: privacidad, clientes por código (nombre real solo en modo Admin, desde la lista del aparato), redactor en partes = entero, pie de tablas; PR #935 subir foto o PDF, solo Admin). Worker 69 ya publicado primero (run 39811845157, versión a3783295-165f-4a0f-9eef-296b761ac1ce). Solo estáticos web: sin migraciones, sin secretos. Respaldo D1 run 39787686903. Rollback a Web 190 (approved_base 48a8d920, run 39791120674).",
+  "note": "Web 191: publicar CANON commit cbd88718485c19806ce3a7edbda81f2613be196e (PR #940: panel de permisos por empleado se monta al confirmar el rol; employee-perms-ui.js en PRECACHE_URLS). Solo estáticos web: sin Worker, sin migraciones, sin secretos. Rollback a Web 190 (a422f434, run 39791120674).",
   "retry_attempt": 191,
-  "retry_reason": "OK del dueño 2026-10-22 («aprobado publica todo») para publicar #934 y #935 (Worker primero, luego web).",
-  "requested_at_utc": "2026-10-22T16:20:00Z",
-  "approved_base": "dbca4aeac570f3749f5c056ad4391982e547acdd"
+  "retry_reason": "OK del dueño 2026-10-22 para publicar #940 (solo web).",
+  "requested_at_utc": "2026-10-22T19:15:00Z",
+  "approved_base": "cbd88718485c19806ce3a7edbda81f2613be196e"
 }

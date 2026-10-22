@@ -13,7 +13,7 @@
   if (!doc || !C || root.NA_ASISTENTE) return;
   var cutNote = null; // nota de corte de la última respuesta (Bot 4: «Ver nuevo ↓» nunca la tapa)
   var lastCut = null; // burbuja de la última respuesta CORTADA por el servidor (final.cut === true): su cabecera pintada sirve a la continuación
-  var history = [], state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
+  var history = [], invoiceMemory = null, state = 'listo', quality = 'high', lowBattery = false, slowFrames = false, stateTimer = null, busy = false;
   var mascot = null, mascotAsked = false; // mascota v11 del dueño (asistente-mascota.js): solo dentro del panel, se pide al abrirlo la primera vez
   var clockOffset = 0;
   var IDLE_MS = 9000, HOLD_MS = 700, holding = false, holdTimer = null, idleTimer = null, sleeping = false, offscreen = false, heroOff = true, heroIO = null, heroDeferred = false, adminOff = false, bubbleIO = null, wired = false;
@@ -311,6 +311,13 @@
     roles: roles, confirm: confirmRemote, online: function () { return root.navigator.onLine !== false; },
     productos: function () { return g('productos') || []; },
     clientes: function () { var c = g('clientes'); return Array.isArray(c) ? c : []; },
+    refreshProducts: async function () {
+      var client = root.NuevoAmanecerCanonical;
+      if (!client || typeof client.refresh !== 'function') throw new Error('catalog_unavailable');
+      var pending = typeof client.pendingSnapshot === 'function' ? client.pendingSnapshot() : null;
+      if (pending && pending.command === 'product.create') throw new Error('product_pending');
+      await client.refresh();
+    },
     navigate: function (id) { try { root.NA_MENU_NAVIGATION.navigate(id); } catch (_) { try { root.goPage(id); } catch (__) {} } },
     openPurchase: function () { if (!root.NA_PURCHASES) return null; root.NA_PURCHASES.open(); return doc.getElementById('naPurchaseDialog'); },
     fillPurchase: function (w, p) {
@@ -332,7 +339,7 @@
         if (!prod && !nm) { pin.placeholder = 'Complete el producto'; pin.setAttribute('aria-invalid', 'true'); pin.dataset.naNeed = '1'; }
         row.querySelector('.na-pur-qty').value = l.cantidad;
         if (l.costo_unitario != null) row.querySelector('.na-pur-cost').value = l.costo_unitario;
-        if (!prod) row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b';
+        if (!prod) { row.querySelector('.na-pur-prod').style.outline = '3px solid #f59e0b'; purchaseProductButton(w, row); }
       });
       w.dispatchEvent(new Event('input', { bubbles: true }));
     },
@@ -377,6 +384,46 @@
     },
     businessName: function () { return 'Botica Nuevo Amanecer'; }
   };
+  // Conserva el borrador de compra mientras se guarda la ficha normal del producto.
+  // No llama comandos ni suma stock: Nuevo producto y Registrar compra mantienen sus permisos.
+  function purchaseProductButton(w, row) {
+    var box = el('div', 'na-asst-purchase-product'), button = el('button', 'na-asst-ok'), note = el('small', 'na-asst-note');
+    box.style.gridColumn = '1 / -1'; button.type = 'button'; button.textContent = 'Crear o vincular producto';
+    note.textContent = 'Busca uno existente o crea su ficha. El stock se sumará al registrar la compra.';
+    box.appendChild(button); box.appendChild(note); row.appendChild(box);
+    button.addEventListener('click', async function () {
+      if (!isOwnerAccess()) { note.textContent = 'Vuelve a entrar como Admin.'; return; }
+      button.disabled = true;
+      try { await deps.refreshProducts(); }
+      catch (_) { button.disabled = false; note.textContent = 'No pude verificar el catálogo o hay un producto pendiente. No repitas el guardado; revisa Inventario y vuelve a intentar.'; return; }
+      button.disabled = false;
+      if (!isOwnerAccess() || !w.parentNode) return;
+      var pin = row.querySelector('.na-pur-prod'), cost = row.querySelector('.na-pur-cost').value;
+      var draft = C.purchaseProductDraft({ nombre: pin.value, costo_unitario: cost === '' ? null : Number(cost) }, deps.productos());
+      if (!draft || draft.ambiguous) { note.textContent = 'Revisa el nombre y selecciona la presentación correcta en el catálogo.'; return; }
+      if (draft.product_id) { pin.value = draft.nombre; pin.style.outline = ''; note.textContent = 'Producto existente vinculado. Revisa cantidad y costo.'; w.dispatchEvent(new Event('input', { bubbles: true })); return; }
+      var display = w.style.display; w.style.display = 'none';
+      if (!deps.openNewProduct(draft)) { w.style.display = display; note.textContent = 'No se pudo abrir Nuevo producto. Revisa el catálogo.'; return; }
+      var modal = doc.getElementById('mProd');
+      note.textContent = 'Completa el precio de venta y guarda la ficha con stock inicial cero.';
+      var observer = new root.MutationObserver(async function () {
+        if (modal.classList.contains('open')) return;
+        observer.disconnect();
+        if (!w.parentNode || !isOwnerAccess()) return;
+        w.style.display = display; button.disabled = true;
+        try { await deps.refreshProducts(); }
+        catch (_) { note.textContent = 'No pude comprobar el producto guardado. No lo crees otra vez; revisa Inventario y vuelve a intentar.'; button.disabled = false; return; }
+        button.disabled = false;
+        if (!isOwnerAccess() || !w.parentNode) return;
+        var name = doc.getElementById('pNombre'), linked = C.purchaseProductDraft({ nombre: name ? name.value : draft.nombre }, deps.productos());
+        if (linked && linked.product_id) { pin.value = linked.nombre; pin.style.outline = ''; note.textContent = 'Producto vinculado. Revisa la compra antes de registrarla.'; }
+        else note.textContent = 'No se encontró una ficha guardada para vincular. Revisa el catálogo y los datos antes de continuar.';
+        w.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+  }
+
   var gate = C.createGate(deps);
 
   // ---------- Panel ----------
@@ -602,7 +649,7 @@
     if (mascot) { mascot.destroy(); mascot = null; } mascotAsked = false;
     if (panelEl) panelEl.remove(); if (rootEl) rootEl.remove();
     rootEl = panelEl = msgsEl = inputEl = sendBtn = photoBtn = fileEl = offEl = tagEl = newBtn = liveEl = null;
-    history.length = 0; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
+    history.length = 0; invoiceMemory = null; lastCut = null; cutNote = null; shownFor = null; busy = false; offscreen = false;
   }
   // (Bots 4/5 sobre 58200f60) 403 forbidden_role al CONFIRMAR una tarjeta: manda el rol del servidor; aquí no se mira el rol guardado en el
   // aparato ni se reintenta nada. La tarjeta sale de la pantalla, y la propuesta y lo escrito a mano salen de la memoria (la puerta ya la
@@ -683,6 +730,15 @@
   // informe nunca se pide solo). Se manda el resumen LOCAL (asistente-loader.js) pasado por el redactor del asistente; el servidor lo
   // vuelve a limpiar, arma el informe y no guarda nada. Empleado: nunca se manda (y el servidor responde 403 review_admin_only).
   var REVIEW_RE = /revisi[oó]n del (?:punto de venta|pos)\b|\brevis(?:a|e|ar)\s+(?:el\s+)?(?:punto de venta|pos)\b|\berrores del (?:punto de venta|pos)\b|\b(?:hazme|h[aá]game|haz|dame|d[eé]me|arma|genera|quiero|ver)\s+(?:el|un|mi)\s+informe\b|\binforme del (?:punto de venta|pos)\b/i;
+  // Preguntas naturales del Admin sobre lo que vio el monitor («qué errores encontraste», «hubo fallas», «se colgó», «cómo está el sistema»,
+  // «reporte»). Se comparan sin tildes, sin signos y en minúsculas, y aceptan errores de tipeo comunes («q erores», «fayas»). No toma
+  // preguntas de negocio: «cuánto vendí hoy», «stock de arroz», «reporte de ventas», «cómo está la caja», «productos de lenta rotación».
+  var REVIEW_ASK_RE = /\b(?:que|q|ke|cuales?|cuantos?|algun[oa]?s?|hay|hubo|habia|ha habido|existen?|tienes?|tiene|tenemos|tuvo|tuvimos|ves|viste|veo|encontr\w*|detect\w*|registr\w*|revis\w*|muestr\w*|mostr\w*|dime|decime|digame|dame|deme|listame|lista|ultimos?|nuevos?|reportame|informame)\s+(?:\S+\s+){0,2}?(?:e+r+o+r+(?:e*s)?|errors?|fa(?:ll|y)(?:a|o)s?|bugs?)\b|^\s*(?:los\s+|las\s+)?(?:e+r+o+r+(?:e*s)?|fa(?:ll|y)(?:a|o)s|bugs?)(?:\s+(?:de|del|en el|en la)\s+(?:hoy|ayer|la semana|semana|pos|punto de venta|sistema|app|aplicacion|programa))?\s*$|\b(?:e+r+o+r+(?:e*s)?|fa(?:ll|y)(?:a|o)s|bugs?)\s+(?:encontrad\w*|detectad\w*|registrad\w*|hay|hubo)\b|\b(?:que|q|ke|algo)\s+(?:fallo|se rompio|(?:anda|esta|salio|funciona)\s+mal)\b|\bfallo\s+algo\b|\bque\s+(?:encontraste|detectaste|notaste|registraste)\b|\bque\s+(?:encontro|detecto|vio|dice)\s+(?:el\s+)?monitor\b|\b(?:algo|esta|estuvo|va|iba|anda|andaba|se pone|se puso|funciona|muy|tan|demasiado)\s+lent[oa]s?\b|\blentitud\b|\bse\s+(?:colg|congel|trab|tild)\w*|\b(?:colgad|congelad|trabad)[oa]s?\b|\bse\s+cuelga\b|\bcomo\s+(?:esta|anda|va|sigue|marcha)\s+(?:el\s+|la\s+|mi\s+|nuestro\s+|nuestra\s+)?(?:pos|punto de venta|sistema|app|aplicacion|programa)\b|\b(?:pos|punto de venta|sistema|app|aplicacion|programa)\s+(?:esta|anda|va|funciona)\s+bien\b|\b(?:revis|chequ|verific|analiz|diagnostic|monitore|vigil)\w*\s+(?:todo\s+)?(?:el\s+|la\s+|mi\s+)?(?:pos|punto de venta|sistema|app|aplicacion|programa)\b|\b(?:informe|reporte|resumen)\s+(?:de|del|sobre)\s+(?:los\s+|las\s+)?(?:e+r+o+r+(?:e*s)?|fa(?:ll|y)(?:a|o)s|bugs?|lentitud|rendimiento|monitoreo|monitor|salud|estado|pos|punto de venta|sistema|app|aplicacion)\b|^\s*(?:el\s+|un\s+|mi\s+|tu\s+)?(?:informe|reporte)\s*$|\b(?:hazme|hagame|haz|dame|deme|arma|genera|quiero|ver|mandame|enviame|muestrame|pasame)\s+(?:el|un|mi|ese|tu)\s+reporte\b(?!\s+de\s+(?:ventas?|compras?|caja|stock|inventario|productos?|clientes?|ganancias?|gastos?|deudas?|creditos?))/;
+  function reviewNorm(t) { var s = String(t || '').toLowerCase(); if (s.normalize) s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); return s.replace(/[^a-z0-9#]+/g, ' ').trim(); }
+  // Errores en DATOS del negocio («¿algún error en los precios?», «errores en el stock», «falla en la caja», «error en la venta del cliente»)
+  // son preguntas de datos: van al chat. «Errores del POS / del sistema / de la app» siguen abriendo la revisión.
+  var REVIEW_BIZ_RE = /\b(?:e+r+o+r+(?:e*s)?|errors?|fa(?:ll|y)(?:a|o)s?|bugs?|mal|problemas?)\s+(?:\S+\s+){0,2}?(?:en|de|con|del|sobre|para)\s+(?:(?:los|las|el|la|mis|mi|un|una|unos|unas|este|esta|estos|estas|esos|esas)\s+)?(?:precios?|stock|inventarios?|ventas?|compras?|caja|creditos?|abonos?|boletas?|facturas?|productos?|clientes?|cuentas?|deudas?|montos?|gastos?|cobros?|pagos?|vueltos?|tickets?|recibos?|totales?|cuadres?|cierres?|kardex|lotes?|proveedor(?:es)?|pedidos?)\b/;
+  function isReview(t) { if (REVIEW_RE.test(t)) return true; var n = reviewNorm(t); return !REVIEW_BIZ_RE.test(n) && REVIEW_ASK_RE.test(n); }
   // Cliente: SOLO su código interno (el id que ya tiene en la lista de clientes del POS) y la acción. Nunca nombre, DNI ni montos.
   var CLI_RE = /^[A-Za-z0-9_-]{1,40}$/;
   function cliPart(x) { return x && x.cli != null && CLI_RE.test(String(x.cli)) ? { cli: String(x.cli), accion: String(x.accion || 'cliente').slice(0, 30) } : {}; }
@@ -784,8 +840,8 @@
     if (busy) return;
     text = String(text || '').trim(); if (!text && !image) return;
     if (!image && isOwnerAccess() && BOLETA_RE.test(text)) { inputEl.value = ''; return boletaPick(); }
-    if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !REVIEW_RE.test(text)) return learnedShow(text);
-    if (!image && isOwnerAccess() && REVIEW_RE.test(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
+    if (!image && isOwnerAccess() && LEARNED_RE.test(text) && !isReview(text)) return learnedShow(text);
+    if (!image && isOwnerAccess() && isReview(text)) { if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, null, false]); setState('offline'); return; } return review(text); }
     if (root.navigator.onLine === false) { offline(true); errMsg('offline', null, [text, image, false]); setState('offline'); return; }
     // Bot 3: foto de un empleado = se avisa al instante, SIN subirla (el servidor igual la corta con 403 image_owner_only).
     if (image && access && access.role !== 'owner') { addMsg('u', text || 'Foto'); errMsg('image_owner_only'); setState('error', 2600); return; }
@@ -800,7 +856,8 @@
     // de salir del aparato; el historial guarda lo mismo (los turnos firmados son este texto). El nombre se vuelve a poner solo al pintar.
     var masked = C.maskCustomers ? C.maskCustomers(text, deps.clientes(), deps.productos()) : { text: text };
     var body = { text: C.redactText(masked.text), history: history.slice(-8), context: C.buildContext(deps.productos(), roles().role, screen, text) };
-    if (image) body.image = image;
+    if (image) { body.image = image; invoiceMemory = null; }
+    else if (isOwnerAccess() && invoiceMemory) body.invoice_memory = invoiceMemory;
     var bubble = null, painter = null, streaming = canStream();
     // cabecera para filas sueltas de la continuación: solo de lo YA pintado (texto filtrado) en la burbuja anterior cortada
     var prevLabels = lastCut && lastCut._md && lastCut._md.labels ? lastCut._md.labels() : null, mdOpts = prevLabels ? { labels: prevLabels } : null; lastCut = null; cutNote = null;
@@ -840,6 +897,8 @@
       if (!d.ok && ACCESS_LOST[d.error]) { accessLost(d.error); return; }
       if (!d.ok && d.error === 'forbidden_document') { levelLowered(); errMsg('forbidden_document'); setState('error', 2600); return; }
       if (!d.ok) { errMsg(d.error, null, [text, image]); setState('error', 2600); return; }
+      if (isOwnerAccess() && typeof d.invoice_memory === 'string') invoiceMemory = d.invoice_memory;
+      else if (d.invoice_memory === null || !isOwnerAccess()) invoiceMemory = null;
       // Turnos firmados por el servidor (texto exacto + firma). Sin firma, el servidor los descarta en un aparato de empleado.
       if (Array.isArray(d.turns) && d.turns.length === 2) history.push({ role: 'user', content: d.turns[0].content, sig: d.turns[0].sig, n: d.turns[0].n, iat: d.turns[0].iat }, { role: 'assistant', content: d.turns[1].content, sig: d.turns[1].sig, n: d.turns[1].n, iat: d.turns[1].iat, cut: d.turns[1].cut === true });
       else history.push({ role: 'user', content: body.text || 'Foto' }, { role: 'assistant', content: d.reply });

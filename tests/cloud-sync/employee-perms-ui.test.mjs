@@ -51,3 +51,63 @@ test('el módulo no usa innerHTML, no define ownerAllowed y arranca todo apagado
   assert.ok(html.indexOf('js/config/pos-employee-toggles.js') < html.indexOf('js/config/employee-perms-ui.js'));
   assert.ok(html.indexOf('js/config/employee-perms-ui.js') < html.indexOf('js/config/config-g.js'));
 });
+
+// Confirmación tardía del rol y sin doble montaje (DOM mínimo de prueba, solo fixtures locales).
+function fakeDom() {
+  const mk = (tag) => {
+    const n = { tagName: tag, children: [], parentNode: null, className: '', id: '', dataset: {}, attrs: {}, textContent: '', type: '', checked: false, disabled: false,
+      appendChild(c) { c.parentNode = n; n.children.push(c); return c; },
+      insertBefore(c) { return n.appendChild(c); },
+      remove() { if (n.parentNode) { n.parentNode.children = n.parentNode.children.filter(x => x !== n); n.parentNode = null; } },
+      setAttribute(k, v) { n.attrs[k] = v; }, addEventListener() {}, closest() { return null; },
+      all() { return n.children.flatMap(c => [c, ...c.all()]); },
+      querySelectorAll(sel) { return n.all().filter(c => match(c, sel)); },
+      querySelector(sel) { return n.querySelectorAll(sel)[0] || null; } };
+    return n;
+  };
+  const match = (c, sel) => sel === '#naEmpPerm' ? c.id === 'naEmpPerm' : sel === '#naEmpPermSave' ? c.id === 'naEmpPermSave'
+    : sel === 'input[data-perm]' ? c.tagName === 'input' && 'perm' in c.dataset : sel === '.na-emp-perm-status' ? c.className.split(' ').includes('na-emp-perm-status') : false;
+  const cont = mk('div');
+  const document = { createElement: mk, querySelector: sel => (sel === '.na9-bd[data-sec="pin"]' ? cont : null) };
+  return { cont, document };
+}
+function loadLive(role) {
+  const { cont, document } = fakeDom(); const listeners = [];
+  const ctx = vm.createContext({ document, Date, Math, NA_PERMISSIONS: perms(false), NA_ROLES: { isOwner: () => role.owner, api: async () => ({ allow: {} }), pinSet: true },
+    addEventListener: (t, f) => { if (t === 'na:role') listeners.push(f); } });
+  vm.runInContext(read('POS/js/config/pos-employee-toggles.js'), ctx);
+  vm.runInContext(UI, ctx);
+  return { ctx, cont, fire: () => listeners.forEach(f => f()), count: () => cont.querySelectorAll('#naEmpPerm').length, listeners };
+}
+
+test('rol confirmado tarde: na:role monta el panel en Usuarios y PIN', () => {
+  const role = { owner: false }; const t = loadLive(role);
+  assert.equal(t.listeners.length, 1);
+  assert.equal(t.ctx.NA_EMPLOYEE_PERMS_UI.mount(t.cont), false, 'sin confirmar no se monta');
+  assert.equal(t.count(), 0);
+  t.fire(); assert.equal(t.count(), 0, 'na:role sin dueño confirmado sigue cerrado');
+  role.owner = true; t.fire();
+  assert.equal(t.count(), 1, 'al confirmar aparece');
+});
+
+test('sin doble montaje: varios na:role y mount previo dejan un solo panel', () => {
+  const role = { owner: true }; const t = loadLive(role);
+  assert.equal(t.ctx.NA_EMPLOYEE_PERMS_UI.mount(t.cont), true);
+  const first = t.cont.querySelector('#naEmpPerm');
+  t.fire(); t.fire(); t.fire();
+  assert.equal(t.count(), 1);
+  assert.equal(t.cont.querySelector('#naEmpPerm'), first, 'no se reconstruye el mismo panel');
+});
+
+test('falla cerrada: si el rol deja de ser dueño confirmado, na:role quita el panel', () => {
+  const role = { owner: true }; const t = loadLive(role);
+  t.fire(); assert.equal(t.count(), 1);
+  role.owner = false; t.fire(); assert.equal(t.count(), 0);
+  role.owner = () => { throw new Error('x'); }; t.ctx.NA_ROLES.isOwner = () => { throw new Error('x'); }; t.fire(); assert.equal(t.count(), 0);
+});
+
+test('sw.js precarga employee-perms-ui.js (el panel no depende de la red)', () => {
+  const sw = read('POS/sw.js');
+  const block = sw.slice(sw.indexOf('const PRECACHE_URLS = ['), sw.indexOf('];', sw.indexOf('const PRECACHE_URLS = [')));
+  assert.ok(block.includes("'./js/config/employee-perms-ui.js'"));
+});
