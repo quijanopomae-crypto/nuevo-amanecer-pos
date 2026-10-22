@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner OK to publish PR #924 (permisos por empleado, 2026-10-22). Merge 48a8d920: worker.js authorizeSession + pos-employee-perms.js (/auth/employee-permissions), pos-roles.js (/auth/me employee_allow solo empleado); FEATURE_LOCKS 'permisos-por-empleado': false. Sin migración: fila pos_settings internal:emp:perm:v1 (sin fila = todo apagado). Worker before web. CI critical-regression + visual green. D1 backup taken first: Owner Backup Recovery Drill run 39781034687 success (R2 recovery-drills/2026-10-22T12-46-03Z-94a98e23….sql). Rollback to 7e06690c (worker 67).",
-  "target_commit": "48a8d9203029826812fb4613894f2a7f70f4b569",
-  "rollback_ref": "7e06690cc6c83651e60d1daeaa7a3f73da02f1ad",
+  "authorization_context": "Owner OK 2026-10-22 («aprobado publica todo») to publish PR #934 (asistente: privacidad, clientes por código, redactor en partes = entero, tabla de deudas sin nombres del servidor) and PR #935 (subir foto o PDF, solo web). Merges 8687bf2d (#934) and dbca4aea (#935) on top of Worker 68 (48a8d920, #924). Sin migración, sin cambios de esquema. CI critical-regression + e2e-smoke + visual green on both PRs. D1 backup today: Owner Backup Recovery Drill run 39787686903 success (R2). Rollback to 48a8d920 (Worker 68, version 8bd10309-6fb9-400a-a83f-c233aaa623a5).",
+  "target_commit": "dbca4aeac570f3749f5c056ad4391982e547acdd",
+  "rollback_ref": "48a8d9203029826812fb4613894f2a7f70f4b569",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 68,
-  "optimization": "PERMISOS_POR_EMPLEADO"
+  "attempt": 69,
+  "optimization": "ASISTENTE_PRIVACIDAD_SUBIR_ARCHIVO"
 }
