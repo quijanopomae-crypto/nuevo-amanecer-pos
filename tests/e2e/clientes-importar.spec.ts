@@ -109,3 +109,20 @@ test('no abre la importación si «+ Cliente» tiene datos sin guardar', async (
   await expect(page.locator('#naImportarClientes')).toBeHidden();
   expect(await page.evaluate(() => (document.getElementById('cNombre') as HTMLInputElement).value)).toBe('A medio escribir');
 });
+
+test('sin roles cargados: con sesión en la nube no es dueño; en modo local puro sí', async ({ page }) => {
+  await openClients(page);
+  const run = (cloud: boolean) => page.evaluate((cloud) => {
+    const w = window as any;
+    Object.defineProperty(w, 'NA_ROLES', { value: undefined, configurable: true, writable: true });
+    const canon = w.NuevoAmanecerCanonical;
+    Object.defineProperty(w, 'NuevoAmanecerCanonical', { value: { ...canon, enabled: () => cloud }, configurable: true, writable: true });
+    return w.NA_CLIENTES_IMPORTAR.buildPreview('nombre;linea_credito\nAna;150\n', { docs: {}, phones: {} });
+  }, cloud);
+  const cloudRes = await run(true);
+  expect(cloudRes.lineIgnored).toBe(true);
+  expect(cloudRes.rows[0].lineaTexto).toBe('');
+  const localRes = await run(false);
+  expect(localRes.lineIgnored).toBe(false);
+  expect(localRes.rows[0].lineaTexto).toBe('150.00');
+});
