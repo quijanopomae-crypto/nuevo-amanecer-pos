@@ -8,6 +8,8 @@ import { canonicalRead } from './a6-canonical.js';
 const sentences = (arr) => arr.map((x) => (/[.!?]$/.test(x) ? x : x + '.')).join(' ');
 export const QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'resumen_dia', 'resumen_mes']);
 // Resúmenes del día y del mes: SOLO el Admin (el empleado recibe 403 summary_admin_only en el chat).
+// (lote en vivo 22-10, a) sin compras: se dice claro y dónde se registran (el modelo no pregunta de vuelta).
+export const NO_PURCHASES_TEXT = 'No tengo ese dato registrado: no hay compras guardadas. Se registran en Inventario > Compras > Nueva compra y se ven en Compras > Historial.';
 export const SUMMARY_TYPES = Object.freeze(['resumen_dia', 'resumen_mes']);
 export const PRODUCT_ID_CHUNK = 50; // ids por consulta IN (...): muy por debajo del tope de 100 parámetros de D1
 export const QUERY_LIMITS = Object.freeze({ topRows: 10, modelRows: 8, maxPages: 20, pageSize: 250, maxDays: 92 });
@@ -309,8 +311,8 @@ export async function runAssistantQuery(reader, args, nowMs = Date.now()) {
   // Fecha de la compra en día de Lima (una compra de las 23:30 en Lima ya es el día siguiente en UTC).
   const filas = rows.map((r) => [limaDateOf(r.created_at), r.supplier || '-', r.document_ref || '-', cents(r.total_cost_cents), r.line_count]);
   return { ...base, columnas: ['Fecha', 'Proveedor', 'Documento', 'Total S/', 'Líneas'], filas,
-    texto: rows.length ? (rows.length === 1 ? 'Última compra' : 'Últimas ' + rows.length + ' compras') + '. La más reciente: ' + filas[0][0] + ', ' + filas[0][1] + ', S/ ' + Number(filas[0][3] || 0).toFixed(2) + '.' : 'No hay compras registradas.',
-    resumen: { compras: rows.length, total_soles: r2(filas.reduce((s, f) => s + (f[3] || 0), 0)), recientes: filas.slice(0, M).map((f) => ({ fecha: f[0], proveedor: f[1], soles: f[3] })) } };
+    texto: rows.length ? (rows.length === 1 ? 'Última compra' : 'Últimas ' + rows.length + ' compras') + '. La más reciente: ' + filas[0][0] + ', ' + filas[0][1] + ', S/ ' + Number(filas[0][3] || 0).toFixed(2) + '.' : NO_PURCHASES_TEXT,
+    resumen: { ...(rows.length ? {} : { sin_dato: NO_PURCHASES_TEXT }), compras: rows.length, total_soles: r2(filas.reduce((s, f) => s + (f[3] || 0), 0)), recientes: filas.slice(0, M).map((f) => ({ fecha: f[0], proveedor: f[1], soles: f[3] })) } };
 }
 
 // Resumen del día o del mes. Pantalla del Admin: tabla actual vs. anterior y productos top (con nombre). Modelo y texto de la respuesta:

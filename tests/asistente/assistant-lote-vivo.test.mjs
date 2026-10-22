@@ -133,7 +133,8 @@ test('Admin: el texto nombra el producto, no «producto #id»; el empleado sin c
   const emp = await chat({ text: '¿qué producto está bajo?', context: ctx }, { role: 'empleado:consultas', responses: [{ content: 'El producto #p17abc tiene 3 unid.' }] });
   assert.match(emp.body.reply, /#p17abc/);
   assert.equal(A.nameProductRefs('cliente #c1 compró', ctx.products), 'cliente #c1 compró');
-  assert.match(systemPrompt('owner'), /Nombra los productos por su NOMBRE/);
+  // Con la base: los productos de un resumen siguen como «producto #código» (assistant-resumenes.test.mjs); el resto se nombra en el servidor.
+  assert.doesNotMatch(systemPrompt('owner'), /Nombra los productos por su NOMBRE/);
 });
 
 // ---------- Lote 3 ----------
@@ -198,4 +199,73 @@ test('lote 3: Admin ve el NOMBRE aunque la pantalla no mande productos (se busca
     fetch: async (_u, init) => { requests.push(JSON.parse(init.body)); return new Response(JSON.stringify({ choices: [{ message: { content: 'El producto #p9 tiene 20 unidades.' } }] })); }
   });
   assert.equal((await res.json()).reply, 'El producto Arroz Jairito 1 kg tiene 20 unidades.');
+});
+
+// ---------- Lote 4 (a-d) y alfa ----------
+test('a) sin dato: compras vacías -> «No tengo ese dato registrado» + dónde; al modelo va sin_dato; regla SIN DATO (flete en Gastos)', async () => {
+  const empty = { products: async () => PRODUCTS, purchases: async () => [], credits: async () => [], customers: async () => [] };
+  const q = await runAssistantQuery(empty, { tipo: 'compras_recientes' }, 200000);
+  assert.match(q.texto, /^No tengo ese dato registrado/); assert.match(q.texto, /Inventario > Compras > Nueva compra/); assert.match(q.texto, /Compras > Historial/);
+  assert.match(q.resumen.sin_dato, /No tengo ese dato registrado/);
+  const r = await chat({ text: 'a qué precio compré el aceite?' }, { reader: empty, responses: [call('consultar', { tipo: 'compras_recientes' }), { content: 'No tengo ese dato registrado; las compras se registran en Inventario > Compras > Nueva compra.' }] });
+  assert.equal(r.status, 200); assert.equal(r.requests.length, 2);
+  const tool = r.requests[1].messages.find((m) => m.role === 'tool'); assert.match(tool.content, /No tengo ese dato registrado/);
+  for (const role of ['owner', 'empleado:consultas']) {
+    const sp = systemPrompt(role);
+    assert.match(sp, /SIN DATO \(flete en Gastos[^\n]*«No tengo ese dato registrado» y dónde se registra o se ve; no preguntes de vuelta/);
+    assert.match(sp, /PANTALLAS REALES[^\n]*Gastos/, 'Gastos es una pantalla real');
+  }
+});
+
+test('b) «compré 10 Inka Kola y no aparecen en el stock»: pasos con pantallas reales (Inventario > Compras > Historial, Nueva compra, stock y Kardex)', () => {
+  const ui = readFileSync('POS/js/config/pos-purchases-client.js', 'utf8');
+  assert.match(ui, /textContent = 'Compras'/); assert.match(ui, /<h3>Nueva compra<\/h3>/); assert.match(ui, />Historial<\/button>/);
+  for (const role of ['owner', 'empleado:consultas']) {
+    const line = systemPrompt(role).split('\n').find((l) => l.startsWith('COMPRA QUE NO SUBE EL STOCK')); assert.ok(line, role);
+    assert.match(line, /Inventario > Compras > Historial: ¿se guardó\?/); assert.match(line, /Nueva compra/); assert.match(line, /stock_producto/); assert.match(line, /Kardex/);
+    assert.match(systemPrompt(role), /Kardex valorizado por producto/, 'Kardex es una pantalla real');
+  }
+});
+
+test('c) RUC del proveedor: nunca «no puedo compartir»; «No tengo ese dato registrado» y dónde verlo', async () => {
+  for (const text of ['cuál es el RUC de mi proveedor Gloria?', 'dame el ruc del proveedor del arroz']) {
+    const r = await chat({ text }, { responses: [{ content: 'Lo siento, no puedo compartir el RUC del proveedor.' }] });
+    assert.equal(r.body.reply, A.RUC_MISSING_TEXT, text);
+    assert.doesNotMatch(r.body.reply, /no puedo compartir/i); assert.match(r.body.reply, /No tengo ese dato registrado[^]*factura o boleta[^]*Inventario > Compras > Historial/);
+  }
+  const other = await chat({ text: 'cuánto cuesta la leche?' }, { responses: [{ content: 'No puedo darte ese dato ahora.' }] });
+  assert.equal(other.body.reply, 'No puedo darte ese dato ahora.', 'sin RUC en la pregunta no se toca');
+  assert.match(systemPrompt('owner'), /ni digas «no puedo compartir»/);
+});
+
+test('d) montos «que te indiqué» que nunca se dijeron: se quita la referencia; si sí se dijeron, queda', async () => {
+  const r = await chat({ text: 'cuánto pago de flete?' }, { responses: [{ content: 'Sobre los S/ 0 que te indiqué, no tengo el flete registrado.' }] });
+  assert.equal(r.body.reply, 'Sobre S/ 0, no tengo el flete registrado.');
+  assert.doesNotMatch(r.body.reply, /que te indiqu/);
+  assert.equal(A.dropUnsaidAmountRefs('Los S/ 15 que te dije siguen igual.', 'El flete fue S/ 15.'), 'Los S/ 15 que te dije siguen igual.');
+  assert.equal(A.dropUnsaidAmountRefs('Los S/ 12,50 que te mencioné.', 'Costó S/ 12.50'), 'Los S/ 12,50 que te mencioné.');
+  assert.equal(A.dropUnsaidAmountRefs('Los S/ 12,50 que te mencioné.', 'Costó S/ 9'), 'S/ 12,50.');
+  assert.match(systemPrompt('owner'), /No cites montos que no dijiste antes/);
+});
+
+test('alfa: lo enseñado que se guarda en pos_settings no lleva nombres, DNI ni teléfonos de clientes (solo «cliente #código»)', async () => {
+  const store = createMemoryUsageStore();
+  const CUST = [{ id: 'c1', nombre: 'Rosa Pérez Quispe' }, { id: 'c2', nombre: 'Juan Díaz' }];
+  const run = (text) => assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text }) }), env, auth, (d, s = 200) => new Response(JSON.stringify(d), { status: s }), {
+    store, now: () => 200000, resolveRole: async () => 'owner', audit: async () => {},
+    reader: { products: async () => PRODUCTS, credits: async () => [], customers: async () => CUST },
+    fetch: async () => new Response(JSON.stringify({ choices: [{ message: { content: 'Anotado.' } }] }))
+  });
+  await run('apunta: rosa perez me debe 3 cajas de leche, su dni es 45678912 y su cel 987654321');
+  await run('apunta: la señora Marta Flores lleva 2 inka kola, su teléfono 987 654 321, correo marta@x.com');
+  const saved = await store.get(await A.lessonsKey(auth)), raw = JSON.stringify(saved.value);
+  assert.equal(saved.value.items.length, 2, raw);
+  for (const bad of ['rosa', 'Rosa', 'perez', 'Pérez', 'Marta', 'Flores', '45678912', '8912', '987654321', '987 654 321', 'marta@x.com']) assert.ok(!raw.includes(bad), 'guardado: ' + bad + ' en ' + raw);
+  assert.match(saved.value.items[0], /cliente #c1 me debe 3 cajas de leche/); assert.match(saved.value.items[1], /lleva 2 inka kola/);
+  assert.equal(A.sanitizeLesson('JUAN DIAZ compra 12 cervezas', CUST), 'cliente #c2 compra 12 cervezas');
+  assert.equal(A.sanitizeLesson('mi proveedor del arroz es distribuidora san juan', CUST), 'mi proveedor del arroz es distribuidora san juan');
+  // también por la puerta directa
+  await A.saveLesson(store, { principalId: 'otro' }, 200000, 'el cliente Pedro Ramos paga los viernes, dni 41234567', CUST);
+  const o = JSON.stringify((await store.get(await A.lessonsKey({ principalId: 'otro' }))).value);
+  assert.ok(!/Pedro|Ramos|41234567|4567/.test(o), o);
 });
