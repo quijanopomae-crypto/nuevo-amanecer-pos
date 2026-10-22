@@ -94,7 +94,7 @@ test('correcciones: comparar con el sistema antes de aceptarlas («El sistema di
     const sp = systemPrompt(role);
     assert.match(sp, /CORRECCIONES DEL USUARIO[^\n]*compáralo con el dato del sistema[^\n]*«El sistema dice 24, ¿lo cambio\?»[^\n]*Nunca digas «tomo la corrección»/);
   }
-  assert.match(systemPrompt('owner'), /si contradice un dato del sistema, pregunta antes de usarla/);
+  assert.match(systemPrompt('owner'), /MEMORIA DE BOLETA[^\n]*una corrección explícita más reciente prevalece/); // la de boleta cede ante CORRECCIONES
 });
 
 test('«¿qué te enseñé?»: lo enseñado sigue llegando al modelo aunque salga de los últimos 8 mensajes', async () => {
@@ -221,10 +221,17 @@ test('b) «compré 10 Inka Kola y no aparecen en el stock»: pasos con pantallas
   const ui = readFileSync('POS/js/config/pos-purchases-client.js', 'utf8');
   assert.match(ui, /textContent = 'Compras'/); assert.match(ui, /<h3>Nueva compra<\/h3>/); assert.match(ui, />Historial<\/button>/);
   for (const role of ['owner', 'empleado:consultas']) {
-    const line = systemPrompt(role).split('\n').find((l) => l.startsWith('COMPRA QUE NO SUBE EL STOCK')); assert.ok(line, role);
+    const q = 'Compré 10 Inka Kola y no aparecen en el stock';
+    assert.ok(A.STOCK_NOT_UP_RE.test(q)); assert.ok(A.STOCK_NOT_UP_RE.test('registré la compra del arroz pero no sube')); assert.ok(!A.STOCK_NOT_UP_RE.test('cuánto stock de inka kola hay?'));
+    assert.ok(!systemPrompt(role, {}, 'hola').includes('COMPRA QUE NO SUBE'), 'solo cuando preguntan eso');
+    const line = systemPrompt(role, {}, q).split('\n').find((l) => l.startsWith('COMPRA QUE NO SUBE EL STOCK')); assert.ok(line, role);
     assert.match(line, /Inventario > Compras > Historial: ¿se guardó\?/); assert.match(line, /Nueva compra/); assert.match(line, /stock_producto/); assert.match(line, /Kardex/);
     assert.match(systemPrompt(role), /Kardex valorizado por producto/, 'Kardex es una pantalla real');
   }
+  return (async () => { // llega al modelo en el pedido real
+    const r = await chat({ text: 'Compré 10 Inka Kola y no aparecen en el stock' });
+    assert.match(r.requests[0].messages[0].content, /COMPRA QUE NO SUBE EL STOCK: 1\) Inventario > Compras > Historial/);
+  })();
 });
 
 test('c) RUC del proveedor: nunca «no puedo compartir»; «No tengo ese dato registrado» y dónde verlo', async () => {
