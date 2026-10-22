@@ -137,7 +137,7 @@ test('deuda de un cliente por código: saldo, créditos abiertos y cuál vence p
 });
 
 test('ventas por hora de Lima: bordes del día (00:00 y 23:59) y anuladas fuera', async () => {
-  const r = await q('ventas_por_hora');
+  const r = await q('ventas_por_hora', { periodo: 'hoy' });
   assert.deepEqual(r.filas, [['00:00–00:59', 1, 7], ['09:00–09:59', 2, 25], ['11:00–11:59', 1, 10], ['12:00–12:59', 1, 30]]);
   assert.equal(r.resumen.ventas, 5); assert.equal(r.resumen.total_soles, 72);
   assert.deepEqual(r.resumen.mejor_hora, { hora: '12:00', ventas: 1, soles: 30 });
@@ -181,7 +181,7 @@ test('chat del Admin: deuda_cliente manda al modelo SOLO código, saldo, crédit
 });
 
 test('chat del Admin: ganancia y ventas por hora llegan al modelo solo con códigos de producto y números', async () => {
-  for (const [tipo, check] of [['ganancia', (s) => assert.equal(s.ganancia_soles, 17.2)], ['ventas_por_hora', (s) => assert.equal(s.mejor_hora.hora, '12:00')], ['productos_sin_ventas', (s) => assert.equal(s.sin_ventas, 2)]]) {
+  for (const [tipo, check] of [['ganancia', (s) => assert.equal(s.ganancia_soles, 17.2)], ['ventas_por_hora', (s) => assert.equal(s.mejor_hora.hora, '23:00', 'sin período = esta semana: el 21 a las 23:00 vendió S/ 40')], ['productos_sin_ventas', (s) => assert.equal(s.sin_ventas, 2)]]) {
     const cap = [];
     const r = await chat({ text: 'dime' }, { rd: reader(), fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo }, 'call_1')] }, { content: 'Listo.' }], cap) });
     assert.equal(r.status, 200, tipo);
@@ -369,4 +369,48 @@ test('por rol: el prompt del empleado no trae las líneas de ganancia, costos, c
   for (const re of [/CAJA DE HOY/, /caja_abierta/, /MEMORIA DE BOLETA/, /leer_factura_compra/, /estado de cuenta/, /consultar deuda_cliente con cliente_id = ese código/]) assert.match(o, re, 'Admin: ' + re);
   assert.match(o, /«el mismo día de la otra semana»/); assert.match(o, /el sistema calcula las fechas/);
   assert.ok(o.length > systemPrompt('empleado:consultas', {}).length, 'el empleado recibe menos texto');
+});
+
+// Herramientas por nivel (alfa, 22-10, tras el #939): cada nivel recibe SUS tipos de pos-assistant-levels.js; nivel 2 y 3 no quedan
+// con los del empleado a secas; el nivel 3 con costos recibe ganancia; deuda_cliente, caja y créditos atrasados siguen solo del Admin.
+const LEVELS = [
+  ['nivel 1', 'empleado:consultas', ['stock_producto', 'bajo_stock'], ['explicar_pasos', 'consultar'], 'ventas_periodo'],
+  ['nivel 2', 'empleado:consultas_documentos', ['stock_producto', 'bajo_stock'], ['explicar_pasos', 'consultar', 'preparar_documento'], 'ganancia'],
+  ['nivel 3 sin costos', 'empleado:completo', ['stock_producto', 'bajo_stock'], ['explicar_pasos', 'consultar', 'preparar_documento'], 'ganancia'],
+  ['nivel 3 con costos', 'empleado:completo+costos', ['stock_producto', 'bajo_stock', 'sin_costo', 'ventas_periodo', 'top_productos', 'compras_recientes', 'ganancia', 'productos_sin_ventas', 'ventas_por_hora'],
+    ['explicar_pasos', 'consultar', 'preparar_documento', 'proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo'], 'deuda_cliente']
+];
+for (const [label, role, types, names, denied] of LEVELS) {
+  test('por nivel (' + label + '): consultar trae solo sus tipos y sus herramientas; un tipo ajeno no pasa y no se lee la base', async () => {
+    const tools = toolsForRole(role), c = consultarOf(role);
+    assert.deepEqual(tools.map((t) => t.function.name).sort(), [...names].sort(), label + ': herramientas');
+    assert.deepEqual([...c.parameters.properties.tipo.enum].sort(), [...types].sort(), label + ': tipos de consultar');
+    assert.ok(!('cliente_id' in c.parameters.properties), label + ': sin cliente_id');
+    for (const t of types) assert.ok(c.description.includes(t), label + ': la descripción nombra ' + t);
+    assert.ok(!/deuda|crédito|credito|caja/i.test(c.description), label + ': la descripción no habla de deudas, créditos ni caja');
+    for (const t of ['deuda_cliente', 'deudas_clientes', 'caja_abierta', 'creditos_atrasados', 'resumen_dia']) assert.ok(!c.parameters.properties.tipo.enum.includes(t), label + ': ' + t);
+    const cap = [], [rd, n] = counting(reader());
+    const r = await chat({ text: 'dime' }, { role, rd, fetch: scripted([{ content: '', tool_calls: [tool('consultar', { tipo: denied, cliente_id: 'C1' }, 'c1')] }, { content: 'Listo.' }], cap) });
+    // Tipo fuera de su nivel: la tarjeta se descarta (forbidden_query) y no se lee nada de la base.
+    assert.equal(toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: denied }) }, role, { products: [] }, 1).dropped, denied === 'ganancia' ? 'forbidden_costs' : 'forbidden_query', label);
+    assert.ok([200, 403].includes(r.status), label + ': ' + r.status); assert.equal(n.reads, 0, label + ': sin leer la base');
+    assert.ok(!(r.body.proposals || []).some((p) => p.type === 'consulta'), label + ': sin tarjeta de ' + denied);
+  });
+}
+test('por nivel (Admin): consultar trae todos los tipos, con cliente_id; deuda_cliente con un código de letras y guiones da el total', async () => {
+  const c = consultarOf('owner');
+  for (const t of [...QUERY_TYPES]) assert.ok(c.parameters.properties.tipo.enum.includes(t), 'Admin: ' + t);
+  assert.ok('cliente_id' in c.parameters.properties);
+  assert.equal(toProposal({ name: 'consultar', arguments: JSON.stringify({ tipo: 'deuda_cliente', cliente_id: 'C1' }) }, 'owner', { products: [] }, 1).type, 'consulta');
+  const D = { ...DATA, credits: [...DATA.credits, { cliente: 'SIN-DOC-MISAEL', saldo: 4000, vence: '2026-10-05', fecha: '2026-09-05' }, { cliente: 'SIN-DOC-MISAEL', saldo: 125, vence: '2026-11-05', fecha: '2026-10-05' }] };
+  const r = await q('deuda_cliente', { cliente_id: 'SIN-DOC-MISAEL' }, memoryReader(D));
+  assert.deepEqual(r.resumen, { cliente: 'cliente #SIN-DOC-MISAEL', saldo_soles: 4125, creditos_abiertos: 2, vence_primero: '2026-10-05' });
+  assert.equal((await q('deuda_cliente', { cliente_id: 'cliente #SIN-DOC-MISAEL' }, memoryReader(D))).resumen.saldo_soles, 4125, 'también con «cliente #»');
+});
+test('ventas por hora sin período: esta semana de Lima (lunes 19 a hoy), sin preguntar; con fecha o período, lo pedido', async () => {
+  const r = await q('ventas_por_hora');
+  assert.equal(r.resumen.desde, '2026-10-19'); assert.equal(r.resumen.hasta, '2026-10-22');
+  assert.ok(!r.resumen.falta); assert.equal(r.resumen.ventas, 6);
+  assert.equal((await q('ventas_por_hora', { periodo: 'ayer' })).resumen.desde, '2026-10-21');
+  assert.equal((await q('ventas_por_hora', { fecha: '2026-10-20' })).resumen.desde, '2026-10-20');
 });

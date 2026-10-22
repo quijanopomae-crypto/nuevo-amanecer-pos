@@ -685,7 +685,9 @@ async function customerDebtQuery(reader, args, base) {
 
 // Ventas por hora de Lima (período por defecto hoy): número y total por hora. Sin clientes ni productos.
 async function hourlySalesQuery(reader, args, nowMs, base) {
-  const p = period(args, nowMs), rango = rangeLabel(p), rows = (await reader.salesByHour(p)).filter((x) => x.n > 0);
+  // «¿A qué hora vendo más?» sin fecha: esta semana (lunes a hoy, Lima), sin volver a preguntar el período.
+  const noDate = !args?.periodo && !args?.fecha && !args?.desde && !args?.hasta;
+  const p = period(noDate ? { ...args, periodo: 'esta_semana' } : args, nowMs), rango = rangeLabel(p), rows = (await reader.salesByHour(p)).filter((x) => x.n > 0);
   const hh = (h) => (h == null ? 'sin hora' : String(h).padStart(2, '0') + ':00');
   const slot = (h) => (h == null ? 'Sin hora' : hh(h) + '–' + String(h).padStart(2, '0') + ':59');
   const n = rows.reduce((s, x) => s + x.n, 0), c = rows.reduce((s, x) => s + x.c, 0);
