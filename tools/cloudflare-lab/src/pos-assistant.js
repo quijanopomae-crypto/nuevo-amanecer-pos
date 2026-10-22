@@ -19,6 +19,7 @@
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
 import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
+import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
 import { sha256Hex } from './a5-import-core.js';
 import { canDo } from './pos-permissions.js';
@@ -1761,6 +1762,8 @@ export function toProposal(call, role, ctx, n) {
     if (role !== 'owner' && SUMMARY_TYPES.includes(args.tipo)) return { dropped: 'forbidden_summary', tool: name };
     if (!costQueryAllowed(role, args.tipo)) return { dropped: 'forbidden_costs', tool: name }; // ganancia: permiso de costos
     if (!queryAllowed(role, args.tipo)) return { dropped: 'forbidden_query', tool: name };
+    // Código neutro que la IA inventó o no está en el mapa de este pedido: «no encontrado», sin leer la base (pos-assistant-codigos.js).
+    if (args.tipo === 'deuda_cliente' && [args.cliente_id, args.cliente].includes(UNKNOWN_CUSTOMER)) return { dropped: 'unknown_customer', tool: name };
     return { id, type: 'consulta', needsConfirm: false, query: { tipo: args.tipo, producto: cleanText(args.producto, 80), periodo: dateWord(args.periodo),
       fecha: /^\d{4}-\d{2}-\d{2}$/.test(String(args.fecha ?? '')) ? args.fecha : null,
       // deuda_cliente: solo el CÓDIGO del cliente (mismo filtro que el estado de cuenta); un nombre o algo que parezca DNI/teléfono no pasa.
@@ -1820,6 +1823,8 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'preparar_documento') {
     const tipo = DOC_TYPES.includes(args.tipo) ? args.tipo : null; if (!tipo) return { dropped: 'bad_document', tool: name };
     if (!docAllowed(role, tipo)) return { dropped: 'forbidden_document', tool: name };
+    // Código neutro que la IA inventó o que no es de esta conversación: «no encontrado», sin buscar ni adivinar (pos-assistant-codigos.js).
+    if (CUSTOMER_DOC_TYPES.includes(tipo) && [args.cliente_id, args.cliente].includes(UNKNOWN_CUSTOMER)) return { dropped: 'unknown_customer', tool: name };
     const D = /^\d{4}-\d{2}-\d{2}$/;
     return { id, type: 'documento', needsConfirm: false, title: DOC_TITLES[tipo], tipo, desde: D.test(args.desde || '') ? args.desde : null, hasta: D.test(args.hasta || '') ? args.hasta : null,
       // (auditoría de privacidad 2026-10-22) el estado de cuenta va por el CÓDIGO del cliente (cliente_id), nunca por su nombre: el aparato
@@ -1828,6 +1833,8 @@ export function toProposal(call, role, ctx, n) {
   }
   return { dropped: 'unknown_tool', tool: name };
 }
+
+export const UNKNOWN_CUSTOMER_TEXT = 'No encontré ese cliente. Revise el código en Clientes.';
 
 // ---------- Límites de uso ----------
 const limaDate = limaToday; // mismo día de Lima que las consultas (pos-assistant-queries.js)
@@ -2878,6 +2885,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const noteCall = (r, key, a) => { tm[key] = ms(a); if (!r) return; tm.attempts += Number(r.attempts) || 0; if (r.fallback) { tm.fallback = true; if (r.provider) tm.provider = r.provider; if (r.model) tm.model = r.model; } };
   const failTimes = () => { tm.ms_total = ms(t0); tm.db_stmts = dbc.n; logTimings(tm); return timingFields(tm); };
   let result, req = null; const bytes = [];
+  // Códigos de cliente neutros (C-0001…) hacia la IA: un mapa para todo el pedido (primera y segunda llamada), ver pos-assistant-codigos.js.
+  const ccfg = cfg.ok ? { ...cfg, codes: createCodeMap() } : cfg;
   if (mode === 'mock') {
     result = mockAssistantReply({ role, ctx, text: parsed.text, image: !!parsed.image });
     // Empleado: si la demostración trae una herramienta prohibida, no sale ningún texto (igual que el corte en DeepSeek).
@@ -2890,8 +2899,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     req = buildDeepSeekRequest({ role, ctx, history: parsed.history, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null });
     bytes.push(payloadBytes(req));
     const a1 = clock();
-    result = emit ? await callModelStream(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
-      : await callModel(cfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
+    result = emit ? await callModelStream(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => { emit.push(t); if (emit.holding()) beat.tick(true); }, () => beat.tick(true), guard, up.signal, deps.firstDataMs ? { firstMs: deps.firstDataMs } : undefined)
+      : await callModel(ccfg, req, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
     noteCall(result, 'ms_model1', a1);
     if (emit && !result.error && !result.forbidden && !confirmHeld(emit)) emit.flush(); // con «pulsa…» retenido se cierra abajo, con hasChange
     if (result.error) return json({ error: result.error, mode, ...(result.partial ? { partial: true } : {}), timings: failTimes() }, ERR_STATUS[result.error] || 502);
@@ -3015,7 +3024,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (emit) { emit.reset(); beat.start(); beat.tick(); }
       const a2 = clock();
       // (lentitud 22-10) sin respaldo a modelos gratis: si esta llamada falla, queda el texto armado con los números (no vale la pena esperar).
-      const cfg2 = { ...cfg, noFreeFallback: true };
+      const cfg2 = { ...ccfg, noFreeFallback: true }; // mismo mapa de códigos neutros que la primera llamada
       const second = emit ? await callModelStream(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, (t) => emit.push(t), undefined, null, up.signal, { stallMs: deps.firstDataMs || FIRST_DATA_MS })
         : await callModel(cfg2, req2, deps.fetch || fetch, deps.timeoutMs || ASSISTANT_LIMITS.timeoutMs, up.signal);
       noteCall(second, 'ms_model2', a2); tm.second_call = true;
@@ -3029,7 +3038,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const secret = env.ASSISTANT_CONFIRM_SECRET && String(env.ASSISTANT_CONFIRM_SECRET).length >= 16 ? env.ASSISTANT_CONFIRM_SECRET : null;
   for (const p of proposals) if (p.needsConfirm) p.confirm_token = secret ? await issueConfirmToken(p, role, auth, secret, now) : null;
   // Si el modelo intentó acciones y ninguna pasó, su texto ("pulsa Confirmar") no puede quedar: no hay tarjeta. Mensaje neutro.
-  if (!proposals.length && dropped.length) reply = role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_role')
+  if (!proposals.length && dropped.length) reply = dropped.every((d) => d.dropped === 'unknown_customer') ? UNKNOWN_CUSTOMER_TEXT
+    : role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_role')
     ? EMPLOYEE_CHANGE_TEXT // empleado que pide un cambio: frase simple, sin hablar de permisos ni códigos
     : 'No puedo hacer eso desde el asistente. Hazlo en su pantalla normal.';
   if (proposals.some((p) => p.type === 'compra')) {
