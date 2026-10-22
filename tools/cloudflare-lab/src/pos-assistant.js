@@ -53,6 +53,15 @@ export function hasForbiddenParam(value, depth = 0) {
 // dueño apruebe desde el teléfono del empleado: el empleado NO propone cambios (no hay nivel de escritura). Los cambios los confirma el dueño.
 export const EMPLOYEE_TOOLS = Object.freeze({ consultas: Object.freeze(['explicar_pasos', 'consultar']), consultas_documentos: Object.freeze(['explicar_pasos', 'consultar', 'preparar_documento']) });
 export const EMPLOYEE_QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock']);
+// Consultas SOLO del Admin que a un empleado se le cortan con 403 query_admin_only (no 200 con la tarjeta descartada): en el chat
+// por frase clara antes del modelo (sin cupo), a mitad del texto (guard) y si el modelo igual pide la herramienta. Mismo esquema que el #929.
+export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['creditos_atrasados']);
+export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
+const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
+export function employeeQueryDenied(role, text) {
+  if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
+  return ADMIN_ONLY_ASK.test(String(text || ''));
+}
 export const EMPLOYEE_DOC_TYPES = Object.freeze(['lista_precios', 'lista_pedido']);
 export function toolAllowed(role, name) {
   const a = TOOL_ACTIONS[name]; if (!a) return false;
@@ -1440,6 +1449,7 @@ export function employeeToolGuard(role) {
     if (!c || !TOOL_DEFS.some((t) => t.name === c.name)) return null;
     if (!toolAllowed(role, c.name)) return c.name === 'preparar_documento' ? 'forbidden_document' : 'forbidden_role';
     if (c.name === 'preparar_documento') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !EMPLOYEE_DOC_TYPES.includes(m[1])) return 'forbidden_document'; }
+    if (c.name === 'consultar') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && ADMIN_ONLY_QUERY_TYPES.includes(m[1])) return 'query_admin_only'; }
     return null;
   };
 }
@@ -1602,6 +1612,7 @@ export function toProposal(call, role, ctx, n) {
   }
   if (name === 'consultar') {
     if (!QUERY_TYPES.includes(args.tipo)) return { dropped: 'bad_query', tool: name };
+    if (role !== 'owner' && ADMIN_ONLY_QUERY_TYPES.includes(args.tipo)) return { dropped: 'query_admin_only', tool: name };
     if (role !== 'owner' && !EMPLOYEE_QUERY_TYPES.includes(args.tipo)) return { dropped: 'forbidden_query', tool: name };
     return { id, type: 'consulta', needsConfirm: false, query: { tipo: args.tipo, producto: cleanText(args.producto, 80), desde: cleanText(args.desde, 10), hasta: cleanText(args.hasta, 10) } };
   }
@@ -2546,6 +2557,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const ctx = sanitizeContext(parsed.context, role);
   // Documento del dueño pedido con todas las letras por un empleado: 403 en JSON antes de abrir el canal, sin cupo ni DeepSeek (Bot 5).
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
+  // Créditos atrasados pedidos por un empleado: 403 antes de abrir el canal, sin cupo ni modelo.
+  if (employeeQueryDenied(role, parsed.text)) return json(QUERY_ADMIN_ONLY, 403);
   const store = store0;
   if (!store) return json({ error: 'usage_store_missing' }, 500);
   const quota = await reserveUsage(store, { ...auth, posRole: role }, env, (deps.now || Date.now)(), !!parsed.image);
@@ -2583,6 +2596,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (result.forbidden) {
     if (emit) { emit.drop(); emit.reset(); }
     if (result.forbidden === 'forbidden_document') return json(FORBIDDEN_DOCUMENT, 403);
+    if (result.forbidden === 'query_admin_only') return json(QUERY_ADMIN_ONLY, 403);
     preDropped = { dropped: 'forbidden_role', tool: 'cut_mid_stream' }; result = { content: '', calls: [], usage: result.usage };
   }
   // Herramientas o búsquedas por delante y todavía sin texto: «buscando» enseguida y cada pocos segundos hasta el primer texto.
@@ -2610,6 +2624,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_document')) {
     if (emit) { emit.drop(); emit.reset(); }
     return json(FORBIDDEN_DOCUMENT, 403);
+  }
+  // Empleado al que el modelo le propuso una consulta solo del Admin (créditos atrasados): 403, sin leer la base ni segunda llamada.
+  if (role !== 'owner' && dropped.some((d) => d.dropped === 'query_admin_only')) {
+    if (emit) { emit.drop(); emit.reset(); }
+    return json(QUERY_ADMIN_ONLY, 403);
   }
   // Consultas: el Worker lee su base (solo lectura) y manda al modelo SOLO un resumen chico, nunca el inventario completo.
   const consultas = [], toolMsgs = [];
