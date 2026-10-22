@@ -7,7 +7,9 @@ const source = readFileSync('POS/js/modules/proximamente.js', 'utf8');
 const registrySource = readFileSync('POS/js/modules/proximamente-registry.js', 'utf8');
 const permissionsSource = readFileSync('POS/js/config/pos-permissions.js', 'utf8');
 const indexHtml = readFileSync('POS/index.html', 'utf8');
-const unlocked = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'clientes-deudores-caja': 'pageClientes', 'estado-cuenta-cliente': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra', 'ajustes-inventario': 'pageAjustesInventario' };
+const unlocked = { 'creditos-vencimiento': 'pageClientes', gastos: 'pageGastos', reportes: 'pageVentas', 'filtro-fechas-export': 'pageVentas', 'clientes-filtro-deuda': 'pageClientes', 'clientes-deudores-caja': 'pageClientes', 'valorizacion-inventario': 'pageValorizacion', 'rotacion-abc': 'pageRotacionAbc', 'clientes-frecuencia': 'pageClientesFrecuencia', kardex: 'pageKardex', 'reporte-ventas-stock': 'pageVentasStock', 'reporte-arqueo': 'pageReporteArqueo', 'historial-compras-producto': 'pageHistorialCompras', 'cliente-historial-compras': 'pageClienteHistorial', 'historial-precios-producto': 'pageInventario', 'etiquetas-precios': 'pageEtiquetasPrecios', 'reporte-productos-vencer': 'pageReporteProductosVencer', 'productos-sin-movimiento': 'pageProductosSinMovimiento', 'sugerencia-compra': 'pageSugerenciaCompra', 'ajustes-inventario': 'pageAjustesInventario'};
+// Hechas pero con el candado cerrado hasta abrirlos todos juntos (primero el Worker).
+const builtLocked = {'estado-cuenta-cliente': 'pageClientes'};
 const MODULES = ['Ventas', 'Caja', 'Inventario', 'Clientes', 'Comprobantes', 'Extras'];
 
 function loaded() {
@@ -36,7 +38,9 @@ test('registry data loads lazily and lock state comes only from pos-permissions 
     assert.ok(MODULES.includes(f.module), f.id);
     assert.ok(['form', 'table'].includes(f.preview.type));
     assert.ok(f.name && f.description && !f.description.includes('\n'));
-    if (unlocked[f.id]) {
+    if (builtLocked[f.id]) {
+      assert.equal(P.FEATURE_LOCKS[f.id], true, f.id); assert.equal(f.page, builtLocked[f.id]); assert.equal(api.isUnlocked(f), false);
+    } else if (unlocked[f.id]) {
       assert.equal(P.FEATURE_LOCKS[f.id], false); assert.equal(f.page, unlocked[f.id]);
       assert.ok(indexHtml.includes(`id="${f.page}"`)); assert.equal(api.isUnlocked(f), true);
     } else {

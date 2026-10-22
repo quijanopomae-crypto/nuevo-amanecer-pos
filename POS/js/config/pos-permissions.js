@@ -110,7 +110,7 @@
     'nota-credito-parcial-compras': true,
     'clientes-filtro-deuda': false,
     'clientes-deudores-caja': false,
-    'estado-cuenta-cliente': false,
+    'estado-cuenta-cliente': true,
     'clientes-dias-credito': true,
     'nota-credito-devolucion-parcial': true,
     'ordenes-compra': true,
