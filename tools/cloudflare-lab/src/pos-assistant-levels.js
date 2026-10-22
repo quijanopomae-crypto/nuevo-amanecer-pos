@@ -25,11 +25,12 @@ export const EMPLOYEE_DEFAULT_LEVEL = 0;
 export const LEVEL_LABELS = Object.freeze(['Sin permiso', 'Nivel 1: con permiso', 'Nivel 2: sus funciones, el resto solo lectura', 'Nivel 3: sin restricción']);
 
 const freezeAll = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Array.isArray(v) ? Object.freeze(v) : v])));
-const NONE = freezeAll({ asistente: false, herramientas: [], consultas: [], documentos: [], revision: false, cambios: false, costos: false, fotos: false, configurar: false });
+const NONE = freezeAll({ asistente: false, herramientas: [], consultas: [], documentos: [], revision: false, cambios: false, cambios_masivos: false, costos: false, fotos: false, configurar: false });
 const L1 = freezeAll({ ...NONE, asistente: true, herramientas: ['explicar_pasos', 'consultar'], consultas: ['stock_producto', 'bajo_stock'] });
 const L2 = freezeAll({ ...L1, herramientas: [...L1.herramientas, 'preparar_documento'], documentos: ['lista_precios', 'lista_pedido'] });
 const L3 = freezeAll({ ...L2, revision: true });
-// Nivel 3 + permiso «costos y cambios». Fuera siempre: deudas y estado de cuenta de clientes, caja, fotos y configurar niveles.
+// Nivel 3 + permiso «costos y cambios». Fuera siempre: deudas y estado de cuenta de clientes, caja, fotos, configurar niveles y
+// cambios masivos (cambios_masivos: false, heredado de NONE): una tarjeta por producto, nunca una tarjeta que cambia muchos a la vez.
 const L3C = freezeAll({ ...L3, costos: true, cambios: true,
   herramientas: [...L3.herramientas, 'proponer_cambio_precio', 'preparar_compra', 'proponer_ajuste_stock', 'proponer_producto_nuevo'],
   consultas: [...L3.consultas, 'sin_costo', 'ventas_periodo', 'top_productos', 'compras_recientes'],
@@ -40,7 +41,7 @@ export const COSTS_ROLE = 'empleado:completo' + COSTS_SUFFIX;
 // Capacidades de un EMPLEADO por nivel. «cambios», «costos», «fotos» y «configurar» quedan para el Admin (ver ADMIN_CAPABILITIES).
 export const LEVEL_CAPABILITIES = Object.freeze([NONE, L1, L2, L3]);
 // Admin: 'todas' = las herramientas y consultas de la tabla única de permisos (POS/js/config/pos-permissions.js), sin cambios respecto de hoy.
-export const ADMIN_CAPABILITIES = Object.freeze({ asistente: true, herramientas: 'todas', consultas: 'todas', documentos: 'todos', revision: true, cambios: true, costos: true, fotos: true, configurar: true });
+export const ADMIN_CAPABILITIES = Object.freeze({ asistente: true, herramientas: 'todas', consultas: 'todas', documentos: 'todos', revision: true, cambios: true, cambios_masivos: true, costos: true, fotos: true, configurar: true });
 
 // Acepta 0..3 (número o texto) o el nombre guardado. Cualquier otra cosa: null.
 export function parseLevel(v) {
@@ -84,4 +85,34 @@ export function levelMap() {
   return { niveles: LEVEL_CAPABILITIES.map((c, n) => ({ nivel: n, nombre: LEVEL_NAMES[n], titulo: LEVEL_LABELS[n], capacidades: c })),
     permiso_costos: { solo_nivel: 3, por_defecto: false, capacidades: L3C },
     admin: { nivel: ADMIN_LEVEL, capacidades: ADMIN_CAPABILITIES }, por_defecto: { empleado: EMPLOYEE_DEFAULT_LEVEL, admin: ADMIN_LEVEL, costos: false } };
+}
+
+// ---------- Cambios masivos: solo el Admin (decisión de la sala, 2026-10-22) ----------
+// Una tarjeta que cambia MÁS DE UN producto con un solo «Aplicar» (p. ej. «Cambiar precio de 408 productos a S/ 1.00») es solo del Admin
+// (capacidad cambios_masivos). Un empleado, aunque sea nivel 3 con «costos y cambios», recibe una tarjeta por producto.
+// La compra (factura de un proveedor, varias filas) NO es un cambio masivo: es un solo documento y ya la tiene el nivel 3 con permiso.
+export const BULK_EXEMPT_TYPES = Object.freeze(['compra', 'documento', 'consulta', 'pasos']);
+export const BULK_ADMIN_ONLY_TEXT = 'Los cambios de varios productos a la vez los hace el Admin. Yo te preparo una tarjeta por producto.';
+const idOf = (x) => (x && typeof x === 'object' ? x.product_id ?? x.id ?? null : x);
+// Productos distintos que toca UNA tarjeta. Mira product_id y cualquier lista de productos (product_ids, productos, items, cambios,
+// ejemplos no cuenta: el total lo dice cantidad_productos/total_productos). Genérico: sirve para la tarjeta resumen que se arme después.
+export function proposalProductCount(p) {
+  if (!p || typeof p !== 'object' || BULK_EXEMPT_TYPES.includes(p.type)) return 0;
+  const ids = new Set();
+  if (p.product_id != null && p.product_id !== '') ids.add(String(p.product_id));
+  for (const k of ['product_ids', 'productos', 'items', 'cambios']) if (Array.isArray(p[k])) for (const x of p[k]) { const id = idOf(x); if (id != null && id !== '') ids.add(String(id)); }
+  const declared = Math.max(0, ...['cantidad_productos', 'total_productos'].map((k) => (Number.isFinite(Number(p[k])) ? Number(p[k]) : 0)));
+  return Math.max(ids.size, declared, p.masivo === true ? 2 : 0);
+}
+export function isBulkProposal(p) { return proposalProductCount(p) > 1; }
+export function bulkAllowed(role) { return levelCan(role, 'cambios_masivos'); }
+// Saca las tarjetas masivas de quien no es Admin (las anota en dropped como bulk_admin_only). Devuelve cuántas sacó.
+export function dropBulkProposals(role, proposals, dropped) {
+  if (bulkAllowed(role)) return 0;
+  let n = 0;
+  for (let k = proposals.length - 1; k >= 0; k--) {
+    if (!isBulkProposal(proposals[k])) continue;
+    dropped.push({ dropped: 'bulk_admin_only', tool: proposals[k]._call?.name || proposals[k].type }); proposals.splice(k, 1); n++;
+  }
+  return n;
 }

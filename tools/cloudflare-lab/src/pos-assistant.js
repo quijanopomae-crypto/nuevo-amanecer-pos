@@ -25,7 +25,8 @@ import { mockAssistantReply } from './pos-assistant-mock.js';
 import { runAssistantQuery, canonicalReader, QUERY_TYPES, employeeDocumentRows } from './pos-assistant-queries.js';
 import { assistantAccess, accessOn, accessLevel, STRICT_APPROVAL_SQL } from './pos-assistant-access.js';
 import { auditWrite, isAggregated } from './pos-assistant-audit.js';
-import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor } from './pos-assistant-levels.js';
+import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
+  bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
@@ -2332,6 +2333,8 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   if (!body?.proposal || typeof body.proposal !== 'object') return json({ error: 'proposal_changed' }, 409);
   if (body.proposal.id !== tok.pid) return json({ error: 'proposal_id_mismatch' }, 409); // id del cliente distinto del firmado
   if ((await proposalHash(body.proposal)) !== tok.h) return json({ error: 'proposal_changed' }, 409);
+  // Doble barrera: una tarjeta masiva firmada nunca la aplica quien no es Admin (aunque tenga «costos y cambios»).
+  if (!bulkAllowed(role) && isBulkProposal(body.proposal)) return json({ error: 'bulk_admin_only', message: BULK_ADMIN_ONLY_TEXT }, 403);
   const store = deps.store || (deps.db ? createSettingsUsageStore(deps.db) : null);
   if (!store) return json({ error: 'usage_store_missing' }, 500);
   const usedKey = USAGE_PREFIX + 'u:' + tok.n;
@@ -2604,6 +2607,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
+  // Cambios masivos (una tarjeta que cambia más de un producto): solo el Admin. Empleado: fuera, con frase simple (pos-assistant-levels.js).
+  const bulkDropped = dropBulkProposals(role, proposals, dropped) > 0;
   await resolveLevelProposals(deps.db, proposals, dropped); // tarjetas de nivel: persona por etiqueta o código (pos-assistant-levels-route.js)
   // Compra con costos distintos a los del inventario: tarjetas APARTE «Actualizar costo» (product.update con PIN). La compra del POS no cambia el costo.
   const reader = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
@@ -2679,7 +2684,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (!proposals.length && dropped.length) reply = role !== 'owner' && dropped.some((d) => d.dropped === 'forbidden_role')
     ? EMPLOYEE_CHANGE_TEXT // empleado que pide un cambio: frase simple, sin hablar de permisos ni códigos
     : 'No puedo hacer eso desde el asistente. Hazlo en su pantalla normal.';
-  const notes = [...[...new Set(noStock)].map(NO_STOCK_TEXT), ...[...new Set(overNames)].map((n) => '«' + n + '»: la cantidad pasa el límite de ' + PURCHASE_HARD_LIMITS.maxQty + '. Hazlo desde Inventario.')];
+  const notes = [...(bulkDropped ? [BULK_ADMIN_ONLY_TEXT] : []), ...[...new Set(noStock)].map(NO_STOCK_TEXT), ...[...new Set(overNames)].map((n) => '«' + n + '»: la cantidad pasa el límite de ' + PURCHASE_HARD_LIMITS.maxQty + '. Hazlo desde Inventario.')];
   if (notes.length) reply = (proposals.length ? (reply ? reply + ' ' : '') : '') + notes.join(' ');
   // El texto del modelo podía hablar de la compra o el ajuste que se quitó: se reemplaza por un mensaje simple.
   if (stockFailed) reply = STOCK_READ_FAILED_TEXT + (proposals.length ? ' Las otras tarjetas sí se pueden revisar.' : '') + (notes.length ? ' ' + notes.join(' ') : '');
