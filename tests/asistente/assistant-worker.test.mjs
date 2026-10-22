@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../../tools/cloudflare-lab/src/worker.js';
 import {
-  assistantChatRoute, assistantConfirmRoute, assistantRole, createMemoryUsageStore, toolsForRole, redactText,
+  assistantChatRoute, assistantConfirmRoute, createMemoryUsageStore, toolsForRole, redactText,
   buildDeepSeekRequest, sanitizeContext, DEEPSEEK_MODEL, CONFIRM_TTL_MS, readConfirmToken, verifyOwnerApproval
 } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 
@@ -139,15 +139,6 @@ test('límites: por minuto, fotos por minuto y tope mensual (se cuentan antes de
   assert.equal((await chat({ text: 'a' }, { store: s3, now, e: env({ ASSISTANT_MONTHLY_CHAT_CAP: '1' }) })).status, 200);
   const cap = await chat({ text: 'a' }, { store: s3, now, e: env({ ASSISTANT_MONTHLY_CHAT_CAP: '1' }) });
   assert.equal(cap.status, 429); assert.equal(cap.body.error, 'monthly_cap');
-});
-
-test('rol del asistente: sin fila de rol o sin tabla cuenta como empleado', async () => {
-  const db = (row, fail) => ({ prepare: () => ({ bind: () => ({ first: async () => { if (fail) throw new Error('no such table: pos_device_roles'); return row; } }) }) });
-  assert.equal(await assistantRole(db(null), OWNER), 'empleado');
-  assert.equal(await assistantRole(db(null, true), OWNER), 'empleado');
-  assert.equal(await assistantRole(db({ pos_role: 'owner' }), OWNER), 'owner');
-  assert.equal(await assistantRole(db({ pos_role: 'owner' }), EMP), 'empleado');
-  assert.equal(await assistantRole(null, OWNER), 'empleado');
 });
 
 // Base de solo lectura de prueba: el confirm de ajustes/compras revisa el producto en el servidor (falla cerrado sin base).
@@ -399,7 +390,7 @@ test('sin PIN: sin sesión dueño sigue bloqueado (sin rol, empleado apagado, em
   for (const [role, err] of [['sin_rol', 'assistant_off'], ['empleado:off', 'assistant_off'], ['empleado:consultas', 'forbidden_role'], ['empleado:consultas_documentos', 'forbidden_role']]) {
     const r = await as(role); assert.equal(r.status, 403, role); assert.equal((await r.json()).error, err, role);
   }
-  // Rol de la base = dueño pero la sesión del POS no es dueño (posRole empleado): assistantRole no da 'owner' -> bloqueado.
+  // Rol de la base = dueño pero la sesión del POS no es dueño (posRole empleado): assistantAccess no da 'owner' -> bloqueado.
   const c = await confirm(p, { store, auth: { ...OWNER, posRole: 'empleado' } }); assert.equal(c.status, 403);
   const good = await confirm(p, { store }); assert.equal(good.status, 200); assert.equal(good.body.already_confirmed, undefined);
 });

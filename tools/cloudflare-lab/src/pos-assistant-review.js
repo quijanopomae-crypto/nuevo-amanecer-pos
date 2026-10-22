@@ -45,6 +45,18 @@ export function cleanReviewText(v, n) {
   s = redactText(s).replace(/\s+/g, ' ').trim();
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
+// Errores de pantalla y promesas: SOLO el tipo («TypeError», «Error»), nunca el mensaje (puede traer nombres o datos del cliente).
+// Origen: SOLO archivo y línea («js/a.js:9»). Las llamadas a la API guardan su ruta (sin consulta) como antes.
+export function errorType(v) {
+  const t = String(v == null ? '' : v).trim();
+  if (/^[A-Za-z]{1,40}$/.test(t)) return t;
+  const m = /^(?:Uncaught\s+)?(?:\(in promise\)\s*)?([A-Z][A-Za-z]{0,39}(?:Error|Exception))\b/.exec(t);
+  return m ? m[1] : 'Error';
+}
+export function fileLine(v) {
+  const m = /^[A-Za-z0-9_./-]{1,80}(?::\d{1,7}){0,2}/.exec(cleanReviewText(v, REVIEW_LIMITS.srcChars).replace(/^https?:\/\/[^/\s]+\//i, ''));
+  return m ? m[0] : '';
+}
 const int = (v, max) => { const x = Math.floor(Number(v)); return Number.isFinite(x) && x > 0 ? Math.min(x, max) : 0; };
 const iso = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v) ? v : null);
 const KEY_RE = /^[A-Za-z][A-Za-z0-9_#-]{0,30}(?::[A-Za-z0-9_#-]{1,40}){0,2}$/;
@@ -57,7 +69,7 @@ export function sanitizeReview(body) {
     if (!e || typeof e !== 'object') continue;
     const kind = KINDS.has(e.kind) ? e.kind : 'error';
     const status = kind === 'api' ? int(e.status, 599) : 0;
-    const msg = cleanReviewText(e.msg, REVIEW_LIMITS.msgChars), src = cleanReviewText(e.src, REVIEW_LIMITS.srcChars);
+    const msg = kind === 'api' ? cleanReviewText(e.msg, REVIEW_LIMITS.msgChars) : errorType(e.msg), src = fileLine(e.src);
     if (!msg && !src) continue;
     const cli = cliOf(e), accion = accionOf(e, cli);
     const k = kind + '|' + status + '|' + msg + '|' + src + '|' + (cli || ''), n = int(e.count, 1e6) || 1, g = by.get(k);
