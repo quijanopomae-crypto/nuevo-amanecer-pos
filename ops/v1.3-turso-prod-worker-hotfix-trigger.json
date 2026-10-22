@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner explicitly approved 2026-10-22: Aplícalo lo apruebo. Deploy PR #950 invoice/new product correction; CANON Critical CI 39822600750, E2E Smoke CI 39822600145 and Visual Regression 39822600315 all success. Independent Reviewer/Forensic no P0/P1. Backend first, then web. No schema changes, migrations or live sales. Rollback to previous deployed Worker code.",
-  "target_commit": "59dc8b810983af04173266ddf79207f91785bb9f",
-  "rollback_ref": "dbca4aeac570f3749f5c056ad4391982e547acdd",
+  "authorization_context": "Owner approved 2026-10-22: Aslo. Deploy PR #953 invoice conversation memory and clarifications. CANON Critical CI 39830113594, E2E Smoke CI 39830113650 and Visual Regression 39830113808 success; independent Reviewer/Forensic no P0/P1. Backend first then web. No schema, business data or secret changes.",
+  "target_commit": "36c07f3d0b61a24b8f23b59b8cd61f1fd972f85d",
+  "rollback_ref": "e58826c093ee0b411eef30012ba9038e4bbecca1",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 70,
-  "optimization": "ASSISTANT_INVOICE_NEW_PRODUCTS"
+  "attempt": 71,
+  "optimization": "ASSISTANT_INVOICE_CONVERSATION_MEMORY"
 }
