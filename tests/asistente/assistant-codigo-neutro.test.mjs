@@ -42,7 +42,7 @@ const sseEvents = (text) => text.split('\n\n').filter(Boolean).map((b) => { cons
 
 test('1) hacia la IA nunca va el código real: consulta, historial, resumen y respuesta; el aparato recibe el real', async () => {
   const { r, cap } = await route({
-    text: '¿Quiénes me deben? Sobre todo el cliente #' + REAL,
+    text: '¿Quiénes me deben? Sobre todo el cliente #' + REAL + '. Explícame.', // «explícame»: segunda llamada (#960)
     history: [{ role: 'user', content: 'El cliente #' + REAL + ' pasó hoy' }, { role: 'assistant', content: 'Anotado, cliente #' + REAL + '.' }],
     resumen: 'Antes se habló del cliente #' + REAL + ' y de su deuda.'
   }, [{ content: '', tool_calls: [call('consultar', { tipo: 'deudas_clientes' })] }, { content: 'El cliente #C-0001 debe S/ 4.13.' }]);
@@ -83,7 +83,7 @@ test('2) herramienta con C-000N -> código real (estado de cuenta, con cliente_i
 });
 
 test('2b) deuda_cliente (#958): cliente_id neutro hacia la IA, real hacia la base; SIN-DOC-MISAEL debe S/ 4.125', async () => {
-  const { r, cap, reads } = await route({ text: '¿Cuánto debe el cliente #' + REAL + '?' },
+  const { r, cap, reads } = await route({ text: '¿Cuánto debe el cliente #' + REAL + '? Explícame.' },
     [{ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: 'C-0001' })] }, { content: 'El cliente #C-0001 debe S/ 4.13 en 1 crédito.' }]);
   assert.equal(r.status, 200); const d = await r.json();
   assert.equal(cap.length, 2); for (const b of cap) assert.ok(!LEAK.test(b), b.slice(0, 300));
@@ -95,6 +95,10 @@ test('2b) deuda_cliente (#958): cliente_id neutro hacia la IA, real hacia la bas
   const sent = JSON.parse(JSON.parse(cap[1]).messages.find((m) => m.role === 'tool').content);
   assert.equal(sent.resumen.cliente, 'cliente #C-0001'); assert.equal(sent.resumen.saldo_soles, direct.resumen.saldo_soles);
   assert.match(d.reply, /cliente #SIN-DOC-MISAEL debe/);
+  // Respuesta directa (#960, sin segunda llamada): el texto lo arma el servidor con el código real; a la IA solo fue el neutro.
+  const x = await route({ text: '¿Cuánto debe el cliente #' + REAL + '?' }, [{ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: 'C-0001' })] }]);
+  const dx = await x.r.json(); assert.equal(x.cap.length, 1); assert.ok(!LEAK.test(x.cap[0]));
+  assert.match(dx.reply, /cliente #SIN-DOC-MISAEL debe S\/ /);
 });
 
 test('3) en partes: el neutro llega al aparato como código real, aunque venga cortado entre partes', async () => {
