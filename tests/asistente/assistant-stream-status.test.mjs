@@ -154,7 +154,7 @@ test('Bot 5: employeeQueryResult deja solo la lista blanca (columnas y resumen),
   for (const c of CANARY) assert.ok(!JSON.stringify(r).includes(c));
   assert.deepEqual(employeeQueryResult({ error: 'x' }), { error: 'x' });
   const src = readFileSync(new URL('../../tools/cloudflare-lab/src/pos-assistant.js', import.meta.url), 'utf8');
-  const i = src.indexOf('runAssistantQuery(reader, p.query, now)'), j = src.indexOf("if (role !== 'owner') r = employeeQueryResult(r);"), k = src.indexOf("toolMsgs.push({ role: 'tool'");
+  const i = src.indexOf('runAssistantQuery(reader, p.query, now)'), j = src.indexOf("if (!seesOwnerData(role)) r = employeeQueryResult(r);"), k = src.indexOf("toolMsgs.push({ role: 'tool'");
   assert.ok(i > 0 && j > i && k > j, 'se filtra justo después de leer y antes de pantalla y modelo');
 });
 
