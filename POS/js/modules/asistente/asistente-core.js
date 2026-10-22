@@ -662,6 +662,7 @@
     forbidden_role: [MSG.owner], admin_only: [MSG.owner], image_owner_only: [MSG.owner], owner_approval_required: [MSG.owner], forbidden: [MSG.owner], HTTP_403: [MSG.owner],
     assistant_off: ['El asistente está apagado en este aparato.'], unauthorized: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'], HTTP_401: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'],
     forbidden_document: ['Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.'],
+    query_admin_only: ['Esa consulta es solo para el Admin.'],
     review_admin_only: ['La revisión del punto de venta es solo para el Admin.'],
     below_cost_admin_only: ['Las alertas de venta bajo costo son solo para el Admin.'],
     summary_admin_only: ['Los resúmenes del día y del mes son solo para el Admin.'],

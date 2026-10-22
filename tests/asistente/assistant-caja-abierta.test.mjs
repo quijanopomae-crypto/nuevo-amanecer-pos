@@ -123,7 +123,7 @@ test('al modelo solo totales: sin nombres de cajero, clientes ni conceptos; y pa
   assert.ok(forModel.length < 1500);
 });
 
-test('empleado: no ve la consulta y si el modelo la pide igual se descarta sin leer la base', async () => {
+test('empleado: no ve la consulta y si el modelo la pide igual recibe 403 query_admin_only sin leer la base', async () => {
   assert.ok(QUERY_TYPES.includes('caja_abierta'));
   const emp = JSON.stringify(toolsForRole('empleado:consultas_documentos'));
   assert.ok(!emp.includes('caja_abierta'), 'el empleado no la tiene en su lista');
@@ -136,9 +136,10 @@ test('empleado: no ve la consulta y si el modelo la pide igual se descarta sin l
   const res = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text: '¿cuánto hay en caja?', context: { products: [] } }) }),
     { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: 'secreto-de-prueba-0123456789abcdef', DEEPSEEK_API_KEY: 'k' }, { principalId: 'dev-emp', posRole: 'empleado' }, json,
     { store: createMemoryUsageStore(), resolveRole: async () => 'empleado:consultas', fetch, reader });
+  assert.equal(res.status, 403, 'caja_abierta es solo del Admin: 403, no 200 con la consulta descartada');
   const body = await res.json();
+  assert.equal(body.error, 'query_admin_only');
   assert.equal(reads, 0, 'no se leyó la caja');
   assert.ok(!JSON.stringify(body).includes('777'), 'ninguna cifra de caja');
-  assert.ok(body.dropped.some((d) => d.reason === 'forbidden_query' || d.reason === 'query_admin_only'), JSON.stringify(body.dropped));
-  assert.equal(body.proposals.length, 0); assert.equal(bodies.length, 1, 'sin segunda llamada con datos');
+  assert.equal(bodies.length, 1, 'sin segunda llamada con datos');
 });
