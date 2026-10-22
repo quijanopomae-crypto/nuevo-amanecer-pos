@@ -209,12 +209,14 @@
       try {
         var meta = { supplier: w.querySelector('#naPurSupplier').value.trim(), documentRef: w.querySelector('#naPurDoc').value.trim() };
         var dupKey = normDoc(meta.supplier) + '|' + normDoc(meta.documentRef);
-        if (normDoc(meta.documentRef) && w.__naDupAck !== dupKey) {
-          var prior = null;
-          try { var list = await root.NA_ROLES.api('/auth/purchases'); prior = findDuplicatePurchase(list && list.purchases, meta); } catch (_) { prior = null; }
+        if (dupCheckUnlocked() && normDoc(meta.documentRef) && w.__naDupAck !== dupKey) {
+          var prior = null, truncated = false;
+          try { var list = await root.NA_ROLES.api('/auth/purchases'); truncated = !!(list && list.truncated); prior = findDuplicatePurchase(list && list.purchases, meta); } catch (_) { prior = null; }
+          // Si el servidor cortó la lista y no hubo coincidencia, se avisa que la revisión fue parcial (no bloquea).
+          if (!prior && truncated) toast('Solo se revisaron las compras más recientes para ver si la factura se repite.', 'info');
           if (prior) {
             w.__naDupAck = dupKey;
-            fail('Ya hay una compra registrada con el documento «' + (prior.document_ref || meta.documentRef) + '» (' + limaDay(prior.created_at) + ', hora de Lima). Revisa que no sea la misma factura. Si es otra, pulsa «Registrar compra» otra vez.');
+            fail('Ya hay una compra registrada con el documento «' + (prior.document_ref || meta.documentRef) + '» (' + limaDay(prior.created_at) + ', hora de Lima). Revisa que no sea la misma factura. Si es otra, pulsa «Registrar compra» otra vez.' + (truncated ? ' (Solo se revisaron las compras más recientes.)' : ''));
             errBox.classList.add('info');
             return;
           }
@@ -262,6 +264,11 @@
   // Aviso de factura repetida (sin migración): compara el documento y, si el servidor lo envía (solo dueño),
   // también el proveedor, contra las compras ya registradas. Solo avisa; un segundo clic registra igual.
   function normDoc(v) { return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s.\-_/]+/g, '').toUpperCase(); }
+  // Falla cerrado: sin permisos cargados o con el candado en true, no se consulta ni se avisa.
+  function dupCheckUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked('aviso-factura-duplicada') === false); }
+    catch (_) { return false; }
+  }
   function findDuplicatePurchase(rows, meta) {
     var d = normDoc(meta && meta.documentRef); if (!d) return null;
     var sup = normDoc(meta && meta.supplier);

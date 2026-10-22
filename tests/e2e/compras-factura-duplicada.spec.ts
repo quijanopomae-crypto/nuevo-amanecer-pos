@@ -1,18 +1,18 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // Aviso de factura repetida en Nueva compra. Servidor simulado; datos sintéticos; nada real se registra.
-async function setup(page: Page, role: 'owner' | 'empleado', dark = false) {
+async function setup(page: Page, role: 'owner' | 'empleado', dark = false, opts: { locked?: boolean, truncated?: boolean, docRef?: string } = {}) {
   const posts: string[] = [];
   // Ninguna compra llega al servidor en estas pruebas.
   await page.route('**/*', route => {
     const req = route.request(), url = new URL(req.url());
     if (url.hostname === 'permissions.test') {
       if (url.pathname === '/auth/purchases' && req.method() === 'POST') { posts.push(req.postData() || ''); return route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"test_stop"}' }); }
-      const prior = { purchase_id: 'old-1', document_ref: 'F001-123', created_at: '2026-10-02T03:00:00Z', status: 'completa', line_count: 1,
+      const prior = { purchase_id: 'old-1', document_ref: opts.docRef || 'F001-123', created_at: '2026-10-02T03:00:00Z', status: 'completa', line_count: 1,
         ...(role === 'owner' ? { supplier: 'Distribuidora Prueba', total_cost_cents: 99900 } : {}) };
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
         url.pathname === '/auth/me' ? { pos_role: role, owner_pin_set: true, roles_ready: true, device_id: 'dup-device' }
-        : url.pathname === '/auth/purchases' ? { purchases: [prior], truncated: false } : {}) });
+        : url.pathname === '/auth/purchases' ? { purchases: [prior], truncated: !!opts.truncated } : {}) });
     }
     return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
   });
@@ -23,8 +23,12 @@ async function setup(page: Page, role: 'owner' | 'empleado', dark = false) {
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed, role);
-  await page.evaluate(dark => {
+  await page.evaluate(({ dark, locked }) => {
     const w = window as any;
+    // El candado sigue en true en pos-permissions.js; solo la prueba lo abre.
+    const perms = w.NA_PERMISSIONS;
+    if (!locked) w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'aviso-factura-duplicada' ? false : perms.featureLocked(id) };
+    w.__toasts = []; const t0 = w.toast; w.toast = (m: string, k: string) => { w.__toasts.push(m); try { t0 && t0(m, k); } catch (_) {} };
     document.body.classList.toggle('dark', dark);
     w.eval(`productos=[{id:'dp-1',nombre:'Arroz Prueba',name:'Arroz Prueba',stock:5,costo:3,precio:4,controlInventario:true}]`);
     w.NuevoAmanecerCanonical = { ...w.NuevoAmanecerCanonical, enabled: () => true, refresh: async () => {},
@@ -32,7 +36,7 @@ async function setup(page: Page, role: 'owner' | 'empleado', dark = false) {
       prepareCommand: async () => { w.__submits = (w.__submits || 0) + 1; throw Object.assign(new Error('test_stop'), { status: 0 }); },
       commandContext: () => { w.__submits = (w.__submits || 0) + 1; throw Object.assign(new Error('test_stop'), { status: 0 }); } };
     w.NA_PURCHASES.open();
-  }, dark);
+  }, { dark, locked: !!opts.locked });
   return posts;
 }
 async function fill(page: Page, supplier: string, docRef: string) {
@@ -103,4 +107,27 @@ test('_findDuplicate normaliza espacios, guiones y mayúsculas', async ({ page }
       !!f(rows, { documentRef: 'x1', supplier: 'Cualquiera' }), !!f(rows, { documentRef: '' })];
   });
   expect(r).toEqual([true, false, true, false]);
+});
+
+test('candado en true (el de pos-permissions.js): no se consulta ni se avisa', async ({ page }) => {
+  await setup(page, 'owner', false, { locked: true });
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('aviso-factura-duplicada'))).toBe(true);
+  const d = await fill(page, 'Distribuidora Prueba', 'F001-123');
+  await d.locator('.na-pur-ok').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__submits || 0)).toBe(1);
+});
+
+test('lista cortada por el servidor: el aviso lo menciona', async ({ page }) => {
+  await setup(page, 'owner', false, { truncated: true });
+  const d = await fill(page, 'Distribuidora Prueba', 'F001-123');
+  await d.locator('.na-pur-ok').click();
+  await expect(d.locator('.na-pur-err')).toContainText('Solo se revisaron las compras más recientes');
+});
+
+test('lista cortada y sin coincidencia: toast informativo y sigue el registro', async ({ page }) => {
+  await setup(page, 'owner', false, { truncated: true, docRef: 'F999-1' });
+  const d = await fill(page, 'Distribuidora Prueba', 'F001-123');
+  await d.locator('.na-pur-ok').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__submits || 0)).toBe(1);
+  expect(await page.evaluate(() => (window as any).__toasts.join(' | '))).toContain('Solo se revisaron las compras más recientes');
 });
