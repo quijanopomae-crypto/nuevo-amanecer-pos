@@ -56,3 +56,8 @@ test('se carga en index.html y en la caché del service worker', () => {
   assert.match(sw, /'\.\/js\/modules\/atajos-teclado\.js'/);
   assert.match(sw, /'\.\/css\/atajos-teclado\.css'/);
 });
+test('F4 arma un seguro: el primer Enter en el cobro no confirma', () => {
+  assert.match(source, /armEnterGuard\(\)/);
+  assert.match(source, /addEventListener\('keydown', guardKeydown, true\)/);
+  assert.match(source, /stopImmediatePropagation/);
+});

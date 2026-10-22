@@ -27,6 +27,10 @@ for (const width of [768, 1280]) for (const dark of [false, true]) {
     const salesBefore = await page.evaluate(() => (window as any).eval('ventas.length'));
     await page.keyboard.press('F4'); // con el cobro abierto no confirma nada
     expect(await page.evaluate(() => (window as any).eval('ventas.length'))).toBe(salesBefore);
+    // Seguro: el primer Enter después de F4 no confirma la venta.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#mCobro')).toHaveClass(/open/);
+    expect(await page.evaluate(() => (window as any).eval('ventas.length'))).toBe(salesBefore);
     await page.keyboard.press('Escape');
     await expect(page.locator('#mCobro')).not.toHaveClass(/open/);
     await expect(page.locator('#posTotal')).toHaveText(total!);

@@ -93,7 +93,9 @@
     }
     if (action === 'pay') {
       var b = d.getElementById('btnPagar'); if (!b || b.disabled || b.hidden) return false;
-      b.click(); return true; // solo abre el diálogo de cobro existente
+      b.click(); // solo abre el diálogo de cobro existente
+      armEnterGuard();
+      return true;
     }
     if (action === 'close') {
       var o = topOverlay(); if (!o) return false;
@@ -103,6 +105,29 @@
     if (action === 'help') { var h = buildHelp(); h.hidden = !h.hidden; return true; }
     return false;
   }
+  /* Seguro anti-Enter: tras abrir el cobro con F4, el primer Enter NO confirma.
+   * El cobro ya confirmaba con Enter (escucha global en document), así que F4+Enter
+   * cobraría al instante. Se bloquea solo ese primer Enter; cualquier otra tecla,
+   * un clic o cerrar el cobro desarman el seguro. */
+  var guardArmed = false;
+  function cobroOpen() { var m = doc().getElementById('mCobro'); return !!(m && m.classList.contains('open')); }
+  function armEnterGuard() {
+    if (!cobroOpen()) return;
+    guardArmed = true;
+    try { var a = doc().activeElement; if (a && a !== doc().body && typeof a.blur === 'function') a.blur(); } catch (_) {}
+  }
+  function guardKeydown(event) {
+    if (!guardArmed) return;
+    if (!cobroOpen()) { guardArmed = false; return; }
+    if (event.key === 'Enter') {
+      guardArmed = false;
+      event.preventDefault(); event.stopImmediatePropagation();
+      try { if (typeof root.toast === 'function') root.toast('Revisa el cobro. Pulsa Enter otra vez para confirmar.', 'warning'); } catch (_) {}
+      return;
+    }
+    if (event.key !== 'F4') guardArmed = false;
+  }
+  function guardPointer() { guardArmed = false; }
   function onKeydown(event) {
     var action = resolveAction(event, currentState(event));
     if (!action) return;
@@ -112,8 +137,10 @@
   function init() {
     if (ready || !root.document) return; ready = true;
     root.document.addEventListener('keydown', onKeydown, false);
+    root.document.addEventListener('keydown', guardKeydown, true);
+    root.document.addEventListener('pointerdown', guardPointer, true);
   }
-  root.NA_ATAJOS_TECLADO = Object.freeze({ SHORTCUTS: SHORTCUTS, resolveAction: resolveAction, isEditable: isEditable, isTouchOnly: isTouchOnly, init: init });
+  root.NA_ATAJOS_TECLADO = Object.freeze({ SHORTCUTS: SHORTCUTS, resolveAction: resolveAction, isEditable: isEditable, isTouchOnly: isTouchOnly, init: init, _guardKeydown: guardKeydown, _isGuardArmed: function () { return guardArmed; } });
   if (root.document) {
     if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init); else init();
   }
