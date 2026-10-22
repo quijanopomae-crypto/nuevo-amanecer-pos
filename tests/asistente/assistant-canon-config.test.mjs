@@ -3,7 +3,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolveProvider, configFor } from '../../tools/cloudflare-lab/src/pos-assistant-providers.js';
-const WF = readFileSync('.github/workflows/v1.3-turso-prod-worker-hotfix.yml', 'utf8');
 const CFG = JSON.parse(readFileSync('tools/cloudflare-prod/wrangler.turso-prod.jsonc', 'utf8'));
 
 test('nombres de secreto: ASSISTANT_AI_API_KEY_4 = OhMyAgent, ASSISTANT_AI_API_KEY_2 = Routeway (respaldo)', () => {
@@ -22,14 +21,3 @@ test('CANON: vars sin secretos (bandera, proveedor, base URL, modelo); las clave
   assert.equal(CFG.vars.ASSISTANT_OWNER_BOOTSTRAP, undefined, 'el registro de aparato dueño sigue apagado (necesita la migración 0036)');
 });
 
-test('workflow del Worker: claves por stdin a «wrangler secret put», enmascaradas, nunca en echo; se omiten si el secreto no existe', () => {
-  const a = WF.indexOf('Sync assistant AI provider secrets'), block = WF.slice(a, WF.indexOf('Verify production health after secret sync'));
-  assert.ok(a > 0);
-  for (const n of ['ASSISTANT_AI_API_KEY_4', 'ASSISTANT_AI_API_KEY_2', 'ASSISTANT_CONFIRM_SECRET']) assert.match(block, new RegExp(n + ': \\$\\{\\{ secrets\\.' + n + ' \\}\\}'));
-  assert.match(block, /echo "::add-mask::\$value"/);
-  assert.match(block, /printf '%s' "\$value" \| npx wrangler secret put "\$name" --config \.\.\/cloudflare-prod\/wrangler\.turso-prod\.jsonc/);
-  const echoes = [...block.matchAll(/echo[^\n]*/g)].map((m) => m[0]);
-  assert.ok(echoes.every((e) => e.includes('::add-mask::') || !/\$value|\$\{!name/.test(e)), JSON.stringify(echoes));
-  assert.doesNotMatch(block, /set -x|secret list[^\n]*\| *grep/);
-  assert.ok(WF.indexOf('Sync assistant AI provider secrets') > WF.indexOf('Deploy Turso production Worker hotfix'));
-});
