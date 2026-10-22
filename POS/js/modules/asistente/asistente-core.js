@@ -663,6 +663,7 @@
     assistant_off: ['El asistente está apagado en este aparato.'], unauthorized: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'], HTTP_401: ['Este aparato no tiene sesión. Entra de nuevo al sistema.'],
     forbidden_document: ['Ese documento es solo para el Admin. Puedes pedir la lista de precios o la lista de pedido.'],
     review_admin_only: ['La revisión del punto de venta es solo para el Admin.'],
+    summary_admin_only: ['Los resúmenes del día y del mes son solo para el Admin.'],
     boleta_admin_only: ['Leer boletas con IA es solo para el Admin.'],
     boleta_unreadable: ['No pude leer esa boleta. Tome la foto de frente, con buena luz y sin mover.'],
     boleta_timeout: ['La lectura tardó más de 90 s. Pruebe con una foto más nítida o recortada.'],
