@@ -139,7 +139,7 @@ test('UI: botón flotante en Inicio e Inventario; Enter mientras responde queda 
 test('«Pensando…» con la burbuja ya abierta (status «pensando» de #962) y se quita con el siguiente texto, el final o un reset', () => {
   const pick = (start, endMark) => { const a = UI.indexOf(start); assert.ok(a > 0, start); const b = UI.indexOf(endMark, a); return UI.slice(a, b + endMark.length); };
   const src = [pick('    function ensureBubble()', '\n'), pick('    function writeText(t)', '\n'), pick('    function doneBubble()', '\n'), pick('    function backToThinking()', '\n'),
-    pick('    var holdEl = null;', "thinking.classList.add('na-asst-searching'); }")].join('\n');
+    pick('    function searching()', '\n')].join('\n') + '\nfunction finalLine() { ' + pick('          doneBubble();', '\n') + ' }';
   class N { constructor(tag, text) { this.tag = tag; this.nodeType = tag ? 1 : 3; this.data = text; this.childNodes = []; this.parentNode = null; this.attrs = {}; const cl = new Set(); this.classList = { add: (...c) => c.forEach((x) => cl.add(x)), remove: (...c) => c.forEach((x) => cl.delete(x)), has: (x) => cl.has(x) }; }
     get firstChild() { return this.childNodes[0] || null; }
     get textContent() { return this.nodeType === 3 ? this.data : this.childNodes.map((c) => c.textContent).join(''); }
@@ -153,17 +153,17 @@ test('«Pensando…» con la burbuja ya abierta (status «pensando» de #962) y 
     setState: () => {}, painter: { reset: () => {} } };
   const make = new Function('env', 'var doc = env.doc, C = env.C, mdOpts = env.mdOpts, setState = env.setState, painter = env.painter;\n' +
     'var thinking = new (env.N)("div"), dots = new (env.N)("span"), bubble = null, panelEl = 1, mine = 1; thinking.textContent = "Pensando"; thinking.appendChild(dots);\n' + src +
-    '\nreturn { searching: searching, writeText: writeText, doneBubble: doneBubble, backToThinking: backToThinking, bubble: function () { return bubble; }, thinking: thinking, dots: dots };');
+    '\nreturn { searching: searching, writeText: writeText, doneBubble: finalLine, backToThinking: backToThinking, bubble: function () { return bubble; }, thinking: thinking, dots: dots };');
   env.N = N;
   const ui = make(env);
   ui.searching({ s: 'buscando' }); assert.equal(ui.thinking.firstChild.data, 'Buscando en su inventario', 'antes del primer texto: como siempre');
-  ui.writeText('La clave del wifi '); const b = ui.bubble(); assert.ok(b);
+  ui.writeText('Listo, revisé '); const b = ui.bubble(); assert.ok(b);
   ui.searching({ s: 'buscando' }); assert.ok(!b.textContent.includes('Pensando'), 'con burbuja, «buscando» no cambia nada');
   ui.searching({ s: 'pensando' }); ui.searching({ s: 'pensando' });
   const holds = () => b.childNodes.filter((n) => n.className === 'na-asst-hold');
   assert.equal(holds().length, 1, 'un solo «Pensando…» aunque lleguen varios status'); assert.equal(holds()[0].textContent, 'Pensando…');
   assert.equal(b.childNodes.at(-1), ui.dots, 'debajo del texto, antes de los puntitos'); assert.equal(b.childNodes.at(-2), holds()[0]);
-  ui.writeText('se la da el Admin.'); assert.equal(holds().length, 0, 'vuelve el texto: se quita');
+  ui.writeText('el inventario.'); assert.equal(holds().length, 0, 'vuelve el texto: se quita');
   ui.searching({ s: 'pensando' }); assert.equal(holds().length, 1); ui.doneBubble(); assert.equal(holds().length, 0, 'final: se quita');
   ui.searching({ s: 'pensando' }); ui.backToThinking(); assert.ok(!b.textContent.includes('Pensando…'), 'reset: se quita');
   assert.match(UI, /onStatus: searching \}\);/);

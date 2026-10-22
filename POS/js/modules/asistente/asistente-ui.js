@@ -948,19 +948,15 @@
     if (streaming) body.stream = true;
     // La burbuja de «Pensando» se vuelve la respuesta EN EL MISMO LUGAR en cuanto llega el primer texto; la mascota pasa a «hablando».
     // Bot 4: los puntitos siguen al final mientras la respuesta llega (aria-busy); se quitan al terminar (doneBubble).
-    function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } return bubble; }
-    function writeText(t) { var b = ensureBubble(); unhold(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') b.classList.add('na-asst-wide'); b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
-    function doneBubble() { unhold(); if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); if (bubble) bubble.removeAttribute('aria-busy'); } // (Bot 4) con aria-busy se va la línea de los puntos: misma altura (CSS)
+    function ensureBubble() { if (!bubble) { bubble = thinking; thinking._md = null; thinking.classList.remove('na-asst-thinking', 'na-asst-searching'); thinking.textContent = ''; thinking.appendChild(dots); bubble.setAttribute('aria-busy', 'true'); setState('hablando'); } if (bubble._hold && bubble._hold.parentNode) bubble._hold.parentNode.removeChild(bubble._hold); return bubble; }
+    function writeText(t) { var b = ensureBubble(); if (!b._md) b._md = C.createReplyRenderer(doc, function (n) { if (n.className === 'na-asst-tbl') b.classList.add('na-asst-wide'); b.insertBefore(n, dots.parentNode === b ? dots : null); }, mdOpts); b._md.push(t); } // fila por fila, sin releer
+    function doneBubble() { if (bubble && dots.parentNode === bubble) bubble.removeChild(dots); if (bubble) bubble.removeAttribute('aria-busy'); } // (Bot 4) con aria-busy se va la línea de los puntos: misma altura (CSS)
     // reset del servidor: lo pintado se borra y la burbuja vuelve a «Pensando» con puntitos (nunca una burbuja vacía)
-    function backToThinking() { unhold(); painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
+    function backToThinking() { painter.reset(); if (!bubble) return; bubble._md = null; bubble.removeAttribute('aria-busy'); bubble.textContent = 'Pensando'; bubble.appendChild(dots); bubble.classList.add('na-asst-thinking'); bubble = null; setState('pensando'); }
     // Aviso del servidor mientras busca datos (antes de cualquier texto): «Buscando en su inventario…» en la misma burbuja.
-    // #962: mientras el servidor retiene texto (tras una palabra delicada) manda status {s:'pensando'} aunque ya haya texto pintado:
-    // «Pensando…» debajo de lo ya pintado (antes de los puntitos); se quita con el siguiente texto, el final o un reset.
-    var holdEl = null;
-    function unhold() { if (holdEl && holdEl.parentNode) holdEl.parentNode.removeChild(holdEl); holdEl = null; }
-    function holding() { if (!bubble || panelEl !== mine || holdEl) return; holdEl = doc.createElement('div'); holdEl.className = 'na-asst-hold'; holdEl.textContent = 'Pensando…'; bubble.insertBefore(holdEl, dots.parentNode === bubble ? dots : null); }
-    function searching(ev) { if (bubble && ev && ev.s === 'pensando') return holding();
-      if (bubble || panelEl !== mine || !thinking.firstChild || thinking.firstChild.nodeType !== 3) return; thinking.firstChild.data = 'Buscando en su inventario'; thinking.classList.add('na-asst-searching'); }
+    // #962: mientras el servidor retiene texto (tras una palabra delicada) manda status {s:'pensando'} aunque ya haya texto pintado: «Pensando…»
+    // debajo de lo pintado (antes de los puntitos), uno solo; lo quita el siguiente texto (ensureBubble), el final o un reset.
+    function searching() { if (bubble || panelEl !== mine || !thinking.firstChild || thinking.firstChild.nodeType !== 3) { var ev = arguments[0]; if (bubble && panelEl === mine && ev && ev.s === 'pensando') { if (!bubble._hold || bubble._hold.parentNode !== bubble) { bubble._hold = doc.createElement('div'); bubble._hold.className = 'na-asst-hold'; bubble._hold.textContent = 'Pensando…'; } bubble.insertBefore(bubble._hold, dots.parentNode === bubble ? dots : null); } return; } thinking.firstChild.data = 'Buscando en su inventario'; thinking.classList.add('na-asst-searching'); }
     try {
       var mine = panelEl, d;
       if (streaming) {
@@ -973,7 +969,7 @@
         else {
           painter.finish(); // lo que quedaba en la tanda se pinta: nada se pierde
           if (bubble && bubble._md) bubble._md.finish(); // la última línea (cabecera o fila sin salto) también
-          doneBubble();
+          doneBubble(); if (bubble && bubble._hold && bubble._hold.parentNode) bubble._hold.parentNode.removeChild(bubble._hold); // #962: sin «Pensando…» al final
           if (st.final) d = st.final;
           else if (st.text && bubble && (!st.error || /^upstream_/.test(String(st.error.error || '')))) { incomplete(bubble, text, image); setState('error', 2600); return; }
           else if (st.error) d = { ok: false, error: st.error.error || 'upstream_error', status: st.error.status };
