@@ -24,6 +24,9 @@ const SLOW_KINDS = new Set(['api', 'tarea', 'pantalla', 'cuelgue']);
 // Cada parte se acepta SOLO si cumple su lista o su forma (nunca texto libre de la pantalla) y si el redactor no la cambiaría.
 export const LAYOUT_KINDS = Object.freeze(['corte', 'desborde', 'boton_chico', 'lenta']);
 export const LAYOUT_LIMITS = Object.freeze({ max: 60, devices: 6, perDevice: 4 });
+// corte/desborde/boton_chico: estado de la ÚLTIMA revisión de esa pantalla en ese tipo de aparato; count = elementos distintos.
+// lenta: suceso; count = veces que pasó.
+const LAYOUT_STATIC = new Set(['corte', 'desborde', 'boton_chico']);
 const LAYOUT_SET = new Set(LAYOUT_KINDS);
 const DEV_PARTS = [['tel', 'tableta', 'pc'], ['tactil', 'raton'], ['vert', 'horiz'], ['Android', 'iOS', 'Windows', 'Mac', 'Linux', 'ChromeOS', 'otro'], ['Chrome', 'Safari', 'Firefox', 'Edge', 'Samsung', 'Opera', 'otro']];
 const SCREEN_RE = /^[A-Za-z][A-Za-z0-9_-]{0,29}$/;
@@ -113,7 +116,10 @@ export function layoutByDevice(layout = []) {
   const by = new Map();
   for (const x of layout) { let g = by.get(x.device);
     if (!g) by.set(x.device, (g = { device: x.device, label: deviceLabel(x.device), total: 0, kinds: { corte: 0, desborde: 0, boton_chico: 0, lenta: 0 }, items: [] }));
-    g.total += x.count; g.kinds[x.kind] += 1; g.items.push(x); }
+    // desborde: la página es una sola; lenta: una pantalla
+    const n = x.kind === 'corte' || x.kind === 'boton_chico' ? x.count : 1; g.total += n; g.kinds[x.kind] += n; g.items.push(x); }
+  const order = (x) => LAYOUT_KINDS.indexOf(x.kind);
+  for (const g of by.values()) g.items.sort((a, b) => order(a) - order(b) || b.count - a.count || a.screen.localeCompare(b.screen));
   return [...by.values()].sort((a, b) => b.total - a.total || a.device.localeCompare(b.device));
 }
 const LAYOUT_TXT = { corte: ['texto o menú cortado', 'textos o menús cortados'], desborde: ['pantalla que se sale de lado', 'pantallas que se salen de lado'],
@@ -121,8 +127,8 @@ const LAYOUT_TXT = { corte: ['texto o menú cortado', 'textos o menús cortados'
 const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 function layoutLine(x) {
   const what = x.kind === 'lenta' ? 'pantalla lenta, hasta ' + secs(x.worst) : x.kind === 'desborde' ? 'la pantalla se sale ' + x.worst + ' px de lado'
-    : x.kind === 'boton_chico' ? 'botón chico ' + x.el + ' (' + x.worst + ' px; mínimo ' + 40 + ')' : 'texto o menú cortado ' + x.el + ' (' + x.worst + ' px escondidos)';
-  return x.label + ': ' + what + ', ' + plural(x.count, 'vez', 'veces');
+    : x.kind === 'boton_chico' ? 'botón chico ' + x.el + ' (' + x.worst + ' px' + (/^(?:input|select|textarea)/.test(x.el) ? ')' : '; mínimo 40)') : 'texto o menú cortado ' + x.el + ' (' + x.worst + ' px escondidos)';
+  return x.label + ': ' + what + (x.kind === 'lenta' ? ', ' + plural(x.count, 'vez', 'veces') : x.kind === 'desborde' ? '' : ', ' + plural(x.count, 'elemento', 'elementos'));
 }
 export function usageLabel(key) {
   const [scr, act, arg] = String(key).split(':'); const s = SCREENS[scr] || scr;
@@ -141,7 +147,9 @@ export function buildReviewSummary({ groups, usage, slow = [], ocr = null, layou
   if (!groups.length) L.push('Errores: ninguno guardado en este aparato.');
   else { L.push('Errores: ' + groups.length + (groups.length === 1 ? ' tipo, ' : ' tipos, ') + total + (total === 1 ? ' vez.' : ' veces en total.'));
     for (const g of groups.slice(0, 8)) L.push('• ' + g.count + (g.count === 1 ? ' vez: ' : ' veces: ') + kindLabel(g) + (g.msg ? ', ' + g.msg : '') + (g.src ? ' (' + g.src + ')' : '') + cliTxt(g)); }
-  const hangs = slow.filter((x) => x.kind === 'cuelgue'), lag = slow.filter((x) => x.kind !== 'cuelgue');
+  // Una pantalla lenta medida por aparato (layout «lenta») no se repite en «Lentitud» como «pantalla».
+  const slowScreens = new Set(layout.filter((x) => x.kind === 'lenta').map((x) => x.screen));
+  const hangs = slow.filter((x) => x.kind === 'cuelgue'), lag = slow.filter((x) => x.kind !== 'cuelgue' && !(x.kind === 'pantalla' && slowScreens.has(x.name)));
   L.push(hangs.length ? 'Cuelgues: ' + hangs.reduce((t, x) => t + x.count, 0) + ' (pantalla congelada más de 5 s).' : 'Cuelgues: ninguno.');
   for (const x of hangs.slice(0, 4)) L.push('• ' + x.count + (x.count === 1 ? ' vez: ' : ' veces: ') + slowLabel(x) + ', hasta ' + secs(x.ms_max) + cliTxt(x));
   L.push(lag.length ? 'Lentitud: ' + lag.length + (lag.length === 1 ? ' punto lento.' : ' puntos lentos.') : 'Lentitud: nada lento guardado.');
@@ -153,7 +161,7 @@ export function buildReviewSummary({ groups, usage, slow = [], ocr = null, layou
   }
   const devs = layoutByDevice(layout);
   if (devs.length) {
-    L.push('Pantallas por tipo de aparato: ' + plural(layout.length, 'problema', 'problemas') + ' en ' + plural(devs.length, 'tipo de aparato.', 'tipos de aparato.'));
+    L.push('Pantallas por tipo de aparato: ' + plural(devs.reduce((t, g) => t + g.total, 0), 'problema', 'problemas') + ' en ' + plural(devs.length, 'tipo de aparato.', 'tipos de aparato.'));
     for (const g of devs.slice(0, LAYOUT_LIMITS.devices)) {
       const k = LAYOUT_KINDS.filter((t) => g.kinds[t]).map((t) => plural(g.kinds[t], LAYOUT_TXT[t][0], LAYOUT_TXT[t][1])).join(', ');
       L.push('• ' + g.label + ': ' + k + '.');
@@ -178,7 +186,9 @@ export function buildReviewSummary({ groups, usage, slow = [], ocr = null, layou
   if (custs.length) tips.push('Revisar ' + custs.slice(0, 3).map(customerRef).join(', ') + ': los problemas pasaron al trabajar con ' + (custs.length === 1 ? 'ese cliente.' : 'esos clientes.'));
   if (ocr && ocr.reads >= 3 && ocr.fails / ocr.reads >= 0.3) tips.push('Muchas boletas no se leen: tomar la foto con buena luz, de frente y sin mover.');
   else if (ocr && ocr.confirmed && ocr.corrections / ocr.confirmed >= 3) tips.push('Las boletas necesitan muchas correcciones: revisar las correcciones guardadas y la nitidez de las fotos.');
-  const lay = layout.slice().sort((a, b) => b.count - a.count)[0];
+  // Sugerencia: el problema de pantalla con más elementos afectados (botón chico antes que corte si empatan); si no hay, la más lenta.
+  const lay = layout.filter((x) => LAYOUT_STATIC.has(x.kind)).sort((a, b) => b.count - a.count || (a.kind === 'boton_chico' ? -1 : b.kind === 'boton_chico' ? 1 : 0))[0]
+    || layout.filter((x) => x.kind === 'lenta').sort((a, b) => b.worst - a.worst)[0];
   if (lay) tips.push(lay.kind === 'boton_chico' ? 'Agrandar los botones chicos de ' + lay.label + ' en ' + deviceLabel(lay.device) + ', a 40 px o más, para tocarlos sin errar.'
     : lay.kind === 'lenta' ? 'Aligerar ' + lay.label + ': tarda en abrir en ' + deviceLabel(lay.device) + '.'
     : 'Acomodar ' + lay.label + ' en ' + deviceLabel(lay.device) + ': hay textos o menús que no se ven completos.');

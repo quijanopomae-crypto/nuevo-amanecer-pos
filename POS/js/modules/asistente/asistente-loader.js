@@ -70,9 +70,11 @@
   var REV_SLOW_API_MS = 3000, REV_SCREEN_MS = 1500, REV_TASK_MS = 1000, REV_HANG_MS = 5000, REV_BEAT_MS = 1000, REV_CTX_MS = 15000;
   var revCtx = null, ltOn = false, ltUntil = 0, beatLast = 0, beatTimer = 0;
   // Pantallas (nivel 3, asistente-pantallas.js): texto o menú cortado, página que se sale de lado, botón chico en táctil y pantalla lenta,
-  // por tipo de aparato. Máx. 60 hallazgos agrupados (r.l). Salen dentro de «slow» con su propio tipo (corte, desborde, boton_chico,
-  // lenta) para que la UI de hoy los mande tal cual: ms_avg/ms_max = px (o ms en «lenta»); en boton_chico ms_max es el lado MÁS chico.
-  var REV_LAYOUT_MAX = 60, REV_LAYOUT_KINDS = { corte: 1, desborde: 1, boton_chico: 1, lenta: 1 }, PANT_DELAY_MS = 5000, pantLoaded = false;
+  // por tipo de aparato. Máx. 60 hallazgos (r.l). Salen dentro de «slow» con su propio tipo (corte, desborde, boton_chico, lenta) para que
+  // la UI de hoy los mande tal cual: ms_avg/ms_max = px (o ms en «lenta»); en boton_chico ms_max es el lado MÁS chico.
+  // corte/desborde/boton_chico son el ESTADO de la última revisión de esa pantalla en ese tipo de aparato (count = elementos distintos):
+  // cada revisión reemplaza la anterior. lenta es un suceso (count = veces). Todo lo que no se vuelve a ver en 7 días se borra.
+  var REV_LAYOUT_MAX = 60, REV_LAYOUT_STATIC = { corte: 1, desborde: 1, boton_chico: 1 }, REV_LAYOUT_TTL_MS = 7 * 864e5, PANT_DELAY_MS = 5000, pantLoaded = false;
   function revClean(v, n) {
     var s = String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 600)
       .replace(/(https?:\/\/[^\s?#]*)[?#]\S*/gi, '$1').replace(/\b(?:bearer|basic)\s+\S+/gi, '[clave]')
@@ -140,13 +142,28 @@
     r.s.push(it); if (r.s.length > REV_SLOW_MAX) r.s.splice(0, r.s.length - REV_SLOW_MAX);
     revSave();
   }
-  function revLayout(kind, name, v) { // lo llama asistente-pantallas.js; nunca texto de la pantalla, solo «aparato|pantalla|elemento»
-    if (disabled || !REV_LAYOUT_KINDS[kind]) return;
+  function revLayoutPrune(r) { // vence lo que no se volvió a ver en 7 días y respeta el tope
+    var lim = Date.now() - REV_LAYOUT_TTL_MS, n = r.l.length; r.l = r.l.filter(function (x) { var t = Date.parse(x.last); return !(t < lim); });
+    if (r.l.length > REV_LAYOUT_MAX) r.l.splice(0, r.l.length - REV_LAYOUT_MAX); return n !== r.l.length;
+  }
+  // Fin de una revisión de una pantalla en un tipo de aparato: prefix = «aparato|pantalla|», list = [{ kind, name, count, sum, worst }].
+  function revLayoutScan(prefix, list) {
+    if (disabled) return; var r = revLoad(), now = new Date().toISOString(), pre = revClean(prefix, 80); if (!pre || pre.split('|').length !== 3) return;
+    var old = {}; r.l = r.l.filter(function (x) { if (REV_LAYOUT_STATIC[x.kind] && x.name.indexOf(pre) === 0) { old[x.kind + '|' + x.name] = x; return false; } return true; });
+    (Array.isArray(list) ? list : []).slice(0, 30).forEach(function (f) {
+      if (!f || !REV_LAYOUT_STATIC[f.kind]) return; var n = revClean(f.name, 80); if (n.indexOf(pre) !== 0) return;
+      var c = Math.max(1, Math.min(1000, Math.floor(Number(f.count) || 1))), w = Math.max(1, Math.min(36e5, Math.round(Number(f.worst) || 0))), sm = Math.max(w, Math.min(36e8, Math.round(Number(f.sum) || w)));
+      var o = old[f.kind + '|' + n]; r.l.push({ kind: f.kind, name: n, count: c, sum: sm, worst: w, first: o ? o.first : now, last: now });
+    });
+    revLayoutPrune(r); revSave();
+  }
+  function revLayout(kind, name, v) { // pantalla lenta (suceso); nunca texto de la pantalla, solo «aparato|pantalla|pantalla»
+    if (disabled || kind !== 'lenta') return;
     var r = revLoad(), n = revClean(name, 80), now = new Date().toISOString(); v = Math.max(1, Math.min(36e5, Math.round(Number(v) || 0)));
     if (!n || n.indexOf('|') < 0) return;
     for (var i = r.l.length - 1; i >= 0; i--) { var x = r.l[i];
       if (x.kind === kind && x.name === n) { x.count++; x.sum += v; x.worst = kind === 'boton_chico' ? Math.min(x.worst, v) : Math.max(x.worst, v); x.last = now; r.l.splice(i, 1); r.l.push(x); revSave(); return; } }
-    r.l.push({ kind: kind, name: n, count: 1, sum: v, worst: v, first: now, last: now }); if (r.l.length > REV_LAYOUT_MAX) r.l.splice(0, r.l.length - REV_LAYOUT_MAX);
+    r.l.push({ kind: kind, name: n, count: 1, sum: v, worst: v, first: now, last: now }); revLayoutPrune(r);
     revSave();
   }
   function revPantallas() { // archivo chico, solo Admin, en un momento libre y bien después de abrir (no compite con el arranque)
@@ -223,13 +240,14 @@
   root.NA_ASISTENTE_REVISION = {
     // Lo que se manda SOLO cuando el Admin pide la revisión (la UI lo pasa además por el redactor del asistente). De clientes: solo el código.
     // Pantallas: al FINAL de «slow» y sin pasar de 200 en total (la UI manda los últimos 200), así siempre llegan.
-    data: function () { var r = revLoad(), lay = r.l.map(function (x) { return { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.sum / Math.max(1, x.count)), ms_max: x.worst, last: x.last }; });
+    data: function () { var r = revLoad(); if (revLayoutPrune(r)) revSave(); var lay = r.l.map(function (x) { return { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.sum / Math.max(1, x.count)), ms_max: x.worst, last: x.last }; });
       return {
       errors: r.e.map(function (x) { var o = { kind: x.kind, msg: x.msg, src: x.src, status: x.status, count: x.count, first: x.first, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }),
       usage: JSON.parse(JSON.stringify(r.u)),
       slow: r.s.slice(-Math.max(0, REV_SLOW_MAX - lay.length)).map(function (x) { var o = { kind: x.kind, name: x.name, count: x.count, ms_avg: Math.round(x.ms_sum / Math.max(1, x.count)), ms_max: x.ms_max, last: x.last }; if (x.cli) { o.cli = x.cli; o.accion = x.accion; } return o; }).concat(lay),
       ocr: JSON.parse(JSON.stringify(r.o)) }; },
     layout: function (kind, name, v) { if (revOn) revLayout(kind, name, v); },
+    layoutScan: function (prefix, list) { if (revOn) revLayoutScan(prefix, list); },
     newErrors: function () { var r = revLoad(), n = 0; r.e.concat(r.s.filter(function (x) { return x.kind === 'cuelgue'; })).forEach(function (x) { if (!r.seen || x.last > r.seen) n++; }); return n; },
     markSeen: function () { var r = revLoad(); r.seen = new Date().toISOString(); revFlush(); },
     installed: function () { return revOn; },
@@ -242,7 +260,7 @@
       try { if (typeof root.goPage === 'function') { root.goPage('pageClientes'); return true; } } catch (_) {}
       return false;
     },
-    _test: { beat: revBeat, ctx: function () { return revCtxNow(); }, slow: revSlow, layout: revLayout }
+    _test: { beat: revBeat, ctx: function () { return revCtxNow(); }, slow: revSlow, layout: revLayout, layoutScan: revLayoutScan }
   };
   slotCss();
   if (!disabled && ls('na_asistente_acc') === 'owner') { reserve(); revInstall(); }
