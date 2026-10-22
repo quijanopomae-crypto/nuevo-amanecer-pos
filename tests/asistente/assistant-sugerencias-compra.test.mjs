@@ -190,7 +190,7 @@ test('bajo_stock («¿qué falta reponer?»): servicios fuera, igual que la pest
   const r = await runAssistantQuery(memoryReader({ products }), { tipo: 'bajo_stock' });
   assert.equal(r.total, 2); assert.deepEqual(r.filas.map((f) => f[0]).sort(), ['Arroz', 'VERDURAS'], 'solo se quitan los servicios (por categoría), como en la pantalla');
   assert.ok(!JSON.stringify(r).includes('Recarga Claro') && !JSON.stringify(r).includes('Préstamo'));
-  assert.match(r.texto, /^Hay 2 productos en o bajo el mínimo\. Los más urgentes: VERDURAS \(-7660\), Arroz \(0\)\.$/);
+  assert.match(r.texto, /^Hay 2 productos en o bajo el mínimo\. Los más urgentes: VERDURAS \(Faltan 7660\), Arroz \(Sin stock\)\.$/);
   assert.equal(r.resumen.total, 2); assert.equal(r.resumen.revisados, 4);
   // Sin categoría (datos viejos): como antes.
   const old = await runAssistantQuery(memoryReader({ products: [prod('A', 'Arroz', 0, 5)] }), { tipo: 'bajo_stock' });
