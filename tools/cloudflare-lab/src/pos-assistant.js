@@ -29,6 +29,7 @@ import { auditWrite, isAggregated } from './pos-assistant-audit.js';
 import { EMPLOYEE_TOOLS_BY_NAME, EMPLOYEE_QUERY_TYPES_ALL, EMPLOYEE_DOC_TYPES_ALL, seesOwnerData, hasCosts, queryAllowed, docAllowed, levelCan, capabilitiesFor,
   bulkAllowed, isBulkProposal, dropBulkProposals, BULK_ADMIN_ONLY_TEXT } from './pos-assistant-levels.js';
 import { LEVEL_TOOL, LEVEL_CARD, LEVEL_TOOL_DEF, levelToolProposal, resolveLevelProposals, applyLevelCard } from './pos-assistant-levels-route.js';
+import { CONFIG_TOOL, CONFIG_CARD, CONFIG_TOOL_DEF, configToolProposal, resolveConfigProposals, applyConfigCard } from './pos-assistant-config-route.js';
 import { MEMORY_LIMITS, trimHistory, readNote, noteTurn, readResumenField, cleanResumen, verifyResumen, buildResumen, resumenMessage, resumenSigData } from './pos-assistant-memoria.js';
 
 export const ASSISTANT_CHAT_PATH = '/auth/assistant/chat';
@@ -46,7 +47,7 @@ export const USAGE_PREFIX = 'internal:asst:';
 // Herramienta -> acción de la tabla única de permisos (POS/js/config/pos-permissions.js).
 export const TOOL_ACTIONS = Object.freeze({ explicar_pasos: 'assistant.chat', consultar: 'assistant.query', preparar_documento: 'assistant.document',
   proponer_cambio_precio: 'assistant.price.propose', preparar_compra: 'assistant.purchase.propose', leer_factura_compra: 'assistant.purchase.propose',
-  proponer_ajuste_stock: 'assistant.stock.propose', proponer_producto_nuevo: 'assistant.product.propose', [LEVEL_TOOL]: 'assistant.levels.set' });
+  proponer_ajuste_stock: 'assistant.stock.propose', proponer_producto_nuevo: 'assistant.product.propose', [LEVEL_TOOL]: 'assistant.levels.set', [CONFIG_TOOL]: 'assistant.settings.propose' });
 // Nunca se aceptan estos parámetros en una herramienta (el rol y el PIN no los decide el modelo).
 export const FORBIDDEN_PARAMS = Object.freeze(['role', 'rol', 'owner', 'dueno', 'pin', 'approval', 'approval_id', 'x-owner-approval', 'token', 'pos_role', 'admin']);
 export function hasForbiddenParam(value, depth = 0) {
@@ -65,6 +66,9 @@ export const EMPLOYEE_DOC_TYPES = EMPLOYEE_DOC_TYPES_ALL;
 // caja_abierta (#948): la caja del día también es solo del Admin; si el modelo se la pide para un empleado, 403 sin leer la caja.
 export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['creditos_atrasados', 'caja_abierta']);
 export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
+// Configuración (proponer_configuracion) pedida por quien no tiene el permiso «cambios» (niveles 1, 2, 3 sin permiso o sin rol): 403, sin leer
+// la base ni segunda llamada al modelo (chat) y 403 antes de leer el cuerpo (confirm).
+export const CONFIG_FORBIDDEN = Object.freeze({ error: 'config_forbidden', message: 'Los cambios de Configuración los hace el Admin o quien tenga el permiso «costos y cambios».' });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
@@ -1431,6 +1435,7 @@ const TOOL_DEFS = [
     parameters: { type: 'object', properties: { tipo: { type: 'string', enum: DOC_TYPES }, desde: { type: 'string' }, hasta: { type: 'string' }, cliente_id: { type: 'string', description: 'Solo el código de «cliente #CODIGO», sin el nombre.' } }, required: ['tipo'] } }
 ];
 TOOL_DEFS.push(LEVEL_TOOL_DEF); // solo Admin: nivel y permiso de costos de una persona (pos-assistant-levels-route.js)
+TOOL_DEFS.push(CONFIG_TOOL_DEF); // Admin y nivel 3 + «costos y cambios»: ajustes que ya existen en Configuración (pos-assistant-config-route.js)
 export function toolsForRole(role) {
   return TOOL_DEFS.filter((t) => toolAllowed(role, t.name))
     .map((t) => ({ type: 'function', function: role === 'owner' ? { name: t.name, description: t.description, parameters: t.parameters } : employeeTool(t, role) }));
@@ -1491,7 +1496,7 @@ export function employeeToolGuard(role) {
   if (role === 'owner') return null;
   return (c) => {
     if (!c || !TOOL_DEFS.some((t) => t.name === c.name)) return null;
-    if (!toolAllowed(role, c.name)) return c.name === 'preparar_documento' ? 'forbidden_document' : 'forbidden_role';
+    if (!toolAllowed(role, c.name)) return c.name === 'preparar_documento' ? 'forbidden_document' : c.name === CONFIG_TOOL ? 'config_forbidden' : 'forbidden_role';
     if (c.name === 'preparar_documento') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && !docAllowed(role, m[1])) return 'forbidden_document'; }
     if (c.name === 'consultar') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && ADMIN_ONLY_QUERY_TYPES.includes(m[1])) return 'query_admin_only'; }
     if (c.name === 'consultar') { const m = /"tipo"\s*:\s*"([a-z_]+)"/.exec(c.arguments || ''); if (m && SUMMARY_TYPES.includes(m[1])) return 'forbidden_summary'; if (m && !costQueryAllowed(role, m[1])) return 'forbidden_costs'; }
@@ -1700,7 +1705,7 @@ export function toProposal(call, role, ctx, n) {
   if (!args || typeof args !== 'object') return { dropped: 'bad_arguments', tool: name };
   if (!TOOL_DEFS.some((t) => t.name === name)) return { dropped: 'unknown_tool', tool: name };
   // Documento sin permiso de documentos (empleado en «consultas»): mismo motivo que un tipo solo del dueño -> 403 forbidden_document para todo el pedido.
-  if (!toolAllowed(role, name)) return { dropped: name === 'preparar_documento' && role !== 'owner' ? 'forbidden_document' : 'forbidden_role', tool: name };
+  if (!toolAllowed(role, name)) return { dropped: name === 'preparar_documento' && role !== 'owner' ? 'forbidden_document' : name === CONFIG_TOOL ? 'config_forbidden' : 'forbidden_role', tool: name };
   if (hasForbiddenParam(args)) return { dropped: 'forbidden_param', tool: name };
   const idx = productIndex(ctx), id = `p${n}-${name}`;
   if (name === 'explicar_pasos') {
@@ -1709,6 +1714,7 @@ export function toProposal(call, role, ctx, n) {
     return { id, type: 'pasos', needsConfirm: false, title: cleanText(args.tema, 80) || 'Cómo hacerlo', pasos, pantalla: SCREEN_IDS.includes(args.pantalla) ? args.pantalla : null };
   }
   if (name === LEVEL_TOOL) return levelToolProposal(args, id); // solo Admin (toolAllowed); se completa con la base en chatCore
+  if (name === CONFIG_TOOL) return configToolProposal(args, id); // permiso «cambios» (toolAllowed); se completa con la base en chatCore
   if (name === 'consultar') {
     if (!QUERY_TYPES.includes(args.tipo)) return { dropped: 'bad_query', tool: name };
     if (role !== 'owner' && ADMIN_ONLY_QUERY_TYPES.includes(args.tipo)) return { dropped: 'query_admin_only', tool: name };
@@ -2332,7 +2338,7 @@ function offBody(role) { return role === 'empleado:off' || role === 'empleado' |
 
 // ---------- Token de confirmación (un solo uso, 5 minutos) ----------
 const AUDIT_TOOL = Object.freeze({ consulta: 'consultar', documento: 'preparar_documento', pasos: 'explicar_pasos', costo: 'actualizar_costo' });
-const TYPE_TOOL = Object.freeze({ [LEVEL_CARD]: LEVEL_TOOL, compra: 'preparar_compra', precio: 'proponer_cambio_precio', costo: 'proponer_cambio_precio', ajuste: 'proponer_ajuste_stock', producto: 'proponer_producto_nuevo' });
+const TYPE_TOOL = Object.freeze({ [LEVEL_CARD]: LEVEL_TOOL, [CONFIG_CARD]: CONFIG_TOOL, compra: 'preparar_compra', precio: 'proponer_cambio_precio', costo: 'proponer_cambio_precio', ajuste: 'proponer_ajuste_stock', producto: 'proponer_producto_nuevo' });
 const enc = new TextEncoder();
 function b64url(bytes) { let bin = ''; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function fromB64url(s) { const bin = atob(String(s).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(bin, (c) => c.charCodeAt(0)); }
@@ -2554,6 +2560,8 @@ async function confirmCore(request, env, auth, json, deps, ctx) {
   wv.n++;
   // Tarjeta de nivel/permiso (solo Admin): el servidor guarda el cambio aquí y lo anota (pos-assistant-levels-route.js).
   if (tok.t === LEVEL_CARD) { const lv = await applyLevelCard(deps.db, auth, applied, tok.op, deps.audit || auditWrite); if (lv.status !== 200) return json(lv.body, lv.status); applied = { ...applied, resultado: lv.body }; }
+  // Tarjeta de Configuración (Admin o nivel 3 + «costos y cambios»): el servidor guarda aquí y anota el aparato que aplicó.
+  if (tok.t === CONFIG_CARD) { const cf = await applyConfigCard(deps.db, auth, role, applied, tok.op, deps.audit || auditWrite); if (cf.status !== 200) return json(cf.body, cf.status); applied = { ...applied, resultado: cf.body }; }
   const rvUsed = tok.t === 'compra' ? { accept: applied.aceptadas || [], drop: applied.quitadas || [] } : null;
   if (!(await store.put(usedKey, { op: tok.op, at: now, t: tok.t, drop: applied.quitadas || [], ...(tok.t === 'compra' ? { acc: applied.aceptadas || [] } : {}),
     s: sess, rh: await replayHash(secret, tok, fc.out, rvUsed, body.proposal) }, used.revision))) {
@@ -2750,6 +2758,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (result.forbidden === 'query_admin_only') return json(QUERY_ADMIN_ONLY, 403);
     if (result.forbidden === 'forbidden_summary') return json(SUMMARY_ADMIN_ONLY, 403);
     if (result.forbidden === 'forbidden_costs') return json(COSTS_ADMIN_ONLY, 403);
+    if (result.forbidden === 'config_forbidden') return json(CONFIG_FORBIDDEN, 403);
     preDropped = { dropped: 'forbidden_role', tool: 'cut_mid_stream' }; result = { content: '', calls: [], usage: result.usage };
   }
   // Herramientas o búsquedas por delante y todavía sin texto: «buscando» enseguida y cada pocos segundos hasta el primer texto.
@@ -2760,9 +2769,12 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
   dedupeActions(proposals, dropped); // una sola tarjeta por acción (mismo tipo y mismo producto = la primera)
+  // Configuración sin el permiso «cambios»: 403 antes de leer nada de la base y sin segunda llamada al modelo.
+  if (dropped.some((d) => d.dropped === 'config_forbidden')) { if (emit) { emit.drop(); emit.reset(); } return json(CONFIG_FORBIDDEN, 403); }
   // Cambios masivos (una tarjeta que cambia más de un producto): solo el Admin. Empleado: fuera, con frase simple (pos-assistant-levels.js).
   const bulkDropped = dropBulkProposals(role, proposals, dropped) > 0;
   await resolveLevelProposals(deps.db, proposals, dropped); // tarjetas de nivel: persona por etiqueta o código (pos-assistant-levels-route.js)
+  await resolveConfigProposals(deps.db, proposals, dropped); // tarjetas de Configuración: actual → nuevo leído de pos_settings
   // Compra con costos distintos a los del inventario: tarjetas APARTE «Actualizar costo» (product.update con PIN). La compra del POS no cambia el costo.
   const reader = deps.reader || (deps.db ? canonicalReader(deps.db) : null);
   if (reader && proposals.some((p) => p.type === 'compra' && p.sinProducto)) {
