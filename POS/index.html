@@ -102,6 +102,7 @@
     <link rel="stylesheet" href="css/productos-sin-movimiento.css">
     <link rel="stylesheet" href="css/sugerencia-compra.css">
     <link rel="stylesheet" href="css/ajustes-inventario.css">
+    <link rel="stylesheet" href="css/sesiones-aparatos.css">
     <link rel="stylesheet" href="css/inventory-form-polish.css">
 <link rel="stylesheet" href="css/costo-compra-ficha.css">
     <script>
@@ -395,6 +396,22 @@
 <div class="page" id="pageProximamente">
     <h1>Próximamente</h1>
     <div class="na-prox-grid" id="naProximamenteGrid"></div>
+</div>
+
+<div class="page" id="pageSesionesAparatos" aria-labelledby="sesionesAparatosTitle">
+    <header class="sa-header">
+        <div class="sa-heading">
+            <h1 id="sesionesAparatosTitle">Sesiones y aparatos conectados</h1>
+            <p>Cierra a distancia la sesión de un aparato · Solo dueño</p>
+        </div>
+        <div class="sa-controls" data-sa-controls hidden>
+            <button type="button" data-sa-refresh>Actualizar</button>
+        </div>
+    </header>
+    <div class="sa-content">
+        <p class="sa-status" data-sa-status role="status" aria-live="polite"></p>
+        <div data-sa-list></div>
+    </div>
 </div>
 
 <div class="page" id="pageHistorialCompras">
@@ -1466,6 +1483,7 @@
 <script src="js/modules/productos-sin-movimiento.js"></script>
 <script src="js/modules/sugerencia-compra.js"></script>
 <script src="js/modules/ajustes-inventario.js"></script>
+<script src="js/modules/sesiones-aparatos.js"></script>
 <script src="js/config/config-e2.js"></script>
 <script src="js/config/config-g.js"></script>
 <script src="js/config/pos-reviews-client.js"></script>
