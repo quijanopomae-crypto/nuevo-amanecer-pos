@@ -50,7 +50,7 @@ const ITEMS = [
   { sale_id: 'S3', product_id: 'PB', quantity: 100, line_total_cents: 8000 }, { sale_id: 'S4', product_id: 'PD', quantity: 99, line_total_cents: 9999 }
 ];
 const DATA = { products: PRODUCTS, sales: SALES, saleItems: ITEMS, customers: [CLIENTE], credits: [{ cliente: CLIENTE.id, saldo: 55.5, vence: '2026-10-01' }], purchases: [] };
-const EXPECTED_ORDER = ['PA', 'PI', 'PH', 'PJ', 'PG', 'PB', 'PC', 'PD'];
+const EXPECTED_ORDER = ['PA', 'PI', 'PH', 'PB', 'PC', 'PD']; // PG y PJ (0/negativo, sin mínimo ni ventas) van a «stock sin contar»
 
 test('cálculo puro: entra agotado (siempre), bajo mínimo o que se acaba en menos de 7 días; objetivo = mínimo + 14 días de venta (sin ventas: doble del mínimo)', () => {
   const sold = new Map([['PA', 30], ['PB', 60], ['PC', 15], ['PE', 30]]);
@@ -63,12 +63,11 @@ test('cálculo puro: entra agotado (siempre), bajo mínimo o que se acaba en men
   assert.equal(by.PC.sugerido, 9); assert.equal(by.PC.alcanza, 6); // 0,5 u/día: 5 + 7 − 3
   assert.equal(by.PD.sugerido, 6); // sin ventas recientes: 4 × 2 − 2
   assert.equal(by.PA.costoEst, 3.8); assert.equal(by.PC.costoEst, null, 'sin costo: sin estimado');
-  // Agotados: siempre entran. Sin mínimo ni ventas: al menos 1 y marcado «sin datos».
-  assert.equal(by.PG.sugerido, 1); assert.equal(by.PG.sinDatos, true);
+  // Agotados con mínimo o con ventas: siempre entran. Sin mínimo ni ventas (PG, PJ): stock sin contar, no es compra.
+  assert.ok(!by.PG && !by.PJ, 'sin contar: fuera de la lista');
   assert.equal(by.PH.sinDatos, false, 'con mínimo sí hay dato');
   // Stock negativo: se repone lo que falta para volver a 0 más el objetivo.
   assert.equal(by.PI.sugerido, 7); assert.equal(by.PI.stock, -3); assert.equal(by.PI.alcanza, null); // 2 × 2 − (−3)
-  assert.equal(by.PJ.sugerido, 2); assert.equal(by.PJ.sinDatos, true); // 0 − (−2), sin mínimo ni ventas
   const neg = purchaseSuggestions([{ id: 'N', nombre: 'n', stock: -4, min: 1, controla: true }], new Map([['N', 30]]), 30);
   assert.equal(neg[0].sugerido, 19); assert.equal(neg[0].alcanza, 0); // 1 u/día: 1 + 14 − (−4); alcanza 0 días
   for (const id of ['PE', 'PF']) assert.ok(!by[id], id + ' no entra (le alcanza / sin control de stock)');
@@ -80,17 +79,18 @@ test('consulta en memoria: ventana de 30 días, anuladas fuera, totales y tabla 
   assert.ok(QUERY_TYPES.includes('sugerencias_compra'));
   const r = await runAssistantQuery(memoryReader(DATA), { tipo: 'sugerencias_compra' }, NOW);
   assert.ok(!r.error, JSON.stringify(r));
-  assert.equal(r.desde, '2026-09-23'); assert.equal(r.hasta, '2026-10-22'); assert.equal(r.total, 8); assert.equal(r.truncado, false);
+  assert.equal(r.desde, '2026-09-23'); assert.equal(r.hasta, '2026-10-22'); assert.equal(r.total, 6); assert.equal(r.truncado, false);
   assert.deepEqual(r.filas.map((f) => f[1]), EXPECTED_ORDER.map((id) => PRODUCTS.find((p) => p.id === id).nombre), 'la pantalla del dueño ve los nombres, en orden');
   assert.deepEqual(r.filas[0], [1, 'Paracetamol 500 mg', 0, 5, 30, 0, 19, 3.8]);
-  assert.deepEqual(r.filas[4], [5, 'Producto sin movimiento', 0, 0, 0, 'sin datos', 1, 1], 'agotado sin datos: sale con 1 y marcado');
-  assert.equal(r.resumen.productos_sugeridos, 8); assert.equal(r.resumen.unidades_total, 68); // 19 + 7 + 4 + 2 + 1 + 20 + 9 + 6
-  assert.equal(r.resumen.costo_estimado_soles, 53.8); // 3.8 + 14 + 20 + 1 + 6 + 9 (PC y PJ sin costo)
-  assert.equal(r.resumen.sin_costo, 2); assert.equal(r.resumen.dias_analizados, 30); assert.equal(r.resumen.truncado, false);
-  assert.equal(r.resumen.primeros.find((x) => x.codigo === 'PG').sin_datos, true);
+  assert.equal(r.resumen.productos_sugeridos, 6); assert.equal(r.resumen.unidades_total, 65); // 19 + 7 + 4 + 20 + 9 + 6
+  assert.equal(r.resumen.costo_estimado_soles, 52.8); // 3.8 + 14 + 20 + 6 + 9 (PC sin costo)
+  assert.equal(r.resumen.sin_costo, 1); assert.equal(r.resumen.dias_analizados, 30); assert.equal(r.resumen.truncado, false);
+  assert.deepEqual(r.sin_contar, { total: 2, lista: [{ codigo: 'PJ', nombre: 'Curitas surtidas', stock: -2 }, { codigo: 'PG', nombre: 'Producto sin movimiento', stock: 0 }] });
+  assert.deepEqual(r.resumen.sin_contar, { total: 2, codigos: ['PJ', 'PG'] });
+  assert.deepEqual(r.revisar_datos, { total: 0, lista: [] }); assert.equal(r.genericos_excluidos, 0);
   assert.deepEqual(r.resumen.primeros.map((x) => x.codigo), EXPECTED_ORDER);
-  assert.deepEqual(r.resumen.primeros.map((x) => x.fila), [1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.match(r.texto, /Sugiero reponer 8 productos: 68 unidades, unos S\/ 53\.80/); assert.ok(!/Ojo/.test(r.texto)); assert.match(r.texto, /Registrar compra/);
+  assert.deepEqual(r.resumen.primeros.map((x) => x.fila), [1, 2, 3, 4, 5, 6]);
+  assert.match(r.texto, /Sugiero reponer 6 productos: 65 unidades, unos S\/ 52\.80 según el costo registrado \(1 sin costo\)/); assert.match(r.texto, /2 productos están en 0 o en negativo, sin mínimo y sin ventas en 30 días: es stock sin contar/); assert.ok(!/Ojo/.test(r.texto)); assert.match(r.texto, /Registrar compra/);
   // Al modelo: ni nombres de productos ni nada del cliente. Control: la pantalla del dueño SÍ trae el nombre con la clienta.
   assert.ok(r.filas.some((f) => f[1] === PH_NAME));
   const sent = JSON.stringify(r.resumen);
@@ -155,7 +155,7 @@ test('Admin: recibe la tabla de sugerencias; al modelo va solo el resumen con c�
   assert.ok(reader.reads.includes('soldQty') && reader.reads.includes('products'), 'control: el espía sí ve las lecturas del dueño');
   assert.ok(store.puts.length > 0, 'control: el espía sí ve el cupo del dueño');
   const card = d.proposals.find((p) => p.type === 'consulta');
-  assert.ok(card, JSON.stringify(d)); assert.equal(card.needsConfirm, false); assert.equal(card.result.total, 8);
+  assert.ok(card, JSON.stringify(d)); assert.equal(card.needsConfirm, false); assert.equal(card.result.total, 6);
   assert.equal(card.result.filas[0][1], 'Paracetamol 500 mg', 'los nombres se ponen del lado del aparato del dueño');
   assert.ok(card.result.filas.some((x) => x[1] === PH_NAME), 'control: la tarjeta del dueño SÍ trae el nombre con la clienta');
   assert.ok(!d.proposals.some((p) => p.type === 'compra' || p.needsConfirm), 'ninguna compra ni tarjeta para confirmar');
@@ -170,7 +170,7 @@ test('Admin: recibe la tabla de sugerencias; al modelo va solo el resumen con c�
 test('Admin en modo demostración: la frase «¿qué debo comprar?» abre la misma consulta', async () => {
   const r = await route({ text: '¿Qué debo comprar esta semana?' }, { role: 'owner', fetch: async () => { throw new Error('sin red'); }, env: { ASSISTANT_DEMO: '1' } });
   assert.equal(r.status, 200); const d = await r.json();
-  assert.equal(d.proposals[0].type, 'consulta'); assert.equal(d.proposals[0].result.total, 8);
+  assert.equal(d.proposals[0].type, 'consulta'); assert.equal(d.proposals[0].result.total, 6);
 });
 
 for (const role of ['empleado:consultas', 'empleado:consultas_documentos']) {
