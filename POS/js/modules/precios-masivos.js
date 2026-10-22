@@ -9,7 +9,7 @@
 (function (root) {
   'use strict';
   var PAGE_ID = 'pageEdicionPrecios';
-  var MODES = { porcentaje: 'Subir o bajar %', monto: 'Sumar o restar S/', margen: 'Precio por margen sobre costo %' };
+  var MODES = { porcentaje: 'Subir o bajar %', monto: 'Sumar o restar S/', margen: 'Margen sobre costo (recargo) %' };
   var running = false;
 
   function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
@@ -106,6 +106,9 @@
     content.replaceChildren(); current = []; apply.disabled = true;
     if (!allowed()) { main.hidden = true; status.textContent = 'Sin permiso. Solo el dueño puede cambiar precios en bloque.'; return false; }
     main.hidden = false;
+    var hint = q(page, '[data-pm-hint]');
+    if (!hint) { hint = el('p', 'pm-hint', '100% = el doble del costo'); hint.setAttribute('data-pm-hint', ''); var vl = q(page, '[data-pm-value]'); var lab = vl && vl.closest('label'); if (lab && lab.parentNode) lab.parentNode.insertBefore(hint, lab.nextSibling); }
+    hint.hidden = q(page, '[data-pm-mode]').value !== 'margen';
     var items = catalog(), cat = q(page, '[data-pm-category]'), keepCat = cat.value;
     var cats = Array.from(new Set(items.map(function (p) { return p.category; }))).sort(function (a, b) { return a.localeCompare(b, 'es'); });
     var all = el('option', '', 'Todas las categorías'); all.value = ''; cat.replaceChildren(all);
@@ -159,6 +162,8 @@
     var rows = current.slice(), status = q(page, '[data-pm-status]'), apply = q(page, '[data-pm-apply]');
     running = true; apply.disabled = true;
     try {
+      if (options(page).mode === 'margen' && Number(options(page).value) === 0 && typeof root.confirm === 'function' &&
+        !root.confirm('Margen 0 %: el precio quedará igual al costo y no ganarás nada. ¿Continuar?')) { status.textContent = 'No se cambió nada.'; apply.disabled = false; return null; }
       if (!(await askOwnerPin(rows.length))) { status.textContent = 'No se cambió nada: falta el PIN del dueño.'; apply.disabled = false; return null; }
       var c = canon();
       status.textContent = 'Aplicando…';

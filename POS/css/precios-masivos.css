@@ -17,3 +17,5 @@ body.dark #pageEdicionPrecios { --pm-bg:#0f172a; --pm-surface:#1e293b; --pm-text
 #pageEdicionPrecios .pm-num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
 #pageEdicionPrecios .pm-new { font-weight:700; }
 @media (min-width:600px) { #pageEdicionPrecios { padding:24px; } #pageEdicionPrecios .pm-controls { grid-template-columns:repeat(4, minmax(0,1fr)); align-items:end; } }
+#pageEdicionPrecios .pm-hint{margin:4px 0 0;font-size:13px;opacity:.8}
+#pageEdicionPrecios .pm-hint[hidden]{display:none}

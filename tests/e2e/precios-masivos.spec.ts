@@ -97,7 +97,11 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
     await expect(s.locator('tbody tr').first().locator('td')).toHaveText(['Abarrotes', 'S/ 999.00', 'S/ 1,234.50', 'S/ 1,248.75']);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/precio-margen-${width}-${dark ? 'oscuro' : 'claro'}.png` });
+    await expect(s.locator('[data-pm-hint]')).toHaveText('100% = el doble del costo');
+    await expect(s.locator('[data-pm-mode] option[value="margen"]')).toHaveText('Margen sobre costo (recargo) %');
     await s.locator('[data-pm-apply]').click();
+    await page.locator('.na-pin-overlay .na-pin-input').fill('2468');
+    await page.locator('.na-pin-overlay .na-pin-ok').click();
     await expect(s.locator('[data-pm-status]')).toHaveText('Listo: se cambió el precio de 2 productos.');
     const out = await page.evaluate(() => (window as any).eval('JSON.stringify(productos.map(p=>[p.id,p.precio,p.costo]))'));
     expect(JSON.parse(out)).toEqual([['p1', 1248.75, 999], ['p2', 3.75, 3], ['p3', 2.5, 2]]);
@@ -154,4 +158,23 @@ test('local: PIN incorrecto o cancelado no cambia ningún precio', async ({ page
 test('el candado sigue cerrado en pos-permissions.js', async ({ page }) => {
   await page.goto('/index.html');
   expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-precios'))).toBe(true);
+});
+
+test('margen 0 % pide confirmación; si se cancela no cambia nada ni pide PIN', async ({ page }) => {
+  await open(page);
+  const s = page.locator('#pageEdicionPrecios');
+  await s.locator('[data-pm-mode]').selectOption('margen');
+  await s.locator('[data-pm-value]').fill('0');
+  await page.evaluate(() => { (window as any).__asked = 0; window.confirm = () => { (window as any).__asked++; return false; }; });
+  await s.locator('[data-pm-apply]').click();
+  await expect(s.locator('[data-pm-status]')).toHaveText('No se cambió nada.');
+  expect(await page.evaluate(() => (window as any).__asked)).toBe(1);
+  await expect(page.locator('.na-pin-overlay')).toHaveCount(0);
+  const out = await page.evaluate(() => (window as any).eval('JSON.stringify(productos.map(p=>p.precio))'));
+  expect(JSON.parse(out)).toEqual([1234.5, 4, 2.5]);
+});
+
+test('en otros modos no se ve la ayuda del margen', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('#pageEdicionPrecios [data-pm-hint]')).toBeHidden();
 });
