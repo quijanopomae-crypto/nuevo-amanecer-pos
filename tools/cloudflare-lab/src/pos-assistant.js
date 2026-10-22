@@ -2138,15 +2138,19 @@ export function cutPrime(reply, cut = false) {
 // («clave abc123 1.1s m clave el wifi:ga)», «clave mS/ 1.1 Lima, clave el wifi:ga)», «contraseña 1.1s …», «clave+51 987-654-321 S/ 1.10 …»)
 // lo ya soltado dejaba de coincidir con el texto entero (un «[oculto]s» de más o un «S/ 1.10» a la vista que el texto entero tapa).
 // Diseño: se acumula el texto limpio (acc) y se filtra con el MISMO filtro de texto entero (wholeOf). De lo que proponen las etapas solo pasa
-// al envío el prefijo en que coinciden (1) la propuesta de las etapas, (2) el filtro entero de todo lo llegado y (3) el filtro entero de lo
-// llegado SIN la cola de GUARD_HOLD caracteres (cortado en un espacio): lo que ya no cambió al llegar esa cola se toma como estable. Al cerrar
+// al envío el prefijo en que coinciden (1) la propuesta de las etapas y (2) el filtro entero de todo lo llegado, menos los últimos GUARD_HOLD
+// caracteres de esa salida (una regla puede tapar algo hacia atrás al completarse su dato, p. ej. «la clave+51 987-654-321») y sin soltar el
+// valor de una etiqueta abierta mientras la frase siga (chainHold). Así la retención es la mayor de las dos, no la suma. Al cerrar
 // (flush) se filtra todo una vez y sale el resto; si lo soltado no fuera prefijo (no debería pasar nunca) se manda reset y el texto entero.
 // Por qué la cola basta: las reglas que miran hacia adelante (pin/clave/contraseña…: 60–62 caracteres por tramo, cortadas en . ; ! ? y salto
 // de línea; comillas 80 + 20; DNI/RUC/teléfono/correo: el largo del dato) quedan retenidas además por las etapas incrementales (que no sueltan
 // una etiqueta abierta ni un valor a medias). La guardia solo QUITA texto de lo que se suelta, nunca agrega: es más conservadora que antes.
 // Costo: el filtro entero corre sobre una ventana (desde un punto de control ya verificado, con GUARD_CTX de contexto detrás), a lo más cada
 // GUARD_STEP caracteres nuevos y solo si hay algo propuesto sin soltar: lineal en el largo del texto.
-const GUARD_HOLD = 64, GUARD_STEP = 8, GUARD_WIN = 900, GUARD_CTX = 600;
+const GUARD_HOLD = 40, GUARD_STEP = 8, GUARD_WIN = 900, GUARD_CTX = 600;
+// La guardia solo trabaja si en la ventana hay una etiqueta de clave (pin/clave/contraseña/password/token/api key/wifi): las reglas que miran
+// lejos hacia adelante son las de la etiqueta. Sin etiqueta, montos/RUC/DNI/teléfonos/correos ya los retienen las etapas y sale lo de siempre.
+const GUARD_ANY = /(?:pin|clave|contrase|password|token|api|wi-?fi)/i;
 const guardHold = (acc) => (/(?:pin|clave|contrase|password|token|api|wi-?fi|data|ruc|dni|@|arroba|\[at\]|S\/|\d)/i.test(acc.slice(-GUARD_WIN)) ? GUARD_HOLD : 0);
 // Cadena de etiquetas: la 3.ª rama de la regla de la etiqueta decide si tapa la palabra que sigue a «clave/pin/…» mirando ~62 + 62 + 62
 // caracteres adelante (otro valor, otra etiqueta y su «[oculto]»), y ese «[oculto]» lo deciden reglas que también miran adelante: la cadena no
@@ -2155,7 +2159,7 @@ const guardHold = (acc) => (/(?:pin|clave|contrase|password|token|api|wi-?fi|dat
 // esté a menos de GUARD_CHAIN caracteres del final. Solo retiene ESA palabra y lo que sigue; lo de antes sale.
 const GUARD_CHAIN = 320;
 const GUARD_LBL = /(?<![A-Za-z0-9_áéíóúñÁÉÍÓÚÑ])(?:pin|clave|contrase(?:ñ|n)a|password|token|api[ _-]?key)(?![A-Za-z0-9_áéíóúñÁÉÍÓÚÑ])(\s*(?:(?:es|era|fue|de)(?![a-zñ])|->|=>|→|[—–:=])?\s*)(?=[^\s,.;])([^\s,.;]*)/gi;
-const GUARD_FIXED = new RegExp('^(?:[*_`~(\\[' + PIN_Q_CH + ']{0,4}\\[[a-záéíóúñ ]{2,30}\\][*_`~)\\]' + PIN_Q_CH + ']{0,4}|' + PIN_LINK + '|es|era|fue|son|' + PIN_PRICE_WORD + ')$', 'i');
+const GUARD_FIXED = new RegExp('^(?:[*_`~(\\[' + PIN_Q_CH + ']{0,4}\\[[a-záéíóúñ ]{2,30}\\][*_`~)\\]' + PIN_Q_CH + ']{0,4}|' + PIN_LINK + '|es|era|fue|son|S\\/\\.?|US\\$|\\$|PEN|' + PIN_PRICE_WORD + ')$', 'i'); // moneda: lo que sigue es un monto
 const GUARD_END = /(?<!c[óo]d)(?:\.(?=[^\d])|[;!?\n])/i; // «1.10» / «12.345.678» no cierran la frase; un «.» al final todavía no
 function chainHold(w) { // primer valor «abierto» de la cola de w (posición en w) o w.length
   const from = Math.max(0, w.length - GUARD_CHAIN), tail = w.slice(from); GUARD_LBL.lastIndex = 0; let m;
@@ -2174,25 +2178,23 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
   let sent = 0, ready = '', prevCtrl = false, s0, sw, sq, s1, s2, cut = false, lastNl = false;
   // guardia: acc (texto limpio llegado), cand (lo que proponen las etapas), fwd (lo ya pasado a ready); punto de control ra/oa: el filtro entero
   // de acc[0, ra) es exactamente fwd[0, oa) y sigue siendo prefijo con el texto que vino después (verificado con la ventana)
-  let acc = '', cand = '', fwd = '', ra = 0, wc = 0, oa = 0, lastAt = 0, pre = '', hist = [];
+  let acc = '', cand = '', fwd = '', ra = 0, wc = 0, oa = 0, lastAt = 0, pre = '';
   const guard = (final) => {
     if (cut) return;
     if (final) { const zf = wholeOf(acc); // al cerrar: el filtro entero de todo, una vez
       if (zf.startsWith(fwd)) { ready += zf.slice(fwd.length); fwd = zf; return; }
       if (sent) send({ reset: true }); sent = 0; lastNl = false; ready = zf; fwd = zf; return; } // no debería pasar: reset y el texto entero
-    if (cand.length <= fwd.length || acc.length - lastAt < GUARD_STEP) return;
+    const free = !GUARD_ANY.test(acc.slice(wc)); // sin etiqueta en la ventana: lo de las etapas sale tal cual (misma retención de antes)
+    if (free) { if (cand.length > fwd.length) { const add = cand.slice(fwd.length); fwd += add; ready += add; }
+      if (acc.length - ra <= GUARD_WIN + GUARD_CTX || acc.length - lastAt < GUARD_HOLD) return;
+      if (Math.max(acc.lastIndexOf(' ', ra + GUARD_WIN), acc.lastIndexOf('\n', ra + GUARD_WIN)) <= ra) return; } // sin espacio donde cortar: nada que mover // solo mover el punto de control
+    else if (cand.length <= fwd.length || acc.length - lastAt < GUARD_STEP) return;
     lastAt = acc.length;
     const cs = wc, fw = wholeOf(acc.slice(cs)); if (!fw.startsWith(pre)) return; // la ventana no separa limpio: se espera
-    const w = fw.slice(pre.length), h = guardHold(acc); let stable = w.length;
-    if (h) { while (hist.length > 1 && hist[1][0] <= acc.length - h) hist.shift(); // lo que ya daba igual h caracteres atrás
-      if (!(hist.length && hist[0][0] <= acc.length - h)) { // sin una vista de h atrás (al empezar): se calcula una vez, cortada en un espacio
-        const b = acc.lastIndexOf(' ', acc.length - h), z = b > cs ? wholeOf(acc.slice(cs, b)) : null;
-        if (z && z.startsWith(pre)) hist.unshift([b, z.slice(pre.length)]); }
-      stable = hist.length && hist[0][0] <= acc.length - h ? lcp(w, hist[0][1]) : 0; }
-    hist.push([acc.length, w]);
-    stable = Math.min(stable, chainHold(w));
-    const lim = oa + lcp(cand.slice(oa, oa + stable), w.slice(0, stable));
-    if (lim > fwd.length) { const add = cand.slice(fwd.length, lim); fwd += add; ready += add; }
+    const w = fw.slice(pre.length);
+    if (!free) { const stable = Math.min(Math.max(0, w.length - guardHold(acc)), chainHold(w));
+      const lim = oa + lcp(cand.slice(oa, oa + stable), w.slice(0, stable));
+      if (lim > fwd.length) { const add = cand.slice(fwd.length, lim); fwd += add; ready += add; } }
     if (acc.length - ra > GUARD_WIN + GUARD_CTX) { // nuevo punto de control (ventana acotada: costo lineal), en un espacio ya soltado
       const c = Math.max(acc.lastIndexOf(' ', ra + GUARD_WIN), acc.lastIndexOf('\n', ra + GUARD_WIN));
       if (c > ra) { const zc = wholeOf(acc.slice(cs, c)), k = zc.length - pre.length;
@@ -2203,8 +2205,7 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
           for (let tries = 0; tries < 6 && at >= 0; tries++) {
             const p2 = wholeOf(acc.slice(at, c)), f2 = wholeOf(acc.slice(at));
             if (f2.startsWith(p2) && f2.slice(p2.length) === w.slice(k)) {
-              ra = c; wc = at; oa += k; pre = p2;
-              hist = hist.filter((e) => e[0] >= c && e[1].startsWith(w.slice(0, k))).map((e) => [e[0], e[1].slice(k)]); break; }
+              ra = c; wc = at; oa += k; pre = p2; break; }
             if (at === 0) break;
             const sp = acc.lastIndexOf(' ', at - 2); at = sp < 0 ? 0 : sp + 1; } } } }
   };
@@ -2225,7 +2226,7 @@ export function createTextEmitter(send, max = 1200, redact = redactText, hold = 
     batches(n);
   };
   const init = () => {
-    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false; acc = ''; cand = ''; fwd = ''; ra = 0; wc = 0; oa = 0; lastAt = 0; pre = ''; hist = [];
+    sent = 0; ready = ''; prevCtrl = false; cut = false; lastNl = false; acc = ''; cand = ''; fwd = ''; ra = 0; wc = 0; oa = 0; lastAt = 0; pre = '';
     s2 = stages === 2 ? createOwnerPipeline((x) => { cand += x; }, prime) : null;
     s1 = createTextStage((x) => { if (s2) s2.push(longLabel(x)); else cand += x; }, s2 ? redactText : redact);
     sq = createSupStage((x) => s1.push(x)); // (Bot 2 sobre f773911f) supresión de la comilla larga sin cierre (igual que redactText: supQuotes)
