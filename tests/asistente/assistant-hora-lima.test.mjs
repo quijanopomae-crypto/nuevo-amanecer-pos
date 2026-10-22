@@ -62,7 +62,7 @@ test('palabras aceptadas: con tildes, mayúsculas, espacios o guion bajo; lo dem
   for (const [w, k] of [['Hoy', 'hoy'], ['oy', 'hoy'], ['AYER', 'ayer'], ['esta semana', 'esta_semana'], ['esta_semana', 'esta_semana'], ['la semana pasada', 'semana_pasada'],
     ['Este Mes', 'este_mes'], ['mes pasado', 'mes_pasado']]) assert.equal(dateWord(w), k, w);
   for (const w of ['', null, '2026-10-22', 'mañana', 'Rosa', 'hoyy']) assert.equal(dateWord(w), null, String(w));
-  assert.deepEqual([...DATE_WORDS], ['hoy', 'ayer', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']);
+  assert.deepEqual([...DATE_WORDS], ['hoy', 'ayer', 'antier', 'mismo_dia_semana_pasada', 'esta_semana', 'semana_pasada', 'este_mes', 'mes_pasado']); // antier y mismo día: #consultas-nuevas
   assert.equal(limaBounds('2026-10-01', '2026-10-31').toIso, '2026-11-01T05:00:00.000Z');
 });
 
