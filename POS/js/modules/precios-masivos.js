@@ -14,6 +14,12 @@
   function isOwner() { try { var r = root.NA_ROLES; return !!(r && typeof r.isOwner === 'function' && r.isOwner() === true); } catch (_) { return false; } }
   function policyReady() { try { var p = root.NA_PERMISSIONS; return !!(p && p.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; } }
   function allowed() { return isOwner() && policyReady(); }
+  // Candado propio (#901). Falla cerrado: sin NA_PERMISSIONS, sin el id o con error, queda cerrado.
+  var LOCK_ID = 'edicion-masiva-precios';
+  function edicionPreciosUnlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(LOCK_ID) === false); }
+    catch (_) { return false; }
+  }
   // Miles con coma y dos decimales, igual que #872.
   function money(c) { var n = Number(c) / 100; return (n < 0 ? '-' : '') + 'S/ ' + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function canon() { var c = root.NuevoAmanecerCanonical; try { return c && typeof c.enabled === 'function' && c.enabled() ? c : null; } catch (_) { return null; } }
@@ -61,7 +67,7 @@
   async function applyCanon(client, rows, onStep) {
     var done = [], failed = [];
     for (var i = 0; i < rows.length; i++) {
-      if (!allowed()) { failed.push({ id: rows[i].id, error: 'not_owner' }); break; }
+      if (!allowed() || !edicionPreciosUnlocked()) { failed.push({ id: rows[i].id, error: 'not_owner' }); break; }
       try { if (typeof client.refresh === 'function') await client.refresh(); } catch (_) {}
       var snap = client.snapshot() || {}, id = rows[i].id;
       var raw = (snap.products || []).find(function (p) { return String(p.product_id) === id; });
@@ -74,6 +80,7 @@
     return { done: done, failed: failed };
   }
   async function applyLocal(rows) {
+    if (!edicionPreciosUnlocked()) return { done: [], failed: rows.map(function (r) { return { id: r.id, error: 'locked' }; }) };
     var list; try { list = productos; } catch (_) { list = []; } // eslint-disable-line no-undef
     var changes = rows.map(function (r) { var p = list.find(function (x) { return String(x.id) === r.id; }); return p ? { p: p, before: p.precio, row: r } : null; }).filter(Boolean);
     changes.forEach(function (c) { c.p.precio = c.row.after / 100; });
@@ -101,6 +108,7 @@
     if (!page) return false;
     var main = q(page, '[data-pm-main]'), status = q(page, '[data-pm-status]'), content = q(page, '[data-pm-content]'), apply = q(page, '[data-pm-apply]');
     content.replaceChildren(); current = []; apply.disabled = true;
+    if (!edicionPreciosUnlocked()) { main.hidden = true; status.textContent = 'Disponible pronto.'; return false; }
     if (!allowed()) { main.hidden = true; status.textContent = 'Sin permiso. Solo el dueño puede cambiar precios en bloque.'; return false; }
     main.hidden = false;
     var items = catalog(), cat = q(page, '[data-pm-category]'), keepCat = cat.value;
@@ -149,11 +157,12 @@
   }
   async function applyAll() {
     var page = root.document.getElementById(PAGE_ID);
-    if (running || !allowed() || !current.length) return null;
+    if (running || !edicionPreciosUnlocked() || !allowed() || !current.length) return null;
     var rows = current.slice(), status = q(page, '[data-pm-status]'), apply = q(page, '[data-pm-apply]');
     running = true; apply.disabled = true;
     try {
       if (!(await askOwnerPin(rows.length))) { status.textContent = 'No se cambió nada: falta el PIN del dueño.'; apply.disabled = false; return null; }
+      if (!edicionPreciosUnlocked()) { status.textContent = 'No se cambió nada: la función aún no está disponible.'; return null; }
       var c = canon();
       status.textContent = 'Aplicando…';
       var out = c && typeof c.updateProduct === 'function'
@@ -177,6 +186,6 @@
     root.addEventListener('na:role', render);
     render();
   }
-  root.NA_PRECIOS_MASIVOS = Object.freeze({ plan: plan, newPrice: newPrice, payload: payload, catalog: catalog, render: render, apply: applyAll, MODES: MODES });
+  root.NA_PRECIOS_MASIVOS = Object.freeze({ plan: plan, newPrice: newPrice, payload: payload, catalog: catalog, render: render, apply: applyAll, unlocked: edicionPreciosUnlocked, MODES: MODES });
   if (root.document) { if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', init, { once: true }); else init(); }
 })(globalThis);

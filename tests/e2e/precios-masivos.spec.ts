@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // Edición masiva de precios (solo dueño). Datos sintéticos; rol simulado en el navegador de la prueba.
-async function open(page: Page, { role = 'owner', dark = false, canon = false } = {}) {
+async function open(page: Page, { role = 'owner', dark = false, canon = false, unlock = true } = {}) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
@@ -15,13 +15,13 @@ async function open(page: Page, { role = 'owner', dark = false, canon = false } 
   }, role);
   await page.reload();
   await page.waitForFunction(role => (window as any).NA_ROLES?.role === role && (window as any).NA_ROLES.confirmed && !!(window as any).NA_PRECIOS_MASIVOS, role);
-  await page.evaluate(({ dark, canon }) => {
+  await page.evaluate(({ dark, canon, unlock }) => {
     const w = window as any;
     document.body.classList.toggle('dark', dark);
     w.eval(`productos=[{id:'p1',nombre:'Arroz Prueba',cat:'Abarrotes',precio:1234.5,costo:999,stock:5},{id:'p2',nombre:'Azúcar Prueba',cat:'Abarrotes',precio:4,costo:3,stock:5},{id:'p3',nombre:'Jabón Prueba',cat:'Limpieza',precio:2.5,costo:2,stock:5}]`);
     w.eval(`ventas=[]`);
     // El candado sigue cerrado en pos-permissions.js; la prueba lo abre solo en este navegador.
-    const perms = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'edicion-masiva-precios' || id === 'precio-por-margen' ? false : perms.featureLocked(id) };
+    const perms = w.NA_PERMISSIONS; if (unlock) w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'edicion-masiva-precios' || id === 'precio-por-margen' ? false : perms.featureLocked(id) };
     (0, eval)("_naSecurity.pinEnabled=true;_naSecurity.pinHash=_naSecHash('2468');");
     w.__approvals = [];
     w.NA_ROLES = { ...w.NA_ROLES, approve: async (action: string, opId: string) => { w.__approvals.push(action); return true; } };
@@ -33,8 +33,8 @@ async function open(page: Page, { role = 'owner', dark = false, canon = false } 
       w.NuevoAmanecerCanonical = { ...w.NuevoAmanecerCanonical, enabled: () => true, refresh: async () => {}, snapshot: () => ({ products }),
         updateProduct: async (p: any) => { w.__updates.push(p); return { ok: true }; } };
     }
-  }, { dark, canon });
-  if (role === 'owner') {
+  }, { dark, canon, unlock });
+  if (role === 'owner' && unlock) {
     await page.evaluate(() => (window as any).goPage('pageProximamente'));
     const card = page.locator('[data-feature-id="edicion-masiva-precios"]');
     await expect(card).toHaveClass(/is-enabled/);
@@ -125,3 +125,21 @@ test('el candado sigue cerrado en pos-permissions.js', async ({ page }) => {
   await page.goto('/index.html');
   expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-precios'))).toBe(true);
 });
+
+// Candado real cerrado (pos-permissions.js sin tocar): dueño no ve controles ni puede aplicar.
+for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
+  test(`candado cerrado real: dueño sin controles ${width}px ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await open(page, { dark, unlock: false });
+    await page.evaluate(() => (window as any).goPage('pageProximamente'));
+    await expect(page.locator('[data-feature-id="edicion-masiva-precios"]')).not.toHaveClass(/is-enabled/);
+    await page.evaluate(() => { document.getElementById('pageEdicionPrecios')!.classList.add('active'); (window as any).NA_PRECIOS_MASIVOS.render(); });
+    const s = page.locator('#pageEdicionPrecios');
+    await expect(s.locator('[data-pm-main]')).toBeHidden();
+    await expect(s.locator('[data-pm-status]')).toHaveText('Disponible pronto.');
+    expect(await page.evaluate(() => (window as any).NA_PRECIOS_MASIVOS.unlocked())).toBe(false);
+    expect(await page.evaluate(() => (window as any).NA_PRECIOS_MASIVOS.apply())).toBeNull();
+    expect(JSON.parse(await page.evaluate(() => (window as any).eval('JSON.stringify(productos.map(p=>p.precio))')))).toEqual([1234.5, 4, 2.5]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
