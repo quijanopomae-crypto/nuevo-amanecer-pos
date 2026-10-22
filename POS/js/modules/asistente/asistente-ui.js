@@ -728,6 +728,30 @@
       say: function (t) { addMsg('a', t); }, state: setState,
       busy: function (on) { busy = !!on; if (sendBtn) sendBtn.disabled = on || root.navigator.onLine === false; if (photoBtn) photoBtn.disabled = on || root.navigator.onLine === false; } };
   }
+  // ---------- «Subir archivo»: PDF -> imagen en el aparato (carga diferida de asistente-pdf.js; usa el pdf.js que ya trae el POS) ----------
+  function fileKind(f) {
+    var n = String(f && f.name || '').toLowerCase(), t = String(f && f.type || '').toLowerCase();
+    if (t === 'application/pdf' || /\.pdf$/.test(n)) return 'pdf';
+    if (/^image\//.test(t) || /\.(?:jpe?g|png|webp|gif|bmp|heic|heif)$/.test(n)) return 'image';
+    if (/\.(?:docx?|xlsx?|xlsm|csv|odt|ods|rtf|txt|pptx?)$/.test(n) || /msword|ms-excel|officedocument|opendocument|text\/(?:plain|csv)|rtf/.test(t)) return 'doc';
+    return 'other';
+  }
+  var pdfP = null;
+  function loadPdf() {
+    if (root.NA_ASISTENTE_PDF) return Promise.resolve(root.NA_ASISTENTE_PDF);
+    if (pdfP) return pdfP;
+    pdfP = new Promise(function (ok, ko) { var sc = doc.createElement('script'); sc.src = 'js/modules/asistente/asistente-pdf.js';
+      sc.onload = function () { root.NA_ASISTENTE_PDF ? ok(root.NA_ASISTENTE_PDF) : ko(new Error('pdf')); }; sc.onerror = function () { pdfP = null; ko(new Error('pdf')); }; doc.body.appendChild(sc); });
+    return pdfP;
+  }
+  // -> Promise<{ blob, pages, total }>; si falla, ya avisó en el chat y rechaza.
+  function pdfImage(f) {
+    var wait = addMsg('a', 'Abriendo el PDF'); wait.classList.add('na-asst-thinking'); setState('concentrado');
+    return loadPdf().then(function (P) { return P.toImage(f, { doc: doc }).then(function (r) {
+      wait.remove(); if (r.total > r.pages) addMsg('a', 'El PDF tiene ' + r.total + ' páginas: leo solo las primeras ' + r.pages + '.'); return r;
+    }, function (e) { throw P.message(e && e.code); }); }).catch(function (m) {
+      wait.remove(); addMsg('a', typeof m === 'string' ? m : 'No pude abrir ese PDF.'); setState('error', 2000); throw m; });
+  }
   function boletaPick() { if (!isOwnerAccess() || !canPhoto()) { errMsg('boleta_admin_only'); return; } fileMode = 'boleta'; fileEl.click(); }
   function boletaStart(f) { var chips = panelEl.querySelector('.na-asst-chips'); if (chips) chips.hidden = true; addMsg('u', 'Leer boleta con IA');
     loadBoleta().then(function (B) { return B.start(f, boletaHost()); }).catch(function () { addMsg('a', 'No pude abrir el lector de boletas. Inténtelo otra vez.'); setState('error', 2000); }); }
@@ -1225,7 +1249,7 @@
     panelEl.innerHTML = '<div class="na-asst-head">' + charHtml() + '<div class="na-asst-head-t"><b>Burbuja</b><small>' + (isOwnerAccess() ? 'Gestión · Admin · prueba aislada' : 'Consultas · empleado · prueba aislada') + '</small></div><button type="button" class="na-asst-x" aria-label="Cerrar asistente">✕</button></div>' +
       '<div class="na-asst-offline" hidden>Asistente no disponible sin internet</div><div class="na-asst-msgs"></div><div class="na-asst-live" aria-live="polite" aria-atomic="true"></div>' +
       '<div class="na-asst-chips">' + chipsHtml() + '</div>' +
-      '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*" capture="environment" hidden>' +
+      '<div class="na-asst-input"><button type="button" class="na-asst-photo" aria-label="Enviar foto o PDF" title="Tomar foto o subir foto/PDF"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button><input type="file" accept="image/*,application/pdf,.pdf" hidden>' +
       '<textarea rows="1" placeholder="Escribe aquí…" aria-label="Mensaje para el asistente"></textarea><button type="button" class="na-asst-send" aria-label="Enviar">➤</button></div>';
     doc.body.appendChild(rootEl); doc.body.appendChild(panelEl);
     msgsEl = panelEl.querySelector('.na-asst-msgs'); liveEl = panelEl.querySelector('.na-asst-live');
@@ -1238,9 +1262,15 @@
     sendBtn.onclick = function () { send(inputEl.value); };
     inputEl.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(inputEl.value); } });
     photoBtn.onclick = function () { fileMode = ''; fileEl.click(); };
+    // Sin «capture»: el teléfono ofrece cámara, galería o archivos. Fotos y PDF (el PDF se pasa a imagen EN EL APARATO); Word/Excel: aún no.
     fileEl.onchange = function () { var f = fileEl.files && fileEl.files[0], mode = fileMode; fileMode = ''; fileEl.value = ''; if (!f) return;
-      if (mode === 'boleta') { if (isOwnerAccess()) boletaStart(f); return; }
-      compress(f).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }).catch(function () { addMsg('a', 'No pude abrir esa foto.'); setState('error', 2000); }); };
+      var k = fileKind(f);
+      if (k === 'doc') { addMsg('a', 'Por ahora leo fotos y PDF. Si es Word o Excel, guárdelo como PDF o tómele una foto y súbalo.'); return; }
+      if (k === 'other') { addMsg('a', 'Ese archivo no lo puedo leer. Suba una foto o un PDF.'); return; }
+      if (k === 'pdf' && !isOwnerAccess()) { errMsg('image_owner_only'); return; }
+      var got = k === 'pdf' ? pdfImage(f) : Promise.resolve({ blob: f });
+      if (mode === 'boleta') { if (isOwnerAccess()) got.then(function (r) { boletaStart(r.blob); }, function () {}); return; }
+      got.then(function (r) { return compress(r.blob).then(function (img) { send(inputEl.value || 'Lee esta factura de compra', img); }, function () { addMsg('a', k === 'pdf' ? 'No pude abrir ese PDF.' : 'No pude abrir esa foto.'); setState('error', 2000); }); }, function () {}); };
     panelEl.querySelector('.na-asst-chips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-photo')) { fileMode = ''; fileEl.click(); } else if (b.hasAttribute('data-boleta')) boletaPick(); else send(b.dataset.q); });
     shownFor = access ? access.role + ':' + access.level + ':' + (access.vision === false ? 'nv' : 'v') : '';
     if (photoBtn) photoBtn.hidden = !canPhoto(); // empleado o proveedor sin fotos: sin botón

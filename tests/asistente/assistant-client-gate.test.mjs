@@ -341,7 +341,7 @@ test('revisión visual Bot 4: SVG en vez de emoji, ids de SVG únicos, Venció c
   const fs = await import('node:fs');
   const ui = fs.readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../../POS/css/asistente.css', import.meta.url), 'utf8');
-  assert.ok(!/📷/.test(ui), 'sin emoji de cámara'); assert.match(ui, /aria-label="Enviar foto"><svg /);
+  assert.ok(!/📷/.test(ui), 'sin emoji de cámara'); assert.match(ui, /aria-label="Enviar foto o PDF" title="Tomar foto o subir foto\/PDF"><svg /);
   assert.ok(!/id="naAsst(Iris|EyeL|EyeR)/.test(ui), 'sin ids fijos'); assert.match(ui, /var u = 'naA' \+ \(\+\+charSeq\)/);
   assert.match(ui, /function expire\(\)[\s\S]{0,400}ok\.textContent = 'Venció'; ok\.disabled = true;[\s\S]{0,120}again\.hidden = false/);
   assert.match(ui, /if \(r\.code === 'confirm_expired'\) \{ expire\(\);/);
