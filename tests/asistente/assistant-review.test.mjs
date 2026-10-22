@@ -179,7 +179,7 @@ test('UI: la revisión es solo del Admin (chip, texto o aviso de errores nuevos)
   const chips = UI.slice(UI.indexOf('function chipsHtml()'), UI.indexOf('function chipsHtml()') + 1400).split('\n');
   assert.match(chips[1], /^    if \(isOwnerAccess\(\)\) return .*data-q="Revisión del punto de venta">Revisión del POS<\/button>';$/);
   assert.ok(!chips.slice(2, 4).join('\n').includes('Revisión'), 'el empleado no ve el chip');
-  assert.match(UI, /if \(!image && isOwnerAccess\(\) && REVIEW_RE\.test\(text\)\) \{/);
+  assert.match(UI, /if \(!image && isOwnerAccess\(\) && isReview\(text\)\) \{/);
   const rv = UI.slice(UI.indexOf('function reviewData()'), UI.indexOf('async function send('));
   assert.match(rv, /msg: C\.redactText\(String\(x\.msg \|\| ''\)\)\.slice\(0, 160\)/); assert.ok(!/innerHTML/.test(rv));
   assert.match(rv, /post\('\/auth\/assistant\/review', reviewData\(\)/); assert.match(rv, /R\.markSeen\(\)/);
