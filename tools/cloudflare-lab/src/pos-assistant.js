@@ -57,7 +57,8 @@ export const EMPLOYEE_TOOLS = Object.freeze({ consultas: Object.freeze(['explica
 export const EMPLOYEE_QUERY_TYPES = Object.freeze(['stock_producto', 'bajo_stock']);
 // Consultas SOLO del Admin que a un empleado se le cortan con 403 query_admin_only (no 200 con la tarjeta descartada): en el chat
 // por frase clara antes del modelo (sin cupo), a mitad del texto (guard) y si el modelo igual pide la herramienta. Mismo esquema que el #929.
-export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['creditos_atrasados']);
+// caja_abierta (#948): la caja del día también es solo del Admin; si el modelo se la pide para un empleado, 403 sin leer la caja.
+export const ADMIN_ONLY_QUERY_TYPES = Object.freeze(['creditos_atrasados', 'caja_abierta']);
 export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
 export function employeeQueryDenied(role, text) {
@@ -2713,7 +2714,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (emit) { emit.drop(); emit.reset(); }
     return json(FORBIDDEN_DOCUMENT, 403);
   }
-  // Empleado al que el modelo le propuso una consulta solo del Admin (créditos atrasados): 403, sin leer la base ni segunda llamada.
+  // Empleado al que el modelo le propuso una consulta solo del Admin (créditos atrasados, caja abierta): 403, sin leer la base ni segunda llamada.
   if (role !== 'owner' && dropped.some((d) => d.dropped === 'query_admin_only')) {
     if (emit) { emit.drop(); emit.reset(); }
     return json(QUERY_ADMIN_ONLY, 403);

@@ -2,7 +2,7 @@
 // rangos y el código del cliente. El empleado no recibe la consulta. Datos inventados; el modelo siempre simulado.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assistantChatRoute, createMemoryUsageStore, toolsForRole, toProposal } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { assistantChatRoute, createMemoryUsageStore, toolsForRole, toProposal, employeeToolGuard, ADMIN_ONLY_QUERY_TYPES } from '../../tools/cloudflare-lab/src/pos-assistant.js';
 import { runAssistantQuery, memoryReader, dueDay, safeClientCode, reminderDraft, parseCuotas, overduePart, termDue } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 
 const json = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { 'content-type': 'application/json' } });
@@ -73,7 +73,11 @@ test('empleado: la consulta no se le ofrece y, si el modelo la pide, se descarta
     assert.ok(!c || !JSON.stringify(c).includes('creditos_atrasados'), role);
     const p = toProposal({ id: 'x', name: 'consultar', arguments: JSON.stringify({ tipo: 'creditos_atrasados' }) }, role, { products: [] }, 0);
     assert.equal(p.dropped, 'query_admin_only', role);
+    const caja = toProposal({ id: 'y', name: 'consultar', arguments: JSON.stringify({ tipo: 'caja_abierta' }) }, role, { products: [] }, 0);
+    assert.equal(caja.dropped, 'query_admin_only', role + ': caja_abierta también es solo del Admin');
+    assert.equal(employeeToolGuard(role)({ name: 'consultar', arguments: '{"tipo":"caja_abierta"}' }), 'query_admin_only', role + ': guard a mitad del texto');
   }
+  assert.ok(ADMIN_ONLY_QUERY_TYPES.includes('caja_abierta'));
   const owner = toolsForRole('owner').find((t) => t.function.name === 'consultar');
   assert.ok(JSON.stringify(owner).includes('creditos_atrasados'));
 });
