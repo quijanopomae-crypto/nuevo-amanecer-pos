@@ -463,3 +463,21 @@ test('#995 (2ª) «cliente #5 o cliente #9» en cobros: pregunta cuál, no elige
       assert.match(reply, /cuál/i); assert.match(reply, /cliente #5/); assert.match(reply, /cliente #9/);
     }
 });
+
+// ---------- #995: modo demostración con «cliente nro. 5» / «N° 5» / «cliente 5» ----------
+const mockArgs = (text) => (mockAssistantReply({ role: 'owner', ctx: { products: [] }, text }).calls || []).map((c) => JSON.parse(c.function?.arguments ?? c.arguments));
+test('#995 mock: «cliente nro. 5», «N° 5», «cliente 5» dan cliente_id 5 en cobros_creditos (como el chat real) y en deuda_cliente', async () => {
+  for (const text of ['¿cuánto me pagó el cliente nro. 5 de su deuda esta semana?', '¿cuánto me pagó el cliente N° 5 de su deuda esta semana?', '¿cuánto me pagó el cliente 5 de su deuda esta semana?', '¿cuánto me pagó cliente #5 de su deuda esta semana?']) {
+    const a = mockArgs(text);
+    assert.equal(a.length, 1, text); assert.equal(a[0].tipo, 'cobros_creditos', text); assert.equal(a[0].cliente_id, '5', text);
+    // El chat real (modelo que pide ventas_periodo) contesta lo mismo: los cobros de cliente #5.
+    const { reply } = await ask995(text, { tipo: 'ventas_periodo', ...WEEK }, false);
+    assert.equal(reply, 'Cobros de fiados de cliente #5 2026-10-19 a 2026-10-23: S/ 5.00 en 1 cobro.', text);
+  }
+  for (const text of ['¿cuánto debe el cliente nro. 5?', '¿cuánto debe el cliente N° 5?', '¿cuánto debe el cliente 5?', '¿cuánto debe el cliente #5?', '¿hasta cuánto le fío al cliente nro. 7?']) {
+    const a = mockArgs(text);
+    assert.equal(a.length, 1, text); assert.equal(a[0].tipo, 'deuda_cliente', text); assert.equal(a[0].cliente_id, /7/.test(text) ? '7' : '5', text);
+  }
+  // «cliente nuevo» no es un código: no es deuda de un cliente «nuevo».
+  assert.ok(!mockArgs('¿cuánto debe el cliente nuevo?').some((a) => a.cliente_id === 'nuevo'));
+});
