@@ -129,7 +129,8 @@ test('deuda de un cliente por código: saldo, créditos abiertos y cuál vence p
   assert.equal(r.texto, 'cliente #C1 debe S/ 35.00 en 2 créditos abiertos; el primero vence el 2026-10-01.');
   assert.deepEqual((await q('deuda_cliente', { cliente_id: '12' })).resumen, { cliente: 'cliente #12', saldo_soles: 12, creditos_abiertos: 1, vence_primero: '2026-11-01' });
   const none = await q('deuda_cliente', { cliente_id: 'C9' });
-  assert.equal(none.resumen.saldo_soles, 0); assert.match(none.texto, /No encontré deudas de cliente #C9/);
+  // (auditoría 500, CLI-016) antes «No encontré deudas de cliente #C9» (¿no debe o no existe?): C9 no está en Clientes -> «No existe».
+  assert.equal(none.resumen.cliente_encontrado, false); assert.match(none.texto, /^No existe cliente #C9 en Clientes/); assert.ok(!/S\/\s*\d/.test(none.texto));
   const sin = await q('deuda_cliente', {});
   assert.ok(!sin.error); assert.deepEqual(sin.filas, []); assert.equal(sin.resumen.falta, 'cliente_id');
   for (const bad of ['Rosa Quispe', '40112233', '987654321', "C1' OR 1=1"]) assert.equal((await q('deuda_cliente', { cliente_id: bad })).resumen.falta, 'cliente_id', bad);
