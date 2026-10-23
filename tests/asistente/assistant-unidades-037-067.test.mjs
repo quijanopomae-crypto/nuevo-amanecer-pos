@@ -73,7 +73,7 @@ test('UNI-037: el costo corregido al del saco no queda en silencio: marca «cost
   const p = [{ type: 'compra', lineas: [{ product_id: 'u14', nombre: 'ARROZ ALEJANDRINA X 50KG', cantidad: 2, costo_unitario: 3.14 }] }];
   const names = clearUnstatedCosts(p, ['el saco me costo 157'], new Map([['u14', 'unidad']]));
   assert.equal(p[0].lineas[0].costo_unitario, 157); assert.deepEqual(p[0].lineas[0].revisar, ['costo']);
-  assert.deepEqual(names, [], 'no es un costo que falte');
+  assert.deepEqual([...names], [], 'no es un costo que falte');
   assert.deepEqual(names.porSaco, ['ARROZ ALEJANDRINA X 50KG']);
 });
 
@@ -84,7 +84,7 @@ test('UNI-037: solo tamaños a granel (KG o LT de 2 para arriba): gramos y milil
   assert.equal(keep('GALLETA SODA X 170GR', 17, 100, ['compre 17 galletas soda']), 0, '17 / 0.17 = 100');
   assert.equal(keep('GALLETA SODA X 170GR', 17, 1000, ['compre 17 galletas soda de 170gr']), 0, '170 / 0.17');
   assert.equal(keep('LECHE 1LT', 12, 4, ['compre 12 leches a 4']), 4, 'lo dicho sigue valiendo');
-  assert.equal(keep('AZUCAR X 1.5KG', 4, 4, ['compre 4 bolsas de azucar, 6 soles']), 0, '6 / 1.5: no es a granel');
+  assert.equal(keep('AZUCAR X 1.5KG', 3, 4, ['compre 3 bolsas de azucar, 6 soles']), 0, '6 / 1.5: no es a granel');
 });
 
 test('UNI-037: saco que se vende ENTERO (unidad de venta «unidad» en el servidor): «el saco me costo 157» queda en 157', async () => {
@@ -102,7 +102,7 @@ test('UNI-037: el modelo pone 3.14 (por kilo) a un saco que se vende ENTERO: se 
   assert.equal(status, 200);
   assert.deepEqual(rows(body), [['u14', 'ARROZ ALEJANDRINA X 50KG', 2, 157]]);
   assert.deepEqual(body.proposals[0].lineas[0].revisar, ['costo']);
-  assert.match(body.reply, /«ARROZ ALEJANDRINA X 50KG» no se vende por kilo ni por litro/);
+  assert.match(body.reply, /«ARROZ ALEJANDRINA X 50KG» no figura como venta por kilo ni por litro/);
   assert.doesNotMatch(body.reply, /Falta el costo/);
 });
 
@@ -110,7 +110,8 @@ test('UNI-037: producto sin unidad de venta conocida: tampoco se divide (queda 1
   const { body } = await chat('compre 1 saco de jairito a 156.80',
     call('preparar_compra', { lineas: [{ product_id: 'u15', nombre: 'ARROZ JAIRITO X 49KG', cantidad: 49, costo_unitario: 3.2 }] }));
   assert.deepEqual(rows(body), [['u15', 'ARROZ JAIRITO X 49KG', 49, 156.8]]);
-  assert.deepEqual(body.proposals[0].lineas[0].revisar, ['costo']);
+  assert.ok(body.proposals[0].lineas[0].revisar.includes('costo'), 'marcado (y «costo_raro»: 156.80 contra 3.20 del inventario)');
+  assert.match(body.reply, /«ARROZ JAIRITO X 49KG» no figura como venta por kilo ni por litro/);
 });
 
 test('UNI-037: sin costo dicho la tarjeta no queda en 0 en silencio: marca «costo» y la respuesta lo pide', async () => {
