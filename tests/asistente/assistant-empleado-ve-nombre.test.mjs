@@ -7,8 +7,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, toolsForRole, systemPrompt } from '../../tools/cloudflare-lab/src/pos-assistant.js';
-import { memoryReader } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { assistantChatRoute, createMemoryUsageStore, toolsForRole, systemPrompt, employeeQueryResult } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { memoryReader, runAssistantQuery } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import { makeDoc } from './fake-dom.mjs';
 const require = createRequire(import.meta.url);
 const store = new Map();
@@ -216,5 +216,64 @@ test('(f) empleado, dos clientes con el mismo nombre: si la IA consulta a uno (p
     assert.deepEqual(cards.map((p) => p.query.cliente_id).sort(), ['R7', 'R9'], tag);
     assert.ok(!/No puedo hacer eso|¿es cliente/.test(both.b.reply), tag + ': ' + both.b.reply);
     for (const body of [...one.cap, ...both.cap]) assert.ok(!NAME_RE.test(body) && !/\bR[79]\b/.test(body), tag + ': nombre o código real hacia la IA');
+  }
+});
+
+// ---------- (g) formato de texto y total de deuda_cliente para el empleado (revisión #1018) ----------
+// El texto del empleado es una de estas frases fijas, con «cliente #código» y montos de ESE cliente; el total es null o el número de
+// créditos abiertos (nunca plata ni totales de la tienda). Sin nombre, DNI ni teléfono. Si el texto de la consulta trae otra cosa
+// (otro formato, un nombre, un total de la tienda), al empleado no le llega: se arma de nuevo con lo que pasó la lista blanca.
+const CODE = '[A-Za-z0-9_-]{1,40}';
+const DEBT_TEXTS = [
+  new RegExp('^cliente #' + CODE + ' debe S/ \\d+\\.\\d{2} en \\d+ créditos? abiertos?(?:; el primero vence el \\d{4}-\\d{2}-\\d{2})?\\.$'),
+  new RegExp('^cliente #' + CODE + ' no tiene deudas pendientes\\.$'),
+  new RegExp('^No encontré deudas de cliente #' + CODE + '\\. Revise el código en Clientes\\.$'),
+  /^Dime el código del cliente \(aparece como «cliente #código» en Clientes\)\.$/];
+const PII_RE = /Rosa|Prueba|Tito|Inventado|40998877|911222333/i;
+const pinned = (e, tag) => {
+  assert.ok(DEBT_TEXTS.some((re) => re.test(e.texto)), tag + ': formato del texto: ' + e.texto);
+  assert.ok(e.total === null || (Number.isInteger(e.total) && e.total === e.resumen.creditos_abiertos), tag + ': total = null o n.º de créditos: ' + e.total);
+  assert.ok(!PII_RE.test(JSON.stringify(e)), tag + ': sin nombre, DNI ni teléfono: ' + JSON.stringify(e));
+  assert.ok(!/999\.99|1049\.99|22057|tienda|todos/i.test(JSON.stringify(e)), tag + ': sin otro cliente ni totales de la tienda: ' + JSON.stringify(e));
+};
+test('(g) deuda_cliente del empleado: texto y total con formato fijo (código, saldo de ESE cliente), sin nombre, DNI, teléfono ni totales de la tienda', async () => {
+  const rd = memoryReader(DATA), now = NOW;
+  const cases = [
+    [{ cliente_id: 'R7' }, 'cliente #R7 debe S/ 50.00 en 2 créditos abiertos; el primero vence el 2026-11-05.', null],
+    [{ cliente_id: 'cliente #R8' }, 'cliente #R8 debe S/ 999.99 en 1 crédito abierto; el primero vence el 2026-11-01.', null],
+    [{ cliente_id: 'R9' }, 'No encontré deudas de cliente #R9. Revise el código en Clientes.', null],
+    [{}, 'Dime el código del cliente (aparece como «cliente #código» en Clientes).', null]];
+  for (const [args, texto, total] of cases) {
+    const e = employeeQueryResult(await runAssistantQuery(rd, { tipo: 'deuda_cliente', ...args }, now)), tag = JSON.stringify(args);
+    assert.equal(e.texto, texto, tag); assert.equal(e.total, total, tag);
+    if (args.cliente_id !== 'cliente #R8') pinned(e, tag);
+  }
+  // sin deuda pendiente (cliente conocido)
+  const paid = { ...DATA, credits: [{ cliente: 'R7', saldo: 0, vence: '2026-10-01', fecha: '2026-09-01' }] };
+  const e0 = employeeQueryResult(await runAssistantQuery(memoryReader(paid), { tipo: 'deuda_cliente', cliente_id: 'R7' }, now));
+  assert.equal(e0.texto, 'cliente #R7 no tiene deudas pendientes.'); pinned(e0, 'pagado');
+  // más créditos que filas: total = número de créditos abiertos (no plata)
+  const many = { ...DATA, credits: Array.from({ length: 40 }, (_, i) => ({ cliente: 'R7', saldo: 1, vence: '2026-12-' + String(1 + (i % 28)).padStart(2, '0'), fecha: '2026-10-01' })) };
+  const em = employeeQueryResult(await runAssistantQuery(memoryReader(many), { tipo: 'deuda_cliente', cliente_id: 'R7' }, now));
+  if (em.total !== null) assert.equal(em.total, 40); pinned(em, 'muchos créditos');
+  // un texto o total que no son del formato (nombre, DNI, teléfono, total de la tienda) no le llegan al empleado
+  const base = await runAssistantQuery(rd, { tipo: 'deuda_cliente', cliente_id: 'R7' }, now);
+  for (const bad of [
+    { texto: 'Rosa Prueba (DNI 40998877, cel 911222333) debe S/ 50.00.' },
+    { texto: base.texto + ' La tienda tiene S/ 22057.72 por cobrar de todos los clientes.' },
+    { texto: 'cliente #R7 debe S/ 50.00; cliente #R8 debe S/ 999.99.' },
+    { total: 22057.72 }, { total: 1049.99 }, { total: '2' }]) {
+    const e = employeeQueryResult({ ...base, ...bad }), tag = JSON.stringify(bad);
+    pinned(e, tag);
+    assert.equal(e.texto, 'cliente #R7 debe S/ 50.00 en 2 créditos abiertos; el primero vence el 2026-11-05.', tag + ': se arma de nuevo con lo de la lista blanca');
+  }
+  // hacia la IA (segunda llamada): código neutro, sin nombre, DNI, teléfono, código real, otro cliente ni totales de la tienda
+  for (const role of EMP) for (const stream of [false, true]) {
+    const r = await chat(role, { tipo: 'deuda_cliente', cliente_id: 'R7' }, { text: ask('Explícame por qué debe tanto Rosa Prueba'), stream });
+    const tag = role + (stream ? ' partes' : ''), toAi = r.toModel.join('\n');
+    assert.equal(r.toModel.length, 2, tag);
+    assert.ok(!PII_RE.test(toAi), tag + ': sin nombre, DNI ni teléfono hacia la IA');
+    assert.ok(!/\bR[78]\b/.test(toAi), tag + ': sin el código real hacia la IA');
+    assert.ok(!/999\.99|1049\.99|777\.77|555\.55|666\.66/.test(toAi), tag + ': sin otro cliente ni totales de la tienda hacia la IA');
   }
 });
