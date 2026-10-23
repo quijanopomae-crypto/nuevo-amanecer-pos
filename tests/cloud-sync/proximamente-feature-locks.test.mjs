@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { activeCanon } from './canon-browser-harness.mjs';
 import { PERMISSIONS } from '../../tools/cloudflare-lab/src/pos-permissions.js';
 
-const addedIds = ['venta-exitosa-comprobante', 'clonar-venta', 'nota-credito-parcial-compras', 'clientes-dias-credito', 'credito-cuotas', 'reparto-abono-multiples-deudas', 'asistente-virtual', 'lotes-multiples-fefo', 'stock-negativo-configurable', 'app-pedidos-marca-propia', 'cambiar-clave-usuarios', 'conversion-masiva-documentos', 'vendedor-en-venta', 'comentarios-venta', 'despacho-productos', 'vendedor-por-cliente', 'consulta-dni-ruc', 'edicion-masiva-productos', 'marcas-productos', 'subcategorias-atributos', 'produccion-recetas', 'registro-sanitario', 'numero-serie-producto', 'tipos-movimiento-inventario', 'conciliacion-bancaria', 'historial-exportaciones', 'catalogo-reportes', 'importar-proveedores', 'periodo-contable-percepcion', 'desbloquear-usuario', 'detraccion-retencion', 'canales-venta', 'estado-recepcion-compras', 'adjuntos-proveedor', 'dashboard-compras', 'recargo-servicio', 'producto-activo-venta', 'precio-min-max', 'cajas-multiples', 'cierre-remoto-cajas', 'dashboard-tesoreria', 'producto-servicio', 'catalogo-desde-pos'];
+const addedIds = ['venta-exitosa-comprobante', 'clonar-venta', 'nota-credito-parcial-compras', 'clientes-dias-credito', 'credito-cuotas', 'reparto-abono-multiples-deudas', 'asistente-virtual', 'lotes-multiples-fefo', 'app-pedidos-marca-propia', 'cambiar-clave-usuarios', 'conversion-masiva-documentos', 'vendedor-en-venta', 'comentarios-venta', 'despacho-productos', 'vendedor-por-cliente', 'consulta-dni-ruc', 'marcas-productos', 'subcategorias-atributos', 'produccion-recetas', 'registro-sanitario', 'numero-serie-producto', 'tipos-movimiento-inventario', 'conciliacion-bancaria', 'historial-exportaciones', 'catalogo-reportes', 'importar-proveedores', 'periodo-contable-percepcion', 'desbloquear-usuario', 'detraccion-retencion', 'canales-venta', 'estado-recepcion-compras', 'adjuntos-proveedor', 'dashboard-compras', 'recargo-servicio', 'producto-activo-venta', 'precio-min-max', 'cajas-multiples', 'cierre-remoto-cajas', 'dashboard-tesoreria', 'producto-servicio', 'catalogo-desde-pos'];
 
 test('real Worker authenticates then returns feature_locked for every locked registry id without writes', async t => {
   const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
@@ -89,9 +89,9 @@ test('clientes-deudores-caja is unlocked on client and server (no feature_locked
   assert.deepEqual(f.database.prepare('SELECT * FROM canonical_control').all(), before);
 });
 
-test('edicion-masiva-precios: locked for now, owner-only screen and feature route; product.update stays owner-approved', async t => {
-  assert.equal(PERMISSIONS.featureLocked('edicion-masiva-precios'), true) // candado cerrado hasta abrirlos todos juntos;
-  assert.equal(PERMISSIONS.featureLocked('precio-por-margen'), true) // candado cerrado hasta abrirlos todos juntos;
+test('edicion-masiva-precios: abierto (OK dueño 2026-10-23), owner-only screen and feature route; product.update stays owner-approved', async t => {
+  assert.equal(PERMISSIONS.featureLocked('edicion-masiva-precios'), false);
+  assert.equal(PERMISSIONS.featureLocked('precio-por-margen'), false);
   assert.equal(PERMISSIONS.canAccessScreen('owner', 'pageEdicionPrecios'), true);
   assert.equal(PERMISSIONS.canAccessScreen('empleado', 'pageEdicionPrecios'), false);
   const f = await activeCanon(t, { migrations: ['0024_pos_roles_owner_pin.sql'] });
@@ -100,7 +100,7 @@ test('edicion-masiva-precios: locked for now, owner-only screen and feature rout
   f.exec("INSERT INTO pos_device_roles(device_id,pos_role,created_by,created_at) VALUES('session:pm-employee','empleado','test','2026-10-21T00:00:00Z')");
   const before = f.database.prepare('SELECT * FROM canonical_control').all();
   const owner = await f.fetch('http://localhost/features/edicion-masiva-precios', { headers: { authorization: 'Bearer pm-owner-token' } });
-  assert.equal((await owner.json()).error, 'feature_locked'); // candado cerrado
+  assert.notEqual((await owner.json()).error, 'feature_locked'); // candado abierto
   for (const id of ['edicion-masiva-precios', 'precio-por-margen']) {
     const employee = await f.fetch('http://localhost/features/' + id, { headers: { authorization: 'Bearer pm-employee-token' } });
     assert.equal(employee.status, 403, id);

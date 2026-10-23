@@ -7,8 +7,8 @@ async function rolePage(page: Page, role: 'owner' | 'empleado', unlock = true) {
     const url = new URL(route.request().url());
     if (url.hostname === 'permissions.test') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(
       url.pathname === '/auth/me' ? { pos_role: role, owner_pin_set: true, roles_ready: true, device_id: 'sn-test-device' } : url.pathname === '/auth/purchases' ? { purchases: [], truncated: false } : {}) });
-    if (unlock && url.hostname === '127.0.0.1' && url.pathname.endsWith('/js/config/pos-permissions.js')) {
-      const res = await route.fetch(); const body = (await res.text()).replace("'stock-negativo-configurable': true", "'stock-negativo-configurable': false");
+    if (!unlock && url.hostname === '127.0.0.1' && url.pathname.endsWith('/js/config/pos-permissions.js')) {
+      const res = await route.fetch(); const body = (await res.text()).replace("'stock-negativo-configurable': false", "'stock-negativo-configurable': true");
       return route.fulfill({ response: res, body });
     }
     return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
@@ -63,7 +63,7 @@ for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
   });
 }
 
-test('candado cerrado: no aparece la sección de stock negativo', async ({ page }) => {
+test('candado cerrado (rollback): no aparece la sección de stock negativo', async ({ page }) => {
   await rolePage(page, 'owner', false); await seed(page); await open(page);
   await expect(page.locator('[data-sn-root]')).toHaveCount(0);
 });

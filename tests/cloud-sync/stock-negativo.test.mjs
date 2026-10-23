@@ -25,10 +25,10 @@ function ctx({ locked = false, owner = true, localStorage = memStore() } = {}) {
   return c;
 }
 
-test('candado: entrada existente, cerrada por defecto y solo dueño', () => {
-  assert.equal(PERMISSIONS.FEATURE_LOCKS['stock-negativo-configurable'], true);
+test('candado: entrada existente, abierta (OK dueño 2026-10-23) y solo dueño', () => {
+  assert.equal(PERMISSIONS.FEATURE_LOCKS['stock-negativo-configurable'], false);
   const c = vm.createContext({}); vm.runInContext(BROWSER_PERMS, c);
-  assert.equal(c.NA_PERMISSIONS.featureLocked('stock-negativo-configurable'), true);
+  assert.equal(c.NA_PERMISSIONS.featureLocked('stock-negativo-configurable'), false);
   assert.deepEqual([...c.NA_PERMISSIONS.FEATURE_ROLES['stock-negativo-configurable']], ['owner']);
   assert.equal(ctx({ locked: true }).NA_STOCK_NEGATIVO.available(), false);
   assert.equal(ctx({ owner: false }).NA_STOCK_NEGATIVO.available(), false);

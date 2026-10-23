@@ -21,7 +21,7 @@ async function open(page: Page, { role = 'owner', dark = false, canon = false, u
     w.eval(`productos=[{id:'p1',nombre:'Arroz Prueba',cat:'Abarrotes',precio:1234.5,costo:999,stock:5},{id:'p2',nombre:'Azúcar Prueba',cat:'Abarrotes',precio:4,costo:3,stock:5},{id:'p3',nombre:'Jabón Prueba',cat:'Limpieza',precio:2.5,costo:2,stock:5}]`);
     w.eval(`ventas=[]`);
     // El candado sigue cerrado en pos-permissions.js; la prueba lo abre solo en este navegador.
-    const perms = w.NA_PERMISSIONS; if (unlock) w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'edicion-masiva-precios' || id === 'precio-por-margen' ? false : perms.featureLocked(id) };
+    const perms = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...perms, featureLocked: (id: string) => id === 'edicion-masiva-precios' || id === 'precio-por-margen' ? !unlock : perms.featureLocked(id) };
     (0, eval)("_naSecurity.pinEnabled=true;_naSecurity.pinHash=_naSecHash('2468');");
     w.__approvals = [];
     w.NA_ROLES = { ...w.NA_ROLES, approve: async (action: string, opId: string) => { w.__approvals.push(action); return true; } };
@@ -155,14 +155,14 @@ test('local: PIN incorrecto o cancelado no cambia ningún precio', async ({ page
   expect(JSON.parse(out)).toEqual([1234.5, 4, 2.5]);
 });
 
-test('el candado sigue cerrado en pos-permissions.js', async ({ page }) => {
+test('el candado está abierto en pos-permissions.js (OK dueño 2026-10-23)', async ({ page }) => {
   await page.goto('/index.html');
-  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-precios'))).toBe(true);
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-precios'))).toBe(false);
 });
 
-// Candado real cerrado (pos-permissions.js sin tocar): dueño no ve controles ni puede aplicar.
+// Candado cerrado de nuevo (rollback simulado en el navegador): dueño no ve controles ni puede aplicar.
 for (const width of [390, 768, 1280]) for (const dark of [false, true]) {
-  test(`candado cerrado real: dueño sin controles ${width}px ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
+  test(`candado cerrado (rollback): dueño sin controles ${width}px ${dark ? 'oscuro' : 'claro'}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await open(page, { dark, unlock: false });
     await page.evaluate(() => (window as any).goPage('pageProximamente'));

@@ -136,11 +136,11 @@ test('el empleado no ve la edición masiva', async ({ page }) => {
   await expect(page.locator('#naEdicionMasiva')).toHaveCount(0);
 });
 
-test('con el candado cerrado el botón no aparece (falla cerrado)', async ({ page }) => {
+test('con el candado cerrado (rollback) el botón no aparece (falla cerrado)', async ({ page }) => {
   await page.goto('/index.html');
   await page.waitForFunction(() => !!(window as any).NA_PERMISSIONS);
-  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-productos'))).toBe(true);
-  await page.evaluate(() => (window as any).goPage('pageInventario'));
+  expect(await page.evaluate(() => (window as any).NA_PERMISSIONS.featureLocked('edicion-masiva-productos'))).toBe(false);
+  await page.evaluate(() => { const w = window as any, p = w.NA_PERMISSIONS; w.NA_PERMISSIONS = { ...p, featureLocked: (id: string) => id === 'edicion-masiva-productos' ? true : p.featureLocked(id) }; w.goPage('pageMenu'); w.goPage('pageInventario'); });
   await expect(page.locator('#invEdicionMasivaBtn')).toHaveCount(0);
   await page.evaluate(() => { const w = window as any; w.NA_PERMISSIONS = { ...w.NA_PERMISSIONS, featureLocked: undefined }; w.goPage('pageMenu'); (window as any).goPage('pageInventario'); });
   await expect(page.locator('#invEdicionMasivaBtn')).toHaveCount(0);

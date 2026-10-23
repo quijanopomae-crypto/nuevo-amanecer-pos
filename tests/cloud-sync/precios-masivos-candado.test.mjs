@@ -41,10 +41,10 @@ for (const [name, perms] of Object.entries(variants)) test(`candado ${name}: ocu
   assert.equal(await api.apply(), null); assert.deepEqual(ctx.calls, []);
   assert.equal(ctx.productos[0].precio, 10);
 });
-test('candado ausente en pos-permissions.js real (true): cerrado', () => {
+test('candado real en pos-permissions.js: abierto (OK dueño 2026-10-23); cerrado de nuevo vuelve a ocultar', () => {
   const c = vm.createContext({}); vm.runInContext(readFileSync('POS/js/config/pos-permissions.js', 'utf8'), c);
-  assert.equal(c.NA_PERMISSIONS.featureLocked('edicion-masiva-precios'), true);
-  assert.equal(load({ ...base, featureLocked: c.NA_PERMISSIONS.featureLocked }).api.unlocked(), false);
+  assert.equal(c.NA_PERMISSIONS.featureLocked('edicion-masiva-precios'), false);
+  assert.equal(load({ ...base, featureLocked: () => true }).api.unlocked(), false);
 });
 test('candado abierto: muestra vista previa (dueño)', () => {
   const { api, sel } = load({ ...base, featureLocked: id => id !== 'edicion-masiva-precios' });
