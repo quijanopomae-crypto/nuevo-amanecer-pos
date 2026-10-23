@@ -60,8 +60,9 @@ export async function readInvoiceMemory(token, secret, auth, now) {
     return m;
   } catch { return null; }
 }
-// taughtClean: la frase enseñada ya limpia (sanitizeLesson en pos-assistant.js); si viene, se firma esa y no la cruda.
-export async function writeInvoiceMemory({previous, image, proposals, reply, text, secret, auth, now, clean, taughtClean}) {
+// taughtClean / clarifyClean: la frase enseñada y la aclaración de la boleta ya limpias (sanitizeLesson en pos-assistant.js); si vienen,
+// se firman esas y no el texto crudo.
+export async function writeInvoiceMemory({previous, image, proposals, reply, text, secret, auth, now, clean, taughtClean, clarifyClean}) {
   if (!secret) return null;
   const purchases = proposals.filter(p => p.type === 'compra');
   const fresh = !!image || purchases.length > 0;
@@ -80,7 +81,8 @@ export async function writeInvoiceMemory({previous, image, proposals, reply, tex
   // Las preguntas no deben expulsar equivalencias confirmadas. Una respuesta corta
   // conserva la pregunta previa para que «96» o «sí» no pierdan su significado.
   const question = isQuestion(text);
-  if (keep && previous.invoices.length && text && !question) m.clarifications = [...m.clarifications, {usuario:clean(text).slice(0,500), pregunta_previa:previous.lastReply || ''}].slice(-8);
+  const said = keep && previous.invoices.length && text && !question ? (typeof clarifyClean === 'string' ? clarifyClean : clean(text)).slice(0,500) : '';
+  if (said) m.clarifications = [...m.clarifications, {usuario:said, pregunta_previa:previous.lastReply || ''}].slice(-8);
   m.lastReply = clean(reply || '').slice(0,600);
   const body = b64(enc.encode(JSON.stringify(m)));
   const token = body + '.' + await sign(secret, body);

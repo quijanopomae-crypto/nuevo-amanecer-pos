@@ -3323,6 +3323,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // Un token firmado antes de este arreglo puede traer la frase cruda: se limpia al leer, antes del modelo y antes de volver a firmarse.
   if (invoiceMemory && invoiceMemory.taught.length) { const cust = await lessonCustomers(), prods = ctx.products || [];
     invoiceMemory.taught = [...new Set(invoiceMemory.taught.map((x) => sanitizeLesson(x, cust, prods).slice(0, 200)).filter(Boolean))]; }
+  // (alfa) Igual con las aclaraciones de la boleta (vuelven a la IA en <boleta_recordada>): un token viejo puede traerlas crudas.
+  if (invoiceMemory && invoiceMemory.clarifications.length) { const cust = await lessonCustomers(), prods = ctx.products || [];
+    invoiceMemory.clarifications = invoiceMemory.clarifications.filter((c) => c && typeof c === 'object')
+      .map((c) => ({ ...c, usuario: sanitizeLesson(String(c.usuario || ''), cust, prods).slice(0, 500) })).filter((c) => c.usuario); }
   const priceFacts = sysProducts ? priceLookupMessage(role, parsed.text, sysProducts) : null;
   const sse = parsed.stream && deps.sse && !resetAsk ? deps.sse : null;
   const red = redactFor(seesOwnerData(role) ? 'owner' : role), guard = employeeToolGuard(role);
@@ -3631,10 +3635,15 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (!sysProducts) sysProducts = await loadProducts(); const prods = [...(ctx.products || []), ...(sysProducts || [])];
     taughtClean = sanitizeLesson(redactModelOwner(fact), cust, prods);
     if (!resetAsk) await saveLesson(store, auth, now, redactModelOwner(fact), cust, prods); } }
+  // (alfa) La aclaración de la boleta se firma con el mismo limpiado (sanitizeLesson + isBrandDon): «la boleta es de don Ernesto Villar»
+  // se firma como «la boleta es de don»; «fideo don vittorio» y una marca del catálogo («Doña Pepa») se quedan.
+  let clarifyClean = null;
+  if (role === 'owner' && !parsed.image && invoiceMemory && invoiceMemory.invoices.length && parsed.text) { const cust = await lessonCustomers();
+    if (!sysProducts) sysProducts = await loadProducts(); clarifyClean = sanitizeLesson(redactModelOwner(parsed.text), cust, [...(ctx.products || []), ...(sysProducts || [])]); }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
-  const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner, taughtClean}) : null;
+  const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner, taughtClean, clarifyClean}) : null;
   let shown = reply; // lo que ve el Admin en pantalla: los «producto #N» de resúmenes/consultas con su nombre; turns e historial siguen con el código
   if (role === 'owner' && refIds.size && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); shown = nameProductRefs(reply, known.names.filter((p) => !notRef(p))); }
   return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
