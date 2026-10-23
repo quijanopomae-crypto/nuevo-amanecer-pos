@@ -156,3 +156,42 @@ test('4b) con pronombres y puntuación cerca, «fideo don vittorio» y «doña p
     assert.equal(isBrandDon(t, i, i + len, KNOWN), true, t);
   }
 });
+
+// (alfa) La aclaración de la boleta (invoice_memory.clarifications[].usuario) es texto crudo del Admin que vuelve a la IA en
+// <boleta_recordada> en los turnos siguientes: misma regla que lo enseñado (sanitizeLesson + isBrandDon) antes de firmarse y al leer un token viejo.
+const BOLETA = [{ type: 'compra', proveedor: 'Distribuidora Lima', documento: 'F001-123', fecha: '2026-10-22', lineas: [{ nombre: 'Arroz 1 kg', cantidad: 50, costo_unitario: 3 }] }];
+const boletaToken = () => writeInvoiceMemory({ previous: null, image: null, proposals: BOLETA, reply: 'Leí la boleta F001-123.', text: '', secret: SECRET, auth: OWNER, now: NOW, clean: (x) => String(x) });
+const CTX_PEPA = { products: [...DATA.products, { id: 'P3', nombre: 'Doña Pepa 1 kg', precio: 5, costo: 4, stock: 10, min: 1, controla: true }] };
+const boletaSent = (s) => { const i = s.lastIndexOf('<boleta_recordada>'); return i < 0 ? '' : s.slice(i, s.indexOf('</boleta_recordada>', i)); }; // el mensaje, no la regla del sistema
+
+for (const stream of [false, true]) test('5) la aclaración de la boleta pasa por sanitizeLesson antes de firmarse: el nombre no vuelve a la IA; las marcas sí' + (stream ? ' (en partes)' : ''), async () => {
+  const reply = stream ? () => streamR([delta({ content: 'Entendido.' }, 'stop')]) : () => msg('Entendido.');
+  const read = async (r) => (stream ? sseFinal(await r.text()) : await r.json());
+  for (const [said, name, keep] of [
+    ['doña Carmen Salas trajo la boleta, el arroz es 50 kg', /Carmen|Salas/i, /50 kg/],
+    ['la boleta es de don Ernesto Villar', /Ernesto|Villar/i, /la boleta es de/],
+    ['ojo, el fideo don vittorio de la boleta viene en cajas de 20', null, /fideo don vittorio de la boleta viene en cajas de 20/],
+    ['la doña pepa de la boleta trae 12 bolsas', null, /la doña pepa de la boleta trae 12 bolsas/]
+  ]) {
+    const t1 = await route({ text: said, invoice_memory: await boletaToken(), context: CTX_PEPA, stream }, createMemoryUsageStore(), [reply]);
+    const tok = (await read(t1.r)).invoice_memory; assert.equal(typeof tok, 'string', said);
+    const clar = (await readInvoiceMemory(tok, SECRET, OWNER, NOW)).clarifications.map((c) => c.usuario);
+    assert.equal(clar.length, 1, said); assert.match(clar[0], keep, 'guardado: ' + clar[0]);
+    if (name) { assert.ok(!name.test(clar[0]), 'se firmó con el nombre: ' + clar[0]); for (const s of t1.cap) assert.ok(!name.test(s), 'llegó a la IA en el mismo turno: ' + said); }
+    const t2 = await route({ text: 'listo, regístrala', invoice_memory: tok, context: CTX_PEPA, stream }, createMemoryUsageStore(), [reply]); await read(t2.r);
+    const sent = boletaSent(t2.cap[t2.cap.length - 1]); assert.ok(sent.includes('aclaraciones_del_usuario'), 'va la boleta recordada');
+    assert.match(sent, keep, 'a la IA: ' + sent);
+    if (name) assert.ok(!name.test(sent), 'llegó a la IA en <boleta_recordada>: ' + sent);
+  }
+});
+
+test('5b) un token firmado antes del arreglo (aclaración cruda) sale limpio hacia la IA y se vuelve a firmar limpio', async () => {
+  const prev = await readInvoiceMemory(await boletaToken(), SECRET, OWNER, NOW);
+  const old = await writeInvoiceMemory({ previous: prev, image: null, proposals: [], reply: 'Entendido.', text: 'doña Carmen Salas trajo la boleta, el arroz es 50 kg', secret: SECRET, auth: OWNER, now: NOW, clean: (x) => String(x) });
+  assert.match(JSON.stringify((await readInvoiceMemory(old, SECRET, OWNER, NOW)).clarifications), /Carmen Salas/, 'el token viejo lleva el nombre');
+  const t2 = await route({ text: 'listo, regístrala', invoice_memory: old }, createMemoryUsageStore(), [() => msg('Listo.')]);
+  const d = await t2.r.json(), sent = boletaSent(t2.cap[t2.cap.length - 1]);
+  assert.ok(/aclaraciones_del_usuario/.test(sent) && /50 kg/.test(sent), 'va la aclaración');
+  assert.ok(!/Carmen|Salas/i.test(sent), 'llegó a la IA: ' + sent);
+  assert.ok(!/Carmen|Salas/.test(JSON.stringify((await readInvoiceMemory(d.invoice_memory, SECRET, OWNER, NOW)).clarifications)), 'el token nuevo sale limpio');
+});
