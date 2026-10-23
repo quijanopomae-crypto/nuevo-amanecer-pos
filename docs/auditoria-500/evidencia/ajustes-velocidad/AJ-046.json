@@ -1,0 +1,101 @@
+{
+ "id": "AJ-046",
+ "file": "ajustes-stock-masivos.csv",
+ "pregunta": "productos sin precio",
+ "rol": "owner",
+ "nota": null,
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 8066,
+   "reply": "Aquí tienes los pasos.",
+   "error": null,
+   "message": null,
+   "proposals": [
+    {
+     "type": "pasos",
+     "raw": {
+      "id": "437d2399-d67f-4f54-8dec-a569b5d3502c",
+      "type": "pasos",
+      "needsConfirm": false,
+      "title": "Revisar productos sin precio de venta",
+      "pasos": [
+       "Abre Inventario.",
+       "Revisa la columna de precio de venta para encontrar productos con el precio vacío o en cero."
+      ],
+      "pantalla": "pageInventario"
+     }
+    }
+   ],
+   "dropped": [],
+   "timings": {
+    "ms_gates": 2,
+    "ms_model1": 8063,
+    "ms_db": 0,
+    "ms_total": 8065,
+    "provider": "ohmyagent",
+    "model": "gpt-6.1-sol",
+    "attempts": 1,
+    "fallback": false,
+    "db_stmts": 0
+   },
+   "texto_enviado": "productos sin precio",
+   "history_enviado": 0,
+   "bytes_cuerpo": 2008,
+   "productos_en_contexto": 24,
+   "tool_calls": [
+    [
+     {
+      "name": "explicar_pasos",
+      "arguments": {
+       "tema": "Revisar productos sin precio de venta",
+       "pasos": [
+        "Abre Inventario.",
+        "Revisa la columna de precio de venta para encontrar productos con el precio vacío o en cero."
+       ],
+       "pantalla": "pageInventario"
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7429
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"p01\",\"nombre\":\"Arroz Costeño 750 g\",\"precio\":3.8,\"stock\":12,\"costo\":3.2},{\"id\":\"p02\",\"nombre\":\"ARROZ COSTEÑO 750G\",\"precio\":3.8,\"stock\":3,\"costo\":3.2},{\"id\":\"p03\",\"nombre\":\"Arroz Jairito 1 kg\",\"precio\":3.5,\"stock\":40,\"costo\":3.18},{\"id\":\"p04\",\"nombre\":\"Azúcar Rubia Cartavio 1 kg\",\"precio\":4,\"stock\":10,\"costo\":3.3},{\"id\":\"p05\",\"nombre\":\"Azúcar Blanca Paramonga 1 kg\",\"precio\":4.6,\"stock\":6,\"costo\":3.9},{\"id\":\"p06\",\"nombre\":\"Leche Gloria Tarro Grande 395 g (caja 24)\",\"precio\":4.2,\"stock\":30,\"costo\":3.1},{\"id\":\"p07\",\"nombre\":\"Leche Gloria Tarro Chico 170 g (caja 48)\",\"precio\":2.2,\"stock\":20,\"costo\":1.65},{\"id\":\"p08\",\"nombre\":\"Yogurt Gloria Fresa 1 L\",\"precio\":6.5,\"stock\":6,\"costo\":5.3},{\"id\":\"p09\",\"nombre\":\"Aceite Primor 1 L\",\"precio\":11.5,\"stock\":8,\"costo\":9.8},{\"id\":\"p10\",\"nombre\":\"Aceite Sao 900 ml\",\"precio\":9.9,\"stock\":0,\"costo\":8.2},{\"id\":\"p11\",\"nombre\":\"Inca Kola 500 ml\",\"precio\":2.5,\"stock\":24,\"costo\":1.9},{\"id\":\"p12\",\"nombre\":\"Inca Kola 1.5 L\",\"precio\":7,\"stock\":6,\"costo\":5.5},{\"id\":\"p13\",\"nombre\":\"Coca-Cola 500 ml\",\"precio\":2.5,\"stock\":18,\"costo\":1.85},{\"id\":\"p14\",\"nombre\":\"Coca-Cola 1.5 L\",\"precio\":7,\"stock\":4,\"costo\":5.4},{\"id\":\"p15\",\"nombre\":\"Coca-Cola lata 355 ml\",\"precio\":3,\"stock\":0,\"costo\":2.2},{\"id\":\"p16\",\"nombre\":\"Sprite 500 ml\",\"precio\":2.5,\"stock\":-1,\"costo\":1.8},{\"id\":\"p17\",\"nombre\":\"Galleta Soda Field x6\",\"precio\":1.5,\"stock\":-2,\"costo\":1.2},{\"id\":\"p18\",\"nombre\":\"Galleta Casino Menta\",\"precio\":1,\"stock\":0,\"costo\":0.75},{\"id\":\"p19\",\"nombre\":\"Galleta Oreo\",\"precio\":1.2,\"stock\":15,\"costo\":0.8},{\"id\":\"p20\",\"nombre\":\"Wafer Nik\",\"precio\":0.6,\"stock\":3,\"costo\":0.45},{\"id\":\"p21\",\"nombre\":\"Queso Fresco (por kg)\",\"precio\":18,\"stock\":4.5,\"costo\":14},{\"id\":\"p22\",\"nombre\":\"Atún Florida 170 g\",\"precio\":6,\"stock\":20,\"costo\":4.7},{\"id\":\"p23\",\"nombre\":\"Atún Real 170 g\",\"precio\":5.2,\"stock\":-3,\"costo\":4.1},{\"id\":\"p24\",\"nombre\":\"Cerveza Pilsen 630 ml\",\"precio\":7,\"stock\":24,\"costo\":5.2}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<precios_del_sistema>{\"productos\":[{\"nombre\":\"Galleta Casino Menta\",\"precio\":1,\"costo\":0.75}]}</precios_del_sistema>"
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>productos sin precio</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_058f2fb1bf8a3f31006adb81c7c31c8195a70abc4c24be5b4f\",\"object\":\"chat.completion\",\"created\":1792770508,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_epFuN6B0SjsZjMoTmjUbuNGe\",\"type\":\"function\",\"function\":{\"name\":\"explicar_pasos\",\"arguments\":\"{\\\"tema\\\":\\\"Revisar productos sin precio de venta\\\",\\\"pasos\\\":[\\\"Abre Inventario.\\\",\\\"Revisa la columna de precio de venta para encontrar productos con el precio vacío o en cero.\\\"],\\\"pantalla\\\":\\\"pageInventario\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4245,\"completion_tokens\":156,\"total_tokens\":4401}}"
+     }
+    }
+   ]
+  }
+ ]
+}

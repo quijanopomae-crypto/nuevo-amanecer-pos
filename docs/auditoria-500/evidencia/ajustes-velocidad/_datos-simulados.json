@@ -1,0 +1,428 @@
+{
+ "nota": "Datos inventados. Hoy = 2026-10-23 (Lima). Sin ventas en 30 días: p27, p35, p37, p38, p40 (solo septiembre o nunca).",
+ "PRODUCTS": [
+  {
+   "id": "p01",
+   "nombre": "Arroz Costeño 750 g",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 12,
+   "min": 10,
+   "precio": 3.8,
+   "costo": 3.2
+  },
+  {
+   "id": "p02",
+   "nombre": "ARROZ COSTEÑO 750G",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 3,
+   "min": 0,
+   "precio": 3.8,
+   "costo": 3.2
+  },
+  {
+   "id": "p03",
+   "nombre": "Arroz Jairito 1 kg",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 40,
+   "min": 10,
+   "precio": 3.5,
+   "costo": 3.18
+  },
+  {
+   "id": "p04",
+   "nombre": "Azúcar Rubia Cartavio 1 kg",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 10,
+   "min": 5,
+   "precio": 4,
+   "costo": 3.3
+  },
+  {
+   "id": "p05",
+   "nombre": "Azúcar Blanca Paramonga 1 kg",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 6,
+   "min": 4,
+   "precio": 4.6,
+   "costo": 3.9
+  },
+  {
+   "id": "p06",
+   "nombre": "Leche Gloria Tarro Grande 395 g (caja 24)",
+   "categoria": "Lácteos",
+   "controla": true,
+   "stock": 30,
+   "min": 24,
+   "precio": 4.2,
+   "costo": 3.1
+  },
+  {
+   "id": "p07",
+   "nombre": "Leche Gloria Tarro Chico 170 g (caja 48)",
+   "categoria": "Lácteos",
+   "controla": true,
+   "stock": 20,
+   "min": 12,
+   "precio": 2.2,
+   "costo": 1.65
+  },
+  {
+   "id": "p08",
+   "nombre": "Yogurt Gloria Fresa 1 L",
+   "categoria": "Lácteos",
+   "controla": true,
+   "stock": 6,
+   "min": 4,
+   "precio": 6.5,
+   "costo": 5.3
+  },
+  {
+   "id": "p09",
+   "nombre": "Aceite Primor 1 L",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 8,
+   "min": 3,
+   "precio": 11.5,
+   "costo": 9.8
+  },
+  {
+   "id": "p10",
+   "nombre": "Aceite Sao 900 ml",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 0,
+   "min": 2,
+   "precio": 9.9,
+   "costo": 8.2
+  },
+  {
+   "id": "p11",
+   "nombre": "Inca Kola 500 ml",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": 24,
+   "min": 12,
+   "precio": 2.5,
+   "costo": 1.9
+  },
+  {
+   "id": "p12",
+   "nombre": "Inca Kola 1.5 L",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": 6,
+   "min": 4,
+   "precio": 7,
+   "costo": 5.5
+  },
+  {
+   "id": "p13",
+   "nombre": "Coca-Cola 500 ml",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": 18,
+   "min": 12,
+   "precio": 2.5,
+   "costo": 1.85
+  },
+  {
+   "id": "p14",
+   "nombre": "Coca-Cola 1.5 L",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": 4,
+   "min": 6,
+   "precio": 7,
+   "costo": 5.4
+  },
+  {
+   "id": "p15",
+   "nombre": "Coca-Cola lata 355 ml",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": 0,
+   "min": 6,
+   "precio": 3,
+   "costo": 2.2
+  },
+  {
+   "id": "p16",
+   "nombre": "Sprite 500 ml",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": -1,
+   "min": 6,
+   "precio": 2.5,
+   "costo": 1.8
+  },
+  {
+   "id": "p17",
+   "nombre": "Galleta Soda Field x6",
+   "categoria": "Galletas",
+   "controla": true,
+   "stock": -2,
+   "min": 5,
+   "precio": 1.5,
+   "costo": 1.2
+  },
+  {
+   "id": "p18",
+   "nombre": "Galleta Casino Menta",
+   "categoria": "Galletas",
+   "controla": true,
+   "stock": 0,
+   "min": 5,
+   "precio": 1,
+   "costo": 0.75
+  },
+  {
+   "id": "p19",
+   "nombre": "Galleta Oreo",
+   "categoria": "Galletas",
+   "controla": true,
+   "stock": 15,
+   "min": 6,
+   "precio": 1.2,
+   "costo": 0.8
+  },
+  {
+   "id": "p20",
+   "nombre": "Wafer Nik",
+   "categoria": "Galletas",
+   "controla": true,
+   "stock": 3,
+   "min": 6,
+   "precio": 0.6,
+   "costo": 0.45
+  },
+  {
+   "id": "p21",
+   "nombre": "Queso Fresco (por kg)",
+   "categoria": "Lácteos",
+   "controla": true,
+   "stock": 4.5,
+   "min": 1,
+   "precio": 18,
+   "costo": 14,
+   "unidad": "kg"
+  },
+  {
+   "id": "p22",
+   "nombre": "Atún Florida 170 g",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 20,
+   "min": 6,
+   "precio": 6,
+   "costo": 4.7
+  },
+  {
+   "id": "p23",
+   "nombre": "Atún Real 170 g",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": -3,
+   "min": 4,
+   "precio": 5.2,
+   "costo": 4.1
+  },
+  {
+   "id": "p24",
+   "nombre": "Cerveza Pilsen 630 ml",
+   "categoria": "Licores",
+   "controla": true,
+   "stock": 24,
+   "min": 12,
+   "precio": 7,
+   "costo": 5.2
+  },
+  {
+   "id": "p25",
+   "nombre": "Cerveza Cristal lata 355 ml",
+   "categoria": "Licores",
+   "controla": true,
+   "stock": 0,
+   "min": 6,
+   "precio": 4.5,
+   "costo": 3.4
+  },
+  {
+   "id": "p26",
+   "nombre": "Caramelos Globopop",
+   "categoria": "Golosinas",
+   "controla": true,
+   "stock": 100,
+   "min": 50,
+   "precio": 0.2,
+   "costo": 0.08
+  },
+  {
+   "id": "p27",
+   "nombre": "Caramelos Halls Menta",
+   "categoria": "Golosinas",
+   "controla": true,
+   "stock": 12,
+   "min": 6,
+   "precio": 1,
+   "costo": 0.7
+  },
+  {
+   "id": "p28",
+   "nombre": "Fideo Don Vittorio Spaghetti 500 g",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 25,
+   "min": 8,
+   "precio": 3.5,
+   "costo": 2.6
+  },
+  {
+   "id": "p29",
+   "nombre": "Fideo Lavaggi Tallarín 500 g",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": -5,
+   "min": 5,
+   "precio": 2.8,
+   "costo": 2.1
+  },
+  {
+   "id": "p30",
+   "nombre": "Papel Higiénico Elite x4",
+   "categoria": "Limpieza",
+   "controla": true,
+   "stock": 0,
+   "min": 4,
+   "precio": 6,
+   "costo": 4.9
+  },
+  {
+   "id": "p31",
+   "nombre": "Detergente Bolívar 500 g",
+   "categoria": "Limpieza",
+   "controla": true,
+   "stock": 2,
+   "min": 5,
+   "precio": 8,
+   "costo": 6.4
+  },
+  {
+   "id": "p32",
+   "nombre": "Huevo rosado (unidad)",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 90,
+   "min": 30,
+   "precio": 0.6,
+   "costo": 0.45
+  },
+  {
+   "id": "p33",
+   "nombre": "Pan francés",
+   "categoria": "Panadería",
+   "controla": false,
+   "stock": 0,
+   "min": 0,
+   "precio": 0.2,
+   "costo": 0.12
+  },
+  {
+   "id": "p34",
+   "nombre": "Recarga celular",
+   "categoria": "Servicios",
+   "controla": false,
+   "stock": 0,
+   "min": 0,
+   "precio": 0,
+   "costo": null
+  },
+  {
+   "id": "p35",
+   "nombre": "Pilas Panasonic AA x2",
+   "categoria": "Bazar",
+   "controla": true,
+   "stock": 10,
+   "min": 2,
+   "precio": 3.5,
+   "costo": null
+  },
+  {
+   "id": "p36",
+   "nombre": "Chocolate Sublime",
+   "categoria": "Golosinas",
+   "controla": true,
+   "stock": 30,
+   "min": 10,
+   "precio": 1.5,
+   "costo": null
+  },
+  {
+   "id": "p37",
+   "nombre": "Gaseosa Guaraná 500 ml",
+   "categoria": "Gaseosas",
+   "controla": true,
+   "stock": 9,
+   "min": 6,
+   "precio": 0,
+   "costo": 1.6
+  },
+  {
+   "id": "p38",
+   "nombre": "Mantequilla Gloria 90 g",
+   "categoria": "Lácteos",
+   "controla": true,
+   "stock": 7,
+   "min": 2,
+   "precio": 4.8,
+   "costo": 3.9
+  },
+  {
+   "id": "p39",
+   "nombre": "Sal Emsal 1 kg",
+   "categoria": "Abarrotes",
+   "controla": true,
+   "stock": 15,
+   "min": 5,
+   "precio": 1.8,
+   "costo": 1.4
+  },
+  {
+   "id": "p40",
+   "nombre": "Fósforos Llama",
+   "categoria": "Bazar",
+   "controla": true,
+   "stock": -1,
+   "min": 10,
+   "precio": 0.5,
+   "costo": 0.3
+  }
+ ],
+ "CUSTOMERS": [
+  {
+   "id": "1",
+   "nombre": "[nombre]"
+  },
+  {
+   "id": "2",
+   "nombre": "[nombre]"
+  }
+ ],
+ "ventas": 61,
+ "lineas": 109,
+ "CASH_OPEN": {
+  "ready": true,
+  "open": {
+   "opened_at": "2026-10-23T13:05:00.000Z",
+   "opening_cents": 10000,
+   "expected_cents": 10000
+  },
+  "rows": [],
+  "lastClosedAt": "2026-10-23T03:10:00.000Z"
+ }
+}

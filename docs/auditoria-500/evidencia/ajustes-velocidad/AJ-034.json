@@ -1,0 +1,130 @@
+{
+ "id": "AJ-034",
+ "file": "ajustes-stock-masivos.csv",
+ "pregunta": "consumo propio 1 gaseosa",
+ "rol": "owner",
+ "nota": null,
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 4248,
+   "reply": "Gaseosa Guaraná 500 ml (S/ 0.00): 9 unid.",
+   "error": null,
+   "message": null,
+   "proposals": [
+    {
+     "type": "consulta",
+     "consulta": {
+      "tipo": "stock_producto",
+      "producto": "gaseosa",
+      "periodo": "hoy",
+      "fecha": null,
+      "desde": "",
+      "hasta": ""
+     },
+     "raw": {
+      "id": "05940874-7b0e-4ab0-ae93-8a11757a7fe0",
+      "type": "consulta",
+      "needsConfirm": false,
+      "query": {
+       "tipo": "stock_producto",
+       "producto": "gaseosa",
+       "periodo": "hoy",
+       "fecha": null,
+       "desde": "",
+       "hasta": ""
+      },
+      "result": {
+       "titulo": "Stock del producto",
+       "columnas": [
+        "Producto",
+        "Stock",
+        "Mínimo",
+        "Precio S/",
+        "Costo S/"
+       ],
+       "filas": [
+        [
+         "Gaseosa Guaraná 500 ml",
+         9,
+         6,
+         0,
+         1.6
+        ]
+       ],
+       "texto": "Gaseosa Guaraná 500 ml (S/ 0.00): 9 unid.",
+       "total": 1
+      }
+     }
+    }
+   ],
+   "dropped": [],
+   "timings": {
+    "ms_gates": 1,
+    "ms_model1": 4246,
+    "ms_db": 0,
+    "ms_total": 4247,
+    "provider": "ohmyagent",
+    "model": "gpt-6.1-sol",
+    "attempts": 1,
+    "fallback": false,
+    "db_stmts": 0,
+    "second_call": false
+   },
+   "texto_enviado": "consumo propio 1 gaseosa",
+   "history_enviado": 0,
+   "bytes_cuerpo": 2012,
+   "productos_en_contexto": 24,
+   "tool_calls": [
+    [
+     {
+      "name": "consultar",
+      "arguments": {
+       "tipo": "stock_producto",
+       "producto": "gaseosa",
+       "periodo": "hoy",
+       "fecha": "",
+       "desde": "",
+       "hasta": "",
+       "cliente_id": ""
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7429
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"p37\",\"nombre\":\"Gaseosa Guaraná 500 ml\",\"precio\":0,\"stock\":9,\"costo\":1.6},{\"id\":\"p01\",\"nombre\":\"Arroz Costeño 750 g\",\"precio\":3.8,\"stock\":12,\"costo\":3.2},{\"id\":\"p02\",\"nombre\":\"ARROZ COSTEÑO 750G\",\"precio\":3.8,\"stock\":3,\"costo\":3.2},{\"id\":\"p03\",\"nombre\":\"Arroz Jairito 1 kg\",\"precio\":3.5,\"stock\":40,\"costo\":3.18},{\"id\":\"p04\",\"nombre\":\"Azúcar Rubia Cartavio 1 kg\",\"precio\":4,\"stock\":10,\"costo\":3.3},{\"id\":\"p05\",\"nombre\":\"Azúcar Blanca Paramonga 1 kg\",\"precio\":4.6,\"stock\":6,\"costo\":3.9},{\"id\":\"p06\",\"nombre\":\"Leche Gloria Tarro Grande 395 g (caja 24)\",\"precio\":4.2,\"stock\":30,\"costo\":3.1},{\"id\":\"p07\",\"nombre\":\"Leche Gloria Tarro Chico 170 g (caja 48)\",\"precio\":2.2,\"stock\":20,\"costo\":1.65},{\"id\":\"p08\",\"nombre\":\"Yogurt Gloria Fresa 1 L\",\"precio\":6.5,\"stock\":6,\"costo\":5.3},{\"id\":\"p09\",\"nombre\":\"Aceite Primor 1 L\",\"precio\":11.5,\"stock\":8,\"costo\":9.8},{\"id\":\"p10\",\"nombre\":\"Aceite Sao 900 ml\",\"precio\":9.9,\"stock\":0,\"costo\":8.2},{\"id\":\"p11\",\"nombre\":\"Inca Kola 500 ml\",\"precio\":2.5,\"stock\":24,\"costo\":1.9},{\"id\":\"p12\",\"nombre\":\"Inca Kola 1.5 L\",\"precio\":7,\"stock\":6,\"costo\":5.5},{\"id\":\"p13\",\"nombre\":\"Coca-Cola 500 ml\",\"precio\":2.5,\"stock\":18,\"costo\":1.85},{\"id\":\"p14\",\"nombre\":\"Coca-Cola 1.5 L\",\"precio\":7,\"stock\":4,\"costo\":5.4},{\"id\":\"p15\",\"nombre\":\"Coca-Cola lata 355 ml\",\"precio\":3,\"stock\":0,\"costo\":2.2},{\"id\":\"p16\",\"nombre\":\"Sprite 500 ml\",\"precio\":2.5,\"stock\":-1,\"costo\":1.8},{\"id\":\"p17\",\"nombre\":\"Galleta Soda Field x6\",\"precio\":1.5,\"stock\":-2,\"costo\":1.2},{\"id\":\"p18\",\"nombre\":\"Galleta Casino Menta\",\"precio\":1,\"stock\":0,\"costo\":0.75},{\"id\":\"p19\",\"nombre\":\"Galleta Oreo\",\"precio\":1.2,\"stock\":15,\"costo\":0.8},{\"id\":\"p20\",\"nombre\":\"Wafer Nik\",\"precio\":0.6,\"stock\":3,\"costo\":0.45},{\"id\":\"p21\",\"nombre\":\"Queso Fresco (por kg)\",\"precio\":18,\"stock\":4.5,\"costo\":14},{\"id\":\"p22\",\"nombre\":\"Atún Florida 170 g\",\"precio\":6,\"stock\":20,\"costo\":4.7},{\"id\":\"p23\",\"nombre\":\"Atún Real 170 g\",\"precio\":5.2,\"stock\":-3,\"costo\":4.1}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>consumo propio 1 gaseosa</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_09f2f4d0ed68693c006adb81af79ac8197b9ced0a03377303a\",\"object\":\"chat.completion\",\"created\":1792770481,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_N7SEV6hnvZTgdkBKVmsEmtC9\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"stock_producto\\\",\\\"producto\\\":\\\"gaseosa\\\",\\\"periodo\\\":\\\"hoy\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4209,\"completion_tokens\":42,\"total_tokens\":4251}}"
+     }
+    }
+   ]
+  }
+ ]
+}

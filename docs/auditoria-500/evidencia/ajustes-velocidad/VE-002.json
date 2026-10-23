@@ -1,0 +1,302 @@
+{
+ "id": "VE-002",
+ "file": "velocidad-errores.csv",
+ "pregunta": "me llego mercaderia: 15 lineas dictadas de corrido",
+ "rol": "owner",
+ "nota": "15 líneas dictadas de corrido (texto armado)",
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 9353,
+   "reply": "Preparé el borrador. Revisa las cantidades, presentaciones y costos; pulsa Confirmar para abrir Nueva compra. Hay líneas por vincular: en Nueva compra puedes buscar un producto existente o crear su ficha sin stock inicial. El stock se suma solo al registrar la compra.",
+   "error": null,
+   "message": null,
+   "proposals": [
+    {
+     "type": "compra",
+     "lineas": 16,
+     "raw": {
+      "id": "8ac4b2b5-7f45-4ddd-aa6c-604e14a7841e",
+      "type": "compra",
+      "needsConfirm": true,
+      "title": "Preparar compra",
+      "proveedor": "Distribuidora El Sol",
+      "documento": "",
+      "fecha": "",
+      "lineas": [
+       {
+        "product_id": "p06",
+        "nombre": "Leche Gloria Tarro Grande 395 g (caja 24)",
+        "cantidad": 48,
+        "costo_unitario": 3.1,
+        "costo_actual": 3.1
+       },
+       {
+        "product_id": "p07",
+        "nombre": "Leche Gloria Tarro Chico 170 g (caja 48)",
+        "cantidad": 48,
+        "costo_unitario": 1.65,
+        "costo_actual": 1.65
+       },
+       {
+        "product_id": "p01",
+        "nombre": "Arroz Costeño 750 g",
+        "cantidad": 20,
+        "costo_unitario": 3.2,
+        "costo_actual": 3.2
+       },
+       {
+        "product_id": "p04",
+        "nombre": "Azúcar Rubia Cartavio 1 kg",
+        "cantidad": 20,
+        "costo_unitario": 3.3,
+        "costo_actual": 3.3
+       },
+       {
+        "product_id": "p09",
+        "nombre": "Aceite Primor 1 L",
+        "cantidad": 12,
+        "costo_unitario": 9.8,
+        "costo_actual": 9.8
+       },
+       {
+        "product_id": "p11",
+        "nombre": "Inca Kola 500 ml",
+        "cantidad": 24,
+        "costo_unitario": 1.9,
+        "costo_actual": 1.9
+       },
+       {
+        "product_id": "p13",
+        "nombre": "Coca-Cola 500 ml",
+        "cantidad": 24,
+        "costo_unitario": 1.85,
+        "costo_actual": 1.85
+       },
+       {
+        "product_id": "p14",
+        "nombre": "Coca-Cola 1.5 L",
+        "cantidad": 12,
+        "costo_unitario": 5.4,
+        "costo_actual": 5.4
+       },
+       {
+        "product_id": "p17",
+        "nombre": "Galleta Soda Field x6",
+        "cantidad": 20,
+        "costo_unitario": 1.2,
+        "costo_actual": 1.2
+       },
+       {
+        "product_id": "p19",
+        "nombre": "Galleta Oreo",
+        "cantidad": 24,
+        "costo_unitario": 0.8,
+        "costo_actual": 0.8
+       },
+       {
+        "product_id": "p20",
+        "nombre": "Wafer Nik",
+        "cantidad": 72,
+        "costo_unitario": 0.45,
+        "costo_actual": 0.45
+       },
+       {
+        "product_id": "p22",
+        "nombre": "Atún Florida 170 g",
+        "cantidad": 24,
+        "costo_unitario": 4.7,
+        "costo_actual": 4.7
+       },
+       {
+        "product_id": "p24",
+        "nombre": "Cerveza Pilsen 630 ml",
+        "cantidad": 12,
+        "costo_unitario": 5.2,
+        "costo_actual": 5.2
+       },
+       {
+        "product_id": "p26",
+        "nombre": "Caramelos Globopop",
+        "cantidad": 100,
+        "costo_unitario": 0.08,
+        "costo_actual": 0.08
+       },
+       {
+        "product_id": null,
+        "nombre": "Fideo Don Vittorio",
+        "cantidad": 20,
+        "costo_unitario": 2.6,
+        "costo_actual": null
+       },
+       {
+        "product_id": null,
+        "nombre": "coca cola litro y medio",
+        "cantidad": 12,
+        "costo_unitario": 5.4,
+        "costo_actual": null
+       }
+      ],
+      "sinProducto": 2,
+      "revisarFilas": 0,
+      "fueraDeLimite": 0,
+      "confirm_token": "eyJ2IjoxLCJwaWQiOiI4YWM0YjJiNS03ZjQ1LTRkZGQtYWE2Yy02MDRlMTRhNzg0MWUiLCJ0IjoiY29tcHJhIiwiaCI6IjIyOTk5ZmJiZmVkYzEyNjI5MmM1YzUzOTA1YzRkYjdlZGIzOWU2ODY0Zjc3ZGUzNmFlNjlhOWNlNjM4N2Y5ZjEiLCJkIjoiZWI2YWRiZDA4ZThlZTJjMDcwZGVhMmM1IiwiciI6Im93bmVyIiwiZXhwIjoxNzkyNzcwODE3ODk4LCJvcCI6IkFTVC05MjM5ODgxNzdjZDZiOWUyNjk3MGY2MDkiLCJuIjoiZmIzMGI4MGNhYTFkYjBkYjllZThmYzlkIn0.5Odp-LpajA5Y4HHIqMAlgJJ2MI1DPwrWtTkyDVmAz9Y"
+     }
+    }
+   ],
+   "dropped": [],
+   "timings": {
+    "ms_gates": 0,
+    "ms_model1": 9329,
+    "ms_db": 0,
+    "ms_total": 9351,
+    "provider": "ohmyagent",
+    "model": "gpt-6.1-sol",
+    "attempts": 1,
+    "fallback": false,
+    "db_stmts": 0
+   },
+   "texto_enviado": "me llego mercaderia de distribuidora el sol: 2 cajas de leche gloria tarro grande a 74.40 la caja, 1 caja de leche gloria tarro chico a 79.20, 20 arroz costeño 750 a 3.20, 20 azucar rubia cartavio a 3.30, 12 aceite primor a 9.80, 24 inca kola 500 a 1.90, 24 coca cola 500 a 1.85, 12 coca cola litro y… (500 car.)",
+   "history_enviado": 0,
+   "bytes_cuerpo": 2501,
+   "productos_en_contexto": 24,
+   "tool_calls": [
+    [
+     {
+      "name": "preparar_compra",
+      "arguments": {
+       "proveedor": "Distribuidora El Sol",
+       "documento": "",
+       "lineas": [
+        {
+         "product_id": "p06",
+         "nombre": "Leche Gloria Tarro Grande 395 g (caja 24)",
+         "cantidad": 48,
+         "costo_unitario": 3.1
+        },
+        {
+         "product_id": "p07",
+         "nombre": "Leche Gloria Tarro Chico 170 g (caja 48)",
+         "cantidad": 48,
+         "costo_unitario": 1.65
+        },
+        {
+         "product_id": "",
+         "nombre": "Arroz Costeño 750 g",
+         "cantidad": 20,
+         "costo_unitario": 3.2
+        },
+        {
+         "product_id": "p04",
+         "nombre": "Azúcar Rubia Cartavio 1 kg",
+         "cantidad": 20,
+         "costo_unitario": 3.3
+        },
+        {
+         "product_id": "p09",
+         "nombre": "Aceite Primor 1 L",
+         "cantidad": 12,
+         "costo_unitario": 9.8
+        },
+        {
+         "product_id": "p11",
+         "nombre": "Inca Kola 500 ml",
+         "cantidad": 24,
+         "costo_unitario": 1.9
+        },
+        {
+         "product_id": "p13",
+         "nombre": "Coca-Cola 500 ml",
+         "cantidad": 24,
+         "costo_unitario": 1.85
+        },
+        {
+         "product_id": "p14",
+         "nombre": "Coca-Cola 1.5 L",
+         "cantidad": 12,
+         "costo_unitario": 5.4
+        },
+        {
+         "product_id": "p17",
+         "nombre": "Galleta Soda Field x6",
+         "cantidad": 20,
+         "costo_unitario": 1.2
+        },
+        {
+         "product_id": "p19",
+         "nombre": "Galleta Oreo",
+         "cantidad": 24,
+         "costo_unitario": 0.8
+        },
+        {
+         "product_id": "p20",
+         "nombre": "Wafer Nik",
+         "cantidad": 72,
+         "costo_unitario": 0.45
+        },
+        {
+         "product_id": "p22",
+         "nombre": "Atún Florida 170 g",
+         "cantidad": 24,
+         "costo_unitario": 4.7
+        },
+        {
+         "product_id": "p24",
+         "nombre": "Cerveza Pilsen 630 ml",
+         "cantidad": 12,
+         "costo_unitario": 5.2
+        },
+        {
+         "product_id": "p26",
+         "nombre": "Caramelos Globopop",
+         "cantidad": 100,
+         "costo_unitario": 0.08
+        },
+        {
+         "product_id": "",
+         "nombre": "Fideo Don Vittorio",
+         "cantidad": 20,
+         "costo_unitario": 2.6
+        }
+       ]
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7429
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"p01\",\"nombre\":\"Arroz Costeño 750 g\",\"precio\":3.8,\"stock\":12,\"costo\":3.2},{\"id\":\"p02\",\"nombre\":\"ARROZ COSTEÑO 750G\",\"precio\":3.8,\"stock\":3,\"costo\":3.2},{\"id\":\"p03\",\"nombre\":\"Arroz Jairito 1 kg\",\"precio\":3.5,\"stock\":40,\"costo\":3.18},{\"id\":\"p04\",\"nombre\":\"Azúcar Rubia Cartavio 1 kg\",\"precio\":4,\"stock\":10,\"costo\":3.3},{\"id\":\"p05\",\"nombre\":\"Azúcar Blanca Paramonga 1 kg\",\"precio\":4.6,\"stock\":6,\"costo\":3.9},{\"id\":\"p06\",\"nombre\":\"Leche Gloria Tarro Grande 395 g (caja 24)\",\"precio\":4.2,\"stock\":30,\"costo\":3.1},{\"id\":\"p07\",\"nombre\":\"Leche Gloria Tarro Chico 170 g (caja 48)\",\"precio\":2.2,\"stock\":20,\"costo\":1.65},{\"id\":\"p08\",\"nombre\":\"Yogurt Gloria Fresa 1 L\",\"precio\":6.5,\"stock\":6,\"costo\":5.3},{\"id\":\"p09\",\"nombre\":\"Aceite Primor 1 L\",\"precio\":11.5,\"stock\":8,\"costo\":9.8},{\"id\":\"p10\",\"nombre\":\"Aceite Sao 900 ml\",\"precio\":9.9,\"stock\":0,\"costo\":8.2},{\"id\":\"p11\",\"nombre\":\"Inca Kola 500 ml\",\"precio\":2.5,\"stock\":24,\"costo\":1.9},{\"id\":\"p12\",\"nombre\":\"Inca Kola 1.5 L\",\"precio\":7,\"stock\":6,\"costo\":5.5},{\"id\":\"p13\",\"nombre\":\"Coca-Cola 500 ml\",\"precio\":2.5,\"stock\":18,\"costo\":1.85},{\"id\":\"p14\",\"nombre\":\"Coca-Cola 1.5 L\",\"precio\":7,\"stock\":4,\"costo\":5.4},{\"id\":\"p15\",\"nombre\":\"Coca-Cola lata 355 ml\",\"precio\":3,\"stock\":0,\"costo\":2.2},{\"id\":\"p17\",\"nombre\":\"Galleta Soda Field x6\",\"precio\":1.5,\"stock\":-2,\"costo\":1.2},{\"id\":\"p18\",\"nombre\":\"Galleta Casino Menta\",\"precio\":1,\"stock\":0,\"costo\":0.75},{\"id\":\"p19\",\"nombre\":\"Galleta Oreo\",\"precio\":1.2,\"stock\":15,\"costo\":0.8},{\"id\":\"p20\",\"nombre\":\"Wafer Nik\",\"precio\":0.6,\"stock\":3,\"costo\":0.45},{\"id\":\"p22\",\"nombre\":\"Atún Florida 170 g\",\"precio\":6,\"stock\":20,\"costo\":4.7},{\"id\":\"p23\",\"nombre\":\"Atún Real 170 g\",\"precio\":5.2,\"stock\":-3,\"costo\":4.1},{\"id\":\"p24\",\"nombre\":\"Cerveza Pilsen 630 ml\",\"precio\":7,\"stock\":24,\"costo\":5.2},{\"id\":\"p25\",\"nombre\":\"Cerveza Cristal lata 355 ml\",\"precio\":4.5,\"stock\":0,\"costo\":3.4},{\"id\":\"p26\",\"nombre\":\"Caramelos Globopop\",\"precio\":0.2,\"stock\":100,\"costo\":0.08}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>me llego mercaderia de distribuidora el sol: 2 cajas de leche gloria tarro grande a 74.40 la caja, 1 caja de leche gloria tarro chico a 79.20, 20 arroz costeño 750 a 3.20, 20 azucar rubia cartavio a 3.30, 12 aceite primor a 9.80, 24 inca kola 500 a 1.90, 24 coca cola 500 a 1.85, 12 coca cola litro y medio a 5.40, 20 galleta soda field a 1.20, 24 galleta oreo a 0.80, 72 wafer nik a 0.45, 24 atun florida a 4.70, 12 cerveza pilsen a 5.20, 100 caramelos globopop a 0.08 y 20 fideo don vittorio a 2.60</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_07db1ab40917e5c4006adb81d799908193bfb4df0cbea1058c\",\"object\":\"chat.completion\",\"created\":1792770527,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_F1umFxNdWsM5rR8BkegWfs0m\",\"type\":\"function\",\"function\":{\"name\":\"preparar_compra\",\"arguments\":\"{\\\"proveedor\\\":\\\"Distribuidora El Sol\\\",\\\"documento\\\":\\\"\\\",\\\"lineas\\\":[{\\\"product_id\\\":\\\"p06\\\",\\\"nombre\\\":\\\"Leche Gloria Tarro Grande 395 g (caja 24)\\\",\\\"cantidad\\\":48,\\\"costo_unitario\\\":3.1},{\\\"product_id\\\":\\\"p07\\\",\\\"nombre\\\":\\\"Leche Gloria Tarro Chico 170 g (caja 48)\\\",\\\"cantidad\\\":48,\\\"costo_unitario\\\":1.65},{\\\"product_id\\\":\\\"\\\",\\\"nombre\\\":\\\"Arroz Costeño 750 g\\\",\\\"cantidad\\\":20,\\\"costo_unitario\\\":3.2},{\\\"product_id\\\":\\\"p04\\\",\\\"nombre\\\":\\\"Azúcar Rubia Cartavio 1 kg\\\",\\\"cantidad\\\":20,\\\"costo_unitario\\\":3.3},{\\\"product_id\\\":\\\"p09\\\",\\\"nombre\\\":\\\"Aceite Primor 1 L\\\",\\\"cantidad\\\":12,\\\"costo_unitario\\\":9.8},{\\\"product_id\\\":\\\"p11\\\",\\\"nombre\\\":\\\"Inca Kola 500 ml\\\",\\\"cantidad\\\":24,\\\"costo_unitario\\\":1.9},{\\\"product_id\\\":\\\"p13\\\",\\\"nombre\\\":\\\"Coca-Cola 500 ml\\\",\\\"cantidad\\\":24,\\\"costo_unitario\\\":1.85},{\\\"product_id\\\":\\\"p14\\\",\\\"nombre\\\":\\\"Coca-Cola 1.5 L\\\",\\\"cantidad\\\":12,\\\"costo_unitario\\\":5.4},{\\\"product_id\\\":\\\"p17\\\",\\\"nombre\\\":\\\"Galleta Soda Field x6\\\",\\\"cantidad\\\":20,\\\"costo_unitario\\\":1.2},{\\\"product_id\\\":\\\"p19\\\",\\\"nombre\\\":\\\"Galleta Oreo\\\",\\\"cantidad\\\":24,\\\"costo_unitario\\\":0.8},{\\\"product_id\\\":\\\"p20\\\",\\\"nombre\\\":\\\"Wafer Nik\\\",\\\"cantidad\\\":72,\\\"costo_unitario\\\":0.45},{\\\"product_id\\\":\\\"p22\\\",\\\"nombre\\\":\\\"Atún Florida 170 g\\\",\\\"cantidad\\\":24,\\\"costo_unitario\\\":4.7},{\\\"product_id\\\":\\\"p24\\\",\\\"nombre\\\":\\\"Cerveza Pilsen 630 ml\\\",\\\"cantidad\\\":12,\\\"costo_unitario\\\":5.2},{\\\"product_id\\\":\\\"p26\\\",\\\"nombre\\\":\\\"Caramelos Globopop\\\",\\\"cantidad\\\":100,\\\"costo_unitario\\\":0.08},{\\\"product_id\\\":\\\"\\\",\\\"nombre\\\":\\\"Fideo Don Vittorio\\\",\\\"cantidad\\\":20,\\\"costo_unitario\\\":2.6}]}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4407,\"completion_tokens\":527,\"total_tokens\":4934}}"
+     }
+    }
+   ]
+  }
+ ]
+}

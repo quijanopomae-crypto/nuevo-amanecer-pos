@@ -1,0 +1,156 @@
+{
+ "id": "AJ-044",
+ "file": "ajustes-stock-masivos.csv",
+ "pregunta": "¿Qué productos llevo un mes sin vender?",
+ "rol": "owner",
+ "nota": null,
+ "corridas": [
+  {
+   "status": 200,
+   "ms": 14335,
+   "reply": "9 productos no tuvieron ventas 2026-10-01 a 2026-10-23 (de 40 revisados). Con más stock: producto #p39 (15), producto #p27 (12), producto #p35 (10).",
+   "error": null,
+   "message": null,
+   "proposals": [
+    {
+     "type": "consulta",
+     "consulta": {
+      "tipo": "productos_sin_ventas",
+      "producto": "",
+      "periodo": "este_mes",
+      "fecha": null,
+      "desde": "",
+      "hasta": ""
+     },
+     "raw": {
+      "id": "988de5c5-b300-4567-81de-7c70ce1cfbc1",
+      "type": "consulta",
+      "needsConfirm": false,
+      "query": {
+       "tipo": "productos_sin_ventas",
+       "producto": "",
+       "periodo": "este_mes",
+       "fecha": null,
+       "desde": "",
+       "hasta": ""
+      },
+      "result": {
+       "titulo": "Sin ventas 2026-10-01 a 2026-10-23",
+       "columnas": [
+        "Producto",
+        "Stock"
+       ],
+       "filas": [
+        [
+         "Sal Emsal 1 kg (producto #p39)",
+         15
+        ],
+        [
+         "Caramelos Halls Menta (producto #p27)",
+         12
+        ],
+        [
+         "Pilas Panasonic AA x2 (producto #p35)",
+         10
+        ],
+        [
+         "Gaseosa Guaraná 500 ml (producto #p37)",
+         9
+        ],
+        [
+         "Mantequilla Gloria 90 g (producto #p38)",
+         7
+        ],
+        [
+         "ARROZ COSTEÑO 750G (producto #p02)",
+         3
+        ],
+        [
+         "Pan francés (producto #p33)",
+         "sin control"
+        ],
+        [
+         "Recarga celular (producto #p34)",
+         "sin control"
+        ],
+        [
+         "Fósforos Llama (producto #p40)",
+         -1
+        ]
+       ],
+       "texto": "9 productos no tuvieron ventas 2026-10-01 a 2026-10-23 (de 40 revisados). Con más stock: producto #p39 (15), producto #p27 (12), producto #p35 (10).",
+       "total": 9
+      }
+     }
+    }
+   ],
+   "dropped": [],
+   "timings": {
+    "ms_gates": 1,
+    "ms_model1": 14312,
+    "ms_db": 13,
+    "ms_total": 14335,
+    "provider": "ohmyagent",
+    "model": "gpt-6.1-sol",
+    "attempts": 1,
+    "fallback": false,
+    "db_stmts": 0,
+    "second_call": false
+   },
+   "texto_enviado": "¿Qué productos llevo un mes sin vender?",
+   "history_enviado": 0,
+   "bytes_cuerpo": 2027,
+   "productos_en_contexto": 24,
+   "tool_calls": [
+    [
+     {
+      "name": "consultar",
+      "arguments": {
+       "tipo": "productos_sin_ventas",
+       "producto": "",
+       "periodo": "este_mes",
+       "fecha": "",
+       "desde": "",
+       "hasta": "",
+       "cliente_id": ""
+      }
+     }
+    ]
+   ],
+   "model_calls": [
+    {
+     "model": "gpt-6.1-sol",
+     "tools": [
+      "explicar_pasos",
+      "consultar",
+      "proponer_ajuste_stock",
+      "preparar_compra",
+      "leer_factura_compra",
+      "proponer_cambio_precio",
+      "proponer_producto_nuevo",
+      "preparar_documento",
+      "configurar_nivel"
+     ],
+     "messages": [
+      {
+       "role": "system",
+       "chars": 7429
+      },
+      {
+       "role": "user",
+       "content": "<datos_pos>{\"pantalla\":null,\"productos\":[{\"id\":\"p01\",\"nombre\":\"Arroz Costeño 750 g\",\"precio\":3.8,\"stock\":12,\"costo\":3.2},{\"id\":\"p02\",\"nombre\":\"ARROZ COSTEÑO 750G\",\"precio\":3.8,\"stock\":3,\"costo\":3.2},{\"id\":\"p03\",\"nombre\":\"Arroz Jairito 1 kg\",\"precio\":3.5,\"stock\":40,\"costo\":3.18},{\"id\":\"p04\",\"nombre\":\"Azúcar Rubia Cartavio 1 kg\",\"precio\":4,\"stock\":10,\"costo\":3.3},{\"id\":\"p05\",\"nombre\":\"Azúcar Blanca Paramonga 1 kg\",\"precio\":4.6,\"stock\":6,\"costo\":3.9},{\"id\":\"p06\",\"nombre\":\"Leche Gloria Tarro Grande 395 g (caja 24)\",\"precio\":4.2,\"stock\":30,\"costo\":3.1},{\"id\":\"p07\",\"nombre\":\"Leche Gloria Tarro Chico 170 g (caja 48)\",\"precio\":2.2,\"stock\":20,\"costo\":1.65},{\"id\":\"p08\",\"nombre\":\"Yogurt Gloria Fresa 1 L\",\"precio\":6.5,\"stock\":6,\"costo\":5.3},{\"id\":\"p09\",\"nombre\":\"Aceite Primor 1 L\",\"precio\":11.5,\"stock\":8,\"costo\":9.8},{\"id\":\"p10\",\"nombre\":\"Aceite Sao 900 ml\",\"precio\":9.9,\"stock\":0,\"costo\":8.2},{\"id\":\"p11\",\"nombre\":\"Inca Kola 500 ml\",\"precio\":2.5,\"stock\":24,\"costo\":1.9},{\"id\":\"p12\",\"nombre\":\"Inca Kola 1.5 L\",\"precio\":7,\"stock\":6,\"costo\":5.5},{\"id\":\"p13\",\"nombre\":\"Coca-Cola 500 ml\",\"precio\":2.5,\"stock\":18,\"costo\":1.85},{\"id\":\"p14\",\"nombre\":\"Coca-Cola 1.5 L\",\"precio\":7,\"stock\":4,\"costo\":5.4},{\"id\":\"p15\",\"nombre\":\"Coca-Cola lata 355 ml\",\"precio\":3,\"stock\":0,\"costo\":2.2},{\"id\":\"p16\",\"nombre\":\"Sprite 500 ml\",\"precio\":2.5,\"stock\":-1,\"costo\":1.8},{\"id\":\"p17\",\"nombre\":\"Galleta Soda Field x6\",\"precio\":1.5,\"stock\":-2,\"costo\":1.2},{\"id\":\"p18\",\"nombre\":\"Galleta Casino Menta\",\"precio\":1,\"stock\":0,\"costo\":0.75},{\"id\":\"p19\",\"nombre\":\"Galleta Oreo\",\"precio\":1.2,\"stock\":15,\"costo\":0.8},{\"id\":\"p20\",\"nombre\":\"Wafer Nik\",\"precio\":0.6,\"stock\":3,\"costo\":0.45},{\"id\":\"p21\",\"nombre\":\"Queso Fresco (por kg)\",\"precio\":18,\"stock\":4.5,\"costo\":14},{\"id\":\"p22\",\"nombre\":\"Atún Florida 170 g\",\"precio\":6,\"stock\":20,\"costo\":4.7},{\"id\":\"p23\",\"nombre\":\"Atún Real 170 g\",\"precio\":5.2,\"stock\":-3,\"costo\":4.1},{\"id\":\"p24\",\"nombre\":\"Cerveza Pilsen 630 ml\",\"precio\":7,\"stock\":24,\"costo\":5.2}]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+      },
+      {
+       "role": "user",
+       "content": "<dato_usuario>¿Qué productos llevo un mes sin vender?</dato_usuario>"
+      }
+     ],
+     "response": {
+      "status": 200,
+      "body": "{\"id\":\"resp_0751f16a42fa9f48006adb81c386008193bd24ee625ad390de\",\"object\":\"chat.completion\",\"created\":1792770511,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_w1zyyApIp4rIsQw9OZAwtQf7\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"productos_sin_ventas\\\",\\\"producto\\\":\\\"\\\",\\\"periodo\\\":\\\"este_mes\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":4209,\"completion_tokens\":41,\"total_tokens\":4250}}"
+     }
+    }
+   ]
+  }
+ ]
+}
