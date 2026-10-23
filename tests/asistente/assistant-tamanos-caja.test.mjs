@@ -9,6 +9,7 @@ import { assistantChatRoute, buildDeepSeekRequest, toolsForRole, toolAllowed, cr
 import { LEVELS_PATH } from '../../tools/cloudflare-lab/src/pos-assistant-levels-route.js';
 import { getDatabase } from '../../tools/cloudflare-lab/src/database-binding.js';
 import { canonicalReader } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { PERMISSIONS } from '../../tools/cloudflare-lab/src/pos-permissions.js';
 
 const T = await import('../../tools/cloudflare-lab/src/pos-assistant-tamanos.js').catch(() => ({}));
 const SECRET = 'secreto-de-prueba-0123456789abcdef';
@@ -22,8 +23,8 @@ function modelReturning({ name, args, content = '' }, seen = []) {
     return new Response(JSON.stringify({ choices: [{ message: msg }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200 });
   };
 }
-async function chat({ text, products, call = {}, role = 'owner', history = [], store = createMemoryUsageStore(), seen = [] }) {
-  const reader = { products: async () => products, productsById: async (ids) => new Map(products.filter((p) => ids.includes(String(p.id))).map((p) => [String(p.id), p])) };
+async function chat({ text, products, call = {}, role = 'owner', history = [], store = createMemoryUsageStore(), seen = [], purchases = [] }) {
+  const reader = { products: async () => products, productsById: async (ids) => new Map(products.filter((p) => ids.includes(String(p.id))).map((p) => [String(p.id), p])), purchases: async () => purchases };
   const body = JSON.stringify({ text, history, context: { products: products.map(({ id, nombre, stock, precio, costo, controla }) => ({ id, nombre, stock, precio, costo, controla })) } });
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body }),
     { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:dueno', posRole: role },
@@ -179,10 +180,104 @@ test('tarjeta tamano_caja: sin precio de caja (ni dicho ni en la ficha) no sale 
 // ---------- UNI-007 ----------
 test('UNI-007: un precio de la lista del proveedor sale marcado «precio del proveedor», no como precio de venta', async () => {
   const products = [P('u02', GLORIA, { precio: 2.4 })];
-  const r = await chat({ text: 'cuanto vale la caja de gloria chica en la lista', products, call: { content: 'La caja de Gloria chica en la lista está a S/ 99.50.' } });
+  // (revisión #999) «lista» sola NO es del proveedor: cuenta con «proveedor», «distribuidor», «mayorista» o el nombre de un proveedor conocido.
+  const r = await chat({ text: 'cuanto vale la caja de gloria chica en la lista del proveedor', products, call: { content: 'La caja de Gloria chica en la lista está a S/ 99.50.' } });
   assert.match(r.body.reply, /precio del proveedor/);
   assert.match(r.body.reply, /no (?:es )?tu precio de venta/);
   assert.match(r.seen[0].messages[0].content, /«precio del proveedor»/);
-  const ok = await chat({ text: 'cuanto vale la caja de gloria chica en la lista', products, call: { content: 'En la lista, precio del proveedor: S/ 99.50 la caja. Tú lo vendes a S/ 2.40 la lata.' } });
+  const ok = await chat({ text: 'cuanto vale la caja de gloria chica en la lista del proveedor', products, call: { content: 'En la lista, precio del proveedor: S/ 99.50 la caja. Tú lo vendes a S/ 2.40 la lata.' } });
   assert.equal((ok.body.reply.match(/precio del proveedor/g) || []).length, 1, 'no repite el aviso');
+});
+
+test('UNI-007 (revisión #999): «lista» con distribuidor, mayorista, un proveedor conocido o factura sigue marcada «precio del proveedor»', async () => {
+  const products = [P('u02', GLORIA, { precio: 2.4 })], call = { content: 'La caja de Gloria chica está a S/ 99.50.' };
+  const purchases = [{ supplier: 'DISTRIBUIDORA ALICORP S.A.A.', document_ref: 'F001-1', total_cost_cents: 1000, line_count: 1, status: 'confirmed', created_at: '2026-10-01T10:00:00.000Z' }];
+  for (const text of ['cuanto vale la caja de gloria chica en la lista del distribuidor', 'precio de la gloria chica en la lista del mayorista',
+    'cuanto vale la caja de gloria chica en la lista de alicorp', 'cuanto vale la caja de gloria chica en la factura']) {
+    const r = await chat({ text, products, call, purchases });
+    assert.match(r.body.reply, /precio del proveedor/, text);
+    assert.match(r.seen[0].messages[0].content, /«precio del proveedor»/, text);
+  }
+});
+test('UNI-007 (revisión #999): mi «lista de precios» es MI precio de venta: sin aviso de proveedor ni regla en el pedido', async () => {
+  const products = [P('u09', 'ARROZ COSTEÑO 750 GR', { precio: 3.5 })];
+  const purchases = [{ supplier: 'COMERCIAL COSTA S.A.C.', document_ref: 'F001-2', total_cost_cents: 1000, line_count: 1, status: 'confirmed', created_at: '2026-10-01T10:00:00.000Z' }];
+  for (const text of ['a cuánto está el arroz costeño en mi lista de precios', 'pásame el precio del arroz costeño para la lista']) {
+    const r = await chat({ text, products, purchases, call: { content: 'lo vendes a S/ 3.50.' } });
+    assert.equal(r.status, 200);
+    assert.doesNotMatch(r.body.reply, /proveedor/, text);
+    assert.equal(r.body.reply, 'lo vendes a S/ 3.50.', text);
+    assert.doesNotMatch(r.seen[0].messages[0].content, /PRECIO DE LISTA O FACTURA/, text);
+  }
+});
+
+// ---------- UNI-033 (revisión #999): el tamaño dicho tiene que ser de la caja, no cualquier «tiene 10» ----------
+const ajusteCall = (cantidad) => ({ name: 'proponer_ajuste_stock', args: { product_id: 'u05', tipo: 'entrada', cantidad, motivo: 'Ajuste de inventario' }, content: 'Listo. Revisa y pulsa Confirmar.' });
+const ASK = (n) => '¿Cuántas unidades trae la caja de ' + n + '? Según el nombre serían 72 (provisional, según el nombre); no lo uso para el stock hasta que me lo confirmes.';
+test('UNI-033 (revisión #999): «tengo 1 caja y la vitrina tiene 10» sigue retenida (el «tiene 10» no es de la caja)', async () => {
+  const r = await chat({ text: 'pon el stock de wafer nik en 82, tengo 1 caja y la vitrina tiene 10', products: [P('u05', WAFER)], call: ajusteCall(32) });
+  assert.equal(r.body.proposals.filter((p) => p.type === 'ajuste').length, 0);
+  assert.ok(r.body.dropped.some((d) => d.reason === 'tamano_sin_confirmar'), JSON.stringify(r.body.dropped));
+  assert.match(r.body.reply, /¿Cuántas unidades trae la caja de WAFER NIK CHICO 12PQT X 6UND\?/);
+  for (const text of ['tengo 1 caja de wafer nik, viene de 24', 'tengo 2 cajas de wafer nik, cajas de 12', 'tengo 1 caja de wafer nik que trae 30, ponlo en 40', 'tengo 1 caja, 12 unidades por caja']) {
+    const ok = await chat({ text, products: [P('u05', WAFER)], call: ajusteCall(10) });
+    assert.equal(ok.body.proposals.filter((p) => p.type === 'ajuste').length, 1, text + ' ' + JSON.stringify(ok.body.dropped));
+  }
+});
+test('UNI-033 (revisión #999): a «¿Cuántas unidades trae la caja…?» contestar «son 2 cajas» sigue retenido; «12 unidades» sí vale', async () => {
+  const history = [{ role: 'user', content: 'pon el stock de wafer nik, tengo 1 caja' }, { role: 'assistant', content: ASK(WAFER) }];
+  const held = await chat({ text: 'son 2 cajas', products: [P('u05', WAFER)], history, call: ajusteCall(144) });
+  assert.equal(held.body.proposals.filter((p) => p.type === 'ajuste').length, 0);
+  assert.ok(held.body.dropped.some((d) => d.reason === 'tamano_sin_confirmar'), JSON.stringify(held.body.dropped));
+  for (const text of ['12 unidades', '12', 'trae 12', 'son 2 cajas, 12 unidades cada una', 'son 2 cajas, trae 12']) {
+    const ok = await chat({ text, products: [P('u05', WAFER)], history, call: ajusteCall(24) });
+    assert.equal(ok.body.proposals.filter((p) => p.type === 'ajuste').length, 1, text + ' ' + JSON.stringify(ok.body.dropped));
+    assert.doesNotMatch(ok.body.reply, /¿Cuántas unidades trae/, text);
+  }
+});
+
+// ---------- tarjeta tamano_caja: la ficha cambió desde que se armó (revisión #999) ----------
+test('tarjeta tamano_caja: si el precio de caja cambió desde la tarjeta -> 409 stock_changed con tarjeta nueva firmada; la vieja no aplica nada; la nueva 200', async (t) => {
+  const { f, call } = await setup(t);
+  const prod = f.sql("SELECT product_id,name,price_cents,units_per_box,box_price_cents FROM products WHERE promotion_id=(SELECT active_promotion_id FROM canonical_control WHERE id=1) LIMIT 1");
+  const real = globalThis.fetch; t.after(() => { globalThis.fetch = real; });
+  const ctx = { products: [{ id: prod.product_id, nombre: prod.name, stock: 5, precio: prod.price_cents / 100 }] };
+  const cardFor = async (unidades, precio) => {
+    globalThis.fetch = modelReturning({ name: 'guardar_tamano_caja', args: { product_id: prod.product_id, unidades, precio_caja: precio } });
+    const c = await call('tok-dueno', '/auth/assistant/chat', { text: 'la caja de ' + prod.name + ' trae ' + unidades + ', a ' + precio + ' la caja, guárdalo', context: ctx });
+    assert.equal(c.status, 200, JSON.stringify(c.body)); const card = c.body.proposals.find((p) => p.type === 'tamano_caja'); assert.ok(card, JSON.stringify(c.body.dropped)); return card;
+  };
+  const confirm = async (p) => { const { confirm_token, ...proposal } = p; return call('tok-dueno', '/auth/assistant/confirm', { token: confirm_token, proposal }); };
+  const revs = () => f.sql('SELECT COUNT(*) n FROM canonical_product_revisions WHERE product_id=?', prod.product_id).n;
+  const vieja = await cardFor(24, 55.5);
+  assert.equal(vieja.precio_caja_antes, prod.box_price_cents == null ? null : prod.box_price_cents / 100, 'la tarjeta firma el precio de caja que vio');
+  const otra = await cardFor(24, 40); // otro cambio de la ficha (mismo tamaño, otro precio de caja) aplicado antes
+  assert.equal((await confirm(otra)).status, 200);
+  assert.equal(revs(), 1);
+  const r = await confirm(vieja);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'stock_changed');
+  assert.ok(r.body.operation_id);
+  assert.match(r.body.message, /cambió/);
+  assert.match(r.body.message, /40\.00/);
+  const n = r.body.proposal; assert.ok(n && n.confirm_token, 'trae tarjeta nueva firmada');
+  assert.equal(n.type, 'tamano_caja'); assert.notEqual(n.id, vieja.id);
+  assert.deepEqual([n.unidades, n.precio_caja, n.unidades_antes, n.precio_caja_antes], [24, 55.5, 24, 40]);
+  assert.equal(revs(), 1, 'la tarjeta vieja no escribió nada');
+  assert.equal((await confirm(vieja)).status, 409, 'la vieja sigue sin aplicar');
+  assert.equal(revs(), 1);
+  const ok = await confirm(n);
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const rev = f.sql('SELECT units_per_box,box_price_cents FROM canonical_product_revisions WHERE product_id=? ORDER BY revision DESC LIMIT 1', prod.product_id);
+  assert.deepEqual({ ...rev }, { units_per_box: 24, box_price_cents: 5550 });
+  assert.equal(revs(), 2);
+});
+
+// ---------- tabla única de permisos (revisión #999) ----------
+test('pos-permissions: assistant.pack.set está en la tabla y es solo del Admin', () => {
+  assert.ok(Object.prototype.hasOwnProperty.call(PERMISSIONS.ACTIONS, 'assistant.pack.set'), 'falta en POS/js/config/pos-permissions.js');
+  assert.deepEqual([...PERMISSIONS.ACTIONS['assistant.pack.set']], ['owner']);
+  assert.equal(PERMISSIONS.canDo('owner', 'assistant.pack.set'), true);
+  assert.equal(PERMISSIONS.canDo('empleado', 'assistant.pack.set'), false);
+  assert.equal(PERMISSIONS.canDo('unknown', 'assistant.pack.set'), false);
 });
