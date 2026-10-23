@@ -171,14 +171,14 @@ export function scrubClientNames(value, customers) {
   return out + s.slice(at);
 }
 const capName = (x) => x.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-// customers: la lista (null = no se pudo leer). Devuelve null (nada que hacer) o { kind: 'uno'|'cual'|'nadie'|'sin_lista', ... }.
+// customers: la lista (null = no se pudo leer). Devuelve null (nada que hacer) o { kind: 'uno'|'cual'|'nadie'|'quien'|'sin_lista', ... }.
 // strict (sin «fiado/deuda» en el mensaje): solo cuentan las personas con señal clara (nombre de la lista, «doña …», junto al verbo);
 // una palabra con mayúscula sola («en Octubre», «Plaza Vea») no convierte la pregunta en cobros de alguien.
 export function resolvePayerNames(text, customers, { strict = false } = {}) {
   const s = String(text ?? ''), toks = personTokens(s);
   const paySent = new Set(toks.filter((t) => PAYER_VERBS.has(t.f)).map((t) => t.sent));
   if (!paySent.size) return null;
-  const ck = Array.isArray(customers) ? personKeys(customers) : [], ments = [];
+  const ck = Array.isArray(customers) ? personKeys(customers) : [], ments = []; let pron = false;
   const isVerb = (j) => !!toks[j] && PAYER_VERBS.has(toks[j].f);
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i]; if (!paySent.has(t.sent)) continue;
@@ -187,17 +187,20 @@ export function resolvePayerNames(text, customers, { strict = false } = {}) {
     const start = hon ? toks[i - 1].s : t.s;
     const { len, hits } = personAt(toks, i, ck);
     if (len) { ments.push({ s: start, e: toks[i + len - 1].e, hits }); i += len - 1; continue; }
-    if (payerStop(t.f) || PAYER_TIME.has(t.f) || t.f.length < 2) continue;
+    const isPron = t.f === 'ella' || t.w.toLowerCase() === 'él';
+    if (!isPron && (payerStop(t.f) || PAYER_TIME.has(t.f) || t.f.length < 2)) continue;
     let pv = i - 1; while (pv > i - 5 && same(pv) && !isVerb(pv) && (PAYER_STOP.has(toks[pv].f) || PAYER_TIME.has(toks[pv].f) || PAYER_GLUE.has(toks[pv].f) || PAYER_GAP.has(toks[pv].f))) pv--;
     const prevVerb = same(pv) && isVerb(pv);
     let n = i + 1; while (same(n) && PAYER_GLUE.has(toks[n].f) && n < i + 3) n++;
     const nextVerb = same(n) && isVerb(n);
+    // (decisión del lead) «me pagó ella / él»: no es un nombre; si no hay otro cliente en el mensaje se pregunta de qué cliente (kind 'quien').
+    if (isPron) { if (prevVerb || nextVerb) pron = true; continue; }
     const afterAnd = same(i - 1) && ['y', 'e'].includes(toks[i - 1].f) && ments.length && ments.at(-1).e <= toks[i - 1].s;
     if (!(hon || prevVerb || nextVerb || afterAnd || (!strict && /^\p{Lu}/u.test(t.w)))) continue;
     let j = i; while (j + 1 < i + 3 && same(j + 1) && /^\p{Lu}/u.test(toks[j + 1].w) && !payerStop(toks[j + 1].f)) j++;
     ments.push({ s: start, e: toks[j].e, hits: [], name: capName(s.slice(t.s, toks[j].e)) }); i = j;
   }
-  if (!ments.length) return null;
+  if (!ments.length) return pron ? { kind: 'quien', masked: s } : null;
   const masked = ments.reduceRight((x, m) => x.slice(0, m.s) + NAME_MASK + x.slice(m.e), s);
   if (!Array.isArray(customers)) return { kind: 'sin_lista', masked };
   const missing = [...new Set(ments.filter((m) => !m.hits.length).map((m) => m.name))];
@@ -3503,10 +3506,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     if (payer?.kind === 'uno') parsed.text = payer.text;
     turnText = payer?.masked ?? (scrub ? scrub(parsed.text) : null);
   }
-  const localPayer = payer && (payer.kind === 'cual' || payer.kind === 'nadie');
+  const localPayer = payer && (payer.kind === 'cual' || payer.kind === 'nadie' || payer.kind === 'quien');
   if (localPayer) {
     // Sin IA: la respuesta (y el historial) con códigos o [nombre oculto]; los nombres solo en lo que se ve (shown).
-    result = { content: payer.kind === 'cual' ? '¿De cuál cliente quiere los cobros: ' + payer.options.map((o) => 'cliente #' + o.cliente_id).join(' o ') + '? Pregunte por uno a la vez.'
+    result = { content: payer.kind === 'quien' ? '¿De qué cliente? Escríbame su nombre.' : payer.kind === 'cual' ? '¿De cuál cliente quiere los cobros: ' + payer.options.map((o) => 'cliente #' + o.cliente_id).join(' o ') + '? Pregunte por uno a la vez.'
       : 'No encontré a un cliente llamado ' + NAME_MASK + '. Revise el nombre en Clientes o dígame su código («cliente #código»).', calls: [] };
   } else if (mode === 'mock') {
     result = mockAssistantReply({ role, ctx, text: parsed.text, image: !!parsed.image });
