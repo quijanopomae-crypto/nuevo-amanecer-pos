@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 198: #966 permiso de alertas bajo costo, #967 configuración de negocio/ticket vía configurar_app y #978 lado teléfono (RUC escrito en el teléfono), merge 065a8311. Backend Worker 76 run 39975163353 success y salud verificada. Respaldo DB run 39974966971. CI crítico success en cada PR; E2E y visual success en #978. Sin migraciones ni datos comerciales. Rollback web a 172cd9a5 (Web 197, ops #977).",
-  "retry_attempt": 198,
-  "retry_reason": "Owner autorizó 2026-10-22: aprobado publiquen todo lo ya terminaron. Rollback a 172cd9a5.",
-  "requested_at_utc": "2026-10-23T15:06:01Z",
-  "approved_base": "87cc23e7c4b4b47689d62fb74478654ca1777ec5"
+  "note": "Web 200: #1007 kárdex en cola, #1008 stock negativo (candado cerrado), #1010 kg/presentaciones (candado cerrado), merge 5d247f92. Solo web, sin cambio de Worker (Worker 77 sigue). Respaldo D1 run 40007559977. Rollback Web 199 (dc65a195).",
+  "retry_attempt": 200,
+  "retry_reason": "OK del dueño 2026-10-23: 'Publica las 5 mejoras y los 7 cambios del asistente, con respaldo antes'.",
+  "requested_at_utc": "2026-10-23T19:40:00Z",
+  "approved_base": "5d247f92446469c72e958fb38d1c4679a0111f26"
 }
