@@ -1,0 +1,245 @@
+{
+ "id": "CAJ-030",
+ "file": "caja.csv",
+ "role": "owner",
+ "pregunta": "cuanto gane hoy despues de pagar todo",
+ "texto_enviado_por_el_aparato": "cuanto gane hoy despues de pagar todo",
+ "status": 200,
+ "ms": 4294,
+ "provider": "ohmyagent",
+ "model": "gpt-6.1-sol",
+ "reply": "Ganancia 2026-10-23: S/ 34.88 (ventas S/ 216.90 menos costo S/ 182.02, margen 16.1 %). Lo que más ganancia dejó: producto #p4 (S/ 9.00).",
+ "error": null,
+ "message": null,
+ "proposals": [
+  {
+   "id": "f7c6ac12-232a-47de-9290-cb150233f4ce",
+   "type": "consulta",
+   "needsConfirm": false,
+   "query": {
+    "tipo": "ganancia",
+    "producto": "",
+    "periodo": "hoy",
+    "fecha": null,
+    "desde": "",
+    "hasta": ""
+   },
+   "result": {
+    "titulo": "Ganancia 2026-10-23",
+    "columnas": [
+     "Detalle",
+     "S/"
+    ],
+    "filas": [
+     [
+      "Ventas S/",
+      216.9
+     ],
+     [
+      "Costo de lo vendido S/ (costo actual)",
+      182.02
+     ],
+     [
+      "Ganancia S/",
+      34.88
+     ],
+     [
+      "Margen %",
+      16.1
+     ],
+     [
+      "Top 1 ganancia: Coca-Cola 500 ml (producto #p4), 12 unid.",
+      9
+     ],
+     [
+      "Top 2 ganancia: Leche Gloria Azul 400 g (producto #p2), 12 unid.",
+      8.4
+     ],
+     [
+      "Top 3 ganancia: Aceite Primor 1 L (producto #p3), 4 unid.",
+      6.8
+     ],
+     [
+      "Top 4 ganancia: Arroz Jairito 1 kg (producto #p1), 19 unid.",
+      6.08
+     ],
+     [
+      "Top 5 ganancia: Azúcar Rubia 1 kg (producto #p6), 5 unid.",
+      3
+     ]
+    ],
+    "texto": "Ganancia 2026-10-23: S/ 34.88 (ventas S/ 216.90 menos costo S/ 182.02, margen 16.1 %). Lo que más ganancia dejó: producto #p4 (S/ 9.00).",
+    "total": null
+   }
+  }
+ ],
+ "dropped": [],
+ "timings": {
+  "ms_gates": 0,
+  "ms_model1": 4292,
+  "ms_db": 1,
+  "ms_total": 4294,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "attempts": 1,
+  "fallback": false,
+  "db_stmts": 0,
+  "second_call": false
+ },
+ "lessons": [],
+ "nombres_en_lo_enviado_al_modelo": [],
+ "dni_tel_en_respuesta": false,
+ "model_calls": [
+  {
+   "model": "gpt-6.1-sol",
+   "tools": [
+    "explicar_pasos",
+    "consultar",
+    "proponer_ajuste_stock",
+    "preparar_compra",
+    "leer_factura_compra",
+    "proponer_cambio_precio",
+    "proponer_producto_nuevo",
+    "preparar_documento",
+    "configurar_nivel"
+   ],
+   "messages": [
+    {
+     "role": "system",
+     "chars": 7429
+    },
+    {
+     "role": "user",
+     "content": "<datos_pos>{\"pantalla\":null,\"productos\":[]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+    },
+    {
+     "role": "user",
+     "content": "<dato_usuario>cuanto gane hoy despues de pagar todo</dato_usuario>"
+    }
+   ],
+   "response": {
+    "status": 200,
+    "body": "{\"id\":\"resp_0e83ae3f9eab9ae9006adb7eea34dc8190a08340d0ec805e2e\",\"object\":\"chat.completion\",\"created\":1792769772,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_S2M66qnsouZePzv9G2azCzlg\",\"type\":\"function\",\"function\":{\"name\":\"consultar\",\"arguments\":\"{\\\"tipo\\\":\\\"ganancia\\\",\\\"producto\\\":\\\"\\\",\\\"periodo\\\":\\\"hoy\\\",\\\"fecha\\\":\\\"\\\",\\\"desde\\\":\\\"\\\",\\\"hasta\\\":\\\"\\\",\\\"cliente_id\\\":\\\"\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":3438,\"completion_tokens\":38,\"total_tokens\":3476}}"
+   }
+  }
+ ],
+ "body": {
+  "ok": true,
+  "mode": "ohmyagent",
+  "role": "owner",
+  "server_now": 1792769768476,
+  "reply": "Ganancia 2026-10-23: S/ 34.88 (ventas S/ 216.90 menos costo S/ 182.02, margen 16.1 %). Lo que más ganancia dejó: producto #p4 (S/ 9.00).",
+  "cut": false,
+  "turns": [
+   {
+    "role": "user",
+    "content": "cuanto gane hoy despues de pagar todo",
+    "sig": "_G9HXJ49rXcPqERjjLGt2oJQ6kyHY0DoxEuaNwC7lvs",
+    "n": 0,
+    "iat": 1792769768476
+   },
+   {
+    "role": "assistant",
+    "content": "Ganancia 2026-10-23: S/ 34.88 (ventas S/ 216.90 menos costo S/ 182.02, margen 16.1 %). Lo que más ganancia dejó: producto #p4 (S/ 9.00).",
+    "sig": "_G9HXJ49rXcPqERjjLGt2oJQ6kyHY0DoxEuaNwC7lvs",
+    "n": 0,
+    "iat": 1792769768476
+   }
+  ],
+  "invoice_memory": null,
+  "proposals": [
+   {
+    "id": "f7c6ac12-232a-47de-9290-cb150233f4ce",
+    "type": "consulta",
+    "needsConfirm": false,
+    "query": {
+     "tipo": "ganancia",
+     "producto": "",
+     "periodo": "hoy",
+     "fecha": null,
+     "desde": "",
+     "hasta": ""
+    },
+    "result": {
+     "titulo": "Ganancia 2026-10-23",
+     "columnas": [
+      "Detalle",
+      "S/"
+     ],
+     "filas": [
+      [
+       "Ventas S/",
+       216.9
+      ],
+      [
+       "Costo de lo vendido S/ (costo actual)",
+       182.02
+      ],
+      [
+       "Ganancia S/",
+       34.88
+      ],
+      [
+       "Margen %",
+       16.1
+      ],
+      [
+       "Top 1 ganancia: Coca-Cola 500 ml (producto #p4), 12 unid.",
+       9
+      ],
+      [
+       "Top 2 ganancia: Leche Gloria Azul 400 g (producto #p2), 12 unid.",
+       8.4
+      ],
+      [
+       "Top 3 ganancia: Aceite Primor 1 L (producto #p3), 4 unid.",
+       6.8
+      ],
+      [
+       "Top 4 ganancia: Arroz Jairito 1 kg (producto #p1), 19 unid.",
+       6.08
+      ],
+      [
+       "Top 5 ganancia: Azúcar Rubia 1 kg (producto #p6), 5 unid.",
+       3
+      ]
+     ],
+     "texto": "Ganancia 2026-10-23: S/ 34.88 (ventas S/ 216.90 menos costo S/ 182.02, margen 16.1 %). Lo que más ganancia dejó: producto #p4 (S/ 9.00).",
+     "total": null
+    }
+   }
+  ],
+  "denied": [],
+  "dropped": [],
+  "left": {
+   "hoy": 149,
+   "fotosHoy": 30
+  },
+  "memoria": {
+   "max_turnos": 40,
+   "max_bytes": 48000,
+   "recortados": 0,
+   "resumen_necesario": false,
+   "resumen_usado": false
+  },
+  "payload_bytes": [
+   15276
+  ],
+  "timings": {
+   "ms_gates": 0,
+   "ms_model1": 4292,
+   "ms_db": 1,
+   "ms_total": 4294,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0,
+   "second_call": false
+  },
+  "usage": {
+   "prompt_tokens": 3438,
+   "completion_tokens": 38
+  }
+ }
+}

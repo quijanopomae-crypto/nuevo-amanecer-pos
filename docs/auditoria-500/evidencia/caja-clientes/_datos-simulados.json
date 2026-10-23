@@ -1,0 +1,208 @@
+{
+ "FACTS": {
+  "opening": 10000,
+  "cashC": 13610,
+  "yapeC": 3300,
+  "plinC": 1680,
+  "credC": 3100,
+  "expected": 26910,
+  "gastos": 1200,
+  "ingresos": 5000,
+  "egresos": 2000,
+  "cobro_efectivo": 1500,
+  "cobro_yape": 900
+ },
+ "CASH_OPEN": {
+  "ready": true,
+  "open": {
+   "opened_at": "2026-10-23T13:05:00.000Z",
+   "opening_cents": 10000,
+   "expected_cents": 26910
+  },
+  "rows": [
+   {
+    "k": "venta",
+    "metodo": "",
+    "signo": "",
+    "n": 7,
+    "a": 13610,
+    "b": 0,
+    "c": 3100
+   },
+   {
+    "k": "venta",
+    "metodo": "yape",
+    "signo": "",
+    "n": 2,
+    "a": 0,
+    "b": 3300,
+    "c": 0
+   },
+   {
+    "k": "venta",
+    "metodo": "plin",
+    "signo": "",
+    "n": 1,
+    "a": 0,
+    "b": 1680,
+    "c": 0
+   },
+   {
+    "k": "payment",
+    "metodo": "efectivo",
+    "signo": "+",
+    "n": 1,
+    "a": 1500,
+    "b": -1500,
+    "c": 0
+   },
+   {
+    "k": "payment",
+    "metodo": "yape",
+    "signo": "+",
+    "n": 1,
+    "a": 0,
+    "b": -900,
+    "c": 0
+   },
+   {
+    "k": "adjustment",
+    "metodo": "",
+    "signo": "+",
+    "n": 1,
+    "a": 5000,
+    "b": 0,
+    "c": 0
+   },
+   {
+    "k": "adjustment",
+    "metodo": "",
+    "signo": "-",
+    "n": 1,
+    "a": -2000,
+    "b": 0,
+    "c": 0
+   },
+   {
+    "k": "gasto",
+    "metodo": "efectivo",
+    "signo": "",
+    "n": 1,
+    "a": -1200,
+    "b": 1200,
+    "c": 0
+   }
+  ],
+  "lastClosedAt": "2026-10-23T03:10:00.000Z"
+ },
+ "CASH_CLOSED": {
+  "ready": true,
+  "open": null,
+  "lastClosedAt": "2026-10-23T15:10:00.000Z"
+ },
+ "CREDITS": [
+  {
+   "cliente": "1",
+   "saldo": 85.5,
+   "vence": "2026-10-10",
+   "original": 120
+  },
+  {
+   "cliente": "1",
+   "saldo": 20,
+   "vence": "2026-11-05"
+  },
+  {
+   "cliente": "2",
+   "saldo": 42,
+   "vence": "2026-10-30"
+  },
+  {
+   "cliente": "3",
+   "saldo": 150,
+   "vence": "2026-09-15"
+  },
+  {
+   "cliente": "4",
+   "saldo": 33.2,
+   "vence": "2026-10-20"
+  },
+  {
+   "cliente": "5",
+   "saldo": 12,
+   "vence": "2026-10-25"
+  },
+  {
+   "cliente": "12",
+   "saldo": 64.9,
+   "vence": "2026-08-31"
+  },
+  {
+   "cliente": "13",
+   "saldo": 18,
+   "vence": "2026-10-01"
+  },
+  {
+   "cliente": "SIN-DOC-MISAEL",
+   "saldo": 41.25,
+   "vence": "2026-10-18"
+  }
+ ],
+ "PRODUCTS": [
+  {
+   "id": "p1",
+   "nombre": "Arroz Jairito 1 kg",
+   "controla": true,
+   "stock": 40,
+   "min": 10,
+   "precio": 3.5,
+   "costo": 3.18
+  },
+  {
+   "id": "p2",
+   "nombre": "Leche Gloria Azul 400 g",
+   "controla": true,
+   "stock": 30,
+   "min": 6,
+   "precio": 4.2,
+   "costo": 3.5
+  },
+  {
+   "id": "p3",
+   "nombre": "Aceite Primor 1 L",
+   "controla": true,
+   "stock": 8,
+   "min": 3,
+   "precio": 11.5,
+   "costo": 9.8
+  },
+  {
+   "id": "p4",
+   "nombre": "Coca-Cola 500 ml",
+   "controla": true,
+   "stock": 48,
+   "min": 12,
+   "precio": 2.5,
+   "costo": 1.75
+  },
+  {
+   "id": "p5",
+   "nombre": "Pan francés",
+   "controla": false,
+   "stock": 0,
+   "min": 0,
+   "precio": 0.2,
+   "costo": 0.12
+  },
+  {
+   "id": "p6",
+   "nombre": "Azúcar Rubia 1 kg",
+   "controla": true,
+   "stock": 20,
+   "min": 5,
+   "precio": 4,
+   "costo": 3.4
+  }
+ ],
+ "sales": 39
+}

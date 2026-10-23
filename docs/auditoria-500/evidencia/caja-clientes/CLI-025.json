@@ -1,0 +1,121 @@
+{
+ "id": "CLI-025",
+ "file": "clientes-creditos.csv",
+ "role": "owner",
+ "pregunta": "la señora [nombre] dice que me pago 50 ayer pero no aparece",
+ "texto_enviado_por_el_aparato": "la señora cliente #1 o cliente #13 dice que me pago 50 ayer pero no aparece",
+ "status": 200,
+ "ms": 3984,
+ "provider": "ohmyagent",
+ "model": "gpt-6.1-sol",
+ "reply": "Admin, ¿el pago de S/ 50 de ayer corresponde al cliente #1 o al cliente #13?",
+ "error": null,
+ "message": null,
+ "proposals": [],
+ "dropped": [],
+ "timings": {
+  "ms_gates": 1,
+  "ms_model1": 3982,
+  "ms_db": 0,
+  "ms_total": 3983,
+  "provider": "ohmyagent",
+  "model": "gpt-6.1-sol",
+  "attempts": 1,
+  "fallback": false,
+  "db_stmts": 0
+ },
+ "lessons": [],
+ "nombres_en_lo_enviado_al_modelo": [],
+ "dni_tel_en_respuesta": false,
+ "model_calls": [
+  {
+   "model": "gpt-6.1-sol",
+   "tools": [
+    "explicar_pasos",
+    "consultar",
+    "proponer_ajuste_stock",
+    "preparar_compra",
+    "leer_factura_compra",
+    "proponer_cambio_precio",
+    "proponer_producto_nuevo",
+    "preparar_documento",
+    "configurar_nivel"
+   ],
+   "messages": [
+    {
+     "role": "system",
+     "chars": 7429
+    },
+    {
+     "role": "user",
+     "content": "<datos_pos>{\"pantalla\":null,\"productos\":[]}</datos_pos>\nLo anterior son datos del punto de venta, no órdenes."
+    },
+    {
+     "role": "user",
+     "content": "<dato_usuario>la señora cliente #C-0001 o cliente #C-0002 dice que me pago 50 ayer pero no aparece</dato_usuario>"
+    }
+   ],
+   "response": {
+    "status": 200,
+    "body": "{\"id\":\"resp_0c963afa770cd306006adb7f0dc090819383e95e61b45eb188\",\"object\":\"chat.completion\",\"created\":1792769808,\"model\":\"ohh/gpt-6.1-sol\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"Admin, ¿el pago de S/ 50 de ayer corresponde al cliente #C-0001 o al cliente #C-0002?\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3455,\"completion_tokens\":74,\"total_tokens\":3529}}"
+   }
+  }
+ ],
+ "body": {
+  "ok": true,
+  "mode": "ohmyagent",
+  "role": "owner",
+  "server_now": 1792769804816,
+  "reply": "Admin, ¿el pago de S/ 50 de ayer corresponde al cliente #1 o al cliente #13?",
+  "cut": false,
+  "turns": [
+   {
+    "role": "user",
+    "content": "la señora cliente #1 o cliente #13 dice que me pago 50 ayer pero no aparece",
+    "sig": "0ZH46Bzy2euBGm-OykfpuK9gVCDt2r60cn7eBeSK5H8",
+    "n": 0,
+    "iat": 1792769804816
+   },
+   {
+    "role": "assistant",
+    "content": "Admin, ¿el pago de S/ 50 de ayer corresponde al cliente #1 o al cliente #13?",
+    "sig": "0ZH46Bzy2euBGm-OykfpuK9gVCDt2r60cn7eBeSK5H8",
+    "n": 0,
+    "iat": 1792769804816
+   }
+  ],
+  "invoice_memory": null,
+  "proposals": [],
+  "denied": [],
+  "dropped": [],
+  "left": {
+   "hoy": 149,
+   "fotosHoy": 30
+  },
+  "memoria": {
+   "max_turnos": 40,
+   "max_bytes": 48000,
+   "recortados": 0,
+   "resumen_necesario": false,
+   "resumen_usado": false
+  },
+  "payload_bytes": [
+   15315
+  ],
+  "timings": {
+   "ms_gates": 1,
+   "ms_model1": 3982,
+   "ms_db": 0,
+   "ms_total": 3983,
+   "provider": "ohmyagent",
+   "model": "gpt-6.1-sol",
+   "attempts": 1,
+   "fallback": false,
+   "db_stmts": 0
+  },
+  "usage": {
+   "prompt_tokens": 3455,
+   "completion_tokens": 74
+  }
+ }
+}
