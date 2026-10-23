@@ -22,6 +22,9 @@ const call = (name, args, id = 'call_1') => ({ id, type: 'function', function: {
 const msg = (m, fin) => json({ choices: [{ message: m, ...(fin ? { finish_reason: fin } : {}) }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
 const enc = new TextEncoder();
 const sseResp = (chunks) => new Response(new ReadableStream({ start(c) { for (const x of chunks) c.enqueue(enc.encode(x)); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+const sseMsg = (m) => sseResp([...(m.content ? ['data: ' + JSON.stringify({ choices: [{ delta: { content: m.content } }] }) + '\n\n'] : []),
+  ...(m.tool_calls || []).map((c, index) => 'data: ' + JSON.stringify({ choices: [{ delta: { tool_calls: [{ index, ...c }] } }] }) + '\n\n'),
+  'data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: m.tool_calls ? 'tool_calls' : 'stop' }] }) + '\n\n', 'data: [DONE]\n\n']);
 const sseEvents = (text) => text.split('\n\n').filter(Boolean).map((b) => { const e = /^event: (\w+)/m.exec(b)?.[1]; const d = /^data: (.*)$/m.exec(b)?.[1]; return { e, d: d ? JSON.parse(d) : null }; });
 const DATA = {
   products: [{ id: 'P1', nombre: 'Arroz 1 kg', precio: 4, costo: 3, stock: 50, min: 5, controla: true }],
@@ -35,7 +38,9 @@ const neutralCodes = (body) => { const m = JSON.parse(body).messages.filter((x) 
 
 async function route(text, responder, { role = 'owner', stream = false, data = DATA } = {}) {
   const cap = [];
-  const f = async (_url, init) => { cap.push(String(init.body)); return responder(cap.length - 1, String(init.body)); };
+  // El responder devuelve un Response o el mensaje del modelo ({ content, tool_calls }); en modo stream el mensaje va en trozos SSE.
+  const f = async (_url, init) => { cap.push(String(init.body)); const out = await responder(cap.length - 1, String(init.body));
+    return out instanceof Response ? out : JSON.parse(String(init.body)).stream ? sseMsg(out) : msg(out); };
   const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ context: { products: data.products }, text, ...(stream ? { stream: true } : {}) }) }),
     ENV, { principalId: 'session:x', posRole: role === 'owner' ? 'owner' : 'empleado' }, json,
     { store: createMemoryUsageStore(), resolveRole: async () => role, fetch: f, reader: memoryReader(data), audit: async () => {}, mockChunkMs: 0, now: () => NOW });
@@ -75,8 +80,8 @@ test('CLI-016 sin poder leer Clientes (falla, no hay lector o la lista vino cort
 
 test('CLI-016 en el chat: la respuesta dice que el código no existe (no «No encontré deudas»)', async () => {
   const { r, cap } = await route('¿cuánto debe el cliente #9999?', (i, body) => i === 0
-    ? msg({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: neutralCodes(body)[0] || '9999' })] })
-    : msg({ content: 'Listo.' }));
+    ? ({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: neutralCodes(body)[0] || '9999' })] })
+    : ({ content: 'Listo.' }));
   const b = await r.json();
   assert.equal(r.status, 200); assert.match(b.reply, /No existe cliente #9999 en Clientes/);
   assert.ok(!/No encontré deudas/.test(b.reply));
@@ -88,7 +93,7 @@ test('CLI-022 empleado «quienes estan atrasados» y parecidos: 403 query_admin_
   for (const text of ['quienes estan atrasados', 'Quiénes están atrasados con sus pagos?', 'quien esta atrasado', 'quiénes están en mora',
     'qué fiados están vencidos', 'dame las deudas atrasadas', 'quiénes no me han pagado', 'quienes andan atrasados']) {
     for (const stream of [false, true]) {
-      const { r, cap } = await route(text, () => msg({ content: 'cliente #C-0001 debe S/ 120.00 desde' }), { role: 'empleado:consultas', stream });
+      const { r, cap } = await route(text, () => ({ content: 'cliente #C-0001 debe S/ 120.00 desde' }), { role: 'empleado:consultas', stream });
       assert.equal(r.status, 403, text); assert.match(r.headers.get('content-type'), /json/);
       const b = await r.json(); assert.equal(b.error, 'query_admin_only', text);
       assert.match(b.message, /solo para el Admin/); assert.ok(!/S\/|\d/.test(b.message));
@@ -113,8 +118,8 @@ test('CLI-025 la IA solo ve códigos neutros y el prompt pide preguntar cuál, s
 test('CLI-025 si la IA consulta solo uno de los dos: no elige; pregunta cuál con los códigos y da los pasos', async () => {
   for (const stream of [false, true]) {
     const { r, cap } = await route(ROSA, (i, body) => i === 0
-      ? msg({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: neutralCodes(body)[0] })] })
-      : msg({ content: 'cliente #C-0001 debe S/ 120.00.' }), { stream });
+      ? ({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: neutralCodes(body)[0] })] })
+      : ({ content: 'cliente #C-0001 debe S/ 120.00.' }), { stream });
     const text = await r.text(); assert.equal(r.status, 200);
     const b = stream ? sseEvents(text).find((e) => e.e === 'final').d : JSON.parse(text);
     assert.match(b.reply, /cliente #1\b/); assert.match(b.reply, /cliente #13\b/); assert.match(b.reply, /¿/);
@@ -126,7 +131,7 @@ test('CLI-025 si la IA consulta solo uno de los dos: no elige; pregunta cuál co
 });
 
 test('CLI-025 si la IA ya pregunta cuál: se agregan los pasos a mano para el pago que no aparece', async () => {
-  const { r, cap } = await route(ROSA, (i, body) => { const [a, c] = neutralCodes(body); return msg({ content: '¿El pago es de cliente #' + a + ' o de cliente #' + c + '?' }); });
+  const { r, cap } = await route(ROSA, (i, body) => { const [a, c] = neutralCodes(body); return ({ content: '¿El pago es de cliente #' + a + ' o de cliente #' + c + '?' }); });
   const b = await r.json(); assert.equal(r.status, 200);
   assert.match(b.reply, /cliente #1 o de cliente #13/);
   assert.match(b.reply, /Clientes > ficha/); assert.match(b.reply, /Abonar/); assert.match(b.reply, /no cambia deudas/);
@@ -135,8 +140,8 @@ test('CLI-025 si la IA ya pregunta cuál: se agregan los pasos a mano para el pa
 
 test('CLI-025 consultar los dos está bien (no se borra nada)', async () => {
   const { r } = await route(ROSA, (i, body) => { const [a, c] = neutralCodes(body); return i === 0
-    ? msg({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: a }, 'c1'), call('consultar', { tipo: 'deuda_cliente', cliente_id: c }, 'c2')] })
-    : msg({ content: 'Listo.' }); });
+    ? ({ content: '', tool_calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: a }, 'c1'), call('consultar', { tipo: 'deuda_cliente', cliente_id: c }, 'c2')] })
+    : ({ content: 'Listo.' }); });
   const b = await r.json(); assert.equal(r.status, 200);
   assert.equal((b.proposals || []).filter((p) => p.type === 'consulta').length, 2, JSON.stringify(b.proposals));
 });
