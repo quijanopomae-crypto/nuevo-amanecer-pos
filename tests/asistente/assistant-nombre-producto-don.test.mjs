@@ -62,6 +62,36 @@ test('personas reales siguen tapadas (Admin y empleado, entero y en partes 1/3/7
   }
   for (const role of ROLES) { const w = whole(role, 'doña juana pérez lleva 2 leches'); assert.doesNotMatch(w, /juana/i, w); }
 });
+// (revisión del lead, #998) MAYÚSCULAS solas no bastan: hace falta palabra de producto antes, producto conocido o medida (KG, GR, X 20…).
+// Tras DON/DOÑA + nombre, un verbo de deuda/pago (debe, pagó, abonó, fió, le fié…) es siempre una persona: se tapa.
+const CAPS_PEOPLE = [
+  ['DON JUAN DEBE 2 KG', 'DON [nombre oculto] DEBE 2 KG'],
+  ['DOÑA ROSA PAGÓ 20', 'DOÑA [nombre oculto] PAGÓ 20'],
+  ['DOÑA ROSA PAGO 20', 'DOÑA [nombre oculto] PAGO 20'],
+  ['ATENCIÓN DON JUAN', 'ATENCIÓN DON [nombre oculto]'],
+  ['VENTA FIADA DOÑA ROSA', 'VENTA FIADA DOÑA [nombre oculto]'],
+  ['DON JUAN ABONÓ 10 DE 2 KG', 'DON [nombre oculto] ABONÓ 10 DE 2 KG'],
+  ['FIDEO DON JUAN DEBE 20', 'FIDEO DON [nombre oculto] DEBE 20'],
+  ['DON JUAN LE FIÉ 2 KG DE ARROZ', 'DON [nombre oculto] LE FIÉ 2 KG DE ARROZ'],
+  ['doña rosa fio 3 leches de 1 L', 'doña [nombre oculto] fio 3 leches de 1 L'],
+  ['Don Vittorio abonó S/ 10', 'Don [nombre oculto] abonó S/ 10']
+];
+const CAPS_KNOWN = { products: [{ id: 'P10', nombre: 'Fideo Don Vittorio Tallarín 500 g' }, { id: 'P11', nombre: 'Aceite Doña Pepa 1 L' }] };
+test('MAYÚSCULAS solas no dejan pasar a una persona; verbo de deuda/pago tras el nombre siempre tapa (entero y en partes 1/3/7)', () => {
+  for (const role of ROLES) for (const [t, want] of CAPS_PEOPLE) for (const k of [undefined, CAPS_KNOWN]) {
+    assert.equal(whole(role, t, k), want, role + ': ' + t);
+    for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step, k), want, role + ' ' + step + ': ' + t);
+  }
+});
+test('marca en MAYÚSCULAS con producto antes, producto conocido o medida: queda (entero y en partes 1/3/7)', () => {
+  const keep = [['FIDEO DON VITTORIO', undefined], ['Te quedan 4 de FIDEO DON VITTORIO.', undefined], ['DON VITTORIO SPAGHETTI 500GR X 20', undefined],
+    ['DOÑA PEPA', CAPS_KNOWN], ['Te quedan 4 de DOÑA PEPA.', CAPS_KNOWN], ['DON VITTORIO TALLARIN', CAPS_KNOWN]];
+  for (const role of ROLES) for (const [t, k] of keep) {
+    assert.equal(whole(role, t, k), t, role + ': ' + t);
+    for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step, k), t, role + ' ' + step + ': ' + t);
+  }
+  for (const role of ROLES) assert.equal(whole(role, 'DOÑA PEPA'), 'DOÑA [nombre oculto]', role + ': sin catálogo DOÑA PEPA es una persona');
+});
 test('cliente de la lista: siempre tapado, aunque se llame como la marca o vaya en mayúsculas', () => {
   const known = { products: [{ id: 'P10', nombre: 'Fideo Don Vittorio Tallarín 500 g' }], customers: [{ id: 'c9', nombre: 'Vittorio Ramos Paz' }, { id: 'c2', nombre: 'Juana Pérez' }] };
   for (const role of ROLES) {
