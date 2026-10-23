@@ -2141,7 +2141,7 @@ const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don
 const BRAND_CUE_RE = /^\s*(?:don|do[nñ]a)(?![a-zñ])/;
 const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada)\s+$/i;
 // sobre texto ya sin tildes y en minúsculas (LESSON_FOLD)
-const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|ara|aron|ar|ado)|fi(?:o|e|a|an|aron|amos|aste|ara|ar)|fiad[oa]s?\s+a|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
+const DEBT_VERB = /(?:^|[^a-z0-9ñ])(?:deb(?:e|en|o|es|io|ia|ian|era|eria|iste|ieron)|pag(?:a|an|o|ue|ara|aria|aron|ar|aba|ado)|abon(?:a|an|o|e|aba|ara|aron|ar|ado)|fi(?:o|e|a|an|aba|aron|amos|aste|ara|ar)|fiad[oa]s?|cobr\w*\s+a|prest(?:a|an|o|e|ar|ara|aron|amos|ado)|adeud\w*)(?![a-z0-9ñ])/;
 const foldWords = (t) => LESSON_FOLD(t).split(/\s+/).filter(Boolean);
 export function isBrandDon(text, start, end, known = []) {
   const all = String(text || ''), s = Math.max(0, start | 0), e = Math.max(s, Math.min(all.length, end | 0));
@@ -3354,17 +3354,18 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     else if (emit) { for (const w of String(result.content || '').split(/(?<=\s)/)) { if (up.signal.aborted) break; emit.push(w); await sleep(deps.mockChunkMs ?? 25); } await prepKnown(result.content); if (!confirmHeld(emit)) emit.flush(); }
   } else {
     ctx.business = await (deps.readBusinessName || readBusinessName)(deps.db); // nombre de Configuración (solo lectura)
-    // (revisión #998) Admin: el historial del teléfono va al modelo sin el nombre tras «don/doña/señora» (isBrandDon). Si solo un
-    // «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
-    let histToModel = parsed.history;
-    if (knownR && parsed.history.length) {
-      const histKnown = () => ({ products: [...(ctx.products || []), ...(sysProducts || [])] });
-      histToModel = maskHistoryPeople(parsed.history, histKnown());
-      if (!sysProducts && histToModel.some((m, i) => m.content !== parsed.history[i].content && HISTORY_DON_CUE.test(parsed.history[i].content))) {
-        sysProducts = await loadProducts(); setKnownProducts(); histToModel = maskHistoryPeople(parsed.history, histKnown());
-      }
+    // (revisión #998) Admin: el historial, el resumen y el mensaje actual van al modelo sin el nombre tras «don/doña/señora» (isBrandDon).
+    // Si solo un «don/doña» cambió, se leen los productos una vez (como prepKnown) para no tapar una marca del catálogo. El empleado: sin cambios.
+    let histToModel = parsed.history, resumenToModel = resumenIn || null, textToModel = parsed.text;
+    if (knownR) {
+      const all = [...parsed.history, { content: resumenToModel || '' }, { content: textToModel || '' }];
+      const maskAll = () => { const k = { products: [...(ctx.products || []), ...(sysProducts || [])] }, out = maskHistoryPeople(all, k);
+        return { out, changed: out.some((m, i) => m.content !== all[i].content && HISTORY_DON_CUE.test(all[i].content)) }; };
+      let r = maskAll();
+      if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
+      histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;
     }
-    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: parsed.text, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenIn || null, cards: parsed.cards });
+    req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenToModel, cards: parsed.cards });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
     const a1 = clock();
