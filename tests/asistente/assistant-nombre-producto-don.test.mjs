@@ -152,9 +152,9 @@ function seq(list, bodies, stream) { let n = 0; return async (_u, init) => { bod
   const parts = r.calls ? [...r.calls.map((c, i) => delta({ tool_calls: [{ index: i, ...c }] })), delta({}, 'tool_calls')]
     : [...(r.content.match(/[\s\S]{1,3}/g) || []).map((x) => delta({ content: x })), delta({}, 'stop')];
   return new Response(new ReadableStream({ start(c) { for (const p of parts) c.enqueue(enc.encode(p)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } }); }; }
-async function chat(text, { role = 'owner', stream = true, list, history }) {
+async function chat(text, { role = 'owner', stream = true, list, history, resumen }) {
   const bodies = [];
-  const r = await A.assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: {}, ...(history ? { history } : {}) }) }),
+  const r = await A.assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: {}, ...(history ? { history } : {}), ...(resumen ? { resumen } : {}) }) }),
     { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:x', posRole: role === 'owner' ? 'owner' : 'empleado' }, jsonR,
     { store: A.createMemoryUsageStore(), resolveRole: async () => role, fetch: seq(list, bodies, stream), reader: memoryReader(DATA), audit: async () => {}, now: () => NOW, statusEveryMs: 60000 });
   const raw = await new Response(r.body).text();
@@ -291,5 +291,42 @@ test('historial del teléfono (Admin): sin el nombre tras «don/doña/señora» 
     assert.match(hist, /señora \[nombre oculto\] abona 5/, hist);
     assert.equal((hist.match(/fideo don vittorio/g) || []).length, 2, 'la marca queda entera: ' + hist);
     assert.equal(r.final.reply, 'Nada más pendiente.');
+  }
+});
+
+// (revisión de #998, 2) el resumen de memoria larga que manda el teléfono del Admin también va al modelo: misma regla (isBrandDon).
+test('resumen del teléfono (Admin): sin el nombre tras «doña» hacia el modelo; «fideo don vittorio» queda (en partes y entero)', async (t) => {
+  quiet(t);
+  const resumen = 'Antes: la leche doña Carmen Salas debe 2 kg.\nfideo don vittorio tiene 30 unid.';
+  for (const stream of [true, false]) {
+    const r = await chat('¿y qué más?', { stream, resumen, list: [{ content: 'Nada más pendiente.' }] });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ': ' + r.raw.slice(0, 200));
+    const body = r.bodies[0];
+    assert.match(body, /Antes: la leche doña \[nombre oculto\] debe 2 kg/, 'stream=' + stream + ': el resumen llegó al modelo, tapado');
+    assert.doesNotMatch(body, /Carmen|Salas/i, 'stream=' + stream + ': al modelo llegó un nombre del resumen');
+    assert.match(body, /fideo don vittorio tiene 30 unid/, 'stream=' + stream + ': la marca queda entera');
+    assert.equal(r.final.reply, 'Nada más pendiente.');
+  }
+});
+// (revisión de #998, 2) el mensaje actual del Admin: el nombre tras «doña» no llega al modelo; la marca sí.
+test('mensaje actual del Admin: «doña Carmen Salas» no llega al modelo; «fideo don vittorio» queda (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const r = await chat('la leche doña Carmen Salas debe 2 kg; ¿cuánto queda de fideo don vittorio?', { stream, list: [{ content: 'Anotado.' }] });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ': ' + r.raw.slice(0, 200));
+    const body = r.bodies[0], last = JSON.parse(body).messages.at(-1);
+    assert.doesNotMatch(body, /Carmen|Salas/i, 'stream=' + stream + ': al modelo llegó el nombre del mensaje actual');
+    assert.match(String(last.content), /doña \[nombre oculto\] debe 2 kg; ¿cuánto queda de fideo don vittorio\?/, 'stream=' + stream + ': ' + last.content);
+  }
+});
+// (revisión de #998, 3) «abonaba», «fiaba», «fiado» (solo) y «fió» en la regla compartida isBrandDon: tras «producto + don/doña + nombre» tapan.
+const DEBT_MORE = ['fideo don ernesto abonaba 5 soles', 'aceite doña carmen fiaba', 'arroz doña carmen fiado', 'fideo don ernesto fió 2 kg', 'FIDEO DON ERNESTO ABONABA 5'];
+test('verbos «abonaba», «fiaba», «fiado» (solo) y «fió»: tapan con isBrandDon (Admin y empleado, entero y en partes 1/3/7); la marca sin verbo queda', () => {
+  checkDebtNow(DEBT_MORE);
+  for (const t of DEBT_MORE) { const i = t.search(/don|doña/i); assert.equal(A.isBrandDon(t, i, t.indexOf(' ', i + 5) < 0 ? t.length : t.indexOf(' ', i + 5)), false, 'isBrandDon: ' + t); }
+  for (const t of ['fideo don vittorio', 'el fideo don vittorio está a S/ 2.60', 'fideo don vittorio 500 g x 20', 'aceite doña pepa 1 L']) {
+    assert.equal(whole('owner', t), t, t);
+    for (const step of [1, 3, 7]) assert.equal(streamed('owner', t, step), t, step + ': ' + t);
+    const i = t.search(/don|doña/i); assert.equal(A.isBrandDon(t, i, t.indexOf(' ', i + 5) < 0 ? t.length : t.indexOf(' ', i + 5)), true, 'isBrandDon: ' + t);
   }
 });
