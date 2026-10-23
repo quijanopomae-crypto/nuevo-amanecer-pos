@@ -43,8 +43,9 @@ const EMP_PINS = [
   [UNI058, 'Hay 5 productos en o bajo el mínimo. Los más urgentes: FIDEO DON [nombre oculto] 500GR X 20 (Faltan 2), ACEITE PRIMOR CLASICO 900ML X 12BOT (Faltan 3).'],
   ['fideo don vittorio: 30 unid.', 'fideo don [nombre oculto]: 30 unid.'],
   ['Te quedan 4 de DOÑA PEPA.', 'Te quedan 4 de DOÑA [nombre oculto].'],
-  ['don vittorio ramos me debe 30', 'don [nombre oculto] ramos me debe 30'],
-  ['DON JUAN ABONÓ 10 DE 2 KG', 'DON [nombre oculto] 10 DE 2 KG'],
+  // (revisión #998) el apellido en minúscula ya no queda a la vista; el verbo y la «X» de medida tampoco se tragan (para todos)
+  ['don vittorio ramos me debe 30', 'don [nombre oculto] me debe 30'],
+  ['DON JUAN ABONÓ 10 DE 2 KG', 'DON [nombre oculto] ABONÓ 10 DE 2 KG'],
   ['La señora Rosa Quispe tiene DNI 45678912.', 'La señora [nombre oculto] tiene DNI ****8912.']
 ];
 test('empleado sin cambios: tapado estricto como antes (entero y en partes 1/3/7), y maskReplyPeople sin known = estricto', () => {
@@ -229,3 +230,34 @@ function checkDebtNow(list) {
 test('verbo de deuda/pago en presente/futuro tras el nombre: tapado (entero y en partes 1/3/7)', () => checkDebtNow(DEBT_NOW_OK));
 // Depende de #988: la lista compartida de isBrandDon suma paga/pagará/abona/fía/le fío; hasta que #988 entre a la base queda como TODO (rojo esperado).
 test('verbo de deuda/pago en presente (paga, abona, fía): tapado — DEPENDE DE #988 (isBrandDon)', { todo: 'depende de #988: isBrandDon con paga/abona/fía' }, () => checkDebtNow(DEBT_NOW_988));
+
+// (revisión #998) nombre completo tapado (nombre Y apellidos, también en minúscula, aunque no sea cliente) sin tragarse lo que sigue
+// (verbo de deuda/pago, números, medidas, «de», «la», «que»); la «X» de medida no es parte del nombre. Admin y empleado, entero y en partes.
+const FULL_NAME = [
+  ['doña juana pérez', 'doña [nombre oculto]'],
+  ['don pedro quispe debe 20', 'don [nombre oculto] debe 20'],
+  ['DOÑA JUANA PÉREZ', 'DOÑA [nombre oculto]'],
+  ['DOÑA JUANA PÉREZ DEBE 2 KG', 'DOÑA [nombre oculto] DEBE 2 KG'],
+  ['doña juana pérez pagó 20 soles de la cuenta', 'doña [nombre oculto] pagó 20 soles de la cuenta'],
+  ['don pedro quispe huamán que vino ayer', 'don [nombre oculto] que vino ayer'],
+  ['a doña juana pérez la vi hoy', 'a doña [nombre oculto] la vi hoy'],
+  ['don pedro quispe de la tienda', 'don [nombre oculto] de la tienda'],
+  ['don pedro 3 kg', 'don [nombre oculto] 3 kg'],
+  ['doña juana pérez le fió 2 kg', 'doña [nombre oculto] le fió 2 kg'],
+  ['DON PEDRO X 2', 'DON [nombre oculto] X 2'],
+  ['Don Pedro x 2 bolsas', 'Don [nombre oculto] x 2 bolsas'],
+  ['DON PEDRO QUISPE X 12', 'DON [nombre oculto] X 12']
+];
+test('nombre completo tapado (también apellidos en minúscula) sin tragarse verbos, números, medidas ni «X» (Admin y empleado, entero y en partes 1/3/7)', () => {
+  for (const role of ROLES) for (const [t, want] of FULL_NAME) {
+    assert.equal(whole(role, t), want, role + ': ' + t); assert.doesNotMatch(whole(role, t), /p[eé]rez|quispe|juana|pedro|huam[aá]n/i, role + ': ' + t);
+    for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step), want, role + ' ' + step + ': ' + t);
+  }
+});
+test('las marcas siguen intactas para el Admin con el tapado de nombre completo (entero y en partes 1/3/7)', () => {
+  const keep = [['fideo don vittorio', undefined], ['FIDEO DON VITTORIO SPAGHETTI 500GR X 20', undefined], ['Te quedan 4 de DOÑA PEPA.', CAPS_KNOWN], ['fideo don vittorio tallarín 500 g x 20', undefined]];
+  for (const [t, k] of keep) {
+    assert.equal(whole('owner', t, k), t, t);
+    for (const step of [1, 3, 7]) assert.equal(streamed('owner', t, step, k), t, step + ': ' + t);
+  }
+});
