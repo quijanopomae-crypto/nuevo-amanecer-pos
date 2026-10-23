@@ -98,7 +98,7 @@ const ONE_PAYER_NAME_RE = /\bpag[oó]\s+(?:el |la |a )?(?!Yape\b|Plin\b|Clientes
 function asksOnePayer(text) {
   return String(text ?? '').split(/[.?!¿¡;\n]+/).some((s) => { const f = foldText(s); return ONE_PAYER_VERB_RE.test(f) && (ONE_PAYER_WHO_RE.test(f) || ONE_PAYER_NAME_RE.test(s)); });
 }
-function creditPaymentsClient(proposals, text, role) {
+function creditPaymentsClient(proposals, text, role, hasList = false) {
   if (role !== 'owner') return;
   const qs = proposals.filter((p) => p.type === 'consulta' && p.query?.tipo === 'cobros_creditos');
   if (!qs.length) return;
@@ -110,8 +110,90 @@ function creditPaymentsClient(proposals, text, role) {
       const { cliente_id: _c, ...rest } = p.query; p.query = { ...rest, falta_cliente: 'cual', opciones: codes };
     } else if (p.query.cliente_id) continue;
     else if (codes.length === 1) p.query = { ...p.query, cliente_id: codes[0] };
-    else if (asksOnePayer(text)) p.query = { ...p.query, falta_cliente: 'codigo' };
+    else if (asksOnePayer(text)) p.query = { ...p.query, falta_cliente: hasList ? 'nombre' : 'codigo' };
   }
+}
+// (#995, regla del 23-10) Una persona nombrada sin código en una pregunta de cobros se resuelve AQUÍ con la lista de Clientes (las mismas
+// palabras que tapan nombres en la respuesta: replyWords, nombre completo o nombre; sin mayúsculas ni tildes). Un cliente: el nombre se
+// cambia por «cliente #código» antes de la IA (a la IA va el código neutro) y en pantalla sale el nombre. Varios (o dos personas): se
+// pregunta cuál con los nombres completos. Ninguno: «No encontré a un cliente llamado …». Esas dos salen sin llamar a la IA. El nombre
+// nunca va a la IA: el mensaje, el historial y el resumen que van al modelo se pasan por scrub ([nombre oculto]). Sin lista: se pide el código.
+const PAYER_VERBS = new Set(['pago', 'pagaron', 'abono', 'abonaron', 'cancelo', 'cancelaron', 'devolvio', 'devolvieron']);
+const PAYER_HON = new Set(['don', 'dona', 'sr', 'sra', 'srta', 'senor', 'senora', 'senorita']);
+const PAYER_GLUE = new Set(['me', 'le', 'nos', 'te', 'ya', 'ha', 'han', 'hoy', 'ayer']);
+const PAYER_STOP = new Set(['cuanto', 'cuanta', 'cuantos', 'cuando', 'como', 'donde', 'quien', 'quienes', 'fue', 'fueron', 'ha', 'han', 'hoy', 'ayer', 'anteayer', 'antier',
+  'semana', 'mes', 'ano', 'dia', 'dias', 'pasada', 'pasado', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo', 'fiado', 'fiados', 'fiada', 'deuda',
+  'deudas', 'credito', 'creditos', 'cuenta', 'saldo', 'total', 'nombre', 'oculto', 'algo', 'nada', 'cobre', 'cobro', 'cobros', 'pagos', 'abonos', 'yape', 'plin', 'efectivo',
+  'tarjeta', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre', 'burbuja', 'oye', 'oiga', 'hola', 'buenas', 'buenos', 'dime', 'digame', 'mira', 'pues', 'bueno', 'entonces', 'gracias', 'porfa', 'favor']);
+const payerStop = (f) => !f || /\d/.test(f) || PAYER_STOP.has(f) || PAYER_HON.has(f) || PAYER_VERBS.has(f) || NAME_NOT.has(f) || NAME_UNIT.has(f) || NAME_STOP_VERB.has(f) || DEBT_VERB.test(' ' + f + ' ');
+function personTokens(text) {
+  const s = String(text ?? ''), out = []; let sent = 0, last = 0;
+  for (const m of s.matchAll(/[\p{L}\d][\p{L}\d'’]*/gu)) {
+    const gap = s.slice(last, m.index), prev = out.at(-1);
+    if (/[?!¿¡;\n]/.test(gap) || (gap.includes('.') && !(prev && /^(?:sr|sra|srta|dr|dra)$/.test(prev.f) && /^\.\s*$/.test(gap)))) sent++;
+    out.push({ w: m[0], f: replyWords(m[0]).join(''), s: m.index, e: m.index + m[0].length, sent }); last = m.index + m[0].length;
+  }
+  return out;
+}
+const personKeys = (customers) => (Array.isArray(customers) ? customers : []).filter((c) => c && c.id != null && productNameOf(c)).map((c) => {
+  const w = replyWords(productNameOf(c)), keys = [w, w.slice(0, 2), w.slice(0, 1)].filter((k) => k.length && !(k.length === 1 && (k[0].length < 3 || payerStop(k[0]))));
+  return { c, keys: keys.filter((k, i) => keys.findIndex((x) => x.join(' ') === k.join(' ')) === i) };
+});
+// El cliente (o los clientes) cuyo nombre empieza en toks[i]: los de la coincidencia más larga.
+function personAt(toks, i, ck) {
+  let best = 0, hits = [];
+  for (const { c, keys } of ck) for (const k of keys) {
+    if (k.length < best || !k.every((w, j) => toks[i + j] && toks[i + j].f === w && toks[i + j].sent === toks[i].sent)) continue;
+    if (k.length > best) { best = k.length; hits = []; }
+    if (!hits.includes(c)) hits.push(c);
+    break;
+  }
+  return { len: best, hits };
+}
+// Cambia los nombres de clientes de la lista (y su «don/doña» delante) por [nombre oculto]: lo que va al modelo.
+export function scrubClientNames(value, customers) {
+  const s = String(value ?? ''), ck = personKeys(customers); if (!ck.length || !s) return s;
+  const toks = personTokens(s); let out = '', at = 0;
+  for (let i = 0; i < toks.length; i++) {
+    const { len } = personAt(toks, i, ck); if (!len) continue;
+    const st = i > 0 && PAYER_HON.has(toks[i - 1].f) && toks[i - 1].sent === toks[i].sent ? toks[i - 1].s : toks[i].s;
+    out += s.slice(at, st) + NAME_MASK; at = toks[i + len - 1].e; i += len - 1;
+  }
+  return out + s.slice(at);
+}
+const capName = (x) => x.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+// customers: la lista (null = no se pudo leer). Devuelve null (nada que hacer) o { kind: 'uno'|'cual'|'nadie'|'sin_lista', ... }.
+export function resolvePayerNames(text, customers) {
+  const s = String(text ?? ''), toks = personTokens(s);
+  const paySent = new Set(toks.filter((t) => PAYER_VERBS.has(t.f)).map((t) => t.sent));
+  if (!paySent.size) return null;
+  const ck = Array.isArray(customers) ? personKeys(customers) : [], ments = [];
+  const isVerb = (j) => !!toks[j] && PAYER_VERBS.has(toks[j].f);
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]; if (!paySent.has(t.sent)) continue;
+    const same = (j) => toks[j] && toks[j].sent === t.sent;
+    const hon = i > 0 && same(i - 1) && PAYER_HON.has(toks[i - 1].f);
+    const start = hon ? toks[i - 1].s : t.s;
+    const { len, hits } = personAt(toks, i, ck);
+    if (len) { ments.push({ s: start, e: toks[i + len - 1].e, hits }); i += len - 1; continue; }
+    if (payerStop(t.f) || t.f.length < 2) continue;
+    const prevVerb = same(i - 1) && (isVerb(i - 1) || (['el', 'la', 'a', 'al'].includes(toks[i - 1].f) && same(i - 2) && isVerb(i - 2)));
+    let n = i + 1; while (same(n) && PAYER_GLUE.has(toks[n].f) && n < i + 3) n++;
+    const nextVerb = same(n) && isVerb(n);
+    const afterAnd = same(i - 1) && ['y', 'e'].includes(toks[i - 1].f) && ments.length && ments.at(-1).e <= toks[i - 1].s;
+    if (!(hon || prevVerb || nextVerb || afterAnd || /^\p{Lu}/u.test(t.w))) continue;
+    let j = i; while (j + 1 < i + 3 && same(j + 1) && /^\p{Lu}/u.test(toks[j + 1].w) && !payerStop(toks[j + 1].f)) j++;
+    ments.push({ s: start, e: toks[j].e, hits: [], name: capName(s.slice(t.s, toks[j].e)) }); i = j;
+  }
+  if (!ments.length) return null;
+  const masked = ments.reduceRight((x, m) => x.slice(0, m.s) + NAME_MASK + x.slice(m.e), s);
+  if (!Array.isArray(customers)) return { kind: 'sin_lista', masked };
+  const missing = [...new Set(ments.filter((m) => !m.hits.length).map((m) => m.name))];
+  if (missing.length) return { kind: 'nadie', names: missing, masked };
+  const all = [...new Set(ments.flatMap((m) => m.hits))];
+  if (all.length > 1) return { kind: 'cual', options: all.slice(0, 5).map((c) => ({ cliente_id: String(c.id), nombre: String(productNameOf(c)).trim() })), masked };
+  const code = String(all[0].id);
+  return { kind: 'uno', client: { cliente_id: code, nombre: String(productNameOf(all[0])).trim() }, text: ments.reduceRight((x, m) => x.slice(0, m.s) + 'cliente #' + code + x.slice(m.e), s) };
 }
 export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', message: 'Esa consulta es solo para el Admin.' });
 // Datos del negocio o del ticket (configurar_app con destino servidor) pedidos por quien no tiene el permiso «cambios» (niveles 1, 2, 3 sin
@@ -3396,7 +3478,21 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   let result, req = null; const bytes = [];
   // Códigos de cliente neutros (C-0001…) hacia la IA: un mapa para todo el pedido (primera y segunda llamada), ver pos-assistant-codigos.js.
   const ccfg = cfg.ok ? { ...cfg, codes: createCodeMap() } : cfg;
-  if (mode === 'mock') {
+  // (#995, regla del 23-10) cobros de una persona nombrada: se resuelve con la lista de Clientes antes de la IA (resolvePayerNames).
+  let payer = null, scrub = null, turnText = null, hasList = false;
+  if (asksCreditPayments(parsed.text) && !parsed.image) {
+    const cs = await (async () => { try { return rd0 && typeof rd0.customers === 'function' ? await rd0.customers() : null; } catch { return null; } })();
+    hasList = Array.isArray(cs); if (hasList) { known.customers = cs; custRead = true; scrub = (v) => scrubClientNames(v, cs); }
+    payer = clientCodesInText(parsed.text).length ? null : resolvePayerNames(parsed.text, hasList ? cs : null);
+    if (payer?.kind === 'uno') parsed.text = payer.text;
+    turnText = payer?.masked ?? (scrub ? scrub(parsed.text) : null);
+  }
+  const localPayer = payer && (payer.kind === 'cual' || payer.kind === 'nadie');
+  if (localPayer) {
+    // Sin IA: la respuesta (y el historial) con códigos o [nombre oculto]; los nombres solo en lo que se ve (shown).
+    result = { content: payer.kind === 'cual' ? '¿De cuál cliente quiere los cobros: ' + payer.options.map((o) => 'cliente #' + o.cliente_id).join(' o ') + '? Pregunte por uno a la vez.'
+      : 'No encontré a un cliente llamado ' + NAME_MASK + '. Revise el nombre en Clientes o dígame su código («cliente #código»).', calls: [] };
+  } else if (mode === 'mock') {
     result = mockAssistantReply({ role, ctx, text: parsed.text, image: !!parsed.image });
     // Empleado: si la demostración trae una herramienta prohibida, no sale ningún texto (igual que el corte en DeepSeek).
     const bad = guard ? (result.calls || []).map((c) => guard({ name: c.name, arguments: typeof c.arguments === 'string' ? c.arguments : JSON.stringify(c.arguments || {}) })).find(Boolean) : null;
@@ -3416,6 +3512,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (!sysProducts && r.changed) { sysProducts = await loadProducts(); setKnownProducts(); r = maskAll(); }
       histToModel = r.out.slice(0, -2); if (resumenToModel) resumenToModel = r.out.at(-2).content; if (textToModel) textToModel = r.out.at(-1).content;
     }
+    // (#995) cobros: ningún nombre de la lista de Clientes va a la IA (mensaje, historial ni resumen); sin lista, el nombre detectado tampoco.
+    if (scrub) { histToModel = histToModel.map((m) => (m && typeof m.content === 'string' ? { ...m, content: scrub(m.content) } : m)); if (resumenToModel) resumenToModel = scrub(resumenToModel); }
+    if (textToModel && payer?.kind === 'sin_lista') textToModel = payer.masked;
+    if (textToModel && scrub) textToModel = scrub(textToModel);
     req = buildDeepSeekRequest({ role, ctx, history: histToModel, text: textToModel, image: parsed.image, invoiceMemory, lessons, priceFacts, resumen: resumenToModel, cards: parsed.cards });
     if (parsed.cut) req.messages.splice(req.messages.length - 1, 0, cutModelMessage(parsed.cut)); // (VE-010) el modelo sabe que faltó una parte
     bytes.push(payloadBytes(req));
@@ -3447,7 +3547,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
     const k = String(c?.name) + '|' + (typeof a === 'string' ? a : stable(a)); if (seenCalls.has(k)) return false; seenCalls.add(k); return true; }); // misma llamada dos veces = una tarjeta
   result.calls.forEach((c, i) => { const p = toProposal(c, role, ctx, i + 1); if (p?.dropped) dropped.push(p); else if (p) { p._call = c; proposals.push(p); } });
   arrivalToPurchase(proposals, dropped, parsed.text, role, ctx, !!parsed.image); // «me llegaron…» con varias cosas = UNA compra con todas las filas
-  creditPaymentsNotSales(proposals, parsed.text, role); creditPaymentsClient(proposals, parsed.text, role); // (#995) cobros de UN cliente con su código.
+  creditPaymentsNotSales(proposals, parsed.text, role); creditPaymentsClient(proposals, parsed.text, role, hasList); // (#995) cobros de UN cliente con su código.
   // (auditoría 500, CLI-024) «¿cuánto cobré de fiados?» con ventas_periodo = cobros_creditos
   // (auditoría 500, CP-037) costo que nadie dijo (ni en este mensaje ni en los anteriores de la persona): queda vacío y marcado, no inventado.
   // Solo compras dictadas por texto («compré…», «me llegaron…»); una factura leída trae sus costos.
@@ -3653,7 +3753,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // Turnos firmados para el historial del aparato (el celular los guarda tal cual y los devuelve con su firma).
   // Memoria de la foto: el turno del usuario lleva la nota de lo leído (el celular guarda turns[0] tal cual), así no vuelve a pedir la foto.
   const nota = parsed.image ? readNote(proposals, redactText) : null;
-  const cls = cls0, userTurn = nota ? (parsed.text ? parsed.text.slice(0, ASSISTANT_LIMITS.maxMessageChars - nota.length - 1) + ' ' + nota : nota) : parsed.text || 'Foto';
+  const cls = cls0, userTurn = nota ? (parsed.text ? parsed.text.slice(0, ASSISTANT_LIMITS.maxMessageChars - nota.length - 1) + ' ' + nota : nota) : turnText || parsed.text || 'Foto';
   // Turnos quitados por el tope (o que el celular ya no pudo mandar): resumen fijo armado aquí, sin otra llamada a la IA, firmado.
   const needSum = mem.dropped.length > 0 || parsed.overflow > 0;
   const sumText = mem.dropped.length ? buildResumen(resumenIn, mem.dropped, memClean) : '';
@@ -3671,7 +3771,11 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const invoiceToken = role === 'owner' ? await writeInvoiceMemory({previous:invoiceMemory, image:parsed.image, proposals, reply, text:parsed.text, secret:turnSecret, auth, now, clean:redactModelOwner}) : null;
   let shown = reply; // lo que ve el Admin en pantalla: los «producto #N» de resúmenes/consultas con su nombre; turns e historial siguen con el código
   if (role === 'owner' && refIds.size && PRODUCT_REF_HINT.test(reply)) { await prepKnown(reply); shown = nameProductRefs(reply, known.names.filter((p) => !notRef(p))); }
-  return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left,
+  // (#995) persona resuelta aquí: en pantalla el nombre (Admin y empleado); en reply/turns (historial que vuelve a la IA) solo el código.
+  if (payer?.kind === 'uno') { const c = payer.client; shown = shown.replace(new RegExp('cliente #' + c.cliente_id.replace(/[^A-Za-z0-9]/g, '\\$&') + '(?![A-Za-z0-9_-])', 'i'), c.nombre + ' (cliente #' + c.cliente_id + ')'); }
+  if (localPayer && payer.kind === 'cual') for (const o of payer.options) shown = shown.replace(new RegExp('cliente #' + o.cliente_id.replace(/[^A-Za-z0-9]/g, '\\$&') + '(?![A-Za-z0-9_-])'), o.nombre + ' (cliente #' + o.cliente_id + ')');
+  if (localPayer && payer.kind === 'nadie') shown = shown.replace(NAME_MASK, payer.names.join(' ni a '));
+  return json({ ok: true, mode, role, server_now: now, reply: shown, cut: wasCut, ...(parsed.cut ? { texto_cortado: { leidos: parsed.cut.leidos, faltan: parsed.cut.faltan } } : {}), turns, ...(role === 'owner' ? {invoice_memory:invoiceToken} : {}), proposals, denied: [], dropped: dropped.map((d) => ({ tool: d.tool, reason: d.dropped })), left: quota.left, ...(localPayer && payer.kind === 'cual' ? { opciones: payer.options } : {}),
     ...(nota ? { nota } : {}), memoria, ...(resumenSug ? { resumen_sugerido: resumenSug } : {}), payload_bytes: bytes, timings: times, usage: result.usage ? { prompt_tokens: result.usage.prompt_tokens || 0, completion_tokens: result.usage.completion_tokens || 0 } : null });
 }
 

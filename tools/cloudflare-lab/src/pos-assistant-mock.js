@@ -49,7 +49,10 @@ export function mockAssistantReply({ role, ctx, text, image }) {
     return { content: '', calls: [call('consultar', { tipo: 'cobros_creditos', ...queryDates(t), ...(cli.length === 1 ? { cliente_id: cli[0] } : {}) })] };
   }
   { const cli = clientCodesInText(text); // solo el código («cliente #12», «cliente 12», «cliente nro. 12», «N° 12»), nunca el nombre
-    if (cli.length && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t)) return { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[0] })] }; }
+    const uno = [...new Set(cli.map((c) => c.toLowerCase()))].length === 1; // (#995, punto 3) «cliente #5 o el #9»: pregunta cuál, no elige el primero
+    if (cli.length && /debe|deuda|saldo|\bfiar|\bles? fi[oa]\b|limite|linea de credito/.test(t) && !/estado de cuenta/.test(t))
+      return uno ? { content: '', calls: [call('consultar', { tipo: 'deuda_cliente', cliente_id: cli[0] })] }
+        : { content: '¿De cuál cliente: ' + [...new Set(cli)].map((c) => 'cliente #' + c).join(' o ') + '? Pregunte por uno a la vez.', calls: [] }; }
   if (/vend|carrito|cobra/.test(t) && !/vendid|ventas|reporte/.test(t)) return { content: 'Las ventas se hacen a mano en Venta. Yo te ayudo con stock, compras, precios, productos y reportes.', calls: [] };
   if (/document|pdf|imprim|reporte de|lista de precios|estado de cuenta|inventario valorizado|valorizado|cierre de caja|pedido para|lista de pedido/.test(t)) {
     const tipo = /lista de precios/.test(t) ? 'lista_precios' : /valoriz/.test(t) ? 'inventario_valorizado' : /reponer|pedido/.test(t) ? 'lista_pedido'

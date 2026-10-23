@@ -1092,19 +1092,33 @@ async function customerDebtQuery(reader, args, base) {
 // (#995, 2ª revisión) Códigos de cliente escritos en el mensaje: «cliente #5», «cliente 5», «el cliente nro. 5», «cliente N° 5» (la
 // herramienta enseña «cliente 12 -> cliente_id 12»). Sin «#» tiene que parecer código (lleva un dígito): «cliente nuevo», «cliente
 // frecuente» y «clientes» no son códigos. Devuelve los códigos tal como se escribieron (quien llama los valida con customerCode).
+// (#995, punto 2) Sin «#», un número con unidad no es un código: «cliente 2 kilos», «cliente 5kg», «cliente 1.5 kg», «cliente 3 soles».
+const CODE_UNIT = '(?:kgs?|g|grs?|kilos?|gramos?|ml|l|lts?|litros?|cc|oz|und|unid|unidades|bot|botellas?|pqt|paquetes?|sob|sobres?|soles?|bolsas?|sacos?|cajas?|docenas?|latas?)';
+const CODE_UNIT_IN = new RegExp('^\\d+(?:[.,]\\d+)?' + CODE_UNIT + '$', 'i'), CODE_UNIT_AFTER = new RegExp('^(?:[.,]\\d+)?\\s*' + CODE_UNIT + '(?![\\p{L}\\d])', 'iu');
+// (#995, punto 3) «cliente #5 o el #9», «cliente #5, #9 y #11»: los «#N» que siguen en la misma lista también son códigos.
+const CODE_MORE = /^\s*(?:,|\by\b|\bo\b|\be\b|\bu\b)\s*(?:(?:el|al|del|la|a)\s+)?(?:cliente\s*)?#\s*([A-Za-z0-9_-]{1,40})/iu;
 export function clientCodesInText(text) {
-  const out = [], re = /\bcliente\b\s*(#|n(?:ro|°|º|o)?\.?(?=\s*\d)|)\s*([A-Za-z0-9_-]{1,40})/giu;
-  for (const m of String(text ?? '').matchAll(re)) if (m[1] === '#' || /\d/.test(m[2])) out.push(m[2]);
+  const src = String(text ?? ''), out = [], re = /\bcliente\b\s*(#|n(?:ro|°|º|o)?\.?(?=\s*\d)|)\s*([A-Za-z0-9_-]{1,40})/giu;
+  let m;
+  while ((m = re.exec(src))) {
+    let end = m.index + m[0].length;
+    if (m[1] !== '#' && (!/\d/.test(m[2]) || CODE_UNIT_IN.test(m[2]) || CODE_UNIT_AFTER.test(src.slice(end)))) continue;
+    out.push(m[2]);
+    for (let k; (k = CODE_MORE.exec(src.slice(end)));) { out.push(k[1]); end += k[0].length; }
+    re.lastIndex = end;
+  }
   return out;
 }
 
 async function creditPaymentsQuery(reader, args, nowMs, base) {
   // Pregunta por UN cliente sin poder saber cuál (el chat lo marca): se pide el código, nunca el total de la tienda.
-  if (args?.falta_cliente === 'cual' || args?.falta_cliente === 'codigo') {
+  if (args?.falta_cliente === 'cual' || args?.falta_cliente === 'codigo' || args?.falta_cliente === 'nombre') {
     const { customerCode: cc } = await import('./pos-assistant.js');
     const ops = [...new Set((Array.isArray(args.opciones) ? args.opciones : []).map((x) => cc(x)).filter(Boolean))].slice(0, 5);
     const texto = args.falta_cliente === 'cual' && ops.length > 1
       ? '¿De cuál cliente quiere los cobros: ' + ops.map((x) => 'cliente #' + x).join(' o ') + '? Pregunte por uno a la vez.'
+      // 'nombre' (#995): hay lista de Clientes pero no se dijo el nombre; 'codigo': sin lista, solo sirve el código.
+      : args.falta_cliente === 'nombre' ? 'Dime el nombre o el código del cliente (aparece como «cliente #código» en Clientes) y te digo cuánto pagó; sin eso no doy el total de la tienda como si fuera de una persona.'
       : 'Dime el código del cliente (aparece como «cliente #código» en Clientes) y te digo cuánto pagó; sin código no doy el total de la tienda como si fuera de una persona.';
     return { ...base, columnas: [], filas: [], texto, resumen: { falta: 'cliente_id', ...(ops.length > 1 ? { opciones: ops.map((x) => 'cliente #' + x) } : {}) } };
   }
