@@ -597,7 +597,7 @@ export function matchProducts(list, text) {
 // DOS palabras tienen 5+ letras: en palabras cortas una letra cambia el producto («sal»/«sol», «pan»/«pin»).
 const NEAR_MIN = 5;
 const nameTokens = (n) => n.split(/[^a-z0-9]+/).filter((t) => t.length >= NEAR_MIN && !/\d/.test(t));
-const single = (s) => loose(s).replace(/(.)\1+/g, '$1');
+const single = (w) => loose(w).replace(/(.)\1+/g, '$1');
 function nearWord(a, b) {
   if (a.length < NEAR_MIN || b.length < NEAR_MIN) return false;
   const x = single(a), y = single(b); if (x === y) return true;
