@@ -2,13 +2,13 @@
   "action": "DEPLOY_TURSO_CANON_WORKER_HOTFIX",
   "owner_authorized": true,
   "requested_by": "owner",
-  "authorization_context": "Owner solicita configurar el sistema de la app desde el chat. PR #972: diez preferencias existentes con tarjeta firmada y confirmación Admin. Suite asistente 1006/1006, revisión independiente y forensic sin P0/P1. Sin esquema, migraciones, secretos ni datos comerciales. Backend primero y web después; sin ajustes productivos aplicados durante QA.",
-  "rollback_ref": "e2c662a5ecb3d7c68a2df268830900a19584bb73",
+  "authorization_context": "Owner approved 2026-10-22: aprobado publiquen todo lo ya terminaron. Deploy merged PR #975 (assistant 'Color' settings fix, 4 files, no DB). CANON Critical CI, E2E Smoke CI and Visual Regression success. DB backup run 39945418717 first. Backend first then web. No schema, migrations, business data or secret changes.",
+  "rollback_ref": "b67ffeb90092fb3b48c0a72bca17bb5b0e34af6e",
   "turso_only": true,
   "no_schema_changes": true,
   "no_live_sale": true,
   "one_shot": true,
-  "attempt": 74,
-  "optimization": "ASSISTANT_APP_SETTINGS",
-  "target_commit": "b67ffeb90092fb3b48c0a72bca17bb5b0e34af6e"
+  "attempt": 75,
+  "optimization": "ASSISTANT_SETTINGS_COLOR_FIX",
+  "target_commit": "cc073012fb8ca4e969d2fc18f276b83f12122b85"
 }
