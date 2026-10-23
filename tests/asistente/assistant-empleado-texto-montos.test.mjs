@@ -6,91 +6,19 @@
 // Precio de venta: permitido (es la misma columna «Precio S/» de la lista de precios del empleado).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { assistantChatRoute, createMemoryUsageStore, employeeQueryResult } from '../../tools/cloudflare-lab/src/pos-assistant.js';
-import { memoryReader, runAssistantQuery, QUERY_TYPES } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { assistantChatRoute, employeeQueryResult } from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { memoryReader, runAssistantQuery, QUERY_TYPES, stockLabel } from '../../tools/cloudflare-lab/src/pos-assistant-queries.js';
 import { LEVEL_NAMES, COSTS_ROLE, capabilitiesFor, seesOwnerData } from '../../tools/cloudflare-lab/src/pos-assistant-levels.js';
-const require = createRequire(import.meta.url);
-const C = require('../../POS/js/modules/asistente/asistente-core.js');
 
-const SECRET = 'secreto-de-prueba-0123456789abcdef';
-const json = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { 'content-type': 'application/json' } });
-const NOW = Date.parse('2026-10-22T20:00:00.000Z'); // 15:00 en Lima
-const at = (h) => new Date(Date.parse('2026-10-22T00:00:00Z') + (h + 5) * 3600000).toISOString();
-
-// Cifras únicas: si alguna aparece en lo que recibe el empleado, hay fuga.
-const DATA = {
-  products: [
-    { id: 'P1', nombre: 'Arroz 1 kg', precio: 4.5, costo: 3.1, stock: 2, min: 5, controla: true },
-    { id: 'P2', nombre: 'Aceite 1 L', precio: 7.25, costo: 5.9, stock: 40, min: 5, controla: true },
-    { id: 'P3', nombre: 'Galleta suelta', precio: 1.5, costo: 0, stock: 9, min: 1, controla: true }
-  ],
-  customers: [{ id: 'C-0001', nombre: 'C-0001' }, { id: 'C-0002', nombre: 'C-0002' }],
-  credits: [
-    { cliente: 'C-0001', saldo: 876.54, vence: '2026-09-01', fecha: '2026-08-01' },
-    { cliente: 'C-0002', saldo: 321.09, vence: '2026-10-01', fecha: '2026-09-01' }
-  ],
-  sales: [
-    { sale_id: 'S1', created_at: at(9), metodo: 'efectivo', total_cents: 123457 },
-    { sale_id: 'S2', created_at: at(11), metodo: 'yape', total_cents: 98765 }
-  ],
-  saleItems: [
-    { sale_id: 'S1', product_id: 'P1', quantity: 2743, line_total_cents: 123457, unit_price_cents: 450 },
-    { sale_id: 'S2', product_id: 'P2', quantity: 1362, line_total_cents: 98765, unit_price_cents: 725 }
-  ],
-  cashMovements: [],
-  payments: [],
-  purchases: [{ created_at: '2026-10-21T15:00:00.000Z', supplier: 'PROV-1', document_ref: 'F001-1', total_cost_cents: 4321099, line_count: 3 }],
-  cash: { ready: true, open: { opened_at: at(7), opening_cents: 55555, expected_cents: 66666 }, rows: [{ k: 'venta', metodo: 'efectivo', n: 1, a: 123457, b: 0, c: 0 }] }
-};
-const SECRET_FIGURES = ['1234.57', '987.65', '2222.22', '876.54', '321.09', '1197.63', '43210.99', '555.55', '666.66', '3.10', '5.90'];
-const SALE_PRICES = ['4.50', '7.25', '1.50'];
-const ARGS = { producto: 'arroz', cliente_id: 'C-0001', periodo: 'hoy' };
+import { NOW, DATA, ARGS, chatWith, amounts, assertNoMoney } from './empleado-montos-datos.mjs';
 
 const EMPLOYEE_ROLES = LEVEL_NAMES.map((n) => 'empleado:' + n).concat(['empleado', 'sin_rol', 'empleado:desconocido']);
 // Nivel 3 + «costos y cambios»: ve ventas y ganancia a propósito (lo da el Admin), pero nunca deudas, caja, créditos, sugerencias ni resúmenes.
 const COSTS_FORBIDDEN = ['deudas_clientes', 'deuda_cliente', 'creditos_atrasados', 'caja_abierta', 'sugerencias_compra', 'resumen_dia', 'resumen_mes'];
 
-function countingReader() {
-  const base = memoryReader(DATA), reads = [];
-  const r = {}; for (const k of Object.keys(base)) r[k] = async (...a) => { reads.push(k); return base[k](...a); };
-  return [r, reads];
-}
-const toolCall = (tipo) => ({ id: 'call_q', type: 'function', function: { name: 'consultar', arguments: JSON.stringify({ tipo, ...ARGS }) } });
-// 1ª llamada: solo «consultar». 2ª (si la hay): texto sin cifras. Se guardan los pedidos al modelo.
-function scripted(tipo, cap) {
-  let i = 0;
-  return async (_u, init) => { cap.push(String(init.body));
-    const msg = i++ === 0 ? { role: 'assistant', content: '', tool_calls: [toolCall(tipo)] } : { role: 'assistant', content: 'Listo, eso es lo que encontré.' };
-    return json({ choices: [{ message: msg }], usage: { prompt_tokens: 1, completion_tokens: 1 } }); };
-}
-const enc = new TextEncoder(), sse = (o) => 'data: ' + JSON.stringify(o) + '\n\n';
-function scriptedStream(tipo, cap) {
-  let i = 0;
-  return async (_u, init) => { cap.push(String(init.body));
-    const chunks = i++ === 0
-      ? [sse({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_q', function: { name: 'consultar', arguments: JSON.stringify({ tipo, ...ARGS }) } }] } }] }), sse({ choices: [{ delta: {}, finish_reason: 'tool_calls' }] })]
-      : [sse({ choices: [{ delta: { content: 'Listo, eso es lo que encontré.' } }] }), sse({ choices: [{ delta: {}, finish_reason: 'stop' }] })];
-    return new Response(new ReadableStream({ start(c) { for (const x of chunks) c.enqueue(enc.encode(x)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream' } }); };
-}
-async function chat(role, tipo, { text = '¿me das el dato?', stream = false } = {}) {
-  const cap = [], [rd, reads] = countingReader();
-  const r = await assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, stream, context: { products: DATA.products } }) }),
-    { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' }, { principalId: 'session:x', posRole: role === 'owner' ? 'owner' : 'empleado' }, json,
-    { store: createMemoryUsageStore(), resolveRole: async () => role, fetch: stream ? scriptedStream(tipo, cap) : scripted(tipo, cap), reader: rd, audit: async () => {}, now: () => NOW });
-  let out;
-  if (stream && /event-stream/.test(r.headers.get('content-type') || '')) {
-    const ev = []; const p = C.createSseParser((e, d) => ev.push({ e, d }));
-    const rr = r.body.getReader(), dec = new TextDecoder(); for (;;) { const { value, done } = await rr.read(); if (done) break; p.feed(dec.decode(value, { stream: true })); }
-    out = JSON.stringify(ev);
-  } else out = await r.text();
-  return { status: r.status, out, toModel: cap.slice(1).join('\n'), reads };
-}
-const amounts = (s) => [...String(s).matchAll(/S\/\s*(-?\d[\d,]*(?:\.\d+)?)/g)].map((m) => Number(m[1].replace(/,/g, '')).toFixed(2));
-function assertNoMoney(label, s, { prices = true } = {}) {
-  for (const f of SECRET_FIGURES) assert.ok(!s.includes(f), `${label}: aparece la cifra ${f}: ${s.slice(0, 400)}`);
-  for (const a of amounts(s)) assert.ok(prices && SALE_PRICES.includes(a), `${label}: monto S/ ${a} que no es precio de venta: ${s.slice(0, 400)}`);
-}
+const chat = (role, tipo, o) => chatWith(assistantChatRoute, role, tipo, o);
 
 test('control: con estos datos el Admin SÍ recibe montos en el texto (la prueba no es vacía)', async () => {
   for (const [tipo, fig] of [['ventas_periodo', '2222.22'], ['ganancia', ''], ['deudas_clientes', '1197.63'], ['caja_abierta', '666.66'], ['compras_recientes', '43210.99'], ['ventas_por_hora', ''], ['top_productos', '1234.57']]) {
@@ -155,5 +83,104 @@ test('employeeQueryResult: para las consultas del empleado el texto que deja pas
   for (const tipo of ['stock_producto', 'bajo_stock']) {
     const e = employeeQueryResult(await runAssistantQuery(memoryReader(DATA), { tipo, ...ARGS }, NOW));
     assertNoMoney(tipo, JSON.stringify(e));
+  }
+});
+
+// ---------- Segunda barrera (pedido de alfa sobre #989) ----------
+// Si un día la lista de consultas de un nivel se abre por error, employeeQueryResult NO debe dejar pasar el texto ni el total de la
+// consulta: el texto del empleado se arma solo con los campos permitidos (columnas y resumen de la lista blanca).
+const MONEY_TYPES = QUERY_TYPES.filter((t) => !['stock_producto', 'bajo_stock'].includes(t));
+const EMPLOYEE_LEVEL_ROLES = ['empleado:consultas', 'empleado:consultas_documentos', 'empleado:completo'];
+const ROUTE_OPENED = ['ventas_periodo', 'top_productos', 'deudas_clientes', 'compras_recientes', 'ventas_por_hora']; // de verdad leen plata
+
+// Junta TODOS los fallos (no solo el primero) para que se vea cada fuga.
+function collector() {
+  const errs = [];
+  return { check: (fn) => { try { fn(); } catch (e) { errs.push(String(e.message).split('\n')[0].slice(0, 260)); } }, done: (what) => assert.deepEqual(errs, [], what + ':\n' + errs.join('\n')) };
+}
+function openedList(open, roles) {
+  const env = { ...process.env, LISTA_ABIERTA: JSON.stringify(open), ROLES: JSON.stringify(roles) };
+  delete env.NODE_TEST_CONTEXT; delete env.NODE_OPTIONS; // proceso normal, no un hijo del corredor de pruebas
+  const r = spawnSync(process.execPath, ['--experimental-test-module-mocks', '--no-warnings', fileURLToPath(new URL('./empleado-lista-abierta.mjs', import.meta.url))], { env, encoding: 'utf8', maxBuffer: 64 << 20 });
+  assert.equal(r.status, 0, 'proceso de la lista abierta: ' + String(r.stderr).slice(0, 800));
+  const i = r.stdout.indexOf('@@LISTA_ABIERTA@@'); assert.ok(i >= 0, 'sin resultado: ' + String(r.stderr).slice(0, 800));
+  return JSON.parse(r.stdout.slice(i + 17));
+}
+
+test('lista abierta por error (nivel 1-3 con ventas, deudas, compras…): el empleado y el modelo no reciben montos ni total', () => {
+  const res = openedList(MONEY_TYPES, EMPLOYEE_LEVEL_ROLES);
+  assert.equal(res.length, MONEY_TYPES.length * EMPLOYEE_LEVEL_ROLES.length * 2);
+  const c = collector();
+  for (const x of res) {
+    const label = `${x.role} / ${x.tipo}${x.stream ? ' / partes' : ''} (lista abierta)`;
+    assert.ok([200, 403].includes(x.status), `${label}: ${x.status}`);
+    if (ROUTE_OPENED.includes(x.tipo)) { // la simulación sí abrió la puerta: la consulta corrió y leyó datos de plata
+      assert.equal(x.status, 200, label);
+      assert.ok(x.reads.some((k) => k !== 'products' && k !== 'productsById'), `${label}: la consulta corrió: ${x.reads}`);
+      assert.ok(x.results.length >= 1, `${label}: llegó la tarjeta de consulta: ${x.out.slice(0, 300)}`);
+    }
+    c.check(() => assertNoMoney(label, x.out));
+    c.check(() => assertNoMoney(label + ' (al modelo)', x.toModel));
+    for (const q of x.results) c.check(() => assert.equal(q.total ?? null, null, `${label}: total ${q.total} en la pantalla`));
+  }
+  c.done('fugas con la lista abierta');
+});
+
+test('employeeQueryResult: con cualquier consulta (también caja, créditos, sugerencias, ganancia, resúmenes) no pasa texto con montos ni total', async () => {
+  const c = collector();
+  for (const tipo of QUERY_TYPES) {
+    const raw = await runAssistantQuery(memoryReader(DATA), { tipo, ...ARGS }, NOW);
+    const e = employeeQueryResult(raw);
+    c.check(() => assertNoMoney(tipo, JSON.stringify(e)));
+    c.check(() => assert.equal(e.total, null, `${tipo}: total ${e.total}`));
+    c.check(() => assert.equal(typeof e.texto, 'string', `${tipo}: hay texto`));
+    if (!['stock_producto', 'bajo_stock'].includes(tipo)) c.check(() => assert.notEqual(e.texto, raw.texto, `${tipo}: pasa el texto original`));
+  }
+  c.done('employeeQueryResult');
+});
+
+test('employeeQueryResult: stock_producto y bajo_stock se leen igual que antes (con el precio de venta)', async () => {
+  const cases = [
+    [DATA, { tipo: 'stock_producto', producto: 'arroz' }], [DATA, { tipo: 'stock_producto', producto: 'a' }], [DATA, { tipo: 'stock_producto', producto: 'zzz-no-existe' }],
+    [DATA, { tipo: 'bajo_stock' }]
+  ];
+  const edge = { products: [
+    { id: 'E1', nombre: 'Sal', precio: 1, costo: 0.5, stock: 0, min: 2, controla: true },
+    { id: 'E2', nombre: 'Azúcar', precio: null, costo: 1, stock: -3, min: 2, controla: true },
+    { id: 'E3', nombre: 'Bolsa', precio: 0.1, costo: 0.05, stock: 0, min: 0, controla: false },
+    { id: 'E4', nombre: 'Leche', precio: 3.8, costo: 3, stock: 1.25, min: 6, controla: true },
+    { id: 'E5', nombre: 'Fideo', precio: 2.2, costo: 1.9, stock: 1, min: 1, controla: true }
+  ] };
+  cases.push([edge, { tipo: 'stock_producto', producto: 'a' }], [edge, { tipo: 'bajo_stock' }], [{ products: [] }, { tipo: 'bajo_stock' }],
+    [{ products: [edge.products[2]] }, { tipo: 'stock_producto', producto: 'bolsa' }]);
+  for (const [data, q] of cases) {
+    const raw = await runAssistantQuery(memoryReader(data), q, NOW);
+    const e = employeeQueryResult(raw);
+    assert.equal(e.texto, raw.texto, `${q.tipo} ${q.producto || ''}: mismo texto`);
+    assert.equal(e.total, null);
+  }
+  const s = employeeQueryResult(await runAssistantQuery(memoryReader(DATA), { tipo: 'stock_producto', producto: 'arroz' }, NOW));
+  assert.equal(s.texto, 'Arroz 1 kg (S/ 4.50): ' + stockLabel(2) + '.');
+});
+
+test('employeeQueryResult: lista larga de bajo_stock conserva el aviso «se revisaron los primeros»', async () => {
+  const many = { products: Array.from({ length: 30 }, (_, i) => ({ id: 'M' + i, nombre: 'Prod ' + i, precio: 1, costo: 0.5, stock: i % 3, min: 5, controla: true })) };
+  const rd = memoryReader(many), base = rd.products;
+  rd.products = async (...a) => { const l = await base(...a); return Object.assign(l.slice(0, 20), { truncated: true }); };
+  const raw = await runAssistantQuery(rd, { tipo: 'bajo_stock' }, NOW);
+  assert.ok(raw.truncado && /se revisaron los primeros/.test(raw.texto), raw.texto);
+  assert.equal(employeeQueryResult(raw).texto, raw.texto);
+});
+
+test(`Admin y ${COSTS_ROLE}: la consulta les llega exactamente como antes (texto y total)`, async () => {
+  for (const [role, tipos] of [['owner', ['ventas_periodo', 'deudas_clientes', 'caja_abierta', 'compras_recientes', 'stock_producto']], [COSTS_ROLE, ['ventas_periodo', 'top_productos', 'ganancia', 'compras_recientes', 'stock_producto']]]) {
+    for (const tipo of tipos) {
+      const raw = await runAssistantQuery(memoryReader(DATA), { tipo, ...ARGS }, NOW);
+      const r = await chat(role, tipo);
+      assert.equal(r.status, 200, `${role} / ${tipo}`);
+      const body = JSON.parse(r.out), q = body.proposals.find((p) => p.type === 'consulta')?.result;
+      assert.equal(q.texto, raw.texto, `${role} / ${tipo}: mismo texto`);
+      assert.equal(q.total, raw.total ?? null, `${role} / ${tipo}: mismo total`);
+    }
   }
 });
