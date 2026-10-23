@@ -705,7 +705,7 @@
     network: [MSG.offline, true], offline: [MSG.offline, true], timeout: [MSG.slow, true], upstream_timeout: [MSG.slow, true],
     upstream_error: [MSG.again, true], stock_check_unavailable: ['No pude revisar el inventario ahora. Toca «Reintentar» en un momento.', true], HTTP_503: [MSG.again, true], HTTP_502: [MSG.again, true], HTTP_500: [MSG.again, true],
     confirm_expired: [MSG.expired], HTTP_410: [MSG.expired], proposal_changed: [MSG.changed], proposal_id_mismatch: [MSG.changed], HTTP_409: [MSG.changed],
-    product_missing: ['Ese producto ya no está en el inventario.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
+    product_missing: ['Ese producto ya no está en el inventario.'], stock_changed: ['El stock cambió desde que preparé la tarjeta. Pídela de nuevo.'], sin_control_stock: ['Ese producto no lleva control de stock.'],
     review_required: ['Revisa este dato en las filas marcadas y vuelve a confirmar.'], fields_required: ['Complete los datos marcados y vuelva a confirmar.'], manual_not_allowed: ['Esa tarjeta no se puede cambiar así. Toque «Pedir de nuevo».'], over_limit: ['Fuera del límite: corrige la factura o quita la fila.'],
     empty_after_review: ['Quitaste todas las filas. Pide la compra de nuevo.'], other_device: ['Esta propuesta es de otro aparato. Pídela aquí otra vez.'],
     image_unsupported: ['Leer fotos no está disponible por ahora.'], assistant_not_configured: ['El asistente no está disponible por ahora.'],
@@ -751,6 +751,8 @@
     if (code === 'over_limit' && !(r.rows || []).some(function (n) { return Number.isInteger(n) && n >= 0; })) return blocked(type === 'compra' ? null : (r.msg && !looksTechnical(r.msg) ? r.msg : null));
     if (code === 'over_limit') return { kind: 'limit', rows: (r.rows || []).filter(function (n) { return Number.isInteger(n) && n >= 0; }), button: 'Confirmar', again: true, msg: r.msg || 'Fuera del límite: corrige la factura o quita la fila.' };
     if (code === 'revision_conflict' || code === 'config_sin_datos' || code === 'config_invalid' || code === 'config_forbidden') return { kind: 'config', rows: [], button: null, again: true, msg: r.msg || friendlyError(code).msg };
+    // (VE-009) stock cambiado: la tarjeta vieja queda sin botón; con tarjeta nueva no hace falta «Pedir de nuevo» (ya está debajo).
+    if (code === 'stock_changed') return { kind: 'stale', rows: [], button: null, again: !r.fresh, cancelOnly: false, msg: r.msg || FRIENDLY.stock_changed[0] };
     if (code === 'already_confirmed') return { kind: 'elsewhere', rows: [], button: 'Confirmar', again: true, msg: r.msg && !looksTechnical(r.msg) ? r.msg : FRIENDLY.already_confirmed[0] };
     if (code === 'rate_limited' || code === 'HTTP_429') return { kind: 'wait', rows: [], button: 'Reintentar', again: true, msg: MSG.wait };
     if (code === 'other_device') return { kind: 'elsewhere', rows: [], button: null, again: true, msg: r.msg || FRIENDLY.other_device[0] };
@@ -817,6 +819,14 @@
     });
     return { filas: rows, total: Math.round(cents) / 100, sinCosto: sinCosto };
   }
+  // Tarjeta nueva de un 409 stock_changed: solo si es un objeto del MISMO tipo y producto que la vieja, con token firmado y otro id.
+  // El servidor la vuelve a revisar al confirmar (token propio); esto solo evita dibujar algo que no corresponde a esta tarjeta.
+  function staleCountFresh(old, fresh) {
+    if (!old || !fresh || typeof fresh !== 'object' || Array.isArray(fresh)) return null;
+    if (fresh.type !== old.type || typeof fresh.confirm_token !== 'string' || !fresh.confirm_token || !fresh.id || fresh.id === old.id) return null;
+    if (String(fresh.product_id == null ? '' : fresh.product_id) !== String(old.product_id == null ? '' : old.product_id)) return null;
+    return fresh;
+  }
   function createGate(deps) {
     var items = Object.create(null);
     function forget(it) { if (!it) return; wipeManual(it.p); wipeManual(it.applied); if (it.sent && it.sent.manual && typeof it.sent.manual === 'object') Object.keys(it.sent.manual).forEach(function (k) { delete it.sent.manual[k]; }); delete items[it.key]; it.state = 'forgotten'; it.p = null; it.applied = null; it.review = null; it.sent = null; it.onRetry = null; }
@@ -860,6 +870,11 @@
         if (c && !c.ok && isServerConfig(it.p) && ['revision_conflict', 'config_sin_datos', 'config_invalid', 'config_forbidden'].indexOf(c.error) >= 0) {
           it.state = 'denied'; if (c.error === 'revision_conflict' && deps.reloadSettings) { try { Promise.resolve(deps.reloadSettings(it.p)).catch(function () {}); } catch (_) {} }
           return { ok: false, code: c.error, msg: c.error === 'revision_conflict' ? CONFIG_CONFLICT_MSG : friendlyError(c.error, c.message).msg }; }
+        // (VE-009, #983) 409 stock_changed: la corrección de conteo se armó con un stock viejo. La tarjeta vieja ya no se aplica; se muestra el
+        // aviso del servidor («cambió de 12 a 10… Revisa la tarjeta nueva.») y la tarjeta NUEVA firmada que devuelve (fresh), si es del mismo
+        // producto y tipo y trae su token. Sin tarjeta nueva (ya llegó al número contado, o pasa el límite) solo el aviso.
+        if (c && !c.ok && c.error === 'stock_changed') { it.state = 'denied'; var fr = staleCountFresh(it.p, c.proposal);
+          return { ok: false, code: 'stock_changed', fresh: fr, msg: c.message && !looksTechnical(c.message) ? c.message : FRIENDLY.stock_changed[0] }; }
         if (c && !c.ok && c.error === 'already_confirmed') { it.state = 'denied'; return { ok: false, code: 'already_confirmed', msg: it.p.type === 'compra' ? FRIENDLY.already_confirmed[0] : 'Este cambio ya se confirmó en otra sesión.' }; }
         if (c && !c.ok && c.error === 'other_device') { it.state = 'denied'; return { ok: false, code: 'other_device', msg: c.confirmed ? OTHER_DEVICE_DONE_MSG : FRIENDLY.other_device[0] }; }
         if (!c || !c.ok) { it.state = (c && (c.error === 'confirm_expired' || c.error === 'forbidden_role' || c.error === 'admin_only' || c.error === 'proposal_changed' || c.error === 'sin_control_stock')) ? 'denied' : 'pending';
@@ -1201,7 +1216,7 @@
     if (/\b(?:color(?:es)?|azul|celeste|naranja|esmeralda|verde|simple)\b|configur|aparien|interfa[sz]|tema|modo|nocturn|oscur|letra|tamañ|boton|stock.*m[ií]n|m[ií]n.*stock|imprim|impres|lector|sonido|escane|avis|alert/.test(t)) return true;
     return !!previous && /^(?:s[ií]|no|hazlo|apl[ií]calo|normal|chico|grande|muy grande|azul|verde|naranja|celeste|simple|claro|noche|auto|\d{1,6}%?)[.!]?$/i.test(t);
   }
-  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
+  var api = { configurationIntent: configurationIntent, MEMORY: MEMORY, utf8Len: utf8Len, businessName: businessName, memNew: memNew, memPairs: memPairs, memRequest: memRequest, memAfter: memAfter, memStore: memStore, memFold: memFold, compactReview: compactReview, REVIEW_BUDGET: REVIEW_BUDGET, maskCustomers: maskCustomers, customerCodesIn: customerCodesIn, fmtClean: fmtClean, inputClean: inputClean, normManual: normManual, manualBad: manualBad, BLOCKED_MSG: BLOCKED_MSG, ROLE_LOST_MSG: ROLE_LOST_MSG, NO_LINK_MSG: NO_LINK_MSG, RECONNECT_MSG: RECONNECT_MSG, SAME_SESSION_MSG: SAME_SESSION_MSG, OTHER_DEVICE_DONE_MSG: OTHER_DEVICE_DONE_MSG, wipeManual: wipeManual, createReplyRenderer: createReplyRenderer, createDisplayStripper: createDisplayStripper, stripDisplay: stripDisplay, appendCoded: appendCoded, DOC_CODE_RE: DOC_CODE_RE, tableCells: tableCells, MASK_LABEL: MASK_LABEL, MASK_NOTE: MASK_NOTE, STREAM: STREAM, uploadMs: uploadMs, createSseParser: createSseParser, createTextPainter: createTextPainter, streamChat: streamChat, friendlyError: friendlyError, looksTechnical: looksTechnical, FRIENDLY: FRIENDLY, padOverlap: padOverlap, tracksStock: tracksStock, precheck: precheck, request: request, TIMEOUTS: TIMEOUTS, CONFIRM_ATTEMPTS: CONFIRM_ATTEMPTS, confirmFailureView: confirmFailureView, staleCountFresh: staleCountFresh, purchaseProductDraft: purchaseProductDraft, capContext: capContext, redactText: redactText, redactOwnerContext: redactOwnerContext, maskLeft: maskLeft, needFields: needFields, fillValues: fillValues, isServerConfig: isServerConfig, isRucCard: isRucCard, SERVER_CONFIG_KEYS: SERVER_CONFIG_KEYS, CONFIG_CONFLICT_MSG: CONFIG_CONFLICT_MSG, CONFIG_LOST_MSG: CONFIG_LOST_MSG, purchaseValue: purchaseValue, purchaseTotals: purchaseTotals, buildContext: buildContext, canExecute: canExecute, createGate: createGate, buildDocument: buildDocument, maskDoc: maskDoc, EXECUTORS: EXECUTORS, soles: soles, esc: esc };
   root.NA_ASISTENTE_CORE = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

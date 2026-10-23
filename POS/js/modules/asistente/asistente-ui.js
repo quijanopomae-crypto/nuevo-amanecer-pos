@@ -277,7 +277,7 @@
         // propuesta y manual; el servidor contesta 200 replay:true y no guarda nada otra vez). Un 409/403 del reintento se muestra tal cual.
         if (d.bodyError && d.status == null) { var be = new Error('network'); be.bodyError = true; throw be; }
         var out = d.ok ? d : { ok: false, error: d.error, status: d.status, rows: d.rows, fields: Array.isArray(d.fields) ? d.fields : null, retry_after_s: d.retry_after_s, message: typeof d.message === 'string' ? d.message.slice(0, 400) : null,
-          confirmed: d.confirmed === true, operation_id: d.operation_id, type: d.type, proposal: d.error === 'already_confirmed_same_session' && d.proposal && typeof d.proposal === 'object' ? d.proposal : undefined };
+          confirmed: d.confirmed === true, operation_id: d.operation_id, type: d.type, proposal: (d.error === 'already_confirmed_same_session' || d.error === 'stock_changed') && d.proposal && typeof d.proposal === 'object' ? d.proposal : undefined };
         try { Object.defineProperty(out, 'sentBody', { value: body, enumerable: false, configurable: true }); } catch (_) {}
         return out; }
       catch (e) { lastErr = e; if (i === 0) await new Promise(function (r) { setTimeout(r, 600); }); }
@@ -677,6 +677,9 @@
         var f = C.confirmFailureView(r, { editable: need ? need.names : [], type: p.type }) || { kind: 'other', rows: [], button: 'Confirmar', again: true };
         c.dataset.fail = f.kind;
         // (Bot 4 sobre 58200f60) nada que arreglar en la tarjeta: aviso claro y solo «Cancelar» (ningún botón que no lleve a ningún lado)
+        // (VE-009) stock cambiado: aviso del servidor en la tarjeta vieja (sin Confirmar) y la tarjeta NUEVA firmada justo debajo.
+        if (f.kind === 'stale') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (no) no.hidden = true; if (again) { again.hidden = !f.again; again.disabled = false; }
+          if (r.fresh) { var nc = addCard(r.fresh, prompt, c); if (nc) revealCard(nc, [nc]); } return; }
         if (f.kind === 'blocked') { res.textContent = f.msg; if (ok) { ok.hidden = true; ok.disabled = true; } if (again) again.hidden = true; no.hidden = false; no.disabled = false; no.textContent = 'Cancelar'; return; }
         if (f.kind === 'review' || f.kind === 'limit') markRows(f.rows, f.kind === 'limit');
         if (f.kind === 'fields' && p.type === 'configuracion') { if (need) need.flag(f.fields, f.msg); res.textContent = f.msg; } // RUC: el aviso del servidor junto al campo y en la tarjeta
