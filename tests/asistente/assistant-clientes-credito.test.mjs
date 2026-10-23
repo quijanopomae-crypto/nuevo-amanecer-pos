@@ -865,3 +865,14 @@ test('#995 (bloqueo en b4072c52) 5 o más palabras entre el verbo y el nombre: s
   for (const text of ['¿a ver cuánto me pagaron esta semana?', '¿al final cuánto me pagaron esta semana?', '¿ya hoy en la tarde me pagaron?']) for (const stream of [false, true])
     assert.equal((await askP(text, { stream })).reply, 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.', text);
 });
+
+// (decisión del lead) verbos en presente/futuro: paga, pagar, pagará, abona, abonar, abonará, «va a pagar». Sin Rosa: «No encontré… Rosa», sin IA ni total.
+const FUT_ROSA = ['¿cuándo me paga Rosa?', '¿Rosa me pagará el viernes?', '¿Rosa me va a pagar esta semana?', '¿me abonará Rosa?', '¿me abona Rosa esta semana?', '¿cuánto me va a abonar Rosa?'];
+test('#995 (decisión del lead) «paga / pagará / va a pagar / abona / abonará»: sin Rosa = «No encontré… Rosa» sin IA ni total (con y sin partes)', async () => {
+  for (const text of FUT_ROSA) for (const stream of [false, true]) for (const args of [{ tipo: 'cobros_creditos', ...WEEK }, { tipo: 'ventas_periodo', ...WEEK }]) {
+    const why = text + ' stream=' + stream + ' ' + args.tipo;
+    const miss = await askP(text, { stream, args, data: noRosa(DATA_CR) });
+    assert.equal(miss.reply, 'No encontré a un cliente llamado Rosa. Revise el nombre en Clientes o dígame su código («cliente #código»).', why);
+    assert.equal(miss.cap.length, 0, why);
+  }
+});
