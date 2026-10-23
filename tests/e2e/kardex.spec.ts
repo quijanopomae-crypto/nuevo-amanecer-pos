@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { isAssistantPing } from './helpers/known-background-requests';
 
 async function rolePage(page: Page, role: 'owner' | 'empleado') {
   await page.route('**/*', route => {
@@ -83,7 +84,7 @@ for (const width of [390, 768, 1366]) for (const dark of [false, true]) {
     await page.setViewportSize({ width, height: 900 });
     await rolePage(page, 'owner');
     const dates = await seed(page), before = await readState(page), writes: string[] = [];
-    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.method() + ' ' + request.url()); });
+    page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.method() + ' ' + request.url()); });
     await page.evaluate(dark => document.body.classList.toggle('dark', dark), dark);
     await openCard(page);
     const screen = page.locator('#pageKardex');
@@ -222,7 +223,7 @@ test('employee cannot open Kardex from navigation or card; direct render exposes
   await page.setViewportSize({ width: 390, height: 844 });
   await rolePage(page, 'empleado'); await seed(page);
   const before = await readState(page), writes: string[] = [];
-  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method())) writes.push(request.url()); });
+  page.on('request', request => { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method()) && !isAssistantPing(request)) writes.push(request.url()); });
   await page.locator('#naMobileMenuToggle').click();
   await expect(page.locator('#naMobileDrawer [data-page="pageKardex"]')).toHaveCount(0);
   await page.evaluate(() => { (window as any).NA_MENU_NAVIGATION.closeMobileDrawer(); (window as any).goPage('pageKardex'); });

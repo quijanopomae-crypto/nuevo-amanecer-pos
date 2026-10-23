@@ -7,9 +7,9 @@
   "backend_worker": "nuevo-amanecer-pos-prod",
   "local_server_required": false,
   "activation_secret_embedded": false,
-  "note": "Web 186: publicar CANON commit f0b8751939a9dd7d1dc6ae165c3f0431aa36bb19 (PR #890: «Clientes que deben» para el cajero, solo lectura, con filtro por vencimiento). Solo estáticos web: sin Worker, sin migraciones, sin secretos. CI verde en 59627299 (CANON 39685520755, Visual 39685520754, E2E 39685520651). Rollback a Web 185 (1fc1323a, run 39680085183).",
-  "retry_attempt": 186,
-  "retry_reason": "Aprobación del dueño 2026-10-21 para publicar #890 (solo web); equipo: ASISTENTE 1 y 3 sobre 59627299.",
-  "requested_at_utc": "2026-10-21T22:58:29Z",
-  "approved_base": "f0b8751939a9dd7d1dc6ae165c3f0431aa36bb19"
+  "note": "Web 200: #1007 kárdex en cola, #1008 stock negativo (candado cerrado), #1010 kg/presentaciones (candado cerrado), merge 5d247f92. Solo web, sin cambio de Worker (Worker 77 sigue). Respaldo D1 run 40007559977. Rollback Web 199 (dc65a195).",
+  "retry_attempt": 200,
+  "retry_reason": "OK del dueño 2026-10-23: 'Publica las 5 mejoras y los 7 cambios del asistente, con respaldo antes'.",
+  "requested_at_utc": "2026-10-23T19:40:00Z",
+  "approved_base": "5d247f92446469c72e958fb38d1c4679a0111f26"
 }

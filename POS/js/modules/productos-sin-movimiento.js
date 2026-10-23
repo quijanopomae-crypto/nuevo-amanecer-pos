@@ -69,8 +69,16 @@
   function policyReady() {
     try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.canAccessScreen === 'function' && p.canAccessScreen('owner', PAGE_ID)); } catch (_) { return false; }
   }
+  function unlocked() {
+    try { var p = root.NA_PERMISSIONS; return !!(p && typeof p.featureLocked === 'function' && p.featureLocked(FEATURE_ID) === false); } catch (_) { return false; }
+  }
+  // Permisos por empleado (#924): el empleado entra solo si el servidor prendió su casilla (falla cerrada).
+  function employeeMay() {
+    try { var e = root.NA_EMPLOYEE_PERMS; return !!(e && typeof e.may === 'function' && e.may(FEATURE_ID) === true); } catch (_) { return false; }
+  }
+  // Dueño como hoy, o empleado con casilla. El valor de inventario (withValue) sigue siendo solo isOwner().
   function available() {
-    try { var p = root.NA_PERMISSIONS; return isOwner() && policyReady() && !!(p && typeof p.featureLocked === 'function' && !p.featureLocked(FEATURE_ID)); } catch (_) { return false; }
+    try { return policyReady() && unlocked() && (isOwner() || employeeMay()); } catch (_) { return false; }
   }
   function dateLabel(day) { return day ? day.split('-').reverse().join('/') : 'Nunca (en este dispositivo)'; }
   function money(v) { return 'S/ ' + v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -161,6 +169,7 @@
     if (exp) exp.addEventListener('click', exportCsv);
     if (typeof root.MutationObserver === 'function') new root.MutationObserver(update).observe(page, { attributes: true, attributeFilter: ['class'] });
     root.addEventListener('na:role', function () { if (!available()) render(); else update(); });
+    root.addEventListener('na:employee-perms', function () { if (!available()) render(); else update(); });
     ['na:canonical-updated', 'na:canonical-sale-projection', 'focus'].forEach(function (ev) { root.addEventListener(ev, update); });
     update();
   }
