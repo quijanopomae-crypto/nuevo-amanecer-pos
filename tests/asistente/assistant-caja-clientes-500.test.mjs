@@ -145,7 +145,9 @@ test('CLI-010: «lo máximo que le puedo fiar» -> dice claro que los límites d
 test('alcance: ventas_periodo con métodos o «ayer» queda con su texto y su periodo de siempre', async (t) => {
   quiet(t);
   const a = await chat('cuanto vendi hoy en efectivo y cuanto en yape', { fetch: seq([first(call(0, 'c1', { tipo: 'ventas_periodo', periodo: 'hoy' })), SECOND], []) });
-  assert.equal(consulta(a)[0].query.tipo, 'ventas_periodo'); assert.match(a.final.reply, /^Ventas /); assert.doesNotMatch(a.final.reply, /Ventas por método/);
+  assert.equal(consulta(a)[0].query.tipo, 'ventas_periodo'); assert.match(consulta(a)[0].result.texto, /^Ventas /); assert.doesNotMatch(a.raw, /Ventas por método/);
+  // (directQueryReply) con método de pago la tabla no contesta: va la segunda llamada y contesta el modelo.
+  assert.equal(a.final.timings.second_call, true);
   const b = await chat('cuanto vendi ayer', { fetch: seq([first(call(0, 'c1', { tipo: 'ventas_periodo', periodo: 'hoy' })), SECOND], []) });
   assert.equal(consulta(b)[0].query.tipo, 'ventas_periodo'); assert.match(consulta(b)[0].result.titulo, new RegExp(HOY), 'la fecha de ventas no se corrige aquí');
 });
