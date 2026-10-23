@@ -19,7 +19,7 @@ function plain(value) {
 function load(extra) {
   const context = Object.assign({
     localStorage: memory(),
-    NA_PERMISSIONS: { canDo: (role, action) => role === 'owner' && action === 'purchases.costs.view' },
+    NA_PERMISSIONS: { featureLocked: id => id !== 'historial-precios-producto', canDo: (role, action) => role === 'owner' && action === 'purchases.costs.view' },
     NA_ROLES: { role: 'owner', label: 'Ana', deviceId: 'dev-ana', confirmed: true, isOwner: () => true }
   }, extra || {});
   vm.createContext(context);
