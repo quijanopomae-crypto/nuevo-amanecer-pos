@@ -29,7 +29,7 @@ function streamed(role, t, step, known) {
 const UNI058 = 'Hay 5 productos en o bajo el mínimo. Los más urgentes: FIDEO DON VITTORIO SPAGHETTI 500GR X 20 (Faltan 2), ACEITE PRIMOR CLASICO 900ML X 12BOT (Faltan 3).';
 const INV041 = 'Admin, encontré Fideo Lavaggi Spaghetti 500 g: precio S/ 2.50 y costo S/ 1.80; Fideo Don Vittorio 500 g: precio S/ 2.60 y costo S/ 1.90. ¿Cuál de los dos contaste en 25?';
 const BRAND_KEEP = [UNI058, INV041, 'Te quedan 30 de FIDEO DON VITTORIO.', 'fideo don vittorio: 30 unid.', 'el fideo don vittorio está a S/ 2.60',
-  'Hay aceite Doña Pepa y tallarín Don Vittorio en stock.', 'DON VITTORIO SPAGHETTI 500GR X 20: 30 unid.'];
+  'Hay aceite Doña Pepa y tallarín Don Vittorio en stock.'];
 test('UNI-058 / INV-041: «FIDEO DON VITTORIO» y «fideo don vittorio» quedan para el Admin (entero y en partes 1/3/7)', () => {
   for (const role of ['owner']) for (const t of BRAND_KEEP) {
     const w = whole(role, t);
@@ -103,13 +103,16 @@ test('MAYÚSCULAS solas no dejan pasar a una persona; verbo de deuda/pago tras e
   }
 });
 test('marca en MAYÚSCULAS con producto antes, producto conocido o medida: queda (entero y en partes 1/3/7)', () => {
-  const keep = [['FIDEO DON VITTORIO', undefined], ['Te quedan 4 de FIDEO DON VITTORIO.', undefined], ['DON VITTORIO SPAGHETTI 500GR X 20', undefined],
+  const keep = [['FIDEO DON VITTORIO', undefined], ['Te quedan 4 de FIDEO DON VITTORIO.', undefined], ['DON VITTORIO SPAGHETTI 500GR X 20', CAPS_KNOWN],
+    ['DON VITTORIO SPAGHETTI 500GR X 20: 30 unid.', CAPS_KNOWN],
     ['DOÑA PEPA', CAPS_KNOWN], ['Te quedan 4 de DOÑA PEPA.', CAPS_KNOWN], ['DON VITTORIO TALLARIN', CAPS_KNOWN]];
   for (const role of ['owner']) for (const [t, k] of keep) {
     assert.equal(whole(role, t, k), t, role + ': ' + t);
     for (const step of [1, 3, 7]) assert.equal(streamed(role, t, step, k), t, role + ' ' + step + ': ' + t);
   }
   for (const role of ROLES) assert.equal(whole(role, 'DOÑA PEPA'), 'DOÑA [nombre oculto]', role + ': sin catálogo DOÑA PEPA es una persona');
+  // (#998 sobre #988) sin la regla propia de MAYÚSCULAS: la medida sola no hace marca (isBrandDon); sin catálogo ni palabra de producto, se tapa
+  for (const role of ROLES) { const w = whole(role, 'DON VITTORIO SPAGHETTI 500GR X 20'); assert.match(w, /^DON \[nombre oculto\].*500GR X 20$/, role + ': sin catálogo, mayúsculas + medida no bastan: ' + w); assert.doesNotMatch(w, /VITTORIO/, w); }
   for (const [t, k] of keep) assert.equal(whole(EMP, t, k), maskReplyPeople(A.redactOwnerData(A.redactEmployeeText(t)), 'strict'), 'empleado estricto: ' + t);
 });
 test('cliente de la lista: siempre tapado, aunque se llame como la marca o vaya en mayúsculas', () => {
@@ -228,8 +231,8 @@ function checkDebtNow(list) {
   }
 }
 test('verbo de deuda/pago en presente/futuro tras el nombre: tapado (entero y en partes 1/3/7)', () => checkDebtNow(DEBT_NOW_OK));
-// Depende de #988: la lista compartida de isBrandDon suma paga/pagará/abona/fía/le fío; hasta que #988 entre a la base queda como TODO (rojo esperado).
-test('verbo de deuda/pago en presente (paga, abona, fía): tapado — DEPENDE DE #988 (isBrandDon)', { todo: 'depende de #988: isBrandDon con paga/abona/fía' }, () => checkDebtNow(DEBT_NOW_988));
+// (#988 en la base) maskReplyPeople usa la regla compartida isBrandDon: paga, abona, fía también tapan.
+test('verbo de deuda/pago en presente (paga, abona, fía): tapado con isBrandDon (entero y en partes 1/3/7)', () => checkDebtNow(DEBT_NOW_988));
 
 // (revisión #998) nombre completo tapado (nombre Y apellidos, también en minúscula, aunque no sea cliente) sin tragarse lo que sigue
 // (verbo de deuda/pago, números, medidas, «de», «la», «que»); la «X» de medida no es parte del nombre. Admin y empleado, entero y en partes.
@@ -259,5 +262,34 @@ test('las marcas siguen intactas para el Admin con el tapado de nombre completo 
   for (const [t, k] of keep) {
     assert.equal(whole('owner', t, k), t, t);
     for (const step of [1, 3, 7]) assert.equal(streamed('owner', t, step, k), t, step + ': ' + t);
+  }
+});
+
+// (revisión de #998) el historial que manda el teléfono del Admin (mensajes anteriores, los manda el aparato) no lleva al modelo el texto
+// crudo tras «don», «doña» o «señora»: se tapa con la misma regla isBrandDon que la respuesta. «fideo don vittorio» queda entero.
+// Se revisa lo que de verdad sale hacia el modelo (cuerpo del pedido), en partes y entero. Nombres inventados, fuera de la lista de clientes.
+const PHONE_HISTORY = [
+  { role: 'user', content: 'recuerda que la leche doña Carmen Salas debe 2 kg' },
+  { role: 'assistant', content: 'Anotado. Don Ernesto Villar pagó 20 soles y la señora Lucía Torres lleva 3 de fideo don vittorio.' },
+  { role: 'user', content: 'el arroz don Ernesto paga el viernes; DOÑA CARMEN X 2 y la señora lucía torres abona 5' },
+  { role: 'assistant', content: 'Listo: fideo don vittorio tiene 30 unid.' }
+];
+test('historial del teléfono (Admin): sin el nombre tras «don/doña/señora» hacia el modelo (isBrandDon); «fideo don vittorio» queda (en partes y entero)', async (t) => {
+  quiet(t);
+  for (const stream of [true, false]) {
+    const r = await chat('¿y qué más?', { stream, history: PHONE_HISTORY, list: [{ content: 'Nada más pendiente.' }] });
+    assert.equal(r.bodies.length, 1, 'stream=' + stream + ': ' + r.raw.slice(0, 200));
+    const sent = JSON.parse(r.bodies[0]).messages;
+    const prior = sent.filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && !/¿y qué más\?/.test(m.content));
+    const hist = prior.map((m) => m.content).join('\n');
+    assert.ok(prior.length >= 4, 'stream=' + stream + ': el historial llegó al modelo: ' + hist);
+    assert.doesNotMatch(r.bodies[0], /Carmen|Salas|Ernesto|Villar|Luc[ií]a|Torres/i, 'stream=' + stream + ': al modelo llegó un nombre del historial: ' + hist);
+    assert.match(hist, /doña \[nombre oculto\] debe 2 kg/, hist);
+    assert.match(hist, /Don \[nombre oculto\] pagó 20 soles/, hist);
+    assert.match(hist, /arroz don \[nombre oculto\] paga el viernes/, hist);
+    assert.match(hist, /DOÑA \[nombre oculto\] X 2/, hist);
+    assert.match(hist, /señora \[nombre oculto\] abona 5/, hist);
+    assert.equal((hist.match(/fideo don vittorio/g) || []).length, 2, 'la marca queda entera: ' + hist);
+    assert.equal(r.final.reply, 'Nada más pendiente.');
   }
 });
