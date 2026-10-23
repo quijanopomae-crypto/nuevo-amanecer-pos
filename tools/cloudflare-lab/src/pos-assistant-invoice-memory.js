@@ -10,10 +10,34 @@ const TEACH_LEAD = /^(?:recuerda|recu[eé]rdalo|anota|apunta|aprende|ten\s+en\s+
 const TEACH_FACT = /\b(?:trae|traen|viene|vienen|contiene|contienen|cuesta|cuestan|vale|valen|equivale|equivalen|son|es\s+de|tiene|tienen|lleva|llevan)\b/i;
 // (lote 3, MEM-013) datos de proveedor sin número: «mi proveedor del arroz es distribuidora san juan», «el arroz se lo compro a …».
 const SUPPLIER_FACT = /\bproveedor(?:a|es)?\b[^.;\n]{0,60}?\b(?:es|son|se\s+llama)\s+\S|\b(?:se\s+)?(?:lo|la|los|las|le)\s+compro\s+(?:a|en)\s+\S|\bme\s+(?:lo|la|los|las)\s+(?:trae|traen|vende|venden)\s+\S/i;
-const QUESTION = /[¿?]|^(?:cu[aá]nt|c[oó]mo|qu[eé]|cu[aá]l|d[oó]nde|puedes|podr[ií]as|recu[eé]rdame|prepara|revisa|dime|dame|mu[eé]strame|y\s+(?:cu[aá]nt|qu[eé]))/i;
+// (auditoría 500, M-007/P-015/P-016) preguntas sin «?»: palabra interrogativa al inicio (también tras «y», «pero», «oye»… o una preposición:
+// «a cuánto», «de qué»), tras «y»/«si» («… trae 24 y cuando»), tras una coma («…, a cuanto me sale cada lata»), «a cuánto» en cualquier
+// parte («si me cuesta 85 … a cuanto vendo») o con tilde en cualquier parte («quién», «cuánto», «dónde»…). Nunca se guardan como lección.
+const Q_LEAD = /^(?:(?:y|o|pero|oye|oiga|entonces|bueno|ya|ok|ah)[,\s]+)?(?:(?:a|de|en|con|para|por|desde|hasta)\s+)?(?:(?:qui[eé]n(?:es)?|cu[aá]nt[oa]s?|c[oó]mo|qu[eé]|cu[aá]l(?:es)?|cu[aá]ndo|d[oó]nde|por\s*qu[eé])(?![a-záéíóúñ])|puedes|podr[ií]as|recu[eé]rdame|prepara|revisa|dime|dame|mu[eé]strame)/i;
+const Q_INSIDE = /[¿?]|(?<![a-záéíóúñ])a\s+cu[aá]nt[oa]s?(?![a-záéíóúñ])|(?<![a-záéíóúñ])(?:y|si)\s+(?:a\s+)?(?:qui[eé]n(?:es)?|cu[aá]nt[oa]s?|cu[aá]l(?:es)?|cu[aá]ndo)(?![a-záéíóúñ])|[,;:]\s*(?:y\s+)?(?:a\s+)?(?:qui[eé]n(?:es)?|cu[aá]nt[oa]s?|cu[aá]l(?:es)?|cu[aá]ndo|d[oó]nde|c[oó]mo)(?![a-záéíóúñ])|(?<![a-záéíóúñ])(?:qui[é]n(?:es)?|cu[á]nt[oa]s?|cu[á]l(?:es)?|cu[á]ndo|d[ó]nde|c[ó]mo|qu[é]|por\s*qu[é])(?![a-záéíóúñ])/i;
+export function isQuestion(text) { const t = String(text || '').replace(/\s+/g, ' ').trim(); return Q_LEAD.test(t) || Q_INSIDE.test(t); }
+// (auditoría 500, M-035) «el pollo ahora me cuesta 9.20»: el Admin dice el COSTO NUEVO de un producto. No es una lección: va a la tarjeta
+// «Actualizar costo» (pos-assistant.js, statedCostCard). Sin caja/paquete ni otro número (eso es una equivalencia o un cálculo), nunca una pregunta.
+const COST_PACK = /(?<![a-z])(?:caja|cajas|paquete\w*|saco|sacos|fardo|fardos|docena\w*|six|pack|bolsa\w*|bolsit\w*|lata|latas|botella\w*|trae|traen|cada|unidad\w*|x)(?![a-z])/;
+const COST_SAID = [
+  /^(?:(?:oye|ojo|ya|bueno|anota|recuerda|apunta)[,:]?\s+)?(?:(?:el|la|los|las)\s+)?([a-z][a-z\s.'-]{1,50}?)\s+(?:(?:ahora|ya|desde\s+hoy|hoy|ahorita)\s+)?me\s+cuestan?\s+(?:a\s+)?(?:s\/\.?\s*)?(\d{1,5}(?:[.,]\d{1,2})?)(?![\d])/,
+  /^(?:(?:oye|ojo|ya|bueno|anota|recuerda|apunta)[,:]?\s+)?(?:(?:ahora|ya|desde\s+hoy|hoy)\s+)?me\s+cuestan?\s+(?:a\s+)?(?:s\/\.?\s*)?(\d{1,5}(?:[.,]\d{1,2})?)(?![\d])\s+(?:(?:el|la|los|las)\s+)?([a-z][a-z\s.'-]{1,50}?)\s*(?:[,.;]|$)/,
+  /^(?:(?:oye|ojo|ya|bueno|anota|recuerda|apunta)[,:]?\s+)?(?:(?:el|mi)\s+)?costo\s+(?:de\s+(?:la|los|las|el)\s+|del\s+|de\s+)([a-z][a-z\s.'-]{1,50}?)\s+(?:(?:ahora|ya|desde\s+hoy|hoy)\s+)?es\s+(?:de\s+)?(?:s\/\.?\s*)?(\d{1,5}(?:[.,]\d{1,2})?)(?![\d])/,
+];
+export function statedCost(text) {
+  const t = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t || t.length > 200 || isQuestion(text) || COST_PACK.test(t) || (t.match(/\d+(?:[.,]\d+)?/g) || []).length !== 1) return null;
+  for (const [i, re] of COST_SAID.entries()) {
+    const m = t.match(re); if (!m) continue;
+    const [nombre, n] = i === 1 ? [m[2], m[1]] : [m[1], m[2]], costo = Number(n.replace(',', '.'));
+    const name = nombre.replace(/\b(?:ahora|ya|hoy|tambien)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (name.length >= 3 && costo > 0) return { nombre: name, costo };
+  }
+  return null;
+}
 export function taughtFact(text) {
   const t = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!t || t.length > 300 || QUESTION.test(t)) return null;
+  if (!t || t.length > 300 || isQuestion(t) || statedCost(t)) return null;
   return (TEACH_LEAD.test(t) && /\d|\b(?:solo|siempre|nunca|no\s+se)\b/i.test(t)) || (TEACH_FACT.test(t) && /\d/.test(t)) || SUPPLIER_FACT.test(t) ? t : null;
 }
 const b64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -54,7 +78,7 @@ export async function writeInvoiceMemory({previous, image, proposals, reply, tex
   if (fact) { const f = clean(fact).slice(0, 200); m.taught = [...m.taught.filter((x) => x !== f), f].slice(-MAX_TAUGHT); }
   // Las preguntas no deben expulsar equivalencias confirmadas. Una respuesta corta
   // conserva la pregunta previa para que «96» o «sí» no pierdan su significado.
-  const question = /[¿?]|^(?:cu[aá]nt|c[oó]mo|qu[eé]|puedes|recu[eé]rdame|prepara|revisa|y\s+(?:cu[aá]nt|qu[eé]))/i.test(String(text || '').trim());
+  const question = isQuestion(text);
   if (keep && previous.invoices.length && text && !question) m.clarifications = [...m.clarifications, {usuario:clean(text).slice(0,500), pregunta_previa:previous.lastReply || ''}].slice(-8);
   m.lastReply = clean(reply || '').slice(0,600);
   const body = b64(enc.encode(JSON.stringify(m)));
