@@ -903,13 +903,15 @@ test('#995 (decisión del lead) «¿me pagó el?» sin tilde pregunta de qué cl
 const STORE29 = 'Cobros de fiados 2026-10-19 a 2026-10-23: S/ 29.00 en 3 cobros.';
 const NOT_FOUND_ROSA = 'No encontré a un cliente llamado Rosa. Revise el nombre en Clientes o dígame su código («cliente #código»).';
 const QUIEN = '¿De qué cliente? Escríbame su nombre.';
-// Lo que va a la IA sin el system (el system lleva el catálogo): mensajes del usuario y del asistente.
-const userSide = (cap) => cap.map((b) => (JSON.parse(b).messages || []).filter((m) => m.role !== 'system').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n'));
+// Lo que va a la IA sin el catálogo (system y <datos_pos> llevan los productos): mensajes del usuario y del asistente.
+const userSide = (cap) => cap.map((b) => (JSON.parse(b).messages || []).filter((m) => m.role !== 'system').map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))).join('\n').replace(/<datos_pos>[\s\S]*?<\/datos_pos>/g, ''));
 const HIST = [{ role: 'user', content: 'Rosa Huamán me debe 80 soles y Carmen Quispe 20' }, { role: 'assistant', content: 'Anotado lo de Rosa y Elmer Paz.' }];
 const RESUMEN = 'Se habló de la deuda de Rosa, de Elmer y de Carmen Quispe.';
 
+// (1) PENDIENTE (orden del lead 23-10 20:07): #1011 entra primero a la base y #995 usará su catalogKeys/inCatalog para la excepción de marcas;
+// sin esa excepción, tapar siempre taparía «leche Gloria». Las dos pruebas de (1) quedan listas y en skip hasta entonces.
 // (1) Siempre se tapa en el servidor: se lee Clientes en cada pedido y ningún nombre de la lista va a la IA, sea cual sea la pregunta.
-test('#995 (final 1) se tapa SIEMPRE: «¿cuánto me debe Rosa?», «¿Rosa tiene deuda?», «anota que Rosa llevó…», «Rosa quiere arroz…» sin Rosa a la IA (con y sin partes, historial y resumen)', async () => {
+test.skip('#995 (final 1) se tapa SIEMPRE: «¿cuánto me debe Rosa?», «¿Rosa tiene deuda?», «anota que Rosa llevó…», «Rosa quiere arroz…» sin Rosa a la IA (con y sin partes, historial y resumen)', async () => {
   for (const role of ['owner', 'empleado:completo+costos']) for (const text of ['¿cuánto me debe Rosa?', '¿Rosa tiene deuda?', 'anota que Rosa llevó 2 kilos de arroz', 'Rosa quiere arroz, ¿cuánto cuesta?'])
     for (const stream of [false, true]) for (const extra of [{}, { history: HIST, resumen: RESUMEN }]) {
       const why = role + ' ' + text + ' stream=' + stream + ' hist=' + !!extra.history;
@@ -923,7 +925,7 @@ const BRAND_PRODUCTS = [{ id: 'P1', nombre: 'Arroz 1 kg', precio: 4, stock: 50 }
   { id: 'P3', nombre: 'Inca Kola 1.5L', precio: 7, stock: 10 }, { id: 'P4', nombre: 'Cerveza Pilsen lata 355ml', precio: 4.5, stock: 30 }, { id: 'P5', nombre: 'Fideo Don Vittorio 500g', precio: 3.2, stock: 15 }];
 const BRAND_DATA = { ...DATA_CR, products: BRAND_PRODUCTS, customers: [...DATA_CR.customers, { id: '21', nombre: 'Gloria Ramos' }, { id: '22', nombre: 'Inca Mamani' },
   { id: '23', nombre: 'Pilsen Torres' }, { id: '24', nombre: 'Vittorio Paz' }] };
-test('#995 (final 1) marcas: «leche Gloria», «Inca Kola», «cerveza Pilsen», «fideo Don Vittorio» quedan aunque haya clientes Gloria/Inca/Pilsen/Vittorio; la persona sí se tapa', async () => {
+test.skip('#995 (final 1) marcas: «leche Gloria», «Inca Kola», «cerveza Pilsen», «fideo Don Vittorio» quedan aunque haya clientes Gloria/Inca/Pilsen/Vittorio; la persona sí se tapa', async () => {
   for (const stream of [false, true]) for (const products of [BRAND_PRODUCTS, DATA.products]) {
     for (const [text, brand] of [['¿cuánto cuesta la leche Gloria?', /leche Gloria/], ['véndeme 2 Inca Kola', /Inca Kola/], ['¿hay cerveza Pilsen?', /cerveza Pilsen/], ['¿a cuánto el fideo Don Vittorio?', /fideo Don Vittorio/]]) {
       const { cap } = await askP(text, { stream, data: BRAND_DATA, products, args: { tipo: 'stock_bajo' } });
