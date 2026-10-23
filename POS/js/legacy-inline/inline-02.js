@@ -274,19 +274,24 @@ function _naCreditDetailHtml(cr){
 }
 const _naCajaMovsSesion=()=>{if(cajEstado?.sessionId)return cajMovs.filter(m=>m.sessionId===cajEstado.sessionId);const fecha=cajEstado?.fechaApertura||obtenerHoy();return cajMovs.filter(m=>m.fecha===fecha);};
 
+// CM-066: unidades pesables/medibles conservan decimales en movimientos; UND sigue entera.
+const _NA_DECIMAL_UNITS=new Set(['kilogramo','kg','gramo','litro','mililitro']);
+function _naIsDecimalUnit(unit){return _NA_DECIMAL_UNITS.has(_naClean(unit).toLowerCase());}
+function _naStockQty(unit,v){return _naIsDecimalUnit(unit)?_naNumber(v):_naInt(v);}
+function _naMovQty(m){const p=(Array.isArray(productos)?productos:[]).find(x=>String(x?.id)===String(m?.productId));return _NA_DECIMAL_UNITS.has(_naClean(p?.unidad).toLowerCase())?(v=>_naNumber(v)):(v=>_naInt(v));}
 function _naNormalizeData(){
   _naEnsureCashierConfig();
   productos=(Array.isArray(productos)?productos:[]).map((p,index)=>({
     ...p,id:p.id??Date.now()+index,name:_naClean(p.name||'Producto'),descripcion:_naClean(p.descripcion||''),sku:_naClean(p.sku||`PROD-${index+1}`),barcode:_naClean(p.barcode||''),codigosAlternativos:_naNormalizeAltCodes(p.codigosAlternativos,p.codigoAlternativo),codigoAlternativo:_naNormalizeAltCodes(p.codigosAlternativos,p.codigoAlternativo)[0]||'',cat:_naClassifyProductCategory(p.name,_naClean(p.cat||'abarrotes').toLowerCase()),marca:_naClean(p.marca||'Sin marca')||'Sin marca',unidad:_naClean(p.unidad||'unidad')||'unidad',unidadCompra:_naClean(p.unidadCompra||(p.unidCaja?'caja':'unidad'))||'unidad',factorCompra:Math.max(0.001,_naNumber(p.factorCompra,p.unidCaja||1)),icon:p.icon||'📦',imagen:p.imagen||null,
     costo:Math.max(0,_naNumber(p.costo)),precio:Math.max(0,_naNumber(p.precio)),incluyeIGV:p.incluyeIGV!==false,tipoImpuesto:_naTaxType(p.tipoImpuesto),impuestoComplementario:_naClean(p.impuestoComplementario||''),precioCaja:_naNumber(p.precioCaja)>0?_naNumber(p.precioCaja):null,unidCaja:_naInt(p.unidCaja)>0?_naInt(p.unidCaja):null,
-    controlInventario:p.controlInventario!==false,stock:p.controlInventario===false?0:_naInt(p.stock),stockMin:Math.max(0,_naInt(p.stockMin,_naInt(appConfig.stockMin,5))),venc:p.venc?String(p.venc).slice(0,10):null
+    controlInventario:p.controlInventario!==false,stock:p.controlInventario===false?0:_naStockQty(p.unidad,p.stock),stockMin:Math.max(0,_naInt(p.stockMin,_naInt(appConfig.stockMin,5))),venc:p.venc?String(p.venc).slice(0,10):null
   }));
   ventas=(Array.isArray(ventas)?ventas:[]).map((v,index)=>_naNormalizeSaleRecord(v,index));
   clientes=(Array.isArray(clientes)?clientes:[]).map((c,index)=>({...c,nombre:_naClean(c.nombre||'Cliente'),dni:_naClean(c.dni||''),tel:_naClean(c.tel||''),dir:_naClean(c.dir||''),color:_naInt(c.color,index)%8,totalCompras:Math.max(0,_naNumber(c.totalCompras))}));
   creditos=(Array.isArray(creditos)?creditos:[]).map((cr,index)=>_naNormalizeCreditRecord(cr,index));
   gastos=(Array.isArray(gastos)?gastos:[]).map(g=>({...g,desc:_naClean(g.desc||'Gasto'),monto:Math.max(0,_naNumber(g.monto)),fecha:g.fecha?String(g.fecha).slice(0,10):obtenerHoy()}));
   cajMovs=(Array.isArray(cajMovs)?cajMovs:[]).map(m=>({...m,monto:Math.max(0,_naNumber(m.monto)),efectivo:Math.max(0,_naNumber(m.efectivo)),fecha:m.fecha?String(m.fecha).slice(0,10):obtenerHoy()}));
-  inventoryMovements=(Array.isArray(inventoryMovements)?inventoryMovements:[]).map(m=>({...m,productId:m?.productId??null,type:_naClean(m?.type)||'AJUSTE',before:_naInt(m?.before),delta:_naNumber(m?.delta),after:_naInt(m?.after),reason:_naClean(m?.reason||''),source:_naClean(m?.source)||'MANUAL',referenceId:m?.referenceId==null?null:String(m.referenceId),fecha:m?.fecha?String(m.fecha).slice(0,10):obtenerHoy()}));
+  inventoryMovements=(Array.isArray(inventoryMovements)?inventoryMovements:[]).map(m=>{const _q=_naMovQty(m);return{...m,productId:m?.productId??null,type:_naClean(m?.type)||'AJUSTE',before:_q(m?.before),delta:_naNumber(m?.delta),after:_q(m?.after),reason:_naClean(m?.reason||''),source:_naClean(m?.source)||'MANUAL',referenceId:m?.referenceId==null?null:String(m.referenceId),fecha:m?.fecha?String(m.fecha).slice(0,10):obtenerHoy()}});
   cart=(Array.isArray(cart)?cart:[]).map((it,index)=>({...it,qty:Math.max(1,_naNumber(it.qty,1)),precio:Math.max(0,_naNumber(it.precio)),costo:Math.max(0,_naNumber(it.costo)),unitsPerQty:Math.max(1,_naInt(it.unitsPerQty,1)),_lineKey:it._lineKey||_naLineKey(it.id,it.unitsPerQty>1?'caja':'unidad')}));
 }
 
@@ -645,7 +650,7 @@ function applyInventoryMovement(options){
   if(!Number.isFinite(delta)||delta===0)return{ok:false,error:'INVALID_DELTA',message:'Delta de inventario inválido'};
   const reason=_naClean(options?.reason);
   if(!reason)return{ok:false,error:'REASON_REQUIRED',message:'Motivo obligatorio para el movimiento de inventario'};
-  const before=_naInt(product.stock),after=before+delta;
+  const before=_naStockQty(product.unidad,product.stock),after=_naIsDecimalUnit(product.unidad)?Math.round((before+delta)*1e6)/1e6:before+delta;
   if(after<0&&!options?.allowNegative)return{ok:false,error:'NEGATIVE_STOCK',message:`Stock insuficiente (${before} disponibles)`};
   if(!Array.isArray(inventoryMovements))inventoryMovements=[];
   const now=new Date();_naInventoryLedgerSeq++;
@@ -687,12 +692,12 @@ guardarProd=async function(){
   if((boxPrice>0)!==(boxUnits>0)){toast('Completa precio mayorista y unidades por caja, o deja ambos vacíos','error');return;}
   if(appConfig.margenActive&&boxPrice>0&&boxPrice<cost*boxUnits){toast('El precio por caja está por debajo del costo total','error');return;}
   const manualActive=document.getElementById('pActivo')?.value!=='false',manualVisibility=_naProductManualVisibilityPatch(editingPrevious,manualActive,Date.now());
-  const data={name,descripcion,sku:finalSku,barcode,codigosAlternativos:altCodesFinal,codigoAlternativo:altCodesFinal[0]||'',unidadCompra,factorCompra,cat:document.getElementById('pCat').value,marca,unidad,icon:document.getElementById('pIcon').value||'📦',imagen:imagenProducto,costo:cost,precio:price,incluyeIGV:!!document.getElementById('pIncluyeIGV').checked,tipoImpuesto:_naTaxType(document.getElementById('pTipoImpuesto').value),impuestoComplementario:document.getElementById('pImpuestoComplementario').value,controlInventario,stock:controlInventario?(invEditId?_naInt(document.getElementById('pStock').value):Math.max(0,_naInt(document.getElementById('pStock').value))):0,stockMin:controlInventario?Math.max(0,_naInt(document.getElementById('pStockMin').value,_naInt(appConfig.stockMin,5))):0,venc:controlInventario?(document.getElementById('pVenc').readOnly&&editingPrevious?(editingPrevious.venc||null):(document.getElementById('pVenc').value||null)):null,precioCaja:boxPrice>0?boxPrice:null,unidCaja:boxUnits>0?boxUnits:null,...manualVisibility};
+  const data={name,descripcion,sku:finalSku,barcode,codigosAlternativos:altCodesFinal,codigoAlternativo:altCodesFinal[0]||'',unidadCompra,factorCompra,cat:document.getElementById('pCat').value,marca,unidad,icon:document.getElementById('pIcon').value||'📦',imagen:imagenProducto,costo:cost,precio:price,incluyeIGV:!!document.getElementById('pIncluyeIGV').checked,tipoImpuesto:_naTaxType(document.getElementById('pTipoImpuesto').value),impuestoComplementario:document.getElementById('pImpuestoComplementario').value,controlInventario,stock:controlInventario?(invEditId?_naStockQty(unidad,document.getElementById('pStock').value):Math.max(0,_naStockQty(unidad,document.getElementById('pStock').value))):0,stockMin:controlInventario?Math.max(0,_naInt(document.getElementById('pStockMin').value,_naInt(appConfig.stockMin,5))):0,venc:controlInventario?(document.getElementById('pVenc').readOnly&&editingPrevious?(editingPrevious.venc||null):(document.getElementById('pVenc').value||null)):null,precioCaja:boxPrice>0?boxPrice:null,unidCaja:boxUnits>0?boxUnits:null,...manualVisibility};
   // FIX04: targetStock queda separado; applyInventoryMovement es la única mutación final de stock.
   const targetStock=data.stock,{stock:_ignoredTargetStock,...persistedData}=data;
   const backup={productos:_naClone(productos),inventoryMovements:_naClone(inventoryMovements)};
   if(invEditId){const index=productos.findIndex(x=>x.id===invEditId);if(index<0)return;
-    const previous=productos[index],beforeStock=_naInt(previous.stock),ledgerDelta=targetStock-beforeStock,staged={...previous,...persistedData,stock:beforeStock};
+    const previous=productos[index],beforeStock=_naStockQty(previous.unidad,previous.stock),ledgerDelta=targetStock-beforeStock,staged={...previous,...persistedData,stock:beforeStock};
     if(ledgerDelta!==0){
       staged.controlInventario=true;productos[index]=staged;
       const outcome=applyInventoryMovement({productId:previous.id,type:'AJUSTE',delta:ledgerDelta,reason:`Edición de producto: stock fijado en ${targetStock}`,source:'PRODUCT_EDIT',referenceId:String(previous.id)});
