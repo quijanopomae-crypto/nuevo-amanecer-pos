@@ -104,7 +104,8 @@ test('solo lectura: el módulo no escribe en la base ni toca compras o códigos 
 });
 
 test('pantalla y Worker: solo Admin, ruta con la misma bandera, mensaje amable', () => {
-  assert.match(UI, /isOwnerAccess\(\) && BELOW_RE\.test\(text\)/);
+  assert.match(UI, /canBelowCost\(\) && BELOW_RE\.test\(text\)/); // (auditoría 500, P-051) Admin o nivel 3 con «costos y cambios»
+  assert.match(UI, /function canBelowCost\(\) \{ return isOwnerAccess\(\) \|\|/);
   assert.match(UI, /data-q="Ventas bajo costo"/);
   assert.match(WORKER, /url\.pathname === ASSISTANT_BELOW_COST_PATH\) \{\n\s+if \(String\(env\.ASSISTANT_ENABLED \|\| ''\) !== '1'\) return json\(\{ error: 'not_found' \}, 404\);\n\s+const auth = await authorizeSession/);
   assert.equal(C.friendlyError('below_cost_admin_only').msg, 'Las alertas de venta bajo costo son solo para el Admin.');

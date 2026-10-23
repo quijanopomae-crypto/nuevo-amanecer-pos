@@ -1,0 +1,174 @@
+// (auditoría 500, fix/asist-memoria-precios-500) Memoria y precios del asistente:
+// 1) lo enseñado nunca guarda preguntas (aunque no lleven «?»): M-007, P-015, P-016; las afirmaciones se siguen guardando.
+// 2) «don» de una marca («fideo Don Vittorio», P-027) no es un nombre de persona; los clientes de verdad se siguen tapando.
+// 3) «el pollo ahora me cuesta 9.20» (M-035): tarjeta «Actualizar costo» con un toque (nunca se aplica sola), sin guardarlo como lección.
+// 4) «vendiendo a pérdida» / «a perdida» = venta bajo costo (servidor y teléfono, mismo patrón).
+// 5) el teléfono abre «Ventas bajo costo» también para el nivel 3 con «costos y cambios» (el servidor ya lo permite).
+// 6) P-044 «el azucar ponlo a 400» con precio S/ 4.00: la tarjeta y la respuesta preguntan «¿Quiso decir S/ 4.00?».
+// Proveedor siempre simulado: nunca hay red real.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import * as A from '../../tools/cloudflare-lab/src/pos-assistant.js';
+import { taughtFact, readInvoiceMemory } from '../../tools/cloudflare-lab/src/pos-assistant-invoice-memory.js';
+import { COSTS_ROLE } from '../../tools/cloudflare-lab/src/pos-assistant-levels.js';
+
+const realFetch = globalThis.fetch;
+globalThis.fetch = async () => { throw new Error('red prohibida en las pruebas'); };
+test.after(() => { globalThis.fetch = realFetch; });
+const UI = readFileSync(new URL('../../POS/js/modules/asistente/asistente-ui.js', import.meta.url), 'utf8');
+const SECRET = 'secreto-de-prueba-memoria-precios-500';
+const ENV = { ASSISTANT_ENABLED: '1', ASSISTANT_CONFIRM_SECRET: SECRET, DEEPSEEK_API_KEY: 'k' };
+const OWNER = { principalId: 'session:dev-owner-500', posRole: 'owner' };
+const NOW = 200000;
+const PRODUCTS = [
+  { id: 'P1', nombre: 'Pollo entero x kg', precio: 11, costo: 8.5, stock: 20 },
+  { id: 'P2', nombre: 'Fideo Don Vittorio spaghetti 500 g', precio: 2.2, costo: 1.6, stock: 40 },
+  { id: 'P3', nombre: 'Azúcar rubia 1 kg', precio: 4, costo: 3.2, stock: 30 },
+  { id: 'P4', nombre: 'Leche Gloria evaporada 395 g', precio: 4.2, costo: 3.6, stock: 48 },
+];
+const CUST = [{ id: 'c9', nombre: 'Vittorio Ramos Paz' }, { id: 'c2', nombre: 'Juana Pérez' }];
+const tool = (name, args) => ({ id: 'c1', type: 'function', function: { name, arguments: JSON.stringify(args) } });
+async function chat(text, { role = 'owner', products = PRODUCTS, message = { content: 'Anotado.' }, store = A.createMemoryUsageStore() } = {}) {
+  let calls = 0;
+  const r = await A.assistantChatRoute(new Request('https://w.test/auth/assistant/chat', { method: 'POST', body: JSON.stringify({ text, context: { products } }) }), ENV, OWNER,
+    (d, s = 200) => new Response(JSON.stringify(d), { status: s }), {
+      store, now: () => NOW, resolveRole: async () => role, audit: async () => {},
+      reader: { products: async () => products, credits: async () => [], customers: async () => CUST },
+      fetch: async () => { calls++; return new Response(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 5, completion_tokens: 5 } })); } });
+  const body = await r.json();
+  const saved = await store.get(await A.lessonsKey(OWNER));
+  const mem = body.invoice_memory ? await readInvoiceMemory(body.invoice_memory, SECRET, OWNER, NOW) : null;
+  return { status: r.status, body, calls, lessons: saved?.value?.items || [], taught: mem?.taught || [] };
+}
+
+// ---------- 1) preguntas sin «?» ----------
+const QUESTIONS = [
+  'quien te dijo q la caja de gloria trae 24 y cuando',                                                  // M-007
+  'si la caja de leche gloria me cuesta 85 y trae 24 a cuanto vendo cada una pa ganar 20%',              // P-015
+  'la leche gloria evaporada de 24 latas x 395gr me cuesta 93 la caja, a cuanto me sale cada lata',      // P-016
+  'quién te dijo que el arroz cuesta 4',
+  'y cuanto trae la caja de gaseosa',
+  'a cuanto vendo el aceite si me cuesta 9',
+  'el six pack me cuesta 27, cuanto gano por lata',
+  'cuál es el costo de la caja que trae 12',
+  'la caja trae 24 y cuando llega el pedido',
+  'dónde compro la caja de 12 que cuesta 30',
+];
+const FACTS = [
+  'ojo la caja de galleta soda field trae 30 paquetitos',
+  'al arroz jairito se lo compro a distribuidora san juan',
+  'recuerda: al #C0012 no le fíes más de 100',
+  'recuerda que el six pack de Pilsen cuesta 27 soles',
+  'la caja de leche gloria trae 24 latas',
+];
+test('1) lo enseñado: las preguntas no se guardan aunque no lleven «?» (M-007, P-015, P-016)', () => {
+  for (const q of QUESTIONS) assert.equal(taughtFact(q), null, 'no es lección: ' + q);
+});
+test('1) lo enseñado: las afirmaciones con un dato se siguen guardando', () => {
+  for (const f of FACTS) assert.equal(taughtFact(f), f, 'sí es lección: ' + f);
+});
+test('1) chat del Admin: M-007 y P-016 no quedan en las lecciones del día ni en el token', async () => {
+  for (const q of [QUESTIONS[0], QUESTIONS[2]]) {
+    const r = await chat(q);
+    assert.equal(r.status, 200); assert.deepEqual(r.lessons, [], q); assert.deepEqual(r.taught, [], q);
+  }
+  const ok = await chat('ojo la caja de galleta soda field trae 30 paquetitos');
+  assert.deepEqual(ok.lessons, ['ojo la caja de galleta soda field trae 30 paquetitos']);
+});
+
+// ---------- 2) «don» de una marca ----------
+test('2) «Don Vittorio» es marca: la lección la conserva (P-027); los nombres de clientes se siguen tapando', () => {
+  const p027 = 'pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50';
+  assert.equal(A.sanitizeLesson(p027, CUST, PRODUCTS), p027, 'con el catálogo');
+  assert.equal(A.sanitizeLesson(p027, CUST), p027, 'sin catálogo: «fideo don …» es un producto');
+  assert.equal(A.sanitizeLesson('el aceite Don Vittorio trae 12 botellas', [], []), 'el aceite Don Vittorio trae 12 botellas');
+  // personas: se siguen tapando
+  assert.equal(A.sanitizeLesson('don pepe paga los viernes 20 soles', [], PRODUCTS), 'don paga los viernes 20 soles');
+  for (const [t, code] of [['doña juana pérez lleva 2 leches', '#c2'], ['don vittorio ramos me debe 30', '#c9']]) { // cliente de la lista (aunque se llame como la marca)
+    const o = A.sanitizeLesson(t, CUST, PRODUCTS);
+    assert.ok(o.includes(code), o); assert.doesNotMatch(o, /juana|p[eé]rez|vittorio|ramos/i, o);
+  }
+});
+test('2) chat del Admin: P-027 se guarda con la marca', async () => {
+  const p027 = 'pon 30 de margen al fideo don vittorio, el paquete de 20 bolsitas me cuesta 31.50';
+  const r = await chat(p027);
+  assert.deepEqual(r.lessons, [p027]);
+});
+
+// ---------- 3) costo dicho en el chat ----------
+test('3) M-035 «el pollo ahora me cuesta 9.20»: tarjeta «Actualizar costo» firmada, sin lección', async () => {
+  const r = await chat('el pollo ahora me cuesta 9.20, acuerdate pa las ganancias');
+  assert.equal(r.status, 200);
+  const c = r.body.proposals.filter((p) => p.type === 'costo');
+  assert.equal(c.length, 1, JSON.stringify(r.body.proposals));
+  assert.equal(c[0].product_id, 'P1'); assert.equal(c[0].costo_actual, 8.5); assert.equal(c[0].costo_nuevo, 9.2);
+  assert.equal(c[0].needsConfirm, true); assert.equal(c[0].requiresRole, 'owner'); assert.equal(typeof c[0].confirm_token, 'string', 'se aplica solo con el toque (confirm)');
+  assert.match(r.body.reply, /Pollo entero x kg/); assert.match(r.body.reply, /S\/ 9\.20/); assert.match(r.body.reply, /Confirmar/);
+  assert.deepEqual(r.lessons, [], 'no se guarda como lección'); assert.deepEqual(r.taught, []);
+  for (const t of ['el costo del pollo ahora es 9.20', 'ya me cuesta 9.20 el pollo']) {
+    const x = await chat(t); assert.equal(x.body.proposals.filter((p) => p.type === 'costo').length, 1, t); assert.deepEqual(x.lessons, [], t);
+  }
+});
+test('3) costo dicho con varios productos parecidos: pregunta cuál, sin tarjeta ni lección', async () => {
+  const two = [...PRODUCTS, { id: 'P9', nombre: 'Pollo pierna x kg', precio: 12, costo: 9, stock: 5 }];
+  const r = await chat('el pollo ahora me cuesta 9.20', { products: two });
+  assert.equal(r.body.proposals.filter((p) => p.type === 'costo').length, 0);
+  assert.match(r.body.reply, /Pollo entero x kg/); assert.match(r.body.reply, /Pollo pierna x kg/); assert.match(r.body.reply, /cu[aá]l/i);
+  assert.deepEqual(r.lessons, []);
+});
+test('3) caja/paquete o preguntas no son «costo dicho»; el empleado nunca recibe la tarjeta', async () => {
+  for (const t of ['la caja de leche gloria me cuesta 93', 'a cuanto me sale el pollo si me cuesta 9.20', 'el pollo cuesta 9.20']) {
+    const r = await chat(t); assert.equal(r.body.proposals.filter((p) => p.type === 'costo').length, 0, t);
+  }
+  const e = await chat('el pollo ahora me cuesta 9.20', { role: COSTS_ROLE });
+  assert.equal(e.body.proposals.filter((p) => p.type === 'costo').length, 0);
+});
+
+// ---------- 4) «a pérdida» ----------
+const PHONE_BELOW = () => new RegExp(UI.match(/var BELOW_RE = \/(.+)\/i;/)[1], 'i');
+const LOSS = ['q productos estoy vendiendo a perdida', 'estoy vendiendo a pérdida?', 'vendo a perdida el arroz?', 'Vendiendo a Pérdida', 'algo se vende a perdida'];
+const NOT_LOSS = ['¿Cuánto vendimos hoy?', 'perdí el recibo', 'Productos sin costo', 'estoy perdido en la pantalla', 'perdiendo la señal'];
+test('4) «vendiendo a perdida» / «a pérdida»: teléfono y servidor, mismo patrón', () => {
+  const phone = PHONE_BELOW();
+  assert.ok(A.BELOW_COST_ASK_RE instanceof RegExp, 'el servidor tiene su patrón');
+  assert.equal(A.BELOW_COST_ASK_RE.source, phone.source, 'mismo patrón en el teléfono y en el servidor');
+  for (const t of LOSS) { assert.ok(phone.test(t), 'teléfono: ' + t); assert.ok(A.BELOW_COST_ASK_RE.test(t), 'servidor: ' + t); }
+  for (const t of NOT_LOSS) { assert.ok(!phone.test(t), 'teléfono: ' + t); assert.ok(!A.BELOW_COST_ASK_RE.test(t), 'servidor: ' + t); }
+});
+test('4) servidor: empleado sin permiso de costos que pregunta «vendiendo a perdida» = 403 below_cost_admin_only, sin modelo', async () => {
+  for (const role of ['empleado:consultas', 'empleado:completo']) {
+    const r = await chat('q productos estoy vendiendo a perdida', { role });
+    assert.equal(r.status, 403, role); assert.equal(r.body.error, 'below_cost_admin_only'); assert.equal(r.calls, 0);
+  }
+  const ok = await chat('q productos estoy vendiendo a perdida', { role: COSTS_ROLE });
+  assert.equal(ok.status, 200, 'nivel 3 con costos sí pasa');
+});
+
+// ---------- 5) teléfono: nivel 3 con «costos y cambios» ----------
+function phoneGate(access) {
+  const src = ['isAdmin', 'isOwnerAccess', 'canBelowCost'].map((n) => UI.match(new RegExp('  function ' + n + '\\(\\) \\{.*\\}\\n'))[0]).join('');
+  return new Function('access', 'adminOff', src + '; return canBelowCost();')(access, false);
+}
+test('5) teléfono: «Ventas bajo costo» abre para el Admin y el nivel 3 con «costos y cambios»; no para el resto', () => {
+  assert.equal(phoneGate({ role: 'owner', level: 'dueno' }), true);
+  assert.equal(phoneGate({ role: 'empleado', level: 'consultas_documentos', cambios: true }), true);
+  assert.equal(phoneGate({ role: 'empleado', level: 'consultas_documentos', cambios: false }), false);
+  assert.equal(phoneGate({ role: 'empleado', level: 'consultas', cambios: true }), false, 'nivel 1 con cambios raro: no');
+  assert.equal(phoneGate(null), false);
+  assert.match(UI, /canBelowCost\(\) && BELOW_RE\.test\(text\)/, 'la ruta usa la misma puerta');
+});
+
+// ---------- 6) P-044 precio 100× ----------
+test('6) P-044 «el azucar ponlo a 400» con S/ 4.00: la tarjeta y la respuesta preguntan «¿Quiso decir S/ 4.00?»', async () => {
+  const r = await chat('el azucar ponlo a 400', { message: { content: 'Listo, revisa y pulsa Confirmar.', tool_calls: [tool('proponer_cambio_precio', { product_id: 'P3', precio_nuevo: 400 })] } });
+  const p = r.body.proposals.find((x) => x.type === 'precio');
+  assert.ok(p, JSON.stringify(r.body));
+  assert.equal(p.quisoDecir, 4); assert.equal(p.precio_nuevo, 400); assert.equal(typeof p.confirm_token, 'string', 'un toque, sin PIN');
+  assert.match(r.body.reply, /¿Quiso decir S\/ 4\.00\?/);
+  assert.match(UI, /p\.quisoDecir/); assert.match(UI, /¿Quiso decir /);
+  // cambio grande normal (no 100×): sin la pregunta
+  const n = await chat('el azucar ponlo a 7', { message: { content: 'Listo.', tool_calls: [tool('proponer_cambio_precio', { product_id: 'P3', precio_nuevo: 7 })] } });
+  const q = n.body.proposals.find((x) => x.type === 'precio');
+  assert.equal(q.cambioGrande, true); assert.equal(q.quisoDecir, undefined); assert.doesNotMatch(n.body.reply, /Quiso decir/);
+});

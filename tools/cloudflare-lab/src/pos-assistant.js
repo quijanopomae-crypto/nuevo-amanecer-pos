@@ -18,7 +18,7 @@ import { SETTINGS_TOOL, SERVER_SETTINGS_TOOL, settingsSnapshot, settingsProposal
 // 8) Cada propuesta lleva un token de confirmación firmado (HMAC), de un solo uso, que vence a los 5 minutos y
 //    trae un operation_id generado UNA vez. /auth/assistant/confirm lo valida y lo gasta; un reenvío devuelve el
 //    mismo operation_id (already_confirmed), así un doble toque o un corte de señal no duplica nada.
-import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
+import { readInvoiceMemory, writeInvoiceMemory, invoiceMemoryMessage, taughtMemoryMessage, taughtFact, statedCost, MAX_TAUGHT } from './pos-assistant-invoice-memory.js';
 import { resolveProvider, callModel, callModelStream, linkAbort, FIRST_DATA_MS } from './pos-assistant-providers.js';
 import { createCodeMap, UNKNOWN_CUSTOMER } from './pos-assistant-codigos.js';
 import { readProviderChoice } from './pos-assistant-provider-route.js';
@@ -73,6 +73,12 @@ export const QUERY_ADMIN_ONLY = Object.freeze({ error: 'query_admin_only', messa
 export const CONFIG_FORBIDDEN = Object.freeze({ error: 'config_forbidden', message: 'Los cambios de Configuración los hace el Admin o quien tenga el permiso «costos y cambios».' });
 const ADMIN_ONLY_ASK = /\b(?:cr[eé]ditos?\s+(?:atrasad|vencid)\w*|clientes?\s+(?:atrasad|moros)\w*|morosos?|qui[eé]n(?:es)?\s+(?:me\s+)?debe[n]?\s+(?:atrasad|vencid)\w*)/i;
 const SUGGEST_ASK = /\b(sugerencias?\s+de\s+compras?|sugi[eé]reme\s+(?:qu[eé]\s+)?comprar|qu[eé]\s+(?:debo|tengo\s+que|me\s+conviene|deber[ií]a)\s+comprar|cu[aá]nto\s+(?:debo|tengo\s+que|deber[ií]a)\s+(?:comprar|pedir))\b/i;
+// (auditoría 500, P-051/P-052) «Ventas bajo costo» pedida en el chat por un empleado SIN el permiso de costos («q productos estoy vendiendo
+// a perdida»): 403 below_cost_admin_only antes de abrir el canal, sin cupo ni modelo. Mismo patrón que el teléfono (BELOW_RE de asistente-ui.js),
+// que al Admin y al nivel 3 con «costos y cambios» los manda directo a /auth/assistant/below-cost.
+export const BELOW_COST_DENIED = Object.freeze({ error: 'below_cost_admin_only', message: 'Las alertas de venta bajo costo son solo para el Admin.' });
+export const BELOW_COST_ASK_RE = /\bbajo(?:\s+el)?\s+costo\b|\b(?:por\s+)?debajo\s+del\s+costo\b|\bmenos\s+(?:de\s+lo\s+que|del?)\s+(?:me\s+)?cost(?:o|[oó]|aron?)\b|\bvend[ií](?:do|mos)?\s+(?:a\s+)?p[eé]rdida\b|\ba\s+p[eé]rdidas?\b|\bp[eé]rdidas?\s+(?:en|por)\s+(?:las\s+)?ventas\b|\b(?:est[oó]y|estamos)\s+p[eé]rd[ií][eé]ndo\b|\bp[eé]rd[ií][eé]ndo\s+(?:la\s+)?(?:plata|dinero)\b|\bp[ií][eé]rd[oó]\s+(?:la\s+)?(?:plata|dinero)\b/i;
+export function employeeBelowCostDenied(role, text) { return String(role || '').startsWith('empleado:') && !seesOwnerData(role) && BELOW_COST_ASK_RE.test(String(text || '')); }
 export function employeeQueryDenied(role, text) {
   if (role === 'owner' || !String(role || '').startsWith('empleado:')) return false;
   const t = String(text || '');
@@ -1902,10 +1908,10 @@ export function toProposal(call, role, ctx, n) {
   if (name === 'proponer_cambio_precio') {
     const p = idx.get(safeId(args.product_id)); const nuevo = money(args.precio_nuevo);
     if (!p || !nuevo || nuevo <= 0) return { dropped: 'bad_price', tool: name };
-    const delta = p.precio ? (nuevo - p.precio) / p.precio : null;
+    const delta = p.precio ? (nuevo - p.precio) / p.precio : null, quiso = decimalSlip(p.precio, nuevo);
     return { id, type: 'precio', needsConfirm: true, requiresRole: 'owner', title: 'Cambiar precio', product_id: p.id, nombre: p.nombre,
       precio_actual: p.precio, precio_nuevo: nuevo, motivo: cleanText(args.motivo, 160), cambioGrande: delta != null && Math.abs(delta) > 0.5,
-      bajoCosto: p.costo != null && nuevo < p.costo };
+      bajoCosto: p.costo != null && nuevo < p.costo, ...(quiso != null ? { quisoDecir: quiso } : {}) };
   }
   if (name === 'preparar_documento') {
     const tipo = DOC_TYPES.includes(args.tipo) ? args.tipo : null; if (!tipo) return { dropped: 'bad_document', tool: name };
@@ -1962,7 +1968,17 @@ export async function readLessons(store, auth, nowMs) {
 // «cliente», «señora», «don»… -> se quita; DNI, RUC, teléfonos y correos con redactText (las mismas máscaras que van al modelo).
 const LESSON_FOLD = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const PERSON_CUE = /\b(client[ea]s?|se[nñ]ora?|se[nñ]orita|sra?\.?|srta\.?|don|do[nñ]a|vecin[oa]|caser[oa])\s+((?:(?!(?:que|de|del|la|el|los|las|me|nos|le|les|y|o|a|en|con|por|para|se|es|son|debe|deben|compr\w*|pag\w*|trae|vino|viene|siempre|nunca|no|ya|tiene|vive|sabe|dice|est[aá]n?|llev\w*|quier\w*|pid\w*|tom(?:a|ó|o|an|aron)|recog\w*|llam\w*|dij\w*|tien\w*|viv(?:e|en|ía)|sac(?:a|ó|an)|fiad\w*|fi[oó]|encarg\w*|reserv\w*|apart\w*)(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ]))[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}\s*){1,3})/gi;
-export function sanitizeLesson(fact, customers = []) {
+// (auditoría 500, P-027) «don»/«doña» de una MARCA («fideo Don Vittorio») no es una persona: se queda si «don X» está en el nombre de un
+// producto del catálogo o va justo después de una palabra de producto («fideo don …», «aceite doña …»). Los clientes de la lista se tapan antes.
+const BRAND_CUE = /^(?:don|do[nñ]a)$/i;
+const PRODUCT_NOUN_BEFORE = /(?:^|[^a-z])(?:fideos?|tallar[ií]n\w*|spaghetti|espagueti\w*|pasta|aceite|arroz|az[uú]car|galletas?|harina|leche|caf[eé]|salsa|at[uú]n|panet[oó]n|chocolate|mermelada|marca|producto)\s+$/i;
+function brandDon(cue, name, before, products) {
+  if (!BRAND_CUE.test(cue)) return false;
+  if (PRODUCT_NOUN_BEFORE.test(LESSON_FOLD(before))) return true;
+  const first = LESSON_FOLD(name).trim().split(/\s+/)[0], key = LESSON_FOLD(cue) + ' ' + first;
+  return first.length >= 3 && (Array.isArray(products) ? products : []).some((p) => p && (' ' + LESSON_FOLD(p.nombre).replace(/[^a-z0-9ñ]+/g, ' ') + ' ').includes(' ' + key + ' '));
+}
+export function sanitizeLesson(fact, customers = [], products = []) {
   let out = String(fact || '');
   const list = (Array.isArray(customers) ? customers : []).filter((c) => c && c.nombre && String(c.nombre).trim().length >= 3)
     .map((c) => ({ code: customerCode(c.id), nombre: String(c.nombre).trim() })).sort((a, b) => b.nombre.length - a.nombre.length);
@@ -1975,11 +1991,11 @@ export function sanitizeLesson(fact, customers = []) {
       for (const i of at.reverse()) out = out.slice(0, i) + (c.code ? 'cliente #' + c.code : 'un cliente') + out.slice(i + alt.length);
     }
   }
-  out = out.replace(PERSON_CUE, (m, cue, name) => /#/.test(name) ? m : cue + ' ');
+  out = out.replace(PERSON_CUE, (m, cue, name, at, all) => /#/.test(name) || brandDon(cue, name, all.slice(0, at), products) ? m : cue + ' ');
   return redactText(out).replace(/[*∗•]{3,}\s?\d{0,4}/g, '[oculto]').replace(/\bcliente\s+cliente\s+#/gi, 'cliente #').replace(/[ \t]{2,}/g, ' ').trim();
 }
-export async function saveLesson(store, auth, nowMs, fact, customers = []) {
-  const f = sanitizeLesson(fact, customers).slice(0, 200); if (!f) return false;
+export async function saveLesson(store, auth, nowMs, fact, customers = [], products = []) {
+  const f = sanitizeLesson(fact, customers, products).slice(0, 200); if (!f) return false;
   try {
     const key = await lessonsKey(auth), day = limaDate(nowMs);
     for (let i = 0; i < 4; i++) {
@@ -2795,6 +2811,13 @@ export function parseChatBody(body, role = null) {
   return { text, image, history, context: body.context, stream: body.stream === true, resumen: readResumenField(body.resumen), overflow: Math.max(0, all.length - ASSISTANT_LIMITS.maxHistory), cards: parseCards(body.cards) };
 }
 // Estado de las tarjetas que el aparato tiene en pantalla (solo tipo y estado, de listas cerradas). Sin campo = aparato viejo: null.
+// (auditoría 500, P-044) «el azucar ponlo a 400» con precio S/ 4.00: unas 100 veces el precio = casi seguro faltó el punto («4.00»).
+// La tarjeta y la respuesta preguntan «¿Quiso decir S/ 4.00?»; se confirma igual con un toque (sin PIN ni pasos extra).
+export function decimalSlip(actual, nuevo) {
+  const a = Number(actual), n = Number(nuevo); if (!(a > 0) || !(n > 0)) return null;
+  const r = n / a; return r >= 50 && r <= 200 ? Math.round(n) / 100 : null;
+}
+export function decimalSlipText(v) { return '¿Quiso decir S/ ' + Number(v).toFixed(2) + '?'; }
 export const CARD_TYPES = Object.freeze(['configuracion', 'compra', 'precio', 'costo', 'ajuste', 'producto']);
 export const CARD_STATES = Object.freeze(['pendiente', 'confirmada', 'cancelada', 'vencida', 'no_permitida']);
 export function parseCards(cards) {
@@ -2973,6 +2996,7 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   if (employeeDocDenied(role, parsed.text)) return json(FORBIDDEN_DOCUMENT, 403);
   // Sugerencias de compra o créditos atrasados pedidos por un empleado: 403 antes de abrir el canal, sin cupo ni modelo.
   if (employeeQueryDenied(role, parsed.text)) return json(QUERY_ADMIN_ONLY, 403);
+  if (employeeBelowCostDenied(role, parsed.text)) return json(BELOW_COST_DENIED, 403);
   if (employeeSummaryDenied(role, parsed.text)) return json(SUMMARY_ADMIN_ONLY, 403);
   const store = store0;
   if (!store) return json({ error: 'usage_store_missing' }, 500);
@@ -3157,6 +3181,15 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
       if (!second.error && second.content) reply = finalText(second.content);
     }
   }
+  // (auditoría 500, M-035) costo nuevo dicho en el chat por el Admin: tarjeta «Actualizar costo» (firmada abajo), nunca una lección.
+  let costReply = null;
+  const said = role === 'owner' && !parsed.image && !resetAsk ? statedCost(parsed.text) : null;
+  if (said) {
+    if (!sysProducts) sysProducts = await loadProducts();
+    const sc = statedCostCard(said, [...(ctx.products || []), ...(sysProducts || [])]);
+    if (sc.card && !proposals.some((p) => p.type === 'costo' && String(p.product_id) === String(sc.card.product_id))) proposals.push(sc.card);
+    costReply = sc.reply;
+  }
   for (const p of proposals) delete p._call;
   // Id único de propuesta: lo genera el SERVIDOR y queda firmado dentro del token (pid). El cliente nunca lo arma.
   for (const p of proposals) p.id = crypto.randomUUID();
@@ -3187,6 +3220,10 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   // (lote en vivo 22-10, c/d) RUC de proveedor: nunca «no puedo compartir»; montos «que te indiqué» que no están en el historial ni en las consultas.
   if (RUC_ASK_RE.test(parsed.text) && REFUSE_SHARE_RE.test(reply)) reply = RUC_MISSING_TEXT;
   reply = dropUnsaidAmountRefs(reply, [String(resumenIn || ''), ...parsed.history.filter((m) => m.role === 'assistant').map((m) => m.content), ...consultas.map((c) => JSON.stringify(c && c.result !== undefined ? c.result : c))].join('\n'));
+  if (costReply) reply = proposals.some((p) => p.needsConfirm && p.type !== 'costo') ? reply + ' ' + costReply : costReply;
+  // (auditoría 500, P-044) precio unas 100 veces el actual: la respuesta pregunta lo mismo que la tarjeta.
+  for (const p of proposals) if (p.type === 'precio' && p.quisoDecir != null && !reply.includes(decimalSlipText(p.quisoDecir)))
+    reply = (reply ? reply + ' ' : '') + (proposals.filter((x) => x.type === 'precio').length > 1 ? '«' + p.nombre + '» a ' + 'S/ ' + Number(p.precio_nuevo).toFixed(2) + ': ' : '') + decimalSlipText(p.quisoDecir) + ' Si es así, no confirmes y escríbeme el precio con punto.';
   // (lote en vivo 22-10) borrar todo o reiniciar: el asistente nunca lo ofrece ni lo hace; sin tarjetas.
   if (resetAsk) { proposals.length = 0; reply = RESET_REFUSAL_TEXT; }
   tm.ms_db = Math.round(dbMs); tm.db_stmts = dbc.n; tm.ms_total = ms(t0); // antes de la bitácora (su escritura: +1 sentencia)
@@ -3210,7 +3247,8 @@ async function chatCore(request, env, auth, json, deps, ctxOut) {
   const wasCut = capped !== null && reply === capped;
   const pairSig = secret ? await signTurnPair(secret, cls, auth?.principalId, nextPair, now, userTurn, reply, wasCut) : null;
   const turns = secret ? [{ role: 'user', content: userTurn, sig: pairSig, n: nextPair, iat: now }, { role: 'assistant', content: reply, sig: pairSig, n: nextPair, iat: now, ...(wasCut ? { cut: true } : {}) }] : [];
-  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; } await saveLesson(store, auth, now, redactModelOwner(fact), cust); } }
+  if (role === 'owner' && !parsed.image && !resetAsk) { const fact = taughtFact(parsed.text); if (fact) { let cust = []; try { if (rd0 && typeof rd0.customers === 'function') cust = await rd0.customers(); } catch { cust = []; }
+    if (!sysProducts) sysProducts = await loadProducts(); await saveLesson(store, auth, now, redactModelOwner(fact), cust, [...(ctx.products || []), ...(sysProducts || [])]); } }
   // Boleta (#953): el detalle de la factura ACTUAL (líneas, lectura y aclaraciones) va SOLO en invoice_memory (firmado, del Admin, 8 h).
   // La nota de #946 no repite líneas ni nombres: es la marca corta del turno en el historial (números, serie y fecha; sin nombres), la que queda
   // después de otra foto o del vencimiento, y la única memoria de foto del empleado.
@@ -3281,6 +3319,25 @@ export function infoOnlyText(proposals) {
   return 'Aquí tienes la información.';
 }
 
+// (auditoría 500, M-035) «el pollo ahora me cuesta 9.20»: el costo nuevo dicho por el Admin va a la ficha del producto con la MISMA tarjeta
+// «Actualizar costo» (al confirmar se abre la ficha con el costo; se aplica solo cuando la persona pulsa Guardar). No se guarda como lección.
+// Un solo producto que coincide: tarjeta. Varios: se pregunta cuál (sin tarjeta). Ninguno: se dice que no está.
+const soles2 = (n) => n == null || !Number.isFinite(Number(n)) ? 'sin costo' : 'S/ ' + Number(n).toFixed(2);
+export function statedCostCard(said, products) {
+  const fold = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const seen = new Set(), list = (Array.isArray(products) ? products : []).filter((p) => p && p.id != null && p.nombre && !seen.has(String(p.id)) && seen.add(String(p.id)));
+  const nuevo = money(said && said.costo); if (!said || !nuevo) return { card: null, reply: null };
+  const hits = matchProducts(list, said.nombre), full = hits.filter((p) => fold(p.nombre).includes(fold(said.nombre)));
+  const pick = hits.length === 1 ? hits[0] : full.length === 1 ? full[0] : null;
+  if (!pick) return { card: null, reply: hits.length
+    ? 'Ese costo va en la ficha del producto (así las ganancias salen bien), no como nota. ¿De cuál es? ' + hits.slice(0, 5).map((p) => '«' + p.nombre + '»').join(', ') + '. Dime el nombre y te preparo el cambio de costo.'
+    : 'No encontré «' + said.nombre + '» en tus productos. Dime el nombre como está en el inventario y te preparo el cambio de costo.' };
+  const actual = pick.costo == null || !Number.isFinite(Number(pick.costo)) ? null : Number(pick.costo);
+  if (actual != null && Math.abs(actual - nuevo) < 0.005) return { card: null, reply: '«' + pick.nombre + '» ya tiene ese costo (' + soles2(nuevo) + '). No hay nada que cambiar.' };
+  return { card: { id: 'costo-' + pick.id, type: 'costo', needsConfirm: true, requiresRole: 'owner', title: 'Actualizar costo', product_id: pick.id, nombre: pick.nombre,
+    costo_actual: actual, costo_nuevo: nuevo, origen: null, deChat: true },
+  reply: 'Ese costo va en la ficha del producto, así las ganancias salen bien. Preparé el cambio de costo de «' + pick.nombre + '»: ' + soles2(actual) + ' → ' + soles2(nuevo) + '. Pulsa Confirmar para abrir la ficha con el costo nuevo; se aplica cuando pulses Guardar.' };
+}
 // Tarjetas «Actualizar costo» a partir de una compra: solo filas con producto conocido, costo leído distinto (>1 %) y sin marcas de revisión.
 export function costProposals(compra) {
   const out = [];
