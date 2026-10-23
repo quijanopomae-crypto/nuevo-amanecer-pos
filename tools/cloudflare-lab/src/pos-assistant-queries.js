@@ -489,10 +489,15 @@ const METODO = { efectivo: 'Efectivo', yape: 'Yape', plin: 'Plin', transferencia
 // (lote en vivo 22-10) «aceites», «cervezas»: el plural también encuentra el producto en singular. Palabras de relleno fuera.
 const FILLER = new Set(['del', 'las', 'los', 'una', 'uno', 'que', 'con', 'para', 'por', 'caja', 'cajas']);
 const stem = (w) => (w.length >= 5 && w.endsWith('es') && !/[aeiou]es$/.test(w) ? w.slice(0, -2) : w.length >= 4 && w.endsWith('s') ? w.slice(0, -1) : w);
+// (AJ-026) «inka» = «Inca Kola»: c/k/qu suenan igual. Solo «c» antes de a, o, u o consonante (no «ch») y «qu» antes de e, i pasan a «k».
+// Se usa SOLO si la búsqueda exacta no encontró nada, así no cambia ningún resultado que ya salía.
+export const soundK = (s) => String(s || '').replace(/qu(?=[ei])/g, 'k').replace(/c(?![eih])/g, 'k');
 export function matchProducts(list, text) {
   const words = norm(text).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILLER.has(w)).map(stem);
   if (!words.length) return [];
-  return list.map((p) => ({ p, s: words.filter((w) => norm(p.nombre).includes(w)).length })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.p);
+  const rank = (f) => list.map((p) => { const n = f(norm(p.nombre)); return { p, s: words.filter((w) => n.includes(f(w))).length }; }).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.p);
+  const exact = rank((x) => x);
+  return exact.length ? exact : rank(soundK);
 }
 export const PRODUCT_MATCH_ROWS = 8;
 // Cálculo puro de las sugerencias (se prueba aparte). products: forma del lector; sold: Map product_id -> unidades vendidas en `dias` días.
