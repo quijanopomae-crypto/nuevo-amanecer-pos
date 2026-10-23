@@ -8,7 +8,7 @@
   var doc = root.document;
   var CRED = 'na_cloud_sync_credentials', CACHE = 'na_pos_role_v1';
   var OWNER_COMMANDS = ['inventory.adjust', 'adjustment.create', 'compensation.create', 'product.update', 'customer.credit-policy.set'];
-  var state = { role: 'unknown', pinSet: false, label: null, deviceId: null, ready: false, confirmed: false };
+  var state = { role: 'unknown', pinSet: false, label: null, deviceId: null, ready: false, confirmed: false, absentCost: false };
 
   function creds() {
     try { var c = JSON.parse(root.localStorage.getItem(CRED) || 'null'); return c && c.endpoint && c.token ? c : null; } catch (_) { return null; }
@@ -67,10 +67,14 @@
     try {
       var me = await api('/auth/me');
       state.confirmed = true;
+      // Capacidad anunciada por el Worker (#886): product.update acepta cost_cents ausente y conserva el costo.
+      // Solo vale la respuesta confirmada de /auth/me; no se guarda en caché (sin red o Worker viejo = apagada).
+      state.absentCost = !!(me && me.capabilities && me.capabilities.product_update_absent_cost === true);
       try { root.localStorage.removeItem(REVOKED_KEY); } catch (_) {} revokedScreen(false);
       setState({ role: me.pos_role, pinSet: me.owner_pin_set, label: me.label, deviceId: me.device_id }, true);
     } catch (e) {
       state.confirmed = false;
+      state.absentCost = false;
       if (e.status === 403 && e.message === 'session_revoked') { try { root.localStorage.setItem(REVOKED_KEY, '1'); } catch (_) {} revokedScreen(true); }
       if (e.status === 401 || e.status === 403) setState({ role: 'unknown' }, true); else paint();
     }
@@ -148,7 +152,9 @@
   root.NA_ROLES = {
     get role() { return state.role; }, get pinSet() { return state.pinSet; }, get label() { return state.label; }, get deviceId() { return state.deviceId; },
     isOwner: canConfigure, canConfigure: canConfigure, get confirmed() { return state.confirmed; }, refresh: refresh, api: api, askPin: askPin, approve: approve, beforeCommand: beforeCommand,
-    message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice()
+    message: message, OWNER_COMMANDS: OWNER_COMMANDS.slice(),
+    // Capacidades de /auth/me (solo con sesión confirmada); desconocido = false.
+    get capabilities() { return { product_update_absent_cost: state.confirmed && state.absentCost === true }; }
   };
 
   // Configuración solo para el dueño, por cualquier camino de navegación.

@@ -696,7 +696,7 @@ function _naV10ApplySale(draft,intent,ctx){
   const total=_naV10ItemsTotal(intent.items);
   const saleItems=intent.items.map(it=>{
     const qty=Math.max(1,it.qty||1),price=Math.max(0,it.price||0),prod=d.productos.find(p=>String(p.id)===String(it.productId));
-    return{id:it.productId,productoId:it.productId,sku:prod?.sku||it.sku||'',qty,cantidad:qty,precio:price,precioUnitario:price,subtotal:Number((price*qty).toFixed(2)),name:prod?.name||it.name||'',nombre:prod?.name||it.name||'',icon:prod?.icon||'📦',unidad:'unidad',unitsPerQty:_naV10ItemUnitsPerQty(it),ventaModo:_naV10ItemUnitsPerQty(it)>1?'caja':'unidad',ventaLibre:false,ventaSinStock:false,costo:prod?.costo||0,descuento:0,_precioOriginal:null,incluyeIGV:true,tipoImpuesto:'gravado'};
+    return{id:it.productId,productoId:it.productId,sku:prod?.sku||it.sku||'',qty,cantidad:qty,precio:price,precioUnitario:price,subtotal:Number((price*qty).toFixed(2)),name:prod?.name||it.name||'',nombre:prod?.name||it.name||'',icon:prod?.icon||'📦',unidad:'unidad',unitsPerQty:_naV10ItemUnitsPerQty(it),ventaModo:_naV10ItemUnitsPerQty(it)>1?'caja':'unidad',ventaLibre:false,ventaSinStock:false,costo:_naCostValue(prod?.costo),descuento:0,_precioOriginal:null,incluyeIGV:true,tipoImpuesto:'gravado'};
   });
   const metodo=intent.paymentMethod||'efectivo',estado=metodo==='credito'?'credito':'completada';
   const paymentBreakdown=metodo==='mixto'&&intent.mixedData?{efectivo:_naNumber(intent.mixedData.cash),digital:_naNumber(intent.mixedData.digital),digitalMethod:String(intent.mixedData.digitalMethod),reference:String(intent.paymentRef||'')}:null;

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
+import { costHelpersSource } from '../helpers/cost-helpers.mjs';
 import { PERMISSIONS as serverPolicy } from '../../tools/cloudflare-lab/src/pos-permissions.js';
 
 const source = readFileSync(new URL('../../POS/js/inventory/codigos-duplicados.js', import.meta.url), 'utf8');
@@ -360,7 +361,7 @@ test('editProd real y su wrapper abren el formulario sin guardar y restauran la 
   h.context.productos[0].imagen = image;
   const before = JSON.stringify({ products: h.context.productos, sales: h.context.ventas });
   const context = vm.createContext(h.context);
-  vm.runInContext(base + '\nconst _naF12BaseEditProd=editProd;\n' + wrapper, context);
+  vm.runInContext(costHelpersSource + base + '\nconst _naF12BaseEditProd=editProd;\n' + wrapper, context);
   assert.equal(h.a.openProduct(1), true);
   assert.equal(fields.get('pNombre').value, h.context.productos[0].name);
   assert.equal(fields.get('mProd').classList.contains('open'), true);
