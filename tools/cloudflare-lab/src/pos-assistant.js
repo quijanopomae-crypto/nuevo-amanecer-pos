@@ -2287,11 +2287,13 @@ export function maskCuedPeople(text, known = []) {
       const lower = !isCap(tk[k].w), relax = lower && !strong;
       let st = groupBack(k, lower, relax); if (st < 0) continue;
       let from = st, end = k;
-      // «Rosa Quispe y Juan Pérez»: el grupo anterior unido por «y/e» también
-      if (st >= 2 && /^(?:y|e)$/.test(F(st - 1)) && joined(st) && joined(st - 1)) { const st2 = groupBack(st - 2, lower, relax); if (st2 >= 0) { spans.push([tk[st2].s, tk[st - 2].e]); from = st2; } }
+      // marca/proveedor del catálogo antes del verbo, con o sin mayúscula: «Pilsen debe subir», «Inca Kola me debe 2 cajas» (como hacia adelante)
+      const brand = (a, b) => cat(tk.slice(a, b + 1).map((t) => t.w));
+      // «Rosa Quispe y Juan Pérez»: el grupo anterior unido por «y/e» también (salvo que sea marca: «Gloria y Rosa Quispe me deben»)
+      if (st >= 2 && /^(?:y|e)$/.test(F(st - 1)) && joined(st) && joined(st - 1)) { const st2 = groupBack(st - 2, lower, relax); if (st2 >= 0 && !brand(st2, st - 2)) { spans.push([tk[st2].s, tk[st - 2].e]); from = st2; } }
       if (lower && !atStartOf(from)) { if (from !== st) spans.pop(); continue; }
       if (st > 0 && PRODUCT_WORD.has(F(st - 1))) continue; // «la leche Gloria debe…»: lo decide el resto (no es nombre suelto)
-      if (lower && cat(tk.slice(st, end + 1).map((t) => t.w))) continue;
+      if (brand(st, end)) continue;
       spans.push([tk[st].s, tk[end].e]);
     }
   }
